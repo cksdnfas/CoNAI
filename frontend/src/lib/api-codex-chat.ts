@@ -926,7 +926,7 @@ export function reorderChatUserProfiles(ids: number[]) {
 export const CHAT_FLAGS_QUERY_KEY = ['codex-chat-flags'] as const
 export const CHAT_FLAG_LIMITS = { perAccount: 20, name: 30, content: 2000 }
 
-/** One of the account's own instructions, switched on per chat and added to the messages sent while on. */
+/** An instruction switched on per chat and added to the messages sent while on: the account's own, or an admin's (shared). */
 export interface ChatFlag {
   id: number
   /** `lucide:<name>` for a built-in icon, otherwise an emoji; empty shows the name's first letter. */
@@ -934,6 +934,12 @@ export interface ChatFlag {
   name: string
   content: string
   sortOrder: number
+  /** An admin's flag, shown to every account. */
+  shared: boolean
+  /** Shared flag whose text this account changed (its own copy). */
+  edited: boolean
+  /** Shared flag this account hid: not in the tray, listed where flags are managed. */
+  hidden: boolean
 }
 
 export type ChatFlagInput = Pick<ChatFlag, 'icon' | 'name' | 'content'>
@@ -945,8 +951,9 @@ export function pickSnapshot(label: string): ChatFlagSnapshot {
   return { id: 0, icon: 'lucide:target', name: label, content: label, pick: true }
 }
 
+/** Every flag the account sees, hidden shared ones included (the tray leaves those out). */
 export function listChatFlags() {
-  return requestApiData<ChatFlag[]>('/api/codex-chat/flags')
+  return requestApiData<ChatFlag[]>('/api/codex-chat/flags?all=1')
 }
 
 export function createChatFlag(input: ChatFlagInput) {
@@ -959,6 +966,16 @@ export function updateChatFlag(flagId: number, input: ChatFlagInput) {
 
 export function deleteChatFlag(flagId: number) {
   return requestApiData<unknown>(`/api/codex-chat/flags/${flagId}`, { method: 'DELETE' })
+}
+
+/** A hidden shared flag back in the tray. */
+export function restoreChatFlag(flagId: number) {
+  return requestApiData<ChatFlag>(`/api/codex-chat/flags/${flagId}/restore`, { method: 'POST' })
+}
+
+/** A shared flag back to the admin's text. */
+export function resetChatFlag(flagId: number) {
+  return requestApiData<ChatFlag>(`/api/codex-chat/flags/${flagId}/reset`, { method: 'POST' })
 }
 
 export function reorderChatFlags(ids: number[]) {

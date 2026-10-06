@@ -512,7 +512,7 @@ export const LlmChatService = {
     const profile = requireUsableProfile(thread.profile_id)
     const attachments = validateChatAttachments(requester, fileIds)
     const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length)
-    const flags = [...ChatFlagStore.resolve(requester.accountId, parseFlagIds(flagIds)), ...parsePicks(picks)]
+    const flags = [...ChatFlagStore.resolve(requester, parseFlagIds(flagIds)), ...parsePicks(picks)]
     const trimmed = text.trim()
     if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) {
       throw new LlmChatError('메시지를 입력해줘.')

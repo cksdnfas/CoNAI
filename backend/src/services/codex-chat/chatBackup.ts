@@ -37,7 +37,7 @@ export function exportChatJson(requester: McpRequester, threadId: number) {
     members: detail.thread.kind === 'group' ? ChatGroupStore.members(threadId).map((member) => ({ id: member.profile_id, name: ChatProfileStore.find(member.profile_id)?.name ?? null })) : undefined,
     lorebook: book && book.entries.length > 0 ? { entries: book.entries.map((entry) => ({ ...entry, file: null, fileId: null })) } : undefined,
     links: {
-      flags: ChatFlagStore.resolve(requester.accountId, flagIds).map(({ id, name }) => ({ id, name })),
+      flags: ChatFlagStore.resolve(requester, flagIds).map(({ id, name }) => ({ id, name })),
       userProfile: userProfile ? { id: userProfile.id, name: userProfile.name } : null,
       lorebooks: OwnedLorebookStore.threadLinks(threadId).flatMap((id) => {
         const linked = OwnedLorebookStore.find(id, owner)

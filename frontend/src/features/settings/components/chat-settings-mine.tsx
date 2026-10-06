@@ -2,22 +2,23 @@ import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
-import { ChatFlagEditorModal, ChatFlagRows, useChatFlags } from '@/features/codex-chat/chat-flags'
+import { ChatFlagEditorModal, ChatFlagRows, useChatFlagRoom, useChatFlags } from '@/features/codex-chat/chat-flags'
 import { ChatUserProfileEditorModal, ChatUserProfileRows, useChatUserProfiles } from '@/features/codex-chat/chat-user-profiles'
 import { useI18n } from '@/i18n'
-import { CHAT_FLAG_LIMITS, CHAT_USER_PROFILE_LIMITS, type ChatFlag, type ChatUserProfile } from '@/lib/api-codex-chat'
+import { CHAT_USER_PROFILE_LIMITS, type ChatFlag, type ChatUserProfile } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 
-/** Settings › Chat › 내 설정: the signed-in account's own user profiles and flags. */
+/** Settings › Chat › 내 설정: the signed-in account's own user profiles, and its flags (with the admins' shared ones). */
 export function ChatSettingsMine() {
   const { t } = useI18n()
   const [flagEditor, setFlagEditor] = useState<{ flag: ChatFlag | null } | null>(null)
   const [userProfileEditor, setUserProfileEditor] = useState<{ profile: ChatUserProfile | null } | null>(null)
-  const flagsQuery = useChatFlags()
+  const flagsQuery = useChatFlags(true, { includeHidden: true })
   const userProfilesQuery = useChatUserProfiles()
   const flags = flagsQuery.data ?? []
   const userProfiles = userProfilesQuery.data ?? []
+  const canAddFlag = useChatFlagRoom(flags)
 
   return (
     <div className="space-y-8">
@@ -40,7 +41,7 @@ export function ChatSettingsMine() {
         heading={t({ ko: '플래그', en: 'Flags' })}
         count={flagsQuery.isSuccess ? flags.length : undefined}
         actions={(
-          <IconButton size="icon-sm" variant="ghost" disabled={flags.length >= CHAT_FLAG_LIMITS.perAccount} onClick={() => setFlagEditor({ flag: null })} label={t({ ko: '플래그 추가', en: 'Add flag' })}>
+          <IconButton size="icon-sm" variant="ghost" disabled={!canAddFlag} onClick={() => setFlagEditor({ flag: null })} label={t({ ko: '플래그 추가', en: 'Add flag' })}>
             <Plus />
           </IconButton>
         )}

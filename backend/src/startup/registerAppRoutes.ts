@@ -112,6 +112,16 @@ const RUNTIME_MEDIA_SETTINGS_READ_PERMISSION_KEYS = [
   ...HOME_IMAGE_READ_PERMISSION_KEYS,
   'page.generation.view',
 ] as const;
+/**
+ * One library file by its hash (the hash is the pixel SHA-256, so it is only known to someone who was shown the
+ * image). Chat users open the images their chats show — search results, their generations — at full size, as any
+ * signed-in account already can their thumbnails; browsing and searching the library keeps the page permissions.
+ */
+const IMAGE_FILE_READ_PERMISSION_KEYS = [
+  ...IMAGE_READ_PERMISSION_KEYS,
+  'chat.codex.use',
+  'chat.llm.use',
+] as const;
 const WALLPAPER_IMAGE_READ_PERMISSION_KEYS = [
   'page.home.view',
   'page.image-detail.view',
@@ -165,10 +175,13 @@ const allowRuntimeMediaSettingsRead: RequestHandler = (req, res, next) => {
   allowReadAccess(RUNTIME_MEDIA_SETTINGS_READ_PERMISSION_KEYS)(req, res, next);
 };
 
-/** History requests whose handlers already enforce per-record owner-or-admin access. */
+/**
+ * History requests whose handlers already enforce per-record owner-or-admin access: the list (scoped to the requester
+ * by applyHistoryAccessScope), one row, and its media. Chat polls the rows its own generations wrote.
+ */
 function isOwnerScopedHistoryMediaRequest(req: Request): boolean {
   if (isReadMethod(req)) {
-    return /^\/\d+\/(?:file|thumbnail|image)$/.test(req.path);
+    return req.path === '/' || /^\/\d+(?:\/(?:file|thumbnail|image))?$/.test(req.path);
   }
 
   return req.method === 'POST' && req.path === '/download/batch';
@@ -245,6 +258,11 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
       }
 
       allowAnonymousAnyPermission(WALLPAPER_IMAGE_READ_PERMISSION_KEYS)(req, res, next);
+      return;
+    }
+
+    if (isReadMethod(req) && /^\/[^/]+\/file$/.test(req.path)) {
+      allowAnonymousAnyPermission(IMAGE_FILE_READ_PERMISSION_KEYS)(req, res, next);
       return;
     }
 

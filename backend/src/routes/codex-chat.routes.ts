@@ -1628,25 +1628,25 @@ router.delete('/user-profiles/:userProfileId', requireChatAccess, (req: Request,
 // ---- Chat flags: each account's own instructions, switched on per chat ----------------------------------------
 
 router.get('/flags', requireChatAccess, (req: Request, res: Response) => {
-  res.json({ success: true, data: ChatFlagStore.list(getRequesterAccountId(req)) })
+  res.json({ success: true, data: ChatFlagStore.list(requesterFrom(req), { includeHidden: req.query.all === '1' }) })
 })
 
 router.post('/flags', requireChatAccess, (req: Request, res: Response) => {
   try {
-    res.status(201).json({ success: true, data: ChatFlagStore.create(getRequesterAccountId(req), (req.body ?? {}) as Record<string, unknown>) })
+    res.status(201).json({ success: true, data: ChatFlagStore.create(requesterFrom(req), (req.body ?? {}) as Record<string, unknown>) })
   } catch (error) { sendChatError(res, error) }
 })
 
 /** PUT /api/codex-chat/flags/order — `{ ids }`: the account's flags in this order (the order of the chat's flag tray). */
 router.put('/flags/order', requireChatAccess, (req: Request, res: Response) => {
-  res.json({ success: true, data: ChatFlagStore.reorder(getRequesterAccountId(req), parseFlagIds(req.body?.ids)) })
+  res.json({ success: true, data: ChatFlagStore.reorder(requesterFrom(req), parseFlagIds(req.body?.ids)) })
 })
 
 router.put('/flags/:flagId', requireChatAccess, (req: Request, res: Response) => {
   const flagId = parseId(req.params.flagId)
   if (flagId === null) { sendRouteBadRequest(res, 'Invalid flag id'); return }
   try {
-    res.json({ success: true, data: ChatFlagStore.update(getRequesterAccountId(req), flagId, (req.body ?? {}) as Record<string, unknown>) })
+    res.json({ success: true, data: ChatFlagStore.update(requesterFrom(req), flagId, (req.body ?? {}) as Record<string, unknown>) })
   } catch (error) { sendChatError(res, error) }
 })
 
@@ -1654,8 +1654,26 @@ router.delete('/flags/:flagId', requireChatAccess, (req: Request, res: Response)
   const flagId = parseId(req.params.flagId)
   if (flagId === null) { sendRouteBadRequest(res, 'Invalid flag id'); return }
   try {
-    ChatFlagStore.delete(getRequesterAccountId(req), flagId)
+    ChatFlagStore.delete(requesterFrom(req), flagId)
     res.json({ success: true })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** POST /api/codex-chat/flags/:flagId/restore — a shared flag the account hid, back in its tray. */
+router.post('/flags/:flagId/restore', requireChatAccess, (req: Request, res: Response) => {
+  const flagId = parseId(req.params.flagId)
+  if (flagId === null) { sendRouteBadRequest(res, 'Invalid flag id'); return }
+  try {
+    res.json({ success: true, data: ChatFlagStore.restore(requesterFrom(req), flagId) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** POST /api/codex-chat/flags/:flagId/reset — a shared flag back to the admin's text for this account. */
+router.post('/flags/:flagId/reset', requireChatAccess, (req: Request, res: Response) => {
+  const flagId = parseId(req.params.flagId)
+  if (flagId === null) { sendRouteBadRequest(res, 'Invalid flag id'); return }
+  try {
+    res.json({ success: true, data: ChatFlagStore.reset(requesterFrom(req), flagId) })
   } catch (error) { sendChatError(res, error) }
 })
 
@@ -1664,7 +1682,7 @@ router.put('/threads/:threadId/flags', requireChatAccess, (req: Request, res: Re
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
   if (!CodexChatStore.findThread(threadId, getRequesterAccountId(req))) { res.status(404).json({ success: false, error: '채팅을 찾을 수 없어.' }); return }
-  const flags = ChatFlagStore.resolve(getRequesterAccountId(req), parseFlagIds(req.body?.flagIds))
+  const flags = ChatFlagStore.resolve(requesterFrom(req), parseFlagIds(req.body?.flagIds))
   ChatFlagStore.setThreadFlags(threadId, flags.map((flag) => flag.id))
   res.json({ success: true, data: { flagIds: flags.map((flag) => flag.id) } })
 })

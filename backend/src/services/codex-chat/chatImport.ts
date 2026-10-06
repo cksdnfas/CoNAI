@@ -241,7 +241,7 @@ export function importChatThread(requester: McpRequester, raw: Buffer, target: C
     const links = object(file.links)
     // A file from before links names nothing: its ids mean something only to the account that exported it.
     const sameAccount = thread.account_id === requester.accountId
-    const flags = matchOwn(ChatFlagStore.list(requester.accountId), Array.isArray(links.flags) ? links.flags : sameAccount ? idList(thread.flag_ids) : [])
+    const flags = matchOwn(ChatFlagStore.list(requester), Array.isArray(links.flags) ? links.flags : sameAccount ? idList(thread.flag_ids) : [])
     if (flags.found.length) ChatFlagStore.setThreadFlags(created.id, flags.found.map((flag) => flag.id))
     if (flags.missing) notes.push(`이 계정에 없는 플래그 ${flags.missing}개는 켜지 않았어.`)
     const wantedUser = 'userProfile' in links ? links.userProfile : sameAccount && typeof thread.user_profile_id === 'number' ? { id: thread.user_profile_id } : undefined

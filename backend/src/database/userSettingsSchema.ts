@@ -556,6 +556,20 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
   db.exec('CREATE INDEX IF NOT EXISTS idx_chat_flags_account ON chat_flags(account_id, sort_order, id)');
+  // One account's changes to a shared (admin) flag: its own text (NULL fields follow the original), hidden, its tray place.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_flag_overrides (
+      account_id INTEGER NOT NULL,
+      flag_id INTEGER NOT NULL,
+      icon TEXT,
+      name TEXT,
+      content TEXT,
+      hidden INTEGER NOT NULL DEFAULT 0,
+      sort_order INTEGER,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (account_id, flag_id)
+    )
+  `);
 
   // Chat user profiles (personas): who the account is in a chat — name, description, avatar; one may be the default for new chats.
   db.exec(`
@@ -798,6 +812,10 @@ export function createUserSettingsSchema(db: Database.Database): void {
   // The model a user profile writes reply suggestions with (llm_model_slots; no foreign key, like the profile slots).
   if (!hasColumn('chat_user_profiles', 'model_slot_id')) {
     db.exec('ALTER TABLE chat_user_profiles ADD COLUMN model_slot_id INTEGER');
+  }
+  // Admin flags are shared with every account. NULL: written before sharing, sorted out on first read (chatFlags.ts).
+  if (!hasColumn('chat_flags', 'is_global')) {
+    db.exec('ALTER TABLE chat_flags ADD COLUMN is_global INTEGER');
   }
   migrateProfileBlocksToSharedTable(db);
   // The preset column arriving is the one-time signal to fold existing per-profile tool grants into shared presets.

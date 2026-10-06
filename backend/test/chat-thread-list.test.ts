@@ -126,9 +126,11 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     const { ChatUserProfileStore } = await import('../src/services/codex-chat/chatUserProfiles')
     const { fileOwnerKey } = await import('../src/services/fileStoreService')
     const { importChatThread } = await import('../src/services/codex-chat/chatImport')
+    // Flags of a non-admin account (an admin's are shared with everyone, see chat-flags.test.ts).
+    const privateTo = (accountId: number) => ({ accountId, accountType: 'guest' as const })
     const target = (who: typeof requester) => ({ direct: (profileId: number) => CodexChatService.createThread(who, profileId), group: (): { id: number } => { throw new Error('no rooms here') } })
-    const flag = ChatFlagStore.create(1, { icon: '', name: '반말', content: '반말로 말해.' })
-    const quiet = ChatFlagStore.create(1, { icon: '', name: '짧게', content: '짧게 말해.' })
+    const flag = ChatFlagStore.create(privateTo(1), { icon: '', name: '반말', content: '반말로 말해.' })
+    const quiet = ChatFlagStore.create(privateTo(1), { icon: '', name: '짧게', content: '짧게 말해.' })
     const me = ChatUserProfileStore.create(1, { name: '민준', persona: '여행 좋아함' })
     const book = OwnedLorebookStore.create(fileOwnerKey(1), { name: '세계관' })
 
@@ -153,7 +155,7 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     assert.ok(back.notes.includes('라이브러리에 없거나 볼 수 없는 이미지·영상 2개는 뺐어.'), back.notes.join(' / '))
 
     // Another account: same names match, missing ones are reported; the plain id never reaches someone else's.
-    const theirs = ChatFlagStore.create(2, { icon: '', name: '반말', content: '반말.' })
+    const theirs = ChatFlagStore.create(privateTo(2), { icon: '', name: '반말', content: '반말.' })
     const theirMe = ChatUserProfileStore.create(2, { name: '민준', persona: '' })
     const there = importChatThread(stranger, Buffer.from(JSON.stringify(file)), target(stranger))
     const copy = CodexChatStore.findThreadById(there.threadId)!

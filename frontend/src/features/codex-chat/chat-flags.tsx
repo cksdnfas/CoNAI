@@ -1,6 +1,6 @@
 import { createElement, useEffect, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Ban, Flag, GripVertical, Pencil, Plus, Save, Trash2 } from 'lucide-react'
+import { Ban, Eye, EyeOff, Flag, GripVertical, Pencil, Plus, RotateCcw, Save, Trash2, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import {
   CHAT_FLAG_LIMITS,
@@ -20,6 +21,8 @@ import {
   deleteChatFlag,
   listChatFlags,
   reorderChatFlags,
+  resetChatFlag,
+  restoreChatFlag,
   updateChatFlag,
   type ChatFlag,
   type ChatFlagSnapshot,
@@ -33,9 +36,20 @@ const POP_STAGGER_MS = 45
 const DROP_STAGGER_MS = 18
 const DROP_MS = 180
 
-/** The account's chat flags (everyone keeps their own). */
-export function useChatFlags(enabled = true) {
-  return useQuery({ queryKey: CHAT_FLAGS_QUERY_KEY, queryFn: listChatFlags, enabled, staleTime: 60_000 })
+const visibleFlags = (flags: ChatFlag[]) => flags.filter((flag) => !flag.hidden)
+
+/**
+ * The account's chat flags: its own and the admins' shared ones, in tray order. `includeHidden` adds the shared flags
+ * the account hid (where flags are managed); the tray leaves them out.
+ */
+export function useChatFlags(enabled = true, { includeHidden = false }: { includeHidden?: boolean } = {}) {
+  return useQuery({ queryKey: CHAT_FLAGS_QUERY_KEY, queryFn: listChatFlags, enabled, staleTime: 60_000, select: includeHidden ? undefined : visibleFlags })
+}
+
+/** Whether the account may add another flag: admins fill the shared list, everyone else their own. */
+export function useChatFlagRoom(flags: ChatFlag[]) {
+  const isAdmin = useAuthStatusQuery().data?.isAdmin === true
+  return flags.filter((flag) => flag.shared === isAdmin).length < CHAT_FLAG_LIMITS.perAccount
 }
 
 /** A flag's icon: a built-in icon, an emoji, or the name's first letter. */
@@ -280,6 +294,9 @@ function ChatFlagIconPicker({ value, name, onChange }: { value: string; name: st
 /** Create or edit one flag: its icon, name, and the text added to the messages sent while it is on. */
 export function ChatFlagEditorModal({ open, flag, onClose }: { open: boolean; flag: ChatFlag | null; onClose: () => void }) {
   const { t } = useI18n()
+  const isAdmin = useAuthStatusQuery().data?.isAdmin === true
+  // A shared flag is the admin's: anyone else edits their own copy and only hides it.
+  const ownCopy = flag?.shared === true && !isAdmin
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
@@ -300,10 +317,22 @@ export function ChatFlagEditorModal({ open, flag, onClose }: { open: boolean; fl
     onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: CHAT_FLAGS_QUERY_KEY }); onClose() },
     onError,
   })
+  const resetMutation = useMutation({
+    mutationFn: () => resetChatFlag(flag?.id ?? 0),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: CHAT_FLAGS_QUERY_KEY }); onClose() },
+    onError,
+  })
   const handleDelete = async () => {
+    // Hiding a shared flag is undone from the flag list, so it needs no confirmation.
+    if (ownCopy) {
+      deleteMutation.mutate()
+      return
+    }
     const confirmed = await confirm({
       title: t({ ko: '플래그 삭제', en: 'Delete flag' }),
-      description: t({ ko: '이 플래그를 지울까? 이미 보낸 메시지에 붙은 기록은 남아.', en: 'Delete this flag? Messages already sent keep it.' }),
+      description: flag?.shared
+        ? t({ ko: '모두에게 공유된 플래그야. 지우면 모든 계정에서 사라져. 이미 보낸 메시지에 붙은 기록은 남아.', en: 'This flag is shared with everyone; deleting it removes it for every account. Messages already sent keep it.' })
+        : t({ ko: '이 플래그를 지울까? 이미 보낸 메시지에 붙은 기록은 남아.', en: 'Delete this flag? Messages already sent keep it.' }),
       confirmLabel: t({ ko: '삭제', en: 'Delete' }),
       tone: 'destructive',
     })
@@ -332,7 +361,12 @@ export function ChatFlagEditorModal({ open, flag, onClose }: { open: boolean; fl
         </Field>
       </ModalBody>
       <ModalFooter>
-        {flag ? <IconButton size="icon-sm" variant="destructive" disabled={deleteMutation.isPending} onClick={() => void handleDelete()} label={t({ ko: '삭제', en: 'Delete' })}><Trash2 /></IconButton> : null}
+        {flag && ownCopy ? (
+          <IconButton size="icon-sm" variant="ghost" disabled={deleteMutation.isPending || flag.hidden} onClick={() => void handleDelete()} label={t({ ko: '나한테서 숨기기', en: 'Hide for me' })}><EyeOff /></IconButton>
+        ) : flag ? <IconButton size="icon-sm" variant="destructive" disabled={deleteMutation.isPending} onClick={() => void handleDelete()} label={t({ ko: '삭제', en: 'Delete' })}><Trash2 /></IconButton> : null}
+        {flag && ownCopy && flag.edited ? (
+          <IconButton size="icon-sm" variant="ghost" disabled={resetMutation.isPending} onClick={() => resetMutation.mutate()} label={t({ ko: '관리자 원본으로 되돌리기', en: 'Back to the original' })}><RotateCcw /></IconButton>
+        ) : null}
         <span className="flex-1" />
         <IconButton size="icon-sm" variant="default" disabled={!canSave} onClick={() => saveMutation.mutate()} label={t({ ko: '저장', en: 'Save' })}><Save /></IconButton>
       </ModalFooter>
@@ -340,17 +374,35 @@ export function ChatFlagEditorModal({ open, flag, onClose }: { open: boolean; fl
   )
 }
 
-/** The account's flags as rows (drag the handle to reorder; the order is the tray's). */
-export function ChatFlagRows({ flags, onEdit }: { flags: ChatFlag[]; onEdit: (flag: ChatFlag) => void }) {
+/**
+ * The account's flags as rows (drag the handle to reorder; the order is the tray's). Shared flags it hid follow,
+ * dimmed, each with a button to bring it back.
+ */
+export function ChatFlagRows({ flags: allFlags, onEdit }: { flags: ChatFlag[]; onEdit: (flag: ChatFlag) => void }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
+  const isAdmin = useAuthStatusQuery().data?.isAdmin === true
+  const flags = visibleFlags(allFlags)
+  const hiddenFlags = allFlags.filter((flag) => flag.hidden)
+  const restoreMutation = useMutation({
+    mutationFn: restoreChatFlag,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: CHAT_FLAGS_QUERY_KEY }),
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '다시 보이게 하지 못했어.', en: 'Could not show it again.' })), tone: 'error' }),
+  })
+  const sharedMark = (flag: ChatFlag) => flag.shared ? (
+    <Tip content={isAdmin
+      ? t({ ko: '모든 계정에 공유돼', en: 'Shared with every account' })
+      : flag.edited ? t({ ko: '공유 플래그 (내가 고침)', en: 'Shared flag (my edit)' }) : t({ ko: '관리자 공유 플래그', en: 'Shared by an admin' })}>
+      <Users aria-hidden="true" className={cn('size-3.5 shrink-0', flag.edited ? 'text-primary' : 'text-muted-foreground')} />
+    </Tip>
+  ) : null
   const [dragId, setDragId] = useState<number | null>(null)
   const [overId, setOverId] = useState<number | null>(null)
   const reorderMutation = useMutation({
     mutationFn: reorderChatFlags,
     onMutate: (ids) => {
-      queryClient.setQueryData<ChatFlag[]>(CHAT_FLAGS_QUERY_KEY, (current) => current ? ids.flatMap((id) => current.filter((flag) => flag.id === id)) : current)
+      queryClient.setQueryData<ChatFlag[]>(CHAT_FLAGS_QUERY_KEY, (current) => current ? [...ids.flatMap((id) => current.filter((flag) => flag.id === id)), ...current.filter((flag) => !ids.includes(flag.id))] : current)
     },
     onSuccess: (next) => queryClient.setQueryData(CHAT_FLAGS_QUERY_KEY, next),
     onError: (error) => {
@@ -395,8 +447,24 @@ export function ChatFlagRows({ flags, onEdit }: { flags: ChatFlag[]; onEdit: (fl
             </>
           )}
           name={flag.name}
+          extra={sharedMark(flag)}
           meta={flag.content}
           onOpen={() => onEdit(flag)}
+        />
+      ))}
+      {hiddenFlags.map((flag) => (
+        <ResourceRow
+          key={flag.id}
+          className="opacity-55"
+          leading={(
+            <span className="ml-7 flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-high text-foreground">
+              <ChatFlagIcon icon={flag.icon} name={flag.name} />
+            </span>
+          )}
+          name={flag.name}
+          extra={sharedMark(flag)}
+          meta={flag.content}
+          trailing={<IconButton size="icon-sm" variant="ghost" disabled={restoreMutation.isPending} onClick={() => restoreMutation.mutate(flag.id)} label={t({ ko: '다시 보이기', en: 'Show again' })}><Eye /></IconButton>}
         />
       ))}
     </>
@@ -406,10 +474,10 @@ export function ChatFlagRows({ flags, onEdit }: { flags: ChatFlag[]; onEdit: (fl
 /** From the chat: the account's flags, to add, edit and reorder without leaving the conversation. */
 export function ChatFlagManagerModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useI18n()
-  const flagsQuery = useChatFlags(open)
+  const flagsQuery = useChatFlags(open, { includeHidden: true })
   const [editor, setEditor] = useState<{ flag: ChatFlag | null } | null>(null)
   const flags = flagsQuery.data ?? []
-  const full = flags.length >= CHAT_FLAG_LIMITS.perAccount
+  const full = !useChatFlagRoom(flags)
 
   return (
     <>
