@@ -13,6 +13,11 @@ export function codexChatMediaQueryKey(threadId: number | null) {
   return ['codex-chat-media', threadId] as const
 }
 
+/** Compacting (summarizing) a chat, from the menu, /compact or the context view: the chat waits until it ends. */
+export function codexChatCompactMutationKey(threadId: number | null) {
+  return ['codex-chat-compact', threadId] as const
+}
+
 export type CodexChatView = 'chat' | 'gallery' | 'context'
 
 /** The composer text of the new chat being prepared (saved chats use their ids, which start at 1). */

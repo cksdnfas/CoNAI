@@ -17,7 +17,7 @@ import { getErrorMessage } from '@/lib/error-message'
 import { LorebookBlock } from './chat-lorebook-block'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatUserProfileRow } from './chat-user-profiles'
-import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey } from './codex-chat-context'
+import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatCompactMutationKey, codexChatThreadQueryKey } from './codex-chat-context'
 
 type SummaryMode = 'profile' | 'on' | 'off'
 
@@ -273,6 +273,7 @@ function SummaryBlock({ thread, segments, summaryOn }: { thread: CodexChatThread
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
   const summarizeMutation = useMutation({
+    mutationKey: codexChatCompactMutationKey(thread.id),
     mutationFn: () => summarizeCodexChatThread(thread.id),
     onSuccess: refresh,
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '요약하지 못했어.', en: 'Could not summarize.' })), tone: 'error' }),
@@ -420,6 +421,7 @@ export function CodexEngineContextView({ thread, profiles, compactTokens, noteDe
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const compactMutation = useMutation({
+    mutationKey: codexChatCompactMutationKey(thread.id),
     mutationFn: () => summarizeCodexChatThread(thread.id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(thread.id) }),
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '압축하지 못했어.', en: 'Could not compact.' })), tone: 'error' }),

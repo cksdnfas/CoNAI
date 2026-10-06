@@ -1,11 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useIsMutating, useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { Activity, ArrowLeft, ArrowUp, Download, Eraser, Flag, FoldVertical, LayoutGrid, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, UserRound, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
+import { Spinner } from '@/components/ui/loading-state'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import {
@@ -66,6 +67,7 @@ import { ChatSuggestButton, ChatSuggestTray, useReplySuggestions } from './chat-
 import { ChatUserProfileManagerModal, ChatUserProfilePickModal, newChatUserProfile, useChatUserProfiles, userSpeakerOf } from './chat-user-profiles'
 import {
   CODEX_CHAT_THREADS_QUERY_KEY,
+  codexChatCompactMutationKey,
   codexChatMediaQueryKey,
   codexChatThreadQueryKey,
   defaultThreadId,
@@ -334,7 +336,18 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   // this chat's own reply makes it "replying" (the stop button, its server state).
   const isStreaming = liveTurn !== null
   const streamingHere = liveTurn?.threadId === activeThreadId
-  const serverRunning = Boolean(threadQuery.data?.running) && !streamingHere
+  // Compacting this chat (here or from the context view) holds it like a reply; a Codex compaction also reads as
+  // "running" on the server, which is not a reply to show or stop.
+  const compactMutation = useMutation({
+    mutationKey: codexChatCompactMutationKey(activeThreadId),
+    mutationFn: async ({ threadId, enableSummary }: { threadId: number; enableSummary: boolean }) => {
+      await summarizeCodexChatThread(threadId)
+      if (enableSummary) await updateCodexChatThreadContext(threadId, { summaryEnabled: true })
+      await queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(threadId) })
+    },
+  })
+  const isCompacting = useIsMutating({ mutationKey: codexChatCompactMutationKey(activeThreadId) }) > 0
+  const serverRunning = Boolean(threadQuery.data?.running) && !streamingHere && !isCompacting
   const alternativeMutation = useMutation({
     mutationFn: ({ id, index }: { id: number; index: number }) => selectChatAlternative(activeThreadId as number, id, index),
     onSuccess: async (detail) => {
@@ -343,7 +356,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '답변 전환 실패', en: 'Could not switch answer' })), tone: 'error' }),
   })
-  const isBusy = isStreaming || serverRunning || alternativeMutation.isPending || commandPending
+  const isBusy = isStreaming || serverRunning || alternativeMutation.isPending || commandPending || isCompacting
   const replacingMessageId = liveTurn?.threadId === activeThreadId ? liveTurn.replacingMessageId : threadQuery.data?.running?.replacingMessageId
   const messages: CodexChatMessage[] = useMemo(() => (threadQuery.data?.messages ?? []).filter((message) => message.id !== replacingMessageId), [threadQuery.data?.messages, replacingMessageId])
   // Reply suggestions: made on request only, kept until the chat moves on (the last message changes).
@@ -697,7 +710,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const showCommands = isCommand && !/\s/.test(draft) && dismissedCommand !== draft && matchingCommands.length > 0
   const selectedCommand = Math.min(commandIndex, matchingCommands.length - 1)
   // Group rooms: the user may cut in while members are still answering.
-  const sendBlocked = isGroup ? alternativeMutation.isPending || commandPending || (isCommand && isBusy) || (isStreaming && !streamingHere) : isBusy
+  const sendBlocked = isGroup ? alternativeMutation.isPending || commandPending || isCompacting || (isCommand && isBusy) || (isStreaming && !streamingHere) : isBusy
   const canSend = (activeThreadId !== null || (pendingChat?.greeting != null && !isStartingChat)) && (Boolean(draft.trim()) || chat.draftAttachments.length > 0 || chat.draftMediaAttachments.length > 0 || picks.length > 0) && !chat.attachmentsUploading && !sendBlocked && (isCommand || (!profileMissing && !codexUnavailable))
   const mentionQuery = isGroup && !isCommand ? mentionQueryAt(draft, caret) : null
   const mentionMatches = mentionQuery ? mentionOptions(mentionQuery.query, memberProfiles, group?.representativeId ?? null) : []
@@ -752,9 +765,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           if (isGroup && name === 'compact') throw new Error(t({ ko: '그룹 방에서는 쓸 수 없어.', en: 'Not available in group rooms.' }))
           if (name === 'compact') {
             // Codex folds its own memory; an LLM chat folds into its summary, which must then be on.
-            await summarizeCodexChatThread(activeThreadId)
-            if (!isCodexThread) await updateCodexChatThreadContext(activeThreadId, { summaryEnabled: true })
-            await queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(activeThreadId) })
+            await compactMutation.mutateAsync({ threadId: activeThreadId, enableSummary: !isCodexThread })
+            showSnackbar({ message: t({ ko: '대화를 압축했어.', en: 'Chat compacted.' }) })
           } else if (name === 'retry') {
             if (lastReplyId === null) throw new Error(t({ ko: '다시 생성할 답변이 없어.', en: 'No answer to regenerate.' }))
             await regenerate(activeThreadId, lastReplyId)
@@ -918,7 +930,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       ? group ? <IconButton variant="ghost" size="icon-sm" disabled={isBusy || group.memberIds.length >= GROUP_MEMBER_MAX} onClick={() => setInvite({ kind: 'add', threadId: activeThreadId, memberIds: group.memberIds })} label={t({ ko: '참가자 초대', en: 'Invite members' })}><UserPlus /></IconButton> : null
       : profile?.usable ? <IconButton variant="ghost" size="icon-sm" onClick={() => setInvite({ kind: 'create', baseProfileId: profile.id })} label={t({ ko: '참가자 초대', en: 'Invite members' })}><UserPlus /></IconButton> : null
   const liveGroupTurn = isGroup && liveTurn?.threadId === activeThreadId ? liveTurn : null
-  const turnStatus = isGroup && (liveGroupTurn || runningFromServer) ? (
+  const turnStatus = isCompacting ? (
+    <div role="status" className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+      <Spinner size="sm" />{t({ ko: '대화 압축 중…', en: 'Compacting…' })}
+    </div>
+  ) : isGroup && (liveGroupTurn || runningFromServer) ? (
     <GroupTurnStatus
       speakers={(liveGroupTurn ? (liveGroupTurn.replies ?? []).map((reply) => reply.profileId) : serverReplies.map((reply) => reply.profileId)).flatMap((id) => profilesById.get(id) ?? [])}
       queue={((liveGroupTurn ? liveGroupTurn.queue : runningFromServer?.queue) ?? []).flatMap((id) => profilesById.get(id) ?? [])}
