@@ -48,6 +48,7 @@ import { ChatStatusAside, ChatStatusFloating, ChatStatusStrip, useStatusPanelLay
 import { ChatProfilePicker } from './chat-profile-picker'
 import { ChatAttachButton, ChatDraftAttachments } from './chat-attachments'
 import { ChatFlagButton, ChatFlagManagerModal, ChatFlagTray, useChatFlags } from './chat-flags'
+import { ChatSuggestButton, ChatSuggestTray, useReplySuggestions } from './chat-suggestions'
 import { ChatUserProfileManagerModal, ChatUserProfilePickModal, newChatUserProfile, useChatUserProfiles, userSpeakerOf } from './chat-user-profiles'
 import {
   CODEX_CHAT_THREADS_QUERY_KEY,
@@ -329,6 +330,15 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const isBusy = isStreaming || serverRunning || alternativeMutation.isPending || commandPending
   const replacingMessageId = liveTurn?.threadId === activeThreadId ? liveTurn.replacingMessageId : threadQuery.data?.running?.replacingMessageId
   const messages: CodexChatMessage[] = useMemo(() => (threadQuery.data?.messages ?? []).filter((message) => message.id !== replacingMessageId), [threadQuery.data?.messages, replacingMessageId])
+  // Reply suggestions: made on request only, kept until the chat moves on (the last message changes).
+  const suggestButtonRef = useRef<HTMLButtonElement | null>(null)
+  const suggestions = useReplySuggestions({ threadId: activeThreadId, lastMessageId: messages.at(-1)?.id ?? null, enabled: Boolean(profile?.suggestEnabled) && !isBusy })
+  const pickSuggestion = useCallback((text: string) => {
+    setDraft(text)
+    setCaret(text.length)
+    suggestions.close()
+    composerRef.current?.focus()
+  }, [suggestions, setDraft])
   const firstIndex = historyWindow.threadId === activeThreadId ? messages.findIndex((message) => message.id === historyWindow.firstId) : -1
   const visibleCount = firstIndex >= 0 ? messages.length - firstIndex : MESSAGE_PAGE_SIZE
   const focusIndex = messageFocus ? messages.findIndex((message) => message.id === messageFocus.messageId) : -1
@@ -777,6 +787,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         </div>
       ) : null}
       <div className="relative">
+      {profile?.suggestEnabled ? <ChatSuggestTray suggestions={suggestions} buttonRef={suggestButtonRef} onPick={pickSuggestion} /> : null}
       {flags.length > 0 ? (
         <ChatFlagTray
           flags={flags}
@@ -792,6 +803,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       <div className={cn('flex items-end gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-primary/55', backgroundUrl && 'bg-background/85 backdrop-blur-sm')}>
         <ChatAttachButton chat={chat} disabled={isBusy || activeThreadId === null} />
         {flags.length > 0 ? <ChatFlagButton buttonRef={flagButtonRef} count={activeFlagIds.length} open={flagTrayOpen} disabled={activeThreadId === null} onToggle={() => setFlagTrayOpen((open) => !open)} /> : null}
+        {profile?.suggestEnabled ? <ChatSuggestButton buttonRef={suggestButtonRef} open={suggestions.open} loading={suggestions.loading} disabled={isBusy || activeThreadId === null} onToggle={suggestions.toggle} /> : null}
         <textarea
           ref={composerRef}
           value={draft}

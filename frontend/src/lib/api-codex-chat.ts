@@ -118,6 +118,8 @@ export interface ChatProfileSummary {
   tagline: string
   model: string
   canReadFileText: boolean
+  /** The composer offers reply suggestions (a connection is set up to answer them). */
+  suggestEnabled: boolean
   id: number
   name: string
   avatar: string | null
@@ -316,6 +318,10 @@ export interface ChatProfile {
   /** Translation model: messages go to the chat model in English, replies are shown in Korean. Null: none. */
   translationProviderName: string | null
   translationModel: string
+  /** Reply suggestions on the composer's sparkle button; null provider uses the chat's own connection (LLM only). */
+  suggestEnabled: boolean
+  suggestProviderName: string | null
+  suggestModel: string
   maxToolRounds: number
   /** LLM: the model can look at images (view_images). */
   visionEnabled: boolean
@@ -755,6 +761,11 @@ export function previewChatProfile(draft: ChatProfileInput & { id?: number }) {
 
 export function listChatConnectionModels(providerName: string) {
   return requestApiData<{ models: string[]; defaultModel: string | null }>(`/api/codex-chat/admin/models?providerName=${encodeURIComponent(providerName)}`, { cache: 'no-store' })
+}
+
+/** A few things the user might say next, from the profile's suggestion model; `messageId` is the last message it was made after. */
+export function suggestChatReplies(threadId: number, signal?: AbortSignal) {
+  return requestApiData<{ suggestions: string[]; messageId: number | null }>(`/api/codex-chat/threads/${threadId}/suggest`, { method: 'POST', signal })
 }
 
 /** Set a display block's values by hand (the whole object), or `null` to put back its starting values. Rooms name the member. */

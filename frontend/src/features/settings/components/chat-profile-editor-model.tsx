@@ -17,7 +17,7 @@ import { CollapsibleRow } from './chat-profile-sections'
 export type ConnectionModels = { models: string[]; defaultModel: string | null }
 
 /** The engine and its knobs: connection, model, sampling, reasoning; then how much of the chat and the lore it is sent. */
-export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, providersLoaded, connectionModels, summaryModels, translationModels, codexModels }: {
+export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, providersLoaded, connectionModels, summaryModels, translationModels, suggestModels, codexModels }: {
   draft: Draft
   patch: PatchDraft
   defaults: ChatProfileDefaults | undefined
@@ -26,6 +26,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
   connectionModels: ConnectionModels | undefined
   summaryModels: ConnectionModels | undefined
   translationModels: ConnectionModels | undefined
+  suggestModels: ConnectionModels | undefined
   codexModels: CodexModelOption[] | undefined
 }) {
   const { t } = useI18n()
@@ -160,6 +161,31 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
             </Field>
           ) : null}
         </div>
+      </EditorGroup>
+
+      <EditorGroup label={t({ ko: '답장 추천', en: 'Reply suggestions' })}>
+        <SwitchLine label={t({ ko: '답장 추천 받기', en: 'Suggest replies' })} checked={draft.suggestEnabled} onCheckedChange={(suggestEnabled) => patch({ suggestEnabled })} />
+        {draft.suggestEnabled ? (
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label={t({ ko: '추천 연결', en: 'Suggestion connection' })}>
+              <Select variant="settings" value={draft.suggestProviderName ?? ''} onChange={(event) => patch({ suggestProviderName: event.target.value || null, suggestModel: '' })}>
+                {isLlm ? <option value="">{t({ ko: '대화 모델 그대로', en: 'Same as chat' })}</option> : <option value="">{t({ ko: '연결 고르기', en: 'Choose a connection' })}</option>}
+                {llmProviders.map((provider) => <option key={provider.provider_name} value={provider.provider_name}>{provider.display_name}</option>)}
+              </Select>
+            </Field>
+            {isLlm || draft.suggestProviderName ? (
+              <Field label={t({ ko: '추천 모델', en: 'Suggestion model' })}>
+                <ConnectionModelSelect
+                  value={draft.suggestModel}
+                  models={suggestModels?.models ?? []}
+                  defaultModel={draft.suggestProviderName ? suggestModels?.defaultModel ?? null : null}
+                  emptyLabel={draft.suggestProviderName ? undefined : t({ ko: '대화 모델 그대로', en: 'Same as chat' })}
+                  onChange={(suggestModel) => patch({ suggestModel })}
+                />
+              </Field>
+            ) : null}
+          </div>
+        ) : null}
       </EditorGroup>
 
       <EditorGroup label={t({ ko: '컨텍스트', en: 'Context' })}>

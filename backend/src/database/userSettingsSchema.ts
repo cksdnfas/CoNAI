@@ -687,6 +687,10 @@ export function createUserSettingsSchema(db: Database.Database): void {
     // Translation model (user input → English for the model, replies → Korean for display); null: no translation.
     ['translation_provider_name', 'TEXT'],
     ['translation_model', 'TEXT'],
+    // Reply suggestions (the sparkle button next to the composer): on demand, with their own connection/model.
+    ['suggest_enabled', 'INTEGER'],
+    ['suggest_provider_name', 'TEXT'],
+    ['suggest_model', 'TEXT'],
   ];
   for (const [columnName, definition] of chatProfileColumns) {
     if (!hasColumn('llm_chat_profiles', columnName)) {

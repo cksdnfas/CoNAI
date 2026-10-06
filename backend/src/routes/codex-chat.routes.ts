@@ -39,6 +39,7 @@ import { ChatFlagError, ChatFlagStore, parseFlagIds } from '../services/codex-ch
 import { ChatUserProfileError, ChatUserProfileStore } from '../services/codex-chat/chatUserProfiles'
 import { ChatAppearanceError, ChatAppearanceStore } from '../services/codex-chat/chatAppearance'
 import { validateBlockData } from '../services/codex-chat/chatBlockState'
+import { ChatSuggestError, suggestReplies } from '../services/codex-chat/chatSuggestions'
 
 const MESSAGE_MAX_LENGTH = 20000
 
@@ -73,7 +74,7 @@ function isGroupThread(req: Request, threadId: number) {
 }
 
 function sendChatError(res: Response, error: unknown) {
-  if (error instanceof CodexChatError || error instanceof LlmChatError || error instanceof FileStoreError || error instanceof ChatReplyError) {
+  if (error instanceof CodexChatError || error instanceof LlmChatError || error instanceof FileStoreError || error instanceof ChatReplyError || error instanceof ChatSuggestError) {
     res.status(error.status).json({ success: false, error: error.message })
     return
   }
@@ -127,6 +128,8 @@ function toPublicProfile(profile: ChatProfile) {
     authorNote: profile.authorNote,
     style: profile.style,
     backgroundVersion: backgroundVersionOf(profile),
+    // The composer shows the suggestion button only when a connection can answer it.
+    suggestEnabled: profile.suggestEnabled && Boolean(profile.suggestProviderName || (profile.engine === 'llm' && profile.providerName)),
   }
 }
 
@@ -421,6 +424,29 @@ router.patch('/threads/:threadId/blocks/:key', requireChatAccess, (req: Request,
     sendChatError(res, error)
   }
 })
+
+/**
+ * POST /api/codex-chat/threads/:threadId/suggest — a few things the user might say next, from the profile's
+ * suggestion model. Generated on request only; `messageId` is the last message it was made after, so the client can
+ * keep it until the chat moves on.
+ */
+router.post('/threads/:threadId/suggest', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  const controller = new AbortController()
+  req.on('close', () => controller.abort())
+  try {
+    const { thread, messages } = CodexChatService.getThread(requesterFrom(req), threadId)
+    const profile = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
+    if (!profile) throw new ChatSuggestError('이 대화에는 프로필이 없어서 추천할 수 없어.', 409)
+    const nameOf = (message: { speaker_profile_id: number | null }) => (message.speaker_profile_id ? ChatProfileStore.find(message.speaker_profile_id)?.name : null) ?? profile.name
+    const suggestions = await suggestReplies(profile, thread, messages, nameOf, controller.signal)
+    res.json({ success: true, data: { suggestions, messageId: messages.at(-1)?.id ?? null } })
+  } catch (error) {
+    if (controller.signal.aborted) return
+    sendChatError(res, error)
+  }
+}))
 
 /** POST /api/codex-chat/threads/:threadId/summarize — fold everything not yet summarized into the summary now. */
 router.post('/threads/:threadId/summarize', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {

@@ -78,6 +78,9 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     summaryModel: profile?.summaryModel ?? '',
     translationProviderName: profile?.translationProviderName ?? null,
     translationModel: profile?.translationModel ?? '',
+    suggestEnabled: profile?.suggestEnabled ?? false,
+    suggestProviderName: profile?.suggestProviderName ?? null,
+    suggestModel: profile?.suggestModel ?? '',
     maxToolRounds: profile?.maxToolRounds ?? defaults?.maxToolRounds ?? 8,
     visionEnabled: profile?.visionEnabled ?? false,
     style: { ...FALLBACK_STYLE, ...(profile?.style ?? defaults?.style) },
@@ -153,6 +156,13 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
     retry: false,
     staleTime: 60_000,
   })
+  const suggestModelsQuery = useQuery({
+    queryKey: ['codex-chat-connection-models', draft.suggestProviderName || (isLlm ? draft.providerName : '')],
+    queryFn: () => listChatConnectionModels(draft.suggestProviderName || draft.providerName),
+    enabled: open && draft.suggestEnabled && Boolean(draft.suggestProviderName || (isLlm && draft.providerName)),
+    retry: false,
+    staleTime: 60_000,
+  })
   const lorebooksQuery = useQuery({ queryKey: CHAT_LOREBOOKS_QUERY_KEY, queryFn: listChatLorebooks, enabled: open })
   const blocksQuery = useQuery({ queryKey: CHAT_BLOCKS_QUERY_KEY, queryFn: listChatBlocks, enabled: open })
   const codexModelsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 5 * 60 * 1000, enabled: open && !isLlm })
@@ -183,6 +193,12 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
     if (!open || !fill) return
     setDraft((current) => (!current.translationProviderName || current.translationModel ? current : { ...current, translationModel: fill }))
   }, [open, translationModelsQuery.data])
+  useEffect(() => {
+    const data = suggestModelsQuery.data
+    const fill = data?.defaultModel || data?.models[0]
+    if (!open || !fill) return
+    setDraft((current) => (!current.suggestProviderName || current.suggestModel ? current : { ...current, suggestModel: fill }))
+  }, [open, suggestModelsQuery.data])
 
   const refresh = async () => {
     await Promise.all([
@@ -287,6 +303,7 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
             connectionModels={modelsQuery.data}
             summaryModels={summaryModelsQuery.data}
             translationModels={translationModelsQuery.data}
+            suggestModels={suggestModelsQuery.data}
             codexModels={codexModelsQuery.data?.data.models}
           />
         ) : null}
