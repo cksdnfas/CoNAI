@@ -51,7 +51,7 @@ export type ChatToolCall = {
  * it is attached, so the client can render it as is; saving goes through the admin REST with the viewer's own session.
  * `savedId` / `saved` are written back once a person saves the proposal from the card.
  */
-export type ChatProposal =
+export type ChatProposal = { id: number } & (
   | {
       kind: 'display_block'
       /** Shared block name (defaults to the block key). */
@@ -78,6 +78,7 @@ export type ChatProposal =
       before: Record<string, unknown>
       saved?: boolean
     }
+)
 
 /** Message storage and client presentation can differ; the event envelope must stay identical. */
 export type ChatStreamEvent<Message> =
