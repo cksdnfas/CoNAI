@@ -3,6 +3,8 @@ import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { McpRequester } from '../../mcp/context'
 import { FileStoreService, fileOwnerKey } from '../fileStoreService'
 import { parseBlockEdits } from './chatBlockState'
+import { ChatFlagStore } from './chatFlags'
+import { ChatUserProfileStore } from './chatUserProfiles'
 import { OwnedLorebookStore, parsePinnedMemories, pinnedMemoryEntries } from './chatLorebookFiles'
 import { renderSummary, type ChatSummarySegment } from './chatMemory'
 import { ChatProfileStore } from './chatProfiles'
@@ -62,6 +64,32 @@ function findProfile(id: unknown, profileName: unknown) {
   return (name ? ChatProfileStore.list().find((profile) => profile.name === name) : undefined) ?? null
 }
 
+/**
+ * What the file says the chat was tied to (`links`: `{ id, name }` each) matched to this account's own: the same id
+ * under the same name, else one of that name. Older files without names match by id alone.
+ */
+function matchOwn<T extends { id: number; name: string }>(own: T[], wanted: unknown[]) {
+  const found: T[] = []
+  let missing = 0
+  for (const value of wanted) {
+    const item = object(value)
+    const name = typeof item.name === 'string' ? item.name : null
+    const match = own.find((entry) => entry.id === item.id && (name === null || entry.name === name)) ?? (name ? own.find((entry) => entry.name === name) : undefined)
+    if (match && !found.includes(match)) found.push(match)
+    else if (!match) missing += 1
+  }
+  return { found, missing }
+}
+
+const idList = (value: unknown) => {
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) as unknown : value
+    return Array.isArray(parsed) ? parsed.filter((id): id is number => Number.isSafeInteger(id)).map((id) => ({ id })) : []
+  } catch {
+    return []
+  }
+}
+
 /** How the empty chat is made, with the caller's access checks: a direct chat with a profile, or a room. */
 export type ChatImportTarget = {
   direct: (profileId: number) => { id: number }
@@ -71,8 +99,9 @@ export type ChatImportTarget = {
 /**
  * A chat exported as CoNAI JSON, back in as a new chat of the same profile (a room: of the same members): messages
  * with their variants, quotes, flags and app media; files only when they are still the importer's; the pinned
- * memories, author's note, chat settings, display block edits and summary. Tool results come back as their short
- * summaries only. A Codex chat (or member) starts a new Codex thread that is told the recent past on its first turn.
+ * memories, author's note, chat settings, display block edits and summary; the flags, user profile and linked account
+ * lorebooks it had when this account has them (see matchOwn). Tool results come back as their short summaries only.
+ * Images are references: those no longer in the library (or not visible to the importer) are left out and counted. A Codex chat (or member) starts a new Codex thread that is told the recent past on its first turn.
  */
 export function importChatThread(requester: McpRequester, raw: Buffer, target: ChatImportTarget) {
   let file: Json
@@ -119,7 +148,12 @@ export function importChatThread(requester: McpRequester, raw: Buffer, target: C
     }
     return mediaSeen.get(hash) ?? null
   }
-  const visible = (hash: string) => mediaOf(hash) !== null
+  const droppedMedia = new Set<string>()
+  const visible = (hash: string) => {
+    if (mediaOf(hash) !== null) return true
+    droppedMedia.add(hash)
+    return false
+  }
 
   const db = getUserSettingsDb()
   try {
@@ -150,7 +184,7 @@ export function importChatThread(requester: McpRequester, raw: Buffer, target: C
       })) : []
       const active = intOrNull(message.active_alternative, 0, Math.max(0, alternatives.length - 1)) ?? 0
       const media = Array.isArray(message.mediaAttachments) ? message.mediaAttachments.slice(0, 20).map(object)
-        .flatMap((item) => (typeof item.compositeHash === 'string' && /^[a-f0-9]{48}$/.test(item.compositeHash) ? mediaOf(item.compositeHash) ?? [] : [])) : []
+        .flatMap((item) => (typeof item.compositeHash === 'string' && /^[a-f0-9]{48}$/.test(item.compositeHash) && visible(item.compositeHash) ? mediaOf(item.compositeHash) ?? [] : [])) : []
       const copyId = Number(insert.run(
         created.id, role, textOf(message.content), nullableText(message.display_content), toolCalls.length ? JSON.stringify(toolCalls) : null,
         STATUSES.has(message.status as string) ? message.status : 'completed', nullableText(message.error, 2000),
@@ -202,6 +236,26 @@ export function importChatThread(requester: McpRequester, raw: Buffer, target: C
     const lore = object(file.lorebook)
     if (Array.isArray(lore.entries) && lore.entries.length > 0) OwnedLorebookStore.addChatBookEntries(created.id, lore.entries.slice(0, 500))
 
+    // What the chat was tied to in the account: this account's flags, user profile and account lorebooks of the same id
+    // or name. Unmatched ones are left out and reported.
+    const links = object(file.links)
+    // A file from before links names nothing: its ids mean something only to the account that exported it.
+    const sameAccount = thread.account_id === requester.accountId
+    const flags = matchOwn(ChatFlagStore.list(requester.accountId), Array.isArray(links.flags) ? links.flags : sameAccount ? idList(thread.flag_ids) : [])
+    if (flags.found.length) ChatFlagStore.setThreadFlags(created.id, flags.found.map((flag) => flag.id))
+    if (flags.missing) notes.push(`이 계정에 없는 플래그 ${flags.missing}개는 켜지 않았어.`)
+    const wantedUser = 'userProfile' in links ? links.userProfile : sameAccount && typeof thread.user_profile_id === 'number' ? { id: thread.user_profile_id } : undefined
+    if (wantedUser === null) {
+      ChatUserProfileStore.setThreadUserProfile(created.id, null)
+    } else if (wantedUser !== undefined) {
+      const user = matchOwn(ChatUserProfileStore.list(requester.accountId), [wantedUser])
+      if (user.found[0]) ChatUserProfileStore.setThreadUserProfile(created.id, user.found[0].id)
+      else notes.push(`사용자 프로필${typeof object(wantedUser).name === 'string' ? `(${object(wantedUser).name})` : ''}을 찾지 못해 기본값으로 뒀어.`)
+    }
+    const books = matchOwn(OwnedLorebookStore.list(owner), Array.isArray(links.lorebooks) ? links.lorebooks : sameAccount ? idList(thread.lorebook_ids) : [])
+    if (books.found.length) OwnedLorebookStore.setThreadLinks(created.id, books.found.map((book) => book.id))
+    if (books.missing) notes.push(`이 계정에 없는 로어북 ${books.missing}개는 연결하지 않았어.`)
+
     // The summary: its segments when the file has them, else the old single summary as a plot up to where it reached.
     const insertSegment = db.prepare('INSERT INTO chat_summary_segments (thread_id, level, from_message_id, until_message_id, content, backed) VALUES (?, ?, ?, ?, ?, ?)')
     const segments = Array.isArray(file.summarySegments) ? file.summarySegments.slice(0, 5000).map(object) : []
@@ -222,6 +276,7 @@ export function importChatThread(requester: McpRequester, raw: Buffer, target: C
       .run(renderSummary(stored) || null, until, until, created.id)
 
     if (droppedFiles) notes.push(`이 계정에 없는 첨부 파일 ${droppedFiles}개는 뺐어.`)
+    if (droppedMedia.size) notes.push(`라이브러리에 없거나 볼 수 없는 이미지·영상 ${droppedMedia.size}개는 뺐어.`)
     if (droppedToolOutputs) notes.push('도구 결과는 요약만 남겼어.')
     if (ids.size < messages.length) notes.push(`읽을 수 없는 메시지 ${messages.length - ids.size}개는 건너뛰었어.`)
   }).immediate()

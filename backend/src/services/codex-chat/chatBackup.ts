@@ -1,9 +1,11 @@
 import type { McpRequester } from '../../mcp/context'
 import { FileStoreService, fileOwnerKey } from '../fileStoreService'
+import { ChatFlagStore } from './chatFlags'
 import { ChatGroupStore } from './chatGroupStore'
 import { OwnedLorebookStore } from './chatLorebookFiles'
 import { ChatSummaryStore } from './chatMemory'
 import { ChatProfileStore } from './chatProfiles'
+import { ChatUserProfileStore } from './chatUserProfiles'
 import { CodexChatService } from './codexChatService'
 
 /** The file store folder chat backups go to, one subfolder per day. */
@@ -12,11 +14,16 @@ export const CHAT_BACKUP_FOLDER = '채팅 백업'
 /**
  * A chat as a CoNAI chat file (`conai-chat` v1): what "export JSON" downloads and what import reads back. The chat's
  * own lorebook goes along as plain entries (the files an entry points at stay in the file store and are not copied).
+ * `links` names what the chat was tied to in the account (flags on, user profile, linked account lorebooks) by id and
+ * name, so an import can tie it again to the same ones, or to ones of the same name in another account.
  */
 export function exportChatJson(requester: McpRequester, threadId: number) {
   const detail = CodexChatService.getThread(requester, threadId)
   const profile = detail.thread.profile_id ? ChatProfileStore.find(detail.thread.profile_id) : null
   const book = OwnedLorebookStore.chatBookOf(threadId)
+  const owner = fileOwnerKey(requester.accountId)
+  const flagIds = readIdList(detail.thread.flag_ids)
+  const userProfile = ChatUserProfileStore.forThread(detail.thread)
   return {
     format: 'conai-chat',
     version: 1,
@@ -29,6 +36,24 @@ export function exportChatJson(requester: McpRequester, threadId: number) {
     // A room's members, so an import can find them by id and name.
     members: detail.thread.kind === 'group' ? ChatGroupStore.members(threadId).map((member) => ({ id: member.profile_id, name: ChatProfileStore.find(member.profile_id)?.name ?? null })) : undefined,
     lorebook: book && book.entries.length > 0 ? { entries: book.entries.map((entry) => ({ ...entry, file: null, fileId: null })) } : undefined,
+    links: {
+      flags: ChatFlagStore.resolve(requester.accountId, flagIds).map(({ id, name }) => ({ id, name })),
+      userProfile: userProfile ? { id: userProfile.id, name: userProfile.name } : null,
+      lorebooks: OwnedLorebookStore.threadLinks(threadId).flatMap((id) => {
+        const linked = OwnedLorebookStore.find(id, owner)
+        return linked ? [{ id: linked.id, name: linked.name }] : []
+      }),
+    },
+  }
+}
+
+/** A JSON id list column (`[1, 2]`), or none. */
+function readIdList(value: string | null | undefined): number[] {
+  try {
+    const parsed = JSON.parse(value ?? '[]') as unknown
+    return Array.isArray(parsed) ? parsed.filter((id): id is number => Number.isSafeInteger(id)) : []
+  } catch {
+    return []
   }
 }
 

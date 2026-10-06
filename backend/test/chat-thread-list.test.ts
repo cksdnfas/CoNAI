@@ -119,6 +119,55 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     assert.deepEqual(OwnedLorebookStore.chatBookOf(restored.threadId)?.entries.map((entry) => entry.content), ['내일 저녁 반지를 준다.'])
   })
 
+  await t.test('import: flags, user profile and linked lorebooks tied again by id or name; missing images counted', async () => {
+    const { exportChatJson } = await import('../src/services/codex-chat/chatBackup')
+    const { OwnedLorebookStore } = await import('../src/services/codex-chat/chatLorebookFiles')
+    const { ChatFlagStore } = await import('../src/services/codex-chat/chatFlags')
+    const { ChatUserProfileStore } = await import('../src/services/codex-chat/chatUserProfiles')
+    const { fileOwnerKey } = await import('../src/services/fileStoreService')
+    const { importChatThread } = await import('../src/services/codex-chat/chatImport')
+    const target = (who: typeof requester) => ({ direct: (profileId: number) => CodexChatService.createThread(who, profileId), group: (): { id: number } => { throw new Error('no rooms here') } })
+    const flag = ChatFlagStore.create(1, { icon: '', name: '반말', content: '반말로 말해.' })
+    const quiet = ChatFlagStore.create(1, { icon: '', name: '짧게', content: '짧게 말해.' })
+    const me = ChatUserProfileStore.create(1, { name: '민준', persona: '여행 좋아함' })
+    const book = OwnedLorebookStore.create(fileOwnerKey(1), { name: '세계관' })
+
+    const id = newThread()
+    ChatFlagStore.setThreadFlags(id, [flag.id, quiet.id])
+    ChatUserProfileStore.setThreadUserProfile(id, me.id)
+    OwnedLorebookStore.setThreadLinks(id, [book.id])
+    say(id, 'user', '사진 봐')
+    say(id, 'assistant', '찾았어')
+    const file = exportChatJson(requester, id)
+    // Library images this test has no library for: as a file from elsewhere would carry them.
+    const [asked, found] = file.messages as unknown as Array<Record<string, unknown>>
+    asked.mediaAttachments = [{ compositeHash: 'a'.repeat(48), name: 'x.png', mimeType: 'image/png' }]
+    found.tool_calls = [{ id: 'c1', tool: 'search', status: 'completed', arguments: {}, summary: '2개', historyIds: [], compositeHashes: ['b'.repeat(48), 'a'.repeat(48)] }]
+    assert.deepEqual(file.links, { flags: [{ id: flag.id, name: '반말' }, { id: quiet.id, name: '짧게' }], userProfile: { id: me.id, name: '민준' }, lorebooks: [{ id: book.id, name: '세계관' }] })
+
+    const back = importChatThread(requester, Buffer.from(JSON.stringify(file)), target(requester))
+    const restored = CodexChatStore.findThreadById(back.threadId)!
+    assert.deepEqual(JSON.parse(restored.flag_ids ?? '[]'), [flag.id, quiet.id])
+    assert.equal(restored.user_profile_id, me.id)
+    assert.deepEqual(OwnedLorebookStore.threadLinks(back.threadId), [book.id])
+    assert.ok(back.notes.includes('라이브러리에 없거나 볼 수 없는 이미지·영상 2개는 뺐어.'), back.notes.join(' / '))
+
+    // Another account: same names match, missing ones are reported; the plain id never reaches someone else's.
+    const theirs = ChatFlagStore.create(2, { icon: '', name: '반말', content: '반말.' })
+    const theirMe = ChatUserProfileStore.create(2, { name: '민준', persona: '' })
+    const there = importChatThread(stranger, Buffer.from(JSON.stringify(file)), target(stranger))
+    const copy = CodexChatStore.findThreadById(there.threadId)!
+    assert.deepEqual(JSON.parse(copy.flag_ids ?? '[]'), [theirs.id])
+    assert.equal(copy.user_profile_id, theirMe.id)
+    assert.deepEqual(OwnedLorebookStore.threadLinks(there.threadId), [])
+    assert.ok(there.notes.includes('이 계정에 없는 플래그 1개는 켜지 않았어.'), there.notes.join(' / '))
+    assert.ok(there.notes.includes('이 계정에 없는 로어북 1개는 연결하지 않았어.'), there.notes.join(' / '))
+
+    const { links: _links, ...older } = file
+    const oldThere = importChatThread(stranger, Buffer.from(JSON.stringify(older)), target(stranger))
+    assert.equal(CodexChatStore.findThreadById(oldThere.threadId)!.flag_ids, null, 'an old file’s ids are not matched in another account')
+  })
+
   await t.test('branch origin: purpose and source kept, unlinked (not deleted) when the source goes', () => {
     const id = newThread()
     const first = say(id, 'user', '하나')
