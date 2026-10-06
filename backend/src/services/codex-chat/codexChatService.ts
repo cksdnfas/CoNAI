@@ -5,7 +5,7 @@ import { beginDirectReply, userReplyRouting, requireReplyTarget, REPLY_GUIDANCE 
 import { buildReplyContext } from './chatReplyContext'
 import fs from 'fs'
 import { createHash } from 'crypto'
-import { chatContentWithAttachments, validateChatAttachments } from './chatAttachments'
+import { chatContentWithAttachments, inlineTextsForChat, validateChatAttachments } from './chatAttachments'
 import path from 'path'
 import { spawn } from 'child_process'
 import { PORTS, isCodexReasoningEffort, type CodexReasoningEffort } from '@conai/shared'
@@ -22,7 +22,7 @@ import { attachJobResults, collectCodexChatMedia } from './codexChatMedia'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
 import { BLOCK_EDITS_MAX, blockStateHash, blockStateText, foldBlockState, parseBlockEdits, usableBlocks } from './chatBlockState'
-import { authorNoteText, buildPersonaPrompt, estimateTokens, fillCharacterPlaceholders, referenceBlock, resolveAuthorNote, REPLY_FORMAT_GUIDANCE, GENERATION_GUIDANCE } from './llmChatContext'
+import { authorNoteText, postHistoryText, buildPersonaPrompt, estimateTokens, fillCharacterPlaceholders, referenceBlock, resolveAuthorNote, REPLY_FORMAT_GUIDANCE, GENERATION_GUIDANCE } from './llmChatContext'
 import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { translateReply, translateUserInput } from './chatTranslation'
 import { hasTranslation } from './chatModelRoles'
@@ -34,6 +34,8 @@ import { buildFlagDirective, ChatFlagStore, parseFlagIds, parsePicks } from './c
 import { ChatUserProfileStore, userPersonaForThread, userPersonaOf, userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
+import { ChatSummaryStore, memoriesText, parseMemories } from './chatMemory'
+import { branchChatThread } from './chatBranch'
 import { logger } from '../../utils/logger'
 import type { ChatStreamEvent } from '@conai/shared'
 
@@ -612,6 +614,42 @@ function pendingAuthorNote(thread: Pick<CodexChatThreadRecord, 'author_note' | '
   return sent.has(key) ? { text: '', keys: [] } : { text, keys: [key] }
 }
 
+const RECAP_MESSAGES = 40
+const RECAP_CHARS = 16_000
+
+/**
+ * What a new Codex thread is told of a chat it did not take part in (a branch, an import, a chat whose Codex memory was
+ * reset): its summary and its last messages, once. Empty when there is no conversation yet (a greeting alone).
+ */
+export function codexHistoryRecap(thread: Pick<CodexChatThreadRecord, 'summary'> | null, earlier: CodexChatMessageRecord[], profile: ChatProfile, user: ChatUserPersona) {
+  const messages = earlier.filter((message) => message.content.trim())
+  if (!messages.some((message) => message.role === 'user')) return ''
+  let transcript = messages.slice(-RECAP_MESSAGES).map((message) => `${message.role === 'user' ? user.name : profile.name}: ${message.content.trim()}`).join('\n\n')
+  if (transcript.length > RECAP_CHARS) transcript = `…${transcript.slice(-RECAP_CHARS)}`
+  const summary = thread?.summary?.trim()
+  return [
+    '[이전 기록] 이 대화는 아래에서 이어져. 네 기억에는 없지만 실제로 나눈 대화야. 이어서 자연스럽게 답해.',
+    summary ? `## 그 전의 요약\n${summary}` : '',
+    `## 최근 대화\n${transcript}`,
+    '[/이전 기록]',
+  ].filter(Boolean).join('\n\n')
+}
+
+/**
+ * The chat's pinned memories, given to Codex the same way as the note: once, and again when they change (or after a
+ * compaction), tracked as `memory:<hash>`.
+ */
+function pendingMemories(thread: Pick<CodexChatThreadRecord, 'memories'> | null, profile: ChatProfile, sent: Set<string>, user: ChatUserPersona) {
+  const list = memoriesText(parseMemories(thread?.memories), (value) => fillCharacterPlaceholders(value, profile, user))
+  // Codex still holds a list it was given before: say this one replaces it, or that there is none any more.
+  const replacing = [...sent].some((key) => key.startsWith('memory:'))
+  if (!list && !replacing) return { text: '', keys: [] as string[] }
+  const key = list ? `memory:${createHash('sha1').update(list).digest('hex').slice(0, 10)}` : 'memory:none'
+  if (sent.has(key)) return { text: '', keys: [] as string[] }
+  const text = list ? (replacing ? `${list}\n(고정 기억이 바뀌었어. 이전 목록 대신 이 목록을 따라.)` : list) : '## 고정 기억\n(고정 기억을 모두 지웠어. 이전 목록은 따르지 마.)'
+  return { text, keys: [key] }
+}
+
 /**
  * Who the user is (the chat's user profile), given to Codex the same way as the note: once, and again when the
  * profile changes or after a compaction. Codex's fixed instructions are frozen at thread start, so it cannot go there.
@@ -723,15 +761,16 @@ export async function runCodexGroupReply(params: {
         const persona = pendingUserPersona(user, sent)
         const lore = selectLoreEntries(profile, params.messages, (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile, user), { skip: (key) => sent.has(key) })
         const note = pendingAuthorNote(room, profile, sent, user)
+        const memory = pendingMemories(room, profile, sent, user)
         const state = pendingBlockState(room, profile, params.messages, sent, profile.id)
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
           threadId: codexThreadId,
           model: run.model,
           effort: run.effort,
-          input: [{ type: 'text', text: params.buildInput([persona.text, lore.text, note.text, state.text].filter(Boolean).join('\n\n')), text_elements: [] }],
+          input: [{ type: 'text', text: params.buildInput([persona.text, memory.text, lore.text, note.text, state.text].filter(Boolean).join('\n\n')), text_elements: [] }],
         }, THREAD_REQUEST_TIMEOUT_MS)
         turn.turnId = response.turn.id
-        const keys = [...persona.keys, ...lore.keys, ...note.keys, ...state.keys]
+        const keys = [...persona.keys, ...memory.keys, ...lore.keys, ...note.keys, ...state.keys]
         if (keys.length > 0) ChatGroupStore.setMemberLoreSent(threadId, profile.id, [...sent, ...keys].slice(-LORE_SENT_MAX_KEYS))
         if (params.signal.aborted) interrupt()
       } catch (error) {
@@ -808,12 +847,44 @@ export const CodexChatService = {
     const thread = requireThread(requester, threadId)
     if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     if (thread.engine !== 'llm') throw new CodexChatError('답변 전환은 API LLM 채팅에서만 가능해.', 409)
-    const messages = CodexChatStore.listMessages(threadId)
-    const message = messages[messages.length - 1]
-    if (!message || message.id !== messageId || message.role !== 'assistant') throw new CodexChatError('마지막 답변만 전환할 수 있어.', 409)
+    // Any reply, not only the last: the history after it stays, and the summary is redone from it.
+    const message = CodexChatStore.listMessages(threadId).find((entry) => entry.id === messageId)
+    if (!message || message.role !== 'assistant') throw new CodexChatError('답변을 찾을 수 없어.', 404)
     if (!Number.isSafeInteger(index) || index < 0 || !message.alternatives[index]) throw new CodexChatError('답변 번호를 확인해줘.')
     CodexChatStore.selectAlternative(threadId, messageId, index)
     return CodexChatService.getThread(requester, threadId)
+  },
+
+  /** A reply's text rewritten by hand, without regenerating anything (API LLM direct chats). */
+  editReplyText(requester: McpRequester, threadId: number, messageId: number, content: string) {
+    const thread = requireThread(requester, threadId)
+    if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (thread.engine !== 'llm' || thread.kind !== 'direct') throw new CodexChatError('답변 수정은 API LLM 1:1 채팅에서만 가능해.', 409)
+    const message = CodexChatStore.listMessages(threadId).find((entry) => entry.id === messageId)
+    if (!message || message.role !== 'assistant') throw new CodexChatError('답변을 찾을 수 없어.', 404)
+    if (!content.trim()) throw new CodexChatError('답변 내용을 입력해줘.')
+    CodexChatStore.editAssistantMessage(threadId, messageId, content.trim())
+    return CodexChatService.getThread(requester, threadId)
+  },
+
+  /** Carry on the last reply where the token cap cut it, as a new variant of it (API LLM direct chats). */
+  continueReply(requester: McpRequester, threadId: number, messageId: number, listener: (event: CodexChatStreamEvent) => void) {
+    const thread = requireThread(requester, threadId)
+    if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (thread.engine !== 'llm' || thread.kind !== 'direct') throw new CodexChatError('이어쓰기는 API LLM 1:1 채팅에서만 가능해.', 409)
+    return LlmChatService.continueReply(requester, thread, messageId, listener)
+  },
+
+  /**
+   * A new chat holding this one up to `messageId`; this one stays as it is. A Codex chat's branch starts a new Codex
+   * thread, which is told the past once (see codexHistoryRecap).
+   */
+  branchThread(requester: McpRequester, threadId: number, messageId: number) {
+    const thread = requireThread(requester, threadId)
+    if (thread.kind !== 'direct') throw new CodexChatError('그룹 방 분기는 방 기능으로 처리해.', 409)
+    const id = branchChatThread(thread, messageId)
+    if (id === null) throw new CodexChatError('메시지를 찾을 수 없어.', 404)
+    return requireThread(requester, id)
   },
 
   listThreads(requester: McpRequester) {
@@ -862,7 +933,9 @@ export const CodexChatService = {
     // Display block state: direct chats only (a room's members each have their own blocks; not folded yet).
     const blocks = profile && thread.kind === 'direct' ? foldBlockState(profile, messages, parseBlockEdits(thread.block_edits)) : null
     if (thread.engine === 'llm') {
-      return { thread, messages, media, pendingJobs, blocks, running: LlmChatService.running(threadId) }
+      // Direct chats and rooms both keep their summary by stretch (a room's is the room's own, see groupSummaryOn).
+      const summarySegments = ChatSummaryStore.list(threadId)
+      return { thread, messages, media, pendingJobs, blocks, summarySegments, running: LlmChatService.running(threadId) }
     }
     return {
       thread,
@@ -949,6 +1022,8 @@ export const CodexChatService = {
       const session = await ensureSession(requester, scopes, profile.toolAllowlist, false, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct' })
       const run = resolveCodexRun(session, profile)
       const codexThreadId = await ensureCodexThread(session, thread.codex_thread_id, profile, (id) => CodexChatStore.setCodexThreadId(threadId, id))
+      // A new Codex thread for a chat that already has a past (branched, imported, or its memory was reset).
+      const freshCodexThread = codexThreadId !== thread.codex_thread_id
 
       let resolveFinished: (message: CodexChatMessageRecord) => void = () => {}
       const finished = new Promise<CodexChatMessageRecord>((resolve) => {
@@ -996,10 +1071,12 @@ export const CodexChatService = {
         const persona = pendingUserPersona(user, sent)
         const lore = selectLoreEntries(profile, history, (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile, user), { skip: (key) => sent.has(key) })
         const note = pendingAuthorNote(current, profile, sent, user)
+        const memory = pendingMemories(current, profile, sent, user)
         const state = pendingBlockState(current, profile, history, sent)
-        const directive = buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile, user))
-        const reference = referenceBlock([persona.text, lore.text, note.text, state.text])
-        const input = [reference, `${REPLY_GUIDANCE}\nCurrent room_id: ${threadId}.`, buildReplyContext(history, routing), chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments), directive].filter(Boolean).join('\n\n')
+        const directive = [buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile, user)), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
+        const reference = referenceBlock([persona.text, memory.text, lore.text, note.text, state.text])
+        const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user) : ''
+        const input = [recap, reference, `${REPLY_GUIDANCE}\nCurrent room_id: ${threadId}.`, buildReplyContext(history, routing), chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }])), directive].filter(Boolean).join('\n\n')
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
           threadId: codexThreadId,
           model: run.model,
@@ -1007,7 +1084,7 @@ export const CodexChatService = {
           input: [{ type: 'text', text: input, text_elements: [] }],
         }, THREAD_REQUEST_TIMEOUT_MS)
         turn.turnId = response.turn.id
-        const keys = [...persona.keys, ...lore.keys, ...note.keys, ...state.keys]
+        const keys = [...persona.keys, ...memory.keys, ...lore.keys, ...note.keys, ...state.keys]
         if (keys.length > 0) CodexChatStore.setCodexLoreSent(threadId, [...sent, ...keys].slice(-LORE_SENT_MAX_KEYS))
       } catch (error) {
         void finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')

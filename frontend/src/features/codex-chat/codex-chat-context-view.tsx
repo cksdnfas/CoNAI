@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { TriangleAlert } from 'lucide-react'
+import { ChevronDown, Eraser, Plus, TriangleAlert, X } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
+import { useConfirm } from '@/components/ui/confirm-dialog'
+import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SettingRow } from '@/components/ui/setting-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { summarizeCodexChatThread, updateCodexChatThreadContext, updateGroupChat, updateGroupChatMember, type ChatGroupInfo, type ChatProfileSummary, type CodexChatThread, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { editChatSummarySegment, readThreadMemories, summarizeCodexChatThread, updateCodexChatThreadContext, updateGroupChat, updateGroupChatMember, type ChatGroupInfo, type ChatMemoryItem, type ChatProfileSummary, type ChatSummarySegment, type CodexChatThread, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { cn } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error-message'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatUserProfileRow } from './chat-user-profiles'
@@ -93,14 +96,90 @@ export function AuthorNoteBlock({ thread, defaults }: { thread: CodexChatThread;
   )
 }
 
+const MEMORY_MAX_ITEMS = 50
+const MEMORY_TEXT_MAX_LENGTH = 500
+
+const sameMemories = (a: ChatMemoryItem[], b: ChatMemoryItem[]) => JSON.stringify(a.map((item) => [item.id, item.text.trim()])) === JSON.stringify(b.map((item) => [item.id, item.text.trim()]))
+
+/**
+ * Pinned memories: short facts every request of this chat carries (relationships, promises, what happened), for any
+ * engine. A line saves when it loses focus; an emptied line goes away.
+ */
+export function MemoryBlock({ thread }: { thread: CodexChatThread }) {
+  const { t } = useI18n()
+  const { showSnackbar } = useSnackbar()
+  const queryClient = useQueryClient()
+  const storedJson = thread.memories ?? ''
+  const [items, setItems] = useState(() => readThreadMemories(thread))
+  const [focusId, setFocusId] = useState<string | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // The saved list replaces the local one, except while a line is being edited: a save of the line just left must
+  // not wipe the line now being typed (or the one just added). That line saves when it is left in turn.
+  useEffect(() => {
+    if (containerRef.current?.contains(document.activeElement)) return
+    setItems(readThreadMemories({ memories: storedJson }))
+  }, [storedJson])
+
+  const mutation = useMutation({
+    mutationFn: (next: ChatMemoryItem[]) => updateCodexChatThreadContext(thread.id, { memories: next }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(thread.id) }),
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
+  })
+
+  const commit = (next: ChatMemoryItem[]) => {
+    const kept = next.filter((item) => item.text.trim())
+    setItems(kept)
+    if (!sameMemories(kept, readThreadMemories({ memories: storedJson }))) mutation.mutate(kept)
+  }
+  const add = () => {
+    const id = `m${Date.now().toString(36)}`
+    setItems((current) => [...current, { id, text: '' }])
+    setFocusId(id)
+  }
+
+  return (
+    <div ref={containerRef} className="flex flex-col gap-2 border-b border-line py-2.5">
+      <div className="flex min-h-8 items-center justify-between gap-2">
+        <span className="text-sm">{t({ ko: '고정 기억', en: 'Pinned memories' })}</span>
+        <IconButton variant="ghost" size="icon-sm" onClick={add} disabled={items.length >= MEMORY_MAX_ITEMS} label={t({ ko: '기억 추가', en: 'Add memory' })}><Plus /></IconButton>
+      </div>
+      {items.map((item) => (
+        <div key={item.id} className="flex items-start gap-1">
+          <Textarea
+            rows={1}
+            autoFocus={item.id === focusId}
+            value={item.text}
+            maxLength={MEMORY_TEXT_MAX_LENGTH}
+            onChange={(event) => setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, text: event.target.value } : entry)))}
+            onBlur={() => commit(items)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault()
+                event.currentTarget.blur()
+              }
+            }}
+            className="min-h-0 resize-none py-1.5 text-sm leading-relaxed [field-sizing:content]"
+            aria-label={t({ ko: '고정 기억', en: 'Pinned memory' })}
+          />
+          {/* Keeps the line's focus on press, so removing it is one save rather than a blur save racing the removal. */}
+          <IconButton variant="ghost" size="icon-sm" onMouseDown={(event) => event.preventDefault()} onClick={() => commit(items.filter((entry) => entry.id !== item.id))} label={t({ ko: '지우기', en: 'Remove' })}><X /></IconButton>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /**
  * A group room's context: the room's author's note and reply token caps — one for the room, then one per LLM member
  * that overrides it (members keep their own windows and memories). A Codex member has no hard cap, so it is not listed.
  */
-export function GroupContextView({ thread, group, profilesById }: {
+export function GroupContextView({ thread, group, profilesById, segments }: {
   thread: CodexChatThread
   group: ChatGroupInfo | null
   profilesById: Map<number, ChatProfileSummary>
+  /** The room's summary by stretch, the plot first (see ChatSummarySegment). */
+  segments: ChatSummarySegment[]
 }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -111,6 +190,11 @@ export function GroupContextView({ thread, group, profilesById }: {
   }
   const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' })
   const roomMutation = useMutation({ mutationFn: (maxTokens: number | null) => updateGroupChat(thread.id, { maxTokens }), onSuccess: applied, onError })
+  const summaryMutation = useMutation({
+    mutationFn: (summaryEnabled: boolean) => updateCodexChatThreadContext(thread.id, { summaryEnabled }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(thread.id) }),
+    onError,
+  })
   const memberMutation = useMutation({
     mutationFn: ({ profileId, maxTokens }: { profileId: number; maxTokens: number | null }) => updateGroupChatMember(thread.id, profileId, { maxTokens }),
     onSuccess: applied,
@@ -126,6 +210,7 @@ export function GroupContextView({ thread, group, profilesById }: {
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
       <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock thread={thread} defaults={{ note: '', depth: null }} />
+      <MemoryBlock thread={thread} />
       {group ? (
         <>
           <SettingRow label={capLabel}>
@@ -180,13 +265,140 @@ export function GroupContextView({ thread, group, profilesById }: {
           })}
         </>
       ) : null}
+      {/* The room's own summary (off unless turned on here): the representative's summary model writes it for everyone. */}
+      <SettingRow label={t({ ko: '대화 요약', en: 'Conversation summary' })}>
+        <SegmentedControl
+          size="xs"
+          value={thread.summary_enabled === 1 ? 'on' : 'off'}
+          onChange={(mode) => summaryMutation.mutate(mode === 'on')}
+          items={[
+            { value: 'on', label: t({ ko: '켬', en: 'On' }) },
+            { value: 'off', label: t({ ko: '끔', en: 'Off' }) },
+          ]}
+          ariaLabel={t({ ko: '대화 요약', en: 'Conversation summary' })}
+        />
+      </SettingRow>
+      <SummaryBlock thread={thread} segments={segments} summaryOn={thread.summary_enabled === 1} />
     </div>
   )
 }
 
-/** One LLM chat's context: its author's note, turn window, reply token cap and summary switch (all can follow the profile), and the summary itself. */
-export function CodexChatContextView({ thread, profileTurns, profileMaxTokens, profileReasoningBudget, profileSummaryEnabled, noteDefaults }: {
+/** One stretch of the summary (or the plot), edited in place; save and revert show once it differs. */
+function SummarySegmentEditor({ threadId, segment, label, muted }: { threadId: number; segment: ChatSummarySegment; label: string; muted?: boolean }) {
+  const { t } = useI18n()
+  const { showSnackbar } = useSnackbar()
+  const queryClient = useQueryClient()
+  const [draft, setDraft] = useState(segment.content)
+  const synced = useRef(segment.content)
+
+  // A newer text from the server (a fold, another tab) replaces the draft only while it holds no edit of its own.
+  useEffect(() => {
+    setDraft((current) => (current.trim() === synced.current.trim() ? segment.content : current))
+    synced.current = segment.content
+  }, [segment.content])
+
+  const mutation = useMutation({
+    mutationFn: () => editChatSummarySegment(threadId, segment.id, draft),
+    onSuccess: (detail) => queryClient.setQueryData(codexChatThreadQueryKey(threadId), detail),
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
+  })
+  const dirty = draft.trim() !== segment.content.trim()
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <Textarea
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        rows={3}
+        className={cn('min-h-0 resize-y text-sm leading-relaxed [field-sizing:content]', muted && 'text-muted-foreground')}
+        aria-label={label}
+      />
+      {dirty ? (
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={() => setDraft(segment.content)}>{t({ ko: '되돌리기', en: 'Revert' })}</Button>
+          <Button size="sm" onClick={() => mutation.mutate()} disabled={mutation.isPending || !draft.trim()}>{t({ ko: '저장', en: 'Save' })}</Button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * The summary itself, for a direct LLM chat or a room: the plot, the stretches after it, and (folded away) the
+ * stretches the plot took in, each edited in place; summarize now, clear, and the last failure when the summary is on.
+ */
+function SummaryBlock({ thread, segments, summaryOn }: { thread: CodexChatThread; segments: ChatSummarySegment[]; summaryOn: boolean }) {
+  const { t, formatDateTime } = useI18n()
+  const { showSnackbar } = useSnackbar()
+  const confirm = useConfirm()
+  const queryClient = useQueryClient()
+  const [showFolded, setShowFolded] = useState(false)
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(thread.id) })
+  const clearMutation = useMutation({
+    mutationFn: () => updateCodexChatThreadContext(thread.id, { summary: null }),
+    onSuccess: refresh,
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
+  })
+  const summarizeMutation = useMutation({
+    mutationFn: () => summarizeCodexChatThread(thread.id),
+    onSuccess: refresh,
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '요약하지 못했어.', en: 'Could not summarize.' })), tone: 'error' }),
+  })
+
+  const plot = segments.find((segment) => segment.level === 1) ?? null
+  const stretches = segments.filter((segment) => segment.level === 0)
+  const stretchLabel = (segment: ChatSummarySegment) => t({ ko: '구간 {n}', en: 'Part {n}' }, { n: stretches.indexOf(segment) + 1 })
+  const active = stretches.filter((segment) => !plot || segment.until_message_id > plot.until_message_id)
+  const folded = stretches.filter((segment) => plot && segment.until_message_id <= plot.until_message_id)
+  const clearSummary = async () => {
+    const confirmed = await confirm({ title: t({ ko: '요약을 모두 지울까?', en: 'Clear the whole summary?' }), confirmLabel: t({ ko: '지우기', en: 'Clear' }), tone: 'destructive' })
+    if (confirmed) clearMutation.mutate()
+  }
+
+  return (
+    <>
+      <div className="flex items-center gap-2 pb-2 pt-4">
+        <span className="flex-1 text-sm">{t({ ko: '요약', en: 'Summary' })}</span>
+        {thread.summary_updated_date ? <span className="text-xs text-muted-foreground">{formatDateTime(parseServerDate(thread.summary_updated_date))}</span> : null}
+        {segments.length > 0 ? <IconButton variant="ghost" size="icon-sm" onClick={() => void clearSummary()} disabled={clearMutation.isPending} label={t({ ko: '요약 지우기', en: 'Clear summary' })}><Eraser /></IconButton> : null}
+        <Button size="sm" variant="secondary" onClick={() => summarizeMutation.mutate()} disabled={summarizeMutation.isPending}>
+          {summarizeMutation.isPending ? t({ ko: '요약 중…', en: 'Summarizing…' }) : t({ ko: '지금 요약', en: 'Summarize now' })}
+        </Button>
+      </div>
+      {summaryOn && thread.summary_error ? (
+        <p className="flex items-start gap-1.5 pb-2 text-xs text-warning" role="status">
+          <TriangleAlert className="mt-px size-3.5 shrink-0" aria-hidden />
+          <span className="min-w-0 break-words">{t({ ko: '요약하지 못했어: {error}', en: 'Could not summarize: {error}' }, { error: thread.summary_error })}</span>
+        </p>
+      ) : null}
+      {segments.length === 0 ? <p className="text-sm text-muted-foreground">{t({ ko: '아직 요약이 없어.', en: 'No summary yet.' })}</p> : null}
+      <div className="flex flex-col gap-4">
+        {plot ? <SummarySegmentEditor threadId={thread.id} segment={plot} label={t({ ko: '줄거리', en: 'Plot' })} /> : null}
+        {active.map((segment) => <SummarySegmentEditor key={segment.id} threadId={thread.id} segment={segment} label={stretchLabel(segment)} />)}
+      </div>
+      {folded.length > 0 ? (
+        <div className="flex flex-col gap-4 pt-4">
+          <Button variant="ghost" size="sm" className="w-fit gap-1 px-1.5 text-muted-foreground" onClick={() => setShowFolded((value) => !value)} aria-expanded={showFolded}>
+            <ChevronDown className={cn('size-4 transition-transform', !showFolded && '-rotate-90')} />
+            {t({ ko: '줄거리에 접힌 구간 {count}개', en: '{count} parts folded into the plot' }, { count: folded.length })}
+          </Button>
+          {showFolded ? folded.map((segment) => <SummarySegmentEditor key={segment.id} threadId={thread.id} segment={segment} label={stretchLabel(segment)} muted />) : null}
+        </div>
+      ) : null}
+    </>
+  )
+}
+
+/**
+ * One LLM chat's context: its author's note, pinned memories, turn window, reply token cap and summary switch (all can
+ * follow the profile), and the summary itself — the plot, the stretches after it, and the stretches the plot took in.
+ */
+export function CodexChatContextView({ thread, segments, profileTurns, profileMaxTokens, profileReasoningBudget, profileSummaryEnabled, noteDefaults }: {
   thread: CodexChatThread
+  /** The summary by stretch, the plot first (see ChatSummarySegment). */
+  segments: ChatSummarySegment[]
   profileTurns: number | null
   /** The profile's reply cap (null: the server's default) and reasoning budget, shown as the fallback and for the warning. */
   profileMaxTokens: number | null
@@ -194,14 +406,9 @@ export function CodexChatContextView({ thread, profileTurns, profileMaxTokens, p
   profileSummaryEnabled: boolean | null
   noteDefaults: AuthorNoteDefaults
 }) {
-  const { t, formatDateTime } = useI18n()
+  const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  const [summaryDraft, setSummaryDraft] = useState(thread.summary ?? '')
-
-  useEffect(() => {
-    setSummaryDraft(thread.summary ?? '')
-  }, [thread.summary])
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(thread.id) })
   const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' })
@@ -210,21 +417,17 @@ export function CodexChatContextView({ thread, profileTurns, profileMaxTokens, p
     onSuccess: refresh,
     onError,
   })
-  const summarizeMutation = useMutation({
-    mutationFn: () => summarizeCodexChatThread(thread.id),
-    onSuccess: refresh,
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '요약하지 못했어.', en: 'Could not summarize.' })), tone: 'error' }),
-  })
 
   const summaryMode: SummaryMode = thread.summary_enabled === null ? 'profile' : thread.summary_enabled === 1 ? 'on' : 'off'
   const profileLabel = t({ ko: '프로필', en: 'Profile' })
-  const summaryDirty = summaryDraft.trim() !== (thread.summary ?? '').trim()
   const effectiveMaxTokens = thread.max_tokens ?? profileMaxTokens
+  const summaryOn = thread.summary_enabled === null ? profileSummaryEnabled === true : thread.summary_enabled === 1
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
       <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock thread={thread} defaults={noteDefaults} />
+      <MemoryBlock thread={thread} />
       <SettingRow label={t({ ko: '참고할 최근 턴 수', en: 'Recent turns sent' })}>
         <NumberStepperInput
           allowEmpty
@@ -273,27 +476,7 @@ export function CodexChatContextView({ thread, profileTurns, profileMaxTokens, p
         />
       </SettingRow>
 
-      <div className="flex items-center gap-2 pb-2 pt-4">
-        <span className="flex-1 text-sm">{t({ ko: '요약', en: 'Summary' })}</span>
-        {thread.summary_updated_date ? <span className="text-xs text-muted-foreground">{formatDateTime(parseServerDate(thread.summary_updated_date))}</span> : null}
-        <Button size="sm" variant="secondary" onClick={() => summarizeMutation.mutate()} disabled={summarizeMutation.isPending}>
-          {summarizeMutation.isPending ? t({ ko: '요약 중…', en: 'Summarizing…' }) : t({ ko: '지금 요약', en: 'Summarize now' })}
-        </Button>
-      </div>
-      <Textarea
-        value={summaryDraft}
-        onChange={(event) => setSummaryDraft(event.target.value)}
-        rows={10}
-        className="min-h-48 flex-1 text-sm leading-relaxed"
-        placeholder={t({ ko: '아직 요약이 없어.', en: 'No summary yet.' })}
-        aria-label={t({ ko: '요약', en: 'Summary' })}
-      />
-      {summaryDirty ? (
-        <div className="flex justify-end gap-2 pt-2">
-          <Button size="sm" variant="ghost" onClick={() => setSummaryDraft(thread.summary ?? '')}>{t({ ko: '되돌리기', en: 'Revert' })}</Button>
-          <Button size="sm" onClick={() => contextMutation.mutate({ summary: summaryDraft })} disabled={contextMutation.isPending}>{t({ ko: '요약 저장', en: 'Save summary' })}</Button>
-        </div>
-      ) : null}
+      <SummaryBlock thread={thread} segments={segments} summaryOn={summaryOn} />
     </div>
   )
 }
@@ -315,6 +498,7 @@ export function CodexEngineContextView({ thread, compactTokens, noteDefaults }: 
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
       <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock thread={thread} defaults={noteDefaults} />
+      <MemoryBlock thread={thread} />
       <SettingRow label={t({ ko: '현재 컨텍스트', en: 'Current context' })}>
         <span className="text-sm tabular-nums">{tokens(thread.codex_context_tokens)} / {tokens(compactTokens)}</span>
       </SettingRow>

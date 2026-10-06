@@ -23,12 +23,14 @@ import {
   listModelSlots,
   updateChatAdminSettings,
   updateChatProfile,
+  type ChatCardImportReport,
   type ChatProfile,
   type ChatProfileInput,
   type ModelSlot,
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { ChatProfileEditorModal } from './chat-profile-editor-modal'
+import { ChatCardImportReportModal } from './chat-card-import-report'
 import { InstantApplyHint } from './settings-section-status'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 import { SettingsSwitchRow } from './settings-switch-row'
@@ -54,6 +56,8 @@ export function ChatSettingsProfiles() {
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const [editor, setEditor] = useState<{ profile: ChatProfile | null; draft?: ChatProfileInput } | null>(null)
+  // A card import: what came over and what did not, shown before its draft opens.
+  const [imported, setImported] = useState<{ draft: ChatProfileInput; report: ChatCardImportReport } | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
 
   const settingsQuery = useQuery({ queryKey: CHAT_ADMIN_SETTINGS_QUERY_KEY, queryFn: getChatAdminSettings })
@@ -64,10 +68,11 @@ export function ChatSettingsProfiles() {
   const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' })
   const importMutation = useMutation({
     mutationFn: importChatProfileCard,
-    onSuccess: (draft) => {
+    onSuccess: ({ importReport, ...draft }) => {
       // A card's own lorebook is added to the shared lorebooks and linked to the draft.
       if (draft.lorebookIds?.length) void queryClient.invalidateQueries({ queryKey: CHAT_LOREBOOKS_QUERY_KEY })
-      setEditor({ profile: null, draft })
+      if (importReport && (importReport.converted.length || importReport.dropped.length)) setImported({ draft, report: importReport })
+      else setEditor({ profile: null, draft })
     },
     onError,
   })
@@ -154,6 +159,13 @@ export function ChatSettingsProfiles() {
         {profilesQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(profilesQuery.error, t({ ko: '프로필을 불러오지 못했어.', en: 'Could not load profiles.' }))}</p> : null}
       </RowGroup>
 
+      <ChatCardImportReportModal
+        report={imported?.report ?? null}
+        onClose={() => {
+          if (imported) setEditor({ profile: null, draft: imported.draft })
+          setImported(null)
+        }}
+      />
       <ChatProfileEditorModal open={editor !== null} profile={editor?.profile ?? null} initialDraft={editor?.draft} defaults={defaultsQuery.data} onClose={() => setEditor(null)} />
     </div>
   )

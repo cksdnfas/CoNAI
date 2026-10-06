@@ -4,6 +4,7 @@ import { FileStoreService, fileOwnerKey } from '../fileStoreService'
 import { parseBlockEdits, type BlockEdit } from './chatBlockState'
 import { parseFlagSnapshots, type ChatFlagSnapshot } from './chatFlags'
 import { parseChatMediaAttachments, type ChatMediaAttachment } from './chatMediaAttachments'
+import { ChatSummaryStore, type ChatMemoryItem } from './chatMemory'
 
 export type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
 import type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
@@ -50,6 +51,10 @@ export type CodexChatThreadRecord = {
   block_edits: string | null
   /** The account's user profile (persona) in this chat; null is the plain user. */
   user_profile_id: number | null
+  /** JSON pinned memories (see chatMemory). */
+  memories: string | null
+  /** Why the last background summary failed; null once one succeeds. */
+  summary_error: string | null
   created_date: string
   updated_date: string
 }
@@ -74,6 +79,8 @@ export type CodexChatMessageRecord = {
   error: string | null
   /** LLM replies: the provider's finish_reason of the last round; 'length' means the token cap cut the reply. */
   finish_reason: string | null
+  /** LLM replies: JSON of what the request for it carried (see ChatContextMeta). */
+  context_meta?: string | null
   /** User messages: the chat flags that were on when it was sent. */
   flags?: ChatFlagSnapshot[]
   created_date: string
@@ -88,6 +95,7 @@ export type ChatMessageAlternative = {
   status: CodexChatMessageRecord['status']
   error: string | null
   finish_reason?: string | null
+  context_meta?: string | null
 }
 
 type StoredMessageRow = Omit<CodexChatMessageRecord, 'tool_calls' | 'alternatives' | 'flags' | 'routing'> & { tool_calls: string | null; alternatives: string | null; flags: string | null; media_attachments: string | null; routing: string | null }
@@ -126,7 +134,10 @@ function parseAlternatives(value: string | null): ChatMessageAlternative[] {
   }
 }
 
-/** Any history rewrite invalidates summaries being computed from the old history. */
+/**
+ * Any history rewrite invalidates summaries being computed from the old history, and the summary segments that
+ * reach the changed message (a Codex chat's compaction divider likewise).
+ */
 function invalidateContext(threadId: number, changedMessageId: number) {
   getUserSettingsDb().prepare(`UPDATE codex_chat_threads SET
     summary = CASE WHEN summary_until_message_id >= ? THEN NULL ELSE summary END,
@@ -134,6 +145,7 @@ function invalidateContext(threadId: number, changedMessageId: number) {
     summary_until_message_id = CASE WHEN summary_until_message_id >= ? THEN NULL ELSE summary_until_message_id END,
     codex_thread_id = NULL, ${RESET_CODEX_STATE}, context_revision = context_revision + 1, updated_date = CURRENT_TIMESTAMP WHERE id = ?
   `).run(changedMessageId, changedMessageId, changedMessageId, threadId)
+  ChatSummaryStore.invalidateFrom(threadId, changedMessageId)
 }
 
 function removeMessagesAfter(threadId: number, messageId: number) {
@@ -207,11 +219,12 @@ export const CodexChatStore = {
     getUserSettingsDb().prepare('UPDATE codex_chat_threads SET block_edits = ? WHERE id = ?').run(edits.length > 0 ? JSON.stringify(edits) : null, threadId)
   },
 
-  setSummary(threadId: number, summary: string | null, untilMessageId: number | null, expectedRevision?: number) {
-    return getUserSettingsDb().prepare(`
-      UPDATE codex_chat_threads SET summary = ?, summary_until_message_id = ?, summary_updated_date = CURRENT_TIMESTAMP,
-      context_revision = context_revision + 1 WHERE id = ? ${expectedRevision === undefined ? '' : 'AND context_revision = ?'}
-    `).run(summary, untilMessageId, threadId, ...(expectedRevision === undefined ? [] : [expectedRevision])).changes > 0
+  setMemories(threadId: number, items: ChatMemoryItem[]) {
+    getUserSettingsDb().prepare('UPDATE codex_chat_threads SET memories = ? WHERE id = ?').run(items.length > 0 ? JSON.stringify(items) : null, threadId)
+  },
+
+  setSummaryError(threadId: number, error: string | null) {
+    getUserSettingsDb().prepare('UPDATE codex_chat_threads SET summary_error = ? WHERE id = ? AND summary_error IS NOT ?').run(error, threadId, error)
   },
 
   setCodexThreadId(threadId: number, codexThreadId: string) {
@@ -258,6 +271,7 @@ export const CodexChatStore = {
     db.transaction(() => {
       db.prepare('DELETE FROM codex_chat_messages WHERE thread_id = ?').run(threadId)
       db.prepare('DELETE FROM chat_group_members WHERE thread_id = ?').run(threadId)
+      ChatSummaryStore.clear(threadId)
       db.prepare('DELETE FROM codex_chat_threads WHERE id = ?').run(threadId)
     })()
   },
@@ -305,12 +319,30 @@ export const CodexChatStore = {
     }).immediate()
   },
 
+  /**
+   * Replace a reply's text by hand (its shown variant too); later messages stay. The reader's translation goes with
+   * the old text, so the edit is what both the reader and the model see from now on.
+   */
+  editAssistantMessage(threadId: number, messageId: number, content: string) {
+    const db = getUserSettingsDb()
+    db.transaction(() => {
+      const row = db.prepare("SELECT alternatives, active_alternative FROM codex_chat_messages WHERE thread_id = ? AND id = ? AND role = 'assistant'").get(threadId, messageId) as { alternatives: string | null; active_alternative: number } | undefined
+      if (!row) throw new Error('Assistant message not found')
+      const alternatives = parseAlternatives(row.alternatives)
+      if (alternatives[row.active_alternative]) alternatives[row.active_alternative] = { ...alternatives[row.active_alternative], content, display_content: null }
+      db.prepare('UPDATE codex_chat_messages SET content = ?, display_content = NULL, alternatives = ? WHERE id = ?')
+        .run(content, alternatives.length > 0 ? JSON.stringify(alternatives) : null, messageId)
+      invalidateContext(threadId, messageId)
+    }).immediate()
+  },
+
   clearThread(threadId: number, greeting: string) {
     const db = getUserSettingsDb()
     db.transaction(() => {
       db.prepare('DELETE FROM chat_generation_links WHERE thread_id = ?').run(threadId)
       removeMessagesAfter(threadId, 0)
-      db.prepare(`UPDATE codex_chat_threads SET summary = NULL, summary_until_message_id = NULL, summary_updated_date = NULL, block_edits = NULL,
+      ChatSummaryStore.clear(threadId)
+      db.prepare(`UPDATE codex_chat_threads SET summary = NULL, summary_until_message_id = NULL, summary_updated_date = NULL, summary_error = NULL, block_edits = NULL,
         codex_thread_id = NULL, ${RESET_CODEX_STATE}, context_revision = context_revision + 1, updated_date = CURRENT_TIMESTAMP WHERE id = ?`).run(threadId)
       if (greeting) CodexChatStore.addMessage({ thread_id: threadId, role: 'assistant', content: greeting, tool_calls: [], status: 'completed', error: null })
     }).immediate()
@@ -322,10 +354,10 @@ export const CodexChatStore = {
       const row = db.prepare("SELECT * FROM codex_chat_messages WHERE thread_id = ? AND id = ? AND role = 'assistant'").get(threadId, messageId) as StoredMessageRow | undefined
       if (!row) throw new Error('Assistant message not found')
       const alternatives = parseAlternatives(row.alternatives)
-      if (!alternatives.length) alternatives.push({ content: row.content, display_content: row.display_content ?? null, tool_calls: parseToolCalls(row.tool_calls), created_at: row.created_date, status: row.status, error: row.error, finish_reason: row.finish_reason ?? null, routing: parseMessageRouting(row.routing) })
+      if (!alternatives.length) alternatives.push({ content: row.content, display_content: row.display_content ?? null, tool_calls: parseToolCalls(row.tool_calls), created_at: row.created_date, status: row.status, error: row.error, finish_reason: row.finish_reason ?? null, routing: parseMessageRouting(row.routing), context_meta: row.context_meta ?? null })
       alternatives.push(alternative)
-      db.prepare(`UPDATE codex_chat_messages SET alternatives = ?, active_alternative = ?, content = ?, display_content = ?, tool_calls = ?, status = ?, error = ?, finish_reason = ? WHERE id = ?`)
-        .run(JSON.stringify(alternatives), alternatives.length - 1, alternative.content, alternative.display_content ?? null, JSON.stringify(alternative.tool_calls), alternative.status, alternative.error, alternative.finish_reason ?? null, messageId)
+      db.prepare(`UPDATE codex_chat_messages SET alternatives = ?, active_alternative = ?, content = ?, display_content = ?, tool_calls = ?, status = ?, error = ?, finish_reason = ?, context_meta = ? WHERE id = ?`)
+        .run(JSON.stringify(alternatives), alternatives.length - 1, alternative.content, alternative.display_content ?? null, JSON.stringify(alternative.tool_calls), alternative.status, alternative.error, alternative.finish_reason ?? null, alternative.context_meta ?? null, messageId)
       invalidateContext(threadId, messageId)
       if (alternative.routing !== undefined) CodexChatStore.setMessageRouting(threadId, messageId, alternative.routing)
     }).immediate()
@@ -337,11 +369,29 @@ export const CodexChatStore = {
       const row = db.prepare("SELECT * FROM codex_chat_messages WHERE thread_id = ? AND id = ? AND role = 'assistant'").get(threadId, messageId) as StoredMessageRow | undefined
       const alternative = row ? parseAlternatives(row.alternatives)[index] : undefined
       if (!alternative) throw new Error('Alternative not found')
-      db.prepare('UPDATE codex_chat_messages SET active_alternative = ?, content = ?, display_content = ?, tool_calls = ?, status = ?, error = ?, finish_reason = ? WHERE id = ?')
-        .run(index, alternative.content, alternative.display_content ?? null, JSON.stringify(alternative.tool_calls), alternative.status, alternative.error, alternative.finish_reason ?? null, messageId)
+      db.prepare('UPDATE codex_chat_messages SET active_alternative = ?, content = ?, display_content = ?, tool_calls = ?, status = ?, error = ?, finish_reason = ?, context_meta = ? WHERE id = ?')
+        .run(index, alternative.content, alternative.display_content ?? null, JSON.stringify(alternative.tool_calls), alternative.status, alternative.error, alternative.finish_reason ?? null, alternative.context_meta ?? null, messageId)
       invalidateContext(threadId, messageId)
       CodexChatStore.setMessageRouting(threadId, messageId, alternative.routing ?? null)
     }).immediate()
+  },
+
+  /** Generation jobs a reply started now belong to another reply id (a continuation of it). */
+  moveGenerationLinks(threadId: number, fromReplyId: string, toReplyId: string) {
+    getUserSettingsDb().prepare('UPDATE chat_generation_links SET reply_id = ? WHERE thread_id = ? AND reply_id = ?').run(toReplyId, threadId, fromReplyId)
+  },
+
+  /** What the request for a reply carried, on the reply and on its shown variant (so switching variants keeps each one's). */
+  setContextMeta(messageId: number, meta: unknown) {
+    const db = getUserSettingsDb()
+    const json = JSON.stringify(meta)
+    db.transaction(() => {
+      const row = db.prepare('SELECT alternatives, active_alternative FROM codex_chat_messages WHERE id = ?').get(messageId) as { alternatives: string | null; active_alternative: number } | undefined
+      if (!row) return
+      const alternatives = parseAlternatives(row.alternatives)
+      if (alternatives[row.active_alternative]) alternatives[row.active_alternative] = { ...alternatives[row.active_alternative], context_meta: json }
+      db.prepare('UPDATE codex_chat_messages SET context_meta = ?, alternatives = ? WHERE id = ?').run(json, alternatives.length > 0 ? JSON.stringify(alternatives) : row.alternatives, messageId)
+    })()
   },
 
   setMessageRouting(threadId: number, messageId: number, routing: ChatMessageRouting | null) {

@@ -9,6 +9,7 @@ import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord
 import { streamChatCompletion, type ChatCompletionTarget, type ChatCompletionTool } from '../src/services/codex-chat/llmChatCompletion'
 import { buildChatMessages, buildChatPromptPreview, estimateMessagesTokens, fitThreadSummary, rawMessagesEstimate, resolveContextConfig } from '../src/services/codex-chat/llmChatContext'
 import { buildGroupLlmMessages } from '../src/services/codex-chat/groupChatContext'
+import { ChatSummaryStore, renderSummary, type ChatSummarySegment } from '../src/services/codex-chat/chatMemory'
 
 const target: ChatCompletionTarget = {
   providerName: 'test', displayName: 'Test', endpoint: 'http://unused.invalid/chat/completions',
@@ -115,10 +116,14 @@ test('summary includes tool schema cost before old turns leave the request', asy
   const full = buildChatMessages({ profile, thread, messages, config: resolveContextConfig(thread, profile), tools })
   profile.contextTokens = estimateMessagesTokens(profile.id, full, tools) + 100 - 500
   t.mock.method(CodexChatStore, 'findThreadById', () => thread)
-  t.mock.method(CodexChatStore, 'setSummary', (_id: number, summary: string, until: number, revision: number) => {
+  t.mock.method(CodexChatStore, 'setSummaryError', () => {})
+  const segments: ChatSummarySegment[] = []
+  t.mock.method(ChatSummaryStore, 'list', () => segments)
+  t.mock.method(ChatSummaryStore, 'addSegment', (_id: number, segment: { from: number; until: number; content: string }, revision: number) => {
     assert.equal(revision, thread.context_revision)
-    thread.summary = summary
-    thread.summary_until_message_id = until
+    segments.push({ id: segments.length + 1, thread_id: thread.id, level: 0, from_message_id: segment.from, until_message_id: segment.until, content: segment.content, backed: 1, created_date: '', updated_date: '' })
+    thread.summary = renderSummary(segments)
+    thread.summary_until_message_id = segment.until
     thread.context_revision += 1
     return true
   })

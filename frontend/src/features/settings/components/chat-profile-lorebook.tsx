@@ -6,29 +6,50 @@ import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { Select } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
-import type { ChatLoreEntry } from '@/lib/api-codex-chat'
+import type { ChatLoreEntry, LoreSecondaryLogic } from '@/lib/api-codex-chat'
 import { CollapsibleRow } from './chat-profile-sections'
+
+/** Keywords as chips with an input that adds one on Enter, comma or leaving it. */
+function KeywordChips({ keys, onChange, addLabel }: { keys: string[]; onChange: (keys: string[]) => void; addLabel: string }) {
+  const { t } = useI18n()
+  const [keyword, setKeyword] = useState('')
+  const addKey = () => {
+    const key = keyword.trim().slice(0, 100)
+    if (key && keys.length < 20 && !keys.includes(key)) onChange([...keys, key])
+    setKeyword('')
+  }
+  return <div className="flex flex-wrap items-center gap-1.5">
+    {keys.map((key) => <Chip key={key}>{key}<IconButton size="icon-xs" variant="ghost" label={t({ ko: '키워드 삭제', en: 'Remove keyword' })} onClick={() => onChange(keys.filter((value) => value !== key))}><X /></IconButton></Chip>)}
+    <Input variant="settings" className="min-w-32 flex-1" maxLength={100} value={keyword} onChange={(event) => setKeyword(event.target.value)} onBlur={addKey} onKeyDown={(event) => {
+      if (event.nativeEvent.isComposing) return
+      if (event.key === 'Enter' || (event.key === ',' && !keyword.startsWith('/'))) { event.preventDefault(); addKey() }
+    }} aria-label={addLabel} />
+  </div>
+}
 
 function LoreFields({ entry, onChange }: { entry: ChatLoreEntry; onChange: (patch: Partial<ChatLoreEntry>) => void }) {
   const { t } = useI18n()
   const id = useId()
-  const [keyword, setKeyword] = useState('')
-  const addKey = () => {
-    const key = keyword.trim().slice(0, 100)
-    if (key && entry.keys.length < 20 && !entry.keys.includes(key)) onChange({ keys: [...entry.keys, key] })
-    setKeyword('')
-  }
+  const secondaryKeys = entry.secondaryKeys ?? []
   return <>
-    <Field label={t({ ko: '키워드', en: 'Keywords' })}>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {entry.keys.map((key) => <Chip key={key}>{key}<IconButton size="icon-xs" variant="ghost" label={t({ ko: '키워드 삭제', en: 'Remove keyword' })} onClick={() => onChange({ keys: entry.keys.filter((value) => value !== key) })}><X /></IconButton></Chip>)}
-        <Input variant="settings" className="min-w-32 flex-1" maxLength={100} value={keyword} onChange={(event) => setKeyword(event.target.value)} onBlur={addKey} onKeyDown={(event) => {
-          if (event.nativeEvent.isComposing) return
-          if (event.key === 'Enter' || event.key === ',') { event.preventDefault(); addKey() }
-        }} aria-label={t({ ko: '키워드 추가', en: 'Add keyword' })} />
+    <Field label={t({ ko: '키워드', en: 'Keywords' })} info={t({ ko: '/패턴/ 형태는 정규식으로 찾아.', en: '/pattern/ is matched as a regular expression.' })}>
+      <KeywordChips keys={entry.keys} onChange={(keys) => onChange({ keys })} addLabel={t({ ko: '키워드 추가', en: 'Add keyword' })} />
+    </Field>
+    <Field label={t({ ko: '보조 키워드', en: 'Secondary keywords' })}>
+      <div className="flex flex-col gap-2">
+        <KeywordChips keys={secondaryKeys} onChange={(keys) => onChange({ secondaryKeys: keys })} addLabel={t({ ko: '보조 키워드 추가', en: 'Add secondary keyword' })} />
+        {secondaryKeys.length > 0 ? (
+          <Select variant="settings" className="w-56" value={entry.secondaryLogic ?? 'andAny'} onChange={(event) => onChange({ secondaryLogic: event.target.value as LoreSecondaryLogic })} aria-label={t({ ko: '보조 키워드 조건', en: 'Secondary keyword rule' })}>
+            <option value="andAny">{t({ ko: '하나라도 있을 때', en: 'Any of them present' })}</option>
+            <option value="andAll">{t({ ko: '모두 있을 때', en: 'All of them present' })}</option>
+            <option value="notAny">{t({ ko: '하나도 없을 때', en: 'None of them present' })}</option>
+            <option value="notAll">{t({ ko: '다 있지는 않을 때', en: 'Not all of them present' })}</option>
+          </Select>
+        ) : null}
       </div>
     </Field>
     <Field label={t({ ko: '내용', en: 'Content' })}>

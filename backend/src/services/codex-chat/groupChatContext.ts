@@ -6,7 +6,9 @@ import { chatContentWithAttachments } from './chatAttachments'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
 import type { ChatCompletionMessage, ChatCompletionTool } from './llmChatCompletion'
 import { DEFAULT_REPLY_RESERVE_TOKENS, estimateMessagesTokens } from './llmChatContext'
-import { anchoredWindowFor, appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, resolveAuthorNote, selectChatLore, sendableMessages, threadBlockStateText, toCompletionMessages } from './llmChatContext'
+import { postHistoryText } from './llmChatContext'
+import { anchoredWindowFor, appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, recallFor, resolveAuthorNote, selectChatLore, sendableMessages, threadBlockStateText, toCompletionMessages, unsummarizedMessages } from './llmChatContext'
+import type { ChatSummarySegment } from './chatMemory'
 import { usableBlockKeys } from './chatBlockState'
 import { DEFAULT_USER_NAME, userPersonaForThread, type ChatUserPersona } from './chatUserProfiles'
 
@@ -23,8 +25,8 @@ function speakerName(message: CodexChatMessageRecord, names: Map<number, string>
 }
 
 /** Someone else's message as one transcript line: their name, the text, and a note of the tools they used. */
-function transcriptLine(message: CodexChatMessageRecord, names: Map<number, string>, user: ChatUserPersona) {
-  const text = message.role === 'user' ? chatContentWithAttachments(message.content, message.attachments, message.mediaAttachments) : message.content
+function transcriptLine(message: CodexChatMessageRecord, names: Map<number, string>, user: ChatUserPersona, inlineTexts?: ReadonlyMap<string, string>) {
+  const text = message.role === 'user' ? chatContentWithAttachments(message.content, message.attachments, message.mediaAttachments, inlineTexts) : message.content
   const tools = message.tool_calls.map((call) => `(도구 ${call.tool}${call.summary ? `: ${call.summary.slice(0, OTHER_TOOL_NOTE_LENGTH)}` : ''})`)
   return [`[${speakerName(message, names, user)}; ${messageAddress(message)}] ${text}`.trim(), ...tools].join('\n')
 }
@@ -111,10 +113,20 @@ type GroupLlmContext = {
   withTools: boolean
   tools: ChatCompletionTool[]
   maxTokens: number | null
+  /** The room's summary segments (for recall), when its summary is on. */
+  segments?: ChatSummarySegment[]
+  /** A member that cannot read files itself: text attachments' contents, by file id (see inlineTextsForChat). */
+  attachmentTexts?: ReadonlyMap<string, string>
+}
+
+/** A room's summary is its own switch on the thread: off unless set (members' profiles do not decide for the room). */
+export function groupSummaryOn(thread: Pick<CodexChatThreadRecord, 'summary_enabled'>) {
+  return thread.summary_enabled === 1
 }
 
 export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMessage[] {
-  const sendable = sendableMessages(params.messages)
+  // With the room's summary on, the messages it covers stay out: the summary stands in for them.
+  const sendable = sendableMessages(unsummarizedMessages(params.messages, params.thread, { summaryEnabled: groupSummaryOn(params.thread) }))
   let window = anchoredWindowFor(params.thread.id, sendable, params.windowLimit, (message) => message.id)
   let result = buildGroupWindowMessages(params, window, sendable.length)
   const budget = params.profile.contextTokens
@@ -131,13 +143,16 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
   const user = userPersonaForThread(thread)
   const names = new Map(members.map((member) => [member.id, member.name]))
   const lore = selectChatLore(profile, window, user)
-  const leading = buildLeadingMessages(profile, null, { summaryEnabled: false }, withTools, lore, user)
+  const summaryOn = groupSummaryOn(thread)
+  const leading = buildLeadingMessages(profile, { summary: thread.summary, memories: thread.memories }, { summaryEnabled: summaryOn }, withTools, lore, user)
   // The header joins the persona's system message: a second system message in the middle is dropped or rejected by
   // many chat templates, and this one is what keeps the model from writing other members' names its own way.
   const header = buildGroupHeader({ thread, members, self: profile, user })
-  const system: ChatCompletionMessage[] = leading[0]?.role === 'system'
-    ? [{ role: 'system', content: `${leading[0].content}\n\n${header}` }, ...leading.slice(1)]
-    : [{ role: 'system', content: header }, ...leading]
+  // The pinned memories' system message joins it too, for the same reason.
+  const system: ChatCompletionMessage[] = [
+    { role: 'system', content: [...leading.filter((message) => message.role === 'system').map((message) => message.content), header].join('\n\n') },
+    ...leading.filter((message) => message.role !== 'system'),
+  ]
 
   const conversation: ChatCompletionMessage[] = []
   const blockKeys = usableBlockKeys(profile.style.blocks)
@@ -146,16 +161,18 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
       conversation.push(...toCompletionMessages(message, blockKeys))
       continue
     }
-    const line = transcriptLine(message, names, user)
+    const line = transcriptLine(message, names, user, params.attachmentTexts)
     const previous = conversation[conversation.length - 1]
     if (previous?.role === 'user' && typeof previous.content === 'string') previous.content = `${previous.content}\n\n${line}`
     else conversation.push({ role: 'user', content: line })
   }
   // The flags the user had on for the message this run answers reach every member answering it; the request ends
   // with the exact handles, where small models actually look before writing a mention.
-  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread, params.messages, profile.id))
+  // Summaries the room's plot already took in come back when the latest exchange touches them, like in a direct chat.
+  const recall = summaryOn && params.segments ? recallFor(profile, params.segments, params.messages, { contextTokens: profile.contextTokens }) : ''
+  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread, params.messages, profile.id), recall)
   const reference = buildReplyContext(params.messages, params.routing, { group: true, maxChars: Math.max(256, Math.min(6000, Math.floor((profile.contextTokens ?? 24000) / 4))), visibleIds: new Set(window.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) })
-  const directive = [reference, hiddenHistoryNote(thread, total - window.length), flagDirectiveFor(params.messages, profile, user), mentionReminder(members, profile)].filter(Boolean).join('\n\n')
+  const directive = [reference, hiddenHistoryNote(thread, total - window.length), flagDirectiveFor(params.messages, profile, user), postHistoryText(profile, user), mentionReminder(members, profile)].filter(Boolean).join('\n\n')
   return appendUserDirective([...system, ...insertDepthBlocks(conversation, blocks)], directive)
 }
 
@@ -174,6 +191,8 @@ export function buildGroupCodexInput(params: {
   lore: string
   /** The user's chat flags for the message this run answers (already filled for this member). */
   directive: string
+  /** A member that cannot read files itself: text attachments' contents, by file id. */
+  attachmentTexts?: ReadonlyMap<string, string>
 }) {
   const { thread, members, self, lastSeenMessageId, windowLimit, lore, directive } = params
   const user = userPersonaForThread(thread)
@@ -186,7 +205,7 @@ export function buildGroupCodexInput(params: {
     hiddenHistoryNote(thread, missed.length - shown.length),
     buildReplyContext(params.messages, params.routing, { group: true, visibleIds: new Set(shown.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) }),
     lore ? `[참고 설정]\n${lore}\n[/참고 설정]` : '',
-    `[${lastSeenMessageId === null ? '지금까지의 대화' : '네가 마지막으로 말한 뒤의 대화'}]\n${shown.map((message) => transcriptLine(message, names, user)).join('\n\n')}`,
+    `[${lastSeenMessageId === null ? '지금까지의 대화' : '네가 마지막으로 말한 뒤의 대화'}]\n${shown.map((message) => transcriptLine(message, names, user, params.attachmentTexts)).join('\n\n')}`,
     directive,
     [`이제 ${self.name}로서 답해.`, mentionReminder(members, self)].filter(Boolean).join(' '),
   ].filter(Boolean).join('\n\n')

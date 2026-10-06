@@ -4,7 +4,7 @@ import type { ChatExecutionContext, ChatMessageRouting, ChatRecipient } from '@c
 import { automaticReplyRouting, messageSender, quoteMessage, requireReplyTarget, userReplyRouting } from './chatReplies'
 import { registerChatReply } from './chatReplyRegistry'
 import type { McpRequester } from '../../mcp/context'
-import { validateChatAttachments } from './chatAttachments'
+import { inlineTextsForChat, validateChatAttachments } from './chatAttachments'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { foldGroupBlockState, parseBlockEdits } from './chatBlockState'
 import { GROUP_LIMITS, GROUP_MEMBER_MAX, ChatGroupStore, groupLimitsOf } from './chatGroupStore'
@@ -17,9 +17,11 @@ import { loadChatSettings } from './chatSettings'
 import { resolveChatAccess } from './codexChatAccess'
 import { CodexChatError, CodexChatService, deleteCodexRollout, runCodexGroupReply, type CodexChatStreamEvent } from './codexChatService'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
-import { buildGroupCodexInput, buildGroupLlmMessages, parseMentions, resolveMemberName, trimForeignSpeakerLines } from './groupChatContext'
+import { buildGroupCodexInput, buildGroupLlmMessages, groupSummaryOn, parseMentions, resolveMemberName, trimForeignSpeakerLines } from './groupChatContext'
 import { CHAT_ROOM_TOOLS } from '../../mcp/context'
-import { flagDirectiveFor, sendableMessages } from './llmChatContext'
+import { flagDirectiveFor, postHistoryText, groupSummarizer, sendableMessages, summarizeGroupAhead, summarizeGroupAll } from './llmChatContext'
+import { ChatSummaryStore } from './chatMemory'
+import { branchChatThread } from './chatBranch'
 import { generateLlmGroupReply, type GroupReplyResult } from './llmChatService'
 import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../llmGenerationOptions'
@@ -224,6 +226,8 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
 
   let message: CodexChatMessageRecord
   try {
+    // A member that cannot read files itself gets text attachments' contents in the transcript.
+    const attachmentTexts = await inlineTextsForChat(profile, requester.accountId, messages)
     if (profile.engine === 'codex') {
       message = await runCodexGroupReply({
         requester,
@@ -231,7 +235,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         profile,
         chatContext: context,
         messages,
-        buildInput: (lore) => buildGroupCodexInput({ thread, members, self: profile, messages, routing: active.routing, lastSeenMessageId: ChatGroupStore.member(run.threadId, profile.id)?.last_seen_message_id ?? null, windowLimit: limits.window, lore, directive: flagDirectiveFor(messages, profile, userPersonaForThread(thread)) }),
+        buildInput: (lore) => buildGroupCodexInput({ thread, members, self: profile, messages, routing: active.routing, lastSeenMessageId: ChatGroupStore.member(run.threadId, profile.id)?.last_seen_message_id ?? null, windowLimit: limits.window, lore, directive: [flagDirectiveFor(messages, profile, userPersonaForThread(thread)), postHistoryText(profile, userPersonaForThread(thread))].filter(Boolean).join('\n\n') , attachmentTexts }),
         signal: controller.signal,
         emit: forward,
         persist,
@@ -244,7 +248,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         profile,
         // The CoNAI tool guidance is for the profile's own tools, not the room tools every member gets.
         chatContext: context,
-        buildMessages: (tools) => buildGroupLlmMessages({ profile, thread, members, messages, routing: active.routing, windowLimit: limits.window, tools, maxTokens, withTools: tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)) }),
+        buildMessages: (tools) => buildGroupLlmMessages({ profile, thread, members, messages, routing: active.routing, windowLimit: limits.window, tools, maxTokens, withTools: tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)), segments: groupSummaryOn(thread) ? ChatSummaryStore.list(run.threadId) : undefined , attachmentTexts }),
         roomTools: sendableMessages(messages).length > limits.window || profile.contextTokens !== null ? 'all' : 'call',
         // The member's own cap, else the room's, else the profile's (a Codex member has no hard cap).
         generation: { maxTokens },
@@ -347,12 +351,32 @@ async function startRun(threadId: number, listener: (event: CodexChatStreamEvent
     runs.delete(threadId)
     run.listeners.clear()
     resolveFinished()
+    // The room's summary catches up in the background once the members are done (not after a stop: the user cut in).
+    if (!run.stopped) {
+      const thread = CodexChatStore.findThreadById(threadId)
+      if (thread && groupSummaryOn(thread)) {
+        summarizeGroupAhead(threadId, memberProfiles(threadId), groupLimitsOf(thread).window).catch((error: unknown) => {
+          console.warn('[group-chat] summary update failed:', error instanceof Error ? error.message : error)
+        })
+      }
+    }
   }
 }
 
 export const GroupChatService = {
   isRunning(threadId: number) {
     return runs.has(threadId)
+  },
+
+  /** The room's summarize button: fold everything not summarized yet with the room's summarizer (see groupSummarizer). */
+  async summarize(requester: McpRequester, threadId: number) {
+    const thread = requireGroup(requester, threadId)
+    if (runs.has(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    const members = memberProfiles(threadId)
+    if (!groupSummarizer(thread, members)) throw new CodexChatError('요약할 수 있는 LLM 참가자가 없어.', 409)
+    const summary = await summarizeGroupAll(threadId, members, groupLimitsOf(thread).window)
+    if (summary === null) throw new CodexChatError('요약할 새 대화가 없거나 이미 요약 중이야.', 409)
+    return summary
   },
 
   /** A group room; the representative comes first and answers messages that address no one. */
@@ -489,6 +513,31 @@ export const GroupChatService = {
       run.queue = (routing.recipients as number[]).map((profileId) => ({ profileId, sourceMessageId: messageId }))
       await processQueue(run, requester, { chain: true })
     })
+  },
+
+  /** A new room holding this one up to `messageId`, with the same members; this one stays as it is. */
+  branchThread(requester: McpRequester, threadId: number, messageId: number) {
+    const thread = requireGroup(requester, threadId)
+    const id = branchChatThread(thread, messageId)
+    if (id === null) throw new CodexChatError('메시지를 찾을 수 없어.', 404)
+    return requireGroup(requester, id)
+  },
+
+  /**
+   * A member's reply rewritten by hand (API LLM members only: a Codex member keeps its own memory of what it said).
+   * The Codex members of the room forget the old text and get the room's recent past again.
+   */
+  editReplyText(requester: McpRequester, threadId: number, messageId: number, content: string) {
+    requireGroup(requester, threadId)
+    if (runs.has(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    const message = CodexChatStore.listMessages(threadId).find((entry) => entry.id === messageId)
+    if (!message || message.role !== 'assistant') throw new CodexChatError('답변을 찾을 수 없어.', 404)
+    const speaker = message.speaker_profile_id ? ChatProfileStore.find(message.speaker_profile_id) : null
+    if (speaker?.engine !== 'llm') throw new CodexChatError('Codex 참가자의 답변은 고칠 수 없어.', 409)
+    if (!content.trim()) throw new CodexChatError('답변 내용을 입력해줘.')
+    CodexChatStore.editAssistantMessage(threadId, messageId, content.trim())
+    resetCodexMemory(requester, threadId)
+    return GroupChatService.getThread(requester, threadId)
   },
 
   /** Stop the members answering now and drop the queue; waits (bounded) until the cut replies are stored. */

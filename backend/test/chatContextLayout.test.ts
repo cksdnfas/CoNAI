@@ -119,8 +119,8 @@ function record(id: number, role: 'user' | 'assistant', content: string, flags: 
   return { id, thread_id: 7, role, content, speaker_profile_id: null, tool_calls: [], status: 'completed', error: null, alternatives: [], active_alternative: 0, flags, created_date: '2026-10-05 00:00:00' }
 }
 
-test('a request is: system prompt, summary, examples, the unsummarized turns, flags on the last message', () => {
-  const thread = { id: 7, summary: '둘은 친해졌다.', summary_until_message_id: 2, context_turns: null, summary_enabled: 1 } as unknown as CodexChatThreadRecord
+test('a request is: system prompt, pinned memories + summary, examples, the unsummarized turns, flags on the last message', () => {
+  const thread = { id: 7, summary: '둘은 친해졌다.', summary_until_message_id: 2, context_turns: null, summary_enabled: 1, memories: JSON.stringify([{ id: 'a', text: '{{char}}는 왼손잡이' }]) } as unknown as CodexChatThreadRecord
   const messages = [
     record(1, 'user', '처음'), record(2, 'assistant', '응'),
     record(3, 'user', '오늘 뭐 해?'), record(4, 'assistant', '산책'),
@@ -131,10 +131,10 @@ test('a request is: system prompt, summary, examples, the unsummarized turns, fl
 
   assert.deepEqual(result.map((message) => message.role), ['system', 'system', 'user', 'assistant', 'user', 'assistant', 'user'])
   assert.match(String(result[0].content), /^너는 카이야\./)
-  assert.equal(result[1].content, '## 지금까지의 대화 요약\n둘은 친해졌다.')
+  assert.equal(result[1].content, '## 고정 기억\n- 카이는 왼손잡이\n\n## 지금까지의 대화 요약\n둘은 친해졌다.')
   assert.deepEqual([result[2].content, result[3].content], ['안녕', '반가워'])
-  assert.deepEqual([result[4].content, result[5].content], ['오늘 뭐 해?', '산책'], 'turns up to the summary are left out')
-  assert.equal(result[6].content, '같이 갈까?\n\n[사용자 지시: 이번 메시지에 적용]\n- 짧게 답해')
+  assert.deepEqual([result[4].content, result[5].content], ['[message_id=3; from=user]\n오늘 뭐 해?', '[message_id=4; from=assistant]\n산책'], 'turns up to the summary are left out')
+  assert.equal(result[6].content, '[message_id=5; from=user]\n같이 갈까?\n\nCurrent room_id: 7.\n\n[사용자 지시: 이번 메시지에 적용]\n- 짧게 답해')
 })
 
 // ---- Author's note ---------------------------------------------------------------------------------------------
@@ -164,5 +164,5 @@ test("the chat's note lands in the conversation at its depth", () => {
   const messages = [record(1, 'user', '처음'), record(2, 'assistant', '응'), record(3, 'user', '오늘 뭐 해?'), record(4, 'assistant', '산책'), record(5, 'user', '같이 갈까?')]
   const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '요약해' }
   const result = buildChatMessages({ profile: noteProfile, thread, messages, config, tools: [] })
-  assert.deepEqual(userContents(result.slice(3)), ['처음', '[참고 설정]\n## 작가 노트\n비가 온다.\n[/참고 설정]\n\n오늘 뭐 해?', '같이 갈까?'])
+  assert.deepEqual(userContents(result.slice(3)), ['[message_id=1; from=user]\n처음', '[참고 설정]\n## 작가 노트\n비가 온다.\n[/참고 설정]\n\n[message_id=3; from=user]\n오늘 뭐 해?', '[message_id=5; from=user]\n같이 갈까?\n\nCurrent room_id: 8.'])
 })

@@ -17,6 +17,10 @@ import {
   listChatProfileEmoticons,
   deleteCodexChatThread,
   getCodexChatThread,
+  mergeThreadTail,
+  editChatReplyText,
+  branchCodexChatThread,
+  importCodexChatThread,
   getCodexChatRunning,
   listChatProfiles,
   listCodexChatThreads,
@@ -78,6 +82,8 @@ const PENDING_JOB_POLL_MS = 3000
 const COMPOSER_MAX_HEIGHT_PX = 220
 const MESSAGE_FLASH_MS = 1600
 const MESSAGE_PAGE_SIZE = 80
+/** Messages a poll fetches; the rest come from the copy already loaded. */
+const POLL_TAIL_MESSAGES = 40
 
 /** Stable, so useQueries keeps the combined result until a query changes. */
 const pickEmoticonData = (results: UseQueryResult<ChatEmoticon[]>[]) => results.map((result) => result.data)
@@ -198,7 +204,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const isWide = useMinWidth(1024)
   const prependHeightRef = useRef<number | null>(null)
   const followBottomRef = useRef(true)
-  const { liveTurn, selectedThreadId, selectThread, draft, setDraft, view, setView, messageFocus, clearMessageFocus, startChat, isStartingChat, editMessage, regenerate } = chat
+  const { liveTurn, selectedThreadId, selectThread, draft, setDraft, view, setView, messageFocus, clearMessageFocus, startChat, isStartingChat, editMessage, regenerate, continueReply } = chat
 
   const profilesQuery = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000 })
   const profiles = useMemo(() => profilesQuery.data ?? [], [profilesQuery.data])
@@ -245,6 +251,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         if (status.running && status.latestMessageId === (cached.messages.at(-1)?.id ?? null)) {
           return { ...cached, running: status.running }
         }
+      }
+      // While a reply or a generation job is still landing, only the end of the transcript can change.
+      if (cached && (cached.running || cached.pendingJobs)) {
+        const merged = mergeThreadTail(cached, await getCodexChatThread(id, POLL_TAIL_MESSAGES))
+        if (merged) return merged
       }
       return getCodexChatThread(id)
     },
@@ -360,10 +371,18 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const handleEdit = useCallback(async (id: number, content: string) => {
     if (activeThreadId === null || isBusy) return false
     if (messages.some((message) => message.role === 'user' && message.id > id)) {
-      if (!await confirm({ title: t({ ko: '메시지 수정', en: 'Edit message' }), description: t({ ko: '이 메시지 뒤의 대화를 지우고 다시 답할까?', en: 'Remove the following conversation and answer again?' }), confirmLabel: t({ ko: '수정', en: 'Edit' }), tone: 'destructive' })) return false
+      if (!await confirm({ title: t({ ko: '메시지 수정', en: 'Edit message' }), description: t({ ko: '이 메시지 뒤의 대화를 지우고 다시 답할까? 지금까지의 대화는 분기로 남겨둘게.', en: 'Remove the following conversation and answer again? The chat as it is now is kept as a branch.' }), confirmLabel: t({ ko: '수정', en: 'Edit' }), tone: 'destructive' })) return false
+      const last = messages[messages.length - 1]
+      try {
+        if (last) await branchCodexChatThread(activeThreadId, last.id)
+        void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+      } catch (error) {
+        showSnackbar({ message: getErrorMessage(error, t({ ko: '분기를 남기지 못해서 수정하지 않았어.', en: 'Could not keep a branch, so nothing was edited.' })), tone: 'error' })
+        return false
+      }
     }
     return editMessage(activeThreadId, id, content)
-  }, [activeThreadId, editMessage, confirm, isBusy, messages, t])
+  }, [activeThreadId, editMessage, confirm, isBusy, messages, t, queryClient, showSnackbar])
   const handleRegenerate = useCallback((id: number) => {
     if (activeThreadId !== null && !isBusy) void regenerate(activeThreadId, id)
   }, [activeThreadId, regenerate, isBusy])
@@ -381,7 +400,52 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   // Group rooms: only API LLM members' replies can be regenerated.
   const lastReplyByCodex = isGroup && lastMessage?.speaker_profile_id != null && profilesById.get(lastMessage.speaker_profile_id)?.engine !== 'llm'
   const lastReplyId = lastMessage?.role === 'assistant' && messages.some((message) => message.role === 'user') && !lastReplyByCodex ? lastMessage.id : null
-  const messageActions = useMemo(() => ({ busy: isBusy, canRewrite: !isCodexThread, lastReplyId, editingId: editingMessageId, onEditingChange: setEditingMessageId, onEdit: handleEdit, onRegenerate: handleRegenerate, onAlternative: handleAlternative, onReply: handleReply }), [isBusy, isCodexThread, lastReplyId, editingMessageId, handleEdit, handleRegenerate, handleAlternative, handleReply])
+  // Hand edits of replies (API LLM: the chat's own, or an API LLM member's in a room) and continuing a cut reply
+  // (API LLM direct chats); any chat can branch.
+  const directLlm = !isCodexThread && !isGroup
+  const canEditReply = useCallback((message: CodexChatMessage) => {
+    if (!isGroup) return directLlm
+    const speaker = message.speaker_profile_id != null ? profilesById.get(message.speaker_profile_id) : undefined
+    return speaker?.engine === 'llm'
+  }, [isGroup, directLlm, profilesById])
+  const handleEditReply = useCallback(async (id: number, content: string) => {
+    if (activeThreadId === null || isBusy) return false
+    try {
+      queryClient.setQueryData(codexChatThreadQueryKey(activeThreadId), await editChatReplyText(activeThreadId, id, content))
+      return true
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '답변을 고치지 못했어.', en: 'Could not edit the reply.' })), tone: 'error' })
+      return false
+    }
+  }, [activeThreadId, isBusy, queryClient, showSnackbar, t])
+  const handleContinue = useCallback((id: number) => {
+    if (activeThreadId !== null && !isBusy) void continueReply(activeThreadId, id)
+  }, [activeThreadId, continueReply, isBusy])
+  const handleBranch = useCallback(async (id: number) => {
+    if (activeThreadId === null || isBusy) return
+    try {
+      const branch = await branchCodexChatThread(activeThreadId, id)
+      await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+      selectThread(branch.id)
+      showSnackbar({ message: t({ ko: '여기까지로 새 채팅을 만들었어.', en: 'Branched into a new chat.' }) })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '분기하지 못했어.', en: 'Could not branch.' })), tone: 'error' })
+    }
+  }, [activeThreadId, isBusy, queryClient, selectThread, showSnackbar, t])
+  const handleImport = useCallback(async (file: File) => {
+    try {
+      const { thread: imported, notes } = await importCodexChatThread(file)
+      await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+      selectThread(imported.id)
+      showSnackbar({ message: [t({ ko: '대화를 가져왔어.', en: 'Chat imported.' }), ...notes].join(' ') })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '대화를 가져오지 못했어.', en: 'Could not import the chat.' })), tone: 'error' })
+    }
+  }, [queryClient, selectThread, showSnackbar, t])
+  const messageActions = useMemo(() => ({
+    busy: isBusy, canRewrite: !isCodexThread, lastReplyId, editingId: editingMessageId, onEditingChange: setEditingMessageId, onEdit: handleEdit, onRegenerate: handleRegenerate, onAlternative: handleAlternative, onReply: handleReply,
+    canEditReply, onEditReply: handleEditReply, canContinue: directLlm, onContinue: handleContinue, canBranch: true, onBranch: (id: number) => { void handleBranch(id) },
+  }), [isBusy, isCodexThread, lastReplyId, editingMessageId, handleEdit, handleRegenerate, handleAlternative, handleReply, canEditReply, directLlm, handleEditReply, handleContinue, handleBranch])
 
   // Display block state: the panel's data and the chips in replies. A room lists every member's blocks, keyed
   // `<profileId>:<key>` so two members' `status` blocks stay apart; chips keep the plain key (a message has one speaker).
@@ -750,6 +814,10 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     ? <ChatStatusFloating data={statusData} activeKey={activeStatusKey} onActiveKey={setStatusKey} layout={statusLayout} onLayout={setStatusLayout} onDock={() => setStatusLayout({ mode: 'docked' })} onHide={() => setStatusLayout({ open: false })} containerRef={statusAreaRef} />
     : null
 
+  // A direct LLM chat whose background summary failed: older turns may have left the request unsummarized.
+  // A room's summary is its own switch; a direct chat's follows the profile unless set.
+  const summaryFailed = Boolean(thread?.summary_error) && !isCodexThread
+    && (isGroup ? thread?.summary_enabled === 1 : thread?.summary_enabled === null || thread?.summary_enabled === undefined ? profile?.summaryEnabled === true : thread.summary_enabled === 1)
   const warning = profileMissing
     ? t({ ko: '이 채팅의 프로필이 지워졌거나 꺼져 있어.', en: 'This chat’s profile was deleted or turned off.' })
     : codexUnavailable && !codexStatusQuery.isPending
@@ -774,6 +842,13 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         <IconButton variant="ghost" size="icon-xs" label={t({ ko: '답장 취소', en: 'Cancel reply' })} onClick={() => setDraftReply(null)}><X /></IconButton>
       </div> : null}
       {warning ? <p className="mb-2 flex items-center gap-1.5 text-xs text-warning"><TriangleAlert className="size-3.5 shrink-0" />{warning}</p> : null}
+      {summaryFailed ? (
+        <Tip content={thread?.summary_error} side="top">
+          <Button variant="ghost" size="xs" onClick={() => setView('context')} className="mb-2 h-auto gap-1.5 px-0 py-0 text-xs font-normal text-warning hover:bg-transparent hover:underline">
+            <TriangleAlert className="size-3.5 shrink-0" />{t({ ko: '요약하지 못했어. 오래된 대화가 빠질 수 있어.', en: 'Summary failed; older turns may be left out.' })}
+          </Button>
+        </Tip>
+      ) : null}
       <ChatDraftAttachments chat={chat} disabled={isBusy} canReadText={profile?.canReadFileText === true} />
       {picks.length > 0 ? (
         <div className="mb-2 flex flex-wrap gap-1.5">
@@ -834,16 +909,16 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   let body: ReactNode
   if (activeThreadId === null || !thread) {
-    body = threadsQuery.isPending ? null : <ChatProfilePicker profiles={profiles} threads={threads} layout={layout} disabled={isStartingChat || createGroupMutation.isPending || isBusy} onPick={pickProfile} onPickGroup={pickGroup} onRecent={selectThread} />
+    body = threadsQuery.isPending ? null : <ChatProfilePicker profiles={profiles} threads={threads} layout={layout} disabled={isStartingChat || createGroupMutation.isPending || isBusy} onPick={pickProfile} onPickGroup={pickGroup} onRecent={selectThread} onImport={(file) => void handleImport(file)} />
   } else if (activeView === 'gallery') {
     body = <Suspense fallback={null}><CodexChatGallery threadId={activeThreadId} columns={layout === 'page' ? 'wide' : 'narrow'} /></Suspense>
   } else if (activeView === 'context') {
     const noteDefaults = { note: profile?.authorNote ?? '', depth: profile?.loreDepth ?? null }
     body = <Suspense fallback={null}>{isGroup
-      ? <GroupContextView thread={thread} group={group} profilesById={profilesById} />
+      ? <GroupContextView thread={thread} group={group} profilesById={profilesById} segments={threadQuery.data?.summarySegments ?? []} />
       : isCodexThread
         ? <CodexEngineContextView thread={thread} compactTokens={threadQuery.data?.codexCompactTokens ?? null} noteDefaults={noteDefaults} />
-        : <CodexChatContextView thread={thread} profileTurns={profile?.contextTurns ?? null} profileMaxTokens={profile?.maxTokens ?? null} profileReasoningBudget={profile?.reasoningBudgetTokens ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} noteDefaults={noteDefaults} />}</Suspense>
+        : <CodexChatContextView thread={thread} segments={threadQuery.data?.summarySegments ?? []} profileTurns={profile?.contextTurns ?? null} profileMaxTokens={profile?.maxTokens ?? null} profileReasoningBudget={profile?.reasoningBudgetTokens ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} noteDefaults={noteDefaults} />}</Suspense>
   } else {
     body = backgroundUrl && profile ? (
       <div className="relative flex min-h-0 flex-1 flex-col">

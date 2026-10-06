@@ -26,6 +26,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
   const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
   const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
   const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
+  const { ChatSummaryStore } = await import('../src/services/codex-chat/chatMemory')
   const { ChatGroupStore } = await import('../src/services/codex-chat/chatGroupStore')
   const { GroupChatService } = await import('../src/services/codex-chat/groupChatService')
   const { LlmChatService } = await import('../src/services/codex-chat/llmChatService')
@@ -160,7 +161,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     const threadId = LlmChatService.createThread(requester, a.id, null)
     for (let index = 0; index < 14; index += 1) CodexChatStore.addMessage({ thread_id: threadId, role: index % 2 ? 'assistant' : 'user', content: `old-${index} ${'scene '.repeat(30)}`, tool_calls: [], status: 'completed', error: null })
     const target = CodexChatStore.listMessages(threadId)[3]
-    CodexChatStore.setSummary(threadId, 'Earlier conversation summarized.', CodexChatStore.listMessages(threadId)[11].id)
+    ChatSummaryStore.replaceAll(threadId, 'Earlier conversation summarized.', CodexChatStore.listMessages(threadId)[11].id)
     CodexChatStore.updateThreadContext(threadId, { summaryEnabled: true, contextTurns: 1 })
     let input = ''
     s.mock.method(globalThis, 'fetch', async (_url, init) => { input = String(init?.body); return response('I understand the earlier scene.') })

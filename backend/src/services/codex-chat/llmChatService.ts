@@ -6,7 +6,7 @@ import type { McpRequester } from '../../mcp/context'
 import type { LlmGenerationOptions } from '../llmGenerationOptions'
 import { retryLlmRequest } from '../llmRequestRetry'
 import { profileGenerationOptions } from './chatProfiles'
-import { validateChatAttachments } from './chatAttachments'
+import { inlineTextsForChat, validateChatAttachments } from './chatAttachments'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
@@ -20,7 +20,8 @@ import { intersectChatScopes, resolveChatAccess } from './codexChatAccess'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import type { CodexChatStreamEvent } from './codexChatService'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
-import { assertChatContextFits, buildChatMessages, fillCharacterPlaceholders, fitThreadSummary, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
+import { ChatSummaryStore } from './chatMemory'
+import { assertChatContextFits, buildChatMessages, estimateMessagesTokens, type ChatContextMeta, fillCharacterPlaceholders, fitThreadSummary, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
 
 /** Tool output kept on the stored call for replay; the model gets more of it within the reply itself. */
 const STORED_TOOL_OUTPUT_LENGTH = 4000
@@ -52,6 +53,12 @@ type LlmTurn = {
   offeredTools: ChatCompletionTool[]
   /** The provider's finish_reason of the last round ('length': the token cap cut the reply). */
   finishReason: string | null
+  /** Continuing a cut reply: its text, which `text` starts with, and the model is asked to carry on from. */
+  continuing?: string
+  /** …and its routing: the continuation keeps its quote and recipients, and takes over its generation jobs. */
+  continuingRouting?: CodexChatMessageRecord['routing']
+  /** What the request carried and the prompt tokens the server counted for it, stored with the reply. */
+  contextMeta?: ChatContextMeta & { model: string | null; promptTokens?: number | null }
   listeners: Set<(event: CodexChatStreamEvent) => void>
   finished: Promise<CodexChatMessageRecord>
 }
@@ -155,11 +162,20 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
   const listMessages = () => CodexChatStore.listMessages(thread.id).filter((message) => message.id !== turn.replacingMessageId)
   const config = resolveContextConfig(thread, profile)
   return streamReply(turn, requester, profile, async (tools) => {
+    const attachmentTexts = await inlineTextsForChat(profile, requester.accountId, listMessages())
+    // Continuing: the cut reply as the model's own turn, then the request to carry on from its last word — room for
+    // both is kept before the window is chosen.
+    const continuation: ChatCompletionMessage[] = turn.continuing === undefined ? [] : [{ role: 'assistant', content: turn.continuing }, { role: 'user', content: CONTINUE_DIRECTIVE }]
+    const extraTokens = continuation.length ? estimateMessagesTokens(profile.id, continuation) : 0
     if (config.summaryEnabled) {
-      await fitThreadSummary(thread.id, profile, listMessages(), turn.controller.signal, tools)
+      await fitThreadSummary(thread.id, profile, listMessages(), turn.controller.signal, tools, { attachmentTexts, extraTokens })
     }
     const current = CodexChatStore.findThreadById(thread.id) ?? thread
-    return buildChatMessages({ profile, thread: current, messages: listMessages(), config, tools })
+    const request = buildChatMessages({
+      profile, thread: current, messages: listMessages(), config, tools, segments: config.summaryEnabled ? ChatSummaryStore.list(thread.id) : [], attachmentTexts, extraTokens,
+      onMeta: (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(profile, 'chat')?.model ?? null } },
+    })
+    return [...request, ...continuation]
   }, false, { maxTokens: config.maxTokens })
 }
 
@@ -184,7 +200,8 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
       const tools = bridge && round <= profile.maxToolRounds ? offeredTools : []
       assertChatContextFits(profile, messages, tools, target.generation.maxTokens)
       const rawEstimate = round === 1 ? rawMessagesEstimate(messages, tools) : 0
-      let separated = turn.text.length === 0
+      // A continuation joins the cut text directly; later tool rounds start a new paragraph as usual.
+      let separated = turn.text.length === 0 || (round === 1 && turn.continuing !== undefined)
       const result = await retryLlmRequest(() => streamChatCompletion({
         target,
         messages,
@@ -200,10 +217,11 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           turn.reasoning += text
           emit(turn, { type: 'reasoning', text })
         },
-      }), { signal: turn.controller.signal, canRetry: () => turn.text.length === 0 && turn.reasoning.length === 0 })
+      }), { signal: turn.controller.signal, canRetry: () => turn.text.length === (turn.continuing?.length ?? 0) && turn.reasoning.length === 0 })
 
       if (round === 1 && result.promptTokens) {
         recordPromptUsage(profile.id, rawEstimate, result.promptTokens)
+        if (turn.contextMeta) turn.contextMeta.promptTokens = result.promptTokens
       }
       if (!bridge || tools.length === 0 || result.toolCalls.length === 0) {
         turn.finishReason = result.finishReason
@@ -249,14 +267,26 @@ async function finishTurn(turn: LlmTurn, profile: ChatProfile, status: CodexChat
     finish_reason: finishReason,
     routing: turn.delivery?.routing,
   })
+  let stored = !turn.replacingMessageId
   if (turn.replacingMessageId) {
-    // A connection failure must not replace a usable answer with an empty failed alternative.
-    if (status === 'completed' || content || toolCalls.length) {
-      CodexChatStore.addAlternative(turn.threadId, messageId, { content, display_content: displayContent, tool_calls: toolCalls, status, error, finish_reason: finishReason, routing: turn.delivery?.routing, created_at: new Date().toISOString() })
-    } else if (error) {
-      emit(turn, { type: 'error', message: error })
+    // A connection failure must not replace a usable answer with an empty failed alternative; nor may a continuation
+    // that added nothing (failed, stopped, or answered empty) replace the cut reply with a copy of it.
+    const continuedNothing = turn.continuing !== undefined && content === turn.continuing.trim()
+    if (!continuedNothing && (status === 'completed' || content || toolCalls.length)) {
+      let routing = turn.delivery?.routing
+      if (turn.continuing !== undefined && routing) {
+        const before = turn.continuingRouting
+        const replyId = routing.replyId
+        routing = { ...routing, recipients: before?.recipients ?? routing.recipients, replyTo: before?.replyTo ?? null }
+        if (before?.replyId && replyId) CodexChatStore.moveGenerationLinks(turn.threadId, before.replyId, replyId)
+      }
+      CodexChatStore.addAlternative(turn.threadId, messageId, { content, display_content: displayContent, tool_calls: toolCalls, status, error, finish_reason: finishReason, routing, created_at: new Date().toISOString() })
+      stored = true
+    } else if (error || continuedNothing) {
+      emit(turn, { type: 'error', message: error ?? '이어 쓸 내용이 없었어.' })
     }
   }
+  if (turn.contextMeta && stored && (status === 'completed' || content)) CodexChatStore.setContextMeta(messageId, turn.contextMeta)
   const message = CodexChatStore.listMessages(turn.threadId).find((entry) => entry.id === messageId) as CodexChatMessageRecord
   activeTurns.delete(turn.threadId)
   emit(turn, { type: 'done', message })
@@ -264,15 +294,26 @@ async function finishTurn(turn: LlmTurn, profile: ChatProfile, status: CodexChat
   return message
 }
 
-/** All validation and rewrites happen synchronously while this thread is reserved. */
+const CONTINUE_DIRECTIVE = '[이어쓰기] 방금 네 답변이 길이 제한으로 중간에 끊겼어. 끊긴 바로 그 지점부터 이어서 써. 이미 쓴 부분은 반복하지 말고, 앞말 없이 다음 글자부터 바로 시작해.'
+
+/**
+ * All validation and rewrites happen synchronously while this thread is reserved. `continuing`: the reply being
+ * carried on — the turn starts with its text and tool calls, and is stored as a new variant of it.
+ */
 function startReply(requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile, listener: (event: CodexChatStreamEvent) => void,
-  prepare: () => CodexChatStreamEvent, replacingMessageId?: number) {
+  prepare: () => CodexChatStreamEvent, replacingMessageId?: number, continuing?: CodexChatMessageRecord) {
   if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
   let resolveFinished: (message: CodexChatMessageRecord) => void = () => {}
   let rejectFinished: (error: unknown) => void = () => {}
   const turn: LlmTurn = {
     threadId: thread.id, replacingMessageId, controller: new AbortController(), text: '', reasoning: '', toolCalls: new Map(), finishReason: null,
     offeredTools: [], listeners: new Set([listener]), finished: new Promise((resolve, reject) => { resolveFinished = resolve; rejectFinished = reject }),
+  }
+  if (continuing) {
+    turn.continuing = continuing.content
+    turn.continuingRouting = continuing.routing
+    turn.text = continuing.content
+    for (const call of continuing.tool_calls) turn.toolCalls.set(call.id, call)
   }
   activeTurns.set(thread.id, turn)
   try {
@@ -281,6 +322,8 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
     activeTurns.delete(thread.id)
     throw error
   }
+  // The live reply shows the cut text, the continuation streams onto it.
+  if (continuing) emit(turn, { type: 'delta', text: continuing.content })
   const updatedThread = CodexChatStore.findThreadById(thread.id) as CodexChatThreadRecord
   const history = CodexChatStore.listMessages(thread.id).filter((entry) => entry.id !== replacingMessageId)
   turn.delivery = beginDirectReply(updatedThread, profile.id, history, [...history].reverse().find((entry) => entry.role === 'user') ?? null, turn.controller.signal, (routing) => emit(turn, { type: 'routing', routing }))
@@ -418,6 +461,24 @@ export const LlmChatService = {
       else CodexChatStore.editUserMessage(thread.id, messageId, modelText ?? (edited as string), modelText ? edited : null)
       return { type: 'rewind', mode: regenerate ? 'regenerate' : 'edit', message: regenerate ? message : { ...message, content: modelText ?? (edited as string), display_content: modelText ? edited : null } }
     }, regenerate ? messageId : undefined)
+  },
+
+  /** Carry on the last reply where it was cut: the result (old text + new) becomes a new variant of it. */
+  continueReply(requester: McpRequester, thread: CodexChatThreadRecord, messageId: number, listener: (event: CodexChatStreamEvent) => void) {
+    assertLlmChatAvailable(requester)
+    const profile = requireUsableProfile(thread.profile_id)
+    if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
+    const messages = CodexChatStore.listMessages(thread.id)
+    const message = messages[messages.length - 1]
+    if (!message || message.id !== messageId || message.role !== 'assistant' || !messages.some((entry) => entry.role === 'user')) {
+      throw new LlmChatError('마지막 답변만 이어 쓸 수 있어.', 409)
+    }
+    if (!message.content.trim()) throw new LlmChatError('이어 쓸 답변 내용이 없어.', 409)
+    resolveChatCompletionTarget(chatConnectionOf(profile), { model: resolveProfileModel(profile, 'chat')?.model ?? null, generation: profileGenerationOptions(profile) })
+    return startReply(requester, thread, profile, listener, () => {
+      CodexChatStore.prepareRegeneration(thread.id, messageId)
+      return { type: 'rewind', mode: 'regenerate', message }
+    }, messageId, message)
   },
 
   interrupt(threadId: number) {

@@ -1,6 +1,7 @@
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
 import type { CodexChatMediaItem } from './codexChatMedia'
 import { userPersonaForThread } from './chatUserProfiles'
+import { parseMemories } from './chatMemory'
 
 function label(text: string) {
   return text.replace(/[\r\n]+/g, ' ').replace(/[\\[\]]/g, '\\$&')
@@ -9,6 +10,8 @@ function label(text: string) {
 /** `speakers` names group room members by profile id; other replies are `name`'s. */
 export function exportChatMarkdown(thread: CodexChatThreadRecord, messages: CodexChatMessageRecord[], media: CodexChatMediaItem[], name: string, origin: string, speakers?: Map<number, string>) {
   const lines = [`# ${label(thread.title || '새 채팅')}`, '']
+  const memories = parseMemories(thread.memories)
+  if (memories.length > 0) lines.push('## 고정 기억', '', ...memories.map((item) => `- ${item.text.replace(/\s*\n\s*/g, ' ')}`), '')
   if (thread.summary) lines.push('## 대화 요약', '', thread.summary, '')
   const byMessage = new Map<number, CodexChatMediaItem[]>()
   for (const item of media) byMessage.set(item.messageId, [...(byMessage.get(item.messageId) ?? []), item])

@@ -50,7 +50,11 @@ export type ChatPromptSection = {
   id: string
   title: string
   content: string
-  kind: 'text' | 'dialogue'
+  /**
+   * `text` joins the system prompt; `dialogue` becomes example turns; `post` goes after the latest message, where a
+   * character card's post-history instructions belong.
+   */
+  kind: 'text' | 'dialogue' | 'post'
   enabled: boolean
 }
 
@@ -266,7 +270,7 @@ export function normalizeSections(value: unknown): ChatPromptSection[] {
       id: text(record.id, 40) || `s${index}-${Date.now().toString(36)}`,
       title,
       content,
-      kind: record.kind === 'dialogue' ? 'dialogue' as const : 'text' as const,
+      kind: record.kind === 'dialogue' || record.kind === 'post' ? record.kind : 'text' as const,
       enabled: record.enabled !== false,
     }]
   })
@@ -274,11 +278,12 @@ export function normalizeSections(value: unknown): ChatPromptSection[] {
 
 /** Profiles made before free-form sections kept character / persona / example dialogue in fixed columns. */
 function legacySections(row: ProfileRow): ChatPromptSection[] {
-  return [
+  const sections: Array<ChatPromptSection | null> = [
     row.character_description ? { id: 'legacy-character', title: `캐릭터: ${row.name}`, content: row.character_description, kind: 'text' as const, enabled: true } : null,
     row.user_persona ? { id: 'legacy-persona', title: '사용자', content: row.user_persona, kind: 'text' as const, enabled: true } : null,
     row.example_dialogue ? { id: 'legacy-dialogue', title: '대화 예시', content: row.example_dialogue, kind: 'dialogue' as const, enabled: true } : null,
-  ].filter((section): section is ChatPromptSection => section !== null)
+  ]
+  return sections.filter((section): section is ChatPromptSection => section !== null)
 }
 
 function toProfile(row: ProfileRow): ChatProfile {

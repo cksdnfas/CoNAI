@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { ArrowUpRight, Crown, X } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { ArrowUpRight, Crown, FileUp, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { IconButton } from '@/components/ui/icon-button'
@@ -15,9 +15,11 @@ import { ChatProfileAvatar } from './chat-profile-avatar'
  * Pick who to chat with. A tap on a profile starts a direct chat. Ticking profiles (the check that shows on hover,
  * always on touch) collects a room instead: the first one ticked represents it, the rest join as members.
  */
-export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick, onPickGroup, onRecent }: {
+export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick, onPickGroup, onRecent, onImport }: {
   profiles: ChatProfileSummary[]; threads: CodexChatThread[]; layout: 'panel' | 'page'; disabled: boolean
   onPick: (profileId: number) => void
+  /** A CoNAI chat JSON to bring back as a new chat. */
+  onImport?: (file: File) => void
   /** Profiles in the order they were ticked: the first represents the room. */
   onPickGroup: (profileIds: number[]) => void
   onRecent: (threadId: number) => void
@@ -25,6 +27,7 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
   const { t, formatDate, formatNumber } = useI18n()
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState<number[]>([])
+  const importRef = useRef<HTMLInputElement>(null)
   // Each profile's latest direct chat (threads come newest first); group rooms belong to several profiles.
   const recent = useMemo(() => {
     const result = new Map<number, CodexChatThread>()
@@ -51,7 +54,17 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
   return <div className="flex min-h-0 flex-1 flex-col">
     <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
       <div className="mx-auto max-w-4xl">
-        <Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t({ ko: '프로필 검색', en: 'Search profiles' })} aria-label={t({ ko: '프로필 검색', en: 'Search profiles' })} className="mb-4" />
+        <div className="mb-4 flex items-center gap-2">
+          <Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t({ ko: '프로필 검색', en: 'Search profiles' })} aria-label={t({ ko: '프로필 검색', en: 'Search profiles' })} className="flex-1" />
+          {onImport ? <>
+            <IconButton variant="ghost" size="icon-sm" disabled={disabled} onClick={() => importRef.current?.click()} label={t({ ko: '대화 가져오기 (JSON)', en: 'Import a chat (JSON)' })}><FileUp /></IconButton>
+            <input ref={importRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => {
+              const file = event.target.files?.[0]
+              event.target.value = ''
+              if (file) onImport(file)
+            }} />
+          </> : null}
+        </div>
         <div className={cn('grid gap-x-6', layout === 'page' && 'md:grid-cols-2')}>
           {usable.map((profile) => {
             const last = recent.get(profile.id)

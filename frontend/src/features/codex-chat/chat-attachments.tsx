@@ -61,9 +61,16 @@ export function ChatAttachButton({ chat, disabled }: { chat: CodexChatApi; disab
 }
 
 /** Files attached to the message being written; shown only while there are some (or an upload runs). */
-export function ChatDraftAttachments({ chat, disabled, canReadText }: { chat: CodexChatApi; disabled: boolean; canReadText: boolean }) {
+/** Files the server reads as UTF-8 text (fileStoreService TEXT_EXTENSIONS). */
+const TEXT_FILE_PATTERN = /\.(txt|md|markdown|json|jsonl|csv|tsv|ya?ml|xml|html?|svg|css|m?js|cjs|jsx|tsx?|py|sh|sql|log|ini|toml|srt|vtt)$/i
+
+/** `inlinesText`: a chat that gets text files' contents when it cannot read them itself (direct chats; rooms do not). */
+export function ChatDraftAttachments({ chat, disabled, canReadText, inlinesText = true }: { chat: CodexChatApi; disabled: boolean; canReadText: boolean; inlinesText?: boolean }) {
   const { t } = useI18n()
   if (chat.draftAttachments.length === 0 && chat.draftMediaAttachments.length === 0 && !chat.attachmentsUploading) return null
+  const unreadableLabel = inlinesText
+    ? t({ ko: '이 프로필은 텍스트가 아닌 첨부 파일을 읽지 못해', en: 'This profile cannot read attached files other than text' })
+    : t({ ko: '이 프로필은 첨부 파일 내용을 읽지 못해', en: 'This profile cannot read attached files' })
 
   return (
     <>
@@ -79,9 +86,10 @@ export function ChatDraftAttachments({ chat, disabled, canReadText }: { chat: Co
           </span>
         ))}
         {chat.attachmentsUploading ? <Spinner size="sm" label={t({ ko: '업로드 중', en: 'Uploading' })} /> : null}
-        {!canReadText && chat.draftAttachments.length > 0 ? (
-          <Tip content={t({ ko: '이 프로필은 첨부 파일 내용을 읽지 못해', en: 'This profile cannot read attached files' })}>
-            <span className="inline-flex size-7 items-center justify-center text-muted-foreground" aria-label={t({ ko: '이 프로필은 첨부 파일 내용을 읽지 못해', en: 'This profile cannot read attached files' })}>
+        {/* Without the file tool the chat still gets the start of text files; anything else it cannot open. */}
+        {!canReadText && chat.draftAttachments.some((file) => !inlinesText || !TEXT_FILE_PATTERN.test(file.name)) ? (
+          <Tip content={unreadableLabel}>
+            <span className="inline-flex size-7 items-center justify-center text-muted-foreground" aria-label={unreadableLabel}>
               <EyeOff className="size-3.5" />
             </span>
           </Tip>

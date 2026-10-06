@@ -164,14 +164,21 @@ export interface ChatPromptSection {
   id: string
   title: string
   content: string
-  kind: 'text' | 'dialogue'
+  /** `post`: goes after the latest message (a card's post-history instructions). */
+  kind: 'text' | 'dialogue' | 'post'
   enabled: boolean
 }
 
 /** A full chat profile (admin). */
+/** How secondary keywords narrow a primary match: any also present, not all, none, or all. */
+export type LoreSecondaryLogic = 'andAny' | 'notAll' | 'notAny' | 'andAll'
+
 export interface ChatLoreEntry {
   id: string
+  /** `/pattern/flags` is a regular expression. */
   keys: string[]
+  secondaryKeys?: string[]
+  secondaryLogic?: LoreSecondaryLogic
   content: string
   enabled: boolean
   constant: boolean
@@ -343,6 +350,13 @@ export interface ChatProfile {
 }
 
 /** `background`: a new image (data URL), null to remove it, left out to keep the current one. */
+/** What a card import kept as it was, kept in another form, and left out. */
+export interface ChatCardImportReport {
+  kept: string[]
+  converted: string[]
+  dropped: string[]
+}
+
 export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate' | 'backgroundVersion'>> & { background?: string | null }
 
 export interface ChatProfileDefaults {
@@ -376,6 +390,8 @@ export interface CodexChatThread {
   summary: string | null
   summary_until_message_id: number | null
   summary_updated_date: string | null
+  /** Moves whenever the history or its summary is rewritten. */
+  context_revision: number
   /** Codex chats: input tokens of the last model request (null right after a compaction) and the model's window. */
   codex_context_tokens: number | null
   codex_context_window: number | null
@@ -396,8 +412,40 @@ export interface CodexChatThread {
   flag_ids?: string | null
   /** The account's user profile (persona) in this chat; null is the plain user. */
   user_profile_id?: number | null
+  /** JSON pinned memories (read with readThreadMemories). */
+  memories?: string | null
+  /** LLM chats: why the last background summary failed; null once one succeeds. */
+  summary_error?: string | null
   created_date: string
   updated_date: string
+}
+
+/** A short fact pinned to a chat: every request carries it. */
+export interface ChatMemoryItem {
+  id: string
+  text: string
+}
+
+/**
+ * One stretch of an LLM chat's summary: level 0 summarizes messages from..until; level 1 is the plot the older
+ * stretches were folded into (those stay, and come back when the conversation touches them).
+ */
+export interface ChatSummarySegment {
+  id: number
+  level: 0 | 1
+  from_message_id: number
+  until_message_id: number
+  content: string
+  updated_date: string
+}
+
+export function readThreadMemories(thread: Pick<CodexChatThread, 'memories'> | null | undefined): ChatMemoryItem[] {
+  try {
+    const parsed: unknown = JSON.parse(thread?.memories || '[]')
+    return Array.isArray(parsed) ? parsed.filter((item): item is ChatMemoryItem => typeof item?.id === 'string' && typeof item?.text === 'string') : []
+  } catch {
+    return []
+  }
 }
 
 export interface CodexChatMessage {
@@ -420,6 +468,8 @@ export interface CodexChatMessage {
   error: string | null
   /** LLM replies: the provider's finish_reason; 'length' means the token cap cut the reply short. */
   finish_reason?: string | null
+  /** LLM replies: JSON of what the request carried (read with parseContextMeta). */
+  context_meta?: string | null
   /** User messages: the chat flags that were on when it was sent. */
   flags?: ChatFlagSnapshot[]
   created_date: string
@@ -455,6 +505,11 @@ export interface CodexChatThreadDetail {
   } | null
   /** Codex chats: Codex folds its memory once a request's input reaches this many tokens. */
   codexCompactTokens?: number
+  /** A `tail` fetch: the id of the first message sent, and how many the thread has in all. */
+  messagesFrom?: number
+  messageCount?: number
+  /** Direct LLM chats: the summary by stretch, the plot first. */
+  summarySegments?: ChatSummarySegment[]
   group?: ChatGroupInfo
 }
 
@@ -523,10 +578,17 @@ export function createChatProfile(input: ChatProfileInput) {
   return requestApiData<ChatProfile>('/api/codex-chat/admin/profiles', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
 }
 
+/** A chat exported as CoNAI JSON, back in as a new chat; `notes` say what did not come along. */
+export function importCodexChatThread(file: File) {
+  const body = new FormData()
+  body.append('file', file)
+  return requestApiData<{ thread: CodexChatThread; notes: string[] }>('/api/codex-chat/threads/import', { method: 'POST', body })
+}
+
 export function importChatProfileCard(file: File) {
   const body = new FormData()
   body.append('file', file)
-  return requestApiData<ChatProfileInput>('/api/codex-chat/admin/profiles/import-card', { method: 'POST', body })
+  return requestApiData<ChatProfileInput & { importReport?: ChatCardImportReport }>('/api/codex-chat/admin/profiles/import-card', { method: 'POST', body })
 }
 
 export function listChatLorebooks() {
@@ -796,6 +858,11 @@ export function updateChatProfile(profileId: number, patch: ChatProfileInput) {
   return requestApiData<ChatProfile>(`/api/codex-chat/admin/profiles/${profileId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
+/** Marks a chat proposal saved (after the card's save or the editor's) so the card shows "saved" on every reload. */
+export function markChatProposalSaved(proposalId: number, savedId?: number | null) {
+  return requestApiData<{ id: number; savedId: number | null; saved: boolean }>(`/api/chat-proposals/${proposalId}/saved`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(savedId == null ? {} : { savedId }) })
+}
+
 export function deleteChatProfile(profileId: number) {
   return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/profiles/${profileId}`, { method: 'DELETE' })
 }
@@ -830,11 +897,6 @@ export function listChatConnectionModels(providerName: string) {
 export function suggestChatReplies(threadId: number, signal?: AbortSignal) {
   return requestApiData<{ suggestions: string[]; messageId: number | null }>(`/api/codex-chat/threads/${threadId}/suggest`, { method: 'POST', signal })
 }
-/** Marks a chat proposal saved (after the card's save or the editor's) so the card shows "saved" on every reload. */
-export function markChatProposalSaved(proposalId: number, savedId?: number | null) {
-  return requestApiData<{ id: number; savedId: number | null; saved: boolean }>(`/api/chat-proposals/${proposalId}/saved`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(savedId == null ? {} : { savedId }) })
-}
-
 
 /** Set a display block's values by hand (the whole object), or `null` to put back its starting values. Rooms name the member. */
 export function editChatBlock(threadId: number, key: string, data: Record<string, unknown> | null, profileId?: number) {
@@ -843,8 +905,13 @@ export function editChatBlock(threadId: number, key: string, data: Record<string
   })
 }
 
-export function updateCodexChatThreadContext(threadId: number, patch: { contextTurns?: number | null; maxTokens?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null; userProfileId?: number | null }) {
+export function updateCodexChatThreadContext(threadId: number, patch: { contextTurns?: number | null; maxTokens?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null; userProfileId?: number | null; memories?: Array<{ id?: string; text: string }> }) {
   return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/context`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+}
+
+/** Rewrite one stretch of an LLM chat's summary by hand. */
+export function editChatSummarySegment(threadId: number, segmentId: number, content: string) {
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/summary-segments/${segmentId}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ content }) })
 }
 
 export function summarizeCodexChatThread(threadId: number) {
@@ -902,8 +969,23 @@ export function removeGroupChatMember(threadId: number, profileId: number) {
   return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/members/${profileId}`, { method: 'DELETE' })
 }
 
-export function getCodexChatThread(threadId: number) {
-  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}`, { cache: 'no-store' })
+/** `tail`: only the last messages (see CodexChatThreadDetail.messagesFrom); merge with mergeThreadTail. */
+export function getCodexChatThread(threadId: number, tail?: number) {
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}${tail ? `?tail=${tail}` : ''}`, { cache: 'no-store' })
+}
+
+/**
+ * A tail fetch laid over the full copy: the copy's messages before the tail, then the tail. Null when the copy cannot
+ * be trusted — the history was rewritten since (edits, regeneration, variants move the context revision) or messages
+ * are missing between the two — and a full fetch is needed.
+ */
+export function mergeThreadTail(full: CodexChatThreadDetail, tail: CodexChatThreadDetail): CodexChatThreadDetail | null {
+  if (tail.messagesFrom === undefined) return tail
+  if (full.messagesFrom !== undefined || full.thread.context_revision !== tail.thread.context_revision) return null
+  const from = tail.messagesFrom
+  const messages = [...full.messages.filter((message) => message.id < from), ...tail.messages]
+  if (messages.length !== tail.messageCount) return null
+  return { ...tail, messages, media: { ...full.media, ...tail.media }, messagesFrom: undefined, messageCount: undefined }
 }
 
 export function getCodexChatRunning(threadId: number) {
@@ -928,6 +1010,21 @@ export function interruptCodexChatThread(threadId: number) {
  */
 export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = [], picks: string[] = [], mediaHashes: string[] = [], replyToMessageId?: number) {
   return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds, picks, mediaHashes, replyToMessageId }, onEvent, signal)
+}
+
+/** Carry on a cut last reply (API LLM direct chats); the stream reads like a regeneration. */
+export function streamChatContinue(threadId: number, messageId: number, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal) {
+  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages/${messageId}/continue`, 'POST', {}, onEvent, signal)
+}
+
+/** Rewrite a reply's text by hand, without regenerating (API LLM direct chats). */
+export function editChatReplyText(threadId: number, messageId: number, content: string) {
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/messages/${messageId}/text`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ content }) })
+}
+
+/** A new chat holding this one up to the message (API LLM direct chats). */
+export function branchCodexChatThread(threadId: number, messageId: number) {
+  return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/messages/${messageId}/branch`, { method: 'POST' })
 }
 
 export function streamChatRewrite(threadId: number, messageId: number, content: string | undefined, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal) {

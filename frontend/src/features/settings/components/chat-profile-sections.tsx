@@ -81,7 +81,7 @@ export function ChatPromptSectionsEditor({ sections, onChange }: { sections: Cha
               open={openId === section.id}
               onOpenChange={(open) => setOpenId(open ? section.id : null)}
               title={<span className={cn(!section.enabled && 'text-muted-foreground line-through')}>{section.title || untitled}</span>}
-              meta={section.kind === 'dialogue' ? t({ ko: '대화 예시', en: 'Example dialogue' }) : null}
+              meta={section.kind === 'dialogue' ? t({ ko: '대화 예시', en: 'Example dialogue' }) : section.kind === 'post' ? t({ ko: '대화 뒤 지시', en: 'After the conversation' }) : null}
               actions={(
                 <>
                   <Switch checked={section.enabled} onCheckedChange={(enabled) => update(section.id, { enabled })} aria-label={t({ ko: '사용', en: 'On' })} />
@@ -96,9 +96,10 @@ export function ChatPromptSectionsEditor({ sections, onChange }: { sections: Cha
                   <Input variant="settings" value={section.title} maxLength={80} onChange={(event) => update(section.id, { title: event.target.value })} placeholder={t({ ko: '예: 캐릭터, 세계관, 말투', en: 'e.g. Character, World, Tone' })} />
                 </Field>
                 <Field label={t({ ko: '형식', en: 'Kind' })}>
-                  <Select variant="settings" value={section.kind} onChange={(event) => update(section.id, { kind: event.target.value === 'dialogue' ? 'dialogue' : 'text' })}>
+                  <Select variant="settings" value={section.kind} onChange={(event) => update(section.id, { kind: event.target.value === 'dialogue' || event.target.value === 'post' ? event.target.value : 'text' })}>
                     <option value="text">{t({ ko: '일반 텍스트', en: 'Text' })}</option>
                     <option value="dialogue">{t({ ko: '대화 예시', en: 'Example dialogue' })}</option>
+                    <option value="post">{t({ ko: '대화 뒤 지시', en: 'After the conversation' })}</option>
                   </Select>
                 </Field>
               </div>

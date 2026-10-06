@@ -634,6 +634,10 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['block_edits', 'TEXT'],
     // The account's user profile (persona) in this chat; null is the plain user.
     ['user_profile_id', 'INTEGER'],
+    // JSON pinned memories ([{ id, text }]): short facts every request of this chat carries.
+    ['memories', 'TEXT'],
+    // Why the last background summary failed (null once one succeeds), so the chat can show it.
+    ['summary_error', 'TEXT'],
   ];
   for (const [columnName, definition] of codexChatThreadColumns) {
     if (!hasColumn('codex_chat_threads', columnName)) {
@@ -655,6 +659,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     // Chats with a translation model: what the reader sees (the user's own words, or the reply translated).
     // `content` stays what the model sees. Null: shown as `content`.
     ['display_content', 'TEXT'],
+    // LLM replies: JSON of what the request carried (window, summary, recall, lore, tokens), for "why did it say that".
+    ['context_meta', 'TEXT'],
   ]) {
     if (!hasColumn('codex_chat_messages', columnName)) {
       db.exec(`ALTER TABLE codex_chat_messages ADD COLUMN ${columnName} ${definition}`);
@@ -667,6 +673,32 @@ export function createUserSettingsSchema(db: Database.Database): void {
     message_id INTEGER REFERENCES codex_chat_messages(id) ON DELETE CASCADE
   )`);
   db.exec('CREATE INDEX IF NOT EXISTS idx_chat_generation_reply ON chat_generation_links(thread_id, reply_id)');
+  // LLM chat summaries by stretch of conversation: level 0 summarizes messages from..until, level 1 (at most one per
+  // thread) is the plot folded from the older level-0 rows, which stay for recall. `codex_chat_threads.summary` keeps
+  // the rendered text the model gets.
+  db.exec(`CREATE TABLE IF NOT EXISTS chat_summary_segments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER NOT NULL REFERENCES codex_chat_threads(id) ON DELETE CASCADE,
+    level INTEGER NOT NULL DEFAULT 0,
+    from_message_id INTEGER NOT NULL,
+    until_message_id INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  // Plots: whether level-0 rows beneath cover the whole range (see ChatSummarySegment.backed).
+  if (!hasColumn('chat_summary_segments', 'backed')) {
+    db.exec('ALTER TABLE chat_summary_segments ADD COLUMN backed INTEGER NOT NULL DEFAULT 1');
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_summary_segments_thread ON chat_summary_segments(thread_id, level, until_message_id)');
+  // A summary written before segments existed becomes the thread's plot, standing on its own: up to where it reached,
+  // or — written by hand before anything was folded — up to 0, ahead of every message.
+  db.exec(`INSERT INTO chat_summary_segments (thread_id, level, from_message_id, until_message_id, content, backed)
+    SELECT t.id, 1, CASE WHEN t.summary_until_message_id > 0 THEN COALESCE((SELECT MIN(m.id) FROM codex_chat_messages m WHERE m.thread_id = t.id), 0) ELSE 0 END,
+      COALESCE(t.summary_until_message_id, 0), t.summary, 0
+    FROM codex_chat_threads t
+    WHERE t.engine = 'llm' AND t.summary IS NOT NULL AND TRIM(t.summary) <> ''
+      AND NOT EXISTS (SELECT 1 FROM chat_summary_segments s WHERE s.thread_id = t.id)`);
   // Group members: this member's reply token cap in the room (null: the room's cap, then the profile's).
   if (!hasColumn('chat_group_members', 'max_tokens')) {
     db.exec('ALTER TABLE chat_group_members ADD COLUMN max_tokens INTEGER');

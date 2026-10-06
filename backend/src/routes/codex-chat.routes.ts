@@ -16,7 +16,7 @@ import { resolveChatAccess } from '../services/codex-chat/codexChatAccess'
 import { getMcpToolScope } from '../mcp/context'
 import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
 import { buildCodexInstructions, CODEX_COMPACT_TOKENS, CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
-import { buildChatPromptPreview, estimateTokens, fillCharacterPlaceholders } from '../services/codex-chat/llmChatContext'
+import { buildChatPromptPreview, estimateTokens, fillCharacterPlaceholders, isSummarizing } from '../services/codex-chat/llmChatContext'
 import { buildLorebookText, ChatLorebookStore } from '../services/codex-chat/chatLorebook'
 import { ChatSharedBlockStore, readBlockFile } from '../services/codex-chat/chatDisplayBlocks'
 import { ChatToolPresetStore, readToolPresetFile } from '../services/codex-chat/chatToolPresets'
@@ -24,7 +24,10 @@ import { ModelSlotStore } from '../services/codex-chat/modelSlots'
 import { buildModelUsage } from '../services/codex-chat/modelUsage'
 import { effectiveModelOf, hasSuggestionModel, modelLabelOf } from '../services/codex-chat/chatModelRoles'
 import { ChatGenerationPresetStore, readGenerationPresetFile, type ChatGenerationPresetInput } from '../services/codex-chat/chatGenerationPresets'
-import { CodexChatStore } from '../services/codex-chat/codexChatStore'
+import { CodexChatStore, type CodexChatMessageRecord } from '../services/codex-chat/codexChatStore'
+import { collectCodexChatMedia } from '../services/codex-chat/codexChatMedia'
+import { CHAT_IMPORT_MAX_BYTES, ChatImportError, importChatThread } from '../services/codex-chat/chatImport'
+import { ChatSummaryStore, normalizeMemories } from '../services/codex-chat/chatMemory'
 import { listChatCompletionModels } from '../services/codex-chat/llmChatCompletion'
 import { LlmChatError, LlmChatService } from '../services/codex-chat/llmChatService'
 import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers'
@@ -350,8 +353,18 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
     const userProfileId = parseUserProfileIdField(body.userProfileId)
     if (userProfileId === 'invalid') { sendRouteBadRequest(res, 'userProfileId must be a number or null'); return }
     const windowKeys = ['contextTurns', 'summaryEnabled', 'summary', 'maxTokens'] as const
-    if ((thread.engine !== 'llm' || thread.kind === 'group') && windowKeys.some((key) => body[key] !== undefined)) {
+    if (thread.engine !== 'llm' && windowKeys.some((key) => body[key] !== undefined)) {
       sendRouteBadRequest(res, 'Only LLM chats have context settings')
+      return
+    }
+    // A room has its own summary switch and summary; its window and reply cap are room settings (see updateRoom).
+    if (thread.kind === 'group' && (['contextTurns', 'maxTokens'] as const).some((key) => body[key] !== undefined)) {
+      sendRouteBadRequest(res, 'A group room sets its window and reply cap as room settings')
+      return
+    }
+    // Replacing or clearing the summary under a reply or a background fold would be lost or half-applied.
+    if (body.summary !== undefined && (CodexChatService.isRunning(threadId) || GroupChatService.isRunning(threadId) || isSummarizing(threadId))) {
+      sendChatError(res, new CodexChatError(isSummarizing(threadId) ? '요약이 아직 진행 중이야.' : '이전 답변이 아직 진행 중이야.', 409))
       return
     }
     let contextTurns: number | null | undefined
@@ -378,6 +391,12 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
       sendRouteBadRequest(res, 'summary must be a string or null')
       return
     }
+    // Pinned memories apply to every kind of chat, like the author's note.
+    const memories = body.memories === undefined ? undefined : body.memories === null ? [] : normalizeMemories(body.memories)
+    if (memories === null) {
+      sendRouteBadRequest(res, 'memories must be a list of strings or { id, text }')
+      return
+    }
     getUserSettingsDb().transaction(() => {
       if (userProfileId !== undefined) {
         if (thread.kind === 'group') GroupChatService.setUserProfile(requesterFrom(req), threadId, userProfileId)
@@ -388,12 +407,33 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
         authorNote: typeof body.authorNote === 'string' ? body.authorNote.slice(0, AUTHOR_NOTE_MAX_LENGTH) : (body.authorNote as null | undefined),
         authorNoteDepth,
       })
+      if (memories !== undefined) CodexChatStore.setMemories(threadId, memories)
+      // The whole summary at once: empty clears it, text replaces it as one plot up to where it reached.
       if (body.summary !== undefined) {
         const summary = typeof body.summary === 'string' ? body.summary.trim().slice(0, 20000) : ''
-        CodexChatStore.setSummary(threadId, summary || null, summary ? thread.summary_until_message_id : null)
+        ChatSummaryStore.replaceAll(threadId, summary || null, summary ? thread.summary_until_message_id : null)
       }
     }).immediate()
     res.json({ success: true, data: CodexChatService.getThread(requesterFrom(req), threadId).thread })
+  } catch (error) {
+    sendChatError(res, error)
+  }
+})
+
+/** PATCH /api/codex-chat/threads/:threadId/summary-segments/:segmentId — `{ content }`: rewrite one summary segment by hand. */
+router.patch('/threads/:threadId/summary-segments/:segmentId', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  const segmentId = parseId(req.params.segmentId)
+  if (segmentId === null) { sendRouteBadRequest(res, 'Invalid segment id'); return }
+  const content = typeof req.body?.content === 'string' ? req.body.content.trim().slice(0, 20000) : ''
+  if (!content) { sendRouteBadRequest(res, 'content must be a non-empty string'); return }
+  try {
+    const { thread } = CodexChatService.getThread(requesterFrom(req), threadId)
+    if (CodexChatService.isRunning(threadId) || GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (isSummarizing(threadId)) throw new CodexChatError('요약이 아직 진행 중이야.', 409)
+    if (!ChatSummaryStore.editSegment(threadId, segmentId, content)) throw new CodexChatError('그 요약 구간을 찾을 수 없어.', 404)
+    res.json({ success: true, data: thread.kind === 'group' ? GroupChatService.getThread(requesterFrom(req), threadId) : CodexChatService.getThread(requesterFrom(req), threadId) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -458,7 +498,11 @@ router.post('/threads/:threadId/summarize', requireChatAccess, asyncHandler(asyn
   if (threadId === null) return
   try {
     const { thread } = CodexChatService.getThread(requesterFrom(req), threadId)
-    if (thread.kind === 'group') throw new CodexChatError('그룹 방에서는 압축하지 않아. 이전 대화는 참가자가 직접 찾아봐.', 409)
+    if (thread.kind === 'group') {
+      await GroupChatService.summarize(requesterFrom(req), threadId)
+      res.json({ success: true, data: GroupChatService.getThread(requesterFrom(req), threadId).thread })
+      return
+    }
     if (thread.engine !== 'llm') {
       // Codex chats: Codex folds its own memory of the chat.
       res.json({ success: true, data: await CodexChatService.compact(requesterFrom(req), threadId) })
@@ -866,6 +910,30 @@ router.get('/search', requireChatAccess, (req: Request, res: Response) => {
   res.json({ success: true, data: CodexChatStore.searchMessages(getRequesterAccountId(req), query) })
 })
 
+const chatImportUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: CHAT_IMPORT_MAX_BYTES, files: 1, fields: 0, parts: 2 } }).single('file')
+
+/** POST /api/codex-chat/threads/import — a CoNAI chat JSON (multipart `file`) as a new chat. Returns `{ thread, notes }`. */
+router.post('/threads/import', requireChatAccess, (req, res, next) => {
+  chatImportUpload(req, res, (error) => {
+    if (error) { res.status(400).json({ success: false, error: '대화 JSON 파일 하나를 골라줘. 최대 32MB야.' }); return }
+    next()
+  })
+}, (req: Request, res: Response) => {
+  try {
+    if (!req.file) throw new ChatImportError('대화 JSON 파일을 골라줘.')
+    const requester = requesterFrom(req)
+    const result = importChatThread(requester, req.file.buffer, {
+      direct: (profileId) => CodexChatService.createThread(requester, profileId),
+      group: (profileIds, representativeId) => GroupChatService.create(requester, { profileIds, representativeId }),
+    })
+    ChatAppearanceStore.threadCreated(getRequesterAccountId(req), result.threadId)
+    res.status(201).json({ success: true, data: { thread: CodexChatService.getThread(requester, result.threadId).thread, notes: result.notes } })
+  } catch (error) {
+    if (error instanceof ChatImportError) { res.status(error.status).json({ success: false, error: error.message }); return }
+    sendChatError(res, error)
+  }
+})
+
 router.get('/threads/:threadId/export', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
@@ -879,7 +947,9 @@ router.get('/threads/:threadId/export', requireChatAccess, (req: Request, res: R
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Cache-Control', 'private, no-store')
     if (format === 'json') {
-      res.type('application/json').send(JSON.stringify({ format: 'conai-chat', version: 1, exportedAt: new Date().toISOString(), profileName: profile?.name ?? null, thread: detail.thread, messages: detail.messages, media: detail.media }, null, 2))
+      res.type('application/json').send(JSON.stringify({ format: 'conai-chat', version: 1, exportedAt: new Date().toISOString(), profileName: profile?.name ?? null, thread: detail.thread, messages: detail.messages, media: detail.media, summarySegments: ChatSummaryStore.list(threadId),
+        // A room's members, so an import can find them by id and name.
+        members: detail.thread.kind === 'group' ? ChatGroupStore.members(threadId).map((member) => ({ id: member.profile_id, name: ChatProfileStore.find(member.profile_id)?.name ?? null })) : undefined }, null, 2))
     } else {
       const speakers = new Map(detail.thread.kind === 'group'
         ? [...new Set(detail.messages.map((message) => message.speaker_profile_id).filter((id): id is number => id !== null))].map((id) => [id, ChatProfileStore.find(id)?.name ?? '(나간 참가자)'] as const)
@@ -899,12 +969,27 @@ router.get('/threads/:threadId/running', requireChatAccess, (req: Request, res: 
   } catch (error) { sendChatError(res, error) }
 })
 
+/**
+ * Only the last `tail` messages of a thread detail (and the media they show), with where they start and how many
+ * there are in all, so a poll does not resend a long transcript; the client keeps the rest from its copy.
+ */
+function threadTail<T extends { messages: CodexChatMessageRecord[]; media: Record<string, unknown> }>(detail: T, tail: number) {
+  if (detail.messages.length <= tail) return detail
+  const messages = detail.messages.slice(-tail)
+  const shown = new Set(collectCodexChatMedia(messages).map((item) => item.compositeHash))
+  return { ...detail, messages, media: Object.fromEntries(Object.entries(detail.media).filter(([hash]) => shown.has(hash))), messagesFrom: messages[0].id, messageCount: detail.messages.length }
+}
+
+/** GET /api/codex-chat/threads/:threadId — the thread detail; `?tail=N` (1-500): see threadTail. */
 router.get('/threads/:threadId', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
+  const tail = req.query.tail === undefined ? null : Number(req.query.tail)
+  if (tail !== null && (!Number.isSafeInteger(tail) || tail < 1 || tail > 500)) { sendRouteBadRequest(res, 'tail must be 1-500'); return }
   try {
     const requester = requesterFrom(req)
-    res.json({ success: true, data: isGroupThread(req, threadId) ? GroupChatService.getThread(requester, threadId) : CodexChatService.getThread(requester, threadId) })
+    const detail = isGroupThread(req, threadId) ? GroupChatService.getThread(requester, threadId) : CodexChatService.getThread(requester, threadId)
+    res.json({ success: true, data: tail === null ? detail : threadTail(detail, tail) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -986,6 +1071,43 @@ async function rewriteMessage(req: Request, res: Response, edit: boolean) {
     ? GroupChatService.rewriteMessage(requesterFrom(req), threadId, messageId, content, write)
     : CodexChatService.rewriteMessage(requesterFrom(req), threadId, messageId, content, write))
 }
+
+/** POST /api/codex-chat/threads/:threadId/messages/:messageId/continue — carry on a cut last reply (NDJSON stream, like regenerate). */
+router.post('/threads/:threadId/messages/:messageId/continue', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  const messageId = parseId(req.params.messageId)
+  if (threadId === null) return
+  if (messageId === null) { sendRouteBadRequest(res, '메시지를 확인해줘.'); return }
+  await streamChatReply(res, (write) => CodexChatService.continueReply(requesterFrom(req), threadId, messageId, write))
+}))
+
+/** PATCH /api/codex-chat/threads/:threadId/messages/:messageId/text — `{ content }`: rewrite a reply by hand. Returns the thread detail. */
+router.patch('/threads/:threadId/messages/:messageId/text', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  const messageId = parseId(req.params.messageId)
+  if (threadId === null) return
+  if (messageId === null || typeof req.body?.content !== 'string' || req.body.content.length > MESSAGE_MAX_LENGTH) {
+    sendRouteBadRequest(res, '메시지 내용을 확인해줘.')
+    return
+  }
+  try {
+    const requester = requesterFrom(req)
+    res.json({ success: true, data: isGroupThread(req, threadId) ? GroupChatService.editReplyText(requester, threadId, messageId, req.body.content) : CodexChatService.editReplyText(requester, threadId, messageId, req.body.content) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** POST /api/codex-chat/threads/:threadId/messages/:messageId/branch — a new chat with this one up to the message. Returns the new thread. */
+router.post('/threads/:threadId/messages/:messageId/branch', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  const messageId = parseId(req.params.messageId)
+  if (threadId === null) return
+  if (messageId === null) { sendRouteBadRequest(res, '메시지를 확인해줘.'); return }
+  try {
+    const branch = isGroupThread(req, threadId) ? GroupChatService.branchThread(requesterFrom(req), threadId, messageId) : CodexChatService.branchThread(requesterFrom(req), threadId, messageId)
+    ChatAppearanceStore.threadCreated(getRequesterAccountId(req), branch.id)
+    res.status(201).json({ success: true, data: branch })
+  } catch (error) { sendChatError(res, error) }
+})
 
 router.post('/threads/:threadId/messages/:messageId/regenerate', requireChatAccess, asyncHandler((req, res) => rewriteMessage(req, res, false)))
 router.patch('/threads/:threadId/messages/:messageId', requireChatAccess, asyncHandler((req, res) => rewriteMessage(req, res, true)))

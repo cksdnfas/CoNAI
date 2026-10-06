@@ -87,6 +87,8 @@ export interface CodexChatApi {
   /** Send `draft` to `threadId` and stream the reply. */
   send: (threadId: number, text?: string) => Promise<void>
   regenerate: (threadId: number, messageId: number) => Promise<boolean>
+  /** Carry on the last reply where the token cap cut it. */
+  continueReply: (threadId: number, messageId: number) => Promise<boolean>
   editMessage: (threadId: number, messageId: number, content: string) => Promise<boolean>
   stop: (threadId: number) => void
   /** A message the chat view should scroll to and flash (from the gallery's "go to message"). */
