@@ -16,7 +16,16 @@ export type LlmConnectionDraft = {
   apiKey: string
   /** Put cache_control breakpoints on requests (Anthropic models behind LiteLLM); other servers ignore or reject them. */
   promptCacheMarks: boolean
+  /** How a request without reasoning turns thinking off on this server (thinking_switch). */
+  thinkingSwitch: LlmThinkingSwitch
   isEnabled: boolean
+}
+
+export const LLM_THINKING_SWITCHES = ['reasoning_effort', 'enable_thinking', 'none'] as const
+export type LlmThinkingSwitch = typeof LLM_THINKING_SWITCHES[number]
+
+function readThinkingSwitch(value: unknown): LlmThinkingSwitch {
+  return (LLM_THINKING_SWITCHES as readonly unknown[]).includes(value) ? value as LlmThinkingSwitch : 'reasoning_effort'
 }
 
 export type LlmConnectionModalState =
@@ -128,6 +137,7 @@ export function buildEmptyDraft(): LlmConnectionDraft {
     concurrentRequests: '1',
     apiKey: '',
     promptCacheMarks: false,
+    thinkingSwitch: 'reasoning_effort',
     isEnabled: true,
   }
 }
@@ -143,6 +153,7 @@ export function buildProviderDraft(provider: ExternalApiProviderRecord): LlmConn
     concurrentRequests: readConcurrentRequests(provider),
     apiKey: '',
     promptCacheMarks: provider.additional_config?.prompt_cache_marks === true,
+    thinkingSwitch: readThinkingSwitch(provider.additional_config?.thinking_switch),
     isEnabled: provider.is_enabled,
   }
 }
@@ -194,6 +205,7 @@ export function buildAdditionalConfig(draft: LlmConnectionDraft, baseConfig?: Re
     request_timeout_ms: Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : undefined,
     max_concurrent_requests: Number.isFinite(concurrent) && concurrent > 1 ? concurrent : undefined,
     prompt_cache_marks: draft.promptCacheMarks || undefined,
+    thinking_switch: draft.thinkingSwitch === 'reasoning_effort' ? undefined : draft.thinkingSwitch,
   }
 }
 

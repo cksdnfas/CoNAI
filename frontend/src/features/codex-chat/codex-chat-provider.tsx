@@ -390,15 +390,18 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
             replies: (current.replies ?? []).filter((reply) => reply.profileId !== event.message.speaker_profile_id),
             replacingMessageId: undefined,
           } : current)
-        } else if ((event.type === 'delta' || event.type === 'reasoning' || event.type === 'tool') && event.profileId !== undefined) {
+        } else if ((event.type === 'delta' || event.type === 'text' || event.type === 'reasoning' || event.type === 'tool') && event.profileId !== undefined) {
           const groupEvent = event
           updateReply(event.profileId, (reply) => {
             if (groupEvent.type === 'delta') return { ...reply, text: reply.text + groupEvent.text }
+            if (groupEvent.type === 'text') return { ...reply, text: groupEvent.text }
             if (groupEvent.type === 'reasoning') return { ...reply, reasoning: reply.reasoning + groupEvent.text }
             return { ...reply, toolCalls: new Map(reply.toolCalls).set(groupEvent.call.id, groupEvent.call) }
           })
         } else if (event.type === 'delta') {
           setLiveTurn((current) => (current ? { ...current, text: current.text + event.text } : current))
+        } else if (event.type === 'text') {
+          setLiveTurn((current) => (current ? { ...current, text: event.text } : current))
         } else if (event.type === 'reasoning') {
           setLiveTurn((current) => (current ? { ...current, reasoning: current.reasoning + event.text } : current))
         } else if (event.type === 'tool') {

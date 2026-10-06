@@ -47,6 +47,7 @@ import {
   type LlmConnectionModalState,
   type LlmPresetDraft,
   type LlmPresetModalState,
+  type LlmThinkingSwitch,
 } from './llm-connections-tab-utils'
 
 export function LlmConnectionListItem({
@@ -220,6 +221,18 @@ function LlmConnectionFormFields({
           onValueCommit={(value) => onChange({ concurrentRequests: value })}
           aria-label={t({ ko: '동시 요청 수', en: 'Concurrent requests' })}
         />
+      </Field>
+
+      <Field label={t({ ko: '생각 끄는 방법', en: 'Turning thinking off' })}>
+        <Select
+          variant="settings"
+          value={draft.thinkingSwitch}
+          onChange={(event) => onChange({ thinkingSwitch: event.target.value as LlmThinkingSwitch })}
+        >
+          <option value="reasoning_effort">reasoning_effort: none</option>
+          <option value="enable_thinking">enable_thinking: false</option>
+          <option value="none">{t({ ko: '보내지 않음', en: 'Send nothing' })}</option>
+        </Select>
       </Field>
 
       {draft.providerType === 'llm_openai_compatible' ? (

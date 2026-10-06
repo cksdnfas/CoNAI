@@ -6,7 +6,7 @@ import { registerImageGroupTools } from './tools/imageGroupTools';
 import { registerResourceTools } from './tools/resourceTools';
 import { registerPromptOrganizationTools } from './tools/promptOrganizationTools';
 import { registerGraphWorkflowTools } from './tools/graphWorkflowTools';
-import { ALL_MCP_HTTP_SCOPES, CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, isChatGenerationTool, isChatMcpSource, isMcpToolAllowed, type McpRequestContext } from './context';
+import { ALL_MCP_HTTP_SCOPES, CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, isChatGenerationTool, isChatMcpSource, isMcpToolAllowed, type McpRequestContext } from './context';
 import { registerChatGenerationTools } from './tools/chatGenerationTools';
 import { registerWorkflowTransferTools } from './tools/workflowTransferTools';
 import { registerPromptPresetTools } from './tools/promptPresetTools';
@@ -33,7 +33,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   (server as McpServer & { tool: typeof server.tool }).tool = ((...args: unknown[]) => {
     const toolName = typeof args[0] === 'string' ? args[0] : '';
     const allowed = CHAT_ROOM_TOOLS.has(toolName)
-      ? Boolean(context.chatContext) && (context.chatRoomTools === 'all' || (context.chatRoomTools === 'call' && ['room_call_member', 'chat_reply_to'].includes(toolName))) && (toolName !== 'room_call_member' || context.chatContext?.kind === 'group')
+      ? Boolean(context.chatContext) && (context.chatRoomTools === 'all' || (context.chatRoomTools === 'call' && ['room_call_member', 'chat_reply_to'].includes(toolName))) && (!GROUP_ONLY_CHAT_TOOLS.has(toolName) || context.chatContext?.kind === 'group')
       : isChatGenerationTool(toolName)
         ? presetMode && context.scopes.includes('generate')
         : isMcpToolAllowed(toolName, context.scopes)

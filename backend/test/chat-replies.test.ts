@@ -241,4 +241,121 @@ test('message replies: storage, delivery, context, and generation ownership', { 
       assert.throws(() => routeChatReply(context, { recipients: ['user'] }), /ended|interrupted/)
     } finally { close(); await bridge.close() }
   })
+
+  // ---- Live test findings (2026-10-06, llama.cpp + Qwen) ---------------------------------------------------------
+
+  const { REPLY_FAILURES } = await import('../src/services/codex-chat/llmChatService')
+  const sse = (...chunks: unknown[]) => new Response(`${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('')}data: [DONE]\n\n`, { headers: { 'Content-Type': 'text/event-stream' } })
+  const text = (content: string, finish: string | null = null) => ({ choices: [{ delta: { content }, finish_reason: finish }] })
+  const toolCall = (name: string, args: string, finish: string) => ({ choices: [{ delta: { tool_calls: [{ index: 0, id: `call-${Math.random()}`, type: 'function', function: { name, arguments: args } }] }, finish_reason: finish }] })
+  const directChat = () => CodexChatStore.findThreadById(LlmChatService.createThread(requester, a.id))!
+  type StreamEvent = Parameters<Parameters<typeof LlmChatService.sendMessage>[3]>[0]
+
+  await t.test('direct chats get no room history tools; group rooms do; chat_reply_to stays in both', async () => {
+    const names = async (context: ChatExecutionContext) => {
+      const bridge = await openChatMcpBridge(requester, [], null, { chatContext: context })
+      try { return bridge.tools.map((tool) => tool.function.name) } finally { await bridge.close() }
+    }
+    const direct = await names({ threadId: directChat().id, profileId: a.id, kind: 'direct', replyId: 'tools-direct' })
+    assert.ok(direct.includes('chat_reply_to'))
+    for (const tool of ['room_history_search', 'room_history_read', 'room_call_member']) assert.ok(!direct.includes(tool), tool)
+    const group = await names({ threadId: createRoom().id, profileId: a.id, kind: 'group', replyId: 'tools-group' })
+    for (const tool of ['chat_reply_to', 'room_history_search', 'room_history_read', 'room_call_member']) assert.ok(group.includes(tool), tool)
+  })
+
+  await t.test('tool calls cut by the output cap fail the reply, never run and never go out again', async (s) => {
+    const thread = directChat()
+    const bodies: Array<{ messages: Array<{ role: string; tool_calls?: unknown[]; content?: unknown }>; tools?: Array<{ function: { name: string } }> }> = []
+    s.mock.method(globalThis, 'fetch', async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)))
+      return bodies.length === 1
+        ? sse(text('잠깐만.'), toolCall('save_lore', '{"title":"등', 'length'))
+        : sse(text('응, 알았어.', 'stop'))
+    })
+    const events: StreamEvent[] = []
+    const failed = await LlmChatService.sendMessage(requester, thread, '이거 저장해줘', (event) => events.push(event))
+    assert.equal(failed.status, 'failed')
+    assert.equal(failed.error, REPLY_FAILURES.toolCallsCut)
+    assert.deepEqual(failed.tool_calls, [])
+    assert.ok(events.some((event) => event.type === 'error' && event.message === REPLY_FAILURES.toolCallsCut))
+    assert.ok(!(bodies[0].tools ?? []).some((tool) => tool.function.name.startsWith('room_')), 'a direct request offers no room tools')
+    await LlmChatService.sendMessage(requester, CodexChatStore.findThreadById(thread.id)!, '다시', () => {})
+    assert.ok(!bodies[1].messages.some((message) => message.role === 'tool' || message.tool_calls), 'the broken call is not replayed')
+  })
+
+  await t.test('an empty reply fails: at the cap it names thinking; regenerating it works', async (s) => {
+    const thread = directChat()
+    let reply = sse({ choices: [{ delta: { reasoning_content: '음… 어떻게 말하지' }, finish_reason: null }] }, { choices: [{ delta: {}, finish_reason: 'length' }] })
+    s.mock.method(globalThis, 'fetch', async () => reply)
+    const events: StreamEvent[] = []
+    const atCap = await LlmChatService.sendMessage(requester, thread, '안녕', (event) => events.push(event))
+    assert.equal(atCap.status, 'failed')
+    assert.equal(atCap.error, REPLY_FAILURES.emptyAtCap)
+    assert.ok(events.some((event) => event.type === 'error' && event.message === REPLY_FAILURES.emptyAtCap))
+    reply = sse(text('', 'stop'))
+    const empty = await LlmChatService.sendMessage(requester, CodexChatStore.findThreadById(thread.id)!, '대답해줘', () => {})
+    assert.equal(empty.status, 'failed')
+    assert.equal(empty.error, REPLY_FAILURES.empty)
+    reply = sse(text('미안, 안녕!', 'stop'))
+    const regenerated = await LlmChatService.rewriteMessage(requester, CodexChatStore.findThreadById(thread.id)!, empty.id, undefined, () => {})
+    assert.equal(regenerated.status, 'completed')
+    assert.equal(regenerated.content, '미안, 안녕!')
+  })
+
+  await t.test('a context overflow after a tool result fails the reply on the stream, with the reason', async (s) => {
+    const profile = ChatProfileStore.create({ name: 'D', engine: 'llm', providerName: 'test', model: 'D', mcpEnabled: false, summaryEnabled: false, contextTokens: 100000, maxTokens: 100 })
+    const live = ChatProfileStore.find(profile.id)!
+    const find = ChatProfileStore.find.bind(ChatProfileStore)
+    s.mock.method(ChatProfileStore, 'find', (id: number) => (id === profile.id ? live : find(id)))
+    const thread = CodexChatStore.findThreadById(LlmChatService.createThread(requester, profile.id))!
+    let calls = 0
+    s.mock.method(globalThis, 'fetch', async () => {
+      calls += 1
+      // The budget shrinks under the reply: the request after the tool round cannot fit, whatever is cut.
+      live.contextTokens = 50
+      return sse(toolCall('chat_reply_to', '{"to":["user"]}', 'tool_calls'))
+    })
+    const events: StreamEvent[] = []
+    const failed = await LlmChatService.sendMessage(requester, thread, '안녕', (event) => events.push(event))
+    assert.equal(calls, 1)
+    assert.equal(failed.status, 'failed')
+    assert.match(failed.error ?? '', /컨텍스트 한도를 넘었어/)
+    assert.ok(events.some((event) => event.type === 'error' && /컨텍스트 한도를 넘었어/.test(event.message)))
+    assert.equal(events.at(-1)?.type, 'done')
+  })
+
+  await t.test('an echoed address label is not streamed, nor stored', async (s) => {
+    const thread = directChat()
+    s.mock.method(globalThis, 'fetch', async () => sse(text('[message_id='), text('9; to=["user"]'), text(']\n'), text('안녕, '), text('반가워.', 'stop')))
+    let streamed = ''
+    const reply = await LlmChatService.sendMessage(requester, thread, '안녕', (event) => { if (event.type === 'delta') streamed += event.text })
+    assert.equal(streamed, '안녕, 반가워.')
+    assert.equal(reply.content, '안녕, 반가워.')
+  })
+
+  await t.test('a room reply that rewrites its pre-tool text after the tool round keeps it once', async (s) => {
+    const before = '등불 찻집 열던 날이었어. 카운터上等 램프가 번아웃 돼서, 본인이 직접 싣고 내 수리점에 들었지. 그때부터 지금까지 고쳐줘 온 거야.\n\n'
+    const after = '등불 찻집 열던 날이었어. 카운터 램프가 번아웃 돼서, 루나가 직접 싣고 내 수리점에 들었지. 그때부터 지금까지 고쳐주고 있다.'
+    let final = after
+    let calls = 0
+    s.mock.method(globalThis, 'fetch', async () => {
+      calls += 1
+      return calls % 2 === 1 ? sse(text(before), toolCall('chat_reply_to', '{"to":["user"]}', 'tool_calls')) : sse(text(final, 'stop'))
+    })
+    const room = createRoom()
+    const events: StreamEvent[] = []
+    await GroupChatService.sendMessage(requester, room.id, '@A 둘이 처음 만난 게 언제야?', (event) => events.push(event))
+    const stored = CodexChatStore.listMessages(room.id).filter((message) => message.role === 'assistant')
+    assert.equal(stored.length, 1)
+    assert.equal(stored[0].content, after)
+    const replaced = events.find((event) => event.type === 'text')
+    assert.ok(replaced && replaced.type === 'text' && replaced.text === after && replaced.profileId === a.id, 'the live reply gets the text without the repeat')
+
+    // Text before the tool call and a different answer after it both stay, one blank line apart.
+    final = '루나가 램프를 들고 온 날이야.'
+    const second = createRoom()
+    await GroupChatService.sendMessage(requester, second.id, '@A 그게 언제였는데?', () => {})
+    const [reply] = CodexChatStore.listMessages(second.id).filter((message) => message.role === 'assistant')
+    assert.equal(reply.content, `${before.trim()}\n\n${final}`)
+  })
 })

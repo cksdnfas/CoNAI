@@ -5,7 +5,7 @@ import { CodexChatStore } from '../../services/codex-chat/codexChatStore';
 import { loreEntryTitle } from '../../services/codex-chat/chatLorebook';
 import { loreEntryFile } from '../../services/codex-chat/chatLorebookFiles';
 import { booksForRequest, CHAT_BOOK_LABEL, hasLoreFiles, READ_LORE_FILE_TOOL, type AttachedLoreBook } from '../../services/codex-chat/chatLoreContext';
-import { LORE_PROPOSAL_LIMITS, proposeLore, SAVE_LORE_TOOL } from '../../services/codex-chat/chatLoreProposals';
+import { LORE_PROPOSAL_LIMITS, LORE_PROPOSAL_MAX_KEYS, proposeLore, SAVE_LORE_TOOL } from '../../services/codex-chat/chatLoreProposals';
 import { FileStoreService } from '../../services/fileStoreService';
 import type { McpRequestContext } from '../context';
 
@@ -136,7 +136,7 @@ export function registerChatLoreTools(server: McpServer, context: McpRequestCont
 function registerSaveLore(server: McpServer, context: McpRequestContext): void {
   server.tool(
     SAVE_LORE_TOOL,
-    `Propose an entry for this chat's own lorebook ("${CHAT_BOOK_LABEL}"): a fact worth remembering later (a promise, a name, a place, an event). It shows as a card under your reply; nothing is saved until the user presses 저장. At most one per reply. Do not propose a title the user dismissed, and do not repeat one already waiting. Using a title the chat book already has proposes updating that entry. constant: true sends it with every request (keep those few and short); otherwise it comes back when one of its keys appears in the conversation. file: an optional text file with longer material, kept in the book's 자료/ folder.`,
+    `Propose an entry for this chat's own lorebook ("${CHAT_BOOK_LABEL}"): only a fact worth keeping across sessions. Propose only when the user asks you to remember or save something, or when a clear promise, preference or identity fact comes up; never for small talk or what the conversation already holds. At most one proposal every several turns (the app refuses more), and at most one per reply. It shows as a card under your reply; nothing is saved until the user presses 저장. Do not propose a title the user dismissed, and do not repeat one already waiting. keys: a few distinctive words of the fact (at most ${LORE_PROPOSAL_MAX_KEYS}); not the user's or your own name, dates, weekdays or times. Using a title the chat book already has proposes updating that entry. constant: true sends it with every request (keep those few and short); otherwise it comes back when one of its keys appears in the conversation. file: an optional text file with longer material, kept in the book's 자료/ folder.`,
     {
       title: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.title).describe('Entry title, as the lore index will show it'),
       keys: z.array(z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.key)).max(LORE_PROPOSAL_LIMITS.keys).default([]).describe('Keywords that bring the entry back when they appear in the conversation'),

@@ -2,7 +2,7 @@
  * One place for what an LLM connection holds (how to reach it) and what a request asks for (how to generate). Chat and
  * the workflow LLM node both build their requests from here, so the same profile behaves the same in both.
  *
- * A connection keeps: default model, request timeout, concurrent requests. Generation options (temperature, output limit, reasoning, extra
+ * A connection keeps: default model, request timeout, concurrent requests, how its server turns thinking off. Generation options (temperature, output limit, reasoning, extra
  * provider parameters) belong to the chat profile or the workflow node; an unset option is not sent at all, so the
  * server's own default applies.
  */
@@ -52,6 +52,19 @@ function parseConfig(additionalConfig: unknown): Record<string, unknown> {
 
 export const LLM_MAX_CONCURRENT_REQUESTS = 8
 
+/**
+ * How a connection's server turns thinking off when a request asks for no reasoning (`reasoningEffort: 'none'`):
+ * `reasoning_effort: "none"` (OpenAI and most proxies), `chat_template_kwargs.enable_thinking: false` (llama.cpp, vLLM
+ * and the like with Qwen-style templates, which ignore or reject reasoning_effort "none"), or nothing at all.
+ */
+export const LLM_THINKING_SWITCHES = ['none', 'reasoning_effort', 'enable_thinking'] as const
+export type LlmThinkingSwitch = typeof LLM_THINKING_SWITCHES[number]
+export const DEFAULT_LLM_THINKING_SWITCH: LlmThinkingSwitch = 'reasoning_effort'
+
+function readThinkingSwitch(value: unknown): LlmThinkingSwitch {
+  return typeof value === 'string' && (LLM_THINKING_SWITCHES as readonly string[]).includes(value) ? value as LlmThinkingSwitch : DEFAULT_LLM_THINKING_SWITCH
+}
+
 /** What a connection says about itself, reading the older key names too. */
 export function readLlmConnectionConfig(additionalConfig: unknown) {
   const config = parseConfig(additionalConfig)
@@ -64,6 +77,8 @@ export function readLlmConnectionConfig(additionalConfig: unknown) {
     maxConcurrentRequests: concurrent === null ? 1 : Math.min(Math.floor(concurrent), LLM_MAX_CONCURRENT_REQUESTS),
     /** Mark cache breakpoints (`cache_control`) on the stable parts of each request — for Anthropic models behind a proxy such as LiteLLM. */
     promptCacheMarks: config.prompt_cache_marks === true,
+    /** How a request without reasoning turns thinking off on this server (see LLM_THINKING_SWITCHES). */
+    thinkingSwitch: readThinkingSwitch(config.thinking_switch),
   }
 }
 
@@ -84,12 +99,21 @@ export function parseLlmExtraParams(value: unknown): Record<string, unknown> | n
   return entries.length > 0 ? Object.fromEntries(entries) : null
 }
 
-/** Body fields for an OpenAI-compatible /chat/completions request (also LiteLLM). Unset options are left out. */
-export function buildOpenAiGenerationFields(options: LlmGenerationOptions): Record<string, unknown> {
+/**
+ * Body fields for an OpenAI-compatible /chat/completions request (also LiteLLM). Unset options are left out. No
+ * reasoning (`reasoningEffort: 'none'`) goes out the way the connection's `thinkingSwitch` says; other efforts as is.
+ */
+export function buildOpenAiGenerationFields(options: LlmGenerationOptions, thinkingSwitch: LlmThinkingSwitch = DEFAULT_LLM_THINKING_SWITCH): Record<string, unknown> {
   const fields: Record<string, unknown> = { ...(options.extraParams ?? {}) }
   if (typeof options.temperature === 'number') fields.temperature = options.temperature
   if (typeof options.maxTokens === 'number') fields.max_tokens = options.maxTokens
-  if (options.reasoningEffort) fields.reasoning_effort = options.reasoningEffort
+  if (options.reasoningEffort === 'none') {
+    if (thinkingSwitch === 'reasoning_effort') fields.reasoning_effort = 'none'
+    else if (thinkingSwitch === 'enable_thinking') {
+      const kwargs = fields.chat_template_kwargs
+      fields.chat_template_kwargs = { ...(kwargs && typeof kwargs === 'object' && !Array.isArray(kwargs) ? kwargs : {}), enable_thinking: false }
+    }
+  } else if (options.reasoningEffort) fields.reasoning_effort = options.reasoningEffort
   if (typeof options.reasoningBudgetTokens === 'number') fields.reasoning_budget_tokens = options.reasoningBudgetTokens
   return fields
 }
@@ -107,11 +131,19 @@ export function buildOllamaGenerationFields(options: LlmGenerationOptions): Reco
   return fields
 }
 
-/** The options a summary request uses: no sampling surprises, and no long thinking when the profile reasons. */
-export function summaryGenerationOptions(options: LlmGenerationOptions): LlmGenerationOptions {
+/**
+ * The options a summary request uses: no sampling surprises, and no long thinking when the profile reasons — or, on a
+ * connection that turns thinking off with `enable_thinking` (a model that thinks unless told not to), always.
+ */
+export function summaryGenerationOptions(options: LlmGenerationOptions, thinkingSwitch: LlmThinkingSwitch = DEFAULT_LLM_THINKING_SWITCH): LlmGenerationOptions {
   return {
     temperature: 0.3,
-    reasoningEffort: options.reasoningEffort ? 'none' : null,
+    reasoningEffort: options.reasoningEffort || thinkingSwitch === 'enable_thinking' ? 'none' : null,
     extraParams: options.extraParams ?? null,
   }
+}
+
+/** Whether a request with these options actually runs without thinking on a connection with this switch. */
+export function thinkingIsOff(options: Pick<LlmGenerationOptions, 'reasoningEffort'>, thinkingSwitch: LlmThinkingSwitch = DEFAULT_LLM_THINKING_SWITCH) {
+  return options.reasoningEffort === 'none' && thinkingSwitch !== 'none'
 }

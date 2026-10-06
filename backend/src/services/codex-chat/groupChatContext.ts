@@ -153,7 +153,7 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
   // The header joins the persona's system message: a second system message in the middle is dropped or rejected by
   // many chat templates, and this one is what keeps the model from writing other members' names its own way.
   const header = buildGroupHeader({ thread, members, self: profile, user })
-  // The lore index and summary's system message joins it too, for the same reason.
+  // The leading system message already carries the lore index and summary behind the persona.
   const system: ChatCompletionMessage[] = [
     { role: 'system', content: [...leading.filter((message) => message.role === 'system').map((message) => message.content), header].join('\n\n') },
     ...leading.filter((message) => message.role !== 'system'),

@@ -6,8 +6,10 @@ import { foldBlockState } from '../src/services/codex-chat/chatBlockState'
 import { ChatProfileStore } from '../src/services/codex-chat/chatProfiles'
 import { normalizeChatStyle } from '../src/services/codex-chat/chatStyle'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from '../src/services/codex-chat/codexChatStore'
-import { streamChatCompletion, type ChatCompletionTarget, type ChatCompletionTool } from '../src/services/codex-chat/llmChatCompletion'
-import { buildChatMessages, buildChatPromptPreview, estimateMessagesTokens, fitThreadSummary, rawMessagesEstimate, resolveContextConfig } from '../src/services/codex-chat/llmChatContext'
+import { streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTarget, type ChatCompletionTool } from '../src/services/codex-chat/llmChatCompletion'
+import { buildChatMessages, buildChatPromptPreview, completeSummary, estimateMessagesTokens, fitChatContext, fitThreadSummary, groupTranscript, rawMessagesEstimate, resolveContextConfig, summaryTranscriptText } from '../src/services/codex-chat/llmChatContext'
+import { addressLabelFilter, restatement, roundSeparator } from '../src/services/codex-chat/chatReplyText'
+import { buildOpenAiGenerationFields, readLlmConnectionConfig, summaryGenerationOptions, thinkingIsOff } from '../src/services/llmGenerationOptions'
 import { buildGroupLlmMessages } from '../src/services/codex-chat/groupChatContext'
 import { ChatSummaryStore, renderSummary, type ChatSummarySegment } from '../src/services/codex-chat/chatMemory'
 import { OwnedLorebookStore } from '../src/services/codex-chat/chatLorebookFiles'
@@ -166,4 +168,139 @@ test('prompt preview uses the same author note and block state as a new direct r
   assert.deepEqual(preview, actual)
   assert.ok(JSON.stringify(preview).includes('Keep the scene short.'))
   assert.ok(JSON.stringify(preview).includes('현재 상태'))
+})
+
+// ---- Live test findings (2026-10-06, llama.cpp + Qwen) -----------------------------------------------------------
+
+const sse = (...chunks: unknown[]) => new Response(`${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('')}data: [DONE]\n\n`, { headers: { 'Content-Type': 'text/event-stream' } })
+
+test('a streamed request asks for usage and reads the final usage chunk with empty choices', async (t) => {
+  const bodies: Record<string, unknown>[] = []
+  t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+    bodies.push(JSON.parse(String(init.body)))
+    return sse({ choices: [{ delta: { content: 'hi' }, finish_reason: null }] }, { choices: [{ delta: {}, finish_reason: 'stop' }] }, { choices: [], usage: { prompt_tokens: 77, completion_tokens: 1 } })
+  })
+  const result = await streamChatCompletion({ target, messages: [], signal: new AbortController().signal })
+  assert.deepEqual(bodies[0].stream_options, { include_usage: true })
+  assert.equal(result.content, 'hi')
+  assert.equal(result.finishReason, 'stop')
+  assert.equal(result.promptTokens, 77)
+})
+
+test('a server that refuses stream_options gets the request again without it', async (t) => {
+  const bodies: Record<string, unknown>[] = []
+  t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+    bodies.push(JSON.parse(String(init.body)))
+    return bodies.length === 1 ? new Response('unknown field stream_options', { status: 400 }) : sse({ choices: [{ delta: { content: 'ok' }, finish_reason: 'stop' }] })
+  })
+  const result = await streamChatCompletion({ target, messages: [], signal: new AbortController().signal })
+  assert.equal(bodies.length, 2)
+  assert.equal(bodies[1].stream_options, undefined)
+  assert.equal(result.content, 'ok')
+})
+
+test("no reasoning goes out the way the connection's thinking switch says", () => {
+  assert.equal(readLlmConnectionConfig({}).thinkingSwitch, 'reasoning_effort')
+  assert.equal(readLlmConnectionConfig({ thinking_switch: 'enable_thinking' }).thinkingSwitch, 'enable_thinking')
+  assert.equal(readLlmConnectionConfig({ thinking_switch: 'bogus' }).thinkingSwitch, 'reasoning_effort')
+  const off = { reasoningEffort: 'none' as const, extraParams: { chat_template_kwargs: { foo: 1 } } }
+  assert.deepEqual(buildOpenAiGenerationFields(off), { chat_template_kwargs: { foo: 1 }, reasoning_effort: 'none' })
+  assert.deepEqual(buildOpenAiGenerationFields(off, 'enable_thinking'), { chat_template_kwargs: { foo: 1, enable_thinking: false } })
+  assert.deepEqual(buildOpenAiGenerationFields(off, 'none'), { chat_template_kwargs: { foo: 1 } })
+  // Other efforts are the profile's choice and go out as they are.
+  assert.deepEqual(buildOpenAiGenerationFields({ reasoningEffort: 'high' }, 'enable_thinking'), { reasoning_effort: 'high' })
+  // A summary turns thinking off on an enable_thinking connection even when the profile sets no effort.
+  assert.equal(summaryGenerationOptions({}).reasoningEffort, null)
+  assert.equal(summaryGenerationOptions({}, 'enable_thinking').reasoningEffort, 'none')
+  assert.equal(summaryGenerationOptions({ reasoningEffort: 'low' }).reasoningEffort, 'none')
+  assert.ok(thinkingIsOff({ reasoningEffort: 'none' }, 'enable_thinking'))
+  assert.ok(!thinkingIsOff({ reasoningEffort: 'none' }, 'none'))
+})
+
+test('a summary on an enable_thinking connection sends chat_template_kwargs and keeps the 2048 cap', async (t) => {
+  const profile = ChatProfileStore.draft({ name: 'Character', providerName: 'test', model: 'test' })
+  t.mock.method(ExternalApiProvider, 'findByName', () => ({ provider_name: 'test', display_name: 'Test', is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid/v1', additional_config: { thinking_switch: 'enable_thinking' } }))
+  t.mock.method(ExternalApiProvider, 'getDecryptedKey', () => null)
+  const bodies: Record<string, unknown>[] = []
+  t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+    bodies.push(JSON.parse(String(init.body)))
+    return sse({ choices: [{ delta: { content: '요약' }, finish_reason: 'stop' }] })
+  })
+  assert.equal(await completeSummary(profile, '요약해', '대화'), '요약')
+  assert.deepEqual(bodies[0].chat_template_kwargs, { enable_thinking: false })
+  assert.equal(bodies[0].reasoning_effort, undefined)
+  assert.equal(bodies[0].max_tokens, 2048)
+})
+
+test('an echoed address label never reaches the stream, whatever the chunking', () => {
+  const run = (chunks: string[]) => {
+    const out: string[] = []
+    const filter = addressLabelFilter((text) => out.push(text))
+    for (const chunk of chunks) filter.push(chunk)
+    filter.flush()
+    return out.join('')
+  }
+  const label = '[message_id=65; to=["user"]; reply_to=63]'
+  assert.equal(run([label, '\n등불 찻집']), '등불 찻집')
+  assert.equal(run(['[mess', 'age_id=65; to=[', '"user"]] 안', '녕']), '안녕')
+  assert.equal(run(['[카이; message_id=12; to=[3]]\n', '안녕']), '안녕')
+  assert.equal(run([label]), '')
+  // Plain text, and brackets that are not a label, pass as written.
+  assert.equal(run(['안녕', ' 반가워']), '안녕 반가워')
+  assert.equal(run(['[속삭이며', '] 안녕']), '[속삭이며] 안녕')
+  assert.equal(run(['**굵게** 말해']), '**굵게** 말해')
+  // Only the start is held: a later line passes at once.
+  const out: string[] = []
+  const filter = addressLabelFilter((text) => out.push(text))
+  filter.push('첫 줄\n')
+  filter.push('둘째')
+  assert.deepEqual(out, ['첫 줄\n', '둘째'])
+})
+
+test('a round that restates the text before its tool call takes its place', () => {
+  // Room message 65 of the live test: the pre-tool paragraph, then the same paragraph rewritten after the tool result.
+  const before = '등불 찻집 열던 날이었어. 카운터上等 램프가 번아웃 돼서, 본인이 직접 싣고 내 수리점에 들었지. 그때부터 지금까지 고쳐줘 온 거야.'
+  const after = '등불 찻집 열던 날이었어. 카운터 램프가 번아웃 돼서, 루나가 직접 싣고 내 수리점에 들었지. 그때부터 지금까지 고쳐주고 있다.'
+  assert.equal(restatement(before, after), 'replaces')
+  assert.equal(restatement('그림 그려볼게.', '그림 그려볼게. 다 됐어, 마음에 들어?'), 'replaces')
+  assert.equal(restatement('잠깐, 기록을 찾아볼게. 금요일 밤 등불 찻집이었지.', '금요일 밤 등불 찻집이었지.'), 'repeats')
+  assert.equal(restatement('잠깐 찾아볼게.', '금요일 밤, 등불 찻집이야. 늦지 마.'), null)
+  assert.equal(roundSeparator(''), '')
+  assert.equal(roundSeparator('앞 문단\n\n'), '')
+  assert.equal(roundSeparator('앞 문단\n'), '\n')
+  assert.equal(roundSeparator('앞 문단'), '\n\n')
+})
+
+test('a tool round that does not fit is retried with the tool result cut shorter, then fails', () => {
+  const profile = ChatProfileStore.draft({ name: 'Character', providerName: 'test', maxTokens: 100 })
+  const messages: ChatCompletionMessage[] = [
+    { role: 'system', content: 'sys' },
+    { role: 'user', content: 'read it' },
+    { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'read_lore_file', arguments: '{}' } }] },
+    { role: 'tool', tool_call_id: 'c1', content: 'x'.repeat(40000) },
+  ]
+  const cut = messages.map((message) => (message.role === 'tool' ? { ...message, content: `${'x'.repeat(4000)}\n…(truncated)` } : message))
+  profile.contextTokens = estimateMessagesTokens(profile.id, cut) + 100
+  const fitted = fitChatContext(profile, messages, [], 100)
+  assert.notEqual(fitted, messages)
+  assert.equal((fitted[3] as { content: string }).content, (cut[3] as { content: string }).content)
+  assert.equal(fitChatContext(profile, fitted, [], 100), fitted, 'what fits goes as it is')
+  profile.contextTokens = estimateMessagesTokens(profile.id, messages.slice(0, 3)) + 100
+  assert.throws(() => fitChatContext(profile, messages, [], 100), /컨텍스트 한도를 넘었어/)
+})
+
+test('the summary transcript leaves out the chat\'s own tools, quoted lore files and address labels', () => {
+  const profile = ChatProfileStore.draft({ name: '카이', providerName: 'test' }, 1)
+  const call = (tool: string, summary: string) => ({ id: tool, tool, status: 'completed' as const, arguments: {}, summary, historyIds: [], compositeHashes: [] })
+  const lineOf = groupTranscript([profile], { name: '한별', persona: '' } as never)
+  const reply = {
+    id: 5, role: 'assistant', speaker_profile_id: 1,
+    content: '[message_id=5; to=["user"]]\n금요일 밤이야.\n[자료 자료/일지.md]\n# 일지\n비밀 암호\n[/자료]\n또 봐 [message_id=4; from=user]',
+    tool_calls: [call('save_lore', '제안으로 올렸어.'), call('read_lore_file', '[자료 자료/일지.md] …'), call('room_history_read', '(기록 ID 50)'), call('chat_reply_to', 'ok'), call('submit_generation_job', 'job 12 queued')],
+  } as unknown as CodexChatMessageRecord
+  const line = lineOf(reply)
+  assert.equal(line, '카이: 금요일 밤이야.\n또 봐\n[도구 submit_generation_job: job 12 queued]')
+  assert.equal(summaryTranscriptText('[카이; message_id=3; to=[1]] 안녕'), '안녕')
+  // A reply that only used the chat's own tools leaves no line at all.
+  assert.equal(lineOf({ ...reply, content: '', tool_calls: [call('save_lore', '제안으로 올렸어.')] } as CodexChatMessageRecord), '')
 })

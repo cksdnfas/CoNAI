@@ -1,6 +1,6 @@
 import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { acquireLlmRequestSlot } from '../llmRequestScheduler'
-import { buildOpenAiGenerationFields, readLlmConnectionConfig, type LlmGenerationOptions } from '../llmGenerationOptions'
+import { buildOpenAiGenerationFields, readLlmConnectionConfig, type LlmGenerationOptions, type LlmThinkingSwitch } from '../llmGenerationOptions'
 import { normalizeOptionalString } from '../../utils/valueNormalization'
 import { LlmRequestError } from '../llmRequestRetry'
 
@@ -30,6 +30,8 @@ export type ChatCompletionTarget = {
   generation: LlmGenerationOptions
   /** Put `cache_control` breakpoints on the stable parts of the request (Anthropic through LiteLLM; off by default). */
   promptCacheMarks: boolean
+  /** How `reasoningEffort: 'none'` reaches the server (the connection's setting; default `reasoning_effort`). */
+  thinkingSwitch?: LlmThinkingSwitch
 }
 
 /** How conversation-time reference material (keyword lore, author's note) starts, in both engines' inputs. */
@@ -120,6 +122,7 @@ export function resolveChatCompletionTarget(providerName: string, overrides: { m
     maxConcurrentRequests: connectionConfig.maxConcurrentRequests,
     generation: overrides.generation ?? {},
     promptCacheMarks: connectionConfig.promptCacheMarks,
+    thinkingSwitch: connectionConfig.thinkingSwitch,
   }
 }
 
@@ -192,8 +195,16 @@ export function markCacheBreakpoints(messages: ChatCompletionMessage[]): unknown
   })
 }
 
-function buildBody(target: ChatCompletionTarget, messages: ChatCompletionMessage[], tools: ChatCompletionTool[], stream: boolean) {
-  const body: Record<string, unknown> = { ...buildOpenAiGenerationFields(target.generation), model: target.model, messages: target.promptCacheMarks ? markCacheBreakpoints(messages) : messages, stream }
+/**
+ * `streamUsage`: a streamed request asks for the usage chunk at the end (`stream_options.include_usage`; OpenAI and
+ * llama.cpp send it as a last chunk with empty `choices`), so the prompt token count is known for streamed replies too.
+ */
+export function buildBody(target: ChatCompletionTarget, messages: ChatCompletionMessage[], tools: ChatCompletionTool[], stream: boolean, streamUsage = stream) {
+  const body: Record<string, unknown> = { ...buildOpenAiGenerationFields(target.generation, target.thinkingSwitch), model: target.model, messages: target.promptCacheMarks ? markCacheBreakpoints(messages) : messages, stream }
+  if (stream && streamUsage) {
+    const options = body.stream_options
+    body.stream_options = { ...(options && typeof options === 'object' && !Array.isArray(options) ? options : {}), include_usage: true }
+  }
   if (tools.length > 0) {
     body.tools = tools
   }
@@ -267,10 +278,11 @@ export async function streamChatCompletion(params: {
   touch()
 
   try {
+    let streamUsage = true
     const request = (target: ChatCompletionTarget) => fetch(target.endpoint, {
       method: 'POST',
       headers: buildHeaders(target),
-      body: JSON.stringify(buildBody(target, params.messages, params.tools ?? [], true)),
+      body: JSON.stringify(buildBody(target, params.messages, params.tools ?? [], true, streamUsage)),
       signal,
     }).catch((error: unknown) => {
       if (signal.aborted) throw error
@@ -290,6 +302,12 @@ export async function streamChatCompletion(params: {
       if (response.status === 400 && target.promptCacheMarks) {
         console.warn(`[llm-chat] ${params.target.displayName}: request with cache marks rejected (${errorText.slice(0, 200)}); retrying without`)
         target = { ...target, promptCacheMarks: false }
+        touch()
+        continue
+      }
+      // Likewise the usage chunk: a server that names stream_options in its refusal gets the request without it.
+      if (response.status === 400 && streamUsage && errorText.includes('stream_options')) {
+        streamUsage = false
         touch()
         continue
       }

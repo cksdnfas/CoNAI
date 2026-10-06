@@ -88,10 +88,18 @@ test('lore context: books per request, the index, always-on entries, linked file
     assert.deepEqual(booksForRequest({ thread: null, profile: profile() }).map((book) => book.label), ['항구 도시 설정'])
   })
 
-  await t.test('the second system message: index in book order, then every attached book\'s always-on entries', () => {
+  /** The system message split at the lore index: the persona prompt before it, the lore (and summary) from it on. */
+  const systemParts = (sent: Array<{ role: string; content: unknown }>) => {
+    const system = String(sent[0].content)
+    const at = system.indexOf('## 로어북 목차')
+    return { persona: at < 0 ? system : system.slice(0, at), lore: at < 0 ? '' : system.slice(at) }
+  }
+
+  await t.test('the system message ends with the index in book order, then every attached book\'s always-on entries', () => {
     say('user', '안녕')
     const sent = request()
-    const second = String(sent[1].content)
+    assert.equal(sent.filter((message) => message.role === 'system').length, 1, 'one system message: Qwen-style templates reject a second')
+    const second = systemParts(sent).lore
     assert.equal(second, [
       '## 로어북 목차',
       '[이 채팅] 바다 약속 · 먹물 실종(자료)',
@@ -106,9 +114,9 @@ test('lore context: books per request, the index, always-on entries, linked file
       '- 왼손잡이: 카이는 왼손잡이다.',
     ].join('\n'))
     assert.ok(!JSON.stringify(sent).includes('다른 계정의 비밀'))
-    assert.ok(!String(sent[0].content).includes('왼손잡이'), 'always-on entries left the persona prompt')
+    assert.ok(!systemParts(sent).persona.includes('왼손잡이'), 'always-on entries left the persona prompt')
     // With read_lore_file offered, the index says how to read a file.
-    assert.match(String(request(LORE_TOOL)[1].content), /\(본문은 키워드가 나오면 참고 설정으로 간다\. 자료가 필요하면 read_lore_file\(책, 항목\)\)/)
+    assert.match(systemParts(request(LORE_TOOL)).lore, /\(본문은 키워드가 나오면 참고 설정으로 간다\. 자료가 필요하면 read_lore_file\(책, 항목\)\)/)
   })
 
   await t.test('index caps: 40 titles a book, then the whole index, global books giving up their titles first', () => {

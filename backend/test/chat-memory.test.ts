@@ -66,7 +66,7 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
     return first
   }
 
-  await t.test("the chat book's index and always-on entries travel in the second system message", () => {
+  await t.test("the chat book's index and always-on entries travel at the end of the one system message", () => {
     // A pinned-memories column the startup migration has not reached yet is never read by a request.
     db.prepare('UPDATE codex_chat_threads SET memories = ? WHERE id = ?').run(JSON.stringify([{ id: 'old', text: '옛 고정 기억' }]), threadId)
     OwnedLorebookStore.saveChatBook(threadId, [
@@ -77,13 +77,18 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
     say('assistant', '안녕!')
     const current = thread()
     const sent = buildChatMessages({ profile, thread: current, messages: CodexChatStore.listMessages(threadId), config: resolveContextConfig(current, profile), tools: [] })
-    assert.equal(sent[1].role, 'system')
-    const second = String(sent[1].content)
+    // Chat templates such as Qwen's reject a system message that is not the first one.
+    assert.equal(sent[0].role, 'system')
+    assert.notEqual(sent[1].role, 'system')
+    const system = String(sent[0].content)
+    const at = system.indexOf('\n\n## 로어북 목차\n')
+    assert.ok(at > 0, 'the persona prompt comes first')
+    const second = system.slice(at + 2)
     assert.match(second, /^## 로어북 목차\n\[이 채팅\] 바다 약속 · 왼손잡이 · 먹물 실종\n/)
     assert.ok(second.includes('\n\n## 상시 항목\n- 바다 약속: 사용자와 약속: 내일 바다\n- 왼손잡이: 카이는 왼손잡이'), second)
     assert.ok(!sentText(sent).includes('옛 고정 기억'), 'pinned memories left on the chat are not sent')
     assert.ok(!sentText(sent).includes('고양이 먹물'), 'a keyword entry waits for its keyword')
-    assert.ok(!String(sent[0].content).includes('바다 약속'), 'the persona prompt stays as it was')
+    assert.ok(!system.slice(0, at).includes('바다 약속'), 'the persona prompt stays as it was')
   })
 
   const first = stretch('은하수정원')

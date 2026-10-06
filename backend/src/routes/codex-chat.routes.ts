@@ -1468,8 +1468,14 @@ router.post('/threads/:threadId/messages/:messageId/branch', requireChatAccess, 
 router.post('/threads/:threadId/messages/:messageId/regenerate', requireChatAccess, asyncHandler((req, res) => rewriteMessage(req, res, false)))
 router.patch('/threads/:threadId/messages/:messageId', requireChatAccess, asyncHandler((req, res) => rewriteMessage(req, res, true)))
 
-/** A rejected operation retains its HTTP status until the first NDJSON event is accepted. */
+/**
+ * A rejected operation retains its HTTP status until the first NDJSON event is accepted. Every streamed chat route
+ * (send, regenerate, edit, continue; direct and room) goes through here: the server's 60 s socket timeout is lifted
+ * like on the SSE routes, since a reply can stay silent for minutes (thinking, a summary it waits for).
+ */
 async function streamChatReply(res: Response, run: (write: (event: CodexChatStreamEvent) => void) => Promise<unknown>) {
+  res.socket?.setTimeout(0)
+  res.socket?.setKeepAlive(true)
   let streaming = false
   const write = (event: CodexChatStreamEvent) => {
     if (res.destroyed || res.writableEnded) return

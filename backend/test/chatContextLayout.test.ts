@@ -130,7 +130,7 @@ const books: AttachedLoreBook[] = [
   { id: 2, name: '항구 도시 설정', label: '항구 도시 설정', kind: 'global', via: 'profile', owner: null, folderId: null, entries: normalizeLorebook([{ keys: ['항구'], content: '항구 도시.' }]) },
 ]
 
-test('a request is: system prompt, lore index + always-on entries + summary, examples, the unsummarized turns, flags on the last message', () => {
+test('a request is: one system message (persona, then lore index + always-on entries + summary), examples, the unsummarized turns, flags on the last message', () => {
   const thread = { id: 7, summary: '둘은 친해졌다.', summary_until_message_id: 2, context_turns: null, summary_enabled: 1, memories: JSON.stringify([{ id: 'a', text: '옛 고정 기억' }]) } as unknown as CodexChatThreadRecord
   const messages = [
     record(1, 'user', '처음'), record(2, 'assistant', '응'),
@@ -140,9 +140,12 @@ test('a request is: system prompt, lore index + always-on entries + summary, exa
   const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, summaryEnabled: true, summaryTriggerTurns: 6, summaryPrompt: '요약해' }
   const result = buildChatMessages({ profile, thread, messages, config, tools: [], books })
 
-  assert.deepEqual(result.map((message) => message.role), ['system', 'system', 'user', 'assistant', 'user', 'assistant', 'user'])
+  // Chat templates such as Qwen's reject a system message that is not the first one.
+  assert.deepEqual(result.map((message) => message.role), ['system', 'user', 'assistant', 'user', 'assistant', 'user'])
   assert.match(String(result[0].content), /^너는 카이야\./)
-  assert.equal(result[1].content, [
+  // The persona prompt leads and does not change with the books or the summary: what a server cached stays valid.
+  const persona = String(buildChatMessages({ profile, thread, messages, config: { ...config, summaryEnabled: false }, tools: [], books: [] })[0].content)
+  assert.equal(result[0].content, `${persona}\n\n${[
     '## 로어북 목차',
     '[이 채팅] 바다 약속 · 먹물 실종',
     '[항구 도시 설정] 항구',
@@ -153,12 +156,11 @@ test('a request is: system prompt, lore index + always-on entries + summary, exa
     '',
     '## 지금까지의 대화 요약',
     '둘은 친해졌다.',
-  ].join('\n'), 'pinned memories on the thread are no longer read')
-  // The persona prompt does not change with the books: what a server cached stays valid.
-  assert.equal(buildChatMessages({ profile, thread, messages, config, tools: [], books: [] })[0].content, result[0].content)
-  assert.deepEqual([result[2].content, result[3].content], ['안녕', '반가워'])
-  assert.deepEqual([result[4].content, result[5].content], ['[message_id=3; from=user]\n오늘 뭐 해?', '[message_id=4; from=assistant]\n산책'], 'turns up to the summary are left out')
-  assert.equal(result[6].content, '[message_id=5; from=user]\n같이 갈까?\n\nCurrent room_id: 7.\n\n[사용자 지시: 이번 메시지에 적용]\n- 짧게 답해')
+  ].join('\n')}`, 'pinned memories on the thread are no longer read')
+  assert.deepEqual([result[1].content, result[2].content], ['안녕', '반가워'])
+  assert.deepEqual([result[3].content, result[4].content], ['[message_id=3; from=user]\n오늘 뭐 해?', '[message_id=4; from=assistant]\n산책'], 'turns up to the summary are left out')
+  // A direct chat has no room tools, so no room id either.
+  assert.equal(result[5].content, '[message_id=5; from=user]\n같이 갈까?\n\n[사용자 지시: 이번 메시지에 적용]\n- 짧게 답해')
 })
 
 test("a keyword entry of an attached book goes into [참고 설정] at the lore depth, not into the system messages", () => {
@@ -167,7 +169,7 @@ test("a keyword entry of an attached book goes into [참고 설정] at the lore 
   const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '요약해' }
   const result = buildChatMessages({ profile, thread, messages, config, tools: [], books })
   assert.ok(!JSON.stringify(result.filter((message) => message.role === 'system')).includes('사흘째'))
-  assert.deepEqual(userContents(result.slice(4)), ['[참고 설정]\n고양이 먹물이 사흘째 안 보인다.\n[/참고 설정]\n\n[message_id=1; from=user]\n먹물 봤어?', '[message_id=3; from=user]\n찾아보자\n\nCurrent room_id: 9.'])
+  assert.deepEqual(userContents(result.slice(3)), ['[참고 설정]\n고양이 먹물이 사흘째 안 보인다.\n[/참고 설정]\n\n[message_id=1; from=user]\n먹물 봤어?', '[message_id=3; from=user]\n찾아보자'])
 })
 
 // ---- Author's note ---------------------------------------------------------------------------------------------
@@ -197,5 +199,5 @@ test("the chat's note lands in the conversation at its depth", () => {
   const messages = [record(1, 'user', '처음'), record(2, 'assistant', '응'), record(3, 'user', '오늘 뭐 해?'), record(4, 'assistant', '산책'), record(5, 'user', '같이 갈까?')]
   const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '요약해' }
   const result = buildChatMessages({ profile: noteProfile, thread, messages, config, tools: [], books: [] })
-  assert.deepEqual(userContents(result.slice(3)), ['[message_id=1; from=user]\n처음', '[참고 설정]\n## 작가 노트\n비가 온다.\n[/참고 설정]\n\n[message_id=3; from=user]\n오늘 뭐 해?', '[message_id=5; from=user]\n같이 갈까?\n\nCurrent room_id: 8.'])
+  assert.deepEqual(userContents(result.slice(3)), ['[message_id=1; from=user]\n처음', '[참고 설정]\n## 작가 노트\n비가 온다.\n[/참고 설정]\n\n[message_id=3; from=user]\n오늘 뭐 해?', '[message_id=5; from=user]\n같이 갈까?'])
 })

@@ -21,11 +21,26 @@ import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord
 import type { CodexChatStreamEvent } from './codexChatService'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 import { ChatSummaryStore } from './chatMemory'
-import { assertChatContextFits, buildChatMessages, estimateMessagesTokens, type ChatContextMeta, fillCharacterPlaceholders, fitThreadSummary, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
+import { buildChatMessages, estimateMessagesTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
+import { addressLabelFilter, restatement, roundSeparator } from './chatReplyText'
 
 /** Tool output kept on the stored call for replay; the model gets more of it within the reply itself. */
 const STORED_TOOL_OUTPUT_LENGTH = 4000
 const STOP_WAIT_MS = 8000
+/** How often a reply that waits for a running summary says so on its stream (keeping the connection busy). */
+const WAITING_EVENT_MS = 15_000
+
+/** Why a reply is stored as failed although its request succeeded. */
+export const REPLY_FAILURES = {
+  toolCallsCut: '출력 상한에 걸려 도구 호출이 잘렸어. 최대 출력 토큰을 늘려줘.',
+  emptyAtCap: '생각만 하다가 출력 상한에 닿았어. 최대 출력 토큰을 늘리거나 추론을 줄여줘.',
+  empty: '빈 답변이 왔어.',
+} as const
+
+/** The reply as stored: no inline thinking, no echoed address labels. */
+function replyContent(text: string) {
+  return stripEchoedAddresses(stripThinking(text)).trim()
+}
 
 export class LlmChatError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -168,7 +183,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     const continuation: ChatCompletionMessage[] = turn.continuing === undefined ? [] : [{ role: 'assistant', content: turn.continuing }, { role: 'user', content: CONTINUE_DIRECTIVE }]
     const extraTokens = continuation.length ? estimateMessagesTokens(profile.id, continuation) : 0
     if (config.summaryEnabled) {
-      await fitThreadSummary(thread.id, profile, listMessages(), turn.controller.signal, tools, { attachmentTexts, extraTokens })
+      await whileWaiting(turn, 'summary', fitThreadSummary(thread.id, profile, listMessages(), turn.controller.signal, tools, { attachmentTexts, extraTokens }))
     }
     const current = CodexChatStore.findThreadById(thread.id) ?? thread
     const request = buildChatMessages({
@@ -179,10 +194,46 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
   }, false, { maxTokens: config.maxTokens })
 }
 
+/** `work`, with a `waiting` event every WAITING_EVENT_MS while it runs: the stream carries bytes and says why it is quiet. */
+async function whileWaiting<T>(turn: LlmTurn, reason: 'summary', work: Promise<T>) {
+  const timer = setInterval(() => emit(turn, { type: 'waiting', reason }), WAITING_EVENT_MS)
+  try {
+    return await work
+  } finally {
+    clearInterval(timer)
+  }
+}
+
+type TextSpan = { start: number; end: number }
+
+/**
+ * After a round that wrote text: when it writes the previous round's text again (see `restatement`), only one of them
+ * stays, and the stream gets the whole text anew. Returns the span (separator included) the next round is compared to.
+ */
+function settleRestatement(turn: LlmTurn, previous: TextSpan | null, roundStart: number): TextSpan | null {
+  if (turn.text.length === roundStart) return previous
+  const current = { start: roundStart, end: turn.text.length }
+  const kind = previous ? restatement(turn.text.slice(previous.start, previous.end), turn.text.slice(current.start)) : null
+  if (!previous || !kind) return current
+  if (kind === 'repeats') {
+    turn.text = turn.text.slice(0, roundStart)
+    emit(turn, { type: 'text', text: turn.text })
+    return previous
+  }
+  const before = turn.text.slice(0, previous.start)
+  const body = turn.text.slice(current.start).replace(/^\s+/, '')
+  turn.text = `${before}${roundSeparator(before)}${body}`
+  emit(turn, { type: 'text', text: turn.text })
+  return { start: previous.start, end: turn.text.length }
+}
+
 /**
  * Model ↔ tool rounds until the model answers in text; the last round withholds tools so it must answer.
  * `roomTools` adds the group room history tools (offered even when the profile has no MCP scopes).
  * `generation` overrides the profile's generation options (a direct chat's own reply cap).
+ *
+ * Fails the reply (LlmChatError) when the output cap cut tool calls (their arguments are broken: never run, never
+ * stored) or when the model answered nothing at all.
  */
 async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>, roomTools: 'call' | 'all' | false = false, generation: Partial<LlmGenerationOptions> = {}) {
   const target = resolveChatCompletionTarget(chatConnectionOf(profile), { model: resolveProfileModel(profile, 'chat')?.model ?? null, generation: { ...profileGenerationOptions(profile), ...generation } })
@@ -195,36 +246,62 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     const offeredTools = (bridge?.tools ?? []).filter((tool) => profile.visionEnabled || tool.function.name !== 'view_images')
     turn.offeredTools = offeredTools
     const messages = await buildMessages(offeredTools)
+    let previousRound: TextSpan | null = null
     for (let round = 1; ; round += 1) {
       turn.controller.signal.throwIfAborted()
       const tools = bridge && round <= profile.maxToolRounds ? offeredTools : []
-      assertChatContextFits(profile, messages, tools, target.generation.maxTokens)
+      // A tool result that tips the request over the limit is cut shorter first; only then does the reply fail.
+      const fitted = fitChatContext(profile, messages, tools, target.generation.maxTokens)
+      if (fitted !== messages) messages.splice(0, messages.length, ...fitted)
       const rawEstimate = round === 1 ? rawMessagesEstimate(messages, tools) : 0
-      // A continuation joins the cut text directly; later tool rounds start a new paragraph as usual.
-      let separated = turn.text.length === 0 || (round === 1 && turn.continuing !== undefined)
-      const result = await retryLlmRequest(() => streamChatCompletion({
-        target,
-        messages,
-        tools,
-        signal: turn.controller.signal,
-        onContent: (text) => {
-          const delta = separated ? text : `\n\n${text}`
-          separated = true
+      // A continuation joins the cut text directly; other rounds start a new paragraph, without leading blank lines.
+      const joins = round === 1 && turn.continuing !== undefined
+      const roundStart = turn.text.length
+      const result = await retryLlmRequest(() => {
+        let started = false
+        // An echoed `[message_id=…]` label at the start never reaches the reader, live or stored.
+        const filter = addressLabelFilter((text) => {
+          let delta = text
+          if (!started) {
+            if (!joins) delta = delta.replace(/^\s+/, '')
+            if (!delta) return
+            if (!joins) delta = `${roundSeparator(turn.text)}${delta}`
+            started = true
+          }
           turn.text += delta
           emit(turn, { type: 'delta', text: delta })
-        },
-        onReasoning: (text) => {
-          turn.reasoning += text
-          emit(turn, { type: 'reasoning', text })
-        },
-      }), { signal: turn.controller.signal, canRetry: () => turn.text.length === (turn.continuing?.length ?? 0) && turn.reasoning.length === 0 })
+        })
+        return streamChatCompletion({
+          target,
+          messages,
+          tools,
+          signal: turn.controller.signal,
+          onContent: filter.push,
+          onReasoning: (text) => {
+            turn.reasoning += text
+            emit(turn, { type: 'reasoning', text })
+          },
+        }).then((value) => {
+          filter.flush()
+          return value
+        })
+      }, { signal: turn.controller.signal, canRetry: () => turn.text.length === (turn.continuing?.length ?? 0) && turn.reasoning.length === 0 })
 
       if (round === 1 && result.promptTokens) {
         recordPromptUsage(profile.id, rawEstimate, result.promptTokens)
         if (turn.contextMeta) turn.contextMeta.promptTokens = result.promptTokens
       }
+      // Tool calls the output cap cut off carry broken arguments: never run them, nor send them again.
+      if (result.finishReason === 'length' && result.toolCalls.length > 0) {
+        throw new LlmChatError(REPLY_FAILURES.toolCallsCut)
+      }
+      previousRound = settleRestatement(turn, previousRound, roundStart)
       if (!bridge || tools.length === 0 || result.toolCalls.length === 0) {
         turn.finishReason = result.finishReason
+        // Nothing to show at all (thinking ate the cap, or the model said nothing) is a failure the reader can retry.
+        if (turn.continuing === undefined && turn.toolCalls.size === 0 && !replyContent(turn.text)) {
+          throw new LlmChatError(result.finishReason === 'length' ? REPLY_FAILURES.emptyAtCap : REPLY_FAILURES.empty)
+        }
         return
       }
 
@@ -249,7 +326,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
 /** Stores the reply (translated for the reader first, while the turn still counts as running) and announces it. */
 async function finishTurn(turn: LlmTurn, profile: ChatProfile, status: CodexChatMessageRecord['status'], error: string | null) {
   const toolCalls = [...turn.toolCalls.values()].map((call) => (call.status === 'running' ? { ...call, status: 'failed' as const } : call))
-  const content = stripEchoedAddresses(stripThinking(turn.text)).trim()
+  const content = replyContent(turn.text)
   const finishReason = status === 'completed' ? turn.finishReason : null
   let displayContent: string | null = null
   if (status === 'completed' && content && hasTranslation(profile)) {
@@ -268,6 +345,7 @@ async function finishTurn(turn: LlmTurn, profile: ChatProfile, status: CodexChat
     routing: turn.delivery?.routing,
   })
   let stored = !turn.replacingMessageId
+  let errorShown = false
   if (turn.replacingMessageId) {
     // A connection failure must not replace a usable answer with an empty failed alternative; nor may a continuation
     // that added nothing (failed, stopped, or answered empty) replace the cut reply with a copy of it.
@@ -284,8 +362,12 @@ async function finishTurn(turn: LlmTurn, profile: ChatProfile, status: CodexChat
       stored = true
     } else if (error || continuedNothing) {
       emit(turn, { type: 'error', message: error ?? '이어 쓸 내용이 없었어.' })
+      errorShown = true
     }
   }
+  // A failed reply says why on the stream too, not only on the stored message (a reply with nothing to show would
+  // otherwise just end empty).
+  if (error && !errorShown) emit(turn, { type: 'error', message: error })
   if (turn.contextMeta && stored && (status === 'completed' || content)) CodexChatStore.setContextMeta(messageId, turn.contextMeta)
   const message = CodexChatStore.listMessages(turn.threadId).find((entry) => entry.id === messageId) as CodexChatMessageRecord
   activeTurns.delete(turn.threadId)
@@ -386,7 +468,7 @@ export async function generateLlmGroupReply(params: {
     params.signal.removeEventListener('abort', abort)
   }
   const toolCalls = [...turn.toolCalls.values()].map((call) => (call.status === 'running' ? { ...call, status: 'failed' as const } : call))
-  return { content: stripEchoedAddresses(stripThinking(turn.text)).trim(), tool_calls: toolCalls, status, error, finish_reason: status === 'completed' ? turn.finishReason : null }
+  return { content: replyContent(turn.text), tool_calls: toolCalls, status, error, finish_reason: status === 'completed' ? turn.finishReason : null }
 }
 
 export const LlmChatService = {

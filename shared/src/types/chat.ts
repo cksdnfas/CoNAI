@@ -112,3 +112,7 @@ export type ChatStreamEvent<Message> =
   | { type: 'routing'; routing: ChatMessageRouting; profileId?: number }
   /** The reply is written; its translation for display is being made before it is stored. */
   | { type: 'translating'; profileId?: number }
+  /** The reply waits for something before it starts (a running summary); repeated while it waits, keeping the stream alive. */
+  | { type: 'waiting'; reason: 'summary' }
+  /** The live reply's whole text so far, in place of what the deltas built (a paragraph the model repeated was dropped). */
+  | { type: 'text'; text: string; profileId?: number }

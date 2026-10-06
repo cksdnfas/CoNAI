@@ -1,5 +1,5 @@
 import sharp from 'sharp'
-import { buildOllamaGenerationFields, buildOpenAiGenerationFields, readLlmConnectionConfig, type LlmGenerationOptions } from './llmGenerationOptions'
+import { buildOllamaGenerationFields, buildOpenAiGenerationFields, readLlmConnectionConfig, type LlmGenerationOptions, type LlmThinkingSwitch } from './llmGenerationOptions'
 import { ExternalApiProvider } from '../models/ExternalApiProvider'
 import { withLlmRequestSlot } from './llmRequestScheduler'
 import { normalizeOptionalString } from '../utils/valueNormalization'
@@ -312,6 +312,8 @@ async function executeOpenAiCompatibleRequest(params: {
   contextValue: string | null
   imageDataUrl: string | null
   generation: LlmGenerationOptions
+  /** How the connection turns thinking off (see LLM_THINKING_SWITCHES). */
+  thinkingSwitch?: LlmThinkingSwitch
   responseMode: LlmResponseMode
   structuredOutputJson: string | null
   timeoutMs: number
@@ -330,7 +332,7 @@ async function executeOpenAiCompatibleRequest(params: {
   const userPrompt = buildUserPrompt(params.prompt, params.contextValue)
   const buildBody = (imageFormat: 'data_url' | 'raw_base64') => {
     return {
-      ...buildOpenAiGenerationFields(params.generation),
+      ...buildOpenAiGenerationFields(params.generation, params.thinkingSwitch),
       model: params.model,
       messages: [
         ...(systemMessage ? [{ role: 'system', content: systemMessage }] : []),
@@ -720,6 +722,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
       contextValue,
       imageDataUrl,
       generation,
+      thinkingSwitch: readLlmConnectionConfig(provider.additional_config).thinkingSwitch,
       responseMode,
       structuredOutputJson,
       timeoutMs,

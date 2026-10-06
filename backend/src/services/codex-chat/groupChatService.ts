@@ -186,8 +186,9 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     // The room announces each stored reply itself, once it carries its speaker.
     if (event.type === 'done') return
     if (event.type === 'delta') active.text += event.text
+    if (event.type === 'text') active.text = event.text
     if (event.type === 'tool') active.toolCalls.set(event.call.id, event.call)
-    emit(run, event.type === 'delta' || event.type === 'reasoning' || event.type === 'tool' || event.type === 'routing' || event.type === 'translating' ? { ...event, profileId: profile.id } : event)
+    emit(run, event.type === 'delta' || event.type === 'text' || event.type === 'reasoning' || event.type === 'tool' || event.type === 'routing' || event.type === 'translating' ? { ...event, profileId: profile.id } : event)
   }
   const others = [userPersonaForThread(thread).name, ...members.filter((member) => member.id !== profile.id).map((member) => member.name)]
   const persist = async (raw: GroupReplyResult) => {
@@ -221,6 +222,8 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
       return findMessage(run.threadId, replacingMessageId)
     }
     const id = CodexChatStore.addMessage({ thread_id: run.threadId, role: 'assistant', ...reply, content, display_content: displayContent, routing: active.routing, speaker_profile_id: profile.id })
+    // The failed reply carries its reason; the stream says it too, so a reply with nothing to show does not just end.
+    if (reply.status === 'failed' && reply.error) emit(run, { type: 'error', message: reply.error })
     return findMessage(run.threadId, id)
   }
 

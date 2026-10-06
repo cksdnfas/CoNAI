@@ -379,4 +379,44 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     })
     ChatProfileStore.update(profile.id, { allowLoreProposals: true })
   })
+
+  await t.test('save_lore: one every few replies unless the user asks; names, dates and times leave the keywords', async () => {
+    const threadId = CodexChatStore.createThread(null, '등대', 'llm', profile.id)
+    const context = (replyId: string): ChatExecutionContext => ({ threadId, profileId: profile.id, kind: 'direct', replyId })
+    const propose = async (replyId: string, input: Record<string, unknown>) => {
+      const close = registerChatReply(context(replyId), controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+      const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, [], null, { chatContext: context(replyId) })
+      try { return await bridge.call('save_lore', input) } finally { close(); await bridge.close() }
+    }
+    const say = (role: 'user' | 'assistant', content: string, replyId?: string) => CodexChatStore.addMessage({
+      thread_id: threadId, role, content, tool_calls: [], status: 'completed', error: null,
+      ...(replyId ? { routing: { replyId, replyTo: null, recipients: ['user'] } } : {}),
+    })
+
+    say('user', '토요일 7시에 등대에서 보자.')
+    const first = await propose('p1', { title: '등대 약속', keys: ['카이', '사용자', '토요일', '7시', '오후 3시 반', '19:30', '내일', '약속', '등대', '기어', '램프', '수리', '방파제', '노을', '갈매기'], content: '토요일 7시에 등대에서 만나기로 했다.' })
+    assert.equal(first.isError, undefined, textOf(first))
+    const keys = (first.structuredContent as { proposal: { keys: string[] } }).proposal.keys
+    assert.deepEqual(keys, ['등대', '기어', '램프', '수리', '방파제', '노을'], 'no names, dates or times, at most six')
+    say('assistant', '좋아, 토요일에 봐.', 'p1')
+
+    say('user', '그 등대 오래됐어?')
+    const tooSoon = await propose('p2', { title: '등대 나이', content: '등대는 백 년 됐다.' })
+    assert.equal(tooSoon.isError, true)
+    assert.match(textOf(tooSoon), /within the last 3 replies/)
+    say('assistant', '백 년 됐대.', 'p2')
+
+    say('user', '이건 꼭 기억해줘: 나는 바다를 무서워해.')
+    const asked = await propose('p3', { title: '바다 공포', keys: ['바다'], content: '사용자는 바다를 무서워한다.' })
+    assert.equal(asked.isError, undefined, 'the user asked for it')
+    say('assistant', '알았어, 기억할게.', 'p3')
+
+    for (const replyId of ['q1', 'q2', 'q3']) {
+      say('user', '그렇구나.')
+      say('assistant', '응.', replyId)
+    }
+    say('user', '내 동생 이름은 하늘이야.')
+    const later = await propose('p4', { title: '동생', keys: ['하늘'], content: '사용자의 동생은 하늘이다.' })
+    assert.equal(later.isError, undefined, 'three replies later it is allowed again')
+  })
 })

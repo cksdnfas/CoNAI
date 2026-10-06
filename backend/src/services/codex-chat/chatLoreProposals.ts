@@ -6,12 +6,16 @@ import { FileStoreService, TEXT_EXTENSIONS, fileOwnerKey } from '../fileStoreSer
 import { storedFilePath } from '../fileStorePaths'
 import { loreEntryTitle } from './chatLorebook'
 import { LORE_FILES_FOLDER, OwnedLorebookStore, foldLoreTitle, freeChildName, type OwnedLorebook } from './chatLorebookFiles'
+import { ChatProfileStore } from './chatProfiles'
 import { ChatProposalStore } from './chatProposals'
+import { userPersonaForThread } from './chatUserProfiles'
+import { CodexChatStore } from './codexChatStore'
 
 /**
  * save_lore: the model proposes an entry for the chat's own lorebook; the entry goes in only when a person saves the
- * card (applyLoreProposal). One proposal per reply, and never a title the person already set aside or that still
- * waits: small models otherwise repeat themselves.
+ * card (applyLoreProposal). One proposal per reply, none within a few replies of the last one unless the user asks
+ * for something to be kept, and never a title the person already set aside or that still waits: small models
+ * otherwise propose every other turn. Names, dates and times are dropped from the keywords.
  */
 
 export type LoreProposal = Extract<ChatProposal, { kind: 'lore' }>
@@ -20,6 +24,23 @@ export const SAVE_LORE_TOOL = 'save_lore'
 export const LORE_PROPOSAL_LIMITS = { title: 80, keys: 20, key: 100, content: 4000, fileName: 120, fileBytes: 32 * 1024 } as const
 /** Set-aside titles the next request names (newest ones). */
 const REJECTED_LORE_TITLES = 10
+/** A chat proposes lore at most once in this many assistant replies, unless the user asks for something to be kept. */
+const LORE_PROPOSAL_SPACING = 3
+/** Words in the latest user message that ask for something to be kept; they lift that spacing. */
+const LORE_REQUEST_WORDS = /기억|저장|남겨|remember|save/i
+/** Keywords a proposal keeps, at most. */
+export const LORE_PROPOSAL_MAX_KEYS = 6
+/**
+ * Keywords that come up in nearly every exchange, so an entry keyed on them would come back all the time: dates,
+ * weekdays, times of day, and the word "promise" itself.
+ */
+const LORE_STOP_KEYS = new Set([
+  '약속', '오늘', '내일', '모레', '어제', '그제', '주말', '평일', '이번 주', '다음 주', '지난주', '아침', '점심', '저녁', '밤', '새벽', '오전', '오후',
+  '월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일',
+  'promise', 'today', 'tomorrow', 'yesterday', 'tonight', 'weekend', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+])
+/** A bare time: `7시`, `오후 3시 반`, `19:30`, `7pm`. */
+const TIME_KEY = /^(?:(?:오전|오후|아침|저녁|밤|새벽)\s*)?\d{1,2}\s*시(?:\s*(?:\d{1,2}\s*분|반))?$|^\d{1,2}:\d{2}$|^\d{1,2}\s*(?:am|pm)$/i
 
 export class LoreProposalError extends Error {
   constructor(message: string, readonly status = 400) { super(message) }
@@ -33,6 +54,37 @@ function loreProposals(threadId: number): LoreProposal[] {
 
 function isSaved(proposal: LoreProposal) {
   return proposal.savedId !== undefined
+}
+
+function foldKey(value: string) {
+  return value.normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()
+}
+
+/**
+ * The keywords worth keeping, at most LORE_PROPOSAL_MAX_KEYS: not the user's or the character's name (they appear in
+ * every turn), not a date, weekday or bare time (see LORE_STOP_KEYS, TIME_KEY).
+ */
+export function usefulLoreKeys(keys: string[], names: Array<string | null | undefined>) {
+  const skipped = new Set(names.filter((name): name is string => Boolean(name?.trim())).map(foldKey))
+  return keys.filter((key) => {
+    const folded = foldKey(key)
+    return folded && !skipped.has(folded) && !LORE_STOP_KEYS.has(folded) && !TIME_KEY.test(folded)
+  }).slice(0, LORE_PROPOSAL_MAX_KEYS)
+}
+
+/**
+ * Whether the chat proposed lore in one of its last LORE_PROPOSAL_SPACING assistant replies, while the latest user
+ * message asks for nothing to be kept. A direct chat's replies after the latest user message are the one being
+ * regenerated or continued, so they do not count.
+ */
+export function loreProposedRecently(context: Pick<ChatExecutionContext, 'threadId' | 'kind'>) {
+  const messages = CodexChatStore.listMessages(context.threadId)
+  const latestUser = messages.map((message) => message.role).lastIndexOf('user')
+  const user = latestUser >= 0 ? messages[latestUser] : null
+  if (user && LORE_REQUEST_WORDS.test(`${user.content}\n${user.display_content ?? ''}`)) return false
+  const answered = context.kind === 'direct' && latestUser >= 0 ? messages.slice(0, latestUser) : messages
+  const recent = new Set(answered.filter((message) => message.role === 'assistant').slice(-LORE_PROPOSAL_SPACING).flatMap((message) => message.routing?.replyId ?? []))
+  return recent.size > 0 && ChatProposalStore.listForThread(context.threadId).some((row) => row.proposal.kind === 'lore' && recent.has(row.replyId))
 }
 
 /** The file a proposal carries: a plain text file name (no folders) and UTF-8 text up to the limit. */
@@ -60,6 +112,8 @@ export function proposeLore(context: ChatExecutionContext, input: SaveLoreInput)
   const keys = [...new Set(((input.keys ?? []) as unknown[]).map((key) => (typeof key === 'string' ? key.trim() : '')).filter(Boolean))]
   if (keys.length > LORE_PROPOSAL_LIMITS.keys) throw new LoreProposalError(`At most ${LORE_PROPOSAL_LIMITS.keys} keys.`)
   if (keys.some((key) => key.length > LORE_PROPOSAL_LIMITS.key)) throw new LoreProposalError(`A key is over ${LORE_PROPOSAL_LIMITS.key} characters.`)
+  const thread = CodexChatStore.findThreadById(context.threadId)
+  const useful = usefulLoreKeys(keys, [thread ? userPersonaForThread(thread).name : null, ChatProfileStore.find(context.profileId)?.name])
   const content = typeof input.content === 'string' ? input.content.trim() : ''
   if (!content) throw new LoreProposalError('content is empty.')
   if (content.length > LORE_PROPOSAL_LIMITS.content) throw new LoreProposalError(`content is over ${LORE_PROPOSAL_LIMITS.content} characters.`)
@@ -68,6 +122,9 @@ export function proposeLore(context: ChatExecutionContext, input: SaveLoreInput)
   // One per reply: a second call in the same reply is refused (the first card stays as it is).
   if (ChatProposalStore.forReply(context.threadId, context.replyId, 'lore').length > 0) {
     throw new LoreProposalError('This reply already has a lore proposal (one per reply). Propose another one in a later reply if it still matters.')
+  }
+  if (loreProposedRecently(context)) {
+    throw new LoreProposalError(`A lore proposal was made within the last ${LORE_PROPOSAL_SPACING} replies. Propose again only when the user asks you to remember something or a lasting fact (a promise, a preference, who someone is) comes up. Just reply now.`)
   }
   const folded = foldLoreTitle(title)
   const earlier = loreProposals(context.threadId).filter((proposal) => foldLoreTitle(proposal.title) === folded)
@@ -78,7 +135,7 @@ export function proposeLore(context: ChatExecutionContext, input: SaveLoreInput)
   return ChatProposalStore.add(context, {
     kind: 'lore',
     title,
-    keys,
+    keys: useful,
     content,
     constant: input.constant === true,
     ...(file ? { file } : {}),

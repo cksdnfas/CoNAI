@@ -1147,7 +1147,7 @@ export const CodexChatService = {
         const directive = [buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile, user)), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
         const reference = referenceBlock([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text])
         const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user) : ''
-        const input = [recap, reference, `${REPLY_GUIDANCE}\nCurrent room_id: ${threadId}.`, buildReplyContext(history, routing), chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }])), directive].filter(Boolean).join('\n\n')
+        const input = [recap, reference, REPLY_GUIDANCE, buildReplyContext(history, routing), chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }])), directive].filter(Boolean).join('\n\n')
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
           threadId: codexThreadId,
           model: run.model,

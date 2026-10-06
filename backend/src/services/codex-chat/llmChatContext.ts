@@ -1,5 +1,6 @@
-import { summaryGenerationOptions } from '../llmGenerationOptions'
+import { summaryGenerationOptions, thinkingIsOff } from '../llmGenerationOptions'
 import { buildReplyContext } from './chatReplyContext'
+import { stripEchoedAddresses } from '@conai/shared'
 import { messageAddress, REPLY_GUIDANCE } from './chatReplies'
 import { CHAT_ROOM_TOOLS } from '../../mcp/context'
 import { blockStateText, foldBlockState, parseBlockEdits, stripBlockFences, usableBlockKeys } from './chatBlockState'
@@ -297,8 +298,8 @@ export function rejectedLoreFor(threadId: number | null | undefined, tools: Read
  * (OpenAI caches a repeated prefix by itself; llama.cpp, LM Studio, vLLM and Ollama reuse their KV cache the same way):
  *
  *   1. system prompt — persona, guidance: fixed until the profile is saved
- *   2. lore index, "always on" lore entries and the rolling summary — change only when a book changes or turns are
- *      folded in
+ *   2. lore index, "always on" lore entries and the rolling summary — the tail of the same system message (chat
+ *      templates allow a system message only at the start); change only when a book changes or turns are folded in
  *   3. example dialogue — fixed
  *   4. older turns
  *   5. keyword lore (`[참고 설정]`) merged into the user message `loreDepth` turns before the end — the part that
@@ -309,8 +310,8 @@ export function rejectedLoreFor(threadId: number | null | undefined, tools: Read
  */
 
 /**
- * Everything before the real conversation: the system prompt (stable, so servers can reuse the cached prefix), the
- * lore index with the "always on" entries and the rolling summary, then example turns. Chat templates often allow
+ * Everything before the real conversation: one system message — the system prompt first (stable, so servers can reuse
+ * the cached prefix), then the lore index with the "always on" entries and the rolling summary — then example turns. Chat templates often allow
  * system messages only at the start, so the note that the examples are not real lives in the system prompt rather
  * than around them. `lore` defaults to the profile's global books with no chat (a preview).
  */
@@ -325,15 +326,15 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
     buildChatStyleGuidance(profile.style, profile.name),
     buildEmoticonGuidance(profile.style),
   ].filter(Boolean).join('\n\n')
-  const result: ChatCompletionMessage[] = systemPrompt ? [{ role: 'system', content: systemPrompt }] : []
-  // The lore index, the "always on" entries and the summary: one system message that only changes when they do.
+  // The lore index, the "always on" entries and the summary follow the persona in the same system message: many chat
+  // templates (Qwen's among them) reject a system message that is not the first one. Behind the persona, so the
+  // prefix a server cached stays the same until they change.
   const memory = [
     loreIndexText(lore),
     config.summaryEnabled && thread?.summary?.trim() ? `## 지금까지의 대화 요약\n${thread.summary.trim()}` : '',
   ].filter(Boolean).join('\n\n')
-  if (memory) {
-    result.push({ role: 'system', content: memory })
-  }
+  const system = [systemPrompt, memory].filter(Boolean).join('\n\n')
+  const result: ChatCompletionMessage[] = system ? [{ role: 'system', content: system }] : []
   return [...result, ...examples]
 }
 
@@ -532,6 +533,33 @@ export function assertChatContextFits(profile: ChatProfile, messages: ChatComple
   }
 }
 
+/** Tool output lengths tried, in order, when a request with tool results does not fit (see fitChatContext). */
+const FIT_TOOL_OUTPUT_LENGTHS = [REPLAYED_TOOL_OUTPUT_LENGTH, 1000]
+
+/**
+ * `messages` when they fit (assertChatContextFits); otherwise a copy with the tool results cut shorter, tried at
+ * FIT_TOOL_OUTPUT_LENGTHS — a large tool result (a long file, a history dump) is what usually tips a tool round over
+ * the limit. Throws the overflow error when even the shortest cut does not fit.
+ */
+export function fitChatContext(profile: ChatProfile, messages: ChatCompletionMessage[], tools: ChatCompletionTool[], maxTokens: number | null | undefined): ChatCompletionMessage[] {
+  try {
+    assertChatContextFits(profile, messages, tools, maxTokens)
+    return messages
+  } catch (error) {
+    for (const length of FIT_TOOL_OUTPUT_LENGTHS) {
+      const cut = messages.map((message) => (message.role === 'tool' && message.content.length > length ? { ...message, content: `${message.content.slice(0, length)}\n…(truncated)` } : message))
+      if (cut.every((message, index) => message === messages[index])) continue
+      try {
+        assertChatContextFits(profile, cut, tools, maxTokens)
+        return cut
+      } catch {
+        // Try a shorter cut.
+      }
+    }
+    throw error
+  }
+}
+
 /** With the summary on, only the messages after it go out verbatim; the summary stands in for the rest. */
 export function unsummarizedMessages(messages: CodexChatMessageRecord[], thread: Pick<CodexChatThreadRecord, 'summary_until_message_id'>, config: Pick<LlmChatContextConfig, 'summaryEnabled'>) {
   const until = config.summaryEnabled ? thread.summary_until_message_id ?? 0 : 0
@@ -572,7 +600,8 @@ export function buildChatMessages(params: {
   const blockKeys = usableBlockKeys(profile.style.blocks)
   const conversation = insertDepthBlocks(window.flat().flatMap((message) => toCompletionMessages(message, blockKeys, params.attachmentTexts)), blocks)
   const reference = buildReplyContext(params.messages, routing, { maxChars, visibleIds: new Set(window.flat().map((message) => message.id)) })
-  const request = appendUserDirective([...system, ...conversation], [reference, params.messages.length ? `Current room_id: ${thread.id}.` : '', directive].filter(Boolean).join('\n\n'))
+  // A direct chat has no room tools, so the request names no room id.
+  const request = appendUserDirective([...system, ...conversation], [reference, directive].filter(Boolean).join('\n\n'))
   const sent = window.flat()
   params.onMeta?.({
     windowFromMessageId: sent[0]?.id ?? null,
@@ -591,11 +620,28 @@ export function buildChatMessages(params: {
 /** How a message reads in a summary transcript: `speaker: text`, then the tools it used. */
 export type TranscriptLineOf = (message: CodexChatMessageRecord) => string
 
-/** `speakerOf` names the speaker (a room has one per message); `blocksOf` gives the speaker's display block keys. */
+/** Lore file text a reply quoted (`[자료 …]` … `[/자료]`, see loreFileResultText): reference data, not conversation. */
+const QUOTED_LORE_FILE = /\[자료 [^\]\n]*\][\s\S]*?\[\/자료\]\n?/g
+/** An address label anywhere in a line (stripEchoedAddresses takes the ones at a line start). */
+const INLINE_ADDRESS = /\[(?:[^[\]\n]*?;\s*)?message_id=\d+(?:[^[\]\n]|\[[^[\]\n]*\])*\]/g
+
+/** Message text as a summary should read it: no address labels and no quoted lore files. */
+export function summaryTranscriptText(text: string) {
+  return stripEchoedAddresses(text).replace(QUOTED_LORE_FILE, '').replace(INLINE_ADDRESS, '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+/**
+ * `speakerOf` names the speaker (a room has one per message); `blocksOf` gives the speaker's display block keys. The
+ * chat's own tools (quoting, room history, lorebook reads and proposals) are bookkeeping, not events, and stay out;
+ * CoNAI actions (a generation…) stay as a short note.
+ */
 function transcriptLine(message: CodexChatMessageRecord, speakerOf: (message: CodexChatMessageRecord) => string, blocksOf: (message: CodexChatMessageRecord) => ReadonlySet<string>) {
-  const tools = message.tool_calls.map((call) => `[도구 ${call.tool}: ${(call.summary ?? '').slice(0, SUMMARY_TOOL_NOTE_LENGTH)}]`)
+  const tools = message.tool_calls.filter((call) => !CHAT_ROOM_TOOLS.has(call.tool)).map((call) => `[도구 ${call.tool}: ${(call.summary ?? '').slice(0, SUMMARY_TOOL_NOTE_LENGTH)}]`)
   // Block fences are state, not conversation: the summary does without them.
-  return [`${speakerOf(message)}: ${message.role === 'assistant' ? stripBlockFences(message.content, blocksOf(message)) : chatContentWithAttachments(message.content, message.attachments, message.mediaAttachments)}`, ...tools].join('\n')
+  const text = summaryTranscriptText(message.role === 'assistant' ? stripBlockFences(message.content, blocksOf(message)) : chatContentWithAttachments(message.content, message.attachments, message.mediaAttachments))
+  // A reply that only used the chat's own tools says nothing worth summarizing.
+  if (!text && tools.length === 0) return ''
+  return [`${speakerOf(message)}: ${text}`, ...tools].join('\n')
 }
 
 /** A direct chat's transcript: the user and the profile speak. */
@@ -695,13 +741,12 @@ class SummaryRunawayError extends Error {}
 export async function completeSummary(profile: ChatProfile, system: string, content: string, signal?: AbortSignal, maxTokens = SUMMARY_MAX_TOKENS) {
   const resolved = resolveProfileModel(profile, 'summary')
   if (!resolved) throw new Error('요약에 쓸 LLM 연결을 찾을 수 없어.')
-  const generation = summaryGenerationOptions(profileGenerationOptions(profile))
-  // With reasoning left on, thinking shares the cap, so only a reasoning-off request gets one.
-  const capped = generation.reasoningEffort === 'none'
-  const target = resolveChatCompletionTarget(resolved.providerName, {
-    model: resolved.model,
-    generation: capped ? { ...generation, maxTokens } : generation,
-  })
+  const connection = resolveChatCompletionTarget(resolved.providerName, { model: resolved.model })
+  // The summary connection's own way of turning thinking off (llama.cpp with Qwen: enable_thinking).
+  const generation = summaryGenerationOptions(profileGenerationOptions(profile), connection.thinkingSwitch)
+  // With reasoning left on, thinking shares the cap, so only a request that really runs without it gets one.
+  const capped = thinkingIsOff(generation, connection.thinkingSwitch)
+  const target = { ...connection, generation: capped ? { ...generation, maxTokens } : generation }
   const timeout = AbortSignal.timeout(SUMMARY_TIMEOUT_MS)
   const result = await streamChatCompletion({
     target,
@@ -735,7 +780,7 @@ async function summarizeSegment(profile: ChatProfile, config: LlmChatContextConf
     used += cost
   }
   const custom = profile.summaryPrompt.trim()
-  const transcript = messages.map(lineOf).join('\n\n')
+  const transcript = messages.map(lineOf).filter(Boolean).join('\n\n')
   return completeSummary(profile, custom ? `${custom}\n\n${SEGMENT_PROMPT_SUFFIX}` : SEGMENT_PROMPT, `## 앞선 내용\n${context.join('\n\n') || '(없음)'}\n\n## 이어진 대화\n${transcript}`, signal)
 }
 
