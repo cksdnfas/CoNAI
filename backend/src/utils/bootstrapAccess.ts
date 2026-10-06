@@ -16,13 +16,32 @@ export function isLoopbackAddress(address: string | null | undefined): boolean {
     || /^::ffff:127(?:\.\d{1,3}){3}$/.test(normalized);
 }
 
+/** Match a connection the server host opened to itself through one of its own addresses (e.g. its LAN IP). */
+export function isSameHostConnection(
+  remoteAddress: string | null | undefined,
+  localAddress: string | null | undefined,
+): boolean {
+  if (!remoteAddress || !localAddress) {
+    return false;
+  }
+
+  const normalize = (address: string) => address.trim().toLowerCase().replace(/^::ffff:/, '');
+  return normalize(remoteAddress) === normalize(localAddress);
+}
+
 /**
  * Bootstrap admin mode is a local-console convenience, not a network authentication mechanism.
- * Forwarded requests are intentionally excluded even when the reverse proxy itself is local.
+ * The server PC opening its own LAN address counts as local; forwarded requests are intentionally
+ * excluded even when the reverse proxy itself is local.
  */
 export function isDirectLoopbackRequest(req: Request): boolean {
   const hasForwardingHeaders = Boolean(req.headers.forwarded || req.headers['x-forwarded-for']);
-  return !hasForwardingHeaders && isLoopbackAddress(req.socket?.remoteAddress);
+  if (hasForwardingHeaders) {
+    return false;
+  }
+
+  const remoteAddress = req.socket?.remoteAddress;
+  return isLoopbackAddress(remoteAddress) || isSameHostConnection(remoteAddress, req.socket?.localAddress);
 }
 
 /** Validate the opt-in token required for first-admin setup over a non-loopback connection. */
