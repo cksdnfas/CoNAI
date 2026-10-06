@@ -16,6 +16,9 @@ import {
   chatProfileEmoticonsQueryKey,
   listChatProfileEmoticons,
   deleteCodexChatThread,
+  getThreadLorebooks,
+  LoreDecisionsNeededError,
+  threadLorebooksQueryKey,
   getCodexChatThread,
   mergeThreadTail,
   editChatReplyText,
@@ -40,6 +43,9 @@ import {
   type ChatBlocksState,
   type ChatDisplayBlock,
   type CodexChatThreadDetail,
+  type LoreMergePreview,
+  type OwnedChatLorebook,
+  type ThreadLorebookAction,
 } from '@/lib/api-codex-chat'
 import { getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
@@ -70,6 +76,8 @@ import { GROUP_MEMBER_MAX, GroupAvatarStack, GroupInviteDialog, GroupMembersPopo
 import { mentionQueryAt } from './chat-mentions'
 import { parseMentions } from '@conai/shared'
 import { ChatReplyPreview } from './chat-reply'
+import { ChatDeleteDialog } from './chat-delete-dialog'
+import { LorebookMergeDialog } from './lorebook-merge-dialog'
 import type { ChatEmoticonMap } from './chat-markdown'
 
 const CodexChatContextView = lazy(async () => ({ default: (await import('./codex-chat-context-view')).CodexChatContextView }))
@@ -508,15 +516,30 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   }, [isGroup, messages, setStatusLayout, statusBlocks, wideStatus])
   const blockChanges = useMemo(() => chipChanges ? { changes: chipChanges, open: openStatus } : null, [chipChanges, openStatus])
 
+  // Deleting a chat whose own lorebook has entries asks what becomes of the book (C); a merge with duplicates goes
+  // through the merge dialog (D) and is retried with its decisions.
+  const [deleteBook, setDeleteBook] = useState<{ threadId: number; book: OwnedChatLorebook } | null>(null)
+  const [deleteMerge, setDeleteMerge] = useState<{ threadId: number; targetId: number; preview: LoreMergePreview } | null>(null)
+  const afterDelete = async (threadId: number) => {
+    setDeleteBook(null)
+    setDeleteMerge(null)
+    queryClient.removeQueries({ queryKey: codexChatThreadQueryKey(threadId) })
+    queryClient.removeQueries({ queryKey: codexChatMediaQueryKey(threadId) })
+    queryClient.removeQueries({ queryKey: threadLorebooksQueryKey(threadId) })
+    selectThread(undefined)
+    await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+  }
   const deleteMutation = useMutation({
-    mutationFn: deleteCodexChatThread,
-    onSuccess: async (_result, threadId) => {
-      queryClient.removeQueries({ queryKey: codexChatThreadQueryKey(threadId) })
-      queryClient.removeQueries({ queryKey: codexChatMediaQueryKey(threadId) })
-      selectThread(undefined)
-      await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+    mutationFn: ({ threadId, lorebook }: { threadId: number; lorebook?: ThreadLorebookAction }) => deleteCodexChatThread(threadId, lorebook),
+    onSuccess: (_result, { threadId }) => afterDelete(threadId),
+    onError: (error, { threadId, lorebook }) => {
+      if (error instanceof LoreDecisionsNeededError && lorebook?.action === 'merge') {
+        setDeleteBook(null)
+        setDeleteMerge({ threadId, targetId: lorebook.targetId, preview: error.preview })
+        return
+      }
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '삭제 실패', en: 'Delete failed' })), tone: 'error' })
     },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '삭제 실패', en: 'Delete failed' })), tone: 'error' }),
   })
 
   const scrollToBottom = useCallback(() => {
@@ -689,6 +712,12 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     if (activeThreadId === null) {
       return
     }
+    const threadId = activeThreadId
+    const books = await queryClient.fetchQuery({ queryKey: threadLorebooksQueryKey(threadId), queryFn: () => getThreadLorebooks(threadId), staleTime: 0 }).catch(() => null)
+    if (books?.chatBook && books.chatBook.entries.length > 0) {
+      setDeleteBook({ threadId, book: books.chatBook })
+      return
+    }
     const confirmed = await confirm({
       title: t({ ko: '채팅 삭제', en: 'Delete chat' }),
       description: t({ ko: '이 채팅 기록을 지울까? 생성된 이미지는 남아.', en: 'Delete this chat? Generated images stay.' }),
@@ -696,7 +725,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       tone: 'destructive',
     })
     if (confirmed) {
-      deleteMutation.mutate(activeThreadId)
+      deleteMutation.mutate({ threadId })
     }
   }
 
@@ -914,11 +943,12 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     body = <Suspense fallback={null}><CodexChatGallery threadId={activeThreadId} columns={layout === 'page' ? 'wide' : 'narrow'} /></Suspense>
   } else if (activeView === 'context') {
     const noteDefaults = { note: profile?.authorNote ?? '', depth: profile?.loreDepth ?? null }
+    const loreProfiles = profile ? [{ id: profile.id, name: profile.name }] : []
     body = <Suspense fallback={null}>{isGroup
       ? <GroupContextView thread={thread} group={group} profilesById={profilesById} segments={threadQuery.data?.summarySegments ?? []} />
       : isCodexThread
-        ? <CodexEngineContextView thread={thread} compactTokens={threadQuery.data?.codexCompactTokens ?? null} noteDefaults={noteDefaults} />
-        : <CodexChatContextView thread={thread} segments={threadQuery.data?.summarySegments ?? []} profileTurns={profile?.contextTurns ?? null} profileMaxTokens={profile?.maxTokens ?? null} profileReasoningBudget={profile?.reasoningBudgetTokens ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} noteDefaults={noteDefaults} />}</Suspense>
+        ? <CodexEngineContextView thread={thread} profiles={loreProfiles} compactTokens={threadQuery.data?.codexCompactTokens ?? null} noteDefaults={noteDefaults} />
+        : <CodexChatContextView thread={thread} profiles={loreProfiles} segments={threadQuery.data?.summarySegments ?? []} profileTurns={profile?.contextTurns ?? null} profileMaxTokens={profile?.maxTokens ?? null} profileReasoningBudget={profile?.reasoningBudgetTokens ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} noteDefaults={noteDefaults} />}</Suspense>
   } else {
     body = backgroundUrl && profile ? (
       <div className="relative flex min-h-0 flex-1 flex-col">
@@ -940,6 +970,20 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     <ChatFlagManagerModal open={flagManagerOpen} onClose={() => setFlagManagerOpen(false)} />
     <ChatUserProfileManagerModal open={userProfileManagerOpen} onClose={() => setUserProfileManagerOpen(false)} />
     <ChatUserProfilePickModal open={pendingStart !== null} profiles={userProfiles} onClose={() => setPendingStart(null)} onPick={(userProfileId) => { const profileIds = pendingStart; setPendingStart(null); if (profileIds !== null) void startWith(profileIds, userProfileId) }} />
+    <ChatDeleteDialog book={deleteBook?.book ?? null} pending={deleteMutation.isPending} onClose={() => setDeleteBook(null)} onConfirm={(lorebook) => deleteBook && deleteMutation.mutate({ threadId: deleteBook.threadId, lorebook })} />
+    {deleteMerge ? (
+      <LorebookMergeDialog
+        open
+        sourceId={deleteMerge.preview.source.id}
+        targetId={deleteMerge.targetId}
+        initialPreview={deleteMerge.preview}
+        profiles={isGroup ? memberProfiles.map(({ id, name }) => ({ id, name })) : profile ? [{ id: profile.id, name: profile.name }] : []}
+        defaultProfileId={profile?.id ?? null}
+        onSubmit={async (decisions) => { await deleteCodexChatThread(deleteMerge.threadId, { action: 'merge', targetId: deleteMerge.targetId, decisions }) }}
+        onMerged={() => void afterDelete(deleteMerge.threadId)}
+        onClose={() => setDeleteMerge(null)}
+      />
+    ) : null}
     <GroupInviteDialog open={invite !== null} mode={invite} profiles={profiles} userProfiles={userProfiles} onClose={() => setInvite(null)} onCreated={(threadId) => selectThread(threadId)} />
     <Modal open={searchOpen} onClose={() => setSearchOpen(false)} title={t({ ko: '채팅 검색', en: 'Search chats' })} widthClassName="max-w-lg">
       <ModalBody><ChatSearchInput value={searchText} onChange={setSearchText} /><ChatSearchResults query={searchText} disabled={isBusy} onPick={pickSearchResult} /></ModalBody>

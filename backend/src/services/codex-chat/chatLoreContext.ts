@@ -98,6 +98,50 @@ export function booksForRequest({ thread, profile }: { thread: RequestThread | n
   return books
 }
 
+/** A book the context tab lists beside the chat's own one: where it comes from and the profiles that bring it. */
+export type ThreadLoreBookView = {
+  id: number
+  name: string
+  kind: ChatLorebookKind
+  via: 'thread' | 'profile'
+  /** The book folder (account books); null for a global book. */
+  folderId: string | null
+  entries: ChatLoreEntry[]
+  /** The profiles (a room: its members) whose links bring this book; empty for one linked to the chat only. */
+  profiles: Array<{ id: number; name: string }>
+}
+
+export type ThreadLorebooks = {
+  chatBook: OwnedLorebook | null
+  /** Account books linked to this chat only (`codex_chat_threads.lorebook_ids`). */
+  linkedIds: number[]
+  /** The other attached books, as the context tab lists them: the profiles' account books, those linked to this chat, then global ones. */
+  books: ThreadLoreBookView[]
+}
+
+/**
+ * What the context tab shows: the chat's own book and every other book its requests attach — for a room, the union
+ * of the members' books (each book once, naming the members that bring it).
+ */
+export function threadLorebooks(thread: RequestThread, profiles: Array<Pick<ChatProfile, 'id' | 'name' | 'lorebookIds'>>): ThreadLorebooks {
+  const chatBook = OwnedLorebookStore.chatBookOf(thread.id)
+  const byId = new Map<number, ThreadLoreBookView>()
+  const sources = profiles.length > 0 ? profiles : [{ id: 0, name: '', lorebookIds: [] }]
+  for (const profile of sources) {
+    for (const book of booksForRequest({ thread, profile })) {
+      if (book.via === 'chat') continue
+      const via = book.via === 'thread' ? 'thread' : 'profile'
+      const seen = byId.get(book.id)
+      const view = seen ?? { id: book.id, name: book.name, kind: book.kind, via, folderId: book.folderId, entries: book.entries, profiles: [] }
+      if (via === 'profile' && profile.id > 0 && !view.profiles.some((entry) => entry.id === profile.id)) view.profiles.push({ id: profile.id, name: profile.name })
+      if (!seen) byId.set(book.id, view)
+    }
+  }
+  const rank = (book: ThreadLoreBookView) => (book.kind === 'global' ? 2 : book.via === 'thread' ? 1 : 0)
+  const books = [...byId.values()].map((book, index) => ({ book, index })).sort((a, b) => rank(a.book) - rank(b.book) || a.index - b.index).map(({ book }) => book)
+  return { chatBook, linkedIds: OwnedLorebookStore.threadLinks(thread.id), books }
+}
+
 /** Every entry of these books as selectLoreEntries takes them; files are read only for an entry that matched. */
 export function keyedLoreEntries(books: AttachedLoreBook[]): KeyedLoreEntry[] {
   return books.flatMap((book) => book.entries.map((entry) => ({

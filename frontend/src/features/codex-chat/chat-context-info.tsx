@@ -36,7 +36,7 @@ export function ChatContextInfo({ meta }: { meta: ChatContextMeta }) {
     [t({ ko: '원문으로 보낸 메시지', en: 'Messages sent verbatim' }), formatNumber(meta.sentMessages)],
     [t({ ko: '요약', en: 'Summary' }), meta.summaryUntilMessageId !== null ? t({ ko: '있음', en: 'yes' }) : t({ ko: '없음', en: 'none' })],
     [t({ ko: '회상한 지난 일', en: 'Recalled' }), formatNumber(meta.recalledSegments)],
-    [t({ ko: '고정 기억', en: 'Pinned memories' }), formatNumber(meta.memories)],
+    [t({ ko: '상시 항목', en: 'Always-on entries' }), formatNumber(meta.memories)],
     [t({ ko: '로어', en: 'Lore' }), meta.lore.length ? meta.lore.join(', ') : t({ ko: '없음', en: 'none' })],
     [t({ ko: '토큰', en: 'Tokens' }), meta.promptTokens ? `${formatNumber(meta.promptTokens)} (${t({ ko: '추정', en: 'est.' })} ${formatNumber(meta.estimatedTokens)})` : `${t({ ko: '추정', en: 'est.' })} ${formatNumber(meta.estimatedTokens)}`],
   ]

@@ -19,6 +19,7 @@ import { buildCodexInstructions, CODEX_COMPACT_TOKENS, CodexChatError, CodexChat
 import { buildChatPromptPreview, estimateTokens, fillCharacterPlaceholders, isSummarizing } from '../services/codex-chat/llmChatContext'
 import { buildLorebookText, ChatLorebookStore, normalizeLorebookIds } from '../services/codex-chat/chatLorebook'
 import { LorebookError, OwnedLorebookStore } from '../services/codex-chat/chatLorebookFiles'
+import { threadLorebooks } from '../services/codex-chat/chatLoreContext'
 import { applyMerge, assertMergeDecisions, draftMerge, hasDuplicates, MergeDecisionsMissingError, previewMerge, type MergeResult } from '../services/codex-chat/chatLorebookMerge'
 import { ChatSharedBlockStore, readBlockFile } from '../services/codex-chat/chatDisplayBlocks'
 import { ChatToolPresetStore, readToolPresetFile } from '../services/codex-chat/chatToolPresets'
@@ -722,8 +723,19 @@ router.post('/lorebooks/:targetId/merge', requireChatAccess, (req: Request, res:
   } catch (error) { sendMergeError(res, error) }
 })
 
+/** POST /api/codex-chat/lorebooks/:targetId/merge/preview — `{ sourceId, entryIds? }`: what a merge would do; changes nothing. */
+router.post('/lorebooks/:targetId/merge/preview', requireChatAccess, (req: Request, res: Response) => {
+  const targetId = parseId(req.params.targetId)
+  const body = (req.body ?? {}) as { sourceId?: unknown; entryIds?: unknown }
+  const sourceId = parseId(body.sourceId)
+  if (targetId === null || sourceId === null) { sendRouteBadRequest(res, 'Invalid lorebook id'); return }
+  try {
+    res.json({ success: true, data: previewMerge(sourceId, targetId, lorebookOwner(req), { entryIds: body.entryIds }) })
+  } catch (error) { sendChatError(res, error) }
+})
+
 /**
- * POST /api/codex-chat/lorebooks/:targetId/merge/draft — `{ sourceId, profileId, entryIds?, instruction? }`: the
+ * POST /api/codex-chat/lorebooks/:targetId/merge/draft —`{ sourceId, profileId, entryIds?, instruction? }`: the
  * profile's summary model (else its chat model) writes a merged text for each duplicate (or the given ones). Saves
  * nothing; an entry that failed comes back as `{ entryId, error }`.
  */
@@ -750,6 +762,34 @@ router.post('/threads/:threadId/lorebook/keep', requireChatAccess, (req: Request
   try {
     if (!CodexChatStore.findThread(threadId, getRequesterAccountId(req))) throw new LorebookError('채팅을 찾을 수 없어.', 404)
     res.json({ success: true, data: OwnedLorebookStore.keepChatBook(threadId) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/**
+ * GET /api/codex-chat/threads/:threadId/lorebooks — the context tab's books: the chat's own book (null until its
+ * first entry), the account books linked to this chat, and the books the profile (a room: every member) brings.
+ */
+router.get('/threads/:threadId/lorebooks', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  try {
+    const thread = CodexChatStore.findThread(threadId, getRequesterAccountId(req))
+    if (!thread) throw new LorebookError('채팅을 찾을 수 없어.', 404)
+    const profileIds = thread.kind === 'group' ? ChatGroupStore.members(threadId).map((member) => member.profile_id) : thread.profile_id ? [thread.profile_id] : []
+    const profiles = profileIds.flatMap((id) => ChatProfileStore.find(id) ?? [])
+    res.json({ success: true, data: threadLorebooks(thread, profiles) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** PUT /api/codex-chat/threads/:threadId/lorebook — `{ entries }`: the chat's own book (made with its first entry; null once emptied). */
+router.put('/threads/:threadId/lorebook', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  const entries = (req.body as { entries?: unknown } | undefined)?.entries
+  if (!Array.isArray(entries)) { sendRouteBadRequest(res, 'entries must be a list'); return }
+  try {
+    if (!CodexChatStore.findThread(threadId, getRequesterAccountId(req))) throw new LorebookError('채팅을 찾을 수 없어.', 404)
+    res.json({ success: true, data: OwnedLorebookStore.saveChatBook(threadId, entries) })
   } catch (error) { sendChatError(res, error) }
 })
 

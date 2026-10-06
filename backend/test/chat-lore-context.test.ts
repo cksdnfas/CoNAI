@@ -158,6 +158,19 @@ test('lore context: books per request, the index, always-on entries, linked file
     assert.ok(toLuna.includes('- 방 규칙: 방에서는 존댓말을 쓰지 않는다.\n- 달: 루나는 달을 좋아한다.'))
     assert.ok(!toLuna.includes('[카이]'), "another member's books stay with that member")
     assert.ok(sentTo(members[0]).includes('[이 채팅] 방 규칙\n[카이] 왼손잡이'))
+    // The context tab lists the room's book and every member's books once, naming who brings them.
+    const view = lore.threadLorebooks(room, members)
+    assert.equal(view.chatBook?.entries[0].title, '방 규칙')
+    assert.deepEqual(view.books.map((book) => [book.name, book.via, book.profiles.map((member) => member.name)]), [['카이', 'profile', ['카이']], ['루나', 'profile', ['루나']], ['항구 도시 설정', 'profile', ['카이']]])
+  })
+
+  await t.test('the context tab: the chat book, then profile account books, chat links and global books, each once', () => {
+    const view = lore.threadLorebooks(thread(), [profile()])
+    assert.deepEqual(view.chatBook?.entries.map((entry) => entry.id), ['promise', 'ink'])
+    assert.deepEqual(view.linkedIds, [taste.id])
+    assert.deepEqual(view.books.map((book) => [book.name, book.kind, book.via]), [['카이', 'account', 'profile'], ['내 취향', 'account', 'thread'], ['항구 도시 설정', 'global', 'profile']])
+    assert.equal(view.books.find((book) => book.kind === 'global')?.folderId, null)
+    assert.ok(view.books.find((book) => book.name === '카이')?.folderId)
   })
 
   await t.test("the export lists the chat book's entries under 로어북", () => {

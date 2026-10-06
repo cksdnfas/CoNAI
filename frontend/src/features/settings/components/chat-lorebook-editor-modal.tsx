@@ -11,19 +11,29 @@ import { useI18n } from '@/i18n'
 import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
   CHAT_LOREBOOKS_QUERY_KEY,
+  OWN_LOREBOOKS_QUERY_KEY,
   createChatLorebook,
+  createOwnLorebook,
   deleteChatLorebook,
+  deleteOwnLorebook,
   updateChatLorebook,
+  updateOwnLorebook,
   type ChatLoreEntry,
   type ChatLorebook,
+  type OwnedChatLorebook,
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { ChatLorebookEditor } from './chat-profile-lorebook'
 
-/** Create or edit one shared lorebook. Saving reaches every profile that links it. */
-export function ChatLorebookEditorModal({ open, lorebook, onClose, onUpdateFromFile, updating }: {
+/**
+ * Create or edit one lorebook: a shared (global) one, or with `kind: 'account'` one of the signed-in account's own
+ * (a 로어북/ folder in its file store). Saving reaches every profile that links it.
+ */
+export function ChatLorebookEditorModal({ open, lorebook, kind = 'global', onClose, onUpdateFromFile, updating }: {
   open: boolean
-  lorebook: ChatLorebook | null
+  lorebook: ChatLorebook | OwnedChatLorebook | null
+  /** What a new book becomes; an existing book keeps its own kind. */
+  kind?: 'global' | 'account'
   onClose: () => void
   /** Pick a file to refresh the opened book (only offered when editing an existing one). */
   onUpdateFromFile?: (lorebook: ChatLorebook) => void
@@ -35,6 +45,8 @@ export function ChatLorebookEditorModal({ open, lorebook, onClose, onUpdateFromF
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [entries, setEntries] = useState<ChatLoreEntry[]>([])
+  const owned = (lorebook?.kind ?? kind) !== 'global'
+  const folderId = lorebook && 'folderId' in lorebook ? lorebook.folderId : null
 
   useEffect(() => {
     if (open) {
@@ -46,11 +58,14 @@ export function ChatLorebookEditorModal({ open, lorebook, onClose, onUpdateFromF
   const refresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: CHAT_LOREBOOKS_QUERY_KEY }),
+      queryClient.invalidateQueries({ queryKey: OWN_LOREBOOKS_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }),
     ])
   }
   const saveMutation = useMutation({
-    mutationFn: () => (lorebook ? updateChatLorebook(lorebook.id, { name, entries }) : createChatLorebook({ name, entries })),
+    mutationFn: () => owned
+      ? (lorebook ? updateOwnLorebook(lorebook.id, { name, entries }) : createOwnLorebook({ name, entries }))
+      : (lorebook ? updateChatLorebook(lorebook.id, { name, entries }) : createChatLorebook({ name, entries })),
     onSuccess: async () => {
       await refresh()
       onClose()
@@ -58,7 +73,7 @@ export function ChatLorebookEditorModal({ open, lorebook, onClose, onUpdateFromF
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
   const deleteMutation = useMutation({
-    mutationFn: () => deleteChatLorebook(lorebook?.id ?? 0),
+    mutationFn: () => (owned ? deleteOwnLorebook(lorebook?.id ?? 0) : deleteChatLorebook(lorebook?.id ?? 0)),
     onSuccess: async () => {
       await refresh()
       onClose()
@@ -80,12 +95,12 @@ export function ChatLorebookEditorModal({ open, lorebook, onClose, onUpdateFromF
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={lorebook ? t({ ko: '로어북 편집', en: 'Edit lorebook' }) : t({ ko: '로어북 추가', en: 'Add lorebook' })} widthClassName="max-w-3xl">
+    <Modal open={open} onClose={onClose} title={lorebook ? t({ ko: '로어북 편집', en: 'Edit lorebook' }) : owned ? t({ ko: '계정 로어북 추가', en: 'Add account lorebook' }) : t({ ko: '로어북 추가', en: 'Add lorebook' })} widthClassName="max-w-3xl">
       <ModalBody className="space-y-4">
         <Field label={t({ ko: '이름', en: 'Name' })}>
           <Input variant="settings" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
         </Field>
-        <ChatLorebookEditor entries={entries} onChange={setEntries} />
+        <ChatLorebookEditor entries={entries} onChange={setEntries} filePlace={owned ? { kind: 'owned', folderId } : { kind: 'global' }} />
       </ModalBody>
       <ModalFooter>
         {lorebook ? (
@@ -93,7 +108,7 @@ export function ChatLorebookEditorModal({ open, lorebook, onClose, onUpdateFromF
             <Trash2 />
           </IconButton>
         ) : null}
-        {lorebook && onUpdateFromFile ? (
+        {lorebook && onUpdateFromFile && !owned ? (
           <IconButton size="icon-sm" variant="ghost" onClick={() => onUpdateFromFile(lorebook)} disabled={updating} label={t({ ko: '파일로 업데이트', en: 'Update from file' })}>
             <RefreshCw />
           </IconButton>

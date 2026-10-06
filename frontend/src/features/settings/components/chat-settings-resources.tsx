@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, FileUp, ImagePlus, LayoutTemplate, Pencil, Plus, Wrench } from 'lucide-react'
+import { BookOpen, BookUser, FileUp, ImagePlus, LayoutTemplate, Pencil, Plus, Wrench } from 'lucide-react'
+import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -12,6 +13,7 @@ import {
   CHAT_GENERATION_PRESETS_QUERY_KEY,
   CHAT_LOREBOOKS_QUERY_KEY,
   CHAT_TOOL_PRESETS_QUERY_KEY,
+  OWN_LOREBOOKS_QUERY_KEY,
   createChatBlock,
   createChatGenerationPreset,
   createChatToolPreset,
@@ -23,8 +25,10 @@ import {
   listChatGenerationPresets,
   listChatLorebooks,
   listChatToolPresets,
+  listOwnLorebooks,
   type ChatGenerationPreset,
   type ChatLorebook,
+  type OwnedChatLorebook,
   type ChatSharedBlock,
   type ChatToolPreset,
 } from '@/lib/api-codex-chat'
@@ -76,7 +80,7 @@ export function ChatSettingsResources() {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  const [lorebookEditor, setLorebookEditor] = useState<{ lorebook: ChatLorebook | null } | null>(null)
+  const [lorebookEditor, setLorebookEditor] = useState<{ lorebook: ChatLorebook | OwnedChatLorebook | null; kind?: 'global' | 'account' } | null>(null)
   const lorebookImportRef = useRef<HTMLInputElement>(null)
   /** Set while a file is picked to refresh that book; null picks a new book. */
   const lorebookTargetRef = useRef<number | null>(null)
@@ -88,6 +92,7 @@ export function ChatSettingsResources() {
   const generationImportRef = useRef<HTMLInputElement>(null)
 
   const lorebooksQuery = useQuery({ queryKey: CHAT_LOREBOOKS_QUERY_KEY, queryFn: listChatLorebooks })
+  const ownLorebooksQuery = useQuery({ queryKey: OWN_LOREBOOKS_QUERY_KEY, queryFn: listOwnLorebooks })
   const blocksQuery = useQuery({ queryKey: CHAT_BLOCKS_QUERY_KEY, queryFn: listChatBlocks })
   const presetsQuery = useQuery({ queryKey: CHAT_TOOL_PRESETS_QUERY_KEY, queryFn: listChatToolPresets })
   const generationPresetsQuery = useQuery({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY, queryFn: listChatGenerationPresets })
@@ -180,6 +185,8 @@ export function ChatSettingsResources() {
   })
 
   const lorebooks = lorebooksQuery.data ?? []
+  // The account's own books (folders under 로어북/ in its file store); chat books are managed from each chat.
+  const accountLorebooks = (ownLorebooksQuery.data ?? []).filter((book) => book.kind === 'account')
   const blocks = blocksQuery.data ?? []
   const presets = presetsQuery.data ?? []
   const generationPresets = generationPresetsQuery.data ?? []
@@ -285,17 +292,30 @@ export function ChatSettingsResources() {
               if (file) lorebookImportMutation.mutate({ file, lorebookId: lorebookTargetRef.current })
             }} />
             <IconButton size="icon-sm" variant="ghost" disabled={lorebookImportMutation.isPending} onClick={() => pickLorebookFile(null)} label={t({ ko: '로어북 가져오기', en: 'Import lorebook' })}><FileUp /></IconButton>
+            <IconButton size="icon-sm" variant="ghost" onClick={() => setLorebookEditor({ lorebook: null, kind: 'account' })} label={t({ ko: '계정 로어북 추가', en: 'Add account lorebook' })}><BookUser /></IconButton>
             <IconButton size="icon-sm" variant="ghost" onClick={() => setLorebookEditor({ lorebook: null })} label={t({ ko: '로어북 추가', en: 'Add lorebook' })}><Plus /></IconButton>
           </div>
         )}
       >
         {lorebooksQuery.isLoading ? <SettingsRowsSkeleton rows={1} /> : null}
-        {lorebooksQuery.isSuccess && lorebooks.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 로어북이 없어.', en: 'No lorebooks yet.' })}</SettingsEmptyRow> : null}
+        {lorebooksQuery.isSuccess && lorebooks.length === 0 && accountLorebooks.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 로어북이 없어.', en: 'No lorebooks yet.' })}</SettingsEmptyRow> : null}
         {lorebooks.map((lorebook) => (
           <ResourceRow
             key={lorebook.id}
             icon={<BookOpen />}
             name={lorebook.name}
+            extra={<Chip size="sm" tone="muted">{t({ ko: '글로벌', en: 'Global' })}</Chip>}
+            meta={t({ ko: '항목 {count}', en: '{count} entries' }, { count: lorebook.entries.length })}
+            profiles={lorebook.profiles}
+            onEdit={() => setLorebookEditor({ lorebook })}
+          />
+        ))}
+        {accountLorebooks.map((lorebook) => (
+          <ResourceRow
+            key={lorebook.id}
+            icon={<BookUser />}
+            name={lorebook.name}
+            extra={<Chip size="sm" tone="muted">{t({ ko: '계정', en: 'Account' })}</Chip>}
             meta={t({ ko: '항목 {count}', en: '{count} entries' }, { count: lorebook.entries.length })}
             profiles={lorebook.profiles}
             onEdit={() => setLorebookEditor({ lorebook })}
@@ -307,6 +327,7 @@ export function ChatSettingsResources() {
       <ChatLorebookEditorModal
         open={lorebookEditor !== null}
         lorebook={lorebookEditor?.lorebook ?? null}
+        kind={lorebookEditor?.kind}
         onClose={() => setLorebookEditor(null)}
         onUpdateFromFile={(lorebook) => pickLorebookFile(lorebook.id)}
         updating={lorebookImportMutation.isPending}

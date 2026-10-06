@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, Eraser, Plus, TriangleAlert, X } from 'lucide-react'
+import { ChevronDown, Eraser, TriangleAlert } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -11,9 +11,10 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { editChatSummarySegment, readThreadMemories, summarizeCodexChatThread, updateCodexChatThreadContext, updateGroupChat, updateGroupChatMember, type ChatGroupInfo, type ChatMemoryItem, type ChatProfileSummary, type ChatSummarySegment, type CodexChatThread, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { editChatSummarySegment, summarizeCodexChatThread, updateCodexChatThreadContext, updateGroupChat, updateGroupChatMember, type ChatGroupInfo, type ChatProfileSummary, type ChatSummarySegment, type CodexChatThread, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error-message'
+import { LorebookBlock } from './chat-lorebook-block'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatUserProfileRow } from './chat-user-profiles'
 import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey } from './codex-chat-context'
@@ -96,80 +97,6 @@ export function AuthorNoteBlock({ thread, defaults }: { thread: CodexChatThread;
   )
 }
 
-const MEMORY_MAX_ITEMS = 50
-const MEMORY_TEXT_MAX_LENGTH = 500
-
-const sameMemories = (a: ChatMemoryItem[], b: ChatMemoryItem[]) => JSON.stringify(a.map((item) => [item.id, item.text.trim()])) === JSON.stringify(b.map((item) => [item.id, item.text.trim()]))
-
-/**
- * Pinned memories: short facts every request of this chat carries (relationships, promises, what happened), for any
- * engine. A line saves when it loses focus; an emptied line goes away.
- */
-export function MemoryBlock({ thread }: { thread: CodexChatThread }) {
-  const { t } = useI18n()
-  const { showSnackbar } = useSnackbar()
-  const queryClient = useQueryClient()
-  const storedJson = thread.memories ?? ''
-  const [items, setItems] = useState(() => readThreadMemories(thread))
-  const [focusId, setFocusId] = useState<string | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  // The saved list replaces the local one, except while a line is being edited: a save of the line just left must
-  // not wipe the line now being typed (or the one just added). That line saves when it is left in turn.
-  useEffect(() => {
-    if (containerRef.current?.contains(document.activeElement)) return
-    setItems(readThreadMemories({ memories: storedJson }))
-  }, [storedJson])
-
-  const mutation = useMutation({
-    mutationFn: (next: ChatMemoryItem[]) => updateCodexChatThreadContext(thread.id, { memories: next }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(thread.id) }),
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
-  })
-
-  const commit = (next: ChatMemoryItem[]) => {
-    const kept = next.filter((item) => item.text.trim())
-    setItems(kept)
-    if (!sameMemories(kept, readThreadMemories({ memories: storedJson }))) mutation.mutate(kept)
-  }
-  const add = () => {
-    const id = `m${Date.now().toString(36)}`
-    setItems((current) => [...current, { id, text: '' }])
-    setFocusId(id)
-  }
-
-  return (
-    <div ref={containerRef} className="flex flex-col gap-2 border-b border-line py-2.5">
-      <div className="flex min-h-8 items-center justify-between gap-2">
-        <span className="text-sm">{t({ ko: '고정 기억', en: 'Pinned memories' })}</span>
-        <IconButton variant="ghost" size="icon-sm" onClick={add} disabled={items.length >= MEMORY_MAX_ITEMS} label={t({ ko: '기억 추가', en: 'Add memory' })}><Plus /></IconButton>
-      </div>
-      {items.map((item) => (
-        <div key={item.id} className="flex items-start gap-1">
-          <Textarea
-            rows={1}
-            autoFocus={item.id === focusId}
-            value={item.text}
-            maxLength={MEMORY_TEXT_MAX_LENGTH}
-            onChange={(event) => setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, text: event.target.value } : entry)))}
-            onBlur={() => commit(items)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault()
-                event.currentTarget.blur()
-              }
-            }}
-            className="min-h-0 resize-none py-1.5 text-sm leading-relaxed [field-sizing:content]"
-            aria-label={t({ ko: '고정 기억', en: 'Pinned memory' })}
-          />
-          {/* Keeps the line's focus on press, so removing it is one save rather than a blur save racing the removal. */}
-          <IconButton variant="ghost" size="icon-sm" onMouseDown={(event) => event.preventDefault()} onClick={() => commit(items.filter((entry) => entry.id !== item.id))} label={t({ ko: '지우기', en: 'Remove' })}><X /></IconButton>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 /**
  * A group room's context: the room's author's note and reply token caps — one for the room, then one per LLM member
  * that overrides it (members keep their own windows and memories). A Codex member has no hard cap, so it is not listed.
@@ -210,7 +137,7 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
       <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock thread={thread} defaults={{ note: '', depth: null }} />
-      <MemoryBlock thread={thread} />
+      <LorebookBlock threadId={thread.id} profiles={(group?.memberIds ?? []).flatMap((id) => profilesById.get(id) ?? []).map(({ id, name }) => ({ id, name }))} />
       {group ? (
         <>
           <SettingRow label={capLabel}>
@@ -392,11 +319,13 @@ function SummaryBlock({ thread, segments, summaryOn }: { thread: CodexChatThread
 }
 
 /**
- * One LLM chat's context: its author's note, pinned memories, turn window, reply token cap and summary switch (all can
+ * One LLM chat's context: its author's note, lorebooks, turn window, reply token cap and summary switch (all can
  * follow the profile), and the summary itself — the plot, the stretches after it, and the stretches the plot took in.
  */
-export function CodexChatContextView({ thread, segments, profileTurns, profileMaxTokens, profileReasoningBudget, profileSummaryEnabled, noteDefaults }: {
+export function CodexChatContextView({ thread, profiles, segments, profileTurns, profileMaxTokens, profileReasoningBudget, profileSummaryEnabled, noteDefaults }: {
   thread: CodexChatThread
+  /** The chat's profile (for the lorebook block's merge and promote). */
+  profiles: Array<{ id: number; name: string }>
   /** The summary by stretch, the plot first (see ChatSummarySegment). */
   segments: ChatSummarySegment[]
   profileTurns: number | null
@@ -427,7 +356,7 @@ export function CodexChatContextView({ thread, segments, profileTurns, profileMa
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
       <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock thread={thread} defaults={noteDefaults} />
-      <MemoryBlock thread={thread} />
+      <LorebookBlock threadId={thread.id} profiles={profiles} />
       <SettingRow label={t({ ko: '참고할 최근 턴 수', en: 'Recent turns sent' })}>
         <NumberStepperInput
           allowEmpty
@@ -482,7 +411,7 @@ export function CodexChatContextView({ thread, segments, profileTurns, profileMa
 }
 
 /** One Codex chat's context: its author's note, then its memory as Codex reports it (how full, what it used) and folding it now. */
-export function CodexEngineContextView({ thread, compactTokens, noteDefaults }: { thread: CodexChatThread; compactTokens: number | null; noteDefaults: AuthorNoteDefaults }) {
+export function CodexEngineContextView({ thread, profiles, compactTokens, noteDefaults }: { thread: CodexChatThread; profiles: Array<{ id: number; name: string }>; compactTokens: number | null; noteDefaults: AuthorNoteDefaults }) {
   const { t, formatNumber, formatDateTime } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
@@ -498,7 +427,7 @@ export function CodexEngineContextView({ thread, compactTokens, noteDefaults }: 
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
       <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock thread={thread} defaults={noteDefaults} />
-      <MemoryBlock thread={thread} />
+      <LorebookBlock threadId={thread.id} profiles={profiles} />
       <SettingRow label={t({ ko: '현재 컨텍스트', en: 'Current context' })}>
         <span className="text-sm tabular-nums">{tokens(thread.codex_context_tokens)} / {tokens(compactTokens)}</span>
       </SettingRow>

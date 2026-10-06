@@ -13,7 +13,7 @@ import { Tip } from '@/components/ui/tooltip'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { useI18n } from '@/i18n'
 import type { ChatLorebook } from '@/lib/api-codex-chat'
-import { EditorGroup, type Draft, type PatchDraft } from './chat-profile-editor-fields'
+import { EditorGroup, SwitchLine, type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { readAvatarFile } from './chat-profile-images'
 import { ChatProfilePresetMenu } from './chat-profile-preset-menu'
 import { ChatPromptSectionsEditor, CollapsibleRow } from './chat-profile-sections'
@@ -144,12 +144,14 @@ export function ChatProfileCharacterPanel({ open, draft, patch, lorebooks, local
             return (
               <ToggleChip key={lorebook.id} pressed={linked} onClick={() => patch({ lorebookIds: linked ? draft.lorebookIds.filter((id) => id !== lorebook.id) : [...draft.lorebookIds, lorebook.id] })}>
                 {lorebook.name}
+                {lorebook.kind === 'account' ? <span className="opacity-60">{t({ ko: '계정', en: 'Account' })}</span> : null}
                 <span className="opacity-60">{lorebook.entries.length}</span>
               </ToggleChip>
             )
           })}
           {lorebooks && lorebooks.length === 0 ? <span className="text-sm text-muted-foreground">{t({ ko: '가져온 로어북이 없어.', en: 'No lorebooks yet.' })}</span> : null}
         </div>
+        <SwitchLine label={t({ ko: '로어 제안 허용', en: 'Allow lore proposals' })} checked={draft.allowLoreProposals} onCheckedChange={(allowLoreProposals) => patch({ allowLoreProposals })} />
       </EditorGroup>
     </div>
   )

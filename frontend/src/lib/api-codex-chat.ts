@@ -175,6 +175,8 @@ export type LoreSecondaryLogic = 'andAny' | 'notAll' | 'notAny' | 'andAll'
 
 export interface ChatLoreEntry {
   id: string
+  /** What the book's index calls the entry; empty: the first keyword (see loreEntryTitle). */
+  title?: string
   /** `/pattern/flags` is a regular expression. */
   keys: string[]
   secondaryKeys?: string[]
@@ -184,16 +186,82 @@ export interface ChatLoreEntry {
   constant: boolean
   order: number
   caseSensitive: boolean
+  /** A text file in the book's folder (`자료/x.md`); account and chat books only. `fileId` follows it when moved. */
+  file?: string | null
+  fileId?: string | null
 }
+
+/** The entry's title as the index shows it: its own, else the first keyword, else the start of its text. */
+export function loreEntryTitle(entry: Pick<ChatLoreEntry, 'title' | 'keys' | 'content'>) {
+  return entry.title?.trim() || entry.keys[0] || entry.content.slice(0, 20)
+}
+
+/** `global`: the admin's shared books. `account`: a folder under the account's 로어북/. `chat`: one chat's own book. */
+export type ChatLorebookKind = 'global' | 'account' | 'chat'
 
 /** A shared lorebook; profiles link it by id, so editing or re-importing it reaches every linked profile. */
 export interface ChatLorebook {
   id: number
   name: string
+  kind?: ChatLorebookKind
   entries: ChatLoreEntry[]
   profiles: Array<{ id: number; name: string }>
   createdDate: string
   updatedDate: string
+}
+
+/** An account or chat book (a file-store folder); global ones come with no entries, only their count. */
+export interface OwnedChatLorebook extends ChatLorebook {
+  kind: ChatLorebookKind
+  threadId: number | null
+  folderId: string | null
+  entryCount?: number
+}
+
+/** A book the chat's requests attach besides its own: linked to this chat, or brought by the profile (a room: members). */
+export interface ThreadLoreBook {
+  id: number
+  name: string
+  kind: ChatLorebookKind
+  via: 'thread' | 'profile'
+  folderId: string | null
+  entries: ChatLoreEntry[]
+  profiles: Array<{ id: number; name: string }>
+}
+
+export interface ThreadLorebooks {
+  chatBook: OwnedChatLorebook | null
+  linkedIds: number[]
+  books: ThreadLoreBook[]
+}
+
+export type LoreMergeChoice = 'source' | 'target' | 'both' | 'merged'
+export type LoreMergeDecision = { entryId: string; choice: LoreMergeChoice; content?: string }
+export interface LoreMergeItem {
+  entry: ChatLoreEntry
+  status: 'new' | 'duplicate'
+  duplicateOf?: ChatLoreEntry
+  /** The starting text of "합친 결과". */
+  suggested?: string
+}
+export interface LoreMergePreview {
+  source: OwnedChatLorebook
+  target: OwnedChatLorebook
+  items: LoreMergeItem[]
+  files: Array<{ file: string; clash: boolean }>
+}
+export type LoreMergeResult = { status: 'merged'; book: OwnedChatLorebook; added: number; updated: number; skipped: number; files: number; sourceDeleted: boolean; sourceError?: string }
+export type LoreMergeDraft = { entryId: string; content: string } | { entryId: string; error: string }
+
+/** A 409 answer that carries the merge preview: some duplicates still need a decision. */
+export class LoreDecisionsNeededError extends Error {
+  readonly preview: LoreMergePreview
+  readonly missing: string[]
+  constructor(message: string, preview: LoreMergePreview, missing: string[]) {
+    super(message)
+    this.preview = preview
+    this.missing = missing
+  }
 }
 
 /** A shared display block (status card); profiles link it by id, so editing it reaches every linked profile. */
@@ -341,6 +409,8 @@ export interface ChatProfile {
   maxToolRounds: number
   /** LLM: the model can look at images (view_images). */
   visionEnabled: boolean
+  /** The model may propose chat lorebook entries (save_lore). */
+  allowLoreProposals: boolean
   style: ChatStyle
   backgroundVersion: string | null
   isEnabled: boolean
@@ -412,18 +482,10 @@ export interface CodexChatThread {
   flag_ids?: string | null
   /** The account's user profile (persona) in this chat; null is the plain user. */
   user_profile_id?: number | null
-  /** JSON pinned memories (read with readThreadMemories). */
-  memories?: string | null
   /** LLM chats: why the last background summary failed; null once one succeeds. */
   summary_error?: string | null
   created_date: string
   updated_date: string
-}
-
-/** A short fact pinned to a chat: every request carries it. */
-export interface ChatMemoryItem {
-  id: string
-  text: string
 }
 
 /**
@@ -437,15 +499,6 @@ export interface ChatSummarySegment {
   until_message_id: number
   content: string
   updated_date: string
-}
-
-export function readThreadMemories(thread: Pick<CodexChatThread, 'memories'> | null | undefined): ChatMemoryItem[] {
-  try {
-    const parsed: unknown = JSON.parse(thread?.memories || '[]')
-    return Array.isArray(parsed) ? parsed.filter((item): item is ChatMemoryItem => typeof item?.id === 'string' && typeof item?.text === 'string') : []
-  } catch {
-    return []
-  }
 }
 
 export interface CodexChatMessage {
@@ -905,7 +958,7 @@ export function editChatBlock(threadId: number, key: string, data: Record<string
   })
 }
 
-export function updateCodexChatThreadContext(threadId: number, patch: { contextTurns?: number | null; maxTokens?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null; userProfileId?: number | null; memories?: Array<{ id?: string; text: string }> }) {
+export function updateCodexChatThreadContext(threadId: number, patch: { contextTurns?: number | null; maxTokens?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null; userProfileId?: number | null; lorebookIds?: number[] }) {
   return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/context`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
@@ -996,8 +1049,81 @@ export function getCodexChatThreadMedia(threadId: number) {
   return requestApiData<CodexChatMediaItem[]>(`/api/codex-chat/threads/${threadId}/media`, { cache: 'no-store' })
 }
 
-export function deleteCodexChatThread(threadId: number) {
-  return requestJson<{ success: boolean }>(`/api/codex-chat/threads/${threadId}`, { method: 'DELETE' })
+/** What happens to the chat's own lorebook when the chat is deleted (default: it goes too). */
+export type ThreadLorebookAction = { action: 'delete' } | { action: 'keep' } | { action: 'merge'; targetId: number; decisions?: LoreMergeDecision[] }
+
+/** Deleting with a merge throws LoreDecisionsNeededError (nothing changed) while a duplicate has no decision. */
+export function deleteCodexChatThread(threadId: number, lorebook?: ThreadLorebookAction) {
+  return requestWithMergePreview<{ lorebook?: unknown } | undefined>(`/api/codex-chat/threads/${threadId}`, { method: 'DELETE', ...(lorebook ? { headers: JSON_HEADERS, body: JSON.stringify({ lorebook }) } : {}) })
+}
+
+/** Like requestApiData, but a 409 carrying a merge preview becomes LoreDecisionsNeededError. */
+async function requestWithMergePreview<T>(path: string, init: RequestInit): Promise<T> {
+  const response = await fetch(buildApiUrl(path), { ...init, credentials: 'include', headers: { Accept: 'application/json', ...(init.headers ?? {}) } })
+  const payload = (response.headers.get('content-type') ?? '').includes('application/json') ? await response.json() as { success?: boolean; data?: unknown; error?: string } : null
+  if (response.status === 409) {
+    const data = payload?.data as { status?: string; preview?: LoreMergePreview; missing?: string[] } | undefined
+    if (data?.status === 'decisions' && data.preview) throw new LoreDecisionsNeededError(payload?.error ?? 'decisions', data.preview, data.missing ?? [])
+  }
+  if (!response.ok || !payload?.success) throw new Error(payload?.error || `Request failed: ${response.status}`)
+  return payload.data as T
+}
+
+export const OWN_LOREBOOKS_QUERY_KEY = ['codex-chat-own-lorebooks'] as const
+export const threadLorebooksQueryKey = (threadId: number) => ['codex-chat-thread-lorebooks', threadId] as const
+
+/** The requester's account books (with entries) and the global books (count only). */
+export function listOwnLorebooks() {
+  return requestApiData<OwnedChatLorebook[]>('/api/codex-chat/lorebooks')
+}
+
+export function createOwnLorebook(input: { name: string; entries?: ChatLoreEntry[] }) {
+  return requestApiData<OwnedChatLorebook>('/api/codex-chat/lorebooks', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+
+/** Null: an emptied chat book went away. */
+export function updateOwnLorebook(lorebookId: number, patch: { name?: string; entries?: ChatLoreEntry[] }) {
+  return requestApiData<OwnedChatLorebook | null>(`/api/codex-chat/lorebooks/${lorebookId}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+}
+
+export function deleteOwnLorebook(lorebookId: number) {
+  return requestApiData<{ deleted: boolean }>(`/api/codex-chat/lorebooks/${lorebookId}`, { method: 'DELETE' })
+}
+
+export function linkLorebookToProfile(lorebookId: number, profileId: number, linked: boolean) {
+  return requestApiData<{ lorebookIds: number[] }>(`/api/codex-chat/lorebooks/${lorebookId}/profiles/${profileId}`, { method: linked ? 'PUT' : 'DELETE' })
+}
+
+export function getThreadLorebooks(threadId: number) {
+  return requestApiData<ThreadLorebooks>(`/api/codex-chat/threads/${threadId}/lorebooks`, { cache: 'no-store' })
+}
+
+/** Replace the chat book's entries; it is made with its first entry (null once emptied). */
+export function saveThreadLorebook(threadId: number, entries: ChatLoreEntry[]) {
+  return requestApiData<OwnedChatLorebook | null>(`/api/codex-chat/threads/${threadId}/lorebook`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ entries }) })
+}
+
+export function previewLorebookMerge(targetId: number, input: { sourceId: number; entryIds?: string[] }) {
+  return requestApiData<LoreMergePreview>(`/api/codex-chat/lorebooks/${targetId}/merge/preview`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+
+/** Throws LoreDecisionsNeededError while a duplicate has no decision. */
+export function mergeLorebook(targetId: number, input: { sourceId: number; decisions: LoreMergeDecision[]; deleteSource?: boolean; entryIds?: string[] }) {
+  return requestWithMergePreview<LoreMergeResult>(`/api/codex-chat/lorebooks/${targetId}/merge`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+
+/** The profile's summary model writes a merged text for each duplicate; nothing is saved. */
+export function draftLorebookMerge(targetId: number, input: { sourceId: number; profileId: number; entryIds?: string[]; instruction?: string }) {
+  return requestApiData<{ drafts: LoreMergeDraft[] }>(`/api/codex-chat/lorebooks/${targetId}/merge/draft`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) }, { timeoutMs: 300_000 })
+}
+
+/** Save a save_lore proposal into the chat book (the server writes it). */
+export function applyChatProposal(proposalId: number) {
+  return requestApiData<{ proposal: unknown; book: OwnedChatLorebook | null }>(`/api/chat-proposals/${proposalId}/apply`, { method: 'POST' })
+}
+
+export function dismissChatProposal(proposalId: number) {
+  return requestApiData<unknown>(`/api/chat-proposals/${proposalId}/dismiss`, { method: 'POST' })
 }
 
 export function interruptCodexChatThread(threadId: number) {

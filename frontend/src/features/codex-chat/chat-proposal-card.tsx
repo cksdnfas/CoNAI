@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { SquarePen } from 'lucide-react'
+import { FileText, SquarePen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -16,7 +17,10 @@ import {
   CHAT_BLOCKS_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
   MODEL_SLOTS_QUERY_KEY,
+  applyChatProposal,
   createChatBlock,
+  dismissChatProposal,
+  threadLorebooksQueryKey,
   createChatProfile,
   getChatProfileDefaults,
   listChatAdminProfiles,
@@ -39,6 +43,7 @@ type Proposal = NonNullable<CodexChatToolCall['proposal']>
 type BlockProposal = Extract<Proposal, { kind: 'display_block' }>
 type ProfileProposal = Extract<Proposal, { kind: 'profile' }>
 type UpdateProposal = Extract<Proposal, { kind: 'profile_update' }>
+type LoreProposal = Extract<Proposal, { kind: 'lore' }>
 
 const CARD_CLASS = 'space-y-2.5 rounded-md border border-line px-3 py-2.5'
 const DEFAULTS_QUERY_KEY = ['codex-chat-profile-defaults'] as const
@@ -65,8 +70,7 @@ export function ChatProposalCards({ calls, threadId }: { calls: CodexChatToolCal
 function ProposalCard({ proposal, threadId }: { proposal: Proposal; threadId?: number }) {
   if (proposal.kind === 'display_block') return <BlockProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'profile') return <ProfileProposalCard proposal={proposal} threadId={threadId} />
-  // TODO(lorebook phase 4): the save_lore card.
-  if (proposal.kind === 'lore') return null
+  if (proposal.kind === 'lore') return <LoreProposalCard proposal={proposal} threadId={threadId} />
   return <ProfileUpdateCard proposal={proposal} threadId={threadId} />
 }
 
@@ -383,6 +387,68 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
         <SaveButton pending={saveMutation.isPending} onClick={() => saveMutation.mutate()} />
       </Footer>
       {admin && editorOpen && editorProfile ? <ChatProfileEditorModal open profile={editorProfile} defaults={defaultsQuery.data} onClose={handleEditorClose} /> : null}
+    </div>
+  )
+}
+
+/** E: a save_lore proposal — an entry for this chat's own lorebook; anyone in the chat can save or set it aside. */
+function LoreProposalCard({ proposal, threadId }: { proposal: LoreProposal; threadId?: number }) {
+  const { t } = useI18n()
+  const { showSnackbar } = useSnackbar()
+  const queryClient = useQueryClient()
+  const [state, setState] = useState<'saved' | 'dismissed' | null>(null)
+  const saved = state === 'saved' || (proposal.savedId !== undefined && !proposal.dismissed)
+  const dismissed = !saved && (state === 'dismissed' || proposal.dismissed === true)
+  const refresh = async () => {
+    if (threadId === undefined) return
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(threadId) }),
+      queryClient.invalidateQueries({ queryKey: threadLorebooksQueryKey(threadId) }),
+    ])
+  }
+  const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' })
+  const saveMutation = useMutation({ mutationFn: () => applyChatProposal(proposal.id), onSuccess: async () => { setState('saved'); await refresh() }, onError })
+  const dismissMutation = useMutation({ mutationFn: () => dismissChatProposal(proposal.id), onSuccess: async () => { setState('dismissed'); await refresh() }, onError })
+  const busy = saveMutation.isPending || dismissMutation.isPending
+  const before = proposal.replaces ? proposal.before : undefined
+  const keys = (list: string[]) => (list.length > 0 ? list.join(', ') : '—')
+  const constantLabel = (value: boolean) => (value ? t({ ko: '상시', en: 'Always' }) : '—')
+  // Replacing an entry of the same title: what changes, before and after.
+  const changes = before ? [
+    { label: t({ ko: '제목', en: 'Title' }), before: before.title, after: proposal.title },
+    { label: t({ ko: '키워드', en: 'Keywords' }), before: keys(before.keys), after: keys(proposal.keys) },
+    { label: t({ ko: '본문', en: 'Content' }), before: before.content, after: proposal.content },
+    { label: t({ ko: '상시', en: 'Always' }), before: constantLabel(before.constant), after: constantLabel(proposal.constant) },
+    ...(proposal.file ? [{ label: t({ ko: '자료', en: 'File' }), before: before.file ?? '—', after: `자료/${proposal.file.name}` }] : []),
+  ].filter((change) => change.before !== change.after) : []
+
+  return (
+    <div className={CARD_CLASS}>
+      <Header label={t({ ko: '로어북에 남길까?', en: 'Keep this in the lorebook?' })} name={`save_lore · ${t({ ko: '이 채팅', en: 'this chat' })}`} />
+      <div className="space-y-2 text-sm">
+        <div className="font-semibold">{proposal.title}</div>
+        {changes.length > 0 ? (
+          <div className="space-y-1.5">
+            {changes.map((change) => <UpdateRow key={change.label} label={change.label} before={change.before} after={change.after} />)}
+          </div>
+        ) : <div className="whitespace-pre-wrap break-words text-muted-foreground">{proposal.content}</div>}
+      </div>
+      {proposal.keys.length > 0 || proposal.constant || proposal.file ? (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {proposal.keys.map((key) => <Chip key={key} size="sm" tone="muted">{key}</Chip>)}
+          {proposal.constant ? <Chip size="sm" tone="primary">{t({ ko: '상시', en: 'Always' })}</Chip> : null}
+          {proposal.file ? <span className="inline-flex items-center gap-1 font-mono text-2xs text-muted-foreground"><FileText className="size-3" aria-hidden />{proposal.file.name}</span> : null}
+        </div>
+      ) : null}
+      {saved || dismissed ? (
+        <div className="border-t border-line pt-2 text-xs text-muted-foreground">{saved ? t({ ko: '저장됨', en: 'Saved' }) : t({ ko: '무시함', en: 'Dismissed' })}</div>
+      ) : (
+        <div className="flex items-center gap-2 border-t border-line pt-2">
+          <span className="flex-1" />
+          <Button size="xs" variant="ghost" disabled={busy} onClick={() => dismissMutation.mutate()}>{t({ ko: '무시', en: 'Dismiss' })}</Button>
+          <SaveButton pending={saveMutation.isPending} disabled={busy} onClick={() => saveMutation.mutate()} />
+        </div>
+      )}
     </div>
   )
 }

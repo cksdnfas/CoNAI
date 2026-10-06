@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Save, Trash2 } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
@@ -11,6 +11,7 @@ import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
   CHAT_BLOCKS_QUERY_KEY,
   CHAT_LOREBOOKS_QUERY_KEY,
+  OWN_LOREBOOKS_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
   MODEL_SLOTS_QUERY_KEY,
   chatProfileBackgroundUrl,
@@ -19,6 +20,7 @@ import {
   listChatBlocks,
   listChatConnectionModels,
   listChatLorebooks,
+  listOwnLorebooks,
   listModelSlots,
   localizeChatImages,
   updateChatProfile,
@@ -90,6 +92,7 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     suggestSlotId: profile?.suggestSlotId ?? null,
     maxToolRounds: profile?.maxToolRounds ?? defaults?.maxToolRounds ?? 8,
     visionEnabled: profile?.visionEnabled ?? false,
+    allowLoreProposals: profile?.allowLoreProposals ?? true,
     style: { ...FALLBACK_STYLE, ...(profile?.style ?? defaults?.style) },
     isEnabled: profile?.isEnabled ?? true,
     sortOrder: profile?.sortOrder ?? 0,
@@ -179,6 +182,9 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
     staleTime: 60_000,
   })
   const lorebooksQuery = useQuery({ queryKey: CHAT_LOREBOOKS_QUERY_KEY, queryFn: listChatLorebooks, enabled: open })
+  // The editor's own account books can be linked too (another account's book on the profile stays as it is).
+  const ownLorebooksQuery = useQuery({ queryKey: OWN_LOREBOOKS_QUERY_KEY, queryFn: listOwnLorebooks, enabled: open })
+  const linkableLorebooks = useMemo(() => lorebooksQuery.data ? [...lorebooksQuery.data, ...(ownLorebooksQuery.data ?? []).filter((book) => book.kind === 'account')] : undefined, [lorebooksQuery.data, ownLorebooksQuery.data])
   const blocksQuery = useQuery({ queryKey: CHAT_BLOCKS_QUERY_KEY, queryFn: listChatBlocks, enabled: open })
   const codexModelsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 5 * 60 * 1000, enabled: open && !isLlm })
 
@@ -309,7 +315,7 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
             open={open}
             draft={draft}
             patch={patch}
-            lorebooks={lorebooksQuery.data}
+            lorebooks={linkableLorebooks}
             localizing={localizeMutation.isPending}
             onLocalizeImages={() => localizeMutation.mutate()}
             onPreview={() => setPreviewOpen(true)}
