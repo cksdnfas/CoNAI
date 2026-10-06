@@ -80,6 +80,25 @@ function resolveComfyModelPreviewFolder(dropdownList: CustomDropdownList) {
 }
 
 /** Render the ComfyUI home/workflow views and coordinate server-targeted generation. */
+/** The management area (servers, dropdown lists) stays as it was left; it starts open. */
+const COMFY_MANAGEMENT_OPEN_STORAGE_KEY = 'conai.comfy.management-open'
+
+function readManagementOpen() {
+  try {
+    return window.localStorage.getItem(COMFY_MANAGEMENT_OPEN_STORAGE_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+
+function writeManagementOpen(isOpen: boolean) {
+  try {
+    window.localStorage.setItem(COMFY_MANAGEMENT_OPEN_STORAGE_KEY, isOpen ? '1' : '0')
+  } catch {
+    // Storage can be unavailable (private mode, blocked site data); the toggle still works for this session.
+  }
+}
+
 export function ComfyGenerationPanel({
   onHistoryRefresh,
   selectedWorkflowId,
@@ -100,7 +119,7 @@ export function ComfyGenerationPanel({
   const [isChatPresetModalOpen, setIsChatPresetModalOpen] = useState(false)
   const canSaveChatPreset = useAuthStatusQuery().data?.isAdmin === true
   const [workflowEditorState, setWorkflowEditorState] = useState<ComfyWorkflowEditorState | null>(null)
-  const [isManagementOpen, setIsManagementOpen] = useState(false)
+  const [isManagementOpen, setIsManagementOpen] = useState(readManagementOpen)
   const activeWorkflowId = selectedWorkflowId !== null ? String(selectedWorkflowId) : ''
 
   const appSettingsQuery = useQuery({
@@ -543,7 +562,7 @@ export function ComfyGenerationPanel({
               serverTests={comfyServerTests}
               dropdownLists={dropdownListsQuery.data}
               isManagementOpen={isManagementOpen}
-              onToggleManagement={() => setIsManagementOpen((current) => !current)}
+              onToggleManagement={() => setIsManagementOpen((current) => { writeManagementOpen(!current); return !current })}
               isRefreshingDropdownLists={isRefreshingDropdownLists}
               onCreateManualList={(input) => handleCreateDropdownList(input)}
               onUpdateList={(listId, input) => handleUpdateDropdownList(listId, input)}
