@@ -1,3 +1,4 @@
+import { resolveProfileModel, type ModelRoleProfile } from './chatModelRoles'
 import type { ChatProfile } from './chatProfiles'
 import { stripBlockFences, usableBlockKeys } from './chatBlockState'
 import { completeChat, resolveChatCompletionTarget, type ChatCompletionTarget } from './llmChatCompletion'
@@ -32,13 +33,12 @@ const SYSTEM_PROMPT = [
 ].join('\n')
 
 /** The connection and model a profile suggests with, or null when suggestions are off or no connection applies. */
-export function suggestionTargetOf(profile: Pick<ChatProfile, 'engine' | 'providerName' | 'model' | 'suggestEnabled' | 'suggestProviderName' | 'suggestModel'>): ChatCompletionTarget | null {
+export function suggestionTargetOf(profile: ModelRoleProfile & Pick<ChatProfile, 'suggestEnabled'>): ChatCompletionTarget | null {
   if (!profile.suggestEnabled) return null
-  const own = profile.engine === 'llm' ? profile.providerName : ''
-  const providerName = profile.suggestProviderName || own
-  if (!providerName) return null
-  return resolveChatCompletionTarget(providerName, {
-    model: profile.suggestProviderName ? profile.suggestModel || null : profile.suggestModel || profile.model || null,
+  const resolved = resolveProfileModel(profile, 'suggest')
+  if (!resolved) return null
+  return resolveChatCompletionTarget(resolved.providerName, {
+    model: resolved.model,
     generation: { temperature: 0.9, reasoningEffort: 'none' },
   })
 }

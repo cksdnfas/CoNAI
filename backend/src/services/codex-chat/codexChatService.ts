@@ -25,6 +25,7 @@ import { BLOCK_EDITS_MAX, blockStateHash, blockStateText, foldBlockState, parseB
 import { authorNoteText, buildPersonaPrompt, estimateTokens, fillCharacterPlaceholders, referenceBlock, resolveAuthorNote, REPLY_FORMAT_GUIDANCE, GENERATION_GUIDANCE } from './llmChatContext'
 import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { translateReply, translateUserInput } from './chatTranslation'
+import { hasTranslation } from './chatModelRoles'
 import { stripEchoedAddresses } from '@conai/shared'
 import { selectLoreEntries } from './chatLorebook'
 import { LlmChatService, type GroupReplyResult } from './llmChatService'
@@ -973,7 +974,7 @@ export const CodexChatService = {
       const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: modelText ?? trimmed, display_content: modelText ? trimmed : null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
       ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       turn.userMessageId = userMessageId
-      if (profile.translationProviderName) turn.translate = (content) => translateReply(profile, content, turn.controller?.signal)
+      if (hasTranslation(profile)) turn.translate = (content) => translateReply(profile, content, turn.controller?.signal)
       session.activeTurns.set(codexThreadId, turn)
       clearIdleTimer(session)
       if (!thread.title) {

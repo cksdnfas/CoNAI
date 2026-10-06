@@ -10,6 +10,7 @@ import { foldGroupBlockState, parseBlockEdits } from './chatBlockState'
 import { GROUP_LIMITS, GROUP_MEMBER_MAX, ChatGroupStore, groupLimitsOf } from './chatGroupStore'
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
 import { translateReply, translateUserInput, translatorOf } from './chatTranslation'
+import { hasTranslation, resolveProfileModel } from './chatModelRoles'
 import { stripEchoedAddresses } from '@conai/shared'
 import { ChatUserProfileStore, userPersonaForThread, type ChatUserProfile } from './chatUserProfiles'
 import { loadChatSettings } from './chatSettings'
@@ -204,7 +205,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     if (reply.status !== 'completed') run.reserved.delete(replyId)
     // The member's own translation model gives the reader its reply in Korean.
     let displayContent: string | null = null
-    if (reply.status === 'completed' && content && profile.translationProviderName) {
+    if (reply.status === 'completed' && content && hasTranslation(profile)) {
       emit(run, { type: 'translating', profileId: profile.id })
       displayContent = await translateReply(profile, content, controller.signal)
     }
@@ -265,8 +266,9 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
 /** Members sharing a key share its slots: one LLM connection, or Codex. */
 function concurrencyOf(profile: ChatProfile) {
   if (profile.engine === 'codex') return { key: 'codex', limit: 1 }
-  const provider = ExternalApiProvider.findByName(profile.providerName)
-  return { key: `llm:${profile.providerName}`, limit: readLlmConnectionConfig(provider?.additional_config).maxConcurrentRequests }
+  const providerName = resolveProfileModel(profile, 'chat')?.providerName ?? ''
+  const provider = ExternalApiProvider.findByName(providerName)
+  return { key: `llm:${providerName}`, limit: readLlmConnectionConfig(provider?.additional_config).maxConcurrentRequests }
 }
 
 function emitQueue(run: GroupRun) {

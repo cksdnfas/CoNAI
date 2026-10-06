@@ -13,6 +13,8 @@ export const CHAT_LOREBOOKS_QUERY_KEY = ['codex-chat-lorebooks'] as const
 export const CHAT_BLOCKS_QUERY_KEY = ['codex-chat-blocks'] as const
 export const CHAT_TOOL_PRESETS_QUERY_KEY = ['codex-chat-tool-presets'] as const
 export const CHAT_GENERATION_PRESETS_QUERY_KEY = ['codex-chat-generation-presets'] as const
+export const MODEL_SLOTS_QUERY_KEY = ['codex-chat-model-slots'] as const
+export const MODEL_USAGE_QUERY_KEY = ['codex-chat-model-usage'] as const
 export const CHAT_STATUS_QUERY_KEY = ['codex-chat-status'] as const
 
 export interface CodexChatStatus {
@@ -117,6 +119,8 @@ export function chatEmoticonUrl(profileId: number, compositeHash: string) {
 export interface ChatProfileSummary {
   tagline: string
   model: string
+  /** The line the chat UI shows for the model: `slot · model`, `connection · model` or `Codex · model`. */
+  modelLabel: string
   canReadFileText: boolean
   /** The composer offers reply suggestions (a connection is set up to answer them). */
   suggestEnabled: boolean
@@ -322,6 +326,11 @@ export interface ChatProfile {
   suggestEnabled: boolean
   suggestProviderName: string | null
   suggestModel: string
+  /** Model slots per role; a slot wins over the role's direct connection + model above. Null: the direct pair applies. */
+  modelSlotId: number | null
+  summarySlotId: number | null
+  translationSlotId: number | null
+  suggestSlotId: number | null
   maxToolRounds: number
   /** LLM: the model can look at images (view_images). */
   visionEnabled: boolean
@@ -584,6 +593,60 @@ export function updateChatToolPreset(presetId: number, patch: Partial<ChatToolPr
 
 export function deleteChatToolPreset(presetId: number) {
   return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/tool-presets/${presetId}`, { method: 'DELETE' })
+}
+
+export type ModelRole = 'chat' | 'summary' | 'translation' | 'suggest'
+
+/** A named connection + model; profiles and workflow nodes reference it per role, so editing it reaches all of them. */
+export interface ModelSlot {
+  id: number
+  name: string
+  providerName: string
+  model: string
+  isDefault: boolean
+  sortOrder: number
+  profiles: Array<{ id: number; name: string; roles: ModelRole[] }>
+  createdDate: string
+  updatedDate: string
+}
+
+/** `adoptProfiles`: bind profiles whose direct connection + model equals this slot's (and have no slot for that role). */
+export type ModelSlotInput = { name: string; providerName: string; model: string; isDefault?: boolean; adoptProfiles?: boolean }
+
+export type ModelSlotSaveResult = { slot: ModelSlot; adopted: Record<ModelRole, number> }
+
+export interface ModelUsage {
+  connections: Array<{
+    providerName: string
+    slots: Array<{ id: number; name: string }>
+    directProfiles: Array<{ id: number; name: string; roles: ModelRole[] }>
+    workflowNodes: number
+  }>
+  slots: Array<{ id: number; name: string; profiles: Array<{ id: number; name: string; roles: ModelRole[] }>; workflowNodes: number }>
+}
+
+export function listModelSlots() {
+  return requestApiData<ModelSlot[]>('/api/codex-chat/admin/model-slots')
+}
+
+export function createModelSlot(input: ModelSlotInput) {
+  return requestApiData<ModelSlotSaveResult>('/api/codex-chat/admin/model-slots', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
+}
+
+export function updateModelSlot(slotId: number, patch: Partial<ModelSlotInput>) {
+  return requestApiData<ModelSlotSaveResult>(`/api/codex-chat/admin/model-slots/${slotId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+}
+
+export function setDefaultModelSlot(slotId: number) {
+  return requestApiData<ModelSlot>(`/api/codex-chat/admin/model-slots/${slotId}/default`, { method: 'POST' })
+}
+
+export function deleteModelSlot(slotId: number) {
+  return requestApiData<{ deleted: boolean }>(`/api/codex-chat/admin/model-slots/${slotId}`, { method: 'DELETE' })
+}
+
+export function getModelUsage() {
+  return requestApiData<ModelUsage>('/api/codex-chat/admin/model-usage', { cache: 'no-store' })
 }
 
 export function listChatGenerationPresets() {

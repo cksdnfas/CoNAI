@@ -5,6 +5,7 @@ import { CHAT_ROOM_TOOLS } from '../../mcp/context'
 import { blockStateText, foldBlockState, parseBlockEdits, stripBlockFences, usableBlockKeys } from './chatBlockState'
 import { fillCharacterPlaceholders } from './chatPlaceholders'
 import { userPersonaForThread, userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
+import { resolveProfileModel } from './chatModelRoles'
 import { profileGenerationOptions, resolveSummaryPrompt, type ChatProfile } from './chatProfiles'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
@@ -549,8 +550,10 @@ function takeSummaryChunk(profile: ChatProfile, config: LlmChatContextConfig, tu
 }
 
 async function summarizeInto(profile: ChatProfile, config: LlmChatContextConfig, previous: string | null, messages: CodexChatMessageRecord[], user: ChatUserPersona, signal?: AbortSignal) {
-  const target = resolveChatCompletionTarget(profile.summaryProviderName || profile.providerName, {
-    model: profile.summaryProviderName ? profile.summaryModel || null : profile.summaryModel || profile.model || null,
+  const resolved = resolveProfileModel(profile, 'summary')
+  if (!resolved) throw new Error('요약에 쓸 LLM 연결을 찾을 수 없어.')
+  const target = resolveChatCompletionTarget(resolved.providerName, {
+    model: resolved.model,
     generation: summaryGenerationOptions(profileGenerationOptions(profile)),
   })
   const transcript = messages.map((message) => transcriptLine(message, profile, user)).join('\n\n')

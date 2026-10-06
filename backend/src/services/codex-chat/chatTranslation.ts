@@ -1,3 +1,4 @@
+import { hasTranslation, resolveProfileModel, type ModelRoleProfile } from './chatModelRoles'
 import type { ChatProfile } from './chatProfiles'
 import { completeChat, resolveChatCompletionTarget, type ChatCompletionTarget } from './llmChatCompletion'
 
@@ -42,11 +43,12 @@ function countMatches(text: string, pattern: RegExp) {
 }
 
 /** The connection and model a profile translates with, or null when it does not translate. */
-export function translationTargetOf(profile: Pick<ChatProfile, 'translationProviderName' | 'translationModel'>): ChatCompletionTarget | null {
-  if (!profile.translationProviderName) return null
+export function translationTargetOf(profile: ModelRoleProfile): ChatCompletionTarget | null {
+  const resolved = resolveProfileModel(profile, 'translation')
+  if (!resolved) return null
   try {
-    return resolveChatCompletionTarget(profile.translationProviderName, {
-      model: profile.translationModel || null,
+    return resolveChatCompletionTarget(resolved.providerName, {
+      model: resolved.model,
       generation: { temperature: 0.2, reasoningEffort: 'none' },
     })
   } catch (error) {
@@ -85,7 +87,7 @@ async function translate(target: ChatCompletionTarget, system: string, text: str
  * The user's message as the model should see it (English), or null when the chat does not translate, the text has no
  * Korean to translate, or the translation failed (the message is then sent as written).
  */
-export async function translateUserInput(profile: Pick<ChatProfile, 'translationProviderName' | 'translationModel'> | null | undefined, text: string, signal?: AbortSignal) {
+export async function translateUserInput(profile: ModelRoleProfile | null | undefined, text: string, signal?: AbortSignal) {
   const target = profile ? translationTargetOf(profile) : null
   const trimmed = text.trim()
   if (!target || !trimmed || countMatches(trimmed, HANGUL) === 0) return null
@@ -97,7 +99,7 @@ export async function translateUserInput(profile: Pick<ChatProfile, 'translation
  * The reply as the reader should see it (Korean), or null when the chat does not translate, the reply is already
  * mostly Korean, or the translation failed (the reply is then shown as written).
  */
-export async function translateReply(profile: Pick<ChatProfile, 'translationProviderName' | 'translationModel'> | null | undefined, text: string, signal?: AbortSignal) {
+export async function translateReply(profile: ModelRoleProfile | null | undefined, text: string, signal?: AbortSignal) {
   const target = profile ? translationTargetOf(profile) : null
   const trimmed = text.trim()
   if (!target || !trimmed || countMatches(trimmed, LATIN) === 0 || countMatches(trimmed, HANGUL) > countMatches(trimmed, LATIN)) return null
@@ -107,5 +109,5 @@ export async function translateReply(profile: Pick<ChatProfile, 'translationProv
 
 /** Group rooms: the member whose translation model the room's user messages go through (the representative first). */
 export function translatorOf(profiles: ChatProfile[]) {
-  return profiles.find((profile) => profile.translationProviderName) ?? null
+  return profiles.find((profile) => hasTranslation(profile)) ?? null
 }

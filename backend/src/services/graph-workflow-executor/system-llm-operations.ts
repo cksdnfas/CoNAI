@@ -1,5 +1,6 @@
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import { ChatProfileStore, profileGenerationOptions } from '../codex-chat/chatProfiles'
+import { resolveProfileModel } from '../codex-chat/chatModelRoles'
 import type { LlmGenerationOptions } from '../llmGenerationOptions'
 import { executeLlmTextRequest } from '../llmProviderService'
 import { throwIfExecutionAborted } from './execution-abort'
@@ -61,8 +62,12 @@ export async function executeCallLlmNode(
     if (profile.engine !== 'llm') {
       throw new Error(`API LLM 프로필만 쓸 수 있어: ${profile.name}`)
     }
-    providerName = profile.providerName
-    model = profile.model || null
+    const resolved = resolveProfileModel(profile, 'chat')
+    if (!resolved) {
+      throw new Error(`LLM 프로필에 모델이 없어: ${profile.name}`)
+    }
+    providerName = resolved.providerName
+    model = resolved.model
     generation = {
       ...profileGenerationOptions(profile),
       ...(nodeTemperature !== null ? { temperature: nodeTemperature } : {}),

@@ -3,6 +3,8 @@ import { routeParam } from './routeParam';
 import { ExternalApiProvider } from '../models/ExternalApiProvider';
 import { ExternalApiService } from '../services/externalApiService';
 import { ChatProfileStore } from '../services/codex-chat/chatProfiles';
+import { resolveProfileModel } from '../services/codex-chat/chatModelRoles';
+import { modelReferencesOfConnection } from '../services/codex-chat/modelSlots';
 import { fetchOpenAiCompatibleModels, toOpenAiApiBase } from '../services/codex-chat/llmChatCompletion';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { optionalAuth, requirePermission } from '../middleware/authMiddleware';
@@ -45,14 +47,17 @@ router.get('/llm-profile-options', requirePermission('page.generation.view'), as
     success: true,
     data: ChatProfileStore.list()
       .filter((profile) => profile.engine === 'llm')
-      .map((profile) => ({
-        id: profile.id,
-        name: profile.name,
-        avatar: profile.avatar,
-        provider_name: profile.providerName,
-        model: profile.model || ExternalApiProvider.findEnabledLlmOptions().find((option) => option.provider_name === profile.providerName)?.default_model || null,
-        is_enabled: profile.isEnabled,
-      })),
+      .map((profile) => {
+        const resolved = resolveProfileModel(profile, 'chat');
+        return {
+          id: profile.id,
+          name: profile.name,
+          avatar: profile.avatar,
+          provider_name: resolved?.providerName ?? '',
+          model: resolved?.model || ExternalApiProvider.findEnabledLlmOptions().find((option) => option.provider_name === resolved?.providerName)?.default_model || null,
+          is_enabled: profile.isEnabled,
+        };
+      }),
   });
 }));
 
@@ -213,6 +218,17 @@ router.put('/providers/:name', asyncHandler(async (req: Request, res: Response) 
  */
 router.delete('/providers/:name', asyncHandler(async (req: Request, res: Response) => {
   const name = routeParam(req.params.name);
+
+  // A connection that slots or chat profiles still name would leave them failing at request time.
+  const references = modelReferencesOfConnection(name);
+  if (references.slots.length > 0 || references.profiles.length > 0) {
+    res.status(409).json({
+      success: false,
+      error: '이 연결을 쓰는 모델·프로필이 있어.',
+      data: references,
+    });
+    return;
+  }
 
   const deleted = ExternalApiProvider.delete(name);
 

@@ -8,6 +8,7 @@ import { ChatSharedBlockStore, normalizeBlockIds } from './chatDisplayBlocks'
 import { ChatProfileError } from './chatProfileError'
 import { ChatToolPresetStore } from './chatToolPresets'
 import { ChatGenerationPresetStore, normalizeGenerationPresetIds } from './chatGenerationPresets'
+import { ModelSlotStore } from './modelSlots'
 
 const NAME_MAX_LENGTH = 60
 const MODEL_MAX_LENGTH = 200
@@ -131,6 +132,14 @@ export type ChatProfile = {
   suggestEnabled: boolean
   suggestProviderName: string | null
   suggestModel: string
+  /**
+   * Model slots (llm_model_slots) per role. A slot wins over the role's direct connection + model above; null keeps the
+   * direct pair. A slot that went missing reads as null. Codex profiles have no chat slot.
+   */
+  modelSlotId: number | null
+  summarySlotId: number | null
+  translationSlotId: number | null
+  suggestSlotId: number | null
   /** Model ↔ tool round trips allowed in one reply. */
   maxToolRounds: number
   /** LLM: the model can look at images (view_images results are sent to it). */
@@ -191,6 +200,10 @@ type ProfileRow = {
   suggest_enabled: number | null
   suggest_provider_name: string | null
   suggest_model: string | null
+  model_slot_id: number | null
+  summary_slot_id: number | null
+  translation_slot_id: number | null
+  suggest_slot_id: number | null
   max_tool_rounds: number | null
   chat_style: string | null
   background_image: string | null
@@ -314,6 +327,11 @@ function toProfile(row: ProfileRow): ChatProfile {
     suggestEnabled: row.suggest_enabled === 1,
     suggestProviderName: row.suggest_provider_name,
     suggestModel: row.suggest_model ?? '',
+    // A slot that no longer exists reads as unset (the next save clears the column).
+    modelSlotId: ModelSlotStore.existing(row.model_slot_id),
+    summarySlotId: ModelSlotStore.existing(row.summary_slot_id),
+    translationSlotId: ModelSlotStore.existing(row.translation_slot_id),
+    suggestSlotId: ModelSlotStore.existing(row.suggest_slot_id),
     maxToolRounds: row.max_tool_rounds ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
     visionEnabled: row.vision_enabled === 1,
     // Display blocks live in chat_display_blocks; the profile only links them (the style column's own list is legacy).
@@ -372,7 +390,15 @@ function toColumns(input: ChatProfileInput) {
   }
   const engine: ChatProfileEngine = input.engine === 'codex' ? 'codex' : 'llm'
   const providerName = engine === 'llm' ? text(input.providerName, 200) : ''
-  if (engine === 'llm' && !providerName) {
+  const slotId = (value: unknown) => {
+    if (value === null || value === undefined || value === '') return null
+    const id = ModelSlotStore.existing(value)
+    if (id === null) throw new ChatProfileError('모델을 찾을 수 없어.')
+    return id
+  }
+  // Codex has no connection, so no chat slot; its helper roles (summary, translation, suggestions) still use slots.
+  const modelSlotId = engine === 'llm' ? slotId(input.modelSlotId) : null
+  if (engine === 'llm' && !providerName && modelSlotId === null) {
     throw new ChatProfileError('LLM 연결을 골라줘.')
   }
   const avatar = typeof input.avatar === 'string' && input.avatar ? input.avatar : null
@@ -442,6 +468,10 @@ function toColumns(input: ChatProfileInput) {
     suggest_enabled: input.suggestEnabled ? 1 : 0,
     suggest_provider_name: text(input.suggestProviderName, 200) || null,
     suggest_model: text(input.suggestModel, MODEL_MAX_LENGTH) || null,
+    model_slot_id: modelSlotId,
+    summary_slot_id: slotId(input.summarySlotId),
+    translation_slot_id: slotId(input.translationSlotId),
+    suggest_slot_id: slotId(input.suggestSlotId),
     max_tool_rounds: optionalNumber(input.maxToolRounds, CHAT_PROFILE_LIMITS.maxToolRounds, true) ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
     vision_enabled: input.visionEnabled ? 1 : 0,
     chat_style: JSON.stringify({ ...normalizeChatStyle(input.style), blocks: [] }),

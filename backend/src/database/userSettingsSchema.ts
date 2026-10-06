@@ -502,6 +502,20 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
+  // Model slots: a named LLM connection + model; chat profiles and workflow nodes reference them by id per role.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS llm_model_slots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      provider_name TEXT NOT NULL,
+      model TEXT NOT NULL,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_date TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_date TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
   // Generation presets: a fixed NAI setup or ComfyUI workflow whose remaining fields the chat model fills; profiles link them by id.
   db.exec(`
     CREATE TABLE IF NOT EXISTS chat_generation_presets (
@@ -691,6 +705,11 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['suggest_enabled', 'INTEGER'],
     ['suggest_provider_name', 'TEXT'],
     ['suggest_model', 'TEXT'],
+    // Model slots (llm_model_slots) per role; null: the direct provider/model columns apply. No foreign keys on purpose.
+    ['model_slot_id', 'INTEGER'],
+    ['summary_slot_id', 'INTEGER'],
+    ['translation_slot_id', 'INTEGER'],
+    ['suggest_slot_id', 'INTEGER'],
   ];
   for (const [columnName, definition] of chatProfileColumns) {
     if (!hasColumn('llm_chat_profiles', columnName)) {

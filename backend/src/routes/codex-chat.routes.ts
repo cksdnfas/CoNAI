@@ -20,6 +20,9 @@ import { buildChatPromptPreview, estimateTokens, fillCharacterPlaceholders } fro
 import { buildLorebookText, ChatLorebookStore } from '../services/codex-chat/chatLorebook'
 import { ChatSharedBlockStore, readBlockFile } from '../services/codex-chat/chatDisplayBlocks'
 import { ChatToolPresetStore, readToolPresetFile } from '../services/codex-chat/chatToolPresets'
+import { ModelSlotStore } from '../services/codex-chat/modelSlots'
+import { buildModelUsage } from '../services/codex-chat/modelUsage'
+import { effectiveModelOf, hasSuggestionModel, modelLabelOf } from '../services/codex-chat/chatModelRoles'
 import { ChatGenerationPresetStore, readGenerationPresetFile, type ChatGenerationPresetInput } from '../services/codex-chat/chatGenerationPresets'
 import { CodexChatStore } from '../services/codex-chat/codexChatStore'
 import { listChatCompletionModels } from '../services/codex-chat/llmChatCompletion'
@@ -116,7 +119,8 @@ function toPublicProfile(profile: ChatProfile) {
     id: profile.id,
     name: profile.name,
     tagline: profile.tagline,
-    model: profile.model || (profile.engine === 'llm' ? readLlmConnectionConfig(ExternalApiProvider.findByName(profile.providerName)?.additional_config).defaultModel ?? '' : ''),
+    model: effectiveModelOf(profile),
+    modelLabel: modelLabelOf(profile),
     avatar: profile.avatar,
     engine: profile.engine,
     isEnabled: profile.isEnabled,
@@ -129,7 +133,7 @@ function toPublicProfile(profile: ChatProfile) {
     style: profile.style,
     backgroundVersion: backgroundVersionOf(profile),
     // The composer shows the suggestion button only when a connection can answer it.
-    suggestEnabled: profile.suggestEnabled && Boolean(profile.suggestProviderName || (profile.engine === 'llm' && profile.providerName)),
+    suggestEnabled: profile.suggestEnabled && hasSuggestionModel(profile),
   }
 }
 
@@ -519,6 +523,11 @@ router.post('/admin/profiles/import-card', requireAdmin, (req, res, next) => {
 router.post('/admin/profiles', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   try {
     const input = (req.body ?? {}) as ChatProfileInput
+    // An API LLM profile with no model of its own starts on the default slot, when there is one.
+    if (input.engine !== 'codex' && !input.providerName && (input.modelSlotId === null || input.modelSlotId === undefined)) {
+      const defaultSlot = ModelSlotStore.findDefault()
+      if (defaultSlot) input.modelSlotId = defaultSlot.id
+    }
     await assertCodexEffortSupported(input)
     res.status(201).json({ success: true, data: toAdminProfile(ChatProfileStore.create(input)) })
   } catch (error) {
@@ -643,6 +652,46 @@ router.delete('/admin/blocks/:blockId', requireAdmin, (req: Request, res: Respon
   const blockId = parseId(req.params.blockId)
   if (blockId === null) { sendRouteBadRequest(res, 'Invalid block id'); return }
   res.json({ success: true, data: { deleted: ChatSharedBlockStore.delete(blockId) } })
+})
+
+/** Model slots (a named connection + model). Profiles and workflow nodes reference them per role, so an edit reaches all of them. */
+router.get('/admin/model-slots', requireAdmin, (_req: Request, res: Response) => {
+  res.json({ success: true, data: ModelSlotStore.list() })
+})
+
+router.post('/admin/model-slots', requireAdmin, (req: Request, res: Response) => {
+  try {
+    res.status(201).json({ success: true, data: ModelSlotStore.create((req.body ?? {}) as Record<string, unknown>) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.put('/admin/model-slots/:slotId', requireAdmin, (req: Request, res: Response) => {
+  const slotId = parseId(req.params.slotId)
+  if (slotId === null) { sendRouteBadRequest(res, 'Invalid model slot id'); return }
+  try {
+    const updated = ModelSlotStore.update(slotId, (req.body ?? {}) as Record<string, unknown>)
+    if (!updated) { res.status(404).json({ success: false, error: '모델을 찾을 수 없어.' }); return }
+    res.json({ success: true, data: updated })
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.post('/admin/model-slots/:slotId/default', requireAdmin, (req: Request, res: Response) => {
+  const slotId = parseId(req.params.slotId)
+  if (slotId === null) { sendRouteBadRequest(res, 'Invalid model slot id'); return }
+  const slot = ModelSlotStore.setDefault(slotId)
+  if (!slot) { res.status(404).json({ success: false, error: '모델을 찾을 수 없어.' }); return }
+  res.json({ success: true, data: slot })
+})
+
+router.delete('/admin/model-slots/:slotId', requireAdmin, (req: Request, res: Response) => {
+  const slotId = parseId(req.params.slotId)
+  if (slotId === null) { sendRouteBadRequest(res, 'Invalid model slot id'); return }
+  res.json({ success: true, data: { deleted: ModelSlotStore.delete(slotId) } })
+})
+
+/** Which profiles, slots and saved workflow nodes use each LLM connection and slot. */
+router.get('/admin/model-usage', requireAdmin, (_req: Request, res: Response) => {
+  res.json({ success: true, data: buildModelUsage() })
 })
 
 /** Tool presets (MCP scopes + tool allowlist). Profiles link one by id, so an edit reaches every linked profile at once. */

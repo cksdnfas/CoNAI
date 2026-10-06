@@ -12,6 +12,7 @@ import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { ChatProfileStore, pickChatGreeting, type ChatProfile } from './chatProfiles'
 import { translateReply, translateUserInput } from './chatTranslation'
+import { hasTranslation, resolveProfileModel } from './chatModelRoles'
 import { stripEchoedAddresses } from '@conai/shared'
 import { ChatUserProfileStore, userPersonaOf } from './chatUserProfiles'
 import { loadChatSettings } from './chatSettings'
@@ -29,6 +30,13 @@ export class LlmChatError extends Error {
   constructor(message: string, readonly status = 400) {
     super(message)
   }
+}
+
+/** The connection an API LLM profile chats through (its model slot, direct connection or the default slot). */
+function chatConnectionOf(profile: ChatProfile) {
+  const resolved = resolveProfileModel(profile, 'chat')
+  if (!resolved) throw new LlmChatError('LLM 연결을 찾을 수 없어. 프로필의 모델을 골라줘.')
+  return resolved.providerName
 }
 
 type LlmTurn = {
@@ -161,7 +169,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
  * `generation` overrides the profile's generation options (a direct chat's own reply cap).
  */
 async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>, roomTools: 'call' | 'all' | false = false, generation: Partial<LlmGenerationOptions> = {}) {
-  const target = resolveChatCompletionTarget(profile.providerName, { model: profile.model || null, generation: { ...profileGenerationOptions(profile), ...generation } })
+  const target = resolveChatCompletionTarget(chatConnectionOf(profile), { model: resolveProfileModel(profile, 'chat')?.model ?? null, generation: { ...profileGenerationOptions(profile), ...generation } })
   const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
   const chatContext = turn.chatContext ?? turn.delivery?.context
   const bridge = scopes.length > 0 || roomTools || chatContext ? await openChatMcpBridge(requester, scopes, profile.toolAllowlist, { roomTools, generationPresetIds: profile.generationPresetIds, chatContext }) : null
@@ -226,7 +234,7 @@ async function finishTurn(turn: LlmTurn, profile: ChatProfile, status: CodexChat
   const content = stripEchoedAddresses(stripThinking(turn.text)).trim()
   const finishReason = status === 'completed' ? turn.finishReason : null
   let displayContent: string | null = null
-  if (status === 'completed' && content && profile.translationProviderName) {
+  if (status === 'completed' && content && hasTranslation(profile)) {
     emit(turn, { type: 'translating' })
     displayContent = await translateReply(profile, content, turn.controller.signal)
   }
@@ -401,7 +409,7 @@ export const LlmChatService = {
     }
     if (!regenerate && !content.trim() && !message.attachments?.length && !message.mediaAttachments?.length) throw new LlmChatError('메시지를 입력해줘.')
     // Resolve configuration before deleting any later messages.
-    resolveChatCompletionTarget(profile.providerName, { model: profile.model || null, generation: profileGenerationOptions(profile) })
+    resolveChatCompletionTarget(chatConnectionOf(profile), { model: resolveProfileModel(profile, 'chat')?.model ?? null, generation: profileGenerationOptions(profile) })
     const edited = regenerate ? null : content.trim()
     const modelText = edited ? await translateUserInput(profile, edited) : null
     if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
