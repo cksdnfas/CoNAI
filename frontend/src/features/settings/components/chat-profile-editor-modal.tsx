@@ -83,6 +83,7 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     summaryModel: profile?.summaryModel ?? '',
     translationProviderName: profile?.translationProviderName ?? null,
     translationModel: profile?.translationModel ?? '',
+    translationInstructions: profile?.translationInstructions ?? '',
     suggestEnabled: profile?.suggestEnabled ?? false,
     suggestProviderName: profile?.suggestProviderName ?? null,
     suggestModel: profile?.suggestModel ?? '',

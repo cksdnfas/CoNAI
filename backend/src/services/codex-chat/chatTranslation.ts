@@ -38,6 +38,19 @@ const TO_DISPLAY_PROMPT = [
   PRESERVE_RULES,
 ].join('\n')
 
+/** Who is speaking, and the profile's own notes on its voice (they come after the rules, which still win on markup). */
+export function replyTranslationPrompt(profile: { name?: string; translationInstructions?: string }, userName?: string) {
+  const name = profile.name?.trim()
+  const notes = (profile.translationInstructions ?? '').trim()
+    .replace(/\{\{char\}\}/gi, name || 'the character')
+    .replace(/\{\{user\}\}/gi, userName?.trim() || 'the user')
+  return [
+    TO_DISPLAY_PROMPT,
+    ...(name ? [`The speaking character is "${name}".`] : []),
+    ...(notes ? ['Notes on this character\'s voice and terms (follow them; the rules above still apply):', notes] : []),
+  ].join('\n')
+}
+
 function countMatches(text: string, pattern: RegExp) {
   return (text.match(pattern) ?? []).length
 }
@@ -97,13 +110,14 @@ export async function translateUserInput(profile: ModelRoleProfile | null | unde
 
 /**
  * The reply as the reader should see it (Korean), or null when the chat does not translate, the reply is already
- * mostly Korean, or the translation failed (the reply is then shown as written).
+ * mostly Korean, or the translation failed (the reply is then shown as written). The translator is told who speaks
+ * and the profile's translation notes (`userName` fills their `{{user}}`).
  */
-export async function translateReply(profile: ModelRoleProfile | null | undefined, text: string, signal?: AbortSignal) {
+export async function translateReply(profile: (ModelRoleProfile & { name?: string; translationInstructions?: string }) | null | undefined, text: string, signal?: AbortSignal, userName?: string) {
   const target = profile ? translationTargetOf(profile) : null
   const trimmed = text.trim()
-  if (!target || !trimmed || countMatches(trimmed, LATIN) === 0 || countMatches(trimmed, HANGUL) > countMatches(trimmed, LATIN)) return null
-  const translated = await translate(target, TO_DISPLAY_PROMPT, trimmed, signal)
+  if (!profile || !target || !trimmed || countMatches(trimmed, LATIN) === 0 || countMatches(trimmed, HANGUL) > countMatches(trimmed, LATIN)) return null
+  const translated = await translate(target, replyTranslationPrompt(profile, userName), trimmed, signal)
   return translated && translated !== trimmed ? translated : null
 }
 

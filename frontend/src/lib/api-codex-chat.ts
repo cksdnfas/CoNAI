@@ -399,6 +399,8 @@ export interface ChatProfile {
   /** Translation model: messages go to the chat model in English, replies are shown in Korean. Null: none. */
   translationProviderName: string | null
   translationModel: string
+  /** Notes for translating this profile's replies (voice, how it addresses the user, a glossary); `{{char}}`/`{{user}}` filled. */
+  translationInstructions: string
   /** Reply suggestions on the composer's sparkle button; null provider uses the chat's own connection (LLM only). */
   suggestEnabled: boolean
   suggestProviderName: string | null

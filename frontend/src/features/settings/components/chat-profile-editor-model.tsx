@@ -211,6 +211,15 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
           ) : null}
           <AuxModelRow label={t({ ko: '번역', en: 'Translation' })} select={roleSelect('translation', t({ ko: '번역 모델', en: 'Translation model' }))}>
             {directFields('translation', true)}
+            {roleChoice(draft, 'translation', slots, isLlm, slotsReady) !== 'off' ? (
+              <Field
+                className="md:pl-4"
+                label={t({ ko: '번역 지시', en: 'Translation notes' })}
+                info={t({ ko: '답변을 한국어로 옮길 때 번역 모델이 따르는 메모. 말투, 호칭, 고유명사 번역표 등. {{char}}·{{user}}는 이름으로 바뀌어. 캐릭터 이름은 비워도 알려 줘. 내 메시지 번역에는 쓰지 않아.', en: 'Notes the translation model follows when it puts replies into Korean: voice, forms of address, a glossary. {{char}} and {{user}} become the names. The character’s name is passed even when empty. Not used for your own messages.' })}
+              >
+                <Textarea variant="settings" rows={3} maxLength={4000} value={draft.translationInstructions} placeholder={t({ ko: '{{char}}는 무뚝뚝한 반말, 문장 끝을 "…"로 자주 끊음. {{user}}를 "선배"라고 부름.', en: '{{char}} speaks in curt casual Korean and trails off with "…". Calls {{user}} "선배".' })} onChange={(event) => patch({ translationInstructions: event.target.value })} />
+              </Field>
+            ) : null}
           </AuxModelRow>
           <AuxModelRow label={t({ ko: '답장 추천', en: 'Reply suggestions' })} select={roleSelect('suggest', t({ ko: '답장 추천 모델', en: 'Reply suggestion model' }))}>
             {directFields('suggest', true)}

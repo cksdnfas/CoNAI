@@ -210,7 +210,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     let displayContent: string | null = null
     if (reply.status === 'completed' && content && hasTranslation(profile)) {
       emit(run, { type: 'translating', profileId: profile.id })
-      displayContent = await translateReply(profile, content, controller.signal)
+      displayContent = await translateReply(profile, content, controller.signal, userPersonaForThread(thread).name)
     }
     if (replacingMessageId) {
       // A connection failure must not replace a usable answer with an empty failed alternative.

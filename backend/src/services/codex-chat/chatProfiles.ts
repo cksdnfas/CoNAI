@@ -38,6 +38,7 @@ export const CHAT_PROFILE_DEFAULTS = {
 
 export const AUTHOR_NOTE_MAX_LENGTH = 4000
 /** Text caps toColumns applies to the profile fields a chat may propose (the setup tools validate with the same numbers). */
+const TRANSLATION_INSTRUCTIONS_MAX_LENGTH = 4000
 export const CHAT_PROFILE_TEXT_LIMITS = { name: NAME_MAX_LENGTH, tagline: 200, text: TEXT_MAX_LENGTH, authorNote: AUTHOR_NOTE_MAX_LENGTH, sections: 30, sectionTitle: 80, alternateGreetings: 100 } as const
 const MAX_PROMPT_SECTIONS = 30
 const SECTION_TITLE_MAX_LENGTH = 80
@@ -132,6 +133,11 @@ export type ChatProfile = {
   translationProviderName: string | null
   translationModel: string
   /**
+   * Notes the translation model follows when it puts this profile's replies into Korean: the character's voice, how it
+   * addresses the user, a glossary. `{{char}}` / `{{user}}` are filled. The user's messages are translated without it.
+   */
+  translationInstructions: string
+  /**
    * Reply suggestions: the composer's sparkle button asks a model for a few things the user might say next.
    * Null provider uses the chat's own connection (LLM profiles only). Empty model uses the connection's default.
    */
@@ -205,6 +211,7 @@ type ProfileRow = {
   summary_model: string | null
   translation_provider_name: string | null
   translation_model: string | null
+  translation_instructions: string | null
   suggest_enabled: number | null
   suggest_provider_name: string | null
   suggest_model: string | null
@@ -343,6 +350,7 @@ function toProfile(row: ProfileRow): ChatProfile {
     summaryModel: row.summary_model ?? '',
     translationProviderName: row.translation_provider_name,
     translationModel: row.translation_model ?? '',
+    translationInstructions: row.translation_instructions ?? '',
     suggestEnabled: row.suggest_enabled === 1,
     suggestProviderName: row.suggest_provider_name,
     suggestModel: row.suggest_model ?? '',
@@ -485,6 +493,7 @@ function toColumns(input: ChatProfileInput) {
     summary_model: text(input.summaryModel, MODEL_MAX_LENGTH) || null,
     translation_provider_name: text(input.translationProviderName, 200) || null,
     translation_model: text(input.translationModel, MODEL_MAX_LENGTH) || null,
+    translation_instructions: text(input.translationInstructions, TRANSLATION_INSTRUCTIONS_MAX_LENGTH) || null,
     suggest_enabled: input.suggestEnabled ? 1 : 0,
     suggest_provider_name: text(input.suggestProviderName, 200) || null,
     suggest_model: text(input.suggestModel, MODEL_MAX_LENGTH) || null,

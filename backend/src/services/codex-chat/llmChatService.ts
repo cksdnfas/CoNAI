@@ -14,7 +14,7 @@ import { ChatProfileStore, pickChatGreeting, type ChatProfile } from './chatProf
 import { translateReply, translateUserInput } from './chatTranslation'
 import { hasTranslation, resolveProfileModel } from './chatModelRoles'
 import { stripEchoedAddresses } from '@conai/shared'
-import { ChatUserProfileStore, userPersonaOf } from './chatUserProfiles'
+import { ChatUserProfileStore, userPersonaForThread, userPersonaOf } from './chatUserProfiles'
 import { loadChatSettings } from './chatSettings'
 import { intersectChatScopes, resolveChatAccess } from './codexChatAccess'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
@@ -331,7 +331,7 @@ async function finishTurn(turn: LlmTurn, profile: ChatProfile, status: CodexChat
   let displayContent: string | null = null
   if (status === 'completed' && content && hasTranslation(profile)) {
     emit(turn, { type: 'translating' })
-    displayContent = await translateReply(profile, content, turn.controller.signal)
+    displayContent = await translateReply(profile, content, turn.controller.signal, userPersonaForThread(CodexChatStore.findThreadById(turn.threadId)).name)
   }
   const messageId = turn.replacingMessageId ?? CodexChatStore.addMessage({
     thread_id: turn.threadId,

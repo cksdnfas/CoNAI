@@ -759,6 +759,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     // Translation model (user input → English for the model, replies → Korean for display); null: no translation.
     ['translation_provider_name', 'TEXT'],
     ['translation_model', 'TEXT'],
+    // Notes for translating this profile's replies (voice, how it addresses the user, a glossary); null: none.
+    ['translation_instructions', 'TEXT'],
     // Reply suggestions (the sparkle button next to the composer): on demand, with their own connection/model.
     ['suggest_enabled', 'INTEGER'],
     ['suggest_provider_name', 'TEXT'],

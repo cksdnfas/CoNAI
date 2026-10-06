@@ -168,6 +168,21 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     assert.equal(CodexChatStore.findThreadById(oldThere.threadId)!.flag_ids, null, 'an old file’s ids are not matched in another account')
   })
 
+  await t.test('reply translation: told who speaks, the profile notes filled after the rules', async () => {
+    const { replyTranslationPrompt } = await import('../src/services/codex-chat/chatTranslation')
+    const plain = replyTranslationPrompt({ name: '루나' })
+    assert.ok(plain.includes('The speaking character is "루나".'))
+    assert.ok(!plain.includes('Notes on this character'))
+    const noted = replyTranslationPrompt({ name: '루나', translationInstructions: '{{char}}는 반말, {{user}}를 "선배"라고 부른다.' }, '민준')
+    const [rules, notes] = noted.split('Notes on this character')
+    assert.ok(rules.includes('Keep these exactly as they are'), 'the markup rules come first')
+    assert.ok(notes.includes('루나는 반말, 민준를 "선배"라고 부른다.'))
+    assert.ok(replyTranslationPrompt({ name: '루나', translationInstructions: '{{user}}에게 존댓말' }).includes('the user에게 존댓말'))
+    const saved = ChatProfileStore.create({ name: '번역', engine: 'llm', providerName: 'test', model: 'm', mcpEnabled: false, summaryEnabled: false, translationInstructions: '  말끝을 "…"로  ' })
+    assert.equal(saved.translationInstructions, '말끝을 "…"로')
+    assert.equal(ChatProfileStore.update(saved.id, { tagline: '바뀜' })!.translationInstructions, '말끝을 "…"로', 'a partial update keeps the notes')
+  })
+
   await t.test('branch origin: purpose and source kept, unlinked (not deleted) when the source goes', () => {
     const id = newThread()
     const first = say(id, 'user', '하나')

@@ -1120,7 +1120,7 @@ export const CodexChatService = {
       const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: modelText ?? trimmed, display_content: modelText ? trimmed : null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
       ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       turn.userMessageId = userMessageId
-      if (hasTranslation(profile)) turn.translate = (content) => translateReply(profile, content, turn.controller?.signal)
+      if (hasTranslation(profile)) turn.translate = (content) => translateReply(profile, content, turn.controller?.signal, userPersonaForThread(thread).name)
       session.activeTurns.set(codexThreadId, turn)
       clearIdleTimer(session)
       if (!thread.title) {
