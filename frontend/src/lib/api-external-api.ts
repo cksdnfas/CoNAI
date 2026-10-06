@@ -1,4 +1,4 @@
-import { fetchJson } from './api-client'
+import { buildApiUrl, fetchJson } from './api-client'
 
 export type ExternalApiProviderType = 'general' | 'llm_openai_compatible' | 'llm_ollama'
 
@@ -101,10 +101,26 @@ export async function updateExternalApiProvider(providerName: string, input: Omi
   return response.data
 }
 
+/** Deletes a connection; a 409 (still used by models or profiles) throws with the user names appended to the message. */
 export async function deleteExternalApiProvider(providerName: string) {
-  return await fetchJson<{ success: boolean; message?: string }>(`/api/external-api/providers/${encodeURIComponent(providerName)}`, {
+  const response = await fetch(buildApiUrl(`/api/external-api/providers/${encodeURIComponent(providerName)}`), {
     method: 'DELETE',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
   })
+  const payload = (await response.json().catch(() => null)) as {
+    success?: boolean
+    message?: string
+    error?: string
+    data?: { slots?: unknown; profiles?: unknown }
+  } | null
+  if (!response.ok) {
+    const names = [payload?.data?.slots, payload?.data?.profiles]
+      .flatMap((list) => (Array.isArray(list) ? list.filter((name): name is string => typeof name === 'string') : []))
+    const base = payload?.error || `Request failed: ${response.status}`
+    throw new Error(names.length > 0 ? `${base.replace(/[.。]$/, '')}: ${names.join(', ')}` : base)
+  }
+  return { success: payload?.success ?? true, message: payload?.message }
 }
 
 /** Model ids the LLM server at these (possibly unsaved) connection values lists. */

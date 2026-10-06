@@ -39,7 +39,7 @@ export type LlmPresetModalState =
   | null
 
 // Container-prefixed: the tables stack into labelled rows below these widths (SettingsResourceTable stackBelow).
-export const LLM_CONNECTIONS_TABLE_GRID = '@4xl:grid-cols-[minmax(180px,1.15fr)_minmax(160px,1fr)_minmax(160px,0.95fr)_96px_64px_48px]'
+export const LLM_CONNECTIONS_TABLE_GRID = '@4xl:grid-cols-[minmax(160px,1.1fr)_minmax(150px,1fr)_minmax(140px,0.9fr)_minmax(130px,0.8fr)_88px_64px_48px]'
 export const LLM_PRESETS_TABLE_GRID = '@3xl:grid-cols-[minmax(180px,0.9fr)_minmax(240px,1.6fr)_140px_48px]'
 
 export const STRUCTURED_OUTPUT_JSON_EXAMPLE = `{

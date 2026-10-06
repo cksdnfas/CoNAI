@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
+import { MODEL_SLOTS_QUERY_KEY, MODEL_USAGE_QUERY_KEY, getModelUsage, listModelSlots, setDefaultModelSlot, type ModelSlot } from '@/lib/api-codex-chat'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { getExternalApiProviders } from '@/lib/api-external-api'
@@ -18,6 +19,13 @@ import {
   LlmPresetListItem,
 } from './llm-connections-tab-modals'
 import {
+  MODEL_SLOTS_TABLE_GRID,
+  ModelSlotEditorModal,
+  ModelSlotListItem,
+  useRefreshModelSlots,
+  type ModelSlotModalState,
+} from './llm-model-slots'
+import {
   LLM_CONNECTIONS_TABLE_GRID,
   LLM_PRESETS_TABLE_GRID,
   LLM_PRESET_SECTIONS,
@@ -33,6 +41,18 @@ export function LlmConnectionsTab() {
   const { t } = useI18n()
   const [connectionModalState, setConnectionModalState] = useState<LlmConnectionModalState>(null)
   const [presetModalState, setPresetModalState] = useState<LlmPresetModalState>(null)
+  const [slotModalState, setSlotModalState] = useState<ModelSlotModalState>(null)
+  const refreshModelSlots = useRefreshModelSlots()
+
+  const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots })
+  const usageQuery = useQuery({ queryKey: MODEL_USAGE_QUERY_KEY, queryFn: getModelUsage })
+  const setDefaultMutation = useMutation({
+    mutationFn: (slot: ModelSlot) => setDefaultModelSlot(slot.id),
+    onSuccess: () => refreshModelSlots(),
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '기본 모델을 바꾸지 못했어.', en: 'Could not change the default model.' }), tone: 'error' })
+    },
+  })
 
   const providersQuery = useQuery({
     queryKey: ['external-api-providers', 'settings-llm-connections'],
@@ -55,6 +75,7 @@ export function LlmConnectionsTab() {
       queryClient.invalidateQueries({ queryKey: ['external-api-providers'] }),
       queryClient.invalidateQueries({ queryKey: ['external-api-llm-options'] }),
       queryClient.invalidateQueries({ queryKey: ['module-definitions'] }),
+      queryClient.invalidateQueries({ queryKey: MODEL_USAGE_QUERY_KEY }),
     ])
   }
 
@@ -155,6 +176,41 @@ export function LlmConnectionsTab() {
   return (
     <div className="space-y-8">
       <RowGroup
+        heading={t({ ko: '모델', en: 'Models' })}
+        actions={
+          <IconButton size="icon-sm" variant="ghost" onClick={() => setSlotModalState({ mode: 'create' })} label={t({ ko: '모델 추가', en: 'Add model' })}>
+            <Plus className="h-4 w-4" />
+          </IconButton>
+        }
+      >
+        {slotsQuery.isLoading ? (
+          <SettingsRowsSkeleton rows={2} />
+        ) : (slotsQuery.data ?? []).length === 0 ? (
+          <SettingsEmptyRow>{t({ ko: '아직 모델이 없어.', en: 'No models yet.' })}</SettingsEmptyRow>
+        ) : (
+          <SettingsResourceTable
+            gridClassName={MODEL_SLOTS_TABLE_GRID}
+            stackBelow="4xl"
+            centerFrom={4}
+            headers={[t({ ko: '이름', en: 'Name' }), t({ ko: '연결', en: 'Connection' }), t({ ko: '모델', en: 'Model' }), t({ ko: '사용처', en: 'Used by' }), t({ ko: '기본', en: 'Default' }), '']}
+          >
+            {(slotsQuery.data ?? []).map((slot) => (
+              <ModelSlotListItem
+                key={slot.id}
+                slot={slot}
+                providers={llmProviders}
+                workflowNodes={usageQuery.data?.slots.find((entry) => entry.id === slot.id)?.workflowNodes ?? 0}
+                selected={slotModalState?.mode === 'edit' && slotModalState.slot.id === slot.id}
+                settingDefault={setDefaultMutation.isPending}
+                onSetDefault={(next) => setDefaultMutation.mutate(next)}
+                onOpenOptions={(next) => setSlotModalState({ mode: 'edit', slot: next })}
+              />
+            ))}
+          </SettingsResourceTable>
+        )}
+      </RowGroup>
+
+      <RowGroup
         heading={t('llmConnectionsTab.llmConnections')}
         actions={
           <IconButton
@@ -175,13 +231,14 @@ export function LlmConnectionsTab() {
           <SettingsResourceTable
             gridClassName={LLM_CONNECTIONS_TABLE_GRID}
             stackBelow="4xl"
-            centerFrom={3}
-            headers={[t({ ko: '연결', en: 'Connection' }), t({ ko: '기본 URL', en: 'Base URL' }), t({ ko: '기본 모델', en: 'Default model' }), t({ ko: '제한 시간', en: 'Time limit' }), t({ ko: '활성', en: 'Active' }), '']}
+            centerFrom={4}
+            headers={[t({ ko: '연결', en: 'Connection' }), t({ ko: '기본 URL', en: 'Base URL' }), t({ ko: '기본 모델', en: 'Default model' }), t({ ko: '사용처', en: 'Used by' }), t({ ko: '제한 시간', en: 'Time limit' }), t({ ko: '활성', en: 'Active' }), '']}
           >
             {llmProviders.map((provider) => (
               <LlmConnectionListItem
                 key={provider.id}
                 provider={provider}
+                usage={usageQuery.data?.connections.find((entry) => entry.providerName === provider.provider_name)}
                 selected={connectionModalState?.mode === 'edit' && connectionModalState.provider.provider_name === provider.provider_name}
                 onOpenOptions={(nextProvider) => setConnectionModalState({ mode: 'edit', provider: nextProvider })}
               />
@@ -232,6 +289,8 @@ export function LlmConnectionsTab() {
           </RowGroup>
         )
       })}
+
+      <ModelSlotEditorModal state={slotModalState} providers={llmProviders} onClose={() => setSlotModalState(null)} />
 
       <LlmConnectionEditorModal
         state={connectionModalState}

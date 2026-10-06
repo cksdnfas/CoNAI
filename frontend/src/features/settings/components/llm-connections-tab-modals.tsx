@@ -16,6 +16,7 @@ import {
   type ExternalApiProviderRecord,
   type ExternalApiProviderType,
 } from '@/lib/api-external-api'
+import type { ModelUsage } from '@/lib/api-codex-chat'
 import type { LlmPresetRecord } from '@conai/shared'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
@@ -24,6 +25,7 @@ import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { SettingsSwitchRow } from './settings-switch-row'
 import { ConnectionModelSelect } from './chat-profile-editor-fields'
+import { ConnectionUsageCell } from './llm-model-slots'
 import { SettingsResourceTableRow, SettingsStatusIcon } from './settings-resource-shared'
 import {
   LLM_CONNECTIONS_TABLE_GRID,
@@ -49,10 +51,12 @@ import {
 
 export function LlmConnectionListItem({
   provider,
+  usage,
   selected = false,
   onOpenOptions,
 }: {
   provider: ExternalApiProviderRecord
+  usage?: ModelUsage['connections'][number]
   selected?: boolean
   onOpenOptions: (provider: ExternalApiProviderRecord) => void
 }) {
@@ -78,6 +82,7 @@ export function LlmConnectionListItem({
           {baseUrlSummary}
         </div>,
         <div className="min-w-0 truncate text-sm font-medium text-foreground" title={getDefaultModelSummary(provider, notSetLabel)}>{getDefaultModelSummary(provider, notSetLabel)}</div>,
+        <ConnectionUsageCell usage={usage} />,
         <div className="text-center text-sm font-medium text-foreground">{getTimeoutSummary(provider, autoLabel)}</div>,
         <SettingsStatusIcon checked={provider.is_enabled} title={provider.is_enabled ? t({ ko: '활성', en: 'Active' }) : t({ ko: '비활성', en: 'Inactive' })} />,
       ]}
