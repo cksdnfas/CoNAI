@@ -12,12 +12,14 @@ import {
   CHAT_BLOCKS_QUERY_KEY,
   CHAT_LOREBOOKS_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
+  MODEL_SLOTS_QUERY_KEY,
   chatProfileBackgroundUrl,
   createChatProfile,
   deleteChatProfile,
   listChatBlocks,
   listChatConnectionModels,
   listChatLorebooks,
+  listModelSlots,
   localizeChatImages,
   updateChatProfile,
   type ChatProfile,
@@ -28,6 +30,7 @@ import {
 import { getExternalApiProviders } from '@/lib/api-external-api'
 import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
+import { roleChoice, roleDirect } from './chat-model-role-select'
 import { ChatProfileCharacterPanel } from './chat-profile-editor-character'
 import type { Draft } from './chat-profile-editor-fields'
 import { ChatProfileLookPanel } from './chat-profile-editor-look'
@@ -139,31 +142,38 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
 
   const providersQuery = useQuery({ queryKey: ['external-api-providers', 'chat-profiles'], queryFn: getExternalApiProviders, enabled: open })
   const llmProviders = (providersQuery.data ?? []).filter((provider) => provider.provider_type === 'llm_openai_compatible' || provider.provider_type === 'llm_ollama')
+  const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled: open })
+  const slots = slotsQuery.data ?? []
+  // A role lists connection models only while it is "direct" with a connection of its own.
+  const chatDirect = roleDirect(draft, 'chat')
+  const summaryDirect = roleDirect(draft, 'summary')
+  const translationDirect = roleDirect(draft, 'translation')
+  const suggestDirect = roleDirect(draft, 'suggest')
   const modelsQuery = useQuery({
-    queryKey: ['codex-chat-connection-models', draft.providerName],
-    queryFn: () => listChatConnectionModels(draft.providerName),
-    enabled: open && isLlm && Boolean(draft.providerName),
+    queryKey: ['codex-chat-connection-models', chatDirect.provider],
+    queryFn: () => listChatConnectionModels(chatDirect.provider),
+    enabled: open && isLlm && roleChoice(draft, 'chat', slots, true) === 'direct' && Boolean(chatDirect.provider),
     retry: false,
     staleTime: 60_000,
   })
   const summaryModelsQuery = useQuery({
-    queryKey: ['codex-chat-connection-models', draft.summaryProviderName || draft.providerName],
-    queryFn: () => listChatConnectionModels(draft.summaryProviderName || draft.providerName),
-    enabled: open && isLlm && draft.summaryEnabled && Boolean(draft.summaryProviderName || draft.providerName),
+    queryKey: ['codex-chat-connection-models', summaryDirect.provider],
+    queryFn: () => listChatConnectionModels(summaryDirect.provider),
+    enabled: open && isLlm && roleChoice(draft, 'summary', slots, true) === 'direct' && Boolean(summaryDirect.provider),
     retry: false,
     staleTime: 60_000,
   })
   const translationModelsQuery = useQuery({
-    queryKey: ['codex-chat-connection-models', draft.translationProviderName],
-    queryFn: () => listChatConnectionModels(draft.translationProviderName as string),
-    enabled: open && Boolean(draft.translationProviderName),
+    queryKey: ['codex-chat-connection-models', translationDirect.provider],
+    queryFn: () => listChatConnectionModels(translationDirect.provider),
+    enabled: open && roleChoice(draft, 'translation', slots, isLlm) === 'direct' && Boolean(translationDirect.provider),
     retry: false,
     staleTime: 60_000,
   })
   const suggestModelsQuery = useQuery({
-    queryKey: ['codex-chat-connection-models', draft.suggestProviderName || (isLlm ? draft.providerName : '')],
-    queryFn: () => listChatConnectionModels(draft.suggestProviderName || draft.providerName),
-    enabled: open && draft.suggestEnabled && Boolean(draft.suggestProviderName || (isLlm && draft.providerName)),
+    queryKey: ['codex-chat-connection-models', suggestDirect.provider],
+    queryFn: () => listChatConnectionModels(suggestDirect.provider),
+    enabled: open && roleChoice(draft, 'suggest', slots, isLlm) === 'direct' && Boolean(suggestDirect.provider),
     retry: false,
     staleTime: 60_000,
   })
@@ -174,34 +184,42 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
   // Fields start on real values, not on a "choose" or "connection default" entry: the first connection, then the
   // connection's default model (or its first listed one). Declared after the draft reset so they apply on top of it.
   // They stay here, not in the model panel, so switching tabs never re-runs them over edited values.
+  // A new profile starts on the default model slot when there is one. Waits for the slot list so the first connection
+  // is not picked in the meantime. Existing profiles never get a slot; they only get the first connection if empty.
   const firstProviderName = llmProviders[0]?.provider_name ?? ''
+  const defaultSlotId = slots.find((slot) => slot.isDefault)?.id ?? null
+  const slotsSettled = slotsQuery.isSuccess || slotsQuery.isError
   useEffect(() => {
-    if (!open || !firstProviderName) return
-    setDraft((current) => (current.engine === 'llm' && !current.providerName ? { ...current, providerName: firstProviderName } : current))
-  }, [open, firstProviderName, draft.engine])
+    if (!open || !slotsSettled) return
+    setDraft((current) => {
+      if (current.engine !== 'llm' || current.providerName || current.modelSlotId) return current
+      if (!profile && defaultSlotId !== null) return { ...current, modelSlotId: defaultSlotId }
+      return firstProviderName ? { ...current, providerName: firstProviderName } : current
+    })
+  }, [open, slotsSettled, defaultSlotId, firstProviderName, draft.engine, profile])
   useEffect(() => {
     const data = modelsQuery.data
     const fill = data?.defaultModel || data?.models[0]
     if (!open || !fill) return
-    setDraft((current) => (current.engine !== 'llm' || current.model ? current : { ...current, model: fill }))
+    setDraft((current) => (current.engine !== 'llm' || current.model || current.modelSlotId || !current.providerName ? current : { ...current, model: fill }))
   }, [open, modelsQuery.data, draft.engine])
   useEffect(() => {
     const data = summaryModelsQuery.data
     const fill = data?.defaultModel || data?.models[0]
     if (!open || !fill) return
-    setDraft((current) => (!current.summaryProviderName || current.summaryModel ? current : { ...current, summaryModel: fill }))
+    setDraft((current) => (!current.summaryProviderName || current.summarySlotId || current.summaryModel ? current : { ...current, summaryModel: fill }))
   }, [open, summaryModelsQuery.data])
   useEffect(() => {
     const data = translationModelsQuery.data
     const fill = data?.defaultModel || data?.models[0]
     if (!open || !fill) return
-    setDraft((current) => (!current.translationProviderName || current.translationModel ? current : { ...current, translationModel: fill }))
+    setDraft((current) => (!current.translationProviderName || current.translationSlotId || current.translationModel ? current : { ...current, translationModel: fill }))
   }, [open, translationModelsQuery.data])
   useEffect(() => {
     const data = suggestModelsQuery.data
     const fill = data?.defaultModel || data?.models[0]
     if (!open || !fill) return
-    setDraft((current) => (!current.suggestProviderName || current.suggestModel ? current : { ...current, suggestModel: fill }))
+    setDraft((current) => (!current.suggestProviderName || current.suggestSlotId || current.suggestModel ? current : { ...current, suggestModel: fill }))
   }, [open, suggestModelsQuery.data])
 
   const refresh = async () => {
@@ -259,7 +277,7 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
     ? draft.background
     : profile?.backgroundVersion ? chatProfileBackgroundUrl(profile.id, profile.backgroundVersion) : null
   const nameMissing = draft.name.trim().length === 0
-  const connectionMissing = isLlm && draft.providerName.length === 0
+  const connectionMissing = isLlm && !draft.modelSlotId && !draft.providerName
   const canSave = !nameMissing && !connectionMissing && !saveMutation.isPending
   const incompleteLabel = t({ ko: '입력 필요', en: 'Needs input' })
 
@@ -304,6 +322,7 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
             defaults={defaults}
             llmProviders={llmProviders}
             providersLoaded={providersQuery.isSuccess}
+            slots={slots}
             connectionModels={modelsQuery.data}
             summaryModels={summaryModelsQuery.data}
             translationModels={translationModelsQuery.data}

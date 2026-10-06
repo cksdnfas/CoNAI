@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Field } from '@/components/ui/field'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -6,23 +7,38 @@ import { Textarea } from '@/components/ui/textarea'
 import { CodexModelSelect } from '@/features/image-generation/components/codex-model-select'
 import { CodexReasoningSelect } from '@/features/image-generation/components/codex-reasoning-select'
 import { useI18n } from '@/i18n'
-import type { ChatProfileDefaults, ChatProfileInput } from '@/lib/api-codex-chat'
+import type { ChatProfileDefaults, ChatProfileInput, ModelRole, ModelSlot } from '@/lib/api-codex-chat'
 import type { ExternalApiProviderRecord } from '@/lib/api-external-api'
 import type { CodexModelOption } from '@/lib/api-image-generation-queue'
 import { cn } from '@/lib/utils'
+import { applyRoleChoice, ModelRoleSelect, roleChoice, roleDirect, roleModelPatch, roleProviderPatch } from './chat-model-role-select'
 import { ConnectionModelSelect, EditorGroup, numberOrNull, SwitchLine, type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { CollapsibleRow } from './chat-profile-sections'
 
 /** What a connection lists for a model field. */
 export type ConnectionModels = { models: string[]; defaultModel: string | null }
 
-/** The engine and its knobs: connection, model, sampling, reasoning; then how much of the chat and the lore it is sent. */
-export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, providersLoaded, connectionModels, summaryModels, translationModels, suggestModels, codexModels }: {
+/** One auxiliary role: its label on the left, its model select on the right, and (when custom) its own connection + model underneath. */
+function AuxModelRow({ label, select, children }: { label: string; select: ReactNode; children?: ReactNode }) {
+  return (
+    <div className="space-y-2 border-t border-line py-3 first:border-t-0 first:pt-0 last:pb-0">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between md:gap-4">
+        <span className="text-sm">{label}</span>
+        <div className="md:w-3/5">{select}</div>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+/** The engine and its knobs: model slots per role, sampling, reasoning; then how much of the chat and the lore it is sent. */
+export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, providersLoaded, slots, connectionModels, summaryModels, translationModels, suggestModels, codexModels }: {
   draft: Draft
   patch: PatchDraft
   defaults: ChatProfileDefaults | undefined
   llmProviders: ExternalApiProviderRecord[]
   providersLoaded: boolean
+  slots: ModelSlot[]
   connectionModels: ConnectionModels | undefined
   summaryModels: ConnectionModels | undefined
   translationModels: ConnectionModels | undefined
@@ -32,7 +48,10 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
   const { t } = useI18n()
   const isLlm = draft.engine === 'llm'
   const serverDefault = t({ ko: '서버 기본값', en: 'Server default' })
-  const models = connectionModels?.models ?? []
+  const firstProvider = llmProviders[0]?.provider_name ?? ''
+  const modelsByRole: Record<ModelRole, ConnectionModels | undefined> = { chat: connectionModels, summary: summaryModels, translation: translationModels, suggest: suggestModels }
+  const summaryChoice = roleChoice(draft, 'summary', slots, isLlm)
+  const summaryOn = summaryChoice !== 'off'
   const extraParamsError = (() => {
     if (!isLlm || !draft.extraParams.trim()) return null
     try {
@@ -43,16 +62,52 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
     }
   })()
 
+  /** The select for one role, wired to the draft. */
+  const roleSelect = (role: ModelRole, ariaLabel: string) => (
+    <ModelRoleSelect
+      role={role}
+      value={roleChoice(draft, role, slots, isLlm)}
+      slots={slots}
+      canInherit={isLlm}
+      ariaLabel={ariaLabel}
+      onChange={(choice) => patch(applyRoleChoice(draft, role, choice, firstProvider))}
+    />
+  )
+
+  /** A role's own connection + model, shown only while that role is "direct". */
+  const directFields = (role: ModelRole, indent: boolean) => {
+    if (roleChoice(draft, role, slots, isLlm) !== 'direct') return null
+    const direct = roleDirect(draft, role)
+    const models = modelsByRole[role]
+    return (
+      <div className={cn('grid gap-3 md:grid-cols-2', indent && 'md:pl-4')}>
+        <Field label={t({ ko: '연결', en: 'Connection' })}>
+          <Select variant="settings" value={direct.provider} disabled={llmProviders.length === 0} onChange={(event) => patch(roleProviderPatch(role, event.target.value))}>
+            {llmProviders.length === 0 && providersLoaded ? <option value="">{t({ ko: 'LLM 연결 없음', en: 'No LLM connections' })}</option> : null}
+            {!direct.provider && llmProviders.length > 0 ? <option value="">{t({ ko: '연결 고르기', en: 'Choose a connection' })}</option> : null}
+            {direct.provider && !llmProviders.some((provider) => provider.provider_name === direct.provider) && providersLoaded
+              ? <option value={direct.provider}>{direct.provider}</option>
+              : null}
+            {llmProviders.map((provider) => <option key={provider.provider_name} value={provider.provider_name}>{provider.display_name}</option>)}
+          </Select>
+        </Field>
+        <Field label={t({ ko: '모델', en: 'Model' })}>
+          <ConnectionModelSelect value={direct.model} models={models?.models ?? []} defaultModel={models?.defaultModel ?? null} onChange={(model) => patch(roleModelPatch(role, model))} />
+        </Field>
+      </div>
+    )
+  }
+
   const loreFields = (
     <>
-      <Field label={t({ ko: '로어북 · 최근 메시지 수', en: 'Lorebook · recent messages' })}>
+      <Field label={t({ ko: '로어북 최근 메시지', en: 'Lorebook recent messages' })}>
         <NumberStepperInput variant="settings" min={1} max={100} value={draft.loreScanDepth} onValueCommit={(value) => patch({ loreScanDepth: numberOrNull(value) ?? 4 })} />
       </Field>
-      <Field label={t({ ko: '로어북 · 토큰 상한', en: 'Lorebook · token budget' })}>
+      <Field label={t({ ko: '로어북 토큰 상한', en: 'Lorebook token budget' })}>
         <NumberStepperInput variant="settings" min={0} max={32768} step={128} value={draft.loreTokenBudget} onValueCommit={(value) => patch({ loreTokenBudget: numberOrNull(value) ?? 1024 })} />
       </Field>
       {isLlm ? (
-        <Field label={t({ ko: '로어북 · 삽입 위치 (끝에서 몇 턴 앞)', en: 'Lorebook · insert depth (turns from the end)' })}>
+        <Field label={t({ ko: '로어북 삽입 위치', en: 'Lorebook insert depth' })} info={t({ ko: '대화 끝에서 몇 턴 앞에 넣을지.', en: 'How many turns before the end of the chat to insert it.' })}>
           <NumberStepperInput variant="settings" min={0} max={20} value={draft.loreDepth} onValueCommit={(value) => patch({ loreDepth: numberOrNull(value) ?? 4 })} />
         </Field>
       ) : null}
@@ -60,18 +115,26 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
   )
 
   const noteField = (
-    <Field label={t({ ko: '기본 작가 노트', en: "Default author's note" })}>
+    <Field
+      label={t({ ko: '기본 작가 노트', en: "Default author's note" })}
+      info={t({
+        ko: '모든 채팅에 매 요청 들어가는 장면 지시. 대화 끝쪽에 들어가. 채팅마다 ⋯ → 컨텍스트에서 따로 쓰면 그쪽이 우선이야.',
+        en: "A scene instruction added to every request in every chat, near the end of the conversation. A note written per chat under ⋯ → Context takes precedence.",
+      })}
+    >
       <Textarea variant="settings" rows={3} value={draft.authorNote} onChange={(event) => patch({ authorNote: event.target.value })} />
     </Field>
   )
 
   return (
     <div className="space-y-4">
-      <EditorGroup>
+      <EditorGroup label={t({ ko: '모델', en: 'Model' })}>
         <SegmentedControl
           size="sm"
           value={draft.engine}
-          onChange={(engine) => patch({ engine: engine === 'codex' ? 'codex' : 'llm', model: '', reasoningEffort: '', reasoningBudgetTokens: null })}
+          onChange={(engine) => patch(engine === 'codex'
+            ? { engine: 'codex', modelSlotId: null, model: '', reasoningEffort: '', reasoningBudgetTokens: null }
+            : { engine: 'llm', model: '', reasoningEffort: '', reasoningBudgetTokens: null })}
           items={[
             { value: 'llm', label: t({ ko: 'API LLM', en: 'API LLM' }) },
             { value: 'codex', label: 'Codex' },
@@ -80,23 +143,18 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
         />
         {isLlm ? (
           <>
+            <Field label={t({ ko: '대화 모델', en: 'Chat model' })}>
+              {roleSelect('chat', t({ ko: '대화 모델', en: 'Chat model' }))}
+            </Field>
+            {directFields('chat', false)}
             <div className="grid gap-3 md:grid-cols-2">
-              <Field label={t({ ko: 'LLM 연결', en: 'LLM connection' })}>
-                <Select variant="settings" value={draft.providerName} disabled={llmProviders.length === 0} onChange={(event) => patch({ providerName: event.target.value, model: '' })}>
-                  {llmProviders.length === 0 && providersLoaded ? <option value="">{t({ ko: 'LLM 연결 없음', en: 'No LLM connections' })}</option> : null}
-                  {draft.providerName && !llmProviders.some((provider) => provider.provider_name === draft.providerName) && providersLoaded
-                    ? <option value={draft.providerName}>{draft.providerName}</option>
-                    : null}
-                  {llmProviders.map((provider) => <option key={provider.provider_name} value={provider.provider_name}>{provider.display_name}</option>)}
-                </Select>
-              </Field>
-              <Field label={t({ ko: '모델', en: 'Model' })}>
-                <ConnectionModelSelect value={draft.model} models={models} defaultModel={connectionModels?.defaultModel ?? null} onChange={(model) => patch({ model })} />
-              </Field>
               <Field label={t({ ko: '온도', en: 'Temperature' })}>
                 <NumberStepperInput variant="settings" allowEmpty step={0.1} min={0} max={2} value={draft.temperature} placeholder={serverDefault} onValueCommit={(value) => patch({ temperature: numberOrNull(value) })} />
               </Field>
-              <Field label={t({ ko: '최대 출력 토큰 (추론 포함)', en: 'Max output tokens (incl. reasoning)' })}>
+              <Field
+                label={t({ ko: '최대 출력 토큰', en: 'Max output tokens' })}
+                info={t({ ko: '추론과 답변을 합친 한도. 채팅의 ⋯ → 컨텍스트에서 따로 정하면 그쪽이 우선이야.', en: 'Limit for reasoning and answer combined. A value set per chat under ⋯ → Context takes precedence.' })}
+              >
                 <NumberStepperInput variant="settings" allowEmpty step={1024} min={1} value={draft.maxTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />
               </Field>
               <Field label={t({ ko: '추론 강도', en: 'Reasoning effort' })}>
@@ -108,7 +166,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
                   <option value="high">high</option>
                 </Select>
               </Field>
-              <Field label={t({ ko: '추론 토큰 예산', en: 'Reasoning token budget' })}>
+              <Field label={t({ ko: '추론 토큰 예산', en: 'Reasoning token budget' })} info={t({ ko: 'reasoning_budget_tokens. 비우면 보내지 않아.', en: 'reasoning_budget_tokens. Not sent when empty.' })}>
                 <NumberStepperInput variant="settings" allowEmpty step={1024} min={1} value={draft.reasoningBudgetTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ reasoningBudgetTokens: numberOrNull(value) })} />
               </Field>
             </div>
@@ -142,111 +200,66 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
         )}
       </EditorGroup>
 
-      <EditorGroup label={t({ ko: '번역', en: 'Translation' })}>
-        <div className="grid gap-3 md:grid-cols-2">
-          <Field label={t({ ko: '번역 연결', en: 'Translation connection' })}>
-            <Select variant="settings" value={draft.translationProviderName ?? ''} onChange={(event) => patch({ translationProviderName: event.target.value || null, translationModel: '' })}>
-              <option value="">{t({ ko: '번역 안 함', en: 'No translation' })}</option>
-              {llmProviders.map((provider) => <option key={provider.provider_name} value={provider.provider_name}>{provider.display_name}</option>)}
-            </Select>
-          </Field>
-          {draft.translationProviderName ? (
-            <Field label={t({ ko: '번역 모델', en: 'Translation model' })}>
-              <ConnectionModelSelect
-                value={draft.translationModel}
-                models={translationModels?.models ?? []}
-                defaultModel={translationModels?.defaultModel ?? null}
-                onChange={(translationModel) => patch({ translationModel })}
-              />
-            </Field>
+      <EditorGroup label={t({ ko: '보조 모델', en: 'Helper models' })}>
+        <div>
+          {isLlm ? (
+            <AuxModelRow label={t({ ko: '요약', en: 'Summary' })} select={roleSelect('summary', t({ ko: '요약 모델', en: 'Summary model' }))}>
+              {directFields('summary', true)}
+            </AuxModelRow>
           ) : null}
+          <AuxModelRow label={t({ ko: '번역', en: 'Translation' })} select={roleSelect('translation', t({ ko: '번역 모델', en: 'Translation model' }))}>
+            {directFields('translation', true)}
+          </AuxModelRow>
+          <AuxModelRow label={t({ ko: '답장 추천', en: 'Reply suggestions' })} select={roleSelect('suggest', t({ ko: '답장 추천 모델', en: 'Reply suggestion model' }))}>
+            {directFields('suggest', true)}
+          </AuxModelRow>
         </div>
-      </EditorGroup>
-
-      <EditorGroup label={t({ ko: '답장 추천', en: 'Reply suggestions' })}>
-        <SwitchLine label={t({ ko: '답장 추천 받기', en: 'Suggest replies' })} checked={draft.suggestEnabled} onCheckedChange={(suggestEnabled) => patch({ suggestEnabled })} />
-        {draft.suggestEnabled ? (
-          <div className="grid gap-3 md:grid-cols-2">
-            <Field label={t({ ko: '추천 연결', en: 'Suggestion connection' })}>
-              <Select variant="settings" value={draft.suggestProviderName ?? ''} onChange={(event) => patch({ suggestProviderName: event.target.value || null, suggestModel: '' })}>
-                {isLlm ? <option value="">{t({ ko: '대화 모델 그대로', en: 'Same as chat' })}</option> : <option value="">{t({ ko: '연결 고르기', en: 'Choose a connection' })}</option>}
-                {llmProviders.map((provider) => <option key={provider.provider_name} value={provider.provider_name}>{provider.display_name}</option>)}
-              </Select>
-            </Field>
-            {isLlm || draft.suggestProviderName ? (
-              <Field label={t({ ko: '추천 모델', en: 'Suggestion model' })}>
-                <ConnectionModelSelect
-                  value={draft.suggestModel}
-                  models={suggestModels?.models ?? []}
-                  defaultModel={draft.suggestProviderName ? suggestModels?.defaultModel ?? null : null}
-                  emptyLabel={draft.suggestProviderName ? undefined : t({ ko: '대화 모델 그대로', en: 'Same as chat' })}
-                  onChange={(suggestModel) => patch({ suggestModel })}
-                />
-              </Field>
-            ) : null}
-          </div>
-        ) : null}
       </EditorGroup>
 
       <EditorGroup label={t({ ko: '컨텍스트', en: 'Context' })}>
         {isLlm ? (
           <>
             <div className="grid gap-3 md:grid-cols-2">
-              <Field label={t({ ko: '참고할 최근 턴 수', en: 'Recent turns sent' })}>
+              <Field label={t({ ko: '최근 턴 수', en: 'Recent turns' })} info={t({ ko: '요청마다 보내는 최근 대화. 사용자 메시지 하나와 그 답변이 한 턴.', en: 'The recent conversation sent with each request. One user message and its reply make a turn.' })}>
                 <NumberStepperInput variant="settings" step={1} min={1} max={200} value={draft.contextTurns} onValueCommit={(value) => patch({ contextTurns: numberOrNull(value) ?? draft.contextTurns })} />
               </Field>
-              <Field label={t({ ko: '컨텍스트 길이 (토큰)', en: 'Context length (tokens)' })}>
+              <Field
+                label={t({ ko: '컨텍스트 길이', en: 'Context length' })}
+                info={t({ ko: '토큰. 비우면 제한 없음. 정하면 시스템 프롬프트·요약·도구 설명·답변 몫을 뺀 만큼만 최근 턴을 보내.', en: 'In tokens. Empty means no limit. When set, only as many recent turns are sent as fit after the system prompt, summary, tool descriptions and the reply allowance.' })}
+              >
                 <NumberStepperInput variant="settings" allowEmpty step={1024} min={1024} value={draft.contextTokens} placeholder={t({ ko: '제한 없음', en: 'No limit' })} onValueCommit={(value) => patch({ contextTokens: numberOrNull(value) })} />
               </Field>
               {loreFields}
+              {summaryOn ? (
+                <Field label={t({ ko: '한 번에 요약할 턴 수', en: 'Turns per summary' })}>
+                  <NumberStepperInput variant="settings" step={1} min={1} max={200} value={draft.summaryTriggerTurns} onValueCommit={(value) => patch({ summaryTriggerTurns: numberOrNull(value) ?? draft.summaryTriggerTurns })} />
+                </Field>
+              ) : null}
             </div>
             {noteField}
-            <SwitchLine label={t({ ko: '대화 요약', en: 'Conversation summary' })} checked={draft.summaryEnabled} onCheckedChange={(summaryEnabled) => patch({ summaryEnabled })} />
-            {draft.summaryEnabled ? (
-              <>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <Field label={t({ ko: '한 번에 요약할 턴 수', en: 'Turns per summary' })}>
-                    <NumberStepperInput variant="settings" step={1} min={1} max={200} value={draft.summaryTriggerTurns} onValueCommit={(value) => patch({ summaryTriggerTurns: numberOrNull(value) ?? draft.summaryTriggerTurns })} />
-                  </Field>
-                  <Field label={t({ ko: '요약 연결', en: 'Summary connection' })}>
-                    <Select variant="settings" value={draft.summaryProviderName ?? ''} onChange={(event) => patch({ summaryProviderName: event.target.value || null, summaryModel: '' })}>
-                      <option value="">{t({ ko: '대화 모델 그대로', en: 'Same as chat' })}</option>
-                      {llmProviders.map((provider) => <option key={provider.provider_name} value={provider.provider_name}>{provider.display_name}</option>)}
-                    </Select>
-                  </Field>
-                  <Field label={t({ ko: '요약 모델', en: 'Summary model' })}>
-                    <ConnectionModelSelect
-                      value={draft.summaryModel}
-                      models={summaryModels?.models ?? []}
-                      defaultModel={draft.summaryProviderName ? summaryModels?.defaultModel ?? null : null}
-                      emptyLabel={draft.summaryProviderName ? undefined : t({ ko: '대화 모델 그대로', en: 'Same as chat' })}
-                      onChange={(summaryModel) => patch({ summaryModel })}
-                    />
-                  </Field>
-                </div>
-                <Field label={t({ ko: '요약 프롬프트', en: 'Summary prompt' })}>
-                  <Textarea variant="settings" rows={4} value={draft.summaryPrompt} placeholder={defaults?.summaryPrompt} onChange={(event) => patch({ summaryPrompt: event.target.value })} />
-                </Field>
-              </>
+            {summaryOn ? (
+              <Field label={t({ ko: '요약 프롬프트', en: 'Summary prompt' })}>
+                <Textarea variant="settings" rows={4} value={draft.summaryPrompt} placeholder={defaults?.summaryPrompt} onChange={(event) => patch({ summaryPrompt: event.target.value })} />
+              </Field>
             ) : null}
           </>
         ) : (
           <>
-          <div className="grid gap-3 md:grid-cols-2">
-            <Field label={t({ ko: '압축 기준 (토큰)', en: 'Compact at (tokens)' })}>
-              <NumberStepperInput
-                variant="settings"
-                allowEmpty
-                step={8000}
-                min={defaults?.codexCompactTokens.min ?? 48_000}
-                value={draft.contextTokens}
-                placeholder={`${t({ ko: '기본', en: 'Default' })} (${(defaults?.codexCompactTokens.default ?? 64_000).toLocaleString()})`}
-                onValueCommit={(value) => patch({ contextTokens: numberOrNull(value) })}
-              />
-            </Field>
-            {loreFields}
-          </div>
-          {noteField}
+            <div className="grid gap-3 md:grid-cols-2">
+              <Field label={t({ ko: '압축 기준', en: 'Compact at' })} info={t({ ko: '토큰. Codex가 대화를 압축하는 기준.', en: 'In tokens. The size at which Codex compacts the conversation.' })}>
+                <NumberStepperInput
+                  variant="settings"
+                  allowEmpty
+                  step={8000}
+                  min={defaults?.codexCompactTokens.min ?? 48_000}
+                  value={draft.contextTokens}
+                  placeholder={`${t({ ko: '기본', en: 'Default' })} (${(defaults?.codexCompactTokens.default ?? 64_000).toLocaleString()})`}
+                  onValueCommit={(value) => patch({ contextTokens: numberOrNull(value) })}
+                />
+              </Field>
+              {loreFields}
+            </div>
+            {noteField}
           </>
         )}
       </EditorGroup>
