@@ -1,7 +1,7 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { parseBlockEdits } from './chatBlockState'
 import { renderSummary, type ChatSummarySegment } from './chatMemory'
-import { parseMessageRouting, type CodexChatThreadRecord } from './codexChatStore'
+import { parseMessageRouting, type ChatBranchPurpose, type CodexChatThreadRecord } from './codexChatStore'
 
 const BRANCH_TITLE_SUFFIX = ' (분기)'
 const TITLE_MAX_LENGTH = 60
@@ -17,14 +17,15 @@ const COPIED_MESSAGE_COLUMNS = ['role', 'content', 'display_content', 'tool_call
  * A new chat holding `thread` up to and including `untilMessageId`: the messages (with their variants, files and
  * quotes), the hand edits of the display blocks made by then, and the summary segments that end by then — all
  * pointing at the copies' ids. The original chat is not touched. Null when the message is not in the chat.
+ * The branch remembers where it came from and why (`purpose`), so the chat list can group it with the original.
  */
-export function branchChatThread(thread: CodexChatThreadRecord, untilMessageId: number): number | null {
+export function branchChatThread(thread: CodexChatThreadRecord, untilMessageId: number, purpose: ChatBranchPurpose = 'continue'): number | null {
   const db = getUserSettingsDb()
   return db.transaction(() => {
     if (!db.prepare('SELECT 1 FROM codex_chat_messages WHERE thread_id = ? AND id = ?').get(thread.id, untilMessageId)) return null
     const title = `${(thread.title || '새 채팅').slice(0, TITLE_MAX_LENGTH - BRANCH_TITLE_SUFFIX.length)}${BRANCH_TITLE_SUFFIX}`
-    const branchId = Number(db.prepare(`INSERT INTO codex_chat_threads (title, ${COPIED_THREAD_COLUMNS.join(', ')})
-      SELECT ?, ${COPIED_THREAD_COLUMNS.join(', ')} FROM codex_chat_threads WHERE id = ?`).run(title, thread.id).lastInsertRowid)
+    const branchId = Number(db.prepare(`INSERT INTO codex_chat_threads (title, branched_from_thread_id, branched_at_message_id, branch_purpose, ${COPIED_THREAD_COLUMNS.join(', ')})
+      SELECT ?, ?, ?, ?, ${COPIED_THREAD_COLUMNS.join(', ')} FROM codex_chat_threads WHERE id = ?`).run(title, thread.id, untilMessageId, purpose, thread.id).lastInsertRowid)
 
     // Messages in order, so the copies keep it; ids map old → new for everything that points at a message.
     const ids = new Map<number, number>()

@@ -2,25 +2,52 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildr
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread, getCodexChatStatus, interruptCodexChatThread, pickSnapshot, readThreadFlagIds, streamCodexChatMessage, streamChatContinue, streamChatRewrite, type ChatFlag, type ChatMediaAttachment, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread, type CodexChatThread, getCodexChatStatus, interruptCodexChatThread, pickSnapshot, readThreadFlagIds, streamCodexChatMessage, streamChatContinue, streamChatRewrite, type ChatFlag, type ChatMediaAttachment, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { CHAT_STATUS_QUERY_KEY } from '@/lib/api-codex-chat'
 import { summarizeChatError } from './chat-error-chip'
 import type { StoredFileEntry } from '@conai/shared'
 import { getCodexChatThreadMedia } from '@/lib/api-codex-chat'
 import { FILES_QUERY_KEY, uploadStoredFiles } from '@/lib/api-files'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import {
   CODEX_CHAT_THREADS_QUERY_KEY,
   CodexChatContext,
   CodexChatReferenceContext,
   codexChatMediaQueryKey,
   codexChatThreadQueryKey,
+  defaultThreadId,
   type CodexChatApi,
   type CodexChatLiveReply,
   type CodexChatLiveTurn,
   type CodexChatReferenceApi,
   type CodexChatView,
 } from './codex-chat-context'
+
+/** What a chat's composer holds besides its text, kept while another chat is open. */
+type ComposerStash = { attachments: StoredFileEntry[]; media: ChatMediaAttachment[]; reply: CodexChatApi['draftReply']; picks: string[] }
+
+const DRAFTS_STORAGE_PREFIX = 'conai.chat.drafts.'
+
+/** The composer texts saved in this browser for one account (text only: attached files are not kept over a reload). */
+function readStoredDrafts(key: string): Record<number, string> {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) ?? '{}') as unknown
+    if (!parsed || typeof parsed !== 'object') return {}
+    return Object.fromEntries(Object.entries(parsed).filter(([id, text]) => Number.isSafeInteger(Number(id)) && typeof text === 'string' && text).map(([id, text]) => [Number(id), text as string]))
+  } catch {
+    return {}
+  }
+}
+
+function writeStoredDrafts(key: string, drafts: Record<number, string>) {
+  try {
+    if (Object.keys(drafts).length === 0) window.localStorage.removeItem(key)
+    else window.localStorage.setItem(key, JSON.stringify(drafts))
+  } catch {
+    // Storage blocked or full: the drafts last for this page only.
+  }
+}
 
 /**
  * Chat state shared by the side panel and the /chat page, kept above the routes so a reply keeps streaming while the
@@ -33,6 +60,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   const [isPanelOpen, setIsPanelOpen] = useState(false)
   const [view, setView] = useState<CodexChatView>('chat')
   const [selectedThreadId, setSelectedThreadId] = useState<number | null | undefined>(undefined)
+  const selectedRef = useRef(selectedThreadId)
   const [listOpen, setListOpen] = useState(false)
   // What the user is typing, per chat: moving through the list must not carry one chat's text into another.
   const [drafts, setDrafts] = useState<Record<number, string>>({})
@@ -45,6 +73,28 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     delete rest[threadId]
     draftsRef.current = value ? { ...rest, [threadId]: value } : rest
     setDrafts(draftsRef.current)
+  }, [])
+  // Kept in this browser per account, so a reload does not lose them and another account never sees them.
+  const authStatus = useAuthStatusQuery().data
+  const draftsKey = authStatus ? `${DRAFTS_STORAGE_PREFIX}${authStatus.accountId ?? 'local'}` : null
+  const [loadedDraftsKey, setLoadedDraftsKey] = useState<string | null>(null)
+  if (draftsKey !== loadedDraftsKey) {
+    setLoadedDraftsKey(draftsKey)
+    draftsRef.current = draftsKey ? readStoredDrafts(draftsKey) : {}
+    setDrafts(draftsRef.current)
+  }
+  useEffect(() => {
+    if (!loadedDraftsKey) return
+    const timer = window.setTimeout(() => writeStoredDrafts(loadedDraftsKey, drafts), 400)
+    return () => window.clearTimeout(timer)
+  }, [drafts, loadedDraftsKey])
+  /** Drop the texts of chats that are gone. */
+  const keepDrafts = useCallback((threadIds: number[]) => {
+    const live = new Set(threadIds)
+    const kept = Object.fromEntries(Object.entries(draftsRef.current).filter(([id]) => live.has(Number(id))))
+    if (Object.keys(kept).length === Object.keys(draftsRef.current).length) return
+    draftsRef.current = kept
+    setDrafts(kept)
   }, [])
   const [draftReply, updateDraftReply] = useState<CodexChatApi['draftReply']>(null)
   const draftReplyRef = useRef(draftReply)
@@ -71,16 +121,26 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   const attachmentsRef = useRef(draftAttachments)
   const uploadBusyRef = useRef(false)
   const attachmentEpoch = useRef(0)
+  /** Attachments, reply and picks of the chats not open now (see switchComposer). */
+  const stashRef = useRef(new Map<number, ComposerStash>())
   const [liveTurn, setLiveTurn] = useState<CodexChatLiveTurn | null>(null)
   const [messageFocus, setMessageFocus] = useState<CodexChatApi['messageFocus']>(null)
   const [isStartingChat, setIsStartingChat] = useState(false)
   const streamAbortRef = useRef<AbortController | null>(null)
+  /** The chat the stream belongs to: only a message in that same room may cut in. */
+  const streamThreadRef = useRef<number | null>(null)
   /** Settles when the streamed reply has wound down, so a group room message can cut in after it. */
   const activeReplyRef = useRef<Promise<void> | null>(null)
 
   attachmentsRef.current = draftAttachments
   mediaAttachmentsRef.current = draftMediaAttachments
   picksRef.current = picks
+  selectedRef.current = selectedThreadId
+
+  /** The chat the composer belongs to: the selection, `undefined` being the list's first chat (as the view reads it). */
+  const resolveThread = useCallback((selection: number | null | undefined) => (
+    selection === undefined ? defaultThreadId(queryClient.getQueryData<CodexChatThread[]>(CODEX_CHAT_THREADS_QUERY_KEY) ?? []) : selection
+  ), [queryClient])
 
   const togglePick = useCallback((label: string) => setPicks((current) => (current.includes(label) ? current.filter((entry) => entry !== label) : [...current, label].slice(-12))), [])
   const removePick = useCallback((label: string) => setPicks((current) => current.filter((entry) => entry !== label)), [])
@@ -122,12 +182,17 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       showSnackbar({ tone: 'error', message: t({ ko: '첨부파일은 최대 20개까지 가능해.', en: 'Attach up to 20 files.' }) })
       return
     }
-    const epoch = attachmentEpoch.current
+    const startedIn = resolveThread(selectedRef.current)
     uploadBusyRef.current = true
     setAttachmentsUploading(true)
     try {
       const entries = await uploadStoredFiles(null, files)
-      if (attachmentEpoch.current === epoch) addAttachments(entries)
+      // Another chat opened meanwhile: the files wait in the chat they were picked for.
+      if (resolveThread(selectedRef.current) === startedIn) addAttachments(entries)
+      else if (startedIn !== null) {
+        const stash = stashRef.current.get(startedIn) ?? { attachments: [], media: [], reply: null, picks: [] }
+        stashRef.current.set(startedIn, { ...stash, attachments: [...new Map([...stash.attachments, ...entries].map((file) => [file.id, file])).values()] })
+      }
       await queryClient.invalidateQueries({ queryKey: FILES_QUERY_KEY })
     } catch (error) {
       showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '업로드 실패', en: 'Upload failed' })) })
@@ -135,25 +200,52 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       uploadBusyRef.current = false
       setAttachmentsUploading(false)
     }
-  }, [addAttachments, queryClient, showSnackbar, t])
+  }, [addAttachments, queryClient, resolveThread, showSnackbar, t])
 
   const statusQuery = useQuery({ queryKey: CHAT_STATUS_QUERY_KEY, queryFn: getCodexChatStatus, staleTime: 60_000, retry: false })
   const canUse = statusQuery.data?.canUse === true
 
   useEffect(() => () => streamAbortRef.current?.abort(), [])
 
-  const selectThread = useCallback((threadId: number | null | undefined) => {
-    setDraftReply(null)
+  /**
+   * Moving to another chat puts the composer's attachments, reply and picks aside for the chat being left and brings
+   * back what the next one had (its text is kept per chat already). Staying in the same chat keeps them as they are.
+   */
+  const switchComposer = useCallback((next: number | null | undefined) => {
+    const from = resolveThread(selectedRef.current)
+    const to = resolveThread(next)
+    selectedRef.current = next
+    setSelectedThreadId(next)
+    if (from === to) return
+    if (from !== null) {
+      const stash = { attachments: attachmentsRef.current, media: mediaAttachmentsRef.current, reply: draftReplyRef.current, picks: picksRef.current }
+      if (stash.attachments.length || stash.media.length || stash.reply || stash.picks.length) stashRef.current.set(from, stash)
+      else stashRef.current.delete(from)
+    }
+    const restored = to !== null ? stashRef.current.get(to) : undefined
+    if (to !== null) stashRef.current.delete(to)
     attachmentEpoch.current += 1
-    attachmentsRef.current = []
-    setDraftAttachments([])
-    mediaAttachmentsRef.current = []
-    setDraftMediaAttachments([])
-    setPicks([])
+    attachmentsRef.current = restored?.attachments ?? []
+    setDraftAttachments(attachmentsRef.current)
+    mediaAttachmentsRef.current = restored?.media ?? []
+    setDraftMediaAttachments(mediaAttachmentsRef.current)
+    setDraftReply(restored?.reply ?? null)
+    picksRef.current = restored?.picks ?? []
+    setPicks(picksRef.current)
+  }, [resolveThread, setDraftReply])
+
+  /** "The latest chat" becomes that chat once the list is known, so later list changes never swap the open chat. */
+  const settleSelection = useCallback((threadId: number) => {
+    if (selectedRef.current !== undefined) return
+    selectedRef.current = threadId
     setSelectedThreadId(threadId)
+  }, [])
+
+  const selectThread = useCallback((threadId: number | null | undefined) => {
+    switchComposer(threadId)
     setListOpen(false)
     setView('chat')
-  }, [setDraftReply])
+  }, [switchComposer])
 
   const showList = useCallback((open: boolean) => {
     setListOpen(open)
@@ -167,21 +259,15 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
       // The new chat starts from the default appearance slot, copied on the server.
       void queryClient.invalidateQueries({ queryKey: CHAT_APPEARANCE_QUERY_KEY })
-      setSelectedThreadId(thread.id)
+      switchComposer(thread.id)
       setListOpen(false)
-      setDraftReply(null)
-      attachmentEpoch.current += 1
-      attachmentsRef.current = []
-      setDraftAttachments([])
-      mediaAttachmentsRef.current = []
-      setDraftMediaAttachments([])
       setView('chat')
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '채팅을 만들지 못했어.', en: 'Could not start a chat.' })), tone: 'error' })
     } finally {
       setIsStartingChat(false)
     }
-  }, [queryClient, showSnackbar, t, setDraftReply])
+  }, [queryClient, showSnackbar, t, switchComposer])
 
   const reply = useCallback(async (threadId: number, rewrite?: { messageId: number; content?: string; continue?: boolean }, literalText?: string) => {
     const replyingTo = !rewrite && draftReplyRef.current?.threadId === threadId ? draftReplyRef.current : null
@@ -202,7 +288,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     if (streamAbortRef.current) {
       // In a group room the user may cut in: the server stops the room's reply when the new message arrives, so stop
       // reading the old stream and let it wind down first.
-      if (!isGroup || rewrite) return false
+      if (!isGroup || rewrite || streamThreadRef.current !== threadId) return false
       streamAbortRef.current.abort()
       await activeReplyRef.current
       if (streamAbortRef.current) return false
@@ -213,6 +299,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     const sentThreadId = threadId
     const controller = new AbortController()
     streamAbortRef.current = controller
+    streamThreadRef.current = sentThreadId
     if (!rewrite) {
       setDraftReply(null)
       setDraft(sentThreadId, '')
@@ -348,6 +435,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       ])
       if (streamAbortRef.current === controller) {
         streamAbortRef.current = null
+        streamThreadRef.current = null
         setLiveTurn(null)
       }
       settle()
@@ -384,12 +472,14 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     setView,
     selectedThreadId,
     selectThread,
+    settleSelection,
     listOpen,
     setListOpen: showList,
     startChat,
     isStartingChat,
     drafts,
     setDraft,
+    keepDrafts,
     picks,
     togglePick,
     removePick,
@@ -411,7 +501,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     messageFocus,
     focusMessage,
     clearMessageFocus,
-  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, drafts, setDraft, focusMessage, isPanelOpen, isStartingChat, liveTurn, messageFocus, openPanel, picks, togglePick, removePick, selectThread, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, startChat, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
+  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, drafts, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, liveTurn, messageFocus, openPanel, picks, togglePick, removePick, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, startChat, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
 
   const referenceApi = useMemo<CodexChatReferenceApi>(() => ({ draftMediaAttachments, toggleMediaAttachment, focusMessage }), [draftMediaAttachments, toggleMediaAttachment, focusMessage])
 

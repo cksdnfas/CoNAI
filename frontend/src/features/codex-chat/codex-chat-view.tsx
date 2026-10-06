@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
-import { Activity, ArrowLeft, ArrowUp, Archive, Download, Eraser, Flag, LayoutGrid, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, UserRound, X } from 'lucide-react'
+import { Activity, ArrowLeft, ArrowUp, Download, Eraser, Flag, FoldVertical, LayoutGrid, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, UserRound, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -34,12 +34,14 @@ import {
   updateCodexChatThreadContext,
   readThreadFlagIds,
   setChatThreadFlags,
+  updateChatListState,
   type ChatEmoticon,
   type ChatSearchResult,
   type ChatProfileSummary,
   type CodexChatMessage,
   type ChatBlocksState,
   type ChatDisplayBlock,
+  type CodexChatThread,
   type CodexChatThreadDetail,
   type LoreMergePreview,
   type OwnedChatLorebook,
@@ -54,7 +56,7 @@ import { ChatBlockChangesContext, type BlockAction } from './chat-display-block'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatStatusAside, ChatStatusFloating, ChatStatusStrip, useStatusPanelLayout, type ChatStatusBlock, type ChatStatusData } from './chat-status-panel'
 import { ChatProfilePicker } from './chat-profile-picker'
-import { ChatThreadList } from './chat-thread-list'
+import { ChatThreadList, type ChatListPatch } from './chat-thread-list'
 import { ChatAttachButton, ChatDraftAttachments } from './chat-attachments'
 import { ChatFlagButton, ChatFlagManagerModal, ChatFlagTray, useChatFlags } from './chat-flags'
 import { ChatSuggestButton, ChatSuggestTray, useReplySuggestions } from './chat-suggestions'
@@ -63,6 +65,7 @@ import {
   CODEX_CHAT_THREADS_QUERY_KEY,
   codexChatMediaQueryKey,
   codexChatThreadQueryKey,
+  defaultThreadId,
   useCodexChat,
   type CodexChatApi,
 } from './codex-chat-context'
@@ -91,6 +94,12 @@ const MESSAGE_FLASH_MS = 1600
 const MESSAGE_PAGE_SIZE = 80
 /** Messages a poll fetches; the rest come from the copy already loaded. */
 const POLL_TAIL_MESSAGES = 40
+
+/** Where each chat was left when read part-way up (absent: at the latest message), for coming back to it. */
+const readingPositions = new Map<number, number>()
+/** The chat list screen's scroll, kept while a chat covers it. */
+let chatListScrollTop = 0
+const restoreChatListScroll = (node: HTMLDivElement | null) => { if (node) node.scrollTop = chatListScrollTop }
 
 /** Stable, so useQueries keeps the combined result until a query changes. */
 const pickEmoticonData = (results: UseQueryResult<ChatEmoticon[]>[]) => results.map((result) => result.data)
@@ -202,9 +211,21 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     else await startWith(profileIds)
   }, [startWith, userProfiles])
 
-  const threadsQuery = useQuery({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY, queryFn: listCodexChatThreads })
+  const threadsQuery = useQuery({
+    queryKey: CODEX_CHAT_THREADS_QUERY_KEY,
+    queryFn: listCodexChatThreads,
+    // A reply this tab is not streaming (another tab, or started before a reload): watch for it to end.
+    refetchInterval: (query) => (query.state.data?.some((entry) => entry.running && entry.id !== liveTurn?.threadId) ? RUNNING_POLL_MS * 2 : false),
+  })
   const threads = useMemo(() => threadsQuery.data ?? [], [threadsQuery.data])
-  const activeThreadId = selectedThreadId === undefined ? threads[0]?.id ?? null : selectedThreadId
+  const activeThreadId = selectedThreadId === undefined ? defaultThreadId(threads) : selectedThreadId
+  const { keepDrafts, settleSelection } = chat
+  useEffect(() => {
+    if (selectedThreadId === undefined && activeThreadId !== null) settleSelection(activeThreadId)
+  }, [activeThreadId, selectedThreadId, settleSelection])
+  useEffect(() => {
+    if (threadsQuery.data) keepDrafts(threadsQuery.data.map((entry) => entry.id))
+  }, [keepDrafts, threadsQuery.data])
   const activeThread = threads.find((thread) => thread.id === activeThreadId) ?? null
   const draft = activeThreadId !== null ? chat.drafts[activeThreadId] ?? '' : ''
   const setChatDraft = chat.setDraft
@@ -299,8 +320,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const codexStatusQuery = useQuery({ queryKey: ['codex-generation-status'], queryFn: getCodexGenerationStatus, staleTime: 30_000, enabled: isCodexThread && thread !== null })
   const codexStatus = codexStatusQuery.data?.data ?? null
 
+  // One reply streams at a time. A stream in another chat still blocks sending and rewriting here (isBusy), but only
+  // this chat's own reply makes it "replying" (the stop button, its server state).
   const isStreaming = liveTurn !== null
-  const serverRunning = Boolean(threadQuery.data?.running) && !isStreaming
+  const streamingHere = liveTurn?.threadId === activeThreadId
+  const serverRunning = Boolean(threadQuery.data?.running) && !streamingHere
   const alternativeMutation = useMutation({
     mutationFn: ({ id, index }: { id: number; index: number }) => selectChatAlternative(activeThreadId as number, id, index),
     onSuccess: async (detail) => {
@@ -350,7 +374,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       if (!await confirm({ title: t({ ko: '메시지 수정', en: 'Edit message' }), description: t({ ko: '이 메시지 뒤의 대화를 지우고 다시 답할까? 지금까지의 대화는 분기로 남겨둘게.', en: 'Remove the following conversation and answer again? The chat as it is now is kept as a branch.' }), confirmLabel: t({ ko: '수정', en: 'Edit' }), tone: 'destructive' })) return false
       const last = messages[messages.length - 1]
       try {
-        if (last) await branchCodexChatThread(activeThreadId, last.id)
+        if (last) await branchCodexChatThread(activeThreadId, last.id, 'preserve')
         void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
       } catch (error) {
         showSnackbar({ message: getErrorMessage(error, t({ ko: '분기를 남기지 못해서 수정하지 않았어.', en: 'Could not keep a branch, so nothing was edited.' })), tone: 'error' })
@@ -526,10 +550,17 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   }, [])
 
   useLayoutEffect(() => {
-    followBottomRef.current = true
     setEditingMessageId(null)
     prependHeightRef.current = null
-    scrollToBottom()
+    // Back in a chat left part-way up: where the reader was; otherwise the latest message.
+    const saved = activeThreadId !== null ? readingPositions.get(activeThreadId) : undefined
+    if (saved !== undefined && scrollRef.current) {
+      followBottomRef.current = false
+      scrollRef.current.scrollTop = saved
+    } else {
+      followBottomRef.current = true
+      scrollToBottom()
+    }
   }, [activeThreadId, isTranscript, scrollToBottom])
 
   const showEarlierMessages = () => {
@@ -593,7 +624,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const showCommands = isCommand && !/\s/.test(draft) && dismissedCommand !== draft && matchingCommands.length > 0
   const selectedCommand = Math.min(commandIndex, matchingCommands.length - 1)
   // Group rooms: the user may cut in while members are still answering.
-  const sendBlocked = isGroup ? alternativeMutation.isPending || commandPending || (isCommand && isBusy) : isBusy
+  const sendBlocked = isGroup ? alternativeMutation.isPending || commandPending || (isCommand && isBusy) || (isStreaming && !streamingHere) : isBusy
   const canSend = activeThreadId !== null && (Boolean(draft.trim()) || chat.draftAttachments.length > 0 || chat.draftMediaAttachments.length > 0 || picks.length > 0) && !chat.attachmentsUploading && !sendBlocked && (isCommand || (!profileMissing && !codexUnavailable))
   const mentionQuery = isGroup && !isCommand ? mentionQueryAt(draft, caret) : null
   const mentionMatches = mentionQuery ? mentionOptions(mentionQuery.query, memberProfiles, group?.representativeId ?? null) : []
@@ -746,16 +777,37 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const pickGroup = (profileIds: number[]) => void beginChat(profileIds)
 
   // "+" opens the profile picker, which lists the most recently used profiles first.
-  const newChatButton = <IconButton variant="ghost" size="icon-sm" disabled={isBusy || isStartingChat} onClick={() => selectThread(null)} label={t({ ko: '새 채팅', en: 'New chat' })}><Plus /></IconButton>
+  const newChatButton = <IconButton variant="ghost" size="icon-sm" disabled={isStartingChat} onClick={() => selectThread(null)} label={t({ ko: '새 채팅', en: 'New chat' })}><Plus /></IconButton>
   const backButton = canOpenList ? <IconButton variant="ghost" size="icon-sm" onClick={() => setListOpen(true)} label={t({ ko: '채팅 목록', en: 'Chats' })}><ArrowLeft /></IconButton> : null
   const openThread = (threadId: number) => (threadId === activeThreadId ? setListOpen(false) : selectThread(threadId))
-  const runningThreadIds = new Set<number>([...(liveTurn ? [liveTurn.threadId] : []), ...(serverRunning && activeThreadId !== null ? [activeThreadId] : [])])
+  const runningThreadIds = new Set<number>([
+    ...threads.filter((entry) => entry.running).map((entry) => entry.id),
+    ...(liveTurn ? [liveTurn.threadId] : []),
+    ...(serverRunning && activeThreadId !== null ? [activeThreadId] : []),
+  ])
+  // Pin, archive and rename show at once; the server's answer (or a refetch on failure) settles it.
+  const updateListEntry = (threadId: number, patch: ChatListPatch) => {
+    const apply = (entry: CodexChatThread) => entry.id !== threadId ? entry : {
+      ...entry,
+      ...(patch.title !== undefined ? { title: patch.title } : {}),
+      ...(patch.pinned !== undefined ? { pinned: patch.pinned ? 1 as const : 0 as const } : {}),
+      ...(patch.archived !== undefined ? { archived: patch.archived ? 1 as const : 0 as const } : {}),
+    }
+    queryClient.setQueryData<CodexChatThread[]>(CODEX_CHAT_THREADS_QUERY_KEY, (current) => current?.map(apply))
+    queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(threadId), (current) => current ? { ...current, thread: apply(current.thread) } : current)
+    updateChatListState(threadId, patch).catch((error: unknown) => {
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '채팅을 바꾸지 못했어.', en: 'Could not change the chat.' })), tone: 'error' })
+    }).finally(() => {
+      void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+      void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(threadId) })
+    })
+  }
   const threadList = (dense: boolean) => <>
     <div className={dense ? 'px-2 pb-2' : 'px-3 pb-2 pt-3'}><ChatSearchInput value={searchText} onChange={setSearchText} /></div>
-    <div className={cn('min-h-0 flex-1 overflow-y-auto', !dense && 'px-1')}>
+    <div ref={dense ? undefined : restoreChatListScroll} onScroll={dense ? undefined : (event) => { chatListScrollTop = event.currentTarget.scrollTop }} className={cn('min-h-0 flex-1 overflow-y-auto', !dense && 'px-1')}>
       {searchText.trim()
-        ? <ChatSearchResults query={searchText} disabled={isBusy} onPick={pickSearchResult} />
-        : <ChatThreadList threads={threads} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} disabled={isBusy} dense={dense} onSelect={openThread} />}
+        ? <ChatSearchResults query={searchText} disabled={false} onPick={pickSearchResult} />
+        : <ChatThreadList threads={threads} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} drafts={chat.drafts} dense={dense} onSelect={openThread} onUpdate={updateListEntry} />}
     </div>
   </>
   const chatMenu = <ChatAppearancePopover threadId={activeThreadId} style={profile?.style} layout={layout} open={appearanceOpen} onOpenChange={setAppearanceOpen}><span className="inline-flex"><DropdownMenu>
@@ -770,7 +822,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       <DropdownMenuItem onSelect={() => setUserProfileManagerOpen(true)}><UserRound />{t({ ko: '사용자 프로필', en: 'User profiles' })}</DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/clear')}><Eraser />{t({ ko: '대화 비우기', en: 'Clear chat' })}</DropdownMenuItem>
-      {isGroup ? null : <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/compact')}><Archive />{t({ ko: '압축', en: 'Compact' })}</DropdownMenuItem>}
+      {isGroup ? null : <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/compact')}><FoldVertical />{t({ ko: '압축', en: 'Compact' })}</DropdownMenuItem>}
       <DropdownMenuItem onSelect={() => setExportOpen(true)}><Download />{t({ ko: '내보내기', en: 'Export' })}</DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem disabled={isBusy || deleteMutation.isPending} onSelect={() => void handleDelete()} className="text-destructive"><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
@@ -802,6 +854,10 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     <ChatBlockChangesContext.Provider value={blockChanges}><div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto" onScroll={(event) => {
       const node = event.currentTarget
       followBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100
+      if (activeThreadId !== null) {
+        if (followBottomRef.current) readingPositions.delete(activeThreadId)
+        else readingPositions.set(activeThreadId, node.scrollTop)
+      }
       if (node.scrollTop < 80) showEarlierMessages()
     }}>
       <div className={cn('mx-auto flex flex-col pb-6', layout === 'page' ? cn(CHAT_WIDTH_CLASS[appearance.width], 'px-4 pt-2 sm:px-6') : 'px-4 pt-3')} style={{ ...chatTranscriptStyle(appearance, profile?.style), gap: `${CHAT_MESSAGE_GAP_PX[appearance.messageGap]}px` }}>
@@ -909,7 +965,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           aria-activedescendant={showCommands ? `${commandListId}-${selectedCommand}` : showMentions ? `${mentionListId}-${selectedMention}` : undefined}
           className="block min-h-0 flex-1 resize-none bg-transparent py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
         />
-        {isBusy && !(isGroup && canSend) ? (
+        {(streamingHere || serverRunning) && !(isGroup && canSend) ? (
           <IconButton variant="secondary" size="icon-sm" className="rounded-full" onClick={() => activeThreadId !== null && chat.stop(activeThreadId)} label={t({ ko: '중단', en: 'Stop' })}>
             <Square />
           </IconButton>
@@ -977,7 +1033,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     ) : null}
     <GroupInviteDialog open={invite !== null} mode={invite} profiles={profiles} userProfiles={userProfiles} onClose={() => setInvite(null)} onCreated={(threadId) => selectThread(threadId)} />
     <Modal open={searchOpen} onClose={() => setSearchOpen(false)} title={t({ ko: '채팅 검색', en: 'Search chats' })} widthClassName="max-w-lg">
-      <ModalBody><ChatSearchInput value={searchText} onChange={setSearchText} /><ChatSearchResults query={searchText} disabled={isBusy} onPick={pickSearchResult} /></ModalBody>
+      <ModalBody><ChatSearchInput value={searchText} onChange={setSearchText} /><ChatSearchResults query={searchText} disabled={false} onPick={pickSearchResult} /></ModalBody>
     </Modal>
   </>
 

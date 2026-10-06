@@ -34,7 +34,7 @@ import { ChatGroupStore } from './chatGroupStore'
 import { buildFlagDirective, ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { ChatUserProfileStore, userPersonaForThread, userPersonaOf, userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
-import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
+import { CodexChatStore, type ChatBranchPurpose, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import { ChatSummaryStore } from './chatMemory'
 import { branchChatThread } from './chatBranch'
 import { logger } from '../../utils/logger'
@@ -918,16 +918,23 @@ export const CodexChatService = {
    * A new chat holding this one up to `messageId`; this one stays as it is. A Codex chat's branch starts a new Codex
    * thread, which is told the past once (see codexHistoryRecap).
    */
-  branchThread(requester: McpRequester, threadId: number, messageId: number) {
+  branchThread(requester: McpRequester, threadId: number, messageId: number, purpose?: ChatBranchPurpose) {
     const thread = requireThread(requester, threadId)
     if (thread.kind !== 'direct') throw new CodexChatError('그룹 방 분기는 방 기능으로 처리해.', 409)
-    const id = branchChatThread(thread, messageId)
+    const id = branchChatThread(thread, messageId, purpose)
     if (id === null) throw new CodexChatError('메시지를 찾을 수 없어.', 404)
     return requireThread(requester, id)
   },
 
   listThreads(requester: McpRequester) {
     return CodexChatStore.listThreads(requester.accountId)
+  },
+
+  /** Pin, archive or rename a chat (any kind) of the requester's from the chat list. */
+  updateListState(requester: McpRequester, threadId: number, patch: { title?: string; pinned?: boolean; archived?: boolean }) {
+    requireThread(requester, threadId)
+    CodexChatStore.updateListState(threadId, patch)
+    return requireThread(requester, threadId)
   },
 
   /**

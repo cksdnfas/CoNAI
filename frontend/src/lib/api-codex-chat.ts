@@ -486,9 +486,23 @@ export interface CodexChatThread {
   user_profile_id?: number | null
   /** LLM chats: why the last background summary failed; null once one succeeds. */
   summary_error?: string | null
+  /** The chat list: shown first / kept in the archive instead of the list. */
+  pinned?: 0 | 1
+  archived?: 0 | 1
+  /** Branches: the chat and message copied from, and why (null on older branches and other chats). */
+  branched_from_thread_id?: number | null
+  branched_at_message_id?: number | null
+  branch_purpose?: ChatBranchPurpose | null
+  /** Chat lists: the latest message as one plain line (text empty when it was only files or images). */
+  preview?: { text: string; role: 'user' | 'assistant'; media: boolean; files: boolean } | null
+  /** Chat lists: a reply is on its way (in any tab, or one started before a reload). */
+  running?: boolean
   created_date: string
   updated_date: string
 }
+
+/** `preserve`: the chat as it was before an edit rewrote it; `continue`: branched to go on from that point. */
+export type ChatBranchPurpose = 'preserve' | 'continue'
 
 /**
  * One stretch of an LLM chat's summary: level 0 summarizes messages from..until; level 1 is the plot the older
@@ -1151,8 +1165,13 @@ export function editChatReplyText(threadId: number, messageId: number, content: 
 }
 
 /** A new chat holding this one up to the message (API LLM direct chats). */
-export function branchCodexChatThread(threadId: number, messageId: number) {
-  return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/messages/${messageId}/branch`, { method: 'POST' })
+export function branchCodexChatThread(threadId: number, messageId: number, purpose: ChatBranchPurpose = 'continue') {
+  return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/messages/${messageId}/branch`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ purpose }) })
+}
+
+/** Pin, archive or rename a chat from the chat list. */
+export function updateChatListState(threadId: number, patch: { title?: string; pinned?: boolean; archived?: boolean }) {
+  return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/list`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
 export function streamChatRewrite(threadId: number, messageId: number, content: string | undefined, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal) {

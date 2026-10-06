@@ -640,6 +640,14 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['summary_error', 'TEXT'],
     // JSON ids of the account lorebooks linked to this chat only (the owner's own books).
     ['lorebook_ids', 'TEXT'],
+    // The chat list: pinned chats come first; archived ones leave the list for the archive (nothing is deleted).
+    ['pinned', 'INTEGER NOT NULL DEFAULT 0'],
+    ['archived', 'INTEGER NOT NULL DEFAULT 0'],
+    // A branch: the chat and message it was copied from, and why ('preserve': kept before an edit rewrote the
+    // original; 'continue': branched to go on from there). Null on chats that are no branch, or older branches.
+    ['branched_from_thread_id', 'INTEGER'],
+    ['branched_at_message_id', 'INTEGER'],
+    ['branch_purpose', 'TEXT'],
   ];
   for (const [columnName, definition] of codexChatThreadColumns) {
     if (!hasColumn('codex_chat_threads', columnName)) {

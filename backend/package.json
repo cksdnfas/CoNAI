@@ -7,7 +7,7 @@
     "dev": "nodemon --watch src --ext ts,json --ignore 'database/**' --ignore 'uploads/**' --ignore '**/*.db' --signal SIGTERM --exec tsx src/index.ts",
     "build": "tsc && npm run copy:migrations",
     "typecheck": "tsc --noEmit",
-    "test:chat": "tsx --test test/chat-regressions.test.ts test/chat-replies.test.ts test/chat-translation.test.ts test/chat-suggestions.test.ts test/chat-model-slots.test.ts test/chat-proposals.test.ts test/chat-memory.test.ts test/chatContextLayout.test.ts test/chatSummaryFold.test.ts test/chat-group-memory.test.ts test/chat-review-items.test.ts test/chat-lorebook-files.test.ts test/chat-lore-context.test.ts test/chat-lorebook-merge.test.ts",
+    "test:chat": "tsx --test test/chat-regressions.test.ts test/chat-replies.test.ts test/chat-translation.test.ts test/chat-suggestions.test.ts test/chat-model-slots.test.ts test/chat-proposals.test.ts test/chat-memory.test.ts test/chatContextLayout.test.ts test/chatSummaryFold.test.ts test/chat-group-memory.test.ts test/chat-review-items.test.ts test/chat-lorebook-files.test.ts test/chat-lore-context.test.ts test/chat-lorebook-merge.test.ts test/chat-thread-list.test.ts",
     "test:queue": "tsx --test test/queueInputBackfill.test.ts",
     "copy:migrations": "copyfiles -u 1 \"src/database/migrations/**/*.sql\" dist/",
     "start": "node dist/backend/src/index.js",

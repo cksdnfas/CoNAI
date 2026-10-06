@@ -16,7 +16,7 @@ import { ChatUserProfileStore, userPersonaForThread, type ChatUserProfile } from
 import { loadChatSettings } from './chatSettings'
 import { resolveChatAccess } from './codexChatAccess'
 import { CodexChatError, CodexChatService, deleteCodexRollout, runCodexGroupReply, type CodexChatStreamEvent } from './codexChatService'
-import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
+import { CodexChatStore, type ChatBranchPurpose, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import { buildGroupCodexInput, buildGroupLlmMessages, groupSummaryOn, parseMentions, resolveMemberName, trimForeignSpeakerLines } from './groupChatContext'
 import { CHAT_ROOM_TOOLS } from '../../mcp/context'
 import { flagDirectiveFor, postHistoryText, groupSummarizer, sendableMessages, summarizeGroupAhead, summarizeGroupAll } from './llmChatContext'
@@ -516,9 +516,9 @@ export const GroupChatService = {
   },
 
   /** A new room holding this one up to `messageId`, with the same members; this one stays as it is. */
-  branchThread(requester: McpRequester, threadId: number, messageId: number) {
+  branchThread(requester: McpRequester, threadId: number, messageId: number, purpose?: ChatBranchPurpose) {
     const thread = requireGroup(requester, threadId)
-    const id = branchChatThread(thread, messageId)
+    const id = branchChatThread(thread, messageId, purpose)
     if (id === null) throw new CodexChatError('메시지를 찾을 수 없어.', 404)
     return requireGroup(requester, id)
   },

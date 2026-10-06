@@ -15,6 +15,11 @@ export function codexChatMediaQueryKey(threadId: number | null) {
 
 export type CodexChatView = 'chat' | 'gallery' | 'context'
 
+/** The chat opened when none is chosen: the latest one in the list (archived chats only when nothing else is left). */
+export function defaultThreadId(threads: Array<{ id: number; archived?: 0 | 1 }>) {
+  return (threads.find((thread) => !thread.archived) ?? threads[0])?.id ?? null
+}
+
 /** One group member's reply while it streams. */
 export type CodexChatLiveReply = {
   routing?: ChatMessageRouting
@@ -64,6 +69,8 @@ export interface CodexChatApi {
   selectedThreadId: number | null | undefined
   /** Opening a chat (or the profile picker, `null`) also leaves the chat list. */
   selectThread: (threadId: number | null | undefined) => void
+  /** Fix "the latest chat" (`undefined`) to this chat, without the side effects of selecting it. */
+  settleSelection: (threadId: number) => void
   /** The narrow layouts (panel, phone-width page) show the chat list instead of a chat; the selection stays. */
   listOpen: boolean
   /** Also returns from the gallery or context to the chat. */
@@ -75,6 +82,8 @@ export interface CodexChatApi {
   /** The composer text of each chat (chats without one are left out). */
   drafts: Record<number, string>
   setDraft: (threadId: number, draft: string | ((current: string) => string)) => void
+  /** Forget the texts of chats not among these (deleted elsewhere). */
+  keepDrafts: (threadIds: number[]) => void
   /** Items chosen in the status panel (`data-pick`), sent with the next message. */
   picks: string[]
   togglePick: (label: string) => void

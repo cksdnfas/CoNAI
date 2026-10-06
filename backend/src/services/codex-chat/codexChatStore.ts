@@ -57,8 +57,37 @@ export type CodexChatThreadRecord = {
   lorebook_ids: string | null
   /** Why the last background summary failed; null once one succeeds. */
   summary_error: string | null
+  /** The chat list: shown first / kept out of the list (in the archive). */
+  pinned: 0 | 1
+  archived: 0 | 1
+  /** Branches: the chat and message copied from, and why (null on older branches and other chats). */
+  branched_from_thread_id: number | null
+  branched_at_message_id: number | null
+  branch_purpose: ChatBranchPurpose | null
   created_date: string
   updated_date: string
+}
+
+/** `preserve`: the chat as it was before an edit rewrote it; `continue`: branched to go on from that point. */
+export type ChatBranchPurpose = 'preserve' | 'continue'
+
+/** The chat list's line under a title: the latest message, flattened to plain text. */
+export type ChatThreadPreview = { text: string; role: 'user' | 'assistant'; media: boolean; files: boolean }
+
+const PREVIEW_MAX_LENGTH = 120
+
+/** A message as one plain line: no fenced blocks (display blocks, code), reasoning, tags or markdown marks. */
+export function previewText(content: string) {
+  return content
+    .replace(/```[\s\S]*?(```|$)/g, ' ')
+    .replace(/<think>[\s\S]*?(<\/think>|$)/gi, ' ')
+    .replace(/<[^>\n]+>/g, ' ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[*_~`#>|]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, PREVIEW_MAX_LENGTH)
 }
 
 export type CodexChatMessageRecord = {
@@ -175,6 +204,29 @@ export const CodexChatStore = {
     `).all(query, query, query, accountId, query, query) as Array<{ messageId: number; threadId: number; title: string; profileId: number | null; role: 'user' | 'assistant'; createdDate: string; excerpt: string }>
   },
 
+  /** The latest message of each chat as a list preview (text empty when it was only files or images). */
+  listPreviews(threadIds: number[]) {
+    const previews = new Map<number, ChatThreadPreview>()
+    if (threadIds.length === 0) return previews
+    const rows = getUserSettingsDb().prepare(`
+      SELECT m.thread_id, m.role, COALESCE(NULLIF(m.display_content, ''), m.content) AS content,
+        (m.media_attachments IS NOT NULL AND m.media_attachments NOT IN ('', '[]')) AS media,
+        EXISTS (SELECT 1 FROM chat_file_attachments f WHERE f.message_id = m.id) AS files
+      FROM codex_chat_messages m
+      WHERE m.id IN (SELECT MAX(id) FROM codex_chat_messages WHERE thread_id IN (${threadIds.map(() => '?').join(', ')}) GROUP BY thread_id)
+    `).all(...threadIds) as Array<{ thread_id: number; role: 'user' | 'assistant'; content: string; media: number; files: number }>
+    for (const row of rows) previews.set(row.thread_id, { text: previewText(row.content), role: row.role, media: row.media === 1, files: row.files === 1 })
+    return previews
+  },
+
+  /** Pin, archive or rename a chat from the chat list (rename keeps its place: the list sorts by activity). */
+  updateListState(threadId: number, patch: { title?: string; pinned?: boolean; archived?: boolean }) {
+    const db = getUserSettingsDb()
+    if (patch.title !== undefined) db.prepare('UPDATE codex_chat_threads SET title = ? WHERE id = ?').run(patch.title.slice(0, TITLE_MAX_LENGTH), threadId)
+    if (patch.pinned !== undefined) db.prepare('UPDATE codex_chat_threads SET pinned = ? WHERE id = ?').run(patch.pinned ? 1 : 0, threadId)
+    if (patch.archived !== undefined) db.prepare('UPDATE codex_chat_threads SET archived = ? WHERE id = ?').run(patch.archived ? 1 : 0, threadId)
+  },
+
   listThreads(accountId: number | null) {
     return getUserSettingsDb().prepare(`
       SELECT * FROM codex_chat_threads WHERE account_id IS ? ORDER BY updated_date DESC, id DESC
@@ -276,6 +328,8 @@ export const CodexChatStore = {
       db.prepare('DELETE FROM chat_group_members WHERE thread_id = ?').run(threadId)
       ChatSummaryStore.clear(threadId)
       ChatProposalStore.deleteForThread(threadId)
+      // Its branches stay, as chats of their own.
+      db.prepare('UPDATE codex_chat_threads SET branched_from_thread_id = NULL, branched_at_message_id = NULL WHERE branched_from_thread_id = ?').run(threadId)
       db.prepare('DELETE FROM codex_chat_threads WHERE id = ?').run(threadId)
     })()
     try {

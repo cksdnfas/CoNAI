@@ -235,7 +235,37 @@ router.get('/assets/:name', requireChatAccess, asyncHandler(async (req: Request,
 router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
   const threads = CodexChatService.listThreads(requesterFrom(req))
   const members = ChatGroupStore.memberIdsByThread(threads.filter((thread) => thread.kind === 'group').map((thread) => thread.id))
-  res.json({ success: true, data: threads.map((thread) => thread.kind === 'group' ? { ...thread, member_profile_ids: members.get(thread.id) ?? [] } : thread) })
+  const previews = CodexChatStore.listPreviews(threads.map((thread) => thread.id))
+  res.json({ success: true, data: threads.map((thread) => ({
+    ...thread,
+    ...(thread.kind === 'group' ? { member_profile_ids: members.get(thread.id) ?? [] } : {}),
+    preview: previews.get(thread.id) ?? null,
+    // A reply on its way (this or another tab, or one started before a reload).
+    running: CodexChatService.isRunning(thread.id) || GroupChatService.isRunning(thread.id),
+  })) })
+})
+
+/** PATCH /api/codex-chat/threads/:threadId/list — `{ title?, pinned?, archived? }`: the chat's place in the chat list. */
+router.patch('/threads/:threadId/list', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  const body = (req.body ?? {}) as Record<string, unknown>
+  const patch: { title?: string; pinned?: boolean; archived?: boolean } = {}
+  if (body.title !== undefined) {
+    const title = typeof body.title === 'string' ? body.title.replace(/\s+/g, ' ').trim() : ''
+    if (!title) { sendRouteBadRequest(res, 'title must be a non-empty string'); return }
+    patch.title = title
+  }
+  for (const key of ['pinned', 'archived'] as const) {
+    if (body[key] === undefined) continue
+    if (typeof body[key] !== 'boolean') { sendRouteBadRequest(res, `${key} must be a boolean`); return }
+    patch[key] = body[key] as boolean
+  }
+  try {
+    res.json({ success: true, data: CodexChatService.updateListState(requesterFrom(req), threadId, patch) })
+  } catch (error) {
+    sendChatError(res, error)
+  }
 })
 
 /**
@@ -1323,7 +1353,8 @@ router.post('/threads/:threadId/messages/:messageId/branch', requireChatAccess, 
   if (threadId === null) return
   if (messageId === null) { sendRouteBadRequest(res, '메시지를 확인해줘.'); return }
   try {
-    const branch = isGroupThread(req, threadId) ? GroupChatService.branchThread(requesterFrom(req), threadId, messageId) : CodexChatService.branchThread(requesterFrom(req), threadId, messageId)
+    const purpose = req.body?.purpose === 'preserve' ? 'preserve' : 'continue'
+    const branch = isGroupThread(req, threadId) ? GroupChatService.branchThread(requesterFrom(req), threadId, messageId, purpose) : CodexChatService.branchThread(requesterFrom(req), threadId, messageId, purpose)
     ChatAppearanceStore.threadCreated(getRequesterAccountId(req), branch.id)
     res.status(201).json({ success: true, data: branch })
   } catch (error) { sendChatError(res, error) }
