@@ -591,11 +591,14 @@ export const OwnedLorebookStore = {
 
   /**
    * Keep a chat's book as an account book: its folder moves from 로어북/채팅/ to 로어북/ (a name taken in either place
-   * gets a ` (2)`-style suffix) and the book stops belonging to the chat.
+   * gets a ` (2)`-style suffix) and the book stops belonging to the chat. `link`: the chat keeps using it, as an
+   * account book linked to this chat (refused before anything moves when the chat already links the most it can).
    */
-  keepChatBook(threadId: number): OwnedLorebook {
+  keepChatBook(threadId: number, options: { link?: boolean } = {}): OwnedLorebook {
     const found = chatBookRow(threadId)
     if (!found) throw new LorebookError('이 채팅에는 로어북이 없어.', 404)
+    const links = OwnedLorebookStore.threadLinks(threadId)
+    if (options.link && links.length >= PROFILE_MAX_LOREBOOKS) throw new LorebookError(`채팅에는 로어북을 ${PROFILE_MAX_LOREBOOKS}개까지 연결할 수 있어.`)
     const row = refreshIfStale(found)
     const owner = row.owner_key as string
     const folderId = row.folder_id as string
@@ -616,6 +619,7 @@ export const OwnedLorebookStore = {
       if (name !== row.name) FileStoreService.rename(owner, folderId, name)
       FileStoreService.move(owner, [folderId], root.id)
       db.prepare("UPDATE chat_lorebooks SET kind = 'account', thread_id = NULL, name = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?").run(name, row.id)
+      if (options.link) OwnedLorebookStore.setThreadLinks(threadId, [...links, row.id])
       return toOwned(rowById(row.id) as LorebookRow)
     }).immediate()
   },

@@ -7,7 +7,8 @@ import { ChatProfileStore } from '../src/services/codex-chat/chatProfiles'
 import { normalizeChatStyle } from '../src/services/codex-chat/chatStyle'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from '../src/services/codex-chat/codexChatStore'
 import { streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTarget, type ChatCompletionTool } from '../src/services/codex-chat/llmChatCompletion'
-import { buildChatMessages, buildChatPromptPreview, completeSummary, cutToolOutput, estimateMessagesTokens, fitChatContext, fitThreadSummary, groupTranscript, rawMessagesEstimate, resolveContextConfig, summaryTranscriptText } from '../src/services/codex-chat/llmChatContext'
+import { buildChatMessages, buildChatPromptPreview, completeSummary, cutToolOutput, estimateMessagesTokens, fitChatContext, fitThreadSummary, groupTranscript, rawMessagesEstimate, resolveContextConfig, summaryTranscriptText, toCompletionMessages } from '../src/services/codex-chat/llmChatContext'
+import { applyGenerationOutcomes, generationOutcomeNote } from '../src/services/codex-chat/codexChatMedia'
 import { addressLabelFilter, restatement, roundSeparator } from '../src/services/codex-chat/chatReplyText'
 import { buildOpenAiGenerationFields, readLlmConnectionConfig, summaryGenerationOptions, thinkingIsOff } from '../src/services/llmGenerationOptions'
 import { buildGroupLlmMessages } from '../src/services/codex-chat/groupChatContext'
@@ -308,4 +309,33 @@ test('the summary transcript leaves out the chat\'s own tools, quoted lore files
   assert.equal(summaryTranscriptText('[카이; message_id=3; to=[1]] 안녕'), '안녕')
   // A reply that only used the chat's own tools leaves no line at all.
   assert.equal(lineOf({ ...reply, content: '', tool_calls: [call('save_lore', '제안으로 올렸어.')] } as CodexChatMessageRecord), '')
+})
+
+test('a generation is summarized by the scene the model asked for, and replays with its outcome, not the queued job JSON', () => {
+  const profile = ChatProfileStore.draft({ name: '카이', providerName: 'test' }, 1)
+  const lineOf = groupTranscript([profile], { name: '한별', persona: '' } as never)
+  const queued = JSON.stringify({ id: 12, status: 'queued', request_summary: '채팅 프리셋 · 기본' })
+  const call = (id: string, tool: string, args: unknown) => ({ id, tool, status: 'completed' as const, arguments: args, summary: queued, output: queued, jobIds: [12], historyIds: [], compositeHashes: [] })
+  const reply = {
+    id: 7, role: 'assistant', speaker_profile_id: 1, content: '자, 봐봐.',
+    tool_calls: [call('g', 'generate_image_3', { prompt: '1girl, smiling, cafe, window light', size: 'portrait' })],
+  } as unknown as CodexChatMessageRecord
+  // The summary keeps the scene: the job JSON says nothing about the picture.
+  assert.equal(lineOf(reply), '카이: 자, 봐봐.\n[이미지 생성: 1girl, smiling, cafe, window light]')
+  // submit_generation_job carries its prompt in the payload; a call without any prompt falls back to its summary.
+  assert.match(lineOf({ ...reply, tool_calls: [call('s', 'submit_generation_job', { service_type: 'novelai', request_payload: { prompt: 'forest, night' } })] } as CodexChatMessageRecord), /\[이미지 생성: forest, night\]$/)
+  assert.match(lineOf({ ...reply, tool_calls: [call('s', 'submit_generation_job', {})] } as CodexChatMessageRecord), /\[도구 submit_generation_job: \{"id":12/)
+
+  // Without the outcome pass the model would read the submission's "queued" JSON forever.
+  assert.equal(toCompletionMessages(reply)[1].content, queued)
+  const finished = applyGenerationOutcomes([reply], new Map([[12, { status: 'completed', images: 1 }]]))
+  assert.equal(toCompletionMessages(finished[0])[1].content, generationOutcomeNote(12, { status: 'completed', images: 1 }))
+  assert.match(generationOutcomeNote(12, { status: 'completed', images: 1 }), /1 image attached to this reply/)
+  assert.match(generationOutcomeNote(12, { status: 'failed', images: 0 }), /failed/)
+  assert.match(generationOutcomeNote(12, { status: 'executing', images: 0 }), /still running/)
+  assert.match(generationOutcomeNote(12, undefined), /no longer in the queue/)
+  // The stored record is untouched, and a lookup call (not a creation) keeps its own output.
+  assert.equal(reply.tool_calls[0].output, queued)
+  const lookup = { ...reply, tool_calls: [call('w', 'wait_generation_job', {})] } as CodexChatMessageRecord
+  assert.equal(applyGenerationOutcomes([lookup], new Map())[0], lookup)
 })

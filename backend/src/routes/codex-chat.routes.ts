@@ -27,13 +27,13 @@ import { ChatSharedBlockStore, readBlockFile } from '../services/codex-chat/chat
 import { ChatToolPresetStore, readToolPresetFile } from '../services/codex-chat/chatToolPresets'
 import { ModelSlotStore } from '../services/codex-chat/modelSlots'
 import { buildModelUsage } from '../services/codex-chat/modelUsage'
-import { effectiveModelOf, hasSuggestionModel, modelLabelOf } from '../services/codex-chat/chatModelRoles'
+import { effectiveModelOf, modelLabelOf } from '../services/codex-chat/chatModelRoles'
 import { ChatGenerationPresetStore, readGenerationPresetFile, type ChatGenerationPresetInput } from '../services/codex-chat/chatGenerationPresets'
 import { CodexChatStore, type CodexChatMessageRecord } from '../services/codex-chat/codexChatStore'
 import { collectCodexChatMedia } from '../services/codex-chat/codexChatMedia'
 import { CHAT_IMPORT_MAX_BYTES, ChatImportError, importChatThread } from '../services/codex-chat/chatImport'
 import { ChatSummaryStore } from '../services/codex-chat/chatMemory'
-import { listChatCompletionModels } from '../services/codex-chat/llmChatCompletion'
+import { isChatTargetReady, listChatCompletionModels } from '../services/codex-chat/llmChatCompletion'
 import { LlmChatError, LlmChatService } from '../services/codex-chat/llmChatService'
 import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers'
 import { sendRouteBadRequest } from './routeValidation'
@@ -49,10 +49,10 @@ import { MEDIA_HASH_PATTERN, rewriteMediaLinks } from '../services/codex-chat/ch
 import { GroupChatService } from '../services/codex-chat/groupChatService'
 import { ChatReplyError } from '../services/codex-chat/chatReplies'
 import { ChatFlagError, ChatFlagStore, parseFlagIds } from '../services/codex-chat/chatFlags'
-import { ChatUserProfileError, ChatUserProfileStore } from '../services/codex-chat/chatUserProfiles'
+import { ChatUserProfileError, ChatUserProfileStore, type ChatUserProfile } from '../services/codex-chat/chatUserProfiles'
 import { ChatAppearanceError, ChatAppearanceStore } from '../services/codex-chat/chatAppearance'
 import { validateBlockData } from '../services/codex-chat/chatBlockState'
-import { ChatSuggestError, suggestReplies } from '../services/codex-chat/chatSuggestions'
+import { canSuggest, ChatSuggestError, profileWriterReady, suggestReplies, userWriterReady } from '../services/codex-chat/chatSuggestions'
 
 const MESSAGE_MAX_LENGTH = 20000
 
@@ -124,7 +124,7 @@ function backgroundVersionOf(profile: ChatProfile) {
   return profile.background ? `${profile.id}-${Date.parse(profile.updatedDate) || 0}` : null
 }
 
-function toPublicProfile(profile: ChatProfile) {
+function toPublicProfile(profile: ChatProfile, accountId: number | null) {
   return {
     id: profile.id,
     name: profile.name,
@@ -143,8 +143,8 @@ function toPublicProfile(profile: ChatProfile) {
     authorNote: profile.authorNote,
     style: profile.style,
     backgroundVersion: backgroundVersionOf(profile),
-    // The composer shows the suggestion button only when a connection can answer it.
-    suggestEnabled: profile.suggestEnabled && hasSuggestionModel(profile),
+    // The composer shows the suggestion button only when someone can answer it.
+    suggestEnabled: canSuggest(profile, accountId),
   }
 }
 
@@ -152,7 +152,8 @@ function toPublicProfile(profile: ChatProfile) {
 function toAdminProfile(profile: ChatProfile | null) {
   if (!profile) return null
   const { background: _background, ...rest } = profile
-  return { ...rest, backgroundVersion: backgroundVersionOf(profile) }
+  // Whether it can write reply suggestions for a profile that links it (its model is set and its connection works).
+  return { ...rest, backgroundVersion: backgroundVersionOf(profile), suggestWriterReady: profileWriterReady(profile) }
 }
 
 /** GET /api/codex-chat/status — whether the chat (header key, panel, /chat) should appear, and which engines. */
@@ -176,10 +177,11 @@ router.get('/status', (req: Request, res: Response) => {
  */
 router.get('/profiles', requireChatAccess, (req: Request, res: Response) => {
   const access = chatAccessOf(req)
+  const accountId = getRequesterAccountId(req)
   res.json({
     success: true,
     data: ChatProfileStore.list().map((profile) => ({
-      ...toPublicProfile(profile),
+      ...toPublicProfile(profile, accountId),
       usable: profile.isEnabled && (profile.engine === 'codex' ? access.codex : access.llm),
       canReadFileText: profile.mcpEnabled && profile.mcpScopes.includes('read') && access.scopes.includes('read') && (!profile.toolAllowlist || profile.toolAllowlist.includes('read_file_text')),
     })),
@@ -835,13 +837,16 @@ router.post('/lorebooks/:targetId/merge/draft', requireChatAccess, asyncHandler(
   }
 }))
 
-/** POST /api/codex-chat/threads/:threadId/lorebook/keep — keep the chat's own book as an account book (its folder moves to 로어북/). */
+/**
+ * POST /api/codex-chat/threads/:threadId/lorebook/keep — keep the chat's own book as an account book (its folder
+ * moves to 로어북/), linked to this chat so its requests still carry it.
+ */
 router.post('/threads/:threadId/lorebook/keep', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
   try {
     if (!CodexChatStore.findThread(threadId, getRequesterAccountId(req))) throw new LorebookError('채팅을 찾을 수 없어.', 404)
-    res.json({ success: true, data: OwnedLorebookStore.keepChatBook(threadId) })
+    res.json({ success: true, data: OwnedLorebookStore.keepChatBook(threadId, { link: true }) })
   } catch (error) { sendChatError(res, error) }
 })
 
@@ -965,7 +970,7 @@ router.delete('/admin/blocks/:blockId', requireAdmin, (req: Request, res: Respon
 
 /** Model slots (a named connection + model). Profiles and workflow nodes reference them per role, so an edit reaches all of them. */
 router.get('/admin/model-slots', requireAdmin, (_req: Request, res: Response) => {
-  res.json({ success: true, data: ModelSlotStore.list() })
+  res.json({ success: true, data: ModelSlotStore.list().map((slot) => ({ ...slot, ready: isChatTargetReady(slot.providerName, slot.model) })) })
 })
 
 router.post('/admin/model-slots', requireAdmin, (req: Request, res: Response) => {
@@ -1580,8 +1585,16 @@ router.post('/threads/:threadId/messages', requireChatAccess, asyncHandler(async
 
 // ---- Chat user profiles: who the account is in a chat (name, persona, avatar), one per chat ----------------------
 
+/** A user profile with whether it can write reply suggestions (its model is set and its connection works). */
+const withModelReady = (profile: ChatUserProfile) => ({ ...profile, modelReady: userWriterReady(profile) })
+
 router.get('/user-profiles', requireChatAccess, (req: Request, res: Response) => {
-  res.json({ success: true, data: ChatUserProfileStore.list(getRequesterAccountId(req)) })
+  res.json({ success: true, data: ChatUserProfileStore.list(getRequesterAccountId(req)).map(withModelReady) })
+})
+
+/** GET /api/codex-chat/model-options — the models a user profile can write reply suggestions with (any chat user). */
+router.get('/model-options', requireChatAccess, (_req: Request, res: Response) => {
+  res.json({ success: true, data: ModelSlotStore.list().map((slot) => ({ id: slot.id, name: slot.name, model: slot.model, ready: isChatTargetReady(slot.providerName, slot.model) })) })
 })
 
 router.post('/user-profiles', requireChatAccess, (req: Request, res: Response) => {

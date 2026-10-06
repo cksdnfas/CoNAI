@@ -13,7 +13,7 @@ import { thinkingMayFillCap, type ChatProfileDefaults, type ChatProfileInput, ty
 import type { ExternalApiProviderRecord } from '@/lib/api-external-api'
 import type { CodexModelOption } from '@/lib/api-image-generation-queue'
 import { cn } from '@/lib/utils'
-import { applyRoleChoice, ModelRoleSelect, roleChoice, roleDirect, roleModelPatch, roleProviderPatch } from './chat-model-role-select'
+import { applyRoleChoice, ModelRoleSelect, roleChoice, roleDirect, roleModelPatch, roleProviderPatch, type SuggestWriters } from './chat-model-role-select'
 import { ConnectionModelSelect, EditorGroup, numberOrNull, SwitchLine, type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { CollapsibleRow } from './chat-profile-sections'
 
@@ -34,7 +34,7 @@ function AuxModelRow({ label, select, children }: { label: string; select: React
 }
 
 /** The engine and its knobs: model slots per role, sampling, reasoning; then how much of the chat and the lore it is sent. */
-export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, providersLoaded, slots, slotsReady, connectionModels, summaryModels, translationModels, suggestModels, codexModels }: {
+export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, providersLoaded, slots, slotsReady, suggestWriters, connectionModels, summaryModels, translationModels, suggestModels, codexModels }: {
   draft: Draft
   patch: PatchDraft
   defaults: ChatProfileDefaults | undefined
@@ -42,6 +42,8 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
   providersLoaded: boolean
   slots: ModelSlot[]
   slotsReady: boolean
+  /** The profiles that can write this one's reply suggestions. */
+  suggestWriters: SuggestWriters
   connectionModels: ConnectionModels | undefined
   summaryModels: ConnectionModels | undefined
   translationModels: ConnectionModels | undefined
@@ -73,6 +75,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
       slots={slots}
       slotsReady={slotsReady}
       canInherit={isLlm}
+      writers={role === 'suggest' ? suggestWriters : undefined}
       ariaLabel={ariaLabel}
       onChange={(choice) => patch(applyRoleChoice(draft, role, choice, firstProvider))}
     />

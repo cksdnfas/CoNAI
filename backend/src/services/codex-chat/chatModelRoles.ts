@@ -74,11 +74,6 @@ export function hasTranslation(profile: ModelRoleProfile | null | undefined) {
   return profile ? resolveProfileModel(profile, 'translation') !== null : false
 }
 
-/** Whether reply suggestions have a connection to ask (their own, or the chat's). */
-export function hasSuggestionModel(profile: ModelRoleProfile) {
-  return resolveProfileModel(profile, 'suggest') !== null
-}
-
 /** The model name a chat user sees: the resolved model, or the connection's default when the profile leaves it empty. */
 export function effectiveModelOf(profile: ModelRoleProfile): string {
   if (profile.engine === 'codex') return profile.model ?? ''

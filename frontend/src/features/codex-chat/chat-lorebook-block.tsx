@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { BookPlus, ChevronDown, ChevronRight, Ellipsis, FileText, FolderOpen, Merge, Plus } from 'lucide-react'
+import { BookPlus, BookUp, ChevronDown, ChevronRight, Ellipsis, FileText, FolderOpen, Merge, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -14,6 +14,7 @@ import {
   CHAT_LOREBOOKS_QUERY_KEY,
   OWN_LOREBOOKS_QUERY_KEY,
   getThreadLorebooks,
+  keepThreadLorebook,
   listOwnLorebooks,
   loreEntryTitle,
   saveThreadLorebook,
@@ -81,6 +82,14 @@ export function LorebookBlock({ threadId, profiles }: {
     mutationFn: ({ book, entries }: { book: EditTarget['book']; entries: ChatLoreEntry[] }) => (book === CHAT_BOOK ? saveThreadLorebook(threadId, entries) : updateOwnLorebook(book.id, { entries })),
     onSuccess: async () => {
       setEditing(null)
+      await refresh()
+    },
+    onError,
+  })
+  const keepMutation = useMutation({
+    mutationFn: () => keepThreadLorebook(threadId),
+    onSuccess: async (book) => {
+      showSnackbar({ message: t({ ko: '내 로어북 {name}(으)로 보관했어.', en: 'Kept as your lorebook {name}.' }, { name: book.name }), tone: 'info' })
       await refresh()
     },
     onError,
@@ -154,7 +163,12 @@ export function LorebookBlock({ threadId, profiles }: {
           count={countLabel(chatEntries)}
           open={expanded.has(CHAT_BOOK)}
           onToggle={() => toggle(CHAT_BOOK)}
-          actions={<IconButton variant="ghost" size="icon-xs" disabled={chatEntries.length >= 500} onClick={() => setEditing({ book: CHAT_BOOK, entry: newLoreEntry(chatEntries.length), isNew: true })} label={t({ ko: '항목 추가', en: 'Add entry' })}><Plus /></IconButton>}
+          actions={(
+            <>
+              {chatBook ? <IconButton variant="ghost" size="icon-xs" disabled={keepMutation.isPending} onClick={() => keepMutation.mutate()} label={t({ ko: '내 로어북으로 보관', en: 'Keep as my lorebook' })}><BookUp /></IconButton> : null}
+              <IconButton variant="ghost" size="icon-xs" disabled={chatEntries.length >= 500} onClick={() => setEditing({ book: CHAT_BOOK, entry: newLoreEntry(chatEntries.length), isNew: true })} label={t({ ko: '항목 추가', en: 'Add entry' })}><Plus /></IconButton>
+            </>
+          )}
         />
         {expanded.has(CHAT_BOOK) ? chatEntries.map((entry) => <EntryRow key={entry.id} entry={entry} onOpen={() => setEditing({ book: CHAT_BOOK, entry, isNew: false })} />) : null}
         {books.map((book) => {

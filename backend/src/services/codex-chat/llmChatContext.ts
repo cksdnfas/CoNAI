@@ -1,6 +1,6 @@
 import { summaryGenerationOptions, thinkingIsOff } from '../llmGenerationOptions'
 import { buildReplyContext } from './chatReplyContext'
-import { stripEchoedAddresses } from '@conai/shared'
+import { isCodexChatCreationTool, stripEchoedAddresses } from '@conai/shared'
 import { messageAddress, REPLY_GUIDANCE } from './chatReplies'
 import { CHAT_ROOM_TOOLS } from '../../mcp/context'
 import { blockStateText, foldBlockState, parseBlockEdits, stripBlockFences, usableBlockKeys } from './chatBlockState'
@@ -15,6 +15,7 @@ import type { SelectedLore } from './chatLorebook'
 import { booksForRequest, loreIndexText, READ_LORE_FILE_TOOL, selectRequestLore, type AttachedLoreBook, type ChatLore } from './chatLoreContext'
 import { rejectedLoreLine, SAVE_LORE_TOOL } from './chatLoreProposals'
 import { buildFlagDirective } from './chatFlags'
+import { generationPromptOf } from './chatToolReferences'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import { ChatSummaryStore, recallText, selectRecall, splitSegments, type ChatSummarySegment } from './chatMemory'
 import { REFERENCE_BLOCK_START, resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool, type ChatContentPart } from './llmChatCompletion'
@@ -643,7 +644,11 @@ export function summaryTranscriptText(text: string) {
  * CoNAI actions (a generation…) stay as a short note.
  */
 function transcriptLine(message: CodexChatMessageRecord, speakerOf: (message: CodexChatMessageRecord) => string, blocksOf: (message: CodexChatMessageRecord) => ReadonlySet<string>) {
-  const tools = message.tool_calls.filter((call) => !CHAT_ROOM_TOOLS.has(call.tool)).map((call) => `[도구 ${call.tool}: ${(call.summary ?? '').slice(0, SUMMARY_TOOL_NOTE_LENGTH)}]`)
+  // A generation is remembered by the scene the model asked for: its result JSON names no picture.
+  const tools = message.tool_calls.filter((call) => !CHAT_ROOM_TOOLS.has(call.tool)).map((call) => {
+    const prompt = isCodexChatCreationTool(call.tool) ? generationPromptOf(call) : null
+    return prompt ? `[이미지 생성: ${prompt.slice(0, SUMMARY_TOOL_NOTE_LENGTH)}]` : `[도구 ${call.tool}: ${(call.summary ?? '').slice(0, SUMMARY_TOOL_NOTE_LENGTH)}]`
+  })
   // Block fences are state, not conversation: the summary does without them.
   const text = summaryTranscriptText(message.role === 'assistant' ? stripBlockFences(message.content, blocksOf(message)) : chatContentWithAttachments(message.content, message.attachments, message.mediaAttachments))
   // A reply that only used the chat's own tools says nothing worth summarizing.

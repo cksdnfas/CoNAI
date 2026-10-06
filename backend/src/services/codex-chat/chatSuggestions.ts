@@ -1,8 +1,11 @@
-import { resolveProfileModel, type ModelRoleProfile } from './chatModelRoles'
-import type { ChatProfile } from './chatProfiles'
+import { executeCodexMessageRequest } from '../codexMessageService'
+import { resolveProfileModel } from './chatModelRoles'
+import { ChatProfileStore, profileGenerationOptions, type ChatProfile } from './chatProfiles'
 import { stripBlockFences, usableBlockKeys } from './chatBlockState'
-import { completeChat, resolveChatCompletionTarget, type ChatCompletionTarget } from './llmChatCompletion'
-import { userPersonaForThread, userPersonaPrompt } from './chatUserProfiles'
+import { fillCharacterPlaceholders } from './chatPlaceholders'
+import { completeChat, isChatTargetReady, resolveChatCompletionTarget, type ChatCompletionTarget } from './llmChatCompletion'
+import { ChatUserProfileStore, userPersonaForThread, userPersonaPrompt, type ChatUserPersona, type ChatUserProfile } from './chatUserProfiles'
+import { ModelSlotStore } from './modelSlots'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
 
 /**
@@ -10,10 +13,18 @@ import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatS
  * is generated until the button is pressed, so a chat that never uses it costs nothing. The call has its own
  * prompt: the user's persona, the character's name, and the last few turns as the reader sees them. The chat's
  * system prompt and lore are left out on purpose; the recent turns carry the scene.
+ *
+ * Who writes them: a chat profile linked as the writer (another one or the chat's own; its model, and its prompt as
+ * extra direction) or a user profile (its model and description), else the profile's suggest role (slot, connection,
+ * or the chat's own connection). A Codex profile with none of these asks its own Codex model in a one-shot run.
  */
 
 export const SUGGESTION_COUNT = 3
 const SUGGESTION_TIMEOUT_MS = 60_000
+/** A one-shot Codex run starts a whole Codex process first. */
+const CODEX_SUGGESTION_TIMEOUT_MS = 180_000
+/** The chat's own Codex model, asked only for a few short lines. */
+const CODEX_SUGGESTION_EFFORT = 'low'
 const TRANSCRIPT_TURNS = 12
 const TURN_MAX_CHARS = 1200
 const SUGGESTION_MAX_CHARS = 300
@@ -32,15 +43,106 @@ const SYSTEM_PROMPT = [
   'Output only a JSON array of strings, nothing else.',
 ].join('\n')
 
-/** The connection and model a profile suggests with, or null when suggestions are off or no connection applies. */
-export function suggestionTargetOf(profile: ModelRoleProfile & Pick<ChatProfile, 'suggestEnabled'>): ChatCompletionTarget | null {
-  if (!profile.suggestEnabled) return null
-  const resolved = resolveProfileModel(profile, 'suggest')
+/** Who writes the suggestions besides the model: a chat profile (its prompt) or a user profile (its description). */
+export type SuggestionWriter = { kind: 'profile'; profile: ChatProfile } | { kind: 'user'; profile: ChatUserProfile }
+
+/** How suggestions are written: an API call or a one-shot Codex run, with the linked writer when there is one. */
+export type SuggestionRunner =
+  | { kind: 'llm'; target: ChatCompletionTarget; writer: SuggestionWriter | null }
+  | { kind: 'codex'; model: string | null; reasoningEffort: string | null; writer: SuggestionWriter | null }
+
+/**
+ * The linked writer, or null when none applies: a chat profile that went missing or is off (the profile itself always
+ * counts), a user profile of another account (`accountId` given) or one without a model.
+ */
+export function suggestionWriterOf(profile: ChatProfile, accountId?: number | null): SuggestionWriter | null {
+  if (profile.suggestProfileId) {
+    const writer = profile.suggestProfileId === profile.id ? profile : ChatProfileStore.find(profile.suggestProfileId)
+    return writer && (writer === profile || writer.isEnabled) ? { kind: 'profile', profile: writer } : null
+  }
+  if (profile.suggestUserProfileId) {
+    const writer = ChatUserProfileStore.findById(profile.suggestUserProfileId)
+    if (!writer || writer.modelSlotId === null || (accountId !== undefined && writer.accountId !== accountId)) return null
+    return { kind: 'user', profile: writer }
+  }
+  return null
+}
+
+function writerRunner(writer: SuggestionWriter): SuggestionRunner | null {
+  if (writer.kind === 'user') {
+    const slot = ModelSlotStore.target(writer.profile.modelSlotId)
+    return slot ? { kind: 'llm', target: resolveChatCompletionTarget(slot.providerName, { model: slot.model, generation: { temperature: 0.9, reasoningEffort: 'none' } }), writer } : null
+  }
+  const profile = writer.profile
+  if (profile.engine === 'codex') return { kind: 'codex', model: profile.model || null, reasoningEffort: profile.reasoningEffort || null, writer }
+  const resolved = resolveProfileModel(profile, 'chat')
   if (!resolved) return null
-  return resolveChatCompletionTarget(resolved.providerName, {
-    model: resolved.model,
-    generation: { temperature: 0.9, reasoningEffort: 'none' },
-  })
+  const generation = profileGenerationOptions(profile)
+  return { kind: 'llm', target: resolveChatCompletionTarget(resolved.providerName, { model: resolved.model, generation: { ...generation, temperature: generation.temperature ?? 0.9 } }), writer }
+}
+
+/**
+ * Who writes a profile's suggestions, or null when they are off or nothing can answer. Throws when the chosen
+ * connection cannot be used (missing, or no model). `accountId`: the chat's account (a user profile writes only there).
+ */
+export function suggestionRunnerOf(profile: ChatProfile, accountId?: number | null): SuggestionRunner | null {
+  if (!profile.suggestEnabled) return null
+  const writer = suggestionWriterOf(profile, accountId)
+  if (writer) return writerRunner(writer)
+  const resolved = resolveProfileModel(profile, 'suggest')
+  if (resolved) {
+    return {
+      kind: 'llm',
+      target: resolveChatCompletionTarget(resolved.providerName, { model: resolved.model, generation: { temperature: 0.9, reasoningEffort: 'none' } }),
+      writer: null,
+    }
+  }
+  return profile.engine === 'codex' ? { kind: 'codex', model: profile.model || null, reasoningEffort: CODEX_SUGGESTION_EFFORT, writer: null } : null
+}
+
+/** Whether the composer's suggestion button has someone to ask (a connection that cannot be used counts as none). */
+export function canSuggest(profile: ChatProfile, accountId?: number | null) {
+  try {
+    return suggestionRunnerOf(profile, accountId) !== null
+  } catch {
+    return false
+  }
+}
+
+/** Whether a chat profile could write suggestions: Codex, or an API model whose connection can be used. */
+export function profileWriterReady(profile: ChatProfile) {
+  if (profile.engine === 'codex') return true
+  const resolved = resolveProfileModel(profile, 'chat')
+  return resolved !== null && isChatTargetReady(resolved.providerName, resolved.model)
+}
+
+/** Whether a user profile could write suggestions: it has a model whose connection can be used. */
+export function userWriterReady(profile: Pick<ChatUserProfile, 'modelSlotId'>) {
+  const slot = ModelSlotStore.target(profile.modelSlotId)
+  return slot !== null && isChatTargetReady(slot.providerName, slot.model)
+}
+
+/**
+ * The writer's direction: a chat profile's prompt (system prompt and enabled sections) or a user profile's description
+ * (left out when it is the chat's own user, whose description is already there).
+ */
+function writerDirection(writer: SuggestionWriter, character: ChatProfile, user: ChatUserPersona, threadUserProfileId: number | null) {
+  let text: string
+  let heading: string
+  if (writer.kind === 'user') {
+    if (writer.profile.id === threadUserProfileId) return ''
+    text = writer.profile.persona.trim()
+    heading = `## 추천 지시 (${writer.profile.name})`
+  } else {
+    const sections = writer.profile.promptSections
+      .filter((section) => section.enabled && section.content.trim())
+      .map((section) => (section.title ? `### ${section.title}\n${section.content}` : section.content))
+    text = [writer.profile.systemPrompt, ...sections].map((part) => part.trim()).filter(Boolean).join('\n\n')
+    // The chat's own profile as the writer: its card is about the character, not direction.
+    heading = writer.profile.id === character.id ? `## 캐릭터 설정 (${character.name})` : `## 추천 지시 (${writer.profile.name})`
+  }
+  // {{char}} is the character the user talks to, {{user}} the user the options are written for.
+  return text ? [heading, fillCharacterPlaceholders(text, character, user)].join('\n') : ''
 }
 
 function readerText(message: CodexChatMessageRecord, keys: ReadonlySet<string>) {
@@ -98,13 +200,13 @@ export function parseSuggestions(text: string): string[] {
  * suggestion model, the model answered nothing usable, or the call failed.
  */
 export async function suggestReplies(profile: ChatProfile, thread: CodexChatThreadRecord, messages: CodexChatMessageRecord[], nameOf: (message: CodexChatMessageRecord) => string, signal?: AbortSignal) {
-  let target: ChatCompletionTarget | null
+  let runner: SuggestionRunner | null
   try {
-    target = suggestionTargetOf(profile)
+    runner = suggestionRunnerOf(profile, thread.account_id)
   } catch (error) {
     throw new ChatSuggestError(`추천 모델 연결을 쓸 수 없어: ${error instanceof Error ? error.message : String(error)}`, 409)
   }
-  if (!target) throw new ChatSuggestError(profile.suggestEnabled ? '이 프로필에는 추천에 쓸 연결이 없어. 프로필 설정에서 추천 연결을 골라줘.' : '이 프로필은 답장 추천을 안 써.', 409)
+  if (!runner) throw new ChatSuggestError(profile.suggestEnabled ? '이 프로필에는 추천에 쓸 연결이 없어. 프로필 설정에서 추천 연결을 골라줘.' : '이 프로필은 답장 추천을 안 써.', 409)
 
   const user = userPersonaForThread(thread)
   const transcript = buildSuggestionTranscript(messages, user.name, nameOf, usableBlockKeys(profile.style.blocks))
@@ -117,18 +219,33 @@ export async function suggestReplies(profile: ChatProfile, thread: CodexChatThre
     `이름: ${profile.name}`,
     profile.tagline ? profile.tagline : '',
     userPersonaPrompt(user),
+    runner.writer ? writerDirection(runner.writer, profile, user, thread.user_profile_id ?? null) : '',
   ].filter(Boolean).join('\n')
   const prompt = `${transcript}\n\n---\n${user.name}이(가) 다음에 할 말 ${SUGGESTION_COUNT}개를 JSON 배열로.`
 
-  const timeout = AbortSignal.timeout(SUGGESTION_TIMEOUT_MS)
+  const timeout = AbortSignal.timeout(runner.kind === 'codex' ? CODEX_SUGGESTION_TIMEOUT_MS : SUGGESTION_TIMEOUT_MS)
+  const combined = signal ? AbortSignal.any([signal, timeout]) : timeout
   let answer: string
   try {
-    answer = await completeChat(target, [
-      { role: 'system', content: system },
-      { role: 'user', content: prompt },
-    ], signal ? AbortSignal.any([signal, timeout]) : timeout)
+    answer = runner.kind === 'codex'
+      ? (await executeCodexMessageRequest({
+        task: 'You write reply suggestions for a CoNAI chat.',
+        systemPrompt: system,
+        context: transcript,
+        prompt: `${user.name}이(가) 다음에 할 말 ${SUGGESTION_COUNT}개를 JSON 배열로.`,
+        model: runner.model,
+        reasoningEffort: runner.reasoningEffort,
+        shouldCancel: () => combined.aborted,
+        timeoutMs: CODEX_SUGGESTION_TIMEOUT_MS,
+        cleanup: true,
+      })).text
+      : await completeChat(runner.target, [
+        { role: 'system', content: system },
+        { role: 'user', content: prompt },
+      ], combined)
   } catch (error) {
     if (signal?.aborted) throw new ChatSuggestError('추천을 멈췄어.', 499)
+    if (timeout.aborted) throw new ChatSuggestError('추천이 너무 오래 걸려서 멈췄어.', 504)
     throw new ChatSuggestError(`추천을 받지 못했어: ${error instanceof Error ? error.message : String(error)}`, 502)
   }
   const suggestions = parseSuggestions(answer)

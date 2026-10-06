@@ -1,8 +1,9 @@
 import type { ChatProfile } from './chatProfiles'
-import type { ChatMessageRouting } from '@conai/shared'
+import { isCodexChatCreationTool, type ChatMessageRouting } from '@conai/shared'
 import { buildReplyContext } from './chatReplyContext'
 import { messageAddress } from './chatReplies'
 import { chatContentWithAttachments } from './chatAttachments'
+import { generationPromptOf } from './chatToolReferences'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
 import type { ChatCompletionMessage, ChatCompletionTool } from './llmChatCompletion'
 import { DEFAULT_REPLY_RESERVE_TOKENS, estimateMessagesTokens } from './llmChatContext'
@@ -28,7 +29,12 @@ function speakerName(message: CodexChatMessageRecord, names: Map<number, string>
 /** Someone else's message as one transcript line: their name, the text, and a note of the tools they used. */
 function transcriptLine(message: CodexChatMessageRecord, names: Map<number, string>, user: ChatUserPersona, inlineTexts?: ReadonlyMap<string, string>) {
   const text = message.role === 'user' ? chatContentWithAttachments(message.content, message.attachments, message.mediaAttachments, inlineTexts) : message.content
-  const tools = message.tool_calls.map((call) => `(도구 ${call.tool}${call.summary ? `: ${call.summary.slice(0, OTHER_TOOL_NOTE_LENGTH)}` : ''})`)
+  const tools = message.tool_calls.map((call) => {
+    // Another member's generation: the scene they asked for and what became of it, not the job JSON.
+    const prompt = isCodexChatCreationTool(call.tool) ? generationPromptOf(call) : null
+    if (prompt) return `(이미지 생성: ${prompt.slice(0, OTHER_TOOL_NOTE_LENGTH)}${call.output && !call.output.startsWith('{') ? ` — ${call.output.slice(0, OTHER_TOOL_NOTE_LENGTH)}` : ''})`
+    return `(도구 ${call.tool}${call.summary ? `: ${call.summary.slice(0, OTHER_TOOL_NOTE_LENGTH)}` : ''})`
+  })
   return [`[${speakerName(message, names, user)}; ${messageAddress(message)}] ${text}`.trim(), ...tools].join('\n')
 }
 

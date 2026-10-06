@@ -18,6 +18,12 @@ export type ExecuteCodexMessageRequest = {
   context?: string | null
   image?: string | null
   model?: string | null
+  /** Codex `model_reasoning_effort` for this run; unset keeps the Codex config's. */
+  reasoningEffort?: string | null
+  /** The first line of the prompt: what the run is for. */
+  task?: string | null
+  /** Delete the run's scratch directory afterwards (its logs too). */
+  cleanup?: boolean
   responseMode?: CodexResponseMode | null
   structuredOutputJson?: string | null
   shouldCancel?: () => boolean
@@ -72,6 +78,7 @@ function buildPromptBlock(label: string, value: string | null) {
 }
 
 function buildCodexMessagePrompt(params: {
+  task: string | null
   prompt: string
   systemPrompt: string | null
   contextValue: string | null
@@ -90,7 +97,7 @@ function buildCodexMessagePrompt(params: {
       : 'Return the final answer as plain text. Do not wrap it in markdown fences unless the content itself requires it.'
 
   return [
-    'You are replying for a CoNAI graph node execution.',
+    params.task ?? 'You are replying for a CoNAI graph node execution.',
     'This is a one-shot task running in an isolated scratch directory.',
     'Do not modify repository files or rely on git state.',
     responseInstruction,
@@ -105,6 +112,7 @@ async function runCodexExec(params: {
   workDir: string
   prompt: string
   model: string | null
+  reasoningEffort: string | null
   imagePaths: string[]
   shouldCancel?: () => boolean
   timeoutMs: number
@@ -128,6 +136,10 @@ async function runCodexExec(params: {
 
   if (params.model) {
     args.push('--model', params.model)
+  }
+
+  if (params.reasoningEffort) {
+    args.push('-c', `model_reasoning_effort="${params.reasoningEffort}"`)
   }
 
   for (const imagePath of params.imagePaths) {
@@ -311,6 +323,7 @@ export async function executeCodexMessageRequest(request: ExecuteCodexMessageReq
     : DEFAULT_CODEX_TIMEOUT_MS
 
   const codexPrompt = buildCodexMessagePrompt({
+    task: normalizeOptionalString(request.task),
     prompt,
     systemPrompt: normalizeOptionalString(request.systemPrompt),
     contextValue: normalizeOptionalString(request.context),
@@ -319,13 +332,17 @@ export async function executeCodexMessageRequest(request: ExecuteCodexMessageReq
     structuredOutputJson,
   })
 
+  const reasoningEffort = normalizeOptionalString(request.reasoningEffort)
   const result = await runCodexExec({
     workDir,
     prompt: codexPrompt,
     model,
+    reasoningEffort: reasoningEffort && /^[a-z]+$/.test(reasoningEffort) ? reasoningEffort : null,
     imagePaths: attachedImagePaths,
     shouldCancel: request.shouldCancel,
     timeoutMs,
+  }).finally(() => {
+    if (request.cleanup) void fs.promises.rm(workDir, { recursive: true, force: true }).catch(() => undefined)
   })
 
   const text = normalizeOptionalString(result.lastMessage) ?? normalizeOptionalString(result.stdout) ?? null

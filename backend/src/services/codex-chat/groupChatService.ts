@@ -17,6 +17,7 @@ import { loadChatSettings } from './chatSettings'
 import { resolveChatAccess } from './codexChatAccess'
 import { CodexChatError, CodexChatService, deleteCodexRollout, runCodexGroupReply, type CodexChatStreamEvent } from './codexChatService'
 import { CodexChatStore, type ChatBranchPurpose, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
+import { withGenerationOutcomes } from './codexChatMedia'
 import { buildGroupCodexInput, buildGroupLlmMessages, groupSummaryOn, parseMentions, resolveMemberName, trimForeignSpeakerLines } from './groupChatContext'
 import { CHAT_ROOM_TOOLS } from '../../mcp/context'
 import { flagDirectiveFor, postHistoryText, groupSummarizer, sendableMessages, summarizeGroupAhead, summarizeGroupAll } from './llmChatContext'
@@ -150,7 +151,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
   const members = memberProfiles(run.threadId)
   const limits = groupLimitsOf(thread)
   const controller = new AbortController()
-  const messages = CodexChatStore.listMessages(run.threadId).filter((message) => message.id !== replacingMessageId)
+  const messages = withGenerationOutcomes(CodexChatStore.listMessages(run.threadId).filter((message) => message.id !== replacingMessageId))
   const source = messages.find((message) => message.id === sourceMessageId) ?? null
   const replyId = randomUUID()
   const context: ChatExecutionContext = { threadId: run.threadId, profileId: profile.id, kind: 'group', replyId }

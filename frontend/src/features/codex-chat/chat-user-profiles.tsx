@@ -17,10 +17,12 @@ import { Tip } from '@/components/ui/tooltip'
 import { readAvatarFile } from '@/features/settings/components/chat-profile-images'
 import { useI18n } from '@/i18n'
 import {
+  CHAT_MODEL_OPTIONS_QUERY_KEY,
   CHAT_USER_PROFILE_LIMITS,
   CHAT_USER_PROFILES_QUERY_KEY,
   createChatUserProfile,
   deleteChatUserProfile,
+  listChatModelOptions,
   listChatUserProfiles,
   updateChatUserProfile,
   updateCodexChatThreadContext,
@@ -62,10 +64,12 @@ export function ChatUserProfileEditorModal({ open, profile, onClose }: { open: b
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const [draft, setDraft] = useState<{ name: string; persona: string; avatar: string | null; isDefault: boolean }>({ name: '', persona: '', avatar: null, isDefault: false })
+  const [draft, setDraft] = useState<{ name: string; persona: string; avatar: string | null; isDefault: boolean; modelSlotId: number | null }>({ name: '', persona: '', avatar: null, isDefault: false, modelSlotId: null })
+  const modelsQuery = useQuery({ queryKey: CHAT_MODEL_OPTIONS_QUERY_KEY, queryFn: listChatModelOptions, enabled: open })
+  const models = modelsQuery.data ?? []
 
   useEffect(() => {
-    if (open) setDraft({ name: profile?.name ?? '', persona: profile?.persona ?? '', avatar: profile?.avatar ?? null, isDefault: profile?.isDefault ?? false })
+    if (open) setDraft({ name: profile?.name ?? '', persona: profile?.persona ?? '', avatar: profile?.avatar ?? null, isDefault: profile?.isDefault ?? false, modelSlotId: profile?.modelSlotId ?? null })
   }, [profile, open])
 
   const refresh = () => Promise.all([
@@ -128,6 +132,18 @@ export function ChatUserProfileEditorModal({ open, profile, onClose }: { open: b
             placeholder={t({ ko: '모델이 알아야 할 나에 대한 설명. 성격, 외모, 캐릭터와의 관계…', en: 'What the models should know about you: personality, looks, your relationship with the character…' })}
             onChange={(event) => setDraft((current) => ({ ...current, persona: event.target.value }))}
           />
+        </Field>
+        <Field label={t({ ko: '모델', en: 'Model' })} info={t({ ko: '채팅 프로필의 답장 추천을 이 프로필이 쓸 때 쓰는 모델.', en: 'The model used when this profile writes reply suggestions for a chat profile.' })}>
+          <Select
+            variant="settings"
+            value={draft.modelSlotId === null ? '' : String(draft.modelSlotId)}
+            disabled={!modelsQuery.isSuccess}
+            onChange={(event) => setDraft((current) => ({ ...current, modelSlotId: event.target.value ? Number(event.target.value) : null }))}
+          >
+            <option value="">{t({ ko: '없음', en: 'None' })}</option>
+            {/* A model whose connection cannot be used shows greyed out. */}
+            {models.map((model) => <option key={model.id} value={model.id} disabled={!model.ready}>{`${model.name} · ${model.model}`}</option>)}
+          </Select>
         </Field>
       </ModalBody>
       <ModalFooter>

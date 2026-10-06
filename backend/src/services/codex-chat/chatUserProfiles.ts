@@ -1,5 +1,6 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { CodexChatThreadRecord } from './codexChatStore'
+import { ModelSlotStore } from './modelSlots'
 
 /**
  * User profiles (personas): who the account is in a chat — a name the models address and see in transcripts, a
@@ -22,6 +23,8 @@ export type ChatUserProfile = {
   /** New chats pick this profile without asking. */
   isDefault: boolean
   sortOrder: number
+  /** The model (llm_model_slots) this profile writes reply suggestions with when a chat profile links it; null: none. */
+  modelSlotId: number | null
 }
 
 /** What prompt builders need of the user: the name they go by and their description ('' when none). */
@@ -29,7 +32,7 @@ export type ChatUserPersona = { name: string; persona: string }
 
 export const PLAIN_USER: ChatUserPersona = { name: DEFAULT_USER_NAME, persona: '' }
 
-type Row = { id: number; account_id: number | null; name: string; persona: string; avatar: string | null; is_default: number; sort_order: number }
+type Row = { id: number; account_id: number | null; name: string; persona: string; avatar: string | null; is_default: number; sort_order: number; model_slot_id: number | null }
 
 export class ChatUserProfileError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -38,7 +41,8 @@ export class ChatUserProfileError extends Error {
 }
 
 function toProfile(row: Row): ChatUserProfile {
-  return { id: row.id, name: row.name, persona: row.persona, avatar: row.avatar, isDefault: row.is_default === 1, sortOrder: row.sort_order }
+  // A slot that went missing reads as none.
+  return { id: row.id, name: row.name, persona: row.persona, avatar: row.avatar, isDefault: row.is_default === 1, sortOrder: row.sort_order, modelSlotId: ModelSlotStore.existing(row.model_slot_id) }
 }
 
 function normalizeInput(input: Record<string, unknown>) {
@@ -50,7 +54,14 @@ function normalizeInput(input: Record<string, unknown>) {
   if (/[@[\]]/.test(name)) throw new ChatUserProfileError('이름에 @나 대괄호는 쓸 수 없어.')
   if (persona.length > CHAT_USER_PROFILE_LIMITS.persona) throw new ChatUserProfileError(`설명은 ${CHAT_USER_PROFILE_LIMITS.persona}자까지야.`)
   if (avatar && (avatar.length > AVATAR_MAX_LENGTH || !AVATAR_PATTERN.test(avatar))) throw new ChatUserProfileError('아바타 이미지가 너무 크거나 형식이 맞지 않아.')
-  return { name, persona, avatar, isDefault: input.isDefault === true }
+  // Left out (undefined): an update keeps the model it had.
+  let modelSlotId: number | null | undefined
+  if (input.modelSlotId === null || input.modelSlotId === '') modelSlotId = null
+  else if (input.modelSlotId !== undefined) {
+    modelSlotId = ModelSlotStore.existing(input.modelSlotId)
+    if (modelSlotId === null) throw new ChatUserProfileError('모델을 찾을 수 없어.')
+  }
+  return { name, persona, avatar, isDefault: input.isDefault === true, modelSlotId }
 }
 
 export const ChatUserProfileStore = {
@@ -94,8 +105,8 @@ export const ChatUserProfileStore = {
       const { count, last } = db.prepare('SELECT COUNT(*) AS count, COALESCE(MAX(sort_order), -1) AS last FROM chat_user_profiles WHERE account_id IS ?').get(accountId) as { count: number; last: number }
       if (count >= CHAT_USER_PROFILE_LIMITS.perAccount) throw new ChatUserProfileError(`사용자 프로필은 ${CHAT_USER_PROFILE_LIMITS.perAccount}개까지 만들 수 있어.`)
       if (value.isDefault) db.prepare('UPDATE chat_user_profiles SET is_default = 0 WHERE account_id IS ?').run(accountId)
-      const result = db.prepare('INSERT INTO chat_user_profiles (account_id, name, persona, avatar, is_default, sort_order) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(accountId, value.name, value.persona, value.avatar, value.isDefault ? 1 : 0, last + 1)
+      const result = db.prepare('INSERT INTO chat_user_profiles (account_id, name, persona, avatar, is_default, sort_order, model_slot_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(accountId, value.name, value.persona, value.avatar, value.isDefault ? 1 : 0, last + 1, value.modelSlotId ?? null)
       return ChatUserProfileStore.find(accountId, Number(result.lastInsertRowid)) as ChatUserProfile
     })()
   },
@@ -107,6 +118,7 @@ export const ChatUserProfileStore = {
       if (value.isDefault) db.prepare('UPDATE chat_user_profiles SET is_default = 0 WHERE account_id IS ?').run(accountId)
       const result = db.prepare('UPDATE chat_user_profiles SET name = ?, persona = ?, avatar = ?, is_default = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ? AND account_id IS ?')
         .run(value.name, value.persona, value.avatar, value.isDefault ? 1 : 0, profileId, accountId)
+      if (result.changes && value.modelSlotId !== undefined) db.prepare('UPDATE chat_user_profiles SET model_slot_id = ? WHERE id = ?').run(value.modelSlotId, profileId)
       if (!result.changes) throw new ChatUserProfileError('사용자 프로필을 찾을 수 없어.', 404)
       return ChatUserProfileStore.find(accountId, profileId) as ChatUserProfile
     })()
@@ -131,6 +143,12 @@ export const ChatUserProfileStore = {
       ordered.forEach((profile, index) => db.prepare('UPDATE chat_user_profiles SET sort_order = ? WHERE id = ?').run(index, profile.id))
     })()
     return ChatUserProfileStore.list(accountId)
+  },
+
+  /** Any account's profile by id (a chat profile's suggestion writer; the caller checks whose it is). */
+  findById(profileId: number) {
+    const row = getUserSettingsDb().prepare('SELECT * FROM chat_user_profiles WHERE id = ?').get(profileId) as Row | undefined
+    return row ? { ...toProfile(row), accountId: row.account_id } : null
   },
 
   setThreadUserProfile(threadId: number, userProfileId: number | null) {

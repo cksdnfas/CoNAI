@@ -13,13 +13,16 @@ import {
   CHAT_LOREBOOKS_QUERY_KEY,
   OWN_LOREBOOKS_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
+  CHAT_USER_PROFILES_QUERY_KEY,
   MODEL_SLOTS_QUERY_KEY,
   chatProfileBackgroundUrl,
   createChatProfile,
   deleteChatProfile,
+  listChatAdminProfiles,
   listChatBlocks,
   listChatConnectionModels,
   listChatLorebooks,
+  listChatUserProfiles,
   listOwnLorebooks,
   listModelSlots,
   updateChatProfile,
@@ -90,6 +93,8 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     summarySlotId: profile?.summarySlotId ?? null,
     translationSlotId: profile?.translationSlotId ?? null,
     suggestSlotId: profile?.suggestSlotId ?? null,
+    suggestProfileId: profile?.suggestProfileId ?? null,
+    suggestUserProfileId: profile?.suggestUserProfileId ?? null,
     maxToolRounds: profile?.maxToolRounds ?? defaults?.maxToolRounds ?? 8,
     visionEnabled: profile?.visionEnabled ?? false,
     allowLoreProposals: profile?.allowLoreProposals ?? true,
@@ -174,6 +179,16 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
     retry: false,
     staleTime: 60_000,
   })
+  // Reply suggestions can be written by a chat profile (this one too, once saved) or one of the editor's user profiles;
+  // one that is off or has no working model is listed greyed out.
+  const profilesQuery = useQuery({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, queryFn: listChatAdminProfiles, enabled: open })
+  const userProfilesQuery = useQuery({ queryKey: CHAT_USER_PROFILES_QUERY_KEY, queryFn: listChatUserProfiles, enabled: open })
+  const suggestWriters = useMemo(() => ({
+    profiles: profilesQuery.data?.map((entry) => entry.id === profile?.id
+      ? { id: entry.id, name: t({ ko: '{name} (이 프로필)', en: '{name} (this profile)' }, { name: entry.name }), ready: entry.suggestWriterReady !== false }
+      : { id: entry.id, name: entry.name, ready: entry.isEnabled && entry.suggestWriterReady !== false }),
+    users: userProfilesQuery.data?.map((entry) => ({ id: entry.id, name: entry.name, ready: entry.modelReady === true })),
+  }), [profilesQuery.data, userProfilesQuery.data, profile?.id, t])
   const suggestModelsQuery = useQuery({
     queryKey: ['codex-chat-connection-models', suggestDirect.provider],
     queryFn: () => listChatConnectionModels(suggestDirect.provider),
@@ -311,6 +326,7 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
             providersLoaded={providersQuery.isSuccess}
             slots={slots}
             slotsReady={slotsSettled}
+            suggestWriters={suggestWriters}
             connectionModels={modelsQuery.data}
             summaryModels={summaryModelsQuery.data}
             translationModels={translationModelsQuery.data}

@@ -126,6 +126,16 @@ export function resolveChatCompletionTarget(providerName: string, overrides: { m
   }
 }
 
+/** Whether a request could be sent: the connection exists, is on, is an LLM with an address, and a model applies. */
+export function isChatTargetReady(providerName: string, model?: string | null) {
+  try {
+    resolveChatCompletionTarget(providerName, { model })
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** Model ids the connection lists at `GET {base}/models`, plus its default model. */
 export async function listChatCompletionModels(providerName: string) {
   const { config, apiBase, apiKey } = resolveConnection(providerName)

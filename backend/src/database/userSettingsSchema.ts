@@ -783,6 +783,10 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['summary_slot_id', 'INTEGER'],
     ['translation_slot_id', 'INTEGER'],
     ['suggest_slot_id', 'INTEGER'],
+    // Another chat profile (or this one) that writes the reply suggestions with its model and prompt; null: the role above.
+    ['suggest_profile_id', 'INTEGER'],
+    // Or a user profile (chat_user_profiles) that writes them with its own model and description.
+    ['suggest_user_profile_id', 'INTEGER'],
     // The model may propose chat lorebook entries (save_lore).
     ['allow_lore_proposals', 'INTEGER NOT NULL DEFAULT 1'],
   ];
@@ -790,6 +794,10 @@ export function createUserSettingsSchema(db: Database.Database): void {
     if (!hasColumn('llm_chat_profiles', columnName)) {
       db.exec(`ALTER TABLE llm_chat_profiles ADD COLUMN ${columnName} ${definition}`);
     }
+  }
+  // The model a user profile writes reply suggestions with (llm_model_slots; no foreign key, like the profile slots).
+  if (!hasColumn('chat_user_profiles', 'model_slot_id')) {
+    db.exec('ALTER TABLE chat_user_profiles ADD COLUMN model_slot_id INTEGER');
   }
   migrateProfileBlocksToSharedTable(db);
   // The preset column arriving is the one-time signal to fold existing per-profile tool grants into shared presets.

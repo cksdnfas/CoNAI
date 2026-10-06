@@ -453,7 +453,7 @@ export interface ChatProfile {
   translationModel: string
   /** Notes for translating this profile's replies (voice, how it addresses the user, a glossary); `{{char}}`/`{{user}}` filled. */
   translationInstructions: string
-  /** Reply suggestions on the composer's sparkle button; null provider uses the chat's own connection (LLM only). */
+  /** Reply suggestions on the composer's sparkle button; null provider uses the chat's own model (Codex: a one-shot run). */
   suggestEnabled: boolean
   suggestProviderName: string | null
   suggestModel: string
@@ -462,6 +462,12 @@ export interface ChatProfile {
   summarySlotId: number | null
   translationSlotId: number | null
   suggestSlotId: number | null
+  /** A profile (another one or this one) that writes the suggestions with its own model and prompt; wins over the suggest role. */
+  suggestProfileId: number | null
+  /** Or a user profile that writes them with its own model and description (only in its account's chats). */
+  suggestUserProfileId: number | null
+  /** Read-only: as a suggestion writer, its model is set and its connection works. */
+  suggestWriterReady?: boolean
   maxToolRounds: number
   /** LLM: the model can look at images (view_images). */
   visionEnabled: boolean
@@ -483,7 +489,7 @@ export interface ChatCardImportReport {
   dropped: string[]
 }
 
-export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate' | 'backgroundVersion'>> & { background?: string | null }
+export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate' | 'backgroundVersion' | 'suggestWriterReady'>> & { background?: string | null }
 
 export interface ChatProfileDefaults {
   loreScanDepth: number
@@ -798,6 +804,8 @@ export interface ModelSlot {
   profiles: Array<{ id: number; name: string; roles: ModelRole[] }>
   createdDate: string
   updatedDate: string
+  /** Read-only: its connection can be used. */
+  ready?: boolean
 }
 
 /** `adoptProfiles`: bind profiles whose direct connection + model equals this slot's (and have no slot for that role). */
@@ -872,9 +880,28 @@ export interface ChatUserProfile {
   /** New chats take this profile without asking. */
   isDefault: boolean
   sortOrder: number
+  /** The model (a model slot) this profile writes reply suggestions with when a chat profile links it; null: none. */
+  modelSlotId: number | null
+  /** Read-only: the model is set and its connection works. */
+  modelReady?: boolean
 }
 
-export type ChatUserProfileInput = Pick<ChatUserProfile, 'name' | 'persona' | 'avatar' | 'isDefault'>
+/** `modelSlotId` left out keeps the model the profile had. */
+export type ChatUserProfileInput = Pick<ChatUserProfile, 'name' | 'persona' | 'avatar' | 'isDefault'> & { modelSlotId?: number | null }
+
+/** A model any chat user can give a user profile: a model slot, and whether its connection works. */
+export interface ChatModelOption {
+  id: number
+  name: string
+  model: string
+  ready: boolean
+}
+
+export const CHAT_MODEL_OPTIONS_QUERY_KEY = ['codex-chat-model-options'] as const
+
+export function listChatModelOptions() {
+  return requestApiData<ChatModelOption[]>('/api/codex-chat/model-options')
+}
 
 export function listChatUserProfiles() {
   return requestApiData<ChatUserProfile[]>('/api/codex-chat/user-profiles')
@@ -1200,6 +1227,11 @@ export function getThreadLorebooks(threadId: number) {
 /** Replace the chat book's entries; it is made with its first entry (null once emptied). */
 export function saveThreadLorebook(threadId: number, entries: ChatLoreEntry[]) {
   return requestApiData<OwnedChatLorebook | null>(`/api/codex-chat/threads/${threadId}/lorebook`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ entries }) })
+}
+
+/** Keep the chat book as an account book, linked to this chat (the chat starts a new book with its next entry). */
+export function keepThreadLorebook(threadId: number) {
+  return requestApiData<OwnedChatLorebook>(`/api/codex-chat/threads/${threadId}/lorebook/keep`, { method: 'POST' })
 }
 
 export function previewLorebookMerge(targetId: number, input: { sourceId: number; entryIds?: string[] }) {

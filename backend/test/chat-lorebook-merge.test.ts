@@ -212,7 +212,14 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     assert.equal(child(lorebookRoot.id, '등대 산책 (2)')?.id, chatBook.folderId)
     assert.equal(child(child(lorebookRoot.id, CHAT_LOREBOOK_FOLDER)!.id, '등대 산책'), null)
     assert.equal(OwnedLorebookStore.chatBookOf(threadId), null)
+    assert.deepEqual(OwnedLorebookStore.threadLinks(threadId), [chatBook.id], 'the chat keeps the kept book, now linked')
     assert.equal((await call('POST', `/api/codex-chat/threads/${threadId}/lorebook/keep`)).status, 404, 'no chat book left to keep')
+    // A chat that already links the most it can: refused, nothing moved.
+    const full = chatWithBook('가득 찬 채팅', [{ id: 'f', content: '메모.' }])
+    const many = Array.from({ length: 20 }, (_, n) => OwnedLorebookStore.create(me, { name: `연결 ${n}`, entries: [] }).id)
+    OwnedLorebookStore.setThreadLinks(full.threadId, many)
+    assert.equal((await call('POST', `/api/codex-chat/threads/${full.threadId}/lorebook/keep`)).status, 400)
+    assert.equal(OwnedLorebookStore.chatBookOf(full.threadId)?.id, full.chatBook.id)
     // Deleting the chat now leaves the kept book alone.
     assert.equal((await call('DELETE', `/api/codex-chat/threads/${threadId}`)).status, 200)
     assert.deepEqual(book(chatBook.id).entries.map((entry) => entry.content), ['저녁마다 등대까지 걷는다.'])

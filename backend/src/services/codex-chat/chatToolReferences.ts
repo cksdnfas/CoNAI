@@ -13,6 +13,28 @@ function readJobId(value: unknown) {
   return typeof id === 'number' && Number.isSafeInteger(id) && id > 0 ? id : null
 }
 
+/**
+ * The scene the model asked for with a creation tool call: the `prompt` of a preset tool (generate_image_N), or the
+ * prompt / inputs of a submit_generation_job payload. What a summary or another member keeps of the call, since the
+ * job JSON in its result says nothing about the picture.
+ */
+export function generationPromptOf(call: { tool: string; arguments: unknown }): string | null {
+  if (!call.arguments || typeof call.arguments !== 'object') return null
+  const args = call.arguments as Record<string, unknown>
+  const direct = args.prompt
+  if (typeof direct === 'string' && direct.trim()) return direct.trim()
+  const payload = args.request_payload
+  if (payload && typeof payload === 'object' && typeof (payload as Record<string, unknown>).prompt === 'string') {
+    const prompt = ((payload as Record<string, unknown>).prompt as string).trim()
+    if (prompt) return prompt
+  }
+  const inputs = args.inputs
+  if (inputs && typeof inputs === 'object' && Object.keys(inputs as object).length > 0) {
+    return Object.entries(inputs as Record<string, unknown>).map(([key, value]) => `${key}=${typeof value === 'string' ? value : JSON.stringify(value)}`).join('; ')
+  }
+  return null
+}
+
 export function truncateToolSummary(value: string) {
   return value.length > TOOL_SUMMARY_LENGTH ? `${value.slice(0, TOOL_SUMMARY_LENGTH)}…` : value
 }

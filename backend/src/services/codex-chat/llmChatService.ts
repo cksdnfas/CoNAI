@@ -18,6 +18,7 @@ import { ChatUserProfileStore, userPersonaForThread, userPersonaOf } from './cha
 import { loadChatSettings } from './chatSettings'
 import { intersectChatScopes, resolveChatAccess } from './codexChatAccess'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
+import { withGenerationOutcomes } from './codexChatMedia'
 import type { CodexChatStreamEvent } from './codexChatService'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 import { ChatSummaryStore } from './chatMemory'
@@ -174,7 +175,8 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
 
 /** A direct chat's reply: the profile's prompt and the thread's context window (summarized first if it overflows). */
 async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile) {
-  const listMessages = () => CodexChatStore.listMessages(thread.id).filter((message) => message.id !== turn.replacingMessageId)
+  // Creation calls replay with their outcome (image attached / failed / running), not the "queued" JSON of their submission.
+  const listMessages = () => withGenerationOutcomes(CodexChatStore.listMessages(thread.id).filter((message) => message.id !== turn.replacingMessageId))
   const config = resolveContextConfig(thread, profile)
   return streamReply(turn, requester, profile, async (tools) => {
     const attachmentTexts = await inlineTextsForChat(profile, requester.accountId, listMessages())

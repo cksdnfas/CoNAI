@@ -122,6 +122,56 @@ export function attachJobResults(messages: CodexChatMessageRecord[]) {
   return { pendingJobs: pendingJobIds.size, messages: attachResolvedJobResults(messages, historiesByJob, pendingJobIds, owners) }
 }
 
+/** What became of a generation job, as a later request should read it. */
+export type GenerationOutcome = { status: string; images: number }
+
+/**
+ * One line in place of the job JSON a creation call stored at submission (always "queued" there): whether the image
+ * landed in the reply, failed, or is still on its way. The model is otherwise never told, and keeps apologising for an
+ * image the reader has long seen.
+ */
+export function generationOutcomeNote(jobId: number, outcome: GenerationOutcome | undefined): string {
+  if (!outcome) return `Generation job #${jobId}: no longer in the queue (its result, if any, is attached to this reply).`
+  if (outcome.images > 0) return `Generation job #${jobId} finished: ${outcome.images} image${outcome.images === 1 ? '' : 's'} attached to this reply, visible to the reader. Do not describe or re-announce it.`
+  if (outcome.status === 'completed') return `Generation job #${jobId} finished but produced no image.`
+  if (outcome.status === 'failed') return `Generation job #${jobId} failed: no image was attached to this reply.`
+  if (outcome.status === 'cancelled') return `Generation job #${jobId} was cancelled: no image was attached to this reply.`
+  return `Generation job #${jobId} is still running; its image attaches to this reply when it finishes.`
+}
+
+/** Pure form of withGenerationOutcomes: creation calls get the note as their replayed output (not stored). */
+export function applyGenerationOutcomes(messages: CodexChatMessageRecord[], outcomes: ReadonlyMap<number, GenerationOutcome>) {
+  return messages.map((message) => {
+    if (!message.tool_calls.some((call) => isCodexChatCreationTool(call.tool) && jobIdsOf(call).length > 0)) return message
+    return {
+      ...message,
+      tool_calls: message.tool_calls.map((call) => {
+        const ids = isCodexChatCreationTool(call.tool) ? jobIdsOf(call) : []
+        return ids.length > 0 ? { ...call, output: ids.map((id) => generationOutcomeNote(id, outcomes.get(id))).join('\n') } : call
+      }),
+    }
+  })
+}
+
+/**
+ * The messages as a request should replay them: each creation call's stale job JSON replaced by its outcome now
+ * (see generationOutcomeNote). Read-only; the stored records keep the submission result.
+ */
+export function withGenerationOutcomes(messages: CodexChatMessageRecord[]) {
+  const jobIds = [...new Set(messages.flatMap((message) => message.tool_calls.filter((call) => isCodexChatCreationTool(call.tool)).flatMap(jobIdsOf)))]
+  if (jobIds.length === 0) return messages
+  const db = getUserSettingsDb()
+  const outcomes = new Map<number, GenerationOutcome>()
+  for (const chunk of chunked(jobIds)) {
+    const placeholders = chunk.map(() => '?').join(',')
+    const jobs = db.prepare(`SELECT id, status FROM generation_queue_jobs WHERE id IN (${placeholders})`).all(...chunk) as Array<{ id: number; status: string }>
+    jobs.forEach((job) => outcomes.set(job.id, { status: job.status, images: 0 }))
+    const histories = db.prepare(`SELECT queue_job_id, COUNT(*) AS images FROM api_generation_history WHERE generation_status = 'completed' AND composite_hash IS NOT NULL AND queue_job_id IN (${placeholders}) GROUP BY queue_job_id`).all(...chunk) as Array<{ queue_job_id: number; images: number }>
+    histories.forEach((row) => outcomes.set(row.queue_job_id, { status: outcomes.get(row.queue_job_id)?.status ?? 'completed', images: row.images }))
+  }
+  return applyGenerationOutcomes(messages, outcomes)
+}
+
 /** Pure ownership resolution, also used by regression coverage. Old records prefer an actual submission. */
 export function attachResolvedJobResults(messages: CodexChatMessageRecord[], historiesByJob: ReadonlyMap<number, number[]>, pendingJobIds: ReadonlySet<number>, owners: ReadonlyMap<number, string> = new Map()) {
   const creator = new Map<number, string>()

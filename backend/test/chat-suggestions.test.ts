@@ -2,8 +2,9 @@ import assert from 'node:assert/strict'
 import { test, type TestContext } from 'node:test'
 import { ExternalApiProvider } from '../src/models/ExternalApiProvider'
 import { ChatUserProfileStore } from '../src/services/codex-chat/chatUserProfiles'
-import { ChatSuggestError, buildSuggestionTranscript, parseSuggestions, suggestReplies, suggestionTargetOf } from '../src/services/codex-chat/chatSuggestions'
-import type { ChatProfile } from '../src/services/codex-chat/chatProfiles'
+import { ChatSuggestError, buildSuggestionTranscript, canSuggest, parseSuggestions, suggestReplies, suggestionRunnerOf, userWriterReady } from '../src/services/codex-chat/chatSuggestions'
+import { ModelSlotStore } from '../src/services/codex-chat/modelSlots'
+import { ChatProfileStore, type ChatProfile } from '../src/services/codex-chat/chatProfiles'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from '../src/services/codex-chat/codexChatStore'
 
 /** The suggestion connection answers `reply`; `requests` collects what was sent to it. */
@@ -40,14 +41,74 @@ test('parseSuggestions: a JSON array, a fenced one, or lines; trimmed, deduplica
   assert.deepEqual(parseSuggestions('   '), [])
 })
 
-test('suggestionTargetOf: off, the chat connection as fallback for LLM profiles, none for Codex without its own', (t) => {
+const modelOf = (runner: ReturnType<typeof suggestionRunnerOf>) => runner?.kind === 'llm' ? [runner.target.providerName, runner.target.model] : runner ? ['codex', runner.model] : null
+
+test('suggestionRunnerOf: off, own connection, the chat connection for LLM profiles, the own Codex model for Codex', (t) => {
   mockConnection(t, '')
-  assert.equal(suggestionTargetOf({ ...profile, suggestEnabled: false }), null)
-  const own = suggestionTargetOf({ ...profile, suggestProviderName: null, suggestModel: '' })
-  assert.equal(own?.providerName, 'chat-llm')
-  assert.equal(own?.model, 'big')
-  assert.equal(suggestionTargetOf({ ...profile, engine: 'codex', providerName: '', suggestProviderName: null }), null)
-  assert.equal(suggestionTargetOf(profile)?.model, 'tiny')
+  assert.equal(suggestionRunnerOf({ ...profile, suggestEnabled: false }), null)
+  assert.deepEqual(modelOf(suggestionRunnerOf(profile)), ['small-llm', 'tiny'])
+  assert.deepEqual(modelOf(suggestionRunnerOf({ ...profile, suggestProviderName: null, suggestModel: '' })), ['chat-llm', 'big'])
+  const codex = suggestionRunnerOf({ ...profile, engine: 'codex', providerName: '', model: 'gpt-5.5', suggestProviderName: null })
+  assert.deepEqual(modelOf(codex), ['codex', 'gpt-5.5'])
+  assert.equal(codex?.kind === 'codex' ? codex.reasoningEffort : null, 'low')
+  assert.equal(canSuggest({ ...profile, suggestProviderName: 'gone' }), false, 'a connection that cannot be used offers no button')
+})
+
+const writer = {
+  id: 2, name: '대필', engine: 'llm', providerName: 'small-llm', model: 'writer-model', isEnabled: true, temperature: null,
+  maxTokens: null, reasoningEffort: '', reasoningBudgetTokens: null, extraParams: '',
+  systemPrompt: '{{user}}답게, {{char}}를 놀리는 쪽으로.', promptSections: [{ id: 's', title: '말투', content: '짧게 끊어 말함.', kind: 'text', enabled: true }, { id: 'x', title: '끔', content: '안 보임', kind: 'text', enabled: false }],
+} as unknown as ChatProfile
+
+const writerIdOf = (runner: ReturnType<typeof suggestionRunnerOf>) => runner?.writer ? `${runner.writer.kind}:${runner.writer.profile.id}` : null
+
+test('suggestionRunnerOf: a linked writer profile, or the profile itself, wins with its own model; a missing or disabled one does not', (t) => {
+  mockConnection(t, '')
+  const found = new Map<number, ChatProfile>([[2, writer], [3, { ...writer, id: 3, isEnabled: false }], [4, { ...writer, id: 4, engine: 'codex', model: 'gpt-5.5', reasoningEffort: 'medium' }]])
+  t.mock.method(ChatProfileStore, 'find', (id: number) => found.get(id) ?? null)
+  assert.deepEqual(modelOf(suggestionRunnerOf({ ...profile, suggestProfileId: 2 })), ['small-llm', 'writer-model'])
+  assert.equal(writerIdOf(suggestionRunnerOf({ ...profile, suggestProfileId: 2 })), 'profile:2')
+  const itself = suggestionRunnerOf({ ...profile, suggestProfileId: 1 })
+  assert.deepEqual([modelOf(itself), writerIdOf(itself)], [['chat-llm', 'big'], 'profile:1'])
+  for (const id of [3, 99]) assert.deepEqual(modelOf(suggestionRunnerOf({ ...profile, suggestProfileId: id })), ['small-llm', 'tiny'])
+  const codexWriter = suggestionRunnerOf({ ...profile, suggestProfileId: 4 })
+  assert.deepEqual(modelOf(codexWriter), ['codex', 'gpt-5.5'])
+  assert.equal(codexWriter?.kind === 'codex' ? codexWriter.reasoningEffort : null, 'medium')
+})
+
+const userWriter = { id: 7, accountId: 5, name: '나', persona: '{{char}}한테는 늘 장난스럽게 군다.', avatar: null, isDefault: false, sortOrder: 0, modelSlotId: 9 }
+
+test('suggestionRunnerOf: a user profile writes with its model, only in its own account and only with a model', (t) => {
+  mockConnection(t, '')
+  t.mock.method(ChatUserProfileStore, 'findById', (id: number) => (id === 7 ? userWriter : id === 8 ? { ...userWriter, id: 8, modelSlotId: null } : null))
+  t.mock.method(ModelSlotStore, 'target', (id: number | null) => (id === 9 ? { id: 9, name: '작은 모델', providerName: 'small-llm', model: 'slot-model' } : null))
+  const linked = { ...profile, suggestUserProfileId: 7 }
+  assert.deepEqual([modelOf(suggestionRunnerOf(linked, 5)), writerIdOf(suggestionRunnerOf(linked, 5))], [['small-llm', 'slot-model'], 'user:7'])
+  assert.equal(writerIdOf(suggestionRunnerOf(linked, 6)), null, 'another account falls back to the role')
+  assert.equal(writerIdOf(suggestionRunnerOf({ ...profile, suggestUserProfileId: 8 }, 5)), null, 'no model falls back to the role')
+  assert.equal(userWriterReady({ modelSlotId: 9 }), true)
+  assert.equal(userWriterReady({ modelSlotId: null }), false)
+})
+
+test('suggestReplies: a user profile writer adds its description, unless it is the chat\'s own user', async (t) => {
+  const requests = mockConnection(t, '["a"]')
+  t.mock.method(ChatUserProfileStore, 'findById', (id: number) => (id === 7 ? { ...userWriter, accountId: null } : id === 1 ? { ...userWriter, id: 1, accountId: null } : null))
+  t.mock.method(ModelSlotStore, 'target', (id: number | null) => (id === 9 ? { id: 9, name: '작은 모델', providerName: 'small-llm', model: 'slot-model' } : null))
+  await suggestReplies({ ...profile, suggestUserProfileId: 7 }, thread, [message(1, 'assistant', 'hi')], () => '유나')
+  assert.match(requests[0].messages[0].content, /## 추천 지시 \(나\)\n유나한테는 늘 장난스럽게 군다\./)
+  await suggestReplies({ ...profile, suggestUserProfileId: 1 }, thread, [message(1, 'assistant', 'hi')], () => '유나')
+  assert.doesNotMatch(requests[1].messages[0].content, /추천 지시/)
+})
+
+test('suggestReplies: a writer profile adds its prompt, placeholders filled, disabled sections left out', async (t) => {
+  const requests = mockConnection(t, '["a"]')
+  t.mock.method(ChatProfileStore, 'find', (id: number) => (id === 2 ? writer : null))
+  await suggestReplies({ ...profile, suggestProfileId: 2 }, thread, [message(1, 'assistant', 'hi')], () => '유나')
+  assert.equal(requests[0].model, 'writer-model')
+  const system = requests[0].messages[0].content
+  assert.match(system, /## 추천 지시 \(대필\)\n민수답게, 유나를 놀리는 쪽으로\./)
+  assert.match(system, /### 말투\n짧게 끊어 말함\./)
+  assert.doesNotMatch(system, /안 보임/)
 })
 
 test('transcript: reader text, no block fences, no reply labels, last turns only', () => {

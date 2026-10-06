@@ -139,7 +139,8 @@ export type ChatProfile = {
   translationInstructions: string
   /**
    * Reply suggestions: the composer's sparkle button asks a model for a few things the user might say next.
-   * Null provider uses the chat's own connection (LLM profiles only). Empty model uses the connection's default.
+   * Null provider uses the chat's own connection (a Codex profile: its Codex model, in a one-shot run). Empty model
+   * uses the connection's default.
    */
   suggestEnabled: boolean
   suggestProviderName: string | null
@@ -152,6 +153,16 @@ export type ChatProfile = {
   summarySlotId: number | null
   translationSlotId: number | null
   suggestSlotId: number | null
+  /**
+   * A chat profile (another one, or this one) that writes the reply suggestions with its own model and prompt; it wins
+   * over the suggest role's slot / connection. Null, or a profile that went missing or is off: the role applies.
+   */
+  suggestProfileId: number | null
+  /**
+   * Or a user profile that writes them with its own model and description (used only in that account's chats).
+   * At most one of the two is set.
+   */
+  suggestUserProfileId: number | null
   /** Model ↔ tool round trips allowed in one reply. */
   maxToolRounds: number
   /** LLM: the model can look at images (view_images results are sent to it). */
@@ -219,6 +230,8 @@ type ProfileRow = {
   summary_slot_id: number | null
   translation_slot_id: number | null
   suggest_slot_id: number | null
+  suggest_profile_id: number | null
+  suggest_user_profile_id: number | null
   max_tool_rounds: number | null
   chat_style: string | null
   background_image: string | null
@@ -359,6 +372,8 @@ function toProfile(row: ProfileRow): ChatProfile {
     summarySlotId: ModelSlotStore.existing(row.summary_slot_id),
     translationSlotId: ModelSlotStore.existing(row.translation_slot_id),
     suggestSlotId: ModelSlotStore.existing(row.suggest_slot_id),
+    suggestProfileId: row.suggest_profile_id,
+    suggestUserProfileId: row.suggest_profile_id === null ? row.suggest_user_profile_id : null,
     maxToolRounds: row.max_tool_rounds ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
     visionEnabled: row.vision_enabled === 1,
     allowLoreProposals: row.allow_lore_proposals !== 0,
@@ -501,6 +516,8 @@ function toColumns(input: ChatProfileInput) {
     summary_slot_id: slotId(input.summarySlotId),
     translation_slot_id: slotId(input.translationSlotId),
     suggest_slot_id: slotId(input.suggestSlotId),
+    suggest_profile_id: optionalNumber(input.suggestProfileId, { min: 1, max: Number.MAX_SAFE_INTEGER }, true),
+    suggest_user_profile_id: input.suggestProfileId ? null : optionalNumber(input.suggestUserProfileId, { min: 1, max: Number.MAX_SAFE_INTEGER }, true),
     max_tool_rounds: optionalNumber(input.maxToolRounds, CHAT_PROFILE_LIMITS.maxToolRounds, true) ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
     vision_enabled: input.visionEnabled ? 1 : 0,
     allow_lore_proposals: input.allowLoreProposals === false ? 0 : 1,
