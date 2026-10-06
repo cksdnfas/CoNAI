@@ -35,7 +35,7 @@ import { listChatCompletionModels } from '../services/codex-chat/llmChatCompleti
 import { LlmChatError, LlmChatService } from '../services/codex-chat/llmChatService'
 import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers'
 import { sendRouteBadRequest } from './routeValidation'
-import { FileStoreError, fileOwnerKey } from '../services/fileStoreService'
+import { FileStoreError, FileStoreService, fileOwnerKey, parseFileId } from '../services/fileStoreService'
 import { exportChatMarkdown } from '../services/codex-chat/chatExport'
 import { ExternalApiProvider } from '../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../services/llmGenerationOptions'
@@ -1167,6 +1167,43 @@ router.post('/threads/import', requireChatAccess, (req, res, next) => {
     if (error instanceof ChatImportError) { res.status(error.status).json({ success: false, error: error.message }); return }
     sendChatError(res, error)
   }
+})
+
+/**
+ * POST /api/codex-chat/threads/import-files — `{ fileIds }`: CoNAI chat JSON files from the requester's own file store
+ * (a chat backup, say) as new chats, without downloading them first. Each file is reported on its own:
+ * `{ fileId, name, threadId?, notes?, error? }`.
+ */
+router.post('/threads/import-files', requireChatAccess, (req: Request, res: Response) => {
+  const raw = (req.body as { fileIds?: unknown } | undefined)?.fileIds
+  let fileIds: string[]
+  try {
+    fileIds = Array.isArray(raw) ? [...new Set(raw.map((value) => parseFileId(value) as string))] : []
+  } catch {
+    sendRouteBadRequest(res, 'fileIds must be file ids')
+    return
+  }
+  if (fileIds.length === 0 || fileIds.length > 20) { sendRouteBadRequest(res, 'fileIds must hold 1–20 files'); return }
+  const requester = requesterFrom(req)
+  const owner = fileOwnerKey(requester.accountId)
+  const target = {
+    direct: (profileId: number) => CodexChatService.createThread(requester, profileId),
+    group: (profileIds: number[], representativeId: number) => GroupChatService.create(requester, { profileIds, representativeId }),
+  }
+  const results = fileIds.map((fileId) => {
+    let name = ''
+    try {
+      const { entry, filePath } = FileStoreService.resolveFile(owner, fileId)
+      name = entry.name
+      if (entry.size > CHAT_IMPORT_MAX_BYTES) throw new ChatImportError('대화 JSON은 최대 32MB야.')
+      const imported = importChatThread(requester, fs.readFileSync(filePath), target)
+      ChatAppearanceStore.threadCreated(getRequesterAccountId(req), imported.threadId)
+      return { fileId, name, threadId: imported.threadId, notes: imported.notes }
+    } catch (error) {
+      return { fileId, name, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
+  res.json({ success: true, data: { results } })
 })
 
 router.get('/threads/:threadId/export', requireChatAccess, (req: Request, res: Response) => {

@@ -25,6 +25,7 @@ import {
   editChatReplyText,
   branchCodexChatThread,
   importCodexChatThread,
+  importChatFromFiles,
   getCodexChatRunning,
   listChatProfiles,
   listCodexChatThreads,
@@ -79,7 +80,7 @@ import { CHAT_COMMANDS, ChatCommandList, type ChatCommand } from './chat-command
 import { ChatExportDialog, ChatSearchInput, ChatSearchResults } from './chat-search-export'
 import { GROUP_MEMBER_MAX, GroupAvatarStack, GroupInviteDialog, GroupMembersPopover, GroupTurnStatus, MentionList, mentionOptions, type GroupInviteMode, type MentionOption } from './chat-group'
 import { mentionQueryAt } from './chat-mentions'
-import { parseMentions } from '@conai/shared'
+import { parseMentions, type StoredFileEntry } from '@conai/shared'
 import { ChatReplyPreview } from './chat-reply'
 import { ChatDeleteDialog } from './chat-delete-dialog'
 import { LorebookMergeDialog } from './lorebook-merge-dialog'
@@ -451,6 +452,22 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       showSnackbar({ message: getErrorMessage(error, t({ ko: '대화를 가져오지 못했어.', en: 'Could not import the chat.' })), tone: 'error' })
     }
   }, [queryClient, selectThread, showSnackbar, t])
+  // Several files may come back at once: open the chat when there is just one, and say what failed.
+  const handleImportFiles = async (entries: StoredFileEntry[]) => {
+    try {
+      const { results } = await importChatFromFiles(entries.map((entry) => entry.id))
+      const imported = results.filter((result) => result.threadId !== undefined)
+      const failed = results.filter((result) => result.error)
+      await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+      if (imported.length === 1) selectThread(imported[0].threadId)
+      else if (imported.length > 1) setListOpen(true)
+      const parts = imported.length ? [t({ ko: '대화 {count}개를 가져왔어.', en: 'Imported {count} chats.' }, { count: imported.length }), ...(imported.length === 1 ? imported[0].notes ?? [] : [])] : []
+      if (failed.length) parts.push(t({ ko: '{name}: {error}', en: '{name}: {error}' }, { name: failed[0].name || failed[0].fileId, error: failed[0].error ?? '' }) + (failed.length > 1 ? t({ ko: ' 외 {count}개 실패', en: ' and {count} more failed' }, { count: failed.length - 1 }) : ''))
+      showSnackbar({ message: parts.join(' '), tone: failed.length ? 'error' : undefined })
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '대화를 가져오지 못했어.', en: 'Could not import the chat.' })), tone: 'error' })
+    }
+  }
   const messageActions = useMemo(() => ({
     busy: isBusy, canRewrite: !isCodexThread, lastReplyId, editingId: editingMessageId, onEditingChange: setEditingMessageId, onEdit: handleEdit, onRegenerate: handleRegenerate, onAlternative: handleAlternative, onReply: handleReply,
     canEditReply, onEditReply: handleEditReply, canContinue: directLlm, onContinue: handleContinue, canBranch: true, onBranch: (id: number) => { void handleBranch(id) },
@@ -1026,7 +1043,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     // The unsaved new chat shows its greeting and the composer; otherwise there is no chat yet: the picker.
     body = pendingProfile
       ? chatBody
-      : threadsQuery.isPending ? null : <ChatProfilePicker profiles={profiles} threads={threads} layout={layout} disabled={isStartingChat || createGroupMutation.isPending || isBusy} onPick={pickProfile} onPickGroup={pickGroup} onImport={(file) => void handleImport(file)} />
+      : threadsQuery.isPending ? null : <ChatProfilePicker profiles={profiles} threads={threads} layout={layout} disabled={isStartingChat || createGroupMutation.isPending || isBusy} onPick={pickProfile} onPickGroup={pickGroup} onImport={(file) => void handleImport(file)} onImportFiles={(entries) => void handleImportFiles(entries)} />
   } else if (activeView === 'gallery') {
     body = <Suspense fallback={null}><CodexChatGallery threadId={activeThreadId} columns={layout === 'page' ? 'wide' : 'narrow'} /></Suspense>
   } else if (activeView === 'context') {

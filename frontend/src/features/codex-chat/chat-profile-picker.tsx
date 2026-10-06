@@ -1,12 +1,18 @@
 import { useMemo, useRef, useState } from 'react'
-import { Crown, FileUp, X } from 'lucide-react'
+import { Crown, FileUp, FolderOpen, HardDriveUpload, X } from 'lucide-react'
+import type { StoredFileEntry } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
+import { Tip } from '@/components/ui/tooltip'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { FilePicker } from '@/features/files/file-browser'
 import { useI18n } from '@/i18n'
-import type { ChatProfileSummary, CodexChatThread } from '@/lib/api-codex-chat'
+import { CHAT_BACKUP_FOLDER, type ChatProfileSummary, type CodexChatThread } from '@/lib/api-codex-chat'
+import { listStoredFiles } from '@/lib/api-files'
 import { cn } from '@/lib/utils'
 import { GROUP_MEMBER_MAX } from './chat-group'
 import { ChatProfileAvatar } from './chat-profile-avatar'
@@ -15,11 +21,13 @@ import { ChatProfileAvatar } from './chat-profile-avatar'
  * Pick who to chat with. A tap on a profile starts a direct chat. Ticking profiles (the check that shows on hover,
  * always on touch) collects a room instead: the first one ticked represents it, the rest join as members.
  */
-export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick, onPickGroup, onImport }: {
+export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick, onPickGroup, onImport, onImportFiles }: {
   profiles: ChatProfileSummary[]; threads: CodexChatThread[]; layout: 'panel' | 'page'; disabled: boolean
   onPick: (profileId: number) => void
   /** A CoNAI chat JSON to bring back as a new chat. */
   onImport?: (file: File) => void
+  /** Chat JSON files already in the file store (chat backups), brought back without downloading them. */
+  onImportFiles?: (entries: StoredFileEntry[]) => void
   /** Profiles in the order they were ticked: the first represents the room. */
   onPickGroup: (profileIds: number[]) => void
 }) {
@@ -27,6 +35,14 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState<number[]>([])
   const importRef = useRef<HTMLInputElement>(null)
+  const canBrowseFiles = useAuthStatusQuery().data?.permissionKeys.includes('page.files.view') === true && onImportFiles !== undefined
+  /** The file store picker, opened in the chat backup folder when there is one; undefined while closed. */
+  const [filePickerAt, setFilePickerAt] = useState<string | null | undefined>(undefined)
+  const openFilePicker = async () => {
+    const root = await listStoredFiles(null).catch(() => null)
+    setFilePickerAt(root?.entries.find((entry) => entry.kind === 'folder' && entry.name === CHAT_BACKUP_FOLDER)?.id ?? null)
+  }
+  const importLabel = t({ ko: '대화 가져오기 (JSON)', en: 'Import a chat (JSON)' })
   // Each profile's latest direct chat (threads come newest first); group rooms belong to several profiles.
   const recent = useMemo(() => {
     const result = new Map<number, CodexChatThread>()
@@ -52,7 +68,29 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
         <div className="mb-4 flex items-center gap-2">
           <Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t({ ko: '프로필 검색', en: 'Search profiles' })} aria-label={t({ ko: '프로필 검색', en: 'Search profiles' })} className="flex-1" />
           {onImport ? <>
-            <IconButton variant="ghost" size="icon-sm" disabled={disabled} onClick={() => importRef.current?.click()} label={t({ ko: '대화 가져오기 (JSON)', en: 'Import a chat (JSON)' })}><FileUp /></IconButton>
+            {canBrowseFiles ? (
+              <DropdownMenu>
+                <Tip content={importLabel}>
+                  <DropdownMenuTrigger asChild>
+                    <IconButton variant="ghost" size="icon-sm" disabled={disabled} label={importLabel} tooltip={false}><FileUp /></IconButton>
+                  </DropdownMenuTrigger>
+                </Tip>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => importRef.current?.click()}><HardDriveUpload />{t({ ko: '내 기기에서', en: 'From this device' })}</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void openFilePicker()}><FolderOpen />{t({ ko: '파일 보관함에서', en: 'From files' })}</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : <IconButton variant="ghost" size="icon-sm" disabled={disabled} onClick={() => importRef.current?.click()} label={importLabel}><FileUp /></IconButton>}
+            {filePickerAt !== undefined && onImportFiles ? (
+              <FilePicker
+                title={t({ ko: '보관함에서 대화 가져오기', en: 'Import chats from files' })}
+                accept={['.json']}
+                initialParentId={filePickerAt}
+                pickLabel={(count) => count > 0 ? t({ ko: '{count}개 가져오기', en: 'Import {count}' }, { count }) : t({ ko: '가져오기', en: 'Import' })}
+                onClose={() => setFilePickerAt(undefined)}
+                onPick={(entries) => { setFilePickerAt(undefined); onImportFiles(entries) }}
+              />
+            ) : null}
             <input ref={importRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => {
               const file = event.target.files?.[0]
               event.target.value = ''

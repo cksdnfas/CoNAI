@@ -654,6 +654,11 @@ export function importCodexChatThread(file: File) {
   return requestApiData<{ thread: CodexChatThread; notes: string[] }>('/api/codex-chat/threads/import', { method: 'POST', body })
 }
 
+/** CoNAI chat JSON files from the requester's file store (chat backups) as new chats, each reported on its own. */
+export function importChatFromFiles(fileIds: string[]) {
+  return requestApiData<{ results: Array<{ fileId: string; name: string; threadId?: number; notes?: string[]; error?: string }> }>('/api/codex-chat/threads/import-files', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ fileIds }) })
+}
+
 export function importChatProfileCard(file: File) {
   const body = new FormData()
   body.append('file', file)

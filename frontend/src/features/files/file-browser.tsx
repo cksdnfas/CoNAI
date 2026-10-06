@@ -180,10 +180,14 @@ function OwnerList({ owners, onOpen }: { owners: StoredFileOwner[]; onOpen: (own
  * With `onPick` it becomes a picker (inside a modal): only files can be chosen and nothing is changed but uploads.
  * With `owner` + `onOwnerChange`, holders of `files.browse.all` can switch to any account's store (`ALL_OWNERS` lists them).
  */
-export function FileBrowser({ parentId, onNavigate, onPick, owner = null, onOwnerChange }: {
+export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, owner = null, onOwnerChange }: {
   parentId: string | null
   onNavigate: (id: string | null) => void
   onPick?: (files: StoredFileEntry[]) => void
+  /** Picker: the confirm button's text for `count` chosen files (default: attach). */
+  pickLabel?: (count: number) => string
+  /** Picker: only files with these extensions (lowercase, with the dot) can be chosen. */
+  accept?: readonly string[]
   owner?: string | null
   onOwnerChange?: (owner: string | null) => void
 }) {
@@ -480,7 +484,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, owner = null, onOwne
     </div>
   )
 
-  const pickedFiles = selection.filter((entry) => entry.kind === 'file')
+  const pickedFiles = selection.filter((entry) => entry.kind === 'file' && (!accept || accept.some((extension) => entry.name.toLowerCase().endsWith(extension))))
 
   return (
     <>
@@ -496,9 +500,11 @@ export function FileBrowser({ parentId, onNavigate, onPick, owner = null, onOwne
           <ModalFooter>
             <span className="flex-1" />
             <Button disabled={pickedFiles.length === 0 || busy} onClick={() => onPick(pickedFiles)}>
-              {pickedFiles.length > 0
-                ? t({ ko: '{count}개 첨부', en: 'Attach {count}' }, { count: pickedFiles.length })
-                : t({ ko: '첨부', en: 'Attach' })}
+              {pickLabel
+                ? pickLabel(pickedFiles.length)
+                : pickedFiles.length > 0
+                  ? t({ ko: '{count}개 첨부', en: 'Attach {count}' }, { count: pickedFiles.length })
+                  : t({ ko: '첨부', en: 'Attach' })}
             </Button>
           </ModalFooter>
         </>
@@ -566,12 +572,20 @@ export function FileBrowser({ parentId, onNavigate, onPick, owner = null, onOwne
 }
 
 /** Choose stored files to attach (chat). */
-export function FilePicker({ onClose, onPick }: { onClose: () => void; onPick: (entries: StoredFileEntry[]) => void }) {
+export function FilePicker({ onClose, onPick, title, pickLabel, accept, initialParentId = null }: {
+  onClose: () => void
+  onPick: (entries: StoredFileEntry[]) => void
+  title?: string
+  pickLabel?: (count: number) => string
+  accept?: readonly string[]
+  /** The folder it opens in (null: the top). */
+  initialParentId?: string | null
+}) {
   const { t } = useI18n()
-  const [parentId, setParentId] = useState<string | null>(null)
+  const [parentId, setParentId] = useState<string | null>(initialParentId)
   return (
-    <Modal open title={t({ ko: '보관함에서 첨부', en: 'Attach from files' })} onClose={onClose} widthClassName="max-w-3xl">
-      <FileBrowser key={parentId ?? 'root'} parentId={parentId} onNavigate={setParentId} onPick={onPick} />
+    <Modal open title={title ?? t({ ko: '보관함에서 첨부', en: 'Attach from files' })} onClose={onClose} widthClassName="max-w-3xl">
+      <FileBrowser key={parentId ?? 'root'} parentId={parentId} onNavigate={setParentId} onPick={onPick} pickLabel={pickLabel} accept={accept} />
     </Modal>
   )
 }
