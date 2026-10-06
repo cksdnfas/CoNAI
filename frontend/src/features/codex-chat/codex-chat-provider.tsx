@@ -299,6 +299,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
           } : current)
           setLiveTurn((current) => current ? { ...current, replacingMessageId: event.mode === 'regenerate' ? event.message.id : undefined } : current)
         } else if (event.type === 'done') {
+          // Proposals are attached when the thread is read, so a reply that proposed something reloads it now.
+          if (event.message.tool_calls.some((call) => call.tool.startsWith('propose_'))) void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(sentThreadId) })
           setLiveTurn((current) => current ? { ...current, replacingMessageId: event.message.id, userText: '', userRouting: undefined, flags: [], attachments: [], mediaAttachments: [] } : current)
         } else if (event.type === 'error') {
           // The full text stays on the failed message (its error chip); the toast only names the reason.

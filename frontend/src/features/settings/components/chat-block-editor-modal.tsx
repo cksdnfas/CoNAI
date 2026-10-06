@@ -23,10 +23,15 @@ import { BLOCK_KEY_PATTERN, ChatBlockEditor, starterBlock } from './chat-block-e
 import { downloadChatBlockFile } from './chat-block-file'
 
 /** Create or edit one shared display block. Saving reaches every profile that links it. */
-export function ChatBlockEditorModal({ open, shared, onClose, onDuplicate, duplicating }: {
+export function ChatBlockEditorModal({ open, shared, initialName, initialBlock, onClose, onSaved, onDuplicate, duplicating }: {
   open: boolean
   shared: ChatSharedBlock | null
+  /** New block only: the draft starts from this name and block (a block proposed in a chat) instead of the starter. */
+  initialName?: string
+  initialBlock?: ChatDisplayBlock
   onClose: () => void
+  /** Called after a new block is created (not after an edit of an existing one). */
+  onSaved?: (shared: ChatSharedBlock) => void
   /** Copy the opened block (only offered when editing an existing one). */
   onDuplicate?: (shared: ChatSharedBlock) => void
   duplicating?: boolean
@@ -42,11 +47,11 @@ export function ChatBlockEditorModal({ open, shared, onClose, onDuplicate, dupli
 
   useLayoutEffect(() => {
     if (open) {
-      setName(shared?.name ?? '')
-      setBlock(shared?.block ?? starterBlock())
+      setName(shared?.name ?? initialName ?? '')
+      setBlock(shared?.block ?? initialBlock ?? starterBlock())
       setSession((current) => current + 1)
     }
-  }, [shared, open])
+  }, [shared, initialName, initialBlock, open])
 
   const refresh = async () => {
     await Promise.all([
@@ -57,7 +62,8 @@ export function ChatBlockEditorModal({ open, shared, onClose, onDuplicate, dupli
   }
   const saveMutation = useMutation({
     mutationFn: () => (shared ? updateChatBlock(shared.id, { name, block }) : createChatBlock({ name: name.trim() || block.key, block })),
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
+      if (!shared) onSaved?.(saved)
       await refresh()
       onClose()
     },

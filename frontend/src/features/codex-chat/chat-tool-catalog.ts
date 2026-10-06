@@ -12,6 +12,7 @@ type Copy = { ko: string; en: string }
 export type ChatToolGroupId =
   | 'images' | 'history' | 'prompts' | 'workflows' | 'files' | 'emoticons' | 'backups'
   | 'image-gen' | 'workflow-run'
+  | 'configure'
   | 'image-groups' | 'prompt-groups' | 'file-ops' | 'emoticon-ops'
   | 'other'
 
@@ -29,6 +30,7 @@ const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
   { id: 'prompt-groups', scope: 'organize', label: { ko: '프롬프트 정리', en: 'Prompt organizing' } },
   { id: 'file-ops', scope: 'organize', label: { ko: '파일 변경', en: 'File changes' } },
   { id: 'emoticon-ops', scope: 'organize', label: { ko: '이모티콘 설정', en: 'Emoticon setup' } },
+  { id: 'configure', scope: 'configure', label: { ko: '설정', en: 'Setup' } },
 ]
 
 const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }> = {
@@ -89,6 +91,14 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   delete_files: { group: 'file-ops', label: { ko: '파일 삭제', en: 'Delete files' }, ko: '보관함의 파일이나 빈 폴더를 영구히 지워. 채팅에 붙은 파일은 보호돼.' },
   set_emoticon_keywords: { group: 'emoticon-ops', label: { ko: '이모티콘 키워드 설정', en: 'Set emoticon keywords' }, ko: '그룹 안 이미지의 이모티콘 키워드를 정해.' },
   set_emoticon_group: { group: 'emoticon-ops', label: { ko: '이모티콘 그룹 지정', en: 'Set emoticon group' }, ko: '그룹을 이모티콘 그룹으로 만들거나 되돌려.' },
+  get_chat_setup_guide: { group: 'configure', label: { ko: '설정 안내 읽기', en: 'Read setup guide' }, ko: '프로필·표시 블록을 어떻게 짜는지 안내를 읽어.' },
+  list_chat_profiles: { group: 'configure', label: { ko: '프로필 목록', en: 'List profiles' }, ko: '채팅 프로필을 나열해.' },
+  get_chat_profile: { group: 'configure', label: { ko: '프로필 읽기', en: 'Read profile' }, ko: '프로필 하나의 설정을 읽어.' },
+  list_display_blocks: { group: 'configure', label: { ko: '표시 블록 목록', en: 'List display blocks' }, ko: '공유 표시 블록을 나열해.' },
+  get_display_block: { group: 'configure', label: { ko: '표시 블록 읽기', en: 'Read display block' }, ko: '표시 블록 하나의 설계를 읽어.' },
+  propose_display_block: { group: 'configure', label: { ko: '표시 블록 제안', en: 'Propose display block' }, ko: '새 표시 블록을 제안해. 저장은 답변 밑 카드에서 네가 눌러.' },
+  propose_chat_profile: { group: 'configure', label: { ko: '프로필 제안', en: 'Propose profile' }, ko: '새 프로필을 제안해. 저장은 답변 밑 카드에서 네가 눌러.' },
+  propose_profile_update: { group: 'configure', label: { ko: '프로필 수정 제안', en: 'Propose profile update' }, ko: '기존 프로필의 수정을 제안해. 저장은 답변 밑 카드에서 네가 눌러.' },
 }
 
 export type ChatToolEntry = {
@@ -125,7 +135,7 @@ export function groupChatTools(tools: ChatToolInfo[], t: TranslateFn): ChatToolG
     fallback.tools.push({ name: tool.name, scope: tool.scope, label, description })
   }
   const ordered: ChatToolGroup[] = []
-  for (const scope of ['read', 'generate', 'organize'] as ChatScope[]) {
+  for (const scope of ['read', 'generate', 'organize', 'configure'] as ChatScope[]) {
     for (const group of groups.values()) if (group.scope === scope && group.tools.length > 0) ordered.push(group)
     const fallback = other.get(scope)
     if (fallback) ordered.push(fallback)

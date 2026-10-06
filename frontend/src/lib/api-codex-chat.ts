@@ -2,10 +2,10 @@ import { requestApiData, requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
 import type { ChatStreamEvent, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting } from '@conai/shared'
 
-export type ChatScope = 'read' | 'generate' | 'organize'
+export type ChatScope = 'read' | 'generate' | 'organize' | 'configure'
 export type ChatEngine = 'llm' | 'codex'
 
-export const CHAT_SCOPES: ChatScope[] = ['read', 'generate', 'organize']
+export const CHAT_SCOPES: ChatScope[] = ['read', 'generate', 'organize', 'configure']
 export const CHAT_PROFILES_QUERY_KEY = ['codex-chat-profiles'] as const
 export const CHAT_ADMIN_PROFILES_QUERY_KEY = ['codex-chat-admin-profiles'] as const
 export const CHAT_ADMIN_SETTINGS_QUERY_KEY = ['codex-chat-admin-settings'] as const
@@ -830,6 +830,11 @@ export function listChatConnectionModels(providerName: string) {
 export function suggestChatReplies(threadId: number, signal?: AbortSignal) {
   return requestApiData<{ suggestions: string[]; messageId: number | null }>(`/api/codex-chat/threads/${threadId}/suggest`, { method: 'POST', signal })
 }
+/** Marks a chat proposal saved (after the card's save or the editor's) so the card shows "saved" on every reload. */
+export function markChatProposalSaved(proposalId: number, savedId?: number | null) {
+  return requestApiData<{ id: number; savedId: number | null; saved: boolean }>(`/api/chat-proposals/${proposalId}/saved`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(savedId == null ? {} : { savedId }) })
+}
+
 
 /** Set a display block's values by hand (the whole object), or `null` to put back its starting values. Rooms name the member. */
 export function editChatBlock(threadId: number, key: string, data: Record<string, unknown> | null, profileId?: number) {

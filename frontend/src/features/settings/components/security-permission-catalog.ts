@@ -82,6 +82,7 @@ const PERMISSION_CATALOG: PermissionCatalogSection[] = [
       { key: 'chat.tools.read', label: { ko: '채팅 도구: 조회', en: 'Chat tools: read' } },
       { key: 'chat.tools.generate', label: { ko: '채팅 도구: 생성', en: 'Chat tools: generate' } },
       { key: 'chat.tools.organize', label: { ko: '채팅 도구: 정리', en: 'Chat tools: organize' } },
+      { key: 'chat.tools.configure', label: { ko: '채팅 도구: 설정', en: 'Chat tools: setup' } },
     ],
   },
   {

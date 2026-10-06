@@ -12,5 +12,7 @@ export function getChatScopeCopy(scope: ChatScope, t: TranslateFn) {
       return { label: t({ ko: '생성', en: 'Generate' }), description: t({ ko: 'NAI·ComfyUI·Codex 생성과 워크플로 실행을 시작하거나 취소해.', en: 'Start or cancel NAI/ComfyUI/Codex generations and workflow runs.' }) }
     case 'organize':
       return { label: t({ ko: '정리', en: 'Organize' }), description: t({ ko: '그룹을 만들고 이미지·프롬프트를 그룹에 넣거나 옮겨.', en: 'Create groups and add or move images and prompts into them.' }) }
+    case 'configure':
+      return { label: t({ ko: '설정', en: 'Setup' }), description: t({ ko: '프로필·표시 블록을 읽고 제안해. 저장은 네가 눌러.', en: 'Reads chat setup and proposes profiles and display blocks; you save them.' }) }
   }
 }

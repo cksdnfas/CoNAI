@@ -23,6 +23,7 @@ import { DEFAULT_CHAT_APPEARANCE, type ChatAppearance, type ChatImageLayout } fr
 import { ChatErrorChip } from './chat-error-chip'
 import { ChatMarkdown, type ChatEmoticonMap } from './chat-markdown'
 import { ChatProfileAvatar } from './chat-profile-avatar'
+import { ChatProposalCards } from './chat-proposal-card'
 import { ChatReferenceButton, ChatThumbOverlay } from './chat-reference'
 import { MENTION_CLASS, splitMentions } from './chat-mentions'
 
@@ -582,7 +583,9 @@ const AVATAR_SIZE = { sm: 'sm', md: 'lg', lg: 'xl' } as const
 const AVATAR_COLUMN_PAD = { md: 'pl-13', lg: 'pl-17' } as const
 const BUBBLE_CLASS = 'max-w-[85%] self-start rounded-lg bg-surface-low/85 px-3.5 py-2.5 backdrop-blur-sm'
 
-export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content: written, toolCalls, status, error, finishReason = null, reasoning, streaming = false, translating = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, routing, recipientLabel }: {
+export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content: written, toolCalls, status, error, finishReason = null, reasoning, streaming = false, translating = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, routing, recipientLabel, threadId }: {
+  /** The stored thread this reply belongs to (proposal cards refresh it after a save). */
+  threadId?: number
   routing?: ChatMessageRouting | null
   recipientLabel?: string
   content: string
@@ -647,11 +650,13 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   const castSegments = hasCast ? (segments ?? []).filter((segment, index) => !(index === 0 && segment.speaker === null)) : []
   const showReasoning = Boolean(reasoning) && appearance.showReasoning
   // A failed or empty reply has no body: nothing to draw a bubble around.
+  // A proposal rides on a tool call, so `toolCalls.length` already counts it as content.
   const ownParts = !ownText && !showReasoning && toolCalls.length === 0 && !routing?.replyTo ? null : (
     <div className="space-y-2">
       <ChatMessageReply routing={routing} recipientLabel={recipientLabel} />
       {showReasoning ? <ReasoningBlock text={reasoning as string} active={streaming && !content} /> : null}
       <CodexChatToolMedia calls={toolCalls} size={appearance.imageSize} layout={appearance.imageLayout} media={media} />
+      <ChatProposalCards calls={toolCalls} threadId={threadId} />
       {ownText ? markdown(ownText) : null}
     </div>
   )
