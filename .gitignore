@@ -52,6 +52,7 @@ backend/test/*
 !backend/test/chat-memory.test.ts
 !backend/test/chat-group-memory.test.ts
 !backend/test/chatSummaryFold.test.ts
+!backend/test/chat-review-items.test.ts
 
 # Uploaded images
 uploads/
