@@ -86,9 +86,9 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
             </div>
             <p className="leading-relaxed">
               {preset.toolAllowlist === null
-                ? t({ ko: '권한 안의 모든 도구를 써.', en: 'Every tool in the scopes.' })
+                ? t({ ko: '모든 도구', en: 'All tools' })
                 : preset.toolAllowlist.length === 0
-                  ? t({ ko: '고른 도구가 없어.', en: 'No tools picked.' })
+                  ? t({ ko: '없음', en: 'None' })
                   : preset.toolAllowlist.map((name) => chatToolLabel(name, t)).join(' · ')}
             </p>
           </div>
@@ -118,7 +118,8 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
             {/* Generation presets are made from the NAI / ComfyUI panels (or settings › chat); here the profile only links them. */}
             <CollapsibleRow
               title={t({ ko: '생성 프리셋', en: 'Generation presets' })}
-              meta={draft.generationPresetIds.length > 0 ? t({ ko: '{count}개 · 이 프리셋으로만 그려', en: '{count} · draws only with these' }, { count: draft.generationPresetIds.length }) : t({ ko: '없음 · 자유 생성', en: 'None · free-form generation' })}
+              info={t({ ko: '프리셋이 연결되면 자유 생성 도구와 워크플로 조회 도구는 숨겨지고, 모델은 프리셋이 열어둔 필드만 채워.', en: 'With presets linked, free-form generation and workflow lookups are withheld; the model fills only the fields the presets expose.' })}
+              meta={draft.generationPresetIds.length > 0 ? t({ ko: '{count}개', en: '{count}' }, { count: draft.generationPresetIds.length }) : t({ ko: '없음', en: 'None' })}
               defaultOpen={draft.generationPresetIds.length > 0}
             >
               <div className="flex flex-wrap gap-1.5">
@@ -139,7 +140,6 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
                 {generationPresetsQuery.isSuccess && generationPresets.length === 0 ? <span className="text-sm text-muted-foreground">{t({ ko: 'NAI나 ComfyUI 생성 패널에서 "채팅 프리셋으로 저장"을 눌러 먼저 만들어.', en: 'Make one first with "Save as chat preset" in the NAI or ComfyUI panel.' })}</span> : null}
               </div>
               {draft.generationPresetIds.length > 0 && !canGenerate ? <p className="text-xs text-destructive">{t({ ko: '생성 권한이 없어서 프리셋 도구가 나타나지 않아.', en: 'Without the generate scope the preset tools do not appear.' })}</p> : null}
-              {draft.generationPresetIds.length > 0 ? <p className="text-xs text-muted-foreground">{t({ ko: '프리셋이 연결되면 자유 생성 도구와 워크플로 조회 도구는 숨겨지고, 모델은 프리셋이 열어둔 필드만 채워.', en: 'With presets linked, free-form generation and workflow lookups are withheld; the model fills only the fields the presets expose.' })}</p> : null}
             </CollapsibleRow>
           </div>
         ) : null}

@@ -113,16 +113,15 @@ function NaiPresetFields({ config, onChange }: { config: ChatNaiPresetConfig; on
         <SwitchLine label="Variety+" checked={config.varietyPlus} onCheckedChange={(varietyPlus) => patch({ varietyPlus })} />
         <SwitchLine label={t({ ko: '투명 배경', en: 'Transparent background' })} checked={config.transparentBackground} onCheckedChange={(transparentBackground) => patch({ transparentBackground })} />
       </EditorGroup>
-      <EditorGroup label={t({ ko: '모델이 고를 수 있는 크기', en: 'Sizes the model may pick' })}>
+      <EditorGroup label={t({ ko: '모델이 고를 수 있는 크기', en: 'Sizes the model may pick' })} info={t({ ko: '하나만 고르면 크기 필드가 모델에게 보이지 않아.', en: 'With one size picked, the model sees no size field.' })}>
         <div className="flex flex-wrap gap-1.5">
           {sizeOptions.map((option) => {
             const pressed = config.sizes.some((size) => size.width === option.width && size.height === option.height)
             return <ToggleChip key={`${option.width}x${option.height}`} size="sm" pressed={pressed} disabled={pressed && config.sizes.length === 1} onClick={() => toggleSize(option)}>{option.label}</ToggleChip>
           })}
         </div>
-        <p className="text-xs text-muted-foreground">{t({ ko: '하나만 고르면 크기 필드가 모델에게 보이지 않아.', en: 'With one size picked, the model sees no size field.' })}</p>
       </EditorGroup>
-      <EditorGroup label={t({ ko: '고정 프롬프트', en: 'Fixed prompt' })}>
+      <EditorGroup label={t({ ko: '고정 프롬프트', en: 'Fixed prompt' })} info={t({ ko: '모델은 상황 프롬프트만 써. 서버가 앞부분, 상황, 뒷부분 순서로 합쳐.', en: 'The model writes only the scene; the server joins before, scene, after.' })}>
         <Field label={t({ ko: '앞부분 (퀄리티·작가·화풍)', en: 'Before the scene (quality, artist, style)' })}>
           <Textarea variant="settings" rows={3} value={config.promptPrefix} onChange={(event) => patch({ promptPrefix: event.target.value })} />
         </Field>
@@ -132,7 +131,6 @@ function NaiPresetFields({ config, onChange }: { config: ChatNaiPresetConfig; on
         <Field label={t({ ko: '네거티브', en: 'Negative prompt' })}>
           <Textarea variant="settings" rows={3} value={config.negativePrompt} onChange={(event) => patch({ negativePrompt: event.target.value })} />
         </Field>
-        <p className="text-xs text-muted-foreground">{t({ ko: '모델은 상황 프롬프트만 써. 서버가 앞부분, 상황, 뒷부분 순서로 합쳐.', en: 'The model writes only the scene; the server joins before, scene, after.' })}</p>
       </EditorGroup>
       {assetNote.length > 0 ? (
         <EditorGroup label={t({ ko: '패널에서 가져온 자산', en: 'Assets from the panel' })}>

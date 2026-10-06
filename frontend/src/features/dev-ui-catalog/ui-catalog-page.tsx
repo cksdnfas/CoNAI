@@ -399,7 +399,7 @@ export function UiCatalogPage() {
         <CatalogSection id="inputs" title="Input / Select / Textarea / Field / ToggleRow">
           <div className="grid gap-4 md:grid-cols-2">
             {INPUT_VARIANTS.map((variant) => (
-              <Field key={variant} label={`Input variant=${variant}`} hint="hint">
+              <Field key={variant} label={`Input variant=${variant}`} info="info">
                 <Input variant={variant} placeholder="Placeholder" />
               </Field>
             ))}

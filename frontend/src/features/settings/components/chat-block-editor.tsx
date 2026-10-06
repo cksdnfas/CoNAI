@@ -191,11 +191,11 @@ export function ChatBlockEditor({ block, onChange }: { block: ChatDisplayBlock; 
         </Field>
       </div>
       {rows ? (
-        <Field label={t({ ko: '필드', en: 'Fields' })} hint={t({ ko: '시작 값은 글자 그대로, 숫자·목록은 JSON으로', en: 'Start: text as is, numbers and lists as JSON' })}>
+        <Field label={t({ ko: '필드', en: 'Fields' })} info={t({ ko: '시작 값은 글자 그대로, 숫자·목록은 JSON으로 적어.', en: 'Start: text as is, numbers and lists as JSON.' })}>
           <BlockFieldsTable rows={rows} onChange={changeRows} />
         </Field>
       ) : (
-        <Field label={t({ ko: '시작 값 (JSON)', en: 'Starting values (JSON)' })} hint={t({ ko: 'JSON 객체로 고치면 표로 바뀌어', en: 'Becomes a table once it is a JSON object' })}>
+        <Field label={t({ ko: '시작 값 (JSON)', en: 'Starting values (JSON)' })} info={t({ ko: 'JSON 객체로 고치면 표로 바뀌어.', en: 'Becomes a table once it is a JSON object.' })}>
           <Textarea variant="settings" rows={5} className="font-mono text-xs" value={block.example} onChange={(event) => {
             update({ example: event.target.value })
             const next = rowsOf({ ...block, example: event.target.value })
