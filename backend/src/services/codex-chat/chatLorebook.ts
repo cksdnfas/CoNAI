@@ -1,5 +1,6 @@
 import { createHash } from 'crypto'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { ChatProfileError } from './chatProfileError'
 
 /**
  * How secondary keywords narrow a match on the primary ones (SillyTavern's selective logic): any of them also
@@ -10,6 +11,8 @@ const SECONDARY_LOGICS: readonly LoreSecondaryLogic[] = ['andAny', 'notAll', 'no
 
 export type ChatLoreEntry = {
   id: string
+  /** What the book's index calls the entry; '' derives one (see loreEntryTitle). */
+  title: string
   /** Plain words match as substrings; `/pattern/flags` is a regular expression. */
   keys: string[]
   /** Checked only once a primary keyword matched; none means no further condition. */
@@ -20,12 +23,26 @@ export type ChatLoreEntry = {
   constant: boolean
   order: number
   caseSensitive: boolean
+  /**
+   * A text file this entry points at, relative to the book's folder (`자료/x.md`); null: a plain entry. Account and
+   * chat books only. `fileId` is the file store id that follows the file when it is moved or renamed; `file` is what
+   * a person reads.
+   */
+  file: string | null
+  fileId: string | null
 }
+
+/**
+ * Where a book lives. `global`: shared by the admin, in the database only. `account`: one folder of an account's file
+ * store (`로어북/<name>/`). `chat`: the same shape under `로어북/채팅/`, tied to one chat.
+ */
+export type ChatLorebookKind = 'global' | 'account' | 'chat'
 
 /** A shared lorebook. Profiles link it by id, so editing or re-importing it reaches every linked profile. */
 export type ChatLorebook = {
   id: number
   name: string
+  kind: ChatLorebookKind
   entries: ChatLoreEntry[]
   /** Profiles that link this book. */
   profiles: Array<{ id: number; name: string }>
@@ -35,7 +52,27 @@ export type ChatLorebook = {
 
 export const LOREBOOK_MAX_ENTRIES = 500
 export const PROFILE_MAX_LOREBOOKS = 20
-const LOREBOOK_NAME_MAX_LENGTH = 80
+export const LOREBOOK_NAME_MAX_LENGTH = 80
+const LORE_TITLE_MAX_LENGTH = 80
+const LORE_FILE_MAX_LENGTH = 300
+
+/** The entry's title as the index shows it: its own, else the first keyword, else the start of its text. */
+export function loreEntryTitle(entry: Pick<ChatLoreEntry, 'title' | 'keys' | 'content'>) {
+  return entry.title || entry.keys[0] || entry.content.slice(0, 20)
+}
+
+/** A file path as stored: forward slashes, no leading `./`; null when empty. Safety is checked by the book (see isSafeLoreFilePath). */
+function loreFilePath(value: unknown) {
+  if (typeof value !== 'string') return null
+  const path = value.trim().replace(/\\/g, '/').replace(/^(\.\/)+/, '').slice(0, LORE_FILE_MAX_LENGTH)
+  return path || null
+}
+
+/** Whether a stored path stays inside its book folder: relative, no `.`/`..` or empty segments, no drive letter. */
+export function isSafeLoreFilePath(path: string) {
+  if (!path || path.startsWith('/') || path.includes(':') || path.includes('\\')) return false
+  return path.split('/').every((segment) => segment !== '' && segment !== '.' && segment !== '..')
+}
 
 /** Plain keywords up to 100 characters; a `/regex/` keyword up to its own limit, so it is not cut into a plain word. */
 function keywordList(value: unknown) {
@@ -76,8 +113,12 @@ export function normalizeLorebook(value: unknown): ChatLoreEntry[] {
     const secondary = selective ? row.secondaryKeys ?? row.secondary_keys ?? row.keysecondary : undefined
     const content = typeof row.content === 'string' ? row.content : typeof row.text === 'string' ? row.text : ''
     const order = typeof row.order === 'number' ? row.order : row.insertion_order
+    // SillyTavern keeps an entry's title in `comment`.
+    const title = typeof row.title === 'string' ? row.title : typeof row.comment === 'string' ? row.comment : ''
+    const file = loreFilePath(row.file)
     return [{
       id,
+      title: title.trim().replace(/\s+/g, ' ').slice(0, LORE_TITLE_MAX_LENGTH),
       keys: keywordList(keys),
       secondaryKeys: keywordList(secondary),
       secondaryLogic: secondaryLogicOf(row),
@@ -86,8 +127,15 @@ export function normalizeLorebook(value: unknown): ChatLoreEntry[] {
       constant: row.constant === true || row.forceActivation === true,
       order: typeof order === 'number' && Number.isFinite(order) ? Math.max(-10_000, Math.min(10_000, Math.round(order))) : index,
       caseSensitive: row.caseSensitive === true || row.case_sensitive === true,
+      file,
+      fileId: file && typeof row.fileId === 'string' && /^[a-f0-9]{32}$/.test(row.fileId) ? row.fileId : null,
     }]
   })
+}
+
+/** A global book links no files. */
+function withoutFiles(entries: ChatLoreEntry[]) {
+  return entries.map((entry) => ({ ...entry, file: null, fileId: null }))
 }
 
 export function normalizeLorebookIds(value: unknown): number[] {
@@ -98,21 +146,37 @@ export function normalizeLorebookIds(value: unknown): number[] {
   return [...new Set(value.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0))].slice(0, PROFILE_MAX_LOREBOOKS)
 }
 
-type LorebookRow = { id: number; name: string; entries: string; created_date: string; updated_date: string }
+export type LorebookRow = {
+  id: number
+  name: string
+  entries: string
+  kind: ChatLorebookKind
+  /** File store owner key (`account:<id>` / `bootstrap`); null for a global book. */
+  owner_key: string | null
+  /** The book's folder in the owner's file store; null for a global book. */
+  folder_id: string | null
+  /** Chat books: the chat they belong to. */
+  thread_id: number | null
+  /** Account and chat books: which lorebook.json the cached entries came from (id, updated_at, size). */
+  source_stamp: string | null
+  created_date: string
+  updated_date: string
+}
 
 function lorebookName(value: unknown) {
   return (typeof value === 'string' ? value.trim().slice(0, LOREBOOK_NAME_MAX_LENGTH) : '') || '로어북'
 }
 
-function linkedProfiles() {
+export function linkedProfiles() {
   const rows = getUserSettingsDb().prepare("SELECT id, name, lorebook_ids FROM llm_chat_profiles WHERE lorebook_ids IS NOT NULL AND lorebook_ids != '[]' ORDER BY sort_order ASC, id ASC").all() as Array<{ id: number; name: string; lorebook_ids: string }>
   return rows.map((row) => ({ id: row.id, name: row.name, lorebookIds: normalizeLorebookIds(row.lorebook_ids) }))
 }
 
-function toLorebook(row: LorebookRow, profiles: ReturnType<typeof linkedProfiles>): ChatLorebook {
+export function toLorebook(row: LorebookRow, profiles: ReturnType<typeof linkedProfiles>): ChatLorebook {
   return {
     id: row.id,
     name: row.name,
+    kind: row.kind ?? 'global',
     entries: normalizeLorebook(row.entries),
     profiles: profiles.filter((profile) => profile.lorebookIds.includes(row.id)).map(({ id, name }) => ({ id, name })),
     createdDate: row.created_date,
@@ -120,9 +184,13 @@ function toLorebook(row: LorebookRow, profiles: ReturnType<typeof linkedProfiles
   }
 }
 
+/**
+ * Global books (the admin's shared ones). Account and chat books live in the owner's file store; see
+ * chatLorebookFiles.ts for those.
+ */
 export const ChatLorebookStore = {
   list() {
-    const rows = getUserSettingsDb().prepare('SELECT * FROM chat_lorebooks ORDER BY name COLLATE NOCASE ASC, id ASC').all() as LorebookRow[]
+    const rows = getUserSettingsDb().prepare("SELECT * FROM chat_lorebooks WHERE kind = 'global' ORDER BY name COLLATE NOCASE ASC, id ASC").all() as LorebookRow[]
     const profiles = linkedProfiles()
     return rows.map((row) => toLorebook(row, profiles))
   },
@@ -132,17 +200,31 @@ export const ChatLorebookStore = {
     return row ? toLorebook(row, linkedProfiles()) : null
   },
 
-  /** Ids of these that still exist, in the given order. */
+  /** Ids of these that still exist and a profile can link (global and account books, not chat books), in the given order. */
   existing(ids: number[]) {
     if (ids.length === 0) return []
-    const found = new Set((getUserSettingsDb().prepare(`SELECT id FROM chat_lorebooks WHERE id IN (${ids.map(() => '?').join(', ')})`).all(...ids) as Array<{ id: number }>).map((row) => row.id))
+    const found = new Set((getUserSettingsDb().prepare(`SELECT id FROM chat_lorebooks WHERE kind IN ('global', 'account') AND id IN (${ids.map(() => '?').join(', ')})`).all(...ids) as Array<{ id: number }>).map((row) => row.id))
     return ids.filter((id) => found.has(id))
   },
 
-  /** The entries of these books in book order (missing books are skipped), keyed `book:entry:content hash`. */
+  /**
+   * A profile is shared, but an account book is private: whoever saves a profile may add their own account books
+   * only. Links already on the profile (another account's) stay as they are.
+   */
+  assertProfileLinks(ids: number[], owner: string, previousIds: readonly number[] = []) {
+    const added = ids.filter((id) => !previousIds.includes(id))
+    if (added.length === 0) return
+    const foreign = getUserSettingsDb().prepare(`SELECT id FROM chat_lorebooks WHERE kind = 'account' AND owner_key IS NOT ? AND id IN (${added.map(() => '?').join(', ')})`).all(owner, ...added)
+    if (foreign.length > 0) throw new ChatProfileError('다른 계정의 로어북은 연결할 수 없어.')
+  },
+
+  /**
+   * The entries of these books in book order (missing books are skipped), keyed `book:entry:content hash`. Global
+   * books only for now: account books are private, and a shared profile's links can name several accounts' books.
+   */
   keyedEntriesOf(ids: number[]) {
     if (ids.length === 0) return []
-    const rows = getUserSettingsDb().prepare(`SELECT id, entries FROM chat_lorebooks WHERE id IN (${ids.map(() => '?').join(', ')})`).all(...ids) as Array<{ id: number; entries: string }>
+    const rows = getUserSettingsDb().prepare(`SELECT id, entries FROM chat_lorebooks WHERE kind = 'global' AND id IN (${ids.map(() => '?').join(', ')})`).all(...ids) as Array<{ id: number; entries: string }>
     const byId = new Map(rows.map((row) => [row.id, normalizeLorebook(row.entries)]))
     return ids.flatMap((bookId) => (byId.get(bookId) ?? []).map((entry) => ({
       key: `${bookId}:${entry.id}:${createHash('sha1').update(entry.content).digest('hex').slice(0, 10)}`,
@@ -151,25 +233,27 @@ export const ChatLorebookStore = {
   },
 
   create(input: { name?: unknown; entries?: unknown }) {
-    const result = getUserSettingsDb().prepare('INSERT INTO chat_lorebooks (name, entries) VALUES (?, ?)').run(lorebookName(input.name), JSON.stringify(normalizeLorebook(input.entries ?? [])))
+    const result = getUserSettingsDb().prepare("INSERT INTO chat_lorebooks (name, entries, kind) VALUES (?, ?, 'global')").run(lorebookName(input.name), JSON.stringify(withoutFiles(normalizeLorebook(input.entries ?? []))))
     return ChatLorebookStore.find(Number(result.lastInsertRowid)) as ChatLorebook
   },
 
+  /** Global books only (null for any other): account and chat books are written through their files. */
   update(lorebookId: number, patch: { name?: unknown; entries?: unknown }) {
     const current = ChatLorebookStore.find(lorebookId)
-    if (!current) return null
+    if (!current || current.kind !== 'global') return null
     getUserSettingsDb().prepare('UPDATE chat_lorebooks SET name = ?, entries = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(
       patch.name === undefined ? current.name : lorebookName(patch.name),
-      JSON.stringify(patch.entries === undefined ? current.entries : normalizeLorebook(patch.entries)),
+      JSON.stringify(patch.entries === undefined ? current.entries : withoutFiles(normalizeLorebook(patch.entries))),
       lorebookId,
     )
     return ChatLorebookStore.find(lorebookId)
   },
 
-  /** Also unlinks the book from every profile. */
+  /** Global books only. Also unlinks the book from every profile. */
   delete(lorebookId: number) {
     const db = getUserSettingsDb()
     return db.transaction(() => {
+      if (ChatLorebookStore.find(lorebookId)?.kind !== 'global') return false
       const unlink = db.prepare('UPDATE llm_chat_profiles SET lorebook_ids = ? WHERE id = ?')
       for (const profile of linkedProfiles()) {
         if (profile.lorebookIds.includes(lorebookId)) unlink.run(JSON.stringify(profile.lorebookIds.filter((id) => id !== lorebookId)), profile.id)

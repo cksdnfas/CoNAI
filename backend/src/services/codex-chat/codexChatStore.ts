@@ -53,6 +53,8 @@ export type CodexChatThreadRecord = {
   user_profile_id: number | null
   /** JSON pinned memories (see chatMemory). */
   memories: string | null
+  /** JSON ids of the owner's account lorebooks linked to this chat only (see chatLorebookFiles). */
+  lorebook_ids: string | null
   /** Why the last background summary failed; null once one succeeds. */
   summary_error: string | null
   created_date: string

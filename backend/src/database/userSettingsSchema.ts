@@ -638,12 +638,30 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['memories', 'TEXT'],
     // Why the last background summary failed (null once one succeeds), so the chat can show it.
     ['summary_error', 'TEXT'],
+    // JSON ids of the account lorebooks linked to this chat only (the owner's own books).
+    ['lorebook_ids', 'TEXT'],
   ];
   for (const [columnName, definition] of codexChatThreadColumns) {
     if (!hasColumn('codex_chat_threads', columnName)) {
       db.exec(`ALTER TABLE codex_chat_threads ADD COLUMN ${columnName} ${definition}`);
     }
   }
+  // Lorebooks come in three kinds: global (admin-shared, DB only), account (a folder of the owner's file store) and
+  // chat (the same folder shape, tied to one thread). For account and chat books `entries` caches lorebook.json.
+  for (const [columnName, definition] of [
+    ['kind', "TEXT NOT NULL DEFAULT 'global'"],
+    ['owner_key', 'TEXT'],
+    ['folder_id', 'TEXT'],
+    ['thread_id', 'INTEGER'],
+    ['source_stamp', 'TEXT'],
+  ] as Array<[string, string]>) {
+    if (!hasColumn('chat_lorebooks', columnName)) {
+      db.exec(`ALTER TABLE chat_lorebooks ADD COLUMN ${columnName} ${definition}`);
+    }
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_lorebooks_owner ON chat_lorebooks(owner_key, kind)');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_lorebooks_folder ON chat_lorebooks(folder_id) WHERE folder_id IS NOT NULL');
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_lorebooks_thread ON chat_lorebooks(thread_id) WHERE kind = 'chat'");
   for (const [columnName, definition] of [
     ['alternatives', 'TEXT'],
     ['active_alternative', 'INTEGER NOT NULL DEFAULT 0'],
@@ -1273,6 +1291,13 @@ export function createUserSettingsSchema(db: Database.Database): void {
 
   // Generation defaults move from LLM connections to the profiles that use them (no-op once done).
   migrateLlmConnectionGenerationDefaults(db);
+
+  // Pinned chat memories become "always on" entries of each chat's lorebook (no-op once every row is NULL).
+  if (db.prepare('SELECT 1 FROM codex_chat_threads WHERE memories IS NOT NULL LIMIT 1').get()) {
+    // Loaded here: the lorebook files module reaches the file store, which imports this module's own callers.
+    const { migratePinnedMemoriesToChatBooks } = require('../services/codex-chat/chatLorebookFiles') as typeof import('../services/codex-chat/chatLorebookFiles');
+    migratePinnedMemoriesToChatBooks(db);
+  }
 
   console.log('  ✅ User settings tables created (19 tables + indexes)');
 

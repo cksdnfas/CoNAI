@@ -4,7 +4,7 @@ import path from 'path';
 import type { FileStoreListing, StoredFileEntry, StoredFileOwner, StoredFileText } from '@conai/shared';
 import { getUserSettingsDb } from '../database/userSettingsDb';
 import { AuthAccount } from '../models/AuthAccount';
-import { ensureFileOwnerDirectory, ensureFileStoreDirectories, migrateFileStoreLayout, storedFilePath, fileStoreThumbnailPath } from './fileStorePaths';
+import { ensureFileOwnerDirectory, ensureFileStoreDirectories, fileStoreIncoming, migrateFileStoreLayout, storedFilePath, fileStoreThumbnailPath } from './fileStorePaths';
 
 export class FileStoreError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -120,6 +120,39 @@ function insert(owner: string, parentId: string | null, name: string, kind: File
   return toEntry(requireRow(owner, id));
 }
 
+/**
+ * What changed in one owner's store, told after the change committed. `previousParentId` / `previousName`: where a
+ * moved or renamed entry was. Deleted entries are already gone when this is told.
+ */
+export type FileStoreChange = {
+  owner: string;
+  action: 'write' | 'rename' | 'move' | 'delete';
+  entries: Array<{ id: string; kind: FileRow['kind']; name: string; parentId: string | null; previousParentId?: string | null; previousName?: string }>;
+};
+type FileStoreListener = (change: FileStoreChange) => void;
+const changeListeners = new Set<FileStoreListener>();
+
+/** A failing listener never fails the change itself; it is logged. */
+function notifyChange(change: FileStoreChange) {
+  if (change.entries.length === 0) return;
+  for (const listener of changeListeners) {
+    try { listener(change); }
+    catch (error) { console.warn('[file-store] Change hook failed:', error instanceof Error ? error.message : error); }
+  }
+}
+
+function changedEntry(row: FileRow, previous?: FileRow): FileStoreChange['entries'][number] {
+  return { id: row.id, kind: row.kind, name: row.name, parentId: row.parent_id,
+    ...(previous ? { previousParentId: previous.parent_id, previousName: previous.name } : {}) };
+}
+
+function textMimeType(name: string) {
+  const extension = path.extname(name).toLowerCase();
+  if (extension === '.json') return 'application/json';
+  if (extension === '.md' || extension === '.markdown') return 'text/markdown';
+  return 'text/plain';
+}
+
 function idsInput(value: unknown): string[] {
   if (!Array.isArray(value) || value.length === 0 || value.length > 200) throw new FileStoreError('1~200개 항목을 선택해줘.');
   return [...new Set(value.map((id) => parseFileId(id) as string))];
@@ -175,8 +208,9 @@ export const FileStoreService = {
     ensureFileStoreDirectories();
     ensureFileOwnerDirectory(owner);
     const allocated: string[] = [];
+    let entries: StoredFileEntry[];
     try {
-      return getUserSettingsDb().transaction(() => files.map((file) => {
+      entries = getUserSettingsDb().transaction(() => files.map((file) => {
         const name = uploadedName(file.originalname);
         assertFileTypeAllowed(name, allowAnyType);
         const id = crypto.randomBytes(16).toString('hex');
@@ -193,23 +227,27 @@ export const FileStoreService = {
       for (const target of allocated) fs.rmSync(target, { force: true });
       throw error;
     }
+    notifyChange({ owner, action: 'write', entries: entries.map((entry) => ({ id: entry.id, kind: entry.kind, name: entry.name, parentId: entry.parentId })) });
+    return entries;
   },
 
   /** Renaming is the other way a restricted extension could appear, so files obey the same type policy as uploads. */
   rename(owner: string, id: string, value: unknown, allowAnyType = false) {
     const name = normalizeName(value);
-    return getUserSettingsDb().transaction(() => {
+    const [previous, current] = getUserSettingsDb().transaction(() => {
       const row = requireRow(owner, id);
       if (row.kind === 'file' && name.toLowerCase() !== row.name_key) assertFileTypeAllowed(name, allowAnyType);
       assertUnique(owner, row.parent_id, name, id);
       getUserSettingsDb().prepare('UPDATE stored_file_entries SET name = ?, name_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(name, name.toLowerCase(), id);
-      return toEntry(requireRow(owner, id));
+      return [row, requireRow(owner, id)];
     }).immediate();
+    notifyChange({ owner, action: 'rename', entries: [changedEntry(current, previous)] });
+    return toEntry(current);
   },
 
   move(owner: string, value: unknown, parentId: string | null) {
     const ids = idsInput(value);
-    return getUserSettingsDb().transaction(() => {
+    const moved = getUserSettingsDb().transaction(() => {
       requireFolder(owner, parentId);
       const destinationAncestors = ancestors(owner, parentId);
       const rows = ids.map((id) => requireRow(owner, id));
@@ -227,14 +265,17 @@ export const FileStoreService = {
         assertUnique(owner, parentId, row.name, row.id);
         getUserSettingsDb().prepare('UPDATE stored_file_entries SET parent_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(parentId, row.id);
       }
+      return roots.map((row) => changedEntry({ ...row, parent_id: parentId }, row));
     }).immediate();
+    notifyChange({ owner, action: 'move', entries: moved });
   },
 
   /** Empty folders only. Attachments protect their originals; deleting a chat releases the reference. */
   delete(owner: string, value: unknown) {
     const ids = idsInput(value);
     const db = getUserSettingsDb();
-    db.transaction(() => {
+    const removed = db.transaction(() => {
+      const rows: FileRow[] = [];
       for (const id of ids) {
         const row = requireRow(owner, id);
         if (row.kind === 'folder' && db.prepare('SELECT 1 FROM stored_file_entries WHERE parent_id = ? AND deleted_at IS NULL').get(id)) {
@@ -243,10 +284,122 @@ export const FileStoreService = {
         if (db.prepare('SELECT 1 FROM chat_file_attachments WHERE file_id = ?').get(id)) {
           throw new FileStoreError(`채팅에서 참조 중인 파일은 삭제할 수 없어: ${row.name}`, 409);
         }
+        rows.push(row);
       }
       for (const id of ids) db.prepare('UPDATE stored_file_entries SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+      return rows;
     }).immediate();
     this.purgeDeleted();
+    notifyChange({ owner, action: 'delete', entries: removed.map((row) => changedEntry(row)) });
+  },
+
+  /** Listen to writes, renames, moves and deletes (see FileStoreChange). Returns the unsubscribe. */
+  onChange(listener: FileStoreListener) {
+    changeListeners.add(listener);
+    return () => { changeListeners.delete(listener); };
+  },
+
+  /** The live entry named `name` directly under `parentId`, or null. */
+  findChild(owner: string, parentId: string | null, name: string): StoredFileEntry | null {
+    const row = getUserSettingsDb().prepare('SELECT * FROM stored_file_entries WHERE owner_key = ? AND parent_id IS ? AND name_key = ? AND deleted_at IS NULL')
+      .get(owner, parentId, name.normalize('NFC').toLowerCase()) as FileRow | undefined;
+    return row ? toEntry(row) : null;
+  },
+
+  /** The folder `name` under `parentId`, created when missing. A file of that name is a conflict. */
+  ensureFolder(owner: string, parentId: string | null, value: unknown): StoredFileEntry {
+    const name = normalizeName(value);
+    return getUserSettingsDb().transaction(() => {
+      const existing = this.findChild(owner, parentId, name);
+      if (existing && existing.kind !== 'folder') throw new FileStoreError(`같은 이름의 항목이 있어: ${name}`, 409);
+      return existing ?? insert(owner, parentId, name, 'folder', crypto.randomBytes(16).toString('hex'));
+    }).immediate();
+  },
+
+  /**
+   * Create a UTF-8 text file, or replace one in place: the blob is swapped in one rename and the id stays, so links
+   * by id survive. `silent` keeps the change listeners out (the caller already accounts for it).
+   */
+  writeText(owner: string, parentId: string | null, value: unknown, text: string, options: { silent?: boolean } = {}): StoredFileEntry {
+    const name = normalizeName(value);
+    if (!TEXT_EXTENSIONS.has(path.extname(name).toLowerCase())) throw new FileStoreError('텍스트 파일만 쓸 수 있어.', 415);
+    ensureFileStoreDirectories();
+    ensureFileOwnerDirectory(owner);
+    const data = Buffer.from(text, 'utf8');
+    const staged = path.join(fileStoreIncoming, `${crypto.randomBytes(16).toString('hex')}.tmp`);
+    fs.writeFileSync(staged, data);
+    let row: FileRow;
+    try {
+      row = getUserSettingsDb().transaction(() => {
+        const existing = this.findChild(owner, parentId, name);
+        if (existing && existing.kind !== 'file') throw new FileStoreError(`같은 이름의 항목이 있어: ${name}`, 409);
+        const id = existing?.id ?? crypto.randomBytes(16).toString('hex');
+        if (existing) {
+          getUserSettingsDb().prepare('UPDATE stored_file_entries SET size = ?, mime_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(data.length, textMimeType(name), id);
+        } else {
+          insert(owner, parentId, name, 'file', id, data.length, textMimeType(name));
+        }
+        fs.renameSync(staged, storedFilePath(owner, id));
+        return requireRow(owner, id);
+      }).immediate();
+    } finally {
+      fs.rmSync(staged, { force: true });
+    }
+    fs.rmSync(fileStoreThumbnailPath(row.id), { force: true });
+    if (!options.silent) notifyChange({ owner, action: 'write', entries: [changedEntry(row)] });
+    return toEntry(row);
+  },
+
+  /** A folder and everything under it. Files a chat message attaches are refused, as with delete. */
+  deleteTree(owner: string, folderId: string, options: { silent?: boolean } = {}) {
+    const db = getUserSettingsDb();
+    const removed = db.transaction(() => {
+      if (requireRow(owner, folderId).kind !== 'folder') throw new FileStoreError('대상은 폴더여야 해.');
+      const rows = db.prepare(`WITH RECURSIVE tree(id, depth) AS (
+        SELECT ?, 0 UNION ALL
+        SELECT e.id, tree.depth + 1 FROM stored_file_entries e JOIN tree ON e.parent_id = tree.id WHERE e.deleted_at IS NULL AND tree.depth < ${MAX_DEPTH}
+      ) SELECT s.* FROM stored_file_entries s JOIN tree ON s.id = tree.id WHERE s.owner_key = ?`).all(folderId, owner) as FileRow[];
+      for (const row of rows) {
+        if (db.prepare('SELECT 1 FROM chat_file_attachments WHERE file_id = ?').get(row.id)) {
+          throw new FileStoreError(`채팅에서 참조 중인 파일은 삭제할 수 없어: ${row.name}`, 409);
+        }
+      }
+      const mark = db.prepare('UPDATE stored_file_entries SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?');
+      for (const row of rows) mark.run(row.id);
+      return rows;
+    }).immediate();
+    // A folder row goes only once its children rows are gone, so purge level by level.
+    const exists = db.prepare('SELECT 1 FROM stored_file_entries WHERE id = ?');
+    for (let pass = 0; pass < MAX_DEPTH && exists.get(folderId); pass++) this.purgeDeleted();
+    if (!options.silent) notifyChange({ owner, action: 'delete', entries: removed.map((row) => changedEntry(row)) });
+  },
+
+  /** `a/b/c`: the names from below `ancestorId` down to `id`, or null when `id` is not (live) inside that folder. */
+  relativePath(owner: string, ancestorId: string, id: string): string | null {
+    const lookup = getUserSettingsDb().prepare('SELECT parent_id, name FROM stored_file_entries WHERE id = ? AND owner_key = ? AND deleted_at IS NULL');
+    const names: string[] = [];
+    let current: string | null = id;
+    while (current !== null && current !== ancestorId) {
+      if (names.length >= MAX_DEPTH) return null;
+      const row = lookup.get(current, owner) as { parent_id: string | null; name: string } | undefined;
+      if (!row) return null;
+      names.unshift(row.name);
+      current = row.parent_id;
+    }
+    return current === ancestorId && names.length > 0 ? names.join('/') : null;
+  },
+
+  /** The live entry at `a/b/c` below `folderId` (names compared as the store does, case-insensitive), or null. */
+  resolvePath(owner: string, folderId: string, relative: string): StoredFileEntry | null {
+    let entry: StoredFileEntry | null = null;
+    let parentId: string | null = folderId;
+    for (const segment of relative.split('/')) {
+      if (parentId === null || !segment) return null;
+      entry = this.findChild(owner, parentId, segment);
+      if (!entry) return null;
+      parentId = entry.kind === 'folder' ? entry.id : null;
+    }
+    return entry;
   },
 
   /** Tombstones make interrupted filesystem deletion retryable without reviving a half-deleted file. */

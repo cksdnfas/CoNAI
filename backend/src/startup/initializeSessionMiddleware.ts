@@ -4,6 +4,7 @@ import session, { type Store as SessionStore } from 'express-session';
 import { initializeAuthDb, getAuthDb } from '../database/authDb';
 import { initializeUserSettingsDb } from '../database/userSettingsDb';
 import { FileStoreService } from '../services/fileStoreService';
+import { reconcileLorebookFolders } from '../services/codex-chat/chatLorebookFiles';
 import { resolveSessionSecret } from '../utils/sessionSecret';
 import { throttleSessionStoreTouch } from '../utils/sessionTouchThrottle';
 
@@ -52,6 +53,13 @@ export async function initializeSessionMiddleware(
     if (moved || orphaned) console.log(`[file-store] Moved ${moved} blob(s) into per-account directories; ${orphaned} orphan(s) set aside.`);
   } catch (error) {
     console.warn('[file-store] Layout migration will retry on next start:', error instanceof Error ? error.message : error);
+  }
+  // Lorebook folders may have been edited while the app was down: the files win over the cached entries.
+  try {
+    const { created, refreshed, removed } = reconcileLorebookFolders();
+    if (created || refreshed || removed) console.log(`[lorebook] Reconciled book folders: ${created} new, ${refreshed} refreshed, ${removed} gone.`);
+  } catch (error) {
+    console.warn('[lorebook] Folder reconcile will retry on next start:', error instanceof Error ? error.message : error);
   }
 
   const SqliteStore = BetterSqlite3Store(session);
