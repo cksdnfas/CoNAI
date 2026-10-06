@@ -65,6 +65,10 @@
   --color-info-foreground: var(--info-foreground);
   --color-info-soft: var(--info-soft);
   --color-info-soft-foreground: var(--info-soft-foreground);
+  --color-resource-tool: var(--resource-tool);
+  --color-resource-generation: var(--resource-generation);
+  --color-resource-block: var(--resource-block);
+  --color-resource-lorebook: var(--resource-lorebook);
   --color-backdrop: var(--backdrop);
   --tracking-overline: var(--overline-tracking);
   --shadow-elevation-1: var(--elevation-1);
@@ -237,6 +241,14 @@
   --info-foreground: #003258;
   --info-soft: #173650;
   --info-soft-foreground: #d1e4ff;
+  /*
+   * Kind colours for the chat resources (tool preset, generation preset, display block, lorebook): the icon and the
+   * group label of one kind share a hue, so a long list reads by colour. Text / icon colour only, no fills.
+   */
+  --resource-tool: #e8b04a;
+  --resource-generation: #e38aa6;
+  --resource-block: #62bfae;
+  --resource-lorebook: #a897e6;
   --theme-primary-soft: #32170d;
   --theme-secondary-soft: #2f221d;
   --theme-shell-surface: rgb(19 19 19 / 0.72);
@@ -346,6 +358,10 @@
   --info-foreground: #ffffff;
   --info-soft: #d3e4ff;
   --info-soft-foreground: #001c38;
+  --resource-tool: #b07a10;
+  --resource-generation: #c04f78;
+  --resource-block: #1f8a78;
+  --resource-lorebook: #6d58c4;
   --theme-shell-surface: rgb(245 242 241 / 0.72);
   --theme-floating-surface: rgb(235 225 221 / 0.88);
   --theme-shell-border: rgb(249 94 20 / 0.18);

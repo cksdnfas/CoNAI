@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Plus, Save, Star, Trash2 } from 'lucide-react'
+import { Plus, Save, Star, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
+import { ResourceRow } from '@/components/ui/resource-row'
 import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
@@ -155,17 +156,18 @@ export function ChatUserProfileRows({ profiles, onEdit }: { profiles: ChatUserPr
   return (
     <>
       {profiles.map((profile) => (
-        <div key={profile.id} className="flex min-h-14 items-center gap-3 border-t border-line py-2.5 first:border-t-0">
-          <ChatUserProfileAvatar profile={profile} size="md" />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold">{profile.name}</div>
-            {profile.persona ? <div className="truncate text-xs text-muted-foreground">{profile.persona}</div> : null}
-          </div>
-          <IconButton size="icon-sm" variant="ghost" active={profile.isDefault} disabled={defaultMutation.isPending} onClick={() => defaultMutation.mutate(profile)} label={t({ ko: '새 채팅 기본', en: 'Default for new chats' })}>
-            <Star className={cn(profile.isDefault && 'fill-current')} />
-          </IconButton>
-          <IconButton size="icon-sm" variant="ghost" onClick={() => onEdit(profile)} label={t({ ko: '편집', en: 'Edit' })}><Pencil /></IconButton>
-        </div>
+        <ResourceRow
+          key={profile.id}
+          leading={<ChatUserProfileAvatar profile={profile} size="md" />}
+          name={profile.name}
+          meta={profile.persona || undefined}
+          trailing={(
+            <IconButton size="icon-sm" variant="ghost" active={profile.isDefault} disabled={defaultMutation.isPending} onClick={() => defaultMutation.mutate(profile)} label={t({ ko: '새 채팅 기본', en: 'Default for new chats' })}>
+              <Star className={cn(profile.isDefault && 'fill-current')} />
+            </IconButton>
+          )}
+          onOpen={() => onEdit(profile)}
+        />
       ))}
     </>
   )

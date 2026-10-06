@@ -54,9 +54,10 @@ const sectionSlots: Record<SectionVariant, SectionSlots> = {
     body: 'space-y-4',
   },
   settings: {
-    header: 'flex min-h-8 items-center justify-between gap-3',
+    // Same rank as a RowGroup heading: muted overline over a hairline.
+    header: 'mb-1 flex min-h-8 items-center justify-between gap-3 border-b border-foreground/15',
     titleBlock: 'min-w-0 flex-1',
-    heading: 'text-sm font-semibold tracking-tight text-foreground',
+    heading: 'text-2xs font-semibold uppercase tracking-overline text-muted-foreground',
     headingAs: 'h3',
     actions: 'flex shrink-0 items-center gap-2',
     body: 'space-y-4',

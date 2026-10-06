@@ -23,6 +23,7 @@ export function ChatSettingsMine() {
     <div className="space-y-8">
       <RowGroup
         heading={t({ ko: '사용자 프로필', en: 'User profiles' })}
+        count={userProfilesQuery.isSuccess ? userProfiles.length : undefined}
         actions={(
           <IconButton size="icon-sm" variant="ghost" disabled={userProfiles.length >= CHAT_USER_PROFILE_LIMITS.perAccount} onClick={() => setUserProfileEditor({ profile: null })} label={t({ ko: '사용자 프로필 추가', en: 'Add user profile' })}>
             <Plus />
@@ -37,6 +38,7 @@ export function ChatSettingsMine() {
 
       <RowGroup
         heading={t({ ko: '플래그', en: 'Flags' })}
+        count={flagsQuery.isSuccess ? flags.length : undefined}
         actions={(
           <IconButton size="icon-sm" variant="ghost" disabled={flags.length >= CHAT_FLAG_LIMITS.perAccount} onClick={() => setFlagEditor({ flag: null })} label={t({ ko: '플래그 추가', en: 'Add flag' })}>
             <Plus />

@@ -3,7 +3,7 @@
  * Registered in router.tsx behind `import.meta.env.DEV`, so it never reaches production bundles.
  */
 import { useEffect, useId, useState, type ReactNode } from 'react'
-import { ArrowDownWideNarrow, Bookmark, CircleCheck, Copy, Download, Folder, Image as ImageIcon, ImageOff, Inbox, Layers, Library, Lock, MoreHorizontal, Pencil, Plus, Search, Server, Settings, SlidersHorizontal, Trash2, TriangleAlert, X } from 'lucide-react'
+import { ArrowDownWideNarrow, Bookmark, CircleCheck, Copy, Download, Folder, Image as ImageIcon, ImageOff, Inbox, Layers, Library, Lock, MoreHorizontal, Pencil, Plus, Search, Server, Settings, SlidersHorizontal, Trash2, TriangleAlert, Wrench, X } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { PageToolbar } from '@/components/common/page-toolbar'
@@ -43,6 +43,7 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Panel } from '@/components/ui/panel'
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Progress } from '@/components/ui/progress'
+import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
 import { RowGroup } from '@/components/ui/row-group'
 import { Section } from '@/components/ui/section'
 import { Select } from '@/components/ui/select'
@@ -295,6 +296,10 @@ export function UiCatalogPage() {
                     </ListRow>
                   ))}
                   <ListRow leading={<Checkbox aria-label="soft focus" />} trailing="64">soft focus <Text as="span" variant="caption">static row</Text></ListRow>
+                </RowGroup>
+                <RowGroup heading="도구 프리셋" count={2} headingClassName="text-resource-tool" actions={<IconButton variant="ghost" size="icon-sm" label="추가"><Plus /></IconButton>}>
+                  <ResourceRow leading={<Wrench className="text-resource-tool" />} name="검색만" meta={<>도구 7 · <ResourceRowStatus>연결 없음</ResourceRowStatus></>} onOpen={() => undefined} />
+                  <ResourceRow leading={<Wrench className="text-resource-tool" />} name="전부" extra={<Chip size="sm" tone="muted">기본</Chip>} meta="모든 도구 · 프로필 1" onOpen={() => undefined} />
                 </RowGroup>
               </div>
             </div>

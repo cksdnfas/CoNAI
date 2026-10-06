@@ -1,8 +1,10 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, BookUser, FileUp, ImagePlus, LayoutTemplate, Pencil, Plus, Wrench } from 'lucide-react'
+import { BookOpen, BookUser, FileUp, ImagePlus, LayoutTemplate, Plus, Wrench } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
+import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
 import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
@@ -33,6 +35,7 @@ import {
   type ChatToolPreset,
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
+import { cn } from '@/lib/utils'
 import { ChatBlockEditorModal } from './chat-block-editor-modal'
 import { readChatBlockFile } from './chat-block-file'
 import { ChatGenerationPresetEditorModal } from './chat-generation-preset-editor-modal'
@@ -42,36 +45,97 @@ import { ChatToolPresetEditorModal } from './chat-tool-preset-editor-modal'
 import { readChatToolPresetFile } from './chat-tool-preset-file'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 
-/** One resource row: icon, name (+ small extra), one meta, the profiles that use it, and only the edit button. */
-function ResourceRow({ icon, name, extra, meta, profiles, onEdit }: {
-  icon: ReactNode
-  name: string
-  extra?: ReactNode
-  meta: string
-  profiles: Array<{ id: number; name: string }>
-  onEdit: () => void
-}) {
+/** Section ids, in page order; the jump bar and the groups share them. */
+const SECTION_IDS = ['chat-tool-presets', 'chat-generation-presets', 'chat-display-blocks', 'chat-lorebooks'] as const
+type SectionId = (typeof SECTION_IDS)[number]
+
+/** Label + icon colour of each kind: the group label and the rows' icons share the hue so a long list reads by colour. */
+const KIND_CLASS: Record<SectionId, string> = {
+  'chat-tool-presets': 'text-resource-tool',
+  'chat-generation-presets': 'text-resource-generation',
+  'chat-display-blocks': 'text-resource-block',
+  'chat-lorebooks': 'text-resource-lorebook',
+}
+
+/** Header (4rem) + page toolbar (3.5rem) + the sticky jump bar: a section jumped to lands under none of them. */
+const SECTION_CLASS = 'scroll-mt-[calc(var(--theme-shell-header-height)+6.5rem)]'
+
+/**
+ * The first section (in page order) that crosses the band around the middle of the viewport; the jump bar highlights
+ * it. A click pins its target for the smooth scroll, since the last section may never reach the band on a short page.
+ */
+function useActiveSection(): [SectionId, (id: SectionId) => void] {
+  const [active, setActive] = useState<SectionId>(SECTION_IDS[0])
+  const pinnedUntil = useRef(0)
+  useEffect(() => {
+    const elements = SECTION_IDS.map((id) => document.getElementById(id)).filter((element): element is HTMLElement => element !== null)
+    if (elements.length === 0) return
+    const visible = new Set<string>()
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) visible.add(entry.target.id)
+        else visible.delete(entry.target.id)
+      }
+      if (Date.now() < pinnedUntil.current) return
+      const current = SECTION_IDS.find((id) => visible.has(id))
+      if (current) setActive(current)
+    }, { rootMargin: '-40% 0px -50% 0px' })
+    elements.forEach((element) => observer.observe(element))
+    return () => observer.disconnect()
+  }, [])
+  const jumpTo = (id: SectionId) => {
+    pinnedUntil.current = Date.now() + 1000
+    setActive(id)
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+  return [active, jumpTo]
+}
+
+/** Sticky one-line section index for the resources view: label + count per kind, click scrolls to the group. */
+function SectionJumpBar({ sections }: { sections: Array<{ id: SectionId; label: string; count: number | undefined }> }) {
   const { t } = useI18n()
+  const [active, jumpTo] = useActiveSection()
   return (
-    <div className="flex min-h-14 items-center gap-3 border-t border-line py-2.5 first:border-t-0">
-      <span className="shrink-0 text-muted-foreground [&_svg]:size-4">{icon}</span>
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-sm font-semibold">{name}</span>
-          {extra}
-        </div>
-        <div className="truncate text-xs text-muted-foreground">
-          {meta}
-          {' · '}
-          {profiles.length > 0 ? (
-            <Tip content={profiles.map((profile) => profile.name).join(', ')}>
-              <span>{t({ ko: '프로필 {count}', en: '{count} profiles' }, { count: profiles.length })}</span>
-            </Tip>
-          ) : t({ ko: '연결 없음', en: 'Not linked' })}
-        </div>
-      </div>
-      <IconButton size="icon-sm" variant="ghost" onClick={onEdit} label={t({ ko: '편집', en: 'Edit' })}><Pencil /></IconButton>
-    </div>
+    <nav
+      aria-label={t({ ko: '자원 종류', en: 'Resource kinds' })}
+      className="sticky top-[calc(var(--theme-shell-header-height)+3.5rem)] z-10 -mx-2 flex flex-wrap gap-1 border-b border-line bg-background/92 px-2 py-1.5 text-xs font-semibold backdrop-blur-md"
+    >
+      {sections.map((section) => (
+        <Button
+          key={section.id}
+          variant="ghost"
+          size="xs"
+          aria-current={active === section.id ? 'location' : undefined}
+          className={cn('font-semibold', active === section.id ? 'bg-fill text-foreground hover:bg-fill' : 'text-muted-foreground')}
+          onClick={() => jumpTo(section.id)}
+        >
+          {section.label}
+          {section.count !== undefined ? <span className="text-muted-foreground/60 tabular-nums">{section.count}</span> : null}
+        </Button>
+      ))}
+    </nav>
+  )
+}
+
+/** The profiles that use a resource, or the warning that none does. */
+function LinkedProfiles({ profiles }: { profiles: Array<{ id: number; name: string }> }) {
+  const { t } = useI18n()
+  if (profiles.length === 0) return <ResourceRowStatus>{t({ ko: '연결 없음', en: 'Not linked' })}</ResourceRowStatus>
+  return (
+    <Tip content={profiles.map((profile) => profile.name).join(', ')}>
+      <span>{t({ ko: '프로필 {count}', en: '{count} profiles' }, { count: profiles.length })}</span>
+    </Tip>
+  )
+}
+
+/** Meta line of a resource row: one fact about it, then who uses it. */
+function resourceMeta(fact: ReactNode, profiles: Array<{ id: number; name: string }>) {
+  return (
+    <>
+      {fact}
+      {' · '}
+      <LinkedProfiles profiles={profiles} />
+    </>
   )
 }
 
@@ -191,10 +255,30 @@ export function ChatSettingsResources() {
   const presets = presetsQuery.data ?? []
   const generationPresets = generationPresetsQuery.data ?? []
 
+  const toolPresetsLabel = t({ ko: '도구 프리셋', en: 'Tool presets' })
+  const generationPresetsLabel = t({ ko: '생성 프리셋', en: 'Generation presets' })
+  const blocksLabel = t({ ko: '표시 블록', en: 'Display blocks' })
+  const lorebooksLabel = t({ ko: '로어북', en: 'Lorebooks' })
+  // The account's own books may be denied (no chat permission); the shared list still gets a count.
+  const lorebookCount = lorebooksQuery.isSuccess ? lorebooks.length + accountLorebooks.length : undefined
+
   return (
     <div className="space-y-8">
+      <SectionJumpBar
+        sections={[
+          { id: 'chat-tool-presets', label: toolPresetsLabel, count: presetsQuery.isSuccess ? presets.length : undefined },
+          { id: 'chat-generation-presets', label: generationPresetsLabel, count: generationPresetsQuery.isSuccess ? generationPresets.length : undefined },
+          { id: 'chat-display-blocks', label: blocksLabel, count: blocksQuery.isSuccess ? blocks.length : undefined },
+          { id: 'chat-lorebooks', label: lorebooksLabel, count: lorebookCount },
+        ]}
+      />
+
       <RowGroup
-        heading={t({ ko: '도구 프리셋', en: 'Tool presets' })}
+        id="chat-tool-presets"
+        className={SECTION_CLASS}
+        headingClassName={KIND_CLASS['chat-tool-presets']}
+        heading={toolPresetsLabel}
+        count={presetsQuery.isSuccess ? presets.length : undefined}
         actions={(
           <div className="flex items-center gap-1">
             <input ref={presetImportRef} type="file" accept=".json,application/json" className="hidden" aria-label={t({ ko: '도구 프리셋 파일', en: 'Tool preset file' })} onChange={(event) => {
@@ -212,18 +296,21 @@ export function ChatSettingsResources() {
         {presets.map((preset) => (
           <ResourceRow
             key={preset.id}
-            icon={<Wrench />}
+            leading={<Wrench className={KIND_CLASS['chat-tool-presets']} />}
             name={preset.name}
-            meta={preset.toolAllowlist === null ? t({ ko: '모든 도구', en: 'Every tool' }) : t({ ko: '도구 {count}', en: '{count} tools' }, { count: preset.toolAllowlist.length })}
-            profiles={preset.profiles}
-            onEdit={() => setPresetEditor({ preset })}
+            meta={resourceMeta(preset.toolAllowlist === null ? t({ ko: '모든 도구', en: 'Every tool' }) : t({ ko: '도구 {count}', en: '{count} tools' }, { count: preset.toolAllowlist.length }), preset.profiles)}
+            onOpen={() => setPresetEditor({ preset })}
           />
         ))}
         {presetsQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(presetsQuery.error, t({ ko: '도구 프리셋을 불러오지 못했어.', en: 'Could not load tool presets.' }))}</p> : null}
       </RowGroup>
 
       <RowGroup
-        heading={t({ ko: '생성 프리셋', en: 'Generation presets' })}
+        id="chat-generation-presets"
+        className={SECTION_CLASS}
+        headingClassName={KIND_CLASS['chat-generation-presets']}
+        heading={generationPresetsLabel}
+        count={generationPresetsQuery.isSuccess ? generationPresets.length : undefined}
         actions={(
           <div className="flex items-center gap-1">
             <input ref={generationImportRef} type="file" accept=".json,application/json" className="hidden" aria-label={t({ ko: '생성 프리셋 파일', en: 'Generation preset file' })} onChange={(event) => {
@@ -241,19 +328,22 @@ export function ChatSettingsResources() {
         {generationPresets.map((preset) => (
           <ResourceRow
             key={preset.id}
-            icon={<ImagePlus />}
+            leading={<ImagePlus className={KIND_CLASS['chat-generation-presets']} />}
             name={preset.name}
-            extra={<span className="shrink-0 rounded-sm bg-fill px-1.5 text-2xs font-semibold text-muted-foreground">{preset.kind === 'nai' ? 'NAI' : 'Comfy'}</span>}
-            meta={preset.kind === 'nai' ? (preset.nai?.model ?? '') : t({ ko: '워크플로 {id}', en: 'Workflow {id}' }, { id: preset.comfyui?.workflowId ?? 0 })}
-            profiles={preset.profiles}
-            onEdit={() => setGenerationEditor({ preset })}
+            extra={<Chip size="sm" tone="muted">{preset.kind === 'nai' ? 'NAI' : 'Comfy'}</Chip>}
+            meta={resourceMeta(preset.kind === 'nai' ? (preset.nai?.model ?? '') : t({ ko: '워크플로 {id}', en: 'Workflow {id}' }, { id: preset.comfyui?.workflowId ?? 0 }), preset.profiles)}
+            onOpen={() => setGenerationEditor({ preset })}
           />
         ))}
         {generationPresetsQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(generationPresetsQuery.error, t({ ko: '생성 프리셋을 불러오지 못했어.', en: 'Could not load generation presets.' }))}</p> : null}
       </RowGroup>
 
       <RowGroup
-        heading={t({ ko: '표시 블록', en: 'Display blocks' })}
+        id="chat-display-blocks"
+        className={SECTION_CLASS}
+        headingClassName={KIND_CLASS['chat-display-blocks']}
+        heading={blocksLabel}
+        count={blocksQuery.isSuccess ? blocks.length : undefined}
         actions={(
           <div className="flex items-center gap-1">
             <input ref={blockImportRef} type="file" accept=".json,application/json" className="hidden" aria-label={t({ ko: '표시 블록 파일', en: 'Display block file' })} onChange={(event) => {
@@ -271,19 +361,22 @@ export function ChatSettingsResources() {
         {blocks.map((shared) => (
           <ResourceRow
             key={shared.id}
-            icon={<LayoutTemplate />}
+            leading={<LayoutTemplate className={KIND_CLASS['chat-display-blocks']} />}
             name={shared.name}
             extra={<span className="truncate font-mono text-xs text-muted-foreground">{shared.block.key}</span>}
-            meta={t({ ko: '필드 {count}', en: '{count} fields' }, { count: shared.block.fields.length })}
-            profiles={shared.profiles}
-            onEdit={() => setBlockEditor({ shared })}
+            meta={resourceMeta(t({ ko: '필드 {count}', en: '{count} fields' }, { count: shared.block.fields.length }), shared.profiles)}
+            onOpen={() => setBlockEditor({ shared })}
           />
         ))}
         {blocksQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(blocksQuery.error, t({ ko: '표시 블록을 불러오지 못했어.', en: 'Could not load display blocks.' }))}</p> : null}
       </RowGroup>
 
       <RowGroup
-        heading={t({ ko: '로어북', en: 'Lorebooks' })}
+        id="chat-lorebooks"
+        className={SECTION_CLASS}
+        headingClassName={KIND_CLASS['chat-lorebooks']}
+        heading={lorebooksLabel}
+        count={lorebookCount}
         actions={(
           <div className="flex items-center gap-1">
             <input ref={lorebookImportRef} type="file" accept=".json,.lorebook,.png,application/json,image/png" className="hidden" aria-label={t({ ko: '로어북 파일', en: 'Lorebook file' })} onChange={(event) => {
@@ -302,23 +395,21 @@ export function ChatSettingsResources() {
         {lorebooks.map((lorebook) => (
           <ResourceRow
             key={lorebook.id}
-            icon={<BookOpen />}
+            leading={<BookOpen className={KIND_CLASS['chat-lorebooks']} />}
             name={lorebook.name}
             extra={<Chip size="sm" tone="muted">{t({ ko: '글로벌', en: 'Global' })}</Chip>}
-            meta={t({ ko: '항목 {count}', en: '{count} entries' }, { count: lorebook.entries.length })}
-            profiles={lorebook.profiles}
-            onEdit={() => setLorebookEditor({ lorebook })}
+            meta={resourceMeta(t({ ko: '항목 {count}', en: '{count} entries' }, { count: lorebook.entries.length }), lorebook.profiles)}
+            onOpen={() => setLorebookEditor({ lorebook })}
           />
         ))}
         {accountLorebooks.map((lorebook) => (
           <ResourceRow
             key={lorebook.id}
-            icon={<BookUser />}
+            leading={<BookUser className={KIND_CLASS['chat-lorebooks']} />}
             name={lorebook.name}
             extra={<Chip size="sm" tone="muted">{t({ ko: '계정', en: 'Account' })}</Chip>}
-            meta={t({ ko: '항목 {count}', en: '{count} entries' }, { count: lorebook.entries.length })}
-            profiles={lorebook.profiles}
-            onEdit={() => setLorebookEditor({ lorebook })}
+            meta={resourceMeta(t({ ko: '항목 {count}', en: '{count} entries' }, { count: lorebook.entries.length }), lorebook.profiles)}
+            onOpen={() => setLorebookEditor({ lorebook })}
           />
         ))}
         {lorebooksQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(lorebooksQuery.error, t({ ko: '로어북을 불러오지 못했어.', en: 'Could not load lorebooks.' }))}</p> : null}

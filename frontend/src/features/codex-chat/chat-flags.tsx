@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
+import { ResourceRow } from '@/components/ui/resource-row'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -368,33 +369,35 @@ export function ChatFlagRows({ flags, onEdit }: { flags: ChatFlag[]; onEdit: (fl
   return (
     <>
       {flags.map((flag) => (
-        <div
+        <ResourceRow
           key={flag.id}
           onDragOver={(event) => { if (dragId !== null) { event.preventDefault(); setOverId(flag.id) } }}
           onDragLeave={() => setOverId((current) => (current === flag.id ? null : current))}
           onDrop={(event) => { drop(event, flag.id); setDragId(null); setOverId(null) }}
-          className={cn('flex min-h-14 items-center gap-3 border-t border-line py-2.5 first:border-t-0', dragId === flag.id && 'opacity-50', overId === flag.id && dragId !== flag.id && 'bg-primary/8')}
-        >
-          <Tip content={t({ ko: '끌어서 순서 바꾸기', en: 'Drag to reorder' })}>
-            <span
-              draggable
-              onDragStart={(event) => { setDragId(flag.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(flag.id)) }}
-              onDragEnd={() => { setDragId(null); setOverId(null) }}
-              className="cursor-grab text-muted-foreground/60 active:cursor-grabbing"
-              aria-hidden="true"
-            >
-              <GripVertical className="size-4" />
-            </span>
-          </Tip>
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-high text-foreground">
-            <ChatFlagIcon icon={flag.icon} name={flag.name} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold">{flag.name}</div>
-            <div className="truncate text-xs text-muted-foreground">{flag.content}</div>
-          </div>
-          <IconButton size="icon-sm" variant="ghost" onClick={() => onEdit(flag)} label={t({ ko: '편집', en: 'Edit' })}><Pencil /></IconButton>
-        </div>
+          className={cn(dragId === flag.id && 'opacity-50', overId === flag.id && dragId !== flag.id && 'bg-primary/8 hover:bg-primary/8')}
+          leading={(
+            <>
+              <Tip content={t({ ko: '끌어서 순서 바꾸기', en: 'Drag to reorder' })}>
+                <span
+                  draggable
+                  onClick={(event) => event.stopPropagation()}
+                  onDragStart={(event) => { setDragId(flag.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(flag.id)) }}
+                  onDragEnd={() => { setDragId(null); setOverId(null) }}
+                  className="mr-3 cursor-grab text-muted-foreground/60 active:cursor-grabbing"
+                  aria-hidden="true"
+                >
+                  <GripVertical className="size-4" />
+                </span>
+              </Tip>
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-high text-foreground">
+                <ChatFlagIcon icon={flag.icon} name={flag.name} />
+              </span>
+            </>
+          )}
+          name={flag.name}
+          meta={flag.content}
+          onOpen={() => onEdit(flag)}
+        />
       ))}
     </>
   )

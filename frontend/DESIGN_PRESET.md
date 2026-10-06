@@ -127,7 +127,14 @@ buttons up one tone.
   control): label left, control right, 52px min, hairline below, control wraps under the label on phones.
 - `ListRow` (`leading?`, `trailing?`, `selected?`, `interactive?`, `size?` sm|md|lg, `asChild?`): hairline row; with
   `asChild` a `<button>` / `<a>` / `<li>` child becomes the row (lint allows `<ListRow asChild><button/></ListRow>`).
-- `RowGroup` (`heading?`, `actions?`, `bodyClassName?`): optional heading over rows.
+- `ResourceRow` (`leading?`, `name`, `extra?`, `meta?`, `trailing?`, `onOpen?`, `openLabel?`): one named thing in a list
+  (preset, profile, lorebook…). Name + extras over one muted meta line; `onOpen` makes the whole row clickable and shows
+  the pencil on hover (always on touch). Clicks in `trailing` do not open the row. Colour the leading icon with
+  `text-resource-*` (tool / generation / block / lorebook) and wrap a state that needs attention in `ResourceRowStatus`.
+- `RowGroup` (`heading?`, `count?`, `headingClassName?`, `actions?`, `bodyClassName?`): group label over rows. The label
+  is a muted overline over a hairline (`border-foreground/15`), one rank below the rows' names, so a long page reads by
+  group; `count` adds the item count, `headingClassName` gives the label a kind colour that the rows' icons share.
+  `Section variant="settings"` has the same heading.
 - Rows must be direct siblings: never put `space-y-*` / `gap-*` between them.
 
 ### Component → look
@@ -178,10 +185,10 @@ Do not restyle buttons with `bg-*`, `border`, `rounded-*` or `shadow-*` override
 `Alert` has the same status set: `default destructive warning success info`.
 
 ### Labels
-Overline-style labels (Field label, StatTile label, Badge, Section `drawer` heading, anchored-popup label, PageHeader
-eyebrow, ExplorerSidebar title) are `text-2xs` + `tracking-overline`. `--overline-tracking` is 0.16em for Latin and
+Overline-style labels (Field label, StatTile label, Badge, RowGroup heading, Section `drawer` / `settings` heading,
+anchored-popup label, PageHeader eyebrow, ExplorerSidebar title) are `text-2xs` + `tracking-overline`. `--overline-tracking` is 0.16em for Latin and
 0.02em under `html:lang(ko)`, so never hard-code `tracking-[0.1Xem]` or `text-[11px]` on a label. The PageHeader eyebrow
-is a muted overline (no accent colour, no rule line).
+is a muted overline (no accent colour, no rule line); the RowGroup heading is the one overline with a rule under it.
 
 ### Navigation rows
 Current row = `bg-fill` + 2px primary bar on the left + `foreground` text (SidebarItem, Button `nav`, `HierarchyNav`,

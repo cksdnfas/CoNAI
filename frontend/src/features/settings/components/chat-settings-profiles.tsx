@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileUp, Pencil, Plus } from 'lucide-react'
+import { FileUp, Plus } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
+import { ResourceRow } from '@/components/ui/resource-row'
 import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Switch } from '@/components/ui/switch'
@@ -117,6 +118,7 @@ export function ChatSettingsProfiles() {
 
       <RowGroup
         heading={t({ ko: '채팅 프로필', en: 'Chat profiles' })}
+        count={profilesQuery.isSuccess ? profiles.length : undefined}
         actions={(
           <div className="flex items-center gap-1">
             <input ref={importRef} type="file" accept=".png,.json,image/png,application/json" className="hidden" aria-label={t({ ko: '캐릭터 카드 파일', en: 'Character card file' })} onChange={(event) => {
@@ -134,27 +136,30 @@ export function ChatSettingsProfiles() {
         {profilesQuery.isLoading ? <SettingsRowsSkeleton rows={2} /> : null}
         {profilesQuery.isSuccess && profiles.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 프로필이 없어.', en: 'No profiles yet.' })}</SettingsEmptyRow> : null}
         {profiles.map((profile) => (
-          <div key={profile.id} className="flex min-h-16 items-center gap-3 border-t border-line py-2.5 first:border-t-0">
-            <ChatProfileAvatar name={profile.name} avatar={profile.avatar} engine={profile.engine} size="lg" />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold">{profile.name}</div>
-              <div className="truncate font-mono text-xs text-muted-foreground">{profileModelLine(profile, slots, t)}</div>
-            </div>
-            {profile.mcpEnabled ? (
-              <Tip content={profile.mcpScopes.map((scope) => getChatScopeCopy(scope, t).label).join(' · ')}>
-                <span className="hidden max-w-32 shrink-0 truncate rounded-sm bg-fill px-2 py-0.5 text-xs text-muted-foreground sm:inline">{profileToolChip(profile, t)}</span>
-              </Tip>
-            ) : null}
-            <Switch
-              checked={profile.isEnabled}
-              disabled={toggleMutation.isPending}
-              onCheckedChange={(isEnabled) => toggleMutation.mutate({ profileId: profile.id, isEnabled })}
-              aria-label={t({ ko: '사용', en: 'On' })}
-            />
-            <IconButton size="icon-sm" variant="ghost" onClick={() => setEditor({ profile })} label={t({ ko: '편집', en: 'Edit' })}>
-              <Pencil />
-            </IconButton>
-          </div>
+          <ResourceRow
+            key={profile.id}
+            className="min-h-16"
+            leading={<ChatProfileAvatar name={profile.name} avatar={profile.avatar} engine={profile.engine} size="lg" />}
+            name={profile.name}
+            meta={<span className="font-mono">{profileModelLine(profile, slots, t)}</span>}
+            trailing={(
+              <>
+                {profile.mcpEnabled ? (
+                  <Tip content={profile.mcpScopes.map((scope) => getChatScopeCopy(scope, t).label).join(' · ')}>
+                    <span className="hidden max-w-32 shrink-0 truncate rounded-sm bg-fill px-2 py-0.5 text-xs text-muted-foreground sm:inline">{profileToolChip(profile, t)}</span>
+                  </Tip>
+                ) : null}
+                <Switch
+                  className="ml-1"
+                  checked={profile.isEnabled}
+                  disabled={toggleMutation.isPending}
+                  onCheckedChange={(isEnabled) => toggleMutation.mutate({ profileId: profile.id, isEnabled })}
+                  aria-label={t({ ko: '사용', en: 'On' })}
+                />
+              </>
+            )}
+            onOpen={() => setEditor({ profile })}
+          />
         ))}
         {profilesQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(profilesQuery.error, t({ ko: '프로필을 불러오지 못했어.', en: 'Could not load profiles.' }))}</p> : null}
       </RowGroup>
