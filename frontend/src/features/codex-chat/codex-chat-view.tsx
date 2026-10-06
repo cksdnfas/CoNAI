@@ -911,9 +911,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   // The menu items used most sit in the header; a second press on a view returns to the chat.
   const toggleView = (next: 'context' | 'gallery') => setView(activeView === next ? 'chat' : next)
   const headerActions = thread ? <>
-    <IconButton variant="ghost" size="icon-sm" active={activeView === 'context'} onClick={() => toggleView('context')} label={t({ ko: '컨텍스트', en: 'Context' })}><SlidersHorizontal /></IconButton>
     <IconButton variant="ghost" size="icon-sm" active={activeView === 'gallery'} onClick={() => toggleView('gallery')} label={t({ ko: '이미지 모아보기', en: 'Image gallery' })}><LayoutGrid /></IconButton>
     <IconButton variant="ghost" size="icon-sm" disabled={isBusy} onClick={() => void runCommand('/clear')} label={t({ ko: '대화 비우기', en: 'Clear chat' })}><Eraser /></IconButton>
+    <IconButton variant="ghost" size="icon-sm" active={activeView === 'context'} onClick={() => toggleView('context')} label={t({ ko: '컨텍스트', en: 'Context' })}><SlidersHorizontal /></IconButton>
   </> : null
   const headerAvatar = isGroup
     ? group && activeThreadId !== null
@@ -1177,6 +1177,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     )
   }
 
+  const expandButton = onExpand ? (
+    <IconButton variant="ghost" size="icon-sm" className="hidden lg:inline-flex" onClick={onExpand} label={t({ ko: '전체 페이지로 열기', en: 'Open full page' })}>
+      <Maximize2 />
+    </IconButton>
+  ) : null
   const closeButton = onClose ? (
     <IconButton variant="ghost" size="icon-sm" onClick={onClose} label={t({ ko: '닫기', en: 'Close' })}>
       <X />
@@ -1189,17 +1194,14 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         {showList ? <>
           {listTitle}
           {newChatButton}
-          {onExpand ? (
-            <IconButton variant="ghost" size="icon-sm" className="hidden lg:inline-flex" onClick={onExpand} label={t({ ko: '전체 페이지로 열기', en: 'Open full page' })}>
-              <Maximize2 />
-            </IconButton>
-          ) : null}
+          {expandButton}
         </> : <>
           {backButton ?? <span className="w-1" />}
           {headerAvatar}
           <span className="min-w-0 flex-1 truncate px-1.5 text-sm font-semibold">{thread ? thread.title || untitled : pendingProfile?.name ?? untitled}</span>
-          {headerActions}
+          {expandButton}
           {inviteButton}
+          {headerActions}
           {thread ? chatMenu : null}
         </>}
         {closeButton}
