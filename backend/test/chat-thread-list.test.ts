@@ -67,6 +67,24 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     assert.equal(CodexChatStore.findThreadById(id)!.pinned, 1)
   })
 
+  await t.test('greeting preview: the chat saved later opens with the previewed greeting', () => {
+    const greeter = ChatProfileStore.create({ name: '하늘', engine: 'llm', providerName: 'test', model: 'm', mcpEnabled: false, summaryEnabled: false,
+      greeting: '안녕, {{user}}.', alternateGreetings: ['또 왔네.', '여행 준비됐어?'] })
+    const preview = CodexChatService.previewGreeting(requester, greeter.id)
+    assert.ok(preview.index !== null && preview.index >= 0 && preview.index < 3)
+    assert.equal(preview.userProfileId, null)
+    assert.ok(!preview.text.includes('{{user}}'), 'placeholders filled as the saved greeting would be')
+    const saved = CodexChatService.createThread(requester, greeter.id, preview.userProfileId, preview.index)
+    assert.equal(CodexChatStore.listMessages(saved.id)[0].content, preview.text)
+    const second = CodexChatService.createThread(requester, greeter.id, null, 1)
+    assert.equal(CodexChatStore.listMessages(second.id)[0].content, '또 왔네.')
+    const outOfRange = CodexChatService.createThread(requester, greeter.id, null, 9)
+    assert.equal(CodexChatStore.listMessages(outOfRange.id).length, 1, 'a stale index still opens with a greeting')
+    const quiet = ChatProfileStore.create({ name: '말없음', engine: 'llm', providerName: 'test', model: 'm', mcpEnabled: false, summaryEnabled: false })
+    assert.deepEqual(CodexChatService.previewGreeting(requester, quiet.id), { index: null, text: '', userProfileId: null })
+    assert.equal(CodexChatStore.listMessages(CodexChatService.createThread(requester, quiet.id, null, null).id).length, 0)
+  })
+
   await t.test('branch origin: purpose and source kept, unlinked (not deleted) when the source goes', () => {
     const id = newThread()
     const first = say(id, 'user', '하나')

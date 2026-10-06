@@ -341,8 +341,27 @@ router.delete('/threads/:threadId/members/:profileId', requireChatAccess, (req: 
   }
 })
 
-/** POST /api/codex-chat/threads — `{ profileId }`: a new chat with that profile's engine and persona. */
-/** POST /api/codex-chat/threads — `{ profileId, userProfileId? }` (userProfileId absent: the default user profile, null: none). */
+/**
+ * GET /api/codex-chat/profiles/:profileId/greeting?userProfileId= — a new chat's opening before it is saved:
+ * `{ index, text, userProfileId }` (index null: no greeting). POST /threads with that index keeps the same greeting.
+ */
+router.get('/profiles/:profileId/greeting', requireChatAccess, (req: Request, res: Response) => {
+  const profileId = parseId(req.params.profileId)
+  if (profileId === null) { sendRouteBadRequest(res, 'Invalid profile id'); return }
+  const raw = req.query.userProfileId
+  const userProfileId = parseUserProfileIdField(raw === undefined ? undefined : raw === 'null' ? null : raw)
+  if (userProfileId === 'invalid') { sendRouteBadRequest(res, 'userProfileId must be a number or null'); return }
+  try {
+    res.json({ success: true, data: CodexChatService.previewGreeting(requesterFrom(req), profileId, userProfileId) })
+  } catch (error) {
+    sendChatError(res, error)
+  }
+})
+
+/**
+ * POST /api/codex-chat/threads — `{ profileId, userProfileId?, greetingIndex? }`: a new chat with that profile's engine
+ * and persona (userProfileId absent: the default user profile, null: none; greetingIndex: the previewed greeting).
+ */
 router.post('/threads', requireChatAccess, (req: Request, res: Response) => {
   const profileId = parseId(req.body?.profileId)
   if (profileId === null) {
@@ -351,8 +370,13 @@ router.post('/threads', requireChatAccess, (req: Request, res: Response) => {
   }
   const userProfileId = parseUserProfileIdField(req.body?.userProfileId)
   if (userProfileId === 'invalid') { sendRouteBadRequest(res, 'userProfileId must be a number or null'); return }
+  const greetingIndex = req.body?.greetingIndex
+  if (greetingIndex !== undefined && greetingIndex !== null && !(Number.isSafeInteger(greetingIndex) && greetingIndex >= 0)) {
+    sendRouteBadRequest(res, 'greetingIndex must be a non-negative integer or null')
+    return
+  }
   try {
-    const created = CodexChatService.createThread(requesterFrom(req), profileId, userProfileId)
+    const created = CodexChatService.createThread(requesterFrom(req), profileId, userProfileId, greetingIndex as number | null | undefined)
     ChatAppearanceStore.threadCreated(getRequesterAccountId(req), created.id)
     res.status(201).json({ success: true, data: created })
   } catch (error) {

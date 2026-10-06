@@ -15,7 +15,7 @@ import { onBeforeCodexCliUpdate, isCodexCliUpdating } from '../codexCliMaintenan
 import { resolveCodexCommand } from '../codexGenerationExecutor'
 import { getCodexModelSuggestions } from '../codexGenerationOptions'
 import { CodexAppServerClient, type CodexAppServerNotification } from './codexAppServerClient'
-import { ChatProfileStore, pickChatGreeting, type ChatProfile } from './chatProfiles'
+import { ChatProfileStore, chatGreetings, pickChatGreeting, type ChatProfile } from './chatProfiles'
 import { loadChatSettings, type ChatScope } from './chatSettings'
 import { intersectChatScopes, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken, setCodexChatExecution } from './codexChatAccess'
 import { attachJobResults, collectCodexChatMedia } from './codexChatMedia'
@@ -941,17 +941,42 @@ export const CodexChatService = {
    * A chat with the profile's engine; the profile's greeting becomes the first message. `userProfileId`: the
    * account's user profile in it; undefined picks the default one (see ChatUserProfileStore.resolveNew), null none.
    */
-  createThread(requester: McpRequester, profileId: number, userProfileId?: number | null) {
+  /**
+   * What a new chat with this profile would start with, before it is saved: one of its greetings (filled for the
+   * user profile it would take) and that greeting's index, which createThread then keeps. The chat is saved only
+   * when its first message is sent.
+   */
+  previewGreeting(requester: McpRequester, profileId: number, userProfileId?: number | null) {
+    const user = ChatUserProfileStore.requireOwn(requester.accountId, userProfileId === undefined ? ChatUserProfileStore.resolveNew(requester.accountId) : userProfileId)
+    const found = ChatProfileStore.find(profileId)
+    let profile: ChatProfile
+    if (found?.engine === 'codex') {
+      assertChatAvailable(requester)
+      requireCodexProfile(found.id)
+      profile = found
+    } else {
+      profile = LlmChatService.requireStartableProfile(requester, profileId)
+    }
+    const greetings = chatGreetings(profile)
+    const index = greetings.length > 0 ? Math.floor(Math.random() * greetings.length) : null
+    return {
+      index,
+      text: index === null ? '' : fillCharacterPlaceholders(greetings[index], profile, userPersonaOf(user)),
+      userProfileId: user?.id ?? null,
+    }
+  },
+
+  createThread(requester: McpRequester, profileId: number, userProfileId?: number | null, greetingIndex?: number | null) {
     const user = ChatUserProfileStore.requireOwn(requester.accountId, userProfileId === undefined ? ChatUserProfileStore.resolveNew(requester.accountId) : userProfileId)
     const profile = ChatProfileStore.find(profileId)
     if (profile?.engine !== 'codex') {
-      return requireThread(requester, LlmChatService.createThread(requester, profileId, user?.id ?? null))
+      return requireThread(requester, LlmChatService.createThread(requester, profileId, user?.id ?? null, greetingIndex))
     }
     assertChatAvailable(requester)
     requireCodexProfile(profile.id)
     const id = CodexChatStore.createThread(requester.accountId, '', 'codex', profile.id)
     if (user) ChatUserProfileStore.setThreadUserProfile(id, user.id)
-    const greeting = pickChatGreeting(profile)
+    const greeting = pickChatGreeting(profile, greetingIndex)
     if (greeting) {
       CodexChatStore.addMessage({ thread_id: id, role: 'assistant', content: fillCharacterPlaceholders(greeting, profile, userPersonaOf(user)), tool_calls: [], status: 'completed', error: null })
     }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildr
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread, type CodexChatThread, getCodexChatStatus, interruptCodexChatThread, pickSnapshot, readThreadFlagIds, streamCodexChatMessage, streamChatContinue, streamChatRewrite, type ChatFlag, type ChatMediaAttachment, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread, type CodexChatThread, getCodexChatStatus, getCodexChatThread, previewChatGreeting, interruptCodexChatThread, pickSnapshot, readThreadFlagIds, streamCodexChatMessage, streamChatContinue, streamChatRewrite, type ChatFlag, type ChatMediaAttachment, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { CHAT_STATUS_QUERY_KEY } from '@/lib/api-codex-chat'
 import { summarizeChatError } from './chat-error-chip'
@@ -17,7 +17,9 @@ import {
   codexChatMediaQueryKey,
   codexChatThreadQueryKey,
   defaultThreadId,
+  PENDING_DRAFT_KEY,
   type CodexChatApi,
+  type CodexChatPendingChat,
   type CodexChatLiveReply,
   type CodexChatLiveTurn,
   type CodexChatReferenceApi,
@@ -90,7 +92,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   }, [drafts, loadedDraftsKey])
   /** Drop the texts of chats that are gone. */
   const keepDrafts = useCallback((threadIds: number[]) => {
-    const live = new Set(threadIds)
+    const live = new Set([...threadIds, PENDING_DRAFT_KEY])
     const kept = Object.fromEntries(Object.entries(draftsRef.current).filter(([id]) => live.has(Number(id))))
     if (Object.keys(kept).length === Object.keys(draftsRef.current).length) return
     draftsRef.current = kept
@@ -126,7 +128,11 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   const [liveTurn, setLiveTurn] = useState<CodexChatLiveTurn | null>(null)
   const [messageFocus, setMessageFocus] = useState<CodexChatApi['messageFocus']>(null)
   const [isStartingChat, setIsStartingChat] = useState(false)
+  const [pendingChat, setPendingChat] = useState<CodexChatPendingChat | null>(null)
+  const pendingRef = useRef(pendingChat)
   const streamAbortRef = useRef<AbortController | null>(null)
+  /** A new chat is being saved (a double click must not save two). */
+  const startingRef = useRef(false)
   /** The chat the stream belongs to: only a message in that same room may cut in. */
   const streamThreadRef = useRef<number | null>(null)
   /** Settles when the streamed reply has wound down, so a group room message can cut in after it. */
@@ -241,33 +247,46 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     setSelectedThreadId(threadId)
   }, [])
 
+  /** Leave the new chat being prepared: nothing was saved, so only its text goes. */
+  const dropPending = useCallback(() => {
+    if (!pendingRef.current) return
+    pendingRef.current = null
+    setPendingChat(null)
+    setDraft(PENDING_DRAFT_KEY, '')
+  }, [setDraft])
+
   const selectThread = useCallback((threadId: number | null | undefined) => {
+    dropPending()
     switchComposer(threadId)
     setListOpen(false)
     setView('chat')
-  }, [switchComposer])
+  }, [dropPending, switchComposer])
 
   const showList = useCallback((open: boolean) => {
+    if (open) dropPending()
     setListOpen(open)
     setView('chat')
-  }, [])
+  }, [dropPending])
 
-  const startChat = useCallback(async (profileId: number, userProfileId?: number | null) => {
-    setIsStartingChat(true)
-    try {
-      const thread = await createCodexChatThread(profileId, userProfileId)
-      await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
-      // The new chat starts from the default appearance slot, copied on the server.
-      void queryClient.invalidateQueries({ queryKey: CHAT_APPEARANCE_QUERY_KEY })
-      switchComposer(thread.id)
-      setListOpen(false)
-      setView('chat')
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t({ ko: '채팅을 만들지 못했어.', en: 'Could not start a chat.' })), tone: 'error' })
-    } finally {
-      setIsStartingChat(false)
-    }
-  }, [queryClient, showSnackbar, t, switchComposer])
+  const prepareChat = useCallback((profileId: number, userProfileId?: number | null) => {
+    switchComposer(null)
+    setDraft(PENDING_DRAFT_KEY, '')
+    const pending: CodexChatPendingChat = { profileId, userProfileId, greeting: null }
+    pendingRef.current = pending
+    setPendingChat(pending)
+    setListOpen(false)
+    setView('chat')
+    previewChatGreeting(profileId, userProfileId).then((preview) => {
+      if (pendingRef.current !== pending) return
+      pendingRef.current = { ...pending, userProfileId: preview.userProfileId, greeting: { index: preview.index, text: preview.text } }
+      setPendingChat(pendingRef.current)
+    }).catch((error: unknown) => {
+      if (pendingRef.current !== pending) return
+      pendingRef.current = null
+      setPendingChat(null)
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '채팅을 시작하지 못했어.', en: 'Could not start a chat.' })), tone: 'error' })
+    })
+  }, [setDraft, showSnackbar, switchComposer, t])
 
   const reply = useCallback(async (threadId: number, rewrite?: { messageId: number; content?: string; continue?: boolean }, literalText?: string) => {
     const replyingTo = !rewrite && draftReplyRef.current?.threadId === threadId ? draftReplyRef.current : null
@@ -444,6 +463,39 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   }, [queryClient, showSnackbar, t, setDraftReply, setDraft])
 
   const send = useCallback(async (threadId: number, text?: string) => { await reply(threadId, undefined, text) }, [reply])
+
+  const sendPending = useCallback(async (text: string) => {
+    const pending = pendingRef.current
+    if (!pending?.greeting || startingRef.current) return
+    startingRef.current = true
+    setIsStartingChat(true)
+    let threadId: number
+    try {
+      threadId = (await createCodexChatThread(pending.profileId, pending.userProfileId, pending.greeting.index)).id
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '채팅을 만들지 못했어.', en: 'Could not start a chat.' })), tone: 'error' })
+      return
+    } finally {
+      startingRef.current = false
+      setIsStartingChat(false)
+    }
+    // Saved: from here it is an ordinary chat. A first message that fails comes back as that chat's draft.
+    pendingRef.current = null
+    setPendingChat(null)
+    setDraft(PENDING_DRAFT_KEY, '')
+    // Loaded before the first message goes out (greeting only), as an opened chat would be: the stored message must
+    // not show next to the streamed one.
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }),
+      queryClient.fetchQuery({ queryKey: codexChatThreadQueryKey(threadId), queryFn: () => getCodexChatThread(threadId) }).catch(() => undefined),
+    ])
+    // The new chat starts from the default appearance slot, copied on the server.
+    void queryClient.invalidateQueries({ queryKey: CHAT_APPEARANCE_QUERY_KEY })
+    switchComposer(threadId)
+    setListOpen(false)
+    setView('chat')
+    await reply(threadId, undefined, text)
+  }, [queryClient, reply, setDraft, showSnackbar, switchComposer, t])
   const regenerate = useCallback((threadId: number, messageId: number) => reply(threadId, { messageId }), [reply])
   const continueReply = useCallback((threadId: number, messageId: number) => reply(threadId, { messageId, continue: true }), [reply])
   const editMessage = useCallback((threadId: number, messageId: number, content: string) => reply(threadId, { messageId, content }), [reply])
@@ -475,7 +527,9 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     settleSelection,
     listOpen,
     setListOpen: showList,
-    startChat,
+    pendingChat,
+    prepareChat,
+    sendPending,
     isStartingChat,
     drafts,
     setDraft,
@@ -501,7 +555,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     messageFocus,
     focusMessage,
     clearMessageFocus,
-  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, drafts, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, liveTurn, messageFocus, openPanel, picks, togglePick, removePick, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, startChat, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
+  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, drafts, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, liveTurn, messageFocus, openPanel, picks, togglePick, removePick, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, pendingChat, prepareChat, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
 
   const referenceApi = useMemo<CodexChatReferenceApi>(() => ({ draftMediaAttachments, toggleMediaAttachment, focusMessage }), [draftMediaAttachments, toggleMediaAttachment, focusMessage])
 

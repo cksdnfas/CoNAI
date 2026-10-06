@@ -15,6 +15,20 @@ export function codexChatMediaQueryKey(threadId: number | null) {
 
 export type CodexChatView = 'chat' | 'gallery' | 'context'
 
+/** The composer text of the new chat being prepared (saved chats use their ids, which start at 1). */
+export const PENDING_DRAFT_KEY = 0
+
+/**
+ * A new 1:1 chat that is not saved yet: it shows the profile's greeting and is saved, with that greeting, when its
+ * first message is sent (so opening and leaving it leaves nothing behind). `greeting` is null while it loads.
+ */
+export type CodexChatPendingChat = {
+  profileId: number
+  /** Undefined until the preview says which user profile the chat takes (then a number or null). */
+  userProfileId: number | null | undefined
+  greeting: { index: number | null; text: string } | null
+}
+
 /** The chat opened when none is chosen: the latest one in the list (archived chats only when nothing else is left). */
 export function defaultThreadId(threads: Array<{ id: number; archived?: 0 | 1 }>) {
   return (threads.find((thread) => !thread.archived) ?? threads[0])?.id ?? null
@@ -75,9 +89,12 @@ export interface CodexChatApi {
   listOpen: boolean
   /** Also returns from the gallery or context to the chat. */
   setListOpen: (open: boolean) => void
-  /** Create a chat with a profile (its greeting arrives as the first message) and open it. */
-  /** `userProfileId` left out: the default user profile; null: the plain user. */
-  startChat: (profileId: number, userProfileId?: number | null) => Promise<void>
+  /** The new chat being prepared (see CodexChatPendingChat); opening a saved chat or the list drops it. */
+  pendingChat: CodexChatPendingChat | null
+  /** Prepare a new chat with a profile. `userProfileId` left out: the default user profile; null: the plain user. */
+  prepareChat: (profileId: number, userProfileId?: number | null) => void
+  /** Save the prepared chat and send its first message. */
+  sendPending: (text: string) => Promise<void>
   isStartingChat: boolean
   /** The composer text of each chat (chats without one are left out). */
   drafts: Record<number, string>

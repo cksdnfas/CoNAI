@@ -1012,8 +1012,15 @@ export function listCodexChatThreads() {
 }
 
 /** `userProfileId` left out: the server picks the default user profile; null: the plain user. */
-export function createCodexChatThread(profileId: number, userProfileId?: number | null) {
-  return requestApiData<CodexChatThread>('/api/codex-chat/threads', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ profileId, ...(userProfileId === undefined ? {} : { userProfileId }) }) })
+/** `greetingIndex`: the greeting previewChatGreeting showed (absent: one chosen at random). */
+export function createCodexChatThread(profileId: number, userProfileId?: number | null, greetingIndex?: number | null) {
+  return requestApiData<CodexChatThread>('/api/codex-chat/threads', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ profileId, ...(userProfileId === undefined ? {} : { userProfileId }), ...(greetingIndex === undefined ? {} : { greetingIndex }) }) })
+}
+
+/** A new chat's opening before it is saved: one greeting (index null: none) and the user profile the chat would take. */
+export function previewChatGreeting(profileId: number, userProfileId?: number | null) {
+  const query = userProfileId === undefined ? '' : `?userProfileId=${userProfileId === null ? 'null' : userProfileId}`
+  return requestApiData<{ index: number | null; text: string; userProfileId: number | null }>(`/api/codex-chat/profiles/${profileId}/greeting${query}`, { cache: 'no-store' })
 }
 
 export function createGroupChat(input: { profileIds: number[]; representativeId: number; title?: string; userProfileId?: number | null }) {

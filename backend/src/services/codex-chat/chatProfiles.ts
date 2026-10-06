@@ -253,9 +253,18 @@ export function normalizeAlternateGreetings(value: unknown): string[] {
   return Array.isArray(value) ? value.slice(0, 100).filter((item): item is string => typeof item === 'string').map((item) => item.trim().slice(0, TEXT_MAX_LENGTH)).filter(Boolean) : []
 }
 
-/** Choose uniformly from non-empty greetings; no greeting keeps the chat empty. */
-export function pickChatGreeting(profile: Pick<ChatProfile, 'greeting' | 'alternateGreetings'>): string {
-  const greetings = [profile.greeting, ...profile.alternateGreetings].filter((greeting) => greeting.trim().length > 0)
+/** The profile's non-empty greetings, the first greeting then the alternates. */
+export function chatGreetings(profile: Pick<ChatProfile, 'greeting' | 'alternateGreetings'>): string[] {
+  return [profile.greeting, ...profile.alternateGreetings].filter((greeting) => greeting.trim().length > 0)
+}
+
+/**
+ * The greeting at `index` of chatGreetings (the one a new chat previewed), or one chosen uniformly when there is no
+ * such index; no greeting keeps the chat empty.
+ */
+export function pickChatGreeting(profile: Pick<ChatProfile, 'greeting' | 'alternateGreetings'>, index?: number | null): string {
+  const greetings = chatGreetings(profile)
+  if (typeof index === 'number' && Number.isSafeInteger(index) && index >= 0 && index < greetings.length) return greetings[index]
   return greetings.length > 0 ? greetings[Math.floor(Math.random() * greetings.length)] : ''
 }
 

@@ -391,13 +391,19 @@ export async function generateLlmGroupReply(params: {
 
 export const LlmChatService = {
   /** `userProfileId`: the account's user profile in the chat (already checked), null for the plain user. */
-  createThread(requester: McpRequester, profileId: number, userProfileId: number | null = null) {
+  /** The profile a new chat would talk to, when this requester may start one. */
+  requireStartableProfile(requester: McpRequester, profileId: number) {
+    assertLlmChatAvailable(requester)
+    return requireUsableProfile(profileId)
+  },
+
+  createThread(requester: McpRequester, profileId: number, userProfileId: number | null = null, greetingIndex?: number | null) {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(profileId)
     const user = ChatUserProfileStore.requireOwn(requester.accountId, userProfileId)
     const threadId = CodexChatStore.createThread(requester.accountId, '', 'llm', profile.id)
     if (user) ChatUserProfileStore.setThreadUserProfile(threadId, user.id)
-    const greeting = pickChatGreeting(profile)
+    const greeting = pickChatGreeting(profile, greetingIndex)
     if (greeting) {
       CodexChatStore.addMessage({ thread_id: threadId, role: 'assistant', content: fillCharacterPlaceholders(greeting, profile, userPersonaOf(user)), tool_calls: [], status: 'completed', error: null })
     }

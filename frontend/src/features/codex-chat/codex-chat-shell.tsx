@@ -212,6 +212,7 @@ export function CodexChatDock() {
     if (!chat) return
     if (chat.view !== 'chat') chat.setView('chat')
     else if (!chat.listOpen && (queryClient.getQueryData<unknown[]>(CODEX_CHAT_THREADS_QUERY_KEY)?.length ?? 0) > 0) chat.setListOpen(true)
+    else if (chat.pendingChat) chat.selectThread(null)
     else chat.closePanel()
   }
   useOverlayBackClose({ open: coversScreen, onClose: stepBack })
