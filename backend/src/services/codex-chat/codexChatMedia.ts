@@ -45,10 +45,16 @@ const PROPOSAL_TOOLS: Record<ChatProposal['kind'], string> = {
   display_block: 'propose_display_block',
   profile: 'propose_chat_profile',
   profile_update: 'propose_profile_update',
+  lore: 'save_lore',
+}
+
+/** Tools whose call leaves a proposal card under the reply. */
+export function isProposalTool(tool: string) {
+  return tool.startsWith('propose_') || tool === 'save_lore'
 }
 
 /**
- * Hang each reply's stored proposals on its `propose_*` tool calls (read-only, not stored on the message). Calls and
+ * Hang each reply's stored proposals on its `propose_*` / save_lore tool calls (read-only, not stored on the message). Calls and
  * proposals both keep their order within a reply, so the i-th proposal belongs to the i-th such call; a failed call
  * stored nothing and is skipped. Replies whose calls were not recorded by name (Codex keeps only a summary) get the
  * leftover proposals as synthetic calls, like generation results below.
@@ -68,7 +74,7 @@ export function attachProposals(messages: CodexChatMessageRecord[]): CodexChatMe
     if (!proposals?.length) return message
     let next = 0
     const calls = message.tool_calls.map((call) => {
-      if (!call.tool.startsWith('propose_') || call.status === 'failed' || next >= proposals.length) return call
+      if (!isProposalTool(call.tool) || call.status === 'failed' || next >= proposals.length) return call
       return { ...call, proposal: proposals[next++].proposal }
     })
     const extra = proposals.slice(next).map(({ id, proposal }) => ({ id: `proposal-${id}`, tool: PROPOSAL_TOOLS[proposal.kind], status: 'completed' as const, arguments: null, summary: null, historyIds: [], compositeHashes: [], proposal }))

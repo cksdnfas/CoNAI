@@ -62,8 +62,25 @@ function folderName(value: unknown, maxLength = LOREBOOK_NAME_MAX_LENGTH) {
   return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(cleaned) ? '' : cleaned
 }
 
-function isTextPath(file: string) {
+export function isTextPath(file: string) {
   return TEXT_EXTENSIONS.has(path.posix.extname(file).toLowerCase())
+}
+
+/** An entry title as compared for "the same title": NFC, whitespace collapsed, case-insensitive. */
+export function foldLoreTitle(value: string) {
+  return value.normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()
+}
+
+/** `name`, else `stem (2).ext`, `stem (3).ext`, … — the first name nothing under `parentId` uses. */
+export function freeChildName(owner: string, parentId: string, name: string, taken: (name: string) => boolean = () => false) {
+  const extension = path.posix.extname(name)
+  const stem = extension ? name.slice(0, -extension.length) : name
+  let candidate = name
+  for (let n = 2; FileStoreService.findChild(owner, parentId, candidate) || taken(candidate.toLowerCase()); n++) {
+    if (n > 999) throw new LorebookError(`같은 이름이 너무 많아: ${name}`, 409)
+    candidate = `${stem} (${n})${extension}`
+  }
+  return candidate
 }
 
 /** Entries from a person or a model: a `file` must stay inside the book folder and be a text file. */
@@ -571,6 +588,56 @@ export const OwnedLorebookStore = {
     const fresh = added.filter((entry) => !have.has(entry.id))
     if (fresh.length === 0) return current
     return OwnedLorebookStore.saveChatBook(threadId, [...(current?.entries ?? []), ...fresh])
+  },
+
+  /**
+   * Keep a chat's book as an account book: its folder moves from 로어북/채팅/ to 로어북/ (a name taken in either place
+   * gets a ` (2)`-style suffix) and the book stops belonging to the chat.
+   */
+  keepChatBook(threadId: number): OwnedLorebook {
+    const found = chatBookRow(threadId)
+    if (!found) throw new LorebookError('이 채팅에는 로어북이 없어.', 404)
+    const row = refreshIfStale(found)
+    const owner = row.owner_key as string
+    const folderId = row.folder_id as string
+    const db = getUserSettingsDb()
+    return db.transaction(() => {
+      const root = lorebookRoot(owner)
+      const parentId = (db.prepare('SELECT parent_id FROM stored_file_entries WHERE id = ?').get(folderId) as { parent_id: string | null } | undefined)?.parent_id ?? null
+      const base = folderName(row.name) || `채팅 ${threadId}`
+      const taken = (name: string) => [root.id, parentId].some((parent) => {
+        const other = parent ? FileStoreService.findChild(owner, parent, name) : null
+        return other !== null && other.id !== folderId
+      }) || name.toLowerCase() === CHAT_LOREBOOK_FOLDER.toLowerCase()
+      let name = base
+      for (let n = 2; taken(name); n++) {
+        if (n > 100) throw new LorebookError('보관할 폴더 이름을 정하지 못했어.', 409)
+        name = `${base.slice(0, LOREBOOK_NAME_MAX_LENGTH - 6)} (${n})`
+      }
+      if (name !== row.name) FileStoreService.rename(owner, folderId, name)
+      FileStoreService.move(owner, [folderId], root.id)
+      db.prepare("UPDATE chat_lorebooks SET kind = 'account', thread_id = NULL, name = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?").run(name, row.id)
+      return toOwned(rowById(row.id) as LorebookRow)
+    }).immediate()
+  },
+
+  /**
+   * A chat was deleted: its book goes too (folder and files). Run after the chat's messages are gone, since a file a
+   * message attaches cannot be deleted. A folder that still cannot be deleted (a file another chat attaches) stays in
+   * the file store; the book row goes either way, so no book is left pointing at a deleted chat.
+   */
+  threadDeleted(threadId: number) {
+    const row = chatBookRow(threadId)
+    if (!row) return false
+    try {
+      FileStoreService.deleteTree(row.owner_key as string, row.folder_id as string, { silent: true })
+    } catch (error) {
+      if (!(error instanceof FileStoreError && error.status === 404)) {
+        console.warn(`[lorebook] Chat ${threadId}: the folder of its book stays in the file store:`, error instanceof Error ? error.message : error)
+      }
+    }
+    removeBookRow(row.id)
+    return true
   },
 }
 

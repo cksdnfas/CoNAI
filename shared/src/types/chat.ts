@@ -49,9 +49,10 @@ export type ChatToolCall = {
 /**
  * A setting proposed from a chat. The server validates the payload with the same normalizers as the admin routes before
  * it is attached, so the client can render it as is; saving goes through the admin REST with the viewer's own session.
- * `savedId` / `saved` are written back once a person saves the proposal from the card.
+ * `savedId` / `saved` are written back once a person saves the proposal from the card; `dismissed` once they set it
+ * aside (무시).
  */
-export type ChatProposal = { id: number } & (
+export type ChatProposal = { id: number; dismissed?: boolean } & (
   | {
       kind: 'display_block'
       /** Shared block name (defaults to the block key). */
@@ -77,6 +78,22 @@ export type ChatProposal = { id: number } & (
       /** The current values of those same fields, for the before/after view. */
       before: Record<string, unknown>
       saved?: boolean
+    }
+  | {
+      /** save_lore: an entry for the chat's own lorebook. Saving it is done by the server (POST /api/chat-proposals/:id/apply). */
+      kind: 'lore'
+      title: string
+      keys: string[]
+      content: string
+      constant: boolean
+      /** A text file to put in the book's 자료/ and link to the entry. */
+      file?: { name: string; text: string }
+      /** The chat book entry with the same title: saving replaces it in place. */
+      replaces?: string
+      /** That entry as it was when proposed, for the before/after view. */
+      before?: { title: string; keys: string[]; content: string; constant: boolean; file: string | null }
+      /** The chat book the entry went into. */
+      savedId?: number | null
     }
 )
 

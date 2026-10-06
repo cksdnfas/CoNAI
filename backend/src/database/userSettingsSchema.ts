@@ -760,6 +760,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['summary_slot_id', 'INTEGER'],
     ['translation_slot_id', 'INTEGER'],
     ['suggest_slot_id', 'INTEGER'],
+    // The model may propose chat lorebook entries (save_lore).
+    ['allow_lore_proposals', 'INTEGER NOT NULL DEFAULT 1'],
   ];
   for (const [columnName, definition] of chatProfileColumns) {
     if (!hasColumn('llm_chat_profiles', columnName)) {

@@ -28,6 +28,7 @@ import { translateReply, translateUserInput } from './chatTranslation'
 import { hasTranslation } from './chatModelRoles'
 import { stripEchoedAddresses } from '@conai/shared'
 import { booksForRequest, hasLoreFiles, loreIndexText, selectRequestLore } from './chatLoreContext'
+import { rejectedLoreLine } from './chatLoreProposals'
 import { LlmChatService, type GroupReplyResult } from './llmChatService'
 import { ChatGroupStore } from './chatGroupStore'
 import { buildFlagDirective, ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
@@ -701,6 +702,17 @@ function pendingBlockState(thread: Pick<CodexChatThreadRecord, 'block_edits'> | 
 }
 
 /**
+ * The lore titles a person set aside in this chat (see rejectedLoreLine), for a profile that may propose lore: given
+ * again only when the list changed (or after a compaction), tracked as `rejected-lore:<hash>`.
+ */
+function pendingRejectedLore(threadId: number, profile: ChatProfile, sent: Set<string>) {
+  const text = profile.allowLoreProposals ? rejectedLoreLine(threadId) : ''
+  if (!text) return { text: '', keys: [] as string[] }
+  const key = `rejected-lore:${createHash('sha1').update(text).digest('hex').slice(0, 10)}`
+  return sent.has(key) ? { text: '', keys: [] } : { text, keys: [key] }
+}
+
+/**
  * Remove a Codex thread's rollout (its memory on disk) once the chat no longer uses it. Best effort and in the
  * background: any chat process can delete it (they share CODEX_HOME), and one is started only when none is running.
  */
@@ -789,14 +801,15 @@ export async function runCodexGroupReply(params: {
         const lore = pendingLore(room, profile, params.messages, sent, user)
         const note = pendingAuthorNote(room, profile, sent, user)
         const state = pendingBlockState(room, profile, params.messages, sent, profile.id)
+        const rejected = pendingRejectedLore(threadId, profile, sent)
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
           threadId: codexThreadId,
           model: run.model,
           effort: run.effort,
-          input: [{ type: 'text', text: params.buildInput([persona.text, lore.index.text, lore.keyed, note.text, state.text].filter(Boolean).join('\n\n')), text_elements: [] }],
+          input: [{ type: 'text', text: params.buildInput([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text].filter(Boolean).join('\n\n')), text_elements: [] }],
         }, THREAD_REQUEST_TIMEOUT_MS)
         turn.turnId = response.turn.id
-        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...note.keys, ...state.keys]
+        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys]
         if (keys.length > 0) ChatGroupStore.setMemberLoreSent(threadId, profile.id, nextLoreSent(sent, keys))
         if (params.signal.aborted) interrupt()
       } catch (error) {
@@ -1098,8 +1111,9 @@ export const CodexChatService = {
         const lore = pendingLore(current, profile, history, sent, user)
         const note = pendingAuthorNote(current, profile, sent, user)
         const state = pendingBlockState(current, profile, history, sent)
+        const rejected = pendingRejectedLore(threadId, profile, sent)
         const directive = [buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile, user)), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
-        const reference = referenceBlock([persona.text, lore.index.text, lore.keyed, note.text, state.text])
+        const reference = referenceBlock([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text])
         const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user) : ''
         const input = [recap, reference, `${REPLY_GUIDANCE}\nCurrent room_id: ${threadId}.`, buildReplyContext(history, routing), chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }])), directive].filter(Boolean).join('\n\n')
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
@@ -1109,7 +1123,7 @@ export const CodexChatService = {
           input: [{ type: 'text', text: input, text_elements: [] }],
         }, THREAD_REQUEST_TIMEOUT_MS)
         turn.turnId = response.turn.id
-        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...note.keys, ...state.keys]
+        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys]
         if (keys.length > 0) CodexChatStore.setCodexLoreSent(threadId, nextLoreSent(sent, keys))
       } catch (error) {
         void finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')

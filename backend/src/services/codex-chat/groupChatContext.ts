@@ -7,7 +7,7 @@ import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatS
 import type { ChatCompletionMessage, ChatCompletionTool } from './llmChatCompletion'
 import { DEFAULT_REPLY_RESERVE_TOKENS, estimateMessagesTokens } from './llmChatContext'
 import { postHistoryText } from './llmChatContext'
-import { anchoredWindowFor, appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, offersLoreFileTool, recallFor, resolveAuthorNote, selectChatLore, sendableMessages, threadBlockStateText, toCompletionMessages, unsummarizedMessages } from './llmChatContext'
+import { anchoredWindowFor, appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, offersLoreFileTool, recallFor, rejectedLoreFor, resolveAuthorNote, selectChatLore, sendableMessages, threadBlockStateText, toCompletionMessages, unsummarizedMessages } from './llmChatContext'
 import { booksForRequest, type AttachedLoreBook } from './chatLoreContext'
 import type { ChatSummarySegment } from './chatMemory'
 import { usableBlockKeys } from './chatBlockState'
@@ -175,7 +175,7 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
   // with the exact handles, where small models actually look before writing a mention.
   // Summaries the room's plot already took in come back when the latest exchange touches them, like in a direct chat.
   const recall = summaryOn && params.segments ? recallFor(profile, params.segments, params.messages, { contextTokens: profile.contextTokens }) : ''
-  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread, params.messages, profile.id), recall)
+  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread, params.messages, profile.id), recall, rejectedLoreFor(thread.id, params.tools))
   const reference = buildReplyContext(params.messages, params.routing, { group: true, maxChars: Math.max(256, Math.min(6000, Math.floor((profile.contextTokens ?? 24000) / 4))), visibleIds: new Set(window.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) })
   const directive = [reference, hiddenHistoryNote(thread, total - window.length), flagDirectiveFor(params.messages, profile, user), postHistoryText(profile, user), mentionReminder(members, profile)].filter(Boolean).join('\n\n')
   return appendUserDirective([...system, ...insertDepthBlocks(conversation, blocks)], directive)

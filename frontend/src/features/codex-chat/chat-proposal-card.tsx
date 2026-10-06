@@ -65,6 +65,8 @@ export function ChatProposalCards({ calls, threadId }: { calls: CodexChatToolCal
 function ProposalCard({ proposal, threadId }: { proposal: Proposal; threadId?: number }) {
   if (proposal.kind === 'display_block') return <BlockProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'profile') return <ProfileProposalCard proposal={proposal} threadId={threadId} />
+  // TODO(lorebook phase 4): the save_lore card.
+  if (proposal.kind === 'lore') return null
   return <ProfileUpdateCard proposal={proposal} threadId={threadId} />
 }
 

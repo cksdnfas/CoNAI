@@ -5,6 +5,8 @@ import { parseBlockEdits, type BlockEdit } from './chatBlockState'
 import { parseFlagSnapshots, type ChatFlagSnapshot } from './chatFlags'
 import { parseChatMediaAttachments, type ChatMediaAttachment } from './chatMediaAttachments'
 import { ChatSummaryStore, type ChatMemoryItem } from './chatMemory'
+import { OwnedLorebookStore } from './chatLorebookFiles'
+import { ChatProposalStore } from './chatProposals'
 
 export type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
 import type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
@@ -268,14 +270,25 @@ export const CodexChatStore = {
     getUserSettingsDb().prepare('UPDATE codex_chat_threads SET updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(threadId)
   },
 
+  /**
+   * Every way a chat is deleted ends here. Its own lorebook goes with it, after the messages: their attachment rows
+   * (which keep a file from being deleted) go with them. A book the chat should keep or merge is dealt with before
+   * this (see the thread delete route); a kept book is no longer the chat's, so it stays.
+   */
   deleteThread(threadId: number) {
     const db = getUserSettingsDb()
     db.transaction(() => {
       db.prepare('DELETE FROM codex_chat_messages WHERE thread_id = ?').run(threadId)
       db.prepare('DELETE FROM chat_group_members WHERE thread_id = ?').run(threadId)
       ChatSummaryStore.clear(threadId)
+      ChatProposalStore.deleteForThread(threadId)
       db.prepare('DELETE FROM codex_chat_threads WHERE id = ?').run(threadId)
     })()
+    try {
+      OwnedLorebookStore.threadDeleted(threadId)
+    } catch (error) {
+      console.warn(`[lorebook] Chat ${threadId}: its book could not be removed:`, error instanceof Error ? error.message : error)
+    }
   },
 
   listMessages(threadId: number) {

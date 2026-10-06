@@ -140,7 +140,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
  * Tools over the caller's own chat (its room, its history, its attached lorebooks), offered to chat agents in a chat
  * regardless of scopes; not CoNAI actions, so they do not bring the app tool guidance along.
  */
-export const CHAT_ROOM_TOOLS = new Set(['chat_reply_to', 'room_call_member', 'room_history_search', 'room_history_read', 'read_lore_file']);
+export const CHAT_ROOM_TOOLS = new Set(['chat_reply_to', 'room_call_member', 'room_history_search', 'room_history_read', 'read_lore_file', 'save_lore']);
 
 export function getMcpToolScope(toolName: string): McpHttpScope | null {
   return TOOL_SCOPES[toolName] ?? null;

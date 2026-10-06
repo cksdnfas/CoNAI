@@ -5,6 +5,7 @@ import { CodexChatStore } from '../../services/codex-chat/codexChatStore';
 import { loreEntryTitle } from '../../services/codex-chat/chatLorebook';
 import { loreEntryFile } from '../../services/codex-chat/chatLorebookFiles';
 import { booksForRequest, CHAT_BOOK_LABEL, hasLoreFiles, READ_LORE_FILE_TOOL, type AttachedLoreBook } from '../../services/codex-chat/chatLoreContext';
+import { LORE_PROPOSAL_LIMITS, proposeLore, SAVE_LORE_TOOL } from '../../services/codex-chat/chatLoreProposals';
 import { FileStoreService } from '../../services/fileStoreService';
 import type { McpRequestContext } from '../context';
 
@@ -89,14 +90,24 @@ export function loreFileResultText(result: Awaited<ReturnType<typeof readLoreFil
   ].filter((line, index) => index < 3 || line).join('\n');
 }
 
+/** Whether the profile speaking in this chat lets its model propose lore (save_lore). */
+function allowsLoreProposals(profileId: number) {
+  return ChatProfileStore.find(profileId)?.allowLoreProposals === true;
+}
+
+/** What the model is told once its proposal is stored. */
+export const SAVE_LORE_DONE = '제안으로 올렸어. 사용자가 저장하면 들어가.';
+
 /**
- * read_lore_file for chat agents: offered in a chat (direct or room) whose attached books link a file. A Codex session
- * outlives its first tool list, so it always has the tool. Scoped like the room tools (no MCP scope needed).
+ * Chat agents' lorebook tools, scoped like the room tools (no MCP scope needed). read_lore_file: offered in a chat
+ * (direct or room) whose attached books link a file; a Codex session outlives its first tool list, so it always has
+ * it. save_lore: offered in a chat whose profile allows lore proposals (checked again on each call, for Codex).
  */
 export function registerChatLoreTools(server: McpServer, context: McpRequestContext): void {
   const chatContext = context.chatContext;
   if (!chatContext) return;
   const chat: LoreChat = { threadId: chatContext.threadId, profileId: chatContext.profileId, accountId: context.requester?.accountId ?? null };
+  if (allowsLoreProposals(chat.profileId)) registerSaveLore(server, context);
   if (context.source !== 'codex-chat') {
     try {
       if (!hasLoreFiles(attachedBooks(chat))) return;
@@ -115,6 +126,34 @@ export function registerChatLoreTools(server: McpServer, context: McpRequestCont
     async ({ book, title, offset }) => {
       try {
         return { content: [{ type: 'text' as const, text: loreFileResultText(await readLoreFile(chat, { book, title, offset })) }] };
+      } catch (error) {
+        return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
+      }
+    },
+  );
+}
+
+function registerSaveLore(server: McpServer, context: McpRequestContext): void {
+  server.tool(
+    SAVE_LORE_TOOL,
+    `Propose an entry for this chat's own lorebook ("${CHAT_BOOK_LABEL}"): a fact worth remembering later (a promise, a name, a place, an event). It shows as a card under your reply; nothing is saved until the user presses 저장. At most one per reply. Do not propose a title the user dismissed, and do not repeat one already waiting. Using a title the chat book already has proposes updating that entry. constant: true sends it with every request (keep those few and short); otherwise it comes back when one of its keys appears in the conversation. file: an optional text file with longer material, kept in the book's 자료/ folder.`,
+    {
+      title: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.title).describe('Entry title, as the lore index will show it'),
+      keys: z.array(z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.key)).max(LORE_PROPOSAL_LIMITS.keys).default([]).describe('Keywords that bring the entry back when they appear in the conversation'),
+      content: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.content).describe('The entry text: short, factual, in the language of the chat'),
+      constant: z.boolean().default(false).describe('Send it with every request (an "always on" entry)'),
+      file: z.object({
+        name: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.fileName).describe('Plain text file name such as 반지.md (no folders)'),
+        text: z.string().min(1).describe(`File content, UTF-8, at most ${LORE_PROPOSAL_LIMITS.fileBytes / 1024} KB`),
+      }).optional().describe('Optional longer material for the entry'),
+    },
+    async (args) => {
+      try {
+        const chatContext = context.chatContext;
+        if (!chatContext) throw new Error('Proposals need an active chat reply.');
+        if (!allowsLoreProposals(chatContext.profileId)) throw new Error('Lore proposals are turned off for this profile.');
+        const proposal = proposeLore(chatContext, args);
+        return { content: [{ type: 'text' as const, text: proposal.replaces ? `${SAVE_LORE_DONE} (같은 제목의 항목을 고치는 제안이야.)` : SAVE_LORE_DONE }], structuredContent: { proposal } };
       } catch (error) {
         return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
       }

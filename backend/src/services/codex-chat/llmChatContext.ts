@@ -12,6 +12,7 @@ import { buildChatStyleGuidance } from './chatStyle'
 import { chatContentWithAttachments } from './chatAttachments'
 import type { SelectedLore } from './chatLorebook'
 import { booksForRequest, loreIndexText, READ_LORE_FILE_TOOL, selectRequestLore, type AttachedLoreBook, type ChatLore } from './chatLoreContext'
+import { rejectedLoreLine, SAVE_LORE_TOOL } from './chatLoreProposals'
 import { buildFlagDirective } from './chatFlags'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import { ChatSummaryStore, recallText, selectRecall, splitSegments, type ChatSummarySegment } from './chatMemory'
@@ -284,6 +285,14 @@ export function offersLoreFileTool(tools: ReadonlyArray<ChatCompletionTool>) {
 }
 
 /**
+ * The lore titles a person set aside in this chat, as one line for the reference block — only when save_lore is
+ * among the request's tools ('' otherwise). Kept out of the system prompt: it changes with the conversation.
+ */
+export function rejectedLoreFor(threadId: number | null | undefined, tools: ReadonlyArray<ChatCompletionTool>) {
+  return tools.some((tool) => tool.function.name === SAVE_LORE_TOOL) ? rejectedLoreLine(threadId) : ''
+}
+
+/**
  * Request layout, front to back, so that what a server has already seen stays byte-identical for as long as possible
  * (OpenAI caches a repeated prefix by itself; llama.cpp, LM Studio, vLLM and Ollama reuse their KV cache the same way):
  *
@@ -361,12 +370,12 @@ export function authorNoteText(note: Pick<AuthorNote, 'text'>) {
 }
 
 /**
- * The `[참고 설정]` blocks a request merges into its conversation: keyword lore (with recalled summaries, `recall`)
- * at the profile's lore depth and the author's note (with the display block state, `stateText`) at its own — one
- * block when both share a depth.
+ * The `[참고 설정]` blocks a request merges into its conversation: keyword lore (with recalled summaries, `recall`,
+ * and the set-aside lore titles, `rejected`) at the profile's lore depth and the author's note (with the display block
+ * state, `stateText`) at its own — one block when both share a depth.
  */
-export function depthBlocks(lore: Pick<SelectedLore, 'keyed'>, loreDepth: number, note: AuthorNote, stateText = '', recall = ''): Array<{ depth: number; block: string }> {
-  const loreText = [lore.keyed, recall].filter(Boolean).join('\n\n')
+export function depthBlocks(lore: Pick<SelectedLore, 'keyed'>, loreDepth: number, note: AuthorNote, stateText = '', recall = '', rejected = ''): Array<{ depth: number; block: string }> {
+  const loreText = [lore.keyed, recall, rejected].filter(Boolean).join('\n\n')
   const noteText = [authorNoteText(note), stateText].filter(Boolean).join('\n\n')
   if (loreText && noteText && note.depth !== loreDepth) {
     return [{ depth: loreDepth, block: referenceBlock([loreText]) }, { depth: note.depth, block: referenceBlock([noteText]) }]
@@ -503,7 +512,7 @@ function buildRequestContext(profile: ChatProfile, thread: CodexChatThreadRecord
   const system = buildLeadingMessages(profile, thread, config, tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)), lore, user)
   const recalled = config.summaryEnabled ? recalledSegments(profile, segments, messages, { contextTokens: config.contextTokens ?? null }) : []
   const recall = recallText(recalled)
-  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread ?? { block_edits: null }, messages), recall)
+  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread ?? { block_edits: null }, messages), recall, rejectedLoreFor(thread?.id, tools))
   const directive = [flagDirectiveFor(messages, profile, user), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
   const fixedTokens = estimateMessagesTokens(profile.id, system, tools) + estimateDepthBlocks(profile.id, blocks) + estimateTokens(profile.id, directive)
   return { system, blocks, directive, fixedTokens, lore: lore.labels, constants: lore.constantCount, recalled: recalled.length }
@@ -602,7 +611,7 @@ export function groupTranscript(members: ChatProfile[], user: ChatUserPersona): 
   return (message) => transcriptLine(message, (entry) => (entry.role === 'user' ? user.name : memberOf(entry)?.name ?? '(나간 참가자)'), (entry) => usableBlockKeys(memberOf(entry)?.style.blocks ?? []))
 }
 
-const SUMMARY_TIMEOUT_MS = 10 * 60 * 1000
+export const SUMMARY_TIMEOUT_MS = 10 * 60 * 1000
 /** Transcript per summary call, so a long backlog (summary just turned on, or wiped by an edit) goes in passes. */
 const DEFAULT_SUMMARY_CHUNK_TOKENS = 16000
 const MAX_SUMMARY_PASSES = 50
@@ -679,7 +688,11 @@ const SUMMARY_MAX_TOKENS = 2048
 /** A summary that ran into the output cap. */
 class SummaryRunawayError extends Error {}
 
-async function completeSummary(profile: ChatProfile, system: string, content: string, signal?: AbortSignal, maxTokens = SUMMARY_MAX_TOKENS) {
+/**
+ * One completion on the profile's summary model (its chat model when it has none), bounded by SUMMARY_TIMEOUT_MS and
+ * the output cap. Also used for merge drafts (chatLorebookMerge).
+ */
+export async function completeSummary(profile: ChatProfile, system: string, content: string, signal?: AbortSignal, maxTokens = SUMMARY_MAX_TOKENS) {
   const resolved = resolveProfileModel(profile, 'summary')
   if (!resolved) throw new Error('요약에 쓸 LLM 연결을 찾을 수 없어.')
   const generation = summaryGenerationOptions(profileGenerationOptions(profile))

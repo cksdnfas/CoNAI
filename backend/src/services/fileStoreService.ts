@@ -350,6 +350,33 @@ export const FileStoreService = {
     return toEntry(row);
   },
 
+  /**
+   * A copy of one of the owner's files as a new file `name` under `parentId` (a new id; the name must be free). The
+   * blob is in place when this returns: a caller whose surrounding transaction rolls back removes it itself.
+   */
+  copyFile(owner: string, fileId: string, parentId: string | null, value: unknown, options: { silent?: boolean } = {}): StoredFileEntry {
+    const name = normalizeName(value);
+    const source = requireRow(owner, fileId);
+    if (source.kind !== 'file') throw new FileStoreError('파일을 선택해줘.');
+    ensureFileStoreDirectories();
+    ensureFileOwnerDirectory(owner);
+    const staged = path.join(fileStoreIncoming, `${crypto.randomBytes(16).toString('hex')}.tmp`);
+    fs.copyFileSync(storedFilePath(owner, source.id), staged);
+    let row: FileRow;
+    try {
+      row = getUserSettingsDb().transaction(() => {
+        const id = crypto.randomBytes(16).toString('hex');
+        insert(owner, parentId, name, 'file', id, source.size, source.mime_type);
+        fs.renameSync(staged, storedFilePath(owner, id));
+        return requireRow(owner, id);
+      }).immediate();
+    } finally {
+      fs.rmSync(staged, { force: true });
+    }
+    if (!options.silent) notifyChange({ owner, action: 'write', entries: [changedEntry(row)] });
+    return toEntry(row);
+  },
+
   /** A folder and everything under it. Files a chat message attaches are refused, as with delete. */
   deleteTree(owner: string, folderId: string, options: { silent?: boolean } = {}) {
     const db = getUserSettingsDb();

@@ -150,6 +150,8 @@ export type ChatProfile = {
   maxToolRounds: number
   /** LLM: the model can look at images (view_images results are sent to it). */
   visionEnabled: boolean
+  /** The model may propose chat lorebook entries (save_lore) for the user to save. */
+  allowLoreProposals: boolean
   /** Typeface, roleplay colours, background dimming. */
   style: ChatStyle
   /** Chat background as a data URL; served on its own route, never inside profile lists. */
@@ -214,6 +216,7 @@ type ProfileRow = {
   chat_style: string | null
   background_image: string | null
   vision_enabled: number | null
+  allow_lore_proposals: number | null
   is_enabled: number
   sort_order: number
   created_date: string
@@ -341,6 +344,7 @@ function toProfile(row: ProfileRow): ChatProfile {
     suggestSlotId: ModelSlotStore.existing(row.suggest_slot_id),
     maxToolRounds: row.max_tool_rounds ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
     visionEnabled: row.vision_enabled === 1,
+    allowLoreProposals: row.allow_lore_proposals !== 0,
     // Display blocks live in chat_display_blocks; the profile only links them (the style column's own list is legacy).
     style: { ...normalizeChatStyle(row.chat_style), blocks: ChatSharedBlockStore.blocksOf(blockIds) },
     background: row.background_image,
@@ -481,6 +485,7 @@ function toColumns(input: ChatProfileInput) {
     suggest_slot_id: slotId(input.suggestSlotId),
     max_tool_rounds: optionalNumber(input.maxToolRounds, CHAT_PROFILE_LIMITS.maxToolRounds, true) ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
     vision_enabled: input.visionEnabled ? 1 : 0,
+    allow_lore_proposals: input.allowLoreProposals === false ? 0 : 1,
     chat_style: JSON.stringify({ ...normalizeChatStyle(input.style), blocks: [] }),
     background_image: background,
     is_enabled: input.isEnabled === false ? 0 : 1,

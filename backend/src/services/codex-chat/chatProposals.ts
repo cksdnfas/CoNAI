@@ -7,7 +7,7 @@ export type NewChatProposal = ChatProposal extends infer P ? (P extends { id: nu
 
 export type StoredChatProposal = { id: number; replyId: string; seq: number; proposal: ChatProposal }
 
-type ProposalRow = { id: number; thread_id: number; reply_id: string; seq: number; kind: string; proposal: string; saved_id: number | null; saved: number }
+type ProposalRow = { id: number; thread_id: number; reply_id: string; seq: number; kind: string; proposal: string; saved_id: number | null; saved: number; dismissed: number }
 
 const ensured = new WeakSet<Database.Database>()
 
@@ -27,10 +27,14 @@ export function ensureProposalTable(db: Database.Database) {
       proposal TEXT NOT NULL,
       saved_id INTEGER,
       saved INTEGER NOT NULL DEFAULT 0,
+      dismissed INTEGER NOT NULL DEFAULT 0,
       created_date TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_chat_proposals_reply ON chat_proposals (thread_id, reply_id, seq);
   `)
+  // Tables made before a person could set a proposal aside (무시).
+  const columns = db.prepare('PRAGMA table_info(chat_proposals)').all() as Array<{ name: string }>
+  if (!columns.some((column) => column.name === 'dismissed')) db.exec('ALTER TABLE chat_proposals ADD COLUMN dismissed INTEGER NOT NULL DEFAULT 0')
   ensured.add(db)
 }
 
@@ -50,6 +54,7 @@ function toProposal(row: ProposalRow): ChatProposal {
   } else if (row.saved === 1) {
     merged.savedId = row.saved_id
   }
+  if (row.dismissed === 1) merged.dismissed = true
   return merged as ChatProposal
 }
 
@@ -85,12 +90,31 @@ export const ChatProposalStore = {
     return row ? row.thread_id : null
   },
 
+  /** Saved, and no longer set aside. */
   markSaved(id: number, savedId: number | null): ChatProposal | null {
-    const changed = table().prepare('UPDATE chat_proposals SET saved = 1, saved_id = ? WHERE id = ?').run(savedId, id).changes
+    const changed = table().prepare('UPDATE chat_proposals SET saved = 1, saved_id = ?, dismissed = 0 WHERE id = ?').run(savedId, id).changes
     return changed > 0 ? ChatProposalStore.find(id) : null
   },
 
-  /** Not wired anywhere yet: threads are deleted in codexChatStore, which this module could not touch. */
+  /** A person set the proposal aside (무시); a saved one stays saved. */
+  markDismissed(id: number): ChatProposal | null {
+    const changed = table().prepare('UPDATE chat_proposals SET dismissed = 1 WHERE id = ? AND saved = 0').run(id).changes
+    return changed > 0 ? ChatProposalStore.find(id) : null
+  },
+
+  /** The proposals of one kind in one reply. */
+  forReply(threadId: number, replyId: string, kind: string): ChatProposal[] {
+    const rows = table().prepare('SELECT * FROM chat_proposals WHERE thread_id = ? AND reply_id = ? AND kind = ? ORDER BY id ASC').all(threadId, replyId, kind) as ProposalRow[]
+    return rows.map(toProposal)
+  },
+
+  /** Every proposal of one kind a person set aside in a chat, newest first, at most `limit`. */
+  dismissedOfKind(threadId: number, kind: string, limit: number): ChatProposal[] {
+    const rows = table().prepare('SELECT * FROM chat_proposals WHERE thread_id = ? AND kind = ? AND dismissed = 1 ORDER BY id DESC LIMIT ?').all(threadId, kind, limit) as ProposalRow[]
+    return rows.map(toProposal)
+  },
+
+  /** A deleted chat's proposals (see CodexChatStore.deleteThread): its id could be handed out again. */
   deleteForThread(threadId: number) {
     return table().prepare('DELETE FROM chat_proposals WHERE thread_id = ?').run(threadId).changes
   },

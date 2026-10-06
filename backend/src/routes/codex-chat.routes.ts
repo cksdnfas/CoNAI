@@ -19,6 +19,7 @@ import { buildCodexInstructions, CODEX_COMPACT_TOKENS, CodexChatError, CodexChat
 import { buildChatPromptPreview, estimateTokens, fillCharacterPlaceholders, isSummarizing } from '../services/codex-chat/llmChatContext'
 import { buildLorebookText, ChatLorebookStore, normalizeLorebookIds } from '../services/codex-chat/chatLorebook'
 import { LorebookError, OwnedLorebookStore } from '../services/codex-chat/chatLorebookFiles'
+import { applyMerge, assertMergeDecisions, draftMerge, hasDuplicates, MergeDecisionsMissingError, previewMerge, type MergeResult } from '../services/codex-chat/chatLorebookMerge'
 import { ChatSharedBlockStore, readBlockFile } from '../services/codex-chat/chatDisplayBlocks'
 import { ChatToolPresetStore, readToolPresetFile } from '../services/codex-chat/chatToolPresets'
 import { ModelSlotStore } from '../services/codex-chat/modelSlots'
@@ -682,6 +683,76 @@ router.delete('/lorebooks/:lorebookId/profiles/:profileId', requireChatAccess, (
   } catch (error) { sendChatError(res, error) }
 })
 
+/** A merge stopped for decisions: 409 with the preview, so the client can ask about each duplicate. */
+function sendMergeError(res: Response, error: unknown) {
+  if (error instanceof MergeDecisionsMissingError) {
+    res.status(409).json({ success: false, error: error.message, data: { status: 'decisions', missing: error.missing, preview: error.preview } })
+    return
+  }
+  sendChatError(res, error)
+}
+
+/**
+ * POST /api/codex-chat/lorebooks/:targetId/merge — `{ sourceId, decisions?, deleteSource?, entryIds? }`: merge an own
+ * chat or account book into an own account book. Without decisions: the preview (`status: 'preview'`) when there are
+ * duplicates, else the merge right away. With decisions: the merge (409 with the preview when a duplicate has none).
+ * `deleteSource` removes the source afterwards; `entryIds` merges only those source entries (승격).
+ */
+router.post('/lorebooks/:targetId/merge', requireChatAccess, (req: Request, res: Response) => {
+  const targetId = parseId(req.params.targetId)
+  const body = (req.body ?? {}) as { sourceId?: unknown; decisions?: unknown; deleteSource?: unknown; entryIds?: unknown }
+  const sourceId = parseId(body.sourceId)
+  if (targetId === null || sourceId === null) { sendRouteBadRequest(res, 'Invalid lorebook id'); return }
+  const owner = lorebookOwner(req)
+  try {
+    if (body.decisions === undefined || body.decisions === null) {
+      const preview = previewMerge(sourceId, targetId, owner, { entryIds: body.entryIds })
+      if (hasDuplicates(preview)) {
+        res.json({ success: true, data: { status: 'preview', preview } })
+        return
+      }
+    }
+    const result: MergeResult = applyMerge(sourceId, targetId, owner, body.decisions, { entryIds: body.entryIds })
+    let sourceDeleted = false
+    let sourceError: string | undefined
+    if (body.deleteSource === true) {
+      try { sourceDeleted = OwnedLorebookStore.delete(sourceId, owner) } catch (error) { sourceError = error instanceof Error ? error.message : String(error) }
+    }
+    res.json({ success: true, data: { status: 'merged', ...result, sourceDeleted, ...(sourceError ? { sourceError } : {}) } })
+  } catch (error) { sendMergeError(res, error) }
+})
+
+/**
+ * POST /api/codex-chat/lorebooks/:targetId/merge/draft — `{ sourceId, profileId, entryIds?, instruction? }`: the
+ * profile's summary model (else its chat model) writes a merged text for each duplicate (or the given ones). Saves
+ * nothing; an entry that failed comes back as `{ entryId, error }`.
+ */
+router.post('/lorebooks/:targetId/merge/draft', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+  const targetId = parseId(req.params.targetId)
+  const body = (req.body ?? {}) as { sourceId?: unknown; profileId?: unknown; entryIds?: unknown; instruction?: unknown }
+  const sourceId = parseId(body.sourceId)
+  if (targetId === null || sourceId === null) { sendRouteBadRequest(res, 'Invalid lorebook id'); return }
+  if (parseId(body.profileId) === null) { sendRouteBadRequest(res, 'Invalid profile id'); return }
+  const controller = new AbortController()
+  res.on('close', () => { if (!res.writableFinished) controller.abort() })
+  try {
+    res.json({ success: true, data: await draftMerge(sourceId, targetId, lorebookOwner(req), body, controller.signal) })
+  } catch (error) {
+    if (controller.signal.aborted) return
+    sendChatError(res, error)
+  }
+}))
+
+/** POST /api/codex-chat/threads/:threadId/lorebook/keep — keep the chat's own book as an account book (its folder moves to 로어북/). */
+router.post('/threads/:threadId/lorebook/keep', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  try {
+    if (!CodexChatStore.findThread(threadId, getRequesterAccountId(req))) throw new LorebookError('채팅을 찾을 수 없어.', 404)
+    res.json({ success: true, data: OwnedLorebookStore.keepChatBook(threadId) })
+  } catch (error) { sendChatError(res, error) }
+})
+
 /** Shared lorebooks. Profiles link them by id, so an edit or a re-import reaches every linked profile at once. */
 router.get('/admin/lorebooks', requireAdmin, (_req: Request, res: Response) => {
   res.json({ success: true, data: ChatLorebookStore.list() })
@@ -1080,16 +1151,56 @@ router.get('/threads/:threadId/media', requireChatAccess, (req: Request, res: Re
   }
 })
 
+type ThreadLorebookOption = { action: 'delete' | 'keep' | 'merge'; targetId: number | null; decisions: unknown }
+
+/** The `lorebook` option of a chat deletion; null when it is malformed. No option: the book goes with the chat. */
+function threadLorebookOption(value: unknown): ThreadLorebookOption | null {
+  if (value === undefined || value === null) return { action: 'delete', targetId: null, decisions: undefined }
+  if (typeof value !== 'object' || Array.isArray(value)) return null
+  const { action = 'delete', targetId, decisions } = value as Record<string, unknown>
+  if (action !== 'delete' && action !== 'keep' && action !== 'merge') return null
+  const target = targetId === undefined || targetId === null ? null : parseId(targetId)
+  if (action === 'merge' && target === null) return null
+  return { action, targetId: target, decisions }
+}
+
+/**
+ * DELETE /api/codex-chat/threads/:threadId — body `{ lorebook?: { action: 'delete' | 'keep' | 'merge', targetId?,
+ * decisions? } }` decides the chat's own book: `delete` (default) removes it with the chat, `keep` makes it an
+ * account book first, `merge` merges it into account book `targetId` first (409 with the preview, and nothing
+ * changed, while a duplicate has no decision). The book itself goes in CodexChatStore.deleteThread, after the
+ * messages whose attachments would block its folder.
+ */
 router.delete('/threads/:threadId', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
+  const option = threadLorebookOption((req.body as { lorebook?: unknown } | undefined)?.lorebook)
+  if (!option) { sendRouteBadRequest(res, 'lorebook must be { action: delete | keep | merge, targetId?, decisions? } (merge needs targetId)'); return }
+  const owner = lorebookOwner(req)
   try {
-    if (isGroupThread(req, threadId)) await GroupChatService.deleteThread(requesterFrom(req), threadId)
-    else await CodexChatService.deleteThread(requesterFrom(req), threadId)
+    const chatBook = CodexChatStore.findThread(threadId, getRequesterAccountId(req)) ? OwnedLorebookStore.chatBookOf(threadId) : null
+    if (chatBook && option.action === 'merge') assertMergeDecisions(previewMerge(chatBook.id, option.targetId as number, owner), option.decisions)
+    let lorebook: { action: ThreadLorebookOption['action']; bookId: number | null; merge?: Omit<MergeResult, 'book'> } = { action: chatBook ? option.action : 'delete', bookId: null }
+    if (chatBook && option.action === 'keep') {
+      lorebook = { action: 'keep', bookId: OwnedLorebookStore.keepChatBook(threadId).id }
+    } else if (chatBook && option.action === 'merge') {
+      const { book, ...counts } = applyMerge(chatBook.id, option.targetId as number, owner, option.decisions)
+      lorebook = { action: 'merge', bookId: book.id, merge: counts }
+    }
+    try {
+      if (isGroupThread(req, threadId)) await GroupChatService.deleteThread(requesterFrom(req), threadId)
+      else await CodexChatService.deleteThread(requesterFrom(req), threadId)
+    } catch (error) {
+      // Merged already: the chat book goes anyway, so deleting the chat again does not merge it twice.
+      if (chatBook && lorebook.action === 'merge') {
+        try { OwnedLorebookStore.delete(chatBook.id, owner) } catch { /* a file a message attaches keeps it; the next delete asks again */ }
+      }
+      throw error
+    }
     ChatAppearanceStore.threadDeleted(getRequesterAccountId(req), threadId)
-    res.json({ success: true })
+    res.json({ success: true, data: { lorebook } })
   } catch (error) {
-    sendChatError(res, error)
+    sendMergeError(res, error)
   }
 }))
 
