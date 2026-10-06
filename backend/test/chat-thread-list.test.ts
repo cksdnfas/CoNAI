@@ -85,6 +85,40 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     assert.equal(CodexChatStore.listMessages(CodexChatService.createThread(requester, quiet.id, null, null).id).length, 0)
   })
 
+  await t.test('backup: a chat file in 채팅 백업/<date>, with its lorebook, that import brings back', async () => {
+    const { backupChatToFiles, backupDateOf, backupFileName, exportChatJson, CHAT_BACKUP_FOLDER } = await import('../src/services/codex-chat/chatBackup')
+    const { OwnedLorebookStore } = await import('../src/services/codex-chat/chatLorebookFiles')
+    const { FileStoreService, fileOwnerKey } = await import('../src/services/fileStoreService')
+    const { importChatThread } = await import('../src/services/codex-chat/chatImport')
+    const id = newThread()
+    CodexChatService.updateListState(requester, id, { title: '옥상: "약속"' })
+    say(id, 'user', '반지 얘기 기억해?')
+    say(id, 'assistant', '응, 내일 저녁이지.')
+    OwnedLorebookStore.addChatBookEntries(id, [{ id: 'ring', keys: ['반지'], content: '내일 저녁 반지를 준다.', constant: true }])
+    assert.equal(backupDateOf('2026-10-06'), '2026-10-06')
+    assert.match(backupDateOf('../x'), /^\d{4}-\d{2}-\d{2}$/)
+    assert.equal(backupFileName('옥상: "약속"', id), `옥상_ _약속_ (#${id}).json`)
+    assert.equal(backupFileName(' ... ', 7), '새 채팅 (#7).json')
+
+    const json = exportChatJson(requester, id)
+    assert.deepEqual(json.lorebook?.entries.map((entry) => [entry.id, entry.content, entry.file]), [['ring', '내일 저녁 반지를 준다.', null]])
+    const saved = backupChatToFiles(requester, id, '2026-10-06')
+    backupChatToFiles(requester, id, '2026-10-06')
+    const owner = fileOwnerKey(requester.accountId)
+    const root = FileStoreService.findChild(owner, null, CHAT_BACKUP_FOLDER)!
+    const day = FileStoreService.findChild(owner, root.id, '2026-10-06')!
+    assert.equal(FileStoreService.list(owner, day.id).total, 1, 'saving the same chat again on the same day replaces its file')
+    assert.equal(saved.name, backupFileName('옥상: "약속"', id))
+    assert.throws(() => backupChatToFiles(stranger, id, '2026-10-06'), /찾을 수 없어/)
+
+    CodexChatStore.deleteThread(id)
+    const raw = fs.readFileSync(FileStoreService.resolveFile(owner, saved.id).filePath)
+    const target = { direct: (profileId: number) => CodexChatService.createThread(requester, profileId), group: (): { id: number } => { throw new Error('no rooms here') } }
+    const restored = importChatThread(requester, raw, target)
+    assert.deepEqual(CodexChatStore.listMessages(restored.threadId).map((message) => message.content), ['반지 얘기 기억해?', '응, 내일 저녁이지.'])
+    assert.deepEqual(OwnedLorebookStore.chatBookOf(restored.threadId)?.entries.map((entry) => entry.content), ['내일 저녁 반지를 준다.'])
+  })
+
   await t.test('branch origin: purpose and source kept, unlinked (not deleted) when the source goes', () => {
     const id = newThread()
     const first = say(id, 'user', '하나')

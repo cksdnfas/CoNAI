@@ -5,62 +5,81 @@ import { Spinner } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
-import { OWN_LOREBOOKS_QUERY_KEY, listOwnLorebooks, type OwnedChatLorebook, type ThreadLorebookAction } from '@/lib/api-codex-chat'
+import { CHAT_BACKUP_FOLDER, OWN_LOREBOOKS_QUERY_KEY, chatBackupDate, listOwnLorebooks, type OwnedChatLorebook, type ThreadLorebookAction } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 
 type Action = ThreadLorebookAction['action']
 
+/** What a delete goes ahead with: the chat book's fate (single chats with a book) and the backup day, if backed up. */
+export type ChatDeleteChoice = { lorebook?: ThreadLorebookAction; backupDate?: string }
+
 /**
- * C: deleting a chat whose own lorebook has entries — delete the book with it (default), keep it as an account book,
- * or merge it into one (the merge dialog follows when duplicates need a decision).
+ * Deleting chats: back them up to the file store first (default) or just delete. A single chat whose own lorebook has
+ * entries also asks about the book — delete it with the chat (default), keep it as an account book, or merge it into
+ * one (the merge dialog follows when duplicates need a decision). Several chats take their books with them; a backup
+ * carries the entries.
  */
-export function ChatDeleteDialog({ book, pending, onConfirm, onClose }: {
-  /** The chat's book; the dialog is open while it is set. */
+export function ChatDeleteDialog({ open, count = 1, book, pending, onConfirm, onClose }: {
+  open: boolean
+  /** How many chats go (the selection of the chat list); a single chat may bring its `book`. */
+  count?: number
   book: OwnedChatLorebook | null
   pending: boolean
-  onConfirm: (lorebook: ThreadLorebookAction) => void
+  onConfirm: (choice: ChatDeleteChoice) => void
   onClose: () => void
 }) {
   const { t } = useI18n()
   const [action, setAction] = useState<Action>('delete')
+  const [backup, setBackup] = useState(true)
   const [targetId, setTargetId] = useState<number | null>(null)
-  const booksQuery = useQuery({ queryKey: OWN_LOREBOOKS_QUERY_KEY, queryFn: listOwnLorebooks, enabled: book !== null })
+  const booksQuery = useQuery({ queryKey: OWN_LOREBOOKS_QUERY_KEY, queryFn: listOwnLorebooks, enabled: open && book !== null })
   const targets = useMemo(() => (booksQuery.data ?? []).filter((item) => item.kind === 'account'), [booksQuery.data])
+  const backupDate = chatBackupDate()
 
   useEffect(() => {
-    if (book) setAction('delete')
-  }, [book])
+    if (open) {
+      setAction('delete')
+      setBackup(true)
+    }
+  }, [open])
   useEffect(() => {
     setTargetId((current) => (current !== null && targets.some((item) => item.id === current) ? current : targets[0]?.id ?? null))
   }, [targets])
 
   const entries = book?.entries.length ?? 0
   const files = book?.entries.filter((entry) => entry.file).length ?? 0
-  const choice = (value: Action, label: string, extra?: ReactNode, disabled?: boolean, trailing?: ReactNode) => (
+  const radio = (checked: boolean, select: () => void, label: string, extra?: ReactNode, disabled?: boolean, trailing?: ReactNode) => (
     <div
       role="radio"
-      aria-checked={action === value}
+      aria-checked={checked}
       aria-disabled={disabled}
-      tabIndex={action === value ? 0 : -1}
-      onClick={() => !disabled && setAction(value)}
+      tabIndex={checked ? 0 : -1}
+      onClick={() => !disabled && select()}
       onKeyDown={(event) => {
-        if ((event.key === ' ' || event.key === 'Enter') && !disabled) { event.preventDefault(); setAction(value) }
+        if ((event.key === ' ' || event.key === 'Enter') && !disabled) { event.preventDefault(); select() }
       }}
       className={cn(
         'flex min-h-10 cursor-pointer items-center gap-2.5 rounded-sm border px-2.5 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
-        action === value ? 'border-primary/60' : 'border-line',
+        checked ? 'border-primary/60' : 'border-line',
         disabled && 'cursor-not-allowed opacity-50',
       )}
     >
-      <span aria-hidden className={cn('size-3.5 shrink-0 rounded-full border-[1.5px]', action === value ? 'border-primary bg-primary shadow-[inset_0_0_0_2.5px_var(--background)]' : 'border-muted-foreground/60')} />
+      <span aria-hidden className={cn('size-3.5 shrink-0 rounded-full border-[1.5px]', checked ? 'border-primary bg-primary shadow-[inset_0_0_0_2.5px_var(--background)]' : 'border-muted-foreground/60')} />
       <span className="min-w-0 flex-1">{label}{extra}</span>
       {trailing}
     </div>
   )
+  const choice = (value: Action, label: string, extra?: ReactNode, disabled?: boolean, trailing?: ReactNode) => radio(action === value, () => setAction(value), label, extra, disabled, trailing)
+  const withBook = count === 1 && book !== null && book.entries.length > 0
 
   return (
-    <Modal open={book !== null} onClose={onClose} title={t({ ko: '채팅을 지울까?', en: 'Delete this chat?' })} widthClassName="max-w-md">
+    <Modal open={open} onClose={onClose} title={count > 1 ? t({ ko: '채팅 {count}개를 지울까?', en: 'Delete {count} chats?' }, { count }) : t({ ko: '채팅을 지울까?', en: 'Delete this chat?' })} widthClassName="max-w-md">
       <ModalBody>
+        <div role="radiogroup" aria-label={t({ ko: '백업', en: 'Backup' })} className="flex flex-col gap-1.5">
+          {radio(backup, () => setBackup(true), t({ ko: '백업하고 지우기', en: 'Back up, then delete' }), <span className="block truncate font-mono text-xs text-muted-foreground">{t({ ko: '파일 보관함', en: 'Files' })}/{CHAT_BACKUP_FOLDER}/{backupDate}</span>)}
+          {radio(!backup, () => setBackup(false), t({ ko: '그냥 지우기', en: 'Just delete' }))}
+        </div>
+        {withBook ? <>
         <p className="text-sm text-muted-foreground">
           {files > 0
             ? t({ ko: '이 채팅의 로어북에 항목 {entries}개와 자료 {files}개가 있어.', en: 'This chat’s lorebook has {entries} entries and {files} files.' }, { entries, files })
@@ -75,14 +94,19 @@ export function ChatDeleteDialog({ book, pending, onConfirm, onClose }: {
             </Select>
           ) : null)}
         </div>
+        </> : null}
+        <p className="text-xs text-muted-foreground">{t({ ko: '되돌릴 수 없어. 생성 이미지는 라이브러리에 남아.', en: 'This cannot be undone. Generated images stay in the library.' })}</p>
       </ModalBody>
       <ModalFooter>
         <Button variant="ghost" size="sm" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
         <Button
           variant="destructive"
           size="sm"
-          disabled={pending || (action === 'merge' && targetId === null)}
-          onClick={() => onConfirm(action === 'merge' ? { action, targetId: targetId as number } : { action })}
+          disabled={pending || (withBook && action === 'merge' && targetId === null)}
+          onClick={() => onConfirm({
+            ...(withBook ? { lorebook: action === 'merge' ? { action, targetId: targetId as number } : { action } } : {}),
+            ...(backup ? { backupDate } : {}),
+          })}
         >
           {pending ? <Spinner className="size-3.5" /> : null}
           {t({ ko: '지우기', en: 'Delete' })}

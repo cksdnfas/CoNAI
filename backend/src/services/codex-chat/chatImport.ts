@@ -198,6 +198,9 @@ export function importChatThread(requester: McpRequester, raw: Buffer, target: C
     // An export from before the lorebook carries pinned memories: they become the chat book's always-on entries.
     const memories = parsePinnedMemories(typeof thread.memories === 'string' ? thread.memories : Array.isArray(thread.memories) ? JSON.stringify(thread.memories) : null)
     if (memories.length > 0) OwnedLorebookStore.addChatBookEntries(created.id, pinnedMemoryEntries(memories.slice(0, 50)))
+    // A backup carries the chat's own lorebook as plain entries: they come back into the new chat's book.
+    const lore = object(file.lorebook)
+    if (Array.isArray(lore.entries) && lore.entries.length > 0) OwnedLorebookStore.addChatBookEntries(created.id, lore.entries.slice(0, 500))
 
     // The summary: its segments when the file has them, else the old single summary as a plot up to where it reached.
     const insertSegment = db.prepare('INSERT INTO chat_summary_segments (thread_id, level, from_message_id, until_message_id, content, backed) VALUES (?, ?, ?, ?, ?, ?)')

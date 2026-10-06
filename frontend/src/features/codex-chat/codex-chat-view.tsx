@@ -15,6 +15,8 @@ import {
   chatProfileEmoticonsQueryKey,
   listChatProfileEmoticons,
   deleteCodexChatThread,
+  bulkChatAction,
+  CHAT_BACKUP_FOLDER,
   getThreadLorebooks,
   LoreDecisionsNeededError,
   threadLorebooksQueryKey,
@@ -515,39 +517,71 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   }, [isGroup, messages, setStatusLayout, statusBlocks, wideStatus])
   const blockChanges = useMemo(() => chipChanges ? { changes: chipChanges, open: openStatus } : null, [chipChanges, openStatus])
 
-  // Deleting a chat whose own lorebook has entries asks what becomes of the book (C); a merge with duplicates goes
-  // through the merge dialog (D) and is retried with its decisions.
-  const [deleteBook, setDeleteBook] = useState<{ threadId: number; book: OwnedChatLorebook } | null>(null)
-  const [deleteMerge, setDeleteMerge] = useState<{ threadId: number; targetId: number; preview: LoreMergePreview } | null>(null)
-  // The chat is gone: stop and drop its queries, and take it out of the cached list before selecting, so the chat that
-  // becomes active is the next one and nothing asks the server for the deleted id again.
-  const forgetThread = (threadId: number) => {
+  // Deleting a chat asks whether to back it up first, and what becomes of its own lorebook when that has entries (C);
+  // a merge with duplicates goes through the merge dialog (D) and is retried with its decisions (and the backup).
+  const [deleteTarget, setDeleteTarget] = useState<{ threadId: number; book: OwnedChatLorebook | null } | null>(null)
+  const [deleteMerge, setDeleteMerge] = useState<{ threadId: number; targetId: number; preview: LoreMergePreview; backupDate?: string } | null>(null)
+  /** A deleted chat: stop and drop its queries and take it out of the cached list, so nothing asks for its id again. */
+  const dropThread = (threadId: number) => {
     void queryClient.cancelQueries({ queryKey: codexChatThreadQueryKey(threadId) })
     queryClient.setQueryData<Array<{ id: number }>>(CODEX_CHAT_THREADS_QUERY_KEY, (current) => current?.filter((entry) => entry.id !== threadId))
     queryClient.removeQueries({ queryKey: codexChatThreadQueryKey(threadId) })
     queryClient.removeQueries({ queryKey: codexChatMediaQueryKey(threadId) })
     queryClient.removeQueries({ queryKey: threadLorebooksQueryKey(threadId) })
+  }
+  // The open chat is gone: drop it before selecting, so the chat that becomes active is the next one.
+  const forgetThread = (threadId: number) => {
+    dropThread(threadId)
     selectThread(undefined)
     setListOpen(true)
   }
-  const afterDelete = async (threadId: number) => {
-    setDeleteBook(null)
+  const backedUpMessage = (date: string) => t({ ko: '백업하고 지웠어 · 파일 보관함/{folder}/{date}', en: 'Backed up and deleted · Files/{folder}/{date}' }, { folder: CHAT_BACKUP_FOLDER, date })
+  const afterDelete = async (threadId: number, backupDate?: string) => {
+    setDeleteTarget(null)
     setDeleteMerge(null)
     forgetThread(threadId)
+    if (backupDate) showSnackbar({ message: backedUpMessage(backupDate) })
     await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
   }
   const deleteMutation = useMutation({
-    mutationFn: ({ threadId, lorebook }: { threadId: number; lorebook?: ThreadLorebookAction }) => deleteCodexChatThread(threadId, lorebook),
-    onSuccess: (_result, { threadId }) => afterDelete(threadId),
-    onError: (error, { threadId, lorebook }) => {
+    mutationFn: ({ threadId, lorebook, backupDate }: { threadId: number; lorebook?: ThreadLorebookAction; backupDate?: string }) => deleteCodexChatThread(threadId, lorebook, backupDate),
+    onSuccess: (_result, { threadId, backupDate }) => afterDelete(threadId, backupDate),
+    onError: (error, { threadId, lorebook, backupDate }) => {
       if (error instanceof LoreDecisionsNeededError && lorebook?.action === 'merge') {
-        setDeleteBook(null)
-        setDeleteMerge({ threadId, targetId: lorebook.targetId, preview: error.preview })
+        setDeleteTarget(null)
+        setDeleteMerge({ threadId, targetId: lorebook.targetId, preview: error.preview, backupDate })
         return
       }
       showSnackbar({ message: getErrorMessage(error, t({ ko: '삭제 실패', en: 'Delete failed' })), tone: 'error' })
     },
   })
+  // The chat list's selection: one request, then a line on how it went (skipped and failed chats named by count).
+  const runBulk = async (threadIds: number[], action: 'archive' | 'unarchive' | 'delete', backupDate?: string) => {
+    try {
+      const { results } = await bulkChatAction(threadIds, action, backupDate)
+      const done = results.filter((result) => result.status === 'done').map((result) => result.threadId)
+      const skipped = results.filter((result) => result.status === 'skipped').length
+      const failed = results.filter((result) => result.status === 'failed')
+      if (action === 'delete') {
+        for (const threadId of done) dropThread(threadId)
+        if (activeThreadId !== null && done.includes(activeThreadId)) {
+          selectThread(undefined)
+          setListOpen(true)
+        }
+      }
+      await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+      const verb = action === 'delete' ? (backupDate ? t({ ko: '백업하고 지웠어', en: 'backed up and deleted' }) : t({ ko: '지웠어', en: 'deleted' })) : action === 'archive' ? t({ ko: '보관했어', en: 'archived' }) : t({ ko: '보관 해제했어', en: 'unarchived' })
+      const parts = [t({ ko: '{count}개 {verb}', en: '{count} {verb}' }, { count: done.length, verb })]
+      if (skipped) parts.push(t({ ko: '답변 중 {count}개 건너뜀', en: '{count} replying, skipped' }, { count: skipped }))
+      if (failed.length) parts.push(t({ ko: '{count}개 실패: {reason}', en: '{count} failed: {reason}' }, { count: failed.length, reason: failed[0].reason ?? '' }))
+      if (backupDate && done.length) parts.push(`${t({ ko: '파일 보관함', en: 'Files' })}/${CHAT_BACKUP_FOLDER}/${backupDate}`)
+      showSnackbar({ message: parts.join(' · '), tone: failed.length ? 'error' : undefined })
+      return failed.length === 0
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '정리하지 못했어.', en: 'Could not update the chats.' })), tone: 'error' })
+      return false
+    }
+  }
 
   const scrollToBottom = useCallback(() => {
     const node = scrollRef.current
@@ -729,19 +763,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     }
     const threadId = activeThreadId
     const books = await queryClient.fetchQuery({ queryKey: threadLorebooksQueryKey(threadId), queryFn: () => getThreadLorebooks(threadId), staleTime: 0 }).catch(() => null)
-    if (books?.chatBook && books.chatBook.entries.length > 0) {
-      setDeleteBook({ threadId, book: books.chatBook })
-      return
-    }
-    const confirmed = await confirm({
-      title: t({ ko: '채팅 삭제', en: 'Delete chat' }),
-      description: t({ ko: '이 채팅 기록을 지울까? 생성된 이미지는 남아.', en: 'Delete this chat? Generated images stay.' }),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
-    if (confirmed) {
-      deleteMutation.mutate({ threadId })
-    }
+    setDeleteTarget({ threadId, book: books?.chatBook && books.chatBook.entries.length > 0 ? books.chatBook : null })
   }
 
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -819,7 +841,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     <div ref={dense ? undefined : restoreChatListScroll} onScroll={dense ? undefined : (event) => { chatListScrollTop = event.currentTarget.scrollTop }} className={cn('min-h-0 flex-1 overflow-y-auto', !dense && 'px-1')}>
       {searchText.trim()
         ? <ChatSearchResults query={searchText} disabled={false} onPick={pickSearchResult} />
-        : <ChatThreadList threads={threads} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} drafts={chat.drafts} dense={dense} onSelect={openThread} onUpdate={updateListEntry} />}
+        : <ChatThreadList threads={threads} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} drafts={chat.drafts} dense={dense} onSelect={openThread} onUpdate={updateListEntry} onBulk={runBulk} />}
     </div>
   </>
   const chatMenu = <ChatAppearancePopover threadId={activeThreadId} style={profile?.style} layout={layout} open={appearanceOpen} onOpenChange={setAppearanceOpen}><span className="inline-flex"><DropdownMenu>
@@ -1030,7 +1052,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     <ChatFlagManagerModal open={flagManagerOpen} onClose={() => setFlagManagerOpen(false)} />
     <ChatUserProfileManagerModal open={userProfileManagerOpen} onClose={() => setUserProfileManagerOpen(false)} />
     <ChatUserProfilePickModal open={pendingStart !== null} profiles={userProfiles} onClose={() => setPendingStart(null)} onPick={(userProfileId) => { const profileIds = pendingStart; setPendingStart(null); if (profileIds !== null) void startWith(profileIds, userProfileId) }} />
-    <ChatDeleteDialog book={deleteBook?.book ?? null} pending={deleteMutation.isPending} onClose={() => setDeleteBook(null)} onConfirm={(lorebook) => deleteBook && deleteMutation.mutate({ threadId: deleteBook.threadId, lorebook })} />
+    <ChatDeleteDialog open={deleteTarget !== null} book={deleteTarget?.book ?? null} pending={deleteMutation.isPending} onClose={() => setDeleteTarget(null)} onConfirm={(choice) => deleteTarget && deleteMutation.mutate({ threadId: deleteTarget.threadId, ...choice })} />
     {deleteMerge ? (
       <LorebookMergeDialog
         open
@@ -1040,11 +1062,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         profiles={isGroup ? memberProfiles.map(({ id, name }) => ({ id, name })) : profile ? [{ id: profile.id, name: profile.name }] : []}
         defaultProfileId={profile?.id ?? null}
         onSubmit={async (decisions) => {
-          await deleteCodexChatThread(deleteMerge.threadId, { action: 'merge', targetId: deleteMerge.targetId, decisions })
+          await deleteCodexChatThread(deleteMerge.threadId, { action: 'merge', targetId: deleteMerge.targetId, decisions }, deleteMerge.backupDate)
           // Before the dialog refreshes the books: the deleted chat's queries must not refetch meanwhile.
           forgetThread(deleteMerge.threadId)
         }}
-        onMerged={() => void afterDelete(deleteMerge.threadId)}
+        onMerged={() => void afterDelete(deleteMerge.threadId, deleteMerge.backupDate)}
         onClose={() => setDeleteMerge(null)}
       />
     ) : null}

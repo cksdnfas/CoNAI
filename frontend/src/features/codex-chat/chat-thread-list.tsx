@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react'
-import { Archive, ArchiveRestore, ChevronDown, ChevronRight, GitBranch, MoreHorizontal, Pencil, Pin, PinOff } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Archive, ArchiveRestore, Check, ChevronDown, ChevronRight, GitBranch, ListChecks, MoreHorizontal, Pencil, Pin, PinOff, SquareCheck, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -11,17 +11,22 @@ import { useI18n } from '@/i18n'
 import type { ChatProfileSummary, CodexChatThread } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 import { GroupAvatarStack } from './chat-group'
+import { ChatDeleteDialog } from './chat-delete-dialog'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 
 export type ChatListPatch = { title?: string; pinned?: boolean; archived?: boolean }
+export type ChatBulkAction = 'archive' | 'unarchive' | 'delete'
 
 /**
  * The chats: pinned first, then the latest activity (as the server lists them). Each row shows the face it talks to,
  * its title, when it last moved and (roomy rows) the latest message or the unsent text. Branches kept before an edit
  * fold under the chat they came from; archived chats wait behind the archive row at the end.
  * `dense` is the page's side column; the panel's list screen uses roomier rows.
+ *
+ * Several chats are picked by the check that replaces a row's face on hover (or "Select" in the row menu, the way on
+ * touch); while any is picked a row click ticks it, and a floating bar archives or deletes them (Esc lets go).
  */
-export function ChatThreadList({ threads, profilesById, activeThreadId, runningThreadIds, drafts, dense = false, onSelect, onUpdate }: {
+export function ChatThreadList({ threads, profilesById, activeThreadId, runningThreadIds, drafts, dense = false, onSelect, onUpdate, onBulk }: {
   threads: CodexChatThread[]
   profilesById: Map<number, ChatProfileSummary>
   activeThreadId: number | null
@@ -32,11 +37,32 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
   dense?: boolean
   onSelect: (threadId: number) => void
   onUpdate: (threadId: number, patch: ChatListPatch) => void
+  /** Archive, unarchive or delete the picked chats; resolves true when all of them went through. */
+  onBulk: (threadIds: number[], action: ChatBulkAction, backupDate?: string) => Promise<boolean>
 }) {
   const { t, formatDate, formatNumber } = useI18n()
   const [openBranches, setOpenBranches] = useState<ReadonlySet<number>>(() => new Set())
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [renaming, setRenaming] = useState<{ id: number; title: string } | null>(null)
+  const [picked, setPicked] = useState<ReadonlySet<number>>(() => new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  // Chats that went away (deleted elsewhere) drop out of the selection.
+  const pickedIds = threads.filter((entry) => picked.has(entry.id)).map((entry) => entry.id)
+  const selecting = pickedIds.length > 0
+  const togglePick = (threadId: number) => setPicked((current) => {
+    const next = new Set(current)
+    if (next.has(threadId)) next.delete(threadId)
+    else next.add(threadId)
+    return next
+  })
+  const clearPicks = () => setPicked(new Set())
+  useEffect(() => {
+    if (!selecting) return
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && !confirmingDelete) setPicked(new Set()) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selecting, confirmingDelete])
   const untitled = t({ ko: '새 채팅', en: 'New chat' })
   const today = new Date()
   // The clock today, the day otherwise.
@@ -72,13 +98,36 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
     const entryProfile = entry.profile_id ? profilesById.get(entry.profile_id) : undefined
     const movedAt = new Date(`${entry.updated_date.replace(' ', 'T')}Z`)
     const preview = dense ? null : previewOf(entry)
+    const checked = picked.has(entry.id)
     return (
       <div key={entry.id} className={cn('group/row relative', nested && (dense ? 'pl-5' : 'pl-8'))}>
-        <ListRow asChild interactive size={dense ? 'sm' : 'lg'} selected={entry.id === activeThreadId}>
-          <button type="button" onClick={() => onSelect(entry.id)} className={cn('w-full', dense ? 'gap-2 pointer-coarse:pr-9' : 'gap-3 px-3 pointer-coarse:pr-11')}>
-            {entry.kind === 'group'
-              ? <GroupAvatarStack profiles={(entry.member_profile_ids ?? []).flatMap((id) => profilesById.get(id) ?? [])} size={dense ? 'xs' : 'sm'} ringClassName="ring-background" />
-              : entryProfile ? <ChatProfileAvatar name={entryProfile.name} avatar={entryProfile.avatar} engine={entryProfile.engine} size={dense ? 'xs' : 'md'} /> : null}
+        <ListRow asChild interactive size={dense ? 'sm' : 'lg'} selected={selecting ? checked : entry.id === activeThreadId}>
+          <button
+            type="button"
+            aria-pressed={selecting ? checked : undefined}
+            // While picking, a row click ticks it; otherwise the check over the face (hover) starts picking.
+            onClick={(event) => (selecting || (event.target as HTMLElement).closest('[data-row-check]') ? togglePick(entry.id) : onSelect(entry.id))}
+            className={cn('w-full', dense ? 'gap-2 pointer-coarse:pr-9' : 'gap-3 px-3 pointer-coarse:pr-11')}
+          >
+            <span className="relative flex shrink-0">
+              <span className={cn('flex transition-opacity', selecting ? 'opacity-0' : 'group-hover/row:opacity-0')}>
+              {entry.kind === 'group'
+                ? <GroupAvatarStack profiles={(entry.member_profile_ids ?? []).flatMap((id) => profilesById.get(id) ?? [])} size={dense ? 'xs' : 'sm'} ringClassName="ring-background" />
+                : entryProfile ? <ChatProfileAvatar name={entryProfile.name} avatar={entryProfile.avatar} engine={entryProfile.engine} size={dense ? 'xs' : 'md'} /> : <span className={dense ? 'size-5' : 'size-8'} />}
+              </span>
+              <span
+                data-row-check
+                aria-hidden
+                className={cn(
+                  'absolute inset-0 grid place-items-center transition-opacity',
+                  selecting ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100 pointer-coarse:hidden',
+                )}
+              >
+                <span className={cn('grid size-4 place-items-center rounded-[5px] border-[1.5px]', checked ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/70')}>
+                  {checked ? <Check className="size-3" strokeWidth={3} /> : null}
+                </span>
+              </span>
+            </span>
             <span className="min-w-0 flex-1">
               <span className="flex min-w-0 items-center gap-1.5">
                 <span className={cn('truncate', !dense && 'font-semibold')}>{entry.title || untitled}</span>
@@ -92,7 +141,7 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
             </span>
           </button>
         </ListRow>
-        <DropdownMenu>
+        {selecting ? null : <DropdownMenu>
           <Tip content={t({ ko: '채팅 관리', en: 'Manage chat' })}>
             <DropdownMenuTrigger asChild>
               <IconButton
@@ -107,6 +156,7 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
             </DropdownMenuTrigger>
           </Tip>
           <DropdownMenuContent align="end" className="min-w-40">
+            <DropdownMenuItem onSelect={() => togglePick(entry.id)}><SquareCheck />{t({ ko: '선택', en: 'Select' })}</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onUpdate(entry.id, { pinned: !entry.pinned })}>
               {entry.pinned ? <PinOff /> : <Pin />}{entry.pinned ? t({ ko: '고정 해제', en: 'Unpin' }) : t({ ko: '고정', en: 'Pin' })}
             </DropdownMenuItem>
@@ -115,7 +165,7 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
               {entry.archived ? <ArchiveRestore /> : <Archive />}{entry.archived ? t({ ko: '보관 해제', en: 'Unarchive' }) : t({ ko: '보관', en: 'Archive' })}
             </DropdownMenuItem>
           </DropdownMenuContent>
-        </DropdownMenu>
+        </DropdownMenu>}
       </div>
     )
   }
@@ -155,6 +205,16 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
   }
 
   const archiveShown = archiveOpen || archived.some((entry) => entry.id === activeThreadId)
+  // "All" is every chat the list shows now (folded branches included; the archive only while it is open).
+  const shownIds = [...listed, ...(archiveShown ? archived : [])].map((entry) => entry.id)
+  const allPickedArchived = selecting && pickedIds.every((id) => threads.find((entry) => entry.id === id)?.archived)
+  const runBulk = async (action: ChatBulkAction, backupDate?: string) => {
+    setBulkBusy(true)
+    const ok = await onBulk(pickedIds, action, backupDate)
+    setBulkBusy(false)
+    setConfirmingDelete(false)
+    if (ok) clearPicks()
+  }
   const renameTitle = renaming?.title.replace(/\s+/g, ' ').trim() ?? ''
   const saveRename = () => {
     if (!renaming || !renameTitle) return
@@ -168,6 +228,18 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
       {foldRow('archive', archiveShown, () => setArchiveOpen((current) => !current), <Archive className="size-3.5" />, t({ ko: '보관함', en: 'Archive' }), archived.length)}
       {archiveShown ? section(archived) : null}
     </> : null}
+    {selecting ? (
+      <div className="sticky bottom-2 z-10 mx-1 mt-2 flex items-center gap-0.5 rounded-lg border border-line bg-surface-high py-1 pl-3 pr-1 shadow-[var(--elevation-2)]">
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{t({ ko: '{count}개 선택', en: '{count} selected' }, { count: formatNumber(pickedIds.length) })}</span>
+        <IconButton variant="ghost" size="icon-sm" disabled={bulkBusy} onClick={() => setPicked(new Set(shownIds))} label={t({ ko: '전체 선택', en: 'Select all' })}><ListChecks /></IconButton>
+        <IconButton variant="ghost" size="icon-sm" disabled={bulkBusy} onClick={() => void runBulk(allPickedArchived ? 'unarchive' : 'archive')} label={allPickedArchived ? t({ ko: '보관 해제', en: 'Unarchive' }) : t({ ko: '보관', en: 'Archive' })}>
+          {allPickedArchived ? <ArchiveRestore /> : <Archive />}
+        </IconButton>
+        <IconButton variant="ghost" size="icon-sm" disabled={bulkBusy} className="text-destructive" onClick={() => setConfirmingDelete(true)} label={t({ ko: '삭제', en: 'Delete' })}><Trash2 /></IconButton>
+        <IconButton variant="ghost" size="icon-sm" disabled={bulkBusy} onClick={clearPicks} label={t({ ko: '선택 해제', en: 'Clear selection' })}><X /></IconButton>
+      </div>
+    ) : null}
+    <ChatDeleteDialog open={confirmingDelete} count={pickedIds.length} book={null} pending={bulkBusy} onClose={() => setConfirmingDelete(false)} onConfirm={(choice) => void runBulk('delete', choice.backupDate)} />
     <Modal open={renaming !== null} onClose={() => setRenaming(null)} title={t({ ko: '이름 바꾸기', en: 'Rename' })} widthClassName="max-w-sm">
       <ModalBody>
         <Input

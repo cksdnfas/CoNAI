@@ -41,6 +41,7 @@ import { ExternalApiProvider } from '../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../services/llmGenerationOptions'
 import { CHAT_CARD_MAX_BYTES, importChatCard, readLorebookFile } from '../services/codex-chat/chatCardImport'
 import { ChatGroupStore } from '../services/codex-chat/chatGroupStore'
+import { backupChatToFiles, backupDateOf, exportChatJson } from '../services/codex-chat/chatBackup'
 import { chatAssetFile, localizeImages, rewriteImageLinks, rewriteStoredMessages } from '../services/codex-chat/chatCardAssets'
 import { GroupChatService } from '../services/codex-chat/groupChatService'
 import { ChatReplyError } from '../services/codex-chat/chatReplies'
@@ -1175,16 +1176,18 @@ router.get('/threads/:threadId/export', requireChatAccess, (req: Request, res: R
   if (format !== 'md' && format !== 'json') { sendRouteBadRequest(res, '내보내기 형식은 md 또는 json이야.'); return }
   try {
     const requester = requesterFrom(req)
-    const detail = CodexChatService.getThread(requester, threadId)
-    const profile = detail.thread.profile_id ? ChatProfileStore.find(detail.thread.profile_id) : null
-    res.setHeader('Content-Disposition', `attachment; filename="chat-${threadId}.${format}"`)
-    res.setHeader('X-Content-Type-Options', 'nosniff')
-    res.setHeader('Cache-Control', 'private, no-store')
     if (format === 'json') {
-      res.type('application/json').send(JSON.stringify({ format: 'conai-chat', version: 1, exportedAt: new Date().toISOString(), profileName: profile?.name ?? null, thread: detail.thread, messages: detail.messages, media: detail.media, summarySegments: ChatSummaryStore.list(threadId),
-        // A room's members, so an import can find them by id and name.
-        members: detail.thread.kind === 'group' ? ChatGroupStore.members(threadId).map((member) => ({ id: member.profile_id, name: ChatProfileStore.find(member.profile_id)?.name ?? null })) : undefined }, null, 2))
+      const file = exportChatJson(requester, threadId)
+      res.setHeader('Content-Disposition', `attachment; filename="chat-${threadId}.json"`)
+      res.setHeader('X-Content-Type-Options', 'nosniff')
+      res.setHeader('Cache-Control', 'private, no-store')
+      res.type('application/json').send(JSON.stringify(file, null, 2))
     } else {
+      const detail = CodexChatService.getThread(requester, threadId)
+      const profile = detail.thread.profile_id ? ChatProfileStore.find(detail.thread.profile_id) : null
+      res.setHeader('Content-Disposition', `attachment; filename="chat-${threadId}.md"`)
+      res.setHeader('X-Content-Type-Options', 'nosniff')
+      res.setHeader('Cache-Control', 'private, no-store')
       const speakers = new Map(detail.thread.kind === 'group'
         ? [...new Set(detail.messages.map((message) => message.speaker_profile_id).filter((id): id is number => id !== null))].map((id) => [id, ChatProfileStore.find(id)?.name ?? '(나간 참가자)'] as const)
         : [])
@@ -1263,12 +1266,15 @@ function threadLorebookOption(value: unknown): ThreadLorebookOption | null {
 router.delete('/threads/:threadId', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
-  const option = threadLorebookOption((req.body as { lorebook?: unknown } | undefined)?.lorebook)
+  const body = (req.body ?? {}) as { lorebook?: unknown; backup?: unknown; backupDate?: unknown }
+  const option = threadLorebookOption(body.lorebook)
   if (!option) { sendRouteBadRequest(res, 'lorebook must be { action: delete | keep | merge, targetId?, decisions? } (merge needs targetId)'); return }
   const owner = lorebookOwner(req)
   try {
     const chatBook = CodexChatStore.findThread(threadId, getRequesterAccountId(req)) ? OwnedLorebookStore.chatBookOf(threadId) : null
     if (chatBook && option.action === 'merge') assertMergeDecisions(previewMerge(chatBook.id, option.targetId as number, owner), option.decisions)
+    // A backup is written before anything is removed (the book still in it); when it fails nothing is deleted.
+    if (body.backup === true) backupChatToFiles(requesterFrom(req), threadId, backupDateOf(body.backupDate))
     let lorebook: { action: ThreadLorebookOption['action']; bookId: number | null; merge?: Omit<MergeResult, 'book'> } = { action: chatBook ? option.action : 'delete', bookId: null }
     if (chatBook && option.action === 'keep') {
       lorebook = { action: 'keep', bookId: OwnedLorebookStore.keepChatBook(threadId).id }
@@ -1369,6 +1375,44 @@ router.patch('/threads/:threadId/messages/:messageId/text', requireChatAccess, (
     res.json({ success: true, data: isGroupThread(req, threadId) ? GroupChatService.editReplyText(requester, threadId, messageId, req.body.content) : CodexChatService.editReplyText(requester, threadId, messageId, req.body.content) })
   } catch (error) { sendChatError(res, error) }
 })
+
+/**
+ * POST /api/codex-chat/threads/bulk — `{ threadIds, action: archive | unarchive | delete, backup?, backupDate? }`: the
+ * chat list's selection. Each chat is handled on its own and reported (`done`, `skipped` while a reply runs, or
+ * `failed` with the reason); a delete with `backup` saves the chat file first and keeps the chat when that fails.
+ * Deleting here takes the chat's own lorebook with it (a backup carries its entries).
+ */
+router.post('/threads/bulk', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as { threadIds?: unknown; action?: unknown; backup?: unknown; backupDate?: unknown }
+  const threadIds = Array.isArray(body.threadIds) ? [...new Set(body.threadIds.map(Number))].filter((id) => Number.isSafeInteger(id) && id > 0) : []
+  if (threadIds.length === 0 || threadIds.length > 200) { sendRouteBadRequest(res, 'threadIds must hold 1–200 chat ids'); return }
+  const action = body.action
+  if (action !== 'archive' && action !== 'unarchive' && action !== 'delete') { sendRouteBadRequest(res, 'action must be archive, unarchive or delete'); return }
+  const requester = requesterFrom(req)
+  const backupDate = backupDateOf(body.backupDate)
+  const results: Array<{ threadId: number; status: 'done' | 'skipped' | 'failed'; reason?: string }> = []
+  for (const threadId of threadIds) {
+    try {
+      if (action !== 'delete') {
+        CodexChatService.updateListState(requester, threadId, { archived: action === 'archive' })
+      } else {
+        if (!CodexChatStore.findThread(threadId, requester.accountId)) throw new CodexChatError('채팅을 찾을 수 없어.', 404)
+        if (CodexChatService.isRunning(threadId) || GroupChatService.isRunning(threadId)) {
+          results.push({ threadId, status: 'skipped', reason: '답변 중' })
+          continue
+        }
+        if (body.backup === true) backupChatToFiles(requester, threadId, backupDate)
+        if (isGroupThread(req, threadId)) await GroupChatService.deleteThread(requester, threadId)
+        else await CodexChatService.deleteThread(requester, threadId)
+        ChatAppearanceStore.threadDeleted(getRequesterAccountId(req), threadId)
+      }
+      results.push({ threadId, status: 'done' })
+    } catch (error) {
+      results.push({ threadId, status: 'failed', reason: error instanceof Error ? error.message : String(error) })
+    }
+  }
+  res.json({ success: true, data: { results } })
+}))
 
 /** POST /api/codex-chat/threads/:threadId/messages/:messageId/branch — a new chat with this one up to the message. Returns the new thread. */
 router.post('/threads/:threadId/messages/:messageId/branch', requireChatAccess, (req: Request, res: Response) => {

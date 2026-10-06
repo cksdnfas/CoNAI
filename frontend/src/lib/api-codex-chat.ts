@@ -1076,9 +1076,26 @@ export function getCodexChatThreadMedia(threadId: number) {
 export type ThreadLorebookAction = { action: 'delete' } | { action: 'keep' } | { action: 'merge'; targetId: number; decisions?: LoreMergeDecision[] }
 
 /** Deleting with a merge throws LoreDecisionsNeededError (nothing changed) while a duplicate has no decision. */
-export function deleteCodexChatThread(threadId: number, lorebook?: ThreadLorebookAction) {
-  return requestWithMergePreview<{ lorebook?: unknown } | undefined>(`/api/codex-chat/threads/${threadId}`, { method: 'DELETE', ...(lorebook ? { headers: JSON_HEADERS, body: JSON.stringify({ lorebook }) } : {}) })
+/** `backupDate` (the reader's `YYYY-MM-DD`): save the chat to the file store's 채팅 백업 folder first. */
+export function deleteCodexChatThread(threadId: number, lorebook?: ThreadLorebookAction, backupDate?: string) {
+  const body = { ...(lorebook ? { lorebook } : {}), ...(backupDate ? { backup: true, backupDate } : {}) }
+  return requestWithMergePreview<{ lorebook?: unknown } | undefined>(`/api/codex-chat/threads/${threadId}`, { method: 'DELETE', ...(Object.keys(body).length ? { headers: JSON_HEADERS, body: JSON.stringify(body) } : {}) })
 }
+
+export type ChatBulkResult = { threadId: number; status: 'done' | 'skipped' | 'failed'; reason?: string }
+
+/** Archive, unarchive or delete several chats; each is reported on its own. `backupDate` backs deletions up first. */
+export function bulkChatAction(threadIds: number[], action: 'archive' | 'unarchive' | 'delete', backupDate?: string) {
+  return requestApiData<{ results: ChatBulkResult[] }>('/api/codex-chat/threads/bulk', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ threadIds, action, ...(backupDate ? { backup: true, backupDate } : {}) }) })
+}
+
+/** Today in the reader's time zone as `YYYY-MM-DD`: the day folder chat backups go to. */
+export function chatBackupDate(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+/** Where a backup made today lands in the file store. */
+export const CHAT_BACKUP_FOLDER = '채팅 백업'
 
 /** Like requestApiData, but a 409 carrying a merge preview becomes LoreDecisionsNeededError. */
 async function requestWithMergePreview<T>(path: string, init: RequestInit): Promise<T> {
