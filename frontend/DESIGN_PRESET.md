@@ -131,6 +131,9 @@ buttons up one tone.
   (preset, profile, lorebook…). Name + extras over one muted meta line; `onOpen` makes the whole row clickable and shows
   the pencil on hover (always on touch). Clicks in `trailing` do not open the row. Colour the leading icon with
   `text-resource-*` (tool / generation / block / lorebook) and wrap a state that needs attention in `ResourceRowStatus`.
+  Settings lists whose rows open an editor (folders, LLM models/connections/presets, accounts, permission groups) use
+  it instead of a column table; flag only what is off or failing (inactive, watcher error, not used), never the normal
+  state. Keep a table only where values are compared down columns (scan logs).
 - `RowGroup` (`heading?`, `count?`, `headingClassName?`, `actions?`, `bodyClassName?`): group label over rows. The label
   is a muted overline over a hairline (`border-foreground/15`), one rank below the rows' names, so a long page reads by
   group; `count` adds the item count, `headingClassName` gives the label a kind colour that the rows' icons share.

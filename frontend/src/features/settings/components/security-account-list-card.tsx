@@ -42,6 +42,7 @@ export function SecurityAccountListCard({
   return (
     <RowGroup
         heading={t({ ko: '계정', en: 'Accounts' })}
+        count={isLoading ? undefined : accounts.length}
         actions={(
           <IconButton
             size="icon-sm"

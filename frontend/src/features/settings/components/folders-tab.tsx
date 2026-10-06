@@ -18,9 +18,7 @@ import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import type { RuntimeJobRecord } from '@/types/runtime-job'
 import { useI18n } from '@/i18n'
 
-// Tables switch to labelled cards below these container widths (see SettingsResourceTable `stackBelow`).
-const WATCHED_FOLDER_TABLE_GRID = '@3xl:grid-cols-[minmax(160px,1fr)_minmax(240px,2.4fr)_72px_72px_56px]'
-const BACKUP_SOURCE_TABLE_GRID = '@4xl:grid-cols-[minmax(150px,0.95fr)_minmax(200px,1.55fr)_minmax(160px,1.25fr)_72px_72px_56px]'
+// The scan log table switches to labelled cards below this container width (see SettingsResourceTable `stackBelow`).
 const SCAN_LOG_TABLE_GRID = '@4xl:grid-cols-[minmax(160px,1fr)_110px_80px_80px_80px_80px_120px]'
 
 interface FoldersTabProps {
@@ -161,6 +159,7 @@ export function FoldersTab({
       <div className="space-y-8">
         <RowGroup
           heading={t({ ko: '감시 폴더', en: 'Watched folders' })}
+          count={!foldersLoading && !foldersError ? folders.length : undefined}
           actions={(
             <>
               <IconButton size="icon-sm" variant="ghost" onClick={onRefresh} label={t({ ko: '새로고침', en: 'Refresh' })}>
@@ -200,22 +199,14 @@ export function FoldersTab({
 
           {!foldersLoading && !foldersError ? (
             folders.length > 0 ? (
-              <SettingsResourceTable
-                gridClassName={WATCHED_FOLDER_TABLE_GRID}
-                stackBelow="3xl"
-                headers={[t({ ko: '이름', en: 'Name' }), t({ ko: '경로', en: 'Path' }), t({ ko: '활성', en: 'Active' }), t({ ko: '감시', en: 'Watcher' }), '']}
-              >
-                {folders.map((folder) => (
-                  <WatchedFolderListItem
-                    key={folder.id}
-                    folder={folder}
-                    watcherState={folderWatcherMap.get(folder.id)}
-                    selected={selectedFolderId === folder.id}
-                    gridClassName={WATCHED_FOLDER_TABLE_GRID}
-                    onOpenOptions={setSelectedFolderId}
-                  />
-                ))}
-              </SettingsResourceTable>
+              folders.map((folder) => (
+                <WatchedFolderListItem
+                  key={folder.id}
+                  folder={folder}
+                  watcherState={folderWatcherMap.get(folder.id)}
+                  onOpenOptions={setSelectedFolderId}
+                />
+              ))
             ) : (
               <SettingsEmptyRow>{t({ ko: '등록된 감시 폴더가 없어.', en: 'No registered watched folders yet.' })}</SettingsEmptyRow>
             )
@@ -224,6 +215,7 @@ export function FoldersTab({
 
         <RowGroup
           heading={t({ ko: '백업 소스', en: 'Backup sources' })}
+          count={!backupSourcesLoading && !backupSourcesError ? backupSources.length : undefined}
           actions={(
             <IconButton size="icon-sm" variant="ghost" onClick={() => setIsAddBackupSourceModalOpen(true)} label={t({ ko: '백업 소스 추가', en: 'Add backup source' })}>
               <Plus className="h-4 w-4" />
@@ -241,21 +233,9 @@ export function FoldersTab({
 
           {!backupSourcesLoading && !backupSourcesError ? (
             backupSources.length > 0 ? (
-              <SettingsResourceTable
-                gridClassName={BACKUP_SOURCE_TABLE_GRID}
-                stackBelow="4xl"
-                headers={[t({ ko: '이름', en: 'Name' }), t({ ko: '원본 경로', en: 'Source path' }), t({ ko: '대상', en: 'Target' }), t({ ko: '활성', en: 'Active' }), t({ ko: '감시', en: 'Watcher' }), '']}
-              >
-                {backupSources.map((source) => (
-                  <BackupSourceListItem
-                    key={source.id}
-                    source={source}
-                    selected={selectedBackupSourceId === source.id}
-                    gridClassName={BACKUP_SOURCE_TABLE_GRID}
-                    onOpenOptions={setSelectedBackupSourceId}
-                  />
-                ))}
-              </SettingsResourceTable>
+              backupSources.map((source) => (
+                <BackupSourceListItem key={source.id} source={source} onOpenOptions={setSelectedBackupSourceId} />
+              ))
             ) : (
               <SettingsEmptyRow>{t({ ko: '등록된 백업 소스가 없어.', en: 'No registered backup sources yet.' })}</SettingsEmptyRow>
             )

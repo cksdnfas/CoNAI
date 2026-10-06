@@ -1,14 +1,14 @@
 import { createContext, useContext, type ComponentProps, type ReactNode } from 'react'
-import { Check, FolderCheck, FolderPlus, LoaderCircle, Minus, Save, Settings2, Trash2 } from 'lucide-react'
+import { FolderCheck, FolderPlus, LoaderCircle, Save, Trash2 } from 'lucide-react'
 import { SegmentedControl, type SegmentedControlItem } from '@/components/common/segmented-control'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
+import { ResourceRowStatus } from '@/components/ui/resource-row'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 
 type SettingsBadgeVariant = NonNullable<ComponentProps<typeof Badge>['variant']>
-export type SettingsStatusTone = 'default' | 'muted' | 'danger'
 
 export interface SettingsResourceBadge {
   label: ReactNode
@@ -55,6 +55,21 @@ export function getWatcherStateLabel(watcherState: string | null | undefined, t:
   }
 }
 
+/**
+ * Meta-line head of a watched folder / backup source row: the one state that needs attention (switched off, watcher
+ * error, watcher expected but not running), then a separator. It leads so a long path cannot truncate it away.
+ * Nothing while it runs as set up.
+ */
+export function WatchProblem({ isActive, watcherEnabled, watcherState }: { isActive: boolean; watcherEnabled: boolean; watcherState?: string | null }) {
+  const { t } = useI18n()
+  const state = (watcherState || '').toLowerCase()
+  let problem: ReactNode = null
+  if (!isActive) problem = <ResourceRowStatus>{t({ ko: '비활성', en: 'Inactive' })}</ResourceRowStatus>
+  else if (state === 'error') problem = <ResourceRowStatus tone="destructive">{getWatcherStateLabel(watcherState, t)}</ResourceRowStatus>
+  else if (watcherEnabled && state !== 'watching' && state !== 'initializing') problem = <ResourceRowStatus>{getWatcherStateLabel(watcherState, t)}</ResourceRowStatus>
+  return problem ? <>{problem}{' · '}</> : null
+}
+
 /** Turn a raw scan log status into a user-facing label. */
 export function getScanStatusLabel(status: string | null | undefined, t: TranslateFn): string {
   switch ((status || '').toLowerCase()) {
@@ -69,44 +84,6 @@ export function getScanStatusLabel(status: string | null | undefined, t: Transla
     default:
       return status || '—'
   }
-}
-
-/** Map watcher states to a compact icon tone for table cells. */
-export function getWatcherStatusTone(watcherState?: string | null): SettingsStatusTone {
-  if (!watcherState) {
-    return 'muted'
-  }
-
-  const normalized = watcherState.toLowerCase()
-  if (normalized === 'watching') {
-    return 'default'
-  }
-  if (normalized === 'error') {
-    return 'danger'
-  }
-  return 'muted'
-}
-
-interface SettingsStatusIconProps {
-  checked?: boolean
-  tone?: SettingsStatusTone
-  title?: string
-}
-
-/** Render a dense boolean/status cell for settings tables: a tinted check or a muted dash, no box. */
-export function SettingsStatusIcon({ checked = false, tone = 'muted', title }: SettingsStatusIconProps) {
-  return (
-    <span
-      className={cn(
-        'inline-flex h-7 w-7 items-center justify-center',
-        tone === 'danger' ? 'text-destructive' : checked ? 'text-primary' : 'text-muted-foreground/60',
-      )}
-      title={title}
-      aria-label={title}
-    >
-      {checked ? <Check className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
-    </span>
-  )
 }
 
 /** Container width below which a stackable table turns each row into a card. */
@@ -285,48 +262,6 @@ export function SettingsResourceStackedCells({ gridClassName, cells, labelledFro
       ))}
       {trailing}
     </div>
-  )
-}
-
-interface SettingsResourceTableRowProps {
-  gridClassName: string
-  cells: ReactNode[]
-  selected?: boolean
-  onOpenOptions: () => void
-  /** Cells from this index on are short labelled values when stacked. Default: the last two. */
-  labelledFrom?: number
-}
-
-/** Render a shared row for settings resource tables. */
-export function SettingsResourceTableRow({
-  gridClassName,
-  cells,
-  selected = false,
-  onOpenOptions,
-  labelledFrom,
-}: SettingsResourceTableRowProps) {
-  const { t } = useI18n()
-
-  return (
-    <SettingsResourceStackedCells
-      gridClassName={gridClassName}
-      cells={cells}
-      labelledFrom={labelledFrom ?? cells.length - 2}
-      className={cn('transition-colors', selected ? 'bg-primary/8' : 'hover:bg-fill')}
-      trailing={(
-        <div className="ml-auto flex justify-end">
-          <IconButton
-            size="icon-sm"
-            variant="ghost"
-            active={selected}
-            label={t({ ko: '상세 정보와 수정 열기', en: 'Open details and editing' })}
-            onClick={onOpenOptions}
-          >
-            <Settings2 className="h-4 w-4" />
-          </IconButton>
-        </div>
-      )}
-    />
   )
 }
 

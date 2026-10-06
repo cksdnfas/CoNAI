@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { FlaskConical, LoaderCircle, Save, Trash2, X } from 'lucide-react'
+import { FileText, FlaskConical, LoaderCircle, Plug, Save, Trash2, X } from 'lucide-react'
+import { Chip } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -18,18 +19,15 @@ import {
 } from '@/lib/api-external-api'
 import type { ModelUsage } from '@/lib/api-codex-chat'
 import type { LlmPresetRecord } from '@conai/shared'
-import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
 import { SettingsSwitchRow } from './settings-switch-row'
 import { ConnectionModelSelect } from './chat-profile-editor-fields'
-import { ConnectionUsageCell } from './llm-model-slots'
-import { SettingsResourceTableRow, SettingsStatusIcon } from './settings-resource-shared'
+import { ConnectionUsage } from './llm-model-slots'
 import {
-  LLM_CONNECTIONS_TABLE_GRID,
-  LLM_PRESETS_TABLE_GRID,
   LLM_PRESET_SECTIONS,
   LLM_PROVIDER_OPTIONS,
   buildAdditionalConfig,
@@ -40,8 +38,6 @@ import {
   buildProviderPlaceholder,
   formatPresetUpdatedAt,
   getBaseUrlSummary,
-  getDefaultModelSummary,
-  getTimeoutSummary,
   summarizePresetValue,
   type LlmConnectionDraft,
   type LlmConnectionModalState,
@@ -53,68 +49,58 @@ import {
 export function LlmConnectionListItem({
   provider,
   usage,
-  selected = false,
   onOpenOptions,
 }: {
   provider: ExternalApiProviderRecord
   usage?: ModelUsage['connections'][number]
-  selected?: boolean
   onOpenOptions: (provider: ExternalApiProviderRecord) => void
 }) {
   const { t } = useI18n()
   const notSetLabel = t('llmConnectionsTab.notSet')
-  const autoLabel = t({ ko: '자동', en: 'Auto' })
   const baseUrlSummary = getBaseUrlSummary(provider, notSetLabel)
+  const kind = LLM_PROVIDER_OPTIONS.find((option) => option.value === provider.provider_type)
 
   return (
-    <SettingsResourceTableRow
-      gridClassName={LLM_CONNECTIONS_TABLE_GRID}
-      selected={selected}
-      labelledFrom={3}
-      onOpenOptions={() => onOpenOptions(provider)}
-      cells={[
-        <div className="min-w-0 truncate font-medium text-foreground" title={provider.provider_name}>
-          {provider.provider_name}
-        </div>,
-        <div
-          className={cn('text-xs text-muted-foreground', baseUrlSummary === notSetLabel ? 'font-medium' : 'truncate font-mono')}
-          title={baseUrlSummary}
-        >
-          {baseUrlSummary}
-        </div>,
-        <div className="min-w-0 truncate text-sm font-medium text-foreground" title={getDefaultModelSummary(provider, notSetLabel)}>{getDefaultModelSummary(provider, notSetLabel)}</div>,
-        <ConnectionUsageCell usage={usage} />,
-        <div className="text-center text-sm font-medium text-foreground">{getTimeoutSummary(provider, autoLabel)}</div>,
-        <SettingsStatusIcon checked={provider.is_enabled} title={provider.is_enabled ? t({ ko: '활성', en: 'Active' }) : t({ ko: '비활성', en: 'Inactive' })} />,
-      ]}
+    <ResourceRow
+      leading={<Plug />}
+      name={provider.display_name || provider.provider_name}
+      extra={kind ? <Chip size="sm" tone="muted">{t(kind.shortLabel)}</Chip> : null}
+      meta={(
+        <>
+          {baseUrlSummary === notSetLabel
+            ? <ResourceRowStatus>{notSetLabel}</ResourceRowStatus>
+            : <span className="font-mono" title={baseUrlSummary}>{baseUrlSummary}</span>}
+          {' · '}
+          <ConnectionUsage usage={usage} />
+          {provider.is_enabled ? null : <>{' · '}<ResourceRowStatus>{t({ ko: '비활성', en: 'Inactive' })}</ResourceRowStatus></>}
+        </>
+      )}
+      onOpen={() => onOpenOptions(provider)}
     />
   )
 }
 
 export function LlmPresetListItem({
   preset,
-  selected = false,
   onOpenOptions,
 }: {
   preset: LlmPresetRecord
-  selected?: boolean
   onOpenOptions: (preset: LlmPresetRecord) => void
 }) {
   const { locale, t } = useI18n()
 
   return (
-    <SettingsResourceTableRow
-      gridClassName={LLM_PRESETS_TABLE_GRID}
-      selected={selected}
-      labelledFrom={2}
-      onOpenOptions={() => onOpenOptions(preset)}
-      cells={[
-        <div className="min-w-0 truncate font-medium text-foreground" title={preset.name}>{preset.name}</div>,
-        <div className="min-w-0 truncate text-xs text-muted-foreground" title={preset.content || t({ ko: '비어 있음', en: 'Empty' })}>
-          {summarizePresetValue(preset.content, t({ ko: '비어 있음', en: 'Empty' }))}
-        </div>,
-        <div className="text-center text-xs text-muted-foreground">{formatPresetUpdatedAt(preset.updatedAt, locale)}</div>,
-      ]}
+    <ResourceRow
+      leading={<FileText />}
+      name={preset.name}
+      meta={(
+        <>
+          <span title={preset.content || undefined}>{summarizePresetValue(preset.content, t({ ko: '비어 있음', en: 'Empty' }))}</span>
+          {' · '}
+          {formatPresetUpdatedAt(preset.updatedAt, locale)}
+        </>
+      )}
+      onOpen={() => onOpenOptions(preset)}
     />
   )
 }

@@ -47,10 +47,6 @@ export type LlmPresetModalState =
   | { mode: 'edit'; presetType: LlmPresetCollectionKey; preset: LlmPresetRecord }
   | null
 
-// Container-prefixed: the tables stack into labelled rows below these widths (SettingsResourceTable stackBelow).
-export const LLM_CONNECTIONS_TABLE_GRID = '@4xl:grid-cols-[minmax(160px,1.1fr)_minmax(150px,1fr)_minmax(140px,0.9fr)_minmax(130px,0.8fr)_88px_64px_48px]'
-export const LLM_PRESETS_TABLE_GRID = '@3xl:grid-cols-[minmax(180px,0.9fr)_minmax(240px,1.6fr)_140px_48px]'
-
 export const STRUCTURED_OUTPUT_JSON_EXAMPLE = `{
   "title": "",
   "summary": "",
@@ -166,11 +162,6 @@ export function buildProviderPlaceholder(providerType: ExternalApiProviderType) 
   return 'http://127.0.0.1:1234/v1'
 }
 
-export function getDefaultModelSummary(provider: ExternalApiProviderRecord, notSetLabel: string) {
-  const defaultModel = normalizeOptionalString(provider.additional_config?.default_model)
-  return defaultModel || notSetLabel
-}
-
 function readTimeoutSeconds(provider: ExternalApiProviderRecord) {
   const ms = Number(provider.additional_config?.request_timeout_ms ?? provider.additional_config?.timeout_ms)
   return Number.isFinite(ms) && ms > 0 ? String(Math.round(ms / 1000)) : ''
@@ -179,11 +170,6 @@ function readTimeoutSeconds(provider: ExternalApiProviderRecord) {
 function readConcurrentRequests(provider: ExternalApiProviderRecord) {
   const count = Number(provider.additional_config?.max_concurrent_requests)
   return Number.isFinite(count) && count >= 1 ? String(Math.floor(count)) : '1'
-}
-
-export function getTimeoutSummary(provider: ExternalApiProviderRecord, defaultLabel: string) {
-  const seconds = readTimeoutSeconds(provider)
-  return seconds ? `${seconds}s` : defaultLabel
 }
 
 export function getBaseUrlSummary(provider: ExternalApiProviderRecord, notSetLabel: string) {

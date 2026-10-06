@@ -1,12 +1,13 @@
 import { useEffect, useId, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { LoaderCircle, Save, Star, Trash2, X } from 'lucide-react'
+import { Box, LoaderCircle, Save, Star, Trash2, X } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
@@ -29,10 +30,6 @@ import type { ExternalApiProviderRecord } from '@/lib/api-external-api'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { ConnectionModelSelect, SwitchLine } from './chat-profile-editor-fields'
-import { SettingsResourceTableRow } from './settings-resource-shared'
-
-// Container-prefixed like the other settings tables; the table stacks below 4xl.
-export const MODEL_SLOTS_TABLE_GRID = '@4xl:grid-cols-[minmax(160px,1fr)_minmax(140px,0.9fr)_minmax(160px,1.1fr)_minmax(140px,0.9fr)_64px_48px]'
 
 export type ModelSlotModalState = { mode: 'create' } | { mode: 'edit'; slot: ModelSlot } | null
 
@@ -69,14 +66,14 @@ function describeProfiles(profiles: UsageProfile[], roleLabels: Record<ModelRole
     .join(' · ')
 }
 
-/** Connection table's 사용처 cell: models and directly-assigned profiles on this connection. */
-export function ConnectionUsageCell({ usage }: { usage?: ModelUsage['connections'][number] }) {
+/** Who uses a connection (models, profiles set on it directly) for its row's meta line; names in the tooltip. */
+export function ConnectionUsage({ usage }: { usage?: ModelUsage['connections'][number] }) {
   const { t } = useI18n()
   const roleLabels = useRoleLabels()
   const slots = usage?.slots ?? []
   const profiles = usage?.directProfiles ?? []
   if (slots.length === 0 && profiles.length === 0) {
-    return <div className="text-xs text-muted-foreground">{t({ ko: '없음', en: 'None' })}</div>
+    return <ResourceRowStatus>{t({ ko: '사용처 없음', en: 'Not used' })}</ResourceRowStatus>
   }
 
   const label = [
@@ -90,16 +87,16 @@ export function ConnectionUsageCell({ usage }: { usage?: ModelUsage['connections
 
   return (
     <Tip content={<span className="whitespace-pre-line">{tip}</span>}>
-      <div className="min-w-0 truncate text-xs text-foreground">{label}</div>
+      <span>{label}</span>
     </Tip>
   )
 }
 
-function SlotUsageCell({ slot, workflowNodes }: { slot: ModelSlot; workflowNodes: number }) {
+function SlotUsage({ slot, workflowNodes }: { slot: ModelSlot; workflowNodes: number }) {
   const { t } = useI18n()
   const roleLabels = useRoleLabels()
   if (slot.profiles.length === 0 && workflowNodes === 0) {
-    return <div className="text-xs text-muted-foreground">{t({ ko: '없음', en: 'None' })}</div>
+    return <ResourceRowStatus>{t({ ko: '사용처 없음', en: 'Not used' })}</ResourceRowStatus>
   }
 
   const label = [
@@ -109,7 +106,7 @@ function SlotUsageCell({ slot, workflowNodes }: { slot: ModelSlot; workflowNodes
 
   return (
     <Tip content={slot.profiles.length > 0 ? describeProfiles(slot.profiles, roleLabels, true) : null}>
-      <div className="min-w-0 truncate text-xs text-foreground">{label}</div>
+      <span>{label}</span>
     </Tip>
   )
 }
@@ -118,7 +115,6 @@ export function ModelSlotListItem({
   slot,
   providers,
   workflowNodes,
-  selected = false,
   settingDefault = false,
   onSetDefault,
   onOpenOptions,
@@ -126,7 +122,6 @@ export function ModelSlotListItem({
   slot: ModelSlot
   providers: ExternalApiProviderRecord[]
   workflowNodes: number
-  selected?: boolean
   settingDefault?: boolean
   onSetDefault: (slot: ModelSlot) => void
   onOpenOptions: (slot: ModelSlot) => void
@@ -135,19 +130,19 @@ export function ModelSlotListItem({
   const providerLabel = providers.find((provider) => provider.provider_name === slot.providerName)?.display_name || slot.providerName
 
   return (
-    <SettingsResourceTableRow
-      gridClassName={MODEL_SLOTS_TABLE_GRID}
-      selected={selected}
-      labelledFrom={3}
-      onOpenOptions={() => onOpenOptions(slot)}
-      cells={[
-        <div className="flex min-w-0 items-center gap-1.5 font-medium text-foreground" title={slot.name}>
-          {slot.isDefault ? <Star className="h-3.5 w-3.5 shrink-0 fill-primary text-primary" /> : null}
-          <span className="truncate">{slot.name}</span>
-        </div>,
-        <div className="min-w-0 truncate text-sm text-foreground" title={providerLabel}>{providerLabel}</div>,
-        <div className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={slot.model}>{slot.model}</div>,
-        <SlotUsageCell slot={slot} workflowNodes={workflowNodes} />,
+    <ResourceRow
+      leading={<Box />}
+      name={slot.name}
+      meta={(
+        <>
+          {providerLabel}
+          {' · '}
+          <span className="font-mono" title={slot.model}>{slot.model}</span>
+          {' · '}
+          <SlotUsage slot={slot} workflowNodes={workflowNodes} />
+        </>
+      )}
+      trailing={(
         <IconButton
           size="icon-sm"
           variant="ghost"
@@ -156,8 +151,9 @@ export function ModelSlotListItem({
           label={slot.isDefault ? t({ ko: '기본 모델', en: 'Default model' }) : t({ ko: '기본으로', en: 'Make default' })}
         >
           <Star className={cn('h-4 w-4', slot.isDefault && 'fill-primary text-primary')} />
-        </IconButton>,
-      ]}
+        </IconButton>
+      )}
+      onOpen={() => onOpenOptions(slot)}
     />
   )
 }

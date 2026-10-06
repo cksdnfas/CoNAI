@@ -1,9 +1,10 @@
-import { Palette, Pencil, Shield, Users, UserPlus } from 'lucide-react'
+import { Palette, Shield, UserPlus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import type { AuthPermissionGroupSummaryItem } from '@/lib/api-auth'
-import { ListRow } from '@/components/ui/list-row'
+import { ResourceRow } from '@/components/ui/resource-row'
 import { RowGroup } from '@/components/ui/row-group'
 import { SettingsRowsSkeleton } from './settings-rows'
 import { getPermissionGroupDisplayName, getPermissionGroupKindLabel } from './security-ui-text'
@@ -32,6 +33,7 @@ export function SecurityPermissionGroupListCard({
   return (
     <RowGroup
       heading={t({ ko: '권한 그룹', en: 'Permission groups' })}
+      count={isLoading ? undefined : groups.length}
       actions={(
         <>
           <IconButton size="icon-sm" variant="ghost" onClick={onOpenGroupColors} label={t('securityGroupColorEditorModal.permissionGroupColors')}>
@@ -48,33 +50,21 @@ export function SecurityPermissionGroupListCard({
       ) : (
         <div>
           {groups.map((group) => (
-            <ListRow
+            <ResourceRow
               key={group.id}
-              className="flex-wrap"
-              trailing={(
-                <>
-                  <span className="inline-flex items-center gap-1 text-xs tabular-nums" title={t({ ko: '권한 수', en: 'Permissions' })}>
-                    <Shield className="h-3.5 w-3.5" aria-hidden />
-                    {group.directPermissionKeys.length}
-                  </span>
-                  <span className="inline-flex items-center gap-1 text-xs tabular-nums" title={t({ ko: '멤버 수', en: 'Members' })}>
-                    <Users className="h-3.5 w-3.5" aria-hidden />
-                    {group.memberCount}
-                  </span>
-                  <IconButton size="icon-sm" variant="ghost" onClick={() => onEdit(group)} label={t({ ko: '권한 그룹 열기', en: 'Open permission group' })}>
-                    <Pencil className="h-4 w-4" />
-                  </IconButton>
-                </>
+              leading={<Shield />}
+              name={(
+                <Badge
+                  className="border-0 normal-case tracking-normal"
+                  style={getSecurityGroupBadgeStyle(getSecurityGroupColor(group.groupKey, groupColors))}
+                >
+                  {getPermissionGroupDisplayName(language, group.groupKey, group.name)}
+                </Badge>
               )}
-            >
-              <Badge
-                className="border-0 normal-case tracking-normal"
-                style={getSecurityGroupBadgeStyle(getSecurityGroupColor(group.groupKey, groupColors))}
-              >
-                {getPermissionGroupDisplayName(language, group.groupKey, group.name)}
-              </Badge>
-              <span className="text-xs text-muted-foreground">{getPermissionGroupKindLabel(language, group.systemGroup)}</span>
-            </ListRow>
+              extra={<Chip size="sm" tone="muted">{getPermissionGroupKindLabel(language, group.systemGroup)}</Chip>}
+              meta={t({ ko: '권한 {permissions} · 멤버 {members}', en: '{permissions} permissions · {members} members' }, { permissions: group.directPermissionKeys.length, members: group.memberCount })}
+              onOpen={() => onEdit(group)}
+            />
           ))}
         </div>
       )}

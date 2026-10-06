@@ -10,7 +10,6 @@ import { updateLlmSettings } from '@/lib/api-settings-llm'
 import type { LlmPresetRecord, LlmSettings } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { RowGroup } from '@/components/ui/row-group'
-import { SettingsResourceTable } from './settings-resource-shared'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 import {
   LlmConnectionEditorModal,
@@ -19,15 +18,12 @@ import {
   LlmPresetListItem,
 } from './llm-connections-tab-modals'
 import {
-  MODEL_SLOTS_TABLE_GRID,
   ModelSlotEditorModal,
   ModelSlotListItem,
   useRefreshModelSlots,
   type ModelSlotModalState,
 } from './llm-model-slots'
 import {
-  LLM_CONNECTIONS_TABLE_GRID,
-  LLM_PRESETS_TABLE_GRID,
   LLM_PRESET_SECTIONS,
   normalizePresetJson,
   type LlmConnectionModalState,
@@ -177,6 +173,7 @@ export function LlmConnectionsTab() {
     <div className="space-y-8">
       <RowGroup
         heading={t({ ko: '모델', en: 'Models' })}
+        count={slotsQuery.isSuccess ? slotsQuery.data.length : undefined}
         actions={
           <IconButton size="icon-sm" variant="ghost" onClick={() => setSlotModalState({ mode: 'create' })} label={t({ ko: '모델 추가', en: 'Add model' })}>
             <Plus className="h-4 w-4" />
@@ -188,30 +185,23 @@ export function LlmConnectionsTab() {
         ) : (slotsQuery.data ?? []).length === 0 ? (
           <SettingsEmptyRow>{t({ ko: '아직 모델이 없어.', en: 'No models yet.' })}</SettingsEmptyRow>
         ) : (
-          <SettingsResourceTable
-            gridClassName={MODEL_SLOTS_TABLE_GRID}
-            stackBelow="4xl"
-            centerFrom={4}
-            headers={[t({ ko: '이름', en: 'Name' }), t({ ko: '연결', en: 'Connection' }), t({ ko: '모델', en: 'Model' }), t({ ko: '사용처', en: 'Used by' }), t({ ko: '기본', en: 'Default' }), '']}
-          >
-            {(slotsQuery.data ?? []).map((slot) => (
-              <ModelSlotListItem
-                key={slot.id}
-                slot={slot}
-                providers={llmProviders}
-                workflowNodes={usageQuery.data?.slots.find((entry) => entry.id === slot.id)?.workflowNodes ?? 0}
-                selected={slotModalState?.mode === 'edit' && slotModalState.slot.id === slot.id}
-                settingDefault={setDefaultMutation.isPending}
-                onSetDefault={(next) => setDefaultMutation.mutate(next)}
-                onOpenOptions={(next) => setSlotModalState({ mode: 'edit', slot: next })}
-              />
-            ))}
-          </SettingsResourceTable>
+          (slotsQuery.data ?? []).map((slot) => (
+            <ModelSlotListItem
+              key={slot.id}
+              slot={slot}
+              providers={llmProviders}
+              workflowNodes={usageQuery.data?.slots.find((entry) => entry.id === slot.id)?.workflowNodes ?? 0}
+              settingDefault={setDefaultMutation.isPending}
+              onSetDefault={(next) => setDefaultMutation.mutate(next)}
+              onOpenOptions={(next) => setSlotModalState({ mode: 'edit', slot: next })}
+            />
+          ))
         )}
       </RowGroup>
 
       <RowGroup
         heading={t('llmConnectionsTab.llmConnections')}
+        count={providersQuery.isSuccess ? llmProviders.length : undefined}
         actions={
           <IconButton
             size="icon-sm"
@@ -228,22 +218,14 @@ export function LlmConnectionsTab() {
         ) : llmProviders.length === 0 ? (
           <SettingsEmptyRow>{t({ ko: '연결된 LLM이 아직 없어.', en: 'No connected LLMs yet.' })}</SettingsEmptyRow>
         ) : (
-          <SettingsResourceTable
-            gridClassName={LLM_CONNECTIONS_TABLE_GRID}
-            stackBelow="4xl"
-            centerFrom={4}
-            headers={[t({ ko: '연결', en: 'Connection' }), t({ ko: '기본 URL', en: 'Base URL' }), t({ ko: '기본 모델', en: 'Default model' }), t({ ko: '사용처', en: 'Used by' }), t({ ko: '제한 시간', en: 'Time limit' }), t({ ko: '활성', en: 'Active' }), '']}
-          >
-            {llmProviders.map((provider) => (
-              <LlmConnectionListItem
-                key={provider.id}
-                provider={provider}
-                usage={usageQuery.data?.connections.find((entry) => entry.providerName === provider.provider_name)}
-                selected={connectionModalState?.mode === 'edit' && connectionModalState.provider.provider_name === provider.provider_name}
-                onOpenOptions={(nextProvider) => setConnectionModalState({ mode: 'edit', provider: nextProvider })}
-              />
-            ))}
-          </SettingsResourceTable>
+          llmProviders.map((provider) => (
+            <LlmConnectionListItem
+              key={provider.id}
+              provider={provider}
+              usage={usageQuery.data?.connections.find((entry) => entry.providerName === provider.provider_name)}
+              onOpenOptions={(nextProvider) => setConnectionModalState({ mode: 'edit', provider: nextProvider })}
+            />
+          ))
         )}
       </RowGroup>
 
@@ -254,6 +236,7 @@ export function LlmConnectionsTab() {
           <RowGroup
             key={section.key}
             heading={t(section.heading)}
+            count={settingsQuery.isSuccess ? presets.length : undefined}
             actions={
               <IconButton
                 size="icon-sm"
@@ -270,21 +253,13 @@ export function LlmConnectionsTab() {
             ) : presets.length === 0 ? (
               <SettingsEmptyRow>{t(section.emptyMessage)}</SettingsEmptyRow>
             ) : (
-              <SettingsResourceTable
-                gridClassName={LLM_PRESETS_TABLE_GRID}
-                stackBelow="3xl"
-                centerFrom={2}
-                headers={[t({ ko: '이름', en: 'Name' }), t(section.fieldLabel), t({ ko: '수정', en: 'Updated' }), '']}
-              >
-                {presets.map((preset) => (
-                  <LlmPresetListItem
-                    key={preset.id}
-                    preset={preset}
-                    selected={presetModalState?.mode === 'edit' && presetModalState.presetType === section.key && presetModalState.preset.id === preset.id}
-                    onOpenOptions={(nextPreset) => setPresetModalState({ mode: 'edit', presetType: section.key, preset: nextPreset })}
-                  />
-                ))}
-              </SettingsResourceTable>
+              presets.map((preset) => (
+                <LlmPresetListItem
+                  key={preset.id}
+                  preset={preset}
+                  onOpenOptions={(nextPreset) => setPresetModalState({ mode: 'edit', presetType: section.key, preset: nextPreset })}
+                />
+              ))
             )}
           </RowGroup>
         )

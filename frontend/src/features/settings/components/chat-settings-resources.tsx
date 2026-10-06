@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookOpen, BookUser, FileUp, ImagePlus, LayoutTemplate, Plus, Wrench } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
@@ -35,7 +34,6 @@ import {
   type ChatToolPreset,
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
-import { cn } from '@/lib/utils'
 import { ChatBlockEditorModal } from './chat-block-editor-modal'
 import { readChatBlockFile } from './chat-block-file'
 import { ChatGenerationPresetEditorModal } from './chat-generation-preset-editor-modal'
@@ -45,77 +43,13 @@ import { ChatToolPresetEditorModal } from './chat-tool-preset-editor-modal'
 import { readChatToolPresetFile } from './chat-tool-preset-file'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 
-/** Section ids, in page order; the jump bar and the groups share them. */
-const SECTION_IDS = ['chat-tool-presets', 'chat-generation-presets', 'chat-display-blocks', 'chat-lorebooks'] as const
-type SectionId = (typeof SECTION_IDS)[number]
-
 /** Label + icon colour of each kind: the group label and the rows' icons share the hue so a long list reads by colour. */
-const KIND_CLASS: Record<SectionId, string> = {
-  'chat-tool-presets': 'text-resource-tool',
-  'chat-generation-presets': 'text-resource-generation',
-  'chat-display-blocks': 'text-resource-block',
-  'chat-lorebooks': 'text-resource-lorebook',
-}
-
-/** Header (4rem) + page toolbar (3.5rem) + the sticky jump bar: a section jumped to lands under none of them. */
-const SECTION_CLASS = 'scroll-mt-[calc(var(--theme-shell-header-height)+6.5rem)]'
-
-/**
- * The first section (in page order) that crosses the band around the middle of the viewport; the jump bar highlights
- * it. A click pins its target for the smooth scroll, since the last section may never reach the band on a short page.
- */
-function useActiveSection(): [SectionId, (id: SectionId) => void] {
-  const [active, setActive] = useState<SectionId>(SECTION_IDS[0])
-  const pinnedUntil = useRef(0)
-  useEffect(() => {
-    const elements = SECTION_IDS.map((id) => document.getElementById(id)).filter((element): element is HTMLElement => element !== null)
-    if (elements.length === 0) return
-    const visible = new Set<string>()
-    const observer = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.isIntersecting) visible.add(entry.target.id)
-        else visible.delete(entry.target.id)
-      }
-      if (Date.now() < pinnedUntil.current) return
-      const current = SECTION_IDS.find((id) => visible.has(id))
-      if (current) setActive(current)
-    }, { rootMargin: '-40% 0px -50% 0px' })
-    elements.forEach((element) => observer.observe(element))
-    return () => observer.disconnect()
-  }, [])
-  const jumpTo = (id: SectionId) => {
-    pinnedUntil.current = Date.now() + 1000
-    setActive(id)
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-  return [active, jumpTo]
-}
-
-/** Sticky one-line section index for the resources view: label + count per kind, click scrolls to the group. */
-function SectionJumpBar({ sections }: { sections: Array<{ id: SectionId; label: string; count: number | undefined }> }) {
-  const { t } = useI18n()
-  const [active, jumpTo] = useActiveSection()
-  return (
-    <nav
-      aria-label={t({ ko: '자원 종류', en: 'Resource kinds' })}
-      className="sticky top-[calc(var(--theme-shell-header-height)+3.5rem)] z-10 -mx-2 flex flex-wrap gap-1 border-b border-line bg-background/92 px-2 py-1.5 text-xs font-semibold backdrop-blur-md"
-    >
-      {sections.map((section) => (
-        <Button
-          key={section.id}
-          variant="ghost"
-          size="xs"
-          aria-current={active === section.id ? 'location' : undefined}
-          className={cn('font-semibold', active === section.id ? 'bg-fill text-foreground hover:bg-fill' : 'text-muted-foreground')}
-          onClick={() => jumpTo(section.id)}
-        >
-          {section.label}
-          {section.count !== undefined ? <span className="text-muted-foreground/60 tabular-nums">{section.count}</span> : null}
-        </Button>
-      ))}
-    </nav>
-  )
-}
+const KIND_CLASS = {
+  tool: 'text-resource-tool',
+  generation: 'text-resource-generation',
+  block: 'text-resource-block',
+  lorebook: 'text-resource-lorebook',
+} as const
 
 /** The profiles that use a resource, or the warning that none does. */
 function LinkedProfiles({ profiles }: { profiles: Array<{ id: number; name: string }> }) {
@@ -264,19 +198,8 @@ export function ChatSettingsResources() {
 
   return (
     <div className="space-y-8">
-      <SectionJumpBar
-        sections={[
-          { id: 'chat-tool-presets', label: toolPresetsLabel, count: presetsQuery.isSuccess ? presets.length : undefined },
-          { id: 'chat-generation-presets', label: generationPresetsLabel, count: generationPresetsQuery.isSuccess ? generationPresets.length : undefined },
-          { id: 'chat-display-blocks', label: blocksLabel, count: blocksQuery.isSuccess ? blocks.length : undefined },
-          { id: 'chat-lorebooks', label: lorebooksLabel, count: lorebookCount },
-        ]}
-      />
-
       <RowGroup
-        id="chat-tool-presets"
-        className={SECTION_CLASS}
-        headingClassName={KIND_CLASS['chat-tool-presets']}
+        headingClassName={KIND_CLASS.tool}
         heading={toolPresetsLabel}
         count={presetsQuery.isSuccess ? presets.length : undefined}
         actions={(
@@ -296,7 +219,7 @@ export function ChatSettingsResources() {
         {presets.map((preset) => (
           <ResourceRow
             key={preset.id}
-            leading={<Wrench className={KIND_CLASS['chat-tool-presets']} />}
+            leading={<Wrench className={KIND_CLASS.tool} />}
             name={preset.name}
             meta={resourceMeta(preset.toolAllowlist === null ? t({ ko: '모든 도구', en: 'Every tool' }) : t({ ko: '도구 {count}', en: '{count} tools' }, { count: preset.toolAllowlist.length }), preset.profiles)}
             onOpen={() => setPresetEditor({ preset })}
@@ -306,9 +229,7 @@ export function ChatSettingsResources() {
       </RowGroup>
 
       <RowGroup
-        id="chat-generation-presets"
-        className={SECTION_CLASS}
-        headingClassName={KIND_CLASS['chat-generation-presets']}
+        headingClassName={KIND_CLASS.generation}
         heading={generationPresetsLabel}
         count={generationPresetsQuery.isSuccess ? generationPresets.length : undefined}
         actions={(
@@ -328,7 +249,7 @@ export function ChatSettingsResources() {
         {generationPresets.map((preset) => (
           <ResourceRow
             key={preset.id}
-            leading={<ImagePlus className={KIND_CLASS['chat-generation-presets']} />}
+            leading={<ImagePlus className={KIND_CLASS.generation} />}
             name={preset.name}
             extra={<Chip size="sm" tone="muted">{preset.kind === 'nai' ? 'NAI' : 'Comfy'}</Chip>}
             meta={resourceMeta(preset.kind === 'nai' ? (preset.nai?.model ?? '') : t({ ko: '워크플로 {id}', en: 'Workflow {id}' }, { id: preset.comfyui?.workflowId ?? 0 }), preset.profiles)}
@@ -339,9 +260,7 @@ export function ChatSettingsResources() {
       </RowGroup>
 
       <RowGroup
-        id="chat-display-blocks"
-        className={SECTION_CLASS}
-        headingClassName={KIND_CLASS['chat-display-blocks']}
+        headingClassName={KIND_CLASS.block}
         heading={blocksLabel}
         count={blocksQuery.isSuccess ? blocks.length : undefined}
         actions={(
@@ -361,7 +280,7 @@ export function ChatSettingsResources() {
         {blocks.map((shared) => (
           <ResourceRow
             key={shared.id}
-            leading={<LayoutTemplate className={KIND_CLASS['chat-display-blocks']} />}
+            leading={<LayoutTemplate className={KIND_CLASS.block} />}
             name={shared.name}
             extra={<span className="truncate font-mono text-xs text-muted-foreground">{shared.block.key}</span>}
             meta={resourceMeta(t({ ko: '필드 {count}', en: '{count} fields' }, { count: shared.block.fields.length }), shared.profiles)}
@@ -372,9 +291,7 @@ export function ChatSettingsResources() {
       </RowGroup>
 
       <RowGroup
-        id="chat-lorebooks"
-        className={SECTION_CLASS}
-        headingClassName={KIND_CLASS['chat-lorebooks']}
+        headingClassName={KIND_CLASS.lorebook}
         heading={lorebooksLabel}
         count={lorebookCount}
         actions={(
@@ -395,7 +312,7 @@ export function ChatSettingsResources() {
         {lorebooks.map((lorebook) => (
           <ResourceRow
             key={lorebook.id}
-            leading={<BookOpen className={KIND_CLASS['chat-lorebooks']} />}
+            leading={<BookOpen className={KIND_CLASS.lorebook} />}
             name={lorebook.name}
             extra={<Chip size="sm" tone="muted">{t({ ko: '글로벌', en: 'Global' })}</Chip>}
             meta={resourceMeta(t({ ko: '항목 {count}', en: '{count} entries' }, { count: lorebook.entries.length }), lorebook.profiles)}
@@ -405,7 +322,7 @@ export function ChatSettingsResources() {
         {accountLorebooks.map((lorebook) => (
           <ResourceRow
             key={lorebook.id}
-            leading={<BookUser className={KIND_CLASS['chat-lorebooks']} />}
+            leading={<BookUser className={KIND_CLASS.lorebook} />}
             name={lorebook.name}
             extra={<Chip size="sm" tone="muted">{t({ ko: '계정', en: 'Account' })}</Chip>}
             meta={resourceMeta(t({ ko: '항목 {count}', en: '{count} entries' }, { count: lorebook.entries.length }), lorebook.profiles)}
