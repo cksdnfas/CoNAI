@@ -158,9 +158,52 @@ export function chatAssetUrl(name: string) {
   return buildApiUrl(`/api/codex-chat/assets/${encodeURIComponent(name)}`)
 }
 
-/** Copy the web images these texts show into CoNAI; returns the texts pointing at the copies. */
-export function localizeChatImages(texts: string[]) {
-  return requestApiData<{ texts: string[]; saved: number; failed: Array<{ url: string; reason: string }>; messages: number }>('/api/codex-chat/admin/chat-assets/localize', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ texts }) })
+/** Library media linked from chat text (`media:<hash>.<ext>`), served by the chat route so every chat user sees it. */
+export function chatMediaUrl(compositeHash: string, extension: string) {
+  return buildApiUrl(`/api/codex-chat/media/${encodeURIComponent(compositeHash)}.${encodeURIComponent(extension)}`)
+}
+
+export function chatMediaThumbnailUrl(compositeHash: string) {
+  return buildApiUrl(`/api/codex-chat/media/${encodeURIComponent(compositeHash)}/thumbnail`)
+}
+
+export type ChatLocalizedMedia = {
+  texts: string[]
+  saved: number
+  items: Array<{ url: string; compositeHash: string; extension: string; finalUrl: string | null }>
+  failed: Array<{ url: string; reason: string }>
+  /** Links left for another run (one run copies 30 at most). */
+  remaining: number
+  messages: number
+}
+
+/**
+ * Copy the web images and videos these texts show into the image library (under `채팅 카드/<name>`); returns the texts
+ * pointing at the copies. `only` fetches just those links, again even if copied before.
+ */
+export function localizeChatImages(texts: string[], options: { name?: string; only?: string[] } = {}) {
+  return requestApiData<ChatLocalizedMedia>('/api/codex-chat/admin/chat-assets/localize', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ texts, ...options }) })
+}
+
+export type ChatMediaInfo = {
+  compositeHash: string
+  available: boolean
+  mimeType: string | null
+  fileSize: number | null
+  width: number | null
+  height: number | null
+  duration: number | null
+  sourceUrl: string | null
+  finalUrl: string | null
+}
+
+export function getChatMediaInfo(hashes: string[]) {
+  return requestApiData<ChatMediaInfo[]>('/api/codex-chat/admin/chat-media/info', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ hashes }) })
+}
+
+/** Chat profiles (names) and messages that show these library media. */
+export function getChatMediaUsage(hashes: string[]) {
+  return requestApiData<{ profiles: string[]; messages: number }>('/api/codex-chat/admin/chat-media/usage', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ hashes }) })
 }
 
 /** The chat background image of a profile. */

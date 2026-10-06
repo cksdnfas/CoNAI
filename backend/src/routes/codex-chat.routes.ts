@@ -11,7 +11,9 @@ import { CHAT_SCOPES, loadChatSettings, updateChatSettings } from '../services/c
 import { DEFAULT_CHAT_STYLE } from '../services/codex-chat/chatStyle'
 import { listProfileEmoticons } from '../services/codex-chat/chatEmoticons'
 import { EmoticonService } from '../services/emoticonService'
-import { streamCacheableFile } from './images/query-file-helpers'
+import { serveThumbnailOrOriginal, streamCacheableFile, streamRangeFile } from './images/query-file-helpers'
+import { ImageFileModel } from '../models/Image/ImageFileModel'
+import { MediaMetadataModel } from '../models/Image/MediaMetadataModel'
 import { resolveChatAccess } from '../services/codex-chat/codexChatAccess'
 import { getMcpToolScope } from '../mcp/context'
 import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
@@ -42,7 +44,8 @@ import { readLlmConnectionConfig } from '../services/llmGenerationOptions'
 import { CHAT_CARD_MAX_BYTES, importChatCard, readLorebookFile } from '../services/codex-chat/chatCardImport'
 import { ChatGroupStore } from '../services/codex-chat/chatGroupStore'
 import { backupChatToFiles, backupDateOf, exportChatJson } from '../services/codex-chat/chatBackup'
-import { chatAssetFile, localizeImages, rewriteImageLinks, rewriteStoredMessages } from '../services/codex-chat/chatCardAssets'
+import { activeMediaFile, chatAssetFile, chatMediaInfo, chatMediaUsage, localizeImages, rewriteStoredMessages } from '../services/codex-chat/chatCardAssets'
+import { MEDIA_HASH_PATTERN, rewriteMediaLinks } from '../services/codex-chat/chatMediaLinks'
 import { GroupChatService } from '../services/codex-chat/groupChatService'
 import { ChatReplyError } from '../services/codex-chat/chatReplies'
 import { ChatFlagError, ChatFlagStore, parseFlagIds } from '../services/codex-chat/chatFlags'
@@ -223,7 +226,35 @@ router.get('/profiles/:profileId/emoticons/:compositeHash', requireChatAccess, a
   await streamCacheableFile(req, res, file.path, file.mimeType ?? 'application/octet-stream')
 }))
 
-/** GET /api/codex-chat/assets/:name — an image copied in from a character card (content-addressed, so cached for good). */
+/**
+ * GET /api/codex-chat/media/:file — library media linked from chat text (`media:<hash>.<ext>`; the extension is
+ * ignored). Served here, not /api/images, so chat users without library access see it, regardless of the safety
+ * policy and without waiting for postprocessing. The id is the pixel identity, so the response is cached for good.
+ */
+router.get('/media/:file', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+  const file = activeMediaFile(String(req.params.file ?? '').replace(/\.[a-z0-9]{2,5}$/, ''))
+  if (!file) {
+    res.status(404).json({ success: false, error: 'Not found' })
+    return
+  }
+  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable')
+  if (file.mimeType.startsWith('video/')) streamRangeFile(req, res, file.path, file.mimeType)
+  else await streamCacheableFile(req, res, file.path, file.mimeType)
+}))
+
+/** GET /api/codex-chat/media/:hash/thumbnail — the library thumbnail (a poster frame for video and animations). */
+router.get('/media/:compositeHash/thumbnail', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+  const compositeHash = String(req.params.compositeHash ?? '')
+  const metadata = MEDIA_HASH_PATTERN.test(compositeHash) ? MediaMetadataModel.findByHash(compositeHash) : null
+  const file = metadata ? ImageFileModel.findActiveByHash(compositeHash)[0] : undefined
+  if (!metadata || !file) {
+    res.status(404).json({ success: false, error: 'Not found' })
+    return
+  }
+  await serveThumbnailOrOriginal(req, res, compositeHash, metadata, file)
+}))
+
+/** GET /api/codex-chat/assets/:name — an image copied in from a character card before card media went to the library. */
 router.get('/assets/:name', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
   const file = chatAssetFile(String(req.params.name ?? ''))
   if (!file) {
@@ -1049,23 +1080,50 @@ router.delete('/admin/generation-presets/:presetId', requireAdmin, (req: Request
 })
 
 /**
- * POST /admin/chat-assets/localize — `{ texts }`: copy the web images these texts show into CoNAI and return the texts
- * pointing at the copies (the profile editor applies them to its draft). Chat messages already showing those links
- * (greetings posted before) are updated too.
+ * POST /admin/chat-assets/localize — `{ texts, name?, only? }`: copy the web images and videos these texts show into the
+ * image library (filed under `채팅 카드/<name>`) and return the texts pointing at the copies (the profile editor
+ * applies them to its draft). `only` limits the run to those links and fetches them again even if copied before.
+ * Chat messages already showing those links (greetings posted before) are updated too.
  */
 router.post('/admin/chat-assets/localize', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
-  const texts = (req.body as { texts?: unknown } | undefined)?.texts
+  const body = (req.body ?? {}) as { texts?: unknown; name?: unknown; only?: unknown }
+  const texts = body.texts
   if (!Array.isArray(texts) || texts.length > 300 || !texts.every((value) => typeof value === 'string' && value.length <= 40_000)) {
     sendRouteBadRequest(res, 'texts must be up to 300 strings')
     return
   }
+  const only = Array.isArray(body.only) ? body.only.filter((value): value is string => typeof value === 'string').slice(0, 100) : undefined
   try {
-    const { saved, failed } = await localizeImages(texts as string[])
-    res.json({ success: true, data: { texts: (texts as string[]).map((value) => rewriteImageLinks(value, saved)), saved: saved.size, failed, messages: rewriteStoredMessages(saved) } })
+    const { saved, items, failed, remaining } = await localizeImages(texts as string[], { characterName: typeof body.name === 'string' ? body.name : '', only })
+    res.json({
+      success: true,
+      data: { texts: (texts as string[]).map((value) => rewriteMediaLinks(value, saved)), saved: saved.size, items, failed, remaining, messages: rewriteStoredMessages(saved) },
+    })
   } catch (error) {
     sendChatError(res, error)
   }
 }))
+
+function parseMediaHashes(req: Request, res: Response) {
+  const hashes = (req.body as { hashes?: unknown } | undefined)?.hashes
+  if (!Array.isArray(hashes) || hashes.length > 500 || !hashes.every((value) => typeof value === 'string')) {
+    sendRouteBadRequest(res, 'hashes must be up to 500 strings')
+    return null
+  }
+  return hashes as string[]
+}
+
+/** POST /admin/chat-media/info — `{ hashes }`: size, kind and original link of the library media a profile links. */
+router.post('/admin/chat-media/info', requireAdmin, (req: Request, res: Response) => {
+  const hashes = parseMediaHashes(req, res)
+  if (hashes) res.json({ success: true, data: chatMediaInfo(hashes) })
+})
+
+/** POST /admin/chat-media/usage — `{ hashes }`: chat profiles and messages that show these library media. */
+router.post('/admin/chat-media/usage', requireAdmin, (req: Request, res: Response) => {
+  const hashes = parseMediaHashes(req, res)
+  if (hashes) res.json({ success: true, data: chatMediaUsage(hashes) })
+})
 
 /** Every chat-grantable MCP tool with its scope and description, for the profile editor's tool picker. */
 router.get('/admin/tools', requireAdmin, asyncHandler(async (req: Request, res: Response) => {

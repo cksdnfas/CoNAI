@@ -6,7 +6,7 @@ import { Check, Copy, Eye } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
-import { chatAssetUrl, chatEmoticonUrl, type ChatDisplayBlock } from '@/lib/api-codex-chat'
+import { chatAssetUrl, chatEmoticonUrl, chatMediaUrl, type ChatDisplayBlock } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 import { BlockChangeChips, ChatDisplayBlocksContext, parseBlockPayload, useChatDisplayBlock } from './chat-display-block'
 
@@ -89,8 +89,11 @@ const EMOTE_TOKEN_PATTERN = /&\*([^*&\n]{1,40})\*&/g
 const EMOTE_LINE_PATTERN = /^\s*&\*([^*&\n]{1,40})\*&\s*$/
 const EMOTE_SCHEME = 'emote:'
 const STICKER_SCHEME = 'emote-sticker:'
-/** Images copied in from character cards: `chat-asset:<sha256>.<ext>`. */
+/** Images copied in from character cards before card media went to the library: `chat-asset:<sha256>.<ext>`. */
 const ASSET_PATTERN = /^chat-asset:([a-f0-9]{64}\.(?:png|jpg|webp|gif))$/
+/** Library media: `media:<composite hash>.<ext>`; the extension says image or video. */
+const MEDIA_PATTERN = /^media:([a-f0-9]{48}|[a-f0-9]{32})\.([a-z0-9]{2,5})$/
+const VIDEO_SOURCE = /\/api\/codex-chat\/media\/[a-f0-9]+\.(?:mp4|webm|mov)$/
 
 /**
  * `&*keyword*&` → an image reference the `img` component draws: alone on a line it is a sticker, inside text an
@@ -120,6 +123,8 @@ function injectEmoticons(text: string, emoticons: ChatEmoticonMap | null) {
 function urlTransform(url: string) {
   const asset = ASSET_PATTERN.exec(url)
   if (asset) return chatAssetUrl(asset[1])
+  const media = MEDIA_PATTERN.exec(url)
+  if (media) return chatMediaUrl(media[1], media[2])
   return url.startsWith(EMOTE_SCHEME) || url.startsWith(STICKER_SCHEME) ? url : defaultUrlTransform(url)
 }
 
@@ -140,6 +145,9 @@ function MarkdownImage({ src, alt }: ComponentProps<'img'>) {
         className={sticker ? 'my-1 block h-auto max-h-(--chat-sticker-size,128px) w-auto max-w-full object-contain' : 'inline-block h-(--chat-emoticon-size,1.6em) w-auto align-text-bottom'}
       />
     )
+  }
+  if (VIDEO_SOURCE.test(source)) {
+    return <video src={source} title={alt || undefined} aria-label={alt || undefined} autoPlay loop muted playsInline controls className="my-2 max-h-80 max-w-full rounded-sm" />
   }
   return <img src={source} alt={alt ?? ''} loading="lazy" className="my-2 max-h-80 max-w-full rounded-sm" />
 }

@@ -21,8 +21,10 @@ import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 
 /** Search the full library on the server; selection survives filters and page changes. */
-export function ChatMediaPicker({ initial, maxCount, onPick, onClose }: {
+export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, applyLabel, note }: {
   initial: ChatMediaAttachment[]; maxCount: number; onPick: (items: ChatMediaAttachment[]) => void; onClose: () => void
+  /** Defaults are worded for chat attachments; `note: null` drops the attachment note. */
+  title?: string; applyLabel?: string; note?: string | null
 }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -59,7 +61,7 @@ export function ChatMediaPicker({ initial, maxCount, onPick, onClose }: {
     }
     setSelected(new Map(ids.flatMap((id) => available.has(id) ? [[id, available.get(id)!] as const] : [])))
   }
-  return <Modal open title={t({ ko: '앱 미디어에서 고르기', en: 'Choose app media' })} onClose={onClose} widthClassName="max-w-4xl">
+  return <Modal open title={title ?? t({ ko: '앱 미디어에서 고르기', en: 'Choose app media' })} onClose={onClose} widthClassName="max-w-4xl">
     <ModalBody className="space-y-3">
       <form className="flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); setSearch(input.trim()) }}>
         <Input className="min-w-40 flex-1" value={input} onChange={(event) => setInput(event.target.value)} aria-label={t({ ko: '프롬프트·태그 검색', en: 'Search prompts and tags' })} placeholder={t({ ko: '전체 미디어의 프롬프트·태그 검색', en: 'Search prompts and tags across the library' })} maxLength={300} />
@@ -85,13 +87,13 @@ export function ChatMediaPicker({ initial, maxCount, onPick, onClose }: {
         <Button variant="ghost" onClick={() => void (query.isFetchNextPageError ? query.fetchNextPage() : query.refetch())}>{t({ ko: '다시 시도', en: 'Retry' })}</Button>
       </div> : null}
       {query.hasNextPage ? <Button variant="secondary" disabled={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>{t({ ko: '더 보기', en: 'Load more' })}</Button> : null}
-      <p className="text-xs text-muted-foreground">{t({ ko: '원본을 참조해 첨부해. 이미지 이해에는 이미지 보기 도구와 비전 모델이 필요하고, 영상·오디오 내용 분석은 지원하지 않아.', en: 'Attachments reference the originals. Image understanding requires the image tool and a vision model; video/audio analysis is not supported.' })}</p>
+      {note === null ? null : <p className="text-xs text-muted-foreground">{note ?? t({ ko: '원본을 참조해 첨부해. 이미지 이해에는 이미지 보기 도구와 비전 모델이 필요하고, 영상·오디오 내용 분석은 지원하지 않아.', en: 'Attachments reference the originals. Image understanding requires the image tool and a vision model; video/audio analysis is not supported.' })}</p>}
     </ModalBody>
     <ModalFooter>
       <span className="mr-auto text-sm text-muted-foreground">{t({ ko: '{count}개 선택', en: '{count} selected' }, { count: selected.size })}</span>
       <Button variant="ghost" disabled={!selected.size} onClick={() => setSelected(new Map())}>{t({ ko: '선택 해제', en: 'Clear selection' })}</Button>
       <Button variant="secondary" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-      <Button disabled={selected.size > maxCount} onClick={() => onPick([...selected.values()])}>{t({ ko: '첨부 적용', en: 'Apply attachments' })}</Button>
+      <Button disabled={selected.size > maxCount} onClick={() => onPick([...selected.values()])}>{applyLabel ?? t({ ko: '첨부 적용', en: 'Apply attachments' })}</Button>
     </ModalFooter>
   </Modal>
 }

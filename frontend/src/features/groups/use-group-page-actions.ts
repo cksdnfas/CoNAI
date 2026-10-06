@@ -11,6 +11,7 @@ import {
   runGroupAutoCollect,
   updateGroup,
 } from '@/lib/api-groups'
+import { withChatMediaDeleteWarning } from '@/features/images/chat-media-delete-warning'
 import { deleteImagesBulk } from '@/lib/api-images'
 import type { GroupDownloadType, GroupMutationInput, GroupRecord } from '@/types/group'
 import type { GroupEditorState, GroupSourceDefinition } from './group-page-shared'
@@ -379,7 +380,7 @@ export function useGroupPageActions({
 
     const confirmed = await confirm({
       title: t({ ko: '휴지통으로 보내기', en: 'Move to Recycle Bin' }),
-      description: t({ ko: '선택한 {count}개 항목을 휴지통으로 보낼까?', en: 'Send {count} selected items to the Recycle Bin?' }, { count: formatNumber(selectedGroupCompositeHashes.length) }),
+      description: await withChatMediaDeleteWarning(t({ ko: '선택한 {count}개 항목을 휴지통으로 보낼까?', en: 'Send {count} selected items to the Recycle Bin?' }, { count: formatNumber(selectedGroupCompositeHashes.length) }), selectedGroupCompositeHashes, t),
       confirmLabel: t({ ko: '삭제', en: 'Delete' }),
       tone: 'destructive',
     })

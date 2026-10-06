@@ -479,6 +479,19 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
+  // Web images/videos from character cards copied into the image library: the original link of each library copy,
+  // so the profile editor can show where it came from, put the link back, or fetch it again.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_card_media (
+      source_url TEXT PRIMARY KEY,
+      composite_hash TEXT NOT NULL,
+      extension TEXT NOT NULL,
+      final_url TEXT,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_card_media_hash ON chat_card_media(composite_hash)');
+
   // Shared display blocks (status cards): chat profiles link them by id (llm_chat_profiles.block_ids), like lorebooks.
   db.exec(`
     CREATE TABLE IF NOT EXISTS chat_display_blocks (

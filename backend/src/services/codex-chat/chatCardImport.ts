@@ -2,7 +2,8 @@ import sharp from 'sharp'
 import { PngExtractor } from '../metadata/extractors/pngExtractor'
 import { ChatProfileError, normalizeAlternateGreetings, type ChatProfileInput, type ChatPromptSection } from './chatProfiles'
 import { ChatLorebookStore, isRegexKeyword, normalizeLorebook, type ChatLoreEntry } from './chatLorebook'
-import { localizeImages, rewriteImageLinks } from './chatCardAssets'
+import { localizeImages } from './chatCardAssets'
+import { rewriteMediaLinks } from './chatMediaLinks'
 
 export const CHAT_CARD_MAX_BYTES = 8 * 1024 * 1024
 const text = (value: unknown, limit = 20_000) => typeof value === 'string' ? value.trim().slice(0, limit) : ''
@@ -94,12 +95,15 @@ export async function importChatCard(buffer: Buffer, providerName: string): Prom
   const authorNote = text(depthPrompt.prompt).replace(/\{\{\s*original\s*\}\}/gi, '').trim()
   if (authorNote) report.converted.push(`캐릭터 노트 → 작가 노트${typeof depthPrompt.depth === 'number' ? ` (깊이 ${depthPrompt.depth} 대신 로어 깊이를 따름)` : ''}`)
   if (Array.isArray(extensions.regex_scripts) && extensions.regex_scripts.length) report.dropped.push(`정규식 스크립트 ${extensions.regex_scripts.length}개`)
-  // Web images in the card's text are copied into CoNAI (hosts get blocked, links die); failures keep the link.
+  // Web images and videos in the card's text are copied into the image library under the character's group (hosts
+  // get blocked, links die); failures keep the link.
   const systemPrompt = text(data.system_prompt).replace(/\{\{\s*original\s*\}\}/gi, '').trim()
   const greeting = text(data.first_mes)
   const alternateGreetings = normalizeAlternateGreetings(data.alternate_greetings)
-  const { saved } = await localizeImages([systemPrompt, greeting, ...alternateGreetings, ...sections.map((section) => section.content)])
-  const localized = (value: string) => rewriteImageLinks(value, saved)
+  const media = await localizeImages([systemPrompt, greeting, ...alternateGreetings, ...sections.map((section) => section.content)], { characterName: name })
+  const localized = (value: string) => rewriteMediaLinks(value, media.saved)
+  if (media.saved.size) report.converted.push(`이미지 ${media.saved.size}개 → 라이브러리 '채팅 카드/${name}' 그룹`)
+  if (media.failed.length || media.remaining) report.dropped.push(`받지 못한 이미지 ${media.failed.length + media.remaining}개 (원래 링크 그대로, 캐릭터 탭 '이미지'에서 다시 받기)`)
   const book = object(data.character_book)
   const entries = bookEntries(book)
   const lorebookIds = entries.length > 0 ? [ChatLorebookStore.create({ name: text(book.name, 80) || name, entries }).id] : []

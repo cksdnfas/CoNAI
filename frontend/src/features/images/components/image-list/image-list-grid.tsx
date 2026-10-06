@@ -158,7 +158,8 @@ export function ImageListGrid({
         ['--image-list-row-gap' as string]: `${rowGap}px`,
         height: resolvedContainerHeight,
         minHeight: usesWindowScroll ? undefined : 0,
-        flex: usesWindowScroll ? undefined : 1,
+        // A given height is the viewport: flex: 1 (basis 0) would override it to nothing in an auto-height parent.
+        flex: usesWindowScroll ? undefined : resolvedContainerHeight !== undefined ? 'none' : 1,
         display: usesWindowScroll ? undefined : 'flex',
         flexDirection: usesWindowScroll ? undefined : 'column',
         overflowX: usesWindowScroll ? undefined : 'hidden',

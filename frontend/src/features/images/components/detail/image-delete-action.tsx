@@ -7,6 +7,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { removeDeletedImagesFromListCaches } from '@/features/images/image-list-cache'
 import { useI18n } from '@/i18n'
+import { withChatMediaDeleteWarning } from '@/features/images/chat-media-delete-warning'
 import { deleteImagesBulk } from '@/lib/api-images'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
@@ -47,7 +48,7 @@ export function ImageDeleteAction({ image, className, variant = 'secondary', onD
 
     const confirmed = await confirm({
       title: t({ ko: '휴지통으로 보내기', en: 'Move to Recycle Bin' }),
-      description: t({ ko: '이 이미지를 휴지통으로 보낼까?', en: 'Move this image to the Recycle Bin?' }),
+      description: await withChatMediaDeleteWarning(t({ ko: '이 이미지를 휴지통으로 보낼까?', en: 'Move this image to the Recycle Bin?' }), [compositeHash], t),
       confirmLabel: t({ ko: '삭제', en: 'Delete' }),
       tone: 'destructive',
     })

@@ -13,6 +13,7 @@ import { buildHomeSearchString, readHomeSortParam, readSearchChipsParam, type Ho
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { addImagesToGroup, getGroupsHierarchyAll } from '@/lib/api-groups'
+import { withChatMediaDeleteWarning } from '@/features/images/chat-media-delete-warning'
 import { deleteImagesBulk, downloadImageSelection, getImages, getImagesCount, searchImagesComplex } from '@/lib/api-images'
 import { formatGroupBulkAddNotice } from '@/features/groups/group-bulk-result-messages'
 import { countStateFromQuery, type CountState } from '@/lib/count-display'
@@ -326,7 +327,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     const selectedCount = formatNumber(selectedCompositeHashes.length)
     const confirmed = await confirm({
       title: t({ ko: '휴지통으로 보내기', en: 'Move to Recycle Bin' }),
-      description: t({ ko: '선택한 {count}개 항목을 휴지통으로 보낼까?', en: 'Move {count} selected items to the Recycle Bin?' }, { count: selectedCount }),
+      description: await withChatMediaDeleteWarning(t({ ko: '선택한 {count}개 항목을 휴지통으로 보낼까?', en: 'Move {count} selected items to the Recycle Bin?' }, { count: selectedCount }), selectedCompositeHashes, t),
       confirmLabel: t({ ko: '삭제', en: 'Delete' }),
       tone: 'destructive',
     })

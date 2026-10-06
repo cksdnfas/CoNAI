@@ -120,4 +120,11 @@ export async function startRuntimeSideEffectServices(
     console.warn('⚠️  Failed to start temp image cleanup scheduler:', error instanceof Error ? error.message : error)
     console.warn('   Temp files will not be automatically cleaned up')
   }
+
+  // Old chat card copies move into the image library once the boot-time scan load has passed.
+  setTimeout(() => {
+    import('../services/codex-chat/chatCardAssets')
+      .then(({ migrateLegacyChatAssets }) => migrateLegacyChatAssets())
+      .catch((error) => console.warn('⚠️  Failed to move chat card images into the library:', error instanceof Error ? error.message : error))
+  }, 90_000).unref()
 }

@@ -1,4 +1,4 @@
-import { useRef, type ChangeEvent } from 'react'
+import { useRef, useState, type ChangeEvent } from 'react'
 import { Eye, ImageDown, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ToggleChip } from '@/components/ui/chip'
@@ -15,24 +15,29 @@ import { useI18n } from '@/i18n'
 import type { ChatLorebook } from '@/lib/api-codex-chat'
 import { EditorGroup, SwitchLine, type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { readAvatarFile } from './chat-profile-images'
+import { ChatProfileMediaRow, useChatMediaLocalize, useLastTextarea } from './chat-profile-media'
 import { ChatProfilePresetMenu } from './chat-profile-preset-menu'
 import { ChatPromptSectionsEditor, CollapsibleRow } from './chat-profile-sections'
 
-/** Who the profile is: avatar, name, the prompt (system prompt, sections, greetings) and the lorebooks it reads. */
-export function ChatProfileCharacterPanel({ open, draft, patch, lorebooks, localizing, onLocalizeImages, onPreview }: {
+/**
+ * Who the profile is: avatar, name, the prompt (system prompt, sections, greetings, the images they show) and the
+ * lorebooks it reads.
+ */
+export function ChatProfileCharacterPanel({ open, draft, patch, lorebooks, onPreview }: {
   open: boolean
   draft: Draft
   patch: PatchDraft
   /** The shared lorebooks; undefined until they load. */
   lorebooks: ChatLorebook[] | undefined
-  localizing: boolean
-  onLocalizeImages: () => void
   onPreview: () => void
 }) {
   const { t } = useI18n()
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const localize = useChatMediaLocalize(draft, patch)
+  const lastTextarea = useLastTextarea()
+  const [mediaOpen, setMediaOpen] = useState(false)
 
   const handleAvatarFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -64,7 +69,7 @@ export function ChatProfileCharacterPanel({ open, draft, patch, lorebooks, local
   const updateAlternate = (index: number, text: string) => patch({ alternateGreetings: alternates.map((entry, i) => (i === index ? text : entry)) })
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" onFocusCapture={lastTextarea.onFocusCapture}>
       <EditorGroup>
         <div className="flex items-center gap-4">
           <Tip content={t({ ko: '아바타 바꾸기', en: 'Change avatar' })}>
@@ -101,7 +106,7 @@ export function ChatProfileCharacterPanel({ open, draft, patch, lorebooks, local
             <IconButton size="icon-sm" variant="ghost" onClick={onPreview} label={t({ ko: '프롬프트 미리보기', en: 'Prompt preview' })}>
               <Eye />
             </IconButton>
-            <IconButton size="icon-sm" variant="ghost" onClick={onLocalizeImages} disabled={localizing} label={t({ ko: '외부 이미지 저장', en: 'Save web images' })}>
+            <IconButton size="icon-sm" variant="ghost" onClick={() => { localize.run(); setMediaOpen(true) }} disabled={localize.pending} label={t({ ko: '외부 이미지 저장', en: 'Save web images' })}>
               <ImageDown />
             </IconButton>
           </div>
@@ -134,6 +139,7 @@ export function ChatProfileCharacterPanel({ open, draft, patch, lorebooks, local
               {t({ ko: '추가 인사말', en: 'Alternate greeting' })}
             </Button>
           </CollapsibleRow>
+          <ChatProfileMediaRow draft={draft} patch={patch} localize={localize} lastTextarea={lastTextarea.ref} open={mediaOpen} onOpenChange={setMediaOpen} />
         </div>
       </EditorGroup>
 
