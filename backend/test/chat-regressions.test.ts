@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { mock, test } from 'node:test'
 import { ExternalApiProvider } from '../src/models/ExternalApiProvider'
 import { acquireLlmRequestSlot } from '../src/services/llmRequestScheduler'
 import { foldBlockState } from '../src/services/codex-chat/chatBlockState'
@@ -10,6 +10,11 @@ import { streamChatCompletion, type ChatCompletionTarget, type ChatCompletionToo
 import { buildChatMessages, buildChatPromptPreview, estimateMessagesTokens, fitThreadSummary, rawMessagesEstimate, resolveContextConfig } from '../src/services/codex-chat/llmChatContext'
 import { buildGroupLlmMessages } from '../src/services/codex-chat/groupChatContext'
 import { ChatSummaryStore, renderSummary, type ChatSummarySegment } from '../src/services/codex-chat/chatMemory'
+import { OwnedLorebookStore } from '../src/services/codex-chat/chatLorebookFiles'
+
+// These requests run without a settings database: their chats have no lorebooks of their own.
+mock.method(OwnedLorebookStore, 'chatBookOf', () => null)
+mock.method(OwnedLorebookStore, 'threadLinks', () => [])
 
 const target: ChatCompletionTarget = {
   providerName: 'test', displayName: 'Test', endpoint: 'http://unused.invalid/chat/completions',

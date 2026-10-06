@@ -392,7 +392,8 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
       sendRouteBadRequest(res, 'summary must be a string or null')
       return
     }
-    // Pinned memories apply to every kind of chat, like the author's note.
+    // Pinned memories: still accepted from an older client and kept on the chat, but requests no longer read them —
+    // the chat's lorebook took their place, and the startup migration moves what is kept here into it.
     const memories = body.memories === undefined ? undefined : body.memories === null ? [] : normalizeMemories(body.memories)
     if (memories === null) {
       sendRouteBadRequest(res, 'memories must be a list of strings or { id, text }')

@@ -7,7 +7,8 @@ import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatS
 import type { ChatCompletionMessage, ChatCompletionTool } from './llmChatCompletion'
 import { DEFAULT_REPLY_RESERVE_TOKENS, estimateMessagesTokens } from './llmChatContext'
 import { postHistoryText } from './llmChatContext'
-import { anchoredWindowFor, appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, recallFor, resolveAuthorNote, selectChatLore, sendableMessages, threadBlockStateText, toCompletionMessages, unsummarizedMessages } from './llmChatContext'
+import { anchoredWindowFor, appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, offersLoreFileTool, recallFor, resolveAuthorNote, selectChatLore, sendableMessages, threadBlockStateText, toCompletionMessages, unsummarizedMessages } from './llmChatContext'
+import { booksForRequest, type AttachedLoreBook } from './chatLoreContext'
 import type { ChatSummarySegment } from './chatMemory'
 import { usableBlockKeys } from './chatBlockState'
 import { DEFAULT_USER_NAME, userPersonaForThread, type ChatUserPersona } from './chatUserProfiles'
@@ -97,7 +98,7 @@ export function hiddenHistoryNote(thread: Pick<CodexChatThreadRecord, 'id'>, hid
 }
 
 /**
- * An API LLM member's request: its own persona (with its always-on lore) and examples, the room header, then the
+ * An API LLM member's request: its own persona, its lore index (the room's books and its own) and examples, the room header, then the
  * room's recent messages from its point of view — its own replies as `assistant`, everyone else's as `[name] text`
  * user turns (merged when consecutive, since chat templates expect user/assistant to alternate). The window start is
  * anchored like a direct chat's, and the member's keyword lore and the room's author's note are merged in `loreDepth`
@@ -117,6 +118,8 @@ type GroupLlmContext = {
   segments?: ChatSummarySegment[]
   /** A member that cannot read files itself: text attachments' contents, by file id (see inlineTextsForChat). */
   attachmentTexts?: ReadonlyMap<string, string>
+  /** The member's lore books, already resolved (default: booksForRequest for the room and the member). */
+  books?: AttachedLoreBook[]
 }
 
 /** A room's summary is its own switch on the thread: off unless set (members' profiles do not decide for the room). */
@@ -128,6 +131,7 @@ export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMe
   // With the room's summary on, the messages it covers stay out: the summary stands in for them.
   const sendable = sendableMessages(unsummarizedMessages(params.messages, params.thread, { summaryEnabled: groupSummaryOn(params.thread) }))
   let window = anchoredWindowFor(params.thread.id, sendable, params.windowLimit, (message) => message.id)
+  params = { ...params, books: params.books ?? booksForRequest({ thread: params.thread, profile: params.profile }) }
   let result = buildGroupWindowMessages(params, window, sendable.length)
   const budget = params.profile.contextTokens
   const reserve = params.maxTokens ?? DEFAULT_REPLY_RESERVE_TOKENS
@@ -142,13 +146,14 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
   const { profile, thread, members, withTools } = params
   const user = userPersonaForThread(thread)
   const names = new Map(members.map((member) => [member.id, member.name]))
-  const lore = selectChatLore(profile, window, user)
+  // The room's own book and the account books linked to the room, then this member's profile books.
+  const lore = selectChatLore(profile, window, user, { books: params.books, toolOffered: offersLoreFileTool(params.tools) })
   const summaryOn = groupSummaryOn(thread)
-  const leading = buildLeadingMessages(profile, { summary: thread.summary, memories: thread.memories }, { summaryEnabled: summaryOn }, withTools, lore, user)
+  const leading = buildLeadingMessages(profile, { summary: thread.summary }, { summaryEnabled: summaryOn }, withTools, lore, user)
   // The header joins the persona's system message: a second system message in the middle is dropped or rejected by
   // many chat templates, and this one is what keeps the model from writing other members' names its own way.
   const header = buildGroupHeader({ thread, members, self: profile, user })
-  // The pinned memories' system message joins it too, for the same reason.
+  // The lore index and summary's system message joins it too, for the same reason.
   const system: ChatCompletionMessage[] = [
     { role: 'system', content: [...leading.filter((message) => message.role === 'system').map((message) => message.content), header].join('\n\n') },
     ...leading.filter((message) => message.role !== 'system'),

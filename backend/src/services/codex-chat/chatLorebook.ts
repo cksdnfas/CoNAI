@@ -222,14 +222,11 @@ export const ChatLorebookStore = {
    * The entries of these books in book order (missing books are skipped), keyed `book:entry:content hash`. Global
    * books only for now: account books are private, and a shared profile's links can name several accounts' books.
    */
-  keyedEntriesOf(ids: number[]) {
+  keyedEntriesOf(ids: number[]): KeyedLoreEntry[] {
     if (ids.length === 0) return []
     const rows = getUserSettingsDb().prepare(`SELECT id, entries FROM chat_lorebooks WHERE kind = 'global' AND id IN (${ids.map(() => '?').join(', ')})`).all(...ids) as Array<{ id: number; entries: string }>
     const byId = new Map(rows.map((row) => [row.id, normalizeLorebook(row.entries)]))
-    return ids.flatMap((bookId) => (byId.get(bookId) ?? []).map((entry) => ({
-      key: `${bookId}:${entry.id}:${createHash('sha1').update(entry.content).digest('hex').slice(0, 10)}`,
-      entry,
-    })))
+    return ids.flatMap((bookId) => (byId.get(bookId) ?? []).map((entry) => ({ key: loreEntryKey(bookId, entry), entry })))
   },
 
   create(input: { name?: unknown; entries?: unknown }) {
@@ -265,16 +262,44 @@ export const ChatLorebookStore = {
 
 type LoreProfile = { lorebookIds: number[]; loreScanDepth: number; loreTokenBudget: number }
 
+/** The key a caller that keeps context (Codex) remembers an entry by: `book:entry:content hash`. */
+export function loreEntryKey(bookId: number, entry: Pick<ChatLoreEntry, 'id' | 'content'>) {
+  return `${bookId}:${entry.id}:${createHash('sha1').update(entry.content).digest('hex').slice(0, 10)}`
+}
+
+/** A linked text file as read for a request: `truncated` when the file is longer than what was read. */
+export type LoreFileText = { name: string; text: string; truncated: boolean }
+
+/** An entry as a request considers it; `book` names its book, `file` reads its linked file (account and chat books only). */
+export type KeyedLoreEntry = { key: string; entry: ChatLoreEntry; book?: string; file?: () => LoreFileText | null }
+
+/** Largest linked file (in tokens) that goes along with its matched entry; a larger one is left to read_lore_file. */
+export const LORE_FILE_INLINE_MAX_TOKENS = 300
+
 export type SelectedLore = {
-  /** Every chosen entry in order (what Codex gets in one block). */
+  /** Every chosen entry in order, as the profile preview shows it. */
   text: string
-  /** "Always on" entries: fixed for the profile, so they belong with the stable system prompt. */
+  /** "Always on" entries, one `- title: content` line each (see the lore index in chatLoreContext). */
   constant: string
-  /** Entries matched by keyword: change with the conversation, so they go near its end. */
+  /** How many "always on" entries were chosen. */
+  constantCount: number
+  /** Entries matched by keyword (with their files, see selectLoreEntries): change with the conversation, so they go near its end. */
   keyed: string
   keys: string[]
-  /** Each chosen entry as a person names it (its first keyword), in the same order as `keys`. */
+  /** Keys of the keyword entries alone, for a caller that sends "always on" entries separately (Codex). */
+  keyedKeys: string[]
+  /** Each chosen entry as a person names it (its title), in the same order as `keys`. */
   labels: string[]
+}
+
+/** How a request treats linked files: put a small one in (`inline`), and what to say about one that stays out. */
+export type LoreFileOptions = { inline: boolean; hint: (file: string, entry: { book?: string; title: string }) => string }
+
+/** One line of the "always on" list: newlines folded; the title is left out when the text already starts with it. */
+function constantLine(title: string, text: string) {
+  const line = text.replace(/\s*\n\s*/g, ' ').trim()
+  const name = title.replace(/\s+/g, ' ').trim()
+  return name && !line.startsWith(name) ? `- ${name}: ${line}` : `- ${line}`
 }
 
 /** Longest regular expression accepted as a keyword. */
@@ -383,37 +408,56 @@ export function loreEntryMatches(entry: Pick<ChatLoreEntry, 'keys' | 'secondaryK
 
 /**
  * The entries a reply gets, each with a stable key (`book:entry:content hash`) so a caller that keeps context
- * (Codex) can skip what it already sent. Books are read at send time so edits apply at once. No messages means a
- * prompt preview: constant entries only. The last `loreScanDepth` messages are scanned as the model and the reader
- * see them (a chat with a translation model keeps both). Keywords never run code; `/regex/` keywords are bounded
- * (see keywordRegex). One token budget covers constant and keyed entries together (see the selection below).
+ * (Codex) can skip keyword entries it already sent (`skip`; "always on" entries are never skipped, they travel in the
+ * lore index). Books are read at send time so edits apply at once. No messages means a prompt preview: constant
+ * entries only. The last `loreScanDepth` messages are scanned as the model and the reader see them (a chat with a
+ * translation model keeps both). Keywords never run code; `/regex/` keywords are bounded (see keywordRegex). One
+ * token budget covers constant and keyed entries together (see the selection below).
+ *
+ * `entries`: the request's books (see chatLoreContext); without them, the profile's global books. A matched keyword
+ * entry with a linked file takes the file's text along (`  자료 <name>: "<text>"`) when `files.inline`, the file is at
+ * most LORE_FILE_INLINE_MAX_TOKENS and the budget has room; otherwise `files.hint` stands in for it.
  */
-export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<{ content: string; display_content?: string | null }> | undefined, estimate: (text: string) => number, render: (text: string) => string, options: { skip?: (key: string) => boolean } = {}): SelectedLore {
-  const lorebook = ChatLorebookStore.keyedEntriesOf(profile.lorebookIds)
-  if (lorebook.length === 0) return { text: '', constant: '', keyed: '', keys: [], labels: [] }
+export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<{ content: string; display_content?: string | null }> | undefined, estimate: (text: string) => number, render: (text: string) => string, options: { skip?: (key: string) => boolean; entries?: KeyedLoreEntry[]; files?: LoreFileOptions } = {}): SelectedLore {
+  const lorebook = options.entries ?? ChatLorebookStore.keyedEntriesOf(profile.lorebookIds)
+  if (lorebook.length === 0) return { text: '', constant: '', constantCount: 0, keyed: '', keys: [], keyedKeys: [], labels: [] }
   const recent = (messages?.slice(-profile.loreScanDepth).map((message) => [message.content, message.display_content].filter(Boolean).join('\n')).join('\n') ?? '').slice(-SCAN_TEXT_MAX_LENGTH)
   const folded = recent.toLowerCase()
-  const active = lorebook.filter(({ key, entry }) => !options.skip?.(key) && entry.enabled && entry.content.trim() && (entry.constant || (messages !== undefined && loreEntryMatches(entry, recent, folded))))
+  const active = lorebook.filter(({ key, entry }) => entry.enabled && entry.content.trim() && (entry.constant || (messages !== undefined && !options.skip?.(key) && loreEntryMatches(entry, recent, folded))))
   // The budget keeps entries as SillyTavern does: "always on" ones first, then the higher order first.
   const byPriority = [...active].sort((a, b) => Number(b.entry.constant) - Number(a.entry.constant) || b.entry.order - a.entry.order)
   const chosen: Array<{ key: string; entry: ChatLoreEntry; rendered: string }> = []
   let used = 0
-  for (const { key, entry } of byPriority) {
-    const rendered = render(entry.content)
-    const cost = estimate(rendered)
-    if (used + cost > profile.loreTokenBudget) continue
-    chosen.push({ key, entry, rendered })
-    used += cost
+  for (const item of byPriority) {
+    const content = render(item.entry.content)
+    // The file is data: it stays as written, inside the reference block.
+    const file = !item.entry.constant && item.entry.file && options.files ? item.file?.() ?? null : null
+    const candidates = file && options.files
+      ? [
+          options.files.inline && !file.truncated && estimate(file.text) <= LORE_FILE_INLINE_MAX_TOKENS ? `${content}\n  자료 ${file.name}: "${file.text.trim()}"` : '',
+          `${content}\n  ${options.files.hint(file.name, { book: item.book, title: loreEntryTitle(item.entry) })}`,
+        ].filter(Boolean)
+      : [content]
+    for (const rendered of candidates) {
+      const cost = estimate(rendered)
+      if (used + cost > profile.loreTokenBudget) continue
+      chosen.push({ key: item.key, entry: item.entry, rendered })
+      used += cost
+      break
+    }
   }
   // Placed in order: a higher order lands later, closer to the end, where it weighs more.
   chosen.sort((a, b) => a.entry.order - b.entry.order)
-  const pick = (constant: boolean) => chosen.filter(({ entry }) => entry.constant === constant).map(({ rendered }) => rendered).join('\n\n')
+  const constants = chosen.filter(({ entry }) => entry.constant)
+  const keyed = chosen.filter(({ entry }) => !entry.constant)
   return {
     text: chosen.map(({ rendered }) => rendered).join('\n\n'),
-    constant: pick(true),
-    keyed: pick(false),
+    constant: constants.map(({ entry, rendered }) => constantLine(render(loreEntryTitle(entry)), rendered)).join('\n'),
+    constantCount: constants.length,
+    keyed: keyed.map(({ rendered }) => rendered).join('\n\n'),
     keys: chosen.map(({ key }) => key),
-    labels: chosen.map(({ entry }) => entry.keys[0] ?? entry.content.slice(0, 20)),
+    keyedKeys: keyed.map(({ key }) => key),
+    labels: chosen.map(({ entry }) => loreEntryTitle(entry)),
   }
 }
 

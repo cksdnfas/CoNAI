@@ -54,6 +54,7 @@ backend/test/*
 !backend/test/chatSummaryFold.test.ts
 !backend/test/chat-review-items.test.ts
 !backend/test/chat-lorebook-files.test.ts
+!backend/test/chat-lore-context.test.ts
 
 # Uploaded images
 uploads/

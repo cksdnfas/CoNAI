@@ -1,7 +1,8 @@
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
 import type { CodexChatMediaItem } from './codexChatMedia'
 import { userPersonaForThread } from './chatUserProfiles'
-import { parseMemories } from './chatMemory'
+import { loreEntryTitle } from './chatLorebook'
+import { OwnedLorebookStore } from './chatLorebookFiles'
 
 function label(text: string) {
   return text.replace(/[\r\n]+/g, ' ').replace(/[\\[\]]/g, '\\$&')
@@ -10,8 +11,16 @@ function label(text: string) {
 /** `speakers` names group room members by profile id; other replies are `name`'s. */
 export function exportChatMarkdown(thread: CodexChatThreadRecord, messages: CodexChatMessageRecord[], media: CodexChatMediaItem[], name: string, origin: string, speakers?: Map<number, string>) {
   const lines = [`# ${label(thread.title || '새 채팅')}`, '']
-  const memories = parseMemories(thread.memories)
-  if (memories.length > 0) lines.push('## 고정 기억', '', ...memories.map((item) => `- ${item.text.replace(/\s*\n\s*/g, ' ')}`), '')
+  // The chat's own lorebook (where pinned memories went); its linked files stay in the file store.
+  const book = OwnedLorebookStore.chatBookOf(thread.id)
+  const entries = book?.entries.filter((entry) => entry.content.trim() || loreEntryTitle(entry)) ?? []
+  if (entries.length > 0) {
+    lines.push('## 로어북', '', ...entries.map((entry) => {
+      const title = loreEntryTitle(entry).replace(/\s+/g, ' ').trim()
+      const content = entry.content.replace(/\s*\n\s*/g, ' ').trim()
+      return `- ${title && content && !content.startsWith(title) ? `${title}: ${content}` : content || title}${entry.file ? ` (자료: ${entry.file})` : ''}`
+    }), '')
+  }
   if (thread.summary) lines.push('## 대화 요약', '', thread.summary, '')
   const byMessage = new Map<number, CodexChatMediaItem[]>()
   for (const item of media) byMessage.set(item.messageId, [...(byMessage.get(item.messageId) ?? []), item])

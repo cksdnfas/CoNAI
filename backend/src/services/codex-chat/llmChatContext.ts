@@ -10,10 +10,11 @@ import { profileGenerationOptions, resolveSummaryPrompt, type ChatProfile } from
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
 import { chatContentWithAttachments } from './chatAttachments'
-import { selectLoreEntries, type SelectedLore } from './chatLorebook'
+import type { SelectedLore } from './chatLorebook'
+import { booksForRequest, loreIndexText, READ_LORE_FILE_TOOL, selectRequestLore, type AttachedLoreBook, type ChatLore } from './chatLoreContext'
 import { buildFlagDirective } from './chatFlags'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
-import { ChatSummaryStore, memoriesText, parseMemories, recallText, selectRecall, splitSegments, type ChatSummarySegment } from './chatMemory'
+import { ChatSummaryStore, recallText, selectRecall, splitSegments, type ChatSummarySegment } from './chatMemory'
 import { REFERENCE_BLOCK_START, resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool, type ChatContentPart } from './llmChatCompletion'
 
 /** Tool output replayed to the model for turns still in the window. */
@@ -268,18 +269,27 @@ function selectWindow(profile: Pick<ChatProfile, 'id' | 'style'>, turns: CodexCh
 }
 
 /**
- * The profile's lore for one request. Without messages (a prompt preview) only the "always on" entries are chosen.
+ * The lore of one request: the books attached to the chat and the profile (see booksForRequest; a profile preview has
+ * no chat and gets the global books only), unless the caller resolved `books` already. Without messages only the
+ * "always on" entries are chosen. `toolOffered`: read_lore_file is among the request's tools.
  */
-export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<{ content: string }>, user?: ChatUserPersona | null): SelectedLore {
-  return selectLoreEntries(profile, messages, (text) => estimateTokens(profile.id, text), (text) => fillCharacterPlaceholders(text, profile, user))
+export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<{ content: string; display_content?: string | null }>, user?: ChatUserPersona | null, options: { thread?: Pick<CodexChatThreadRecord, 'id' | 'account_id'> | null; books?: AttachedLoreBook[]; toolOffered?: boolean } = {}): ChatLore {
+  const books = options.books ?? booksForRequest({ thread: options.thread ?? null, profile })
+  return selectRequestLore(profile, books, messages, (text) => estimateTokens(profile.id, text), (text) => fillCharacterPlaceholders(text, profile, user), { toolOffered: options.toolOffered ?? false })
+}
+
+/** Whether read_lore_file is among these tools. */
+export function offersLoreFileTool(tools: ReadonlyArray<ChatCompletionTool>) {
+  return tools.some((tool) => tool.function.name === READ_LORE_FILE_TOOL)
 }
 
 /**
  * Request layout, front to back, so that what a server has already seen stays byte-identical for as long as possible
  * (OpenAI caches a repeated prefix by itself; llama.cpp, LM Studio, vLLM and Ollama reuse their KV cache the same way):
  *
- *   1. system prompt — persona, "always on" lore, guidance: fixed until the profile is saved
- *   2. rolling summary — changes only when turns are folded in
+ *   1. system prompt — persona, guidance: fixed until the profile is saved
+ *   2. lore index, "always on" lore entries and the rolling summary — change only when a book changes or turns are
+ *      folded in
  *   3. example dialogue — fixed
  *   4. older turns
  *   5. keyword lore (`[참고 설정]`) merged into the user message `loreDepth` turns before the end — the part that
@@ -291,15 +301,14 @@ export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<{ 
 
 /**
  * Everything before the real conversation: the system prompt (stable, so servers can reuse the cached prefix), the
- * rolling summary, then example turns. Chat templates often allow system messages only at the start, so the note that
- * the examples are not real lives in the system prompt rather than around them. `lore` defaults to the constant
- * entries alone (a preview).
+ * lore index with the "always on" entries and the rolling summary, then example turns. Chat templates often allow
+ * system messages only at the start, so the note that the examples are not real lives in the system prompt rather
+ * than around them. `lore` defaults to the profile's global books with no chat (a preview).
  */
-export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'summary' | 'memories'> | null, config: Pick<LlmChatContextConfig, 'summaryEnabled'>, withTools: boolean, lore: Pick<SelectedLore, 'constant'> = selectChatLore(profile), user: ChatUserPersona | null = null) {
+export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'summary'> | null, config: Pick<LlmChatContextConfig, 'summaryEnabled'>, withTools: boolean, lore: Pick<ChatLore, 'index' | 'constant'> = selectChatLore(profile), user: ChatUserPersona | null = null) {
   const examples = buildExampleMessages(profile, user)
   const systemPrompt = [
     buildPersonaPrompt(profile, { user }),
-    lore.constant ? `## 설정\n${lore.constant}` : '',
     examples.length > 0 ? EXAMPLE_NOTE : '',
     withTools ? toolGuidance(profile.generationPresetIds.length > 0) : '',
     REPLY_FORMAT_GUIDANCE,
@@ -308,9 +317,9 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
     buildEmoticonGuidance(profile.style),
   ].filter(Boolean).join('\n\n')
   const result: ChatCompletionMessage[] = systemPrompt ? [{ role: 'system', content: systemPrompt }] : []
-  // Pinned memories and the summary: one system message that only changes when either does.
+  // The lore index, the "always on" entries and the summary: one system message that only changes when they do.
   const memory = [
-    memoriesText(parseMemories(thread?.memories), (text) => fillCharacterPlaceholders(text, profile, user)),
+    loreIndexText(lore),
     config.summaryEnabled && thread?.summary?.trim() ? `## 지금까지의 대화 요약\n${thread.summary.trim()}` : '',
   ].filter(Boolean).join('\n\n')
   if (memory) {
@@ -471,8 +480,8 @@ export function recalledSegments(profile: ChatProfile, segments: ChatSummarySegm
 
 /**
  * What one reply's request carried, kept on the reply: the stretch of conversation sent as it was, how far the
- * summary reached, how many summaries came back by recall, the lore entries chosen, the pinned memories, and the
- * size estimate (the server's own count is added once it answers).
+ * summary reached, how many summaries came back by recall, the lore entries chosen, how many of them are "always on"
+ * (`memories`, where pinned memories went), and the size estimate (the server's own count is added once it answers).
  */
 export type ChatContextMeta = {
   windowFromMessageId: number | null
@@ -486,18 +495,18 @@ export type ChatContextMeta = {
 
 /**
  * Shared by summary planning, the actual request and the profile preview. `segments`: the thread's summary segments,
- * read by the caller (recall comes from them; none without).
+ * read by the caller (recall comes from them; none without). `books`: the lore books, when the caller resolved them.
  */
-function buildRequestContext(profile: ChatProfile, thread: CodexChatThreadRecord | null, messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'summaryEnabled'> & Partial<Pick<LlmChatContextConfig, 'contextTokens'>>, tools: ChatCompletionTool[], segments: ChatSummarySegment[] = []) {
+function buildRequestContext(profile: ChatProfile, thread: CodexChatThreadRecord | null, messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'summaryEnabled'> & Partial<Pick<LlmChatContextConfig, 'contextTokens'>>, tools: ChatCompletionTool[], segments: ChatSummarySegment[] = [], books?: AttachedLoreBook[]) {
   const user = userPersonaForThread(thread)
-  const lore = selectChatLore(profile, messages, user)
+  const lore = selectChatLore(profile, messages, user, { thread, books, toolOffered: offersLoreFileTool(tools) })
   const system = buildLeadingMessages(profile, thread, config, tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)), lore, user)
   const recalled = config.summaryEnabled ? recalledSegments(profile, segments, messages, { contextTokens: config.contextTokens ?? null }) : []
   const recall = recallText(recalled)
   const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread ?? { block_edits: null }, messages), recall)
   const directive = [flagDirectiveFor(messages, profile, user), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
   const fixedTokens = estimateMessagesTokens(profile.id, system, tools) + estimateDepthBlocks(profile.id, blocks) + estimateTokens(profile.id, directive)
-  return { system, blocks, directive, fixedTokens, lore: lore.labels, recalled: recalled.length }
+  return { system, blocks, directive, fixedTokens, lore: lore.labels, constants: lore.constantCount, recalled: recalled.length }
 }
 
 export function buildChatPromptPreview(profile: ChatProfile, tools: ChatCompletionTool[]) {
@@ -540,9 +549,11 @@ export function buildChatMessages(params: {
   onMeta?: (meta: ChatContextMeta) => void
   /** Tokens the caller adds after the request (a continuation), kept free when the window is chosen. */
   extraTokens?: number
+  /** The lore books, already resolved (default: booksForRequest for this chat and profile). */
+  books?: AttachedLoreBook[]
 }): ChatCompletionMessage[] {
   const { profile, thread, config, tools } = params
-  const { system, blocks, directive, fixedTokens, lore, recalled } = buildRequestContext(profile, thread, params.messages, config, tools, params.segments)
+  const { system, blocks, directive, fixedTokens, lore, constants, recalled } = buildRequestContext(profile, thread, params.messages, config, tools, params.segments, params.books)
   const routing = [...params.messages].reverse().find((message) => message.role === 'user')?.routing
   const maxChars = Math.max(256, Math.min(6000, Math.floor((config.contextTokens ?? 24000) / 4)))
   const replyContext = buildReplyContext(params.messages, routing, { maxChars })
@@ -560,7 +571,7 @@ export function buildChatMessages(params: {
     summaryUntilMessageId: config.summaryEnabled && thread.summary ? thread.summary_until_message_id : null,
     recalledSegments: recalled,
     lore,
-    memories: parseMemories(thread.memories).length,
+    memories: constants,
     estimatedTokens: estimateMessagesTokens(profile.id, request, tools) + (params.extraTokens ?? 0),
   })
   return request

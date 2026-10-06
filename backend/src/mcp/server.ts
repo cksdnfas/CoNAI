@@ -13,6 +13,7 @@ import { registerPromptPresetTools } from './tools/promptPresetTools';
 import { registerFileStoreTools } from './tools/fileStoreTools';
 import { registerEmoticonTools } from './tools/emoticonTools';
 import { registerChatRoomTools } from './tools/chatRoomTools';
+import { registerChatLoreTools } from './tools/chatLoreTools';
 import { registerChatSetupTools } from './tools/chatSetupTools';
 import { requireActiveChatReply } from '../services/codex-chat/chatReplyRegistry';
 
@@ -66,6 +67,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   registerPromptOrganizationTools(server);
   registerWorkflowTransferTools(server);
   registerChatRoomTools(server, context);
+  registerChatLoreTools(server, context);
   registerChatSetupTools(server, context);
 
   return server;

@@ -136,8 +136,11 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   propose_profile_update: 'configure',
 };
 
-/** Read-only tools over the caller's own group chat rooms; offered to chat agents in group rooms regardless of scopes. */
-export const CHAT_ROOM_TOOLS = new Set(['chat_reply_to', 'room_call_member', 'room_history_search', 'room_history_read']);
+/**
+ * Tools over the caller's own chat (its room, its history, its attached lorebooks), offered to chat agents in a chat
+ * regardless of scopes; not CoNAI actions, so they do not bring the app tool guidance along.
+ */
+export const CHAT_ROOM_TOOLS = new Set(['chat_reply_to', 'room_call_member', 'room_history_search', 'room_history_read', 'read_lore_file']);
 
 export function getMcpToolScope(toolName: string): McpHttpScope | null {
   return TOOL_SCOPES[toolName] ?? null;

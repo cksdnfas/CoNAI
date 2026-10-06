@@ -18,6 +18,7 @@ import {
   toLorebook,
   type ChatLoreEntry,
   type ChatLorebook,
+  type LoreFileText,
   type LorebookRow,
 } from './chatLorebook'
 
@@ -571,6 +572,57 @@ export const OwnedLorebookStore = {
     if (fresh.length === 0) return current
     return OwnedLorebookStore.saveChatBook(threadId, [...(current?.entries ?? []), ...fresh])
   },
+}
+
+// ---- Linked files ---------------------------------------------------------------------------------------------
+
+/** Where a book's files are: the owner's file store and the book folder. */
+export type LoreFileBook = { owner: string | null; folderId: string | null }
+
+/** The live text file an entry links, inside its book folder; null when it has none, or it is gone or not text. */
+export function loreEntryFile(book: LoreFileBook, entry: Pick<ChatLoreEntry, 'file'>): StoredFileEntry | null {
+  if (!book.owner || !book.folderId || !entry.file || !isSafeLoreFilePath(entry.file) || !isTextPath(entry.file)) return null
+  const found = FileStoreService.resolvePath(book.owner, book.folderId, entry.file)
+  return found?.kind === 'file' && isTextPath(found.name) ? found : null
+}
+
+/**
+ * The start of an entry's linked file as UTF-8 text, at most `maxBytes` (cut on a whole character; `truncated` when
+ * there is more). Null when the entry links none, or the file is gone, binary or not UTF-8.
+ */
+export function readEntryFileText(book: LoreFileBook, entry: Pick<ChatLoreEntry, 'file'>, maxBytes: number): LoreFileText | null {
+  const file = loreEntryFile(book, entry)
+  if (!file) return null
+  try {
+    const handle = fs.openSync(storedFilePath(book.owner as string, file.id), 'r')
+    let data: Buffer
+    let truncated: boolean
+    try {
+      const size = fs.fstatSync(handle).size
+      const buffer = Buffer.alloc(Math.min(size, Math.max(0, maxBytes)))
+      const read = fs.readSync(handle, buffer, 0, buffer.length, 0)
+      truncated = read < size
+      let length = read
+      if (truncated) {
+        // Back off to the start of a character that did not fit whole.
+        let start = read - 1
+        while (start >= 0 && (buffer[start] & 0xc0) === 0x80) start--
+        if (start >= 0) {
+          const byte = buffer[start]
+          const width = byte < 0x80 ? 1 : byte < 0xe0 ? 2 : byte < 0xf0 ? 3 : 4
+          if (start + width > read) length = start
+        }
+      }
+      data = buffer.subarray(0, length)
+    } finally {
+      fs.closeSync(handle)
+    }
+    if (data.includes(0)) return null
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(data).replace(/^﻿/, '')
+    return { name: path.posix.basename(entry.file as string), text, truncated }
+  } catch {
+    return null
+  }
 }
 
 // ---- Migration ------------------------------------------------------------------------------------------------

@@ -30,6 +30,7 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
   const { ChatSummaryStore, normalizeMemories, recallTerms, selectRecall, splitSegments } = memory
   const context = await import('../src/services/codex-chat/llmChatContext')
   const { buildChatMessages, resolveContextConfig, summarizeAhead, summarizeAll } = context
+  const { OwnedLorebookStore } = await import('../src/services/codex-chat/chatLorebookFiles')
 
   ExternalApiProvider.create({ provider_name: 'conn', display_name: 'Conn', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
   const profile = ChatProfileStore.create({ name: '카이', engine: 'llm', providerName: 'conn', summaryEnabled: true, contextTurns: 4, contextTokens: 8000, summaryTriggerTurns: 2 })
@@ -65,7 +66,8 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
     return first
   }
 
-  await t.test('pinned memories are validated and travel in the second system message', () => {
+  await t.test("the chat book's index and always-on entries travel in the second system message", () => {
+    // An older client may still send pinned memories: they are validated and kept, but requests no longer read them.
     assert.equal(normalizeMemories('x'), null)
     assert.equal(normalizeMemories([{ text: 3 }]), null)
     const items = normalizeMemories(['  {{user}}와 약속: 내일 바다  ', '', { id: 'keep-me', text: '카이는 왼손잡이' }, { id: 'keep-me', text: '중복 id' }])!
@@ -73,12 +75,22 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
     assert.equal(items[1].id, 'keep-me')
     assert.notEqual(items[2].id, 'keep-me', 'a repeated id gets a new one')
     assert.equal(normalizeMemories(Array.from({ length: 80 }, (_, index) => `m${index}`))!.length, memory.MEMORY_MAX_ITEMS)
-    CodexChatStore.setMemories(threadId, items)
+    CodexChatStore.setMemories(threadId, [{ id: 'old', text: '옛 고정 기억' }])
+    OwnedLorebookStore.saveChatBook(threadId, [
+      { id: 'promise', title: '바다 약속', content: '{{user}}와 약속: 내일 바다', constant: true },
+      { id: 'hand', title: '왼손잡이', content: '카이는 왼손잡이', constant: true },
+      { id: 'ink', title: '먹물 실종', keys: ['먹물'], content: '고양이 먹물이 안 보인다.' },
+    ])
     say('assistant', '안녕!')
     const current = thread()
     const sent = buildChatMessages({ profile, thread: current, messages: CodexChatStore.listMessages(threadId), config: resolveContextConfig(current, profile), tools: [] })
     assert.equal(sent[1].role, 'system')
-    assert.match(String(sent[1].content), /^## 고정 기억\n- 사용자와 약속: 내일 바다\n- 카이는 왼손잡이/)
+    const second = String(sent[1].content)
+    assert.match(second, /^## 로어북 목차\n\[이 채팅\] 바다 약속 · 왼손잡이 · 먹물 실종\n/)
+    assert.ok(second.includes('\n\n## 상시 항목\n- 바다 약속: 사용자와 약속: 내일 바다\n- 왼손잡이: 카이는 왼손잡이'), second)
+    assert.ok(!sentText(sent).includes('옛 고정 기억'), 'pinned memories left on the chat are not sent')
+    assert.ok(!sentText(sent).includes('고양이 먹물'), 'a keyword entry waits for its keyword')
+    assert.ok(!String(sent[0].content).includes('바다 약속'), 'the persona prompt stays as it was')
   })
 
   const first = stretch('은하수정원')

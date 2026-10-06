@@ -27,14 +27,14 @@ import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { translateReply, translateUserInput } from './chatTranslation'
 import { hasTranslation } from './chatModelRoles'
 import { stripEchoedAddresses } from '@conai/shared'
-import { selectLoreEntries } from './chatLorebook'
+import { booksForRequest, hasLoreFiles, loreIndexText, selectRequestLore } from './chatLoreContext'
 import { LlmChatService, type GroupReplyResult } from './llmChatService'
 import { ChatGroupStore } from './chatGroupStore'
 import { buildFlagDirective, ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { ChatUserProfileStore, userPersonaForThread, userPersonaOf, userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
-import { ChatSummaryStore, memoriesText, parseMemories } from './chatMemory'
+import { ChatSummaryStore } from './chatMemory'
 import { branchChatThread } from './chatBranch'
 import { logger } from '../../utils/logger'
 import type { ChatStreamEvent } from '@conai/shared'
@@ -635,19 +635,46 @@ export function codexHistoryRecap(thread: Pick<CodexChatThreadRecord, 'summary'>
   ].filter(Boolean).join('\n\n')
 }
 
+const LORE_INDEX_KEY = 'lore-index:'
+/** Pinned memories as Codex was given them before they became chat book entries. */
+const OLD_MEMORY_KEY = 'memory:'
+
 /**
- * The chat's pinned memories, given to Codex the same way as the note: once, and again when they change (or after a
- * compaction), tracked as `memory:<hash>`.
+ * The lore index with the "always on" entries (see loreIndexText), given to Codex the same way as the note: once, and
+ * again when it changes (or after a compaction), tracked as `lore-index:<hash>`. Codex may still hold an earlier index,
+ * or pinned memories from before they moved into the chat book: this one replaces them.
  */
-function pendingMemories(thread: Pick<CodexChatThreadRecord, 'memories'> | null, profile: ChatProfile, sent: Set<string>, user: ChatUserPersona) {
-  const list = memoriesText(parseMemories(thread?.memories), (value) => fillCharacterPlaceholders(value, profile, user))
-  // Codex still holds a list it was given before: say this one replaces it, or that there is none any more.
-  const replacing = [...sent].some((key) => key.startsWith('memory:'))
-  if (!list && !replacing) return { text: '', keys: [] as string[] }
-  const key = list ? `memory:${createHash('sha1').update(list).digest('hex').slice(0, 10)}` : 'memory:none'
+function pendingLoreIndex(text: string, sent: Set<string>) {
+  const replacing = [...sent].some((key) => key.startsWith(LORE_INDEX_KEY) || key.startsWith(OLD_MEMORY_KEY))
+  if (!text && !replacing) return { text: '', keys: [] as string[] }
+  const key = `${LORE_INDEX_KEY}${text ? createHash('sha1').update(text).digest('hex').slice(0, 10) : 'none'}`
   if (sent.has(key)) return { text: '', keys: [] as string[] }
-  const text = list ? (replacing ? `${list}\n(고정 기억이 바뀌었어. 이전 목록 대신 이 목록을 따라.)` : list) : '## 고정 기억\n(고정 기억을 모두 지웠어. 이전 목록은 따르지 마.)'
-  return { text, keys: [key] }
+  const body = text
+    ? (replacing ? `${text}\n(로어북 목차와 상시 항목이 바뀌었어. 이전에 받은 목차·상시 항목·고정 기억 대신 이걸 따라.)` : text)
+    : '## 로어북 목차\n(붙은 로어북이 없어. 이전에 받은 목차·상시 항목·고정 기억은 따르지 마.)'
+  return { text: body, keys: [key] }
+}
+
+/** The sent keys after this turn: an index given now supersedes every earlier one (and old pinned memories). */
+function nextLoreSent(sent: Set<string>, keys: string[]) {
+  const superseded = keys.some((key) => key.startsWith(LORE_INDEX_KEY))
+  const kept = superseded ? [...sent].filter((key) => !key.startsWith(LORE_INDEX_KEY) && !key.startsWith(OLD_MEMORY_KEY)) : [...sent]
+  return [...kept, ...keys].slice(-LORE_SENT_MAX_KEYS)
+}
+
+/**
+ * The lore of one Codex turn: the books the chat and the profile attach (a room's: the room's books and the member's
+ * own), keyword entries not yet given (files only through read_lore_file, which a Codex session always has), and the
+ * index to give if it changed.
+ */
+function pendingLore(thread: CodexChatThreadRecord | null, profile: ChatProfile, messages: CodexChatMessageRecord[], sent: Set<string>, user: ChatUserPersona) {
+  const books = booksForRequest({ thread, profile })
+  const lore = selectRequestLore(profile, books, messages, (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile, user), {
+    toolOffered: hasLoreFiles(books),
+    inlineFiles: false,
+    skip: (key) => sent.has(key),
+  })
+  return { keyed: lore.keyed, keyedKeys: lore.keyedKeys, index: pendingLoreIndex(loreIndexText(lore), sent) }
 }
 
 /**
@@ -759,19 +786,18 @@ export async function runCodexGroupReply(params: {
         const room = CodexChatStore.findThreadById(threadId) ?? null
         const user = userPersonaForThread(room)
         const persona = pendingUserPersona(user, sent)
-        const lore = selectLoreEntries(profile, params.messages, (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile, user), { skip: (key) => sent.has(key) })
+        const lore = pendingLore(room, profile, params.messages, sent, user)
         const note = pendingAuthorNote(room, profile, sent, user)
-        const memory = pendingMemories(room, profile, sent, user)
         const state = pendingBlockState(room, profile, params.messages, sent, profile.id)
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
           threadId: codexThreadId,
           model: run.model,
           effort: run.effort,
-          input: [{ type: 'text', text: params.buildInput([persona.text, memory.text, lore.text, note.text, state.text].filter(Boolean).join('\n\n')), text_elements: [] }],
+          input: [{ type: 'text', text: params.buildInput([persona.text, lore.index.text, lore.keyed, note.text, state.text].filter(Boolean).join('\n\n')), text_elements: [] }],
         }, THREAD_REQUEST_TIMEOUT_MS)
         turn.turnId = response.turn.id
-        const keys = [...persona.keys, ...memory.keys, ...lore.keys, ...note.keys, ...state.keys]
-        if (keys.length > 0) ChatGroupStore.setMemberLoreSent(threadId, profile.id, [...sent, ...keys].slice(-LORE_SENT_MAX_KEYS))
+        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...note.keys, ...state.keys]
+        if (keys.length > 0) ChatGroupStore.setMemberLoreSent(threadId, profile.id, nextLoreSent(sent, keys))
         if (params.signal.aborted) interrupt()
       } catch (error) {
         void finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')
@@ -1069,12 +1095,11 @@ export const CodexChatService = {
         const user = userPersonaForThread(current)
         const history = CodexChatStore.listMessages(threadId)
         const persona = pendingUserPersona(user, sent)
-        const lore = selectLoreEntries(profile, history, (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile, user), { skip: (key) => sent.has(key) })
+        const lore = pendingLore(current, profile, history, sent, user)
         const note = pendingAuthorNote(current, profile, sent, user)
-        const memory = pendingMemories(current, profile, sent, user)
         const state = pendingBlockState(current, profile, history, sent)
         const directive = [buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile, user)), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
-        const reference = referenceBlock([persona.text, memory.text, lore.text, note.text, state.text])
+        const reference = referenceBlock([persona.text, lore.index.text, lore.keyed, note.text, state.text])
         const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user) : ''
         const input = [recap, reference, `${REPLY_GUIDANCE}\nCurrent room_id: ${threadId}.`, buildReplyContext(history, routing), chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }])), directive].filter(Boolean).join('\n\n')
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
@@ -1084,8 +1109,8 @@ export const CodexChatService = {
           input: [{ type: 'text', text: input, text_elements: [] }],
         }, THREAD_REQUEST_TIMEOUT_MS)
         turn.turnId = response.turn.id
-        const keys = [...persona.keys, ...memory.keys, ...lore.keys, ...note.keys, ...state.keys]
-        if (keys.length > 0) CodexChatStore.setCodexLoreSent(threadId, [...sent, ...keys].slice(-LORE_SENT_MAX_KEYS))
+        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...note.keys, ...state.keys]
+        if (keys.length > 0) CodexChatStore.setCodexLoreSent(threadId, nextLoreSent(sent, keys))
       } catch (error) {
         void finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')
       }
