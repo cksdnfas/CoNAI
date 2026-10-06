@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { MessageSquare } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { LoadingState } from '@/components/ui/loading-state'
@@ -7,7 +8,7 @@ import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useI18n } from '@/i18n'
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
-import { CODEX_CHAT_ROUTE, useCodexChat } from './codex-chat-context'
+import { CODEX_CHAT_ROUTE, CODEX_CHAT_THREADS_QUERY_KEY, useCodexChat } from './codex-chat-context'
 
 /** Docked beside the page from this width (Tailwind `lg`); below it the panel covers the screen. */
 const DOCK_MIN_WIDTH_PX = 1024
@@ -181,6 +182,7 @@ export function CodexChatDock() {
   const { t } = useI18n()
   const chat = useCodexChat()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const isDocked = useMinWidth(DOCK_MIN_WIDTH_PX)
   const visible = useCodexChatDockVisible()
   const closePanel = chat?.closePanel ?? (() => {})
@@ -204,8 +206,15 @@ export function CodexChatDock() {
     }
   }, [isDockedOpen])
 
-  // Full screen on a phone: browser back closes it, and the page behind must not scroll.
-  useOverlayBackClose({ open: coversScreen, onClose: closePanel })
+  // Full screen on a phone: browser back steps out one screen (gallery or context → chat → chat list) and then closes
+  // it; a step that keeps the panel open puts the history entry back. The page behind must not scroll.
+  const stepBack = () => {
+    if (!chat) return
+    if (chat.view !== 'chat') chat.setView('chat')
+    else if (!chat.listOpen && (queryClient.getQueryData<unknown[]>(CODEX_CHAT_THREADS_QUERY_KEY)?.length ?? 0) > 0) chat.setListOpen(true)
+    else chat.closePanel()
+  }
+  useOverlayBackClose({ open: coversScreen, onClose: stepBack })
   useEffect(() => {
     if (!coversScreen) {
       return

@@ -62,13 +62,19 @@ export interface CodexChatApi {
   setView: (view: CodexChatView) => void
   /** `undefined` follows the latest saved chat. */
   selectedThreadId: number | null | undefined
+  /** Opening a chat (or the profile picker, `null`) also leaves the chat list. */
   selectThread: (threadId: number | null | undefined) => void
+  /** The narrow layouts (panel, phone-width page) show the chat list instead of a chat; the selection stays. */
+  listOpen: boolean
+  /** Also returns from the gallery or context to the chat. */
+  setListOpen: (open: boolean) => void
   /** Create a chat with a profile (its greeting arrives as the first message) and open it. */
   /** `userProfileId` left out: the default user profile; null: the plain user. */
   startChat: (profileId: number, userProfileId?: number | null) => Promise<void>
   isStartingChat: boolean
-  draft: string
-  setDraft: (draft: string | ((current: string) => string)) => void
+  /** The composer text of each chat (chats without one are left out). */
+  drafts: Record<number, string>
+  setDraft: (threadId: number, draft: string | ((current: string) => string)) => void
   /** Items chosen in the status panel (`data-pick`), sent with the next message. */
   picks: string[]
   togglePick: (label: string) => void

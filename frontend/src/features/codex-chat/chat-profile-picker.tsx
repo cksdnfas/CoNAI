@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { ArrowUpRight, Crown, FileUp, X } from 'lucide-react'
+import { Crown, FileUp, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { IconButton } from '@/components/ui/icon-button'
@@ -15,16 +15,15 @@ import { ChatProfileAvatar } from './chat-profile-avatar'
  * Pick who to chat with. A tap on a profile starts a direct chat. Ticking profiles (the check that shows on hover,
  * always on touch) collects a room instead: the first one ticked represents it, the rest join as members.
  */
-export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick, onPickGroup, onRecent, onImport }: {
+export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick, onPickGroup, onImport }: {
   profiles: ChatProfileSummary[]; threads: CodexChatThread[]; layout: 'panel' | 'page'; disabled: boolean
   onPick: (profileId: number) => void
   /** A CoNAI chat JSON to bring back as a new chat. */
   onImport?: (file: File) => void
   /** Profiles in the order they were ticked: the first represents the room. */
   onPickGroup: (profileIds: number[]) => void
-  onRecent: (threadId: number) => void
 }) {
-  const { t, formatDate, formatNumber } = useI18n()
+  const { t, formatNumber } = useI18n()
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState<number[]>([])
   const importRef = useRef<HTMLInputElement>(null)
@@ -46,10 +45,6 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
   // Same rules as inviting into a room: one profile per name, and a room size cap.
   const takenNames = new Set(pickedProfiles.map((profile) => profile.name.trim().toLowerCase()))
   const toggle = (id: number) => setPicked((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id])
-  // When the latest chat moved: the clock today, the day otherwise.
-  const whenLabel = (date: Date) => date.toDateString() === new Date().toDateString()
-    ? formatDate(date, { hour: 'numeric', minute: '2-digit' })
-    : formatDate(date, date.getFullYear() === new Date().getFullYear() ? { month: 'short', day: 'numeric' } : { dateStyle: 'medium' })
 
   return <div className="flex min-h-0 flex-1 flex-col">
     <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
@@ -67,11 +62,9 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
         </div>
         <div className={cn('grid gap-x-6', layout === 'page' && 'md:grid-cols-2')}>
           {usable.map((profile) => {
-            const last = recent.get(profile.id)
             const pickedIndex = picked.indexOf(profile.id)
             const isPicked = pickedIndex >= 0
             const blocked = selecting && !isPicked && (picked.length >= GROUP_MEMBER_MAX || takenNames.has(profile.name.trim().toLowerCase()))
-            const lastDate = last ? new Date(`${last.updated_date.replace(' ', 'T')}Z`) : null
             return <div key={profile.id} className="group/profile border-b border-line py-1">
               <div className="relative">
                 <ListRow asChild interactive selected={isPicked}>
@@ -107,14 +100,6 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
                   onCheckedChange={() => toggle(profile.id)}
                 />
               </div>
-              {/* The latest chat with this profile, in the text column: its title and when it last moved, picked up with one tap. */}
-              {last && lastDate && !selecting ? (
-                <Button variant="link" size="xs" disabled={disabled} className="-mt-1.5 mb-1 ml-13 max-w-[calc(100%-3.25rem)] justify-start gap-1.5 font-normal" onClick={() => onRecent(last.id)}>
-                  <ArrowUpRight className="size-3 shrink-0" />
-                  <span className="truncate">{last.title || t({ ko: '새 채팅', en: 'New chat' })}</span>
-                  <time className="shrink-0 text-2xs text-muted-foreground" dateTime={lastDate.toISOString()}>{whenLabel(lastDate)}</time>
-                </Button>
-              ) : null}
             </div>
           })}
         </div>

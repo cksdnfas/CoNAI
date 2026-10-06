@@ -1,10 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
-import { Activity, ArrowLeft, ArrowUp, Archive, ChevronDown, Download, Eraser, Flag, LayoutGrid, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, UserRound, X } from 'lucide-react'
+import { Activity, ArrowLeft, ArrowUp, Archive, Download, Eraser, Flag, LayoutGrid, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, UserRound, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
-import { ListRow } from '@/components/ui/list-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
 import { Modal, ModalBody } from '@/components/ui/modal'
@@ -39,7 +38,6 @@ import {
   type ChatSearchResult,
   type ChatProfileSummary,
   type CodexChatMessage,
-  type CodexChatThread,
   type ChatBlocksState,
   type ChatDisplayBlock,
   type CodexChatThreadDetail,
@@ -56,6 +54,7 @@ import { ChatBlockChangesContext, type BlockAction } from './chat-display-block'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatStatusAside, ChatStatusFloating, ChatStatusStrip, useStatusPanelLayout, type ChatStatusBlock, type ChatStatusData } from './chat-status-panel'
 import { ChatProfilePicker } from './chat-profile-picker'
+import { ChatThreadList } from './chat-thread-list'
 import { ChatAttachButton, ChatDraftAttachments } from './chat-attachments'
 import { ChatFlagButton, ChatFlagManagerModal, ChatFlagTray, useChatFlags } from './chat-flags'
 import { ChatSuggestButton, ChatSuggestTray, useReplySuggestions } from './chat-suggestions'
@@ -131,48 +130,6 @@ function ChatBackground({ url, dim, blur, fit }: { url: string; dim: number; blu
   )
 }
 
-/** The chat switcher of the panel header: each chat with the face of the profile it talks to. */
-function ThreadSelect({ threads, profilesById, activeThreadId, disabled, onSelect, className }: {
-  threads: CodexChatThread[]
-  profilesById: Map<number, ChatProfileSummary>
-  activeThreadId: number | null
-  disabled: boolean
-  onSelect: (threadId: number) => void
-  className?: string
-}) {
-  const { t } = useI18n()
-  const untitled = t({ ko: '새 채팅', en: 'New chat' })
-  const activeTitle = threads.find((thread) => thread.id === activeThreadId)?.title || untitled
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          disabled={disabled}
-          className={cn('h-9 min-w-0 flex-1 shrink justify-start gap-1 px-2 font-semibold text-foreground', className)}
-          aria-label={t({ ko: '채팅 목록', en: 'Chats' })}
-        >
-          <span className="min-w-0 flex-1 truncate text-left">{activeTitle}</span>
-          <ChevronDown className="text-muted-foreground" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-56 overflow-y-auto">
-        {threads.map((thread) => {
-          const profile = thread.profile_id ? profilesById.get(thread.profile_id) : undefined
-          return (
-            <DropdownMenuItem key={thread.id} onSelect={() => onSelect(thread.id)} className={cn(thread.id === activeThreadId && 'bg-fill font-semibold')}>
-              {thread.kind === 'group'
-                ? <GroupAvatarStack profiles={(thread.member_profile_ids ?? []).flatMap((id) => profilesById.get(id) ?? [])} size="xs" ringClassName="ring-surface-high" />
-                : profile ? <ChatProfileAvatar name={profile.name} avatar={profile.avatar} engine={profile.engine} size="sm" /> : null}
-              <span className="truncate">{thread.title || untitled}</span>
-            </DropdownMenuItem>
-          )
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
 function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: CodexChatViewProps & { chat: CodexChatApi }) {
   const { t } = useI18n()
   const confirm = useConfirm()
@@ -210,9 +167,10 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const [stripOpen, setStripOpen] = useState(false)
   const statusAreaRef = useRef<HTMLDivElement | null>(null)
   const isWide = useMinWidth(1024)
+  const hasSideList = useMinWidth(768)
   const prependHeightRef = useRef<number | null>(null)
   const followBottomRef = useRef(true)
-  const { liveTurn, selectedThreadId, selectThread, draft, setDraft, view, setView, messageFocus, clearMessageFocus, startChat, isStartingChat, editMessage, regenerate, continueReply } = chat
+  const { liveTurn, selectedThreadId, selectThread, listOpen, setListOpen, view, setView, messageFocus, clearMessageFocus, startChat, isStartingChat, editMessage, regenerate, continueReply } = chat
 
   const profilesQuery = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000 })
   const profiles = useMemo(() => profilesQuery.data ?? [], [profilesQuery.data])
@@ -248,6 +206,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const threads = useMemo(() => threadsQuery.data ?? [], [threadsQuery.data])
   const activeThreadId = selectedThreadId === undefined ? threads[0]?.id ?? null : selectedThreadId
   const activeThread = threads.find((thread) => thread.id === activeThreadId) ?? null
+  const draft = activeThreadId !== null ? chat.drafts[activeThreadId] ?? '' : ''
+  const setChatDraft = chat.setDraft
+  const setDraft = useCallback((next: string | ((current: string) => string)) => {
+    if (activeThreadId !== null) setChatDraft(activeThreadId, next)
+  }, [activeThreadId, setChatDraft])
 
   const threadQuery = useQuery({
     queryKey: codexChatThreadQueryKey(activeThreadId),
@@ -374,7 +337,12 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const liveReplyLength = (liveTurn?.replies ?? []).reduce((total, reply) => total + reply.text.length + reply.toolCalls.size, 0)
     + serverReplies.reduce((total, reply) => total + reply.text.length + reply.toolCalls.length, 0)
   const activeView = activeThreadId === null ? 'chat' : view
-  const isTranscript = activeView === 'chat'
+  // The panel and a phone-width page have no room for the chat list beside a chat: the list is a screen of its own,
+  // and a chat (or the picker) goes back to it. With no chat saved yet the picker is all there is.
+  const canOpenList = threads.length > 0 && (layout === 'panel' || !hasSideList)
+  const showList = canOpenList && listOpen
+  // Off while the list covers the chat: coming back remounts the transcript, which scrolls down again.
+  const isTranscript = activeView === 'chat' && !showList
 
   const handleEdit = useCallback(async (id: number, content: string) => {
     if (activeThreadId === null || isBusy) return false
@@ -529,6 +497,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     queryClient.removeQueries({ queryKey: codexChatMediaQueryKey(threadId) })
     queryClient.removeQueries({ queryKey: threadLorebooksQueryKey(threadId) })
     selectThread(undefined)
+    setListOpen(true)
   }
   const afterDelete = async (threadId: number) => {
     setDeleteBook(null)
@@ -778,6 +747,17 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   // "+" opens the profile picker, which lists the most recently used profiles first.
   const newChatButton = <IconButton variant="ghost" size="icon-sm" disabled={isBusy || isStartingChat} onClick={() => selectThread(null)} label={t({ ko: '새 채팅', en: 'New chat' })}><Plus /></IconButton>
+  const backButton = canOpenList ? <IconButton variant="ghost" size="icon-sm" onClick={() => setListOpen(true)} label={t({ ko: '채팅 목록', en: 'Chats' })}><ArrowLeft /></IconButton> : null
+  const openThread = (threadId: number) => (threadId === activeThreadId ? setListOpen(false) : selectThread(threadId))
+  const runningThreadIds = new Set<number>([...(liveTurn ? [liveTurn.threadId] : []), ...(serverRunning && activeThreadId !== null ? [activeThreadId] : [])])
+  const threadList = (dense: boolean) => <>
+    <div className={dense ? 'px-2 pb-2' : 'px-3 pb-2 pt-3'}><ChatSearchInput value={searchText} onChange={setSearchText} /></div>
+    <div className={cn('min-h-0 flex-1 overflow-y-auto', !dense && 'px-1')}>
+      {searchText.trim()
+        ? <ChatSearchResults query={searchText} disabled={isBusy} onPick={pickSearchResult} />
+        : <ChatThreadList threads={threads} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} disabled={isBusy} dense={dense} onSelect={openThread} />}
+    </div>
+  </>
   const chatMenu = <ChatAppearancePopover threadId={activeThreadId} style={profile?.style} layout={layout} open={appearanceOpen} onOpenChange={setAppearanceOpen}><span className="inline-flex"><DropdownMenu>
     <Tip content={t({ ko: '채팅 메뉴', en: 'Chat menu' })}><DropdownMenuTrigger asChild>
       <IconButton variant="ghost" size="icon-sm" disabled={activeThreadId === null} label={t({ ko: '채팅 메뉴', en: 'Chat menu' })} tooltip={false}><MoreHorizontal /></IconButton>
@@ -945,7 +925,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   let body: ReactNode
   if (activeThreadId === null || !thread) {
-    body = threadsQuery.isPending ? null : <ChatProfilePicker profiles={profiles} threads={threads} layout={layout} disabled={isStartingChat || createGroupMutation.isPending || isBusy} onPick={pickProfile} onPickGroup={pickGroup} onRecent={selectThread} onImport={(file) => void handleImport(file)} />
+    body = threadsQuery.isPending ? null : <ChatProfilePicker profiles={profiles} threads={threads} layout={layout} disabled={isStartingChat || createGroupMutation.isPending || isBusy} onPick={pickProfile} onPickGroup={pickGroup} onImport={(file) => void handleImport(file)} />
   } else if (activeView === 'gallery') {
     body = <Suspense fallback={null}><CodexChatGallery threadId={activeThreadId} columns={layout === 'page' ? 'wide' : 'narrow'} /></Suspense>
   } else if (activeView === 'context') {
@@ -1001,6 +981,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     </Modal>
   </>
 
+  const listTitle = <span className="min-w-0 flex-1 truncate pl-1.5 text-sm font-semibold">{t({ ko: '채팅', en: 'Chats' })}</span>
+
   if (layout === 'page') {
     return (
       <div className="flex min-h-0 flex-1">
@@ -1010,36 +992,19 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
             <span className="text-xs font-semibold text-muted-foreground">{t({ ko: '채팅', en: 'Chats' })}</span>
             {newChatButton}
           </div>
-          <div className="px-2 pb-2"><ChatSearchInput value={searchText} onChange={setSearchText} /></div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {searchText.trim() ? <ChatSearchResults query={searchText} disabled={isBusy} onPick={pickSearchResult} /> : threads.map((entry) => {
-              const entryProfile = entry.profile_id ? profilesById.get(entry.profile_id) : undefined
-              return (
-                <ListRow key={entry.id} asChild interactive size="sm" selected={entry.id === activeThreadId}>
-                  <button type="button" onClick={() => selectThread(entry.id)} disabled={isBusy && entry.id !== activeThreadId} className="w-full gap-2 disabled:opacity-50">
-                    {entry.kind === 'group'
-                      ? <GroupAvatarStack profiles={(entry.member_profile_ids ?? []).flatMap((id) => profilesById.get(id) ?? [])} size="xs" ringClassName="ring-background" />
-                      : entryProfile ? <ChatProfileAvatar name={entryProfile.name} avatar={entryProfile.avatar} engine={entryProfile.engine} size="xs" /> : null}
-                    <span className="truncate">{entry.title || untitled}</span>
-                  </button>
-                </ListRow>
-              )
-            })}
-          </div>
+          {threadList(true)}
         </nav>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex h-12 shrink-0 items-center gap-1 pl-4 sm:pl-6">
-            <span className="md:hidden">{headerAvatar}</span>
-            <ThreadSelect className="md:hidden" threads={threads} profilesById={profilesById} activeThreadId={activeThreadId} disabled={isBusy} onSelect={selectThread} />
-            <span className="hidden min-w-0 flex-1 items-center gap-2 md:flex">
+          <div className={cn('flex h-12 shrink-0 items-center gap-1', backButton ? 'pl-1.5' : 'pl-4 sm:pl-6')}>
+            {showList ? <>{listTitle}{newChatButton}</> : <>
+              {backButton}
               {headerAvatar}
-              <span className="truncate text-sm font-semibold">{viewTitle}</span>
-            </span>
-            {statusButton}
-            {inviteButton}
-            {newChatButton}
-            {chatMenu}
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold">{viewTitle}</span>
+              {statusButton}
+              {inviteButton}
+              {chatMenu}
+            </>}
             {onCollapse ? (
               <IconButton variant="ghost" size="icon-sm" className="hidden lg:inline-flex" onClick={onCollapse} label={t({ ko: '패널로 접기', en: 'Fold into panel' })}>
                 <Minimize2 />
@@ -1047,48 +1012,58 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
             ) : null}
           </div>
           <div ref={statusAreaRef} className="relative flex min-h-0 flex-1 flex-col">
-            {statusStrip}
-            {body}
-            {statusFloating}
+            {showList ? threadList(false) : <>
+              {statusStrip}
+              {body}
+              {statusFloating}
+            </>}
           </div>
         </div>
-        {statusAside}
+        {showList ? null : statusAside}
       </div>
     )
   }
 
+  const closeButton = onClose ? (
+    <IconButton variant="ghost" size="icon-sm" onClick={onClose} label={t({ ko: '닫기', en: 'Close' })}>
+      <X />
+    </IconButton>
+  ) : null
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {dialogs}
-      <div className="flex h-12 shrink-0 items-center gap-0.5 border-b border-line pl-2.5 pr-1.5">
-        {headerAvatar}
-        <ThreadSelect threads={threads} profilesById={profilesById} activeThreadId={activeThreadId} disabled={isBusy} onSelect={selectThread} />
-        {inviteButton}
-        {newChatButton}
-        {chatMenu}
-        {onExpand ? (
-          <IconButton variant="ghost" size="icon-sm" className="hidden lg:inline-flex" onClick={onExpand} label={t({ ko: '전체 페이지로 열기', en: 'Open full page' })}>
-            <Maximize2 />
-          </IconButton>
-        ) : null}
-        {onClose ? (
-          <IconButton variant="ghost" size="icon-sm" onClick={onClose} label={t({ ko: '닫기', en: 'Close' })}>
-            <X />
-          </IconButton>
-        ) : null}
+      <div className="flex h-12 shrink-0 items-center gap-0.5 border-b border-line px-1.5">
+        {showList ? <>
+          {listTitle}
+          {newChatButton}
+          {onExpand ? (
+            <IconButton variant="ghost" size="icon-sm" className="hidden lg:inline-flex" onClick={onExpand} label={t({ ko: '전체 페이지로 열기', en: 'Open full page' })}>
+              <Maximize2 />
+            </IconButton>
+          ) : null}
+        </> : <>
+          {backButton ?? <span className="w-1" />}
+          {headerAvatar}
+          <span className="min-w-0 flex-1 truncate px-1.5 text-sm font-semibold">{thread ? thread.title || untitled : untitled}</span>
+          {inviteButton}
+          {thread ? chatMenu : null}
+        </>}
+        {closeButton}
       </div>
-      {activeView !== 'chat' && thread ? (
-        <div className="flex h-10 shrink-0 items-center gap-1 px-1.5">
-          <IconButton variant="ghost" size="icon-sm" onClick={() => setView('chat')} label={t({ ko: '채팅으로 돌아가기', en: 'Back to chat' })}>
-            <ArrowLeft />
-          </IconButton>
-          <span className="truncate text-sm font-semibold">{viewTitle}</span>
+      {showList ? threadList(false) : <>
+        {activeView !== 'chat' && thread ? (
+          <div className="flex h-10 shrink-0 items-center gap-1 px-1.5">
+            <IconButton variant="ghost" size="icon-sm" onClick={() => setView('chat')} label={t({ ko: '채팅으로 돌아가기', en: 'Back to chat' })}>
+              <ArrowLeft />
+            </IconButton>
+            <span className="truncate text-sm font-semibold">{viewTitle}</span>
+          </div>
+        ) : null}
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {statusStrip}
+          {body}
         </div>
-      ) : null}
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        {statusStrip}
-        {body}
-      </div>
+      </>}
     </div>
   )
 }

@@ -33,7 +33,19 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   const [isPanelOpen, setIsPanelOpen] = useState(false)
   const [view, setView] = useState<CodexChatView>('chat')
   const [selectedThreadId, setSelectedThreadId] = useState<number | null | undefined>(undefined)
-  const [draft, setDraft] = useState('')
+  const [listOpen, setListOpen] = useState(false)
+  // What the user is typing, per chat: moving through the list must not carry one chat's text into another.
+  const [drafts, setDrafts] = useState<Record<number, string>>({})
+  const draftsRef = useRef(drafts)
+  const setDraft = useCallback((threadId: number, next: string | ((current: string) => string)) => {
+    const current = draftsRef.current[threadId] ?? ''
+    const value = typeof next === 'function' ? next(current) : next
+    if (value === current) return
+    const rest = { ...draftsRef.current }
+    delete rest[threadId]
+    draftsRef.current = value ? { ...rest, [threadId]: value } : rest
+    setDrafts(draftsRef.current)
+  }, [])
   const [draftReply, updateDraftReply] = useState<CodexChatApi['draftReply']>(null)
   const draftReplyRef = useRef(draftReply)
   const setDraftReply = useCallback((reply: CodexChatApi['draftReply']) => {
@@ -62,12 +74,10 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   const [liveTurn, setLiveTurn] = useState<CodexChatLiveTurn | null>(null)
   const [messageFocus, setMessageFocus] = useState<CodexChatApi['messageFocus']>(null)
   const [isStartingChat, setIsStartingChat] = useState(false)
-  const draftRef = useRef(draft)
   const streamAbortRef = useRef<AbortController | null>(null)
   /** Settles when the streamed reply has wound down, so a group room message can cut in after it. */
   const activeReplyRef = useRef<Promise<void> | null>(null)
 
-  draftRef.current = draft
   attachmentsRef.current = draftAttachments
   mediaAttachmentsRef.current = draftMediaAttachments
   picksRef.current = picks
@@ -141,8 +151,14 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     setDraftMediaAttachments([])
     setPicks([])
     setSelectedThreadId(threadId)
+    setListOpen(false)
     setView('chat')
   }, [setDraftReply])
+
+  const showList = useCallback((open: boolean) => {
+    setListOpen(open)
+    setView('chat')
+  }, [])
 
   const startChat = useCallback(async (profileId: number, userProfileId?: number | null) => {
     setIsStartingChat(true)
@@ -152,6 +168,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       // The new chat starts from the default appearance slot, copied on the server.
       void queryClient.invalidateQueries({ queryKey: CHAT_APPEARANCE_QUERY_KEY })
       setSelectedThreadId(thread.id)
+      setListOpen(false)
       setDraftReply(null)
       attachmentEpoch.current += 1
       attachmentsRef.current = []
@@ -170,7 +187,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     const replyingTo = !rewrite && draftReplyRef.current?.threadId === threadId ? draftReplyRef.current : null
     const picked = rewrite ? [] : picksRef.current
     // Picks alone make a message of their own labels, so a click can be sent as is.
-    const text = rewrite ? '' : (literalText ?? draftRef.current).trim() || picked.join(', ')
+    const text = rewrite ? '' : (literalText ?? draftsRef.current[threadId] ?? '').trim() || picked.join(', ')
     const attachments = rewrite ? [] : attachmentsRef.current
     const mediaAttachments = rewrite ? [] : mediaAttachmentsRef.current
     const sentAttachmentEpoch = attachmentEpoch.current
@@ -198,7 +215,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     streamAbortRef.current = controller
     if (!rewrite) {
       setDraftReply(null)
-      setDraft('')
+      setDraft(sentThreadId, '')
       setDraftAttachments([])
       mediaAttachmentsRef.current = []
       setDraftMediaAttachments([])
@@ -315,7 +332,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
         showSnackbar({ message: summarizeChatError(getErrorMessage(error, t({ ko: '응답 실패', en: 'Reply failed' })), t), tone: 'error' })
         if (!accepted && !rewrite && attachmentEpoch.current === sentAttachmentEpoch) {
           if (!draftReplyRef.current) setDraftReply(replyingTo)
-          setDraft((current) => current || (picked.length ? '' : text))
+          setDraft(sentThreadId, (current) => current || (picked.length ? '' : text))
           setDraftAttachments(attachments)
           attachmentsRef.current = attachments
           setDraftMediaAttachments(mediaAttachments)
@@ -336,7 +353,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       settle()
     }
     return accepted
-  }, [queryClient, showSnackbar, t, setDraftReply])
+  }, [queryClient, showSnackbar, t, setDraftReply, setDraft])
 
   const send = useCallback(async (threadId: number, text?: string) => { await reply(threadId, undefined, text) }, [reply])
   const regenerate = useCallback((threadId: number, messageId: number) => reply(threadId, { messageId }), [reply])
@@ -367,9 +384,11 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     setView,
     selectedThreadId,
     selectThread,
+    listOpen,
+    setListOpen: showList,
     startChat,
     isStartingChat,
-    draft,
+    drafts,
     setDraft,
     picks,
     togglePick,
@@ -392,7 +411,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     messageFocus,
     focusMessage,
     clearMessageFocus,
-  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, draft, focusMessage, isPanelOpen, isStartingChat, liveTurn, messageFocus, openPanel, picks, togglePick, removePick, selectThread, selectedThreadId, send, regenerate, continueReply, editMessage, startChat, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
+  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, drafts, setDraft, focusMessage, isPanelOpen, isStartingChat, liveTurn, messageFocus, openPanel, picks, togglePick, removePick, selectThread, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, startChat, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
 
   const referenceApi = useMemo<CodexChatReferenceApi>(() => ({ draftMediaAttachments, toggleMediaAttachment, focusMessage }), [draftMediaAttachments, toggleMediaAttachment, focusMessage])
 
