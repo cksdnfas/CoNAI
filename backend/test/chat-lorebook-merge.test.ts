@@ -101,6 +101,7 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
       ['s-house', 'new', null],
     ])
     assert.equal(preview.items[1].suggested, '카이가 기르는 검은 고양이.\n\n먹물이 사흘째 안 보인다.')
+    assert.equal(preview.defaultInstruction, MERGE_DRAFT_INSTRUCTION)
     assert.deepEqual(preview.files, [{ file: '자료/반지.md', clash: false }, { file: '자료/전단지.md', clash: true }])
     assert.throws(() => previewMerge(kai.id, kai.id, me), /같은 로어북/)
     assert.throws(() => previewMerge(kai.id, sea.chatBook.id, me), /계정 로어북에만/, 'a chat book is never a target')
@@ -109,6 +110,28 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     assert.throws(() => applyMerge(sea.chatBook.id, kai.id, me, [{ entryId: 's-ink', choice: 'target' }]), (error: unknown) => error instanceof MergeDecisionsMissingError && error.missing.join() === 's-left' && error.status === 409)
     assert.throws(() => applyMerge(sea.chatBook.id, kai.id, me, [{ entryId: 's-ink', choice: 'merged' }, { entryId: 's-left', choice: 'target' }]), /합친 결과 본문이 비어/)
     assert.equal(book(kai.id).entries.length, 3)
+  })
+
+  await t.test('preview: the merged text to start from does not repeat equal or contained texts', () => {
+    const target = OwnedLorebookStore.create(me, { name: '겹침 대상', entries: [
+      { id: 'same', title: '같음', keys: ['같음'], content: '카이는  왼손잡이다.' },
+      { id: 'long', title: '긴 쪽', keys: ['긴'], content: '카이는 왼손잡이다. 글도 왼손으로 쓴다.' },
+      { id: 'short', title: '짧은 쪽', keys: ['짧은'], content: '먹물은 검은 고양이.' },
+      { id: 'apart', title: '다름', keys: ['다름'], content: '항구 근처 집.' },
+    ] })
+    const source = OwnedLorebookStore.create(me, { name: '겹침 원본', entries: [
+      { id: 'same', title: '같음', keys: ['같음'], content: ' 카이는\n왼손잡이다. ' },
+      { id: 'long', title: '긴 쪽', keys: ['긴'], content: '글도 왼손으로 쓴다.' },
+      { id: 'short', title: '짧은 쪽', keys: ['짧은'], content: '먹물은 검은 고양이. 사흘째 안 보인다.' },
+      { id: 'apart', title: '다름', keys: ['다름'], content: '1층은 수리점.' },
+    ] })
+    const suggested = Object.fromEntries(previewMerge(source.id, target.id, me).items.map((item) => [item.entry.id, item.suggested]))
+    assert.deepEqual(suggested, {
+      same: '카이는  왼손잡이다.',
+      long: '카이는 왼손잡이다. 글도 왼손으로 쓴다.',
+      short: '먹물은 검은 고양이. 사흘째 안 보인다.',
+      apart: '항구 근처 집.\n\n1층은 수리점.',
+    })
   })
 
   await t.test('apply: source, target, both and merged decisions; new entries appended; the source untouched', () => {
@@ -255,7 +278,7 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     assert.equal(drafts[1].entryId, 'dog2')
     assert.ok('error' in drafts[1] && drafts[1].error.length > 0)
     const first = JSON.parse(bodies[0]) as { messages: Array<{ role: string; content: string }> }
-    assert.equal(first.messages[0].content, `${MERGE_DRAFT_INSTRUCTION}\n\n짧게 써.`)
+    assert.equal(first.messages[0].content, '짧게 써.', 'the rewritten instruction replaces the default')
     assert.match(first.messages[1].content, /^## A \(채팅 책\)\n제목: 먹물\n키워드: 고양이\n\n사흘째 안 보인다\.\n\n## B \(대상 책\)\n제목: 먹물\n키워드: 먹물\n\n검은 고양이\.$/)
     assert.deepEqual(book(target.id).entries, before.entries, 'drafts are not saved')
     assert.equal(book(target.id).updatedDate, before.updatedDate)

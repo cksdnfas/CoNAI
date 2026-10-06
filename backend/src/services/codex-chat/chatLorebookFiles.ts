@@ -6,7 +6,6 @@ import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { ensureFileStoreSchema } from '../../database/fileStoreSchema'
 import { FileStoreError, FileStoreService, TEXT_EXTENSIONS, fileOwnerKey, type FileStoreChange } from '../fileStoreService'
 import { storedFilePath } from '../fileStorePaths'
-import { parseMemories } from './chatMemory'
 import {
   LOREBOOK_NAME_MAX_LENGTH,
   PROFILE_MAX_LOREBOOKS,
@@ -694,6 +693,34 @@ export function readEntryFileText(book: LoreFileBook, entry: Pick<ChatLoreEntry,
 
 // ---- Migration ------------------------------------------------------------------------------------------------
 
+type PinnedMemory = { id: string; text: string }
+
+/** The old pinned memories (a JSON list of `{ id, text }`, from the chat row or an old export); blanks dropped. */
+export function parsePinnedMemories(value: string | null | undefined): PinnedMemory[] {
+  try {
+    const parsed: unknown = JSON.parse(value || '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed.flatMap((item) => (item && typeof item === 'object' && typeof (item as PinnedMemory).id === 'string' && typeof (item as PinnedMemory).text === 'string' && (item as PinnedMemory).text.trim()
+      ? [{ id: (item as PinnedMemory).id, text: (item as PinnedMemory).text }]
+      : []))
+  } catch {
+    return []
+  }
+}
+
+/** Pinned memories as "always on" chat book entries: the title is the first 20 characters, the id keeps the memory's. */
+export function pinnedMemoryEntries(items: PinnedMemory[]): Array<Partial<ChatLoreEntry>> {
+  return items.map((item, index) => ({
+    id: `memory-${item.id}`.slice(0, 80),
+    title: item.text.trim().slice(0, 20),
+    keys: [],
+    content: item.text,
+    constant: true,
+    enabled: true,
+    order: index,
+  }))
+}
+
 /**
  * Pinned memories (codex_chat_threads.memories) become "always on" entries of each chat's book, then the column is
  * cleared for that chat. Per chat and idempotent: a chat whose memories are NULL is done, and an entry already moved
@@ -709,19 +736,9 @@ export function migratePinnedMemoriesToChatBooks(db: Database.Database) {
   let moved = 0
   for (const row of rows) {
     try {
-      const items = parseMemories(row.memories)
+      const items = parsePinnedMemories(row.memories)
       db.transaction(() => {
-        if (items.length > 0) {
-          OwnedLorebookStore.addChatBookEntries(row.id, items.map((item, index) => ({
-            id: `memory-${item.id}`.slice(0, 80),
-            title: item.text.trim().slice(0, 20),
-            keys: [],
-            content: item.text,
-            constant: true,
-            enabled: true,
-            order: index,
-          })))
-        }
+        if (items.length > 0) OwnedLorebookStore.addChatBookEntries(row.id, pinnedMemoryEntries(items))
         db.prepare('UPDATE codex_chat_threads SET memories = NULL WHERE id = ?').run(row.id)
       }).immediate()
       moved += items.length

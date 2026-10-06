@@ -249,6 +249,8 @@ export interface LoreMergePreview {
   target: OwnedChatLorebook
   items: LoreMergeItem[]
   files: Array<{ file: string; clash: boolean }>
+  /** What "맡기기" tells the model unless rewritten. */
+  defaultInstruction: string
 }
 export type LoreMergeResult = { status: 'merged'; book: OwnedChatLorebook; added: number; updated: number; skipped: number; files: number; sourceDeleted: boolean; sourceError?: string }
 export type LoreMergeDraft = { entryId: string; content: string } | { entryId: string; error: string }

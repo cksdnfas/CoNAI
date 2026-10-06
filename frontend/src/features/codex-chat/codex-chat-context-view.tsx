@@ -137,7 +137,7 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
       <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock thread={thread} defaults={{ note: '', depth: null }} />
-      <LorebookBlock threadId={thread.id} profiles={(group?.memberIds ?? []).flatMap((id) => profilesById.get(id) ?? []).map(({ id, name }) => ({ id, name }))} />
+      <LorebookBlock threadId={thread.id} profiles={(group?.memberIds ?? thread.member_profile_ids ?? []).flatMap((id) => profilesById.get(id) ?? []).map(({ id, name }) => ({ id, name }))} />
       {group ? (
         <>
           <SettingRow label={capLabel}>

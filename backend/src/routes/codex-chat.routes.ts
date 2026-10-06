@@ -16,10 +16,10 @@ import { resolveChatAccess } from '../services/codex-chat/codexChatAccess'
 import { getMcpToolScope } from '../mcp/context'
 import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
 import { buildCodexInstructions, CODEX_COMPACT_TOKENS, CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
-import { buildChatPromptPreview, estimateTokens, fillCharacterPlaceholders, isSummarizing } from '../services/codex-chat/llmChatContext'
-import { buildLorebookText, ChatLorebookStore, normalizeLorebookIds } from '../services/codex-chat/chatLorebook'
+import { buildChatPromptPreview, estimateTokens, isSummarizing, referenceBlock, selectChatLore } from '../services/codex-chat/llmChatContext'
+import { ChatLorebookStore, normalizeLorebookIds } from '../services/codex-chat/chatLorebook'
 import { LorebookError, OwnedLorebookStore } from '../services/codex-chat/chatLorebookFiles'
-import { threadLorebooks } from '../services/codex-chat/chatLoreContext'
+import { loreIndexText, threadLorebooks } from '../services/codex-chat/chatLoreContext'
 import { applyMerge, assertMergeDecisions, draftMerge, hasDuplicates, MergeDecisionsMissingError, previewMerge, type MergeResult } from '../services/codex-chat/chatLorebookMerge'
 import { ChatSharedBlockStore, readBlockFile } from '../services/codex-chat/chatDisplayBlocks'
 import { ChatToolPresetStore, readToolPresetFile } from '../services/codex-chat/chatToolPresets'
@@ -30,7 +30,7 @@ import { ChatGenerationPresetStore, readGenerationPresetFile, type ChatGeneratio
 import { CodexChatStore, type CodexChatMessageRecord } from '../services/codex-chat/codexChatStore'
 import { collectCodexChatMedia } from '../services/codex-chat/codexChatMedia'
 import { CHAT_IMPORT_MAX_BYTES, ChatImportError, importChatThread } from '../services/codex-chat/chatImport'
-import { ChatSummaryStore, normalizeMemories } from '../services/codex-chat/chatMemory'
+import { ChatSummaryStore } from '../services/codex-chat/chatMemory'
 import { listChatCompletionModels } from '../services/codex-chat/llmChatCompletion'
 import { LlmChatError, LlmChatService } from '../services/codex-chat/llmChatService'
 import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers'
@@ -394,13 +394,6 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
       sendRouteBadRequest(res, 'summary must be a string or null')
       return
     }
-    // Pinned memories: still accepted from an older client and kept on the chat, but requests no longer read them —
-    // the chat's lorebook took their place, and the startup migration moves what is kept here into it.
-    const memories = body.memories === undefined ? undefined : body.memories === null ? [] : normalizeMemories(body.memories)
-    if (memories === null) {
-      sendRouteBadRequest(res, 'memories must be a list of strings or { id, text }')
-      return
-    }
     // Account lorebooks linked to this chat only (the chat owner's own books).
     if (body.lorebookIds !== undefined && body.lorebookIds !== null && !Array.isArray(body.lorebookIds)) {
       sendRouteBadRequest(res, 'lorebookIds must be a list of lorebook ids or null')
@@ -416,7 +409,6 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
         authorNote: typeof body.authorNote === 'string' ? body.authorNote.slice(0, AUTHOR_NOTE_MAX_LENGTH) : (body.authorNote as null | undefined),
         authorNoteDepth,
       })
-      if (memories !== undefined) CodexChatStore.setMemories(threadId, memories)
       if (body.lorebookIds !== undefined) OwnedLorebookStore.setThreadLinks(threadId, body.lorebookIds ?? [])
       // The whole summary at once: empty clears it, text replaces it as one plot up to where it reached.
       if (body.summary !== undefined) {
@@ -737,7 +729,8 @@ router.post('/lorebooks/:targetId/merge/preview', requireChatAccess, (req: Reque
 /**
  * POST /api/codex-chat/lorebooks/:targetId/merge/draft —`{ sourceId, profileId, entryIds?, instruction? }`: the
  * profile's summary model (else its chat model) writes a merged text for each duplicate (or the given ones). Saves
- * nothing; an entry that failed comes back as `{ entryId, error }`.
+ * nothing; an entry that failed comes back as `{ entryId, error }`. `instruction` replaces the preview's
+ * `defaultInstruction`.
  */
 router.post('/lorebooks/:targetId/merge/draft', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
   const targetId = parseId(req.params.targetId)
@@ -1049,9 +1042,11 @@ router.post('/admin/profiles/preview', requireAdmin, asyncHandler(async (req: Re
       const messages = profile.engine === 'codex'
         ? [{ role: 'developer', content: buildCodexInstructions(profile) }]
         : buildChatPromptPreview(profile, tools)
+      // Codex gets the lore index and the always-on entries in its first turn's reference block (no chat here: the
+      // profile's global books only, as in an LLM preview).
       if (profile.engine === 'codex') {
-        const lore = buildLorebookText(profile, undefined, (text) => estimateTokens(profile.id, text), (text) => fillCharacterPlaceholders(text, profile))
-        if (lore) messages.push({ role: 'user', content: `[참고 설정]\n${lore}\n[/참고 설정]` })
+        const lore = referenceBlock([loreIndexText(selectChatLore(profile))])
+        if (lore) messages.push({ role: 'user', content: lore })
       }
       const promptTokens = estimateTokens(profileId, JSON.stringify(messages))
       const toolTokens = tools.length > 0 ? estimateTokens(profileId, JSON.stringify(tools)) : 0

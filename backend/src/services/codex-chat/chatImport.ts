@@ -3,7 +3,8 @@ import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { McpRequester } from '../../mcp/context'
 import { FileStoreService, fileOwnerKey } from '../fileStoreService'
 import { parseBlockEdits } from './chatBlockState'
-import { normalizeMemories, renderSummary, type ChatSummarySegment } from './chatMemory'
+import { OwnedLorebookStore, parsePinnedMemories, pinnedMemoryEntries } from './chatLorebookFiles'
+import { renderSummary, type ChatSummarySegment } from './chatMemory'
 import { ChatProfileStore } from './chatProfiles'
 import { CodexChatStore, parseMessageRouting } from './codexChatStore'
 import { validateChatMediaAttachments } from './chatMediaAttachments'
@@ -185,16 +186,18 @@ export function importChatThread(requester: McpRequester, raw: Buffer, target: C
       setRouting.run(JSON.stringify(routing), copyId)
     }
 
-    const memories = normalizeMemories(thread.memories ? (() => { try { return JSON.parse(String(thread.memories)) } catch { return [] } })() : []) ?? []
     const edits = parseBlockEdits(typeof thread.block_edits === 'string' ? thread.block_edits : null)
       .flatMap((edit) => (edit.afterMessageId === 0 || ids.has(edit.afterMessageId) ? [{ ...edit, afterMessageId: ids.get(edit.afterMessageId) ?? 0, profileId: undefined }] : []))
     db.prepare(`UPDATE codex_chat_threads SET title = ?, context_turns = ?, summary_enabled = ?, author_note = ?, author_note_depth = ?, max_tokens = ?,
-      memories = ?, block_edits = ? WHERE id = ?`).run(
+      block_edits = ? WHERE id = ?`).run(
       textOf(thread.title, 60) || '가져온 대화',
       intOrNull(thread.context_turns, 1, 200), intOrNull(thread.summary_enabled, 0, 1),
       nullableText(thread.author_note, 4000), intOrNull(thread.author_note_depth, 0, 20), intOrNull(thread.max_tokens, 1, 1_000_000),
-      memories.length ? JSON.stringify(memories) : null, edits.length ? JSON.stringify(edits) : null, created.id,
+      edits.length ? JSON.stringify(edits) : null, created.id,
     )
+    // An export from before the lorebook carries pinned memories: they become the chat book's always-on entries.
+    const memories = parsePinnedMemories(typeof thread.memories === 'string' ? thread.memories : Array.isArray(thread.memories) ? JSON.stringify(thread.memories) : null)
+    if (memories.length > 0) OwnedLorebookStore.addChatBookEntries(created.id, pinnedMemoryEntries(memories.slice(0, 50)))
 
     // The summary: its segments when the file has them, else the old single summary as a plot up to where it reached.
     const insertSegment = db.prepare('INSERT INTO chat_summary_segments (thread_id, level, from_message_id, until_message_id, content, backed) VALUES (?, ?, ?, ?, ?, ?)')

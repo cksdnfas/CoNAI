@@ -2,54 +2,13 @@ import { getUserSettingsDb } from '../../database/userSettingsDb'
 
 /**
  * Long-term memory of a chat, in three layers:
- *   1. pinned memories — short facts the user keeps on the thread; every request carries them
+ *   1. the chat lorebook — the chat's own book (see chatLorebookFiles); its always-on entries go with every request,
+ *      next to the lore index of every attached book, and its keyword entries when the conversation names them
  *   2. summary segments — each stretch of folded conversation summarized on its own (level 0), the older ones folded
  *      once more into one plot (level 1). The plot and the segments after it are the rolling summary the model gets.
  *   3. recall — segments already folded into the plot come back, verbatim, when the conversation touches them again
+ * This file holds layers 2 and 3.
  */
-
-// ---- Pinned memories ------------------------------------------------------------------------------------------
-
-export type ChatMemoryItem = { id: string; text: string }
-
-export const MEMORY_MAX_ITEMS = 50
-export const MEMORY_TEXT_MAX_LENGTH = 500
-
-export function parseMemories(value: string | null | undefined): ChatMemoryItem[] {
-  try {
-    const parsed: unknown = JSON.parse(value || '[]')
-    if (!Array.isArray(parsed)) return []
-    return parsed.flatMap((item) => (item && typeof item === 'object' && typeof (item as ChatMemoryItem).id === 'string' && typeof (item as ChatMemoryItem).text === 'string' && (item as ChatMemoryItem).text.trim()
-      ? [{ id: (item as ChatMemoryItem).id, text: (item as ChatMemoryItem).text }]
-      : []))
-  } catch {
-    return []
-  }
-}
-
-/** Validate a full list from the client: text trimmed and capped, blanks dropped, ids kept when given. Null: invalid. */
-export function normalizeMemories(value: unknown): ChatMemoryItem[] | null {
-  if (!Array.isArray(value)) return null
-  const items: ChatMemoryItem[] = []
-  const seen = new Set<string>()
-  for (const entry of value) {
-    const text = typeof entry === 'string' ? entry : entry && typeof entry === 'object' ? (entry as { text?: unknown }).text : undefined
-    if (typeof text !== 'string') return null
-    const trimmed = text.trim().slice(0, MEMORY_TEXT_MAX_LENGTH)
-    if (!trimmed) continue
-    const givenId = entry && typeof entry === 'object' ? (entry as { id?: unknown }).id : undefined
-    let id = typeof givenId === 'string' && /^[\w-]{1,40}$/.test(givenId) && !seen.has(givenId) ? givenId : ''
-    while (!id || seen.has(id)) id = `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
-    seen.add(id)
-    items.push({ id, text: trimmed })
-  }
-  return items.slice(0, MEMORY_MAX_ITEMS)
-}
-
-/** The pinned memories as the model reads them ('' when there are none). `fill`: `{{char}}`/`{{user}}`. */
-export function memoriesText(items: ChatMemoryItem[], fill: (text: string) => string = (text) => text) {
-  return items.length > 0 ? `## 고정 기억\n${items.map((item) => `- ${fill(item.text).replace(/\s*\n\s*/g, ' ')}`).join('\n')}` : ''
-}
 
 // ---- Summary segments -----------------------------------------------------------------------------------------
 

@@ -520,13 +520,20 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   // through the merge dialog (D) and is retried with its decisions.
   const [deleteBook, setDeleteBook] = useState<{ threadId: number; book: OwnedChatLorebook } | null>(null)
   const [deleteMerge, setDeleteMerge] = useState<{ threadId: number; targetId: number; preview: LoreMergePreview } | null>(null)
-  const afterDelete = async (threadId: number) => {
-    setDeleteBook(null)
-    setDeleteMerge(null)
+  // The chat is gone: stop and drop its queries, and take it out of the cached list before selecting, so the chat that
+  // becomes active is the next one and nothing asks the server for the deleted id again.
+  const forgetThread = (threadId: number) => {
+    void queryClient.cancelQueries({ queryKey: codexChatThreadQueryKey(threadId) })
+    queryClient.setQueryData<Array<{ id: number }>>(CODEX_CHAT_THREADS_QUERY_KEY, (current) => current?.filter((entry) => entry.id !== threadId))
     queryClient.removeQueries({ queryKey: codexChatThreadQueryKey(threadId) })
     queryClient.removeQueries({ queryKey: codexChatMediaQueryKey(threadId) })
     queryClient.removeQueries({ queryKey: threadLorebooksQueryKey(threadId) })
     selectThread(undefined)
+  }
+  const afterDelete = async (threadId: number) => {
+    setDeleteBook(null)
+    setDeleteMerge(null)
+    forgetThread(threadId)
     await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
   }
   const deleteMutation = useMutation({
@@ -979,7 +986,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         initialPreview={deleteMerge.preview}
         profiles={isGroup ? memberProfiles.map(({ id, name }) => ({ id, name })) : profile ? [{ id: profile.id, name: profile.name }] : []}
         defaultProfileId={profile?.id ?? null}
-        onSubmit={async (decisions) => { await deleteCodexChatThread(deleteMerge.threadId, { action: 'merge', targetId: deleteMerge.targetId, decisions }) }}
+        onSubmit={async (decisions) => {
+          await deleteCodexChatThread(deleteMerge.threadId, { action: 'merge', targetId: deleteMerge.targetId, decisions })
+          // Before the dialog refreshes the books: the deleted chat's queries must not refetch meanwhile.
+          forgetThread(deleteMerge.threadId)
+        }}
         onMerged={() => void afterDelete(deleteMerge.threadId)}
         onClose={() => setDeleteMerge(null)}
       />

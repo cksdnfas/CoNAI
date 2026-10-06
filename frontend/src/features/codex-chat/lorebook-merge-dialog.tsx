@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Sparkles, TriangleAlert } from 'lucide-react'
+import { Pencil, Sparkles, TriangleAlert } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
+import { IconButton } from '@/components/ui/icon-button'
+import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
@@ -77,6 +79,9 @@ function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, 
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [profileId, setProfileId] = useState<number | null>(defaultProfileId ?? profiles[0]?.id ?? null)
+  // "맡기기" instruction: null until the person opens the field, then their text (sent in place of the default).
+  const [instruction, setInstruction] = useState<string | null>(null)
+  const [instructionOpen, setInstructionOpen] = useState(false)
 
   const booksQuery = useQuery({ queryKey: OWN_LOREBOOKS_QUERY_KEY, queryFn: listOwnLorebooks, enabled: fixedTargetId == null && !initialPreview })
   const targets = (booksQuery.data ?? []).filter((book) => book.kind === 'account' && book.id !== sourceId)
@@ -110,7 +115,12 @@ function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, 
   const emptyMerged = duplicates.some((item) => choices[item.entry.id]?.choice === 'merged' && !choices[item.entry.id]?.content.trim())
 
   const draftMutation = useMutation({
-    mutationFn: () => draftLorebookMerge(targetId as number, { sourceId, profileId: profileId as number, entryIds: duplicates.map((item) => item.entry.id) }),
+    mutationFn: () => draftLorebookMerge(targetId as number, {
+      sourceId,
+      profileId: profileId as number,
+      entryIds: duplicates.map((item) => item.entry.id),
+      ...(instruction !== null && instruction.trim() ? { instruction: instruction.trim() } : {}),
+    }),
     onSuccess: ({ drafts }) => {
       const nextErrors: Record<string, string> = {}
       setChoices((current) => {
@@ -224,6 +234,15 @@ function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, 
                 />
               </div>
             ) : null}
+            {instructionOpen && duplicates.length > 0 ? (
+              <Input
+                variant="settings"
+                maxLength={2000}
+                value={instruction ?? preview.defaultInstruction}
+                onChange={(event) => setInstruction(event.target.value)}
+                aria-label={t({ ko: '맡기기 지시', en: 'Instruction' })}
+              />
+            ) : null}
           </>
         ) : null}
       </ModalBody>
@@ -234,6 +253,7 @@ function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, 
               {draftMutation.isPending ? <Spinner className="size-3.5" /> : <Sparkles />}
               {t({ ko: '{name}에게 맡기기', en: 'Ask {name}' }, { name: draftProfile?.name ?? '' })}
             </Button>
+            <IconButton variant="ghost" size="icon-sm" active={instructionOpen} onClick={() => setInstructionOpen((open) => !open)} label={t({ ko: '지시 고치기', en: 'Edit instruction' })}><Pencil /></IconButton>
             {profiles.length > 1 ? (
               <Select className="h-8 w-40" value={profileId === null ? '' : String(profileId)} onChange={(event) => setProfileId(Number(event.target.value))} aria-label={t({ ko: '맡길 프로필', en: 'Profile to ask' })}>
                 {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}

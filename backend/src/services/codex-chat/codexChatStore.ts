@@ -4,7 +4,7 @@ import { FileStoreService, fileOwnerKey } from '../fileStoreService'
 import { parseBlockEdits, type BlockEdit } from './chatBlockState'
 import { parseFlagSnapshots, type ChatFlagSnapshot } from './chatFlags'
 import { parseChatMediaAttachments, type ChatMediaAttachment } from './chatMediaAttachments'
-import { ChatSummaryStore, type ChatMemoryItem } from './chatMemory'
+import { ChatSummaryStore } from './chatMemory'
 import { OwnedLorebookStore } from './chatLorebookFiles'
 import { ChatProposalStore } from './chatProposals'
 
@@ -53,8 +53,6 @@ export type CodexChatThreadRecord = {
   block_edits: string | null
   /** The account's user profile (persona) in this chat; null is the plain user. */
   user_profile_id: number | null
-  /** JSON pinned memories (see chatMemory). */
-  memories: string | null
   /** JSON ids of the owner's account lorebooks linked to this chat only (see chatLorebookFiles). */
   lorebook_ids: string | null
   /** Why the last background summary failed; null once one succeeds. */
@@ -221,10 +219,6 @@ export const CodexChatStore = {
 
   setBlockEdits(threadId: number, edits: BlockEdit[]) {
     getUserSettingsDb().prepare('UPDATE codex_chat_threads SET block_edits = ? WHERE id = ?').run(edits.length > 0 ? JSON.stringify(edits) : null, threadId)
-  },
-
-  setMemories(threadId: number, items: ChatMemoryItem[]) {
-    getUserSettingsDb().prepare('UPDATE codex_chat_threads SET memories = ? WHERE id = ?').run(items.length > 0 ? JSON.stringify(items) : null, threadId)
   },
 
   setSummaryError(threadId: number, error: string | null) {

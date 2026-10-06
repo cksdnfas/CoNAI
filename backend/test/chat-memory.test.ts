@@ -27,7 +27,7 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
   const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
   const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
   const memory = await import('../src/services/codex-chat/chatMemory')
-  const { ChatSummaryStore, normalizeMemories, recallTerms, selectRecall, splitSegments } = memory
+  const { ChatSummaryStore, recallTerms, selectRecall, splitSegments } = memory
   const context = await import('../src/services/codex-chat/llmChatContext')
   const { buildChatMessages, resolveContextConfig, summarizeAhead, summarizeAll } = context
   const { OwnedLorebookStore } = await import('../src/services/codex-chat/chatLorebookFiles')
@@ -67,15 +67,8 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
   }
 
   await t.test("the chat book's index and always-on entries travel in the second system message", () => {
-    // An older client may still send pinned memories: they are validated and kept, but requests no longer read them.
-    assert.equal(normalizeMemories('x'), null)
-    assert.equal(normalizeMemories([{ text: 3 }]), null)
-    const items = normalizeMemories(['  {{user}}와 약속: 내일 바다  ', '', { id: 'keep-me', text: '카이는 왼손잡이' }, { id: 'keep-me', text: '중복 id' }])!
-    assert.deepEqual(items.map((item) => item.text), ['{{user}}와 약속: 내일 바다', '카이는 왼손잡이', '중복 id'])
-    assert.equal(items[1].id, 'keep-me')
-    assert.notEqual(items[2].id, 'keep-me', 'a repeated id gets a new one')
-    assert.equal(normalizeMemories(Array.from({ length: 80 }, (_, index) => `m${index}`))!.length, memory.MEMORY_MAX_ITEMS)
-    CodexChatStore.setMemories(threadId, [{ id: 'old', text: '옛 고정 기억' }])
+    // A pinned-memories column the startup migration has not reached yet is never read by a request.
+    db.prepare('UPDATE codex_chat_threads SET memories = ? WHERE id = ?').run(JSON.stringify([{ id: 'old', text: '옛 고정 기억' }]), threadId)
     OwnedLorebookStore.saveChatBook(threadId, [
       { id: 'promise', title: '바다 약속', content: '{{user}}와 약속: 내일 바다', constant: true },
       { id: 'hand', title: '왼손잡이', content: '카이는 왼손잡이', constant: true },

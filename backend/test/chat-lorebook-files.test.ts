@@ -156,9 +156,10 @@ test('lorebook files: account and chat books as file store folders, cache sync, 
   })
 
   await t.test('pinned memories move into the chat book once', () => {
+    const memoriesOf = (id: number) => (db.prepare('SELECT memories FROM codex_chat_threads WHERE id = ?').get(id) as { memories: string | null }).memories
     const threadId = CodexChatStore.createThread(1, '이관', 'llm', profile.id)
     const emptyId = CodexChatStore.createThread(1, '빈 기억', 'llm', profile.id)
-    CodexChatStore.setMemories(threadId, [{ id: 'm1', text: '카이는 왼손잡이' }, { id: 'm2', text: '내일 저녁 바다에서 반지를 주기로 했다. 카이는 아직 모른다.' }])
+    db.prepare('UPDATE codex_chat_threads SET memories = ? WHERE id = ?').run(JSON.stringify([{ id: 'm1', text: '카이는 왼손잡이' }, { id: 'm2', text: '내일 저녁 바다에서 반지를 주기로 했다. 카이는 아직 모른다.' }]), threadId)
     db.prepare("UPDATE codex_chat_threads SET memories = '[]' WHERE id = ?").run(emptyId)
     createUserSettingsSchema(db)
     createUserSettingsSchema(db)
@@ -167,14 +168,14 @@ test('lorebook files: account and chat books as file store folders, cache sync, 
       ['memory-m1', '카이는 왼손잡이', '카이는 왼손잡이', true, 0],
       ['memory-m2', '내일 저녁 바다에서 반지를 주기로 했', '내일 저녁 바다에서 반지를 주기로 했다. 카이는 아직 모른다.', true, 0],
     ])
-    assert.equal(CodexChatStore.findThreadById(threadId)!.memories, null)
-    assert.equal(CodexChatStore.findThreadById(emptyId)!.memories, null)
+    assert.equal(memoriesOf(threadId), null)
+    assert.equal(memoriesOf(emptyId), null)
     assert.equal(OwnedLorebookStore.chatBookOf(emptyId), null, 'nothing to move, no book')
     // Cut short after the book was written but before the column was cleared: nothing is added twice.
     db.prepare('UPDATE codex_chat_threads SET memories = ? WHERE id = ?').run(JSON.stringify([{ id: 'm1', text: '카이는 왼손잡이' }]), threadId)
     createUserSettingsSchema(db)
     assert.equal(OwnedLorebookStore.chatBookOf(threadId)!.entries.length, 2)
-    assert.equal(CodexChatStore.findThreadById(threadId)!.memories, null)
+    assert.equal(memoriesOf(threadId), null)
   })
 
   await t.test('links: a profile or a chat takes only its owner\'s account books', () => {

@@ -39,14 +39,15 @@ export type MergeItem = {
   status: 'new' | 'duplicate'
   /** The target entry it duplicates. */
   duplicateOf?: ChatLoreEntry
-  /** The editable starting text of "합친 결과": both texts, a blank line between. */
+  /** The editable starting text of "합친 결과": both texts, a blank line between (one of them when it holds the other). */
   suggested?: string
 }
 
 /** A source file and whether its name is taken where it goes (it is then copied as `name (2).ext`). */
 export type MergeFile = { file: string; clash: boolean }
 
-export type MergePreview = { source: OwnedLorebook; target: OwnedLorebook; items: MergeItem[]; files: MergeFile[] }
+/** `defaultInstruction`: what "맡기기" tells the model unless the person rewrites it. */
+export type MergePreview = { source: OwnedLorebook; target: OwnedLorebook; items: MergeItem[]; files: MergeFile[]; defaultInstruction: string }
 
 export type MergeResult = { book: OwnedLorebook; added: number; updated: number; skipped: number; files: number }
 
@@ -91,11 +92,25 @@ function idFilter(value: unknown) {
   return new Set(value.filter((id): id is string => typeof id === 'string'))
 }
 
+/** Whitespace runs folded to one space, for comparing two texts. */
+function foldText(text: string) {
+  return text.trim().replace(/\s+/g, ' ')
+}
+
+/** The target text and the source text, a blank line between; just one of them when they are equal or one holds the other. */
+function suggestedText(targetText: string, sourceText: string) {
+  const target = targetText.trim()
+  const source = sourceText.trim()
+  if (foldText(target).includes(foldText(source))) return target
+  if (foldText(source).includes(foldText(target))) return source
+  return `${target}\n\n${source}`
+}
+
 function itemsOf(source: OwnedLorebook, target: OwnedLorebook, entryIds: Set<string> | null): MergeItem[] {
   return source.entries.filter((entry) => !entryIds || entryIds.has(entry.id)).map((entry) => {
     const duplicateOf = target.entries.find((candidate) => isDuplicate(entry, candidate))
     return duplicateOf
-      ? { entry, status: 'duplicate' as const, duplicateOf, suggested: [duplicateOf.content.trim(), entry.content.trim()].filter(Boolean).join('\n\n') }
+      ? { entry, status: 'duplicate' as const, duplicateOf, suggested: suggestedText(duplicateOf.content, entry.content) }
       : { entry, status: 'new' as const }
   })
 }
@@ -168,6 +183,7 @@ export function previewMerge(sourceId: number, targetId: number, owner: string, 
     target,
     items: itemsOf(source, target, idFilter(options.entryIds)),
     files: planFiles(owner, source, target).map((file) => ({ file: file.source.rel, clash: file.clash })),
+    defaultInstruction: MERGE_DRAFT_INSTRUCTION,
   }
 }
 
@@ -312,8 +328,9 @@ export async function draftMerge(sourceId: number, targetId: number, owner: stri
   if (!resolveProfileModel(profile, 'summary')) throw new LorebookError('이 프로필에는 합치기에 쓸 모델이 없어.')
   const wanted = idFilter(input.entryIds)
   const duplicates = preview.items.filter((item) => item.status === 'duplicate' && (!wanted || wanted.has(item.entry.id))).slice(0, MERGE_DRAFT_MAX_ENTRIES)
+  // The person's instruction is the default rewritten, so it replaces it; empty falls back to the default.
   const instruction = typeof input.instruction === 'string' ? input.instruction.trim().slice(0, MERGE_INSTRUCTION_MAX_LENGTH) : ''
-  const system = [MERGE_DRAFT_INSTRUCTION, instruction].filter(Boolean).join('\n\n')
+  const system = instruction || MERGE_DRAFT_INSTRUCTION
   const sourceLabel = preview.source.kind === 'chat' ? '채팅 책' : '원본 책'
   const timeout = AbortSignal.timeout(SUMMARY_TIMEOUT_MS)
   const bounded = signal ? AbortSignal.any([signal, timeout]) : timeout

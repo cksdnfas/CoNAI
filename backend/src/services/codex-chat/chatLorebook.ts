@@ -460,7 +460,3 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
     labels: chosen.map(({ entry }) => loreEntryTitle(entry)),
   }
 }
-
-export function buildLorebookText(profile: LoreProfile, messages: ReadonlyArray<{ content: string }> | undefined, estimate: (text: string) => number, render: (text: string) => string) {
-  return selectLoreEntries(profile, messages, estimate, render).text
-}
