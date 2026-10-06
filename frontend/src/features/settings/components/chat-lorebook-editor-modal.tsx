@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Save, Trash2 } from 'lucide-react'
+import { RefreshCw, Save, Trash2 } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
@@ -21,7 +21,14 @@ import { getErrorMessage } from '@/lib/error-message'
 import { ChatLorebookEditor } from './chat-profile-lorebook'
 
 /** Create or edit one shared lorebook. Saving reaches every profile that links it. */
-export function ChatLorebookEditorModal({ open, lorebook, onClose }: { open: boolean; lorebook: ChatLorebook | null; onClose: () => void }) {
+export function ChatLorebookEditorModal({ open, lorebook, onClose, onUpdateFromFile, updating }: {
+  open: boolean
+  lorebook: ChatLorebook | null
+  onClose: () => void
+  /** Pick a file to refresh the opened book (only offered when editing an existing one). */
+  onUpdateFromFile?: (lorebook: ChatLorebook) => void
+  updating?: boolean
+}) {
   const { t } = useI18n()
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
@@ -84,6 +91,11 @@ export function ChatLorebookEditorModal({ open, lorebook, onClose }: { open: boo
         {lorebook ? (
           <IconButton size="icon-sm" variant="destructive" onClick={() => void handleDelete()} disabled={deleteMutation.isPending} label={t({ ko: '삭제', en: 'Delete' })}>
             <Trash2 />
+          </IconButton>
+        ) : null}
+        {lorebook && onUpdateFromFile ? (
+          <IconButton size="icon-sm" variant="ghost" onClick={() => onUpdateFromFile(lorebook)} disabled={updating} label={t({ ko: '파일로 업데이트', en: 'Update from file' })}>
+            <RefreshCw />
           </IconButton>
         ) : null}
         <span className="flex-1" />

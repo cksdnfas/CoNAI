@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Download, Save, Trash2 } from 'lucide-react'
+import { Copy, Download, Save, Trash2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ToggleChip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -213,7 +213,14 @@ function ComfyPresetFields({ config, onChange }: { config: ChatComfyPresetConfig
 }
 
 /** Create or edit one generation preset. Saving reaches every profile that links it. */
-export function ChatGenerationPresetEditorModal({ open, preset, onClose }: { open: boolean; preset: ChatGenerationPreset | null; onClose: () => void }) {
+export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDuplicate, duplicating }: {
+  open: boolean
+  preset: ChatGenerationPreset | null
+  onClose: () => void
+  /** Copy the opened preset (only offered when editing an existing one). */
+  onDuplicate?: (preset: ChatGenerationPreset) => void
+  duplicating?: boolean
+}) {
   const { t } = useI18n()
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
@@ -299,6 +306,11 @@ export function ChatGenerationPresetEditorModal({ open, preset, onClose }: { ope
         <IconButton size="icon-sm" variant="ghost" onClick={() => downloadChatGenerationPresetFile(draft)} disabled={nameMissing} label={t({ ko: 'JSON으로 내보내기', en: 'Export as JSON' })}>
           <Download />
         </IconButton>
+        {preset && onDuplicate ? (
+          <IconButton size="icon-sm" variant="ghost" onClick={() => onDuplicate(preset)} disabled={duplicating} label={t({ ko: '복제', en: 'Duplicate' })}>
+            <Copy />
+          </IconButton>
+        ) : null}
         <span className="flex-1" />
         <IconButton size="icon-sm" variant="default" onClick={() => saveMutation.mutate()} disabled={nameMissing || comfyIncomplete || saveMutation.isPending} label={t({ ko: '저장', en: 'Save' })}>
           <Save />

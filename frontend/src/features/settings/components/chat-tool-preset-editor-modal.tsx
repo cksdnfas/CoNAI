@@ -1,6 +1,6 @@
 import { useLayoutEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Download, Save, Trash2 } from 'lucide-react'
+import { Copy, Download, Save, Trash2 } from 'lucide-react'
 import { ToggleChip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
@@ -33,13 +33,16 @@ const EMPTY: ChatToolPresetInput = { name: '', scopes: ['read'], toolAllowlist: 
  * Create or edit one tool preset: name, scopes and the tools within them. Saving reaches every profile that links it.
  * `onSaved` hands the saved preset back (the profile editor links a preset made from inside it).
  */
-export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSaved }: {
+export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSaved, onDuplicate, duplicating }: {
   open: boolean
   preset: ChatToolPreset | null
   /** Starting values for a new preset (e.g. a duplicate, or a profile's own grant turned into a preset). */
   initial?: ChatToolPresetInput
   onClose: () => void
   onSaved?: (preset: ChatToolPreset) => void
+  /** Copy the opened preset (only offered when editing an existing one). */
+  onDuplicate?: (preset: ChatToolPreset) => void
+  duplicating?: boolean
 }) {
   const { t } = useI18n()
   const confirm = useConfirm()
@@ -137,6 +140,11 @@ export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSa
         <IconButton size="icon-sm" variant="ghost" onClick={() => downloadChatToolPresetFile(draft)} disabled={nameMissing} label={t({ ko: 'JSON으로 내보내기', en: 'Export as JSON' })}>
           <Download />
         </IconButton>
+        {preset && onDuplicate ? (
+          <IconButton size="icon-sm" variant="ghost" onClick={() => onDuplicate(preset)} disabled={duplicating} label={t({ ko: '복제', en: 'Duplicate' })}>
+            <Copy />
+          </IconButton>
+        ) : null}
         <span className="flex-1" />
         <IconButton size="icon-sm" variant="default" onClick={() => saveMutation.mutate()} disabled={nameMissing || saveMutation.isPending} label={t({ ko: '저장', en: 'Save' })}>
           <Save />

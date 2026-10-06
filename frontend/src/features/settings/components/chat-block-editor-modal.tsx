@@ -1,6 +1,6 @@
 import { useLayoutEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Download, Save, Trash2 } from 'lucide-react'
+import { Copy, Download, Save, Trash2 } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
@@ -23,7 +23,14 @@ import { BLOCK_KEY_PATTERN, ChatBlockEditor, starterBlock } from './chat-block-e
 import { downloadChatBlockFile } from './chat-block-file'
 
 /** Create or edit one shared display block. Saving reaches every profile that links it. */
-export function ChatBlockEditorModal({ open, shared, onClose }: { open: boolean; shared: ChatSharedBlock | null; onClose: () => void }) {
+export function ChatBlockEditorModal({ open, shared, onClose, onDuplicate, duplicating }: {
+  open: boolean
+  shared: ChatSharedBlock | null
+  onClose: () => void
+  /** Copy the opened block (only offered when editing an existing one). */
+  onDuplicate?: (shared: ChatSharedBlock) => void
+  duplicating?: boolean
+}) {
   const { t } = useI18n()
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
@@ -97,6 +104,11 @@ export function ChatBlockEditorModal({ open, shared, onClose }: { open: boolean;
         <IconButton size="icon-sm" variant="ghost" onClick={() => downloadChatBlockFile(name.trim() || block.key, block)} disabled={!keyValid} label={t({ ko: 'JSON으로 내보내기', en: 'Export as JSON' })}>
           <Download />
         </IconButton>
+        {shared && onDuplicate ? (
+          <IconButton size="icon-sm" variant="ghost" onClick={() => onDuplicate(shared)} disabled={duplicating} label={t({ ko: '복제', en: 'Duplicate' })}>
+            <Copy />
+          </IconButton>
+        ) : null}
         <span className="flex-1" />
         <IconButton size="icon-sm" variant="default" onClick={() => saveMutation.mutate()} disabled={!keyValid || saveMutation.isPending} label={t({ ko: '저장', en: 'Save' })}>
           <Save />
