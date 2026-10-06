@@ -451,7 +451,7 @@ export function LlmConnectionEditorModal({
             <IconButton
               size="icon-sm"
               variant="secondary"
-              onClick={() => void testMutation.mutateAsync()}
+              onClick={() => testMutation.mutate()}
               disabled={testMutation.isPending || isSaving}
               label={t('llmConnectionsTab.testConnection')}
             >
@@ -471,7 +471,7 @@ export function LlmConnectionEditorModal({
                   tone: 'destructive',
                 })
                 if (confirmed) {
-                  void deleteMutation.mutateAsync()
+                  deleteMutation.mutate()
                 }
               }}
               disabled={deleteMutation.isPending || isSaving}
@@ -486,7 +486,7 @@ export function LlmConnectionEditorModal({
         </IconButton>
         <IconButton
           size="icon-sm"
-          onClick={() => void (isEditMode ? updateMutation.mutateAsync() : createMutation.mutateAsync())}
+          onClick={() => (isEditMode ? updateMutation.mutate() : createMutation.mutate())}
           disabled={!canSave || isSaving}
           label={isEditMode ? t('llmConnectionsTab.saveConnection') : t('llmConnectionsTab.createAndSaveConnection')}
         >

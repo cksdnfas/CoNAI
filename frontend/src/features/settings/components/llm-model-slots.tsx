@@ -353,7 +353,7 @@ export function ModelSlotEditorModal({
                 confirmLabel: t({ ko: '삭제', en: 'Delete' }),
                 tone: 'destructive',
               })
-              if (confirmed) void deleteMutation.mutateAsync()
+              if (confirmed) deleteMutation.mutate()
             }}
             label={t({ ko: '모델 삭제', en: 'Delete model' })}
           >
@@ -363,7 +363,7 @@ export function ModelSlotEditorModal({
         <IconButton size="icon-sm" variant="secondary" onClick={onClose} disabled={busy} label={t({ ko: '취소', en: 'Cancel' })}>
           <X className="h-4 w-4" />
         </IconButton>
-        <IconButton size="icon-sm" onClick={() => void saveMutation.mutateAsync()} disabled={!canSave || busy} label={t({ ko: '저장', en: 'Save' })}>
+        <IconButton size="icon-sm" onClick={() => saveMutation.mutate()} disabled={!canSave || busy} label={t({ ko: '저장', en: 'Save' })}>
           {saveMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
         </IconButton>
       </ModalFooter>
