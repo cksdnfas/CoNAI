@@ -39,8 +39,25 @@ function speakerName(row: RoomMessageRow, names: Map<number, string>, userName: 
   return names.get(row.speaker_profile_id) as string;
 }
 
+/**
+ * A direct chat's reply already answers (and quotes) the latest user message, so chat_reply_to there only quotes an
+ * older one: offered once the chat has a user message before the latest. Codex keeps the first tool list of its
+ * session, so it always has it.
+ */
+export function offersChatReplyTo(context: McpRequestContext) {
+  const chat = context.chatContext;
+  if (!chat || chat.kind !== 'direct' || context.source === 'codex-chat') return true;
+  const { count } = getUserSettingsDb().prepare("SELECT COUNT(*) AS count FROM codex_chat_messages WHERE thread_id = ? AND role = 'user'").get(chat.threadId) as { count: number };
+  return count > 1;
+}
+
 /** Group room tools for chat agents in a room the caller owns: call another member, and read the room's history. */
 export function registerChatRoomTools(server: McpServer, context: McpRequestContext): void {
+  if (offersChatReplyTo(context)) registerChatReplyTo(server, context);
+  registerRoomTools(server, context);
+}
+
+function registerChatReplyTo(server: McpServer, context: McpRequestContext): void {
   server.tool(
     'chat_reply_to',
     'Set the quote and recipients of the reply you are writing. Omit message_id to keep its current quote. to contains exact member profile IDs, "user" to finish by addressing the human, or "room" for an announcement without waking anyone. Replaces an earlier recipient selection. The app displays the quote; do not repeat it in your text. Your sender and room are server-controlled.',
@@ -57,6 +74,9 @@ export function registerChatRoomTools(server: McpServer, context: McpRequestCont
       } catch (error) { return errorResult(error); }
     },
   );
+}
+
+function registerRoomTools(server: McpServer, context: McpRequestContext): void {
   server.tool(
     'room_call_member',
     'Ask other members of the group chat room you are in to answer right after you. Use their exact names from the room header (not translated). They write their own answers; do not write them yourself.',

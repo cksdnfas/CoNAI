@@ -1,13 +1,15 @@
 import type { ReactNode } from 'react'
+import { TriangleAlert } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Field } from '@/components/ui/field'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { Tip } from '@/components/ui/tooltip'
 import { CodexModelSelect } from '@/features/image-generation/components/codex-model-select'
 import { CodexReasoningSelect } from '@/features/image-generation/components/codex-reasoning-select'
 import { useI18n } from '@/i18n'
-import type { ChatProfileDefaults, ChatProfileInput, ModelRole, ModelSlot } from '@/lib/api-codex-chat'
+import { thinkingMayFillCap, type ChatProfileDefaults, type ChatProfileInput, type ModelRole, type ModelSlot } from '@/lib/api-codex-chat'
 import type { ExternalApiProviderRecord } from '@/lib/api-external-api'
 import type { CodexModelOption } from '@/lib/api-image-generation-queue'
 import { cn } from '@/lib/utils'
@@ -157,7 +159,14 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
                 label={t({ ko: '최대 출력 토큰', en: 'Max output tokens' })}
                 info={t({ ko: '추론과 답변을 합친 한도. 채팅의 ⋯ → 컨텍스트에서 따로 정하면 그쪽이 우선이야.', en: 'Limit for reasoning and answer combined. A value set per chat under ⋯ → Context takes precedence.' })}
               >
-                <NumberStepperInput variant="settings" allowEmpty step={1024} min={1} value={draft.maxTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />
+                <div className="flex items-center gap-2">
+                  {thinkingMayFillCap(draft.reasoningEffort, draft.maxTokens) ? (
+                    <Tip content={t({ ko: '추론이 켜진 채 최대 출력 토큰이 {n}이면 생각만 하다 끝날 수 있어', en: 'With reasoning on, a cap of {n} tokens may run out while still thinking' }, { n: draft.maxTokens ?? 0 })} side="top">
+                      <span className="text-warning"><TriangleAlert className="size-4" aria-hidden /></span>
+                    </Tip>
+                  ) : null}
+                  <NumberStepperInput variant="settings" allowEmpty step={1024} min={1} value={draft.maxTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />
+                </div>
               </Field>
               <Field label={t({ ko: '추론 강도', en: 'Reasoning effort' })}>
                 <Select variant="settings" value={draft.reasoningEffort} onChange={(event) => patch({ reasoningEffort: event.target.value as ChatProfileInput['reasoningEffort'] ?? '' })}>

@@ -202,4 +202,18 @@ test('lorebook files: account and chat books as file store folders, cache sync, 
     assert.deepEqual(OwnedLorebookStore.threadLinks(threadId), [])
     assert.throws(() => OwnedLorebookStore.delete(theirs.id, me), /찾을 수 없어/)
   })
+
+  await t.test('reading text from an offset inside a character starts on the next one and ends on a whole one', async () => {
+    const file = FileStoreService.writeText(me, null, '한글.md', '가나다라마바')
+    const inside = await FileStoreService.readText(me, file.id, 1, 8)
+    assert.deepEqual([inside.offset, inside.text, inside.nextOffset, inside.size], [3, '나다', 9, 18])
+    const next = await FileStoreService.readText(me, file.id, 9, 4)
+    assert.deepEqual([next.offset, next.text, next.nextOffset], [9, '라', 12])
+    // Too narrow for a character after the skip: no text, but the next offset still moves to a boundary.
+    const narrow = await FileStoreService.readText(me, file.id, 1, 4)
+    assert.deepEqual([narrow.offset, narrow.text, narrow.nextOffset], [3, '', 3])
+    const tail = await FileStoreService.readText(me, file.id, 17, 100)
+    assert.deepEqual([tail.offset, tail.text, tail.nextOffset], [18, '', null])
+    await assert.rejects(FileStoreService.readText(me, file.id, 19, 100), /잘못된 읽기 범위야 \(파일 크기 18바이트\)/)
+  })
 })

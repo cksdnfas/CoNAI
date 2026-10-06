@@ -197,6 +197,17 @@ test('lore context: books per request, the index, always-on entries, linked file
     await assert.rejects(readLoreFile(chat, { book: '남의 책', title: '비밀' }), /Lorebook not found/)
     await assert.rejects(readLoreFile(chat, { book: '이 채팅', title: '바다 약속' }), /no linked file/)
     await assert.rejects(readLoreFile({ ...chat, accountId: 2 }, { book: '이 채팅', title: '먹물 실종' }), /Chat not found/, "another account's chat")
+    // An offset inside a character starts on the next one; a wrong one says how large the file is.
+    const inside = await readLoreFile(chat, { book: '[카이]', title: '어린 시절', offset: 1 })
+    assert.equal(inside.offset, 3)
+    assert.ok(inside.text.startsWith('닷가 마을의 기억.'))
+    const size = Buffer.byteLength('바닷가 마을의 기억. '.repeat(300))
+    await assert.rejects(readLoreFile(chat, { book: '[카이]', title: '어린 시절', offset: size + 1 }), new RegExp(`잘못된 읽기 범위야 \\(파일 크기 ${size}바이트\\)`))
+    // A file longer than one call ends with where to go on.
+    assert.equal(
+      loreFileResultText({ book: '카이', title: '어린 시절', file: '자료/어린시절.md', text: '바닷가', offset: 0, nextOffset: 32000, size: 40000 }),
+      '[자료 자료/어린시절.md]\n바닷가\n[/자료]\n(파일 40000바이트 중 32000바이트까지 읽음. 이어 읽으려면 read_lore_file(book="카이", title="어린 시절", offset=32000))',
+    )
 
     // Through the chat's MCP bridge: offered beside the room tools while a reply is running, with no scopes needed.
     const context = { threadId, profileId: kai.id, kind: 'direct' as const, replyId: 'lore-reply' }

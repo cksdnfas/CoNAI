@@ -7,7 +7,7 @@ import { ChatProfileStore } from '../src/services/codex-chat/chatProfiles'
 import { normalizeChatStyle } from '../src/services/codex-chat/chatStyle'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from '../src/services/codex-chat/codexChatStore'
 import { streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTarget, type ChatCompletionTool } from '../src/services/codex-chat/llmChatCompletion'
-import { buildChatMessages, buildChatPromptPreview, completeSummary, estimateMessagesTokens, fitChatContext, fitThreadSummary, groupTranscript, rawMessagesEstimate, resolveContextConfig, summaryTranscriptText } from '../src/services/codex-chat/llmChatContext'
+import { buildChatMessages, buildChatPromptPreview, completeSummary, cutToolOutput, estimateMessagesTokens, fitChatContext, fitThreadSummary, groupTranscript, rawMessagesEstimate, resolveContextConfig, summaryTranscriptText } from '../src/services/codex-chat/llmChatContext'
 import { addressLabelFilter, restatement, roundSeparator } from '../src/services/codex-chat/chatReplyText'
 import { buildOpenAiGenerationFields, readLlmConnectionConfig, summaryGenerationOptions, thinkingIsOff } from '../src/services/llmGenerationOptions'
 import { buildGroupLlmMessages } from '../src/services/codex-chat/groupChatContext'
@@ -279,7 +279,7 @@ test('a tool round that does not fit is retried with the tool result cut shorter
     { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'read_lore_file', arguments: '{}' } }] },
     { role: 'tool', tool_call_id: 'c1', content: 'x'.repeat(40000) },
   ]
-  const cut = messages.map((message) => (message.role === 'tool' ? { ...message, content: `${'x'.repeat(4000)}\n…(truncated)` } : message))
+  const cut = messages.map((message) => (message.role === 'tool' ? { ...message, content: `${'x'.repeat(4000)}\n…(잘림: 이 결과의 4000자까지만 보임)` } : message))
   profile.contextTokens = estimateMessagesTokens(profile.id, cut) + 100
   const fitted = fitChatContext(profile, messages, [], 100)
   assert.notEqual(fitted, messages)
@@ -287,6 +287,11 @@ test('a tool round that does not fit is retried with the tool result cut shorter
   assert.equal(fitChatContext(profile, fitted, [], 100), fitted, 'what fits goes as it is')
   profile.contextTokens = estimateMessagesTokens(profile.id, messages.slice(0, 3)) + 100
   assert.throws(() => fitChatContext(profile, messages, [], 100), /컨텍스트 한도를 넘었어/)
+  // The error gives the estimate of the shortest cut tried, not of the uncut request.
+  const shortest = messages.map((message) => (message.role === 'tool' ? { ...message, content: cutToolOutput(message.content, 1000) } : message))
+  const expected = estimateMessagesTokens(profile.id, shortest) + 100
+  assert.throws(() => fitChatContext(profile, messages, [], 100), (error: Error) => error.message.includes(`예상 ${expected} /`))
+  assert.ok(estimateMessagesTokens(profile.id, messages) + 100 > expected)
 })
 
 test('the summary transcript leaves out the chat\'s own tools, quoted lore files and address labels', () => {

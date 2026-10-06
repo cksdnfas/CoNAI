@@ -21,7 +21,7 @@ import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord
 import type { CodexChatStreamEvent } from './codexChatService'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 import { ChatSummaryStore } from './chatMemory'
-import { buildChatMessages, estimateMessagesTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
+import { buildChatMessages, cutToolOutput, estimateMessagesTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
 import { addressLabelFilter, restatement, roundSeparator } from './chatReplyText'
 
 /** Tool output kept on the stored call for replay; the model gets more of it within the reply itself. */
@@ -169,7 +169,7 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
   record.summary = output ? truncateToolSummary(output) : null
   record.output = output.slice(0, STORED_TOOL_OUTPUT_LENGTH)
   emit(turn, { type: 'tool', call: { ...record } })
-  return (output.length > outputLimit ? `${output.slice(0, outputLimit)}\n…(truncated)` : output) || '(no output)'
+  return (output.length > outputLimit ? cutToolOutput(output, outputLimit) : output) || '(no output)'
 }
 
 /** A direct chat's reply: the profile's prompt and the thread's context window (summarized first if it overflows). */

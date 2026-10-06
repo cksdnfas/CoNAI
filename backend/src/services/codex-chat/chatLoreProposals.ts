@@ -6,10 +6,11 @@ import { FileStoreService, TEXT_EXTENSIONS, fileOwnerKey } from '../fileStoreSer
 import { storedFilePath } from '../fileStorePaths'
 import { loreEntryTitle } from './chatLorebook'
 import { LORE_FILES_FOLDER, OwnedLorebookStore, foldLoreTitle, freeChildName, type OwnedLorebook } from './chatLorebookFiles'
+import { ChatGroupStore } from './chatGroupStore'
 import { ChatProfileStore } from './chatProfiles'
 import { ChatProposalStore } from './chatProposals'
 import { userPersonaForThread } from './chatUserProfiles'
-import { CodexChatStore } from './codexChatStore'
+import { CodexChatStore, type CodexChatMessageRecord } from './codexChatStore'
 
 /**
  * save_lore: the model proposes an entry for the chat's own lorebook; the entry goes in only when a person saves the
@@ -39,6 +40,14 @@ const LORE_STOP_KEYS = new Set([
   '월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일',
   'promise', 'today', 'tomorrow', 'yesterday', 'tonight', 'weekend', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
 ])
+/**
+ * A keyword found in more than this share of the chat's recent messages is part of the chat itself (the user's in-chat
+ * name, the place every scene happens), measured over the last CHAT_COMMON_WINDOW user and assistant messages once
+ * there are at least CHAT_COMMON_MIN_MESSAGES of them (fewer would drop the fact the user just brought up).
+ */
+const CHAT_COMMON_SHARE = 0.4
+const CHAT_COMMON_WINDOW = 20
+const CHAT_COMMON_MIN_MESSAGES = 10
 /** A bare time: `7시`, `오후 3시 반`, `19:30`, `7pm`. */
 const TIME_KEY = /^(?:(?:오전|오후|아침|저녁|밤|새벽)\s*)?\d{1,2}\s*시(?:\s*(?:\d{1,2}\s*분|반))?$|^\d{1,2}:\d{2}$|^\d{1,2}\s*(?:am|pm)$/i
 
@@ -61,15 +70,28 @@ function foldKey(value: string) {
 }
 
 /**
- * The keywords worth keeping, at most LORE_PROPOSAL_MAX_KEYS: not the user's or the character's name (they appear in
- * every turn), not a date, weekday or bare time (see LORE_STOP_KEYS, TIME_KEY).
+ * The keywords worth keeping, at most LORE_PROPOSAL_MAX_KEYS: not the user's or a speaker's name (they appear in
+ * every turn), not a date, weekday or bare time (see LORE_STOP_KEYS, TIME_KEY), and not a word most of the `recent`
+ * messages already hold (see CHAT_COMMON_SHARE).
  */
-export function usefulLoreKeys(keys: string[], names: Array<string | null | undefined>) {
+export function usefulLoreKeys(keys: string[], names: Array<string | null | undefined>, recent: string[] = []) {
   const skipped = new Set(names.filter((name): name is string => Boolean(name?.trim())).map(foldKey))
+  const texts = recent.length >= CHAT_COMMON_MIN_MESSAGES ? recent.slice(-CHAT_COMMON_WINDOW).map(foldKey) : []
+  const common = (folded: string) => texts.length > 0 && texts.filter((text) => text.includes(folded)).length > texts.length * CHAT_COMMON_SHARE
   return keys.filter((key) => {
     const folded = foldKey(key)
-    return folded && !skipped.has(folded) && !LORE_STOP_KEYS.has(folded) && !TIME_KEY.test(folded)
+    return folded && !skipped.has(folded) && !LORE_STOP_KEYS.has(folded) && !TIME_KEY.test(folded) && !common(folded)
   }).slice(0, LORE_PROPOSAL_MAX_KEYS)
+}
+
+/** Names that come up in every turn of the chat: the user's in this chat, then every profile that speaks in it. */
+function chatNames(threadId: number, profileId: number, messages: CodexChatMessageRecord[]) {
+  const thread = CodexChatStore.findThreadById(threadId)
+  const speakers = new Set<number>([profileId])
+  if (thread?.profile_id) speakers.add(thread.profile_id)
+  for (const member of ChatGroupStore.members(threadId)) speakers.add(member.profile_id)
+  for (const message of messages) if (message.speaker_profile_id) speakers.add(message.speaker_profile_id)
+  return [thread ? userPersonaForThread(thread).name : null, ...[...speakers].map((id) => ChatProfileStore.find(id)?.name)]
 }
 
 /**
@@ -112,8 +134,9 @@ export function proposeLore(context: ChatExecutionContext, input: SaveLoreInput)
   const keys = [...new Set(((input.keys ?? []) as unknown[]).map((key) => (typeof key === 'string' ? key.trim() : '')).filter(Boolean))]
   if (keys.length > LORE_PROPOSAL_LIMITS.keys) throw new LoreProposalError(`At most ${LORE_PROPOSAL_LIMITS.keys} keys.`)
   if (keys.some((key) => key.length > LORE_PROPOSAL_LIMITS.key)) throw new LoreProposalError(`A key is over ${LORE_PROPOSAL_LIMITS.key} characters.`)
-  const thread = CodexChatStore.findThreadById(context.threadId)
-  const useful = usefulLoreKeys(keys, [thread ? userPersonaForThread(thread).name : null, ChatProfileStore.find(context.profileId)?.name])
+  const messages = CodexChatStore.listMessages(context.threadId)
+  const recent = messages.filter((message) => (message.role === 'user' || message.role === 'assistant') && message.content.trim()).map((message) => message.content)
+  const useful = usefulLoreKeys(keys, chatNames(context.threadId, context.profileId, messages), recent)
   const content = typeof input.content === 'string' ? input.content.trim() : ''
   if (!content) throw new LoreProposalError('content is empty.')
   if (content.length > LORE_PROPOSAL_LIMITS.content) throw new LoreProposalError(`content is over ${LORE_PROPOSAL_LIMITS.content} characters.`)

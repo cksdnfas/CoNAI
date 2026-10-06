@@ -419,4 +419,29 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     const later = await propose('p4', { title: '동생', keys: ['하늘'], content: '사용자의 동생은 하늘이다.' })
     assert.equal(later.isError, undefined, 'three replies later it is allowed again')
   })
+
+  await t.test("save_lore keywords leave out the user's chat name, every speaker and words most recent messages hold", async () => {
+    const { ChatGroupStore } = await import('../src/services/codex-chat/chatGroupStore')
+    const { ChatUserProfileStore } = await import('../src/services/codex-chat/chatUserProfiles')
+    const { proposeLore, usefulLoreKeys } = await import('../src/services/codex-chat/chatLoreProposals')
+    const luna = ChatProfileStore.create({ name: '루나', engine: 'llm', providerName: 'conn' })
+    const roomId = ChatGroupStore.create(null, '항구', [profile.id, luna.id], profile.id)
+    ChatUserProfileStore.setThreadUserProfile(roomId, ChatUserProfileStore.create(null, { name: '한별' }).id)
+    const say = (role: 'user' | 'assistant', content: string) => CodexChatStore.addMessage({
+      thread_id: roomId, role, content, tool_calls: [], status: 'completed', error: null, ...(role === 'assistant' ? { speaker_profile_id: luna.id } : {}),
+    })
+    for (let index = 0; index < 6; index++) {
+      say('user', index % 2 ? '오늘도 HARBOR  항구는 조용하네.' : '그냥 걷는 중.')
+      say('assistant', index % 2 ? '항구 바람이 차. harbor 냄새도.' : '응.')
+    }
+    say('user', '이건 기억해줘: 할머니 금성 라디오를 고쳐야 해.')
+    const proposal = proposeLore({ threadId: roomId, profileId: profile.id, kind: 'group', replyId: 'g1' }, {
+      title: '금성 라디오', keys: ['한별', '루나', '카이', ' 항구 ', 'Harbor', '금성', '라디오', '할머니', '수리'], content: '한별은 할머니의 금성 라디오를 고쳐야 한다.',
+    })
+    assert.deepEqual(proposal.keys, ['금성', '라디오', '할머니', '수리'])
+    // Too few messages to tell what is common: nothing is dropped for it.
+    assert.deepEqual(usefulLoreKeys(['항구'], [], Array(9).fill('항구')), ['항구'])
+    assert.deepEqual(usefulLoreKeys(['항구'], [], Array(10).fill('항구')), [])
+    assert.deepEqual(usefulLoreKeys(['항구'], [], [...Array(4).fill('항구'), ...Array(6).fill('바다')]), ['항구'], 'at 40% it stays')
+  })
 })

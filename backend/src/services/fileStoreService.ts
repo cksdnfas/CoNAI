@@ -487,28 +487,33 @@ export const FileStoreService = {
   async readText(owner: string, id: string, offset = 0, limit = 16000): Promise<StoredFileText> {
     const { entry, filePath } = this.resolveFile(owner, id);
     if (!TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) throw new FileStoreError('텍스트 읽기는 UTF-8 텍스트 파일만 지원해. 음성·문서는 별도 변환이 필요해.', 415);
-    if (!Number.isSafeInteger(offset) || offset < 0 || offset > entry.size || !Number.isSafeInteger(limit) || limit < 4 || limit > 32000) throw new FileStoreError('잘못된 읽기 범위야.');
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > entry.size || !Number.isSafeInteger(limit) || limit < 4 || limit > 32000) throw new FileStoreError(`잘못된 읽기 범위야 (파일 크기 ${entry.size}바이트).`);
     const handle = await fs.promises.open(filePath, 'r');
     try {
       const buffer = Buffer.alloc(Math.min(limit, entry.size - offset));
       const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset);
+      // Start on a character: an offset inside a UTF-8 codepoint moves forward past its continuation bytes.
+      let skip = 0;
+      while (skip < Math.min(bytesRead, 3) && (buffer[skip] & 0xc0) === 0x80) skip++;
+      const start = offset + skip;
       // End only on a complete UTF-8 codepoint, so nextOffset can be used losslessly.
-      let length = bytesRead;
+      let end = bytesRead;
       if (offset + bytesRead < entry.size) {
-        let start = bytesRead - 1;
-        while (start >= 0 && (buffer[start] & 0xc0) === 0x80) start--;
-        if (start >= 0) {
-          const byte = buffer[start];
+        let lead = bytesRead - 1;
+        while (lead >= skip && (buffer[lead] & 0xc0) === 0x80) lead--;
+        if (lead >= skip) {
+          const byte = buffer[lead];
           const width = byte < 0x80 ? 1 : byte < 0xe0 ? 2 : byte < 0xf0 ? 3 : 4;
-          if (start + width > bytesRead) length = start;
+          if (lead + width > bytesRead) end = lead;
         }
       }
-      const data = buffer.subarray(0, length);
+      const data = buffer.subarray(skip, end);
       if (data.includes(0)) throw new FileStoreError('바이너리 파일은 텍스트로 읽을 수 없어.', 415);
       let text: string;
       try { text = new TextDecoder('utf-8', { fatal: true }).decode(data); }
       catch { throw new FileStoreError('UTF-8로 저장한 텍스트 파일만 읽을 수 있어.', 415); }
-      return { offset, nextOffset: offset + length < entry.size ? offset + length : null, size: entry.size, text };
+      const next = offset + end;
+      return { offset: start, nextOffset: next < entry.size ? next : null, size: entry.size, text };
     } finally { await handle.close(); }
   },
 

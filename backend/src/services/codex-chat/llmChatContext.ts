@@ -536,27 +536,34 @@ export function assertChatContextFits(profile: ChatProfile, messages: ChatComple
 /** Tool output lengths tried, in order, when a request with tool results does not fit (see fitChatContext). */
 const FIT_TOOL_OUTPUT_LENGTHS = [REPLAYED_TOOL_OUTPUT_LENGTH, 1000]
 
+/** A tool result cut to `length` characters, saying how much of it the model sees. */
+export function cutToolOutput(content: string, length: number) {
+  return `${content.slice(0, length)}\n…(잘림: 이 결과의 ${length}자까지만 보임)`
+}
+
 /**
  * `messages` when they fit (assertChatContextFits); otherwise a copy with the tool results cut shorter, tried at
  * FIT_TOOL_OUTPUT_LENGTHS — a large tool result (a long file, a history dump) is what usually tips a tool round over
- * the limit. Throws the overflow error when even the shortest cut does not fit.
+ * the limit. Throws the overflow error of the shortest cut tried (its estimate) when even that does not fit.
  */
 export function fitChatContext(profile: ChatProfile, messages: ChatCompletionMessage[], tools: ChatCompletionTool[], maxTokens: number | null | undefined): ChatCompletionMessage[] {
   try {
     assertChatContextFits(profile, messages, tools, maxTokens)
     return messages
   } catch (error) {
+    let last = error
     for (const length of FIT_TOOL_OUTPUT_LENGTHS) {
-      const cut = messages.map((message) => (message.role === 'tool' && message.content.length > length ? { ...message, content: `${message.content.slice(0, length)}\n…(truncated)` } : message))
+      const cut = messages.map((message) => (message.role === 'tool' && message.content.length > length ? { ...message, content: cutToolOutput(message.content, length) } : message))
       if (cut.every((message, index) => message === messages[index])) continue
       try {
         assertChatContextFits(profile, cut, tools, maxTokens)
         return cut
-      } catch {
-        // Try a shorter cut.
+      } catch (cutError) {
+        // Try a shorter cut; report the shortest one's estimate.
+        last = cutError
       }
     }
-    throw error
+    throw last
   }
 }
 

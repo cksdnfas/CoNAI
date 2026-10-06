@@ -251,14 +251,24 @@ test('message replies: storage, delivery, context, and generation ownership', { 
   const directChat = () => CodexChatStore.findThreadById(LlmChatService.createThread(requester, a.id))!
   type StreamEvent = Parameters<Parameters<typeof LlmChatService.sendMessage>[3]>[0]
 
-  await t.test('direct chats get no room history tools; group rooms do; chat_reply_to stays in both', async () => {
+  await t.test('direct chats get no room history tools, and chat_reply_to only with an older message to quote; group rooms get all', async () => {
     const names = async (context: ChatExecutionContext) => {
       const bridge = await openChatMcpBridge(requester, [], null, { chatContext: context })
       try { return bridge.tools.map((tool) => tool.function.name) } finally { await bridge.close() }
     }
-    const direct = await names({ threadId: directChat().id, profileId: a.id, kind: 'direct', replyId: 'tools-direct' })
-    assert.ok(direct.includes('chat_reply_to'))
+    const thread = directChat()
+    const sayUser = (content: string) => CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content, tool_calls: [], status: 'completed', error: null })
+    const directContext = { threadId: thread.id, profileId: a.id, kind: 'direct' as const, replyId: 'tools-direct' }
+    sayUser('안녕')
+    const first = await names(directContext)
+    assert.ok(!first.includes('chat_reply_to'), 'the reply already answers the only user message')
+    for (const tool of ['room_history_search', 'room_history_read', 'room_call_member']) assert.ok(!first.includes(tool), tool)
+    sayUser('아까 그 얘기 말인데')
+    const direct = await names(directContext)
+    assert.ok(direct.includes('chat_reply_to'), 'an older message to quote')
     for (const tool of ['room_history_search', 'room_history_read', 'room_call_member']) assert.ok(!direct.includes(tool), tool)
+    const guidance = String(buildChatMessages({ profile: ChatProfileStore.find(a.id)!, thread, messages: CodexChatStore.listMessages(thread.id), config: resolveContextConfig(thread, ChatProfileStore.find(a.id)!), tools: [] })[0].content)
+    assert.ok(guidance.includes('you are already answering the latest message; use chat_reply_to only to quote an older one'))
     const group = await names({ threadId: createRoom().id, profileId: a.id, kind: 'group', replyId: 'tools-group' })
     for (const tool of ['chat_reply_to', 'room_history_search', 'room_history_read', 'room_call_member']) assert.ok(group.includes(tool), tool)
   })

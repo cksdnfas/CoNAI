@@ -144,7 +144,7 @@ export const CHAT_ROOM_TOOLS = new Set(['chat_reply_to', 'room_call_member', 'ro
 
 /**
  * The room tools only a group room offers. A direct chat keeps chat_reply_to (it quotes an earlier message of the
- * chat) and the lorebook tools; its context comes from the window and the summary, not the room history tools.
+ * chat, see offersChatReplyTo) and the lorebook tools; its context comes from the window and the summary, not the room history tools.
  */
 export const GROUP_ONLY_CHAT_TOOLS = new Set(['room_call_member', 'room_history_search', 'room_history_read']);
 

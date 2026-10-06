@@ -11,7 +11,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { editChatSummarySegment, summarizeCodexChatThread, updateCodexChatThreadContext, updateGroupChat, updateGroupChatMember, type ChatGroupInfo, type ChatProfileSummary, type ChatSummarySegment, type CodexChatThread, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { editChatSummarySegment, summarizeCodexChatThread, thinkingMayFillCap, updateCodexChatThreadContext, updateGroupChat, updateGroupChatMember, type ChatGroupInfo, type ChatProfileSummary, type ChatSummarySegment, type CodexChatThread, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error-message'
 import { LorebookBlock } from './chat-lorebook-block'
@@ -172,6 +172,10 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
                 <div className="flex items-center gap-2">
                   {effective !== null && member.reasoningBudgetTokens !== null && effective <= member.reasoningBudgetTokens ? (
                     <Tip content={t({ ko: '추론 토큰 예산({budget})보다 작아서 답변 없이 끊길 수 있어', en: 'At or under the reasoning budget ({budget}): the reply may be cut before it starts' }, { budget: member.reasoningBudgetTokens })} side="top">
+                      <span className="text-warning"><TriangleAlert className="size-4" aria-hidden /></span>
+                    </Tip>
+                  ) : thinkingMayFillCap(member.reasoningEffort, effective) ? (
+                    <Tip content={t({ ko: '추론이 켜진 채 최대 출력 토큰이 {n}이면 생각만 하다 끝날 수 있어', en: 'With reasoning on, a cap of {n} tokens may run out while still thinking' }, { n: effective ?? 0 })} side="top">
                       <span className="text-warning"><TriangleAlert className="size-4" aria-hidden /></span>
                     </Tip>
                   ) : null}

@@ -134,6 +134,7 @@ function toPublicProfile(profile: ChatProfile) {
     contextTurns: profile.contextTurns,
     summaryEnabled: profile.summaryEnabled,
     maxTokens: profile.maxTokens,
+    reasoningEffort: profile.reasoningEffort,
     reasoningBudgetTokens: profile.reasoningBudgetTokens,
     loreDepth: profile.loreDepth,
     authorNote: profile.authorNote,

@@ -86,7 +86,9 @@ export function loreFileResultText(result: Awaited<ReturnType<typeof readLoreFil
     // The file cannot end the data block early.
     result.text.replace(/\[\/자료\]/g, '[/ 자료]'),
     '[/자료]',
-    result.nextOffset !== null ? `(${result.size - result.nextOffset} more bytes: call ${READ_LORE_FILE_TOOL} again with offset=${result.nextOffset})` : '',
+    result.nextOffset !== null
+      ? `(파일 ${result.size}바이트 중 ${result.nextOffset}바이트까지 읽음. 이어 읽으려면 ${READ_LORE_FILE_TOOL}(book=${JSON.stringify(result.book)}, title=${JSON.stringify(result.title)}, offset=${result.nextOffset}))`
+      : '',
   ].filter((line, index) => index < 3 || line).join('\n');
 }
 

@@ -133,8 +133,9 @@ export interface ChatProfileSummary {
   /** Context defaults a chat can override (LLM profiles). */
   contextTurns: number
   summaryEnabled: boolean
-  /** LLM profiles: reply token cap (null: the server's default) and reasoning budget, both counted in the cap. */
+  /** LLM profiles: reply token cap (null: the server's default), reasoning effort ('' not sent) and budget, both counted in the cap. */
   maxTokens: number | null
+  reasoningEffort: CodexReasoningEffort | ''
   reasoningBudgetTokens: number | null
   /** Where keyword lore and the author's note go (turns before the end), and the default note a chat falls back to. */
   loreDepth: number
@@ -142,6 +143,14 @@ export interface ChatProfileSummary {
   style: ChatStyle
   /** Null: no background image. Otherwise part of the image URL, so it changes with the image. */
   backgroundVersion: string | null
+}
+
+/** A reply cap at or under this, with reasoning not turned off, may be spent on thinking before any answer. */
+const THINKING_CAP_WARN_TOKENS = 1024
+
+/** Whether an LLM reply cap is small enough that reasoning may use it all up (reasoning not 'none', the cap set and low). */
+export function thinkingMayFillCap(reasoningEffort: string, maxTokens: number | null) {
+  return reasoningEffort !== 'none' && maxTokens !== null && maxTokens <= THINKING_CAP_WARN_TOKENS
 }
 
 /** An image copied in from a character card (`chat-asset:<name>` in profile and message text). */
