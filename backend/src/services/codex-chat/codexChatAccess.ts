@@ -20,6 +20,7 @@ const CHAT_TOOL_PERMISSION_KEYS: Record<ChatScope, string> = {
   read: 'chat.tools.read',
   generate: 'chat.tools.generate',
   organize: 'chat.tools.organize',
+  configure: 'chat.tools.configure',
 }
 
 export type ChatAccess = {

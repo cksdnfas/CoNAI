@@ -113,6 +113,7 @@ const ACTION_PERMISSION_LABELS: Readonly<Record<string, string>> = {
   'chat.tools.read': 'Chat Tools: Read',
   'chat.tools.generate': 'Chat Tools: Generate',
   'chat.tools.organize': 'Chat Tools: Organize',
+  'chat.tools.configure': 'Chat Tools: Configure',
 };
 
 /** Format one editable built-in permission into the current UI label shape. */

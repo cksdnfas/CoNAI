@@ -51,5 +51,5 @@ export function updateChatSettings(patch: Partial<ChatSettings>): ChatSettings {
 }
 
 /** MCP scopes a chat may grant. Backup/restore stay out: restore overwrites data and neither belongs in a chat. */
-export const CHAT_SCOPES = ['read', 'generate', 'organize'] as const
+export const CHAT_SCOPES = ['read', 'generate', 'organize', 'configure'] as const
 export type ChatScope = typeof CHAT_SCOPES[number]

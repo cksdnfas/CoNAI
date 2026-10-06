@@ -1,5 +1,6 @@
-import { isCodexChatGenerationTool, isCodexChatCreationTool } from '@conai/shared'
+import { isCodexChatGenerationTool, isCodexChatCreationTool, type ChatProposal } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { ChatProposalStore } from './chatProposals'
 import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibilityService'
 import type { CodexChatMessageRecord } from './codexChatStore'
 
@@ -40,12 +41,48 @@ function jobIdsOf(call: CodexChatMessageRecord['tool_calls'][number]) {
   return match ? [Number(match[1])] : []
 }
 
+const PROPOSAL_TOOLS: Record<ChatProposal['kind'], string> = {
+  display_block: 'propose_display_block',
+  profile: 'propose_chat_profile',
+  profile_update: 'propose_profile_update',
+}
+
+/**
+ * Hang each reply's stored proposals on its `propose_*` tool calls (read-only, not stored on the message). Calls and
+ * proposals both keep their order within a reply, so the i-th proposal belongs to the i-th such call; a failed call
+ * stored nothing and is skipped. Replies whose calls were not recorded by name (Codex keeps only a summary) get the
+ * leftover proposals as synthetic calls, like generation results below.
+ */
+export function attachProposals(messages: CodexChatMessageRecord[]): CodexChatMessageRecord[] {
+  const byReply = new Map<string, Array<{ id: number; proposal: ChatProposal }>>()
+  for (const threadId of new Set(messages.map((message) => message.thread_id))) {
+    for (const stored of ChatProposalStore.listForThread(threadId)) {
+      const key = `${threadId}:${stored.replyId}`
+      byReply.set(key, [...(byReply.get(key) ?? []), { id: stored.id, proposal: stored.proposal }])
+    }
+  }
+  if (byReply.size === 0) return messages
+  return messages.map((message) => {
+    const replyId = message.routing?.replyId
+    const proposals = message.role === 'assistant' && replyId ? byReply.get(`${message.thread_id}:${replyId}`) : undefined
+    if (!proposals?.length) return message
+    let next = 0
+    const calls = message.tool_calls.map((call) => {
+      if (!call.tool.startsWith('propose_') || call.status === 'failed' || next >= proposals.length) return call
+      return { ...call, proposal: proposals[next++].proposal }
+    })
+    const extra = proposals.slice(next).map(({ id, proposal }) => ({ id: `proposal-${id}`, tool: PROPOSAL_TOOLS[proposal.kind], status: 'completed' as const, arguments: null, summary: null, historyIds: [], compositeHashes: [], proposal }))
+    return { ...message, tool_calls: [...calls, ...extra] }
+  })
+}
+
 /**
  * Generation jobs finish after the reply that started them, often after the agent stopped checking. Attach each
  * referenced job's history rows to the tool call (read-only, not stored) and count the jobs still running, so the chat
  * shows results as they land without waiting for another message.
  */
 export function attachJobResults(messages: CodexChatMessageRecord[]) {
+  messages = attachProposals(messages)
   const db = getUserSettingsDb()
   const owners = new Map<number, string>()
   const links: Array<{ job_id: number; reply_id: string }> = []

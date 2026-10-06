@@ -125,6 +125,15 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   restore_prompt_data: 'restore',
   import_workflow_definition: 'restore',
   restore_deleted_workflow: 'restore',
+  // Chat-only: HTTP keys never hold `configure` (admin chat accounts only), and propose_* only shows a card a person saves.
+  get_chat_setup_guide: 'configure',
+  list_chat_profiles: 'configure',
+  get_chat_profile: 'configure',
+  list_display_blocks: 'configure',
+  get_display_block: 'configure',
+  propose_display_block: 'configure',
+  propose_chat_profile: 'configure',
+  propose_profile_update: 'configure',
 };
 
 /** Read-only tools over the caller's own group chat rooms; offered to chat agents in group rooms regardless of scopes. */

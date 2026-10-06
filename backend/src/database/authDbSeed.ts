@@ -264,6 +264,12 @@ const DEFAULT_PERMISSION_CATALOG = [
     action: 'organize',
     description: 'Let chat agents create groups and move images and prompts for this account.',
   },
+  {
+    permissionKey: 'chat.tools.configure',
+    resource: 'chat.tools',
+    action: 'configure',
+    description: 'Let chat agents read chat setup and propose chat profiles and display blocks (a person saves them).',
+  },
 ] as const;
 
 /** Seed built-in permission groups and the initial permission catalog. */

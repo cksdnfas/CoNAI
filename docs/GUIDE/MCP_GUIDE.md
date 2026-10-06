@@ -278,6 +278,24 @@ stdio:
 - 정리 도구는 계정에 권한이 추가로 필요합니다: `create_file_folder`·`rename_file`·`move_files`는 `files.organize`, `delete_files`는 `files.delete`. 이름 변경으로 실행파일 등 제한 확장자를 붙이려면 `files.upload.any`도 있어야 합니다.
 - MCP 도구는 항상 요청 계정 본인의 보관함만 다룹니다. 관리자의 다른 계정 보관함 탐색(`files.browse.all`)은 웹 UI·HTTP API(`?owner=`)에서만 됩니다.
 
+### 채팅 설정 (configure)
+
+채팅 에이전트가 채팅 프로필과 표시 블록의 설정을 읽고, 새 설정을 **제안**하는 도구입니다. `configure` 권한은 채팅 전용이며 관리자 전용입니다(계정 권한 `chat.tools.configure`). HTTP MCP 키에는 이 권한이 없습니다.
+
+| Tool | 용도 |
+| --- | --- |
+| `get_chat_setup_guide` | 표시 블록(`display_block`) 또는 프로필(`profile`) 작성 가이드 조회: JSON 모양, 한도, 템플릿 문법, 사용 가능한 모델·로어북·공유 블록 |
+| `list_chat_profiles` | 프로필 목록: 이름, 소개, 엔진, 모델 표기, 연결된 블록·로어북 |
+| `get_chat_profile` | 프로필의 텍스트 설정 전체 조회(기본값은 지금 말하는 프로필). 도구 권한·연결 정보는 포함되지 않습니다. |
+| `list_display_blocks` | 공유 표시 블록 목록: 이름, 키, 필드 이름, 연결된 프로필 |
+| `get_display_block` | 표시 블록 하나를 전체로 조회 |
+| `propose_display_block` | 새 표시 블록 제안 |
+| `propose_chat_profile` | 새 프로필 제안 |
+| `propose_profile_update` | 기존 프로필의 변경 제안(변경 전·후 비교). 엔진, 도구 권한, 허용 목록, 프리셋, 연결·모델 지정은 제안할 수 없습니다. |
+
+- `propose_*` 도구는 답변 아래에 카드를 보여 줄 뿐 아무것도 저장하지 않습니다. 사용자가 카드에서 **저장**을 눌러야 반영됩니다.
+- 제안 도구는 진행 중인 채팅 답변 안에서만 쓸 수 있습니다.
+
 ### 리소스 조회
 
 | Tool | 용도 |

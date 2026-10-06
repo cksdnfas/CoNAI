@@ -19,6 +19,7 @@ import naiRoutes from '../routes/nai';
 import generationHistoryRoutes from '../routes/generation-history.routes';
 import generationQueueRoutes from '../routes/generation-queue.routes';
 import codexChatRoutes from '../routes/codex-chat.routes';
+import chatProposalRoutes from '../routes/chat-proposals.routes';
 import filesRoutes from '../routes/files.routes';
 import { wildcardMutationRoutes } from '../routes/wildcards.mutation.routes';
 import { wildcardReadRoutes } from '../routes/wildcards.read.routes';
@@ -288,6 +289,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/generation-history', options.readOnlyLimiter, optionalAuth, allowScopedGenerationHistoryAccess, generationHistoryRoutes);
   app.use('/api/generation-queue', requireAuth, generationQueueRoutes);
   app.use('/api/codex-chat', requireAuth, codexChatRoutes);
+  app.use('/api/chat-proposals', requireAuth, chatProposalRoutes);
   app.use('/api/files', requireAuth, (req, res, next) => {
     const limiter = req.method === 'POST' && req.path === '/upload' ? options.uploadLimiter : options.readOnlyLimiter;
     limiter(req, res, next);

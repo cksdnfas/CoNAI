@@ -37,6 +37,8 @@ export const CHAT_PROFILE_DEFAULTS = {
 } as const
 
 export const AUTHOR_NOTE_MAX_LENGTH = 4000
+/** Text caps toColumns applies to the profile fields a chat may propose (the setup tools validate with the same numbers). */
+export const CHAT_PROFILE_TEXT_LIMITS = { name: NAME_MAX_LENGTH, tagline: 200, text: TEXT_MAX_LENGTH, authorNote: AUTHOR_NOTE_MAX_LENGTH, sections: 30, sectionTitle: 80, alternateGreetings: 100 } as const
 const MAX_PROMPT_SECTIONS = 30
 const SECTION_TITLE_MAX_LENGTH = 80
 
@@ -250,7 +252,7 @@ export function pickChatGreeting(profile: Pick<ChatProfile, 'greeting' | 'altern
   return greetings.length > 0 ? greetings[Math.floor(Math.random() * greetings.length)] : ''
 }
 
-function normalizeSections(value: unknown): ChatPromptSection[] {
+export function normalizeSections(value: unknown): ChatPromptSection[] {
   if (!Array.isArray(value)) {
     return []
   }
