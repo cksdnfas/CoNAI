@@ -44,6 +44,9 @@ function getScopeCopy(scope: McpHttpScope, t: TranslateFn): { label: string; des
       return { label: t({ ko: '백업', en: 'Back up' }), description: t({ ko: '프롬프트 데이터와 워크플로 정의를 내보내.', en: 'Export prompt data and workflow definitions.' }) }
     case 'restore':
       return { label: t({ ko: '복원', en: 'Restore' }), description: t({ ko: '백업을 가져와 기존 데이터를 덮어쓸 수 있어.', en: 'Import backups, which can overwrite existing data.' }) }
+    case 'configure':
+      // Chat-only: HTTP keys never list it (SCOPES above), the chat profile picks it.
+      return { label: t({ ko: '설정', en: 'Configure' }), description: t({ ko: '채팅에서 프로필·표시 블록을 제안해.', en: 'Propose chat profiles and display blocks from a chat.' }) }
   }
 }
 

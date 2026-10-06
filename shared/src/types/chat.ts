@@ -42,7 +42,42 @@ export type ChatToolCall = {
   pendingJobIds?: number[]
   /** Results this call created; lookups retain references without claiming authorship. */
   generated?: boolean
+  /** A setting the model proposed with this call (propose_* tools); the card under the reply lets a person save it. */
+  proposal?: ChatProposal
 }
+
+/**
+ * A setting proposed from a chat. The server validates the payload with the same normalizers as the admin routes before
+ * it is attached, so the client can render it as is; saving goes through the admin REST with the viewer's own session.
+ * `savedId` / `saved` are written back once a person saves the proposal from the card.
+ */
+export type ChatProposal =
+  | {
+      kind: 'display_block'
+      /** Shared block name (defaults to the block key). */
+      name: string
+      /** Normalized ChatDisplayBlock: key, instruction, example, template, css, rules, summary, fields, enabled. */
+      block: Record<string, unknown>
+      /** Profile the card offers to link the block to (the speaking profile), or null. */
+      linkProfileId: number | null
+      savedId?: number | null
+    }
+  | {
+      kind: 'profile'
+      /** Normalized ChatProfileInput subset: name, tagline, systemPrompt, promptSections, greeting, alternateGreetings, modelSlotId, lorebookIds, blockIds, style, authorNote. */
+      input: Record<string, unknown>
+      savedId?: number | null
+    }
+  | {
+      kind: 'profile_update'
+      profileId: number
+      profileName: string
+      /** Only the fields that change, normalized. */
+      patch: Record<string, unknown>
+      /** The current values of those same fields, for the before/after view. */
+      before: Record<string, unknown>
+      saved?: boolean
+    }
 
 /** Message storage and client presentation can differ; the event envelope must stay identical. */
 export type ChatStreamEvent<Message> =

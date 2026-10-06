@@ -316,7 +316,8 @@ export interface LlmSettings {
   builtinSeedVersion?: number;
 }
 
-export type McpHttpScope = 'read' | 'generate' | 'organize' | 'backup' | 'restore';
+/** `configure` is chat-only (proposing chat profiles and display blocks); HTTP keys never carry it. */
+export type McpHttpScope = 'read' | 'generate' | 'organize' | 'configure' | 'backup' | 'restore';
 
 export interface McpHttpApiKey {
   id: string;
