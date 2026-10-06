@@ -607,6 +607,21 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     }
   }, [])
 
+  // What grows the transcript after it renders (a reply's quote card, a late translation, an image loading) or shrinks
+  // its frame (the composer growing) keeps a reader who was at the bottom there.
+  const transcriptObserverRef = useRef<ResizeObserver | null>(null)
+  const observeTranscript = useCallback((node: HTMLDivElement | null) => {
+    transcriptObserverRef.current?.disconnect()
+    transcriptObserverRef.current = null
+    if (!node) return
+    const observer = new ResizeObserver(() => {
+      if (followBottomRef.current && prependHeightRef.current === null) scrollToBottom()
+    })
+    observer.observe(node)
+    if (node.parentElement) observer.observe(node.parentElement)
+    transcriptObserverRef.current = observer
+  }, [scrollToBottom])
+
   useLayoutEffect(() => {
     setEditingMessageId(null)
     prependHeightRef.current = null
@@ -769,6 +784,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const handleSend = () => {
     if (!canSend) return
     const literal = draft.startsWith('//') ? draft.slice(1) : undefined
+    // A message sent from part-way up the chat still shows its answer.
+    if (!isCommand) {
+      followBottomRef.current = true
+      scrollToBottom()
+    }
     if (isCommand) void runCommand(draft)
     else if (activeThreadId !== null) void chat.send(activeThreadId, literal)
     else if (pendingChat) void chat.sendPending(literal ?? draft)
@@ -866,19 +886,23 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       <IconButton variant="ghost" size="icon-sm" disabled={activeThreadId === null} label={t({ ko: '채팅 메뉴', en: 'Chat menu' })} tooltip={false}><MoreHorizontal /></IconButton>
     </DropdownMenuTrigger></Tip>
     <DropdownMenuContent align="end" className="min-w-48" onCloseAutoFocus={(event) => { if (appearanceOpenRef.current) { event.preventDefault(); appearanceOpenRef.current = false } }}>
-      <DropdownMenuItem onSelect={() => setView('context')}><SlidersHorizontal />{t({ ko: '컨텍스트', en: 'Context' })}</DropdownMenuItem>
-      <DropdownMenuItem onSelect={() => setView('gallery')}><LayoutGrid />{t({ ko: '이미지 모아보기', en: 'Image gallery' })}</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => { appearanceOpenRef.current = true; setAppearanceOpen(true) }}><AppearanceIcon />{t({ ko: '채팅 모양', en: 'Chat appearance' })}</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => setFlagManagerOpen(true)}><Flag />{t({ ko: '플래그 관리', en: 'Manage flags' })}</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => setUserProfileManagerOpen(true)}><UserRound />{t({ ko: '사용자 프로필', en: 'User profiles' })}</DropdownMenuItem>
       <DropdownMenuSeparator />
-      <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/clear')}><Eraser />{t({ ko: '대화 비우기', en: 'Clear chat' })}</DropdownMenuItem>
       {isGroup ? null : <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/compact')}><FoldVertical />{t({ ko: '압축', en: 'Compact' })}</DropdownMenuItem>}
       <DropdownMenuItem onSelect={() => setExportOpen(true)}><Download />{t({ ko: '내보내기', en: 'Export' })}</DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem disabled={isBusy || deleteMutation.isPending} onSelect={() => void handleDelete()} className="text-destructive"><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu></span></ChatAppearancePopover>
+  // The menu items used most sit in the header; a second press on a view returns to the chat.
+  const toggleView = (next: 'context' | 'gallery') => setView(activeView === next ? 'chat' : next)
+  const headerActions = thread ? <>
+    <IconButton variant="ghost" size="icon-sm" active={activeView === 'context'} onClick={() => toggleView('context')} label={t({ ko: '컨텍스트', en: 'Context' })}><SlidersHorizontal /></IconButton>
+    <IconButton variant="ghost" size="icon-sm" active={activeView === 'gallery'} onClick={() => toggleView('gallery')} label={t({ ko: '이미지 모아보기', en: 'Image gallery' })}><LayoutGrid /></IconButton>
+    <IconButton variant="ghost" size="icon-sm" disabled={isBusy} onClick={() => void runCommand('/clear')} label={t({ ko: '대화 비우기', en: 'Clear chat' })}><Eraser /></IconButton>
+  </> : null
   const headerAvatar = isGroup
     ? group && activeThreadId !== null
       ? (
@@ -911,7 +935,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       }
       if (node.scrollTop < 80) showEarlierMessages()
     }}>
-      <div className={cn('mx-auto flex flex-col pb-6', layout === 'page' ? cn(CHAT_WIDTH_CLASS[appearance.width], 'px-4 pt-2 sm:px-6') : 'px-4 pt-3')} style={{ ...chatTranscriptStyle(appearance, profile?.style), gap: `${CHAT_MESSAGE_GAP_PX[appearance.messageGap]}px` }}>
+      <div ref={observeTranscript} className={cn('mx-auto flex flex-col pb-6', layout === 'page' ? cn(CHAT_WIDTH_CLASS[appearance.width], 'px-4 pt-2 sm:px-6') : 'px-4 pt-3')} style={{ ...chatTranscriptStyle(appearance, profile?.style), gap: `${CHAT_MESSAGE_GAP_PX[appearance.messageGap]}px` }}>
         {visibleMessages.length < messages.length ? <Button variant="ghost" size="sm" onClick={showEarlierMessages}>{t({ ko: '이전 메시지', en: 'Earlier messages' })}</Button> : null}
         {pendingChat?.greeting?.text ? <CodexChatAssistantMessage content={pendingChat.greeting.text} toolCalls={[]} appearance={appearance} speaker={speaker} /> : null}
         <ChatSavedMessages messages={visibleMessages} flashMessageId={flashMessageId} summaryUntilId={isGroup ? null : thread?.summary_until_message_id ?? null} media={media} actions={messageActions} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
@@ -1114,6 +1138,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
               {headerAvatar}
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">{viewTitle}</span>
               {statusButton}
+              {headerActions}
               {inviteButton}
               {chatMenu}
             </>}
@@ -1157,6 +1182,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           {backButton ?? <span className="w-1" />}
           {headerAvatar}
           <span className="min-w-0 flex-1 truncate px-1.5 text-sm font-semibold">{thread ? thread.title || untitled : pendingProfile?.name ?? untitled}</span>
+          {headerActions}
           {inviteButton}
           {thread ? chatMenu : null}
         </>}

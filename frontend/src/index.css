@@ -373,6 +373,14 @@
     font-size: calc(16px * var(--theme-ui-scale));
   }
 
+  /*
+   * Radix menus, dialogs and selects lock the page scroll and pad the body by the scrollbar's width so nothing
+   * moves; the stable gutter above already keeps that space, so the extra margin squeezed the page on every open.
+   */
+  html body[data-scroll-locked] {
+    margin-right: 0 !important;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);

@@ -496,11 +496,24 @@ export const CodexChatUserMessage = memo(function CodexChatUserMessage({ content
     )
   }
   const right = appearance.userPlacement === 'right'
+  const bubble = <div className="min-w-0 max-w-[85%] break-words rounded-lg bg-surface-high px-3.5 py-2 text-foreground"><ChatMessageReply routing={routing} recipientLabel={recipientLabel} /><div className="whitespace-pre-wrap">{text}</div></div>
+  // The picture sits above the bubble with the time, so the bubble keeps the chat's full width.
+  if (avatar) {
+    return (
+      <div className={cn('flex flex-col gap-2', right ? 'items-end' : 'items-start')}>
+        <div className={cn('flex min-h-6 items-center gap-2', right && 'flex-row-reverse')}>
+          {avatar}
+          <MessageTime at={createdAt} appearance={appearance} />
+        </div>
+        {bubble}
+      </div>
+    )
+  }
   return (
     <div className={cn('flex items-end gap-2', right ? 'justify-end' : 'justify-start')}>
-      {right ? <MessageTime at={createdAt} appearance={appearance} className="mb-1" /> : avatar}
-      <div className="min-w-0 max-w-[85%] break-words rounded-lg bg-surface-high px-3.5 py-2 text-foreground"><ChatMessageReply routing={routing} recipientLabel={recipientLabel} /><div className="whitespace-pre-wrap">{text}</div></div>
-      {right ? avatar : <MessageTime at={createdAt} appearance={appearance} className="mb-1" />}
+      {right ? <MessageTime at={createdAt} appearance={appearance} className="mb-1" /> : null}
+      {bubble}
+      {right ? null : <MessageTime at={createdAt} appearance={appearance} className="mb-1" />}
     </div>
   )
 })
@@ -577,10 +590,8 @@ function ReasoningBlock({ text, active }: { text: string; active: boolean }) {
   )
 }
 
-/** Appearance setting → avatar size; small keeps the name line compact, larger sizes sit in a column beside the reply. */
+/** Appearance setting → avatar size. Every size sits on the name line, so the reply keeps the chat's full width. */
 const AVATAR_SIZE = { sm: 'sm', md: 'lg', lg: 'xl' } as const
-/** Status lines under a cast reply line up with the text column beside the avatar. */
-const AVATAR_COLUMN_PAD = { md: 'pl-13', lg: 'pl-17' } as const
 const BUBBLE_CLASS = 'max-w-[85%] self-start rounded-lg bg-surface-low/85 px-3.5 py-2.5 backdrop-blur-sm'
 
 export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content: written, toolCalls, status, error, finishReason = null, reasoning, streaming = false, translating = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, routing, recipientLabel, threadId }: {
@@ -610,7 +621,6 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   // Older stored replies and live streams may still carry the model's copy of the app's [message_id=...] label.
   const content = stripEchoedAddresses(written)
   const { avatarSize } = appearance
-  const avatarBeside = speaker !== null && (avatarSize === 'md' || avatarSize === 'lg')
   const toolBadge = toolCalls.length > 0 && appearance.showToolChips ? <ToolCallsBadge calls={toolCalls} /> : null
   const markdown = (text: string) => <ChatMarkdown text={text} roleplay={speaker?.roleplay} blocks={speaker?.blocks} emoticons={speaker?.emoticons} mentions={speaker?.mentions} />
   const avatarOf = (who: { name: string; avatar: string | null }, engine: ChatEngine) => avatarSize === 'none' ? null : (
@@ -619,20 +629,19 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   const bubble = (children: ReactNode) => children && appearance.replyShape === 'bubble' ? <div className={BUBBLE_CLASS}>{children}</div> : children
 
   /**
-   * One speaker's part: avatar beside (or inline with) the name line, the content (in a bubble, by choice), then
-   * `after` (status lines, outside the bubble).
+   * One speaker's part: the name line (avatar, name, time), the content under it at full width (in a bubble, by
+   * choice), then `after` (status lines, outside the bubble).
    */
   const row = (key: string, who: { name: string; avatar: string | null; color?: string } | null, engine: ChatEngine, extra: ReactNode, children: ReactNode, after?: ReactNode) => {
     const avatar = who ? avatarOf(who, engine) : null
-    const time = <MessageTime at={createdAt} appearance={appearance} />
-    const nameLine = (who && (appearance.showNames || (!avatarBeside && avatar))) || extra || (appearance.timeStamps !== 'off' && createdAt)
-    const body = (
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
+    const nameLine = (who && (appearance.showNames || avatar)) || extra || (appearance.timeStamps !== 'off' && createdAt)
+    return (
+      <div key={key} className="flex min-w-0 flex-col gap-2">
         {nameLine ? (
-          <div className="flex min-h-6 items-center gap-1.5">
-            {avatarBeside ? null : avatar}
+          <div className="flex min-h-6 items-center gap-2">
+            {avatar}
             {who && appearance.showNames ? <span className="truncate text-xs font-semibold text-muted-foreground" style={who.color ? { color: who.color } : undefined}>{who.name}</span> : null}
-            {time}
+            <MessageTime at={createdAt} appearance={appearance} />
             {extra}
           </div>
         ) : null}
@@ -640,7 +649,6 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
         {after}
       </div>
     )
-    return avatarBeside ? <div key={key} className="flex items-start gap-3">{avatar}{body}</div> : <div key={key}>{body}</div>
   }
 
   const segments = content && speaker?.cast?.length ? splitByCast(content, speaker.name, speaker.cast) : null
@@ -683,7 +691,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
     <div className="space-y-5">
       {showOwnRow ? row('own', speaker, speaker?.engine ?? 'llm', toolBadge, ownParts) : null}
       {castSegments.map((segment, index) => row(`cast-${index}`, segment.speaker ?? speaker, segment.speaker ? 'llm' : speaker?.engine ?? 'llm', null, markdown(segment.text)))}
-      {footer ? <div className={cn(avatarBeside && AVATAR_COLUMN_PAD[avatarSize as 'md' | 'lg'])}>{footer}</div> : null}
+      {footer}
     </div>
   )
 })
