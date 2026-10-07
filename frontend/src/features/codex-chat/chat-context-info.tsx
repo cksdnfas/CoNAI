@@ -80,7 +80,9 @@ function sectionHashes(meta: ChatContextMeta) {
   return hashes
 }
 
-function contextChanges(meta: ChatContextMeta, previous: ChatContextMeta, t: T) {
+const PER_TURN_KINDS = new Set<ChatContextKind>(['window', 'continuation', 'last-instruction', 'page'])
+
+function contextChanges(meta: ChatContextMeta, previous: ChatContextMeta, t: T): Array<{ added: boolean; changed?: boolean; title: string }> {
   const current = meta.loreEntries ?? []
   if (previous.version !== 2) return [
     ...current.filter((entry) => !previous.lore.includes(entry.title)).map((entry) => ({ added: true, title: entry.title })),
@@ -94,9 +96,9 @@ function contextChanges(meta: ChatContextMeta, previous: ChatContextMeta, t: T) 
   const nowHashes = sectionHashes(meta)
   const beforeHashes = sectionHashes(previous)
   for (const kind of new Set([...nowHashes.keys(), ...beforeHashes.keys()])) {
-    if (JSON.stringify(nowHashes.get(kind)) === JSON.stringify(beforeHashes.get(kind))) continue
-    if (beforeHashes.has(kind)) changes.push({ added: false, title: t(KIND_LABELS[kind]) })
-    if (nowHashes.has(kind)) changes.push({ added: true, title: t(KIND_LABELS[kind]) })
+    // The verbatim window, a continuation and the latest instruction differ on every turn; listing them is noise.
+    if (PER_TURN_KINDS.has(kind) || JSON.stringify(nowHashes.get(kind)) === JSON.stringify(beforeHashes.get(kind))) continue
+    changes.push({ added: nowHashes.has(kind), changed: nowHashes.has(kind) && beforeHashes.has(kind), title: t(KIND_LABELS[kind]) })
   }
   return changes
 }
@@ -196,7 +198,7 @@ export function ChatContextInfo({ meta, previous, threadId, messageId, alternati
     [t({ ko: '요약', en: 'Summary' }), meta.summaryUntilMessageId !== null ? t({ ko: '메시지 {id}까지', en: 'Through message {id}' }, { id: meta.summaryUntilMessageId }) : t({ ko: '없음', en: 'None' })],
   ]
   if (meta.toolRounds) details.push([t({ ko: '도구', en: 'Tools' }), t({ ko: '{n}라운드', en: '{n} rounds' }, { n: meta.toolRounds })])
-  if (previous) details.push([t({ ko: '직전 답변 대비', en: 'Since previous reply' }), changes.length ? <div className="flex flex-wrap gap-x-2 gap-y-1">{changes.map((change, index) => <span key={index} className={change.added ? 'text-success' : 'text-warning'}>{change.added ? '+' : '−'} {change.title}</span>)}</div> : t({ ko: '같음', en: 'Unchanged' })])
+  if (previous) details.push([t({ ko: '직전 답변 대비', en: 'Since previous reply' }), changes.length ? <div className="flex flex-wrap gap-x-2 gap-y-1">{changes.map((change, index) => <span key={index} className={change.changed ? 'text-muted-foreground' : change.added ? 'text-success' : 'text-warning'}>{change.changed ? '~' : change.added ? '+' : '−'} {change.title}</span>)}</div> : t({ ko: '같음', en: 'Unchanged' })])
   return (
     <Popover open={open} onOpenChange={changeOpen}>
       <PopoverAnchor asChild>
