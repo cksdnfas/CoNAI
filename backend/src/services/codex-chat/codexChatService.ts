@@ -15,7 +15,7 @@ import { CodexAppServerClient, type CodexAppServerNotification } from './codexAp
 import { prepareChatRuntime, parseChatFeatureInventory, chatRuntimeArgs, chatTurnRestrictions, verifyChatRuntime } from './codexChatRuntime'
 import { ChatProfileStore, chatGreetings, pickChatGreeting, type ChatProfile } from './chatProfiles'
 import { loadChatSettings, type ChatScope } from './chatSettings'
-import { intersectChatScopes, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken, setCodexChatExecution } from './codexChatAccess'
+import { resolveChatProfileToolGrant, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken, setCodexChatExecution } from './codexChatAccess'
 import { chatPageReference, parseChatPageContext } from './chatPageContext'
 import { attachJobResults, collectCodexChatMedia } from './codexChatMedia'
 import { canRequesterViewImages } from '../../middleware/imageAccess'
@@ -715,8 +715,8 @@ export async function runCodexGroupReply(params: {
 }): Promise<CodexChatMessageRecord> {
   const { requester, threadId, profile } = params
   assertChatAvailable(requester)
-  const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
-  const session = await ensureSession(requester, scopes, profile.toolAllowlist, true, profile.generationPresetIds, params.chatContext)
+  const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
+  const session = await ensureSession(requester, scopes, toolAllowlist, true, profile.generationPresetIds, params.chatContext)
   setCodexChatExecution(session.token, params.chatContext)
   const run = resolveCodexRun(session, profile)
   const codexThreadId = await ensureCodexThread(session, ChatGroupStore.member(threadId, profile.id)?.codex_thread_id ?? null, profile,
@@ -809,8 +809,8 @@ export const CodexChatService = {
     let codexThreadId: string | null = null
     try {
       const profile = requireCodexProfile(thread.profile_id)
-      const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
-      session = await ensureSession(requester, scopes, profile.toolAllowlist, false, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct' })
+      const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
+      session = await ensureSession(requester, scopes, toolAllowlist, false, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct' })
       codexThreadId = await ensureCodexThread(session, thread.codex_thread_id, profile, (id) => CodexChatStore.setCodexThreadId(threadId, id))
       // The rollout was gone and a fresh thread started: nothing left to fold.
       if (codexThreadId !== thread.codex_thread_id) return CodexChatService.getThread(requester, threadId).thread
@@ -1050,8 +1050,8 @@ export const CodexChatService = {
       const profile = requireCodexProfile(thread.profile_id)
       const page = parseChatPageContext(pageContext, requester, profile)
       const routing = userReplyRouting(thread, replyToMessageId)
-      const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
-      const session = await ensureSession(requester, scopes, profile.toolAllowlist, false, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct', page })
+      const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
+      const session = await ensureSession(requester, scopes, toolAllowlist, false, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct', page })
       const run = resolveCodexRun(session, profile)
       const codexThreadId = await ensureCodexThread(session, thread.codex_thread_id, profile, (id) => CodexChatStore.setCodexThreadId(threadId, id))
       // A new Codex thread for a chat that already has a past (branched, imported, or its memory was reset).

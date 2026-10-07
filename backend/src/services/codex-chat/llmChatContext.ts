@@ -33,7 +33,7 @@ const EXAMPLE_NOTE = '바로 뒤에 이어지는 첫 user/assistant 대화들은
  * Generation runs in the background: the job is linked to the reply at submission and the app attaches the finished
  * image to the message by itself, so the model answers right away instead of blocking on wait_generation_job.
  */
-const GENERATION_ASYNC_GUIDANCE = 'Do not wait for the job and do not poll it: the app attaches the finished image to this reply by itself, even after you finish. Write your reply right away in the same turn, without ids or links; you may say the image is on its way, but never describe it as finished or describe what it looks like.'
+const GENERATION_ASYNC_GUIDANCE = 'Image generation does not require connecting a CoNAI page. Use the generation tools actually provided in this request; never infer missing account permission from page connection state or ask an administrator to grant themselves permissions. Do not wait for the job and do not poll it: the app attaches the finished image to this reply by itself, even after you finish. Write your reply right away in the same turn, without ids or links; you may say the image is on its way, but never describe it as finished or describe what it looks like.'
 
 export const GENERATION_GUIDANCE = {
   freeform: [

@@ -54,7 +54,7 @@ export function isChatMcpSource(source: McpRequestContext['source']) {
  * The job is linked to the reply at submission and the app attaches the result when it lands.
  */
 export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'execute_graph_workflow', 'get_codex_generation_options', 'import_workflow_definition']);
-/** A connected page grants a bounded input task, never access to unrelated private data or side effects. */
+/** A page grants a bounded input task; explicitly linked generation presets keep their independent grant. */
 export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'propose_page_changes', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes', 'read_page_data', 'propose_page_action']);
 
 /** Chat agents must not spend paid NovelAI multi-sample generations on their own; one image per request is free. */

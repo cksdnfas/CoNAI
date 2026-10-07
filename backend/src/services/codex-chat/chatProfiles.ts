@@ -109,9 +109,9 @@ export type ChatProfile = {
   /** Read-only: the linked preset's name; a missing linked preset revokes its tool grant. */
   toolPresetName?: string | null
   mcpScopes: ChatScope[]
-  /** Only these tools (within the scopes); null offers every tool the scopes allow. */
+  /** General tools within the scopes; linked generation presets have their own explicit grant. */
   toolAllowlist: string[] | null
-  /** Generation presets (chat_generation_presets) the profile draws with; any linked withholds free-form generation. */
+  /** Linking enables these generation tools; any linked withholds free-form generation. */
   generationPresetIds: number[]
   /** LLM: characters of one tool result the model sees within a reply. */
   toolOutputLimit: number

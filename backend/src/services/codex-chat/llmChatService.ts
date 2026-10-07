@@ -16,7 +16,7 @@ import { hasTranslation, resolveProfileModel } from './chatModelRoles'
 import { stripEchoedAddresses } from '@conai/shared'
 import { ChatUserProfileStore, userPersonaForThread, userPersonaOf } from './chatUserProfiles'
 import { loadChatSettings } from './chatSettings'
-import { intersectChatScopes, resolveChatAccess } from './codexChatAccess'
+import { resolveChatProfileToolGrant, resolveChatAccess } from './codexChatAccess'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import { withGenerationOutcomes } from './codexChatMedia'
 import type { CodexChatStreamEvent } from './codexChatService'
@@ -250,9 +250,9 @@ function settleRestatement(turn: LlmTurn, previous: TextSpan | null, roundStart:
  */
 async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>, roomTools: 'call' | 'all' | false = false, generation: Partial<LlmGenerationOptions> = {}) {
   const target = resolveChatCompletionTarget(chatConnectionOf(profile), { model: resolveProfileModel(profile, 'chat')?.model ?? null, generation: { ...profileGenerationOptions(profile), ...generation } })
-  const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
+  const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
   const chatContext = turn.chatContext ?? turn.delivery?.context
-  const bridge = scopes.length > 0 || roomTools || chatContext ? await openChatMcpBridge(requester, scopes, profile.toolAllowlist, { roomTools, generationPresetIds: profile.generationPresetIds, chatContext }) : null
+  const bridge = scopes.length > 0 || roomTools || chatContext ? await openChatMcpBridge(requester, scopes, toolAllowlist, { roomTools, generationPresetIds: profile.generationPresetIds, chatContext }) : null
 
   try {
     // Image viewing is only offered to models the profile says can see images.
