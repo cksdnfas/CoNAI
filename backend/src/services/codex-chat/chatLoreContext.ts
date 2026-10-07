@@ -6,6 +6,7 @@ import {
   normalizeLorebook,
   selectLoreEntries,
   type ChatLoreEntry,
+  type LoreTimingOptions,
   type ChatLorebookKind,
   type KeyedLoreEntry,
   type SelectedLore,
@@ -252,10 +253,11 @@ export function selectRequestLore(
   messages: ReadonlyArray<{ content: string; display_content?: string | null }> | undefined,
   estimate: (text: string) => number,
   render: (text: string) => string,
-  options: { toolOffered: boolean; inlineFiles?: boolean; skip?: (key: string) => boolean },
+  options: { toolOffered: boolean; inlineFiles?: boolean; skip?: (key: string) => boolean; timing?: LoreTimingOptions },
 ): ChatLore {
   const selected = selectLoreEntries(profile, messages, estimate, render, {
     skip: options.skip,
+    timing: options.timing,
     entries: keyedLoreEntries(books),
     files: {
       inline: options.inlineFiles ?? true,

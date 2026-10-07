@@ -2,7 +2,7 @@ import sharp from 'sharp'
 import { unknownChatMacros } from '@conai/shared'
 import { PngExtractor } from '../metadata/extractors/pngExtractor'
 import { ChatProfileError, normalizeAlternateGreetings, type ChatProfileInput, type ChatPromptSection } from './chatProfiles'
-import { ChatLorebookStore, isRegexKeyword, normalizeLorebook, type ChatLoreEntry } from './chatLorebook'
+import { ChatLorebookStore, isRegexKeyword, LOREBOOK_MAX_ENTRIES, normalizeLorebook, type ChatLoreEntry } from './chatLorebook'
 import { characterMediaGroupPath, fileLibraryMediaUnderGroup, ingestMedia, localizeImages } from './chatCardAssets'
 import { rewriteMediaLinks } from './chatMediaLinks'
 
@@ -30,7 +30,22 @@ function readJsonFile(buffer: Buffer, failure: string): Record<string, unknown> 
 /** World info keeps entries as an object keyed by uid; card books and NovelAI lorebooks as an array. */
 function bookEntries(book: Record<string, unknown>): ChatLoreEntry[] {
   const entries = Array.isArray(book.entries) ? book.entries : Object.values(object(book.entries))
-  return normalizeLorebook(entries)
+  const raw = entries.slice(0, LOREBOOK_MAX_ENTRIES).filter((entry) => entry && typeof entry === 'object' && !Array.isArray(entry)).map(object)
+  const normalized = normalizeLorebook(raw)
+  const groups = new Map<string, number[]>()
+  normalized.forEach((entry, index) => {
+    if (entry.group) groups.set(entry.group, [...(groups.get(entry.group) ?? []), index])
+  })
+  for (const indices of groups.values()) {
+    const overrides = indices.filter((index) => (raw[index].groupOverride ?? object(raw[index].extensions).groupOverride) === true)
+    if (!overrides.length) continue
+    const highest = Math.max(...indices.map((index) => normalized[index].order))
+    const priority = Math.min(10000, highest + overrides.length)
+    overrides.sort((a, b) => normalized[b].order - normalized[a].order || a - b)
+    for (const index of indices) if (!overrides.includes(index)) normalized[index].order = Math.min(normalized[index].order, priority - overrides.length)
+    overrides.forEach((index, rank) => { normalized[index].order = priority - rank })
+  }
+  return normalized
 }
 
 /** What a card import kept as it was, kept in another form, and left out — so a working import is not taken for an identical one. */
@@ -40,8 +55,8 @@ export type ChatCardImportReport = { kept: string[]; converted: string[]; droppe
 const UNSUPPORTED_LORE_FIELDS: Array<[string, (row: Record<string, unknown>, extensions: Record<string, unknown>) => boolean]> = [
   ['삽입 위치·깊이', (row, ext) => (typeof row.position === 'number' && row.position !== 0) || (typeof row.position === 'string' && !['', 'before_char', 'after_char'].includes(row.position)) || typeof row.depth === 'number' || typeof ext.depth === 'number'],
   ['발동 확률', (row, ext) => (row.useProbability === true || ext.useProbability === true) && Number(row.probability ?? ext.probability ?? 100) < 100],
-  ['유지·쿨다운·지연', (row, ext) => [row.sticky, row.cooldown, row.delay, ext.sticky, ext.cooldown, ext.delay].some((value) => typeof value === 'number' && value > 0)],
-  ['포함 그룹', (row, ext) => Boolean(row.group || ext.group)],
+  ['그룹 가중치 무시', (row, ext) => row.groupWeight !== undefined || ext.groupWeight !== undefined],
+  ['그룹 점수 무시', (row, ext) => row.useGroupScoring !== undefined || ext.useGroupScoring !== undefined],
   ['재귀 설정', (row, ext) => [row.excludeRecursion, row.preventRecursion, row.delayUntilRecursion, ext.exclude_recursion, ext.prevent_recursion].some((value) => value === true)],
   ['항목별 탐색 깊이', (row, ext) => typeof row.scanDepth === 'number' || typeof ext.scan_depth === 'number'],
 ]
@@ -51,6 +66,18 @@ function lorebookReport(raw: unknown[], entries: ChatLoreEntry[], report: ChatCa
   report.kept.push(`로어북 ${entries.length}개 항목`)
   const regex = entries.filter((entry) => [...entry.keys, ...entry.secondaryKeys].some(isRegexKeyword)).length
   if (regex) report.converted.push(`정규식 키워드가 있는 로어 ${regex}개 (안전 제한 안에서만 동작)`)
+  for (const [label, fields] of [['유지·쿨다운·지연 → 메시지 수 조건', ['sticky', 'cooldown', 'delay']], ['포함 그룹 → 유지 우선·순서 선택', ['group']]] as const) {
+    const count = raw.filter((value) => {
+      const row = object(value)
+      return fields.some((field) => (row[field] ?? object(row.extensions)[field]) !== undefined)
+    }).length
+    if (count) report.converted.push(`로어 ${label} (${count}개 항목)`)
+  }
+  const overrides = raw.filter((value) => {
+    const row = object(value)
+    return Boolean(row.group ?? object(row.extensions).group) && (row.groupOverride ?? object(row.extensions).groupOverride) === true
+  }).length
+  if (overrides) report.converted.push(`로어 groupOverride → 같은 그룹의 가장 높은 순서 (${overrides}개 항목)`)
   for (const [label, test] of UNSUPPORTED_LORE_FIELDS) {
     const count = raw.filter((value) => {
       const row = object(value)

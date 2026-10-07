@@ -11,7 +11,7 @@ import { postHistoryText, buildContextMeta, recalledSegments, type ChatContextMe
 import { recallText } from './chatMemory'
 import { contextSource, limitContextMeta, contextPartsOf, markContextParts } from './chatContextDiagnostics'
 import { anchoredWindowFor, appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, offersLoreFileTool, recallFor, rejectedLoreFor, resolveAuthorNote, selectChatLore, sendableMessages, threadBlockStateText, toCompletionMessages, unsummarizedMessages } from './llmChatContext'
-import { booksForRequest, type AttachedLoreBook } from './chatLoreContext'
+import { booksForRequest, type AttachedLoreBook, type ChatLore } from './chatLoreContext'
 import type { ChatSummarySegment } from './chatMemory'
 import { usableBlockKeys } from './chatBlockState'
 import { DEFAULT_USER_NAME, userPersonaForThread, type ChatUserPersona } from './chatUserProfiles'
@@ -141,12 +141,13 @@ export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMe
   const sendable = sendableMessages(unsummarizedMessages(params.messages, params.thread, { summaryEnabled: groupSummaryOn(params.thread) }))
   let window = anchoredWindowFor(params.thread.id, sendable, params.windowLimit, (message) => message.id)
   params = { ...params, books: params.books ?? booksForRequest({ thread: params.thread, profile: params.profile }) }
-  let context = buildGroupWindowMessages(params, window, sendable.length)
+  const lore = selectChatLore(params.profile, window, userPersonaForThread(params.thread), { books: params.books, toolOffered: offersLoreFileTool(params.tools), history: params.messages, speakerProfileId: params.profile.id })
+  let context = buildGroupWindowMessages(params, window, sendable.length, lore)
   const budget = params.profile.contextTokens
   const reserve = params.maxTokens ?? DEFAULT_REPLY_RESERVE_TOKENS
   while (budget !== null && window.length > 1 && estimateMessagesTokens(params.profile.id, context.messages, params.tools) + reserve > budget) {
     window = window.slice(1)
-    context = buildGroupWindowMessages(params, window, sendable.length)
+    context = buildGroupWindowMessages(params, window, sendable.length, lore)
   }
   if (params.onMeta) {
     const meta = buildContextMeta(params.profile, params.thread, params.messages, window, groupSummaryOn(params.thread), context.lore, context.recalled, params.tools, context.messages)
@@ -156,12 +157,11 @@ export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMe
   return context.messages
 }
 
-function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMessageRecord[], total: number) {
+function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMessageRecord[], total: number, lore: ChatLore) {
   const { profile, thread, members, withTools } = params
   const user = userPersonaForThread(thread)
   const names = new Map(members.map((member) => [member.id, member.name]))
   // The room's own book and the account books linked to the room, then this member's profile books.
-  const lore = selectChatLore(profile, window, user, { books: params.books, toolOffered: offersLoreFileTool(params.tools) })
   const summaryOn = groupSummaryOn(thread)
   const leading = buildLeadingMessages(profile, { summary: thread.summary }, { summaryEnabled: summaryOn }, withTools, lore, user)
   // The header joins the persona's system message: a second system message in the middle is dropped or rejected by

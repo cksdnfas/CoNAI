@@ -162,6 +162,15 @@ export function ChatLoreEntryFields({ entry, onChange, filePlace }: { entry: Cha
       <Textarea variant="settings" rows={5} value={entry.content} maxLength={20000} onChange={(event) => onChange({ content: event.target.value })} />
     </Field>
     <LoreFileField place={filePlace} value={entry.file ?? null} onChange={(file) => onChange({ file, fileId: null })} />
+    <div className="space-y-2">
+      <div className="text-2xs font-semibold tracking-overline text-muted-foreground uppercase">{t({ ko: '시간 조건', en: 'Timing' })}</div>
+      <div className="grid grid-cols-4 gap-2">
+        {([{ key: 'sticky', label: { ko: '유지', en: 'Sticky' } }, { key: 'cooldown', label: { ko: '쿨다운', en: 'Cooldown' } }, { key: 'delay', label: { ko: '지연', en: 'Delay' } }] as const).map(({ key, label }) => <Field key={key} label={t(label)} className="min-w-0">
+          <NumberStepperInput variant="settings" min={0} max={Number.MAX_SAFE_INTEGER} precision={0} value={entry[key] ?? 0} className={`min-w-0 [&_button]:min-w-7 ${(entry[key] ?? 0) === 0 ? '[&_input]:text-muted-foreground' : ''}`} aria-label={t(label)} onValueCommit={(value) => onChange({ [key]: Number(value) || 0 })} />
+        </Field>)}
+        <Field label={t({ ko: '그룹', en: 'Group' })} className="min-w-0"><Input variant="settings" value={entry.group ?? ''} maxLength={100} onChange={(event) => onChange({ group: event.target.value })} /></Field>
+      </div>
+    </div>
     <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
       <div className="flex items-center gap-2"><Switch id={`${id}-constant`} checked={entry.constant} onCheckedChange={(constant) => onChange({ constant })} /><label htmlFor={`${id}-constant`} className="cursor-pointer">{t({ ko: '항상 넣기', en: 'Always include' })}</label></div>
       <div className="flex items-center gap-2"><Switch id={`${id}-case`} checked={entry.caseSensitive} onCheckedChange={(caseSensitive) => onChange({ caseSensitive })} /><label htmlFor={`${id}-case`} className="cursor-pointer">{t({ ko: '대소문자 구분', en: 'Case sensitive' })}</label></div>

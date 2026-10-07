@@ -108,7 +108,9 @@ test('chat review items: lore conditions, card import report, post sections, att
     assert.ok(report.kept.includes('대화 뒤 지시'))
     assert.ok(report.converted.some((line) => line.startsWith('캐릭터 노트')))
     assert.ok(report.converted.some((line) => line.startsWith('정규식 키워드')))
-    for (const label of ['삽입 위치·깊이', '발동 확률', '유지·쿨다운·지연', '정규식 스크립트 2개']) assert.ok(report.dropped.some((line) => line.includes(label)), label)
+    for (const label of ['삽입 위치·깊이', '발동 확률', '정규식 스크립트 2개']) assert.ok(report.dropped.some((line) => line.includes(label)), label)
+    assert.ok(report.converted.some((line) => line.includes('유지·쿨다운·지연')))
+    assert.equal(ChatLorebookStore.find(imported.lorebookIds![0])!.entries[2].sticky, 2)
     assert.ok(report.dropped.some((line) => line.includes('{{random:a,b}}')))
   })
 

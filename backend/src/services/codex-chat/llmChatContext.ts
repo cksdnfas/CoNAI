@@ -14,7 +14,7 @@ import { profileGenerationOptions, resolveSummaryPrompt, type ChatProfile } from
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
 import { chatContentWithAttachments } from './chatAttachments'
-import type { SelectedLore } from './chatLorebook'
+import type { LoreHistoryMessage, SelectedLore } from './chatLorebook'
 import { booksForRequest, loreIndexText, READ_LORE_FILE_TOOL, selectRequestLore, type AttachedLoreBook, type ChatLore } from './chatLoreContext'
 import { rejectedLoreLine, SAVE_LORE_TOOL } from './chatLoreProposals'
 import { buildFlagDirective } from './chatFlags'
@@ -284,9 +284,12 @@ function selectWindow(profile: Pick<ChatProfile, 'id' | 'style'>, turns: CodexCh
  * no chat and gets the global books only), unless the caller resolved `books` already. Without messages only the
  * "always on" entries are chosen. `toolOffered`: read_lore_file is among the request's tools.
  */
-export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<{ content: string; display_content?: string | null }>, user?: ChatUserPersona | null, options: { thread?: Pick<CodexChatThreadRecord, 'id' | 'account_id'> | null; books?: AttachedLoreBook[]; toolOffered?: boolean } = {}): ChatLore {
+export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<LoreHistoryMessage>, user?: ChatUserPersona | null, options: { thread?: Pick<CodexChatThreadRecord, 'id' | 'account_id'> | null; books?: AttachedLoreBook[]; toolOffered?: boolean; history?: ReadonlyArray<LoreHistoryMessage>; speakerProfileId?: number } = {}): ChatLore {
   const books = options.books ?? booksForRequest({ thread: options.thread ?? null, profile })
-  return selectRequestLore(profile, books, messages, (text) => estimateTokens(profile.id, text), (text) => fillCharacterPlaceholders(text, profile, user), { toolOffered: options.toolOffered ?? false })
+  return selectRequestLore(profile, books, messages, (text) => estimateTokens(profile.id, text), (text) => fillCharacterPlaceholders(text, profile, user), {
+    toolOffered: options.toolOffered ?? false,
+    ...(profile.engine === 'llm' && messages !== undefined ? { timing: { messages: options.history ?? messages, speakerProfileId: options.speakerProfileId } } : {}),
+  })
 }
 
 /** Whether read_lore_file is among these tools. */
@@ -563,7 +566,9 @@ export function buildContextMeta(profile: ChatProfile, thread: CodexChatThreadRe
     recalledSegments: recalled.length, lore: lore.labels, memories: lore.constantCount,
     estimatedTokens: estimateMessagesTokens(profile.id, request, tools),
   }
-  if (!loadChatSettings().diagnostics.enabled) return limitContextMeta(meta)
+  if (!loadChatSettings().diagnostics.enabled) return limitContextMeta({
+    ...meta, loreEntries: lore.decisions.filter((entry) => entry.selected),
+  })
   const user = userPersonaForThread(thread)
   const summary = summaryEnabled ? thread.summary?.trim() ?? '' : ''
   return limitContextMeta({

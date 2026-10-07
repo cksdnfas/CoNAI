@@ -49,7 +49,7 @@ export type ChatDiagnosticsScope = 'none' | 'view' | 'content' | 'prompts'
 
 export type ChatContextKind = 'persona' | 'system-prompt' | 'prompt-section' | 'guidance' | 'lore-index' | 'constant-lore' | 'lore' | 'summary' | 'example' | 'window' | 'reference' | 'author-note' | 'state' | 'flags' | 'user-persona' | 'recall' | 'page' | 'continuation' | 'last-instruction' | 'tool-definition' | 'tool-result' | 'group-header' | 'summary-instruction' | 'translation-instruction'
 export type ChatContextPart = { kind: ChatContextKind; role: string; position: number; estTokens: number; hash: string }
-export type ChatContextLore = { key: string; bookId: number; bookKind: ChatLorebookKind; entryId: string; title: string; selected: boolean; reason: string; matched: string[]; hash?: string; file?: 'inline' | 'hint' }
+export type ChatContextLore = { key: string; bookId: number; bookKind: ChatLorebookKind; entryId: string; title: string; selected: boolean; reason: string; matched: string[]; hash?: string; file?: 'inline' | 'hint'; remaining?: number }
 
 /** Text-free request composition; old records keep the v1 fields alone. */
 export interface ChatContextMeta {
@@ -363,6 +363,10 @@ export interface ChatLoreEntry {
   constant: boolean
   order: number
   caseSensitive: boolean
+  sticky?: number
+  cooldown?: number
+  delay?: number
+  group?: string
   /** A text file in the book's folder (`자료/x.md`); account and chat books only. `fileId` follows it when moved. */
   file?: string | null
   fileId?: string | null

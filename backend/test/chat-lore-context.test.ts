@@ -239,4 +239,202 @@ test('lore context: books per request, the index, always-on entries, linked file
       await quiet.close()
     }
   })
+
+  await t.test('timed lore: message boundaries, active path, member isolation and card conversion', async (t) => {
+    const { selectLoreEntries, loreEntryKey } = await import('../src/services/codex-chat/chatLorebook')
+    const { loreDiagnostics, metadataOnly } = await import('../src/services/codex-chat/chatContextDiagnostics')
+    const { importChatCard, readLorebookFile } = await import('../src/services/codex-chat/chatCardImport')
+    const { branchChatThread } = await import('../src/services/codex-chat/chatBranch')
+    const { selectChatLore } = await import('../src/services/codex-chat/llmChatContext')
+    type History = import('../src/services/codex-chat/chatLorebook').LoreHistoryMessage
+    const entry = { id: 'timed', keys: ['trigger'], content: 'timed body', sticky: 4, cooldown: 3 }
+    const selectionMeta = (reason = 'key:trigger', bookId = 41) => JSON.stringify({ version: 2, loreEntries: [{ bookId, entryId: entry.id, selected: true, reason }] })
+    const choose = (messages: History[], raw: unknown[] = [entry], timed = true) => selectLoreEntries(
+      { lorebookIds: [], loreScanDepth: 1, loreTokenBudget: 1000 }, messages, (text) => text.length, (text) => text,
+      { entries: normalizeLorebook(raw).map((entry) => ({ key: loreEntryKey(41, entry), entry, bookId: 41 })), ...(timed ? { timing: { messages } } : {}) },
+    )
+    const historyAt = (age: number, keyword = false): History[] => [
+      { role: 'assistant', content: 'answer', context_meta: selectionMeta() },
+      ...Array.from({ length: age - 1 }, () => ({ role: 'user', content: 'other' })),
+    ].map((message, index) => keyword && index === age - 1 ? { ...message, content: 'trigger' } : message)
+
+    await t.test('normalization defaults, integers, extensions and JSON round trips', () => {
+      const [plain, invalid, imported] = normalizeLorebook([
+        { content: 'plain' }, { content: 'bad', sticky: -1, cooldown: Infinity, delay: '2', group: 7 },
+        { content: 'valid', sticky: 3.8, extensions: { cooldown: 2, delay: 4, group: ' scene ' } },
+      ])
+      for (const entry of [plain, invalid]) assert.deepEqual([entry.sticky, entry.cooldown, entry.delay, entry.group], [0, 0, 0, ''])
+      assert.deepEqual([imported.sticky, imported.cooldown, imported.delay, imported.group], [3, 2, 4, 'scene'])
+      assert.deepEqual(normalizeLorebook(JSON.stringify([imported]))[0], imported)
+    })
+
+    await t.test('sticky and cooldown use all messages, delay gates the exact count, and old records have no history', () => {
+      for (const age of [1, 2, 3, 4]) {
+        const chosen = choose(historyAt(age)).decisions[0]
+        assert.equal(chosen.reason, 'sticky')
+        assert.equal(chosen.remaining, 4 - age)
+        assert.equal(chosen.selected, true)
+      }
+      for (const age of [5, 6, 7]) {
+        const chosen = choose(historyAt(age, true)).decisions[0]
+        assert.equal(chosen.reason, 'cooldown')
+        assert.equal(chosen.selected, false)
+      }
+      assert.equal(choose(historyAt(8, true)).decisions[0].reason, 'key:trigger')
+      assert.equal(choose(historyAt(8)).unmatched, 1)
+      assert.equal(choose([{ role: 'user', content: 'trigger' }], [{ ...entry, delay: 2 }]).decisions[0].reason, 'delay')
+      assert.equal(choose([{ role: 'user', content: 'other' }, { role: 'user', content: 'trigger' }], [{ ...entry, delay: 2 }]).decisions[0].selected, true)
+      assert.equal(choose(historyAt(4), [{ ...entry, delay: 5 }]).decisions[0].reason, 'delay')
+      assert.equal(choose(historyAt(5, true), [{ ...entry, constant: true }]).decisions[0].reason, 'cooldown')
+      assert.equal(choose(historyAt(3, true), [{ ...entry, sticky: 0 }]).decisions[0].reason, 'cooldown')
+      assert.equal(choose(historyAt(4, true), [{ ...entry, sticky: 0 }]).decisions[0].selected, true)
+      for (const context_meta of [null, '{', JSON.stringify({ lore: ['timed'] }), JSON.stringify({ loreEntries: [{ bookId: 41, entryId: entry.id, selected: false }] })]) {
+        assert.equal(choose([{ role: 'assistant', content: 'other', context_meta }]).keys.length, 0)
+      }
+      const diagnostic = metadataOnly({ version: 2, lore: [], ...loreDiagnostics(choose(historyAt(2)).decisions, 0) })
+      assert.equal(diagnostic.loreEntries?.[0].remaining, 2)
+      assert.equal(loreDiagnostics(choose(historyAt(5, true)).decisions, 0).loreSkipped?.[0].reason, 'cooldown')
+    })
+
+    await t.test('sticky selections do not renew the period and content edits keep the same timer', () => {
+      const messages = historyAt(2)
+      messages.push({ role: 'assistant', content: 'answer', context_meta: selectionMeta('sticky') }, { role: 'user', content: 'other' })
+      const changed = choose(messages, [{ ...entry, content: 'edited body' }])
+      assert.equal(changed.text, 'edited body')
+      assert.equal(changed.decisions[0].remaining, 0)
+      messages.push({ role: 'assistant', content: 'answer', context_meta: selectionMeta('sticky') }, { role: 'user', content: 'trigger' })
+      assert.equal(choose(messages).decisions[0].reason, 'cooldown')
+      messages.push({ role: 'assistant', content: 'answer' }, { role: 'user', content: 'trigger' })
+      assert.equal(choose(messages).decisions[0].reason, 'key:trigger')
+      let oldReads = 0
+      const unread: History = { role: 'assistant', content: 'old', get context_meta(): string { oldReads++; return selectionMeta() } }
+      assert.equal(choose([unread, ...Array.from({ length: 10000 }, () => ({ role: 'user', content: 'other' }))]).keys.length, 0)
+      assert.equal(oldReads, 0)
+    })
+
+    await t.test('group winners prefer sticky then highest order, ties are stable, and Codex is unchanged', () => {
+      const entries = [{ ...entry, group: 'scene', order: 1 }, { ...entry, id: 'other', group: 'scene', order: 99 }, { ...entry, id: 'free', group: '' }]
+      assert.deepEqual(choose(historyAt(2, true), entries).decisions.filter((entry) => entry.selected).map((entry) => entry.entryId), ['timed', 'free'])
+      assert.equal(choose(historyAt(2, true), entries).decisions.find((entry) => entry.entryId === 'other')?.reason, 'group')
+      assert.equal(choose([{ role: 'user', content: 'trigger' }], entries).decisions.find((entry) => entry.entryId === 'other')?.selected, true)
+      const ties = entries.slice(0, 2).map((entry) => ({ ...entry, order: 1 }))
+      assert.equal(choose([{ role: 'user', content: 'trigger' }], ties).decisions.find((entry) => entry.selected)?.entryId, 'timed')
+      const codex = choose([{ role: 'user', content: 'trigger' }], entries.map((entry) => ({ ...entry, delay: 100 })), false)
+      assert.equal(codex.keys.length, 3)
+      assert.equal(choose(historyAt(2), entries, false).keys.length, 0)
+      const books = [{ id: 41, name: 'timed', label: 'timed', kind: 'global' as const, via: 'profile' as const, owner: null, folderId: null, entries: normalizeLorebook(entries.map((entry) => ({ ...entry, delay: 100 }))) }]
+      assert.equal(selectChatLore({ ...kai, engine: 'codex' }, [{ content: 'trigger' }], null, { books }).keys.length, 3)
+    })
+
+    await t.test('regeneration, variant switches, edits and nested branches recompute from real active records', async (t) => {
+      const { LlmChatService } = await import('../src/services/codex-chat/llmChatService')
+      const timed = ChatProfileStore.create({ name: '시간', engine: 'llm', providerName: 'conn', loreScanDepth: 1, mcpEnabled: false, summaryEnabled: false })
+      const id = CodexChatStore.createThread(1, '시간', 'llm', timed.id)
+      let book = OwnedLorebookStore.saveChatBook(id, [entry])!
+      const current = () => CodexChatStore.findThreadById(id)!
+      const requester = { accountId: 1, accountType: 'admin' as const }
+      t.mock.method(globalThis, 'fetch', async () => Response.json({ choices: [{ message: { content: 'answer' }, finish_reason: 'stop' }] }))
+      await LlmChatService.sendMessage(requester, current(), 'trigger', () => {})
+      const answer = CodexChatStore.listMessages(id).at(-1)!
+      const original = JSON.parse(answer.context_meta!)
+      assert.equal(original.loreEntries[0].reason, 'key:trigger')
+      // The reply being regenerated must be absent from both its count and its history.
+      await LlmChatService.rewriteMessage(requester, current(), answer.id, undefined, () => {})
+      assert.equal(JSON.parse(CodexChatStore.listMessages(id).at(-1)!.context_meta!).loreEntries[0].reason, 'key:trigger')
+      assert.equal(CodexChatStore.listMessages(id).at(-1)!.alternatives.length, 2)
+      CodexChatStore.addAlternative(id, answer.id, { content: 'unused', tool_calls: [], status: 'completed', error: null, created_at: new Date().toISOString(), context_meta: JSON.stringify({ version: 2, loreEntries: [] }) })
+      say('user', 'other', id)
+      const selected = () => selectChatLore(timed, CodexChatStore.listMessages(id), null, { thread: current() })
+      assert.equal(selected().keys.length, 0)
+      CodexChatStore.selectAlternative(id, answer.id, 0)
+      assert.equal(selected().decisions[0].reason, 'sticky')
+      book = OwnedLorebookStore.saveChatBook(id, book.entries.map((entry) => ({ ...entry, content: 'changed body' })))!
+      assert.equal(selected().keyed, 'changed body')
+      assert.equal(selected().decisions[0].remaining, 2)
+      const branchId = branchChatThread(current(), answer.id)!
+      const branchBook = OwnedLorebookStore.chatBookOf(branchId)!
+      assert.notEqual(book.id, branchBook.id)
+      const inBranch = () => selectChatLore(timed, CodexChatStore.listMessages(branchId), null, { thread: CodexChatStore.findThreadById(branchId)! })
+      assert.equal(inBranch().decisions[0].reason, 'sticky')
+      assert.equal(inBranch().decisions[0].remaining, 3)
+      const nestedId = branchChatThread(CodexChatStore.findThreadById(branchId)!, CodexChatStore.listMessages(branchId).at(-1)!.id)!
+      assert.equal(selectChatLore(timed, CodexChatStore.listMessages(nestedId), null, { thread: CodexChatStore.findThreadById(nestedId)! }).decisions[0].reason, 'sticky')
+      const firstUser = CodexChatStore.listMessages(id)[0]
+      CodexChatStore.editUserMessage(id, firstUser.id, 'other')
+      assert.equal(selected().keys.length, 0)
+    })
+
+    await t.test('group timers use the full room count and only the replying member history, outside the prompt window', () => {
+      const roomId = ChatGroupStore.create(1, '시간 그룹', [kai.id, luna.id], kai.id)
+      const room = CodexChatStore.findThreadById(roomId)!
+      const book = OwnedLorebookStore.saveChatBook(roomId, [entry])!
+      const answer = CodexChatStore.addMessage({ thread_id: roomId, role: 'assistant', content: 'answer', speaker_profile_id: kai.id, tool_calls: [], status: 'completed', error: null })
+      CodexChatStore.setContextMeta(answer, JSON.parse(selectionMeta('key:trigger', book.id)))
+      say('user', 'other', roomId)
+      const request = (profile: typeof kai) => {
+        let meta: import('../src/services/codex-chat/llmChatContext').ChatContextMeta | undefined
+        buildGroupLlmMessages({ profile, thread: room, members: [kai, luna], messages: CodexChatStore.listMessages(roomId), windowLimit: 1, tools: [], withTools: false, maxTokens: null, onMeta: (value) => { meta = value } })
+        return meta!
+      }
+      assert.equal(request(kai).loreEntries?.[0].reason, 'sticky')
+      assert.equal(request(kai).loreEntries?.[0].remaining, 2)
+      assert.equal(request(luna).loreEntries?.length, 0)
+      for (let index = 0; index < 3; index++) CodexChatStore.addMessage({ thread_id: roomId, role: 'assistant', content: 'trigger', speaker_profile_id: luna.id, tool_calls: [], status: 'completed', error: null })
+      assert.equal(request(kai).loreSkipped?.[0].reason, 'cooldown')
+      assert.equal(request(luna).loreEntries?.[0].reason, 'key:trigger')
+    })
+
+    await t.test('disabled diagnostics still preserve activation history and remap branch book identifiers', () => {
+      updateChatSettings({ diagnostics: { enabled: false } })
+      try {
+        const id = CodexChatStore.createThread(1, '비공개 진단', 'llm', kai.id)
+        const book = OwnedLorebookStore.saveChatBook(id, [entry])!
+        say('user', 'trigger', id)
+        let meta: import('../src/services/codex-chat/llmChatContext').ChatContextMeta | undefined
+        const thread = CodexChatStore.findThreadById(id)!
+        buildChatMessages({ profile: { ...kai, loreScanDepth: 1 }, thread, messages: CodexChatStore.listMessages(id), config: resolveContextConfig(thread, kai), tools: [], onMeta: (value) => { meta = value } })
+        assert.equal(meta!.version, undefined)
+        assert.equal(meta!.sections, undefined)
+        assert.equal(meta!.loreEntries?.[0].bookId, book.id)
+        assert.equal(metadataOnly(meta!).loreEntries, undefined)
+        const answer = say('assistant', 'answer', id)
+        CodexChatStore.setContextMeta(answer, meta)
+        const branchId = branchChatThread(thread, answer)!
+        const selected = selectChatLore(kai, CodexChatStore.listMessages(branchId), null, { thread: CodexChatStore.findThreadById(branchId)! })
+        assert.equal(selected.decisions[0].reason, 'sticky')
+        assert.equal(selected.decisions[0].bookId, OwnedLorebookStore.chatBookOf(branchId)!.id)
+      } finally {
+        updateChatSettings({ diagnostics: { enabled: true } })
+      }
+    })
+
+    await t.test('card imports convert row/extension fields, highest-order overrides and report ignored group scoring', async () => {
+      const raw = [
+        { id: 'plain', content: 'plain', keys: ['trigger'], order: 10000, group: 'scene' },
+        { id: 'override', content: 'override', keys: ['trigger'], order: -10, extensions: { sticky: 4, cooldown: 3, delay: 2, group: 'scene', groupOverride: true, groupWeight: 25, useGroupScoring: true } },
+        { id: 'row', content: 'row', sticky: 2, cooldown: 1, delay: 3, group: 'other', groupOverride: true, groupWeight: 10, useGroupScoring: false },
+      ]
+      const imported = await importChatCard(Buffer.from(JSON.stringify({ spec: 'chara_card_v2', data: { name: '시간 카드', character_book: { entries: raw } } })), 'conn')
+      const book = ChatLorebookStore.find(imported.lorebookIds![0])!
+      const winner = book.entries.find((entry) => entry.id === 'override')!
+      assert.deepEqual([winner.sticky, winner.cooldown, winner.delay, winner.group], [4, 3, 2, 'scene'])
+      assert.ok(winner.order > book.entries.find((entry) => entry.id === 'plain')!.order)
+      assert.equal(normalizeLorebook(JSON.stringify(book.entries)).find((entry) => entry.id === 'override')!.order, winner.order)
+      assert.ok(imported.importReport.converted.some((line) => line.includes('유지·쿨다운·지연')))
+      assert.ok(imported.importReport.converted.some((line) => line.includes('포함 그룹')))
+      assert.ok(imported.importReport.converted.some((line) => line.includes('groupOverride')))
+      assert.ok(imported.importReport.dropped.some((line) => line.includes('그룹 가중치 무시')))
+      assert.ok(imported.importReport.dropped.some((line) => line.includes('그룹 점수 무시')))
+      assert.ok(!imported.importReport.dropped.some((line) => line.includes('유지·쿨다운·지연') || line.includes('포함 그룹')))
+      const world = readLorebookFile(Buffer.from(JSON.stringify({ entries: Object.fromEntries(raw.map((entry, index) => [index, entry])) })), 'world.json')
+      assert.deepEqual(world.entries, book.entries)
+      assert.ok(!('groupOverride' in winner) && !('groupWeight' in winner) && !('useGroupScoring' in winner))
+      const multiple = readLorebookFile(Buffer.from(JSON.stringify({ entries: [
+        { id: 'low', content: 'low', group: 'scene', order: 2, groupOverride: true },
+        { id: 'high', content: 'high', group: 'scene', order: 7, groupOverride: true },
+        { id: 'ordinary', content: 'ordinary', group: 'scene', order: 10000 },
+      ] })), 'multiple.json').entries
+      assert.ok(multiple[1].order > multiple[0].order && multiple[0].order > multiple[2].order)
+    })
+  })
 })

@@ -84,11 +84,11 @@ export function branchChatThread(thread: CodexChatThreadRecord, untilMessageId: 
       if (typeof value !== 'string') return value
       try {
         const meta = JSON.parse(value) as ChatContextMeta
-        if (meta.version !== 2) return value
+        if (meta.version !== 2 && !meta.loreEntries) return value
         if (sourceBook && branchBook) {
           for (const entry of meta.loreEntries ?? []) if (entry.bookId === sourceBook.id) {
             entry.bookId = branchBook.id
-            entry.key = entry.key.replace(`${sourceBook.id}:`, `${branchBook.id}:`)
+            if (entry.key) entry.key = entry.key.replace(`${sourceBook.id}:`, `${branchBook.id}:`)
           }
           for (const entry of meta.loreSkipped ?? []) if (entry.bookId === sourceBook.id) entry.bookId = branchBook.id
         }

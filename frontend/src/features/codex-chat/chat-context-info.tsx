@@ -101,9 +101,15 @@ function contextChanges(meta: ChatContextMeta, previous: ChatContextMeta, t: T) 
   return changes
 }
 
-function loreReason(reason: string, matched: string[], t: T) {
+function loreReason(reason: string, matched: string[], t: T, remaining?: number) {
   if (reason === 'constant') return t({ ko: '상시', en: 'Constant' })
   if (reason === 'regex') return t({ ko: '정규식', en: 'Regex' })
+  if (reason === 'sticky') return `${t({ ko: '유지', en: 'Sticky' })} · ${remaining ?? 0}`
+  const labels: Record<string, { ko: string; en: string }> = {
+    cooldown: { ko: '쿨다운', en: 'Cooldown' }, delay: { ko: '지연', en: 'Delay' }, group: { ko: '그룹', en: 'Group' },
+    budget: { ko: '예산 초과', en: 'Over budget' }, 'secondary-failed': { ko: '보조 키 불충족', en: 'Secondary key unmet' }, 'codex-sent': { ko: '이미 보냄', en: 'Already sent' },
+  }
+  if (labels[reason]) return t(labels[reason])
   if (reason.startsWith('key:')) return `${t({ ko: '키워드', en: 'Keyword' })} · ${matched.join(', ') || reason.slice(4)}`
   return reason
 }
@@ -225,10 +231,10 @@ export function ChatContextInfo({ meta, previous, threadId, messageId, alternati
                   {GROUPS.map((group, index) => <div key={group.id} className="flex min-w-0 items-center gap-1 text-2xs"><span className="size-2 shrink-0 rounded-xs" style={{ backgroundColor: `var(--chat-diagnostics-${group.id})` }} /><span className="min-w-0">{t(group.label)} <span className="tabular-nums">{formatNumber(totals[index])}</span></span></div>)}
                 </div>
               </div>}
-              {(meta.loreEntries?.length ?? 0) > 0 || (meta.loreUnmatched ?? 0) > 0 ? <div className="space-y-2 border-t border-line pt-3">
+              {(meta.loreEntries?.length ?? 0) > 0 || (meta.loreSkipped?.length ?? 0) > 0 || (meta.loreUnmatched ?? 0) > 0 ? <div className="space-y-2 border-t border-line pt-3">
                 <div className="flex justify-between"><strong>{t({ ko: '로어 {n}', en: 'Lore {n}' }, { n: meta.loreEntries?.length ?? 0 })}</strong><span className="text-muted-foreground">{t({ ko: '안 걸림 {n}', en: 'Unmatched {n}' }, { n: meta.loreUnmatched ?? 0 })}</span></div>
-                {(meta.loreEntries ?? []).map((entry) => <div key={loreKey(entry)} className="flex flex-wrap items-center gap-1.5"><span className="break-words">{entry.title}</span><Chip size="sm" tone="muted" className="whitespace-normal">{loreReason(entry.reason, entry.matched, t)}</Chip>{isNewLore(entry) ? <Chip size="sm" tone="success">{t({ ko: '새로', en: 'New' })}</Chip> : null}</div>)}
-                {(meta.loreSkipped ?? []).map((entry) => <div key={loreKey(entry)} className="flex flex-wrap items-center gap-1.5"><span className="break-words text-muted-foreground line-through">{entry.title}</span><Chip size="sm" tone="warning">{entry.reason === 'budget' ? t({ ko: '예산 초과', en: 'Over budget' }) : entry.reason === 'secondary-failed' ? t({ ko: '보조 키 불충족', en: 'Secondary key unmet' }) : entry.reason === 'codex-sent' ? t({ ko: '이미 보냄', en: 'Already sent' }) : entry.reason}</Chip></div>)}
+                {(meta.loreEntries ?? []).map((entry) => <div key={loreKey(entry)} className="flex flex-wrap items-center gap-1.5"><span className="break-words">{entry.title}</span><Chip size="sm" tone="muted" className="whitespace-normal">{loreReason(entry.reason, entry.matched, t, entry.remaining)}</Chip>{isNewLore(entry) ? <Chip size="sm" tone="success">{t({ ko: '새로', en: 'New' })}</Chip> : null}</div>)}
+                {(meta.loreSkipped ?? []).map((entry) => <div key={loreKey(entry)} className="flex flex-wrap items-center gap-1.5"><span className="break-words text-muted-foreground line-through">{entry.title}</span><Chip size="sm" tone="warning">{loreReason(entry.reason, [], t)}</Chip></div>)}
               </div> : null}
               {(meta.recall?.length ?? 0) > 0 ? <div className="space-y-2 border-t border-line pt-3">
                 <strong>{t({ ko: '회상 {n}', en: 'Recall {n}' }, { n: meta.recall?.length ?? 0 })}</strong>

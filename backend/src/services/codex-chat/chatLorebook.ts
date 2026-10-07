@@ -24,6 +24,10 @@ export type ChatLoreEntry = {
   constant: boolean
   order: number
   caseSensitive: boolean
+  sticky?: number
+  cooldown?: number
+  delay?: number
+  group?: string
   /**
    * A text file this entry points at, relative to the book's folder (`자료/x.md`); null: a plain entry. Account and
    * chat books only. `fileId` is the file store id that follows the file when it is moved or renamed; `file` is what
@@ -90,6 +94,10 @@ function secondaryLogicOf(row: Record<string, unknown>): LoreSecondaryLogic {
   return typeof value === 'number' && SECONDARY_LOGICS[value] ? SECONDARY_LOGICS[value] : 'andAny'
 }
 
+function loreMessageCount(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, Math.floor(value))) : 0
+}
+
 /**
  * Accepts this app's entries, character card books (keys / secondary_keys / selective / insertion_order /
  * case_sensitive), SillyTavern world info (key / keysecondary / selective / selectiveLogic / disable / order /
@@ -105,6 +113,7 @@ export function normalizeLorebook(value: unknown): ChatLoreEntry[] {
   return value.slice(0, LOREBOOK_MAX_ENTRIES).flatMap((entry, index) => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return []
     const row = entry as Record<string, unknown>
+    const extensions = row.extensions && typeof row.extensions === 'object' ? row.extensions as Record<string, unknown> : {}
     let id = typeof row.id === 'string' ? row.id.trim().slice(0, 80) : ''
     if (!id || ids.has(id)) id = `lore-${index}-${ids.size}`
     while (ids.has(id)) id += '-'
@@ -130,6 +139,10 @@ export function normalizeLorebook(value: unknown): ChatLoreEntry[] {
       constant: row.constant === true || row.forceActivation === true,
       order: typeof order === 'number' && Number.isFinite(order) ? Math.max(-10_000, Math.min(10_000, Math.round(order))) : index,
       caseSensitive: row.caseSensitive === true || row.case_sensitive === true,
+      sticky: loreMessageCount(row.sticky ?? extensions.sticky),
+      cooldown: loreMessageCount(row.cooldown ?? extensions.cooldown),
+      delay: loreMessageCount(row.delay ?? extensions.delay),
+      group: typeof (row.group ?? extensions.group) === 'string' ? String(row.group ?? extensions.group).trim().slice(0, 100) : '',
       file,
       fileId: file && typeof row.fileId === 'string' && /^[a-f0-9]{32}$/.test(row.fileId) ? row.fileId : null,
     }]
@@ -279,6 +292,7 @@ export type KeyedLoreEntry = { key: string; entry: ChatLoreEntry; book?: string;
 export type LoreDecision = {
   key: string; bookId: number; bookKind: ChatLorebookKind; entryId: string; title: string
   selected: boolean; reason: string; matched: string[]; hash?: string
+  remaining?: number
   file?: 'inline' | 'hint'
 }
 
@@ -305,6 +319,34 @@ export type SelectedLore = {
 
 /** How a request treats linked files: put a small one in (`inline`), and what to say about one that stays out. */
 export type LoreFileOptions = { inline: boolean; hint: (file: string, entry: { book?: string; title: string }) => string }
+
+export type LoreHistoryMessage = { content: string; display_content?: string | null; role?: string; context_meta?: string | null; speaker_profile_id?: number | null }
+export type LoreTimingOptions = { messages: ReadonlyArray<LoreHistoryMessage>; speakerProfileId?: number }
+
+/** Only activation records start a period; a sticky selection never renews it. Scan the bounded suffix once. */
+function loreActivationAges(entries: KeyedLoreEntry[], timing: LoreTimingOptions) {
+  const horizons = new Map(entries.filter(({ entry }) => entry.enabled).map((item) => [
+    `${item.bookId ?? Number(item.key.split(':')[0])}:${item.entry.id}`, (item.entry.sticky ?? 0) + (item.entry.cooldown ?? 0),
+  ]))
+  const ages = new Map<string, number>()
+  const horizon = Math.max(0, ...horizons.values())
+  const messages = timing.messages
+  for (let index = messages.length - 1; index >= Math.max(0, messages.length - horizon); index -= 1) {
+    const message = messages[index]
+    if (message.role !== 'assistant' || (timing.speakerProfileId !== undefined && message.speaker_profile_id !== timing.speakerProfileId)) continue
+    try {
+      const meta = JSON.parse(message.context_meta ?? '{}') as { loreEntries?: LoreDecision[] }
+      if (!Array.isArray(meta?.loreEntries)) continue
+      for (const selected of meta.loreEntries) {
+        if (!selected?.selected || selected.reason === 'sticky') continue
+        const id = `${selected.bookId}:${selected.entryId}`
+        const age = messages.length - index
+        if (!ages.has(id) && age <= (horizons.get(id) ?? 0)) ages.set(id, age)
+      }
+    } catch { /* Old or malformed records have no activation history. */ }
+  }
+  return ages
+}
 
 /** One line of the "always on" list: newlines folded; the title is left out when the text already starts with it. */
 export function constantLine(title: string, text: string) {
@@ -429,7 +471,7 @@ export function loreEntryMatches(entry: Pick<ChatLoreEntry, 'keys' | 'secondaryK
  * entry with a linked file takes the file's text along (`  자료 <name>: "<text>"`) when `files.inline`, the file is at
  * most LORE_FILE_INLINE_MAX_TOKENS and the budget has room; otherwise `files.hint` stands in for it.
  */
-export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<{ content: string; display_content?: string | null }> | undefined, estimate: (text: string) => number, render: (text: string) => string, options: { skip?: (key: string) => boolean; entries?: KeyedLoreEntry[]; files?: LoreFileOptions } = {}): SelectedLore {
+export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<{ content: string; display_content?: string | null }> | undefined, estimate: (text: string) => number, render: (text: string) => string, options: { skip?: (key: string) => boolean; entries?: KeyedLoreEntry[]; files?: LoreFileOptions; timing?: LoreTimingOptions } = {}): SelectedLore {
   const lorebook = options.entries ?? ChatLorebookStore.keyedEntriesOf(profile.lorebookIds)
   if (lorebook.length === 0) return { text: '', constant: '', constantCount: 0, keyed: '', keys: [], keyedKeys: [], labels: [], decisions: [], unmatched: 0 }
   const recent = (messages?.slice(-profile.loreScanDepth).map((message) => [message.content, message.display_content].filter(Boolean).join('\n')).join('\n') ?? '').slice(-SCAN_TEXT_MAX_LENGTH)
@@ -442,9 +484,28 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
     ...(selected ? { hash: createHash('sha256').update(render(item.entry.content)).digest('hex').slice(0, 12) } : {}),
   })
   const matches = new Map<string, string[]>()
+  const activationAges = options.timing ? loreActivationAges(lorebook, options.timing) : new Map<string, number>()
+  const sticky = new Map<string, number>()
   const active = lorebook.filter((item) => {
     const { key, entry } = item
     if (!entry.enabled || !entry.content.trim()) return false
+    if (options.timing) {
+      if (options.timing.messages.length < (entry.delay ?? 0)) {
+        decisions.push(decisionOf(item, false, 'delay', []))
+        return false
+      }
+      const age = activationAges.get(`${item.bookId ?? Number(key.split(':')[0])}:${entry.id}`)
+      if (age !== undefined) {
+        if (age <= (entry.sticky ?? 0)) {
+          sticky.set(key, (entry.sticky ?? 0) - age)
+          return true
+        }
+        if (age <= (entry.sticky ?? 0) + (entry.cooldown ?? 0)) {
+          decisions.push(decisionOf(item, false, 'cooldown', []))
+          return false
+        }
+      }
+    }
     if (entry.constant) return true
     const skipped = messages !== undefined && options.skip?.(key)
     const matched = messages === undefined ? [] : entry.keys.filter((word) => keywordMatches(word, entry, recent, folded))
@@ -457,8 +518,19 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
     }
     return true
   })
+  const groupWinners = new Map<string, KeyedLoreEntry>()
+  if (options.timing) for (const item of active) {
+    if (!item.entry.group) continue
+    const winner = groupWinners.get(item.entry.group)
+    if (!winner || Number(sticky.has(item.key)) > Number(sticky.has(winner.key)) || (sticky.has(item.key) === sticky.has(winner.key) && item.entry.order > winner.entry.order)) groupWinners.set(item.entry.group, item)
+  }
+  const grouped = active.filter((item) => {
+    if (!options.timing || !item.entry.group || groupWinners.get(item.entry.group) === item) return true
+    decisions.push(decisionOf(item, false, 'group', matches.get(item.key) ?? []))
+    return false
+  })
   // The budget keeps entries as SillyTavern does: "always on" ones first, then the higher order first.
-  const byPriority = [...active].sort((a, b) => Number(b.entry.constant) - Number(a.entry.constant) || b.entry.order - a.entry.order)
+  const byPriority = [...grouped].sort((a, b) => Number(b.entry.constant) - Number(a.entry.constant) || b.entry.order - a.entry.order)
   const chosen: Array<{ key: string; entry: ChatLoreEntry; rendered: string }> = []
   let used = 0
   for (const item of byPriority) {
@@ -478,7 +550,8 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
       if (used + cost > profile.loreTokenBudget) continue
       chosen.push({ key: item.key, entry: item.entry, rendered })
       selected = true
-      const decision = decisionOf(item, true, item.entry.constant ? 'constant' : isRegexKeyword(matched[0]) ? 'regex' : `key:${matched[0]}`, matched)
+      const decision = decisionOf(item, true, sticky.has(item.key) ? 'sticky' : item.entry.constant ? 'constant' : isRegexKeyword(matched[0]) ? 'regex' : `key:${matched[0]}`, matched)
+      if (sticky.has(item.key)) decision.remaining = sticky.get(item.key)
       if (file) decision.file = rendered === `${content}\n  자료 ${file.name}: "${file.text.trim()}"` ? 'inline' : 'hint'
       decisions.push(decision)
       used += cost
