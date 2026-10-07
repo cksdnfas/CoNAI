@@ -47,6 +47,8 @@ export type CodexChatThreadRecord = {
   author_note_depth: number | null
   /** This chat's reply length cap in tokens (null: the profile's max tokens). */
   max_tokens: number | null
+  reaction_enabled: 0 | 1
+  reaction_model_slot_id: number | null
   /** JSON ids of the chat flags switched on in this chat. */
   flag_ids: string | null
   /** JSON hand edits of the display block state (see chatBlockState). */
@@ -250,8 +252,14 @@ export const CodexChatStore = {
     return Number(result.lastInsertRowid)
   },
 
-  updateThreadContext(threadId: number, patch: { contextTurns?: number | null; summaryEnabled?: boolean | null; authorNote?: string | null; authorNoteDepth?: number | null; maxTokens?: number | null }) {
+  updateThreadContext(threadId: number, patch: { contextTurns?: number | null; summaryEnabled?: boolean | null; authorNote?: string | null; authorNoteDepth?: number | null; maxTokens?: number | null; reactionEnabled?: boolean; reactionModelSlotId?: number | null }) {
     const db = getUserSettingsDb()
+    if (patch.reactionEnabled !== undefined) {
+      db.prepare('UPDATE codex_chat_threads SET reaction_enabled = ? WHERE id = ?').run(patch.reactionEnabled ? 1 : 0, threadId)
+    }
+    if (patch.reactionModelSlotId !== undefined) {
+      db.prepare('UPDATE codex_chat_threads SET reaction_model_slot_id = ? WHERE id = ?').run(patch.reactionModelSlotId, threadId)
+    }
     if (patch.contextTurns !== undefined) {
       db.prepare('UPDATE codex_chat_threads SET context_turns = ? WHERE id = ?').run(patch.contextTurns, threadId)
     }
@@ -441,7 +449,13 @@ export const CodexChatStore = {
 
   /** Generation jobs a reply started now belong to another reply id (a continuation of it). */
   moveGenerationLinks(threadId: number, fromReplyId: string, toReplyId: string) {
-    getUserSettingsDb().prepare('UPDATE chat_generation_links SET reply_id = ? WHERE thread_id = ? AND reply_id = ?').run(toReplyId, threadId, fromReplyId)
+    const db = getUserSettingsDb()
+    db.transaction(() => {
+      db.prepare(`INSERT OR IGNORE INTO chat_generation_reactions (reply_id, thread_id, state, attempts, message_id, updated_at)
+        SELECT ?, thread_id, state, attempts, message_id, updated_at FROM chat_generation_reactions WHERE thread_id = ? AND reply_id = ?`)
+        .run(toReplyId, threadId, fromReplyId)
+      db.prepare('UPDATE chat_generation_links SET reply_id = ? WHERE thread_id = ? AND reply_id = ?').run(toReplyId, threadId, fromReplyId)
+    }).immediate()
   },
 
   /** What the request for a reply carried, on the reply and on its shown variant (so switching variants keeps each one's). */

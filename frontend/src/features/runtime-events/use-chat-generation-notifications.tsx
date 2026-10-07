@@ -6,12 +6,12 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip, TooltipProvider } from '@/components/ui/tooltip'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
-import { CODEX_CHAT_ROUTE, CODEX_CHAT_THREADS_QUERY_KEY, defaultThreadId, useCodexChat } from '@/features/codex-chat/codex-chat-context'
+import { CODEX_CHAT_ROUTE, CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey, defaultThreadId, useCodexChat } from '@/features/codex-chat/codex-chat-context'
 import { useI18n } from '@/i18n'
 import { buildApiUrl } from '@/lib/api-client'
 import type { CodexChatThread } from '@/lib/api-codex-chat'
 import { createRuntimeEventStream } from '@/lib/runtime-event-stream'
-import type { ChatGenerationFinishedEventPayload, RuntimeEventEnvelope } from '@/lib/runtime-events-types'
+import type { ChatGenerationFinishedEventPayload, ChatReactionCreatedEventPayload, RuntimeEventEnvelope } from '@/lib/runtime-events-types'
 
 /** A short retry covers the gap between queue completion and thumbnail post-processing. */
 function GenerationThumbnail({ historyId }: { historyId: number }) {
@@ -75,6 +75,13 @@ export function useChatGenerationNotifications() {
   const canUse = chat?.canUse === true
 
   const handleEnvelope = useCallback((envelope: RuntimeEventEnvelope) => {
+    if (envelope.name === 'chat.reaction.created') {
+      const payload = envelope.payload as ChatReactionCreatedEventPayload
+      if (!chat?.canUse || !auth || (auth.hasCredentials && !auth.authenticated) || payload.requestedByAccountId !== accountId) return
+      void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(payload.threadId) })
+      void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+      return
+    }
     if (envelope.name !== 'chat.generation.finished' || !chat?.canUse || !auth || (auth.hasCredentials && !auth.authenticated)) return
     const payload = envelope.payload as ChatGenerationFinishedEventPayload
     if (payload.requestedByAccountId !== accountId) return

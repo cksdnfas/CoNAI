@@ -271,6 +271,8 @@ export async function streamChatCompletion(params: {
   onReasoning?: (text: string) => void
   /** Actual transport body, including cache/usage fallbacks; no headers. */
   onRequestBody?: (body: Record<string, unknown>, target: ChatCompletionTarget) => void
+  /** One-shot background reactions fail without resending compatibility fallbacks. */
+  allowCompatibilityFallback?: boolean
 }): Promise<ChatCompletionResult> {
   const release = await acquireLlmRequestSlot(params.target.providerName, params.target.maxConcurrentRequests ?? 1, params.signal)
   const controller = new AbortController()
@@ -315,14 +317,14 @@ export async function streamChatCompletion(params: {
       const errorText = await response.text().catch(() => '')
       signal.throwIfAborted()
       // A server that does not know cache_control rejects the whole request; the marks are an optimization, so retry without them.
-      if (response.status === 400 && target.promptCacheMarks) {
+      if (params.allowCompatibilityFallback !== false && response.status === 400 && target.promptCacheMarks) {
         console.warn(`[llm-chat] ${params.target.displayName}: request with cache marks rejected (${errorText.slice(0, 200)}); retrying without`)
         target = { ...target, promptCacheMarks: false }
         touch()
         continue
       }
       // Likewise the usage chunk: a server that names stream_options in its refusal gets the request without it.
-      if (response.status === 400 && streamUsage && errorText.includes('stream_options')) {
+      if (params.allowCompatibilityFallback !== false && response.status === 400 && streamUsage && errorText.includes('stream_options')) {
         streamUsage = false
         touch()
         continue

@@ -656,6 +656,8 @@ export interface CodexChatThread {
   /** Overrides of the profile (null follows it). */
   context_turns: number | null
   summary_enabled: 0 | 1 | null
+  reaction_enabled: 0 | 1
+  reaction_model_slot_id: number | null
   max_tokens: number | null
   summary: string | null
   summary_until_message_id: number | null
@@ -1225,7 +1227,7 @@ export function editChatBlock(threadId: number, key: string, data: Record<string
   })
 }
 
-export function updateCodexChatThreadContext(threadId: number, patch: { contextTurns?: number | null; maxTokens?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null; userProfileId?: number | null; lorebookIds?: number[] }) {
+export function updateCodexChatThreadContext(threadId: number, patch: { contextTurns?: number | null; maxTokens?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null; userProfileId?: number | null; lorebookIds?: number[]; reactionEnabled?: boolean; reactionModelSlotId?: number | null }) {
   return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/context`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 

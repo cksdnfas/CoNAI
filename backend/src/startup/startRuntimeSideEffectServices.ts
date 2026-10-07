@@ -104,6 +104,8 @@ export async function startRuntimeSideEffectServices(
   GraphWorkflowExecutionQueue.start()
   GraphWorkflowScheduleService.start()
   GenerationQueueService.start()
+  const { ChatGenerationReactionService } = await import('../services/codex-chat/chatGenerationReactions')
+  ChatGenerationReactionService.start()
 
   const { CleanupService } = await import('../services/cleanupService')
   CleanupService.startPeriodicCleanup()

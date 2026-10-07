@@ -17,6 +17,7 @@ export type RuntimeEventName =
   | 'queue.job.cancel-requested'
   | 'queue.job.progress'
   | 'chat.generation.finished'
+  | 'chat.reaction.created'
   | 'history.record.created'
   | 'history.record.status'
   | 'graph.schedule.changed'
@@ -51,6 +52,12 @@ export interface RuntimeEventEnvelope<TPayload = unknown> {
 }
 
 export type QueueJobEventStatus = 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled'
+
+export interface ChatReactionCreatedEventPayload {
+  threadId: number
+  messageId: number
+  requestedByAccountId: number | null
+}
 
 export interface QueueJobEventPayload {
   job_id: number

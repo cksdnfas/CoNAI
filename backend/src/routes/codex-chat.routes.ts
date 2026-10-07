@@ -471,6 +471,22 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
     const userProfileId = parseUserProfileIdField(body.userProfileId)
     if (userProfileId === 'invalid') { sendRouteBadRequest(res, 'userProfileId must be a number or null'); return }
     const windowKeys = ['contextTurns', 'summaryEnabled', 'summary', 'maxTokens'] as const
+    if (body.reactionEnabled !== undefined && typeof body.reactionEnabled !== 'boolean') {
+      sendRouteBadRequest(res, 'reactionEnabled must be a boolean')
+      return
+    }
+    let reactionModelSlotId: number | null | undefined
+    if (body.reactionModelSlotId !== undefined) {
+      reactionModelSlotId = body.reactionModelSlotId as number | null
+      if (reactionModelSlotId !== null && (typeof reactionModelSlotId !== 'number' || !Number.isSafeInteger(reactionModelSlotId) || reactionModelSlotId <= 0 || !ModelSlotStore.target(reactionModelSlotId))) {
+        sendRouteBadRequest(res, '반응 모델 슬롯을 다시 골라줘.')
+        return
+      }
+    }
+    if (thread.kind === 'direct' && thread.engine === 'codex' && (body.reactionEnabled !== undefined || body.reactionModelSlotId !== undefined)) {
+      sendRouteBadRequest(res, 'Codex 채팅은 완료 반응을 사용할 수 없어.')
+      return
+    }
     if (thread.engine !== 'llm' && windowKeys.some((key) => body[key] !== undefined)) {
       sendRouteBadRequest(res, 'Only LLM chats have context settings')
       return
@@ -521,6 +537,7 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
       }
       CodexChatStore.updateThreadContext(threadId, {
         contextTurns, maxTokens, summaryEnabled: body.summaryEnabled as boolean | null | undefined,
+        reactionEnabled: body.reactionEnabled as boolean | undefined, reactionModelSlotId,
         authorNote: typeof body.authorNote === 'string' ? body.authorNote.slice(0, AUTHOR_NOTE_MAX_LENGTH) : (body.authorNote as null | undefined),
         authorNoteDepth,
       })

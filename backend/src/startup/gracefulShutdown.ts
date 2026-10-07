@@ -59,6 +59,8 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
       return RuntimeEventBroadcaster.shutdown();
     },
     stopGenerationQueue: async () => {
+      const { ChatGenerationReactionService } = await import('../services/codex-chat/chatGenerationReactions');
+      await ChatGenerationReactionService.stop();
       const { GenerationQueueService } = await import('../services/generationQueueService');
       await GenerationQueueService.stopAndDrain();
     },

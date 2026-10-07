@@ -50,6 +50,7 @@ backend/test/*
 !backend/test/chat-regressions.test.ts
 !backend/test/chat-diagnostics.test.ts
 !backend/test/chat-generation-results.test.ts
+!backend/test/chat-generation-reactions.test.ts
 !backend/test/chat-profile-assets.test.ts
 !backend/test/chat-asset-batches.test.ts
 !backend/test/chat-stage5.test.ts

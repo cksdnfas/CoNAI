@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, Eraser, TriangleAlert } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
@@ -7,6 +7,8 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SettingRow } from '@/components/ui/setting-row'
+import { Select } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
@@ -18,6 +20,37 @@ import { LorebookBlock } from './chat-lorebook-block'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatUserProfileRow } from './chat-user-profiles'
 import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatCompactMutationKey, codexChatThreadQueryKey } from './codex-chat-context'
+import { CHAT_MODEL_OPTIONS_QUERY_KEY, listChatModelOptions } from '@/lib/api-codex-chat'
+
+/** Per-chat opt-in, using the same public model slots as reply suggestions. */
+function GenerationReactionSettings({ thread }: { thread: CodexChatThread }) {
+  const { t } = useI18n()
+  const queryClient = useQueryClient()
+  const { showSnackbar } = useSnackbar()
+  const models = useQuery({ queryKey: CHAT_MODEL_OPTIONS_QUERY_KEY, queryFn: listChatModelOptions, staleTime: 60_000 })
+  const mutation = useMutation({
+    mutationFn: (patch: { reactionEnabled?: boolean; reactionModelSlotId?: number | null }) => updateCodexChatThreadContext(thread.id, patch),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(thread.id) }),
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
+  })
+  return (
+    <SettingRow label={t({ ko: '완료 반응', en: 'Completion reaction' })}>
+      <div className="flex items-center gap-3">
+        <Select
+          className="w-44"
+          value={thread.reaction_model_slot_id === null ? '' : String(thread.reaction_model_slot_id)}
+          onChange={(event) => mutation.mutate({ reactionModelSlotId: event.target.value ? Number(event.target.value) : null })}
+          disabled={mutation.isPending}
+          aria-label={t({ ko: '완료 반응 모델', en: 'Completion reaction model' })}
+        >
+          <option value="">{t({ ko: '대화 모델', en: 'Chat model' })}</option>
+          {(models.data ?? []).map((model) => <option key={model.id} value={model.id} disabled={!model.ready}>{model.name}</option>)}
+        </Select>
+        <Switch checked={thread.reaction_enabled === 1} onCheckedChange={(reactionEnabled) => mutation.mutate({ reactionEnabled })} disabled={mutation.isPending} aria-label={t({ ko: '완료 반응', en: 'Completion reaction' })} />
+      </div>
+    </SettingRow>
+  )
+}
 
 type SummaryMode = 'profile' | 'on' | 'off'
 
@@ -137,6 +170,7 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
       <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock thread={thread} defaults={{ note: '', depth: null }} />
+      {llmMembers.length > 0 ? <GenerationReactionSettings thread={thread} /> : null}
       <LorebookBlock threadId={thread.id} profiles={(group?.memberIds ?? thread.member_profile_ids ?? []).flatMap((id) => profilesById.get(id) ?? []).map(({ id, name }) => ({ id, name }))} />
       {group ? (
         <>
@@ -361,6 +395,7 @@ export function CodexChatContextView({ thread, profiles, segments, profileTurns,
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
       <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock thread={thread} defaults={noteDefaults} />
+      <GenerationReactionSettings thread={thread} />
       <LorebookBlock threadId={thread.id} profiles={profiles} />
       <SettingRow label={t({ ko: '참고할 최근 턴 수', en: 'Recent turns sent' })}>
         <NumberStepperInput

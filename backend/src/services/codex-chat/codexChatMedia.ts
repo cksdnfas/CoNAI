@@ -37,7 +37,7 @@ const FAILURE_MESSAGE_MAX_LENGTH = 300
 type FailedJob = NonNullable<CodexChatMessageRecord['tool_calls'][number]['failedJobs']>[number]
 
 /** Queue errors can contain paths or provider details; expose only fixed code-based messages. */
-function failureMessageOf(status: FailedJob['status'], code: string | null) {
+export function failureMessageOf(status: FailedJob['status'], code: string | null) {
   const messages = new Map([
     ['no_image', '완료된 이미지가 없어'],
     ['process_restarted', '서버가 다시 시작돼 작업이 끝났어'],

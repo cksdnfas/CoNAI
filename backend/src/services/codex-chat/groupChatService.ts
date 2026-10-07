@@ -2,7 +2,7 @@ import { validateChatMediaAttachments } from './chatMediaAttachments'
 import { randomUUID } from 'crypto'
 import type { ChatExecutionContext, ChatMessageRouting, ChatRecipient } from '@conai/shared'
 import { automaticReplyRouting, messageSender, quoteMessage, requireReplyTarget, userReplyRouting } from './chatReplies'
-import { registerChatReply } from './chatReplyRegistry'
+import { registerChatReply, skipThreadGenerationReactions } from './chatReplyRegistry'
 import type { McpRequester } from '../../mcp/context'
 import { inlineTextsForChat, validateChatAttachments } from './chatAttachments'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
@@ -25,7 +25,7 @@ import { CHAT_ROOM_TOOLS } from '../../mcp/context'
 import { flagDirectiveFor, postHistoryText, groupSummarizer, sendableMessages, summarizeGroupAhead, summarizeGroupAll } from './llmChatContext'
 import { ChatSummaryStore } from './chatMemory'
 import { branchChatThread } from './chatBranch'
-import { generateLlmGroupReply, type GroupReplyResult } from './llmChatService'
+import { LlmChatService, generateLlmGroupReply, type GroupReplyResult } from './llmChatService'
 import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../llmGenerationOptions'
 
@@ -352,7 +352,7 @@ async function processQueue(run: GroupRun, requester: McpRequester, options: { c
 
 /** Reserve the room for one run (after stopping any run in progress), run it, and release the room. */
 async function startRun(threadId: number, listener: (event: CodexChatStreamEvent) => void, work: (run: GroupRun) => Promise<void>) {
-  if (runs.has(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+  if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
   let resolveFinished: () => void = () => {}
   const run: GroupRun = {
     threadId, stopped: false, active: new Map(), queue: [], chain: true,
@@ -380,13 +380,13 @@ async function startRun(threadId: number, listener: (event: CodexChatStreamEvent
 
 export const GroupChatService = {
   isRunning(threadId: number) {
-    return runs.has(threadId)
+    return runs.has(threadId) || LlmChatService.isRunning(threadId)
   },
 
   /** The room's summarize button: fold everything not summarized yet with the room's summarizer (see groupSummarizer). */
   async summarize(requester: McpRequester, threadId: number) {
     const thread = requireGroup(requester, threadId)
-    if (runs.has(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     const members = memberProfiles(threadId)
     if (!groupSummarizer(thread, members)) throw new CodexChatError('요약할 수 있는 LLM 참가자가 없어.', 409)
     const summary = await summarizeGroupAll(threadId, members, groupLimitsOf(thread).window)
@@ -468,6 +468,8 @@ export const GroupChatService = {
     if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) throw new CodexChatError('메시지를 입력해줘.')
     const routing = userReplyRouting(thread, replyToMessageId)
     routing.recipients = userRecipients(requester, thread, trimmed, routing)
+    LlmChatService.skipReaction(threadId)
+    skipThreadGenerationReactions(threadId)
     // The members read the message in English; the reader keeps their own words.
     const modelText = await translateUserInput(translatorOf(memberProfiles(threadId)), trimmed)
     await GroupChatService.stop(threadId)
@@ -489,7 +491,7 @@ export const GroupChatService = {
   async rewriteMessage(requester: McpRequester, threadId: number, messageId: number, content: string | undefined, listener: (event: CodexChatStreamEvent) => void) {
     const thread = requireGroup(requester, threadId)
     assertGroupChatAvailable(requester)
-    if (runs.has(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     const messages = CodexChatStore.listMessages(threadId)
     const message = messages.find((entry) => entry.id === messageId)
     if (!message) throw new CodexChatError('메시지를 찾을 수 없어.', 404)
@@ -519,7 +521,7 @@ export const GroupChatService = {
     const routing = message.routing ?? { replyTo: null, recipients: [] }
     routing.recipients = userRecipients(requester, thread, trimmed, routing)
     const modelText = await translateUserInput(translatorOf(memberProfiles(threadId)), trimmed)
-    if (runs.has(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     await startRun(threadId, listener, async (run) => {
       CodexChatStore.editUserMessage(threadId, messageId, modelText ?? trimmed, modelText ? trimmed : null)
       CodexChatStore.setMessageRouting(threadId, messageId, routing)
@@ -544,7 +546,7 @@ export const GroupChatService = {
    */
   editReplyText(requester: McpRequester, threadId: number, messageId: number, content: string) {
     requireGroup(requester, threadId)
-    if (runs.has(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     const message = CodexChatStore.listMessages(threadId).find((entry) => entry.id === messageId)
     if (!message || message.role !== 'assistant') throw new CodexChatError('답변을 찾을 수 없어.', 404)
     const speaker = message.speaker_profile_id ? ChatProfileStore.find(message.speaker_profile_id) : null
@@ -557,6 +559,7 @@ export const GroupChatService = {
 
   /** Stop the members answering now and drop the queue; waits (bounded) until the cut replies are stored. */
   async stop(threadId: number) {
+    if (LlmChatService.isRunning(threadId)) await LlmChatService.stop(threadId)
     const run = runs.get(threadId)
     if (!run) return
     run.stopped = true
@@ -573,7 +576,7 @@ export const GroupChatService = {
 
   clearThread(requester: McpRequester, threadId: number) {
     requireGroup(requester, threadId)
-    if (runs.has(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     CodexChatStore.clearThread(threadId, '')
     resetCodexMemory(requester, threadId)
     return GroupChatService.getThread(requester, threadId)
@@ -583,14 +586,14 @@ export const GroupChatService = {
     requireGroup(requester, threadId)
     await GroupChatService.stop(threadId)
     const codexThreadIds = ChatGroupStore.members(threadId).map((member) => member.codex_thread_id)
-    if (runs.has(threadId)) throw new CodexChatError('답변 중단을 처리 중이야. 잠시 후 다시 삭제해줘.', 409)
+    if (GroupChatService.isRunning(threadId)) throw new CodexChatError('답변 중단을 처리 중이야. 잠시 후 다시 삭제해줘.', 409)
     CodexChatStore.deleteThread(threadId)
     for (const codexThreadId of codexThreadIds) deleteCodexRollout(requester, codexThreadId)
   },
 
   addMembers(requester: McpRequester, threadId: number, profileIds: unknown) {
     requireGroup(requester, threadId)
-    if (runs.has(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     const current = memberProfiles(threadId)
     const ids = Array.isArray(profileIds) ? [...new Set(profileIds.map(Number))].filter((id) => Number.isSafeInteger(id) && id > 0 && !current.some((member) => member.id === id)) : []
     if (ids.length === 0) throw new CodexChatError('초대할 프로필을 골라줘.')
@@ -604,7 +607,7 @@ export const GroupChatService = {
 
   removeMember(requester: McpRequester, threadId: number, profileId: number) {
     requireGroup(requester, threadId)
-    if (runs.has(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     const members = ChatGroupStore.members(threadId)
     if (!members.some((member) => member.profile_id === profileId)) throw new CodexChatError('방에 없는 참가자야.', 404)
     if (members.length <= 1) throw new CodexChatError('마지막 참가자는 내보낼 수 없어.', 409)

@@ -29,6 +29,7 @@ const RUNTIME_EVENT_NAMES: readonly RuntimeEventName[] = [
   'queue.job.cancel-requested',
   'queue.job.progress',
   'chat.generation.finished',
+  'chat.reaction.created',
   'history.record.created',
   'history.record.status',
   'job.status',

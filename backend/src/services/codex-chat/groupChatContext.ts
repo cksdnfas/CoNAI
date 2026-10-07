@@ -123,6 +123,8 @@ type GroupLlmContext = {
   withTools: boolean
   tools: ChatCompletionTool[]
   maxTokens: number | null
+  /** Space for a caller's final message, such as generation outcomes. */
+  extraTokens?: number
   /** The room's summary segments (for recall), when its summary is on. */
   segments?: ChatSummarySegment[]
   /** A member that cannot read files itself: text attachments' contents, by file id (see inlineTextsForChat). */
@@ -144,7 +146,7 @@ export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMe
   const lore = selectChatLore(params.profile, window, userPersonaForThread(params.thread), { books: params.books, toolOffered: offersLoreFileTool(params.tools), history: params.messages, speakerProfileId: params.profile.id })
   let context = buildGroupWindowMessages(params, window, sendable.length, lore)
   const budget = params.profile.contextTokens
-  const reserve = params.maxTokens ?? DEFAULT_REPLY_RESERVE_TOKENS
+  const reserve = (params.maxTokens ?? DEFAULT_REPLY_RESERVE_TOKENS) + (params.extraTokens ?? 0)
   while (budget !== null && window.length > 1 && estimateMessagesTokens(params.profile.id, context.messages, params.tools) + reserve > budget) {
     window = window.slice(1)
     context = buildGroupWindowMessages(params, window, sendable.length, lore)

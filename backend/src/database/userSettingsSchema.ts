@@ -654,6 +654,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     // This chat's author's note (replaces the profile's default) and where it goes (turns before the end; null: the profile's lore depth).
     ['author_note', 'TEXT'],
     ['author_note_depth', 'INTEGER'],
+    ['reaction_enabled', 'INTEGER NOT NULL DEFAULT 0'],
+    ['reaction_model_slot_id', 'INTEGER'],
     // This chat's reply length cap in tokens (null: the profile's max tokens).
     ['max_tokens', 'INTEGER'],
     // JSON ids of the chat flags switched on in this chat.
@@ -727,6 +729,17 @@ export function createUserSettingsSchema(db: Database.Database): void {
     message_id INTEGER REFERENCES codex_chat_messages(id) ON DELETE CASCADE
   )`);
   db.exec('CREATE INDEX IF NOT EXISTS idx_chat_generation_reply ON chat_generation_links(thread_id, reply_id)');
+  if (!hasColumn('chat_generation_links', 'reaction_target')) {
+    db.exec('ALTER TABLE chat_generation_links ADD COLUMN reaction_target INTEGER NOT NULL DEFAULT 0');
+  }
+  db.exec(`CREATE TABLE IF NOT EXISTS chat_generation_reactions (
+    reply_id TEXT PRIMARY KEY,
+    thread_id INTEGER NOT NULL REFERENCES codex_chat_threads(id) ON DELETE CASCADE,
+    state TEXT NOT NULL CHECK (state IN ('pending', 'running', 'done', 'skipped', 'failed')),
+    attempts INTEGER NOT NULL DEFAULT 0,
+    message_id INTEGER REFERENCES codex_chat_messages(id) ON DELETE SET NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
   db.exec(`CREATE TABLE IF NOT EXISTS chat_request_captures (
     message_id INTEGER NOT NULL REFERENCES codex_chat_messages(id) ON DELETE CASCADE,
     alternative INTEGER NOT NULL DEFAULT 0,
