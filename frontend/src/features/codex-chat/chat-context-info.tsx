@@ -89,7 +89,7 @@ function contextChanges(meta: ChatContextMeta, previous: ChatContextMeta, t: T):
     ...previous.lore.filter((title) => !current.some((entry) => entry.title === title)).map((title) => ({ added: false, title })),
   ]
   const before = previous.loreEntries ?? []
-  const changes = [
+  const changes: Array<{ added: boolean; changed?: boolean; title: string }> = [
     ...current.filter((entry) => !before.some((item) => loreKey(item) === loreKey(entry))).map((entry) => ({ added: true, title: entry.title })),
     ...before.filter((entry) => !current.some((item) => loreKey(item) === loreKey(entry))).map((entry) => ({ added: false, title: entry.title })),
   ]
