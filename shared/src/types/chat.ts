@@ -1,4 +1,5 @@
 import type { ChatPageProposal, ChatPageSnapshot } from './chatPage'
+import type { ChatWorkflowProposal } from './chatWorkflow'
 
 /** A recipient is a member profile, the human, or a room announcement (no automatic reply). */
 export type ChatRecipient = number | 'user' | 'room'
@@ -58,6 +59,7 @@ export type ChatToolCall = {
  */
 export type ChatProposal = { id: number; dismissed?: boolean } & (
   | ChatPageProposal
+  | ChatWorkflowProposal
   | {
       kind: 'display_block'
       /** Shared block name (defaults to the block key). */

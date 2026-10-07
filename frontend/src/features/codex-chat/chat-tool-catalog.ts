@@ -37,6 +37,9 @@ const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
 const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }> = {
   get_current_page: { group: 'pages', label: { ko: '현재 페이지 읽기', en: 'Read current page' }, ko: '네가 연결한 CoNAI 페이지와 등록된 입력값을 읽어.' },
   propose_page_changes: { group: 'pages', label: { ko: '필드 입력 제안', en: 'Propose input changes' }, ko: '연결된 페이지의 필드 변경안을 보여줘. 네가 적용을 눌러야 입력값이 바뀌어.' },
+  get_workflow_editor: { group: 'pages', label: { ko: '노드 편집기 읽기', en: 'Read workflow editor' }, ko: '연결한 워크플로 초안의 노드와 연결을 읽어.' },
+  list_workflow_modules: { group: 'pages', label: { ko: '워크플로 모듈 조회', en: 'List workflow modules' }, ko: '등록된 활성 모듈의 입력과 출력 포트를 확인해.' },
+  propose_workflow_changes: { group: 'pages', label: { ko: '노드 워크플로 제안', en: 'Propose workflow edits' }, ko: '노드 추가·삭제·입력·연결 변경안을 만들고 네가 초안에 적용해.' },
   search_images: { group: 'images', label: { ko: '이미지 검색', en: 'Search images' }, ko: '프롬프트 글, 도구, 모델, 크기, 날짜, 그룹으로 이미지·영상을 찾아.' },
   search_images_by_tags: { group: 'images', label: { ko: '태그로 이미지 검색', en: 'Search by tags' }, ko: '자동 태그(WD Tagger)로 이미지를 찾아. 캐릭터·등급 필터도 돼.' },
   get_image_metadata: { group: 'images', label: { ko: '이미지 정보', en: 'Image metadata' }, ko: '이미지 하나의 프롬프트·모델·크기 같은 상세 정보를 읽어.' },

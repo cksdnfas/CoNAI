@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useEdgesState, useNodesState } from '@xyflow/react'
 import type { GraphWorkflowExposedInput, GraphWorkflowFolderRecord } from '@/lib/api-module-graph'
 import type { EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
@@ -19,7 +19,8 @@ export function useModuleGraphPageState() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [selectedValidationPortKey, setSelectedValidationPortKey] = useState<string | null>(null)
-  const [lastSavedSnapshot, setLastSavedSnapshot] = useState(() =>
+  const [editorSessionId, setEditorSessionId] = useState(() => crypto.randomUUID())
+  const [lastSavedSnapshot, storeLastSavedSnapshot] = useState(() =>
     buildGraphEditorSnapshot({
       name: 'Workflow Draft',
       description: '',
@@ -31,6 +32,11 @@ export function useModuleGraphPageState() {
       },
     }),
   )
+  // Load, reset, creation and save invalidate earlier chat proposals, even if their graph text is identical.
+  const setLastSavedSnapshot = useCallback<typeof storeLastSavedSnapshot>((next) => {
+    storeLastSavedSnapshot(next)
+    setEditorSessionId(crypto.randomUUID())
+  }, [])
   const [workflowView, setWorkflowView] = useState<'browse' | 'edit'>('browse')
   const [isModuleLibraryOpen, setIsModuleLibraryOpen] = useState(false)
   const [isCustomNodeManagerOpen, setIsCustomNodeManagerOpen] = useState(false)
@@ -69,6 +75,7 @@ export function useModuleGraphPageState() {
   }, [selectedGraphId, workflowExposedInputs, workflowRunInputValues])
 
   return {
+    editorSessionId,
     workflowName,
     setWorkflowName,
     workflowDescription,

@@ -1,4 +1,5 @@
 import type { ChatPageField, ChatPageProposal, ChatPageSnapshot, ChatPageValue } from '../types/chatPage'
+import { CHAT_WORKFLOW_LIMITS, normalizeChatWorkflowSnapshot } from './chatWorkflow'
 
 export const CHAT_PAGE_LIMITS = { fields: 64, changes: 24, text: 8000, options: 100, snapshot: 24000, lifetimeMs: 5 * 60_000 } as const
 
@@ -35,9 +36,9 @@ export function normalizeChatPageSnapshot(value: unknown): ChatPageSnapshot {
   const path = text(raw.path, 240)
   if (!chatPagePermission(path)) throw new Error('이 페이지는 채팅에 연결할 수 없어.')
   const kind = raw.kind
-  if (kind !== 'page' && kind !== 'nai' && kind !== 'comfyui' && kind !== 'library' && kind !== 'prompt_search' && kind !== 'metadata') throw new Error('페이지 종류가 올바르지 않아.')
+  if (kind !== 'page' && kind !== 'nai' && kind !== 'comfyui' && kind !== 'library' && kind !== 'prompt_search' && kind !== 'metadata' && kind !== 'workflow') throw new Error('페이지 종류가 올바르지 않아.')
   const metadataHash = /^\/images\/([\w.-]+)\/metadata$/.exec(path)?.[1]
-  if (((kind === 'nai' || kind === 'comfyui') && path !== '/generation') || (kind === 'library' && path !== '/') || (kind === 'prompt_search' && path !== '/prompts') || (kind === 'metadata' && (!metadataHash || raw.resourceId !== metadataHash))) throw new Error('입력 종류와 대상 페이지가 맞지 않아.')
+  if (((kind === 'nai' || kind === 'comfyui' || kind === 'workflow') && path !== '/generation') || (kind === 'library' && path !== '/') || (kind === 'prompt_search' && path !== '/prompts') || (kind === 'metadata' && (!metadataHash || raw.resourceId !== metadataHash))) throw new Error('입력 종류와 대상 페이지가 맞지 않아.')
   if (!Array.isArray(raw.fields) || raw.fields.length > CHAT_PAGE_LIMITS.fields || (kind === 'page' && raw.fields.length > 0)) throw new Error('페이지 필드 목록이 올바르지 않아.')
   const ids = new Set<string>()
   const fields: ChatPageField[] = raw.fields.map((item) => {
@@ -81,8 +82,18 @@ export function normalizeChatPageSnapshot(value: unknown): ChatPageSnapshot {
     instanceId: identity(raw.instanceId), connectionId: identity(raw.connectionId), path, kind,
     title: text(raw.title, 160), resourceId: raw.resourceId === null ? null : text(raw.resourceId, 100), fields,
   }
-  if (JSON.stringify(snapshot).length > CHAT_PAGE_LIMITS.snapshot) throw new Error('연결할 페이지 정보가 너무 커. 필드 내용을 줄여줘.')
+  if (kind === 'workflow') snapshot.workflow = normalizeChatWorkflowSnapshot(raw.workflow)
+  if (JSON.stringify(snapshot).length > (kind === 'workflow' ? CHAT_WORKFLOW_LIMITS.snapshot + CHAT_PAGE_LIMITS.snapshot : CHAT_PAGE_LIMITS.snapshot)) throw new Error('연결할 페이지 정보가 너무 커. 필드 내용을 줄여줘.')
   return snapshot
+}
+
+/** Store only identity, never the complete editor snapshot, on a review card. */
+export function chatPageTarget(page: ChatPageSnapshot): Omit<ChatPageSnapshot, 'fields' | 'workflow'> {
+  return { instanceId: page.instanceId, connectionId: page.connectionId, path: page.path, title: page.title, kind: page.kind, resourceId: page.resourceId }
+}
+
+export function requireChatPageTarget(page: ChatPageSnapshot, target: Omit<ChatPageSnapshot, 'fields' | 'workflow'>) {
+  if (page.instanceId !== target.instanceId || page.connectionId !== target.connectionId || page.path !== target.path || page.kind !== target.kind || page.resourceId !== target.resourceId) throw new Error('페이지나 연결이 바뀌었어. 현재 페이지에서 다시 요청해줘.')
 }
 
 export function normalizeChatPageValue(field: ChatPageField, value: unknown): ChatPageValue {
@@ -120,7 +131,7 @@ export function buildChatPageChanges(page: ChatPageSnapshot, input: unknown): Ch
 
 /** Optimistic checks also protect undo from overwriting a later user edit. */
 export function chatPagePatch(page: ChatPageSnapshot, proposal: ChatPageProposal, undo = false, now = Date.now()): Record<string, ChatPageValue> {
-  if (page.instanceId !== proposal.page.instanceId || page.connectionId !== proposal.page.connectionId || page.path !== proposal.page.path || page.kind !== proposal.page.kind || page.resourceId !== proposal.page.resourceId) throw new Error('페이지나 연결이 바뀌었어. 현재 페이지에서 다시 요청해줘.')
+  requireChatPageTarget(page, proposal.page)
   if (!undo && proposal.expiresAt < now) throw new Error('입력 제안의 유효 시간이 지났어. 다시 요청해줘.')
   const entries = proposal.changes.map((change) => {
     const field = page.fields.find((entry) => entry.id === change.fieldId)

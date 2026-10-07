@@ -47,6 +47,7 @@ const PROPOSAL_TOOLS: Record<ChatProposal['kind'], string> = {
   profile_update: 'propose_profile_update',
   lore: 'save_lore',
   page_fields: 'propose_page_changes',
+  workflow_graph: 'propose_workflow_changes',
 }
 
 /** Tools whose call leaves a proposal card under the reply. */

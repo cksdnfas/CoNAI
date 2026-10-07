@@ -1,3 +1,5 @@
+import type { ChatWorkflowSnapshot } from './chatWorkflow'
+
 /** Only explicitly registered CoNAI form state is shared with a chat. */
 export type ChatPageValue = string | number | boolean | string[]
 
@@ -21,9 +23,10 @@ export type ChatPageSnapshot = {
   connectionId: string
   path: string
   title: string
-  kind: 'page' | 'nai' | 'comfyui' | 'library' | 'prompt_search' | 'metadata'
+  kind: 'page' | 'nai' | 'comfyui' | 'library' | 'prompt_search' | 'metadata' | 'workflow'
   resourceId: string | null
   fields: ChatPageField[]
+  workflow?: ChatWorkflowSnapshot
 }
 
 export type ChatPageChange = {
@@ -35,7 +38,7 @@ export type ChatPageChange = {
 
 export type ChatPageProposal = {
   kind: 'page_fields'
-  page: Omit<ChatPageSnapshot, 'fields'>
+  page: Omit<ChatPageSnapshot, 'fields' | 'workflow'>
   changes: ChatPageChange[]
   expiresAt: number
   saved?: boolean

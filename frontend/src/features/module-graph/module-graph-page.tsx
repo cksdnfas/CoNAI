@@ -16,6 +16,7 @@ import { useModuleGraphPageActions } from './use-module-graph-page-actions'
 import { useI18n } from '@/i18n'
 import { isFinalResultModule } from './module-graph-shared'
 import { resolveGraphStructureSummary } from './saved-graph-list-summary'
+import { useWorkflowChatPage } from './use-workflow-chat-page'
 
 const ModuleGraphWorkflowBrowseContentLazy = lazy(async () => {
   const module = await import('./components/module-graph-workflow-content')
@@ -48,6 +49,7 @@ function ModuleWorkflowWorkspaceInner({ toolbar }: ModuleWorkflowWorkspaceProps)
   const isDesktopPageLayout = useDesktopPageLayout()
   const unsavedChangesConfirmMessage = t('module-graph.module.graph.page.you.have.unsaved.changes.continuing.may.discard')
   const {
+    editorSessionId,
     workflowName,
     setWorkflowName,
     workflowDescription,
@@ -297,6 +299,13 @@ function ModuleWorkflowWorkspaceInner({ toolbar }: ModuleWorkflowWorkspaceProps)
     refetchExecutionDetail: executionDetailQuery.refetch,
     enterWorkflowEditor,
     showSnackbar,
+  })
+
+  useWorkflowChatPage({
+    enabled: workflowView === 'edit' && !modulesQuery.isLoading && !isSavingGraph && executingGraphId === null && !isWorkflowSaveModalOpen && latestExecution?.status !== 'running' && latestExecution?.status !== 'queued',
+    editorSessionId, selectedGraphId, name: workflowName, description: workflowDescription, debugMode: workflowDebugMode,
+    nodes, edges, modules, runInputs: workflowRunInputValues, setNodes, setEdges,
+    setName: setWorkflowName, setDescription: setWorkflowDescription, setRunInputs: setWorkflowRunInputValues, setExposedInputs: setWorkflowExposedInputs, setSelectedNodeId, setSelectedEdgeId,
   })
 
   const browseManageModalTitle = selectedGraphRecord

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Monitor } from 'lucide-react'
-import { chatPagePatch, chatPagePermission, normalizeChatPageSnapshot, type ChatPageField, type ChatPageSnapshot, type ChatPageValue, type ChatProposal } from '@conai/shared'
+import { chatPagePatch, chatPagePermission, normalizeChatPageSnapshot, requireChatPageTarget, type ChatPageField, type ChatPageSnapshot, type ChatPageValue, type ChatProposal, type ChatWorkflowSnapshot } from '@conai/shared'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -10,7 +10,9 @@ import { useI18n } from '@/i18n'
 import { acknowledgeChatPageProposal, checkChatPageProposal } from '@/lib/api-codex-chat'
 
 type PageProposal = Extract<ChatProposal, { kind: 'page_fields' }>
-type Editor = { instanceId: string; path: string; title: string; kind: Exclude<ChatPageSnapshot['kind'], 'page'>; resourceId: string | null; fields: ChatPageField[]; apply: (patch: Record<string, ChatPageValue>) => void }
+export type WorkflowPageProposal = Extract<ChatProposal, { kind: 'workflow_graph' }>
+export type WorkflowUndo = { isCurrent: () => boolean; restore: () => void }
+type Editor = { instanceId: string; path: string; title: string; kind: Exclude<ChatPageSnapshot['kind'], 'page'>; resourceId: string | null; fields: ChatPageField[]; workflow?: ChatWorkflowSnapshot; apply: (patch: Record<string, ChatPageValue>) => void; applyWorkflow?: (proposal: WorkflowPageProposal) => WorkflowUndo }
 type PageApi = {
   snapshot: ChatPageSnapshot | null
   available: boolean
@@ -21,8 +23,18 @@ type PageApi = {
   register: (editor: Editor) => () => void
   states: ReadonlyMap<number, 'applied' | 'undone'>
   apply: (proposal: PageProposal, undo?: boolean) => Promise<void>
+  workflowProblem: (proposal: WorkflowPageProposal, undo?: boolean) => string
+  applyWorkflow: (proposal: WorkflowPageProposal, undo?: boolean) => Promise<void>
 }
 const PageContext = createContext<PageApi | null>(null)
+
+function validateWorkflow(snapshot: ChatPageSnapshot | null, proposal: WorkflowPageProposal, undo: boolean, record?: WorkflowUndo) {
+  if (!snapshot?.workflow) throw new Error('워크플로 편집기를 채팅에 연결해줘.')
+  requireChatPageTarget(snapshot, proposal.page)
+  if (undo) {
+    if (!record?.isCurrent()) throw new Error('적용 뒤 워크플로를 편집했어. 현재 작업을 보호하려고 되돌리기를 중단했어.')
+  } else if (snapshot.workflow.revision !== proposal.revision || proposal.expiresAt < Date.now()) throw new Error('워크플로가 바뀌었거나 제안의 유효 시간이 지났어. 다시 제안받아줘.')
+}
 
 /** A local registry of form setters; no DOM inspection or code execution. */
 export function ChatPageProvider({ children }: PropsWithChildren) {
@@ -36,6 +48,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
   const [states, setStates] = useState(new Map<number, 'applied' | 'undone'>())
   const statesRef = useRef(states)
   const busy = useRef(new Set<number>())
+  const workflowUndos = useRef(new Map<number, WorkflowUndo>())
   const instanceId = useMemo(() => ({ key: `${location.key}:${location.pathname}:${accountKey}`, id: crypto.randomUUID() }), [location.key, location.pathname, accountKey]).id
   const permission = chatPagePermission(location.pathname)
   const available = !!auth?.authenticated && !!permission && auth.permissionKeys.includes(permission) && auth.permissionKeys.includes('chat.tools.read')
@@ -48,10 +61,11 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
   const snapshot = useMemo<ChatPageSnapshot | null>(() => enabled && connection ? {
     instanceId: activeEditor?.instanceId ?? instanceId, connectionId: connection.id, path: location.pathname, title,
     kind: activeEditor?.kind ?? 'page', resourceId: activeEditor?.resourceId ?? null, fields: activeEditor?.fields ?? [],
+    ...(activeEditor?.workflow ? { workflow: activeEditor.workflow } : {}),
   } : null, [enabled, connection, activeEditor, instanceId, location.pathname, title])
   const current = useRef({ snapshot, editor: activeEditor })
   useLayoutEffect(() => { current.current = { snapshot, editor: activeEditor } })
-  useEffect(() => { statesRef.current = new Map(); setStates(statesRef.current) }, [accountKey])
+  useEffect(() => { statesRef.current = new Map(); workflowUndos.current.clear(); setStates(statesRef.current) }, [accountKey])
   const toggle = useCallback(() => setConnection((old) => old?.accountKey === accountKey ? null : { id: crypto.randomUUID(), accountKey }), [accountKey])
   const disconnect = useCallback(() => setConnection(null), [])
   const register = useCallback((next: Editor) => {
@@ -60,7 +74,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
   }, [])
   const capture = useCallback(() => current.current.snapshot ? normalizeChatPageSnapshot(current.current.snapshot) : undefined, [])
   const apply = useCallback(async (proposal: PageProposal, undo = false) => {
-    if (busy.current.has(proposal.id)) throw new Error('이 제안을 처리하고 있어.')
+    if (busy.current.size) throw new Error('다른 제안을 처리하고 있어.')
     const state = statesRef.current.get(proposal.id)
     if (undo ? state !== 'applied' : !!state || proposal.saved) throw new Error('이미 처리한 제안이야.')
     const before = current.current
@@ -81,7 +95,34 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
       }
     } finally { busy.current.delete(proposal.id) }
   }, [showSnackbar, t])
-  const api = useMemo<PageApi>(() => ({ snapshot, available, enabled, toggle, disconnect, capture, register, states, apply }), [snapshot, available, enabled, toggle, disconnect, capture, register, states, apply])
+  const workflowProblem = useCallback((proposal: WorkflowPageProposal, undo = false) => {
+    try { validateWorkflow(snapshot, proposal, undo, workflowUndos.current.get(proposal.id)); return '' }
+    catch (error) { return error instanceof Error ? error.message : '워크플로를 확인하지 못했어.' }
+  }, [snapshot])
+  const applyWorkflow = useCallback(async (proposal: WorkflowPageProposal, undo = false) => {
+    if (busy.current.size) throw new Error('다른 제안을 처리하고 있어.')
+    const state = statesRef.current.get(proposal.id)
+    if (undo ? state !== 'applied' : !!state || proposal.saved || proposal.dismissed) throw new Error('이미 처리한 제안이야.')
+    validateWorkflow(current.current.snapshot, proposal, undo, workflowUndos.current.get(proposal.id))
+    busy.current.add(proposal.id)
+    try {
+      const authorized = await checkChatPageProposal(proposal, undo)
+      const live = current.current
+      validateWorkflow(live.snapshot, authorized, undo, workflowUndos.current.get(proposal.id))
+      if (undo) { workflowUndos.current.get(proposal.id)!.restore(); workflowUndos.current.delete(proposal.id) }
+      else {
+        if (!live.editor?.applyWorkflow) throw new Error('워크플로 편집기가 닫혔어.')
+        workflowUndos.current.set(proposal.id, live.editor.applyWorkflow(authorized))
+      }
+      statesRef.current = new Map(statesRef.current).set(proposal.id, undo ? 'undone' : 'applied')
+      setStates(statesRef.current)
+      if (!undo) {
+        try { await acknowledgeChatPageProposal(authorized) }
+        catch { showSnackbar({ message: t({ ko: '워크플로 초안은 적용했어. 채팅의 적용 상태는 기록하지 못했어.', en: 'The workflow draft was applied, but its chat receipt could not be saved.' }), tone: 'error' }) }
+      }
+    } finally { busy.current.delete(proposal.id) }
+  }, [showSnackbar, t])
+  const api = useMemo<PageApi>(() => ({ snapshot, available, enabled, toggle, disconnect, capture, register, states, apply, workflowProblem, applyWorkflow }), [snapshot, available, enabled, toggle, disconnect, capture, register, states, apply, workflowProblem, applyWorkflow])
   return <PageContext.Provider value={api}>{children}</PageContext.Provider>
 }
 
@@ -93,8 +134,9 @@ export function useChatPageRegistration(input: Omit<Editor, 'instanceId' | 'path
   const register = page?.register
   const location = useLocation()
   const applyRef = useRef(input?.apply)
-  useLayoutEffect(() => { applyRef.current = input?.apply })
-  const description = input ? JSON.stringify({ title: input.title, kind: input.kind, resourceId: input.resourceId, fields: input.fields }) : null
+  const workflowApplyRef = useRef(input?.applyWorkflow)
+  useLayoutEffect(() => { applyRef.current = input?.apply; workflowApplyRef.current = input?.applyWorkflow })
+  const description = input ? JSON.stringify({ title: input.title, kind: input.kind, resourceId: input.resourceId, fields: input.fields, workflow: input.workflow }) : null
   const kind = input?.kind
   const resourceId = input?.resourceId
   // View controls that write URL search params retain undo within the same mounted view.
@@ -102,8 +144,11 @@ export function useChatPageRegistration(input: Omit<Editor, 'instanceId' | 'path
   const instanceId = useMemo(() => ({ key: `${navigationKey}:${location.pathname}:${kind}:${resourceId}`, id: crypto.randomUUID() }), [navigationKey, location.pathname, kind, resourceId]).id
   useLayoutEffect(() => {
     if (!register || !description) return
-    const data = JSON.parse(description) as Omit<Editor, 'instanceId' | 'path' | 'apply'>
-    return register({ ...data, instanceId, path: location.pathname, apply: (patch) => applyRef.current?.(patch) })
+    const data = JSON.parse(description) as Omit<Editor, 'instanceId' | 'path' | 'apply' | 'applyWorkflow'>
+    return register({ ...data, instanceId, path: location.pathname, apply: (patch) => applyRef.current?.(patch), applyWorkflow: (proposal) => {
+      if (!workflowApplyRef.current) throw new Error('워크플로 편집기가 닫혔어.')
+      return workflowApplyRef.current(proposal)
+    } })
   }, [register, description, instanceId, location.pathname])
 }
 
@@ -112,7 +157,7 @@ export function ChatPageConnectButton({ disabled, allowed }: { disabled: boolean
   const { t } = useI18n()
   if (!page?.available) return null
   const label = t(page.enabled ? { ko: '현재 페이지 연결 해제', en: 'Disconnect current page' } : { ko: '현재 페이지 연결', en: 'Connect current page' })
-  const hint = t(allowed ? { ko: '현재 페이지와 등록된 입력값을 이 채팅에 전달해. 연결 중에는 현재 페이지 조회와 입력 제안만 사용하고, 변경은 네가 적용해.', en: 'Share this page and its registered inputs. While connected, only current-page reads and input proposals are available; you apply the changes.' } : { ko: '프로필 도구에서 현재 페이지 읽기를 허용해줘.', en: 'Allow Read current page in the profile tools.' })
+  const hint = t(allowed ? { ko: '현재 페이지의 등록된 입력과 워크플로 편집 정보를 전달해. 채팅이 만든 변경안을 검토하고 직접 적용해.', en: 'Share registered page inputs and workflow editor state. Review and apply the changes proposed by chat.' } : { ko: '프로필 도구에서 현재 페이지 읽기를 허용해줘.', en: 'Allow Read current page in the profile tools.' })
   return <Tip content={hint}><IconButton variant="ghost" size="icon-sm" active={page.enabled && allowed} disabled={disabled || !allowed} onClick={page.toggle} label={label} tooltip={false}><Monitor /></IconButton></Tip>
 }
 
@@ -121,5 +166,6 @@ export function ChatPageConnectionNotice({ allowed }: { allowed: boolean }) {
   const { t } = useI18n()
   if (!page?.snapshot || !allowed) return null
   const inputCount = page.snapshot.fields.filter((field) => field.editable !== false).length
-  return <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground"><Monitor className="size-3.5 shrink-0" /><span>{t({ ko: '연결된 페이지: {name}', en: 'Connected page: {name}' }, { name: page.snapshot.title })}{inputCount ? t({ ko: ' · 입력 {count}개', en: ' · {count} inputs' }, { count: inputCount }) : ''}</span></p>
+  const workflow = page.snapshot.workflow
+  return <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground"><Monitor className="size-3.5 shrink-0" /><span>{t({ ko: '연결된 페이지: {name}', en: 'Connected page: {name}' }, { name: page.snapshot.title })}{workflow ? t({ ko: ' · 노드 {nodes}개 · 연결 {edges}개', en: ' · {nodes} nodes · {edges} edges' }, { nodes: workflow.nodes.length, edges: workflow.edges.length }) : inputCount ? t({ ko: ' · 입력 {count}개', en: ' · {count} inputs' }, { count: inputCount }) : ''}</span></p>
 }

@@ -50,7 +50,22 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
   const replyContext = (replyId: string): ChatExecutionContext => ({ threadId, profileId: profile.id, kind: 'direct', replyId })
   const BLOCK = { key: 'Status', instruction: 'Update on scene change', example: '{"hp": 100}', template: '<b>{{hp}}</b>', fields: [{ name: 'hp', min: 0, max: 100, step: 10 }] }
 
-  const { normalizeChatPageSnapshot, buildChatPageChanges, chatPagePatch } = await import('@conai/shared')
+  const { normalizeChatPageSnapshot, buildChatPageChanges, chatPagePatch, applyChatWorkflowOperations, normalizeChatWorkflowSnapshot, sanitizeChatWorkflowInputs, chatPageTarget } = await import('@conai/shared')
+  const { chatWorkflowModules, requireChatWorkflowModules } = await import('../src/services/codex-chat/chatWorkflowContext')
+  const { ModuleDefinitionModel } = await import('../src/models/ModuleDefinition')
+  const workflowModules = chatWorkflowModules()
+  const textModule = workflowModules.find((module) => module.operation === 'system.constant_text')!
+  const finalModule = workflowModules.find((module) => module.operation === 'system.final_result')!
+  const numberModule = workflowModules.find((module) => module.operation === 'system.constant_number')!
+  assert.ok(textModule && finalModule && numberModule)
+  const emptyWorkflow = normalizeChatWorkflowSnapshot({ revision: 'workflow-revision-test', name: 'Draft', description: '', nodes: [], edges: [] })
+  const createGraph = [
+    { type: 'add_node', nodeId: 'source', moduleId: textModule.id },
+    { type: 'set_input', nodeId: 'source', key: 'text', value: 'hello' },
+    { type: 'add_node', nodeId: 'result', moduleId: finalModule.id },
+    { type: 'connect', edgeId: 'source-result', sourceNodeId: 'source', sourcePort: 'text', targetNodeId: 'result', targetPort: 'value' },
+    { type: 'set_run_input', nodeId: 'source', enabled: true, label: 'Message' },
+  ]
   const page = normalizeChatPageSnapshot({ instanceId: 'page-test-123', connectionId: 'connection-test-123', path: '/generation', title: 'Test workflow', kind: 'comfyui', resourceId: '1', fields: [
     { id: 'prompt', label: 'Prompt', type: 'text', value: ['old', 'second'] },
     { id: 'steps', label: 'Steps', type: 'number', value: '20', min: 1, max: 50, integer: true },
@@ -58,6 +73,78 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
   ], apiKey: 'must-not-be-retained' })
   const pageProfile = ChatProfileStore.create({ name: 'Page assistant', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page', 'propose_page_changes'] })
   const pageThreadId = CodexChatStore.createThread(null, 'page chat', 'llm', pageProfile.id)
+  const workflowPage = normalizeChatPageSnapshot({ ...page, kind: 'workflow', resourceId: 'workflow:draft:session-test', fields: [], workflow: emptyWorkflow })
+  const workflowProfile = ChatProfileStore.create({ name: 'Workflow assistant', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes'] })
+  const workflowThreadId = CodexChatStore.createThread(null, 'workflow chat', 'llm', workflowProfile.id)
+
+  await t.test('workflow transactions: atomic creation, rewiring/removal, protected fields and cycles', () => {
+    const created = applyChatWorkflowOperations(emptyWorkflow, workflowModules, createGraph)
+    assert.equal(created.graph.nodes.length, 2)
+    assert.equal(created.graph.edges.length, 1)
+    assert.deepEqual(created.issues, [])
+    assert.deepEqual(emptyWorkflow.nodes, [], 'transaction never mutates the source graph')
+    const edited = applyChatWorkflowOperations(created.graph, workflowModules, [
+      { type: 'disconnect', edgeId: 'source-result' },
+      { type: 'add_node', nodeId: 'middle', moduleId: textModule.id },
+      { type: 'connect', edgeId: 'source-result', sourceNodeId: 'source', sourcePort: 'text', targetNodeId: 'middle', targetPort: 'text' },
+      { type: 'connect', edgeId: 'middle-result', sourceNodeId: 'middle', sourcePort: 'text', targetNodeId: 'result', targetPort: 'value' },
+    ])
+    assert.equal(edited.graph.edges.length, 2)
+    assert.equal(edited.graph.edges[0].id, 'source-result', 'a disconnected edge ID can be reused when rewiring atomically')
+    assert.throws(() => applyChatWorkflowOperations(edited.graph, workflowModules, [{ type: 'set_workflow', name: 'would change' }, { type: 'connect', edgeId: 'cycle', sourceNodeId: 'middle', sourcePort: 'text', targetNodeId: 'source', targetPort: 'text' }]), /순환/)
+    assert.equal(edited.graph.name, 'Draft', 'failed batch leaves all earlier operations unapplied')
+    assert.throws(() => applyChatWorkflowOperations(created.graph, workflowModules, [{ type: 'add_node', nodeId: 'another', moduleId: textModule.id }, { type: 'connect', edgeId: 'duplicate', sourceNodeId: 'another', sourcePort: 'text', targetNodeId: 'result', targetPort: 'value' }]), /단일 입력/)
+    assert.throws(() => applyChatWorkflowOperations(created.graph, workflowModules, [{ type: 'add_node', nodeId: 'numeric', moduleId: numberModule.id }, { type: 'connect', edgeId: 'bad-type', sourceNodeId: 'numeric', sourcePort: 'number', targetNodeId: 'source', targetPort: 'text' }]), /타입/)
+    assert.throws(() => applyChatWorkflowOperations(created.graph, workflowModules, [{ type: 'set_input', nodeId: 'source', key: 'api_key', value: 'secret' }]), /ID|보호|입력/)
+    assert.deepEqual(sanitizeChatWorkflowInputs({ text: 'public', api_key: 'secret', code: 'private', unknown: 'hidden' }, textModule), { text: 'public' })
+    const imageModule = workflowModules.find((module) => module.operation === 'system.constant_image')!
+    const media = applyChatWorkflowOperations(emptyWorkflow, workflowModules, [
+      { type: 'add_node', nodeId: 'image', moduleId: imageModule.id },
+      { type: 'add_node', nodeId: 'result', moduleId: finalModule.id },
+      { type: 'connect', edgeId: 'image-result', sourceNodeId: 'image', sourcePort: 'image', targetNodeId: 'result', targetPort: 'value' },
+    ])
+    assert.equal(media.graph.edges.length, 1, 'media port wiring remains available')
+    assert.throws(() => applyChatWorkflowOperations(media.graph, workflowModules, [{ type: 'set_input', nodeId: 'image', key: 'image', value: '/uploads/private.png' }]), /보호된 입력/)
+    assert.deepEqual(sanitizeChatWorkflowInputs({ image: '/uploads/private.png' }, imageModule), {})
+    const jsonModule = workflowModules.find((module) => module.operation === 'system.constant_json')!
+    assert.throws(() => applyChatWorkflowOperations(emptyWorkflow, workflowModules, [{ type: 'add_node', nodeId: 'json', moduleId: jsonModule.id }, { type: 'set_input', nodeId: 'json', key: 'json', value: '{"api_key":"secret"}' }]), /안전한 JSON/)
+    const removed = applyChatWorkflowOperations(edited.graph, workflowModules, [{ type: 'remove_node', nodeId: 'middle' }])
+    assert.equal(removed.graph.edges.length, 0)
+    assert.ok(removed.issues.length > 0, 'an incomplete draft is reviewed with warnings')
+    assert.throws(() => normalizeChatPageSnapshot({ ...workflowPage, path: '/prompts' }), /대상 페이지/)
+  })
+
+  await t.test('workflow tools: request-owned revision, read-only catalog, reviewed proposal and schema changes', async () => {
+    const context: ChatExecutionContext = { threadId: workflowThreadId, profileId: workflowProfile.id, kind: 'direct', replyId: 'workflow-tools', page: workflowPage }
+    const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'generate', 'organize', 'configure'], null, { chatContext: context })
+    try {
+      assert.deepEqual(bridge.tools.map((tool) => tool.function.name).sort(), ['get_current_page', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes'].sort())
+      const read = await bridge.call('get_workflow_editor', {})
+      assert.ok(!read.isError)
+      const catalog = await bridge.call('list_workflow_modules', { moduleIds: [textModule.id] })
+      assert.ok(!catalog.isError)
+      assert.ok(!JSON.stringify(catalog).includes('template_defaults'))
+      assert.ok((await bridge.call('propose_workflow_changes', { operations: [{ type: 'add_node', nodeId: 'unknown', moduleId: 9999999 }] })).isError)
+      const result = await bridge.call('propose_workflow_changes', { revision: 'untrusted-model-revision', operations: createGraph })
+      assert.ok(!result.isError, JSON.stringify(result))
+      const proposal = (result.structuredContent as { proposal: import('@conai/shared').ChatProposal }).proposal
+      assert.ok(proposal.kind === 'workflow_graph')
+      assert.equal(proposal.nodeCount, 2)
+      assert.equal(proposal.revision, emptyWorkflow.revision, 'model arguments cannot override the request-owned editor revision')
+      assert.equal(proposal.saved, undefined)
+      assert.ok(!('workflow' in proposal.page), 'review cards do not retain the entire page graph')
+      const restored = attachProposals([{ id: 100, thread_id: workflowThreadId, role: 'assistant', content: '', tool_calls: [], routing: { replyId: context.replyId, replyTo: null, recipients: [] } } as unknown as CodexChatMessageRecord])
+      assert.equal(restored[0].tool_calls[0].tool, 'propose_workflow_changes')
+      assert.equal(restored[0].tool_calls[0].proposal?.id, proposal.id, 'Codex replies and reloaded history restore the graph review card')
+      requireChatWorkflowModules(proposal.modules)
+      ModuleDefinitionModel.update(textModule.id, { version: textModule.version + 1 })
+      assert.throws(() => requireChatWorkflowModules(proposal.modules), /모듈 정의/)
+      ModuleDefinitionModel.update(textModule.id, { version: textModule.version })
+      unregister()
+      assert.ok((await bridge.call('propose_workflow_changes', { revision: emptyWorkflow.revision, operations: createGraph })).isError)
+    } finally { unregister(); await bridge.close() }
+  })
 
   await t.test('page inputs: atomic validation, stale targets, edited values, and safe undo', () => {
     assert.ok(!('apiKey' in page))
@@ -147,6 +234,32 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.ok(!(await bridge.call('get_current_page', {})).isError)
       permissions = ['chat.llm.use']
       assert.ok((await bridge.call('get_current_page', {})).isError)
+    } finally { unregister(); await bridge.close() }
+  })
+
+  await t.test('workflow feature permission: page access alone cannot read or propose graph changes', async (sub) => {
+    const { AuthAccount } = await import('../src/models/AuthAccount')
+    const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
+    const db = authModule.getAuthDb()
+    const installed = db.prepare('SELECT id FROM auth_permissions WHERE permission_key = ?').get('workflows.view')
+    if (!installed) {
+      db.prepare('INSERT INTO auth_permissions (permission_key, resource, action) VALUES (?, ?, ?)').run('workflows.view', 'workflows', 'view')
+      sub.after(() => { db.prepare('DELETE FROM auth_permissions WHERE permission_key = ?').run('workflows.view') })
+    }
+    let permissions = ['chat.llm.use', 'chat.tools.read', 'page.generation.view']
+    sub.mock.method(AuthAccount, 'findById', () => ({ status: 'active' }))
+    sub.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: permissions }))
+    const context: ChatExecutionContext = { threadId: workflowThreadId, profileId: workflowProfile.id, kind: 'direct', replyId: 'workflow-feature-revoke', page: workflowPage }
+    const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge({ accountId: 7, accountType: 'guest' }, ['read'], null, { chatContext: context })
+    try {
+      assert.ok((await bridge.call('get_current_page', {})).isError)
+      assert.ok((await bridge.call('get_workflow_editor', {})).isError)
+      assert.ok((await bridge.call('list_workflow_modules', {})).isError)
+      permissions.push('workflows.view')
+      assert.ok(!(await bridge.call('get_workflow_editor', {})).isError)
+      permissions = permissions.filter((permission) => permission !== 'workflows.view')
+      assert.ok((await bridge.call('propose_workflow_changes', { operations: createGraph })).isError, 'revocation is checked during the same reply')
     } finally { unregister(); await bridge.close() }
   })
 
@@ -378,6 +491,23 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     assert.equal((await post(proposed.id, binding, 'page-applied')).status, 200)
     assert.equal((await post(proposed.id, binding, 'page-check')).status, 409, 'no duplicate apply')
     assert.equal((await post(proposed.id, { ...binding, undo: true }, 'page-check')).status, 200)
+    const transaction = applyChatWorkflowOperations(emptyWorkflow, workflowModules, createGraph)
+    const graphProposal = ChatProposalStore.add({ threadId: workflowThreadId, profileId: workflowProfile.id, kind: 'direct', replyId: 'workflow-route' }, {
+      kind: 'workflow_graph', page: chatPageTarget(workflowPage), revision: emptyWorkflow.revision, operations: transaction.operations,
+      modules: [textModule, finalModule], changes: transaction.changes, issues: transaction.issues, nodeCount: 2, edgeCount: 1, expiresAt: Date.now() + 60_000,
+    })
+    const graphBinding = { ...binding, revision: emptyWorkflow.revision }
+    assert.equal((await post(graphProposal.id, { ...graphBinding, revision: 'wrong-revision' }, 'page-check')).status, 409)
+    assert.equal((await post(graphProposal.id, graphBinding, 'page-check')).status, 200)
+    ModuleDefinitionModel.update(textModule.id, { version: textModule.version + 1 })
+    assert.equal((await post(graphProposal.id, graphBinding, 'page-check')).status, 409, 'server rechecks current module interfaces')
+    ModuleDefinitionModel.update(textModule.id, { version: textModule.version })
+    assert.equal((await post(graphProposal.id, graphBinding, 'page-applied')).status, 200)
+    assert.equal(ChatProposalStore.find(graphProposal.id)?.kind === 'workflow_graph' && (ChatProposalStore.find(graphProposal.id) as { saved?: boolean }).saved, true)
+    assert.equal((await post(graphProposal.id, graphBinding, 'page-check')).status, 409)
+    assert.equal((await post(graphProposal.id, { ...graphBinding, undo: true }, 'page-check')).status, 200)
+    ChatProfileStore.update(workflowProfile.id, { toolAllowlist: ['get_current_page'] })
+    assert.equal((await post(graphProposal.id, { ...graphBinding, undo: true }, 'page-check')).status, 403)
     ChatProfileStore.update(pageProfile.id, { mcpEnabled: false })
     assert.equal((await post(proposed.id, { ...binding, undo: true }, 'page-check')).status, 403)
   })

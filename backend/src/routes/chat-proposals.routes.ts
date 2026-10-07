@@ -11,25 +11,31 @@ import { ChatPageContextError, requireChatPageAccess, requireChatPageProposalBin
 import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess'
 import { ChatProfileStore } from '../services/codex-chat/chatProfiles'
 import type { ChatProposal } from '@conai/shared'
+import { requireChatWorkflowModules } from '../services/codex-chat/chatWorkflowContext'
 
 const router = express.Router()
 
 /** This only authorizes an owned review card. The browser validates its live field state and applies locally. */
-function pageProposal(req: Request, res: Response, receipt = false): Extract<ChatProposal, { kind: 'page_fields' }> | null {
+function pageProposal(req: Request, res: Response, receipt = false): Extract<ChatProposal, { kind: 'page_fields' | 'workflow_graph' }> | null {
   const id = visibleProposalId(req, res)
   if (id === null) return null
   try {
     const proposal = ChatProposalStore.find(id)
-    if (proposal?.kind !== 'page_fields') throw new ChatPageContextError('페이지 입력 제안이 아니야.')
+    if (proposal?.kind !== 'page_fields' && proposal?.kind !== 'workflow_graph') throw new ChatPageContextError('페이지 편집 제안이 아니야.')
+    const tool = proposal.kind === 'workflow_graph' ? 'propose_workflow_changes' : 'propose_page_changes'
     const thread = CodexChatStore.findThread(ChatProposalStore.threadIdOf(id)!, getRequesterAccountId(req))!
     const profile = thread.profile_id === null ? null : ChatProfileStore.find(thread.profile_id)
-    if (!profile?.isEnabled || !profile.mcpEnabled || !profile.mcpScopes.includes('read') || (profile.toolAllowlist && !profile.toolAllowlist.includes('propose_page_changes'))) throw new ChatPageContextError('프로필의 페이지 입력 도구 권한이 변경됐어.', 403)
+    if (!profile?.isEnabled || !profile.mcpEnabled || !profile.mcpScopes.includes('read') || (profile.toolAllowlist && !profile.toolAllowlist.includes(tool))) throw new ChatPageContextError('프로필의 페이지 편집 도구 권한이 변경됐어.', 403)
     const requester = { accountId: getRequesterAccountId(req), accountType: getRequesterAccountType(req) }
-    requireChatMcpAccountAccess({ requester, scopes: ['read'], source: thread.engine === 'codex' ? 'codex-chat' : 'llm-chat' }, 'propose_page_changes')
+    requireChatMcpAccountAccess({ requester, scopes: ['read'], source: thread.engine === 'codex' ? 'codex-chat' : 'llm-chat' }, tool)
     requireChatPageAccess(requester, proposal.page)
     const undo = req.body?.undo === true
     if (proposal.dismissed || (!receipt && !undo && proposal.saved)) throw new ChatPageContextError('이미 적용하거나 무시한 제안이야.', 409)
-    requireChatPageProposalBinding(undo ? { ...proposal, expiresAt: Number.MAX_SAFE_INTEGER } : proposal, req.body)
+    requireChatPageProposalBinding(proposal, req.body, undo)
+    if (proposal.kind === 'workflow_graph') {
+      try { requireChatWorkflowModules(proposal.modules) }
+      catch (error) { throw new ChatPageContextError(error instanceof Error ? error.message : '모듈 정의를 확인하지 못했어.', 409) }
+    }
     return proposal
   } catch (error) {
     res.status(error instanceof ChatPageContextError ? error.status : 403).json({ success: false, error: error instanceof Error ? error.message : '페이지 입력 권한을 확인하지 못했어.' })
