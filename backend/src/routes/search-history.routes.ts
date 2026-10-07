@@ -1,13 +1,18 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
 import type { SearchHistoryChip } from '../services/searchHistoryService';
-import { SearchHistoryService } from '../services/searchHistoryService';
+import { SearchHistoryService, type SearchHistoryOwner } from '../services/searchHistoryService';
 import { routeParam } from './routeParam';
+import { getRequesterAccountId, isAdminRequest } from './requester-session-helpers';
 
 const router = Router();
 
-router.get('/', asyncHandler(async (_req: Request, res: Response) => {
-  const entries = SearchHistoryService.listEntries();
+function historyOwner(req: Request): SearchHistoryOwner {
+  return { accountId: getRequesterAccountId(req), isAdmin: isAdminRequest(req) };
+}
+
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
+  const entries = SearchHistoryService.listEntries(historyOwner(req));
 
   res.json({
     success: true,
@@ -21,7 +26,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   const chips = Array.isArray(req.body?.chips) ? req.body.chips as SearchHistoryChip[] : [];
 
   try {
-    const entry = SearchHistoryService.saveEntry({ label, chips });
+    const entry = SearchHistoryService.saveEntry(historyOwner(req), { label, chips });
     res.status(201).json({
       success: true,
       data: entry,
@@ -36,8 +41,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   }
 }));
 
-router.delete('/', asyncHandler(async (_req: Request, res: Response) => {
-  SearchHistoryService.clearEntries();
+router.delete('/', asyncHandler(async (req: Request, res: Response) => {
+  SearchHistoryService.clearEntries(historyOwner(req));
 
   res.json({
     success: true,
@@ -48,7 +53,7 @@ router.delete('/', asyncHandler(async (_req: Request, res: Response) => {
 
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
   const entryId = routeParam(routeParam(req.params.id));
-  const deleted = SearchHistoryService.deleteEntry(entryId);
+  const deleted = SearchHistoryService.deleteEntry(historyOwner(req), entryId);
 
   if (!deleted) {
     res.status(404).json({

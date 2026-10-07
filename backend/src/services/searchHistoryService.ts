@@ -18,6 +18,8 @@ export interface SearchHistoryChip {
 
 export interface SearchHistoryEntry {
   id: string;
+  /** Owner account; null for the local owner before accounts exist. Entries saved before history was per account have none. */
+  accountId?: number | null;
   label: string;
   chips: SearchHistoryChip[];
   queryKey: string;
@@ -31,6 +33,16 @@ interface SearchHistoryStore {
 
 const SEARCH_HISTORY_FILE_PATH = path.join(runtimePaths.databaseDir, 'search-history.json');
 const MAX_SEARCH_HISTORY_ENTRIES = 50;
+
+/** Whose history a request reads and writes. Administrators also see entries saved before history was per account. */
+export interface SearchHistoryOwner {
+  accountId: number | null;
+  isAdmin: boolean;
+}
+
+function ownsEntry(owner: SearchHistoryOwner, entry: SearchHistoryEntry): boolean {
+  return entry.accountId === undefined ? owner.isAdmin : entry.accountId === owner.accountId;
+}
 
 /** SearchHistoryService manages persisted gallery search history in a JSON file. */
 export class SearchHistoryService {
@@ -117,16 +129,23 @@ export class SearchHistoryService {
     );
   }
 
-  /** Return all saved history entries sorted from newest to oldest. */
-  static listEntries(): SearchHistoryEntry[] {
+  /** Return the owner's saved history entries sorted from newest to oldest. */
+  static listEntries(owner: SearchHistoryOwner): SearchHistoryEntry[] {
     const store = this.readStore();
     return store.entries
-      .slice()
+      .filter((entry) => ownsEntry(owner, entry))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
 
+  /** Keep each owner's newest entries within the cap without touching other owners'. */
+  private static capEntries(owner: SearchHistoryOwner, entries: SearchHistoryEntry[]): SearchHistoryEntry[] {
+    const sorted = entries.slice().sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    const kept = new Set(sorted.filter((entry) => entry.accountId === owner.accountId).slice(0, MAX_SEARCH_HISTORY_ENTRIES));
+    return sorted.filter((entry) => entry.accountId !== owner.accountId || kept.has(entry));
+  }
+
   /** Save or update a history entry using a stable chip signature. */
-  static saveEntry(input: { label: string; chips: SearchHistoryChip[] }): SearchHistoryEntry {
+  static saveEntry(owner: SearchHistoryOwner, input: { label: string; chips: SearchHistoryChip[] }): SearchHistoryEntry {
     const label = input.label.trim();
     const chips = input.chips.filter((chip) => this.isValidChip(chip));
 
@@ -141,7 +160,7 @@ export class SearchHistoryService {
     const store = this.readStore();
     const now = new Date().toISOString();
     const queryKey = this.buildQueryKey(chips);
-    const existingEntry = store.entries.find((entry) => entry.queryKey === queryKey);
+    const existingEntry = store.entries.find((entry) => entry.accountId === owner.accountId && entry.queryKey === queryKey);
 
     if (existingEntry) {
       const updatedEntry: SearchHistoryEntry = {
@@ -151,18 +170,13 @@ export class SearchHistoryService {
         updatedAt: now,
       };
 
-      const nextEntries = store.entries
-        .filter((entry) => entry.id !== existingEntry.id)
-        .concat(updatedEntry)
-        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-        .slice(0, MAX_SEARCH_HISTORY_ENTRIES);
-
-      this.writeStore({ entries: nextEntries });
+      this.writeStore({ entries: this.capEntries(owner, store.entries.filter((entry) => entry.id !== existingEntry.id).concat(updatedEntry)) });
       return updatedEntry;
     }
 
     const newEntry: SearchHistoryEntry = {
       id: `search_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+      accountId: owner.accountId,
       label,
       chips,
       queryKey,
@@ -170,18 +184,14 @@ export class SearchHistoryService {
       updatedAt: now,
     };
 
-    const nextEntries = [newEntry, ...store.entries]
-      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-      .slice(0, MAX_SEARCH_HISTORY_ENTRIES);
-
-    this.writeStore({ entries: nextEntries });
+    this.writeStore({ entries: this.capEntries(owner, [newEntry, ...store.entries]) });
     return newEntry;
   }
 
-  /** Delete a single saved history entry. */
-  static deleteEntry(entryId: string): boolean {
+  /** Delete one of the owner's saved history entries. */
+  static deleteEntry(owner: SearchHistoryOwner, entryId: string): boolean {
     const store = this.readStore();
-    const nextEntries = store.entries.filter((entry) => entry.id !== entryId);
+    const nextEntries = store.entries.filter((entry) => entry.id !== entryId || !ownsEntry(owner, entry));
 
     if (nextEntries.length === store.entries.length) {
       return false;
@@ -191,8 +201,9 @@ export class SearchHistoryService {
     return true;
   }
 
-  /** Remove all saved history entries. */
-  static clearEntries(): void {
-    this.writeStore({ entries: [] });
+  /** Remove all of the owner's saved history entries. */
+  static clearEntries(owner: SearchHistoryOwner): void {
+    const store = this.readStore();
+    this.writeStore({ entries: store.entries.filter((entry) => !ownsEntry(owner, entry)) });
   }
 }

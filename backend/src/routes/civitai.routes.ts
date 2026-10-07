@@ -11,7 +11,7 @@ import {
 } from './civitai-route-helpers';
 import fs from 'fs';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { optionalAuth } from '../middleware/authMiddleware';
+import { requireAdmin } from '../middleware/authMiddleware';
 import { CivitaiSettings } from '../models/CivitaiSettings';
 import { ModelInfo } from '../models/ModelInfo';
 import { ImageModel } from '../models/ImageModel';
@@ -26,7 +26,8 @@ import { db } from '../database/init';
 
 const router = Router();
 
-router.use(optionalAuth);
+// Reads show model info beside images; settings, lookups, rescans and deletes are server maintenance.
+router.use((req, res, next) => (req.method === 'GET' || req.method === 'HEAD' ? requireImagesView : requireAdmin)(req, res, next));
 
 /**
  * Get Civitai settings

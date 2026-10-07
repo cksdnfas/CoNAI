@@ -1,4 +1,5 @@
 import type { Request } from 'express';
+import { hasAdminAccess } from '../middleware/authMiddleware';
 
 const REQUESTER_ACCOUNT_TYPES = ['admin', 'guest'] as const;
 type RequesterAccountType = (typeof REQUESTER_ACCOUNT_TYPES)[number];
@@ -18,7 +19,7 @@ export function getRequesterAccountType(req: Request) {
   return isRequesterAccountType(accountType) ? accountType : null;
 }
 
-/** Check whether the current request is attached to an admin account. */
+/** Check whether the current request is attached to an admin account, re-read so a demoted admin loses access at once. */
 export function isAdminRequest(req: Request) {
-  return getRequesterAccountType(req) === 'admin';
+  return hasAdminAccess(req);
 }
