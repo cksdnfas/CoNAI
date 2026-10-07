@@ -58,7 +58,7 @@ import { ChatAppearanceError, ChatAppearanceStore } from '../services/codex-chat
 import { validateBlockData } from '../services/codex-chat/chatBlockState'
 import { canSuggest, ChatSuggestError, profileWriterReady, suggestReplies, userWriterReady } from '../services/codex-chat/chatSuggestions'
 import { createUploadStorage, MAX_UPLOAD_FILE_SIZE_BYTES } from '../middleware/upload'
-import { downloadProfileAsset, importFileStoreProfileAsset, ingestProfileAsset, isProfileAssetHidden, profileAssetFields, resolveProfileAsset } from '../services/codex-chat/chatProfileAssets'
+import { downloadProfileAsset, importFileStoreProfileAsset, ingestProfileAsset, profileAssetFields, resolveProfileAsset } from '../services/codex-chat/chatProfileAssets'
 
 const MESSAGE_MAX_LENGTH = 20000
 
@@ -138,7 +138,6 @@ function toPublicProfile(profile: ChatProfile, accountId: number | null) {
     tagline: profile.tagline,
     model: effectiveModelOf(profile),
     modelLabel: modelLabelOf(profile),
-    avatar: canViewImages && !isProfileAssetHidden(profile.avatarHash) ? profile.avatar : null,
     ...profileAssetFields(profile, canViewImages),
     engine: profile.engine,
     isEnabled: profile.isEnabled,

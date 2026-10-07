@@ -14,7 +14,7 @@ import { ChatPageConnectButton, ChatPageConnectionNotice } from './chat-page-con
 import {
   CHAT_APPEARANCE_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
-  chatProfileBackgroundUrl,
+  chatProfileAssetUrl,
   chatProfileEmoticonsQueryKey,
   listChatProfileEmoticons,
   deleteCodexChatThread,
@@ -322,6 +322,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     return result
   }, [emoticonData, speakerProfiles])
   const toSpeaker = useCallback((entry: ChatProfileSummary): ChatSpeaker => ({
+    id: entry.id, avatarHash: entry.avatarHash, avatarCrop: entry.avatarCrop, assetVersion: entry.assetVersion, avatarThumbnailUrl: entry.avatarThumbnailUrl,
     name: entry.name, avatar: entry.avatar, engine: entry.engine, roleplay: entry.style?.roleplay ?? false, blocks: entry.style?.blocks, cast: entry.style?.cast,
     emoticons: emoticonsById.get(entry.id) ?? null, mentions: isGroup ? memberNames : undefined,
   }), [emoticonsById, isGroup, memberNames])
@@ -330,7 +331,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     const entry = profileId === null ? undefined : profilesById.get(profileId)
     return entry ? toSpeaker(entry) : null
   }, [profilesById, toSpeaker])
-  const backgroundUrl = canViewImages && appearance.showBackground && profile?.backgroundVersion ? chatProfileBackgroundUrl(profile.id, profile.backgroundVersion) : null
+  const backgroundUrl = canViewImages && appearance.showBackground && profile?.backgroundVersion ? chatProfileAssetUrl(profile.id, 'background', profile.assetVersion ?? profile.backgroundVersion) : null
 
   const codexStatusQuery = useQuery({ queryKey: ['codex-generation-status'], queryFn: getCodexGenerationStatus, staleTime: 30_000, enabled: isCodexThread && (thread !== null || pendingProfile !== null) })
   const codexStatus = codexStatusQuery.data?.data ?? null
@@ -926,7 +927,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         </GroupMembersPopover>
       )
       : <GroupAvatarStack profiles={memberProfiles} />
-    : speaker ? <ChatProfileAvatar name={speaker.name} avatar={speaker.avatar} engine={speaker.engine} size="sm" /> : null
+    : speaker ? <ChatProfileAvatar name={speaker.name} avatar={speaker.avatar} profile={speaker} engine={speaker.engine} size="sm" /> : null
   const inviteButton = activeThreadId === null || !thread || profileMissing
     ? null
     : isGroup

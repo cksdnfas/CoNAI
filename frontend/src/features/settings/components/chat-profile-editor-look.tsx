@@ -1,6 +1,6 @@
 import { ToggleChip } from '@/components/ui/chip'
 import { useI18n } from '@/i18n'
-import type { ChatSharedBlock, ChatStyle } from '@/lib/api-codex-chat'
+import type { ChatProfile, ChatSharedBlock, ChatStyle } from '@/lib/api-codex-chat'
 import { ChatCastEditor } from './chat-profile-cast'
 import { EditorGroup, type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { ChatEmoticonGroupPicker } from './chat-profile-emoticons'
@@ -11,13 +11,16 @@ import { CollapsibleRow } from './chat-profile-sections'
  * How the profile's chats look: typeface, background and roleplay colours, then the folded extras (emoticon groups,
  * cast, display blocks). A fold starts open when it has content, so nothing set is hidden behind a click.
  */
-export function ChatProfileLookPanel({ draft, patch, defaults, backgroundUrl, blocks }: {
+export function ChatProfileLookPanel({ draft, patch, defaults, backgroundUrl, blocks, onBusyChange, busy, profile }: {
   draft: Draft
   patch: PatchDraft
   defaults: ChatStyle | undefined
   backgroundUrl: string | null
   /** The shared display blocks (settings › chat); undefined until they load. */
   blocks: ChatSharedBlock[] | undefined
+  onBusyChange: (busy: boolean) => void
+  busy: boolean
+  profile: ChatProfile | null
 }) {
   const { t } = useI18n()
   const { style } = draft
@@ -33,7 +36,12 @@ export function ChatProfileLookPanel({ draft, patch, defaults, backgroundUrl, bl
           defaults={defaults}
           backgroundUrl={backgroundUrl}
           onStyleChange={(next) => patch({ style: next })}
-          onBackgroundChange={(background) => patch({ background })}
+          characterName={draft.name}
+          hasBackground={Boolean(draft.backgroundHash || backgroundUrl)}
+          onBackgroundHashChange={(backgroundHash) => patch({ backgroundHash, background: backgroundHash === (profile?.backgroundHash ?? draft.backgroundHash) ? undefined : null })}
+          onBusyChange={onBusyChange}
+          busy={busy}
+          onBackgroundChange={(background) => patch({ background, backgroundHash: null })}
         />
       </EditorGroup>
       <div className="border-t border-line">

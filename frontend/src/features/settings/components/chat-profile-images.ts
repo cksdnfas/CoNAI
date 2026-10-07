@@ -1,3 +1,20 @@
+import { buildApiUrl } from '@/lib/api-client'
+import { chatProfileAssetUrl, type ChatProfile, type ChatProfileAssetKind } from '@/lib/api-codex-chat'
+import type { Draft } from './chat-profile-editor-fields'
+
+/** Saved assets use the profile route; unsaved hashes use the library's protected original route. */
+export function draftProfileAssetUrl(draft: Draft, profile: ChatProfile | null, kind: ChatProfileAssetKind) {
+  const field = kind === 'reference' ? 'referenceHash' : kind === 'avatar' ? 'avatarHash' : 'backgroundHash'
+  const hash = draft[field]
+  if (hash) return profile && hash === profile[field]
+    ? chatProfileAssetUrl(profile.id, kind, profile.assetVersion)
+    : buildApiUrl(`/api/images/${encodeURIComponent(hash)}/file`)
+  if (kind === 'avatar') return draft.avatar
+  if (kind === 'background') return draft.background !== undefined ? draft.background
+    : profile?.backgroundVersion ? chatProfileAssetUrl(profile.id, kind, profile.assetVersion ?? profile.backgroundVersion) : null
+  return null
+}
+
 const AVATAR_SIZE_PX = 128
 const BACKGROUND_MAX_SIDE_PX = 1600
 

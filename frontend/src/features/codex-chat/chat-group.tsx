@@ -39,7 +39,7 @@ export function GroupAvatarStack({ profiles, size = 'sm', ringClassName = 'ring-
   return (
     <span className="flex shrink-0">
       {profiles.slice(0, STACK_MAX).map((profile, index) => (
-        <ChatProfileAvatar key={profile.id} name={profile.name} avatar={profile.avatar} engine={profile.engine} size={size} className={cn('ring-2', ringClassName, index > 0 && (size === 'xs' ? '-ml-2' : '-ml-1.5'))} />
+        <ChatProfileAvatar key={profile.id} name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size={size} className={cn('ring-2', ringClassName, index > 0 && (size === 'xs' ? '-ml-2' : '-ml-1.5'))} />
       ))}
     </span>
   )
@@ -102,7 +102,7 @@ export function GroupMembersPopover({ threadId, group, profilesById, disabled, o
           const representative = profile.id === group.representativeId
           return (
             <div key={profile.id} className="group/member flex min-h-12 items-center gap-2.5 rounded-sm pl-2 pr-1 hover:bg-fill">
-              <ChatProfileAvatar name={profile.name} avatar={profile.avatar} engine={profile.engine} size="md" />
+              <ChatProfileAvatar name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size="md" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 text-sm font-semibold">
                   <span className="truncate">{profile.name}</span>
@@ -197,7 +197,7 @@ export function GroupInviteDialog({ open, mode, profiles, userProfiles = [], onC
         <div className="max-h-[50vh] overflow-y-auto">
           {base ? (
             <div className="flex min-h-13 items-center gap-3 px-1">
-              <ChatProfileAvatar name={base.name} avatar={base.avatar} engine={base.engine} size="md" />
+              <ChatProfileAvatar name={base.name} avatar={base.avatar} profile={base} engine={base.engine} size="md" />
               <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-semibold">
                 <span className="truncate">{base.name}</span>
                 <Crown aria-label={t({ ko: '대표', en: 'Representative' })} className="size-3.5 shrink-0 text-secondary-text" />
@@ -210,7 +210,7 @@ export function GroupInviteDialog({ open, mode, profiles, userProfiles = [], onC
             const blocked = !checked && (roomSize >= GROUP_MEMBER_MAX || takenNames.has(profile.name.trim().toLowerCase()))
             return (
               <label key={profile.id} className={cn('flex min-h-13 cursor-pointer items-center gap-3 border-t border-line px-1 first:border-t-0', blocked && 'cursor-not-allowed opacity-50')}>
-                <ChatProfileAvatar name={profile.name} avatar={profile.avatar} engine={profile.engine} size="md" />
+                <ChatProfileAvatar name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size="md" />
                 <span className="min-w-0 flex-1 truncate text-sm font-semibold">{profile.name}</span>
                 <Checkbox checked={checked} disabled={blocked} onCheckedChange={() => toggle(profile.id)} aria-label={profile.name} />
               </label>
@@ -258,7 +258,7 @@ export function MentionList({ id, options, selected, onSelect }: { id: string; o
       {options.map((option, index) => (
         <Button key={option.key} id={`${id}-${index}`} role="option" aria-selected={selected === index} variant="ghost" size="sm" className={cn('w-full justify-start gap-2.5 font-semibold text-foreground', selected === index && 'bg-fill')} onMouseDown={(event) => event.preventDefault()} onClick={() => onSelect(option)}>
           {option.profile
-            ? <ChatProfileAvatar name={option.profile.name} avatar={option.profile.avatar} engine={option.profile.engine} size="sm" />
+            ? <ChatProfileAvatar name={option.profile.name} avatar={option.profile.avatar} profile={option.profile} engine={option.profile.engine} size="sm" />
             : <span className="inline-flex size-6 items-center justify-center rounded-full bg-surface-highest"><Users className="size-3.5" /></span>}
           <span className="truncate">{option.name}</span>
           {option.representative ? <Crown aria-label={t({ ko: '대표', en: 'Representative' })} className="size-3 text-secondary-text" /> : null}
@@ -281,7 +281,7 @@ export function GroupTurnStatus({ speakers, queue }: { speakers: ChatProfileSumm
           {speakers.length > 0 ? <span aria-hidden="true" className="text-foreground/25">·</span> : null}
           <span className="shrink-0">{t({ ko: '다음', en: 'Next' })}</span>
           <span className="flex items-center gap-1">
-            {queue.map((profile, index) => <ChatProfileAvatar key={`${profile.id}-${index}`} name={profile.name} avatar={profile.avatar} engine={profile.engine} size="xs" className="size-4" />)}
+            {queue.map((profile, index) => <ChatProfileAvatar key={`${profile.id}-${index}`} name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size="xs" className="size-4" />)}
           </span>
         </>
       ) : null}

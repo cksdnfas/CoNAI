@@ -1,6 +1,6 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useMemo, useState } from 'react'
-import { useInfiniteQuery, useQueries } from '@tanstack/react-query'
+import { useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query'
 import { ImageOff, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -16,44 +16,69 @@ import { SEARCH_AI_TOOL_OPTIONS } from '@/features/search/search-constants'
 import { useI18n } from '@/i18n'
 import { buildApiUrl } from '@/lib/api-client'
 import type { ChatMediaAttachment } from '@/lib/api-codex-chat'
+import { getGroupImages, getGroupsHierarchyAll } from '@/lib/api-groups'
 import { getImage, getImageDetailQueryKey, getImages, searchImagesComplex } from '@/lib/api-images'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 
 /** Search the full library on the server; selection survives filters and page changes. */
-export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, applyLabel, note }: {
+export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, applyLabel, note, initialGroupPath, imagesOnly = false }: {
   initial: ChatMediaAttachment[]; maxCount: number; onPick: (items: ChatMediaAttachment[]) => void; onClose: () => void
   /** Defaults are worded for chat attachments; `note: null` drops the attachment note. */
   title?: string; applyLabel?: string; note?: string | null
+  initialGroupPath?: string
+  imagesOnly?: boolean
 }) {
   const { t } = useI18n()
   const { canViewImages } = useImagePermissions()
   const { showSnackbar } = useSnackbar()
+  const groupsQuery = useQuery({ queryKey: ['groups-hierarchy-all', 'chat-media-picker'], queryFn: getGroupsHierarchyAll, enabled: canViewImages, staleTime: 30_000 })
+  const groups = useMemo(() => {
+    const entries = groupsQuery.data ?? []
+    const byId = new Map(entries.map((group) => [group.id, group]))
+    return entries.map((group) => {
+      const names = [group.name]
+      const seen = new Set([group.id])
+      let parent = group.parent_id ? byId.get(group.parent_id) : undefined
+      while (parent && !seen.has(parent.id)) { names.unshift(parent.name); seen.add(parent.id); parent = parent.parent_id ? byId.get(parent.parent_id) : undefined }
+      return { id: group.id, path: names.join('/') }
+    })
+  }, [groupsQuery.data])
+  const [chosenGroupId, setChosenGroupId] = useState<number | null | undefined>(undefined)
+  const groupId = chosenGroupId === undefined ? groups.find((group) => group.path === initialGroupPath)?.id ?? null : chosenGroupId
   const [input, setInput] = useState('')
   const [search, setSearch] = useState('')
   const [tool, setTool] = useState('')
   const [order, setOrder] = useState<'ASC' | 'DESC'>('DESC')
   const [selected, setSelected] = useState(() => new Map(initial.map((item) => [item.compositeHash, item])))
   const query = useInfiniteQuery({
-    queryKey: ['chat-media-picker', search, tool, order],
-    initialPageParam: 1,
-    enabled: canViewImages,
-    queryFn: ({ pageParam, signal }) => search || tool ? searchImagesComplex({
-      complex_filter: {
-        or_group: search ? [
-          { category: 'positive_prompt', type: 'prompt_contains', value: search },
-          { category: 'auto_tag', type: 'auto_tag_any', value: search, min_score: 0, max_score: 1 },
-        ] : [],
-        and_group: tool ? [{ category: 'basic', type: 'ai_tool_group', value: tool }] : [],
-      },
-      page: pageParam, limit: 48, sortBy: 'first_seen_date', sortOrder: order,
-    }, { signal }) : getImages({ page: pageParam, limit: 48, sortOrder: order }, { signal }),
-    getNextPageParam: (lastPage, pages) => lastPage.hasMore ? pages.length + 1 : undefined,
+    queryKey: ['chat-media-picker', groupId, search, tool, order],
+    initialPageParam: { page: 1, cursorOrderIndex: null as number | null, cursorAddedDate: null as string | null, cursorHash: null as string | null },
+    enabled: canViewImages && (!initialGroupPath || !groupsQuery.isPending),
+    queryFn: async ({ pageParam, signal }) => {
+      if (groupId !== null) {
+        const result = await getGroupImages(groupId, { ...pageParam, limit: 48, includeChildren: true })
+        return { images: result.images, hasMore: result.pagination.hasMore ?? result.pagination.page < result.pagination.totalPages, cursorOrderIndex: result.pagination.nextCursorOrderIndex ?? null, cursorAddedDate: result.pagination.nextCursorAddedDate ?? null, cursorHash: result.pagination.nextCursorHash ?? null }
+      }
+      const result = await (search || tool ? searchImagesComplex({
+        complex_filter: {
+          or_group: search ? [
+            { category: 'positive_prompt', type: 'prompt_contains', value: search },
+            { category: 'auto_tag', type: 'auto_tag_any', value: search, min_score: 0, max_score: 1 },
+          ] : [],
+          and_group: tool ? [{ category: 'basic', type: 'ai_tool_group', value: tool }] : [],
+        },
+        page: pageParam.page, limit: 48, sortBy: 'first_seen_date', sortOrder: order,
+      }, { signal }) : getImages({ page: pageParam.page, limit: 48, sortOrder: order }, { signal }))
+      return { images: result.images, hasMore: result.hasMore, cursorOrderIndex: null, cursorAddedDate: null, cursorHash: null }
+    },
+    getNextPageParam: (lastPage, pages) => lastPage.hasMore ? { page: pages.length + 1, cursorOrderIndex: lastPage.cursorOrderIndex, cursorAddedDate: lastPage.cursorAddedDate, cursorHash: lastPage.cursorHash } : undefined,
   })
-  const items = useMemo(() => [...new Map((query.data?.pages.flatMap((page) => page.images) ?? []).map((item) => [item.composite_hash, item])).values()], [query.data])
+  const items = useMemo(() => [...new Map((query.data?.pages.flatMap((page) => page.images) ?? []).filter((item) => !imagesOnly || item.mime_type?.startsWith('image/')).map((item) => [item.composite_hash, item])).values()], [query.data, imagesOnly])
   const safety = useImageFeedSafety({ items, hasMore: query.hasNextPage, isLoading: query.isPending, isError: query.isError, isLoadingMore: query.isFetchingNextPage, onLoadMore: query.fetchNextPage })
   const select = (ids: string[]) => {
+    if (imagesOnly && maxCount === 1) ids = ids.slice(-1)
     if (ids.length > maxCount) {
       showSnackbar({ tone: 'error', message: t({ ko: '미디어는 {count}개까지 선택할 수 있어. 전체 첨부 한도는 20개야.', en: 'Select up to {count} media items. The total attachment limit is 20.' }, { count: maxCount }) })
       return
@@ -67,20 +92,26 @@ export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, app
   return <Modal open title={title ?? t({ ko: '앱 미디어에서 고르기', en: 'Choose app media' })} onClose={onClose} widthClassName="max-w-4xl">
     <ModalBody className="space-y-3">
       <form className="flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); setSearch(input.trim()) }}>
-        <Input className="min-w-40 flex-1" value={input} onChange={(event) => setInput(event.target.value)} aria-label={t({ ko: '프롬프트·태그 검색', en: 'Search prompts and tags' })} placeholder={t({ ko: '전체 미디어의 프롬프트·태그 검색', en: 'Search prompts and tags across the library' })} maxLength={300} />
-        <Button type="submit" variant="secondary"><Search />{t({ ko: '검색', en: 'Search' })}</Button>
-        <Select className="w-auto" aria-label={t({ ko: '생성 도구', en: 'Generation tool' })} value={tool} onChange={(event) => setTool(event.target.value)}>
-          <option value="">{t({ ko: '모든 도구', en: 'All tools' })}</option>
-          {SEARCH_AI_TOOL_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.value === 'other' ? t({ ko: '기타', en: 'Other' }) : option.label}</option>)}
+        <Select className="max-w-full w-auto" aria-label={t({ ko: '그룹', en: 'Group' })} value={groupId ?? ''} onChange={(event) => setChosenGroupId(event.target.value ? Number(event.target.value) : null)}>
+          <option value="">{t({ ko: '전체', en: 'All groups' })}</option>
+          {groups.map((group) => <option key={group.id} value={group.id}>{group.path}</option>)}
         </Select>
-        <Select className="w-auto" aria-label={t({ ko: '정렬', en: 'Sort order' })} value={order} onChange={(event) => setOrder(event.target.value as 'ASC' | 'DESC')}>
-          <option value="DESC">{t({ ko: '최신순', en: 'Newest first' })}</option>
-          <option value="ASC">{t({ ko: '오래된순', en: 'Oldest first' })}</option>
-        </Select>
-        <Button type="button" variant="ghost" onClick={() => { setInput(''); setSearch(''); setTool(''); setOrder('DESC') }}>{t({ ko: '필터 초기화', en: 'Reset filters' })}</Button>
+        {groupId === null ? <>
+          <Input className="min-w-40 flex-1" value={input} onChange={(event) => setInput(event.target.value)} aria-label={t({ ko: '프롬프트·태그 검색', en: 'Search prompts and tags' })} placeholder={t({ ko: '전체 미디어의 프롬프트·태그 검색', en: 'Search prompts and tags across the library' })} maxLength={300} />
+          <Button type="submit" variant="secondary"><Search />{t({ ko: '검색', en: 'Search' })}</Button>
+          <Select className="w-auto" aria-label={t({ ko: '생성 도구', en: 'Generation tool' })} value={tool} onChange={(event) => setTool(event.target.value)}>
+            <option value="">{t({ ko: '모든 도구', en: 'All tools' })}</option>
+            {SEARCH_AI_TOOL_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.value === 'other' ? t({ ko: '기타', en: 'Other' }) : option.label}</option>)}
+          </Select>
+          <Select className="w-auto" aria-label={t({ ko: '정렬', en: 'Sort order' })} value={order} onChange={(event) => setOrder(event.target.value as 'ASC' | 'DESC')}>
+            <option value="DESC">{t({ ko: '최신순', en: 'Newest first' })}</option>
+            <option value="ASC">{t({ ko: '오래된순', en: 'Oldest first' })}</option>
+          </Select>
+        </> : null}
+        <Button type="button" variant="ghost" onClick={() => { setChosenGroupId(null); setInput(''); setSearch(''); setTool(''); setOrder('DESC') }}>{t({ ko: '필터 초기화', en: 'Reset filters' })}</Button>
       </form>
       {query.isPending ? <p className="py-12 text-center text-sm text-muted-foreground">{t({ ko: '불러오는 중…', en: 'Loading…' })}</p> : safety.visibleItems.length ? <ImageList
-        items={safety.visibleItems} resetKey={`${search}:${tool}:${order}`} layout="grid" activationMode="none"
+        items={safety.visibleItems} resetKey={`${groupId}:${search}:${tool}:${order}`} layout={imagesOnly ? 'masonry' : 'grid'} activationMode="none"
         selectable forceSelectionMode selectedIds={[...selected.keys()]} onSelectedIdsChange={select}
         scrollMode="container" viewportHeight="min(48vh, 480px)" minColumnWidth={130} gridItemHeight={145} columnGap={8} rowGap={8}
         showDefaultQuickActions={false} shouldBlurItemPreview={safety.shouldBlurItemPreview} renderItemPersistentOverlay={safety.renderItemPersistentOverlay}
@@ -96,7 +127,7 @@ export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, app
       <span className="mr-auto text-sm text-muted-foreground">{t({ ko: '{count}개 선택', en: '{count} selected' }, { count: selected.size })}</span>
       <Button variant="ghost" disabled={!selected.size} onClick={() => setSelected(new Map())}>{t({ ko: '선택 해제', en: 'Clear selection' })}</Button>
       <Button variant="secondary" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-      <Button disabled={selected.size > maxCount} onClick={() => onPick([...selected.values()])}>{applyLabel ?? t({ ko: '첨부 적용', en: 'Apply attachments' })}</Button>
+      <Button disabled={selected.size > maxCount || (imagesOnly && !selected.size)} onClick={() => onPick([...selected.values()])}>{applyLabel ?? t({ ko: '첨부 적용', en: 'Apply attachments' })}</Button>
     </ModalFooter>
   </Modal>
 }

@@ -1,16 +1,16 @@
-import { useId, useRef, type ChangeEvent, type ReactNode } from 'react'
+import { useId, useRef, type ReactNode } from 'react'
 import { ImagePlus, RotateCcw, X } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { IconButton } from '@/components/ui/icon-button'
 import { Slider } from '@/components/ui/slider'
-import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Switch } from '@/components/ui/switch'
 import { Tip } from '@/components/ui/tooltip'
 import { CHAT_TYPEFACE_FAMILY, chatTranscriptStyle, DEFAULT_CHAT_APPEARANCE } from '@/features/codex-chat/chat-appearance'
 import { ChatMarkdown } from '@/features/codex-chat/chat-markdown'
 import { useI18n } from '@/i18n'
 import type { ChatStyle, ChatTypeface } from '@/lib/api-codex-chat'
-import { readBackgroundFile } from './chat-profile-images'
+import { ChatProfileAssetInput } from './chat-profile-asset-input'
+import { ChatProfileImage } from '@/features/codex-chat/chat-profile-image'
 
 /** An overline-labelled group. Not a <label>: these hold several controls (segments, a picture and its remove key). */
 function Group({ label, children }: { label: ReactNode; children: ReactNode }) {
@@ -48,32 +48,25 @@ function ColorField({ label, value, fallback, onChange }: { label: string; value
 }
 
 /** The profile's look: typeface, background, roleplay colours, with a sample line rendered as the chat would. */
-export function ChatProfileLook({ style, defaults, backgroundUrl, onStyleChange, onBackgroundChange }: {
+export function ChatProfileLook({ style, defaults, backgroundUrl, onStyleChange, onBackgroundChange, characterName, hasBackground, onBackgroundHashChange, onBusyChange, busy }: {
   style: ChatStyle
   defaults: ChatStyle | undefined
   /** What the background shows now (saved image, or a newly picked one); null when there is none. */
   backgroundUrl: string | null
   onStyleChange: (style: ChatStyle) => void
-  /** A new image (data URL), or null to remove it. */
+  characterName: string
+  hasBackground: boolean
+  onBackgroundHashChange: (hash: string) => void
+  onBusyChange: (busy: boolean) => void
+  busy: boolean
+  /** Clear the legacy image alongside its library hash. */
   onBackgroundChange: (background: string | null) => void
 }) {
   const { t } = useI18n()
-  const { showSnackbar } = useSnackbar()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const roleplayId = useId()
   const patch = (next: Partial<ChatStyle>) => onStyleChange({ ...style, ...next })
   const setColor = (key: ColorKey, value: string) => patch({ colors: { ...style.colors, [key]: value } })
-
-  const handleFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-    try {
-      onBackgroundChange(await readBackgroundFile(file))
-    } catch {
-      showSnackbar({ message: t({ ko: '이미지를 읽지 못했어.', en: 'Could not read the image.' }), tone: 'error' })
-    }
-  }
 
   const sample = t({
     ko: '*창밖을 보다가 천천히 고개를 돌린다.* "어, 왔어? 기다렸잖아." \'조금 늦었네…\'',
@@ -103,19 +96,19 @@ export function ChatProfileLook({ style, defaults, backgroundUrl, onStyleChange,
               <button
                 type="button"
                 aria-label={t({ ko: '배경 고르기', en: 'Pick a background' })}
+                disabled={busy}
                 onClick={() => fileInputRef.current?.click()}
                 className="flex aspect-video w-full cursor-pointer items-center justify-center overflow-hidden rounded-md border border-dashed border-line bg-cover bg-center text-muted-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
-                style={backgroundUrl ? { backgroundImage: `url("${backgroundUrl}")`, borderStyle: 'solid' } : undefined}
               >
-                {backgroundUrl ? null : <ImagePlus className="size-5" />}
+                <ChatProfileImage src={backgroundUrl} fallback={<ImagePlus className="size-5" />} />
               </button>
             </Tip>
-            {backgroundUrl ? (
-              <IconButton size="icon-xs" variant="secondary" className="absolute right-1.5 top-1.5" onClick={() => onBackgroundChange(null)} label={t({ ko: '배경 지우기', en: 'Remove background' })}>
+            {hasBackground ? (
+              <IconButton size="icon-xs" variant="secondary" disabled={busy} className="absolute right-1.5 top-1.5" onClick={() => onBackgroundChange(null)} label={t({ ko: '배경 지우기', en: 'Remove background' })}>
                 <X />
               </IconButton>
             ) : null}
-            <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(event) => void handleFile(event)} />
+            <ChatProfileAssetInput characterName={characterName} onChange={onBackgroundHashChange} onBusyChange={onBusyChange} busy={busy} uploadRef={fileInputRef} />
           </div>
         </Group>
         {backgroundUrl ? (
@@ -145,7 +138,7 @@ export function ChatProfileLook({ style, defaults, backgroundUrl, onStyleChange,
       <div className="relative overflow-hidden rounded-md border border-line">
         {backgroundUrl ? (
           <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-            <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url("${backgroundUrl}")`, filter: style.backgroundBlur > 0 ? `blur(${style.backgroundBlur}px)` : undefined, transform: style.backgroundBlur > 0 ? 'scale(1.06)' : undefined }} />
+            <div className="absolute inset-0" style={{ filter: style.backgroundBlur > 0 ? `blur(${style.backgroundBlur}px)` : undefined, transform: style.backgroundBlur > 0 ? 'scale(1.06)' : undefined }}><ChatProfileImage src={backgroundUrl} /></div>
             <div className="absolute inset-0 bg-background" style={{ opacity: style.backgroundDim / 100 }} />
           </div>
         ) : null}

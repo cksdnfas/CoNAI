@@ -113,7 +113,7 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
               <span className={cn('flex transition-opacity', selecting ? 'opacity-0' : 'group-hover/row:opacity-0')}>
               {entry.kind === 'group'
                 ? <GroupAvatarStack profiles={(entry.member_profile_ids ?? []).flatMap((id) => profilesById.get(id) ?? [])} size={dense ? 'xs' : 'sm'} ringClassName="ring-background" />
-                : entryProfile ? <ChatProfileAvatar name={entryProfile.name} avatar={entryProfile.avatar} engine={entryProfile.engine} size={dense ? 'xs' : 'md'} /> : <span className={dense ? 'size-5' : 'size-8'} />}
+                : entryProfile ? <ChatProfileAvatar name={entryProfile.name} avatar={entryProfile.avatar} profile={entryProfile} engine={entryProfile.engine} size={dense ? 'xs' : 'md'} /> : <span className={dense ? 'size-5' : 'size-8'} />}
               </span>
               <span
                 data-row-check

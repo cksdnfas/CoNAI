@@ -1,7 +1,9 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { SquareTerminal } from 'lucide-react'
+import { buildApiUrl } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
-import type { ChatEngine } from '@/lib/api-codex-chat'
+import { chatProfileAssetUrl, type ChatAvatarCrop, type ChatEngine, type ChatProfileAssetFields } from '@/lib/api-codex-chat'
+import { ChatProfileImage } from './chat-profile-image'
 
 /** Soft fills for avatars without a picture, picked from the name so a profile keeps its colour. */
 const INITIAL_FILLS = ['#f2a07b', '#8fb3d9', '#b9a3e3', '#9fd0a8', '#e6c46f', '#e99bb4', '#7fc8c8', '#c9b29b']
@@ -23,28 +25,24 @@ function pickFill(name: string) {
 }
 
 /** A chat profile's face: its picture, else the Codex mark for Codex profiles, else its first letter. */
-export function ChatProfileAvatar({ name, avatar, engine, size = 'md', className }: {
+export function ChatProfileAvatar({ name, avatar, profile, imageUrl, avatarCrop, engine, size = 'md', className }: {
   name: string
-  avatar: string | null
+  avatar?: string | null
+  profile?: ChatProfileAssetFields & { id?: number }
+  imageUrl?: string | null
+  avatarCrop?: ChatAvatarCrop | null
   engine: ChatEngine
   size?: keyof typeof SIZE_CLASS
   className?: string
 }) {
   const base = cn('inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold', SIZE_CLASS[size], className)
   const { canViewImages } = useImagePermissions()
-  if (canViewImages && avatar) {
-    return <img src={avatar} alt="" draggable={false} className={cn(base, 'object-cover')} />
-  }
-  if (engine === 'codex') {
-    return (
-      <span className={cn(base, 'bg-foreground text-background')} aria-hidden="true">
-        <SquareTerminal className="size-[60%]" />
-      </span>
-    )
-  }
-  return (
-    <span className={cn(base, 'text-black/80')} style={{ backgroundColor: pickFill(name) }} aria-hidden="true">
-      {Array.from(name.trim())[0] ?? '?'}
-    </span>
-  )
+  const src = imageUrl !== undefined ? imageUrl : profile?.id
+    ? chatProfileAssetUrl(profile.id, 'avatar', profile.assetVersion) : avatar
+  const thumbnailSrc = imageUrl === undefined && profile?.avatarHash && profile.avatarThumbnailUrl
+    ? buildApiUrl(`${profile.avatarThumbnailUrl}?v=${encodeURIComponent(profile.assetVersion ?? '')}`) : null
+  const fallback = engine === 'codex' ? <SquareTerminal className="size-[60%]" /> : Array.from(name.trim())[0] ?? '?'
+  return <span className={cn(base, engine === 'codex' ? 'bg-foreground text-background' : 'text-black/80')} style={engine === 'codex' ? undefined : { backgroundColor: pickFill(name) }} aria-hidden="true">
+    <ChatProfileImage src={canViewImages ? src : null} thumbnailSrc={thumbnailSrc} crop={avatarCrop !== undefined ? avatarCrop : profile?.avatarCrop} fallback={fallback} />
+  </span>
 }

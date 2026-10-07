@@ -164,7 +164,7 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
                 key={member.id}
                 label={(
                   <span className="flex items-center gap-2">
-                    <ChatProfileAvatar name={member.name} avatar={member.avatar} engine={member.engine} size="sm" />
+                    <ChatProfileAvatar name={member.name} avatar={member.avatar} profile={member} engine={member.engine} size="sm" />
                     <span className="truncate">@{member.name}</span>
                   </span>
                 )}

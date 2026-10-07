@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { MediaLightbox } from '@/features/images/components/media-lightbox'
 import { useI18n } from '@/i18n'
-import type { ChatDisplayBlock, ChatEngine, CodexChatMediaInfo, CodexChatMessage, CodexChatToolCall } from '@/lib/api-codex-chat'
+import type { ChatProfileAssetFields, ChatDisplayBlock, ChatEngine, CodexChatMediaInfo, CodexChatMessage, CodexChatToolCall } from '@/lib/api-codex-chat'
 import { requestJson } from '@/lib/api-request'
 import { cn } from '@/lib/utils'
 import { getGenerationHistory } from '@/lib/api-image-generation-history'
@@ -548,9 +548,10 @@ function ActivityLine({ toolCalls, translating = false }: { toolCalls: CodexChat
 export type ChatCastSpeaker = { name: string; avatar: string | null; color: string }
 
 /** Who answers in a chat: the thread's profile, its look, and the other characters it voices. */
-export type ChatSpeaker = {
+export type ChatSpeaker = ChatProfileAssetFields & {
+  id?: number
   name: string
-  avatar: string | null
+  avatar?: string | null
   engine: ChatEngine
   roleplay?: boolean
   blocks?: ChatDisplayBlock[]
@@ -636,8 +637,8 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   const { avatarSize } = appearance
   const toolBadge = toolCalls.length > 0 && appearance.showToolChips ? <ToolCallsBadge calls={toolCalls} /> : null
   const markdown = (text: string) => <ChatMarkdown text={text} roleplay={speaker?.roleplay} blocks={speaker?.blocks} emoticons={speaker?.emoticons} mentions={speaker?.mentions} />
-  const avatarOf = (who: { name: string; avatar: string | null }, engine: ChatEngine) => avatarSize === 'none' ? null : (
-    <ChatProfileAvatar name={who.name} avatar={who.avatar} engine={engine} size={AVATAR_SIZE[avatarSize]} className={avatarSize === 'lg' ? 'size-14 text-lg' : undefined} />
+  const avatarOf = (who: ChatProfileAssetFields & { id?: number; name: string; avatar?: string | null }, engine: ChatEngine) => avatarSize === 'none' ? null : (
+    <ChatProfileAvatar name={who.name} avatar={who.avatar} profile={'id' in who ? who : undefined} engine={engine} size={AVATAR_SIZE[avatarSize]} className={avatarSize === 'lg' ? 'size-14 text-lg' : undefined} />
   )
   const bubble = (children: ReactNode) => children && appearance.replyShape === 'bubble' ? <div className={BUBBLE_CLASS}>{children}</div> : children
 
@@ -645,7 +646,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
    * One speaker's part: the name line (avatar, name, time), the content under it at full width (in a bubble, by
    * choice), then `after` (status lines, outside the bubble).
    */
-  const row = (key: string, who: { name: string; avatar: string | null; color?: string } | null, engine: ChatEngine, extra: ReactNode, children: ReactNode, after?: ReactNode) => {
+  const row = (key: string, who: ChatProfileAssetFields & { id?: number; name: string; avatar?: string | null; color?: string } | null, engine: ChatEngine, extra: ReactNode, children: ReactNode, after?: ReactNode) => {
     const avatar = who ? avatarOf(who, engine) : null
     const nameLine = (who && (appearance.showNames || avatar)) || extra || (appearance.timeStamps !== 'off' && createdAt)
     return (

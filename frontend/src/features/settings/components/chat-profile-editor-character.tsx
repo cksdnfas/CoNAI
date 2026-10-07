@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent } from 'react'
+import { useRef, useState } from 'react'
 import { Eye, ImageDown, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ToggleChip } from '@/components/ui/chip'
@@ -6,15 +6,15 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { useI18n } from '@/i18n'
-import type { ChatLorebook } from '@/lib/api-codex-chat'
+import { uploadChatProfileAsset, type ChatLorebook, type ChatProfile } from '@/lib/api-codex-chat'
 import { EditorGroup, SwitchLine, type Draft, type PatchDraft } from './chat-profile-editor-fields'
-import { readAvatarFile } from './chat-profile-images'
+import { draftProfileAssetUrl } from './chat-profile-images'
+import { PROFILE_IMAGE_ACCEPT, useChatProfileAssetImport } from './chat-profile-asset-input'
 import { ChatProfileMediaRow, useChatMediaLocalize, useLastTextarea } from './chat-profile-media'
 import { ChatProfilePresetMenu } from './chat-profile-preset-menu'
 import { ChatPromptSectionsEditor, CollapsibleRow } from './chat-profile-sections'
@@ -23,32 +23,25 @@ import { ChatPromptSectionsEditor, CollapsibleRow } from './chat-profile-section
  * Who the profile is: avatar, name, the prompt (system prompt, sections, greetings, the images they show) and the
  * lorebooks it reads.
  */
-export function ChatProfileCharacterPanel({ open, draft, patch, lorebooks, onPreview }: {
+export function ChatProfileCharacterPanel({ open, draft, patch, lorebooks, onPreview, profile, onBusyChange, busy }: {
   open: boolean
   draft: Draft
   patch: PatchDraft
   /** The shared lorebooks; undefined until they load. */
   lorebooks: ChatLorebook[] | undefined
   onPreview: () => void
+  profile: ChatProfile | null
+  onBusyChange: (busy: boolean) => void
+  busy: boolean
 }) {
   const { t } = useI18n()
   const confirm = useConfirm()
-  const { showSnackbar } = useSnackbar()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const localize = useChatMediaLocalize(draft, patch)
   const lastTextarea = useLastTextarea()
   const [mediaOpen, setMediaOpen] = useState(false)
 
-  const handleAvatarFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-    try {
-      patch({ avatar: await readAvatarFile(file) })
-    } catch {
-      showSnackbar({ message: t({ ko: '이미지를 읽지 못했어.', en: 'Could not read the image.' }), tone: 'error' })
-    }
-  }
+  const avatarImport = useChatProfileAssetImport((avatarHash) => patch({ avatarHash, avatarCrop: null, avatar: avatarHash === (profile?.avatarHash ?? draft.avatarHash) ? profile?.avatar ?? draft.avatar : null }), onBusyChange)
 
   const applySystemPromptPreset = async (content: string) => {
     if (draft.systemPrompt.trim() && draft.systemPrompt.trim() !== content.trim()) {
@@ -74,11 +67,11 @@ export function ChatProfileCharacterPanel({ open, draft, patch, lorebooks, onPre
         <div className="flex items-center gap-4">
           <Tip content={t({ ko: '아바타 바꾸기', en: 'Change avatar' })}>
             {/* eslint-disable-next-line no-restricted-syntax -- the avatar itself is the control; Button padding would crop it */}
-            <button type="button" className="shrink-0 cursor-pointer rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40" onClick={() => fileInputRef.current?.click()} aria-label={t({ ko: '아바타 바꾸기', en: 'Change avatar' })}>
-              <ChatProfileAvatar name={draft.name || '?'} avatar={draft.avatar} engine={draft.engine} size="xl" />
+            <button type="button" className="shrink-0 cursor-pointer rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40" disabled={busy || avatarImport.isPending} onClick={() => fileInputRef.current?.click()} aria-label={t({ ko: '아바타 바꾸기', en: 'Change avatar' })}>
+              <ChatProfileAvatar name={draft.name || '?'} avatar={draft.avatar} imageUrl={draftProfileAssetUrl(draft, profile, 'avatar')} avatarCrop={draft.avatarHash ? draft.avatarCrop : null} engine={draft.engine} size="xl" />
             </button>
           </Tip>
-          <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(event) => void handleAvatarFile(event)} />
+          <input ref={fileInputRef} type="file" accept={PROFILE_IMAGE_ACCEPT} className="hidden" disabled={busy || avatarImport.isPending} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file && !busy) avatarImport.mutate(() => uploadChatProfileAsset(file, draft.name)) }} />
           <Field label={t({ ko: '이름', en: 'Name' })} className="min-w-0 flex-1">
             <Input variant="settings" value={draft.name} maxLength={60} onChange={(event) => patch({ name: event.target.value })} />
           </Field>
@@ -86,8 +79,8 @@ export function ChatProfileCharacterPanel({ open, draft, patch, lorebooks, onPre
             <Switch checked={draft.isEnabled} onCheckedChange={(isEnabled) => patch({ isEnabled })} aria-label={t({ ko: '사용', en: 'On' })} />
           </div>
         </div>
-        {draft.avatar ? (
-          <Button variant="link" size="xs" className="px-0 text-muted-foreground" onClick={() => patch({ avatar: null })}>{t({ ko: '아바타 지우기', en: 'Remove avatar' })}</Button>
+        {draft.avatar || draft.avatarHash ? (
+          <Button variant="link" size="xs" disabled={busy} className="px-0 text-muted-foreground" onClick={() => patch({ avatar: null, avatarHash: null, avatarCrop: null })}>{t({ ko: '아바타 지우기', en: 'Remove avatar' })}</Button>
         ) : null}
         <Field label={t({ ko: '짧은 소개', en: 'Tagline' })}>
           <Input variant="settings" value={draft.tagline} maxLength={200} onChange={(event) => patch({ tagline: event.target.value })} />

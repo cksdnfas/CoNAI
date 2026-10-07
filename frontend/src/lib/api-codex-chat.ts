@@ -161,6 +161,7 @@ export function chatEmoticonUrl(profileId: number, compositeHash: string) {
 
 /** What a chat user sees of a profile; `usable` says whether this session can start a chat with it. */
 export type ChatProfileAssetKind = 'avatar' | 'background' | 'reference'
+/** x/y are cover overflow positions in percent (0–100); scale is the zoom factor. */
 export type ChatAvatarCrop = { x: number; y: number; scale: number }
 
 /** Additive asset fields; optional while the existing editor still creates legacy drafts. */
@@ -185,7 +186,8 @@ export interface ChatProfileSummary extends ChatProfileAssetFields {
   suggestEnabled: boolean
   id: number
   name: string
-  avatar: string | null
+  /** Kept optional for older servers; current lists serve avatar bytes through the asset route. */
+  avatar?: string | null
   engine: ChatEngine
   isEnabled: boolean
   usable: boolean

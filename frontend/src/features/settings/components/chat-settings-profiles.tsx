@@ -161,7 +161,7 @@ export function ChatSettingsProfiles() {
           <ResourceRow
             key={profile.id}
             className="min-h-16"
-            leading={<ChatProfileAvatar name={profile.name} avatar={profile.avatar} engine={profile.engine} size="lg" />}
+            leading={<ChatProfileAvatar name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size="lg" />}
             name={profile.name}
             meta={<span className="font-mono">{profileModelLine(profile, slots, t)}</span>}
             trailing={(

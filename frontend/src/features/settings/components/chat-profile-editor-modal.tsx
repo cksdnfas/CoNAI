@@ -15,7 +15,6 @@ import {
   CHAT_PROFILES_QUERY_KEY,
   CHAT_USER_PROFILES_QUERY_KEY,
   MODEL_SLOTS_QUERY_KEY,
-  chatProfileBackgroundUrl,
   createChatProfile,
   deleteChatProfile,
   listChatAdminProfiles,
@@ -35,6 +34,8 @@ import { getExternalApiProviders } from '@/lib/api-external-api'
 import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
 import { roleChoice, roleDirect } from './chat-model-role-select'
+import { ChatProfileAppearancePanel } from './chat-profile-editor-appearance'
+import { draftProfileAssetUrl } from './chat-profile-images'
 import { ChatProfileCharacterPanel } from './chat-profile-editor-character'
 import type { Draft } from './chat-profile-editor-fields'
 import { ChatProfileLookPanel } from './chat-profile-editor-look'
@@ -42,7 +43,7 @@ import { ChatProfileModelPanel } from './chat-profile-editor-model'
 import { ChatProfileToolsPanel } from './chat-profile-editor-tools'
 import { ChatProfilePreviewModal } from './chat-profile-preview-modal'
 
-type EditorTab = 'character' | 'model' | 'look' | 'tools'
+type EditorTab = 'character' | 'appearance' | 'model' | 'look' | 'tools'
 
 /** Shown until the server's defaults load (new profiles only). */
 const FALLBACK_STYLE: ChatStyle = { typeface: 'sans', roleplay: false, colors: { dialogue: '', narration: '', thought: '' }, backgroundDim: 55, backgroundBlur: 0, blocks: [], cast: [], emoticonGroupIds: [] }
@@ -126,8 +127,8 @@ function TabLabel({ children, incomplete, incompleteLabel }: { children: ReactNo
 }
 
 /**
- * Create or edit one chat profile in four tabs: character (name, prompt, lorebooks), model (engine, sampling, context),
- * look (typeface, background, cast, blocks) and tools (MCP). One draft spans the tabs, so switching loses nothing.
+ * Create or edit one chat profile: character, appearance, model, look and tools.
+ * One draft spans the tabs, so switching loses nothing.
  */
 export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, onClose }: {
   open: boolean
@@ -142,6 +143,9 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState<Draft>(() => buildDraft(profile ?? initialDraft ?? null, defaults))
   const [tab, setTab] = useState<EditorTab>('character')
+  const [assetImports, setAssetImports] = useState(0)
+  const assetBusy = assetImports > 0
+  const onAssetBusyChange = (busy: boolean) => setAssetImports((count) => Math.max(0, count + (busy ? 1 : -1)))
   const [previewOpen, setPreviewOpen] = useState(false)
 
   useEffect(() => {
@@ -287,12 +291,10 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
     if (confirmed) deleteMutation.mutate()
   }
 
-  const backgroundUrl = draft.background !== undefined
-    ? draft.background
-    : profile?.backgroundVersion ? chatProfileBackgroundUrl(profile.id, profile.backgroundVersion) : null
+  const backgroundUrl = draftProfileAssetUrl(draft, profile, 'background')
   const nameMissing = draft.name.trim().length === 0
   const connectionMissing = isLlm && !draft.modelSlotId && !draft.providerName
-  const canSave = !nameMissing && !connectionMissing && !saveMutation.isPending
+  const canSave = !nameMissing && !connectionMissing && !assetBusy && !saveMutation.isPending
   const incompleteLabel = t({ ko: '입력 필요', en: 'Needs input' })
 
   return (
@@ -306,10 +308,11 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
           size="sm"
           fullWidth
           value={tab}
-          onChange={(value) => setTab(value as EditorTab)}
+          onChange={(value) => { if (!assetBusy) setTab(value as EditorTab) }}
           ariaLabel={t({ ko: '프로필 편집 탭', en: 'Profile editor tabs' })}
           items={[
             { value: 'character', label: <TabLabel incomplete={nameMissing} incompleteLabel={incompleteLabel}>{t({ ko: '캐릭터', en: 'Character' })}</TabLabel> },
+            { value: 'appearance', label: t({ ko: '외형', en: 'Appearance' }) },
             { value: 'model', label: <TabLabel incomplete={connectionMissing} incompleteLabel={incompleteLabel}>{t({ ko: '모델', en: 'Model' })}</TabLabel> },
             { value: 'look', label: t({ ko: '꾸미기', en: 'Look' }) },
             { value: 'tools', label: t({ ko: '도구', en: 'Tools' }) },
@@ -325,8 +328,12 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
             patch={patch}
             lorebooks={linkableLorebooks}
             onPreview={() => setPreviewOpen(true)}
+            profile={profile}
+            onBusyChange={onAssetBusyChange}
+            busy={assetBusy}
           />
         ) : null}
+        {tab === 'appearance' ? <ChatProfileAppearancePanel draft={draft} patch={patch} profile={profile} onBusyChange={onAssetBusyChange} busy={assetBusy} /> : null}
         {tab === 'model' ? (
           <ChatProfileModelPanel
             draft={draft}
@@ -344,7 +351,7 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
             codexModels={codexModelsQuery.data?.data.models}
           />
         ) : null}
-        {tab === 'look' ? <ChatProfileLookPanel draft={draft} patch={patch} defaults={defaults?.style} backgroundUrl={backgroundUrl} blocks={blocksQuery.data} /> : null}
+        {tab === 'look' ? <ChatProfileLookPanel profile={profile} draft={draft} patch={patch} defaults={defaults?.style} backgroundUrl={backgroundUrl} blocks={blocksQuery.data} onBusyChange={onAssetBusyChange} busy={assetBusy} /> : null}
         {tab === 'tools' ? <ChatProfileToolsPanel open={open} draft={draft} patch={patch} defaults={defaults} /> : null}
       </ModalBody>
       <ModalFooter>

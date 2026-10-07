@@ -113,7 +113,7 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
                     onClick={() => (selecting ? toggle(profile.id) : onPick(profile.id))}
                     className="w-full items-center gap-3 py-2.5 pr-10 text-left disabled:opacity-50"
                   >
-                    <ChatProfileAvatar name={profile.name} avatar={profile.avatar} engine={profile.engine} size="lg" />
+                    <ChatProfileAvatar name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size="lg" />
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-center gap-1.5">
                         <span className="truncate font-semibold">{profile.name}</span>
@@ -147,7 +147,7 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <span className="flex shrink-0">
             {pickedProfiles.map((profile, index) => (
-              <ChatProfileAvatar key={profile.id} name={profile.name} avatar={profile.avatar} engine={profile.engine} size="sm" className={cn('ring-2 ring-background', index > 0 && '-ml-1.5')} />
+              <ChatProfileAvatar key={profile.id} name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size="sm" className={cn('ring-2 ring-background', index > 0 && '-ml-1.5')} />
             ))}
           </span>
           <span className="truncate text-xs text-muted-foreground">
