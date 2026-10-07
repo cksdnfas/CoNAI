@@ -9,6 +9,7 @@ import { ChatProfileError } from './chatProfileError'
 import { ChatToolPresetStore } from './chatToolPresets'
 import { ChatGenerationPresetStore, normalizeGenerationPresetIds } from './chatGenerationPresets'
 import { ModelSlotStore } from './modelSlots'
+import { fileProfileAssetsUnderGroup, normalizeAvatarCrop, normalizeProfileAssetHash, type ChatAvatarCrop } from './chatProfileAssets'
 
 const NAME_MAX_LENGTH = 60
 const MODEL_MAX_LENGTH = 200
@@ -86,6 +87,11 @@ export type ChatProfile = {
   diagnosticsScope: 'view' | 'content' | null
   /** Small data URL (resized in the browser). */
   avatar: string | null
+  appearance: string
+  referenceHash: string | null
+  avatarHash: string | null
+  avatarCrop: ChatAvatarCrop | null
+  backgroundHash: string | null
   engine: ChatProfileEngine
   /** LLM: `external_api_providers.provider_name`. Empty for Codex. */
   providerName: string
@@ -194,6 +200,11 @@ type ProfileRow = {
   author_note: string | null
   diagnostics_scope: 'view' | 'content' | null
   avatar: string | null
+  appearance: string | null
+  reference_hash: string | null
+  avatar_hash: string | null
+  avatar_crop: string | null
+  background_hash: string | null
   engine: string | null
   provider_name: string
   model: string | null
@@ -326,6 +337,8 @@ function toProfile(row: ProfileRow): ChatProfile {
   const blockIds = normalizeBlockIds(row.block_ids)
   // A missing linked preset revokes its grant; it cannot restore the profile's older direct grant.
   const preset = row.tool_preset_id === null ? null : ChatToolPresetStore.find(row.tool_preset_id)
+  let avatarCrop: ChatAvatarCrop | null = null
+  try { avatarCrop = normalizeAvatarCrop(row.avatar_crop ? JSON.parse(row.avatar_crop) : null) } catch { /* Keep malformed legacy crops unset. */ }
   return {
     id: row.id,
     name: row.name,
@@ -338,6 +351,11 @@ function toProfile(row: ProfileRow): ChatProfile {
     authorNote: row.author_note ?? '',
     diagnosticsScope: row.diagnostics_scope ?? null,
     avatar: row.avatar,
+    appearance: row.appearance ?? '',
+    referenceHash: row.reference_hash ?? null,
+    avatarHash: row.avatar_hash ?? null,
+    avatarCrop,
+    backgroundHash: row.background_hash ?? null,
     engine: row.engine === 'codex' ? 'codex' : 'llm',
     providerName: row.provider_name,
     model: row.model ?? '',
@@ -482,6 +500,11 @@ function toColumns(input: ChatProfileInput) {
     lore_depth: optionalNumber(input.loreDepth, { min: 0, max: 20 }, true) ?? CHAT_PROFILE_DEFAULTS.loreDepth,
     author_note: text(input.authorNote, AUTHOR_NOTE_MAX_LENGTH) || null,
     avatar,
+    appearance: text(input.appearance, TEXT_MAX_LENGTH) || null,
+    reference_hash: normalizeProfileAssetHash(input.referenceHash),
+    avatar_hash: normalizeProfileAssetHash(input.avatarHash),
+    avatar_crop: input.avatarCrop == null ? null : JSON.stringify(normalizeAvatarCrop(input.avatarCrop)),
+    background_hash: normalizeProfileAssetHash(input.backgroundHash),
     engine,
     provider_name: providerName,
     model: text(input.model, MODEL_MAX_LENGTH) || null,
@@ -556,6 +579,7 @@ export const ChatProfileStore = {
 
   create(input: ChatProfileInput) {
     const columns = toColumns(input)
+    fileProfileAssetsUnderGroup(columns.name, [columns.avatar_hash, columns.background_hash, columns.reference_hash])
     const names = Object.keys(columns)
     const result = getUserSettingsDb().prepare(`
       INSERT INTO llm_chat_profiles (${names.join(', ')}) VALUES (${names.map((name) => `@${name}`).join(', ')})
@@ -568,13 +592,18 @@ export const ChatProfileStore = {
     if (!current) {
       return null
     }
-    const columns = toColumns({ ...current, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) })
+    const merged = { ...current, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) }
+    // The current editor still writes legacy images; changing one invalidates its migrated hash.
+    if (patch.avatar !== undefined && patch.avatar !== current.avatar && (patch.avatarHash === undefined || patch.avatarHash === current.avatarHash)) merged.avatarHash = null
+    if (patch.background !== undefined && patch.background !== current.background && (patch.backgroundHash === undefined || patch.backgroundHash === current.backgroundHash)) merged.backgroundHash = null
+    const columns = toColumns(merged)
     if (columns.engine !== current.engine && getUserSettingsDb().prepare(`
       SELECT 1 FROM codex_chat_threads WHERE profile_id = ?
       UNION ALL SELECT 1 FROM chat_group_members WHERE profile_id = ? LIMIT 1
     `).get(profileId, profileId)) {
       throw new ChatProfileError('대화에서 사용 중인 프로필의 엔진은 바꿀 수 없어. 다른 엔진은 새 프로필로 만들어줘.')
     }
+    fileProfileAssetsUnderGroup(columns.name, [columns.avatar_hash, columns.background_hash, columns.reference_hash])
     getUserSettingsDb().prepare(`
       UPDATE llm_chat_profiles SET ${Object.keys(columns).map((name) => `${name} = @${name}`).join(', ')}, updated_date = CURRENT_TIMESTAMP
       WHERE id = @id

@@ -160,7 +160,21 @@ export function chatEmoticonUrl(profileId: number, compositeHash: string) {
 }
 
 /** What a chat user sees of a profile; `usable` says whether this session can start a chat with it. */
-export interface ChatProfileSummary {
+export type ChatProfileAssetKind = 'avatar' | 'background' | 'reference'
+export type ChatAvatarCrop = { x: number; y: number; scale: number }
+
+/** Additive asset fields; optional while the existing editor still creates legacy drafts. */
+export interface ChatProfileAssetFields {
+  appearance?: string
+  referenceHash?: string | null
+  avatarHash?: string | null
+  avatarCrop?: ChatAvatarCrop | null
+  backgroundHash?: string | null
+  assetVersion?: string | null
+  avatarThumbnailUrl?: string | null
+}
+
+export interface ChatProfileSummary extends ChatProfileAssetFields {
   canUsePageContext: boolean
   tagline: string
   model: string
@@ -254,6 +268,27 @@ export function getChatMediaUsage(hashes: string[]) {
 /** The chat background image of a profile. */
 export function chatProfileBackgroundUrl(profileId: number, version: string) {
   return buildApiUrl(`/api/codex-chat/profiles/${profileId}/background?v=${encodeURIComponent(version)}`)
+}
+
+export function chatProfileAssetUrl(profileId: number, kind: ChatProfileAssetKind, version?: string | null) {
+  return buildApiUrl(`/api/codex-chat/profiles/${profileId}/assets/${kind}${version ? `?v=${encodeURIComponent(version)}` : ''}`)
+}
+
+export type ChatProfileAssetResult = { compositeHash: string; extension: string }
+
+export function uploadChatProfileAsset(file: File, characterName: string) {
+  const body = new FormData()
+  body.append('file', file)
+  body.append('characterName', characterName)
+  return requestApiData<ChatProfileAssetResult>('/api/codex-chat/admin/chat-assets/upload', { method: 'POST', body })
+}
+
+export function downloadChatProfileAsset(url: string, characterName: string) {
+  return requestApiData<ChatProfileAssetResult>('/api/codex-chat/admin/chat-assets/url', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ url, characterName }) })
+}
+
+export function importChatProfileAssetFromFileStore(fileId: string, characterName: string) {
+  return requestApiData<ChatProfileAssetResult>('/api/codex-chat/admin/chat-assets/from-file-store', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ fileId, characterName }) })
 }
 
 /** A user-defined prompt block: `text` joins the system prompt under its title, `dialogue` is example conversation. */
@@ -412,6 +447,7 @@ export interface ChatNaiPresetConfig {
   useCoords: boolean
   vibes: Array<{ encoded: string; strength: number; information_extracted: number }>
   characterRefs: Array<{ image: string; type: string; strength: number; fidelity: number }>
+  characterReference?: 'none' | 'replace' | 'append'
 }
 
 /** One ComfyUI workflow with fixed inputs; the model fills the exposed marked fields. */
@@ -421,6 +457,7 @@ export interface ChatComfyPresetConfig {
   serverTag: string | null
   fixedInputs: Record<string, unknown>
   exposedFieldIds: string[]
+  referenceField?: string | null
 }
 
 export type ChatGenerationPresetKind = 'nai' | 'comfyui'
@@ -444,7 +481,7 @@ export type ChatGenerationPresetInput = { name: string; instruction: string; kin
 /** The file a generation preset exports as; import also takes a bare preset or an array of either. */
 export const CHAT_GENERATION_PRESET_FILE_MARK = 'conai_generation_preset'
 
-export interface ChatProfile {
+export interface ChatProfile extends ChatProfileAssetFields {
   /** Linked shared lorebooks, in priority order. */
   lorebookIds: number[]
   /** Linked shared display blocks, in display order; the server fills `style.blocks` from them. */
@@ -535,7 +572,7 @@ export interface ChatCardImportReport {
   dropped: string[]
 }
 
-export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate' | 'backgroundVersion' | 'suggestWriterReady'>> & { background?: string | null }
+export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate' | 'backgroundVersion' | 'suggestWriterReady' | 'assetVersion' | 'avatarThumbnailUrl'>> & { background?: string | null }
 
 export interface ChatProfileDefaults {
   loreScanDepth: number

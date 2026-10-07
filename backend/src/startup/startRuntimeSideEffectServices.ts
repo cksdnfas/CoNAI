@@ -126,5 +126,8 @@ export async function startRuntimeSideEffectServices(
     import('../services/codex-chat/chatCardAssets')
       .then(({ migrateLegacyChatAssets }) => migrateLegacyChatAssets())
       .catch((error) => console.warn('⚠️  Failed to move chat card images into the library:', error instanceof Error ? error.message : error))
+    import('../services/codex-chat/chatProfileAssets')
+      .then(({ migrateLegacyProfileAssets }) => migrateLegacyProfileAssets())
+      .catch((error) => console.warn('⚠️  Failed to move chat profile images into the library:', error instanceof Error ? error.message : error))
   }, 90_000).unref()
 }

@@ -97,7 +97,7 @@ export type McpGenerationJobInput = {
  * Create one durable generation job for an MCP caller (submit_generation_job and the chat generation presets):
  * routing, ComfyUI input normalization, idempotent retries and ownership. Returns the job as the tools describe it.
  */
-export async function enqueueMcpGenerationJob(context: McpRequestContext, input: McpGenerationJobInput, toolName = 'submit_generation_job') {
+export async function enqueueMcpGenerationJob(context: McpRequestContext, input: McpGenerationJobInput, toolName = 'submit_generation_job', options: { maxPayloadBytes?: number } = {}) {
   if (context.chatContext) requireActiveChatReply(context.chatContext);
   if (isChatMcpSource(context.source)) requireMcpToolAccess(context, toolName, input);
   const { service_type, workflow_id, server_id, server_tag, inputs, request_payload, group_id, group_path, priority = 100, idempotency_key, request_summary } = input;
@@ -202,6 +202,9 @@ export async function enqueueMcpGenerationJob(context: McpRequestContext, input:
     requireMcpToolAccess(context, toolName, input);
     // Delayed jobs recheck this server-issued grant before dispatch, rather than retaining submission authority.
     payload = { ...payload, __conaiChatGrant: { toolName, context, usesImages } };
+  }
+  if (options.maxPayloadBytes && Buffer.byteLength(JSON.stringify(payload)) > options.maxPayloadBytes) {
+    throw new Error('NAI 기준 이미지가 포함된 작업 입력은 8MB까지 쓸 수 있어.');
   }
 
   const createData = {

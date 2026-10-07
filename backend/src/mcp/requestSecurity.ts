@@ -83,6 +83,7 @@ function inspectValue(value: unknown, state: { decodedBytes: number; onManagedMe
     if (!/^(image|video|audio)\/[a-z0-9.+-]+$/.test(mimeType)) {
       throw new McpRequestValidationError(`Unsupported MCP media MIME type: ${mimeType}`, 400, -32602);
     }
+    if (chat) state.onManagedMedia?.();
 
     const decoded = decodeBase64Payload(match[2]);
     const declaredFamily = mimeType.split('/')[0] as 'image' | 'video' | 'audio';

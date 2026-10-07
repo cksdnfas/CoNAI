@@ -2,6 +2,7 @@ import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { createHash } from 'crypto'
 import { WorkflowModel } from '../../models/Workflow'
 import { ChatProfileError } from './chatProfileError'
+import type { MarkedField } from '../../types/workflow'
 
 /**
  * A generation preset: everything a chat bot's image generation needs except what the model should decide. Linked
@@ -33,6 +34,7 @@ export type ChatNaiPresetConfig = {
   useCoords: boolean
   vibes: Array<{ encoded: string; strength: number; information_extracted: number }>
   characterRefs: Array<{ image: string; type: string; strength: number; fidelity: number }>
+  characterReference: 'none' | 'replace' | 'append'
 }
 
 export type ChatComfyPresetConfig = {
@@ -43,6 +45,7 @@ export type ChatComfyPresetConfig = {
   fixedInputs: Record<string, unknown>
   /** Marked fields the model fills. */
   exposedFieldIds: string[]
+  referenceField: string | null
 }
 
 export type ChatGenerationPreset = {
@@ -86,6 +89,7 @@ const DEFAULT_NAI: ChatNaiPresetConfig = {
   useCoords: false,
   vibes: [],
   characterRefs: [],
+  characterReference: 'none',
 }
 
 type PresetRow = { id: number; name: string; instruction: string; kind: string; config: string; created_date: string; updated_date: string }
@@ -115,6 +119,7 @@ function sizeOf(value: unknown): ChatNaiPresetSize | null {
 
 export function normalizeNaiPresetConfig(value: unknown): ChatNaiPresetConfig {
   const raw = isRecord(value) ? value : {}
+  if (raw.characterReference !== undefined && !['none', 'replace', 'append'].includes(raw.characterReference as string)) throw new ChatProfileError('기준 이미지 사용은 none, replace 또는 append여야 해.')
   const sizes = (Array.isArray(raw.sizes) ? raw.sizes : []).map(sizeOf).filter((size): size is ChatNaiPresetSize => size !== null).slice(0, LIST_MAX)
   const seen = new Set<string>()
   const uniqueSizes = sizes.filter((size) => {
@@ -142,6 +147,7 @@ export function normalizeNaiPresetConfig(value: unknown): ChatNaiPresetConfig {
       return [{ prompt, uc: text(entry.uc, TEXT_MAX_LENGTH), center_x: number(entry.center_x, { min: 0, max: 1 }, 0.5), center_y: number(entry.center_y, { min: 0, max: 1 }, 0.5) }]
     }).slice(0, LIST_MAX),
     useCoords: raw.useCoords === true,
+    characterReference: raw.characterReference === 'replace' || raw.characterReference === 'append' ? raw.characterReference : 'none',
     vibes: (Array.isArray(raw.vibes) ? raw.vibes : []).flatMap((entry) => {
       if (!isRecord(entry) || typeof entry.encoded !== 'string' || !entry.encoded.trim()) return []
       return [{ encoded: entry.encoded.trim(), strength: number(entry.strength, { min: 0, max: 1 }, 0.6), information_extracted: number(entry.information_extracted, { min: 0, max: 1 }, 1) }]
@@ -160,12 +166,26 @@ export function normalizeComfyPresetConfig(value: unknown): ChatComfyPresetConfi
   if (!workflowId) throw new ChatProfileError('ComfyUI 프리셋에는 워크플로가 필요해.')
   const serverId = number(raw.serverId, { min: 1, max: Number.MAX_SAFE_INTEGER }, 0, true) || null
   const serverTag = text(raw.serverTag, 64) || null
+  const fixedInputs = isRecord(raw.fixedInputs) ? raw.fixedInputs : {}
+  const exposedFieldIds = [...new Set((Array.isArray(raw.exposedFieldIds) ? raw.exposedFieldIds : []).filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 200))].slice(0, 50)
+  if (raw.referenceField != null && typeof raw.referenceField !== 'string') throw new ChatProfileError('기준 이미지 필드가 올바르지 않아.')
+  const referenceField = text(raw.referenceField, 200) || null
+  if (referenceField) {
+    const workflow = WorkflowModel.findByIdIncludingDeleted(workflowId)
+    let fields: MarkedField[] = []
+    try { fields = JSON.parse(workflow?.marked_fields ?? '[]') } catch { /* Validation below rejects unreadable fields. */ }
+    if (!Array.isArray(fields) || !fields.some((field) => field.id === referenceField && field.type === 'image')
+      || (!exposedFieldIds.includes(referenceField) && !Object.prototype.hasOwnProperty.call(fixedInputs, referenceField))) {
+      throw new ChatProfileError('기준 이미지는 노출하거나 고정한 이미지 필드 하나에 지정해줘.')
+    }
+  }
   return {
     workflowId,
     serverId,
     serverTag: serverId ? null : serverTag,
-    fixedInputs: isRecord(raw.fixedInputs) ? raw.fixedInputs : {},
-    exposedFieldIds: [...new Set((Array.isArray(raw.exposedFieldIds) ? raw.exposedFieldIds : []).filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 200))].slice(0, 50),
+    fixedInputs,
+    exposedFieldIds,
+    referenceField,
   }
 }
 
@@ -201,7 +221,7 @@ function parseConfig(row: PresetRow): Pick<ChatGenerationPreset, 'kind' | 'nai' 
     try {
       return { kind, nai: null, comfyui: normalizeComfyPresetConfig(raw) }
     } catch {
-      return { kind, nai: null, comfyui: { workflowId: 0, serverId: null, serverTag: null, fixedInputs: {}, exposedFieldIds: [] } }
+      return { kind, nai: null, comfyui: { workflowId: 0, serverId: null, serverTag: null, fixedInputs: {}, exposedFieldIds: [], referenceField: null } }
     }
   }
   return { kind, nai: normalizeNaiPresetConfig(raw), comfyui: null }

@@ -3,6 +3,8 @@ import path from 'path'
 import { type MarkedField } from '../types/workflow'
 import { normalizeBase64ImageData } from '../utils/base64ImageData'
 import { ComfyUIService } from './comfyuiService'
+import { ImageUploadService } from './imageUploadService'
+import { MEDIA_HASH_PATTERN } from './codex-chat/chatMediaLinks'
 import { isQueueInputRef, resolveQueueInputFilePath } from './generation-queue/queueInputStore'
 import {
   isWorkflowInputAssetRef,
@@ -18,6 +20,7 @@ interface WorkflowImageFieldPayload {
   filePath?: string
   path?: string
   mimeType?: string
+  composite_hash?: string
 }
 
 type ComfyMediaUploadInput = {
@@ -97,6 +100,12 @@ function getComfyMediaUploadInput(value: unknown): ComfyMediaUploadInput | null 
 
   if (typeof value === 'object') {
     const payload = value as WorkflowImageFieldPayload
+    if (payload.composite_hash) {
+      if (!MEDIA_HASH_PATTERN.test(payload.composite_hash)) throw new Error('이미지 해시가 올바르지 않아.')
+      const filePath = ImageUploadService.getActiveFilePath(payload.composite_hash)
+      if (!filePath || !fs.existsSync(filePath)) throw new Error('라이브러리에서 이미지를 찾을 수 없어.')
+      return { fileName: path.basename(filePath), filePath, mimeType: payload.mimeType }
+    }
     const filePath = normalizeImagePayloadPath(payload)
     if (filePath) {
       return {

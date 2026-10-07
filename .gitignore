@@ -50,6 +50,7 @@ backend/test/*
 !backend/test/chat-regressions.test.ts
 !backend/test/chat-diagnostics.test.ts
 !backend/test/chat-generation-results.test.ts
+!backend/test/chat-profile-assets.test.ts
 !backend/test/chat-replies.test.ts
 !backend/test/chat-memory.test.ts
 !backend/test/chat-group-memory.test.ts

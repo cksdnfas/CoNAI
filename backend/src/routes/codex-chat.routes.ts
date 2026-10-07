@@ -57,6 +57,8 @@ import { ChatUserProfileError, ChatUserProfileStore, type ChatUserProfile } from
 import { ChatAppearanceError, ChatAppearanceStore } from '../services/codex-chat/chatAppearance'
 import { validateBlockData } from '../services/codex-chat/chatBlockState'
 import { canSuggest, ChatSuggestError, profileWriterReady, suggestReplies, userWriterReady } from '../services/codex-chat/chatSuggestions'
+import { createUploadStorage, MAX_UPLOAD_FILE_SIZE_BYTES } from '../middleware/upload'
+import { downloadProfileAsset, importFileStoreProfileAsset, ingestProfileAsset, isProfileAssetHidden, profileAssetFields, resolveProfileAsset } from '../services/codex-chat/chatProfileAssets'
 
 const MESSAGE_MAX_LENGTH = 20000
 
@@ -125,7 +127,7 @@ function requireChatAccess(req: Request, res: Response, next: NextFunction) {
 /** What a chat user sees of a profile: enough to pick it and show who is talking. */
 /** Changes whenever the background does, so the image URL can be cached for good. Null: no background. */
 function backgroundVersionOf(profile: ChatProfile) {
-  return profile.background ? `${profile.id}-${Date.parse(profile.updatedDate) || 0}` : null
+  return profile.background || profile.backgroundHash ? `${profile.id}-${profile.backgroundHash?.slice(0, 8) ?? ''}-${Date.parse(profile.updatedDate) || 0}` : null
 }
 
 function toPublicProfile(profile: ChatProfile, accountId: number | null) {
@@ -136,7 +138,8 @@ function toPublicProfile(profile: ChatProfile, accountId: number | null) {
     tagline: profile.tagline,
     model: effectiveModelOf(profile),
     modelLabel: modelLabelOf(profile),
-    avatar: canViewImages ? profile.avatar : null,
+    avatar: canViewImages && !isProfileAssetHidden(profile.avatarHash) ? profile.avatar : null,
+    ...profileAssetFields(profile, canViewImages),
     engine: profile.engine,
     isEnabled: profile.isEnabled,
     contextTurns: profile.contextTurns,
@@ -159,7 +162,7 @@ function toAdminProfile(profile: ChatProfile | null) {
   if (!profile) return null
   const { background: _background, ...rest } = profile
   // Whether it can write reply suggestions for a profile that links it (its model is set and its connection works).
-  return { ...rest, backgroundVersion: backgroundVersionOf(profile), suggestWriterReady: profileWriterReady(profile) }
+  return { ...rest, ...profileAssetFields(profile, true), backgroundVersion: backgroundVersionOf(profile), suggestWriterReady: profileWriterReady(profile) }
 }
 
 /** GET /api/codex-chat/status — whether the chat (header key, panel, /chat) should appear, and which engines. */
@@ -195,17 +198,31 @@ router.get('/profiles', requireChatAccess, (req: Request, res: Response) => {
 })
 
 /** GET /api/codex-chat/profiles/:profileId/background — the chat background image (`?v=` busts the cache). */
-router.get('/profiles/:profileId/background', requireChatAccess, requireImagesView, (req: Request, res: Response) => {
+async function serveProfileAsset(req: Request, res: Response, kind: string) {
   const profileId = parseId(req.params.profileId)
-  const match = profileId === null ? null : /^data:(image\/[a-z]+);base64,(.+)$/.exec(ChatProfileStore.find(profileId)?.background ?? '')
-  if (!match) {
-    res.status(404).json({ success: false, error: 'No background' })
+  const profile = profileId === null ? null : ChatProfileStore.find(profileId)
+  if (!profile || (kind !== 'avatar' && kind !== 'background' && kind !== 'reference')) {
+    res.status(404).json({ success: false, error: '프로필 자산을 찾을 수 없어.' })
     return
   }
-  res.setHeader('Content-Type', match[1])
+  const asset = resolveProfileAsset(profile, kind)
   res.setHeader('Cache-Control', 'private, no-cache')
-  res.send(Buffer.from(match[2], 'base64'))
-})
+  if (asset.state === 'hidden') {
+    res.status(403).json({ success: false, code: 'hidden_by_safety_policy', error: 'This image is hidden by the current safety policy' })
+  } else if (asset.state === 'missing') {
+    res.status(404).json({ success: false, error: '프로필 자산을 찾을 수 없어.' })
+  } else if (asset.state === 'legacy') {
+    res.setHeader('Content-Type', asset.mimeType)
+    res.send(asset.buffer)
+  } else {
+    await streamCacheableFile(req, res, asset.file.path, asset.file.mimeType)
+  }
+}
+
+router.get('/profiles/:profileId/background', requireChatAccess, requireImagesView, asyncHandler(async (req, res) => serveProfileAsset(req, res, 'background')))
+
+/** Only the selected profile's asset is served; the caller cannot supply an arbitrary hash. */
+router.get('/profiles/:profileId/assets/:kind', requireChatAccess, requireImagesView, asyncHandler(async (req, res) => serveProfileAsset(req, res, String(req.params.kind))))
 
 /** GET /api/codex-chat/profiles/:profileId/emoticons — keyword → image of the profile's linked emoticon groups. */
 router.get('/profiles/:profileId/emoticons', requireChatAccess, requireImagesView, (req: Request, res: Response) => {
@@ -652,6 +669,30 @@ async function assertCodexEffortSupported(input: ChatProfileInput) {
 }
 
 const cardUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: CHAT_CARD_MAX_BYTES, files: 1, fields: 0, parts: 2 } }).single('file')
+const assetUpload = multer({ storage: createUploadStorage(MAX_UPLOAD_FILE_SIZE_BYTES), limits: { fileSize: MAX_UPLOAD_FILE_SIZE_BYTES, files: 1, fields: 1, parts: 3 } }).single('file')
+
+router.post('/admin/chat-assets/upload', requireAdmin, requireImagesView, (req, res, next) => {
+  assetUpload(req, res, (error) => {
+    if (error) { res.status(error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ success: false, error: '이미지 한 장을 골라줘. 최대 500MB야.' }); return }
+    next()
+  })
+}, asyncHandler(async (req, res) => {
+  try {
+    if (!req.file) throw new ChatProfileError('이미지를 골라줘.')
+    res.json({ success: true, data: await ingestProfileAsset(await fs.promises.readFile(req.file.path), String(req.body?.characterName ?? '')) })
+  } catch (error) { sendChatError(res, error) }
+  finally { if (req.file?.path) await fs.promises.unlink(req.file.path).catch(() => {}) }
+}))
+
+router.post('/admin/chat-assets/url', requireAdmin, requireImagesView, asyncHandler(async (req, res) => {
+  try { res.json({ success: true, data: await downloadProfileAsset(req.body?.url, String(req.body?.characterName ?? '')) }) }
+  catch (error) { sendChatError(res, error) }
+}))
+
+router.post('/admin/chat-assets/from-file-store', requireAdmin, requireImagesView, asyncHandler(async (req, res) => {
+  try { res.json({ success: true, data: await importFileStoreProfileAsset(requesterFrom(req), req.body?.fileId, String(req.body?.characterName ?? '')) }) }
+  catch (error) { sendChatError(res, error) }
+}))
 router.post('/admin/profiles/import-card', requireAdmin, (req, res, next) => {
   cardUpload(req, res, (error) => {
     if (error) { res.status(400).json({ success: false, error: 'PNG 또는 JSON 카드 한 장을 골라줘. 최대 8MB야.' }); return }

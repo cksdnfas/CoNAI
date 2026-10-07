@@ -2,7 +2,7 @@ import sharp from 'sharp'
 import { PngExtractor } from '../metadata/extractors/pngExtractor'
 import { ChatProfileError, normalizeAlternateGreetings, type ChatProfileInput, type ChatPromptSection } from './chatProfiles'
 import { ChatLorebookStore, isRegexKeyword, normalizeLorebook, type ChatLoreEntry } from './chatLorebook'
-import { localizeImages } from './chatCardAssets'
+import { characterMediaGroupPath, fileLibraryMediaUnderGroup, ingestMedia, localizeImages } from './chatCardAssets'
 import { rewriteMediaLinks } from './chatMediaLinks'
 
 export const CHAT_CARD_MAX_BYTES = 8 * 1024 * 1024
@@ -77,6 +77,8 @@ export async function importChatCard(buffer: Buffer, providerName: string): Prom
   const data = parsed.spec ? object(parsed.data) : parsed
   const name = text(data.name, 60)
   if (!name) throw new ChatProfileError('카드에 캐릭터 이름이 없어.')
+  const original = isPng(buffer) ? await ingestMedia(buffer, { preserveBytes: true }) : null
+  if (original) fileLibraryMediaUnderGroup(characterMediaGroupPath(name), [original.compositeHash])
   const report: ChatCardImportReport = { kept: [], converted: [], dropped: [] }
   const sections: ChatPromptSection[] = []
   for (const [key, title, kind] of [
@@ -119,7 +121,7 @@ export async function importChatCard(buffer: Buffer, providerName: string): Prom
   return {
     importReport: report,
     authorNote: authorNote || undefined,
-    name, avatar, engine: 'llm', providerName, mcpEnabled: false,
+    name, avatar, referenceHash: original?.compositeHash ?? null, avatarHash: original?.compositeHash ?? null, engine: 'llm', providerName, mcpEnabled: false,
     tagline: text(data.tagline, 200) || text(data.creator_notes, 200) || tags.slice(0, 200),
     systemPrompt: localized(systemPrompt),
     promptSections: sections.map((section) => ({ ...section, content: localized(section.content) })),

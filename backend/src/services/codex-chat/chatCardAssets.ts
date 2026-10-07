@@ -5,13 +5,16 @@ import http from 'http'
 import https from 'https'
 import net from 'net'
 import path from 'path'
+import sharp from 'sharp'
 import { resolveUploadsPath, runtimePaths } from '../../config/runtimePaths'
 import { db as imagesDb } from '../../database/init'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { BackgroundProcessorService } from '../backgroundProcessorService'
 import { assignGeneratedMediaToGroup } from '../generationTargetGroupService'
 import { GroupPathService } from '../groupPathService'
-import { findMediaUrls, MEDIA_HASH_PATTERN, MEDIA_MIME_TYPES, mediaLink, rewriteMediaLinks, sniffMediaExtension } from './chatMediaLinks'
+import { resolveImageIdentity } from '../imageIdentityService'
+import { ImageSimilarityService } from '../imageSimilarity'
+import { findMediaUrls, MEDIA_HASH_PATTERN, MEDIA_MAX_PIXELS, MEDIA_MIME_TYPES, mediaLink, rewriteMediaLinks, sniffMediaExtension } from './chatMediaLinks'
 
 /** Legacy card copies: `chat-asset:<sha256>.<ext>` served from saveDir/chat-assets, moved into the library at startup. */
 export const CHAT_ASSET_SCHEME = 'chat-asset:'
@@ -19,7 +22,8 @@ export const CHAT_ASSET_NAME_PATTERN = /^[a-f0-9]{64}\.(png|jpg|webp|gif)$/
 const LEGACY_ASSET_LINK = /chat-asset:([a-f0-9]{64}\.(?:png|jpg|webp|gif))/g
 /** Library group the copies of one character's card media are filed under: `채팅 카드/<character>`. */
 export const CHAT_CARD_GROUP_ROOT = '채팅 카드'
-const MEDIA_MAX_BYTES = 50 * 1024 * 1024
+export const CHAT_MEDIA_MAX_BYTES = 50 * 1024 * 1024
+const MEDIA_MAX_BYTES = CHAT_MEDIA_MAX_BYTES
 const MEDIA_PER_RUN = 30
 const REQUEST_TIMEOUT_MS = 20_000
 const MAX_REDIRECTS = 3
@@ -56,8 +60,14 @@ function isPublicAddress(address: string) {
     return !(a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254)
       || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0) || (a === 198 && (b === 18 || b === 19)))
   }
-  const lower = address.toLowerCase()
-  if (lower.startsWith('::ffff:')) return isPublicAddress(lower.slice(7))
+  if (!net.isIPv6(address)) return false
+  const lower = new URL(`http://[${address}]/`).hostname.slice(1, -1).toLowerCase()
+  const mapped = /^::ffff:([a-f0-9]{1,4}):([a-f0-9]{1,4})$/.exec(lower)
+  if (mapped) {
+    const upper = parseInt(mapped[1], 16)
+    const lowerBits = parseInt(mapped[2], 16)
+    return isPublicAddress([upper >>> 8, upper & 255, lowerBits >>> 8, lowerBits & 255].join('.'))
+  }
   return !(lower === '::' || lower === '::1' || /^f[cd]/.test(lower) || /^fe[89ab]/.test(lower) || lower.startsWith('ff'))
 }
 
@@ -71,7 +81,7 @@ async function lookupHost(host: string) {
 }
 
 /** The host's addresses (system resolver, then public resolvers); every one of them must be public. */
-async function resolvePublicHost(host: string) {
+export async function resolvePublicHost(host: string) {
   let addresses: Array<{ address: string; family: number }>
   if (net.isIP(host)) {
     addresses = [{ address: host, family: net.isIP(host) }]
@@ -92,7 +102,7 @@ async function resolvePublicHost(host: string) {
 }
 
 /** GET a file, connecting only to the public address resolved above (redirects are checked the same way). */
-async function download(url: string, redirectsLeft = MAX_REDIRECTS): Promise<{ buffer: Buffer; finalUrl: string }> {
+export async function download(url: string, redirectsLeft = MAX_REDIRECTS): Promise<{ buffer: Buffer; finalUrl: string }> {
   const target = new URL(url)
   if (target.protocol !== 'https:' && target.protocol !== 'http:') throw new Error('unsupported protocol')
   const resolved = await resolvePublicHost(target.hostname.replace(/^\[|\]$/g, ''))
@@ -131,23 +141,41 @@ async function download(url: string, redirectsLeft = MAX_REDIRECTS): Promise<{ b
 }
 
 /** Register a downloaded file in the image library (after checking what it really is); returns its library id. */
-async function ingestMedia(buffer: Buffer) {
+const mediaIngestions = new Map<string, Promise<{ compositeHash: string; extension: string }>>()
+
+export async function ingestMedia(buffer: Buffer, options: { preserveBytes?: boolean } = {}) {
   const extension = await sniffMediaExtension(buffer)
   const file = path.join(cardMediaDir(), `${crypto.createHash('sha256').update(buffer).digest('hex')}.${extension}`)
-  if (!fs.existsSync(file)) fs.writeFileSync(file, buffer)
-  const result = await BackgroundProcessorService.processSavedMediaFile(file, { mimeType: MEDIA_MIME_TYPES[extension], metadataMode: 'background', quiet: true })
-  if (!result.compositeHash) throw new Error('not processed')
-  return { compositeHash: result.compositeHash, extension }
+  let identity: Awaited<ReturnType<typeof resolveImageIdentity>> | null = null
+  if (MEDIA_MIME_TYPES[extension]?.startsWith('image/')) {
+    const source = sharp(buffer, { limitInputPixels: MEDIA_MAX_PIXELS })
+    const generated = await ImageSimilarityService.generateHashAndHistogram(file, source)
+    identity = await resolveImageIdentity({ filePath: file, perceptualCompositeHash: generated.hashes.compositeHash, source })
+  }
+  const key = identity?.compositeHash ?? file
+  const previous = mediaIngestions.get(key)
+  const pending = (async () => {
+    if (previous) await previous.catch(() => {})
+    if (identity && !options.preserveBytes && activeMediaFile(identity.compositeHash)) return { compositeHash: identity.compositeHash, extension }
+    if (!fs.existsSync(file)) fs.writeFileSync(file, buffer)
+    const result = await BackgroundProcessorService.processSavedMediaFile(file, { mimeType: MEDIA_MIME_TYPES[extension], metadataMode: 'background', quiet: true })
+    if (!result.compositeHash) throw new Error('not processed')
+    return { compositeHash: result.compositeHash, extension }
+  })()
+  mediaIngestions.set(key, pending)
+  try { return await pending } finally { if (mediaIngestions.get(key) === pending) mediaIngestions.delete(key) }
 }
 
 /** The active library file of a media id, or null when it was deleted or went missing. */
 export function activeMediaFile(compositeHash: string) {
   if (!MEDIA_HASH_PATTERN.test(compositeHash)) return null
-  const row = imagesDb.prepare("SELECT original_file_path, mime_type, file_size FROM image_files WHERE composite_hash = ? AND file_status = 'active' ORDER BY id LIMIT 1")
-    .get(compositeHash) as { original_file_path: string; mime_type: string | null; file_size: number | null } | undefined
-  if (!row) return null
-  const filePath = resolveUploadsPath(row.original_file_path)
-  return fs.existsSync(filePath) ? { path: filePath, mimeType: row.mime_type ?? 'application/octet-stream', size: row.file_size } : null
+  const rows = imagesDb.prepare("SELECT original_file_path, mime_type, file_size FROM image_files WHERE composite_hash = ? AND file_status = 'active' ORDER BY id")
+    .all(compositeHash) as Array<{ original_file_path: string; mime_type: string | null; file_size: number | null }>
+  for (const row of rows) {
+    const filePath = resolveUploadsPath(row.original_file_path)
+    if (fs.existsSync(filePath)) return { path: filePath, mimeType: row.mime_type ?? 'application/octet-stream', size: row.file_size }
+  }
+  return null
 }
 
 type CardMediaRow = { source_url: string; composite_hash: string; extension: string; final_url: string | null }
@@ -167,12 +195,50 @@ function rememberSource(url: string, compositeHash: string, extension: string, f
 export function fileUnderCharacterGroup(characterName: string, compositeHashes: string[]) {
   if (compositeHashes.length === 0) return
   try {
-    // eslint-disable-next-line no-control-regex
-    const name = characterName.replace(/[/\\]/g, '-').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 100) || '이름 없음'
-    assignGeneratedMediaToGroup(GroupPathService.resolveOrCreate(`${CHAT_CARD_GROUP_ROOT}/${name}`).groupId, compositeHashes)
+    fileLibraryMediaUnderGroup(characterMediaGroupPath(characterName), compositeHashes)
   } catch (error) {
     console.warn('⚠️ Could not file chat card media under a group:', error instanceof Error ? error.message : error)
   }
+}
+
+/** Asset inputs must be grouped before they are returned to the caller. */
+export function fileLibraryMediaUnderGroup(groupPath: string, compositeHashes: string[]) {
+  if (compositeHashes.length) assignGeneratedMediaToGroup(GroupPathService.resolveOrCreate(groupPath).groupId, compositeHashes)
+}
+
+export function characterMediaGroupPath(characterName: string, root = CHAT_CARD_GROUP_ROOT) {
+  // eslint-disable-next-line no-control-regex
+  const name = characterName.replace(/[/\\]/g, '-').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 100) || '이름 없음'
+  return `${root}/${name}`
+}
+
+const downloads = new Map<string, Promise<LocalizedMediaItem>>()
+
+/** Reuse the card downloader and URL cache for a single library asset. */
+export async function downloadToLibrary(url: string, groupPath: string, options: { imagesOnly?: boolean; download?: typeof download } = {}): Promise<LocalizedMediaItem> {
+  const target = new URL(url)
+  if (target.protocol !== 'https:' && target.protocol !== 'http:') throw new Error('unsupported protocol')
+  let pending = downloads.get(url)
+  if (!pending) {
+    pending = (async () => {
+      const known = knownSource(url)
+      if (known && activeMediaFile(known.composite_hash)) return { url, compositeHash: known.composite_hash, extension: known.extension, finalUrl: known.final_url }
+      const { buffer, finalUrl } = await (options.download ?? download)(url)
+      if (buffer.length > MEDIA_MAX_BYTES) throw new Error('too large')
+      const extension = await sniffMediaExtension(buffer)
+      if (options.imagesOnly && !MEDIA_MIME_TYPES[extension]?.startsWith('image/')) throw new Error('not an image')
+      const stored = await ingestMedia(buffer)
+      const item = { url, ...stored, finalUrl: finalUrl === url ? null : finalUrl }
+      rememberSource(url, item.compositeHash, item.extension, item.finalUrl)
+      return item
+    })()
+    downloads.set(url, pending)
+  }
+  let item: LocalizedMediaItem
+  try { item = await pending } finally { if (downloads.get(url) === pending) downloads.delete(url) }
+  if (options.imagesOnly && !activeMediaFile(item.compositeHash)?.mimeType.startsWith('image/')) throw new Error('not an image')
+  fileLibraryMediaUnderGroup(groupPath, [item.compositeHash])
+  return item
 }
 
 export type LocalizedMediaItem = { url: string; compositeHash: string; extension: string; finalUrl: string | null }
@@ -291,11 +357,13 @@ export function chatMediaInfo(compositeHashes: string[]): ChatMediaInfo[] {
 
 /** Chat profiles (by name) and message count that show any of these library ids, for the gallery's delete warning. */
 export function chatMediaUsage(compositeHashes: string[]) {
-  const needles = [...new Set(compositeHashes.filter((hash) => MEDIA_HASH_PATTERN.test(hash)))].slice(0, 500).map((hash) => `media:${hash}.`)
+  const hashes = [...new Set(compositeHashes.filter((hash) => MEDIA_HASH_PATTERN.test(hash)))].slice(0, 500)
+  const needles = hashes.map((hash) => `media:${hash}.`)
   if (needles.length === 0) return { profiles: [] as string[], messages: 0 }
   const db = getUserSettingsDb()
   const profileMatch = PROFILE_TEXT_COLUMNS.flatMap((column) => needles.map(() => `instr(COALESCE(${column}, ''), ?) > 0`)).join(' OR ')
-  const profiles = (db.prepare(`SELECT name FROM llm_chat_profiles WHERE ${profileMatch} ORDER BY name`).all(...PROFILE_TEXT_COLUMNS.flatMap(() => needles)) as Array<{ name: string }>).map((row) => row.name)
+  const assetMatch = ['avatar_hash', 'background_hash', 'reference_hash'].map((column) => `${column} IN (${hashes.map(() => '?').join(',')})`).join(' OR ')
+  const profiles = (db.prepare(`SELECT name FROM llm_chat_profiles WHERE ${profileMatch} OR ${assetMatch} ORDER BY name`).all(...PROFILE_TEXT_COLUMNS.flatMap(() => needles), ...hashes, ...hashes, ...hashes) as Array<{ name: string }>).map((row) => row.name)
   const messages = (db.prepare(`SELECT COUNT(*) AS count FROM codex_chat_messages WHERE ${needles.map(() => 'instr(content, ?) > 0').join(' OR ')}`).get(...needles) as { count: number }).count
   return { profiles, messages }
 }
