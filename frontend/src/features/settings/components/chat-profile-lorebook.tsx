@@ -16,6 +16,7 @@ import { useI18n } from '@/i18n'
 import { loreEntryTitle, type ChatLoreEntry, type LoreSecondaryLogic } from '@/lib/api-codex-chat'
 import { createStoredFolder, listStoredFiles, uploadStoredFiles } from '@/lib/api-files'
 import { getErrorMessage } from '@/lib/error-message'
+import { createRandomUuid } from '@/lib/random-uuid'
 import { CollapsibleRow } from './chat-profile-sections'
 
 /** Where an entry's linked file lives: a global book has none; an account or chat book has its folder (null until it exists). */
@@ -171,7 +172,7 @@ export function ChatLoreEntryFields({ entry, onChange, filePlace }: { entry: Cha
 
 /** A blank entry placed after `count` others. */
 export function newLoreEntry(count: number): ChatLoreEntry {
-  return { id: crypto.randomUUID(), title: '', keys: [], content: '', enabled: true, constant: false, order: count, caseSensitive: false, file: null, fileId: null }
+  return { id: createRandomUuid(), title: '', keys: [], content: '', enabled: true, constant: false, order: count, caseSensitive: false, file: null, fileId: null }
 }
 
 export function ChatLorebookEditor({ entries, onChange, filePlace = { kind: 'global' } }: { entries: ChatLoreEntry[]; onChange: (entries: ChatLoreEntry[]) => void; filePlace?: LoreFilePlace }) {

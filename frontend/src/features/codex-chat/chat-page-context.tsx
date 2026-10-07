@@ -8,6 +8,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { acknowledgeChatPageProposal, checkChatPageProposal } from '@/lib/api-codex-chat'
+import { createRandomUuid } from '@/lib/random-uuid'
 import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
 import { pageAction, pageChoice, pageObject } from './page-action-helpers'
 
@@ -56,7 +57,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
   const busy = useRef(new Set<number>())
   const workflowUndos = useRef(new Map<number, WorkflowUndo>())
   const actionUndos = useRef(new Map<number, WorkflowUndo>())
-  const instanceId = useMemo(() => ({ key: `${location.key}:${location.pathname}:${accountKey}`, id: crypto.randomUUID() }), [location.key, location.pathname, accountKey]).id
+  const instanceId = useMemo(() => ({ key: `${location.key}:${location.pathname}:${accountKey}`, id: createRandomUuid() }), [location.key, location.pathname, accountKey]).id
   const permission = chatPagePermission(location.pathname)
   const available = !!auth?.authenticated && !!permission && auth.permissionKeys.includes(permission) && auth.permissionKeys.includes('chat.tools.read')
   const enabled = available && connection?.accountKey === accountKey
@@ -82,7 +83,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
   const current = useRef({ snapshot, editor: activeEditor })
   useLayoutEffect(() => { current.current = { snapshot, editor: activeEditor } })
   useEffect(() => { statesRef.current = new Map(); workflowUndos.current.clear(); actionUndos.current.clear(); setStates(statesRef.current) }, [accountKey])
-  const toggle = useCallback(() => setConnection((old) => old?.accountKey === accountKey ? null : { id: crypto.randomUUID(), accountKey }), [accountKey])
+  const toggle = useCallback(() => setConnection((old) => old?.accountKey === accountKey ? null : { id: createRandomUuid(), accountKey }), [accountKey])
   const disconnect = useCallback(() => setConnection(null), [])
   const register = useCallback((next: Editor) => {
     setEditors((old) => [...old.filter((item) => item.instanceId !== next.instanceId), next])
@@ -204,12 +205,12 @@ export function useChatPageRegistration(input: (Omit<Editor, 'instanceId' | 'pat
   useLayoutEffect(() => { applyRef.current = input?.apply; workflowApplyRef.current = input?.applyWorkflow; actionApplyRef.current = input?.applyAction })
   const description = input ? JSON.stringify({ title: input.title, kind: input.kind, resourceId: input.resourceId, fields: input.fields, workflow: input.workflow, actions: input.actions, data: input.data, priority: input.priority }) : null
   const revisionKey = `${description}:${input?.localRevision ?? ''}`
-  const revision = useMemo(() => ({ key: revisionKey, id: crypto.randomUUID() }), [revisionKey]).id
+  const revision = useMemo(() => ({ key: revisionKey, id: createRandomUuid() }), [revisionKey]).id
   const kind = input?.kind
   const resourceId = input?.resourceId
   // View controls that write URL search params retain undo within the same mounted view.
   const navigationKey = options?.preserveOnSearchChange ? location.pathname : location.key
-  const instanceId = useMemo(() => ({ key: `${navigationKey}:${location.pathname}:${kind}:${resourceId}`, id: crypto.randomUUID() }), [navigationKey, location.pathname, kind, resourceId]).id
+  const instanceId = useMemo(() => ({ key: `${navigationKey}:${location.pathname}:${kind}:${resourceId}`, id: createRandomUuid() }), [navigationKey, location.pathname, kind, resourceId]).id
   useLayoutEffect(() => {
     if (!register || !description) return
     const data = JSON.parse(description) as Omit<Editor, 'instanceId' | 'path' | 'apply' | 'applyWorkflow' | 'applyAction'>

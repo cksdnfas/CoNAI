@@ -1,6 +1,7 @@
 import { applyMiniMaxDirectorResolutionBounds, copyChatPageData, validateChatPageArguments, type ChatPageData, type ChatPageSchema } from '@conai/shared'
 import { pageArray, pageChoice, pageNumber, pageObject, pageText, pageRecord } from '@/features/codex-chat/page-action-helpers'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import { createRandomUuid } from '@/lib/random-uuid'
 import { buildPowerLoraNodeItemsFromInputs, isPowerLoraLoaderEntryValue } from './power-lora-loader-utils'
 import { buildMiniMaxH3DirectorNodeValue, isMiniMaxH3DirectorInputLink, normalizeMiniMaxH3DirectorBuilderState, normalizeMiniMaxH3DirectorNodeValue, parseMiniMaxH3DirectorTimeline, validateMiniMaxH3DirectorNodeValue, MINIMAX_H3_DIRECTOR_MODES, MINIMAX_H3_DIRECTOR_ASPECT_OPTIONS, MINIMAX_H3_DIRECTOR_INPUT_SCALING_OPTIONS, MINIMAX_H3_DIRECTOR_RESOLUTION_PRESETS, MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS, type MiniMaxH3DirectorTimeline } from './minimax-h3-director-dasiwa-utils'
 
@@ -76,7 +77,7 @@ export function applyComfyChatNode(field: WorkflowMarkedField, value: unknown, i
       timeline.items = remove ? timeline.items.filter((entry) => entry.id !== id) : timeline.items.map((entry) => entry.id === id ? { ...entry, ...values } as typeof entry : entry)
     }
   }
-  if (patch.promptBlocks) timeline.prompt_blocks = (patch.promptBlocks as ChatPageData[]).map((raw, index) => ({ enabled: true, ...pageRecord(raw), id: String(pageRecord(raw).id ?? crypto.randomUUID()), order: index })) as MiniMaxH3DirectorTimeline['prompt_blocks']
+  if (patch.promptBlocks) timeline.prompt_blocks = (patch.promptBlocks as ChatPageData[]).map((raw, index) => ({ enabled: true, ...pageRecord(raw), id: String(pageRecord(raw).id ?? createRandomUuid()), order: index })) as MiniMaxH3DirectorTimeline['prompt_blocks']
   const basic = Object.fromEntries(Object.entries(patch).filter(([key]) => ['mode', 'width', 'height', 'duration', 'frame_rate', 'ref_image_size'].includes(key)))
   let builder = normalizeMiniMaxH3DirectorBuilderState(node.builder_state, timeline, (basic.mode ?? node.mode) as typeof MINIMAX_H3_DIRECTOR_MODES[number], Number(basic.duration ?? node.duration), typeof node.prompt === 'string' ? node.prompt : '')
   if (patch.prompt) {

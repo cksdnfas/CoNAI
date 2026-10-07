@@ -4,6 +4,7 @@ import { applyChatWorkflowOperations, describeChatWorkflowModule, normalizeChatW
 import { useChatPageRegistration, type WorkflowPageProposal } from '@/features/codex-chat/chat-page-context'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowExposedInput, ModuleDefinitionRecord } from '@/lib/api-module-graph'
+import { createRandomUuid } from '@/lib/random-uuid'
 import { buildGraphPayload } from './module-graph-flow'
 import { buildHandleId, buildModuleEdgePresentation, findNodePort, getModulePortCompatibility } from './module-graph-ports'
 import type { ModuleGraphEdge, ModuleGraphNode } from './module-graph-types'
@@ -30,7 +31,7 @@ export function useWorkflowChatPage(params: Params) {
   const modules = useMemo(() => params.modules.map(describeChatWorkflowModule), [params.modules])
   const moduleSignature = JSON.stringify(modules)
   const draftSignature = signature(params, params.debugMode)
-  const revision = useMemo(() => ({ draftSignature, moduleSignature, id: crypto.randomUUID() }), [draftSignature, moduleSignature]).id
+  const revision = useMemo(() => ({ draftSignature, moduleSignature, id: createRandomUuid() }), [draftSignature, moduleSignature]).id
   const snapshot = useMemo<ChatWorkflowSnapshot | null>(() => {
     if (!params.enabled) return null
     try {

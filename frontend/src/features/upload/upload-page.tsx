@@ -17,6 +17,7 @@ import type { AutoTestTaggerResult } from '@/lib/api-settings-tagger'
 import type { AutoTestKaloscopeResult } from '@/lib/api-settings-kaloscope'
 import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
 import { shouldBypassImageSaveProcessing } from '@/lib/image-save-output'
+import { createRandomUuid } from '@/lib/random-uuid'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -60,7 +61,7 @@ export function UploadPage() {
   const [isRewritePanelOpen, setIsRewritePanelOpen] = useState(false)
   const { draft: rewriteDraft, patchDraft: patchRewriteDraft } = useMetadataRewriteDraft(extractFile, extractResult)
   const isDesktopPageLayout = useDesktopPageLayout()
-  const chatUploadResourceId = useMemo(() => ({ file: extractFile, id: crypto.randomUUID() }), [extractFile]).id
+  const chatUploadResourceId = useMemo(() => ({ file: extractFile, id: createRandomUuid() }), [extractFile]).id
   useChatPageRegistration({
     kind: 'upload', title: t({ ko: '업로드·메타데이터 검사', en: 'Upload and metadata inspection' }), resourceId: chatUploadResourceId,
     fields: [
