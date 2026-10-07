@@ -191,22 +191,25 @@ export function selectRecall(candidates: ChatSummarySegment[], query: string, bu
   const scored = documents.flatMap(({ segment, terms }) => {
     let shared = 0
     let score = 0
+    const sharedTerms: Array<{ term: string; weight: number }> = []
     for (const term of queryTerms) {
       if (!terms.has(term)) continue
       const count = frequency.get(term) ?? 0
       if (candidates.length >= 5 && count / candidates.length > COMMON_TERM_SHARE) continue
       shared += 1
-      score += Math.log(1 + (candidates.length - count + 0.5) / (count + 0.5))
+      const weight = Math.log(1 + (candidates.length - count + 0.5) / (count + 0.5))
+      score += weight
+      sharedTerms.push({ term, weight })
     }
-    return shared >= MIN_SHARED_TERMS ? [{ segment, score }] : []
+    return shared >= MIN_SHARED_TERMS ? [{ segment, score, terms: sharedTerms.sort((a, b) => b.weight - a.weight).slice(0, 6).map(({ term }) => term) }] : []
   }).sort((a, b) => b.score - a.score || b.segment.until_message_id - a.segment.until_message_id)
-  const chosen: ChatSummarySegment[] = []
+  const chosen: Array<ChatSummarySegment & { score: number; terms: string[] }> = []
   let remaining = budgetTokens
-  for (const { segment } of scored) {
+  for (const { segment, score, terms } of scored) {
     if (chosen.length >= limit) break
     const cost = estimate(segment.content)
     if (cost > remaining) continue
-    chosen.push(segment)
+    chosen.push({ ...segment, score, terms })
     remaining -= cost
   }
   // Told in the order they happened.

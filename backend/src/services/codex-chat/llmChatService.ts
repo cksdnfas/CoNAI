@@ -22,9 +22,11 @@ import { withGenerationOutcomes } from './codexChatMedia'
 import type { CodexChatStreamEvent } from './codexChatService'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 import { ChatSummaryStore } from './chatMemory'
-import { buildChatMessages, cutToolOutput, estimateMessagesTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
+import { buildChatMessages, cutToolOutput, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
 import { addressLabelFilter, restatement, roundSeparator } from './chatReplyText'
 import { chatPageReference, parseChatPageContext } from './chatPageContext'
+import { contextSections, limitContextMeta, markContextMessage, legacyContextMeta } from './chatContextDiagnostics'
+import { redactChatRequestBody, saveChatRequestCapture } from './chatRequestCaptures'
 
 /** Tool output kept on the stored call for replay; the model gets more of it within the reply itself. */
 const STORED_TOOL_OUTPUT_LENGTH = 4000
@@ -77,6 +79,8 @@ type LlmTurn = {
   continuingRouting?: CodexChatMessageRecord['routing']
   /** What the request carried and the prompt tokens the server counted for it, stored with the reply. */
   contextMeta?: ChatContextMeta & { model: string | null; promptTokens?: number | null }
+  requestCapture?: string
+  requestSent?: boolean
   listeners: Set<(event: CodexChatStreamEvent) => void>
   finished: Promise<CodexChatMessageRecord>
 }
@@ -190,9 +194,9 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     const attachmentTexts = await inlineTextsForChat(profile, requester.accountId, listMessages())
     // Continuing: the cut reply as the model's own turn, then the request to carry on from its last word — room for
     // both is kept before the window is chosen.
-    const continuation: ChatCompletionMessage[] = turn.continuing === undefined ? [] : [{ role: 'assistant', content: turn.continuing }, { role: 'user', content: CONTINUE_DIRECTIVE }]
+    const continuation: ChatCompletionMessage[] = turn.continuing === undefined ? [] : [markContextMessage({ role: 'assistant', content: turn.continuing }, 'continuation'), markContextMessage({ role: 'user', content: CONTINUE_DIRECTIVE }, 'continuation')]
     const reference = chatPageReference(turn.page)
-    const pageMessages: ChatCompletionMessage[] = reference ? [{ role: 'user', content: reference }] : []
+    const pageMessages: ChatCompletionMessage[] = reference ? [markContextMessage({ role: 'user', content: reference }, 'page')] : []
     const extraTokens = estimateMessagesTokens(profile.id, [...continuation, ...pageMessages])
     if (config.summaryEnabled) {
       await whileWaiting(turn, 'summary', fitThreadSummary(thread.id, profile, listMessages(), turn.controller.signal, tools, { attachmentTexts, extraTokens }))
@@ -203,7 +207,11 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
       onMeta: (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(profile, 'chat')?.model ?? null } },
     })
     const latestUser = request.map((message) => message.role).lastIndexOf('user')
-    return [...request.slice(0, latestUser), ...pageMessages, ...request.slice(latestUser), ...continuation]
+    const final = [...request.slice(0, latestUser), ...pageMessages, ...request.slice(latestUser), ...continuation]
+    if (turn.contextMeta?.version === 2) {
+      turn.contextMeta = limitContextMeta({ ...turn.contextMeta, sections: contextSections(final, tools, (text) => estimateTokens(profile.id, text)), estimatedTokens: estimateMessagesTokens(profile.id, final, tools) })
+    }
+    return final
   }, false, { maxTokens: config.maxTokens })
 }
 
@@ -267,6 +275,9 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
       const fitted = fitChatContext(profile, messages, tools, target.generation.maxTokens)
       if (fitted !== messages) messages.splice(0, messages.length, ...fitted)
       const rawEstimate = round === 1 ? rawMessagesEstimate(messages, tools) : 0
+      if (turn.contextMeta?.version === 2 && round === 1) {
+        turn.contextMeta = limitContextMeta({ ...turn.contextMeta, sections: contextSections(messages, tools, (text) => estimateTokens(profile.id, text)), estimatedTokens: estimateMessagesTokens(profile.id, messages, tools) })
+      }
       // A continuation joins the cut text directly; other rounds start a new paragraph, without leading blank lines.
       const joins = round === 1 && turn.continuing !== undefined
       const roundStart = turn.text.length
@@ -289,6 +300,11 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           messages,
           tools,
           signal: turn.controller.signal,
+          onRequestBody: (body, actualTarget) => {
+            turn.requestSent = true
+            const diagnostics = loadChatSettings().diagnostics
+            if (diagnostics.enabled && diagnostics.captureRaw) turn.requestCapture = redactChatRequestBody(body, actualTarget)
+          },
           onContent: filter.push,
           onReasoning: (text) => {
             turn.reasoning += text
@@ -304,6 +320,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
         recordPromptUsage(profile.id, rawEstimate, result.promptTokens)
         if (turn.contextMeta) turn.contextMeta.promptTokens = result.promptTokens
       }
+      if (turn.contextMeta?.version === 2) turn.contextMeta.toolRounds = round - (result.toolCalls.length > 0 ? 0 : 1)
       // Tool calls the output cap cut off carry broken arguments: never run them, nor send them again.
       if (result.finishReason === 'length' && result.toolCalls.length > 0) {
         throw new LlmChatError(REPLY_FAILURES.toolCallsCut)
@@ -383,7 +400,10 @@ async function finishTurn(turn: LlmTurn, profile: ChatProfile, status: CodexChat
   // A failed reply says why on the stream too, not only on the stored message (a reply with nothing to show would
   // otherwise just end empty).
   if (error && !errorShown) emit(turn, { type: 'error', message: error })
-  if (turn.contextMeta && stored && (status === 'completed' || content)) CodexChatStore.setContextMeta(messageId, turn.contextMeta)
+  if (turn.contextMeta && stored && (status === 'completed' || content || turn.requestSent)) {
+    CodexChatStore.setContextMeta(messageId, loadChatSettings().diagnostics.enabled ? limitContextMeta(turn.contextMeta) : legacyContextMeta(turn.contextMeta))
+    saveChatRequestCapture(messageId, turn.requestCapture)
+  }
   const message = CodexChatStore.listMessages(turn.threadId).find((entry) => entry.id === messageId) as CodexChatMessageRecord
   activeTurns.delete(turn.threadId)
   emit(turn, { type: 'done', message })
@@ -444,7 +464,7 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
   return turn.finished
 }
 
-export type GroupReplyResult = Pick<CodexChatMessageRecord, 'content' | 'tool_calls' | 'status' | 'error'> & { finish_reason?: string | null }
+export type GroupReplyResult = Pick<CodexChatMessageRecord, 'content' | 'tool_calls' | 'status' | 'error'> & { finish_reason?: string | null; contextMeta?: ChatContextMeta; requestCapture?: string }
 
 /**
  * One group room member's reply (not stored here: the room stores it with its speaker). Streams `delta`,
@@ -455,7 +475,7 @@ export async function generateLlmGroupReply(params: {
   requester: McpRequester
   threadId: number
   profile: ChatProfile
-  buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[]
+  buildMessages: (tools: ChatCompletionTool[], onMeta: (meta: ChatContextMeta) => void) => ChatCompletionMessage[]
   /** Room tools offered: `call` (room_call_member), `all` adding history search when part of the room is not shown. */
   roomTools: 'call' | 'all'
   /** Overrides of the profile's generation options (the member's or room's reply cap). */
@@ -476,7 +496,7 @@ export async function generateLlmGroupReply(params: {
   let status: CodexChatMessageRecord['status'] = 'completed'
   let error: string | null = null
   try {
-    await streamReply(turn, params.requester, params.profile, params.buildMessages, params.roomTools, params.generation ?? {})
+    await streamReply(turn, params.requester, params.profile, (tools) => params.buildMessages(tools, (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(params.profile, 'chat')?.model ?? null } }), params.roomTools, params.generation ?? {})
     if (controller.signal.aborted) status = 'interrupted'
   } catch (caught) {
     status = controller.signal.aborted ? 'interrupted' : 'failed'
@@ -485,7 +505,7 @@ export async function generateLlmGroupReply(params: {
     params.signal.removeEventListener('abort', abort)
   }
   const toolCalls = [...turn.toolCalls.values()].map((call) => (call.status === 'running' ? { ...call, status: 'failed' as const } : call))
-  return { content: replyContent(turn.text), tool_calls: toolCalls, status, error, finish_reason: status === 'completed' ? turn.finishReason : null }
+  return { content: replyContent(turn.text), tool_calls: toolCalls, status, error, finish_reason: status === 'completed' ? turn.finishReason : null, contextMeta: turn.requestSent ? turn.contextMeta : undefined, requestCapture: turn.requestCapture }
 }
 
 export const LlmChatService = {

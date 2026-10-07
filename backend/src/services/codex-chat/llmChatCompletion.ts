@@ -269,6 +269,8 @@ export async function streamChatCompletion(params: {
   signal: AbortSignal
   onContent?: (text: string) => void
   onReasoning?: (text: string) => void
+  /** Actual transport body, including cache/usage fallbacks; no headers. */
+  onRequestBody?: (body: Record<string, unknown>, target: ChatCompletionTarget) => void
 }): Promise<ChatCompletionResult> {
   const release = await acquireLlmRequestSlot(params.target.providerName, params.target.maxConcurrentRequests ?? 1, params.signal)
   const controller = new AbortController()
@@ -289,17 +291,21 @@ export async function streamChatCompletion(params: {
 
   try {
     let streamUsage = true
-    const request = (target: ChatCompletionTarget) => fetch(target.endpoint, {
-      method: 'POST',
-      headers: buildHeaders(target),
-      body: JSON.stringify(buildBody(target, params.messages, params.tools ?? [], true, streamUsage)),
-      signal,
-    }).catch((error: unknown) => {
-      if (signal.aborted) throw error
-      // Node's fetch only says "fetch failed"; the cause (ECONNREFUSED, ENOTFOUND…) is what the user can act on.
-      const cause = (error as { cause?: { code?: string; message?: string } })?.cause
-      throw new LlmRequestError(`LLM 서버에 연결하지 못했어: ${params.target.endpoint} (${cause?.code ?? cause?.message ?? (error instanceof Error ? error.message : String(error))})`, undefined, { cause: error })
-    })
+    const request = (target: ChatCompletionTarget) => {
+      const body = buildBody(target, params.messages, params.tools ?? [], true, streamUsage)
+      params.onRequestBody?.(body, target)
+      return fetch(target.endpoint, {
+        method: 'POST',
+        headers: buildHeaders(target),
+        body: JSON.stringify(body),
+        signal,
+      }).catch((error: unknown) => {
+        if (signal.aborted) throw error
+        // Node's fetch only says "fetch failed"; the cause (ECONNREFUSED, ENOTFOUND…) is what the user can act on.
+        const cause = (error as { cause?: { code?: string; message?: string } })?.cause
+        throw new LlmRequestError(`LLM 서버에 연결하지 못했어: ${params.target.endpoint} (${cause?.code ?? cause?.message ?? (error instanceof Error ? error.message : String(error))})`, undefined, { cause: error })
+      })
+    }
     let target = params.target
     let response: Response
     for (;;) {

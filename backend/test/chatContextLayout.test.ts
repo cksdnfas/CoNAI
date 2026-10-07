@@ -4,7 +4,9 @@ import type { ChatProfile } from '../src/services/codex-chat/chatProfiles'
 import { DEFAULT_CHAT_STYLE } from '../src/services/codex-chat/chatStyle'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from '../src/services/codex-chat/codexChatStore'
 import type { ChatCompletionMessage } from '../src/services/codex-chat/llmChatCompletion'
-import { anchoredSuffix, buildChatMessages, depthBlocks, insertAtDepth, resolveAuthorNote, WINDOW_KEEP_RATIO } from '../src/services/codex-chat/llmChatContext'
+import { anchoredSuffix, buildChatMessages, depthBlocks, insertAtDepth, resolveAuthorNote, WINDOW_KEEP_RATIO, type ChatContextMeta } from '../src/services/codex-chat/llmChatContext'
+import { contextHash, contextSections } from '../src/services/codex-chat/chatContextDiagnostics'
+import { loadChatSettings } from '../src/services/codex-chat/chatSettings'
 import { normalizeLorebook } from '../src/services/codex-chat/chatLorebook'
 import type { AttachedLoreBook } from '../src/services/codex-chat/chatLoreContext'
 
@@ -129,6 +131,23 @@ const books: AttachedLoreBook[] = [
   ]) },
   { id: 2, name: '항구 도시 설정', label: '항구 도시 설정', kind: 'global', via: 'profile', owner: null, folderId: null, entries: normalizeLorebook([{ keys: ['항구'], content: '항구 도시.' }]) },
 ]
+
+test('diagnostic sections preserve the actual message positions and roles without storing text', () => {
+  const thread = { id: 700, summary: null, summary_until_message_id: null } as CodexChatThreadRecord
+  let meta: ChatContextMeta | undefined
+  const result = buildChatMessages({ profile, thread, messages: [record(1, 'user', '먹물 봤어?')],
+    config: { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, maxTokens: null, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '' },
+    tools: [], books, onMeta: (value) => { meta = value } })
+  const sections = contextSections(result, [], (text) => text.length)
+  assert.equal(meta?.version, loadChatSettings().diagnostics.enabled ? 2 : undefined)
+  assert.equal(sections.length, result.length)
+  assert.ok(sections[0].parts?.some((part) => part.kind === 'system-prompt'))
+  assert.deepEqual(sections.map(({ position, role }) => [position, role]), result.map((message, position) => [position, message.role]))
+  assert.deepEqual(sections.map(({ hash }) => hash), result.map((message) => contextHash(String(message.content))))
+  assert.deepEqual(meta?.lore, ['바다 약속', '먹물 실종'])
+  if (meta?.version === 2) assert.equal(meta.loreEntries?.find((entry) => entry.entryId === books[0].entries[1].id)?.reason, 'key:먹물')
+  assert.ok(!JSON.stringify(meta).includes('사흘째 안 보인다'))
+})
 
 test('a request is: one system message (persona, then lore index + always-on entries + summary), examples, the unsummarized turns, flags on the last message', () => {
   const thread = { id: 7, summary: '둘은 친해졌다.', summary_until_message_id: 2, context_turns: null, summary_enabled: 1, memories: JSON.stringify([{ id: 'a', text: '옛 고정 기억' }]) } as unknown as CodexChatThreadRecord

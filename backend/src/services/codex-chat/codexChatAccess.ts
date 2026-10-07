@@ -15,6 +15,22 @@ import { ChatGroupStore } from './chatGroupStore'
 
 const CHAT_MCP_TOKEN_PREFIX = 'conai_chat_'
 
+export const CHAT_DIAGNOSTICS_PERMISSION_KEYS = {
+  view: 'chat.diagnostics.view', content: 'chat.diagnostics.content', prompts: 'chat.diagnostics.prompts',
+} as const
+export type ChatDiagnosticsScope = 'none' | 'view' | 'content' | 'prompts'
+
+export function diagnosticsScopeOf(permissionKeys: readonly string[]): ChatDiagnosticsScope {
+  if (!permissionKeys.includes(CHAT_DIAGNOSTICS_PERMISSION_KEYS.view)) return 'none'
+  if (!permissionKeys.includes(CHAT_DIAGNOSTICS_PERMISSION_KEYS.content)) return 'view'
+  return permissionKeys.includes(CHAT_DIAGNOSTICS_PERMISSION_KEYS.prompts) ? 'prompts' : 'content'
+}
+
+export function narrowDiagnosticsScope(scope: ChatDiagnosticsScope, profileScope: 'view' | 'content' | null | undefined): ChatDiagnosticsScope {
+  if (scope === 'none' || scope === 'view' || !profileScope) return scope
+  return profileScope === 'view' ? 'view' : 'content'
+}
+
 export const CHAT_PERMISSION_KEYS = {
   codex: 'chat.codex.use',
   llm: 'chat.llm.use',
@@ -32,6 +48,7 @@ export type ChatAccess = {
   llm: boolean
   /** MCP scopes this account may hand to a chat agent; a chat's own scope setting is intersected with it. */
   scopes: ChatScope[]
+  diagnostics: ChatDiagnosticsScope
 }
 
 /**
@@ -52,6 +69,7 @@ export function resolveChatAccess(accountId: number | null): ChatAccess {
     codex: has(CHAT_PERMISSION_KEYS.codex),
     llm: has(CHAT_PERMISSION_KEYS.llm),
     scopes: CHAT_SCOPES.filter((scope) => has(CHAT_TOOL_PERMISSION_KEYS[scope])),
+    diagnostics: loadChatSettings().diagnostics.enabled ? diagnosticsScopeOf(permissionKeys) : 'none',
   }
 }
 

@@ -22,7 +22,10 @@ import { canRequesterViewImages } from '../../middleware/imageAccess'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
 import { BLOCK_EDITS_MAX, blockStateHash, blockStateText, foldBlockState, parseBlockEdits, usableBlocks } from './chatBlockState'
-import { authorNoteText, postHistoryText, buildPersonaPrompt, estimateTokens, fillCharacterPlaceholders, referenceBlock, resolveAuthorNote, REPLY_FORMAT_GUIDANCE, GENERATION_GUIDANCE } from './llmChatContext'
+import { authorNoteText, postHistoryText, buildPersonaPrompt, estimateTokens, fillCharacterPlaceholders, flagDirectiveFor, referenceBlock, resolveAuthorNote, sendableMessages, splitTurns, REPLY_FORMAT_GUIDANCE, GENERATION_GUIDANCE, type ChatContextMeta } from './llmChatContext'
+import { visibleContextMessages } from './chatDiagnostics'
+import { contextSections, contextSource, limitContextMeta, loreDiagnostics, legacyContextMeta, type ContextSource } from './chatContextDiagnostics'
+import { redactChatRequestBody, saveChatRequestCapture } from './chatRequestCaptures'
 import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { translateReply, translateUserInput } from './chatTranslation'
 import { hasTranslation } from './chatModelRoles'
@@ -77,6 +80,9 @@ function developerInstructions(presetMode: boolean) {
 export type CodexChatStreamEvent = ChatStreamEvent<CodexChatMessageRecord>
 
 type TurnState = {
+  contextMeta?: ChatContextMeta
+  requestCapture?: string
+  requestSent?: boolean
   delivery?: ReturnType<typeof beginDirectReply>
   controller?: AbortController
   chatThreadId: number
@@ -296,7 +302,7 @@ async function finishTurn(session: Session, turn: TurnState, status: CodexChatMe
     .filter(Boolean)
     .join('\n\n')
   const toolCalls = [...turn.toolCalls.values()].map((call) => (call.status === 'running' ? { ...call, status: 'failed' as const } : call))
-  const reply = { content, tool_calls: toolCalls, status, error }
+  const reply = { content, tool_calls: toolCalls, status, error, contextMeta: turn.requestSent ? turn.contextMeta : undefined, requestCapture: turn.requestCapture }
   let message: CodexChatMessageRecord
   if (turn.persist) {
     message = await turn.persist(reply)
@@ -307,6 +313,10 @@ async function finishTurn(session: Session, turn: TurnState, status: CodexChatMe
       displayContent = await turn.translate(content)
     }
     const messageId = CodexChatStore.addMessage({ thread_id: turn.chatThreadId, role: 'assistant', ...reply, display_content: displayContent, routing: turn.delivery?.routing })
+    if (turn.contextMeta && turn.requestSent) {
+      CodexChatStore.setContextMeta(messageId, loadChatSettings().diagnostics.enabled ? limitContextMeta(turn.contextMeta) : legacyContextMeta(turn.contextMeta))
+      saveChatRequestCapture(messageId, turn.requestCapture)
+    }
     message = CodexChatStore.listMessages(turn.chatThreadId).find((entry) => entry.id === messageId) as CodexChatMessageRecord
   }
   session.activeTurns.delete(turn.codexThreadId)
@@ -353,6 +363,13 @@ function handleNotification(session: Session, notification: CodexAppServerNotifi
   const threadId = typeof params.threadId === 'string' ? params.threadId : null
   if (threadId && method === 'thread/tokenUsage/updated') {
     recordTokenUsage(threadId, params.tokenUsage)
+    const active = session.activeTurns.get(threadId)
+    const usage = params.tokenUsage as { last?: { inputTokens?: number }; total?: { inputTokens?: number; cachedInputTokens?: number; outputTokens?: number } } | undefined
+    if (active?.contextMeta?.version === 2 && usage?.total) {
+      const count = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.round(value)) : null
+      active.contextMeta.tokenUsage = { contextTokens: count(usage.last?.inputTokens), inputTokens: count(usage.total.inputTokens), cachedInputTokens: count(usage.total.cachedInputTokens), outputTokens: count(usage.total.outputTokens) }
+      active.contextMeta.promptTokens = count(usage.last?.inputTokens)
+    }
     return
   }
   if (threadId && method === 'item/completed' && (params.item as { type?: unknown } | undefined)?.type === 'contextCompaction') {
@@ -631,7 +648,23 @@ function pendingLore(thread: CodexChatThreadRecord | null, profile: ChatProfile,
     inlineFiles: false,
     skip: (key) => sent.has(key),
   })
-  return { keyed: lore.keyed, keyedKeys: lore.keyedKeys, index: pendingLoreIndex(loreIndexText(lore), sent) }
+  return { keyed: lore.keyed, keyedKeys: lore.keyedKeys, index: pendingLoreIndex(loreIndexText(lore), sent), selected: lore }
+}
+
+/** Only CoNAI's input is observable; Codex's accumulated/compacted context is opaque. */
+export function codexInputMeta(profile: ChatProfile, messages: CodexChatMessageRecord[], lore: ReturnType<typeof pendingLore>, input: string, keys: string[], sources: ContextSource[], droppedTurns = 0): ChatContextMeta {
+  const decisions = lore.selected.decisions.map((decision) => decision.reason === 'constant' && !lore.index.keys.length ? { ...decision, selected: false, reason: 'codex-sent' } : decision)
+  const meta: ChatContextMeta = {
+    model: profile.model || null, windowFromMessageId: messages[0]?.id ?? null, sentMessages: messages.length,
+    summaryUntilMessageId: null, recalledSegments: 0, lore: decisions.filter((decision) => decision.selected).map((decision) => decision.title),
+    memories: decisions.filter((decision) => decision.selected && decision.reason === 'constant').length, estimatedTokens: estimateTokens(profile.id, input),
+  }
+  if (!loadChatSettings().diagnostics.enabled) return limitContextMeta(meta)
+  return limitContextMeta({ ...meta, version: 2, engine: 'codex', opaqueContext: true, profileId: profile.id,
+    sections: contextSections([{ role: 'user', content: input }], [], (text) => estimateTokens(profile.id, text)),
+    sources, codexKeys: keys, ...loreDiagnostics(decisions, lore.selected.unmatched),
+    recall: [], window: { fromId: meta.windowFromMessageId, sent: messages.length, droppedTurns }, toolRounds: 0,
+  })
 }
 
 /**
@@ -708,6 +741,7 @@ export async function runCodexGroupReply(params: {
   threadId: number
   profile: ChatProfile
   messages: CodexChatMessageRecord[]
+  windowLimit: number
   buildInput: (lore: string) => string
   signal: AbortSignal
   emit: (event: CodexChatStreamEvent) => void
@@ -758,18 +792,33 @@ export async function runCodexGroupReply(params: {
         const note = pendingAuthorNote(room, profile, sent, user)
         const state = pendingBlockState(room, profile, params.messages, sent, profile.id)
         const rejected = pendingRejectedLore(threadId, profile, sent)
+        const input = params.buildInput([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text].filter(Boolean).join('\n\n'))
+        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys]
+        const lastSeen = ChatGroupStore.member(threadId, profile.id)?.last_seen_message_id ?? null
+        const missed = sendableMessages(params.messages).filter((message) => message.id > (lastSeen ?? 0) && !(lastSeen !== null && message.role === 'assistant' && message.speaker_profile_id === profile.id))
+        const shown = missed.slice(-params.windowLimit)
+        turn.contextMeta = codexInputMeta(profile, shown, lore, input, keys, [
+          ...contextSource('user-persona', persona.text), ...contextSource('lore-index', lore.index.keys.length ? lore.selected.index : ''), ...contextSource('constant-lore', lore.index.keys.length ? lore.selected.constant : ''),
+          ...contextSource('author-note', note.text ? resolveAuthorNote(room, profile, user).text : ''), ...contextSource('state', state.text),
+          ...shown.flatMap((message) => contextSource('window', message.content, message.id)),
+          ...contextSource('flags', flagDirectiveFor(params.messages, profile, user), [...params.messages].reverse().find((message) => message.role === 'user')?.id),
+          ...profile.promptSections.filter((section) => section.enabled && section.kind === 'post').flatMap((section) => contextSource('last-instruction', fillCharacterPlaceholders(section.content.trim(), profile, user), section.id)),
+        ], splitTurns(missed).filter((turn) => !turn.some((message) => shown.some((entry) => entry.id === message.id))).length)
+        turn.contextMeta.model = run.model ?? null
         assertChatAvailable(requester)
         requireCodexProfile(profile.id)
         await verifyChatRuntime(session.client, session.features, session.runtime.cwd, process.env.PORT || String(PORTS.BACKEND_DEFAULT))
-        const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
+        const body = {
           threadId: codexThreadId,
           ...chatTurnRestrictions(session.runtime.cwd),
           model: run.model,
           effort: run.effort,
-          input: [{ type: 'text', text: params.buildInput([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text].filter(Boolean).join('\n\n')), text_elements: [] }],
-        }, THREAD_REQUEST_TIMEOUT_MS)
+          input: [{ type: 'text', text: input, text_elements: [] }],
+        }
+        if (loadChatSettings().diagnostics.enabled && loadChatSettings().diagnostics.captureRaw) turn.requestCapture = redactChatRequestBody(body)
+        turn.requestSent = true
+        const response = await session.client.request<{ turn: { id: string } }>('turn/start', body, THREAD_REQUEST_TIMEOUT_MS)
         turn.turnId = response.turn.id
-        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys]
         if (keys.length > 0) ChatGroupStore.setMemberLoreSent(threadId, profile.id, nextLoreSent(sent, keys))
         if (params.signal.aborted) interrupt()
       } catch (error) {
@@ -958,7 +1007,9 @@ export const CodexChatService = {
   /** The transcript, a reply still running, and the media kind of every image it references (for players). */
   getThread(requester: McpRequester, threadId: number) {
     const thread = requireThread(requester, threadId)
-    const { messages, pendingJobs } = attachJobResults(CodexChatStore.listMessages(threadId))
+    const attached = attachJobResults(CodexChatStore.listMessages(threadId))
+    const pendingJobs = attached.pendingJobs
+    const messages = visibleContextMessages(thread, attached.messages, requester.accountId)
     const media = canRequesterViewImages(requester) ? Object.fromEntries(collectCodexChatMedia(messages).map((item) => [item.compositeHash, { mimeType: item.mimeType, width: item.width, height: item.height, historyId: item.historyId }])) : {}
     const profile = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
     // Display block state: direct chats only (a room's members each have their own blocks; not folded yet).
@@ -1109,18 +1160,29 @@ export const CodexChatService = {
         const reference = referenceBlock([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text])
         const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user) : ''
         const input = [recap, reference, REPLY_GUIDANCE, buildReplyContext(history, routing), chatPageReference(page), chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }])), directive].filter(Boolean).join('\n\n')
+        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys]
+        turn.contextMeta = codexInputMeta(profile, [userMessage], lore, input, keys, [
+          ...contextSource('user-persona', persona.text), ...contextSource('lore-index', lore.index.keys.length ? lore.selected.index : ''), ...contextSource('constant-lore', lore.index.keys.length ? lore.selected.constant : ''),
+          ...contextSource('author-note', note.text ? resolveAuthorNote(current, profile, user).text : ''), ...contextSource('state', state.text),
+          ...contextSource('window', userMessage.content, userMessageId),
+          ...contextSource('flags', buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile, user)), userMessageId),
+          ...profile.promptSections.filter((section) => section.enabled && section.kind === 'post').flatMap((section) => contextSource('last-instruction', fillCharacterPlaceholders(section.content.trim(), profile, user), section.id)),
+        ])
+        turn.contextMeta.model = run.model ?? null
         assertChatAvailable(requester)
         requireCodexProfile(profile.id)
         await verifyChatRuntime(session.client, session.features, session.runtime.cwd, process.env.PORT || String(PORTS.BACKEND_DEFAULT))
-        const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
+        const body = {
           threadId: codexThreadId,
           ...chatTurnRestrictions(session.runtime.cwd),
           model: run.model,
           effort: run.effort,
           input: [{ type: 'text', text: input, text_elements: [] }],
-        }, THREAD_REQUEST_TIMEOUT_MS)
+        }
+        if (loadChatSettings().diagnostics.enabled && loadChatSettings().diagnostics.captureRaw) turn.requestCapture = redactChatRequestBody(body)
+        turn.requestSent = true
+        const response = await session.client.request<{ turn: { id: string } }>('turn/start', body, THREAD_REQUEST_TIMEOUT_MS)
         turn.turnId = response.turn.id
-        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys]
         if (keys.length > 0) CodexChatStore.setCodexLoreSent(threadId, nextLoreSent(sent, keys))
       } catch (error) {
         void finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')

@@ -31,6 +31,8 @@ const TO_MODEL_PROMPT = [
   PRESERVE_RULES,
 ].join('\n')
 
+export function userTranslationPrompt() { return TO_MODEL_PROMPT }
+
 const TO_DISPLAY_PROMPT = [
   'You translate an AI character\'s chat reply from English into natural, fluent Korean for the reader.',
   'Match the character\'s tone and register: casual speech (반말) stays casual, polite speech stays polite; keep roleplay actions in *asterisks* as actions.',

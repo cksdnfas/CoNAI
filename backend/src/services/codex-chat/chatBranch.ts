@@ -2,6 +2,7 @@ import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { parseBlockEdits } from './chatBlockState'
 import { renderSummary, type ChatSummarySegment } from './chatMemory'
 import { parseMessageRouting, type ChatBranchPurpose, type CodexChatThreadRecord } from './codexChatStore'
+import type { ChatContextMeta } from './llmChatContext'
 
 const BRANCH_TITLE_SUFFIX = ' (분기)'
 const TITLE_MAX_LENGTH = 60
@@ -62,8 +63,36 @@ export function branchChatThread(thread: CodexChatThreadRecord, untilMessageId: 
     // Summary segments that end by the branch point; a bound that is no message (0: ahead of all) stays as it is.
     const segments = db.prepare('SELECT * FROM chat_summary_segments WHERE thread_id = ? AND until_message_id <= ? ORDER BY id').all(thread.id, untilMessageId) as ChatSummarySegment[]
     const insertSegment = db.prepare('INSERT INTO chat_summary_segments (thread_id, level, from_message_id, until_message_id, content, backed) VALUES (?, ?, ?, ?, ?, ?)')
+    const segmentIds = new Map<number, number>()
     for (const segment of segments) {
-      insertSegment.run(branchId, segment.level, ids.get(segment.from_message_id) ?? segment.from_message_id, ids.get(segment.until_message_id) ?? segment.until_message_id, segment.content, segment.backed ?? 1)
+      segmentIds.set(segment.id, Number(insertSegment.run(branchId, segment.level, ids.get(segment.from_message_id) ?? segment.from_message_id, ids.get(segment.until_message_id) ?? segment.until_message_id, segment.content, segment.backed ?? 1).lastInsertRowid))
+    }
+    const remapMeta = (value: unknown) => {
+      if (typeof value !== 'string') return value
+      try {
+        const meta = JSON.parse(value) as ChatContextMeta
+        if (meta.version !== 2) return value
+        if (meta.windowFromMessageId) meta.windowFromMessageId = ids.get(meta.windowFromMessageId) ?? meta.windowFromMessageId
+        if (meta.summaryUntilMessageId) meta.summaryUntilMessageId = ids.get(meta.summaryUntilMessageId) ?? meta.summaryUntilMessageId
+        if (meta.window?.fromId) meta.window.fromId = ids.get(meta.window.fromId) ?? meta.window.fromId
+        for (const source of meta.sources ?? []) {
+          if ((source.kind === 'window' || source.kind === 'flags') && typeof source.id === 'number') source.id = ids.get(source.id) ?? source.id
+        }
+        for (const recall of meta.recall ?? []) recall.segmentId = segmentIds.get(recall.segmentId) ?? recall.segmentId
+        return JSON.stringify(meta)
+      } catch { return value }
+    }
+    const setMeta = db.prepare('UPDATE codex_chat_messages SET context_meta = ?, alternatives = ? WHERE id = ?')
+    for (const row of rows) {
+      let alternatives = row.alternatives
+      try {
+        const parsed = typeof alternatives === 'string' ? JSON.parse(alternatives) as Array<{ context_meta?: string | null }> : null
+        if (Array.isArray(parsed)) {
+          parsed.forEach((alternative) => { if (alternative.context_meta) alternative.context_meta = remapMeta(alternative.context_meta) as string })
+          alternatives = JSON.stringify(parsed)
+        }
+      } catch { /* Keep older malformed variants as they were. */ }
+      setMeta.run(remapMeta(row.context_meta), alternatives, ids.get(row.id))
     }
     const copied = db.prepare('SELECT * FROM chat_summary_segments WHERE thread_id = ?').all(branchId) as ChatSummarySegment[]
     const until = copied.reduce<number | null>((max, segment) => (max === null || segment.until_message_id > max ? segment.until_message_id : max), null)

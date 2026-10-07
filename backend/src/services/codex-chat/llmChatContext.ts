@@ -1,4 +1,7 @@
 import { summaryGenerationOptions, thinkingIsOff } from '../llmGenerationOptions'
+import { loadChatSettings } from './chatSettings'
+import { replyTranslationPrompt, userTranslationPrompt } from './chatTranslation'
+import { contextHash, contextSections, contextSource, limitContextMeta, loreDiagnostics, markContextMessage, markContextParts, contextPartsOf, type ChatDiagnosticsFields, type ChatContextSectionKind, type ContextSource } from './chatContextDiagnostics'
 import { buildReplyContext } from './chatReplyContext'
 import { isCodexChatCreationTool, stripEchoedAddresses } from '@conai/shared'
 import { messageAddress, REPLY_GUIDANCE } from './chatReplies'
@@ -131,16 +134,20 @@ export function parseExampleDialogue(content: string, profile: ChatProfile, user
  * The system prompt and the enabled text sections (each under its title) as one block. Dialogue sections join it
  * as text only when `dialogueAsText` (Codex) or when their lines carry no speaker labels.
  */
-export function buildPersonaPrompt(profile: ChatProfile, options: { dialogueAsText?: boolean; user?: ChatUserPersona | null } = {}) {
+export function buildPersonaPrompt(profile: ChatProfile, options: { dialogueAsText?: boolean; user?: ChatUserPersona | null; onPart?: (kind: ChatContextSectionKind, text: string) => void } = {}) {
   const blocks = [profile.systemPrompt]
+  if (profile.systemPrompt) options.onPart?.('system-prompt', fillCharacterPlaceholders(profile.systemPrompt, profile, options.user))
   for (const section of profile.promptSections) {
     if (!section.enabled || !section.content.trim() || section.kind === 'post') continue
     if (section.kind === 'dialogue' && !options.dialogueAsText && parseExampleDialogue(section.content, profile, options.user)) continue
     // The chat's user profile describes the user; an old profile's own user persona gives way to it.
     if (section.id === 'legacy-persona' && options.user?.persona) continue
-    blocks.push(section.title ? `## ${section.title}\n${section.content}` : section.content)
+    const text = section.title ? `## ${section.title}\n${section.content}` : section.content
+    blocks.push(text)
+    options.onPart?.('prompt-section', fillCharacterPlaceholders(text, profile, options.user))
   }
   blocks.push(userPersonaPrompt(options.user))
+  if (userPersonaPrompt(options.user)) options.onPart?.('user-persona', fillCharacterPlaceholders(userPersonaPrompt(options.user), profile, options.user))
   return fillCharacterPlaceholders(blocks.filter(Boolean).join('\n\n'), profile, options.user)
 }
 
@@ -155,6 +162,7 @@ function buildExampleMessages(profile: ChatProfile, user?: ChatUserPersona | nul
   return profile.promptSections
     .filter((section) => section.enabled && section.kind === 'dialogue')
     .flatMap((section) => parseExampleDialogue(section.content, profile, user) ?? [])
+    .map((message) => markContextMessage(message, 'example'))
 }
 
 /** A turn starts at a user message; a greeting before the first user message is a turn of its own. */
@@ -318,8 +326,9 @@ export function rejectedLoreFor(threadId: number | null | undefined, tools: Read
  */
 export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'summary'> | null, config: Pick<LlmChatContextConfig, 'summaryEnabled'>, withTools: boolean, lore: Pick<ChatLore, 'index' | 'constant'> = selectChatLore(profile), user: ChatUserPersona | null = null) {
   const examples = buildExampleMessages(profile, user)
+  const personaParts: Array<{ kind: ChatContextSectionKind; text: string }> = []
   const systemPrompt = [
-    buildPersonaPrompt(profile, { user }),
+    buildPersonaPrompt(profile, { user, onPart: (kind, text) => personaParts.push({ kind, text }) }),
     examples.length > 0 ? EXAMPLE_NOTE : '',
     withTools ? toolGuidance(profile.generationPresetIds.length > 0) : '',
     REPLY_FORMAT_GUIDANCE,
@@ -335,7 +344,13 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
     config.summaryEnabled && thread?.summary?.trim() ? `## 지금까지의 대화 요약\n${thread.summary.trim()}` : '',
   ].filter(Boolean).join('\n\n')
   const system = [systemPrompt, memory].filter(Boolean).join('\n\n')
-  const result: ChatCompletionMessage[] = system ? [{ role: 'system', content: system }] : []
+  const result: ChatCompletionMessage[] = system ? [markContextParts({ role: 'system', content: system }, [
+    ...personaParts,
+    { kind: 'guidance', text: [examples.length > 0 ? EXAMPLE_NOTE : '', fixedContextGuidance(profile, withTools)].filter(Boolean).join('\n\n') },
+    { kind: 'lore-index', text: lore.index },
+    { kind: 'constant-lore', text: lore.constant ? `## 상시 항목\n${lore.constant}` : '' },
+    { kind: 'summary', text: config.summaryEnabled && thread?.summary?.trim() ? `## 지금까지의 대화 요약\n${thread.summary.trim()}` : '' },
+  ])] : []
   return [...result, ...examples]
 }
 
@@ -411,7 +426,10 @@ export function insertAtDepth(messages: ChatCompletionMessage[], depth: number, 
   const userIndices = messages.flatMap((message, index) => (message.role === 'user' ? [index] : []))
   if (userIndices.length === 0) return [...messages, { role: 'user', content: block }]
   const target = userIndices[Math.max(0, userIndices.length - 1 - Math.max(0, Math.floor(depth)))]
-  return messages.map((message, index) => (index === target && message.role === 'user' ? { ...message, content: prefixUserContent(message.content, block) } : message))
+  return messages.map((message, index) => (index === target && message.role === 'user' ? markContextParts({ ...message, content: prefixUserContent(message.content, block) }, [
+    { kind: 'reference', text: block },
+    ...(contextPartsOf(message).length ? contextPartsOf(message) : [{ kind: 'window' as const, text: typeof message.content === 'string' ? message.content : JSON.stringify(message.content) }]),
+  ]) : message))
 }
 
 // ---- Window start ---------------------------------------------------------------------------------------------
@@ -460,8 +478,10 @@ export function flagDirectiveFor(messages: CodexChatMessageRecord[], profile: Ch
 export function appendUserDirective(messages: ChatCompletionMessage[], directive: string): ChatCompletionMessage[] {
   if (!directive) return messages
   const last = messages[messages.length - 1]
-  if (last?.role === 'user' && typeof last.content === 'string') return [...messages.slice(0, -1), { ...last, content: `${last.content}\n\n${directive}` }]
-  return [...messages, { role: 'user', content: directive }]
+  if (last?.role === 'user' && typeof last.content === 'string') return [...messages.slice(0, -1), markContextParts({ ...last, content: `${last.content}\n\n${directive}` }, [
+    ...(contextPartsOf(last).length ? contextPartsOf(last) : [{ kind: 'window' as const, text: last.content }]), { kind: 'last-instruction', text: directive },
+  ])]
+  return [...messages, markContextMessage({ role: 'user', content: directive }, 'last-instruction')]
 }
 
 export function sendableMessages(messages: CodexChatMessageRecord[]) {
@@ -502,6 +522,72 @@ export type ChatContextMeta = {
   lore: string[]
   memories: number
   estimatedTokens: number
+  model?: string | null
+  promptTokens?: number | null
+} & ChatDiagnosticsFields
+
+/** Source references carry hashes only; read-time diagnostics resolves each permitted current source separately. */
+export function promptContextSources(profile: ChatProfile, user: ChatUserPersona, withTools: boolean): ContextSource[] {
+  const render = (text: string) => fillCharacterPlaceholders(text, profile, user)
+  return [
+    ...contextSource('system-prompt', render(profile.systemPrompt)),
+    ...profile.promptSections.flatMap((section) => {
+      if (!section.enabled || !section.content.trim() || (section.id === 'legacy-persona' && user.persona)) return []
+      return contextSource(section.kind === 'dialogue' ? 'example' : section.kind === 'post' ? 'last-instruction' : 'prompt-section', render(section.kind === 'post' ? section.content.trim() : section.content), section.id)
+    }),
+    ...contextSource('user-persona', userPersonaPrompt(user)),
+    ...contextSource('guidance', fixedContextGuidance(profile, withTools)),
+  ]
+}
+
+export function fixedContextGuidance(profile: ChatProfile, withTools: boolean) {
+  return [withTools ? toolGuidance(profile.generationPresetIds.length > 0) : '', REPLY_FORMAT_GUIDANCE, REPLY_GUIDANCE, buildChatStyleGuidance(profile.style, profile.name), buildEmoticonGuidance(profile.style)].filter(Boolean).join('\n\n')
+}
+
+/** Helper instructions are referenced separately; they are not part of the primary reply's sections. */
+export function auxiliaryInstructionText(profile: ChatProfile, user: ChatUserPersona, id: string) {
+  const custom = profile.summaryPrompt?.trim() ?? ''
+  switch (id) {
+    case 'summary-segment': return custom ? `${custom}\n\n${SEGMENT_PROMPT_SUFFIX}` : SEGMENT_PROMPT
+    case 'summary-plot': return `${custom || resolveSummaryPrompt({ ...profile, summaryPrompt: '' })}\n\n${PLOT_PROMPT_SUFFIX}`
+    case 'translation-user': return userTranslationPrompt()
+    case 'translation-reply': return replyTranslationPrompt(profile, user.name)
+    default: return ''
+  }
+}
+
+export function buildContextMeta(profile: ChatProfile, thread: CodexChatThreadRecord, messages: CodexChatMessageRecord[], sent: CodexChatMessageRecord[], summaryEnabled: boolean, lore: ChatLore, recalled: ReturnType<typeof recalledSegments>, tools: ChatCompletionTool[], request: ChatCompletionMessage[]): ChatContextMeta {
+  const meta: ChatContextMeta = {
+    windowFromMessageId: sent[0]?.id ?? null, sentMessages: sent.length,
+    summaryUntilMessageId: summaryEnabled && thread.summary ? thread.summary_until_message_id : null,
+    recalledSegments: recalled.length, lore: lore.labels, memories: lore.constantCount,
+    estimatedTokens: estimateMessagesTokens(profile.id, request, tools),
+  }
+  if (!loadChatSettings().diagnostics.enabled) return limitContextMeta(meta)
+  const user = userPersonaForThread(thread)
+  const summary = summaryEnabled ? thread.summary?.trim() ?? '' : ''
+  return limitContextMeta({
+    ...meta, version: 2, engine: 'llm', profileId: profile.id,
+    sections: contextSections(request, tools, (text) => estimateTokens(profile.id, text)),
+    auxiliarySources: [
+      ...(summaryEnabled ? ['summary-segment', 'summary-plot'].flatMap((id) => contextSource('summary-instruction', auxiliaryInstructionText(profile, user, id), id)) : []),
+      ...(resolveProfileModel(profile, 'translation') ? ['translation-user', 'translation-reply'].flatMap((id) => contextSource('translation-instruction', auxiliaryInstructionText(profile, user, id), id)) : []),
+    ],
+    sources: [
+      ...promptContextSources(profile, user, tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name))),
+      ...contextSource('lore-index', lore.index), ...contextSource('constant-lore', lore.constant),
+      ...contextSource('summary', summary),
+      ...contextSource('author-note', resolveAuthorNote(thread, profile, user).text),
+      ...contextSource('state', threadBlockStateText(profile, thread, messages, thread.kind === 'group' ? profile.id : undefined)),
+      ...contextSource('flags', flagDirectiveFor(messages, profile, user), [...messages].reverse().find((message) => message.role === 'user')?.id),
+      ...sent.flatMap((message) => contextSource('window', message.content, message.id)),
+      ...tools.flatMap((tool) => contextSource('tool-definition', JSON.stringify(tool), tool.function.name)),
+    ],
+    ...loreDiagnostics(lore.decisions, lore.unmatched),
+    recall: recalled.map((segment) => ({ segmentId: segment.id, score: segment.score, terms: segment.terms, hash: contextHash(segment.content.trim()) })),
+    window: { fromId: sent[0]?.id ?? null, sent: sent.length, droppedTurns: splitTurns(sendableMessages(unsummarizedMessages(messages, thread, { summaryEnabled }))).filter((turn) => !turn.some((message) => sent.some((entry) => entry.id === message.id))).length },
+    toolRounds: 0,
+  })
 }
 
 /**
@@ -517,7 +603,7 @@ function buildRequestContext(profile: ChatProfile, thread: CodexChatThreadRecord
   const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread ?? { block_edits: null }, messages), recall, rejectedLoreFor(thread?.id, tools))
   const directive = [flagDirectiveFor(messages, profile, user), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
   const fixedTokens = estimateMessagesTokens(profile.id, system, tools) + estimateDepthBlocks(profile.id, blocks) + estimateTokens(profile.id, directive)
-  return { system, blocks, directive, fixedTokens, lore: lore.labels, constants: lore.constantCount, recalled: recalled.length }
+  return { system, blocks, directive, fixedTokens, lore, recalled }
 }
 
 export function buildChatPromptPreview(profile: ChatProfile, tools: ChatCompletionTool[]) {
@@ -598,7 +684,7 @@ export function buildChatMessages(params: {
   books?: AttachedLoreBook[]
 }): ChatCompletionMessage[] {
   const { profile, thread, config, tools } = params
-  const { system, blocks, directive, fixedTokens, lore, constants, recalled } = buildRequestContext(profile, thread, params.messages, config, tools, params.segments, params.books)
+  const { system, blocks, directive, fixedTokens, lore, recalled } = buildRequestContext(profile, thread, params.messages, config, tools, params.segments, params.books)
   const routing = [...params.messages].reverse().find((message) => message.role === 'user')?.routing
   const maxChars = Math.max(256, Math.min(6000, Math.floor((config.contextTokens ?? 24000) / 4)))
   const replyContext = buildReplyContext(params.messages, routing, { maxChars })
@@ -611,15 +697,11 @@ export function buildChatMessages(params: {
   // A direct chat has no room tools, so the request names no room id.
   const request = appendUserDirective([...system, ...conversation], [reference, directive].filter(Boolean).join('\n\n'))
   const sent = window.flat()
-  params.onMeta?.({
-    windowFromMessageId: sent[0]?.id ?? null,
-    sentMessages: sent.length,
-    summaryUntilMessageId: config.summaryEnabled && thread.summary ? thread.summary_until_message_id : null,
-    recalledSegments: recalled,
-    lore,
-    memories: constants,
-    estimatedTokens: estimateMessagesTokens(profile.id, request, tools) + (params.extraTokens ?? 0),
-  })
+  if (params.onMeta) {
+    const meta = buildContextMeta(profile, thread, params.messages, sent, config.summaryEnabled, lore, recalled, tools, request)
+    meta.estimatedTokens += params.extraTokens ?? 0
+    params.onMeta(meta)
+  }
   return request
 }
 

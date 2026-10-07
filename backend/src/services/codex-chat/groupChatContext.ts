@@ -7,7 +7,9 @@ import { generationPromptOf } from './chatToolReferences'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
 import type { ChatCompletionMessage, ChatCompletionTool } from './llmChatCompletion'
 import { DEFAULT_REPLY_RESERVE_TOKENS, estimateMessagesTokens } from './llmChatContext'
-import { postHistoryText } from './llmChatContext'
+import { postHistoryText, buildContextMeta, recalledSegments, type ChatContextMeta } from './llmChatContext'
+import { recallText } from './chatMemory'
+import { contextSource, limitContextMeta, contextPartsOf, markContextParts } from './chatContextDiagnostics'
 import { anchoredWindowFor, appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, offersLoreFileTool, recallFor, rejectedLoreFor, resolveAuthorNote, selectChatLore, sendableMessages, threadBlockStateText, toCompletionMessages, unsummarizedMessages } from './llmChatContext'
 import { booksForRequest, type AttachedLoreBook } from './chatLoreContext'
 import type { ChatSummarySegment } from './chatMemory'
@@ -111,6 +113,7 @@ export function hiddenHistoryNote(thread: Pick<CodexChatThreadRecord, 'id'>, hid
  * user turns before the end.
  */
 type GroupLlmContext = {
+  onMeta?: (meta: ChatContextMeta) => void
   routing?: ChatMessageRouting
   profile: ChatProfile
   thread: CodexChatThreadRecord
@@ -138,17 +141,22 @@ export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMe
   const sendable = sendableMessages(unsummarizedMessages(params.messages, params.thread, { summaryEnabled: groupSummaryOn(params.thread) }))
   let window = anchoredWindowFor(params.thread.id, sendable, params.windowLimit, (message) => message.id)
   params = { ...params, books: params.books ?? booksForRequest({ thread: params.thread, profile: params.profile }) }
-  let result = buildGroupWindowMessages(params, window, sendable.length)
+  let context = buildGroupWindowMessages(params, window, sendable.length)
   const budget = params.profile.contextTokens
   const reserve = params.maxTokens ?? DEFAULT_REPLY_RESERVE_TOKENS
-  while (budget !== null && window.length > 1 && estimateMessagesTokens(params.profile.id, result, params.tools) + reserve > budget) {
+  while (budget !== null && window.length > 1 && estimateMessagesTokens(params.profile.id, context.messages, params.tools) + reserve > budget) {
     window = window.slice(1)
-    result = buildGroupWindowMessages(params, window, sendable.length)
+    context = buildGroupWindowMessages(params, window, sendable.length)
   }
-  return result
+  if (params.onMeta) {
+    const meta = buildContextMeta(params.profile, params.thread, params.messages, window, groupSummaryOn(params.thread), context.lore, context.recalled, params.tools, context.messages)
+    if (meta.version === 2) meta.sources?.push(...contextSource('group-header', context.header))
+    params.onMeta(limitContextMeta(meta))
+  }
+  return context.messages
 }
 
-function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMessageRecord[], total: number): ChatCompletionMessage[] {
+function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMessageRecord[], total: number) {
   const { profile, thread, members, withTools } = params
   const user = userPersonaForThread(thread)
   const names = new Map(members.map((member) => [member.id, member.name]))
@@ -161,7 +169,7 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
   const header = buildGroupHeader({ thread, members, self: profile, user })
   // The leading system message already carries the lore index and summary behind the persona.
   const system: ChatCompletionMessage[] = [
-    { role: 'system', content: [...leading.filter((message) => message.role === 'system').map((message) => message.content), header].join('\n\n') },
+    markContextParts({ role: 'system', content: [...leading.filter((message) => message.role === 'system').map((message) => message.content), header].join('\n\n') }, [...leading.flatMap(contextPartsOf), { kind: 'group-header', text: header }]),
     ...leading.filter((message) => message.role !== 'system'),
   ]
 
@@ -180,11 +188,13 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
   // The flags the user had on for the message this run answers reach every member answering it; the request ends
   // with the exact handles, where small models actually look before writing a mention.
   // Summaries the room's plot already took in come back when the latest exchange touches them, like in a direct chat.
-  const recall = summaryOn && params.segments ? recallFor(profile, params.segments, params.messages, { contextTokens: profile.contextTokens }) : ''
+  const recalled = summaryOn && params.segments ? recalledSegments(profile, params.segments, params.messages, { contextTokens: profile.contextTokens }) : []
+  const recall = recallText(recalled)
   const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread, params.messages, profile.id), recall, rejectedLoreFor(thread.id, params.tools))
   const reference = buildReplyContext(params.messages, params.routing, { group: true, maxChars: Math.max(256, Math.min(6000, Math.floor((profile.contextTokens ?? 24000) / 4))), visibleIds: new Set(window.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) })
   const directive = [reference, hiddenHistoryNote(thread, total - window.length), flagDirectiveFor(params.messages, profile, user), postHistoryText(profile, user), mentionReminder(members, profile)].filter(Boolean).join('\n\n')
-  return appendUserDirective([...system, ...insertDepthBlocks(conversation, blocks)], directive)
+  const result = appendUserDirective([...system, ...insertDepthBlocks(conversation, blocks)], directive)
+  return { messages: result, lore, recalled, header }
 }
 
 /**

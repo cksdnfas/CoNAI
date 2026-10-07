@@ -146,6 +146,8 @@ export function threadLorebooks(thread: RequestThread, profiles: Array<Pick<Chat
 export function keyedLoreEntries(books: AttachedLoreBook[]): KeyedLoreEntry[] {
   return books.flatMap((book) => book.entries.map((entry) => ({
     key: loreEntryKey(book.id, entry),
+    bookId: book.id,
+    bookKind: book.kind,
     entry,
     book: book.label,
     file: entry.file && book.owner && book.folderId ? () => readEntryFileText(book, entry, LORE_FILE_REQUEST_MAX_BYTES) : undefined,
@@ -167,7 +169,7 @@ function keepRank(book: AttachedLoreBook) {
  * LORE_INDEX_MAX_TITLES), then how the bodies arrive. Over LORE_INDEX_MAX_TOKENS, books fall back to their count —
  * global books first, then account books, the later ones first. '' when no book has an enabled entry.
  */
-export function buildLoreIndex(books: AttachedLoreBook[], estimate: (text: string) => number, render: (text: string) => string, toolOffered: boolean) {
+export function buildLoreIndex(books: AttachedLoreBook[], estimate: (text: string) => number, render: (text: string) => string, toolOffered: boolean, includeGuidance = true) {
   const lines = books.flatMap((book) => {
     const entries = book.entries.filter((entry) => entry.enabled)
     if (entries.length === 0) return []
@@ -180,14 +182,19 @@ export function buildLoreIndex(books: AttachedLoreBook[], estimate: (text: strin
   const footer = toolOffered
     ? `(본문은 키워드가 나오면 참고 설정으로 간다. 자료가 필요하면 ${READ_LORE_FILE_TOOL}(책, 항목))`
     : '(본문은 키워드가 나오면 참고 설정으로 간다.)'
-  const text = () => ['## 로어북 목차', ...shown, footer].join('\n')
+  const text = (withGuidance = true) => ['## 로어북 목차', ...shown, ...(withGuidance ? [footer] : [])].join('\n')
   const order = lines.map((_, index) => index).filter((index) => lines[index].full !== lines[index].short)
     .sort((a, b) => keepRank(lines[a].book) - keepRank(lines[b].book) || b - a)
   for (const index of order) {
     if (estimate(text()) <= LORE_INDEX_MAX_TOKENS) break
     shown[index] = lines[index].short
   }
-  return text()
+  return text(includeGuidance)
+}
+
+/** Public book titles/counts with the same budget decisions, without the model's fixed instructions. */
+export function buildLoreIndexContent(books: AttachedLoreBook[], estimate: (text: string) => number, render: (text: string) => string, toolOffered: boolean) {
+  return buildLoreIndex(books, estimate, render, toolOffered, false)
 }
 
 /** One request's lore: the chosen entries (see selectLoreEntries), the index, and the books they came from. */

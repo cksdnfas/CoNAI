@@ -726,6 +726,13 @@ export function createUserSettingsSchema(db: Database.Database): void {
     message_id INTEGER REFERENCES codex_chat_messages(id) ON DELETE CASCADE
   )`);
   db.exec('CREATE INDEX IF NOT EXISTS idx_chat_generation_reply ON chat_generation_links(thread_id, reply_id)');
+  db.exec(`CREATE TABLE IF NOT EXISTS chat_request_captures (
+    message_id INTEGER NOT NULL REFERENCES codex_chat_messages(id) ON DELETE CASCADE,
+    alternative INTEGER NOT NULL DEFAULT 0,
+    body TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (message_id, alternative)
+  )`);
   // LLM chat summaries by stretch of conversation: level 0 summarizes messages from..until, level 1 (at most one per
   // thread) is the plot folded from the older level-0 rows, which stay for recall. `codex_chat_threads.summary` keeps
   // the rendered text the model gets.
@@ -757,6 +764,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
     db.exec('ALTER TABLE chat_group_members ADD COLUMN max_tokens INTEGER');
   }
   const chatProfileColumns: Array<[string, string]> = [
+    ['diagnostics_scope', "TEXT CHECK(diagnostics_scope IN ('view', 'content'))"],
     ['tagline', "TEXT NOT NULL DEFAULT ''"],
     ['lorebook_ids', 'TEXT'],
     // JSON ids of the shared display blocks the profile shows (null: not yet moved out of chat_style).

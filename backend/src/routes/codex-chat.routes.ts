@@ -10,7 +10,8 @@ import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
 import type { McpRequester } from '../mcp/context'
 import { AUTHOR_NOTE_MAX_LENGTH, CHAT_PROFILE_DEFAULTS, ChatProfileError, ChatProfileStore, DEFAULT_CHAT_SUMMARY_PROMPT, ensureCodexProfileMigrated, type ChatProfile, type ChatProfileInput } from '../services/codex-chat/chatProfiles'
-import { CHAT_SCOPES, loadChatSettings, updateChatSettings } from '../services/codex-chat/chatSettings'
+import { CHAT_SCOPES, MAX_CHAT_CAPTURE_LIMIT, loadChatSettings, updateChatSettings } from '../services/codex-chat/chatSettings'
+import { ChatDiagnosticsError, exportChatDiagnostics, getChatDiagnostics, visibleContextMessages } from '../services/codex-chat/chatDiagnostics'
 import { DEFAULT_CHAT_STYLE } from '../services/codex-chat/chatStyle'
 import { listProfileEmoticons } from '../services/codex-chat/chatEmoticons'
 import { EmoticonService } from '../services/emoticonService'
@@ -90,7 +91,7 @@ function isGroupThread(req: Request, threadId: number) {
 }
 
 function sendChatError(res: Response, error: unknown) {
-  if (error instanceof ChatPageContextError || error instanceof CodexChatError || error instanceof LlmChatError || error instanceof FileStoreError || error instanceof ChatReplyError || error instanceof ChatSuggestError || error instanceof LorebookError) {
+  if (error instanceof ChatDiagnosticsError || error instanceof ChatPageContextError || error instanceof CodexChatError || error instanceof LlmChatError || error instanceof FileStoreError || error instanceof ChatReplyError || error instanceof ChatSuggestError || error instanceof LorebookError) {
     res.status(error.status).json({ success: false, error: error.message })
     return
   }
@@ -617,11 +618,16 @@ router.get('/admin/settings', requireAdmin, (_req: Request, res: Response) => {
 })
 
 router.put('/admin/settings', requireAdmin, (req: Request, res: Response) => {
-  if (typeof req.body?.enabled !== 'boolean') {
-    sendRouteBadRequest(res, 'enabled must be a boolean')
+  const { enabled, diagnostics } = req.body ?? {}
+  if ((enabled === undefined && diagnostics === undefined) || (enabled !== undefined && typeof enabled !== 'boolean')
+    || (diagnostics !== undefined && (!diagnostics || typeof diagnostics !== 'object' || Array.isArray(diagnostics)
+      || (diagnostics.enabled !== undefined && typeof diagnostics.enabled !== 'boolean')
+      || (diagnostics.captureRaw !== undefined && typeof diagnostics.captureRaw !== 'boolean')
+      || (diagnostics.captureLimit !== undefined && (!Number.isSafeInteger(diagnostics.captureLimit) || diagnostics.captureLimit < 1 || diagnostics.captureLimit > MAX_CHAT_CAPTURE_LIMIT))))) {
+    sendRouteBadRequest(res, '채팅 설정 값이 올바르지 않아.')
     return
   }
-  res.json({ success: true, data: updateChatSettings({ enabled: req.body.enabled }) })
+  res.json({ success: true, data: updateChatSettings({ enabled, diagnostics }) })
 })
 
 /** Values the profile editor fills in for a new profile, and the scopes it may offer. */
@@ -1424,6 +1430,26 @@ router.post('/threads/:threadId/clear', requireChatAccess, (req: Request, res: R
   } catch (error) { sendChatError(res, error) }
 })
 
+router.get('/threads/:threadId/messages/:messageId/diagnostics', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store')
+  const threadId = parseThreadId(req, res)
+  const messageId = parseId(req.params.messageId)
+  if (threadId === null) return
+  if (messageId === null) { sendRouteBadRequest(res, '메시지를 확인해줘.'); return }
+  try { res.json({ success: true, data: await getChatDiagnostics(requesterFrom(req), threadId, messageId, req.query.alternative) }) }
+  catch (error) { sendChatError(res, error) }
+}))
+
+router.post('/threads/:threadId/messages/:messageId/diagnostics/export', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store')
+  const threadId = parseThreadId(req, res)
+  const messageId = parseId(req.params.messageId)
+  if (threadId === null) return
+  if (messageId === null) { sendRouteBadRequest(res, '메시지를 확인해줘.'); return }
+  try { res.json({ success: true, data: await exportChatDiagnostics(requesterFrom(req), threadId, messageId, req.query.alternative ?? req.body?.alternative) }) }
+  catch (error) { sendChatError(res, error) }
+}))
+
 router.post('/threads/:threadId/messages/:messageId/alternative', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   const messageId = parseId(req.params.messageId)
@@ -1452,7 +1478,7 @@ async function rewriteMessage(req: Request, res: Response, edit: boolean) {
     return
   }
   const content = edit ? req.body.content : undefined
-  await streamChatReply(res, (write) => isGroupThread(req, threadId)
+  await streamChatReply(req, res, (write) => isGroupThread(req, threadId)
     ? GroupChatService.rewriteMessage(requesterFrom(req), threadId, messageId, content, write)
     : CodexChatService.rewriteMessage(requesterFrom(req), threadId, messageId, content, write))
 }
@@ -1463,7 +1489,7 @@ router.post('/threads/:threadId/messages/:messageId/continue', requireChatAccess
   const messageId = parseId(req.params.messageId)
   if (threadId === null) return
   if (messageId === null) { sendRouteBadRequest(res, '메시지를 확인해줘.'); return }
-  await streamChatReply(res, (write) => CodexChatService.continueReply(requesterFrom(req), threadId, messageId, write))
+  await streamChatReply(req, res, (write) => CodexChatService.continueReply(requesterFrom(req), threadId, messageId, write))
 }))
 
 /** PATCH /api/codex-chat/threads/:threadId/messages/:messageId/text — `{ content }`: rewrite a reply by hand. Returns the thread detail. */
@@ -1541,12 +1567,17 @@ router.patch('/threads/:threadId/messages/:messageId', requireChatAccess, asyncH
  * (send, regenerate, edit, continue; direct and room) goes through here: the server's 60 s socket timeout is lifted
  * like on the SSE routes, since a reply can stay silent for minutes (thinking, a summary it waits for).
  */
-async function streamChatReply(res: Response, run: (write: (event: CodexChatStreamEvent) => void) => Promise<unknown>) {
+async function streamChatReply(req: Request, res: Response, run: (write: (event: CodexChatStreamEvent) => void) => Promise<unknown>) {
   res.socket?.setTimeout(0)
   res.socket?.setKeepAlive(true)
   let streaming = false
   const write = (event: CodexChatStreamEvent) => {
     if (res.destroyed || res.writableEnded) return
+    if (event.type === 'done' || event.type === 'user' || event.type === 'rewind') {
+      const thread = CodexChatStore.findThread(event.message.thread_id, getRequesterAccountId(req))
+      if (!thread) return
+      event = { ...event, message: visibleContextMessages(thread, [event.message], getRequesterAccountId(req))[0] }
+    }
     if (!streaming) {
       streaming = true
       res.status(200)
@@ -1586,7 +1617,7 @@ router.post('/threads/:threadId/messages', requireChatAccess, asyncHandler(async
     sendRouteBadRequest(res, '페이지 연결은 1:1 채팅에서 사용할 수 있어.')
     return
   }
-  await streamChatReply(res, (write) => isGroupThread(req, threadId)
+  await streamChatReply(req, res, (write) => isGroupThread(req, threadId)
     ? GroupChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.mediaHashes, req.body?.picks, req.body?.replyToMessageId)
     : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.picks, req.body?.mediaHashes, req.body?.replyToMessageId, req.body?.pageContext))
 }))

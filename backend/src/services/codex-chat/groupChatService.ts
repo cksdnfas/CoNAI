@@ -14,6 +14,8 @@ import { hasTranslation, resolveProfileModel } from './chatModelRoles'
 import { stripEchoedAddresses } from '@conai/shared'
 import { ChatUserProfileStore, userPersonaForThread, type ChatUserProfile } from './chatUserProfiles'
 import { loadChatSettings } from './chatSettings'
+import { limitContextMeta, legacyContextMeta } from './chatContextDiagnostics'
+import { saveChatRequestCapture } from './chatRequestCaptures'
 import { resolveChatAccess } from './codexChatAccess'
 import { CodexChatError, CodexChatService, deleteCodexRollout, runCodexGroupReply, type CodexChatStreamEvent } from './codexChatService'
 import { CodexChatStore, type ChatBranchPurpose, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
@@ -192,7 +194,13 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     emit(run, event.type === 'delta' || event.type === 'text' || event.type === 'reasoning' || event.type === 'tool' || event.type === 'routing' || event.type === 'translating' ? { ...event, profileId: profile.id } : event)
   }
   const others = [userPersonaForThread(thread).name, ...members.filter((member) => member.id !== profile.id).map((member) => member.name)]
-  const persist = async (raw: GroupReplyResult) => {
+  const persist = async ({ contextMeta, requestCapture, ...raw }: GroupReplyResult) => {
+    const saveMeta = (id: number) => {
+      if (contextMeta) {
+        CodexChatStore.setContextMeta(id, loadChatSettings().diagnostics.enabled ? limitContextMeta(contextMeta) : legacyContextMeta(contextMeta))
+        saveChatRequestCapture(id, requestCapture)
+      }
+    }
     // Keep the reply as written when cutting other speakers' lines would leave nothing; an empty reply is a failure
     // the user can see (and regenerate), not a blank message.
     const reply = !raw.content.trim() && raw.tool_calls.length === 0 && raw.status === 'completed'
@@ -217,12 +225,14 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
       // A connection failure must not replace a usable answer with an empty failed alternative.
       if (reply.status === 'completed' || content || reply.tool_calls.length) {
         CodexChatStore.addAlternative(run.threadId, replacingMessageId, { ...reply, content, display_content: displayContent, routing: active.routing, created_at: new Date().toISOString() })
+        saveMeta(replacingMessageId)
       } else if (reply.error) {
         emit(run, { type: 'error', message: reply.error })
       }
       return findMessage(run.threadId, replacingMessageId)
     }
     const id = CodexChatStore.addMessage({ thread_id: run.threadId, role: 'assistant', ...reply, content, display_content: displayContent, routing: active.routing, speaker_profile_id: profile.id })
+    saveMeta(id)
     // The failed reply carries its reason; the stream says it too, so a reply with nothing to show does not just end.
     if (reply.status === 'failed' && reply.error) emit(run, { type: 'error', message: reply.error })
     return findMessage(run.threadId, id)
@@ -239,6 +249,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         profile,
         chatContext: context,
         messages,
+        windowLimit: limits.window,
         buildInput: (lore) => buildGroupCodexInput({ thread, members, self: profile, messages, routing: active.routing, lastSeenMessageId: ChatGroupStore.member(run.threadId, profile.id)?.last_seen_message_id ?? null, windowLimit: limits.window, lore, directive: [flagDirectiveFor(messages, profile, userPersonaForThread(thread)), postHistoryText(profile, userPersonaForThread(thread))].filter(Boolean).join('\n\n') , attachmentTexts }),
         signal: controller.signal,
         emit: forward,
@@ -252,7 +263,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         profile,
         // The CoNAI tool guidance is for the profile's own tools, not the room tools every member gets.
         chatContext: context,
-        buildMessages: (tools) => buildGroupLlmMessages({ profile, thread, members, messages, routing: active.routing, windowLimit: limits.window, tools, maxTokens, withTools: tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)), segments: groupSummaryOn(thread) ? ChatSummaryStore.list(run.threadId) : undefined , attachmentTexts }),
+        buildMessages: (tools, onMeta) => buildGroupLlmMessages({ profile, thread, members, messages, routing: active.routing, windowLimit: limits.window, tools, maxTokens, withTools: tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)), segments: groupSummaryOn(thread) ? ChatSummaryStore.list(run.threadId) : undefined , attachmentTexts, onMeta }),
         roomTools: sendableMessages(messages).length > limits.window || profile.contextTokens !== null ? 'all' : 'call',
         // The member's own cap, else the room's, else the profile's (a Codex member has no hard cap).
         generation: { maxTokens },

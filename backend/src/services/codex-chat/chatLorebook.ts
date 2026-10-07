@@ -226,7 +226,7 @@ export const ChatLorebookStore = {
     if (ids.length === 0) return []
     const rows = getUserSettingsDb().prepare(`SELECT id, entries FROM chat_lorebooks WHERE kind = 'global' AND id IN (${ids.map(() => '?').join(', ')})`).all(...ids) as Array<{ id: number; entries: string }>
     const byId = new Map(rows.map((row) => [row.id, normalizeLorebook(row.entries)]))
-    return ids.flatMap((bookId) => (byId.get(bookId) ?? []).map((entry) => ({ key: loreEntryKey(bookId, entry), entry })))
+    return ids.flatMap((bookId) => (byId.get(bookId) ?? []).map((entry) => ({ key: loreEntryKey(bookId, entry), entry, bookId, bookKind: 'global' as const })))
   },
 
   create(input: { name?: unknown; entries?: unknown }) {
@@ -271,12 +271,20 @@ export function loreEntryKey(bookId: number, entry: Pick<ChatLoreEntry, 'id' | '
 export type LoreFileText = { name: string; text: string; truncated: boolean }
 
 /** An entry as a request considers it; `book` names its book, `file` reads its linked file (account and chat books only). */
-export type KeyedLoreEntry = { key: string; entry: ChatLoreEntry; book?: string; file?: () => LoreFileText | null }
+export type KeyedLoreEntry = { key: string; entry: ChatLoreEntry; book?: string; bookId?: number; bookKind?: ChatLorebookKind; file?: () => LoreFileText | null }
+
+export type LoreDecision = {
+  key: string; bookId: number; bookKind: ChatLorebookKind; entryId: string; title: string
+  selected: boolean; reason: string; matched: string[]; hash?: string
+  file?: 'inline' | 'hint'
+}
 
 /** Largest linked file (in tokens) that goes along with its matched entry; a larger one is left to read_lore_file. */
 export const LORE_FILE_INLINE_MAX_TOKENS = 300
 
 export type SelectedLore = {
+  decisions: LoreDecision[]
+  unmatched: number
   /** Every chosen entry in order, as the profile preview shows it. */
   text: string
   /** "Always on" entries, one `- title: content` line each (see the lore index in chatLoreContext). */
@@ -296,7 +304,7 @@ export type SelectedLore = {
 export type LoreFileOptions = { inline: boolean; hint: (file: string, entry: { book?: string; title: string }) => string }
 
 /** One line of the "always on" list: newlines folded; the title is left out when the text already starts with it. */
-function constantLine(title: string, text: string) {
+export function constantLine(title: string, text: string) {
   const line = text.replace(/\s*\n\s*/g, ' ').trim()
   const name = title.replace(/\s+/g, ' ').trim()
   return name && !line.startsWith(name) ? `- ${name}: ${line}` : `- ${line}`
@@ -420,10 +428,32 @@ export function loreEntryMatches(entry: Pick<ChatLoreEntry, 'keys' | 'secondaryK
  */
 export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<{ content: string; display_content?: string | null }> | undefined, estimate: (text: string) => number, render: (text: string) => string, options: { skip?: (key: string) => boolean; entries?: KeyedLoreEntry[]; files?: LoreFileOptions } = {}): SelectedLore {
   const lorebook = options.entries ?? ChatLorebookStore.keyedEntriesOf(profile.lorebookIds)
-  if (lorebook.length === 0) return { text: '', constant: '', constantCount: 0, keyed: '', keys: [], keyedKeys: [], labels: [] }
+  if (lorebook.length === 0) return { text: '', constant: '', constantCount: 0, keyed: '', keys: [], keyedKeys: [], labels: [], decisions: [], unmatched: 0 }
   const recent = (messages?.slice(-profile.loreScanDepth).map((message) => [message.content, message.display_content].filter(Boolean).join('\n')).join('\n') ?? '').slice(-SCAN_TEXT_MAX_LENGTH)
   const folded = recent.toLowerCase()
-  const active = lorebook.filter(({ key, entry }) => entry.enabled && entry.content.trim() && (entry.constant || (messages !== undefined && !options.skip?.(key) && loreEntryMatches(entry, recent, folded))))
+  const decisions: LoreDecision[] = []
+  let unmatched = 0
+  const decisionOf = (item: KeyedLoreEntry, selected: boolean, reason: string, matched: string[]): LoreDecision => ({
+    key: item.key, bookId: item.bookId ?? Number(item.key.split(':')[0]), bookKind: item.bookKind ?? 'global',
+    entryId: item.entry.id, title: loreEntryTitle(item.entry), selected, reason, matched,
+    ...(selected ? { hash: createHash('sha256').update(render(item.entry.content)).digest('hex').slice(0, 12) } : {}),
+  })
+  const matches = new Map<string, string[]>()
+  const active = lorebook.filter((item) => {
+    const { key, entry } = item
+    if (!entry.enabled || !entry.content.trim()) return false
+    if (entry.constant) return true
+    const skipped = messages !== undefined && options.skip?.(key)
+    const matched = messages === undefined ? [] : entry.keys.filter((word) => keywordMatches(word, entry, recent, folded))
+    if (!matched.length) { unmatched += 1; return false }
+    if (skipped) { decisions.push(decisionOf(item, false, 'codex-sent', matched)); return false }
+    matches.set(key, matched)
+    if (!loreEntryMatches(entry, recent, folded)) {
+      decisions.push(decisionOf(item, false, 'secondary-failed', matched))
+      return false
+    }
+    return true
+  })
   // The budget keeps entries as SillyTavern does: "always on" ones first, then the higher order first.
   const byPriority = [...active].sort((a, b) => Number(b.entry.constant) - Number(a.entry.constant) || b.entry.order - a.entry.order)
   const chosen: Array<{ key: string; entry: ChatLoreEntry; rendered: string }> = []
@@ -438,19 +468,30 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
           `${content}\n  ${options.files.hint(file.name, { book: item.book, title: loreEntryTitle(item.entry) })}`,
         ].filter(Boolean)
       : [content]
+    let selected = false
+    const matched = matches.get(item.key) ?? []
     for (const rendered of candidates) {
       const cost = estimate(rendered)
       if (used + cost > profile.loreTokenBudget) continue
       chosen.push({ key: item.key, entry: item.entry, rendered })
+      selected = true
+      const decision = decisionOf(item, true, item.entry.constant ? 'constant' : isRegexKeyword(matched[0]) ? 'regex' : `key:${matched[0]}`, matched)
+      if (file) decision.file = rendered === `${content}\n  자료 ${file.name}: "${file.text.trim()}"` ? 'inline' : 'hint'
+      decisions.push(decision)
       used += cost
       break
     }
+    if (!selected) decisions.push(decisionOf(item, false, 'budget', matched))
   }
   // Placed in order: a higher order lands later, closer to the end, where it weighs more.
   chosen.sort((a, b) => a.entry.order - b.entry.order)
+  const positions = new Map(chosen.map((item, index) => [item.key, index]))
+  decisions.sort((a, b) => Number(a.selected) - Number(b.selected) || (positions.get(a.key) ?? 0) - (positions.get(b.key) ?? 0))
   const constants = chosen.filter(({ entry }) => entry.constant)
   const keyed = chosen.filter(({ entry }) => !entry.constant)
   return {
+    decisions,
+    unmatched,
     text: chosen.map(({ rendered }) => rendered).join('\n\n'),
     constant: constants.map(({ entry, rendered }) => constantLine(render(loreEntryTitle(entry)), rendered)).join('\n'),
     constantCount: constants.length,

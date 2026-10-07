@@ -230,14 +230,19 @@ export function foldGroupBlockState(members: ChatProfile[], messages: ReadonlyAr
  * block and the block's update rules.
  */
 export function blockStateText(blocks: ChatDisplayBlock[], state: Record<string, BlockData>) {
+  const content = blockStateContentText(blocks, state)
+  return content ? ['## 현재 상태', '아래 값이 지금 장면의 사실이야(이전 답변에 쓴 값보다 우선). 여기에 맞춰 행동하고, 바뀐 값만 같은 이름의 코드 블록에 써.', content].join('\n') : ''
+}
+
+/** Public state values and rules, without the model's fixed instructions. */
+export function blockStateContentText(blocks: ChatDisplayBlock[], state: Record<string, BlockData>) {
   const parts = usableBlocks(blocks).map((block) => [
     `### ${block.key}`,
     JSON.stringify(state[block.key] ?? {}),
     block.rules ? `규칙: ${block.rules}` : '',
     ...fieldRuleLines(block).map((line) => `필드 규칙: ${line}`),
   ].filter(Boolean).join('\n'))
-  if (parts.length === 0) return ''
-  return ['## 현재 상태', '아래 값이 지금 장면의 사실이야(이전 답변에 쓴 값보다 우선). 여기에 맞춰 행동하고, 바뀐 값만 같은 이름의 코드 블록에 써.', ...parts].join('\n')
+  return parts.join('\n')
 }
 
 export function blockStateHash(text: string) {

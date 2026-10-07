@@ -31,6 +31,9 @@ const DEFAULT_PERMISSION_GROUPS = [
 ] as const;
 
 const DEFAULT_PERMISSION_CATALOG = [
+  { permissionKey: 'chat.diagnostics.view', resource: 'chat.diagnostics', action: 'view', description: 'Inspect chat request composition without text.' },
+  { permissionKey: 'chat.diagnostics.content', resource: 'chat.diagnostics', action: 'content', description: 'Inspect already visible chat context text.' },
+  { permissionKey: 'chat.diagnostics.prompts', resource: 'chat.diagnostics', action: 'prompts', description: 'Inspect administrator prompts and captured request bodies.' },
   ...IMAGE_PERMISSION_CATALOG,
   ...FEATURE_READ_PERMISSION_CATALOG,
   { permissionKey: 'page.chat.view', resource: 'page.chat', action: 'view', description: 'Open the full chat page independently of chat engine use.' },
@@ -333,8 +336,23 @@ export function seedAccessControlDefaults(db: Database.Database): void {
   migrateFilesViewPermission(db);
   migrateWorkflowViewPermission(db);
   migrateIndependentFeaturePermissions(db);
+  migrateChatDiagnosticsPermissions(db);
   grantAllCatalogPermissionsToAdminGroup(db);
   applyAnonymousGuestSignupDefault(db);
+}
+
+/** Seed existing chat groups once; later permission edits stay in effect. */
+export function migrateChatDiagnosticsPermissions(db: Database.Database): void {
+  db.transaction(() => {
+    const version = 'chat_diagnostics_v1';
+    if (db.prepare('SELECT 1 FROM auth_seed_state WHERE seed_key = ?').get(version)) return;
+    db.prepare(`INSERT OR IGNORE INTO auth_group_permissions (group_id, permission_id, allowed)
+      SELECT DISTINCT gp.group_id, diagnostic.id, 1 FROM auth_group_permissions gp
+      JOIN auth_permissions chat ON chat.id = gp.permission_id
+      JOIN auth_permissions diagnostic ON diagnostic.permission_key IN ('chat.diagnostics.view', 'chat.diagnostics.content')
+      WHERE gp.allowed = 1 AND chat.permission_key IN ('chat.llm.use', 'chat.codex.use')`).run();
+    db.prepare('INSERT INTO auth_seed_state (seed_key) VALUES (?)').run(version);
+  }).immediate();
 }
 
 /** Only explicit legacy image-bearing grants are converted, once per auth database. */
