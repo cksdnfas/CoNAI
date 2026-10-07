@@ -4,6 +4,50 @@ import type { ChatStreamEvent, CodexReasoningEffort, StoredFileEntry, ChatMessag
 
 export type ChatScope = 'read' | 'generate' | 'organize' | 'configure'
 export type ChatEngine = 'llm' | 'codex'
+export type ChatDiagnosticsScope = 'none' | 'view' | 'content' | 'prompts'
+
+export type ChatContextKind = 'persona' | 'system-prompt' | 'prompt-section' | 'guidance' | 'lore-index' | 'constant-lore' | 'lore' | 'summary' | 'example' | 'window' | 'reference' | 'author-note' | 'state' | 'flags' | 'user-persona' | 'recall' | 'page' | 'continuation' | 'last-instruction' | 'tool-definition' | 'tool-result' | 'group-header' | 'summary-instruction' | 'translation-instruction'
+export type ChatContextPart = { kind: ChatContextKind; role: string; position: number; estTokens: number; hash: string }
+export type ChatContextLore = { key: string; bookId: number; bookKind: ChatLorebookKind; entryId: string; title: string; selected: boolean; reason: string; matched: string[]; hash?: string; file?: 'inline' | 'hint' }
+
+/** Text-free request composition; old records keep the v1 fields alone. */
+export interface ChatContextMeta {
+  model: string | null
+  windowFromMessageId: number | null
+  sentMessages: number
+  summaryUntilMessageId: number | null
+  recalledSegments: number
+  lore: string[]
+  memories: number
+  estimatedTokens: number
+  promptTokens?: number | null
+  version?: 2
+  engine?: ChatEngine
+  /** Effective scope at read time, including the replying profile's restriction. */
+  scope?: ChatDiagnosticsScope
+  profileId?: number
+  sections?: Array<ChatContextPart & { parts?: ChatContextPart[] }>
+  loreEntries?: ChatContextLore[]
+  loreSkipped?: Array<Pick<ChatContextLore, 'entryId' | 'bookId' | 'title' | 'reason'>>
+  loreUnmatched?: number
+  recall?: Array<{ segmentId: number; score: number; terms: string[]; hash: string }>
+  window?: { fromId: number | null; sent: number; droppedTurns: number }
+  toolRounds?: number
+  codexKeys?: string[]
+  tokenUsage?: { contextTokens: number | null; inputTokens: number | null; cachedInputTokens: number | null; outputTokens: number | null }
+  truncated?: boolean
+}
+
+export type ChatDiagnosticText = { kind: ChatContextKind; id?: number | string; hash: string; text?: string; promptText?: string; changedSince?: boolean; unavailable?: boolean; bookId?: number; entryId?: string }
+export interface ChatDiagnostics {
+  meta: ChatContextMeta
+  scope: Exclude<ChatDiagnosticsScope, 'none'>
+  alternative: number
+  texts?: ChatDiagnosticText[]
+  raw?: unknown
+}
+
+export type ChatAdminSettings = { enabled: boolean; diagnostics: { enabled: boolean; captureRaw: boolean; captureLimit: number } }
 
 export const CHAT_SCOPES: ChatScope[] = ['read', 'generate', 'organize', 'configure']
 export const CHAT_PROFILES_QUERY_KEY = ['codex-chat-profiles'] as const
@@ -411,6 +455,7 @@ export interface ChatProfile {
   loreDepth: number
   /** Default author's note for the profile's chats (a chat can set its own). */
   authorNote: string
+  diagnosticsScope: 'view' | 'content' | null
   tagline: string
   id: number
   name: string
@@ -691,11 +736,19 @@ export function listChatProfiles() {
 }
 
 export function getChatAdminSettings() {
-  return requestApiData<{ enabled: boolean }>('/api/codex-chat/admin/settings', { cache: 'no-store' })
+  return requestApiData<ChatAdminSettings>('/api/codex-chat/admin/settings', { cache: 'no-store' })
 }
 
-export function updateChatAdminSettings(patch: { enabled: boolean }) {
-  return requestApiData<{ enabled: boolean }>('/api/codex-chat/admin/settings', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+export function updateChatAdminSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatAdminSettings['diagnostics']> }) {
+  return requestApiData<ChatAdminSettings>('/api/codex-chat/admin/settings', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+}
+
+export function getChatDiagnostics(threadId: number, messageId: number, alternative: number, signal?: AbortSignal) {
+  return requestApiData<ChatDiagnostics>(`/api/codex-chat/threads/${threadId}/messages/${messageId}/diagnostics?alternative=${alternative}`, { cache: 'no-store', signal })
+}
+
+export function exportChatDiagnostics(threadId: number, messageId: number, alternative: number) {
+  return requestApiData<{ file: StoredFileEntry; path: string }>(`/api/codex-chat/threads/${threadId}/messages/${messageId}/diagnostics/export?alternative=${alternative}`, { method: 'POST' })
 }
 
 export function getChatProfileDefaults() {

@@ -1,10 +1,10 @@
-import { Fragment, memo, useState } from 'react'
+import { Fragment, memo, useMemo, useState } from 'react'
 import { Check, ChevronLeft, ChevronRight, Ellipsis, GitBranch, Languages, Pencil, Reply, RotateCcw, StepForward, X } from 'lucide-react'
 import type { ChatMessageRouting } from '@conai/shared'
 import { IconButton } from '@/components/ui/icon-button'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
-import type { CodexChatMediaInfo, CodexChatMessage } from '@/lib/api-codex-chat'
+import type { ChatContextMeta, ChatSummarySegment, CodexChatMediaInfo, CodexChatMessage } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 import type { ChatAppearance } from './chat-appearance'
 import { ChatFileLinks } from './chat-attachments'
@@ -14,6 +14,8 @@ import { ChatMessageFlags } from './chat-flags'
 import type { CodexChatLiveTurn } from './codex-chat-context'
 import { ChatMessageIdContext } from './chat-display-block'
 import { CodexChatAssistantMessage, CodexChatUserMessage, type ChatSpeaker, type ChatUserSpeaker } from './codex-chat-message'
+
+const EMPTY_SEGMENTS: ChatSummarySegment[] = []
 
 type MessageLook = {
   speaker: ChatSpeaker | null
@@ -68,8 +70,8 @@ function ChatMessageEditor({ message, busy, onSave, onCancel, reply = false }: {
   </div>
 }
 
-const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, actions, speakerOf, mentions, userSpeaker = null, ...look }: MessageLook & {
-  message: CodexChatMessage; flash: boolean; media?: Record<string, CodexChatMediaInfo>; actions: MessageActions
+const ChatMessageRow = memo(function ChatMessageRow({ message, previousContext, segments, flash, media, actions, speakerOf, mentions, userSpeaker = null, ...look }: MessageLook & {
+  message: CodexChatMessage; previousContext: ChatContextMeta | null; segments: ChatSummarySegment[]; flash: boolean; media?: Record<string, CodexChatMediaInfo>; actions: MessageActions
 }) {
   const { t } = useI18n()
   const [tapped, setTapped] = useState(false)
@@ -80,7 +82,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, act
   const isUser = message.role === 'user'
   const lastReply = message.id === actions.lastReplyId
   const alternatives = message.alternatives ?? []
-  const contextMeta = parseContextMeta(message.context_meta)
+  const contextMeta = look.appearance.showDiagnostics ? parseContextMeta(message.context_meta) : null
   const editableReply = !isUser && actions.canEditReply(message)
   // Reply and the original text stay in view; the rest folds behind one "more" toggle.
   const [moreOpen, setMoreOpen] = useState(false)
@@ -101,7 +103,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, act
       <IconButton size="icon-xs" variant="ghost" label={t({ ko: '답장', en: 'Reply' })} onClick={() => actions.onReply(message)}><Reply /></IconButton>
       {translated ? <IconButton size="icon-xs" variant="ghost" aria-pressed={showOriginal} className={cn(showOriginal && 'text-primary')} label={showOriginal ? t({ ko: '번역 보기', en: 'Show translation' }) : t({ ko: '원문 보기', en: 'Show original' })} onClick={() => setShowOriginal((current) => !current)}><Languages /></IconButton> : null}
       {hasMore ? <IconButton size="icon-xs" variant="ghost" aria-expanded={moreOpen} className={cn(moreOpen && 'text-primary')} label={moreOpen ? t({ ko: '접기', en: 'Less' }) : t({ ko: '더 보기', en: 'More' })} onClick={() => setMoreOpen((current) => !current)}><Ellipsis /></IconButton> : null}
-      {moreOpen && !isUser && contextMeta ? <ChatContextInfo meta={contextMeta} /> : null}
+      {moreOpen && !isUser && contextMeta ? <ChatContextInfo key={message.active_alternative} meta={contextMeta} previous={previousContext} threadId={message.thread_id} messageId={message.id} alternative={message.active_alternative} segments={segments} /> : null}
       {moreOpen && actions.canBranch ? <IconButton size="icon-xs" variant="ghost" disabled={actions.busy} label={t({ ko: '여기까지로 새 채팅 분기', en: 'Branch a new chat up to here' })} onClick={() => actions.onBranch(message.id)}><GitBranch /></IconButton> : null}
       {moreOpen && showRewriteTools ? <>
         {isUser
@@ -122,19 +124,31 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, flash, media, act
 })
 
 /** Stored rows stay untouched while a live turn streams or the composer changes. */
-export const ChatSavedMessages = memo(function ChatSavedMessages({ messages, flashMessageId, summaryUntilId, media, actions, ...look }: MessageLook & {
+export const ChatSavedMessages = memo(function ChatSavedMessages({ messages, contextMessages, segments = EMPTY_SEGMENTS, flashMessageId, summaryUntilId, media, actions, ...look }: MessageLook & {
   messages: CodexChatMessage[]
+  contextMessages: CodexChatMessage[]
+  segments?: ChatSummarySegment[]
   flashMessageId: number | null
   media?: Record<string, CodexChatMediaInfo>
   actions: MessageActions
   summaryUntilId: number | null
 }) {
   const { t } = useI18n()
+  const previousContexts = useMemo(() => {
+    const result = new Map<number, ChatContextMeta | null>()
+    let previous: ChatContextMeta | null = null
+    if (look.appearance.showDiagnostics) for (const message of contextMessages) {
+      if (message.role !== 'assistant') continue
+      result.set(message.id, previous)
+      previous = parseContextMeta(message.context_meta)
+    }
+    return result
+  }, [contextMessages, look.appearance.showDiagnostics])
   const divider = <div role="separator" className="flex items-center gap-3 text-xs text-muted-foreground"><span className="h-px flex-1 bg-line" />{t({ ko: '여기까지 요약됨', en: 'Summarized up to here' })}<span className="h-px flex-1 bg-line" /></div>
   return <>
     {summaryUntilId !== null && messages[0]?.id > summaryUntilId ? divider : null}
     {messages.map((message) => <Fragment key={message.id}>
-      <ChatMessageRow message={message} flash={flashMessageId === message.id} media={media} actions={actions} {...look} />
+      <ChatMessageRow message={message} previousContext={previousContexts.get(message.id) ?? null} segments={segments} flash={flashMessageId === message.id} media={media} actions={actions} {...look} />
       {message.id === summaryUntilId ? divider : null}
     </Fragment>)}
   </>

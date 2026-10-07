@@ -121,6 +121,7 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
       const body = JSON.stringify(result)
       if (expected === 'view') assert.equal(result.texts, undefined)
       if (expected === 'content') {
+        assert.ok(result.texts?.every((source) => source.promptText === undefined))
         assert.ok(body.includes('이미 공개된 글로벌 본문'))
         assert.ok(body.includes('내 계정 로어 본문'))
         assert.ok(body.includes('채팅 책 상시 본문'))
@@ -143,8 +144,8 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
         assert.ok(body.includes('ADMIN_SYSTEM_PRIVATE'))
         assert.ok(body.includes('ADMIN_RAW_PRIVATE'))
         assert.ok(fileText.includes('ADMIN_RAW_PRIVATE'))
-        assert.ok(result.texts?.find((source) => source.kind === 'state')?.text?.includes('아래 값이 지금 장면의 사실이야'))
-        assert.ok(result.texts?.find((source) => source.kind === 'lore-index')?.text?.includes('본문은 키워드가 나오면 참고 설정으로 간다'))
+        assert.ok(result.texts?.find((source) => source.kind === 'state')?.promptText?.includes('아래 값이 지금 장면의 사실이야'))
+        assert.ok(result.texts?.find((source) => source.kind === 'lore-index')?.promptText?.includes('본문은 키워드가 나오면 참고 설정으로 간다'))
       } else {
         for (const hidden of ['ADMIN_SYSTEM_PRIVATE', 'ADMIN_SECTION_PRIVATE', 'ADMIN_POST_PRIVATE', 'ADMIN_RAW_PRIVATE', '아래 값이 지금 장면의 사실이야', '본문은 키워드가 나오면 참고 설정으로 간다']) {
           assert.ok(!body.includes(hidden), `${hidden} in ${expected} response`)
@@ -161,6 +162,30 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
     grants = [...diagnosticKeys]
     await assert.rejects(getChatDiagnostics({ ...requester, accountId: 2 }, threadId, answerId), /찾을 수 없어/)
     await assert.rejects(getChatDiagnostics(requester, threadId, answerId, 100), /변형/)
+  })
+
+  await t.test('state and lore-index keep public text at prompts scope and compare hashes against full prompt text', async () => {
+    grants = [...diagnosticKeys]
+    const prompts = await getChatDiagnostics(requester, threadId, answerId)
+    for (const [kind, guidance] of [['state', '아래 값이 지금 장면의 사실이야'], ['lore-index', '본문은 키워드가 나오면 참고 설정으로 간다']] as const) {
+      const source = prompts.texts?.find((entry) => entry.kind === kind)
+      assert.ok(source?.text)
+      assert.ok(source.promptText?.includes(guidance))
+      assert.ok(!source.text.includes(guidance))
+      if (kind === 'state') assert.ok(!source.text.includes('## 현재 상태'))
+      assert.notEqual(contextHash(source.text), source.hash, `${kind} public text must differ from the full prompt`)
+      assert.equal(contextHash(source.promptText!), source.hash)
+      assert.equal(source.changedSince, false, `${kind} unchanged full prompt must not be marked changed`)
+    }
+    grants = diagnosticKeys.slice(0, 2)
+    const content = await getChatDiagnostics(requester, threadId, answerId)
+    for (const kind of ['state', 'lore-index']) {
+      const source = content.texts?.find((entry) => entry.kind === kind)
+      assert.equal(source?.text, prompts.texts?.find((entry) => entry.kind === kind)?.text)
+      assert.equal(source?.promptText, undefined)
+      assert.equal(source?.changedSince, false)
+    }
+    grants = [...diagnosticKeys]
   })
 
   await t.test('thread metadata resolves account grants once and each profile once per batch', async (s) => {
@@ -184,12 +209,17 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
     assert.equal(visible.length, messages.length)
     assert.equal(JSON.parse(visible[0].context_meta!).version, 2)
     assert.equal(JSON.parse(visible.at(-1)!.context_meta!).version, 2)
+    assert.equal(JSON.parse(visible[0].context_meta!).scope, 'prompts')
+    assert.equal(JSON.parse(visible[1].context_meta!).scope, 'view')
+    assert.ok(visible[1].alternatives.every((variant) => !variant.context_meta || JSON.parse(variant.context_meta).scope === 'view'))
+    assert.equal(JSON.parse(original.context_meta!).scope, undefined, 'scope belongs to the response, not stored history')
     grants = []
     const revoked = visibleContextMessages(grouped, messages, requester.accountId)
     assert.equal(accountReads, 2)
     assert.equal(permissionReads, 2)
     assert.deepEqual(profileReads, [profile.id, other.id, profile.id, other.id])
     assert.equal(JSON.parse(revoked[0].context_meta!).version, undefined)
+    assert.equal(JSON.parse(revoked[0].context_meta!).scope, undefined)
     assert.ok(revoked[0].alternatives.every((variant) => !variant.context_meta || JSON.parse(variant.context_meta).version === undefined))
     grants = [...diagnosticKeys]
   })

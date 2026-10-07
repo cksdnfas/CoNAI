@@ -249,6 +249,12 @@
   --resource-generation: #e38aa6;
   --resource-block: #62bfae;
   --resource-lorebook: #a897e6;
+  --chat-diagnostics-instructions: #f95e14;
+  --chat-diagnostics-lore: #ffb38f;
+  --chat-diagnostics-examples: #a8a09c;
+  --chat-diagnostics-window: #e5e2e1;
+  --chat-diagnostics-reference: #b84a12;
+  --chat-diagnostics-directives: #6b625e;
   --theme-primary-soft: #32170d;
   --theme-secondary-soft: #2f221d;
   --theme-shell-surface: rgb(19 19 19 / 0.72);
@@ -362,6 +368,7 @@
   --resource-generation: #c04f78;
   --resource-block: #1f8a78;
   --resource-lorebook: #6d58c4;
+  --chat-diagnostics-window: #d1ccca;
   --theme-shell-surface: rgb(245 242 241 / 0.72);
   --theme-floating-surface: rgb(235 225 221 / 0.88);
   --theme-shell-border: rgb(249 94 20 / 0.18);

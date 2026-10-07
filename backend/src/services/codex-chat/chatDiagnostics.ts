@@ -53,7 +53,7 @@ export function visibleContextMessages(thread: CodexChatThreadRecord, messages: 
     const filter = (value: string | null | undefined) => {
       const meta = parseMeta(value)
       if (!meta) return null
-      return JSON.stringify(scope === 'none' ? legacyContextMeta(meta) : meta)
+      return JSON.stringify(scope === 'none' ? legacyContextMeta(meta) : meta.version === 2 ? { ...meta, scope } : meta)
     }
     return { ...message, context_meta: filter(message.context_meta), alternatives: message.alternatives.map((alternative) => ({ ...alternative, context_meta: filter(alternative.context_meta) })) }
   })
@@ -78,7 +78,7 @@ export async function getChatDiagnostics(requester: McpRequester, threadId: numb
   const variant = message.alternatives[index] ?? message
   const meta = parseMeta(variant.context_meta)
   if (!meta) throw new ChatDiagnosticsError('이 답변에는 진단 기록이 없어.', 404)
-  const texts: Array<ContextSource & { text?: string; changedSince?: boolean; unavailable?: boolean; bookId?: number; entryId?: string }> = []
+  const texts: Array<ContextSource & { text?: string; promptText?: string; changedSince?: boolean; unavailable?: boolean; bookId?: number; entryId?: string }> = []
   if (scope !== 'view' && profile && meta.version === 2) {
     const user = userPersonaForThread(thread)
     const render = (text: string) => fillCharacterPlaceholders(text, profile, user)
@@ -86,7 +86,7 @@ export async function getChatDiagnostics(requester: McpRequester, threadId: numb
     const books = [...new Map(profiles.flatMap((member) => booksForRequest({ thread, profile: member })).map((book) => [book.id, book])).values()]
     const segments = ChatSummaryStore.list(threadId)
     const push = (source: ContextSource, text: string | undefined, extra: { bookId?: number; entryId?: string } = {}, displayText = text) => {
-      texts.push({ ...source, ...extra, ...(text === undefined ? { unavailable: true } : { text: displayText, changedSince: contextHash(text) !== source.hash }) })
+      texts.push({ ...source, ...extra, ...(text === undefined ? { unavailable: true } : { text: displayText, ...(scope === 'prompts' && displayText !== text ? { promptText: text } : {}), changedSince: contextHash(text) !== source.hash }) })
     }
     let definitions: Map<string, string> | undefined
     if (scope === 'prompts' && meta.sources?.some((source) => source.kind === 'tool-definition')) {
@@ -108,7 +108,7 @@ export async function getChatDiagnostics(requester: McpRequester, threadId: numb
         case 'state': {
           const folded = foldBlockState(profile, messages, parseBlockEdits(thread.block_edits), thread.kind === 'group' ? profile.id : undefined)
           text = folded ? blockStateText(profile.style.blocks, folded.state) : ''
-          displayText = scope === 'prompts' ? text : folded ? blockStateContentText(profile.style.blocks, folded.state) : ''
+          displayText = folded ? blockStateContentText(profile.style.blocks, folded.state) : ''
           break
         }
         case 'flags': {
@@ -120,7 +120,7 @@ export async function getChatDiagnostics(requester: McpRequester, threadId: numb
         case 'lore-index': {
           const toolOffered = meta.sources?.some((item) => item.kind === 'tool-definition' && item.id === 'read_lore_file') ?? false
           text = buildLoreIndex(books, (value) => estimateTokens(profile.id, value), render, toolOffered)
-          displayText = scope === 'prompts' ? text : buildLoreIndexContent(books, (value) => estimateTokens(profile.id, value), render, toolOffered)
+          displayText = buildLoreIndexContent(books, (value) => estimateTokens(profile.id, value), render, toolOffered)
           break
         }
         case 'constant-lore': {

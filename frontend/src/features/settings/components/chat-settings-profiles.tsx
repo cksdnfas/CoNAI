@@ -2,8 +2,10 @@ import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FileUp, Plus } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { ResourceRow } from '@/components/ui/resource-row'
 import { RowGroup } from '@/components/ui/row-group'
+import { SettingRow } from '@/components/ui/setting-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Switch } from '@/components/ui/switch'
 import { Tip } from '@/components/ui/tooltip'
@@ -79,9 +81,13 @@ export function ChatSettingsProfiles() {
   })
   const settingsMutation = useMutation({
     mutationFn: updateChatAdminSettings,
-    onSuccess: (settings) => {
+    onSuccess: (settings, patch) => {
       queryClient.setQueryData(CHAT_ADMIN_SETTINGS_QUERY_KEY, settings)
       void queryClient.invalidateQueries({ queryKey: CHAT_STATUS_QUERY_KEY })
+      if (patch.diagnostics) {
+        void queryClient.invalidateQueries({ queryKey: ['codex-chat-thread'] })
+        void queryClient.invalidateQueries({ queryKey: ['codex-chat-diagnostics'] })
+      }
     },
     onError,
   })
@@ -114,6 +120,22 @@ export function ChatSettingsProfiles() {
         ) : (
           <SettingsRowsSkeleton rows={1} />
         )}
+      </RowGroup>
+
+      <RowGroup heading={t({ ko: '진단', en: 'Diagnostics' })}>
+        {settingsQuery.data ? <>
+          <SettingsSwitchRow label={t({ ko: '답변 진단', en: 'Answer diagnostics' })} checked={settingsQuery.data.diagnostics.enabled} disabled={settingsMutation.isPending}
+            onCheckedChange={(enabled) => settingsMutation.mutate({ diagnostics: { enabled } })} />
+          <SettingsSwitchRow label={t({ ko: '원문 기록', en: 'Capture raw requests' })} checked={settingsQuery.data.diagnostics.captureRaw} disabled={settingsMutation.isPending}
+            onCheckedChange={(captureRaw) => settingsMutation.mutate({ diagnostics: { captureRaw } })} />
+          <SettingRow label={t({ ko: '채팅당 보관', en: 'Keep per chat' })} className={!settingsQuery.data.diagnostics.captureRaw ? 'opacity-60' : undefined}>
+            <NumberStepperInput variant="settings" className="w-24" min={1} max={200} precision={0} value={settingsQuery.data.diagnostics.captureLimit}
+              aria-label={t({ ko: '채팅당 보관', en: 'Keep per chat' })} disabled={settingsMutation.isPending || !settingsQuery.data.diagnostics.captureRaw}
+              onValueCommit={(value) => { const captureLimit = Number(value); if (captureLimit !== settingsQuery.data?.diagnostics.captureLimit) settingsMutation.mutate({ diagnostics: { captureLimit } }) }} />
+          </SettingRow>
+        </> : settingsQuery.isError ? (
+          <p className="py-3 text-sm text-destructive">{getErrorMessage(settingsQuery.error, t({ ko: '설정을 불러오지 못했어.', en: 'Could not load settings.' }))}</p>
+        ) : <SettingsRowsSkeleton rows={3} />}
       </RowGroup>
 
       <RowGroup

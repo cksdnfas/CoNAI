@@ -286,6 +286,17 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
           </>
         )}
       </EditorGroup>
+      <EditorGroup>
+        <Field label={t({ ko: '진단 범위', en: 'Diagnostics scope' })}>
+          <SegmentedControl size="sm" value={draft.diagnosticsScope ?? 'permissions'} ariaLabel={t({ ko: '진단 범위', en: 'Diagnostics scope' })}
+            onChange={(value) => patch({ diagnosticsScope: value === 'view' || value === 'content' ? value : null })}
+            items={[
+              { value: 'permissions', label: t({ ko: '권한대로', en: 'Permissions' }) },
+              { value: 'view', label: t({ ko: '구성까지', en: 'Composition' }) },
+              { value: 'content', label: t({ ko: '본문까지', en: 'Content' }) },
+            ]} />
+        </Field>
+      </EditorGroup>
     </div>
   )
 }

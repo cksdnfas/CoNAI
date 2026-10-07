@@ -57,6 +57,7 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     loreTokenBudget: profile?.loreTokenBudget ?? defaults?.loreTokenBudget ?? 1024,
     loreDepth: profile?.loreDepth ?? defaults?.loreDepth ?? 4,
     authorNote: profile?.authorNote ?? '',
+    diagnosticsScope: profile?.diagnosticsScope ?? null,
     avatar: profile?.avatar ?? null,
     engine: profile?.engine ?? 'llm',
     providerName: profile?.providerName ?? '',
@@ -253,6 +254,10 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
   const saveMutation = useMutation({
     mutationFn: () => (profile ? updateChatProfile(profile.id, draft) : createChatProfile(draft)),
     onSuccess: async () => {
+      if (draft.diagnosticsScope !== (profile?.diagnosticsScope ?? null)) {
+        await queryClient.invalidateQueries({ queryKey: ['codex-chat-thread'] })
+        await queryClient.invalidateQueries({ queryKey: ['codex-chat-diagnostics'] })
+      }
       await refresh()
       onClose()
     },

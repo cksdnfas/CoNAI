@@ -64,6 +64,7 @@ export type ChatAppearance = {
   timeStamps: ChatTimeStamps
   showToolChips: boolean
   showReasoning: boolean
+  showDiagnostics: boolean
   avatarSize: ChatAvatarSize
   /** Emoticons inside a sentence; larger ones open up their line, by choice. */
   emoticonSize: ChatEmoticonSize
@@ -103,7 +104,7 @@ const POP_STAGGER_MS = 45
 
 export const DEFAULT_CHAT_APPEARANCE: ChatAppearance = {
   fontFamily: 'profile', fontSize: 14, lineHeight: 'normal', paragraphGap: 'normal', letterSpacing: 'normal',
-  replyShape: 'flat', userPlacement: 'right', width: 'normal', messageGap: 'normal', showNames: true, timeStamps: 'off', showToolChips: true, showReasoning: true,
+  replyShape: 'flat', userPlacement: 'right', width: 'normal', messageGap: 'normal', showNames: true, timeStamps: 'off', showToolChips: true, showReasoning: true, showDiagnostics: true,
   avatarSize: 'md', emoticonSize: 'md', stickerSize: 'md', imageSize: 'full', imageLayout: 'grid',
   showBackground: true, backgroundDim: null, backgroundBlur: null, backgroundFit: 'cover',
   flagStyle: 'icon', slotId: null,
@@ -149,6 +150,7 @@ export function normalizeChatAppearance(value: unknown): ChatAppearance {
     timeStamps: pick(raw.timeStamps, ['off', 'hover', 'always'], D.timeStamps),
     showToolChips: raw.showToolChips !== false,
     showReasoning: raw.showReasoning !== false,
+    showDiagnostics: raw.showDiagnostics !== false,
     avatarSize: pick(raw.avatarSize, ['none', 'sm', 'md', 'lg'], D.avatarSize),
     emoticonSize: pick(raw.emoticonSize, ['sm', 'md', 'lg', 'xl'], D.emoticonSize),
     stickerSize: pick(raw.stickerSize, ['sm', 'md', 'lg'], D.stickerSize),
@@ -470,6 +472,7 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
   const namesId = useId()
   const toolsId = useId()
   const reasoningId = useId()
+  const diagnosticsId = useId()
   const [slotsOpen, setSlotsOpen] = useState(false)
   const [tab, setTab] = useState<AppearanceTab>('text')
   const escapeHandledRef = useRef(false)
@@ -653,6 +656,9 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
                   </AppearanceRow>
                   <AppearanceRow label={t({ ko: '추론 블록', en: 'Reasoning' })} htmlFor={reasoningId}>
                     <Switch id={reasoningId} checked={appearance.showReasoning} onCheckedChange={(showReasoning) => update({ showReasoning })} />
+                  </AppearanceRow>
+                  <AppearanceRow label={t({ ko: '진단 아이콘', en: 'Diagnostics icon' })} htmlFor={diagnosticsId}>
+                    <Switch id={diagnosticsId} checked={appearance.showDiagnostics} onCheckedChange={(showDiagnostics) => update({ showDiagnostics })} />
                   </AppearanceRow>
                 </AppearanceGroup>
               </>
