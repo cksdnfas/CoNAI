@@ -112,6 +112,7 @@ export type ThreadLoreBookView = {
 }
 
 export type ThreadLorebooks = {
+  entryUsage: Record<string, { turnsAgo?: number; sourceMessageId?: number | null }>
   chatBook: OwnedLorebook | null
   /** Account books linked to this chat only (`codex_chat_threads.lorebook_ids`). */
   linkedIds: number[]
@@ -139,7 +140,47 @@ export function threadLorebooks(thread: RequestThread, profiles: Array<Pick<Chat
   }
   const rank = (book: ThreadLoreBookView) => (book.kind === 'global' ? 2 : book.via === 'thread' ? 1 : 0)
   const books = [...byId.values()].map((book, index) => ({ book, index })).sort((a, b) => rank(a.book) - rank(b.book) || a.index - b.index).map(({ book }) => book)
-  return { chatBook, linkedIds: OwnedLorebookStore.threadLinks(thread.id), books }
+  const entryUsage = threadLoreUsage(thread, [...(chatBook ? [{ id: chatBook.id, entries: chatBook.entries }] : []), ...books])
+  return { chatBook, linkedIds: OwnedLorebookStore.threadLinks(thread.id), books, entryUsage }
+}
+
+/** Read only active reply metadata, once per context fetch; no transcript bodies or usage state are persisted. */
+export function threadLoreUsage(thread: RequestThread, books: Array<{ id: number; entries: ChatLoreEntry[] }>): ThreadLorebooks['entryUsage'] {
+  const db = getUserSettingsDb()
+  const rows = db.prepare("SELECT id, context_meta FROM codex_chat_messages WHERE thread_id = ? AND role = 'assistant' ORDER BY id DESC").all(thread.id) as Array<{ id: number; context_meta: string | null }>
+  const last = new Map<string, number>()
+  rows.forEach((row, turnsAgo) => {
+    try {
+      const meta = JSON.parse(row.context_meta ?? '{}') as { loreEntries?: Array<{ bookId: number; entryId: string; selected: boolean }> }
+      for (const entry of meta.loreEntries ?? []) {
+        const key = `${entry.bookId}:${entry.entryId}`
+        if (entry.selected && !last.has(key)) last.set(key, turnsAgo)
+      }
+    } catch { /* Older replies without usable diagnostics have no usage record. */ }
+  })
+  const replies = new Map<number, Map<string, number>>()
+  const result: ThreadLorebooks['entryUsage'] = {}
+  for (const book of books) for (const entry of book.entries) {
+    const key = `${book.id}:${entry.id}`
+    const turnsAgo = last.get(key)
+    const usage: ThreadLorebooks['entryUsage'][string] = turnsAgo === undefined ? {} : { turnsAgo }
+    if (entry.source) {
+      const source = entry.source
+      if (!replies.has(source.threadId)) {
+        const messages = db.prepare(`SELECT m.id, json_extract(CASE WHEN json_valid(m.routing) THEN m.routing ELSE '{}' END, '$.replyId') AS reply_id
+          FROM codex_chat_messages m JOIN codex_chat_threads t ON t.id = m.thread_id WHERE t.id = ? AND t.account_id IS ? AND m.role = 'assistant'
+          UNION ALL SELECT m.id, json_extract(a.value, '$.routing.replyId') AS reply_id
+          FROM codex_chat_messages m JOIN codex_chat_threads t ON t.id = m.thread_id, json_each(CASE WHEN json_valid(m.alternatives) THEN m.alternatives ELSE '[]' END) a
+          WHERE t.id = ? AND t.account_id IS ? AND m.role = 'assistant' AND a.type = 'object'`).all(source.threadId, thread.account_id, source.threadId, thread.account_id) as Array<{ id: number; reply_id: string | null }>
+        const byReply = new Map<string, number>()
+        for (const message of messages) if (message.reply_id) byReply.set(message.reply_id, message.id)
+        replies.set(source.threadId, byReply)
+      }
+      usage.sourceMessageId = replies.get(source.threadId)!.get(source.replyId) ?? null
+    }
+    if (Object.keys(usage).length) result[key] = usage
+  }
+  return result
 }
 
 /** Every entry of these books as selectLoreEntries takes them; files are read only for an entry that matched. */

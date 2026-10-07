@@ -2,6 +2,8 @@
  * How a profile's chats look: typeface, roleplay text colours and the chat background. The model only follows a
  * text convention (the guidance below); the browser does the styling, so nothing the model writes runs as code.
  */
+import type { ChatBlockTone } from '@conai/shared'
+
 export type ChatTypeface = 'sans' | 'serif' | 'mono'
 
 export type ChatStyleColors = {
@@ -18,6 +20,7 @@ export type ChatStyleColors = {
  * it may move in one reply, the values it may take, or that the model may not change it at all.
  */
 export type ChatBlockField = {
+  tone?: ChatBlockTone
   name: string
   min: number | null
   max: number | null
@@ -142,7 +145,25 @@ function normalizeFields(value: unknown): ChatBlockField[] {
     const min = optionalNumber(record.min)
     const max = optionalNumber(record.max)
     const step = optionalNumber(record.step)
-    return [{ name, min, max: max !== null && min !== null && max < min ? min : max, step: step !== null && step < 0 ? null : step, values, readonly: record.readonly === true }]
+    const tone = normalizeTone(record.tone, values)
+    return [{ name, min, max: max !== null && min !== null && max < min ? min : max, step: step !== null && step < 0 ? null : step, values, readonly: record.readonly === true, ...(tone ? { tone } : {}) }]
+  })
+}
+
+function normalizeTone(value: unknown, values: string[]): ChatBlockTone | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const text = (value: unknown) => typeof value === 'string' ? value.trim().slice(0, 2000) : ''
+  if (values.length > 0) {
+    if (Array.isArray(value)) return undefined
+    const record = value as Record<string, unknown>
+    return Object.fromEntries(values.filter((key) => Object.prototype.hasOwnProperty.call(record, key) && text(record[key])).map((key) => [key, text(record[key])]))
+  }
+  if (!Array.isArray(value)) return undefined
+  return value.slice(0, 40).flatMap((range) => {
+    if (!range || typeof range !== 'object') return []
+    const min = optionalNumber(range.min)
+    const max = optionalNumber(range.max)
+    return min !== null && max !== null && min <= max && text(range.text) ? [{ min, max, text: text(range.text) }] : []
   })
 }
 

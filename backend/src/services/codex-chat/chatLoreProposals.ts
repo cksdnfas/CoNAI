@@ -1,10 +1,11 @@
 import fs from 'fs'
 import path from 'path'
+import { createHash } from 'node:crypto'
 import type { ChatExecutionContext, ChatProposal } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { FileStoreService, TEXT_EXTENSIONS, fileOwnerKey } from '../fileStoreService'
 import { storedFilePath } from '../fileStorePaths'
-import { loreEntryTitle } from './chatLorebook'
+import { loreEntryTitle, normalizeLorebook } from './chatLorebook'
 import { LORE_FILES_FOLDER, OwnedLorebookStore, foldLoreTitle, freeChildName, type OwnedLorebook } from './chatLorebookFiles'
 import { ChatGroupStore } from './chatGroupStore'
 import { ChatProfileStore } from './chatProfiles'
@@ -189,7 +190,8 @@ export function applyLoreProposal(proposalId: number): { proposal: ChatProposal;
       const current = OwnedLorebookStore.chatBookOf(threadId)
       const entries = current?.entries ?? []
       const replaced = proposal.replaces ? entries.find((entry) => entry.id === proposal.replaces) : undefined
-      const fields = { title: proposal.title, keys: proposal.keys, content: proposal.content, constant: proposal.constant }
+      const replyId = ChatProposalStore.replyIdOf(proposalId)!
+      const fields = { title: proposal.title, keys: proposal.keys, content: proposal.content, constant: proposal.constant, source: { threadId, replyId, proposalId } }
       let entryId = replaced?.id ?? `lore-p${proposal.id}`
       while (!replaced && entries.some((entry) => entry.id === entryId)) entryId += '-'
       const next = replaced
@@ -198,8 +200,8 @@ export function applyLoreProposal(proposalId: number): { proposal: ChatProposal;
       let book = OwnedLorebookStore.saveChatBook(threadId, next) as OwnedLorebook
       if (proposal.file) {
         const materials = FileStoreService.ensureFolder(owner, book.folderId, LORE_FILES_FOLDER)
-        const own = replaced?.file?.toLowerCase() === `${LORE_FILES_FOLDER}/${proposal.file.name}`.toLowerCase()
-        const name = own ? proposal.file.name : freeChildName(owner, materials.id, proposal.file.name)
+        // Keep the replaced entry's file intact so undo can restore its original link and bytes.
+        const name = freeChildName(owner, materials.id, proposal.file.name)
         const existed = FileStoreService.findChild(owner, materials.id, name)
         const written = FileStoreService.writeText(owner, materials.id, name, proposal.file.text, { silent: true })
         if (!existed) created = written.id
@@ -208,12 +210,31 @@ export function applyLoreProposal(proposalId: number): { proposal: ChatProposal;
         }) as OwnedLorebook
       }
       const saved = ChatProposalStore.markSaved(proposalId, book.id) as ChatProposal
-      return { proposal: saved, book }
+      const remembered = replaced ? ChatProposalStore.updateLoreUndo(proposalId, { undoBefore: { ...replaced }, undoAfter: { ...book.entries.find((entry) => entry.id === entryId)! } }) : saved
+      return { proposal: remembered as ChatProposal, book }
     }).immediate()
   } catch (error) {
     if (created) fs.rmSync(storedFilePath(owner, created), { force: true })
     throw error
   }
+}
+
+/** Restore one applied replacement; a later hand edit requires the person's explicit confirmation. */
+export function undoLoreProposal(proposalId: number, force = false, expectedHash?: string): { proposal?: ChatProposal; book?: OwnedLorebook; changed?: boolean; currentHash?: string } {
+  return getUserSettingsDb().transaction(() => {
+    const proposal = ChatProposalStore.find(proposalId)
+    if (proposal?.kind !== 'lore' || !proposal.replaces || !proposal.before || !isSaved(proposal) || proposal.undone) throw new LoreProposalError('되돌릴 교체 제안이 없어.', 409)
+    const threadId = ChatProposalStore.threadIdOf(proposalId)!
+    const book = OwnedLorebookStore.chatBookOf(threadId)
+    const entry = book?.entries.find((entry) => entry.id === proposal.replaces)
+    if (!book || !entry) throw new LoreProposalError('항목이 지워져서 되돌릴 수 없어.', 409)
+    const before = normalizeLorebook([proposal.undoBefore ?? { ...entry, ...proposal.before, fileId: null, source: undefined }])[0]
+    const after = proposal.undoAfter ? normalizeLorebook([proposal.undoAfter])[0] : null
+    const currentHash = createHash('sha256').update(JSON.stringify(entry)).digest('hex')
+    if ((!after || JSON.stringify(entry) !== JSON.stringify(after)) && (!force || expectedHash !== currentHash)) return { changed: true, currentHash }
+    const restored = OwnedLorebookStore.saveChatBook(threadId, book.entries.map((item) => item.id === entry.id ? before : item))!
+    return { proposal: ChatProposalStore.updateLoreUndo(proposalId, { undone: true })!, book: restored }
+  }).immediate()
 }
 
 /**

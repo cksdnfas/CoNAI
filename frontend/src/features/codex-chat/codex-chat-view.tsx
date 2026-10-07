@@ -1,7 +1,7 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useIsMutating, useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
-import { Activity, ArrowLeft, ArrowUp, Download, Eraser, Flag, FoldVertical, LayoutGrid, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, UserRound, X } from 'lucide-react'
+import { Activity, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Download, Eraser, Flag, FoldVertical, LayoutGrid, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, UserRound, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -357,6 +357,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     onSuccess: async (detail) => {
       queryClient.setQueryData(codexChatThreadQueryKey(detail.thread.id), detail)
       await queryClient.invalidateQueries({ queryKey: codexChatMediaQueryKey(detail.thread.id) })
+      await queryClient.invalidateQueries({ queryKey: threadLorebooksQueryKey(detail.thread.id) })
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '답변 전환 실패', en: 'Could not switch answer' })), tone: 'error' }),
   })
@@ -957,7 +958,14 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     }}>
       <div ref={observeTranscript} className={cn('mx-auto flex flex-col pb-6', layout === 'page' ? cn(CHAT_WIDTH_CLASS[appearance.width], 'px-4 pt-2 sm:px-6') : 'px-4 pt-3')} style={{ ...chatTranscriptStyle(appearance, profile?.style), gap: `${CHAT_MESSAGE_GAP_PX[appearance.messageGap]}px` }}>
         {visibleMessages.length < messages.length ? <Button variant="ghost" size="sm" onClick={showEarlierMessages}>{t({ ko: '이전 메시지', en: 'Earlier messages' })}</Button> : null}
-        {pendingChat?.greeting?.text ? <CodexChatAssistantMessage content={pendingChat.greeting.text} toolCalls={[]} appearance={appearance} speaker={speaker} /> : null}
+        {pendingChat?.greeting?.text ? <div>
+          <CodexChatAssistantMessage content={pendingChat.greeting.text} toolCalls={[]} appearance={appearance} speaker={speaker} />
+          {pendingChat.greeting.greetings.length > 1 ? <div className="mt-1 flex items-center gap-1">
+            <IconButton size="icon-xs" variant="ghost" disabled={isStartingChat || (pendingChat.greeting.index ?? 0) <= 0} label={t({ ko: '이전 인사', en: 'Previous greeting' })} onClick={() => chat.selectPendingGreeting((pendingChat.greeting!.index ?? 0) - 1)}><ChevronLeft /></IconButton>
+            <span className="text-xs tabular-nums text-muted-foreground">{(pendingChat.greeting.index ?? 0) + 1}/{pendingChat.greeting.greetings.length}</span>
+            <IconButton size="icon-xs" variant="ghost" disabled={isStartingChat || (pendingChat.greeting.index ?? 0) >= pendingChat.greeting.greetings.length - 1} label={t({ ko: '다음 인사', en: 'Next greeting' })} onClick={() => chat.selectPendingGreeting((pendingChat.greeting!.index ?? 0) + 1)}><ChevronRight /></IconButton>
+          </div> : null}
+        </div> : null}
         <ChatSavedMessages messages={visibleMessages} contextMessages={messages} segments={threadQuery.data?.summarySegments} flashMessageId={flashMessageId} summaryUntilId={isGroup ? null : thread?.summary_until_message_id ?? null} media={media} actions={messageActions} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
         {liveTurn && liveTurn.threadId === activeThreadId ? (
           <ChatLiveMessage turn={liveTurn} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />

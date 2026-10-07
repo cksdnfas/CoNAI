@@ -1,5 +1,6 @@
 import { Fragment, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { MessageCircle, Plus, Trash2, X } from 'lucide-react'
+import { chatBlockToneText } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
@@ -91,7 +92,7 @@ function blockOf(rows: FieldRow[]): Pick<ChatDisplayBlock, 'example' | 'fields'>
   const named = rows.filter((row) => row.name.trim())
   return {
     example: JSON.stringify(Object.fromEntries(named.map((row) => [row.name.trim(), startValue(row.start)])), null, 2),
-    fields: named.map((row) => ({ name: row.name.trim(), min: row.min, max: row.max, step: row.step, values: row.values, readonly: row.readonly })),
+    fields: named.map((row) => ({ name: row.name.trim(), min: row.min, max: row.max, step: row.step, values: row.values, readonly: row.readonly, ...(row.tone ? { tone: row.tone } : {}) })),
   }
 }
 
@@ -106,23 +107,26 @@ function numberOrNull(text: string): number | null {
  */
 function BlockFieldsTable({ rows, onChange }: { rows: FieldRow[]; onChange: (rows: FieldRow[]) => void }) {
   const { t } = useI18n()
+  const [toneOpen, setToneOpen] = useState<string | null>(null)
   const update = (id: string, patch: Partial<FieldRow>) => onChange(rows.map((row) => (row.id === id ? { ...row, ...patch } : row)))
   const head = 'text-2xs font-semibold text-muted-foreground'
   const names = rows.map((row) => row.name.trim())
   return (
     <div className="space-y-1.5">
       {rows.length > 0 ? (
-        <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.3fr)_3.5rem_3.5rem_3.5rem_minmax(0,1.2fr)_auto_auto] items-center gap-x-2 gap-y-1.5">
+        <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(0,1.3fr)_3.5rem_3.5rem_3.5rem_minmax(0,1.2fr)_auto_auto_auto] items-center gap-x-2 gap-y-1.5">
           <span className={head}>{t({ ko: '필드', en: 'Field' })}</span>
           <span className={head}>{t({ ko: '시작 값', en: 'Start' })}</span>
           <span className={head}>{t({ ko: '최소', en: 'Min' })}</span>
           <span className={head}>{t({ ko: '최대', en: 'Max' })}</span>
           <span className={head}>{t({ ko: '턴당', en: 'Per turn' })}</span>
           <span className={head}>{t({ ko: '허용 값 (쉼표)', en: 'Allowed (comma)' })}</span>
+          <span />
           <span className={head}>{t({ ko: '고정', en: 'Fixed' })}</span>
           <span />
           {rows.map((row, index) => {
             const duplicate = row.name.trim() !== '' && names.indexOf(row.name.trim()) !== index
+            const count = Array.isArray(row.tone) ? row.tone.filter((range) => range.text.trim()).length : Object.values(row.tone ?? {}).filter((text) => text.trim()).length
             return (
               <Fragment key={row.id}>
                 <Input variant="settings" value={row.name} maxLength={60} className={cn('font-mono', duplicate && 'border-destructive')} aria-invalid={duplicate} aria-label={t({ ko: '필드', en: 'Field' })} onChange={(event) => update(row.id, { name: event.target.value })} />
@@ -131,8 +135,24 @@ function BlockFieldsTable({ rows, onChange }: { rows: FieldRow[]; onChange: (row
                 <Input variant="settings" inputMode="decimal" value={row.max ?? ''} disabled={row.readonly} aria-label={t({ ko: '최대', en: 'Max' })} onChange={(event) => update(row.id, { max: numberOrNull(event.target.value) })} />
                 <Input variant="settings" inputMode="decimal" value={row.step ?? ''} disabled={row.readonly} aria-label={t({ ko: '턴당 변화', en: 'Per turn' })} onChange={(event) => update(row.id, { step: numberOrNull(event.target.value) })} />
                 <Input variant="settings" value={row.values.join(', ')} disabled={row.readonly} aria-label={t({ ko: '허용 값', en: 'Allowed values' })} onChange={(event) => update(row.id, { values: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} />
+                <IconButton size="icon-sm" variant="ghost" className={cn('relative', count > 0 && 'text-primary')} disabled={row.values.length === 0 && row.min === null && row.max === null && typeof startValue(row.start) !== 'number' && !Array.isArray(row.tone)} aria-expanded={toneOpen === row.id} label={t({ ko: '말투', en: 'Tone' })} onClick={() => setToneOpen(toneOpen === row.id ? null : row.id)}><MessageCircle />{count > 0 ? <span className="absolute -top-1 -right-1 text-2xs">{count}</span> : null}</IconButton>
                 <Switch checked={row.readonly} onCheckedChange={(readonly) => update(row.id, { readonly })} aria-label={t({ ko: '고정', en: 'Fixed' })} />
                 <IconButton size="icon-sm" variant="ghost" onClick={() => onChange(rows.filter((entry) => entry.id !== row.id))} label={t({ ko: '필드 삭제', en: 'Delete field' })}><Trash2 /></IconButton>
+                {toneOpen === row.id ? <div className="col-span-9 ml-1 space-y-1 border-l border-primary/60 py-1 pl-3">
+                  {row.values.length > 0 ? row.values.map((value) => <div key={value} className="grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-2">
+                    <span className="truncate text-xs">{value}</span>
+                    <Input variant="settings" value={!Array.isArray(row.tone) ? row.tone?.[value] ?? '' : ''} maxLength={2000} aria-label={t({ ko: '{value} 말투', en: '{value} tone' }, { value })} onChange={(event) => update(row.id, { tone: { ...(!Array.isArray(row.tone) ? row.tone : {}), [value]: event.target.value } })} />
+                  </div>) : <>
+                    {(Array.isArray(row.tone) ? row.tone : []).map((range, rangeIndex) => <div key={rangeIndex} className="grid grid-cols-[4rem_auto_4rem_minmax(0,1fr)_auto] items-center gap-2">
+                      <Input variant="settings" type="number" value={range.min} aria-label={t({ ko: '구간 최소', en: 'Range min' })} onChange={(event) => update(row.id, { tone: (Array.isArray(row.tone) ? row.tone : []).map((item, index) => index === rangeIndex ? { ...item, min: Number(event.target.value) } : item) })} />
+                      <span className="text-xs text-muted-foreground">–</span>
+                      <Input variant="settings" type="number" value={range.max} aria-label={t({ ko: '구간 최대', en: 'Range max' })} onChange={(event) => update(row.id, { tone: (Array.isArray(row.tone) ? row.tone : []).map((item, index) => index === rangeIndex ? { ...item, max: Number(event.target.value) } : item) })} />
+                      <Input variant="settings" value={range.text} maxLength={2000} aria-label={t({ ko: '말투 지시', en: 'Tone instruction' })} onChange={(event) => update(row.id, { tone: (Array.isArray(row.tone) ? row.tone : []).map((item, index) => index === rangeIndex ? { ...item, text: event.target.value } : item) })} />
+                      <IconButton size="icon-xs" variant="ghost" label={t({ ko: '구간 삭제', en: 'Delete range' })} onClick={() => update(row.id, { tone: (Array.isArray(row.tone) ? row.tone : []).filter((_, index) => index !== rangeIndex) })}><X /></IconButton>
+                    </div>)}
+                    <Button size="xs" variant="ghost" disabled={Array.isArray(row.tone) && row.tone.length >= 40} onClick={() => update(row.id, { tone: [...(Array.isArray(row.tone) ? row.tone : []), { min: row.min ?? 0, max: row.max ?? 30, text: '' }] })}><Plus />{t({ ko: '구간', en: 'Range' })}</Button>
+                  </>}
+                </div> : null}
               </Fragment>
             )
           })}
@@ -150,8 +170,12 @@ function BlockPreview({ block }: { block: ChatDisplayBlock }) {
     return <p className="text-xs text-destructive">{t({ ko: '시작 값이 올바른 JSON이 아니야.', en: 'The starting values are not valid JSON.' })}</p>
   }
   return (
-    <div className="rounded-md border border-dashed border-line px-3 py-1">
-      <ChatDisplayBlockView block={block} data={data} />
+    <div className="space-y-2">
+      <div className="rounded-md border border-dashed border-line px-3 py-1"><ChatDisplayBlockView block={block} data={data} /></div>
+      <div className="space-y-1 text-xs text-muted-foreground">
+        <span>{t({ ko: '모델에 가는 모양', en: 'Sent to the model' })}</span>
+        <pre className="whitespace-pre-wrap break-words font-mono">{`${block.key}: ${JSON.stringify(data)}\n말투: ${chatBlockToneText(block.fields, data) || '—'}`}</pre>
+      </div>
     </div>
   )
 }

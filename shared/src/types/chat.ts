@@ -107,6 +107,10 @@ export type ChatProposal = { id: number; dismissed?: boolean } & (
       before?: { title: string; keys: string[]; content: string; constant: boolean; file: string | null }
       /** The chat book the entry went into. */
       savedId?: number | null
+      /** Snapshots only for undoing one applied lore replacement. */
+      undoBefore?: Record<string, unknown>
+      undoAfter?: Record<string, unknown>
+      undone?: boolean
     }
 )
 

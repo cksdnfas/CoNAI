@@ -1,4 +1,5 @@
 import sharp from 'sharp'
+import { unknownChatMacros } from '@conai/shared'
 import { PngExtractor } from '../metadata/extractors/pngExtractor'
 import { ChatProfileError, normalizeAlternateGreetings, type ChatProfileInput, type ChatPromptSection } from './chatProfiles'
 import { ChatLorebookStore, isRegexKeyword, normalizeLorebook, type ChatLoreEntry } from './chatLorebook'
@@ -44,7 +45,6 @@ const UNSUPPORTED_LORE_FIELDS: Array<[string, (row: Record<string, unknown>, ext
   ['재귀 설정', (row, ext) => [row.excludeRecursion, row.preventRecursion, row.delayUntilRecursion, ext.exclude_recursion, ext.prevent_recursion].some((value) => value === true)],
   ['항목별 탐색 깊이', (row, ext) => typeof row.scanDepth === 'number' || typeof ext.scan_depth === 'number'],
 ]
-const KNOWN_MACRO = /^\{\{\s*(char|user|original)\s*\}\}$/i
 
 function lorebookReport(raw: unknown[], entries: ChatLoreEntry[], report: ChatCardImportReport) {
   if (entries.length === 0) return
@@ -115,8 +115,7 @@ export async function importChatCard(buffer: Buffer, providerName: string): Prom
   if (greeting) report.kept.push(alternateGreetings.length ? `첫 인사와 다른 인사 ${alternateGreetings.length}개` : '첫 인사')
   if (avatar) report.kept.push('아바타')
   // Only {{char}} and {{user}} are filled; any other macro reaches the model as written.
-  const macros = [...new Set([systemPrompt, greeting, ...alternateGreetings, authorNote, ...sections.map((section) => section.content)].join('\n').match(/\{\{[^{}]{1,40}\}\}/g) ?? [])]
-    .filter((macro) => !KNOWN_MACRO.test(macro))
+  const macros = unknownChatMacros([systemPrompt, greeting, ...alternateGreetings, authorNote, ...sections.map((section) => section.content)].join('\n'))
   if (macros.length) report.dropped.push(`지원하지 않는 매크로: ${macros.slice(0, 8).join(' ')}${macros.length > 8 ? ' …' : ''}`)
   return {
     importReport: report,

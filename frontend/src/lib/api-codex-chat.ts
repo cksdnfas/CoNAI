@@ -116,6 +116,7 @@ export type ChatTypeface = 'sans' | 'serif' | 'mono'
 
 /** A rule the server holds a block field to when the model writes it (hand edits are free). */
 export interface ChatBlockField {
+  tone?: import('@conai/shared').ChatBlockTone
   name: string
   min: number | null
   max: number | null
@@ -349,6 +350,7 @@ export interface ChatPromptSection {
 export type LoreSecondaryLogic = 'andAny' | 'notAll' | 'notAny' | 'andAll'
 
 export interface ChatLoreEntry {
+  source?: import('@conai/shared').ChatLoreSource
   id: string
   /** What the book's index calls the entry; empty: the first keyword (see loreEntryTitle). */
   title?: string
@@ -405,6 +407,7 @@ export interface ThreadLoreBook {
 }
 
 export interface ThreadLorebooks {
+  entryUsage?: Record<string, { turnsAgo?: number; sourceMessageId?: number | null }>
   chatBook: OwnedChatLorebook | null
   linkedIds: number[]
   books: ThreadLoreBook[]
@@ -1259,7 +1262,7 @@ export function createCodexChatThread(profileId: number, userProfileId?: number 
 /** A new chat's opening before it is saved: one greeting (index null: none) and the user profile the chat would take. */
 export function previewChatGreeting(profileId: number, userProfileId?: number | null) {
   const query = userProfileId === undefined ? '' : `?userProfileId=${userProfileId === null ? 'null' : userProfileId}`
-  return requestApiData<{ index: number | null; text: string; userProfileId: number | null }>(`/api/codex-chat/profiles/${profileId}/greeting${query}`, { cache: 'no-store' })
+  return requestApiData<{ index: number | null; text: string; greetings: string[]; userProfileId: number | null }>(`/api/codex-chat/profiles/${profileId}/greeting${query}`, { cache: 'no-store' })
 }
 
 export function createGroupChat(input: { profileIds: number[]; representativeId: number; title?: string; userProfileId?: number | null }) {
@@ -1404,6 +1407,10 @@ export function draftLorebookMerge(targetId: number, input: { sourceId: number; 
 /** Save a save_lore proposal into the chat book (the server writes it). */
 export function applyChatProposal(proposalId: number) {
   return requestApiData<{ proposal: unknown; book: OwnedChatLorebook | null }>(`/api/chat-proposals/${proposalId}/apply`, { method: 'POST' })
+}
+
+export function undoChatLoreProposal(proposalId: number, force = false, expectedHash?: string) {
+  return requestApiData<{ proposal?: ChatProposal; book?: OwnedChatLorebook; changed?: boolean; currentHash?: string }>(`/api/chat-proposals/${proposalId}/undo`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ force, expectedHash }) })
 }
 
 export function dismissChatProposal(proposalId: number) {

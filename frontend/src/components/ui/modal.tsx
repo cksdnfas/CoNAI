@@ -11,6 +11,7 @@ interface ModalProps extends PropsWithChildren {
   title: ReactNode
   description?: ReactNode
   headerContent?: ReactNode
+  headerActions?: ReactNode
   onClose: () => void
   widthClassName?: string
   closeOnBack?: boolean
@@ -75,7 +76,7 @@ function preventOutsideDismiss(event: Event) {
  * Esc closes only the top-most dialog, and only when nothing handled the keydown first (`defaultPrevented`), whether in
  * the capture phase (image editor) or in content bubble handlers (inputs that revert their draft on Esc).
  */
-function Modal({ open, title, description, headerContent, onClose, widthClassName = 'max-w-4xl', closeOnBack = true, sidePanelInset, children }: ModalProps) {
+function Modal({ open, title, description, headerContent, headerActions, onClose, widthClassName = 'max-w-4xl', closeOnBack = true, sidePanelInset, children }: ModalProps) {
   const { t } = useI18n()
   const contentRef = useRef<HTMLDivElement | null>(null)
   const returnFocusRef = useRef<HTMLElement | null>(null)
@@ -200,6 +201,7 @@ function Modal({ open, title, description, headerContent, onClose, widthClassNam
                     ) : null}
                   </div>
 
+                  {headerActions}
                   <Button type="button" size="icon-sm" variant="secondary" className="shrink-0" onClick={onClose} aria-label={t({ ko: '닫기', en: 'Close' })} title={t({ ko: '닫기', en: 'Close' })}>
                     <X className="h-4 w-4" />
                   </Button>

@@ -40,6 +40,7 @@ import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { CodexChatStore, type ChatBranchPurpose, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import { ChatSummaryStore } from './chatMemory'
 import { branchChatThread } from './chatBranch'
+import { addChatGreeting } from './chatGreeting'
 import { logger } from '../../utils/logger'
 import type { ChatStreamEvent } from '@conai/shared'
 
@@ -971,6 +972,7 @@ export const CodexChatService = {
     return {
       index,
       text: index === null ? '' : fillCharacterPlaceholders(greetings[index], profile, userPersonaOf(user)),
+      greetings: greetings.map((text) => fillCharacterPlaceholders(text, profile, userPersonaOf(user))),
       userProfileId: user?.id ?? null,
     }
   },
@@ -985,10 +987,7 @@ export const CodexChatService = {
     requireCodexProfile(profile.id)
     const id = CodexChatStore.createThread(requester.accountId, '', 'codex', profile.id)
     if (user) ChatUserProfileStore.setThreadUserProfile(id, user.id)
-    const greeting = pickChatGreeting(profile, greetingIndex)
-    if (greeting) {
-      CodexChatStore.addMessage({ thread_id: id, role: 'assistant', content: fillCharacterPlaceholders(greeting, profile, userPersonaOf(user)), tool_calls: [], status: 'completed', error: null })
-    }
+    addChatGreeting(id, profile, userPersonaOf(user), greetingIndex)
     return requireThread(requester, id)
   },
 

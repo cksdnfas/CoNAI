@@ -10,6 +10,7 @@ export type LoreSecondaryLogic = 'andAny' | 'notAll' | 'notAny' | 'andAll'
 const SECONDARY_LOGICS: readonly LoreSecondaryLogic[] = ['andAny', 'notAll', 'notAny', 'andAll']
 
 export type ChatLoreEntry = {
+  source?: import('@conai/shared').ChatLoreSource
   id: string
   /** What the book's index calls the entry; '' derives one (see loreEntryTitle). */
   title: string
@@ -116,8 +117,10 @@ export function normalizeLorebook(value: unknown): ChatLoreEntry[] {
     // SillyTavern keeps an entry's title in `comment`.
     const title = typeof row.title === 'string' ? row.title : typeof row.comment === 'string' ? row.comment : ''
     const file = loreFilePath(row.file)
+    const source = row.source as Partial<import('@conai/shared').ChatLoreSource> | null | undefined
     return [{
       id,
+      ...(source && Number.isSafeInteger(source.threadId) && source.threadId! > 0 && typeof source.replyId === 'string' && source.replyId.length > 0 && source.replyId.length <= 200 && Number.isSafeInteger(source.proposalId) && source.proposalId! > 0 ? { source: { threadId: source.threadId!, replyId: source.replyId, proposalId: source.proposalId! } } : {}),
       title: title.trim().replace(/\s+/g, ' ').slice(0, LORE_TITLE_MAX_LENGTH),
       keys: keywordList(keys),
       secondaryKeys: keywordList(secondary),

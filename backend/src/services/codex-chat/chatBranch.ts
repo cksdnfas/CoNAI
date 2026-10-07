@@ -1,4 +1,5 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { OwnedLorebookStore } from './chatLorebookFiles'
 import { parseBlockEdits } from './chatBlockState'
 import { renderSummary, type ChatSummarySegment } from './chatMemory'
 import { parseMessageRouting, type ChatBranchPurpose, type CodexChatThreadRecord } from './codexChatStore'
@@ -9,7 +10,7 @@ const TITLE_MAX_LENGTH = 60
 
 /** Thread settings a branch keeps: who talks and how. Codex state and usage start empty. */
 const COPIED_THREAD_COLUMNS = ['account_id', 'engine', 'profile_id', 'kind', 'context_turns', 'summary_enabled', 'author_note', 'author_note_depth',
-  'max_tokens', 'flag_ids', 'user_profile_id', 'group_chain_limit', 'group_window_limit'] as const
+  'max_tokens', 'flag_ids', 'user_profile_id', 'group_chain_limit', 'group_window_limit', 'lorebook_ids'] as const
 
 const COPIED_MESSAGE_COLUMNS = ['role', 'content', 'display_content', 'tool_calls', 'status', 'error', 'speaker_profile_id', 'flags', 'finish_reason',
   'media_attachments', 'alternatives', 'active_alternative', 'context_meta', 'created_date'] as const
@@ -60,6 +61,18 @@ export function branchChatThread(thread: CodexChatThreadRecord, untilMessageId: 
       .map((edit) => ({ ...edit, afterMessageId: ids.get(edit.afterMessageId) ?? edit.afterMessageId }))
     if (edits.length > 0) db.prepare('UPDATE codex_chat_threads SET block_edits = ? WHERE id = ?').run(JSON.stringify(edits), branchId)
 
+    const sourceBook = OwnedLorebookStore.chatBookOf(thread.id)
+    const replyIds = new Set<string>()
+    for (const row of rows) {
+      const routing = parseMessageRouting(row.routing)
+      if (routing?.replyId) replyIds.add(routing.replyId)
+      try {
+        for (const alternative of JSON.parse(typeof row.alternatives === 'string' ? row.alternatives : '[]') as Array<{ routing?: { replyId?: string } }>) if (alternative.routing?.replyId) replyIds.add(alternative.routing.replyId)
+      } catch { /* Legacy malformed variants cannot identify a source. */ }
+    }
+    const entries = sourceBook?.entries.filter((entry) => purpose === 'preserve' || !entry.source || replyIds.has(entry.source.replyId)) ?? []
+    const branchBook = sourceBook && entries.length ? OwnedLorebookStore.copyChatBookEntries(sourceBook, branchId, entries) : null
+
     // Summary segments that end by the branch point; a bound that is no message (0: ahead of all) stays as it is.
     const segments = db.prepare('SELECT * FROM chat_summary_segments WHERE thread_id = ? AND until_message_id <= ? ORDER BY id').all(thread.id, untilMessageId) as ChatSummarySegment[]
     const insertSegment = db.prepare('INSERT INTO chat_summary_segments (thread_id, level, from_message_id, until_message_id, content, backed) VALUES (?, ?, ?, ?, ?, ?)')
@@ -72,6 +85,13 @@ export function branchChatThread(thread: CodexChatThreadRecord, untilMessageId: 
       try {
         const meta = JSON.parse(value) as ChatContextMeta
         if (meta.version !== 2) return value
+        if (sourceBook && branchBook) {
+          for (const entry of meta.loreEntries ?? []) if (entry.bookId === sourceBook.id) {
+            entry.bookId = branchBook.id
+            entry.key = entry.key.replace(`${sourceBook.id}:`, `${branchBook.id}:`)
+          }
+          for (const entry of meta.loreSkipped ?? []) if (entry.bookId === sourceBook.id) entry.bookId = branchBook.id
+        }
         if (meta.windowFromMessageId) meta.windowFromMessageId = ids.get(meta.windowFromMessageId) ?? meta.windowFromMessageId
         if (meta.summaryUntilMessageId) meta.summaryUntilMessageId = ids.get(meta.summaryUntilMessageId) ?? meta.summaryUntilMessageId
         if (meta.window?.fromId) meta.window.fromId = ids.get(meta.window.fromId) ?? meta.window.fromId

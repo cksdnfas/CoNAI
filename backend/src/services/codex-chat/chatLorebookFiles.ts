@@ -579,6 +579,28 @@ export const OwnedLorebookStore = {
     return toOwned(createChatBook(threadId, entries))
   },
 
+  /** Copy a branch's entries and linked files into its own book folder. */
+  copyChatBookEntries(source: OwnedLorebook, threadId: number, entries: ChatLoreEntry[]): OwnedLorebook {
+    const owner = (getUserSettingsDb().prepare('SELECT owner_key FROM chat_lorebooks WHERE id = ?').get(source.id) as { owner_key: string }).owner_key
+    const target = OwnedLorebookStore.saveChatBook(threadId, entries.map((entry) => ({ ...entry, file: null, fileId: null })))!
+    const links = new Map<string, { file: string; fileId: string }>()
+    const next = entries.map((entry) => {
+      if (!entry.file) return entry
+      const existing = links.get(entry.file)
+      if (existing) return { ...entry, ...existing }
+      const file = loreEntryFile({ owner, folderId: source.folderId }, entry)
+      if (!file) return { ...entry, fileId: null }
+      const parts = entry.file.split('/')
+      let folderId = target.folderId
+      for (const part of parts.slice(0, -1)) folderId = FileStoreService.ensureFolder(owner, folderId, part).id
+      const copied = FileStoreService.copyFile(owner, file.id, folderId, file.name, { silent: true })
+      const link = { file: entry.file, fileId: copied.id }
+      links.set(entry.file, link)
+      return { ...entry, ...link }
+    })
+    return OwnedLorebookStore.saveChatBook(threadId, next)!
+  },
+
   /** Append entries to the chat book (created when missing); entries whose id the book already has are skipped. */
   addChatBookEntries(threadId: number, value: unknown): OwnedLorebook | null {
     const added = normalizeLorebook(value)

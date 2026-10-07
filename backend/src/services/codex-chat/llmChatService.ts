@@ -1,4 +1,5 @@
 import { validateChatMediaAttachments } from './chatMediaAttachments'
+import { addChatGreeting } from './chatGreeting'
 import type { ChatExecutionContext, ChatPageSnapshot, ChatProposal } from '@conai/shared'
 import { isCodexChatCreationTool } from '@conai/shared'
 import { beginDirectReply, userReplyRouting } from './chatReplies'
@@ -10,7 +11,7 @@ import { inlineTextsForChat, validateChatAttachments } from './chatAttachments'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
-import { ChatProfileStore, pickChatGreeting, type ChatProfile } from './chatProfiles'
+import { ChatProfileStore, type ChatProfile } from './chatProfiles'
 import { translateReply, translateUserInput } from './chatTranslation'
 import { hasTranslation, resolveProfileModel } from './chatModelRoles'
 import { stripEchoedAddresses } from '@conai/shared'
@@ -522,10 +523,7 @@ export const LlmChatService = {
     const user = ChatUserProfileStore.requireOwn(requester.accountId, userProfileId)
     const threadId = CodexChatStore.createThread(requester.accountId, '', 'llm', profile.id)
     if (user) ChatUserProfileStore.setThreadUserProfile(threadId, user.id)
-    const greeting = pickChatGreeting(profile, greetingIndex)
-    if (greeting) {
-      CodexChatStore.addMessage({ thread_id: threadId, role: 'assistant', content: fillCharacterPlaceholders(greeting, profile, userPersonaOf(user)), tool_calls: [], status: 'completed', error: null })
-    }
+    addChatGreeting(threadId, profile, userPersonaOf(user), greetingIndex)
     return threadId
   },
 

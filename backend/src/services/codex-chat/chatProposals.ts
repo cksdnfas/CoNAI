@@ -84,10 +84,23 @@ export const ChatProposalStore = {
     return row ? toProposal(row) : null
   },
 
+  /** Keep the before/after of an applied lore replacement, without adding general entry history. */
+  updateLoreUndo(id: number, patch: { undoBefore?: Record<string, unknown>; undoAfter?: Record<string, unknown>; undone?: boolean }): ChatProposal | null {
+    const proposal = ChatProposalStore.find(id)
+    if (proposal?.kind !== 'lore') return null
+    table().prepare('UPDATE chat_proposals SET proposal = ? WHERE id = ?').run(JSON.stringify({ ...proposal, ...patch }), id)
+    return ChatProposalStore.find(id)
+  },
+
   /** The chat a proposal belongs to (for the visibility check before saving it), or null when unknown. */
   threadIdOf(id: number): number | null {
     const row = table().prepare('SELECT thread_id FROM chat_proposals WHERE id = ?').get(id) as { thread_id: number } | undefined
     return row ? row.thread_id : null
+  },
+
+  replyIdOf(id: number): string | null {
+    const row = table().prepare('SELECT reply_id FROM chat_proposals WHERE id = ?').get(id) as { reply_id: string } | undefined
+    return row?.reply_id ?? null
   },
 
   /** Saved, and no longer set aside. */

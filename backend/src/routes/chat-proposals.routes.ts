@@ -2,7 +2,7 @@ import express, { type Request, type Response } from 'express'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
 import { ChatProposalStore } from '../services/codex-chat/chatProposals'
-import { applyLoreProposal, LoreProposalError } from '../services/codex-chat/chatLoreProposals'
+import { applyLoreProposal, undoLoreProposal, LoreProposalError } from '../services/codex-chat/chatLoreProposals'
 import { LorebookError } from '../services/codex-chat/chatLorebookFiles'
 import { FileStoreError } from '../services/fileStoreService'
 import { CodexChatStore } from '../services/codex-chat/codexChatStore'
@@ -132,6 +132,20 @@ router.post('/:proposalId/apply', asyncHandler(async (req: Request, res: Respons
   try {
     const { proposal, book } = applyLoreProposal(proposalId)
     res.json({ success: true, data: { proposal, book } })
+  } catch (error) {
+    if (error instanceof LoreProposalError || error instanceof LorebookError || error instanceof FileStoreError) {
+      res.status(error.status).json({ success: false, error: error.message })
+      return
+    }
+    throw error
+  }
+}))
+
+router.post('/:proposalId/undo', asyncHandler(async (req: Request, res: Response) => {
+  const proposalId = visibleProposalId(req, res)
+  if (proposalId === null) return
+  try {
+    res.json({ success: true, data: undoLoreProposal(proposalId, req.body?.force === true, typeof req.body?.expectedHash === 'string' ? req.body.expectedHash : undefined) })
   } catch (error) {
     if (error instanceof LoreProposalError || error instanceof LorebookError || error instanceof FileStoreError) {
       res.status(error.status).json({ success: false, error: error.message })

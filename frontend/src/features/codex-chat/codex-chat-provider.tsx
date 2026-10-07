@@ -4,7 +4,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread, type CodexChatThread, getCodexChatStatus, getCodexChatThread, previewChatGreeting, interruptCodexChatThread, pickSnapshot, readThreadFlagIds, streamCodexChatMessage, streamChatContinue, streamChatRewrite, type ChatFlag, type ChatMediaAttachment, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
-import { CHAT_STATUS_QUERY_KEY } from '@/lib/api-codex-chat'
+import { CHAT_STATUS_QUERY_KEY, threadLorebooksQueryKey } from '@/lib/api-codex-chat'
 import { CHAT_PROFILES_QUERY_KEY, type ChatProfileSummary } from '@/lib/api-codex-chat'
 import { summarizeChatError } from './chat-error-chip'
 import type { StoredFileEntry } from '@conai/shared'
@@ -285,7 +285,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     setView('chat')
     previewChatGreeting(profileId, userProfileId).then((preview) => {
       if (pendingRef.current !== pending) return
-      pendingRef.current = { ...pending, userProfileId: preview.userProfileId, greeting: { index: preview.index, text: preview.text } }
+      pendingRef.current = { ...pending, userProfileId: preview.userProfileId, greeting: { index: preview.index, text: preview.text, greetings: preview.greetings } }
       setPendingChat(pendingRef.current)
     }).catch((error: unknown) => {
       if (pendingRef.current !== pending) return
@@ -461,6 +461,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(sentThreadId) }),
         queryClient.invalidateQueries({ queryKey: codexChatMediaQueryKey(sentThreadId) }),
+        queryClient.invalidateQueries({ queryKey: threadLorebooksQueryKey(sentThreadId) }),
         queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }),
       ])
       if (streamAbortRef.current === controller) {
@@ -474,6 +475,13 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   }, [capturePage, queryClient, showSnackbar, t, setDraftReply, setDraft])
 
   const send = useCallback(async (threadId: number, text?: string) => { await reply(threadId, undefined, text) }, [reply])
+
+  const selectPendingGreeting = useCallback((index: number) => {
+    const pending = pendingRef.current
+    if (!pending?.greeting || startingRef.current || index < 0 || index >= pending.greeting.greetings.length) return
+    pendingRef.current = { ...pending, greeting: { ...pending.greeting, index, text: pending.greeting.greetings[index] } }
+    setPendingChat(pendingRef.current)
+  }, [])
 
   const sendPending = useCallback(async (text: string) => {
     const pending = pendingRef.current
@@ -540,6 +548,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     setListOpen: showList,
     pendingChat,
     prepareChat,
+    selectPendingGreeting,
     sendPending,
     isStartingChat,
     drafts,
@@ -566,7 +575,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     messageFocus,
     focusMessage,
     clearMessageFocus,
-  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, drafts, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, liveTurn, messageFocus, openPanel, picks, togglePick, removePick, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, pendingChat, prepareChat, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
+  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, drafts, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, liveTurn, messageFocus, openPanel, picks, togglePick, removePick, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, pendingChat, prepareChat, selectPendingGreeting, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
 
   const referenceApi = useMemo<CodexChatReferenceApi>(() => ({ draftMediaAttachments, toggleMediaAttachment, focusMessage }), [draftMediaAttachments, toggleMediaAttachment, focusMessage])
 

@@ -8,6 +8,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
+import { Switch } from '@/components/ui/switch'
 import { ChatLoreEntryFields, loreBookFilesQueryKey, newLoreEntry, type LoreFilePlace } from '@/features/settings/components/chat-profile-lorebook'
 import { useI18n } from '@/i18n'
 import {
@@ -28,6 +29,7 @@ import { listStoredFolders } from '@/lib/api-files'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { LorebookMergeDialog } from './lorebook-merge-dialog'
+import { useCodexChat } from './codex-chat-context'
 
 const CHAT_BOOK = 'chat'
 const LOREBOOK_ROOT_FOLDER = '로어북'
@@ -53,6 +55,7 @@ export function LorebookBlock({ threadId, profiles }: {
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const chat = useCodexChat()
   const [expanded, setExpanded] = useState<Set<number | typeof CHAT_BOOK>>(() => new Set([CHAT_BOOK]))
   const [editing, setEditing] = useState<EditTarget | null>(null)
   const [merging, setMerging] = useState<MergeTarget | null>(null)
@@ -201,6 +204,13 @@ export function LorebookBlock({ threadId, profiles }: {
 
       <LoreEntryModal
         target={editing}
+        usage={editing ? data?.entryUsage?.[`${editing.book === CHAT_BOOK ? chatBook?.id : editing.book.id}:${editing.entry.id}`] : undefined}
+        onSource={(sourceThreadId, messageId) => {
+          setEditing(null)
+          chat?.selectThread(sourceThreadId)
+          chat?.setView('chat')
+          chat?.focusMessage(messageId)
+        }}
         filePlace={!editing ? { kind: 'global' } : editing.book === CHAT_BOOK ? { kind: 'owned', folderId: chatBook?.folderId ?? null } : editing.book.kind === 'global' ? { kind: 'global' } : { kind: 'owned', folderId: editing.book.folderId }}
         promoteLabel={editing?.book === CHAT_BOOK && !editing.isNew ? (promoteName ? t({ ko: '승격 → {name}', en: 'Promote → {name}' }, { name: promoteName }) : t({ ko: '승격', en: 'Promote' })) : null}
         saving={entriesMutation.isPending}
@@ -282,7 +292,9 @@ function EntryRow({ entry, onOpen }: { entry: ChatLoreEntry; onOpen?: () => void
 }
 
 /** B: one entry in the shared entry editor, as a modal (지우기 · 승격 · 저장). */
-function LoreEntryModal({ target, filePlace, promoteLabel, saving, onSave, onDelete, onPromote, onClose }: {
+function LoreEntryModal({ target, filePlace, promoteLabel, saving, onSave, onDelete, onPromote, onClose, usage, onSource }: {
+  usage?: { turnsAgo?: number; sourceMessageId?: number | null }
+  onSource: (threadId: number, messageId: number) => void
   target: EditTarget | null
   filePlace: LoreFilePlace
   /** Chat book entries: "승격 → <name>". */
@@ -303,7 +315,13 @@ function LoreEntryModal({ target, filePlace, promoteLabel, saving, onSave, onDel
   }
   const entry = draft ?? target?.entry ?? null
   return (
-    <Modal open={target !== null} onClose={onClose} title={entry ? loreEntryTitle(entry) || t({ ko: '새 항목', en: 'New entry' }) : ''} widthClassName="max-w-xl">
+    <Modal open={target !== null} onClose={onClose} title={entry ? loreEntryTitle(entry) || t({ ko: '새 항목', en: 'New entry' }) : ''} widthClassName="max-w-xl"
+      headerActions={entry ? <Switch checked={entry.enabled} onCheckedChange={(enabled) => setDraft((current) => current ? { ...current, enabled } : current)} aria-label={t({ ko: '로어 사용', en: 'Enable lore' })} /> : null}
+      description={entry && (entry.source || usage?.turnsAgo !== undefined) ? <div className="flex items-center gap-3 text-xs">
+        {entry.source ? usage?.sourceMessageId ? <Button variant="ghost" size="xs" className="h-auto p-0 text-primary" onClick={() => onSource(entry.source!.threadId, usage.sourceMessageId!)}>{t({ ko: '출처 답변', en: 'Source reply' })}</Button> : <span className="text-muted-foreground/50">{t({ ko: '출처 없음', en: 'Source unavailable' })}</span> : null}
+        {usage?.turnsAgo !== undefined ? <span>{t({ ko: '최근 사용 · {count}턴 전', en: 'Last used · {count} turns ago' }, { count: usage.turnsAgo })}</span> : null}
+      </div> : undefined}
+    >
       {entry && target ? (
         <>
           <ModalBody>

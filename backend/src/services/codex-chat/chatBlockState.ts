@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { chatBlockToneText } from '@conai/shared'
 import type { ChatProfile } from './chatProfiles'
 import { fieldRuleLines, type ChatBlockField, type ChatDisplayBlock } from './chatStyle'
 import type { CodexChatMessageRecord } from './codexChatStore'
@@ -239,6 +240,7 @@ export function blockStateContentText(blocks: ChatDisplayBlock[], state: Record<
   const parts = usableBlocks(blocks).map((block) => [
     `### ${block.key}`,
     JSON.stringify(state[block.key] ?? {}),
+    chatBlockToneText(block.fields, state[block.key] ?? {}) ? `말투: ${chatBlockToneText(block.fields, state[block.key] ?? {})}` : '',
     block.rules ? `규칙: ${block.rules}` : '',
     ...fieldRuleLines(block).map((line) => `필드 규칙: ${line}`),
   ].filter(Boolean).join('\n'))

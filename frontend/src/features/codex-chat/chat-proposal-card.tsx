@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { FileText, SquarePen } from 'lucide-react'
+import { FileText, SquarePen, Undo2 } from 'lucide-react'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Chip } from '@/components/ui/chip'
@@ -18,6 +19,7 @@ import {
   CHAT_PROFILES_QUERY_KEY,
   MODEL_SLOTS_QUERY_KEY,
   applyChatProposal,
+  undoChatLoreProposal,
   createChatBlock,
   dismissChatProposal,
   threadLorebooksQueryKey,
@@ -405,6 +407,8 @@ function LoreProposalCard({ proposal, threadId }: { proposal: LoreProposal; thre
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
+  const confirm = useConfirm()
+  const [undone, setUndone] = useState(false)
   const [state, setState] = useState<'saved' | 'dismissed' | null>(null)
   const saved = state === 'saved' || (proposal.savedId !== undefined && !proposal.dismissed)
   const dismissed = !saved && (state === 'dismissed' || proposal.dismissed === true)
@@ -418,7 +422,19 @@ function LoreProposalCard({ proposal, threadId }: { proposal: LoreProposal; thre
   const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' })
   const saveMutation = useMutation({ mutationFn: () => applyChatProposal(proposal.id), onSuccess: async () => { setState('saved'); await refresh() }, onError })
   const dismissMutation = useMutation({ mutationFn: () => dismissChatProposal(proposal.id), onSuccess: async () => { setState('dismissed'); await refresh() }, onError })
-  const busy = saveMutation.isPending || dismissMutation.isPending
+  const undoMutation = useMutation({
+    mutationFn: async () => {
+      const result = await undoChatLoreProposal(proposal.id)
+      if (!result.changed) return result
+      if (!await confirm({ title: t({ ko: '기억 되돌리기', en: 'Undo memory replacement' }), description: t({ ko: '저장한 뒤 항목이 바뀌었어. 이전 내용으로 되돌릴까?', en: 'The entry changed after saving. Restore the previous entry?' }), confirmLabel: t({ ko: '되돌리기', en: 'Undo' }), tone: 'destructive' })) return null
+      const restored = await undoChatLoreProposal(proposal.id, true, result.currentHash)
+      if (restored.changed) throw new Error(t({ ko: '확인하는 동안 항목이 다시 바뀌었어. 다시 되돌려줘.', en: 'The entry changed again during confirmation. Try undo again.' }))
+      return restored
+    },
+    onSuccess: async (result) => { if (result) { setUndone(true); await refresh() } },
+    onError,
+  })
+  const busy = saveMutation.isPending || dismissMutation.isPending || undoMutation.isPending
   const before = proposal.replaces ? proposal.before : undefined
   const keys = (list: string[]) => (list.length > 0 ? list.join(', ') : '—')
   const constantLabel = (value: boolean) => (value ? t({ ko: '상시', en: 'Always' }) : '—')
@@ -450,7 +466,10 @@ function LoreProposalCard({ proposal, threadId }: { proposal: LoreProposal; thre
         </div>
       ) : null}
       {saved || dismissed ? (
-        <div className="border-t border-line pt-2 text-xs text-muted-foreground">{saved ? t({ ko: '저장됨', en: 'Saved' }) : t({ ko: '무시함', en: 'Dismissed' })}</div>
+        <div className="flex items-center justify-between border-t border-line pt-2 text-xs text-muted-foreground">
+          <span>{undone || proposal.undone ? t({ ko: '되돌렸어', en: 'Undone' }) : saved ? t({ ko: '저장됨', en: 'Saved' }) : t({ ko: '무시함', en: 'Dismissed' })}</span>
+          {saved && proposal.replaces && !undone && !proposal.undone ? <IconButton size="icon-xs" variant="ghost" disabled={busy} label={t({ ko: '되돌리기', en: 'Undo' })} onClick={() => undoMutation.mutate()}><Undo2 /></IconButton> : null}
+        </div>
       ) : (
         <div className="flex items-center gap-2 border-t border-line pt-2">
           <span className="flex-1" />
