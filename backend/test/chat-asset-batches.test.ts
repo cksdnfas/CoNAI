@@ -240,12 +240,18 @@ test('character asset batches: durable jobs, dependencies, review and approved a
     EmoticonService.addImages(candidates, [{ compositeHash: candidate, keywords: [] }])
     batches.applyChatAssetBatch(requester, batch.id)
     assert.ok(images.db.prepare('SELECT 1 FROM image_groups WHERE group_id = ? AND composite_hash = ?').get(candidates, candidate))
-    const { listProfileEmoticons } = await import('../src/services/codex-chat/chatEmoticons')
+    const { chatExpressionGroupId, listProfileEmoticons } = await import('../src/services/codex-chat/chatEmoticons')
+    assert.equal(chatExpressionGroupId(current), result.applied.expressionGroupId)
+    assert.equal(chatExpressionGroupId({ ...current, style: { emoticonGroupIds: [] } }), null)
+    assert.equal(chatExpressionGroupId({ ...current, name: '표정 그룹 없음' }), null)
     assert.equal(listProfileEmoticons(current.style).find((entry) => entry.keywords.includes('기쁨'))!.compositeHash, candidate)
     updateChatSettings({ enabled: true })
     const response = await call(chatRouter, '/profiles/:profileId/emoticons', 'get', { profileId: String(profile.id) })
     assert.equal(response.status, 200)
     assert.equal(response.body.data.find((entry: any) => entry.keywords.includes('기쁨')).compositeHash, candidate)
+    assert.equal(response.body.data.find((entry: any) => entry.keywords.includes('기쁨')).groupId, result.applied.expressionGroupId)
+    const summaries = await call(chatRouter, '/profiles', 'get', {})
+    assert.equal(summaries.body.data.find((entry: any) => entry.id === profile.id).expressionGroupId, result.applied.expressionGroupId)
     assert.equal(GroupPathService.getPathLabel(result.applied.expressionGroupId!), '채팅 캐릭터/루나/표정')
     assert.equal(GroupPathService.getPathLabel(result.applied.backgroundGroupId!), '채팅 캐릭터/루나/배경')
   })
@@ -331,6 +337,72 @@ test('character asset batches: durable jobs, dependencies, review and approved a
       assert.equal(ChatProfileStore.find(profile.id)!.avatarHash, other)
       await assert.rejects(applyProfileAssetsProposal(requester, applying.id), /이미 승인/)
     } finally { unregister() }
+  })
+
+  await t.test('explicit vision review uses one selected model call and safe 512px images without mutating the chosen candidate', async (sub) => {
+    const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
+    const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
+    const { reviewChatAssetVision, parseChatAssetVisionReview } = await import('../src/services/codex-chat/chatAssetVision')
+    const { ImageSafetyService } = await import('../src/services/imageSafetyService')
+    const reviewed = await batches.createChatAssetBatch(requester, profile.id, { idempotencyKey: 'vision-review', presetId: preset.id, slots: [{ slotKey: '아바타', kind: 'avatar', prompt: 'solo' }] })
+    finish(reviewed, '아바타', candidate)
+    sub.mock.method(ModelSlotStore, 'target', (id: number) => id === 701 ? { id, name: '비전', providerName: 'vision-test', model: 'vision-model' } : null)
+    sub.mock.method(ExternalApiProvider, 'findByName', (name: string) => ({ provider_name: name, display_name: name, is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', additional_config: {} }))
+    sub.mock.method(ExternalApiProvider, 'getDecryptedKey', () => null)
+    const requests: any[] = []
+    let content = '{"same_person":false,"expression":"웃음","flaw":"손가락 결함"}'
+    sub.mock.method(globalThis, 'fetch', async (_url: unknown, options: RequestInit) => {
+      requests.push(JSON.parse(options.body as string))
+      return Response.json({ choices: [{ message: { content }, finish_reason: 'stop' }] })
+    })
+    const params = { profileId: String(profile.id), batchId: String(reviewed.id), slotKey: '아바타' }
+    const input = { modelSlotId: 701, compositeHash: candidate }
+    const before = batches.getChatAssetBatch(requester, reviewed.id)
+    const result = await call(assetRouter, '/:batchId/slots/:slotKey/vision-review', 'post', params, input)
+    assert.equal(result.status, 200, JSON.stringify(result.body))
+    assert.deepEqual(result.body.data, { compositeHash: candidate, referenceHash: reference, modelSlotId: 701, samePerson: false, expression: '웃음', flaw: '손가락 결함' })
+    assert.deepEqual(batches.getChatAssetBatch(requester, reviewed.id), before)
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].model, 'vision-model')
+    const previews = requests[0].messages[1].content.filter((part: any) => part.type === 'image_url')
+    assert.equal(previews.length, 2)
+    for (const image of previews) {
+      const metadata = await sharp(Buffer.from(image.image_url.url.split(',')[1], 'base64')).metadata()
+      assert.equal(metadata.format, 'jpeg')
+      assert.ok(metadata.width! <= 512 && metadata.height! <= 512)
+    }
+    assert.ok(!JSON.stringify(requests[0].messages).includes('아바타'))
+    assert.equal((await call(assetRouter, '/:batchId/slots/:slotKey/vision-review', 'post', { ...params, profileId: String(profile.id + 9999) }, input)).status, 404)
+    assert.equal((await call(assetRouter, '/:batchId/slots/:slotKey/vision-review', 'post', params, { compositeHash: candidate })).status, 400)
+    await assert.rejects(reviewChatAssetVision(requester, profile.id, reviewed.id, '아바타', { ...input, modelSlotId: 702 }), /모델을 골라줘/)
+    await assert.rejects(reviewChatAssetVision(requester, profile.id, reviewed.id, '아바타', { ...input, compositeHash: other }), /후보가 바뀌었어/)
+    await assert.rejects(reviewChatAssetVision({ accountId: 999999, accountType: 'admin' }, profile.id, reviewed.id, '아바타', input), /관리자 권한/)
+    assert.equal(requests.length, 1)
+    const chosen = await batches.chooseChatAssetSlot(requester, reviewed.id, '아바타', candidate)
+    const newer = await batches.regenerateChatAssetSlot(requester, reviewed.id, '아바타', { attempt: 2 })
+    finish(newer, '아바타', other)
+    await assert.rejects(reviewChatAssetVision(requester, profile.id, reviewed.id, '아바타', { ...input, compositeHash: other }), /후보가 바뀌었어/)
+    content = '```json\n{"same_person":true,"expression":"무표정","flaw":null}\n```'
+    assert.equal((await reviewChatAssetVision(requester, profile.id, reviewed.id, '아바타', input)).samePerson, true)
+    assert.equal(batches.getChatAssetBatch(requester, reviewed.id).slots[0].chosenHash, chosen.slots[0].chosenHash)
+    content = '{"same_person":"yes","expression":"웃음","flaw":null}'
+    await assert.rejects(reviewChatAssetVision(requester, profile.id, reviewed.id, '아바타', input), /결과 형식/)
+    assert.throws(() => parseChatAssetVisionReview('not json'), /JSON/)
+    assert.throws(() => parseChatAssetVisionReview('{"same_person":true,"expression":"","flaw":null}'), /결과 형식/)
+    const count = requests.length
+    const oldRating = images.db.prepare('SELECT rating_score FROM media_metadata WHERE composite_hash = ?').get(reference) as { rating_score: number | null }
+    images.db.prepare('UPDATE media_metadata SET rating_score = 0.99 WHERE composite_hash = ?').run(reference)
+    try {
+      sub.mock.method(ImageSafetyService, 'isHidden', (score: number | null) => score === 0.99)
+      await assert.rejects(reviewChatAssetVision(requester, profile.id, reviewed.id, '아바타', input), /검수 이미지를 볼 수 없/)
+      assert.equal(requests.length, count)
+    } finally {
+      images.db.prepare('UPDATE media_metadata SET rating_score = ? WHERE composite_hash = ?').run(oldRating.rating_score, reference)
+    }
+    sub.mock.method(ImageSafetyService, 'isHidden', () => true)
+    await assert.rejects(reviewChatAssetVision(requester, profile.id, reviewed.id, '아바타', input), /더 이상 사용할 수 없어|이미지를 볼 수 없어/)
+    assert.equal((await call(chatRouter, '/profiles/:profileId/emoticons/:compositeHash', 'get', { profileId: String(profile.id), compositeHash: candidate })).status, 404)
+    assert.equal(requests.length, count)
   })
 
   await t.test('admin API preserves profile binding, validates requests, and records live requester ownership', async (sub) => {

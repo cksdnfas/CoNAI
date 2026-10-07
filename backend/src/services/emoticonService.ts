@@ -223,7 +223,7 @@ export const EmoticonService = {
    */
   forGroups(groupIds: number[]) {
     const byKeyword = new Map<string, string>()
-    const result: Array<{ compositeHash: string; keywords: string[]; mimeType: string | null }> = []
+    const result: Array<{ groupId: number; compositeHash: string; keywords: string[]; mimeType: string | null }> = []
     for (const groupId of groupIds) {
       const group = EmoticonService.findGroup(groupId)
       if (!group || group.emoticon_enabled !== 1) continue
@@ -231,7 +231,7 @@ export const EmoticonService = {
         const keywords = entry.keywords.filter((keyword) => !byKeyword.has(keyword.toLowerCase()))
         if (keywords.length === 0) continue
         for (const keyword of keywords) byKeyword.set(keyword.toLowerCase(), entry.compositeHash)
-        result.push({ compositeHash: entry.compositeHash, keywords, mimeType: entry.mimeType })
+        result.push({ groupId, compositeHash: entry.compositeHash, keywords, mimeType: entry.mimeType })
       }
     }
     return result

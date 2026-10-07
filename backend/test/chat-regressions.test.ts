@@ -386,3 +386,47 @@ test('a generation is summarized by the scene the model asked for, and replays w
   const lookup = { ...reply, tool_calls: [call('w', 'wait_generation_job', {})] } as CodexChatMessageRecord
   assert.equal(applyGenerationOutcomes([lookup], new Map())[0], lookup)
 })
+
+
+test('portraits follow the last standalone sticker of the active variant and fold backwards through edits and branches', async () => {
+  const { resolveChatPortrait, lastChatSticker } = await import('@conai/shared')
+  const profile = { id: 1, expressionGroupId: 7, expressions: new Map([['기쁨', 'happy'], ['슬픔', 'sad']]), referenceHash: 'reference', avatarHash: 'avatar' }
+  const first = { role: 'assistant', content: '&*기쁨*&' }
+  const variant = { role: 'assistant', content: 'server-selected text', alternatives: [{ content: '&*기쁨*&\n&*슬픔*&' }, { content: '&*기쁨*&' }], active_alternative: 0 }
+  assert.equal(resolveChatPortrait([first, variant], [profile], 1)?.compositeHash, 'sad')
+  assert.equal(resolveChatPortrait([first, { ...variant, active_alternative: 1 }], [profile], 1)?.compositeHash, 'happy')
+  assert.equal(resolveChatPortrait([first, { role: 'assistant', content: 'signal removed by edit' }], [profile], 1)?.compositeHash, 'happy')
+  assert.equal(resolveChatPortrait([first], [profile], 1)?.compositeHash, 'happy')
+  assert.equal(resolveChatPortrait([{ role: 'assistant', content: '&*기쁨*&\n&*일반*&' }], [profile], 1)?.source, 'reference')
+  assert.equal(resolveChatPortrait([{ role: 'assistant', content: 'English', display_content: '&*슬픔*&' }], [profile], 1)?.compositeHash, 'sad')
+  assert.equal(lastChatSticker('inline &*슬픔*&\n&*기쁨*&\n```text\n&*슬픔*&\n```'), '기쁨')
+  assert.equal(lastChatSticker('~~~text\n&*슬픔*&\n~~~\ninline &*기쁨*&'), null)
+})
+
+test('portraits prefer retained stickers, then enum emotion, reference and avatar; rooms use the last member', async () => {
+  const { resolveChatPortrait } = await import('@conai/shared')
+  const first = { id: 1, expressionGroupId: 7, expressions: new Map([['기쁨', 'happy']]), emotion: '기쁨', referenceHash: 'reference', avatarHash: 'avatar' }
+  const second = { id: 2, expressionGroupId: 8, expressions: new Map([['슬픔', 'sad']]), referenceHash: 'second-ref' }
+  assert.equal(resolveChatPortrait([], [first], 1)?.source, 'expression')
+  assert.equal(resolveChatPortrait([{ role: 'assistant', content: '&*기쁨*&' }, { role: 'assistant', content: 'no sticker' }], [{ ...first, emotion: '슬픔', expressions: new Map([['기쁨', 'happy'], ['슬픔', 'sad']]) }], 1)?.compositeHash, 'happy')
+  assert.equal(resolveChatPortrait([], [{ ...first, emotion: 'unknown' }], 1)?.source, 'reference')
+  assert.equal(resolveChatPortrait([], [{ ...first, emotion: null, referenceHash: null }], 1)?.compositeHash, 'avatar')
+  assert.equal(resolveChatPortrait([], [{ ...first, expressionGroupId: null }], 1), null)
+  const messages = [{ role: 'assistant', content: '&*슬픔*&', speaker_profile_id: 2 }, { role: 'assistant', content: '&*기쁨*&', speaker_profile_id: 1 }, { role: 'assistant', content: 'no sticker', speaker_profile_id: 2 }, { role: 'user', content: '&*기쁨*&' }]
+  assert.deepEqual(resolveChatPortrait(messages, [first, second], 1), { profileId: 2, source: 'expression', compositeHash: 'sad', emotion: '슬픔' })
+  assert.equal(resolveChatPortrait(messages.slice(1), [first, second], 1)?.compositeHash, 'second-ref')
+})
+
+test('portrait hiding removes only its group stickers without blank rows, leaving inline, ordinary, unknown and code tokens', async () => {
+  const { injectChatEmoticons } = await import('@conai/shared')
+  const emoticons = { profileId: 1, byKeyword: new Map([['기쁨', 'same-image'], ['일반', 'same-image']]), groupByKeyword: new Map([['기쁨', 7], ['일반', 9]]) }
+  const source = '앞\n&*기쁨*&\n뒤\n&*일반*&\ninline &*기쁨*&\n```text\n&*기쁨*&\n```\n&*미등록*&'
+  const hidden = injectChatEmoticons(source, emoticons, new Set([7]))
+  assert.ok(hidden.startsWith('앞\n뒤\n![일반](emote-sticker:same-image)'))
+  assert.ok(hidden.includes('inline ![기쁨](emote:same-image)'))
+  assert.ok(hidden.includes('```text\n&*기쁨*&\n```'))
+  assert.ok(hidden.includes('&\\*미등록\\*&'))
+  assert.ok(injectChatEmoticons(source, emoticons).includes('![기쁨](emote-sticker:same-image)'))
+  assert.equal(injectChatEmoticons('앞\n\n&*기쁨*&\n\n뒤', emoticons, new Set([7])), '앞\n\n뒤')
+  assert.equal(injectChatEmoticons('&*기쁨*&\n\n```text\n\n\nbody\n```', emoticons, new Set([7])), '```text\n\n\nbody\n```')
+})

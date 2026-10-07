@@ -558,6 +558,7 @@ export type ChatSpeaker = ChatProfileAssetFields & {
   cast?: ChatCastSpeaker[]
   /** The profile's emoticons (`&*keyword*&`). */
   emoticons?: ChatEmoticonMap | null
+  hiddenEmoticonGroupIds?: ReadonlySet<number>
   /** Group rooms: member names, so `@name` mentions are highlighted. */
   mentions?: readonly string[]
 }
@@ -636,7 +637,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   const content = stripEchoedAddresses(written)
   const { avatarSize } = appearance
   const toolBadge = toolCalls.length > 0 && appearance.showToolChips ? <ToolCallsBadge calls={toolCalls} /> : null
-  const markdown = (text: string) => <ChatMarkdown text={text} roleplay={speaker?.roleplay} blocks={speaker?.blocks} emoticons={speaker?.emoticons} mentions={speaker?.mentions} />
+  const markdown = (text: string) => <ChatMarkdown text={text} roleplay={speaker?.roleplay} blocks={speaker?.blocks} emoticons={speaker?.emoticons} hiddenGroupIds={speaker?.hiddenEmoticonGroupIds} mentions={speaker?.mentions} />
   const avatarOf = (who: ChatProfileAssetFields & { id?: number; name: string; avatar?: string | null }, engine: ChatEngine) => avatarSize === 'none' ? null : (
     <ChatProfileAvatar name={who.name} avatar={who.avatar} profile={'id' in who ? who : undefined} engine={engine} size={AVATAR_SIZE[avatarSize]} className={avatarSize === 'lg' ? 'size-14 text-lg' : undefined} />
   )

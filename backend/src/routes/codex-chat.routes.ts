@@ -13,7 +13,7 @@ import { AUTHOR_NOTE_MAX_LENGTH, CHAT_PROFILE_DEFAULTS, ChatProfileError, ChatPr
 import { CHAT_SCOPES, MAX_CHAT_CAPTURE_LIMIT, loadChatSettings, updateChatSettings } from '../services/codex-chat/chatSettings'
 import { ChatDiagnosticsError, exportChatDiagnostics, getChatDiagnostics, visibleContextMessages } from '../services/codex-chat/chatDiagnostics'
 import { DEFAULT_CHAT_STYLE } from '../services/codex-chat/chatStyle'
-import { listProfileEmoticons } from '../services/codex-chat/chatEmoticons'
+import { chatExpressionGroupId, listProfileEmoticons } from '../services/codex-chat/chatEmoticons'
 import { EmoticonService } from '../services/emoticonService'
 import { serveThumbnailOrOriginal, streamCacheableFile, streamRangeFile } from './images/query-file-helpers'
 import { ImageFileModel } from '../models/Image/ImageFileModel'
@@ -58,7 +58,7 @@ import { ChatAppearanceError, ChatAppearanceStore } from '../services/codex-chat
 import { validateBlockData } from '../services/codex-chat/chatBlockState'
 import { canSuggest, ChatSuggestError, profileWriterReady, suggestReplies, userWriterReady } from '../services/codex-chat/chatSuggestions'
 import { createUploadStorage, MAX_UPLOAD_FILE_SIZE_BYTES } from '../middleware/upload'
-import { downloadProfileAsset, importFileStoreProfileAsset, ingestProfileAsset, profileAssetFields, resolveProfileAsset } from '../services/codex-chat/chatProfileAssets'
+import { downloadProfileAsset, importFileStoreProfileAsset, ingestProfileAsset, isProfileAssetHidden, profileAssetFields, resolveProfileAsset } from '../services/codex-chat/chatProfileAssets'
 import chatAssetBatchesRouter from './chat-asset-batches.routes'
 import { draftChatAppearance } from '../services/codex-chat/chatAppearanceDraft'
 import { ChatAssetError } from '../services/codex-chat/chatAssetAccess'
@@ -153,6 +153,7 @@ function toPublicProfile(profile: ChatProfile, accountId: number | null) {
     loreDepth: profile.loreDepth,
     authorNote: profile.authorNote,
     style: profile.style,
+    expressionGroupId: canViewImages ? chatExpressionGroupId(profile) : null,
     backgroundVersion: canViewImages ? backgroundVersionOf(profile) : null,
     // The composer shows the suggestion button only when someone can answer it.
     canUsePageContext: profile.mcpEnabled && profile.mcpScopes.includes('read') && resolveChatAccess(accountId).scopes.includes('read') && (!profile.toolAllowlist || profile.toolAllowlist.includes('get_current_page')),
@@ -245,7 +246,7 @@ router.get('/profiles/:profileId/emoticons/:compositeHash', requireChatAccess, r
   const profileId = parseId(req.params.profileId)
   const profile = profileId === null ? null : ChatProfileStore.find(profileId)
   const compositeHash = String(req.params.compositeHash ?? '')
-  const file = profile && EmoticonService.isInGroups(compositeHash, profile.style.emoticonGroupIds) ? EmoticonService.activeFile(compositeHash) : null
+  const file = profile && !isProfileAssetHidden(compositeHash) && EmoticonService.isInGroups(compositeHash, profile.style.emoticonGroupIds) ? EmoticonService.activeFile(compositeHash) : null
   if (!file || !fs.existsSync(file.path)) {
     res.status(404).json({ success: false, error: 'Not found' })
     return

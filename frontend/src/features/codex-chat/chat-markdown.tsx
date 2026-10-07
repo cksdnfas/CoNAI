@@ -12,6 +12,9 @@ import { cn } from '@/lib/utils'
 import { buildApiUrl } from '@/lib/api-url'
 import { BlockChangeChips, ChatDisplayBlocksContext, parseBlockPayload, useChatDisplayBlock } from './chat-display-block'
 import { isolatedChatPreview } from './chat-preview'
+import { injectChatEmoticons, type ChatEmoticonMap } from '@conai/shared'
+/** The profile's emoticons for this reply: keyword (lower case) → image, and whose emoticon route serves them. */
+export type { ChatEmoticonMap } from '@conai/shared'
 
 const PREVIEWABLE_LANGUAGES = new Set(['html', 'htm', 'svg', 'xml'])
 
@@ -83,13 +86,8 @@ function FencedBlock({ language, code }: { language: string | null; code: string
   return block && data ? <BlockChangeChips blockKey={block.key} data={data} /> : <CodeBlock language={language} code={code} />
 }
 
-/** The profile's emoticons for this reply: keyword (lower case) → image, and whose emoticon route serves them. */
-export type ChatEmoticonMap = { profileId: number; byKeyword: Map<string, string> }
-
 const ChatEmoticonsContext = createContext<ChatEmoticonMap | null>(null)
 
-const EMOTE_TOKEN_PATTERN = /&\*([^*&\n]{1,40})\*&/g
-const EMOTE_LINE_PATTERN = /^\s*&\*([^*&\n]{1,40})\*&\s*$/
 const EMOTE_SCHEME = 'emote:'
 const STICKER_SCHEME = 'emote-sticker:'
 /** Images copied in from character cards before card media went to the library: `chat-asset:<sha256>.<ext>`. */
@@ -97,30 +95,6 @@ const ASSET_PATTERN = /^chat-asset:([a-f0-9]{64}\.(?:png|jpg|webp|gif))$/
 /** Library media: `media:<composite hash>.<ext>`; the extension says image or video. */
 const MEDIA_PATTERN = /^media:([a-f0-9]{48}|[a-f0-9]{32})\.([a-z0-9]{2,5})$/
 const VIDEO_SOURCE = /\/api\/codex-chat\/media\/[a-f0-9]+\.(?:mp4|webm|mov)$/
-
-/**
- * `&*keyword*&` → an image reference the `img` component draws: alone on a line it is a sticker, inside text an
- * inline emoticon. Unknown keywords stay visible as typed (escaped so Markdown does not turn them into emphasis).
- * Code fences are left alone.
- */
-function injectEmoticons(text: string, emoticons: ChatEmoticonMap | null) {
-  if (!text.includes('&*')) return text
-  let inFence = false
-  return text.split('\n').map((line) => {
-    if (/^\s*```/.test(line)) {
-      inFence = !inFence
-      return line
-    }
-    if (inFence) return line
-    const solo = EMOTE_LINE_PATTERN.exec(line)
-    const soloHash = solo ? emoticons?.byKeyword.get(solo[1].trim().toLowerCase()) : undefined
-    if (solo && soloHash) return `![${solo[1].trim()}](${STICKER_SCHEME}${soloHash})`
-    return line.replace(EMOTE_TOKEN_PATTERN, (token, keyword: string) => {
-      const hash = emoticons?.byKeyword.get(keyword.trim().toLowerCase())
-      return hash ? `![${keyword.trim()}](${EMOTE_SCHEME}${hash})` : token.replace(/\*/g, '\\*')
-    })
-  }).join('\n')
-}
 
 /** Lets the emoticon schemes through; everything else gets react-markdown's safe default. */
 function urlTransform(url: string) {
@@ -266,11 +240,12 @@ function rehypeRoleplay() {
  * A reply as Markdown (GitHub flavour: tables, task lists, strikethrough). Raw HTML is not rendered; fence it to preview.
  * `roleplay` colours "dialogue", *narration* and 'thoughts' with the profile's colours (CSS variables on the transcript).
  */
-export const ChatMarkdown = memo(function ChatMarkdown({ text, roleplay = false, blocks, emoticons = null, mentions }: {
+export const ChatMarkdown = memo(function ChatMarkdown({ text, roleplay = false, blocks, emoticons = null, hiddenGroupIds, mentions }: {
   text: string
   roleplay?: boolean
   blocks?: ChatDisplayBlock[]
   emoticons?: ChatEmoticonMap | null
+  hiddenGroupIds?: ReadonlySet<number>
   /** Group rooms: member names whose `@name` mentions are highlighted. */
   mentions?: readonly string[]
 }) {
@@ -281,7 +256,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({ text, roleplay = false,
       <ChatDisplayBlocksContext.Provider value={blocksByKey}>
         <div className={cn('chat-markdown break-words text-foreground', roleplay && '[&_em]:text-(--chat-rp-narration)')}>
           <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={MARKDOWN_COMPONENTS} urlTransform={urlTransform}>
-            {injectEmoticons(fenceBareHtml(text), emoticons)}
+            {injectChatEmoticons(fenceBareHtml(text), emoticons, hiddenGroupIds)}
           </ReactMarkdown>
         </div>
       </ChatDisplayBlocksContext.Provider>

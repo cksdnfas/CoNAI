@@ -19,6 +19,7 @@ export type ChatAssetReview = {
   rating: Record<string, number>
   similarSlots: Array<{ slotKey: string; compositeHash: string; confidence: number }>
 }
+export type ChatAssetVisionReview = { compositeHash: string; referenceHash: string; modelSlotId: number; samePerson: boolean; expression: string; flaw: string | null }
 export type ChatAssetCandidate = { compositeHash: string; historyId: number; review?: ChatAssetReview }
 export type ChatAssetAttempt = {
   jobId: number

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import sharp from 'sharp';
+import { previewImage } from '../../services/imagePreview';
 import { z } from 'zod';
 import { db } from '../../database/init';
 import { GroupModel } from '../../models/Group';
@@ -14,7 +14,6 @@ import { ImageSafetyService } from '../../services/imageSafetyService';
 import type { McpRequestContext } from '../context';
 
 const VIEW_MAX_IMAGES = 6;
-const VIEW_MAX_SIDE_PX = 512;
 
 function textResult(value: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] };
@@ -41,17 +40,6 @@ function topTags(compositeHash: string) {
     ORDER BY CASE tag_type WHEN 'character' THEN 0 ELSE 1 END, score DESC LIMIT 10
   `).all(compositeHash) as Array<{ tag_key: string; tag_type: string }>;
   return rows.map((row) => row.tag_key);
-}
-
-/** A small JPEG of an image for the model to look at (first frame for animations). */
-async function previewImage(filePath: string) {
-  const buffer = await sharp(filePath, { animated: false })
-    .rotate()
-    .resize(VIEW_MAX_SIDE_PX, VIEW_MAX_SIDE_PX, { fit: 'inside', withoutEnlargement: true })
-    .flatten({ background: '#ffffff' })
-    .jpeg({ quality: 80 })
-    .toBuffer();
-  return buffer.toString('base64');
 }
 
 export function registerEmoticonTools(server: McpServer, context: McpRequestContext): void {

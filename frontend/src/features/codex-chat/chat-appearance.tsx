@@ -65,6 +65,7 @@ export type ChatAppearance = {
   showToolChips: boolean
   showReasoning: boolean
   showDiagnostics: boolean
+  portrait: boolean
   avatarSize: ChatAvatarSize
   /** Emoticons inside a sentence; larger ones open up their line, by choice. */
   emoticonSize: ChatEmoticonSize
@@ -105,7 +106,7 @@ const POP_STAGGER_MS = 45
 export const DEFAULT_CHAT_APPEARANCE: ChatAppearance = {
   fontFamily: 'profile', fontSize: 14, lineHeight: 'normal', paragraphGap: 'normal', letterSpacing: 'normal',
   replyShape: 'flat', userPlacement: 'right', width: 'normal', messageGap: 'normal', showNames: true, timeStamps: 'off', showToolChips: true, showReasoning: true, showDiagnostics: true,
-  avatarSize: 'md', emoticonSize: 'md', stickerSize: 'md', imageSize: 'full', imageLayout: 'grid',
+  portrait: true, avatarSize: 'md', emoticonSize: 'md', stickerSize: 'md', imageSize: 'full', imageLayout: 'grid',
   showBackground: true, backgroundDim: null, backgroundBlur: null, backgroundFit: 'cover',
   flagStyle: 'icon', slotId: null,
 }
@@ -151,6 +152,7 @@ export function normalizeChatAppearance(value: unknown): ChatAppearance {
     showToolChips: raw.showToolChips !== false,
     showReasoning: raw.showReasoning !== false,
     showDiagnostics: raw.showDiagnostics !== false,
+    portrait: raw.portrait !== false,
     avatarSize: pick(raw.avatarSize, ['none', 'sm', 'md', 'lg'], D.avatarSize),
     emoticonSize: pick(raw.emoticonSize, ['sm', 'md', 'lg', 'xl'], D.emoticonSize),
     stickerSize: pick(raw.stickerSize, ['sm', 'md', 'lg'], D.stickerSize),

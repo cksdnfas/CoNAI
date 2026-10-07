@@ -1,3 +1,4 @@
+import { resolveChatPortrait } from '@conai/shared'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useIsMutating, useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
@@ -60,7 +61,7 @@ import { cn } from '@/lib/utils'
 import { CHAT_APPEARANCE_ICON as AppearanceIcon, CHAT_MESSAGE_GAP_PX, CHAT_WIDTH_CLASS, ChatAppearancePopover, chatBackgroundLook, chatTranscriptStyle, useChatAppearance, type ChatBackgroundFit } from './chat-appearance'
 import { ChatBlockChangesContext, type BlockAction } from './chat-display-block'
 import { ChatProfileAvatar } from './chat-profile-avatar'
-import { ChatStatusAside, ChatStatusFloating, ChatStatusStrip, useStatusPanelLayout, type ChatStatusBlock, type ChatStatusData } from './chat-status-panel'
+import { ChatPortrait, ChatStatusAside, ChatStatusFloating, ChatStatusStrip, useStatusPanelLayout, type ChatStatusBlock, type ChatStatusData } from './chat-status-panel'
 import { ChatProfilePicker } from './chat-profile-picker'
 import { ChatThreadList, type ChatListPatch } from './chat-thread-list'
 import { ChatAttachButton, ChatDraftAttachments } from './chat-attachments'
@@ -274,7 +275,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const userSpeaker = useMemo(() => userSpeakerOf(thread ?? { user_profile_id: pendingUserProfileId }, userProfiles), [thread, pendingUserProfileId, userProfiles])
   const profile = thread?.profile_id ? profilesById.get(thread.profile_id) ?? null : pendingProfile
   const isCodexThread = (thread?.engine ?? pendingProfile?.engine) !== 'llm'
-  const { appearance } = useChatAppearance(activeThreadId, chat.canUse)
+  const { appearance, update: updateAppearance } = useChatAppearance(activeThreadId, chat.canUse)
   // Chat flags: the account's own; which are on is kept per chat (on the thread).
   const flagsQuery = useChatFlags(chat.canUse)
   const flags = useMemo(() => flagsQuery.data ?? [], [flagsQuery.data])
@@ -316,21 +317,15 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       const data = emoticonData[index]
       if (!data?.length) return
       const byKeyword = new Map<string, string>()
-      for (const emoticon of data) for (const keyword of emoticon.keywords) byKeyword.set(keyword.toLowerCase(), emoticon.compositeHash)
-      result.set(entry.id, { profileId: entry.id, byKeyword })
+      const groupByKeyword = new Map<string, number>()
+      for (const emoticon of data) for (const keyword of emoticon.keywords) {
+        byKeyword.set(keyword.toLowerCase(), emoticon.compositeHash)
+        groupByKeyword.set(keyword.toLowerCase(), emoticon.groupId)
+      }
+      result.set(entry.id, { profileId: entry.id, byKeyword, groupByKeyword })
     })
     return result
   }, [emoticonData, speakerProfiles])
-  const toSpeaker = useCallback((entry: ChatProfileSummary): ChatSpeaker => ({
-    id: entry.id, avatarHash: entry.avatarHash, avatarCrop: entry.avatarCrop, assetVersion: entry.assetVersion, avatarThumbnailUrl: entry.avatarThumbnailUrl,
-    name: entry.name, avatar: entry.avatar, engine: entry.engine, roleplay: entry.style?.roleplay ?? false, blocks: entry.style?.blocks, cast: entry.style?.cast,
-    emoticons: emoticonsById.get(entry.id) ?? null, mentions: isGroup ? memberNames : undefined,
-  }), [emoticonsById, isGroup, memberNames])
-  const speaker = useMemo<ChatSpeaker | null>(() => profile ? toSpeaker(profile) : null, [profile, toSpeaker])
-  const speakerOf = useCallback((profileId: number | null) => {
-    const entry = profileId === null ? undefined : profilesById.get(profileId)
-    return entry ? toSpeaker(entry) : null
-  }, [profilesById, toSpeaker])
   const backgroundUrl = canViewImages && appearance.showBackground && profile?.backgroundVersion ? chatProfileAssetUrl(profile.id, 'background', profile.assetVersion ?? profile.backgroundVersion) : null
 
   const codexStatusQuery = useQuery({ queryKey: ['codex-generation-status'], queryFn: getCodexGenerationStatus, staleTime: 30_000, enabled: isCodexThread && (thread !== null || pendingProfile !== null) })
@@ -520,6 +515,49 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   }, [blocksState, isGroup, memberBlocks])
   const hasStatus = panelState !== null && statusBlocks.length > 0 && isTranscript && thread !== null
   const wideStatus = layout === 'page' && isWide
+  const portraitProfiles = useMemo(() => speakerProfiles.map((entry) => {
+    const emoticons = emoticonsById.get(entry.id)
+    const expressions = new Map<string, string>()
+    for (const [keyword, hash] of emoticons?.byKeyword ?? []) {
+      if (emoticons?.groupByKeyword?.get(keyword) === entry.expressionGroupId) expressions.set(keyword, hash)
+    }
+    const state = isGroup ? memberBlocks?.[entry.id]?.state : blocksState?.state
+    let emotion: string | null = null
+    for (const block of entry.style?.blocks ?? []) {
+      if (!block.enabled) continue
+      const field = block.fields.find((field) => field.name === '감정' && field.values.length > 0)
+      const value = field ? state?.[block.key]?.[field.name] : null
+      if (field && typeof value === 'string' && field.values.includes(value)) { emotion = value; break }
+    }
+    return { id: entry.id, expressionGroupId: entry.expressionGroupId, referenceHash: entry.referenceHash, avatarHash: entry.avatarHash, expressions, emotion }
+  }), [speakerProfiles, emoticonsById, isGroup, memberBlocks, blocksState])
+  const portraitMessages = useMemo(() => {
+    const live = liveTurn?.threadId === activeThreadId ? liveTurn : null
+    const replies = isGroup ? live?.replies ?? serverReplies : null
+    const current = replies
+      ? replies.filter((reply) => reply.text).map((reply) => ({ role: 'assistant', content: reply.text, speaker_profile_id: reply.profileId }))
+      : live?.text || runningFromServer?.text ? [{ role: 'assistant', content: live?.text || runningFromServer?.text || '', speaker_profile_id: profile?.id }] : []
+    return current.length ? [...messages, ...current] : messages
+  }, [activeThreadId, isGroup, liveTurn, messages, profile?.id, runningFromServer, serverReplies])
+  const portraitSignal = useMemo(() => resolveChatPortrait(portraitMessages, portraitProfiles, profile?.id ?? null), [portraitMessages, portraitProfiles, profile?.id])
+  const portraitProfile = portraitSignal ? profilesById.get(portraitSignal.profileId) : null
+  const hasPortrait = canViewImages && portraitSignal !== null && !!portraitProfile && isTranscript && thread !== null
+  const hasPanel = hasStatus || hasPortrait
+  const panelOpen = hasPortrait ? appearance.portrait : statusLayout.open
+  const portraitShown = hasPortrait && appearance.portrait && (wideStatus || stripOpen)
+  const portrait = hasPortrait && appearance.portrait && portraitSignal && portraitProfile ? <ChatPortrait signal={portraitSignal} profile={portraitProfile} /> : undefined
+  const toSpeaker = useCallback((entry: ChatProfileSummary): ChatSpeaker => ({
+    id: entry.id, avatarHash: entry.avatarHash, avatarCrop: entry.avatarCrop, assetVersion: entry.assetVersion, avatarThumbnailUrl: entry.avatarThumbnailUrl,
+    name: entry.name, avatar: entry.avatar, engine: entry.engine, roleplay: entry.style?.roleplay ?? false, blocks: entry.style?.blocks, cast: entry.style?.cast,
+    emoticons: emoticonsById.get(entry.id) ?? null,
+    hiddenEmoticonGroupIds: portraitShown && entry.expressionGroupId ? new Set([entry.expressionGroupId]) : undefined, mentions: isGroup ? memberNames : undefined,
+  }), [emoticonsById, isGroup, memberNames, portraitShown])
+  const speaker = useMemo<ChatSpeaker | null>(() => profile ? toSpeaker(profile) : null, [profile, toSpeaker])
+  const speakerOf = useCallback((profileId: number | null) => {
+    const entry = profileId === null ? undefined : profilesById.get(profileId)
+    return entry ? toSpeaker(entry) : null
+  }, [profilesById, toSpeaker])
+
   const activeStatusKey = statusBlocks.some((block) => block.key === statusKey) ? statusKey as string : statusBlocks[0]?.key ?? ''
   useEffect(() => setStripOpen(false), [activeThreadId, isTranscript])
   const handleBlockEdit = useCallback(async (key: string, data: Record<string, unknown> | null) => {
@@ -541,15 +579,16 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     if (action.kind === 'pick') togglePick(action.label)
     else if (panelState && !isBusy) void handleBlockEdit(key, { ...(panelState.state[key] ?? {}), [action.field]: action.value }).catch(() => undefined)
   }, [panelState, handleBlockEdit, isBusy, togglePick])
-  const statusData = useMemo<ChatStatusData | null>(() => panelState ? { blocks: statusBlocks, state: panelState, messages, busy: isBusy, onEdit: handleBlockEdit, picks: pickSet, onAction: handleBlockAction } : null, [panelState, statusBlocks, messages, isBusy, handleBlockEdit, pickSet, handleBlockAction])
+  const statusData: ChatStatusData | null = panelState || hasPortrait ? { blocks: statusBlocks, state: panelState ?? { state: {}, changes: {}, edits: {} }, messages, busy: isBusy, onEdit: handleBlockEdit, picks: pickSet, onAction: handleBlockAction, portrait, portraitLabel: portraitProfile?.name } : null
   const openStatus = useCallback((key: string, messageId: number | null) => {
     // In a room the chip's message tells whose block it is; a streaming reply falls back to the first member with it.
     const speakerId = isGroup ? messages.find((message) => message.id === messageId)?.speaker_profile_id ?? null : null
     const target = isGroup ? (speakerId !== null ? `${speakerId}:${key}` : statusBlocks.find((block) => block.key.endsWith(`:${key}`))?.key ?? key) : key
     setStatusKey(target)
+    if (hasPortrait) updateAppearance({ portrait: true })
     if (wideStatus) setStatusLayout({ open: true })
     else setStripOpen(true)
-  }, [isGroup, messages, setStatusLayout, statusBlocks, wideStatus])
+  }, [hasPortrait, updateAppearance, isGroup, messages, setStatusLayout, statusBlocks, wideStatus])
   const blockChanges = useMemo(() => chipChanges ? { changes: chipChanges, open: openStatus } : null, [chipChanges, openStatus])
 
   // Deleting a chat asks whether to back it up first, and what becomes of its own lorebook when that has entries (C);
@@ -979,15 +1018,23 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     </div></ChatBlockChangesContext.Provider>
   )
 
-  const statusButton = hasStatus && wideStatus ? (
-    <IconButton variant="ghost" size="icon-sm" active={statusLayout.open} onClick={() => setStatusLayout({ open: !statusLayout.open })} label={t({ ko: '상태창', en: 'Status panel' })}><Activity /></IconButton>
+  const hidePanel = () => { if (hasPortrait) updateAppearance({ portrait: false }); setStatusLayout({ open: false }); setStripOpen(false) }
+  const togglePanel = () => {
+    const open = !(wideStatus ? panelOpen : stripOpen)
+    if (hasPortrait) updateAppearance({ portrait: open })
+    setStatusLayout({ open })
+    setStripOpen(open)
+  }
+  const setStripPanelOpen = (open: boolean) => { setStripOpen(open); if (hasPortrait) updateAppearance({ portrait: open }) }
+  const statusButton = hasPanel && (wideStatus || hasPortrait) ? (
+    <IconButton variant="ghost" size="icon-sm" active={wideStatus ? panelOpen : stripOpen} onClick={togglePanel} label={t({ ko: '상태창', en: 'Status panel' })}><Activity /></IconButton>
   ) : null
-  const statusStrip = hasStatus && statusData && !wideStatus ? <ChatStatusStrip data={statusData} activeKey={activeStatusKey} onActiveKey={setStatusKey} open={stripOpen} onOpenChange={setStripOpen} /> : null
-  const statusAside = hasStatus && statusData && wideStatus && statusLayout.open && statusLayout.mode === 'docked'
-    ? <ChatStatusAside data={statusData} activeKey={activeStatusKey} onActiveKey={setStatusKey} onFloat={() => setStatusLayout({ mode: 'floating' })} onHide={() => setStatusLayout({ open: false })} />
+  const statusStrip = hasPanel && statusData && !wideStatus ? <ChatStatusStrip data={statusData} activeKey={activeStatusKey} onActiveKey={setStatusKey} open={stripOpen} onOpenChange={setStripPanelOpen} /> : null
+  const statusAside = hasPanel && statusData && wideStatus && panelOpen && statusLayout.mode === 'docked'
+    ? <ChatStatusAside data={statusData} activeKey={activeStatusKey} onActiveKey={setStatusKey} onFloat={() => setStatusLayout({ mode: 'floating' })} onHide={hidePanel} />
     : null
-  const statusFloating = hasStatus && statusData && wideStatus && statusLayout.open && statusLayout.mode === 'floating'
-    ? <ChatStatusFloating data={statusData} activeKey={activeStatusKey} onActiveKey={setStatusKey} layout={statusLayout} onLayout={setStatusLayout} onDock={() => setStatusLayout({ mode: 'docked' })} onHide={() => setStatusLayout({ open: false })} containerRef={statusAreaRef} />
+  const statusFloating = hasPanel && statusData && wideStatus && panelOpen && statusLayout.mode === 'floating'
+    ? <ChatStatusFloating data={statusData} activeKey={activeStatusKey} onActiveKey={setStatusKey} layout={statusLayout} onLayout={setStatusLayout} onDock={() => setStatusLayout({ mode: 'docked' })} onHide={hidePanel} containerRef={statusAreaRef} />
     : null
 
   // A direct LLM chat whose background summary failed: older turns may have left the request unsummarized.

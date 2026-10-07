@@ -1,7 +1,7 @@
 import { requestApiData, requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
-import type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
-export type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetKind, ChatAssetReview, ChatAssetCandidate, ChatAssetAttempt, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
+import type { ChatAssetVisionReview, ChatAssetBatch, ChatAssetBatchInput, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
+export type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetKind, ChatAssetReview, ChatAssetVisionReview, ChatAssetCandidate, ChatAssetAttempt, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
 import type { ChatStreamEvent, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal } from '@conai/shared'
 
 export type ChatScope = 'read' | 'generate' | 'organize' | 'configure'
@@ -37,6 +37,9 @@ export function cancelChatAssetSlot(profileId: number, batchId: number, slotKey:
 }
 export function chooseChatAssetSlot(profileId: number, batchId: number, slotKey: string, compositeHash: string) {
   return requestApiData<ChatAssetBatch>(`${assetBatchPath(profileId, batchId)}/slots/${encodeURIComponent(slotKey)}/choose`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ compositeHash }) })
+}
+export function reviewChatAssetVision(profileId: number, batchId: number, slotKey: string, modelSlotId: number, compositeHash: string, signal?: AbortSignal) {
+  return requestApiData<ChatAssetVisionReview>(`${assetBatchPath(profileId, batchId)}/slots/${encodeURIComponent(slotKey)}/vision-review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modelSlotId, compositeHash }), signal })
 }
 export function applyChatAssetBatch(profileId: number, batchId: number, input: ChatAssetApplyInput = {}) {
   return requestApiData<ChatAssetApplyResult>(`${assetBatchPath(profileId, batchId)}/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
@@ -186,6 +189,7 @@ export interface ChatStyle {
 
 /** One emoticon a profile's chats can show: the model writes &*keyword*&. */
 export interface ChatEmoticon {
+  groupId: number
   compositeHash: string
   keywords: string[]
   mimeType: string | null
@@ -218,6 +222,7 @@ export interface ChatProfileAssetFields {
 }
 
 export interface ChatProfileSummary extends ChatProfileAssetFields {
+  expressionGroupId?: number | null
   canUsePageContext: boolean
   tagline: string
   model: string

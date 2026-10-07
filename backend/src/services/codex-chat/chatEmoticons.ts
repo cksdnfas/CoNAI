@@ -1,5 +1,13 @@
 import { EMOTICON_PROMPT_BUDGET, EmoticonService } from '../emoticonService'
 import type { ChatStyle } from './chatStyle'
+import { GroupPathService } from '../groupPathService'
+import { chatCharacterGroupPath } from './chatProfileAssets'
+
+/** Only the character's linked, enabled expression group drives its portrait. */
+export function chatExpressionGroupId(profile: { name: string; style: Pick<ChatStyle, 'emoticonGroupIds'> }) {
+  const id = GroupPathService.resolve(`${chatCharacterGroupPath(profile.name)}/표정`, { create: false })?.groupId
+  return id && profile.style.emoticonGroupIds.includes(id) && EmoticonService.findGroup(id)?.emoticon_enabled === 1 ? id : null
+}
 
 /** The emoticons a profile's chats can use, from its linked emoticon groups (first group wins on shared keywords). */
 export function listProfileEmoticons(style: Pick<ChatStyle, 'emoticonGroupIds'>) {

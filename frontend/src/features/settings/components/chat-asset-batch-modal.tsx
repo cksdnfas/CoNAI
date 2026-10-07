@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, ImageOff, RotateCcw, Sparkles, Square } from 'lucide-react'
+import { AlertTriangle, Check, ImageOff, RotateCcw, ScanEye, Sparkles, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Chip, ToggleChip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
@@ -15,7 +15,7 @@ import { MediaLightbox } from '@/features/images/components/media-lightbox'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import { useI18n } from '@/i18n'
 import { buildApiUrl } from '@/lib/api-client'
-import { applyChatAssetBatch, cancelChatAssetSlot, chatAssetBatchQueryKey, chatProfileEmoticonsQueryKey, CHAT_ADMIN_PROFILES_QUERY_KEY, CHAT_GENERATION_PRESETS_QUERY_KEY, CHAT_PROFILES_QUERY_KEY, chooseChatAssetSlot, createChatAssetBatch, getChatAssetBatch, listChatAdminProfiles, listChatGenerationPresets, regenerateChatAssetSlot, type ChatAssetApplyResult, type ChatAssetBatch, type ChatAssetBatchInput, type ChatAssetReview, type ChatProfile } from '@/lib/api-codex-chat'
+import { MODEL_SLOTS_QUERY_KEY, listModelSlots, reviewChatAssetVision, applyChatAssetBatch, cancelChatAssetSlot, chatAssetBatchQueryKey, chatProfileEmoticonsQueryKey, CHAT_ADMIN_PROFILES_QUERY_KEY, CHAT_GENERATION_PRESETS_QUERY_KEY, CHAT_PROFILES_QUERY_KEY, chooseChatAssetSlot, createChatAssetBatch, getChatAssetBatch, listChatAdminProfiles, listChatGenerationPresets, regenerateChatAssetSlot, type ChatAssetApplyResult, type ChatAssetBatch, type ChatAssetBatchInput, type ChatAssetReview, type ChatProfile } from '@/lib/api-codex-chat'
 import { getGenerationWorkflows } from '@/lib/api-image-generation-workflows'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
 import { getPromptPresets } from '@/lib/api-prompt-presets'
@@ -44,6 +44,29 @@ function ReviewChips({ review }: { review?: ChatAssetReview }) {
   </>
 }
 
+/** Candidate-bound results disappear on a candidate, reference or model change. */
+function SlotVisionReview({ profileId, batchId, slotKey, hash, referenceHash, modelSlotId, disabled }: { profileId: number; batchId: number; slotKey: string; hash?: string; referenceHash?: string | null; modelSlotId: number; disabled: boolean }) {
+  const { t } = useI18n()
+  const { showSnackbar } = useSnackbar()
+  const request = useRef<AbortController | null>(null)
+  useEffect(() => () => request.current?.abort(), [])
+  const review = useMutation({
+    mutationFn: () => {
+      const controller = new AbortController()
+      request.current = controller
+      return reviewChatAssetVision(profileId, batchId, slotKey, modelSlotId, hash!, controller.signal)
+    },
+    onError: (error) => { if (!request.current?.signal.aborted) showSnackbar({ message: getErrorMessage(error, t({ ko: '비전 검수를 하지 못했어.', en: 'Could not review the images.' })), tone: 'error' }) },
+  })
+  return <>
+    {review.data ? <>
+      <Chip size="sm" tone={review.data.samePerson ? 'success' : 'warning'}>{t({ ko: '같은 인물', en: 'Same character' })} {review.data.samePerson ? '✓' : '✗'}</Chip>
+      <Chip size="sm" tone="muted" title={[review.data.expression, review.data.flaw].filter(Boolean).join(' · ')}><span className="max-w-52 truncate">{t({ ko: '표정: {expression}', en: 'Expression: {expression}' }, { expression: review.data.expression })}</span></Chip>
+    </> : null}
+    <IconButton variant="ghost" size="icon-sm" disabled={disabled || !hash || !referenceHash || !modelSlotId || review.isPending} label={t({ ko: '비전 검수', en: 'Vision review' })} onClick={() => review.mutate()}>{review.isPending ? <Spinner /> : <ScanEye />}</IconButton>
+  </>
+}
+
 /** Queue-authoritative slots; the same surface opens from the editor and an approved proposal. */
 export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = false, onBatchChange, onPrepare, onApplied, onClose }: {
   profile: Pick<ChatProfile, 'id' | 'name' | 'referenceHash'> | null
@@ -66,11 +89,14 @@ export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = f
   const [background, setBackground] = useState(false)
   const [full, setFull] = useState(false)
   const [promptChoice, setPromptChoice] = useState('')
+  const [visionChoice, setVisionChoice] = useState(0)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const request = useRef<{ serialized: string; input: ChatAssetBatchInput } | null>(null)
   const creating = useRef(false)
   const regeneration = useRef(new Map<string, number>())
   const profileId = savedProfile?.id ?? 0
+  const modelSlots = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots })
+  const visionSlotId = modelSlots.data?.some((slot) => slot.id === visionChoice) ? visionChoice : 0
   const presets = useQuery({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY, queryFn: listChatGenerationPresets })
   const expressionPresets = useQuery({ queryKey: ['prompt-presets', 'chat-assets'], queryFn: () => getPromptPresets({ withItems: true }) })
   const presetId = presetChoice ?? presets.data?.[0]?.id ?? 0
@@ -195,6 +221,10 @@ export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = f
           {expressionPresets.data?.map((entry) => <option key={entry.id} value={entry.id}>{entry.name === '기본 캐릭터 표정' ? t({ ko: '기본 표정 8', en: 'Default 8 expressions' }) : entry.name}</option>)}
         </Select>
         {preset?.kind === 'comfyui' ? <Select className="w-auto max-w-full" value={promptField} disabled={frozen} aria-label={t({ ko: '슬롯 프롬프트 필드', en: 'Slot prompt field' })} onChange={(event) => setPromptChoice(event.target.value)}><option value="">{t({ ko: '프롬프트 필드', en: 'Prompt field' })}</option>{promptFields.map((field) => <option key={field.id} value={field.id}>{field.label}</option>)}</Select> : null}
+        <Select className="w-auto max-w-full" aria-label={t({ ko: '비전 검수 모델', en: 'Vision review model' })} title={t({ ko: '이미지를 볼 수 있는 모델을 골라줘', en: 'Choose a model that can see images' })} value={visionSlotId} disabled={modelSlots.isPending} onChange={(event) => setVisionChoice(Number(event.target.value))}>
+          <option value={0}>{t({ ko: '비전 검수 모델', en: 'Vision review model' })}</option>
+          {modelSlots.data?.map((slot) => <option key={slot.id} value={slot.id}>{slot.name} · {slot.model}</option>)}
+        </Select>
         <span className="mx-1 h-6 w-px bg-line" aria-hidden />
         <ToggleChip pressed={batch ? batch.slots.some((slot) => slot.kind === 'expression') : expressions} disabled={frozen || referenceOnly} onClick={() => setExpressions(!expressions)}>{t({ ko: '표정', en: 'Expressions' })}</ToggleChip>
         <ToggleChip pressed={batch ? batch.slots.some((slot) => slot.kind === 'background') : background} disabled={frozen || referenceOnly} onClick={() => setBackground(!background)}>{t({ ko: '배경', en: 'Background' })}</ToggleChip>
@@ -203,7 +233,7 @@ export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = f
         {isRunning ? <span aria-live="polite" className="text-xs tabular-nums text-muted-foreground">{complete} / {batch?.slots.length}</span> : null}
         <Button size="sm" disabled={busy || isRunning || !savedProfile?.name.trim() || (batchId === null && (!presetId || !preview.length || preview.length > 32 || (expressions && !emotionNames.length) || (preset?.kind === 'comfyui' && !promptField)))} title={batchId !== null ? t({ ko: '새 묶음 만들기', en: 'Create a new batch' }) : onPrepare ? t({ ko: '이름·외형·기준 이미지를 저장하고 만들기', en: 'Save name, appearance and reference, then create' }) : undefined} onClick={() => { if (batchId !== null) { setBatchId(null); request.current = null } else if (!creating.current) { creating.current = true; create.mutate() } }}>{create.isPending ? <Spinner /> : <Sparkles />}{t({ ko: '만들기', en: 'Create' })}</Button>
       </div>
-      {[presets, expressionPresets, workflows, batchQuery].filter((query) => query.isError).map((query, index) => <div key={index} role="alert" className="flex items-center gap-2 text-sm text-destructive">{getErrorMessage(query.error, t({ ko: '불러오지 못했어.', en: 'Could not load.' }))}<Button size="xs" variant="ghost" onClick={() => void query.refetch()}>{t({ ko: '다시 시도', en: 'Retry' })}</Button></div>)}
+      {[presets, expressionPresets, workflows, modelSlots, batchQuery].filter((query) => query.isError).map((query, index) => <div key={index} role="alert" className="flex items-center gap-2 text-sm text-destructive">{getErrorMessage(query.error, t({ ko: '불러오지 못했어.', en: 'Could not load.' }))}<Button size="xs" variant="ghost" onClick={() => void query.refetch()}>{t({ ko: '다시 시도', en: 'Retry' })}</Button></div>)}
       {batchQuery.isPending && batchId !== null ? <Spinner /> : null}
       <div className="divide-y divide-line">
         {(batch?.slots ?? preview).map((entry) => {
@@ -211,12 +241,17 @@ export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = f
           const slotCandidates = slot?.attempts.flatMap((attempt) => attempt.candidates) ?? []
           const chosen = slotCandidates.find((candidate) => candidate.compositeHash === slot?.chosenHash)
           const latest = slotCandidates[slotCandidates.length - 1]
+          const reviewCandidate = slot?.chosenHash ? chosen : latest
+          const reviewHash = reviewCandidate?.compositeHash
+          const reviewAttempt = [...(slot?.attempts ?? [])].reverse().find((attempt) => attempt.candidates.some((candidate) => candidate.compositeHash === reviewHash))
+          const reviewReference = reviewAttempt?.referenceHash ?? batch?.slots.find((slot) => slot.kind === 'reference')?.chosenHash ?? batch?.snapshot.referenceHash
           const working = slot?.attempts.some(activeAttempt)
           const referenceBlocked = slot?.kind !== 'reference' && batch?.slots.some((slot) => slot.kind === 'reference' && !slot.chosenHash)
           const dimensions = entry.kind === 'background' ? 'h-[135px] w-[240px]' : 'h-[150px] w-[112px]'
           return <section key={entry.slotKey} className="py-3">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="w-16 shrink-0 text-sm font-semibold" title={entry.kind === 'full' ? t({ ko: '전신은 후보 그룹에 보관해', en: 'Full-body images stay in the candidates group' }) : undefined}>{entry.slotKey}</span><ReviewChips review={chosen?.review ?? latest?.review} /><span className="flex-1" />
+              <SlotVisionReview key={`${batch?.id}:${entry.slotKey}:${reviewHash}:${reviewReference}:${visionSlotId}`} profileId={profileId} batchId={batch?.id ?? 0} slotKey={entry.slotKey} hash={reviewHash} referenceHash={reviewReference} modelSlotId={visionSlotId} disabled={!batch || busy || !canViewImages || !reviewHash || !visibleImages.has(reviewHash)} />
               {working ? <IconButton variant="ghost" size="icon-sm" disabled={busy || slot?.attempts.filter(activeAttempt).every((attempt) => attempt.cancelRequested)} label={t({ ko: '취소', en: 'Cancel' })} onClick={() => slotMutation.mutate({ slotKey: entry.slotKey, action: 'cancel' })}><Square /></IconButton> : null}
               <IconButton variant="ghost" size="icon-sm" disabled={!slot || busy || referenceBlocked} label={referenceBlocked ? t({ ko: '기준 이미지를 먼저 골라줘', en: 'Choose the reference first' }) : t({ ko: '다시 만들기', en: 'Regenerate' })} onClick={() => slotMutation.mutate({ slotKey: entry.slotKey, action: 'regenerate' })}><RotateCcw /></IconButton>
             </div>

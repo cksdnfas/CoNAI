@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
 import { Activity, Check, ChevronDown, ChevronUp, GripVertical, Minimize2, PanelRight, PanelRightClose, Pencil, PictureInPicture2, RotateCcw, X } from 'lucide-react'
+import type { ChatPortraitSignal } from '@conai/shared'
+import { ChatProfileImage } from './chat-profile-image'
+import { Chip } from '@/components/ui/chip'
+import { chatEmoticonUrl, chatProfileAssetUrl, type ChatProfileSummary } from '@/lib/api-codex-chat'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Textarea } from '@/components/ui/textarea'
@@ -66,7 +70,21 @@ export function useStatusPanelLayout(): [ChatStatusPanelLayout, (patch: Partial<
 /** A block as the panel lists it; rooms prefix the key with the member (`<profileId>:<key>`) and label the tab. */
 export type ChatStatusBlock = ChatDisplayBlock & { label?: string }
 
+/** A safe profile/linked-emoticon image fills the existing panel width, above its blocks. */
+export function ChatPortrait({ signal, profile }: { signal: ChatPortraitSignal; profile: ChatProfileSummary }) {
+  const avatar = <ChatProfileImage src={chatProfileAssetUrl(profile.id, 'avatar', profile.assetVersion)} className="size-full object-cover object-top" fallback={<span className="flex size-full items-center justify-center text-5xl text-muted-foreground">{profile.name.slice(0, 1)}</span>} />
+  const reference = profile.referenceHash ? <ChatProfileImage src={chatProfileAssetUrl(profile.id, 'reference', profile.assetVersion)} className="size-full object-cover object-top" fallback={avatar} /> : avatar
+  return <div className="relative h-[400px] w-full shrink-0 overflow-hidden" aria-label={profile.name}>
+    {signal.source === 'expression' && signal.compositeHash
+      ? <ChatProfileImage src={chatEmoticonUrl(profile.id, signal.compositeHash)} className="size-full object-cover object-top" fallback={reference} />
+      : signal.source === 'reference' ? reference : avatar}
+    {signal.emotion ? <Chip size="sm" className="absolute bottom-3 left-3 bg-background/70 text-foreground backdrop-blur-sm">{signal.emotion}</Chip> : null}
+  </div>
+}
+
 export type ChatStatusData = {
+  portrait?: ReactNode
+  portraitLabel?: string
   /** Usable blocks of the profile (or of every room member), in order. */
   blocks: ChatStatusBlock[]
   state: ChatBlocksState
@@ -158,11 +176,12 @@ function BlockEditor({ data, busy, onSave, onCancel }: { data: Record<string, un
  * The panel's content: tabs and actions on one line, the active block's card, then its recent changes. `actions`
  * are the frame's own buttons (dock, float, hide, fold) placed after the edit and reset ones.
  */
-export function ChatStatusContent({ data, activeKey, onActiveKey, actions, headerClassName, bodyClassName }: {
+export function ChatStatusContent({ data, activeKey, onActiveKey, actions, headerStart, headerClassName, bodyClassName }: {
   data: ChatStatusData
   activeKey: string
   onActiveKey: (key: string) => void
   actions?: ReactNode
+  headerStart?: ReactNode
   headerClassName?: string
   bodyClassName?: string
 }) {
@@ -170,25 +189,29 @@ export function ChatStatusContent({ data, activeKey, onActiveKey, actions, heade
   const [editing, setEditing] = useState(false)
   const block = data.blocks.find((entry) => entry.key === activeKey) ?? data.blocks[0]
   useEffect(() => setEditing(false), [activeKey, data.busy])
-  if (!block) return null
-  const values = data.state.state[block.key] ?? {}
+  if (!block && !data.portrait) return null
+  const values = block ? data.state.state[block.key] ?? {} : {}
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      {data.portrait}
       <div className={cn('flex min-h-12 shrink-0 flex-wrap items-center gap-1 border-b border-line py-1 pl-4 pr-1', headerClassName)}>
-        <BlockTabs blocks={data.blocks} activeKey={block.key} onChange={onActiveKey} className="min-w-0 flex-1 basis-40" />
+        {headerStart}
+        {block ? <BlockTabs blocks={data.blocks} activeKey={block.key} onChange={onActiveKey} className="min-w-0 flex-1 basis-40" /> : <span className="text-sm font-semibold">{data.portraitLabel}</span>}
         <span className="ml-auto flex items-center gap-1">
-          <IconButton variant="ghost" size="icon-sm" active={editing} disabled={data.busy} onClick={() => setEditing((current) => !current)} label={t({ ko: '직접 고치기', en: 'Edit values' })}><Pencil /></IconButton>
-          <IconButton variant="ghost" size="icon-sm" disabled={data.busy} onClick={() => void data.onEdit(block.key, null)} label={t({ ko: '처음 값으로', en: 'Reset to starting values' })}><RotateCcw /></IconButton>
+          {block ? <>
+            <IconButton variant="ghost" size="icon-sm" active={editing} disabled={data.busy} onClick={() => setEditing((current) => !current)} label={t({ ko: '직접 고치기', en: 'Edit values' })}><Pencil /></IconButton>
+            <IconButton variant="ghost" size="icon-sm" disabled={data.busy} onClick={() => void data.onEdit(block.key, null)} label={t({ ko: '처음 값으로', en: 'Reset to starting values' })}><RotateCcw /></IconButton>
+          </> : null}
           {actions}
         </span>
       </div>
-      <div className={cn('min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3', bodyClassName)}>
+      {block ? <div className={cn(data.portrait ? 'shrink-0 space-y-3 px-4 py-3' : 'min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3', bodyClassName)}>
         {editing
           ? <BlockEditor data={values} busy={data.busy} onSave={async (next) => { await data.onEdit(block.key, next); setEditing(false) }} onCancel={() => setEditing(false)} />
           : <ChatDisplayBlockView block={block} data={values} picked={data.picks} onAction={(action) => data.onAction(block.key, action)} />}
         <RecentChanges messages={data.messages} changes={data.state.changes} blockKey={block.key} />
-      </div>
-    </>
+      </div> : null}
+    </div>
   )
 }
 
@@ -294,23 +317,23 @@ export function ChatStatusFloating({ data, activeKey, onActiveKey, layout, onLay
         data={data}
         activeKey={activeKey}
         onActiveKey={onActiveKey}
-        headerClassName="min-h-10 pl-9"
-        actions={<>
-          <IconButton variant="ghost" size="icon-sm" onClick={onDock} label={t({ ko: '오른쪽에 붙이기', en: 'Dock to the right' })}><PanelRight /></IconButton>
-          <IconButton variant="ghost" size="icon-sm" onClick={onHide} label={t({ ko: '상태창 접기', en: 'Hide status panel' })}><Minimize2 /></IconButton>
-        </>}
-      />
-      <span
+        headerClassName="min-h-10 pl-1"
+        headerStart={<span
         role="presentation"
         aria-label={t({ ko: '끌어서 옮기기', en: 'Drag to move' })}
         onPointerDown={start('move')}
         onPointerMove={move}
         onPointerUp={end}
         onPointerCancel={end}
-        className="absolute left-1 top-0 flex h-10 w-7 cursor-grab touch-none items-center justify-center text-muted-foreground active:cursor-grabbing"
+        className="flex h-8 w-7 shrink-0 cursor-grab touch-none items-center justify-center text-muted-foreground active:cursor-grabbing"
       >
         <GripVertical className="size-4" />
-      </span>
+      </span>}
+        actions={<>
+          <IconButton variant="ghost" size="icon-sm" onClick={onDock} label={t({ ko: '오른쪽에 붙이기', en: 'Dock to the right' })}><PanelRight /></IconButton>
+          <IconButton variant="ghost" size="icon-sm" onClick={onHide} label={t({ ko: '상태창 접기', en: 'Hide status panel' })}><Minimize2 /></IconButton>
+        </>}
+      />
       <span
         role="presentation"
         aria-label={t({ ko: '크기 조절', en: 'Resize' })}
@@ -331,8 +354,8 @@ export function ChatStatusStrip({ data, activeKey, onActiveKey, open, onOpenChan
   const { t } = useI18n()
   const block = data.blocks.find((entry) => entry.key === activeKey) ?? data.blocks[0]
   const summary = block ? blockSummaryLine(block, data.state.state[block.key] ?? {}) : ''
-  if (!block) return null
-  const stripLabel = block.label && data.blocks.length > 1 ? `${block.label.split(' · ')[0]} · ` : ''
+  if (!block && !data.portraitLabel) return null
+  const stripLabel = block?.label && data.blocks.length > 1 ? `${block.label.split(' · ')[0]} · ` : ''
   return (
     <>
       <Button
@@ -342,13 +365,13 @@ export function ChatStatusStrip({ data, activeKey, onActiveKey, open, onOpenChan
         className="h-10 w-full shrink-0 justify-start gap-2 rounded-none border-b border-line pl-3.5 pr-1 text-sm font-normal text-foreground/85"
       >
         <Activity className="size-3.5 shrink-0 text-primary" />
-        <span className="min-w-0 flex-1 truncate text-left">{stripLabel}{summary || block.key}</span>
+        <span className="min-w-0 flex-1 truncate text-left">{stripLabel}{summary || block?.key || data.portraitLabel}</span>
         <span className="flex size-8 shrink-0 items-center justify-center text-muted-foreground">{open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}</span>
       </Button>
       {open ? (
         <div className="absolute inset-x-0 bottom-0 top-10 z-20 flex flex-col">
           <section aria-label={t({ ko: '상태창', en: 'Status panel' })} className="flex max-h-[70%] flex-col border-b border-line bg-background shadow-xl">
-            <ChatStatusContent data={data} activeKey={block.key} onActiveKey={onActiveKey} headerClassName="min-h-11" />
+            <ChatStatusContent data={data} activeKey={block?.key ?? activeKey} onActiveKey={onActiveKey} headerClassName="min-h-11" />
             <Button variant="ghost" onClick={() => onOpenChange(false)} aria-label={t({ ko: '상태창 접기', en: 'Fold status panel' })} className="h-10 shrink-0 rounded-none border-t border-line text-muted-foreground"><ChevronUp className="size-4" /></Button>
           </section>
           <Button variant="ghost" aria-label={t({ ko: '상태창 접기', en: 'Fold status panel' })} onClick={() => onOpenChange(false)} className="h-auto flex-1 rounded-none bg-background/55 hover:bg-background/55" />
