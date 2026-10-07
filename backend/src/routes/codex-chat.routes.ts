@@ -60,6 +60,8 @@ import { canSuggest, ChatSuggestError, profileWriterReady, suggestReplies, userW
 import { createUploadStorage, MAX_UPLOAD_FILE_SIZE_BYTES } from '../middleware/upload'
 import { downloadProfileAsset, importFileStoreProfileAsset, ingestProfileAsset, profileAssetFields, resolveProfileAsset } from '../services/codex-chat/chatProfileAssets'
 import chatAssetBatchesRouter from './chat-asset-batches.routes'
+import { draftChatAppearance } from '../services/codex-chat/chatAppearanceDraft'
+import { ChatAssetError } from '../services/codex-chat/chatAssetAccess'
 
 const MESSAGE_MAX_LENGTH = 20000
 
@@ -671,6 +673,19 @@ async function assertCodexEffortSupported(input: ChatProfileInput) {
 
 const cardUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: CHAT_CARD_MAX_BYTES, files: 1, fields: 0, parts: 2 } }).single('file')
 const assetUpload = multer({ storage: createUploadStorage(MAX_UPLOAD_FILE_SIZE_BYTES), limits: { fileSize: MAX_UPLOAD_FILE_SIZE_BYTES, files: 1, fields: 1, parts: 3 } }).single('file')
+
+router.post('/admin/profiles/appearance-draft', requireAdmin, requireImagesView, asyncHandler(async (req, res) => {
+  const controller = new AbortController()
+  res.on('close', () => { if (!res.writableFinished) controller.abort() })
+  try {
+    if (!req.body?.profile || typeof req.body.profile !== 'object' || Array.isArray(req.body.profile)) throw new ChatProfileError('프로필 초안을 넣어줘.')
+    res.json({ success: true, data: await draftChatAppearance(requesterFrom(req), req.body.profile, controller.signal) })
+  } catch (error) {
+    if (controller.signal.aborted) return
+    if (error instanceof ChatAssetError) { res.status(error.status).json({ success: false, error: error.message }); return }
+    sendChatError(res, error)
+  }
+}))
 
 router.post('/admin/chat-assets/upload', requireAdmin, requireImagesView, (req, res, next) => {
   assetUpload(req, res, (error) => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Save, Trash2 } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
@@ -26,6 +26,8 @@ import {
   listModelSlots,
   updateChatProfile,
   type ChatProfile,
+  type ChatAssetApplyResult,
+  type ChatAssetBatch,
   type ChatProfileDefaults,
   type ChatProfileInput,
   type ChatStyle,
@@ -130,7 +132,7 @@ function TabLabel({ children, incomplete, incompleteLabel }: { children: ReactNo
  * Create or edit one chat profile: character, appearance, model, look and tools.
  * One draft spans the tabs, so switching loses nothing.
  */
-export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, onClose }: {
+export function ChatProfileEditorModal({ open, profile: initialProfile, initialDraft, defaults, onClose }: {
   open: boolean
   profile: ChatProfile | null
   initialDraft?: ChatProfileInput
@@ -141,7 +143,10 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
+  const [profile, setProfile] = useState(initialProfile)
+  const editorSession = useRef({ open: false, id: initialProfile?.id ?? null })
   const [draft, setDraft] = useState<Draft>(() => buildDraft(profile ?? initialDraft ?? null, defaults))
+  const [assetBatchId, setAssetBatchId] = useState<number | null>(null)
   const [tab, setTab] = useState<EditorTab>('character')
   const [assetImports, setAssetImports] = useState(0)
   const assetBusy = assetImports > 0
@@ -149,13 +154,49 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
   const [previewOpen, setPreviewOpen] = useState(false)
 
   useEffect(() => {
-    if (open) {
-      setDraft(buildDraft(profile ?? initialDraft ?? null, defaults))
+    if (open && (!editorSession.current.open || editorSession.current.id !== (initialProfile?.id ?? null))) {
+      setProfile(initialProfile)
+      setDraft(buildDraft(initialProfile ?? initialDraft ?? null, defaults))
       setTab('character')
+      let batchId: number | null = null
+      try { const value = Number(sessionStorage.getItem(`conai:chat-asset-batch:${initialProfile?.id ?? 0}`)); if (Number.isSafeInteger(value) && value > 0) batchId = value } catch { /* Storage can be unavailable. */ }
+      setAssetBatchId(batchId)
     }
-  }, [defaults, initialDraft, open, profile])
+    editorSession.current = { open, id: initialProfile?.id ?? null }
+  }, [defaults, initialDraft, open, initialProfile])
 
   const patch = (next: Partial<Draft>) => setDraft((current) => ({ ...current, ...next }))
+  const rememberBatch = (id: number) => {
+    setAssetBatchId(id)
+    try { sessionStorage.setItem(`conai:chat-asset-batch:${profile?.id ?? 0}`, String(id)) } catch { /* Storage can be unavailable. */ }
+  }
+  const prepareAssets = async () => {
+    const updated = profile ? await updateChatProfile(profile.id, { name: draft.name, appearance: draft.appearance, referenceHash: draft.referenceHash }) : await createChatProfile(draft)
+    setProfile(updated)
+    if (!profile) setDraft(buildDraft(updated, defaults))
+    showSnackbar({ message: profile ? t({ ko: '외형을 저장했어.', en: 'Appearance saved.' }) : t({ ko: '프로필을 저장했어.', en: 'Profile saved.' }), tone: 'info' })
+    await Promise.all([queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }), queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY })])
+    return updated
+  }
+  const assetsApplied = (result: ChatAssetApplyResult, batch: ChatAssetBatch, updated?: ChatProfile) => {
+    if (updated) setProfile(updated)
+    setDraft((current) => {
+      const next = { ...current }
+      for (const slot of batch.slots.filter((slot) => slot.chosenHash)) {
+        if (slot.kind === 'reference') next.referenceHash = slot.chosenHash
+        if (slot.kind === 'avatar') { if (next.avatarHash !== slot.chosenHash) next.avatar = null; next.avatarHash = slot.chosenHash; next.avatarCrop = null }
+        if (slot.kind === 'background') { if (next.backgroundHash !== slot.chosenHash) next.background = null; next.backgroundHash = slot.chosenHash }
+      }
+      const groupId = result.applied.expressionGroupId
+      if (groupId) next.style = { ...next.style, emoticonGroupIds: [groupId, ...next.style.emoticonGroupIds.filter((id) => id !== groupId)] }
+      if (updated) {
+        if (result.applied.profileFields.includes('referenceHash')) next.referenceHash = updated.referenceHash
+        if (result.applied.profileFields.includes('avatarHash')) { next.avatarHash = updated.avatarHash; next.avatarCrop = updated.avatarCrop; next.avatar = updated.avatar }
+        if (result.applied.profileFields.includes('backgroundHash')) { next.backgroundHash = updated.backgroundHash; next.background = undefined }
+      }
+      return next
+    })
+  }
   const isLlm = draft.engine === 'llm'
 
   const providersQuery = useQuery({ queryKey: ['external-api-providers', 'chat-profiles'], queryFn: getExternalApiProviders, enabled: open })
@@ -333,7 +374,7 @@ export function ChatProfileEditorModal({ open, profile, initialDraft, defaults, 
             busy={assetBusy}
           />
         ) : null}
-        {tab === 'appearance' ? <ChatProfileAppearancePanel draft={draft} patch={patch} profile={profile} onBusyChange={onAssetBusyChange} busy={assetBusy} /> : null}
+        {tab === 'appearance' ? <ChatProfileAppearancePanel draft={draft} patch={patch} profile={profile} onBusyChange={onAssetBusyChange} busy={assetBusy} batchId={assetBatchId} onBatchChange={rememberBatch} onPrepareAssets={prepareAssets} onAssetsApplied={assetsApplied} /> : null}
         {tab === 'model' ? (
           <ChatProfileModelPanel
             draft={draft}

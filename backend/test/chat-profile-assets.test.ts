@@ -325,6 +325,55 @@ test('chat profile assets: library migration, access, imports and generation ref
     assert.ok(!JSON.stringify(buildChatPromptPreview(profile, [])).includes(profile.appearance))
   })
 
+  await t.test('appearance drafts use the summary role once, include vision only when enabled and leave profiles untouched', async (sub) => {
+    const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
+    const { draftChatAppearance } = await import('../src/services/codex-chat/chatAppearanceDraft')
+    const requests: Array<{ model: string; messages: any[]; stream: boolean; max_tokens: number }> = []
+    sub.mock.method(ExternalApiProvider, 'findByName', (name: string) => ({ provider_name: name, display_name: name, is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', additional_config: {} }))
+    sub.mock.method(ExternalApiProvider, 'getDecryptedKey', () => null)
+    sub.mock.method(globalThis, 'fetch', async (_url: unknown, options: RequestInit) => {
+      requests.push(JSON.parse(options.body as string))
+      return Response.json({ choices: [{ message: { content: 'blue hair, green eyes' }, finish_reason: 'stop' }] })
+    })
+    const input = { name: '외형 초안', engine: 'llm' as const, providerName: 'chat', model: 'large', summaryProviderName: 'summary', summaryModel: 'small', referenceHash: hash, promptSections: [{ id: 'character', title: '캐릭터 설명', content: '파란 머리, 초록 눈', kind: 'text' as const, enabled: true }] }
+    const before = ChatProfileStore.find(first.id)
+    const plain = await call('/admin/profiles/appearance-draft', {}, { method: 'post', body: { profile: input } })
+    assert.equal(plain.status, 200, JSON.stringify(plain.body))
+    assert.equal(plain.body.data.appearance, 'blue hair, green eyes')
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].model, 'small')
+    assert.ok(requests[0].messages[1].content[0].text.includes('파란 머리'))
+    assert.equal(requests[0].messages[1].content.length, 1)
+    const vision = await draftChatAppearance({ accountId: null, accountType: 'admin' }, { ...input, visionEnabled: true })
+    assert.equal(vision.appearance, plain.body.data.appearance)
+    assert.equal(requests.length, 2)
+    assert.equal(requests[1].messages[1].content[1].type, 'image_url')
+    assert.match(requests[1].messages[1].content[1].image_url.url, /^data:image\/jpeg;base64,/)
+    assert.equal(requests[1].max_tokens, 1024)
+    assert.deepEqual(ChatProfileStore.find(first.id), before)
+    await assert.rejects(draftChatAppearance({ accountId: 999999, accountType: 'admin' }, input), /관리자 권한/)
+    const { ImageSafetyService } = await import('../src/services/imageSafetyService')
+    sub.mock.method(ImageSafetyService, 'isHidden', () => true)
+    await assert.rejects(draftChatAppearance({ accountId: null, accountType: 'admin' }, { ...input, visionEnabled: true }), /기준 이미지를 볼 수 없어/)
+    assert.equal(requests.length, 2)
+  })
+
+  await t.test('appearance drafts reject missing source/model or image permissions before contacting a model', async (sub) => {
+    let calls = 0
+    sub.mock.method(globalThis, 'fetch', async () => { calls += 1; throw new Error('unexpected network call') })
+    const { draftChatAppearance } = await import('../src/services/codex-chat/chatAppearanceDraft')
+    await assert.rejects(draftChatAppearance({ accountId: null, accountType: 'admin' }, { name: '모델 없음', engine: 'codex' }), /요약 모델/)
+    const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
+    sub.mock.method(ExternalApiProvider, 'findByName', () => ({ provider_name: 'source-test', display_name: 'Source test', is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', additional_config: { default_model: 'small' } }))
+    sub.mock.method(ExternalApiProvider, 'getDecryptedKey', () => null)
+    await assert.rejects(draftChatAppearance({ accountId: null, accountType: 'admin' }, { name: '설명 없음', providerName: 'source-test' }), /캐릭터 설명/)
+    assert.equal((await call('/admin/profiles/appearance-draft', {}, { method: 'post', body: {} })).status, 400)
+    const bootstrap = AuthAccessControlService.resolveBootstrapAccess()
+    sub.mock.method(AuthAccessControlService, 'resolveBootstrapAccess', () => ({ ...bootstrap, permissionKeys: bootstrap.permissionKeys.filter((key) => key !== 'images.view') }))
+    assert.equal((await call('/admin/profiles/appearance-draft', {}, { method: 'post', body: { profile: { name: '권한 없음', engine: 'codex' } } })).status, 403)
+    assert.equal(calls, 0)
+  })
+
   await t.test('NAI queue size limit includes the stored authorization snapshot and never dispatches an oversized job', async () => {
     const { ChatGenerationPresetStore } = await import('../src/services/codex-chat/chatGenerationPresets')
     const { buildChatGenerationPresetJob, CHAT_NAI_PAYLOAD_MAX_BYTES } = await import('../src/mcp/tools/chatGenerationTools')

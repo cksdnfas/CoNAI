@@ -6,11 +6,28 @@ import type { ChatStreamEvent, CodexReasoningEffort, StoredFileEntry, ChatMessag
 
 export type ChatScope = 'read' | 'generate' | 'organize' | 'configure'
 const assetBatchPath = (profileId: number, batchId?: number) => `/api/codex-chat/admin/profiles/${profileId}/asset-batches${batchId === undefined ? '' : `/${batchId}`}`
-export function createChatAssetBatch(profileId: number, input: ChatAssetBatchInput) {
-  return requestApiData<ChatAssetBatch>(assetBatchPath(profileId), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
+export class ChatAssetSubmissionError extends Error {
+  readonly profileId: number
+  readonly batchId: number | null
+  constructor(message: string, profileId: number, batchId: number | null) {
+    super(message)
+    this.profileId = profileId
+    this.batchId = batchId
+  }
 }
-export function getChatAssetBatch(profileId: number, batchId: number) {
-  return requestApiData<ChatAssetBatch>(assetBatchPath(profileId, batchId))
+/** Keep the durable batch identity when submission stopped after creating some jobs. */
+export async function createChatAssetBatch(profileId: number, input: ChatAssetBatchInput) {
+  const response = await fetch(buildApiUrl(assetBatchPath(profileId)), { method: 'POST', credentials: 'include', signal: AbortSignal.timeout(30000), headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
+  const payload = (response.headers.get('content-type') ?? '').includes('application/json') ? await response.json() as { success?: boolean; data?: ChatAssetBatch; error?: string; batchId?: number } : null
+  if (!response.ok || !payload?.success || !payload.data) throw new ChatAssetSubmissionError(payload?.error || `Request failed: ${response.status}`, profileId, Number.isSafeInteger(payload?.batchId) && payload!.batchId! > 0 ? payload!.batchId! : null)
+  return payload.data
+}
+export function getChatAssetBatch(profileId: number, batchId: number, signal?: AbortSignal) {
+  return requestApiData<ChatAssetBatch>(assetBatchPath(profileId, batchId), { signal, cache: 'no-store' })
+}
+export const chatAssetBatchQueryKey = (profileId: number, batchId: number) => ['chat-asset-batch', profileId, batchId] as const
+export function draftChatAppearance(profile: ChatProfileInput, signal?: AbortSignal) {
+  return requestApiData<{ appearance: string }>('/api/codex-chat/admin/profiles/appearance-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile }), signal }, { timeoutMs: 120000 })
 }
 export function regenerateChatAssetSlot(profileId: number, batchId: number, slotKey: string, attempt: number, useCurrentPreset = false) {
   return requestApiData<ChatAssetBatch>(`${assetBatchPath(profileId, batchId)}/slots/${encodeURIComponent(slotKey)}/regenerate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attempt, useCurrentPreset }) })
