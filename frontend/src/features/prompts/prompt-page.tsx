@@ -26,6 +26,7 @@ import { usePromptPageQueries } from './use-prompt-page-queries'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { usePromptChatActions } from './use-prompt-chat-actions'
 
 type AssignModalState =
   | { mode: 'single'; item: PromptCollectionItem }
@@ -227,9 +228,11 @@ function PromptPageContent() {
     setPage(1)
   }
 
+  const chatActions = usePromptChatActions(promptType, items, promptGroups, items.find((item) => activePrompt?.prompt === item.prompt && activePrompt.type === item.type) ?? selectedPromptItems[0] ?? null, (item) => { setActivePrompt({ prompt: item.prompt, type: item.type }); setSelectedPromptIds([item.id]) })
   useChatPageRegistration(isPromptTypeView(view) ? {
     kind: 'prompt_search', title: t({ ko: '프롬프트 목록 · {type}', en: 'Prompt list · {type}' }, { type: promptType }),
     resourceId: `${promptType}:${selectedGroupId === undefined ? 'all' : selectedGroupId === null ? 'ungrouped' : selectedGroupId}`,
+    ...chatActions,
     fields: [
       { id: 'searchInput', label: t({ ko: '검색어 입력 (Enter로 검색 실행)', en: 'Search draft (press Enter to search)' }), type: 'text', value: searchInput },
       { id: 'sortBy', label: t({ ko: '정렬 기준 (usage_count: 사용량, created_at: 생성일, prompt: 이름)', en: 'Sort field (usage_count, created_at, prompt)' }), type: 'select', value: sortBy, options: ['usage_count', 'created_at', 'prompt'] },

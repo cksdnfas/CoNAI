@@ -53,7 +53,7 @@ export function isChatMcpSource(source: McpRequestContext['source']) {
  */
 export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job']);
 /** A connected page grants a bounded input task, never access to unrelated private data or side effects. */
-export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'propose_page_changes', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes']);
+export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'propose_page_changes', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes', 'read_page_data', 'propose_page_action']);
 
 /** Chat agents must not spend paid NovelAI multi-sample generations on their own; one image per request is free. */
 export function assertChatNaiSampleCount(context: McpRequestContext, nSamples: unknown) {
@@ -67,6 +67,8 @@ export const ALL_MCP_HTTP_SCOPES: McpHttpScope[] = ['read', 'generate', 'organiz
 const TOOL_SCOPES: Record<string, McpHttpScope> = {
   get_current_page: 'read',
   propose_page_changes: 'read',
+  read_page_data: 'read',
+  propose_page_action: 'read',
   get_workflow_editor: 'read',
   list_workflow_modules: 'read',
   propose_workflow_changes: 'read',

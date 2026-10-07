@@ -7,6 +7,7 @@ import { LogIn, RefreshCw, RotateCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useCodexChatPage } from './use-codex-chat-page'
 import { Text } from '@/components/ui/text'
 import { Field } from '@/components/ui/field'
 import { Select } from '@/components/ui/select'
@@ -43,7 +44,7 @@ type CodexGenerationPanelProps = {
   statusPortalTargetId?: string
 }
 
-type CodexFormDraft = {
+export type CodexFormDraft = {
   model: string
   prompt: string
   negativePrompt: string
@@ -233,6 +234,7 @@ export function CodexGenerationPanel({
   const [codexForm, setCodexForm] = useState<CodexFormDraft>(() => loadPersistedCodexFormDraft())
   const [isSubmitting, setIsSubmitting] = useState(false)
   const modelOptionsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 60_000, retry: false })
+  useCodexChatPage(codexForm, setCodexForm, modelOptionsQuery.data?.data.models ?? [])
   const [, setPortalRevision] = useState(0)
 
   const confirm = useConfirm()

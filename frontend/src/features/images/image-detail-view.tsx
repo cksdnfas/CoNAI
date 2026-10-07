@@ -33,6 +33,7 @@ import {
 } from './components/detail/image-detail-utils'
 import { shouldAutoRunImageSimilarityChecks } from './components/detail/image-similarity-policy'
 import { RelatedImageGallerySection } from './components/detail/related-image-gallery-section'
+import { useImageDetailChatPage } from './use-image-detail-chat-page'
 
 const SIMILARITY_INSPECTION_STABLE_DELAY_MS = 350
 
@@ -248,6 +249,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const refetchImage = imageQuery.refetch
 
   const image = imageQuery.data
+  useImageDetailChatPage(image, presentation, activeImageAreaTab, setActiveImageAreaTab)
   const mediaKind = image ? getImageListMediaKind(image) : null
   const canLoadRelatedImages = mediaKind === 'image'
   const isSecondaryContentReady = Boolean(image) && canLoadRelatedImages && isPrimaryMediaReady

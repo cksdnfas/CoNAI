@@ -18,6 +18,8 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { FILES_QUERY_KEY, createStoredFolder, deleteStoredFiles, formatFileSize, listStoredFileOwners, listStoredFiles, listStoredFolders, moveStoredFiles, renameStoredFile, storedFileDownloadUrl, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
@@ -198,6 +200,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
   const auth = useAuthStatusQuery()
   const permissions = useMemo(() => auth.data?.permissionKeys ?? [], [auth.data?.permissionKeys])
   const isPicker = onPick !== undefined
+  const chatCanReadFiles = useChatPageDataPermissions().canReadFiles
   const canUpload = permissions.includes('files.upload')
   const canOrganize = permissions.includes('files.organize')
   const canDelete = permissions.includes('files.delete')
@@ -246,6 +249,17 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '파일 작업에 실패했어.', en: 'File operation failed.' })) }),
   })
   const busy = mutation.isPending
+
+  useChatPageRegistration(!isPicker && chatCanReadFiles && !browsingAll ? {
+    kind: 'files', title: t({ ko: '파일 보관함', en: 'File store' }), resourceId: `${storeOwner ?? 'self'}:${parentId ?? 'root'}`, localRevision: JSON.stringify([selected, preview?.id, nameDialog, moveOpen]),
+    fields: [
+      { id: 'viewMode', label: t({ ko: '목록 표시', en: 'List view' }), type: 'select', value: viewMode, options: ['grid', 'list'] },
+      ...(nameDialog ? [{ id: 'name', label: t({ ko: '폴더·파일 이름 입력', en: 'Folder or file name draft' }), type: 'text' as const, value: nameDialog.name }] : []),
+      ...(moveOpen ? [{ id: 'moveTarget', label: t({ ko: '이동할 폴더 (빈 값은 최상위)', en: 'Destination folder (empty means root)' }), type: 'select' as const, value: moveTarget, options: ['', ...folders.filter((entry) => !selected.includes(entry.folder.id)).map((entry) => entry.folder.id)].slice(0, 100) }] : []),
+    ],
+    data: { files: entries.slice(0, 512).map((entry) => ({ id: entry.id, name: entry.name, kind: entry.kind, mimeType: entry.mimeType, bytes: entry.size })), selected: selection.map((entry) => ({ id: entry.id, name: entry.name })), total: query.data?.total ?? 0, offset },
+    apply: (patch) => { if (patch.viewMode !== undefined) changeViewMode(patch.viewMode as FileViewMode); if (patch.name !== undefined) setNameDialog((old) => old ? { ...old, name: String(patch.name) } : old); if (patch.moveTarget !== undefined) setMoveTarget(String(patch.moveTarget)) },
+  } : null)
 
   const navigate = (id: string | null) => {
     setSelected([])

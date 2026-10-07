@@ -15,6 +15,11 @@ import { ToggleRow } from '@/components/ui/toggle-row'
 import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
 import { useI18n, type TranslationParams } from '@/i18n'
 import type { WildcardRecord, WildcardTool } from '@/lib/api-wildcards'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
+import { pageAction } from '@/features/codex-chat/page-action-helpers'
+import { wildcardChatInput, wildcardChatSchema } from './use-wildcard-chat-page'
+import { CodexChatHeaderButton } from '@/features/codex-chat/codex-chat-shell'
 
 export interface WildcardEditorModalInput {
   name: string
@@ -538,6 +543,22 @@ export function WildcardEditorModal({
   }), [itemDrafts])
 
   const hasExportableItems = wildcardTools.some((tool) => exportItems[tool].length > 0)
+  const chatDraft = { name, description, parent_id: parentValue === 'root' ? null : Number(parentValue), include_children: Number(includeChildren), only_children: Number(onlyChildren), type: isChainTab ? 'chain' as const : 'wildcard' as const, chain_option: chainOption, items: exportItems }
+  const applyChatDraft = useChatDraftTransaction(chatDraft, (next) => {
+    setName(next.name); setDescription(next.description); setParentValue(String(next.parent_id ?? 'root')); setIncludeChildren(!!next.include_children); setOnlyChildren(!!next.only_children); setChainOption(next.chain_option)
+    setItemDrafts(Object.fromEntries(wildcardTools.map((tool) => [tool, next.items[tool].map((item) => createWildcardItemDraft(item.content, item.weight))])) as Record<WildcardTool, WildcardItemDraft[]>)
+  })
+  useChatPageRegistration(open && !isSubmitting ? {
+    kind: 'wildcards', title: t({ ko: '와일드카드 편집', en: 'Wildcard editor' }), priority: 100, resourceId: String(wildcard?.id ?? 'new-wildcard'), fields: [
+      { id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: name }, { id: 'description', label: t({ ko: '설명', en: 'Description' }), type: 'text', value: description },
+      { id: 'includeChildren', label: t({ ko: '하위 항목 포함', en: 'Include children' }), type: 'boolean', value: includeChildren }, { id: 'onlyChildren', label: t({ ko: '하위 항목만', en: 'Only children' }), type: 'boolean', value: onlyChildren },
+      { id: 'chainOption', label: t({ ko: '체인 동작', en: 'Chain behavior' }), type: 'select', value: chainOption, options: ['replace', 'append'] },
+    ],
+    data: { selected: { ...chatDraft, parent_id: chatDraft.parent_id ?? 0, include_children: !!includeChildren, only_children: !!onlyChildren } },
+    actions: [pageAction('wildcard.draft', t({ ko: '와일드카드 항목 입력', en: 'Fill wildcard items' }), t({ ko: '편집 초안의 전체 항목과 가중치를 입력해. 저장 버튼으로 저장할 수 있어.', en: 'Fill the complete draft item list and weights; use Save to persist it.' }), wildcardChatSchema(parentCandidates.map((item) => item.id)))],
+    apply: (patch) => { if (patch.name !== undefined) setName(String(patch.name)); if (patch.description !== undefined) setDescription(String(patch.description)); if (patch.includeChildren !== undefined) setIncludeChildren(Boolean(patch.includeChildren)); if (patch.onlyChildren !== undefined) setOnlyChildren(Boolean(patch.onlyChildren)); if (patch.chainOption !== undefined) setChainOption(patch.chainOption as 'replace' | 'append') },
+    applyAction: (_id, args, assertCurrent) => { assertCurrent(); const next = wildcardChatInput({ ...args, type: args.type ?? chatDraft.type }, wildcard); if (next.type !== chatDraft.type) throw new Error('다른 종류의 항목은 해당 탭에서 만들어줘.'); return applyChatDraft({ ...chatDraft, ...next, description: next.description ?? '', parent_id: next.parent_id ?? null, include_children: next.include_children ?? 0, only_children: next.only_children ?? 0, chain_option: next.chain_option ?? 'replace', type: chatDraft.type }) },
+  } : null)
 
   const handleDownloadTemplate = (format: WildcardJsonFormat) => {
     const filename = format === 'simple'
@@ -656,6 +677,8 @@ export function WildcardEditorModal({
 
   return (
     <Modal
+      sidePanelInset="var(--chat-dock-width, 0px)"
+      headerContent={<CodexChatHeaderButton />}
       open={open}
       onClose={onClose}
       title={mode === 'create'

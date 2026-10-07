@@ -1,4 +1,4 @@
-import type { ChatPageSnapshot } from './chatPage'
+import type { ChatPageTarget } from './chatPage'
 
 export type ChatWorkflowValue = string | number | boolean | null | ChatWorkflowValue[] | { [key: string]: ChatWorkflowValue }
 export type ChatWorkflowDataType = 'text' | 'prompt' | 'number' | 'boolean' | 'json' | 'any' | 'image' | 'video' | 'audio' | 'mask'
@@ -25,7 +25,7 @@ export type ChatWorkflowOperation =
   | { type: 'set_run_input'; nodeId: string; enabled: boolean; label?: string; description?: string }
 export type ChatWorkflowChange = { title: string; before: string; after: string }
 export type ChatWorkflowProposal = {
-  kind: 'workflow_graph'; page: Omit<ChatPageSnapshot, 'fields' | 'workflow'>; revision: string
+  kind: 'workflow_graph'; page: ChatPageTarget; revision: string
   operations: ChatWorkflowOperation[]; modules: ChatWorkflowModule[]; changes: ChatWorkflowChange[]; issues: string[]
   nodeCount: number; edgeCount: number; expiresAt: number; saved?: boolean
 }

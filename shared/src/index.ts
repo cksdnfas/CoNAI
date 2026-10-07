@@ -26,6 +26,8 @@ export {
 
 // Export all constants
 export * from './constants/index';
+export { IMAGE_VIEW_PERMISSION, IMAGE_PERMISSION_CATALOG } from './constants/imagePermissions';
+export { FEATURE_READ_PERMISSION_CATALOG } from './constants/featurePermissions';
 
 // Version info
 export const VERSION = '26.9.29';

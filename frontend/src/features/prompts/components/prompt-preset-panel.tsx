@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { usePresetChatPage, presetChatInput, presetChatSchema } from '../use-preset-chat-page'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { pageAction } from '@/features/codex-chat/page-action-helpers'
+import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
+import { CodexChatHeaderButton } from '@/features/codex-chat/codex-chat-shell'
 import { Copy, Pencil, Plus, Trash2 } from 'lucide-react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
@@ -126,6 +131,19 @@ function PromptPresetEditorModal({
     setDrafts((current) => [...current, createPromptPresetItemDraft()])
   }
 
+  const chatDraft = { name, description, parent_id: parentId, items: drafts.map((item) => ({ description: item.description, value: item.value })) }
+  const applyChatDraft = useChatDraftTransaction(chatDraft, (next) => { setName(next.name); setDescription(next.description); setParentId(next.parent_id); setDrafts(next.items.map((item) => createPromptPresetItemDraft(item.description, item.value))) })
+  useChatPageRegistration(open && !isSubmitting ? {
+    kind: 'presets', title: t({ ko: '프리셋 편집', en: 'Preset editor' }), priority: 100, resourceId: String(preset?.id ?? 'new-preset'), fields: [
+      { id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: name },
+      { id: 'description', label: t({ ko: '설명', en: 'Description' }), type: 'text', value: description },
+    ],
+    data: { selected: { ...chatDraft, parent_id: parentId ?? 0 } },
+    actions: [pageAction('preset.draft', t({ ko: '프리셋 항목 입력', en: 'Fill preset items' }), t({ ko: '프리셋 이름·설명·상위 항목·프롬프트 목록을 편집 초안에 입력해.', en: 'Fill the preset name, description, parent and prompt items in the draft.' }), presetChatSchema(selectableParents.map((item) => item.id)))],
+    apply: (patch) => { if (patch.name !== undefined) setName(String(patch.name)); if (patch.description !== undefined) setDescription(String(patch.description)) },
+    applyAction: (_id, args, assertCurrent) => { assertCurrent(); const next = presetChatInput(args); return applyChatDraft({ name: next.name, description: next.description ?? '', parent_id: next.parent_id ?? null, items: next.items }) },
+  } : null)
+
   const handleChangeDraft = (draftId: string, field: 'description' | 'value', value: string) => {
     setDrafts((current) => current.map((draft) => (draft.id === draftId ? { ...draft, [field]: value } : draft)))
   }
@@ -143,7 +161,7 @@ function PromptPresetEditorModal({
   }
 
   return (
-    <Modal open={open} title={mode === 'create' ? t('prompts.components.prompt.preset.panel.add.preset') : t('prompts.components.prompt.preset.panel.edit.preset')} widthClassName="max-w-5xl" onClose={onClose}>
+    <Modal open={open} sidePanelInset="var(--chat-dock-width, 0px)" headerContent={<CodexChatHeaderButton />} title={mode === 'create' ? t('prompts.components.prompt.preset.panel.add.preset') : t('prompts.components.prompt.preset.panel.edit.preset')} widthClassName="max-w-5xl" onClose={onClose}>
       <form onSubmit={(event) => void handleSubmit(event)}>
         <ModalBody className="space-y-5">
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_18rem]">
@@ -234,6 +252,7 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
 
   const entries = useMemo(() => flattenPromptPresetTree(presetsQuery.data ?? []), [presetsQuery.data])
   const selectedPreset = entries.find((entry) => entry.preset.id === selectedPresetId)?.preset ?? null
+  usePresetChatPage(entries.map((entry) => entry.preset), selectedPreset, setSelectedPresetId, editorState === null)
   const insertionPreview = selectedPreset ? buildPromptPresetInsertionText(selectedPreset) : ''
 
   const createMutation = useMutation({

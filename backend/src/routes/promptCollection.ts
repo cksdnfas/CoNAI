@@ -2,8 +2,15 @@ import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { PromptCollectionService } from '../services/promptCollectionService';
 import { PromptGroupService } from '../services/promptGroupService';
-import { hasAdminAccess } from '../middleware/authMiddleware';
+import { hasAdminAccess, requirePermission } from '../middleware/authMiddleware';
 import { toPublicDanbooruDbInfo, type DanbooruBrowserDatabaseInfo } from '../services/danbooruBrowser/dbResolver';
+import { db } from '../database/init';
+import { PromptCollectionModel } from '../models/PromptCollection';
+import { PromptGroupModel } from '../models/PromptGroup';
+import { getPromptCollectionTableName } from '../utils/promptTables';
+import { isProtectedLoRAGroup } from '../services/promptCollectionProtection';
+import { nativeEditRevision, requireNativeEditRevision } from '../services/nativeEditRevision';
+import { getAuthDb } from '../database/authDb';
 import {
   successResponse,
   errorResponse,
@@ -425,6 +432,57 @@ router.post('/batch-assign', async (req: Request, res: Response) => {
     console.error('Error batch assigning prompts:', error);
     return res.status(500).json(errorResponse('Failed to batch assign prompts'));
   }
+});
+
+/** Native authoring preserves collected usage counts and locked auto-managed groups. */
+function promptAuthorInput(req: Request) {
+  const type = req.body?.type;
+  const prompt = req.body?.prompt;
+  const synonyms = req.body?.synonyms ?? [];
+  const groupId = req.body?.group_id === 0 || req.body?.group_id == null ? null : req.body.group_id;
+  if (!['positive', 'negative', 'auto'].includes(type) || typeof prompt !== 'string' || !prompt.trim() || prompt.length > 8000 || !Array.isArray(synonyms) || synonyms.length > 100 || synonyms.some((item: unknown) => typeof item !== 'string' || item.length > 8000) || (groupId !== null && (!Number.isSafeInteger(groupId) || groupId < 1))) throw new Error('프롬프트 입력을 확인해줘.');
+  if (groupId !== null) {
+    const group = PromptGroupModel.findById(groupId, type);
+    if (!group || isProtectedLoRAGroup(group) || PromptGroupService.isDanbooruManagedGroupId(groupId, type)) throw new Error('자동 관리 그룹에는 프롬프트를 작성할 수 없어.');
+  }
+  return { type: type as PromptCollectionType, prompt: prompt.trim(), synonyms: [...new Set(synonyms.map((item: string) => item.trim()).filter(Boolean))], groupId };
+}
+router.get('/item/:id', (req, res, next) => requirePermission(getAuthDb().prepare('SELECT 1 FROM auth_permissions WHERE permission_key = ?').get('prompts.view') ? 'prompts.view' : 'page.prompts.view')(req, res, next), (req: Request, res: Response) => {
+  const type = req.query.type;
+  if (!['positive', 'negative', 'auto'].includes(String(type))) return res.status(400).json(errorResponse('Invalid prompt type'));
+  const record = PromptCollectionModel.findById(Number(req.params.id), type as PromptCollectionType);
+  if (!record) return res.status(404).json(errorResponse('Prompt not found'));
+  return res.json(successResponse({ ...record, synonyms: record.synonyms ? JSON.parse(record.synonyms) : [], type, assistant_revision: nativeEditRevision(record) }));
+});
+router.post('/item', requirePermission('prompts.create'), (req: Request, res: Response) => {
+  try {
+    const input = promptAuthorInput(req);
+    const table = getPromptCollectionTableName(input.type);
+    const id = db.transaction(() => {
+      if (db.prepare(`SELECT 1 FROM ${table} WHERE prompt = ?`).get(input.prompt)) return null;
+      return Number(db.prepare(`INSERT INTO ${table} (prompt, usage_count, group_id, synonyms) VALUES (?, 0, ?, ?)`).run(input.prompt, input.groupId, JSON.stringify(input.synonyms)).lastInsertRowid);
+    })();
+    if (id === null) return res.status(409).json(errorResponse('같은 프롬프트가 이미 있어.'));
+    return res.status(201).json(successResponse({ id }));
+  } catch (error) { return res.status(400).json(errorResponse(error instanceof Error ? error.message : 'Invalid prompt')); }
+});
+router.put('/item/:id', requirePermission('prompts.update'), (req: Request, res: Response) => {
+  try {
+    const input = promptAuthorInput(req);
+    const id = Number(req.params.id);
+    const table = getPromptCollectionTableName(input.type);
+    const status = db.transaction(() => {
+      const current = PromptCollectionModel.findById(id, input.type);
+      if (!current) return 404;
+      if (!requireNativeEditRevision(req, res, current)) return 409;
+      if (current.group_id && (isProtectedLoRAGroup(PromptGroupModel.findById(current.group_id, input.type)) || PromptGroupService.isDanbooruManagedGroupId(current.group_id, input.type))) return 403;
+      if (db.prepare(`SELECT 1 FROM ${table} WHERE prompt = ? AND id <> ?`).get(input.prompt, id)) return 409;
+      db.prepare(`UPDATE ${table} SET prompt = ?, group_id = ?, synonyms = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(input.prompt, input.groupId, JSON.stringify(input.synonyms), id);
+      return 200;
+    })();
+    if (res.headersSent) return;
+    return status === 200 ? res.json(successResponse({ id })) : res.status(status).json(errorResponse(status === 403 ? '자동 관리 프롬프트는 수정할 수 없어.' : status === 404 ? 'Prompt not found' : '같은 이름이 있거나 프롬프트가 바뀌었어.'));
+  } catch (error) { return res.status(400).json(errorResponse(error instanceof Error ? error.message : 'Invalid prompt')); }
 });
 
 export default router;

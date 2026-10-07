@@ -146,6 +146,129 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     } finally { unregister(); await bridge.close() }
   })
 
+  await t.test('page actions: exact native schemas, route binding, protected data and fresh revisions', async () => {
+    const { copyChatPageData, validateChatPageArguments, requireChatPageActionState, chatPagePermission } = await import('@conai/shared')
+    const schema = { type: 'object' as const, properties: { name: { type: 'string' as const, maxLength: 100 }, items: { type: 'array' as const, minItems: 1, maxItems: 8, items: { type: 'object' as const, properties: { description: { type: 'string' as const }, value: { type: 'string' as const } }, required: ['description', 'value'] } } }, required: ['name', 'items'] }
+    const action = { id: 'preset.create', label: 'Create preset', description: 'Save reviewed preset', effect: 'save' as const, schema }
+    const current = normalizeChatPageSnapshot({ ...page, path: '/prompts', kind: 'presets', resourceId: 'new-preset', fields: [], revision: 'action-revision-test', actions: [action], data: { selected: null } })
+    const args = { name: 'Test', items: [{ description: 'Style', value: 'watercolor' }] }
+    assert.deepEqual(validateChatPageArguments(schema, { ...args, items: JSON.stringify(args.items) }), args)
+    assert.throws(() => validateChatPageArguments(schema, { ...args, url: 'https://external.invalid' }), /등록된/)
+    assert.throws(() => validateChatPageArguments(schema, { name: 'Test', items: [] }), /개수/)
+    assert.throws(() => copyChatPageData({ nested: { api_key: 'private' } }), /보호된/)
+    assert.throws(() => copyChatPageData({ image: 'data:image/png;base64,secret' }), /페이지 데이터/)
+    assert.throws(() => normalizeChatPageSnapshot({ ...current, path: '/wildcards' }), /대상 페이지/)
+    assert.throws(() => normalizeChatPageSnapshot({ ...current, actions: [{ ...action, id: 'shell.execute' }] }), /등록되지/)
+    assert.throws(() => normalizeChatPageSnapshot({ ...current, actions: [{ ...action, effect: 'draft' }] }), /저장 범위/)
+    const proposal = { kind: 'page_action' as const, page: chatPageTarget(current), revision: current.revision!, action: current.actions![0], arguments: args, before: null, expiresAt: Date.now() + 60000 }
+    requireChatPageActionState(current, proposal)
+    requireChatPageActionState({ ...current, actions: [action] }, proposal)
+    const nodeSchema = { type: 'object' as const, properties: { postprocess: { type: 'object' as const, properties: { rtx: { type: 'object' as const, properties: { quality: { type: 'string' as const, enum: ['High', 'Ultra'] } } } } } } }
+    assert.ok(normalizeChatPageSnapshot({ ...page, revision: 'nested-node-schema', data: { nodes: [{ fieldId: 'director', schema: nodeSchema }] } }).data?.nodes)
+    assert.throws(() => requireChatPageActionState({ ...current, revision: 'different-revision' }, proposal), /입력이나 선택/)
+    assert.throws(() => requireChatPageActionState(current, { ...proposal, expiresAt: 0 }), /만료/)
+    assert.equal(chatPagePermission('/chat'), 'page.chat.view')
+    assert.equal(chatPagePermission('/public/workflows/example'), 'chat.tools.read')
+    assert.equal(normalizeChatPageSnapshot({ ...page, path: '/public/workflows/example' }).kind, 'comfyui')
+    assert.equal(normalizeChatPageSnapshot({ ...page, path: '/public/workflows/example', revision: 'shared-create', actions: [{ id: 'comfy.open_create', label: 'Open', description: 'Open native editor', effect: 'draft', schema: { type: 'object', properties: {} } }] }).actions?.[0].id, 'comfy.open_create')
+    assert.deepEqual(buildChatPageChanges(page, [{ fieldId: 'prompt', value: ['first', 'second edited'] }])[0].value, ['first', 'second edited'])
+  })
+
+  await t.test('page action tools: user review only, native record changes and expired replies', async () => {
+    const { PromptPresetModel } = await import('../src/models/PromptPreset')
+    const { nativeEditRevision } = await import('../src/services/nativeEditRevision')
+    const { chatPageNativeActionRevision } = await import('../src/services/codex-chat/chatPageNativeActions')
+    const preset = PromptPresetModel.create({ name: 'Action fixture', items: [{ description: 'Style', value: 'old' }] })
+    const saved = PromptPresetModel.findByIdWithItems(preset.id)!
+    const action = { id: 'preset.update', label: 'Edit preset', description: 'Save reviewed preset', effect: 'save' as const, schema: { type: 'object' as const, properties: { id: { type: 'number' as const, enum: [preset.id] }, name: { type: 'string' as const }, items: { type: 'array' as const, minItems: 1, items: { type: 'object' as const, properties: { description: { type: 'string' as const }, value: { type: 'string' as const } }, required: ['description', 'value'] } } }, required: ['id', 'name', 'items'] } }
+    const snapshot = normalizeChatPageSnapshot({ ...page, path: '/prompts', kind: 'presets', resourceId: String(preset.id), fields: [], revision: 'native-action-revision', actions: [action], data: { presets: [{ id: preset.id, name: preset.name }], selected: { id: preset.id, revision: nativeEditRevision(saved) } } })
+    const actionProfile = ChatProfileStore.create({ name: 'Action assistant', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page', 'read_page_data', 'propose_page_action'] })
+    const actionThreadId = CodexChatStore.createThread(null, 'action chat', 'llm', actionProfile.id)
+    const context: ChatExecutionContext = { threadId: actionThreadId, profileId: actionProfile.id, kind: 'direct', replyId: 'page-action-tools', page: snapshot }
+    const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'generate', 'organize', 'configure'], null, { chatContext: context })
+    try {
+      assert.deepEqual(bridge.tools.map((tool) => tool.function.name).sort(), ['get_current_page', 'read_page_data', 'propose_page_action'].sort())
+      assert.ok(!(await bridge.call('read_page_data', { key: 'presets', limit: 1 })).isError)
+      const args = { id: preset.id, name: 'Edited fixture', items: [{ description: 'Style', value: 'new' }] }
+      assert.ok((await bridge.call('propose_page_action', { actionId: 'preset.update', arguments: { ...args, id: preset.id + 1 } })).isError)
+      const result = await bridge.call('propose_page_action', { actionId: 'preset.update', arguments: args })
+      assert.ok(!result.isError, JSON.stringify(result))
+      const proposal = (result.structuredContent as { proposal: import('@conai/shared').ChatProposal }).proposal
+      assert.ok(proposal.kind === 'page_action')
+      assert.equal(proposal.revision, snapshot.revision)
+      assert.equal(proposal.nativeRevision, nativeEditRevision(saved))
+      assert.equal(PromptPresetModel.findById(preset.id)?.name, 'Action fixture', 'proposals never save native data')
+      assert.equal(ChatProposalStore.find(proposal.id)?.kind, 'page_action')
+      const restored = attachProposals([{ id: 199, thread_id: actionThreadId, role: 'assistant', content: '', tool_calls: [], routing: { replyId: context.replyId, replyTo: null, recipients: [] } } as unknown as CodexChatMessageRecord])
+      assert.equal(restored[0].tool_calls[0].tool, 'propose_page_action')
+      PromptPresetModel.update(preset.id, { items: [{ description: 'Style', value: 'concurrent change' }] })
+      assert.throws(() => chatPageNativeActionRevision(snapshot, 'preset.update', args), /최신 내용/)
+      assert.ok((await bridge.call('propose_page_action', { actionId: 'preset.update', arguments: args })).isError)
+      unregister()
+      assert.ok((await bridge.call('propose_page_action', { actionId: 'preset.update', arguments: args })).isError)
+    } finally { unregister(); await bridge.close() }
+  })
+
+  await t.test('native reviewed writes: compare-and-swap protects prompts, presets, wildcards and Comfy workflows', async (sub) => {
+    const express = (await import('express')).default
+    const { nativeEditRevision } = await import('../src/services/nativeEditRevision')
+    const { db, initializeDatabase } = await import('../src/database/init')
+    await initializeDatabase()
+    const { PromptGroupModel } = await import('../src/models/PromptGroup')
+    const { PromptPresetModel } = await import('../src/models/PromptPreset')
+    const { WildcardModel } = await import('../src/models/Wildcard')
+    const { WorkflowModel } = await import('../src/models/Workflow')
+    const app = express()
+    app.use(express.json())
+    app.use((req, _res, next) => { (req as unknown as { session: object }).session = {}; next() })
+    app.use('/prompts', (await import('../src/routes/promptCollection')).default)
+    app.use('/presets', (await import('../src/routes/prompt-presets.routes')).promptPresetRoutes)
+    app.use('/wildcards', (await import('../src/routes/wildcards')).default)
+    app.use('/workflows', (await import('../src/routes/workflows/crud.routes')).default)
+    const server = http.createServer(app)
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    sub.after(() => new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections() }))
+    const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`
+    const request = async (url: string, method = 'GET', body?: unknown, revision?: string) => {
+      const response = await fetch(base + url, { method, headers: { 'content-type': 'application/json', ...(revision ? { 'If-Match': revision } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+      return { status: response.status, json: await response.json() as { data: Record<string, unknown> } }
+    }
+    const input = { type: 'positive', prompt: 'reviewed prompt fixture', synonyms: ['alias'], group_id: null }
+    const created = await request('/prompts/item', 'POST', input)
+    assert.equal(created.status, 201, JSON.stringify(created.json))
+    const id = Number(created.json.data.id)
+    db.prepare('UPDATE prompt_collection SET usage_count = 9 WHERE id = ?').run(id)
+    const read = await request(`/prompts/item/${id}?type=positive`)
+    const revision = String(read.json.data.assistant_revision)
+    assert.equal((await request(`/prompts/item/${id}`, 'PUT', { ...input, prompt: 'reviewed edited prompt' }, revision)).status, 200)
+    assert.equal((await request(`/prompts/item/${id}`, 'PUT', input, revision)).status, 409)
+    assert.equal((await request(`/prompts/item/${id}?type=positive`)).json.data.usage_count, 9)
+    assert.equal((await request('/prompts/item', 'POST', { ...input, prompt: 'reviewed edited prompt' })).status, 409)
+    const locked = PromptGroupModel.create({ group_name: 'LoRA' })
+    db.prepare('UPDATE prompt_collection SET group_id = ? WHERE id = ?').run(locked, id)
+    assert.equal((await request(`/prompts/item/${id}`, 'PUT', input)).status, 403)
+    assert.equal((await request('/prompts/item', 'POST', { ...input, group_id: locked })).status, 400)
+
+    const preset = PromptPresetModel.create({ name: 'CAS preset', items: [{ description: 'Style', value: 'old' }] })
+    const presetRevision = nativeEditRevision(PromptPresetModel.findByIdWithItems(preset.id))
+    assert.equal((await request(`/presets/${preset.id}`, 'PUT', { name: 'CAS preset', items: [{ description: 'Style', value: 'new' }] }, presetRevision)).status, 200)
+    assert.equal((await request(`/presets/${preset.id}`, 'PUT', { description: 'stale' }, presetRevision)).status, 409)
+    assert.equal(PromptPresetModel.findByIdWithItems(preset.id)?.items?.[0].value, 'new')
+
+    const wildcard = WildcardModel.create({ name: 'CAS wildcard', items: { general: [{ content: 'old', weight: 1 }], nai: [], comfyui: [] } })
+    const wildcardRevision = nativeEditRevision(WildcardModel.findByIdWithItems(wildcard.id))
+    assert.equal((await request(`/wildcards/${wildcard.id}`, 'PUT', { description: 'new' }, wildcardRevision)).status, 200)
+    assert.equal((await request(`/wildcards/${wildcard.id}`, 'PUT', { description: 'stale' }, wildcardRevision)).status, 409)
+    assert.equal(WildcardModel.findById(wildcard.id)?.description, 'new')
+
+    const workflowId = WorkflowModel.create({ name: 'CAS Comfy', workflow_json: JSON.stringify({ 1: { class_type: 'Text', inputs: { text: 'draft' } } }), marked_fields: [] })
+    const workflowRevision = nativeEditRevision(WorkflowModel.findById(workflowId))
+    assert.equal((await request(`/workflows/${workflowId}`, 'PUT', { description: 'new' }, workflowRevision)).status, 200)
+    assert.equal((await request(`/workflows/${workflowId}`, 'PUT', { description: 'stale' }, workflowRevision)).status, 409)
+    assert.equal(WorkflowModel.findById(workflowId)?.description, 'new')
+  })
+
   await t.test('page inputs: atomic validation, stale targets, edited values, and safe undo', () => {
     assert.ok(!('apiKey' in page))
     const changes = buildChatPageChanges(page, [{ fieldId: 'prompt', value: 'new' }, { fieldId: 'steps', value: 30 }])
@@ -224,7 +347,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
   await t.test('API LLM tools reject account permission revocation during a reply', async (sub) => {
     const { AuthAccount } = await import('../src/models/AuthAccount')
     const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
-    let permissions = ['chat.llm.use', 'chat.tools.read', 'page.generation.view']
+    let permissions = ['chat.llm.use', 'chat.tools.read', 'page.generation.view', 'workflows.view']
     sub.mock.method(AuthAccount, 'findById', () => ({ status: 'active' }))
     sub.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: permissions }))
     const context: ChatExecutionContext = { threadId: pageThreadId, profileId: pageProfile.id, kind: 'direct', replyId: 'page-revoke', page }

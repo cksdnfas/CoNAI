@@ -23,6 +23,7 @@ import { SelectionBarAction } from '@/components/common/selection-action-bar'
 import { SearchChipStrip } from '@/features/search/components/search-chip-strip'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { COUNT_UNITS } from '@/lib/count-display'
 import { cn } from '@/lib/utils'
 import type { ImageViewModalAccessOptions } from '@/features/images/components/detail/image-view-modal-context'
@@ -49,7 +50,7 @@ function getHomeImageSelectionId(image: ImageRecord) {
 export function HomePage() {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
-  const { appliedChips, removeAppliedChip, cycleAppliedChipOperator, clearAppliedChips } = useHomeSearch()
+  const { appliedChips, removeAppliedChip, cycleAppliedChipOperator, clearAppliedChips, searchScope, searchInput, setSearchInput } = useHomeSearch()
   const {
     columnCount: homeColumnCount,
     setColumnCount: setHomeColumnCount,
@@ -109,13 +110,18 @@ export function HomePage() {
     permissionKey: 'page.home.view',
   })
 
+  const chatCanReadImages = useChatPageDataPermissions().canReadImages
   useChatPageRegistration(canViewHome && !isAnonymousSession ? {
     kind: 'library', title: t({ ko: '이미지 라이브러리', en: 'Image library' }), resourceId: `library:${viewportClass}`,
     fields: [
       { id: 'sortOrder', label: t({ ko: '정렬 (newest: 최신순, oldest: 오래된순)', en: 'Sort (newest or oldest)' }), type: 'select', value: sortOrder, options: ['newest', 'oldest'] },
+      { id: 'searchInput', label: t({ ko: '검색어 입력 (Enter로 검색 실행)', en: 'Search draft (press Enter to search)' }), type: 'text', value: searchInput },
+      { id: 'searchScope', label: t({ ko: '검색 범위', en: 'Search scope' }), type: 'text', value: searchScope, editable: false },
       { id: 'columns', label: t({ ko: '한 줄의 이미지 수', en: 'Images per row' }), type: 'number', value: homeColumnCount, min: minHomeColumnCount, max: maxHomeColumnCount, integer: true },
     ],
+    data: { filters: JSON.parse(JSON.stringify(appliedChips)), selected: { imageIds: selectedIds }, images: chatCanReadImages ? visibleImages.slice(0, 100).map((image) => ({ hash: image.composite_hash ?? '', width: image.width ?? 0, height: image.height ?? 0 })) : [] },
     apply: (patch) => {
+      if (patch.searchInput !== undefined) setSearchInput(String(patch.searchInput))
       if (patch.sortOrder !== undefined) setSortOrder(patch.sortOrder === 'oldest' ? 'oldest' : 'newest')
       if (patch.columns !== undefined) setHomeColumnCount(Number(patch.columns))
     },

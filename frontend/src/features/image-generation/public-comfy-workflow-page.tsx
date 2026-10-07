@@ -15,8 +15,8 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
-import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
-import { DEFAULT_COMFY_MODEL_API_PATHS, scanGenerationComfyUIModelDropdownLists } from '@/lib/api-image-generation-workflows'
+import type { GenerationWorkflowDetail, WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import { DEFAULT_COMFY_MODEL_API_PATHS, getGenerationWorkflow, getGenerationCustomDropdownLists, scanGenerationComfyUIModelDropdownLists } from '@/lib/api-image-generation-workflows'
 import { getPublicGenerationWorkflow, queuePublicGenerationWorkflowJob } from '@/lib/api-public-workflows'
 import { getAppSettings } from '@/lib/api-settings-general'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
@@ -28,6 +28,9 @@ import { CompactGenerationControllerActionBar, GenerationControllerFieldStack } 
 import { GenerateActionBar } from './components/generate-action-bar'
 import { WorkflowArtifactExplorerPanel } from './components/workflow-artifact-explorer-panel'
 import { WorkflowFieldGroupList } from './components/workflow-field-group-list'
+import { useComfyChatPage } from './components/use-comfy-chat-page'
+import { ComfyWorkflowAuthoringModal } from './components/comfy-workflow-authoring-modal'
+import { findAutoCollectedPowerLoraOptions } from './components/power-lora-loader-utils'
 import {
   buildWorkflowDraft,
   buildWorkflowPromptData,
@@ -76,6 +79,10 @@ export function PublicComfyWorkflowPage() {
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
   const [workflowDraft, setWorkflowDraft] = useState<Record<string, WorkflowFieldDraftValue>>({})
+  const [workflowDraftOwnerId, setWorkflowDraftOwnerId] = useState<number | null>(null)
+  const [authoringWorkflow, setAuthoringWorkflow] = useState<GenerationWorkflowDetail | null>(null)
+  const [isAuthoringOpen, setIsAuthoringOpen] = useState(false)
+  const authoringDropdowns = useQuery({ queryKey: ['image-generation-custom-dropdown-lists'], queryFn: getGenerationCustomDropdownLists, enabled: isAuthoringOpen || authStatusQuery.data?.permissionKeys.includes('workflows.view') === true })
   const [isQueueSubmitting, setIsQueueSubmitting] = useState(false)
   const [isRefreshingDropdownLists, setIsRefreshingDropdownLists] = useState(false)
   const [isControllerOpen, setIsControllerOpen] = useState(false)
@@ -114,6 +121,7 @@ export function PublicComfyWorkflowPage() {
     const baseDraft = buildWorkflowDraft(workflowFields)
     const persistedDraft = loadPersistedComfyWorkflowDraft(workflow.id, workflowFields)
     setWorkflowDraft({ ...baseDraft, ...persistedDraft })
+    setWorkflowDraftOwnerId(workflow.id)
   }, [workflow, workflowFields])
 
   useEffect(() => {
@@ -121,8 +129,9 @@ export function PublicComfyWorkflowPage() {
       return
     }
 
+    if (workflowDraftOwnerId !== workflow.id) return
     persistComfyWorkflowDraft(workflow.id, workflowDraft)
-  }, [workflow, workflowDraft])
+  }, [workflow, workflowDraft, workflowDraftOwnerId])
 
   useEffect(() => {
     setQueueRegistrationCount((current) => String(clampQueueRegistrationCount(current, publicQueueMaxCount)))
@@ -150,6 +159,14 @@ export function PublicComfyWorkflowPage() {
       [fieldId]: image ?? '',
     }))
   }
+
+  useComfyChatPage(workflow, workflowFields, workflowDraft, workflowDraftOwnerId, handleFieldChange, {
+    enabled: !!workflow && !isAuthoringOpen,
+    loraOptions: findAutoCollectedPowerLoraOptions(authoringDropdowns.data ?? []),
+    onRefresh: async () => { const result = await workflowQuery.refetch(); if (result.error) throw result.error },
+    onOpenCreate: authStatusQuery.data?.permissionKeys.includes('workflows.update') && authStatusQuery.data.permissionKeys.includes('workflows.view') ? () => { setAuthoringWorkflow(null); setIsAuthoringOpen(true) } : undefined,
+    onOpenEdit: authStatusQuery.data?.permissionKeys.includes('workflows.update') && authStatusQuery.data.permissionKeys.includes('workflows.view') ? async (id, assertCurrent) => { const detail = await getGenerationWorkflow(id); assertCurrent(); setAuthoringWorkflow(detail); setIsAuthoringOpen(true) } : undefined,
+  })
 
   const handleResetDraft = async () => {
     if (!workflow) {
@@ -535,6 +552,7 @@ export function PublicComfyWorkflowPage() {
           </>
         )
       ) : null}
+      <ComfyWorkflowAuthoringModal open={isAuthoringOpen} mode={authoringWorkflow ? 'edit' : 'create'} initialData={authoringWorkflow ? { workflow: authoringWorkflow } : null} dropdownLists={authoringDropdowns.data ?? []} onClose={() => { setIsAuthoringOpen(false); setAuthoringWorkflow(null) }} onSaved={() => { setIsAuthoringOpen(false); setAuthoringWorkflow(null); void workflowQuery.refetch() }} />
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { requireNativeEditRevision, withNativeEditRevisions } from '../services/nativeEditRevision';
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { asyncHandler } from '../middleware/asyncHandler';
@@ -73,7 +74,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
         ? PromptPresetModel.findAllWithItems()
         : PromptPresetModel.findAll();
 
-  return res.json({ success: true, data: presets });
+  return res.json({ success: true, data: withNativeEditRevisions(presets) });
 }));
 
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
@@ -159,6 +160,7 @@ router.put('/:id', requirePermission('prompts.update'), asyncHandler(async (req:
     ...(items !== undefined ? { items } : {}),
   };
 
+  if (!requireNativeEditRevision(req, res, PromptPresetModel.findByIdWithItems(id))) return;
   const preset = PromptPresetModel.update(id, data);
   return res.json({ success: true, data: PromptPresetModel.findByIdWithItems(preset.id) });
 }));

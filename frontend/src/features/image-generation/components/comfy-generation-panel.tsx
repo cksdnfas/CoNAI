@@ -366,7 +366,12 @@ export function ComfyGenerationPanel({
     clearWorkflowFieldIssue(fieldId)
   }, [clearWorkflowFieldIssue])
 
-  useComfyChatPage(selectedWorkflow, selectedWorkflowFields, workflowDraft, workflowDraftOwnerId, handleWorkflowFieldChange)
+  useComfyChatPage(selectedWorkflow, selectedWorkflowFields, workflowDraft, workflowDraftOwnerId, handleWorkflowFieldChange, {
+    enabled: !isAuthoringModalOpen, workflows: workflowsQuery.data ?? [], loraOptions, onSelect: onSelectedWorkflowChange,
+    onOpenCreate: () => { setWorkflowEditorState(null); setIsAuthoringModalOpen(true) },
+    onOpenEdit: async (id, assertCurrent) => { const workflow = await getGenerationWorkflow(id); assertCurrent(); setWorkflowEditorState({ workflow }); setIsAuthoringModalOpen(true) },
+    onRefresh: async () => { const result = await workflowsQuery.refetch(); if (result.error) throw result.error; const options = await dropdownListsQuery.refetch(); if (options.error) throw options.error },
+  })
 
   useEffect(() => {
     if (!selectedWorkflowId) {

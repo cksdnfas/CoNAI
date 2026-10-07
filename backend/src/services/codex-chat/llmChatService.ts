@@ -149,9 +149,9 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
     record.arguments = parseArguments(call.function.arguments)
     emit(turn, { type: 'tool', call: { ...record } })
     const result = await bridge.call(record.tool, record.arguments as Record<string, unknown>, turn.controller.signal)
-    if (['propose_page_changes', 'propose_workflow_changes'].includes(record.tool) && !result.isError) {
+    if (['propose_page_changes', 'propose_workflow_changes', 'propose_page_action'].includes(record.tool) && !result.isError) {
       const structured = result.structuredContent as { proposal?: ChatProposal } | undefined
-      if (structured?.proposal?.kind === 'page_fields' || structured?.proposal?.kind === 'workflow_graph') record.proposal = structured.proposal
+      if (structured?.proposal?.kind === 'page_fields' || structured?.proposal?.kind === 'workflow_graph' || structured?.proposal?.kind === 'page_action') record.proposal = structured.proposal
     }
     const { texts, historyIds, compositeHashes, jobIds, pendingJobIds } = readMcpToolResult(result, record.tool)
     output = texts.join('\n') || (result.structuredContent ? JSON.stringify(result.structuredContent) : '')
@@ -174,7 +174,7 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
   }
 
   // A later request must read its own fresh snapshot, not replay private state from an old page.
-  const pageRead = ['get_current_page', 'get_workflow_editor', 'list_workflow_modules'].includes(record.tool) && record.status === 'completed'
+  const pageRead = ['get_current_page', 'get_workflow_editor', 'list_workflow_modules', 'read_page_data'].includes(record.tool) && record.status === 'completed'
   record.summary = pageRead ? '현재 요청에 연결한 페이지를 읽었어.' : output ? truncateToolSummary(output) : null
   record.output = pageRead ? '(Page/editor snapshot omitted; read current-request page tools again.)' : output.slice(0, STORED_TOOL_OUTPUT_LENGTH)
   emit(turn, { type: 'tool', call: { ...record } })

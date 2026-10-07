@@ -20,6 +20,7 @@ import { WorkflowValidationPanel, type WorkflowValidationIssue } from './workflo
 import { WorkflowFinalResultsSection } from './workflow-final-results-section'
 import { buildFinalResultLifecycleWarningSourceLabel, listFinalResultLifecycleWarnings } from './workflow-execution-log-alerts'
 import { WorkflowInputFields } from './workflow-input-fields'
+import { useWorkflowRunnerChatPage } from '../use-workflow-runner-chat-page'
 import { GenerationTargetGroupControl } from '@/features/groups/components/generation-target-group-control'
 import { buildGraphWorkflowTargetGroupKey } from '@/features/groups/generation-target-group-store'
 
@@ -76,6 +77,7 @@ export function WorkflowRunnerPanel({
   showHeader = true,
 }: WorkflowRunnerPanelProps) {
   const { t, formatNumber } = useI18n()
+  useWorkflowRunnerChatPage(selectedGraph, inputDefinitions, inputValues, onInputValueChange, !isExecuting)
   const graphSummaryLine = graphSummary
     ? [
         t({ ko: '노드 {count}', en: 'Nodes {count}' }, { count: formatNumber(graphSummary.nodeCount) }),

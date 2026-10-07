@@ -30,6 +30,8 @@ import { buildGroupPathItems, countAutoCollectConditions, groupSources, normaliz
 import { useGroupPageQueries, type GroupCollectionFilter } from './use-group-page-queries'
 import { useGroupPageActions } from './use-group-page-actions'
 import { useI18n } from '@/i18n'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 
 export function GroupPage() {
   const navigate = useNavigate()
@@ -87,6 +89,17 @@ export function GroupPage() {
   })
 
   const groupCountMaps = useMemo(() => buildGroupCountMaps(allGroups), [allGroups])
+  const chatCanReadImages = useChatPageDataPermissions().canReadImages
+  useChatPageRegistration({
+    kind: 'groups', title: t({ ko: '그룹 목록·이미지', en: 'Groups and images' }), resourceId: `${selectedSource.key}:${selectedGroupId ?? 'root'}`,
+    fields: [
+      { id: 'collectionFilter', label: t({ ko: '수집 유형', en: 'Collection type' }), type: 'select', value: groupImageCollectionFilter, options: ['all', 'manual', 'auto'] },
+      { id: 'columns', label: t({ ko: '한 줄의 이미지 수', en: 'Images per row' }), type: 'number', value: groupColumnCount, min: minGroupColumnCount, max: maxGroupColumnCount, integer: true },
+      { id: 'emoticonView', label: t({ ko: '이모티콘 표시', en: 'Emoticon view' }), type: 'select', value: emoticonView, options: ['keywords', 'images'] },
+    ],
+    data: { groups: allGroups.slice(0, 512).map((group) => ({ id: group.id, name: group.name, parent_id: group.parent_id ?? 0 })), selected: { groupId: selectedGroupId ?? 0, imageIds: selectedGroupImageIds }, ...(chatCanReadImages ? { images: groupImages.slice(0, 100).map((image) => ({ hash: image.composite_hash ?? '', width: image.width ?? 0, height: image.height ?? 0 })) } : {}) },
+    apply: (patch) => { if (patch.collectionFilter !== undefined) setGroupImageCollectionFilter(patch.collectionFilter as GroupCollectionFilter); if (patch.columns !== undefined) setGroupColumnCount(Number(patch.columns)); if (patch.emoticonView !== undefined) setEmoticonView(patch.emoticonView as 'keywords' | 'images') },
+  })
   const groupPathItems = useMemo(() => buildGroupPathItems(allGroups, selectedGroupId), [allGroups, selectedGroupId])
   // Only the image list's own total is shown; the group record's raw membership count used to
   // fill in while loading and then jump to the filtered total. Undefined renders as pending.

@@ -12,3 +12,4 @@ export * from './chatMentions';
 export * from './chatAddress';
 export * from './chatPage';
 export * from './chatWorkflow';
+export * from './chatPageAction';

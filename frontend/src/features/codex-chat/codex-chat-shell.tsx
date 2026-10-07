@@ -187,6 +187,11 @@ export function CodexChatDock() {
   const visible = useCodexChatDockVisible()
   const closePanel = chat?.closePanel ?? (() => {})
   const coversScreen = visible && !isDocked
+  useEffect(() => {
+    if (coversScreen) document.documentElement.setAttribute('data-chat-panel-fullscreen', 'true')
+    else document.documentElement.removeAttribute('data-chat-panel-fullscreen')
+    return () => document.documentElement.removeAttribute('data-chat-panel-fullscreen')
+  }, [coversScreen])
   const { width: dockWidth, setWidth: setDockWidth } = useDockWidth()
 
   // Page-level floating controls (bottom-right buttons, bottom actions) read this to step aside from the docked panel.

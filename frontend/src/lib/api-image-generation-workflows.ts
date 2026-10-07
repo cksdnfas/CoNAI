@@ -205,11 +205,12 @@ export async function createGenerationWorkflow(payload: CreateGenerationWorkflow
 }
 
 /** Update a saved ComfyUI workflow definition. */
-export async function updateGenerationWorkflow(workflowId: number, payload: CreateGenerationWorkflowPayload) {
+export async function updateGenerationWorkflow(workflowId: number, payload: CreateGenerationWorkflowPayload, revision?: string) {
   return requestJson<MutationResponse>(`/api/workflows/${workflowId}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
+      ...(revision ? { 'If-Match': revision } : {}),
     },
     body: JSON.stringify(payload),
   })

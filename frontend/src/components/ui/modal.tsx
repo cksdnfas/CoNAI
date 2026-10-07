@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, type ComponentProps, type KeyboardEvent as ReactKeyboardEvent, type PropsWithChildren, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, type ComponentProps, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PropsWithChildren, type ReactNode } from 'react'
 import { Dialog as DialogPrimitive } from 'radix-ui'
 import { X } from 'lucide-react'
 import { Button } from './button'
@@ -14,6 +14,8 @@ interface ModalProps extends PropsWithChildren {
   onClose: () => void
   widthClassName?: string
   closeOnBack?: boolean
+  /** Reserve room for an existing desktop side panel so both surfaces remain interactive. */
+  sidePanelInset?: string
 }
 
 const TABBABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'
@@ -73,7 +75,7 @@ function preventOutsideDismiss(event: Event) {
  * Esc closes only the top-most dialog, and only when nothing handled the keydown first (`defaultPrevented`), whether in
  * the capture phase (image editor) or in content bubble handlers (inputs that revert their draft on Esc).
  */
-function Modal({ open, title, description, headerContent, onClose, widthClassName = 'max-w-4xl', closeOnBack = true, children }: ModalProps) {
+function Modal({ open, title, description, headerContent, onClose, widthClassName = 'max-w-4xl', closeOnBack = true, sidePanelInset, children }: ModalProps) {
   const { t } = useI18n()
   const contentRef = useRef<HTMLDivElement | null>(null)
   const returnFocusRef = useRef<HTMLElement | null>(null)
@@ -173,10 +175,10 @@ function Modal({ open, title, description, headerContent, onClose, widthClassNam
         }}
       >
         <DialogPrimitive.Portal>
-          <div data-slot="modal" className="fixed inset-0 z-modal bg-backdrop p-3 sm:p-4 md:p-6" onMouseDown={onClose}>
+          <div data-slot="modal" data-side-panel={sidePanelInset ? 'true' : undefined} className={cn('fixed inset-0 z-modal bg-backdrop p-3 sm:p-4 md:p-6', sidePanelInset && 'lg:right-(--modal-side-inset)')} style={sidePanelInset ? { '--modal-side-inset': sidePanelInset } as CSSProperties : undefined} onMouseDown={onClose}>
             <DialogPrimitive.Content
               ref={contentRef}
-              aria-modal="true"
+              aria-modal={!sidePanelInset}
               aria-label={hasTitle ? undefined : t({ ko: '대화 상자', en: 'Dialog' })}
               {...(description ? {} : { 'aria-describedby': undefined })}
               className={cn('mx-auto flex max-h-full w-full flex-col overflow-y-auto rounded-sm bg-background shadow-elevation-3 outline-none', widthClassName)}

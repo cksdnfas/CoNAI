@@ -33,6 +33,7 @@ import {
 } from './use-comfy-workflow-authoring-controller'
 import { clampPublicQueueMaxCount, slugifyPublicWorkflow } from './comfy-workflow-public-settings'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { CodexChatHeaderButton } from '@/features/codex-chat/codex-chat-shell'
 
 type ComfyWorkflowAuthoringModalProps = {
   open: boolean
@@ -117,6 +118,8 @@ export function ComfyWorkflowAuthoringModal({
 
   return (
     <Modal
+      sidePanelInset="var(--chat-dock-width, 0px)"
+      headerContent={<CodexChatHeaderButton />}
       open={open}
       onClose={onClose}
       title={modalTitle}

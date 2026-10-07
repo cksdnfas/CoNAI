@@ -4,6 +4,7 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { getUserSettingsDb } from '../database/userSettingsDb';
 import { WildcardModel } from '../models/Wildcard';
 import { requirePermission } from '../middleware/authMiddleware';
+import { withNativeEditRevisions } from '../services/nativeEditRevision';
 
 const router = Router();
 
@@ -28,7 +29,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      data: wildcards
+      data: withNativeEditRevisions(wildcards)
     });
   } catch (error) {
     console.error('Error getting wildcards:', error);

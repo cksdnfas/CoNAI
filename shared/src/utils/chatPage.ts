@@ -1,5 +1,6 @@
-import type { ChatPageField, ChatPageProposal, ChatPageSnapshot, ChatPageValue } from '../types/chatPage'
+import type { ChatPageField, ChatPageProposal, ChatPageSnapshot, ChatPageTarget, ChatPageValue } from '../types/chatPage'
 import { CHAT_WORKFLOW_LIMITS, normalizeChatWorkflowSnapshot } from './chatWorkflow'
+import { CHAT_PAGE_ACTION_LIMITS, copyChatPageData, normalizeChatPageActions } from './chatPageAction'
 
 export const CHAT_PAGE_LIMITS = { fields: 64, changes: 24, text: 8000, options: 100, snapshot: 24000, lifetimeMs: 5 * 60_000 } as const
 
@@ -15,7 +16,9 @@ function text(value: unknown, max: number, empty = false): string {
 
 /** The permission is derived from an app route, never accepted from the browser. */
 export function chatPagePermission(path: string): string | null {
-  if (path === '/' || path === '/access' || path === '/chat') return 'page.home.view'
+  if (path === '/') return 'page.home.view'
+  if (path === '/chat') return 'page.chat.view'
+  if (path === '/access' || /^\/public\/workflows\/[\w-]+$/.test(path)) return 'chat.tools.read'
   if (path === '/generation') return 'page.generation.view'
   if (path === '/prompts') return 'page.prompts.view'
   if (path === '/groups' || /^\/groups\/[\w-]+$/.test(path)) return 'page.groups.view'
@@ -36,9 +39,12 @@ export function normalizeChatPageSnapshot(value: unknown): ChatPageSnapshot {
   const path = text(raw.path, 240)
   if (!chatPagePermission(path)) throw new Error('이 페이지는 채팅에 연결할 수 없어.')
   const kind = raw.kind
-  if (kind !== 'page' && kind !== 'nai' && kind !== 'comfyui' && kind !== 'library' && kind !== 'prompt_search' && kind !== 'metadata' && kind !== 'workflow') throw new Error('페이지 종류가 올바르지 않아.')
+  if (!['page', 'nai', 'codex', 'comfyui', 'comfy_author', 'library', 'prompt_search', 'presets', 'wildcards', 'metadata', 'workflow', 'workflow_runner', 'groups', 'files', 'upload', 'settings', 'wallpaper', 'image_detail'].includes(kind as string)) throw new Error('페이지 종류가 올바르지 않아.')
   const metadataHash = /^\/images\/([\w.-]+)\/metadata$/.exec(path)?.[1]
-  if (((kind === 'nai' || kind === 'comfyui' || kind === 'workflow') && path !== '/generation') || (kind === 'library' && path !== '/') || (kind === 'prompt_search' && path !== '/prompts') || (kind === 'metadata' && (!metadataHash || raw.resourceId !== metadataHash))) throw new Error('입력 종류와 대상 페이지가 맞지 않아.')
+  const publicComfy = /^\/public\/workflows\/[\w-]+$/.test(path)
+  const routes: Partial<Record<ChatPageSnapshot['kind'], RegExp>> = { groups: /^\/groups(?:\/[\w-]+)?$/, files: /^\/files$/, upload: /^\/upload$/, settings: /^\/settings$/, wallpaper: /^\/wallpaper(?:\/runtime)?$/ }
+  if (routes[kind as ChatPageSnapshot['kind']] && !routes[kind as ChatPageSnapshot['kind']]!.test(path)) throw new Error('입력 종류와 대상 페이지가 맞지 않아.')
+  if ((['nai', 'codex', 'workflow', 'workflow_runner'].includes(kind as string) && path !== '/generation') || (['comfyui', 'comfy_author'].includes(kind as string) && path !== '/generation' && !publicComfy) || (kind === 'library' && path !== '/') || (['prompt_search', 'presets'].includes(kind as string) && path !== '/prompts') || (kind === 'wildcards' && path !== '/wildcards') || (kind === 'metadata' && (!metadataHash || raw.resourceId !== metadataHash))) throw new Error('입력 종류와 대상 페이지가 맞지 않아.')
   if (!Array.isArray(raw.fields) || raw.fields.length > CHAT_PAGE_LIMITS.fields || (kind === 'page' && raw.fields.length > 0)) throw new Error('페이지 필드 목록이 올바르지 않아.')
   const ids = new Set<string>()
   const fields: ChatPageField[] = raw.fields.map((item) => {
@@ -79,20 +85,27 @@ export function normalizeChatPageSnapshot(value: unknown): ChatPageSnapshot {
     return id
   }
   const snapshot: ChatPageSnapshot = {
-    instanceId: identity(raw.instanceId), connectionId: identity(raw.connectionId), path, kind,
+    instanceId: identity(raw.instanceId), connectionId: identity(raw.connectionId), path, kind: kind as ChatPageSnapshot['kind'],
     title: text(raw.title, 160), resourceId: raw.resourceId === null ? null : text(raw.resourceId, 100), fields,
   }
   if (kind === 'workflow') snapshot.workflow = normalizeChatWorkflowSnapshot(raw.workflow)
-  if (JSON.stringify(snapshot).length > (kind === 'workflow' ? CHAT_WORKFLOW_LIMITS.snapshot + CHAT_PAGE_LIMITS.snapshot : CHAT_PAGE_LIMITS.snapshot)) throw new Error('연결할 페이지 정보가 너무 커. 필드 내용을 줄여줘.')
+  if (raw.revision !== undefined) snapshot.revision = identity(raw.revision)
+  if (raw.actions !== undefined) {
+    snapshot.actions = normalizeChatPageActions(path, raw.actions)
+    if (!snapshot.revision) throw new Error('페이지 작업의 현재 버전이 필요해.')
+  }
+  if (raw.data !== undefined) snapshot.data = copyChatPageData(record(raw.data)) as ChatPageSnapshot['data']
+  const limit = raw.actions || raw.data ? CHAT_PAGE_ACTION_LIMITS.bytes : kind === 'workflow' ? CHAT_WORKFLOW_LIMITS.snapshot + CHAT_PAGE_LIMITS.snapshot : CHAT_PAGE_LIMITS.snapshot
+  if (JSON.stringify(snapshot).length > limit) throw new Error('연결할 페이지 정보가 너무 커. 필드 내용을 줄여줘.')
   return snapshot
 }
 
 /** Store only identity, never the complete editor snapshot, on a review card. */
-export function chatPageTarget(page: ChatPageSnapshot): Omit<ChatPageSnapshot, 'fields' | 'workflow'> {
+export function chatPageTarget(page: ChatPageSnapshot): ChatPageTarget {
   return { instanceId: page.instanceId, connectionId: page.connectionId, path: page.path, title: page.title, kind: page.kind, resourceId: page.resourceId }
 }
 
-export function requireChatPageTarget(page: ChatPageSnapshot, target: Omit<ChatPageSnapshot, 'fields' | 'workflow'>) {
+export function requireChatPageTarget(page: ChatPageSnapshot, target: ChatPageTarget) {
   if (page.instanceId !== target.instanceId || page.connectionId !== target.connectionId || page.path !== target.path || page.kind !== target.kind || page.resourceId !== target.resourceId) throw new Error('페이지나 연결이 바뀌었어. 현재 페이지에서 다시 요청해줘.')
 }
 
@@ -108,6 +121,7 @@ export function normalizeChatPageValue(field: ChatPageField, value: unknown): Ch
     if (!Number.isFinite(numeric) || (field.integer && !Number.isSafeInteger(numeric)) || (field.min !== undefined && numeric < field.min) || (field.max !== undefined && numeric > field.max) || (field.multipleOf !== undefined && Math.abs(numeric / field.multipleOf - Math.round(numeric / field.multipleOf)) > 1e-8)) throw new Error(`${field.label}: 허용된 숫자 범위를 확인해줘.`)
     return typeof field.value === 'string' ? String(numeric) : numeric
   }
+  if (field.type === 'text' && Array.isArray(value) && value.length <= 32 && value.every((item) => typeof item === 'string' && item.length <= CHAT_PAGE_LIMITS.text)) return [...value]
   const result = text(value, CHAT_PAGE_LIMITS.text, true)
   if (field.type === 'select' && !field.options?.includes(result)) throw new Error(`${field.label}: 선택 목록에 없는 값이야.`)
   return result

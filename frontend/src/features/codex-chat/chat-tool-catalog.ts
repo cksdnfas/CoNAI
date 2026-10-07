@@ -36,6 +36,8 @@ const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
 
 const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }> = {
   get_current_page: { group: 'pages', label: { ko: '현재 페이지 읽기', en: 'Read current page' }, ko: '네가 연결한 CoNAI 페이지와 등록된 입력값을 읽어.' },
+  read_page_data: { group: 'pages', label: { ko: '페이지 목록·선택 내용 읽기', en: 'Read page contents' }, ko: '현재 페이지에 등록된 목록과 선택 항목을 읽어.' },
+  propose_page_action: { group: 'pages', label: { ko: '페이지 작업 제안', en: 'Propose page operation' }, ko: '생성·수정·이미지 입력·워크플로 등록 등 등록된 작업을 제안해. 검토 후 네가 적용해.' },
   propose_page_changes: { group: 'pages', label: { ko: '필드 입력 제안', en: 'Propose input changes' }, ko: '연결된 페이지의 필드 변경안을 보여줘. 네가 적용을 눌러야 입력값이 바뀌어.' },
   get_workflow_editor: { group: 'pages', label: { ko: '노드 편집기 읽기', en: 'Read workflow editor' }, ko: '연결한 워크플로 초안의 노드와 연결을 읽어.' },
   list_workflow_modules: { group: 'pages', label: { ko: '워크플로 모듈 조회', en: 'List workflow modules' }, ko: '등록된 활성 모듈의 입력과 출력 포트를 확인해.' },

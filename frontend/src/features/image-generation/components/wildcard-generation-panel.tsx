@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useWildcardChatPage } from './use-wildcard-chat-page'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, RefreshCw, Trash2, WandSparkles } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
@@ -184,6 +185,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
   const { canEditWildcardEntries, canDeleteWildcardEntries, canScanLora } = getWildcardWorkspacePermissions(permissionKeys)
   const canCreateInActiveTab = canCreateWorkspaceTabItem(activeWorkspaceTab) && canEditWildcardEntries
   const isReadonlyActiveTab = isReadonlyWorkspaceTab(activeWorkspaceTab)
+  useWildcardChatPage({ records: browserEntries.map((entry) => entry.wildcard), selected: selectedWildcard, select: setSelectedWildcardId, search: searchInput, setSearch: setSearchInput, canCreate: canCreateInActiveTab, canEdit: canEditWildcardEntries && !isReadonlyActiveTab, enabled: !isSettingsTab && editorState === null })
 
   useEffect(() => {
     if (!selectedWildcardSyntax) {

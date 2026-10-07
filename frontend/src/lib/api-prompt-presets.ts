@@ -37,6 +37,7 @@ export interface PromptPresetItemRecord {
 }
 
 export interface PromptPresetRecord {
+  assistant_revision?: string
   id: number
   name: string
   description?: string | null
@@ -83,10 +84,10 @@ export async function createPromptPreset(input: PromptPresetMutationInput) {
   })
 }
 
-export async function updatePromptPreset(presetId: number, input: PromptPresetMutationInput) {
+export async function updatePromptPreset(presetId: number, input: PromptPresetMutationInput, revision?: string) {
   return requestPromptPresetData<PromptPresetRecord>(`/api/prompt-presets/${presetId}`, 'promptPresets.update', {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(revision ? { 'If-Match': revision } : {}) },
     body: JSON.stringify(input),
   })
 }

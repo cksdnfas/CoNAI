@@ -5,6 +5,7 @@ import { WorkflowResponse, WorkflowCreateData, WorkflowUpdateData } from '../../
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { getWorkflowNumericFieldDefinitionError } from '../../services/workflowNumericFieldPolicy';
 import { requirePermission } from '../../middleware/authMiddleware';
+import { nativeEditRevision, requireNativeEditRevision } from '../../services/nativeEditRevision';
 
 const router = Router();
 
@@ -142,6 +143,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     // marked_fields를 JSON 객체로 파싱
     const workflowData = {
       ...workflow,
+      assistant_revision: nativeEditRevision(workflow),
       marked_fields: workflow.marked_fields ? JSON.parse(workflow.marked_fields) : [],
       public_queue_role_limits: parseWorkflowRoleQueueLimits(workflow.public_queue_role_limits)
     };
@@ -386,6 +388,7 @@ router.put('/:id', requirePermission('workflows.update'), asyncHandler(async (re
       color
     };
 
+    if (!requireNativeEditRevision(req, res, WorkflowModel.findById(id))) return;
     const updated = await WorkflowModel.update(id, workflowData);
 
     if (!updated) {

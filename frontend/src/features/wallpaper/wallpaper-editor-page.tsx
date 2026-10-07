@@ -17,6 +17,7 @@ import { getGroupsHierarchyAll } from '@/lib/api-groups'
 import { getAppSettings } from '@/lib/api-settings-general'
 import { updateAppearanceSettings } from '@/lib/api-settings-appearance'
 import { copyTextToClipboard } from '@/lib/clipboard'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { getWallpaperCanvasPreset, listWallpaperCanvasPresets } from './wallpaper-canvas-presets'
 import {
   appendWallpaperWidget,
@@ -150,6 +151,15 @@ export function WallpaperEditorPage() {
   })
 
   const canvasPreset = useMemo(() => getWallpaperCanvasPreset(layoutPreset.canvasPresetId), [layoutPreset.canvasPresetId])
+  useChatPageRegistration({
+    kind: 'wallpaper', title: t({ ko: '배경화면 편집', en: 'Wallpaper editor' }), resourceId: layoutPreset.id, localRevision: JSON.stringify(layoutPreset),
+    fields: [
+      { id: 'name', label: t({ ko: '배경화면 이름', en: 'Wallpaper name' }), type: 'text', value: layoutPreset.name },
+      { id: 'canvasPresetId', label: t({ ko: '캔버스 크기', en: 'Canvas size' }), type: 'select', value: layoutPreset.canvasPresetId, options: listWallpaperCanvasPresets().map((preset) => preset.id) },
+    ],
+    data: { widgets: layoutPreset.widgets.map((widget) => ({ id: widget.id, type: widget.type })), selected: { widgetId: selectedWidgetId ?? '' } },
+    apply: (patch) => { const next = { ...layoutPreset, ...patch } as typeof layoutPreset; setLayoutPreset(normalizeWallpaperLayoutPreset(next, getWallpaperCanvasPreset(next.canvasPresetId))) },
+  })
   const savedPresetById = useMemo(() => new Map(savedPresets.map((preset) => [preset.id, preset])), [savedPresets])
   const widgetById = useMemo(() => new Map(layoutPreset.widgets.map((widget) => [widget.id, widget])), [layoutPreset.widgets])
   const effectiveActivePresetId = useMemo(

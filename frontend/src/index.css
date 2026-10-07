@@ -1049,3 +1049,11 @@
 html:lang(ko) {
   --overline-tracking: 0.02em;
 }
+
+/* Retain the page editor draft while the phone's full-screen side panel is in use. */
+@media (width < 1024px) {
+  html[data-chat-panel-fullscreen="true"] [data-slot="modal"][data-side-panel="true"] {
+    visibility: hidden;
+    pointer-events: none;
+  }
+}

@@ -1,5 +1,6 @@
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { fetchJson, triggerBlobDownload } from '@/lib/api-client'
+import { requestApiData } from '@/lib/api-request'
 import type { ApiResponse } from '@/types/image'
 import type {
   DanbooruPromptGroupingMode,
@@ -23,6 +24,17 @@ function normalizePromptItem(item: PromptCollectionItem & { synonyms?: string[] 
     type: item.type === 'negative' || item.type === 'auto' ? item.type : 'positive',
     group_info: item.group_info ?? null,
   }
+}
+
+export type PromptAuthorInput = { type: PromptTypeFilter; prompt: string; synonyms: string[]; group_id: number | null }
+export function getPromptCollectionItem(id: number, type: PromptTypeFilter) {
+  return requestApiData<PromptCollectionItem & { assistant_revision: string }>(`/api/prompt-collection/item/${id}?type=${type}`)
+}
+export function createPromptCollectionItem(input: PromptAuthorInput) {
+  return requestApiData<{ id: number }>('/api/prompt-collection/item', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
+}
+export function updatePromptCollectionItem(id: number, input: PromptAuthorInput, revision?: string) {
+  return requestApiData<{ id: number }>(`/api/prompt-collection/item/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...(revision ? { 'If-Match': revision } : {}) }, body: JSON.stringify(input) })
 }
 
 export async function getPromptGroups(type: PromptTypeFilter = 'positive') {

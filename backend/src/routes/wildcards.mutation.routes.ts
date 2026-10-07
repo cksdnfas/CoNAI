@@ -1,3 +1,4 @@
+import { requireNativeEditRevision } from '../services/nativeEditRevision';
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { asyncHandler } from '../middleware/asyncHandler';
@@ -92,6 +93,7 @@ router.put('/:id', requirePermission('wildcards.edit'), asyncHandler(async (req:
       }
     }
 
+    if (!requireNativeEditRevision(req, res, WildcardModel.findByIdWithItems(id))) return;
     const wildcard = WildcardModel.update(id, data);
     const wildcardWithItems = WildcardModel.findByIdWithItems(wildcard.id);
     const circularPath = WildcardService.detectCircularReference(wildcard.id);

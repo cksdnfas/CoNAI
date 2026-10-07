@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { FEATURE_READ_PERMISSION_CATALOG, IMAGE_PERMISSION_CATALOG, IMAGE_VIEW_PERMISSION } from '@conai/shared';
 
 const ANONYMOUS_GUEST_SIGNUP_SEED_KEY = 'anonymous_guest_signup_enabled_v1';
 
@@ -30,7 +31,11 @@ const DEFAULT_PERMISSION_GROUPS = [
 ] as const;
 
 const DEFAULT_PERMISSION_CATALOG = [
-  { permissionKey: 'page.files.view', resource: 'page.files', action: 'view', description: 'Browse and read your private file store.' },
+  ...IMAGE_PERMISSION_CATALOG,
+  ...FEATURE_READ_PERMISSION_CATALOG,
+  { permissionKey: 'page.chat.view', resource: 'page.chat', action: 'view', description: 'Open the full chat page independently of chat engine use.' },
+  { permissionKey: 'files.view', resource: 'files', action: 'view', description: 'Browse and read authorized private files independently of the Files page.' },
+  { permissionKey: 'page.files.view', resource: 'page.files', action: 'view', description: 'Open the private Files page.' },
   { permissionKey: 'files.upload', resource: 'files', action: 'upload', description: 'Upload text, image, video, audio and document files into your private file store.' },
   { permissionKey: 'files.organize', resource: 'files', action: 'organize', description: 'Create folders, rename and move your private files.' },
   { permissionKey: 'files.delete', resource: 'files', action: 'delete', description: 'Delete your private files and folders.' },
@@ -214,7 +219,7 @@ const DEFAULT_PERMISSION_CATALOG = [
     permissionKey: 'workflows.view',
     resource: 'workflows',
     action: 'view',
-    description: 'Inspect workflow pages and workflow data.',
+    description: 'Read workflow, graph, module and dropdown data independently of navigation.',
   },
   {
     permissionKey: 'workflows.update',
@@ -324,8 +329,90 @@ export function seedAccessControlDefaults(db: Database.Database): void {
   }
 
   splitLegacyFilesManagePermission(db);
+  migrateImageViewPermission(db);
+  migrateFilesViewPermission(db);
+  migrateWorkflowViewPermission(db);
+  migrateIndependentFeaturePermissions(db);
   grantAllCatalogPermissionsToAdminGroup(db);
   applyAnonymousGuestSignupDefault(db);
+}
+
+/** Only explicit legacy image-bearing grants are converted, once per auth database. */
+export const LEGACY_IMAGE_VIEW_PERMISSION_KEYS = [
+  'page.home.view', 'page.image-detail.view', 'page.groups.view', 'page.generation.view',
+  'page.wallpaper.view', 'page.wallpaper.runtime.view',
+  'page.metadata-editor.view', 'chat.codex.use', 'chat.llm.use',
+] as const;
+
+export function migrateImageViewPermission(db: Database.Database): void {
+  db.transaction(() => {
+    const version = 'images_view_v1';
+    if (db.prepare('SELECT 1 FROM auth_seed_state WHERE seed_key = ?').get(version)) return;
+    // INSERT OR IGNORE preserves any explicit images.view row, including an existing denial.
+    db.prepare(`
+      INSERT OR IGNORE INTO auth_group_permissions (group_id, permission_id, allowed)
+      SELECT DISTINCT gp.group_id, image_permission.id, 1
+      FROM auth_group_permissions gp
+      JOIN auth_permissions legacy ON legacy.id = gp.permission_id
+      JOIN auth_permissions image_permission ON image_permission.permission_key = ?
+      WHERE gp.allowed = 1 AND legacy.permission_key IN (${LEGACY_IMAGE_VIEW_PERMISSION_KEYS.map(() => '?').join(', ')})
+    `).run(IMAGE_VIEW_PERMISSION, ...LEGACY_IMAGE_VIEW_PERMISSION_KEYS);
+    db.prepare('INSERT INTO auth_seed_state (seed_key) VALUES (?)').run(version);
+  }).immediate();
+}
+
+function migrateFilesViewPermission(db: Database.Database): void {
+  db.transaction(() => {
+    const version = 'files_view_v1';
+    if (db.prepare('SELECT 1 FROM auth_seed_state WHERE seed_key = ?').get(version)) return;
+    db.prepare(`
+      INSERT OR IGNORE INTO auth_group_permissions (group_id, permission_id, allowed)
+      SELECT gp.group_id, feature.id, 1 FROM auth_group_permissions gp
+      JOIN auth_permissions page ON page.id = gp.permission_id AND page.permission_key = 'page.files.view'
+      JOIN auth_permissions feature ON feature.permission_key = 'files.view'
+      WHERE gp.allowed = 1
+    `).run();
+    db.prepare('INSERT INTO auth_seed_state (seed_key) VALUES (?)').run(version);
+  }).immediate();
+}
+
+/** Preserve workflow data access while the generation page becomes an independent navigation switch. */
+function migrateWorkflowViewPermission(db: Database.Database): void {
+  db.transaction(() => {
+    const version = 'workflows_view_v1';
+    if (db.prepare('SELECT 1 FROM auth_seed_state WHERE seed_key = ?').get(version)) return;
+    db.prepare(`
+      INSERT OR IGNORE INTO auth_group_permissions (group_id, permission_id, allowed)
+      SELECT gp.group_id, feature.id, 1 FROM auth_group_permissions gp
+      JOIN auth_permissions page ON page.id = gp.permission_id AND page.permission_key = 'page.generation.view'
+      JOIN auth_permissions feature ON feature.permission_key = 'workflows.view'
+      WHERE gp.allowed = 1
+    `).run();
+    db.prepare('INSERT INTO auth_seed_state (seed_key) VALUES (?)').run(version);
+  }).immediate();
+}
+
+/** Direct legacy grants are translated once; inheritance and later administrator choices stay untouched. */
+export function migrateIndependentFeaturePermissions(db: Database.Database): void {
+  db.transaction(() => {
+    const version = 'independent_features_v1';
+    if (db.prepare('SELECT 1 FROM auth_seed_state WHERE seed_key = ?').get(version)) return;
+    const grant = db.prepare(`
+      INSERT OR IGNORE INTO auth_group_permissions (group_id, permission_id, allowed)
+      SELECT gp.group_id, feature.id, 1 FROM auth_group_permissions gp
+      JOIN auth_permissions legacy ON legacy.id = gp.permission_id AND legacy.permission_key = ?
+      JOIN auth_permissions feature ON feature.permission_key = ?
+      WHERE gp.allowed = 1
+    `);
+    for (const [legacy, feature] of [
+      ['page.prompts.view', 'prompts.view'],
+      ['page.wildcards.view', 'wildcards.view'],
+      ['page.generation.view', 'generation.execute'],
+      ['chat.codex.use', 'page.chat.view'],
+      ['chat.llm.use', 'page.chat.view'],
+    ]) grant.run(legacy, feature);
+    db.prepare('INSERT INTO auth_seed_state (seed_key) VALUES (?)').run(version);
+  }).immediate();
 }
 
 const FILES_MANAGE_SPLIT_SEED_KEY = 'files_manage_split_v1';

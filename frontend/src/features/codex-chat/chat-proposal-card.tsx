@@ -40,6 +40,7 @@ import { ChatDisplayBlockView, parseBlockPayload } from './chat-display-block'
 import { codexChatThreadQueryKey } from './codex-chat-context'
 import { ChatPageProposalCard } from './chat-page-proposal-card'
 import { ChatWorkflowProposalCard } from './chat-workflow-proposal-card'
+import { ChatPageActionCard } from './chat-page-action-card'
 
 type Proposal = NonNullable<CodexChatToolCall['proposal']>
 type BlockProposal = Extract<Proposal, { kind: 'display_block' }>
@@ -72,6 +73,7 @@ export function ChatProposalCards({ calls, threadId }: { calls: CodexChatToolCal
 function ProposalCard({ proposal, threadId }: { proposal: Proposal; threadId?: number }) {
   if (proposal.kind === 'page_fields') return <ChatPageProposalCard proposal={proposal} />
   if (proposal.kind === 'workflow_graph') return <ChatWorkflowProposalCard proposal={proposal} />
+  if (proposal.kind === 'page_action') return <ChatPageActionCard proposal={proposal} />
   if (proposal.kind === 'display_block') return <BlockProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'profile') return <ProfileProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'lore') return <LoreProposalCard proposal={proposal} threadId={threadId} />

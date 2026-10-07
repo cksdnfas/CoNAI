@@ -7,31 +7,34 @@ import { LorebookError } from '../services/codex-chat/chatLorebookFiles'
 import { FileStoreError } from '../services/fileStoreService'
 import { CodexChatStore } from '../services/codex-chat/codexChatStore'
 import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers'
-import { ChatPageContextError, requireChatPageAccess, requireChatPageProposalBinding } from '../services/codex-chat/chatPageContext'
+import { ChatPageContextError, requireChatPageAccess, requireChatPageActionAccess, requireChatPageProposalBinding } from '../services/codex-chat/chatPageContext'
 import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess'
 import { ChatProfileStore } from '../services/codex-chat/chatProfiles'
 import type { ChatProposal } from '@conai/shared'
 import { requireChatWorkflowModules } from '../services/codex-chat/chatWorkflowContext'
+import { chatPageNativeActionRevision } from '../services/codex-chat/chatPageNativeActions'
 
 const router = express.Router()
 
 /** This only authorizes an owned review card. The browser validates its live field state and applies locally. */
-function pageProposal(req: Request, res: Response, receipt = false): Extract<ChatProposal, { kind: 'page_fields' | 'workflow_graph' }> | null {
+function pageProposal(req: Request, res: Response, receipt = false): Extract<ChatProposal, { kind: 'page_fields' | 'workflow_graph' | 'page_action' }> | null {
   const id = visibleProposalId(req, res)
   if (id === null) return null
   try {
     const proposal = ChatProposalStore.find(id)
-    if (proposal?.kind !== 'page_fields' && proposal?.kind !== 'workflow_graph') throw new ChatPageContextError('페이지 편집 제안이 아니야.')
-    const tool = proposal.kind === 'workflow_graph' ? 'propose_workflow_changes' : 'propose_page_changes'
+    if (proposal?.kind !== 'page_fields' && proposal?.kind !== 'workflow_graph' && proposal?.kind !== 'page_action') throw new ChatPageContextError('페이지 편집 제안이 아니야.')
+    const tool = proposal.kind === 'workflow_graph' ? 'propose_workflow_changes' : proposal.kind === 'page_action' ? 'propose_page_action' : 'propose_page_changes'
     const thread = CodexChatStore.findThread(ChatProposalStore.threadIdOf(id)!, getRequesterAccountId(req))!
     const profile = thread.profile_id === null ? null : ChatProfileStore.find(thread.profile_id)
     if (!profile?.isEnabled || !profile.mcpEnabled || !profile.mcpScopes.includes('read') || (profile.toolAllowlist && !profile.toolAllowlist.includes(tool))) throw new ChatPageContextError('프로필의 페이지 편집 도구 권한이 변경됐어.', 403)
     const requester = { accountId: getRequesterAccountId(req), accountType: getRequesterAccountType(req) }
-    requireChatMcpAccountAccess({ requester, scopes: ['read'], source: thread.engine === 'codex' ? 'codex-chat' : 'llm-chat' }, tool)
+    requireChatMcpAccountAccess({ requester, scopes: ['read'], source: thread.engine === 'codex' ? 'codex-chat' : 'llm-chat', chatContext: { threadId: thread.id, profileId: profile.id, kind: 'direct' } }, tool)
     requireChatPageAccess(requester, proposal.page)
+    if (proposal.kind === 'page_action') requireChatPageActionAccess(requester, proposal.page, proposal.action.id, proposal.arguments)
     const undo = req.body?.undo === true
     if (proposal.dismissed || (!receipt && !undo && proposal.saved)) throw new ChatPageContextError('이미 적용하거나 무시한 제안이야.', 409)
     requireChatPageProposalBinding(proposal, req.body, undo)
+    if (!receipt && proposal.kind === 'page_action' && proposal.nativeRevision !== chatPageNativeActionRevision(proposal.page, proposal.action.id, proposal.arguments)) throw new ChatPageContextError('저장된 항목이 다른 작업에서 바뀌었어. 새로 읽고 다시 요청해줘.', 409)
     if (proposal.kind === 'workflow_graph') {
       try { requireChatWorkflowModules(proposal.modules) }
       catch (error) { throw new ChatPageContextError(error instanceof Error ? error.message : '모듈 정의를 확인하지 못했어.', 409) }

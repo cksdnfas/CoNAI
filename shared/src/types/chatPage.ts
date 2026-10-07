@@ -1,4 +1,5 @@
 import type { ChatWorkflowSnapshot } from './chatWorkflow'
+import type { ChatPageAction, ChatPageData } from './chatPageAction'
 
 /** Only explicitly registered CoNAI form state is shared with a chat. */
 export type ChatPageValue = string | number | boolean | string[]
@@ -23,11 +24,16 @@ export type ChatPageSnapshot = {
   connectionId: string
   path: string
   title: string
-  kind: 'page' | 'nai' | 'comfyui' | 'library' | 'prompt_search' | 'metadata' | 'workflow'
+  kind: 'page' | 'nai' | 'codex' | 'comfyui' | 'comfy_author' | 'library' | 'prompt_search' | 'presets' | 'wildcards' | 'metadata' | 'workflow' | 'workflow_runner' | 'groups' | 'files' | 'upload' | 'settings' | 'wallpaper' | 'image_detail'
   resourceId: string | null
   fields: ChatPageField[]
   workflow?: ChatWorkflowSnapshot
+  revision?: string
+  actions?: ChatPageAction[]
+  data?: Record<string, ChatPageData>
 }
+
+export type ChatPageTarget = Pick<ChatPageSnapshot, 'instanceId' | 'connectionId' | 'path' | 'title' | 'kind' | 'resourceId'>
 
 export type ChatPageChange = {
   fieldId: string
@@ -38,7 +44,7 @@ export type ChatPageChange = {
 
 export type ChatPageProposal = {
   kind: 'page_fields'
-  page: Omit<ChatPageSnapshot, 'fields' | 'workflow'>
+  page: ChatPageTarget
   changes: ChatPageChange[]
   expiresAt: number
   saved?: boolean

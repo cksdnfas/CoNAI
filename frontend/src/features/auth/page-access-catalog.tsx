@@ -31,6 +31,7 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
     icon: MessageSquareText,
     category: 'primary',
   },
+  { path: '/chat', labelKey: 'pageAccessCatalog.chat', permissionKey: 'page.chat.view', icon: MessageSquareText, category: 'derived' },
   {
     path: '/generation',
     labelKey: 'pageAccessCatalog.generation',

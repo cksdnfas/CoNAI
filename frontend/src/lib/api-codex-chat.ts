@@ -607,6 +607,7 @@ export interface CodexChatMessage {
 
 /** Media kind of an image a transcript references (so videos can play inline). */
 export interface CodexChatMediaInfo {
+  historyId?: number
   mimeType: string | null
   width: number | null
   height: number | null
@@ -666,6 +667,7 @@ export interface ChatGroupInfo {
 
 /** One image a chat brought in: `generated` by its jobs, or `found` through searches and lookups. */
 export interface CodexChatMediaItem {
+  historyId?: number
   compositeHash: string
   messageId: number
   /** SQLite UTC timestamp of that message. */
@@ -1287,12 +1289,12 @@ export async function streamCodexChatMessage(threadId: number, text: string, onE
   return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext }, onEvent, signal)
 }
 
-export function checkChatPageProposal<T extends Extract<ChatProposal, { kind: 'page_fields' | 'workflow_graph' }>>(proposal: T, undo = false) {
-  return requestApiData<T>(`/api/chat-proposals/${proposal.id}/page-check`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ instanceId: proposal.page.instanceId, connectionId: proposal.page.connectionId, revision: proposal.kind === 'workflow_graph' ? proposal.revision : undefined, undo }) })
+export function checkChatPageProposal<T extends Extract<ChatProposal, { kind: 'page_fields' | 'workflow_graph' | 'page_action' }>>(proposal: T, undo = false) {
+  return requestApiData<T>(`/api/chat-proposals/${proposal.id}/page-check`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ instanceId: proposal.page.instanceId, connectionId: proposal.page.connectionId, revision: proposal.kind !== 'page_fields' ? proposal.revision : undefined, undo }) })
 }
 
-export function acknowledgeChatPageProposal<T extends Extract<ChatProposal, { kind: 'page_fields' | 'workflow_graph' }>>(proposal: T) {
-  return requestApiData<T>(`/api/chat-proposals/${proposal.id}/page-applied`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ instanceId: proposal.page.instanceId, connectionId: proposal.page.connectionId, revision: proposal.kind === 'workflow_graph' ? proposal.revision : undefined }) })
+export function acknowledgeChatPageProposal<T extends Extract<ChatProposal, { kind: 'page_fields' | 'workflow_graph' | 'page_action' }>>(proposal: T) {
+  return requestApiData<T>(`/api/chat-proposals/${proposal.id}/page-applied`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ instanceId: proposal.page.instanceId, connectionId: proposal.page.connectionId, revision: proposal.kind !== 'page_fields' ? proposal.revision : undefined }) })
 }
 
 /** Carry on a cut last reply (API LLM direct chats); the stream reads like a regeneration. */

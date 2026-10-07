@@ -225,6 +225,7 @@ export interface GenerationWorkflow {
 }
 
 export interface GenerationWorkflowDetail extends GenerationWorkflow {
+  assistant_revision?: string
   workflow_json: string
 }
 

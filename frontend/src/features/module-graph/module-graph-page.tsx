@@ -17,6 +17,8 @@ import { useI18n } from '@/i18n'
 import { isFinalResultModule } from './module-graph-shared'
 import { resolveGraphStructureSummary } from './saved-graph-list-summary'
 import { useWorkflowChatPage } from './use-workflow-chat-page'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
 
 const ModuleGraphWorkflowBrowseContentLazy = lazy(async () => {
   const module = await import('./components/module-graph-workflow-content')
@@ -307,6 +309,13 @@ function ModuleWorkflowWorkspaceInner({ toolbar }: ModuleWorkflowWorkspaceProps)
     nodes, edges, modules, runInputs: workflowRunInputValues, setNodes, setEdges,
     setName: setWorkflowName, setDescription: setWorkflowDescription, setRunInputs: setWorkflowRunInputValues, setExposedInputs: setWorkflowExposedInputs, setSelectedNodeId, setSelectedEdgeId,
   })
+
+  useChatPageRegistration(workflowView === 'browse' ? {
+    kind: 'workflow_runner', title: t({ ko: '워크플로 목록', en: 'Workflow browser' }), resourceId: 'workflow-browser', fields: [],
+    data: { workflows: (graphWorkflowsQuery.data ?? []).slice(0, 512).map((graph) => ({ id: graph.id, name: graph.name, description: graph.description ?? '' })) },
+    actions: graphWorkflowsQuery.data?.length ? [pageAction('workflow.select', t({ ko: '워크플로 선택·편집', en: 'Select or edit workflow' }), t({ ko: '저장된 워크플로를 선택하거나 노드 편집기를 열어.', en: 'Select a saved workflow or open its node editor.' }), pageObject({ id: pageChoice(graphWorkflowsQuery.data.slice(0, 512).map((graph) => graph.id)), mode: pageChoice(['select', 'edit']) }, ['id', 'mode']))] : [],
+    apply: () => {}, applyAction: async (_id, args, assertCurrent) => { assertCurrent(); const graph = graphWorkflowsQuery.data?.find((graph) => graph.id === args.id); if (!graph || !(await handleLoadGraph(graph, { openEditor: args.mode === 'edit' }))) throw new Error('워크플로를 불러오지 못했어.') },
+  } : null)
 
   const browseManageModalTitle = selectedGraphRecord
     ? t('module-graph.module.graph.page.workflow.settings')

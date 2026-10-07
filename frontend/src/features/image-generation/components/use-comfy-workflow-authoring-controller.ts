@@ -8,6 +8,7 @@ import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-se
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import type { CustomDropdownList, GenerationWorkflowDetail, WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { createGenerationWorkflow, updateGenerationWorkflow } from '@/lib/api-image-generation-workflows'
+import { useComfyAuthorChatPage } from './use-comfy-author-chat-page'
 import { listAuthPermissionGroups } from '@/lib/api-auth'
 import {
   buildWorkflowMarkedFieldFromInput,
@@ -307,22 +308,26 @@ export function useComfyWorkflowAuthoringController({
   const handleReorderMarkedField = (sourceFieldId: string, targetFieldId: string) => setMarkedFields((current) => reorderWorkflowMarkedFieldWithinGroup(current, sourceFieldId, targetFieldId))
   const handleReorderMarkedFieldGroup = (sourceGroupKey: string, targetGroupKey: string) => setMarkedFields((current) => reorderWorkflowMarkedFieldGroup(current, sourceGroupKey, targetGroupKey))
 
-  const handleSave = async () => {
-    if (isSaving) return
+  const handleSave = async (revision?: string, propagate = false) => {
+    if (isSaving) { if (propagate) throw new Error('워크플로를 저장하고 있어.'); return }
     if (workflowName.trim().length === 0) {
+      if (propagate) throw new Error('워크플로 이름이 필요해.')
       showSnackbar({ message: t({ ko: '워크플로우 이름이 필요해.', en: 'Workflow name is required.' }), tone: 'error' })
       return
     }
     if (workflowJson.trim().length === 0 || jsonError) {
+      if (propagate) throw new Error('유효한 workflow JSON이 필요해.')
       showSnackbar({ message: t({ ko: '유효한 workflow JSON이 필요해.', en: 'A valid workflow JSON is required.' }), tone: 'error' })
       return
     }
     const markedFieldNumericError = getMarkedFieldNumericDefinitionError(markedFields)
     if (markedFieldNumericError) {
+      if (propagate) throw new Error(markedFieldNumericError)
       showSnackbar({ message: markedFieldNumericError, tone: 'error' })
       return
     }
     if (isPublicPage && slugifyPublicWorkflow(publicSlug).length === 0) {
+      if (propagate) throw new Error('공유 페이지 주소 이름이 필요해.')
       showSnackbar({ message: t({ ko: '공용 페이지 slug가 필요해.', en: 'Public page slug is required.' }), tone: 'error' })
       return
     }
@@ -345,7 +350,7 @@ export function useComfyWorkflowAuthoringController({
       })
       let workflowId = initialData?.workflow.id
       if (mode === 'edit' && workflowId) {
-        await updateGenerationWorkflow(workflowId, payload)
+        await updateGenerationWorkflow(workflowId, payload, revision)
       } else {
         const response = await createGenerationWorkflow(payload)
         workflowId = response.data.id
@@ -355,10 +360,18 @@ export function useComfyWorkflowAuthoringController({
       onClose()
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, mode === 'edit' ? t({ ko: '워크플로우 수정에 실패했어.', en: 'Failed to update the workflow.' }) : t({ ko: '워크플로우 저장에 실패했어.', en: 'Failed to save the workflow.' })), tone: 'error' })
+      if (propagate) throw error
     } finally {
       setIsSaving(false)
     }
   }
+
+  useComfyAuthorChatPage({
+    enabled: open && !isSaving, graph: parsedGraph, saved: mode === 'edit' ? initialData?.workflow ?? null : null,
+    draft: { name: workflowName, description: workflowDescription, workflowJson, markedFields, isPublicPage, publicSlug, publicQueueMaxCount },
+    setDraft: (next) => { setWorkflowName(next.name); setWorkflowDescription(next.description); handleWorkflowJsonChange(next.workflowJson); setMarkedFields(next.markedFields); setIsPublicPage(next.isPublicPage); setPublicSlug(next.publicSlug); setPublicQueueMaxCount(next.publicQueueMaxCount) },
+    save: (revision) => handleSave(revision, true),
+  })
 
   return {
     activeSearchCount, artifactDirectoryMode, artifactRootPath, authoringMiniMapBgColor,

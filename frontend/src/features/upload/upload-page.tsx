@@ -18,6 +18,7 @@ import type { AutoTestKaloscopeResult } from '@/lib/api-settings-kaloscope'
 import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
 import { shouldBypassImageSaveProcessing } from '@/lib/image-save-output'
 import { useI18n } from '@/i18n'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import type { ImageRecord } from '@/types/image'
 import { buildMetadataRewritePatch, useMetadataRewriteDraft } from '../metadata/use-metadata-rewrite-draft'
@@ -59,6 +60,19 @@ export function UploadPage() {
   const [isRewritePanelOpen, setIsRewritePanelOpen] = useState(false)
   const { draft: rewriteDraft, patchDraft: patchRewriteDraft } = useMetadataRewriteDraft(extractFile, extractResult)
   const isDesktopPageLayout = useDesktopPageLayout()
+  const chatUploadResourceId = useMemo(() => ({ file: extractFile, id: crypto.randomUUID() }), [extractFile]).id
+  useChatPageRegistration({
+    kind: 'upload', title: t({ ko: '업로드·메타데이터 검사', en: 'Upload and metadata inspection' }), resourceId: chatUploadResourceId,
+    fields: [
+      { id: 'mode', label: t({ ko: '업로드 화면', en: 'Upload view' }), type: 'select', value: mode, options: ['library', 'inspect'] },
+      ...(mode === 'inspect' && extractFile ? [
+        { id: 'prompt', label: t({ ko: '프롬프트', en: 'Prompt' }), type: 'text' as const, value: rewriteDraft.prompt }, { id: 'negativePrompt', label: t({ ko: '부정 프롬프트', en: 'Negative prompt' }), type: 'text' as const, value: rewriteDraft.negativePrompt },
+        { id: 'steps', label: 'Steps', type: 'number' as const, value: rewriteDraft.steps, min: 1, integer: true, allowEmpty: true }, { id: 'sampler', label: t({ ko: '샘플러', en: 'Sampler' }), type: 'text' as const, value: rewriteDraft.sampler }, { id: 'model', label: t({ ko: '모델', en: 'Model' }), type: 'text' as const, value: rewriteDraft.model }, { id: 'format', label: t({ ko: '파일 형식', en: 'File format' }), type: 'select' as const, value: rewriteDraft.format, options: ['png', 'jpeg', 'webp'] },
+      ] : []),
+    ],
+    data: { selected: { fileName: extractFile?.name ?? '', bytes: extractFile?.size ?? 0 } },
+    apply: (patch) => { const { mode: nextMode, ...metadata } = patch; if (nextMode !== undefined) setMode(nextMode as UploadPageMode); if (Object.keys(metadata).length) { patchRewriteDraft(metadata as Partial<typeof rewriteDraft>); setIsRewritePanelOpen(true) } },
+  })
 
 
   useEffect(() => {

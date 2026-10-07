@@ -40,6 +40,7 @@ export interface WildcardItemRecord {
 }
 
 export interface WildcardRecord {
+  assistant_revision?: string
   id: number
   name: string
   description?: string | null
@@ -147,11 +148,12 @@ export async function createWildcard(input: WildcardMutationInput) {
 }
 
 /** Update an existing wildcard-like record in the shared wildcard store. */
-export async function updateWildcard(wildcardId: number, input: WildcardMutationInput) {
+export async function updateWildcard(wildcardId: number, input: WildcardMutationInput, revision?: string) {
   return requestWildcardData<WildcardRecord>(`/api/wildcards/${wildcardId}`, 'wildcards.update', {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
+      ...(revision ? { 'If-Match': revision } : {}),
     },
     body: JSON.stringify(input),
   })
