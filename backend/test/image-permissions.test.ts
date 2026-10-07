@@ -258,6 +258,80 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     assert.equal(await status('/api/generation-history/clear?service_type=novelai', accountId, 'POST'), 200)
     assert.ok(db.prepare('SELECT 1 FROM api_generation_history WHERE id = ?').get(other))
   })
+  await t.test('linked NAI and Comfy presets generate independently of page binding and general tool selection', async (sub) => {
+    const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
+    const { ChatToolPresetStore } = await import('../src/services/codex-chat/chatToolPresets')
+    const { ChatGenerationPresetStore } = await import('../src/services/codex-chat/chatGenerationPresets')
+    const { resolveChatAccess, resolveChatProfileToolGrant } = await import('../src/services/codex-chat/codexChatAccess')
+    const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
+    const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
+    const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+    const { openChatMcpBridge } = await import('../src/services/codex-chat/chatMcpBridge')
+    const { WorkflowModel } = await import('../src/models/Workflow')
+    const { ComfyUIServerModel } = await import('../src/models/ComfyUIServer')
+    const { GenerationQueueModel } = await import('../src/models/GenerationQueue')
+    const { GenerationQueueService } = await import('../src/services/generationQueueService')
+    const { requireQueuedChatGenerationAccess } = await import('../src/services/generation-queue/queueJobExecutors')
+    const { normalizeChatPageSnapshot } = await import('@conai/shared')
+    const { parseChatPageContext } = await import('../src/services/codex-chat/chatPageContext')
+    updateChatSettings({ enabled: true })
+    sub.mock.method(GenerationQueueService, 'requestDispatch', () => {})
+    ComfyUIServerModel.create({ name: 'Queue fixture', endpoint: 'http://unused.invalid', is_active: true })
+    const workflowId = WorkflowModel.create({ name: 'Linked workflow', workflow_json: JSON.stringify({ '1': { class_type: 'CLIPTextEncode', inputs: { text: '' } } }), marked_fields: [{ id: 'prompt', label: 'Prompt', type: 'text', jsonPath: '1.inputs.text', required: true }] })
+    const nai = ChatGenerationPresetStore.create({ name: 'Linked NAI', kind: 'nai' })
+    const comfy = ChatGenerationPresetStore.create({ name: 'Linked Comfy', kind: 'comfyui', comfyui: { workflowId, exposedFieldIds: ['prompt'] } })
+    const general = ChatToolPresetStore.create({ name: 'Page inputs only', scopes: ['read'], toolAllowlist: ['get_current_page'] })
+    const profile = ChatProfileStore.create({ name: 'Linked generator', engine: 'llm', providerName: 'fixture', mcpEnabled: true, mcpScopes: ['read'], toolPresetId: general.id, generationPresetIds: [nai.id, comfy.id] })
+    const controller = new AbortController()
+    const page = normalizeChatPageSnapshot({ instanceId: 'page-instance', connectionId: 'page-connection', path: '/generation', title: 'Generation', kind: 'page', resourceId: null, fields: [] })
+    assert.ok(resolveChatAccess(adminId).scopes.includes('generate'), 'administrator already holds account generation scope')
+    const permittedGuestKeys = ['chat.llm.use', 'chat.tools.read', 'chat.tools.generate', 'generation.execute', 'workflows.view']
+    const cases: Array<[number, 'admin' | 'guest', boolean]> = [[adminId, 'admin', false], [adminId, 'admin', true], [accountId, 'guest', false], [accountId, 'guest', true]]
+    for (const [callerId, accountType, connected] of cases) {
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: connected ? [...permittedGuestKeys, 'page.generation.view'] : permittedGuestKeys })
+      const requester = { accountId: callerId, accountType }
+      const current = ChatProfileStore.find(profile.id)!
+      const connectedPage = parseChatPageContext(connected ? page : undefined, requester, current)
+      if (accountType === 'guest' && !connected) assert.equal(AuthAccessControlService.hasPermission(callerId, 'page.generation.view'), false, 'generation remains available with its page disabled')
+      const context = { threadId: CodexChatStore.createThread(callerId, 'linked presets', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: `linked-${callerId}-${connected}`, ...(connectedPage ? { page: connectedPage } : {}) }
+      const stop = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+      const grant = resolveChatProfileToolGrant(current, resolveChatAccess(callerId))
+      const bridge = await openChatMcpBridge(requester, grant.scopes, grant.toolAllowlist, { chatContext: context, generationPresetIds: current.generationPresetIds })
+      try {
+        const names = bridge.tools.map((tool) => tool.function.name)
+        assert.ok(names.includes('generate_image') && names.includes('generate_image_2'))
+        assert.equal(names.includes('get_current_page'), connected)
+        for (const unrelated of ['submit_generation_job', 'generate_nai', 'list_workflows', 'delete_files']) assert.equal(names.includes(unrelated), false)
+        for (const [tool, service] of [['generate_image', 'novelai'], ['generate_image_2', 'comfyui']]) {
+          const result = await bridge.call(tool, { prompt: 'a cat' })
+          assert.notEqual(result.isError, true, JSON.stringify(result))
+          const queued = JSON.parse((result.content![0] as { text: string }).text)
+          const job = GenerationQueueModel.findById(queued.id)!
+          assert.equal(job.service_type, service)
+          assert.equal(job.requested_by_account_id, callerId)
+          assert.doesNotThrow(() => requireQueuedChatGenerationAccess(job))
+          if (service === 'comfyui') assert.equal(job.workflow_id, workflowId)
+        }
+        ChatProfileStore.update(profile.id, { generationPresetIds: [] })
+        assert.equal((await bridge.call('generate_image_2', { prompt: 'unlinked' })).isError, true)
+        assert.deepEqual(resolveChatProfileToolGrant(ChatProfileStore.find(profile.id)!, resolveChatAccess(callerId)), { scopes: ['read'], toolAllowlist: ['get_current_page'] }, 'unlinking never enables free-form generation')
+      } finally {
+        stop(); await bridge.close()
+        ChatProfileStore.update(profile.id, { generationPresetIds: [nai.id, comfy.id] })
+      }
+    }
+    const guestContext = { threadId: CodexChatStore.createThread(accountId, 'denied presets', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: 'linked-denied' }
+    const stop = registerChatReply(guestContext, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.llm.use', 'chat.tools.generate'] })
+    const grant = resolveChatProfileToolGrant(ChatProfileStore.find(profile.id)!, resolveChatAccess(accountId))
+    const denied = await openChatMcpBridge({ accountId, accountType: 'guest' }, grant.scopes, grant.toolAllowlist, { chatContext: guestContext, generationPresetIds: [nai.id, comfy.id] })
+    try {
+      assert.equal((await denied.call('generate_image', { prompt: 'no execution grant' })).isError, true)
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.llm.use', 'generation.execute'] })
+      assert.equal(resolveChatProfileToolGrant(ChatProfileStore.find(profile.id)!, resolveChatAccess(accountId)).scopes.includes('generate'), false)
+      assert.equal((await denied.call('generate_image', { prompt: 'no chat grant' })).isError, true)
+    } finally { stop(); await denied.close(); AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] }) }
+  })
   await t.test('chat execution intersects live domain, profile, role, ownership and host boundaries', async (sub) => {
     const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
     const { ChatToolPresetStore } = await import('../src/services/codex-chat/chatToolPresets')

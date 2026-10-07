@@ -3,7 +3,7 @@ import { CHAT_ROOM_TOOLS } from '../../mcp/context'
 import { FileStoreService, fileOwnerKey } from '../fileStoreService'
 import { backupDateOf, backupFileName } from './chatBackup'
 import { contextHash, legacyContextMeta, limitContextMeta, metadataOnly, type ContextSource } from './chatContextDiagnostics'
-import { narrowDiagnosticsScope, resolveChatAccess, intersectChatScopes, type ChatDiagnosticsScope } from './codexChatAccess'
+import { narrowDiagnosticsScope, resolveChatAccess, resolveChatProfileToolGrant, type ChatDiagnosticsScope } from './codexChatAccess'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
 import { ChatSummaryStore } from './chatMemory'
@@ -90,7 +90,8 @@ export async function getChatDiagnostics(requester: McpRequester, threadId: numb
     }
     let definitions: Map<string, string> | undefined
     if (scope === 'prompts' && meta.sources?.some((source) => source.kind === 'tool-definition')) {
-      const bridge = await openChatMcpBridge(requester, profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : [], profile.toolAllowlist, {
+      const grant = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
+      const bridge = await openChatMcpBridge(requester, grant.scopes, grant.toolAllowlist, {
         roomTools: thread.kind === 'group' ? 'all' : false, generationPresetIds: profile.generationPresetIds, allowEmpty: true,
         chatContext: { threadId, profileId: profile.id, kind: thread.kind },
       })

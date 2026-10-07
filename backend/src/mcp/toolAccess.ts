@@ -42,7 +42,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
 export function isContextToolAllowed(context: McpRequestContext, toolName: string): boolean {
   if (context.requester && !isChatGenerationTool(toolName) && TOOL_FEATURE_PERMISSIONS[toolName] === undefined) return false;
   if (context.toolAllowlist && !context.toolAllowlist.includes(toolName)) return false;
-  if (context.chatContext?.page && !CHAT_PAGE_TOOLS.has(toolName)) return false;
+  if (context.chatContext?.page && !CHAT_PAGE_TOOLS.has(toolName) && !isChatGenerationTool(toolName)) return false;
   if (isChatMcpSource(context.source) && CHAT_BLOCKED_TOOLS.has(toolName)) return false;
   const presetMode = (context.generationPresetIds?.length ?? 0) > 0;
   if (CHAT_ROOM_TOOLS.has(toolName)) return Boolean(context.chatContext)

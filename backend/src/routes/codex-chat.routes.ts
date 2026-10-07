@@ -18,7 +18,7 @@ import { EmoticonService } from '../services/emoticonService'
 import { serveThumbnailOrOriginal, streamCacheableFile, streamRangeFile } from './images/query-file-helpers'
 import { ImageFileModel } from '../models/Image/ImageFileModel'
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel'
-import { resolveChatAccess } from '../services/codex-chat/codexChatAccess'
+import { resolveChatAccess, resolveChatProfileToolGrant } from '../services/codex-chat/codexChatAccess'
 import { getMcpToolScope } from '../mcp/context'
 import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
 import { buildCodexInstructions, CODEX_COMPACT_TOKENS, CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
@@ -1238,8 +1238,9 @@ router.post('/admin/profiles/preview', requireAdmin, asyncHandler(async (req: Re
     const body = (req.body ?? {}) as ChatProfileInput & { id?: unknown }
     const profileId = parseId(body.id) ?? 0
     const profile = ChatProfileStore.draft(body, profileId)
-    const bridge = profile.mcpEnabled && profile.mcpScopes.length > 0
-      ? await openChatMcpBridge(requesterFrom(req), profile.mcpScopes, profile.toolAllowlist, { generationPresetIds: profile.generationPresetIds })
+    const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requesterFrom(req).accountId))
+    const bridge = scopes.length > 0
+      ? await openChatMcpBridge(requesterFrom(req), scopes, toolAllowlist, { generationPresetIds: profile.generationPresetIds })
       : null
     try {
       const tools = (bridge?.tools ?? []).filter((tool) => profile.engine === 'codex' || profile.visionEnabled || tool.function.name !== 'view_images')

@@ -8,7 +8,7 @@ import { AuthAccessControlService } from '../authAccessControlService'
 import type { McpHttpAuthentication } from '../mcpHttpSettingsService'
 import { isDirectLoopbackRequest } from '../../utils/bootstrapAccess'
 import { CHAT_SCOPES, loadChatSettings, type ChatScope } from './chatSettings'
-import { ChatProfileStore } from './chatProfiles'
+import { ChatProfileStore, type ChatProfile } from './chatProfiles'
 import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { CodexChatStore } from './codexChatStore'
 import { ChatGroupStore } from './chatGroupStore'
@@ -78,6 +78,16 @@ export function intersectChatScopes(configured: readonly ChatScope[], access: Ch
   return configured.filter((scope) => access.scopes.includes(scope))
 }
 
+/** Linking a generation preset explicitly enables that tool, independently of the general tool selection. */
+export function resolveChatProfileToolGrant(profile: Pick<ChatProfile, 'mcpEnabled' | 'mcpScopes' | 'toolAllowlist' | 'generationPresetIds'>, access: ChatAccess) {
+  const presetTools = profile.generationPresetIds.map((_, index) => chatGenerationToolName(index))
+  const configured: ChatScope[] = [...new Set<ChatScope>([...profile.mcpScopes, ...(presetTools.length ? ['generate' as const] : [])])]
+  return {
+    scopes: profile.mcpEnabled ? intersectChatScopes(configured, access) : [],
+    toolAllowlist: profile.toolAllowlist === null ? null : [...new Set([...profile.toolAllowlist, ...presetTools])],
+  }
+}
+
 /** Recheck account revocation for in-process API LLM tools as well as loopback Codex tools. */
 export function requireChatMcpAccountAccess(context: McpRequestContext, toolName: string) {
   if (!context.requester || !loadChatSettings().enabled) throw new Error('채팅이 꺼졌거나 사용할 권한이 없어.')
@@ -92,8 +102,9 @@ export function requireChatMcpAccountAccess(context: McpRequestContext, toolName
     || (chat.kind === 'group' ? !ChatGroupStore.member(chat.threadId, chat.profileId) : thread.profile_id !== chat.profileId)) {
     throw new Error('이 채팅의 프로필 또는 방 접근 권한이 변경됐어.')
   }
-  if (profile.toolAllowlist && !profile.toolAllowlist.includes(toolName)) throw new Error('프로필에서 이 도구를 더 이상 허용하지 않아.')
-  if (!CHAT_ROOM_TOOLS.has(toolName) && (!profile.mcpEnabled || !profile.mcpScopes.includes(scope as ChatScope))) throw new Error('프로필의 도구 권한이 변경됐어.')
+  const grant = resolveChatProfileToolGrant(profile, access)
+  if (grant.toolAllowlist && !grant.toolAllowlist.includes(toolName)) throw new Error('프로필에서 이 도구를 더 이상 허용하지 않아.')
+  if (!CHAT_ROOM_TOOLS.has(toolName) && !grant.scopes.includes(scope as ChatScope)) throw new Error('프로필의 도구 사용 설정이 변경됐어.')
   if (toolName === 'view_images' && !profile.visionEnabled) throw new Error('프로필의 이미지 조회가 꺼져 있어.')
   if (toolName === 'save_lore' && !profile.allowLoreProposals) throw new Error('프로필의 로어 제안이 꺼져 있어.')
   if (profile.generationPresetIds.length > 0 && GENERATION_PRESET_BLOCKED_TOOLS.has(toolName)) throw new Error('생성 프리셋만 사용할 수 있어.')
