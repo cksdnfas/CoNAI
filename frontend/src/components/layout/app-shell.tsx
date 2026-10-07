@@ -9,6 +9,7 @@ import { HeaderAccountMenu } from '@/features/auth/header-account-menu'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { useChatGenerationNotifications } from '@/features/runtime-events/use-chat-generation-notifications'
 import { CodexChatProvider } from '@/features/codex-chat/codex-chat-provider'
 import { ChatPageProvider } from '@/features/codex-chat/chat-page-context'
 import { CODEX_CHAT_ROUTE } from '@/features/codex-chat/codex-chat-context'
@@ -91,6 +92,7 @@ export function AppShell() {
 
 /** Render the shell layout, leaving nav-scroll mechanics to a focused hook. */
 function AppShellLayout() {
+  useChatGenerationNotifications()
   const location = useLocation()
   const { t } = useI18n()
   const authStatusQuery = useAuthStatusQuery()

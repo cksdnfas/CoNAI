@@ -46,6 +46,8 @@ export type ChatToolCall = {
   output?: string
   jobIds?: number[]
   pendingJobIds?: number[]
+  /** Terminal linked jobs without a completed image, derived when reading the reply. */
+  failedJobs?: Array<{ jobId: number; status: 'failed' | 'cancelled' | 'completed'; failureCode: string | null; failureMessage: string }>
   /** Results this call created; lookups retain references without claiming authorship. */
   generated?: boolean
   /** A setting the model proposed with this call (propose_* tools); the card under the reply lets a person save it. */

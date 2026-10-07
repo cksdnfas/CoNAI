@@ -88,6 +88,8 @@ export class RuntimeEventBroadcaster {
       return false
     }
 
+    if (record.visibility === 'owner') return record.accountId === subscriber.accountId
+
     if (record.visibility === 'all' || subscriber.isAdmin) {
       return true
     }

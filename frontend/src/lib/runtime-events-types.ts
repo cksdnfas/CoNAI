@@ -16,6 +16,7 @@ export type RuntimeEventName =
   | 'queue.job.status'
   | 'queue.job.cancel-requested'
   | 'queue.job.progress'
+  | 'chat.generation.finished'
   | 'history.record.created'
   | 'history.record.status'
   | 'graph.schedule.changed'
@@ -70,6 +71,18 @@ export interface QueueJobEventPayload {
   provider_submit_started_at: string | null
   provider_cancel_state: string | null
   submit_attempt_count: number | null
+}
+
+/** A terminal chat-linked job, delivered only to the requesting thread owner. */
+export interface ChatGenerationFinishedEventPayload {
+  jobId: number
+  requestedByAccountId: number | null
+  status: 'completed' | 'failed' | 'cancelled'
+  chat: { threadId: number; threadTitle: string; replyId: string; characterName: string | null }
+  /** Completed images across the linked reply, so successive jobs replace one notification. */
+  imageCount: number
+  thumbnailHistoryId: number | null
+  failureCode: string | null
 }
 
 export interface QueueJobProgressEventPayload {

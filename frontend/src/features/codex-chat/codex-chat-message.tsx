@@ -1,11 +1,12 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { memo, useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { Check, ChevronLeft, ChevronRight, ImageOff, Scissors, Wrench, X } from 'lucide-react'
+import { AlertTriangle, Ban, Check, ChevronLeft, ChevronRight, ImageOff, Scissors, Wrench, X } from 'lucide-react'
 import { isCodexChatGenerationTool, stripEchoedAddresses, withChatGenerationProgress } from '@conai/shared'
 import type { ChatMessageRouting } from '@conai/shared'
 import { ChatMessageReply } from './chat-reply'
 import { Button } from '@/components/ui/button'
+import { Tip } from '@/components/ui/tooltip'
 import { IconButton } from '@/components/ui/icon-button'
 import { useMediaHoverPreview } from '@/components/common/media-hover-preview'
 import { Spinner } from '@/components/ui/loading-state'
@@ -281,6 +282,24 @@ function PendingJobThumb({ jobId, size, onResolved }: { jobId: number; size: Thu
   )
 }
 
+/** A terminal job without an image takes the same slot as its pending thumbnail. */
+function FailedJobThumb({ job, size }: { job: NonNullable<CodexChatToolCall['failedJobs']>[number]; size: ThumbSize }) {
+  const { t } = useI18n()
+  const cancelled = job.status === 'cancelled'
+  const noImage = job.failureCode === 'no_image'
+  const label = cancelled ? t({ ko: '취소됨', en: 'Cancelled' }) : noImage ? t({ ko: '이미지 없음', en: 'No image' }) : t({ ko: '실패', en: 'Failed' })
+  const reason = job.failureMessage || (cancelled ? t({ ko: '작업이 취소됐어', en: 'The job was cancelled' }) : noImage ? t({ ko: '완료된 이미지가 없어', en: 'No completed image' }) : t({ ko: '이미지 생성에 실패했어', en: 'Image generation failed' }))
+  const Icon = cancelled ? Ban : AlertTriangle
+  return (
+    <Tip content={`${t({ ko: '작업', en: 'Job' })} #${job.jobId} · ${reason}`}>
+      <div className={cn('flex shrink-0 flex-col items-center justify-center gap-1.5 rounded-sm border bg-surface-low text-xs font-bold', THUMB_PLACEHOLDER_CLASS[size], cancelled ? 'border-line text-muted-foreground' : 'border-destructive/22 text-destructive')}>
+        <Icon className="size-[18px]" />
+        {label}
+      </div>
+    </Tip>
+  )
+}
+
 type ToolCallGroup = { tool: string; count: number; status: CodexChatToolCall['status']; summary: string | null }
 
 /** Agents poll (`get_generation_job` ×N); one row per tool keeps the reply readable. The last call speaks for the group. */
@@ -379,7 +398,9 @@ function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { ca
   const resolvedCalls = withChatGenerationProgress(calls)
   const generatedCalls = resolvedCalls.filter((call) => call.generated ?? isCodexChatGenerationTool(call.tool))
   const foundCalls = resolvedCalls.filter((call) => !(call.generated ?? isCodexChatGenerationTool(call.tool)))
-  const pendingJobIds = [...new Set(generatedCalls.flatMap((call) => call.pendingJobIds ?? []))].filter((jobId) => resolvedJobs[jobId] === undefined)
+  const failedJobs = [...new Map(generatedCalls.flatMap((call) => call.failedJobs ?? []).map((job) => [job.jobId, job])).values()]
+  const failedJobIds = new Set(failedJobs.map((job) => job.jobId))
+  const pendingJobIds = [...new Set(generatedCalls.flatMap((call) => call.pendingJobIds ?? []))].filter((jobId) => !failedJobIds.has(jobId) && resolvedJobs[jobId] === undefined)
   const historyIds = [...new Set([...generatedCalls.flatMap((call) => call.historyIds), ...generatedCalls.flatMap((call) => (call.pendingJobIds ?? []).flatMap((jobId) => (resolvedJobs[jobId] !== undefined ? [resolvedJobs[jobId]] : [])))])]
   const foundHistoryIds = [...new Set(foundCalls.flatMap((call) => call.historyIds))].filter((historyId) => !historyIds.includes(historyId))
   // History rows resolve to library images too; skip hashes a history thumbnail already shows.
@@ -412,7 +433,7 @@ function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { ca
     setLightboxIndex(index >= 0 ? index : null)
   }
 
-  const count = historyIds.length + compositeHashes.length + pendingJobIds.length
+  const count = historyIds.length + compositeHashes.length + pendingJobIds.length + failedJobs.length
   if (count === 0 && foundItems.length === 0) {
     return null
   }
@@ -424,6 +445,7 @@ function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { ca
         layout === 'column' ? 'flex flex-col items-start' : size === 'full' && count > 1 ? 'grid grid-cols-2' : 'flex flex-wrap',
       )}>
         {pendingJobIds.map((jobId) => <PendingJobThumb key={`j${jobId}`} jobId={jobId} size={size} onResolved={resolveJob} />)}
+        {failedJobs.map((job) => <FailedJobThumb key={`f${job.jobId}`} job={job} size={size} />)}
         {historyIds.map((historyId) => <HistoryThumb key={`h${historyId}`} historyId={historyId} size={size} media={media} onOpen={openLightbox} />)}
         {compositeHashes.map((hash) => <ChatImageThumb key={hash} image={buildChatImageRecord(hash, undefined, media?.[hash])} size={size} onOpen={() => openLightbox(hash)} />)}
       </div> : null}

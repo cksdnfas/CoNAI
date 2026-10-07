@@ -17,6 +17,7 @@ export type RuntimeEventName =
   | 'queue.job.status'
   | 'queue.job.cancel-requested'
   | 'queue.job.progress'
+  | 'chat.generation.finished'
   | 'history.record.created'
   | 'history.record.status'
   | 'graph.schedule.changed'
@@ -54,8 +55,8 @@ export interface RuntimeEventEnvelope<TPayload = unknown> {
   payload: TPayload
 }
 
-/** 이벤트 가시성. 'account'는 소유 계정 + admin 에게만 전달된다. */
-export type RuntimeEventVisibility = 'all' | 'account'
+/** 'account' includes admins; 'owner' stays strictly within the owning account (including bootstrap null). */
+export type RuntimeEventVisibility = 'all' | 'account' | 'owner'
 
 /** 버스 내부 레코드. 라우팅 메타데이터는 와이어로 나가지 않는다. */
 export interface RuntimeEventRecord<TPayload = unknown> extends RuntimeEventEnvelope<TPayload> {
@@ -85,6 +86,18 @@ export interface QueueJobEventPayload {
   provider_submit_started_at: string | null
   provider_cancel_state: string | null
   submit_attempt_count: number | null
+}
+
+/** A terminal chat-linked job, delivered only to the requesting thread owner. */
+export interface ChatGenerationFinishedEventPayload {
+  jobId: number
+  requestedByAccountId: number | null
+  status: 'completed' | 'failed' | 'cancelled'
+  chat: { threadId: number; threadTitle: string; replyId: string; characterName: string | null }
+  /** Completed images across the linked reply, so successive jobs replace one notification. */
+  imageCount: number
+  thumbnailHistoryId: number | null
+  failureCode: string | null
 }
 
 export interface QueueJobProgressEventPayload {

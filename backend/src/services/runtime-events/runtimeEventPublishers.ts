@@ -1,5 +1,7 @@
 import { publishRuntimeEvent } from './runtimeEventBus'
+import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type {
+  ChatGenerationFinishedEventPayload,
   GraphExecutionEventPayload,
   GraphScheduleEventPayload,
   HistoryRecordEventPayload,
@@ -88,6 +90,48 @@ export function publishQueueJobEvent(
     accountId,
     payload: buildQueueJobPayload(job, options?.previousStatus ?? null),
   })
+  if (name === 'queue.job.status' && options?.previousStatus !== job.status) {
+    publishChatGenerationFinished(job)
+  }
+}
+
+/** All queue status publishers share this path; recovery at boot remains read-time only. */
+function publishChatGenerationFinished(job: Parameters<typeof buildQueueJobPayload>[0]) {
+  if (job.status !== 'completed' && job.status !== 'failed' && job.status !== 'cancelled') return
+  try {
+    const db = getUserSettingsDb()
+    const accountId = job.requested_by_account_id ?? null
+    const chat = db.prepare(`
+      SELECT l.thread_id AS threadId, t.title AS threadTitle, l.reply_id AS replyId, p.name AS characterName
+      FROM chat_generation_links l JOIN codex_chat_threads t ON t.id = l.thread_id
+      LEFT JOIN codex_chat_messages m ON m.id = l.message_id AND m.thread_id = t.id
+      LEFT JOIN generation_queue_jobs j ON j.id = l.job_id
+      LEFT JOIN llm_chat_profiles p ON p.id = COALESCE(m.speaker_profile_id,
+        CASE WHEN json_valid(j.request_payload)
+          AND json_extract(j.request_payload, '$.__conaiChatGrant.context.chatContext.threadId') = t.id
+          THEN json_extract(j.request_payload, '$.__conaiChatGrant.context.chatContext.profileId') END,
+        t.profile_id)
+      WHERE l.job_id = ? AND t.account_id IS ?
+    `).get(job.id, accountId) as ChatGenerationFinishedEventPayload['chat'] | undefined
+    if (!chat) return
+    const images = db.prepare(`
+      SELECT COUNT(*) AS imageCount, MAX(h.id) AS thumbnailHistoryId,
+        COUNT(CASE WHEN l.job_id = ? THEN 1 END) AS jobImageCount
+      FROM chat_generation_links l JOIN api_generation_history h ON h.queue_job_id = l.job_id
+      JOIN generation_queue_jobs j ON j.id = l.job_id
+      WHERE l.thread_id = ? AND l.reply_id = ? AND j.requested_by_account_id IS ?
+        AND h.requested_by_account_id IS ? AND h.generation_status = 'completed' AND h.composite_hash IS NOT NULL
+    `).get(job.id, chat.threadId, chat.replyId, accountId, accountId) as Pick<ChatGenerationFinishedEventPayload, 'imageCount' | 'thumbnailHistoryId'> & { jobImageCount: number }
+    publishRuntimeEvent({
+      name: 'chat.generation.finished',
+      topic: 'generation-queue',
+      visibility: 'owner',
+      accountId: job.requested_by_account_id ?? null,
+      payload: { jobId: job.id, requestedByAccountId: accountId, status: job.status, chat, imageCount: images.imageCount, thumbnailHistoryId: images.thumbnailHistoryId, failureCode: job.status === 'completed' && images.jobImageCount === 0 ? 'no_image' : job.failure_code ?? null } satisfies ChatGenerationFinishedEventPayload,
+    })
+  } catch (error) {
+    console.warn('Failed to publish chat generation outcome:', error instanceof Error ? error.message : error)
+  }
 }
 
 /**

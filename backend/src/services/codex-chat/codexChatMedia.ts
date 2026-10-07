@@ -33,6 +33,19 @@ function chunked<T>(values: T[]) {
 }
 
 const FINISHED_JOB_STATUSES = new Set(['completed', 'failed', 'cancelled'])
+const FAILURE_MESSAGE_MAX_LENGTH = 300
+type FailedJob = NonNullable<CodexChatMessageRecord['tool_calls'][number]['failedJobs']>[number]
+
+/** Queue errors can contain paths or provider details; expose only fixed code-based messages. */
+function failureMessageOf(status: FailedJob['status'], code: string | null) {
+  const messages = new Map([
+    ['no_image', '완료된 이미지가 없어'],
+    ['process_restarted', '서버가 다시 시작돼 작업이 끝났어'],
+    ['process_restarted_orphan', '서버가 다시 시작돼 작업을 복구하지 못했어'],
+    ['nai_submit_ambiguous', '생성 요청의 접수 여부를 확인하지 못했어'],
+  ])
+  return (status === 'cancelled' ? '작업이 취소됐어' : messages.get(code ?? '') ?? '이미지 생성에 실패했어').slice(0, FAILURE_MESSAGE_MAX_LENGTH)
+}
 const JOB_TOOLS = new Set(['submit_generation_job', 'get_generation_job', 'wait_generation_job', 'get_generation_artifacts'])
 
 /** The job ids of a call; calls stored before ids were recorded fall back to the job JSON in their result text. */
@@ -114,17 +127,28 @@ export function attachJobResults(messages: CodexChatMessageRecord[]) {
 
   const historiesByJob = new Map<number, number[]>()
   const pendingJobIds = new Set<number>()
+  const failedJobsByJob = new Map<number, FailedJob>()
+  const failedHistoryIds = new Set<number>()
   for (const chunk of chunked(jobIds)) {
     const placeholders = chunk.map(() => '?').join(',')
     const linked = db.prepare(`SELECT job_id, reply_id FROM chat_generation_links WHERE job_id IN (${placeholders})`).all(...chunk) as Array<{ job_id: number; reply_id: string }>
     linked.forEach((link) => owners.set(link.job_id, link.reply_id))
-    const histories = db.prepare(`SELECT id, queue_job_id FROM api_generation_history WHERE queue_job_id IN (${placeholders}) ORDER BY id`).all(...chunk) as Array<{ id: number; queue_job_id: number }>
-    histories.forEach((row) => historiesByJob.set(row.queue_job_id, [...(historiesByJob.get(row.queue_job_id) ?? []), row.id]))
-    const jobs = db.prepare(`SELECT id, status FROM generation_queue_jobs WHERE id IN (${placeholders})`).all(...chunk) as Array<{ id: number; status: string }>
-    jobs.filter((job) => !FINISHED_JOB_STATUSES.has(job.status)).forEach((job) => pendingJobIds.add(job.id))
+    const histories = db.prepare(`SELECT id, queue_job_id, generation_status, composite_hash FROM api_generation_history WHERE queue_job_id IN (${placeholders}) ORDER BY id`).all(...chunk) as Array<{ id: number; queue_job_id: number; generation_status: string; composite_hash: string | null }>
+    histories.filter((row) => row.generation_status === 'completed' && row.composite_hash !== null).forEach((row) => historiesByJob.set(row.queue_job_id, [...(historiesByJob.get(row.queue_job_id) ?? []), row.id]))
+    const jobs = db.prepare(`SELECT id, status, failure_code FROM generation_queue_jobs WHERE id IN (${placeholders})`).all(...chunk) as Array<{ id: number; status: string; failure_code: string | null }>
+    for (const job of jobs) {
+      if (!FINISHED_JOB_STATUSES.has(job.status)) pendingJobIds.add(job.id)
+      if (!owners.has(job.id) || historiesByJob.get(job.id)?.length) continue
+      if (job.status !== 'failed' && job.status !== 'cancelled' && job.status !== 'completed') continue
+      const failureCode = job.status === 'completed' ? 'no_image' : job.failure_code
+      failedJobsByJob.set(job.id, { jobId: job.id, status: job.status, failureCode, failureMessage: failureMessageOf(job.status, failureCode) })
+    }
+    histories.filter((row) => failedJobsByJob.has(row.queue_job_id)).forEach((row) => failedHistoryIds.add(row.id))
   }
+  // A stored poll may reference a failed/pending history row; the terminal card replaces that empty thumbnail.
+  if (failedHistoryIds.size) messages = messages.map((message) => ({ ...message, tool_calls: message.tool_calls.map((call) => ({ ...call, historyIds: call.historyIds.filter((id) => !failedHistoryIds.has(id)) })) }))
 
-  return { pendingJobs: pendingJobIds.size, messages: attachResolvedJobResults(messages, historiesByJob, pendingJobIds, owners) }
+  return { pendingJobs: pendingJobIds.size, messages: attachResolvedJobResults(messages, historiesByJob, pendingJobIds, owners, failedJobsByJob) }
 }
 
 /** What became of a generation job, as a later request should read it. */
@@ -178,7 +202,7 @@ export function withGenerationOutcomes(messages: CodexChatMessageRecord[]) {
 }
 
 /** Pure ownership resolution, also used by regression coverage. Old records prefer an actual submission. */
-export function attachResolvedJobResults(messages: CodexChatMessageRecord[], historiesByJob: ReadonlyMap<number, number[]>, pendingJobIds: ReadonlySet<number>, owners: ReadonlyMap<number, string> = new Map()) {
+export function attachResolvedJobResults(messages: CodexChatMessageRecord[], historiesByJob: ReadonlyMap<number, number[]>, pendingJobIds: ReadonlySet<number>, owners: ReadonlyMap<number, string> = new Map(), failedJobsByJob: ReadonlyMap<number, FailedJob> = new Map()) {
   const creator = new Map<number, string>()
   for (const message of messages) for (const call of message.tool_calls) {
     if (!isCodexChatCreationTool(call.tool)) continue
@@ -193,7 +217,7 @@ export function attachResolvedJobResults(messages: CodexChatMessageRecord[], his
         const ids = jobIdsOf(call)
         const ownIds = ids.filter((id) => creator.get(id) === `${message.id}:${call.id}`)
         const attached = ownIds.flatMap((jobId) => historiesByJob.get(jobId) ?? [])
-        const placeholders = ownIds.filter((jobId) => pendingJobIds.has(jobId) && !(historiesByJob.get(jobId)?.length))
+        const placeholders = ownIds.filter((jobId) => pendingJobIds.has(jobId) && !failedJobsByJob.has(jobId) && !(historiesByJob.get(jobId)?.length))
         const generated = ids.length ? ownIds.length > 0 : call.generated ?? isCodexChatCreationTool(call.tool)
         // A polling call in the creator's own message need not repeat the large result or its placeholder.
         const duplicateIds = ids.filter((id) => creator.get(id)?.startsWith(`${message.id}:`) && !ownIds.includes(id)).flatMap((id) => historiesByJob.get(id) ?? [])
@@ -202,6 +226,7 @@ export function attachResolvedJobResults(messages: CodexChatMessageRecord[], his
           generated,
           historyIds: [...new Set([...call.historyIds.filter((id) => !duplicateIds.includes(id)), ...attached])],
           pendingJobIds: generated ? placeholders : undefined,
+          failedJobs: ownIds.some((id) => failedJobsByJob.has(id)) ? ownIds.flatMap((id) => failedJobsByJob.get(id) ?? []) : undefined,
         }
       }),
     }))
