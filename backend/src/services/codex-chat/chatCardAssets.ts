@@ -1,3 +1,4 @@
+import type Database from 'better-sqlite3'
 import crypto from 'crypto'
 import dns from 'dns'
 import fs from 'fs'
@@ -202,8 +203,14 @@ export function fileUnderCharacterGroup(characterName: string, compositeHashes: 
 }
 
 /** Asset inputs must be grouped before they are returned to the caller. */
-export function fileLibraryMediaUnderGroup(groupPath: string, compositeHashes: string[]) {
-  if (compositeHashes.length) assignGeneratedMediaToGroup(GroupPathService.resolveOrCreate(groupPath).groupId, compositeHashes)
+export function fileLibraryMediaUnderGroup(groupPath: string, compositeHashes: string[], database: Database.Database = imagesDb) {
+  if (!compositeHashes.length) return
+  const groupId = GroupPathService.resolveOrCreate(groupPath, database).groupId
+  if (database === imagesDb) assignGeneratedMediaToGroup(groupId, compositeHashes)
+  else {
+    const insert = database.prepare("INSERT OR IGNORE INTO image_groups(group_id, composite_hash, collection_type, order_index) VALUES (?, ?, 'manual', 0)")
+    for (const hash of new Set(compositeHashes)) insert.run(groupId, hash)
+  }
 }
 
 export function characterMediaGroupPath(characterName: string, root = CHAT_CARD_GROUP_ROOT) {

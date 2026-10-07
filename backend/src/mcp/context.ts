@@ -145,6 +145,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   propose_display_block: 'configure',
   propose_chat_profile: 'configure',
   propose_profile_update: 'configure',
+  propose_profile_assets: 'configure',
 };
 
 /**

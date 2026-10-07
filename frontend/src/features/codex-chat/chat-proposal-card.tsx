@@ -77,7 +77,8 @@ function ProposalCard({ proposal, threadId }: { proposal: Proposal; threadId?: n
   if (proposal.kind === 'display_block') return <BlockProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'profile') return <ProfileProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'lore') return <LoreProposalCard proposal={proposal} threadId={threadId} />
-  return <ProfileUpdateCard proposal={proposal} threadId={threadId} />
+  if (proposal.kind === 'profile_update') return <ProfileUpdateCard proposal={proposal} threadId={threadId} />
+  return null
 }
 
 /** Refreshes what a save touched, plus the thread so the card reloads as saved. */

@@ -59,10 +59,12 @@ import { validateBlockData } from '../services/codex-chat/chatBlockState'
 import { canSuggest, ChatSuggestError, profileWriterReady, suggestReplies, userWriterReady } from '../services/codex-chat/chatSuggestions'
 import { createUploadStorage, MAX_UPLOAD_FILE_SIZE_BYTES } from '../middleware/upload'
 import { downloadProfileAsset, importFileStoreProfileAsset, ingestProfileAsset, profileAssetFields, resolveProfileAsset } from '../services/codex-chat/chatProfileAssets'
+import chatAssetBatchesRouter from './chat-asset-batches.routes'
 
 const MESSAGE_MAX_LENGTH = 20000
 
 const router = express.Router()
+router.use('/admin/profiles/:profileId/asset-batches', chatAssetBatchesRouter)
 
 // The old server-wide Codex chat settings become a "Codex" profile the first time chat is used after the upgrade.
 router.use((_req: Request, _res: Response, next: NextFunction) => {

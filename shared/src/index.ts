@@ -34,3 +34,4 @@ export const VERSION = '26.9.29';
 
 export * from './utils/minimaxDirectorResolution';
 export * from './types/fileStore';
+export * from './types/chatAssets'

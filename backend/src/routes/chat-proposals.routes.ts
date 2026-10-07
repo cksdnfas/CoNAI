@@ -13,6 +13,9 @@ import { ChatProfileStore } from '../services/codex-chat/chatProfiles'
 import type { ChatProposal } from '@conai/shared'
 import { requireChatWorkflowModules } from '../services/codex-chat/chatWorkflowContext'
 import { chatPageNativeActionRevision } from '../services/codex-chat/chatPageNativeActions'
+import { applyProfileAssetsProposal } from '../services/codex-chat/chatAssetProposals'
+import { ChatAssetError } from '../services/codex-chat/chatAssetAccess'
+import { hasAdminAccess } from '../middleware/authMiddleware'
 
 const router = express.Router()
 
@@ -88,6 +91,10 @@ router.post('/:proposalId/saved', requireAdmin, asyncHandler(async (req: Request
   }
   const proposal = ChatProposalStore.find(proposalId)
   const rawSavedId = (req.body as { savedId?: unknown } | undefined)?.savedId
+  if (proposal?.kind === 'profile_assets') {
+    res.status(400).json({ success: false, error: '자산 제안은 승인 경로에서 적용해줘.' })
+    return
+  }
   const savedId = rawSavedId === undefined || rawSavedId === null ? null : parseId(rawSavedId)
   if (rawSavedId !== undefined && rawSavedId !== null && savedId === null) {
     res.status(400).json({ success: false, error: '저장한 항목의 id가 올바르지 않아.' })
@@ -109,6 +116,16 @@ router.post('/:proposalId/apply', asyncHandler(async (req: Request, res: Respons
   const proposalId = visibleProposalId(req, res)
   if (proposalId === null) return
   if (ChatProposalStore.find(proposalId)?.kind !== 'lore') {
+    if (ChatProposalStore.find(proposalId)?.kind === 'profile_assets') {
+      if (!hasAdminAccess(req)) { res.status(403).json({ success: false, error: '자산을 승인할 관리자 권한이 없어.' }); return }
+      try {
+        res.json({ success: true, data: await applyProfileAssetsProposal({ accountId: getRequesterAccountId(req), accountType: getRequesterAccountType(req) }, proposalId) })
+      } catch (error) {
+        if (error instanceof ChatAssetError) { res.status(error.status).json({ success: false, error: error.message, ...error.details }); return }
+        throw error
+      }
+      return
+    }
     res.status(400).json({ success: false, error: '이 제안은 카드에서 저장해줘.' })
     return
   }

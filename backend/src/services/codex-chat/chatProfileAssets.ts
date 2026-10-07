@@ -1,3 +1,4 @@
+import type Database from 'better-sqlite3'
 import fs from 'fs'
 import { db as imagesDb } from '../../database/init'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
@@ -67,9 +68,9 @@ export function profileAssetFields(profile: ChatProfile, canViewImages: boolean)
   }
 }
 
-export function fileProfileAssetsUnderGroup(name: string, hashes: Array<string | null>) {
+export function fileProfileAssetsUnderGroup(name: string, hashes: Array<string | null>, database: Database.Database = imagesDb) {
   const unique = [...new Set(hashes.filter((hash): hash is string => Boolean(hash)))]
-  fileLibraryMediaUnderGroup(chatCharacterGroupPath(name), unique)
+  fileLibraryMediaUnderGroup(chatCharacterGroupPath(name), unique, database)
 }
 
 /** Decode and register an image; the pipeline keeps its library identity and original bytes. */

@@ -1,3 +1,4 @@
+import type Database from 'better-sqlite3'
 import { db } from '../database/init';
 import { getGroupHierarchyService } from './groupHierarchyService';
 
@@ -61,8 +62,8 @@ export function parseGroupPath(input: unknown): string[] {
 
 type GroupRow = { id: number; name: string };
 
-function findChild(parentId: number | null, name: string): GroupRow | null {
-  const row = db.prepare(`
+function findChild(database: Database.Database, parentId: number | null, name: string): GroupRow | null {
+  const row = database.prepare(`
     SELECT id, name FROM groups
     WHERE COALESCE(parent_id, 0) = ?
       AND TRIM(name) = ? COLLATE NOCASE
@@ -72,53 +73,55 @@ function findChild(parentId: number | null, name: string): GroupRow | null {
   return row ?? null;
 }
 
-function insertChild(parentId: number | null, name: string): boolean {
-  const info = db.prepare(`
+function insertChild(database: Database.Database, parentId: number | null, name: string): boolean {
+  const info = database.prepare(`
     INSERT INTO groups (name, parent_id) VALUES (?, ?)
     ON CONFLICT DO NOTHING
   `).run(name, parentId);
   return info.changes > 0;
 }
 
-const resolveTransaction = db.transaction((segments: string[], create: boolean): ResolvedGroupPath | null => {
-  const resolved: GroupRow[] = [];
-  const createdGroupIds: number[] = [];
-  let parentId: number | null = null;
+function resolveTransaction(database: Database.Database, segments: string[], create: boolean): ResolvedGroupPath | null {
+  return database.transaction((): ResolvedGroupPath | null => {
+    const resolved: GroupRow[] = [];
+    const createdGroupIds: number[] = [];
+    let parentId: number | null = null;
 
-  for (const segment of segments) {
-    let row = findChild(parentId, segment);
-    if (!row) {
-      if (!create) {
-        return null;
-      }
-      insertChild(parentId, segment);
-      row = findChild(parentId, segment);
+    for (const segment of segments) {
+      let row = findChild(database, parentId, segment);
       if (!row) {
-        throw new Error(`Failed to create group "${segment}"`);
+        if (!create) {
+          return null;
+        }
+        insertChild(database, parentId, segment);
+        row = findChild(database, parentId, segment);
+        if (!row) {
+          throw new Error(`Failed to create group "${segment}"`);
+        }
+        createdGroupIds.push(row.id);
       }
-      createdGroupIds.push(row.id);
+      resolved.push(row);
+      parentId = row.id;
     }
-    resolved.push(row);
-    parentId = row.id;
-  }
 
-  const leaf = resolved[resolved.length - 1];
-  return {
-    groupId: leaf.id,
-    path: resolved.map((row) => row.name).join('/'),
-    segments: resolved.map((row) => ({ id: row.id, name: row.name })),
-    createdGroupIds,
-  };
-});
+    const leaf = resolved[resolved.length - 1];
+    return {
+      groupId: leaf.id,
+      path: resolved.map((row) => row.name).join('/'),
+      segments: resolved.map((row) => ({ id: row.id, name: row.name })),
+      createdGroupIds,
+    };
+  }).immediate();
+}
 
 export class GroupPathService {
   /**
    * 경로를 그룹으로 해석한다. `create: false` 이고 경로가 없으면 null.
    * 세그먼트 수가 곧 깊이이므로 GROUP_PATH_MAX_DEPTH 로 깊이 제한이 보장된다.
    */
-  static resolve(path: unknown, options: { create: boolean }): ResolvedGroupPath | null {
+  static resolve(path: unknown, options: { create: boolean }, database: Database.Database = db): ResolvedGroupPath | null {
     const segments = parseGroupPath(path);
-    const result = resolveTransaction.immediate(segments, options.create);
+    const result = resolveTransaction(database, segments, options.create);
     if (result && result.createdGroupIds.length > 0) {
       console.log(`📁 Created group path "${result.path}" (${result.createdGroupIds.length} new)`);
     }
@@ -126,8 +129,8 @@ export class GroupPathService {
   }
 
   /** 없으면 만들어서라도 그룹 id 를 돌려준다. */
-  static resolveOrCreate(path: unknown): ResolvedGroupPath {
-    const result = this.resolve(path, { create: true });
+  static resolveOrCreate(path: unknown, database: Database.Database = db): ResolvedGroupPath {
+    const result = this.resolve(path, { create: true }, database);
     if (!result) {
       throw new GroupPathError('Failed to resolve group path', 'not_found');
     }

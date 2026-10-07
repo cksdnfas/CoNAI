@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { getUserSettingsDb } from '../../database/userSettingsDb';
 import { linkChatGeneration, requireActiveChatReply } from '../../services/codex-chat/chatReplyRegistry';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
@@ -19,6 +20,8 @@ import { requireMcpResourceOwner, requireMcpToolAccess } from '../toolAccess';
 import { requireRequesterPermission } from '../../middleware/featureAccess';
 import { validateMcpToolArguments } from '../requestSecurity';
 import { canRequesterViewImages } from '../../middleware/imageAccess';
+import { requireChatAssetGeneration } from '../../services/codex-chat/chatAssetAccess';
+import type { McpRequester } from '../context';
 import {
   describeMcpGenerationJobRouting,
   getMcpGenerationRoutingOptions,
@@ -98,6 +101,16 @@ export type McpGenerationJobInput = {
  * routing, ComfyUI input normalization, idempotent retries and ownership. Returns the job as the tools describe it.
  */
 export async function enqueueMcpGenerationJob(context: McpRequestContext, input: McpGenerationJobInput, toolName = 'submit_generation_job', options: { maxPayloadBytes?: number } = {}) {
+  return enqueueGenerationJob(context, input, toolName, options);
+}
+
+/** Admin asset jobs use the same normalization/routing without claiming an active chat reply. */
+export async function enqueueProfileAssetGenerationJob(requester: McpRequester, profileId: number, input: McpGenerationJobInput, recordJob: (jobId: number) => void, maxPayloadBytes?: number) {
+  requireChatAssetGeneration(requester, profileId, input.service_type);
+  return enqueueGenerationJob({ scopes: ['generate'], requester }, input, 'profile_assets', { assetProfileId: profileId, recordJob, maxPayloadBytes });
+}
+
+async function enqueueGenerationJob(context: McpRequestContext, input: McpGenerationJobInput, toolName: string, options: { maxPayloadBytes?: number; assetProfileId?: number; recordJob?: (jobId: number) => void }) {
   if (context.chatContext) requireActiveChatReply(context.chatContext);
   if (isChatMcpSource(context.source)) requireMcpToolAccess(context, toolName, input);
   const { service_type, workflow_id, server_id, server_tag, inputs, request_payload, group_id, group_path, priority = 100, idempotency_key, request_summary } = input;
@@ -113,7 +126,7 @@ export async function enqueueMcpGenerationJob(context: McpRequestContext, input:
   if (service_type !== 'comfyui' && (server_id != null || normalizedServerTag !== undefined)) {
     throw new Error('server_id and server_tag are only valid for comfyui jobs');
   }
-  const idempotencyScope = idempotency_key ? resolveIdempotencyScope(context) : null;
+  const idempotencyScope = idempotency_key ? options.assetProfileId ? 'chat-assets' : resolveIdempotencyScope(context) : null;
   const requestHash = idempotency_key
     ? buildIdempotencyRequestHash({
         service_type,
@@ -203,6 +216,11 @@ export async function enqueueMcpGenerationJob(context: McpRequestContext, input:
     // Delayed jobs recheck this server-issued grant before dispatch, rather than retaining submission authority.
     payload = { ...payload, __conaiChatGrant: { toolName, context, usesImages } };
   }
+  if (options.assetProfileId) {
+    requireChatAssetGeneration(context.requester!, options.assetProfileId, service_type);
+    if (service_type === 'novelai' && payload.n_samples !== 1) throw new Error('자산 생성은 n_samples: 1이어야 해.');
+    payload = { ...payload, __conaiAssetGrant: { profileId: options.assetProfileId } };
+  }
   if (options.maxPayloadBytes && Buffer.byteLength(JSON.stringify(payload)) > options.maxPayloadBytes) {
     throw new Error('NAI 기준 이미지가 포함된 작업 입력은 8MB까지 쓸 수 있어.');
   }
@@ -220,17 +238,20 @@ export async function enqueueMcpGenerationJob(context: McpRequestContext, input:
     requested_by_account_id: context.requester?.accountId ?? null,
     requested_by_account_type: context.requester?.accountType ?? null,
   };
-  const creation = idempotency_key && idempotencyScope && requestHash
-    ? GenerationQueueModel.createIdempotent(createData, {
+  const creation = getUserSettingsDb().transaction(() => {
+    const created = idempotency_key && idempotencyScope && requestHash
+      ? GenerationQueueModel.createIdempotent(createData, {
         scope: idempotencyScope,
         key: idempotency_key,
         requestHash,
       })
-    : { jobId: GenerationQueueModel.create(createData), requestHash: null, reused: false };
-  if (requestHash && creation.requestHash !== requestHash) {
-    throw new Error(`idempotency_key "${idempotency_key}" was already used with a different request payload`);
-  }
-
+      : { jobId: GenerationQueueModel.create(createData), requestHash: null, reused: false };
+    if (requestHash && created.requestHash !== requestHash) {
+      throw new Error(`idempotency_key "${idempotency_key}" was already used with a different request payload`);
+    }
+    options.recordJob?.(created.jobId);
+    return created;
+  }).immediate();
   if (!creation.reused) linkChatGeneration(context.chatContext, creation.jobId);
   GenerationQueueService.requestDispatch();
   const job = await describeJob(creation.jobId, context);

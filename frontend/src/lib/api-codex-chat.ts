@@ -1,8 +1,32 @@
 import { requestApiData, requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
+import type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
+export type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetKind, ChatAssetReview, ChatAssetCandidate, ChatAssetAttempt, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
 import type { ChatStreamEvent, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal } from '@conai/shared'
 
 export type ChatScope = 'read' | 'generate' | 'organize' | 'configure'
+const assetBatchPath = (profileId: number, batchId?: number) => `/api/codex-chat/admin/profiles/${profileId}/asset-batches${batchId === undefined ? '' : `/${batchId}`}`
+export function createChatAssetBatch(profileId: number, input: ChatAssetBatchInput) {
+  return requestApiData<ChatAssetBatch>(assetBatchPath(profileId), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
+}
+export function getChatAssetBatch(profileId: number, batchId: number) {
+  return requestApiData<ChatAssetBatch>(assetBatchPath(profileId, batchId))
+}
+export function regenerateChatAssetSlot(profileId: number, batchId: number, slotKey: string, attempt: number, useCurrentPreset = false) {
+  return requestApiData<ChatAssetBatch>(`${assetBatchPath(profileId, batchId)}/slots/${encodeURIComponent(slotKey)}/regenerate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attempt, useCurrentPreset }) })
+}
+export function cancelChatAssetSlot(profileId: number, batchId: number, slotKey: string) {
+  return requestApiData<ChatAssetBatch>(`${assetBatchPath(profileId, batchId)}/slots/${encodeURIComponent(slotKey)}/cancel`, { method: 'POST' })
+}
+export function chooseChatAssetSlot(profileId: number, batchId: number, slotKey: string, compositeHash: string) {
+  return requestApiData<ChatAssetBatch>(`${assetBatchPath(profileId, batchId)}/slots/${encodeURIComponent(slotKey)}/choose`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ compositeHash }) })
+}
+export function applyChatAssetBatch(profileId: number, batchId: number, input: ChatAssetApplyInput = {}) {
+  return requestApiData<ChatAssetApplyResult>(`${assetBatchPath(profileId, batchId)}/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
+}
+export function applyChatProfileAssetsProposal(proposalId: number) {
+  return requestApiData<{ proposal: ChatProposal; batch?: ChatAssetBatch; result?: ChatAssetApplyResult }>(`/api/chat-proposals/${proposalId}/apply`, { method: 'POST' })
+}
 export type ChatEngine = 'llm' | 'codex'
 export type ChatDiagnosticsScope = 'none' | 'view' | 'content' | 'prompts'
 

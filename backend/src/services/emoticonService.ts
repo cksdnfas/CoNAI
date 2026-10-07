@@ -1,3 +1,4 @@
+import type Database from 'better-sqlite3'
 import path from 'path';
 import { db } from '../database/init';
 import { resolveUploadsPath } from '../config/runtimePaths';
@@ -120,8 +121,8 @@ const MEMBERSHIP_SELECT = `
 type GroupRow = { id: number; name: string; emoticon_enabled: number }
 
 export const EmoticonService = {
-  findGroup(groupId: number) {
-    return db.prepare('SELECT id, name, emoticon_enabled FROM groups WHERE id = ?').get(groupId) as GroupRow | undefined
+  findGroup(groupId: number, database: Database.Database = db) {
+    return database.prepare('SELECT id, name, emoticon_enabled FROM groups WHERE id = ?').get(groupId) as GroupRow | undefined
   },
 
   /** Every emoticon group, with how many images it holds and how many have a keyword. */
@@ -133,8 +134,8 @@ export const EmoticonService = {
     })
   },
 
-  listEntries(groupId: number): EmoticonEntry[] {
-    const rows = db.prepare(`${MEMBERSHIP_SELECT} WHERE ig.group_id = ? ORDER BY ig.order_index ASC, ig.added_date ASC, ig.id ASC`).all(groupId) as MembershipRow[]
+  listEntries(groupId: number, database: Database.Database = db): EmoticonEntry[] {
+    const rows = database.prepare(`${MEMBERSHIP_SELECT} WHERE ig.group_id = ? ORDER BY ig.order_index ASC, ig.added_date ASC, ig.id ASC`).all(groupId) as MembershipRow[]
     return rows.map(toEntry)
   },
 
@@ -142,11 +143,11 @@ export const EmoticonService = {
    * Set keywords for images in a group (null: back to the file name). A keyword may belong to one image per group;
    * clashes are refused and reported, the rest are saved.
    */
-  setKeywords(groupId: number, items: Array<{ compositeHash: string; keywords: unknown }>) {
-    const group = EmoticonService.findGroup(groupId)
+  setKeywords(groupId: number, items: Array<{ compositeHash: string; keywords: unknown }>, database: Database.Database = db) {
+    const group = EmoticonService.findGroup(groupId, database)
     if (!group) throw new EmoticonError('그룹을 찾을 수 없어.')
 
-    const entries = new Map(EmoticonService.listEntries(groupId).map((entry) => [entry.compositeHash, entry]))
+    const entries = new Map(EmoticonService.listEntries(groupId, database).map((entry) => [entry.compositeHash, entry]))
     const next = new Map<string, string[] | null>()
     const missing: string[] = []
     for (const item of items) {
@@ -173,9 +174,9 @@ export const EmoticonService = {
       }
     }
     const conflicts: Array<{ compositeHash: string; keyword: string; usedBy: string[] }> = []
-    const update = db.prepare('UPDATE image_groups SET emote_keywords = ? WHERE group_id = ? AND composite_hash = ?')
+    const update = database.prepare('UPDATE image_groups SET emote_keywords = ? WHERE group_id = ? AND composite_hash = ?')
     let updated = 0
-    db.transaction(() => {
+    database.transaction(() => {
       for (const [hash, keywords] of next) {
         const clash = (keywords ?? effective.get(hash) ?? []).filter((keyword) => (owners.get(keyword.toLowerCase()) ?? []).length > 1)
         if (clash.length > 0) {
@@ -190,18 +191,18 @@ export const EmoticonService = {
   },
 
   /** Add images to a group as manual members, optionally with keywords (default: their file names). */
-  addImages(groupId: number, items: Array<{ compositeHash: string; keywords?: unknown }>) {
-    const group = EmoticonService.findGroup(groupId)
+  addImages(groupId: number, items: Array<{ compositeHash: string; keywords?: unknown }>, database: Database.Database = db) {
+    const group = EmoticonService.findGroup(groupId, database)
     if (!group) throw new EmoticonError('그룹을 찾을 수 없어.')
-    const insert = db.prepare(`
+    const insert = database.prepare(`
       INSERT INTO image_groups (group_id, composite_hash, collection_type, order_index)
       VALUES (?, ?, 'manual', COALESCE((SELECT MAX(order_index) + 1 FROM image_groups WHERE group_id = ?), 0))
       ON CONFLICT(group_id, composite_hash) DO UPDATE SET collection_type = 'manual'
     `)
-    const exists = db.prepare('SELECT 1 FROM media_metadata WHERE composite_hash = ?')
+    const exists = database.prepare('SELECT 1 FROM media_metadata WHERE composite_hash = ?')
     const added: string[] = []
     const missing: string[] = []
-    db.transaction(() => {
+    database.transaction(() => {
       for (const item of items) {
         if (!exists.get(item.compositeHash)) {
           missing.push(item.compositeHash)
@@ -212,7 +213,7 @@ export const EmoticonService = {
       }
     })()
     const withKeywords = items.filter((item) => added.includes(item.compositeHash) && item.keywords !== undefined).map((item) => ({ compositeHash: item.compositeHash, keywords: item.keywords }))
-    const keywordResult = withKeywords.length > 0 ? EmoticonService.setKeywords(groupId, withKeywords) : { updated: 0, conflicts: [], missing: [] }
+    const keywordResult = withKeywords.length > 0 ? EmoticonService.setKeywords(groupId, withKeywords, database) : { updated: 0, conflicts: [], missing: [] }
     return { added: added.length, missing, conflicts: keywordResult.conflicts }
   },
 

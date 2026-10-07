@@ -587,7 +587,7 @@ export const ChatProfileStore = {
     return ChatProfileStore.find(Number(result.lastInsertRowid)) as ChatProfile
   },
 
-  update(profileId: number, patch: ChatProfileInput) {
+  update(profileId: number, patch: ChatProfileInput, assetDatabase?: ReturnType<typeof getUserSettingsDb>) {
     const current = ChatProfileStore.find(profileId)
     if (!current) {
       return null
@@ -603,7 +603,7 @@ export const ChatProfileStore = {
     `).get(profileId, profileId)) {
       throw new ChatProfileError('대화에서 사용 중인 프로필의 엔진은 바꿀 수 없어. 다른 엔진은 새 프로필로 만들어줘.')
     }
-    fileProfileAssetsUnderGroup(columns.name, [columns.avatar_hash, columns.background_hash, columns.reference_hash])
+    fileProfileAssetsUnderGroup(columns.name, [columns.avatar_hash, columns.background_hash, columns.reference_hash], assetDatabase)
     getUserSettingsDb().prepare(`
       UPDATE llm_chat_profiles SET ${Object.keys(columns).map((name) => `${name} = @${name}`).join(', ')}, updated_date = CURRENT_TIMESTAMP
       WHERE id = @id

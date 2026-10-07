@@ -60,6 +60,7 @@ const PROPOSAL_TOOLS: Record<ChatProposal['kind'], string> = {
   display_block: 'propose_display_block',
   profile: 'propose_chat_profile',
   profile_update: 'propose_profile_update',
+  profile_assets: 'propose_profile_assets',
   lore: 'save_lore',
   page_fields: 'propose_page_changes',
   workflow_graph: 'propose_workflow_changes',

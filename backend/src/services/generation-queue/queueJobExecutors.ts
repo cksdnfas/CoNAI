@@ -35,6 +35,7 @@ import { requireRequesterPermission } from '../../middleware/featureAccess'
 import { isChatMcpSource, type McpRequestContext } from '../../mcp/context'
 import { parseStoredRequestPayload } from './queuePayloads'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { requireChatAssetGeneration } from '../codex-chat/chatAssetAccess'
 import {
   handleComfySubmitFailure,
   markNaiSubmitAmbiguous,
@@ -107,6 +108,14 @@ function isQueueCancelRequested(jobId: number) {
 }
 
 export function requireQueuedChatGenerationAccess(job: GenerationQueueJobRecord) {
+  const assetGrant = parseStoredRequestPayload(job).__conaiAssetGrant as { profileId?: number } | undefined
+  if (assetGrant) {
+    const assetBinding = getUserSettingsDb().prepare(`SELECT b.profile_id FROM chat_asset_slots s
+      JOIN chat_asset_batches b ON b.id = s.batch_id, json_each(s.attempts) a
+      WHERE json_extract(a.value, '$.jobId') = ? LIMIT 1`).get(job.id) as { profile_id: number } | undefined
+    if (!assetBinding || assetGrant?.profileId !== assetBinding.profile_id) throw new Error('자산 작업의 프로필 연결을 찾을 수 없어.')
+    requireChatAssetGeneration({ accountId: job.requested_by_account_id ?? null, accountType: null }, assetBinding.profile_id, job.service_type)
+  }
   const grant = parseStoredRequestPayload(job).__conaiChatGrant as { toolName?: string; context?: McpRequestContext; usesImages?: boolean } | undefined
   if (!grant && getUserSettingsDb().prepare('SELECT 1 FROM chat_generation_links WHERE job_id = ?').get(job.id)) throw new Error('This older chat generation job has no current authorization binding. Resubmit it from chat.')
   if (grant) {

@@ -1,3 +1,4 @@
+import { ensureChatAssetSchema } from './chatAssetSchema';
 import Database from 'better-sqlite3';
 import { applyGenerationQueueDebugColumns } from './migrations/029_add_generation_queue_debug_columns';
 import { applyGenerationQueueInputRefs } from './migrations/032_add_generation_queue_input_refs';
@@ -1344,6 +1345,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
   indexes.forEach(sql => db.exec(sql));
 
   // Insert default language setting
+  ensureChatAssetSchema(db);
   db.prepare(`INSERT OR IGNORE INTO user_preferences (key, value) VALUES (?, ?)`)
     .run('language', 'ko');
 

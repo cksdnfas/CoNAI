@@ -9,6 +9,11 @@ import { ModelSlotStore } from '../../services/codex-chat/modelSlots';
 import { modelLabelOf } from '../../services/codex-chat/chatModelRoles';
 import { normalizeBlock } from '../../services/codex-chat/chatStyle';
 import type { McpRequestContext } from '../context';
+import { proposeProfileAssets } from '../../services/codex-chat/chatAssetProposals';
+import { chatAssetBatchInputSchema } from '../../services/codex-chat/chatAssetBatches';
+import { ChatGenerationPresetStore, resolvePresetWorkflow } from '../../services/codex-chat/chatGenerationPresets';
+import { PromptPresetModel } from '../../models/PromptPreset';
+import { parseMcpMarkedFields } from './mcpComfyWorkflowService';
 
 function textResult(value: unknown, extra: Record<string, unknown> = {}) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }], ...extra };
@@ -330,15 +335,39 @@ function storeProposal(context: McpRequestContext, proposal: NewChatProposal): C
   return ChatProposalStore.add(context.chatContext, proposal);
 }
 
+function profileAssetsGuide(context: McpRequestContext) {
+  const profile = context.chatContext ? ChatProfileStore.find(context.chatContext.profileId) : null;
+  return JSON.stringify({
+    instruction: 'Use propose_profile_assets(action=create) for one reviewed batch. Emotion names are prompt-preset item descriptions. Slots are separate reference/background/full/avatar prompts. A reference slot blocks followers until the user chooses a successful candidate. After choices, propose_profile_assets(action=apply, batch_id=...) requires a second approval. No jobs or profile changes happen from proposing alone.',
+    profile: profile ? { id: profile.id, name: profile.name, appearance: profile.appearance, hasReference: Boolean(profile.referenceHash) } : null,
+    generationPresets: ChatGenerationPresetStore.list().map((preset) => {
+      const workflow = preset.comfyui ? resolvePresetWorkflow(preset.comfyui).workflow : null;
+      return { id: preset.id, name: preset.name, kind: preset.kind, instruction: preset.instruction, ...(preset.comfyui ? { referenceField: preset.comfyui.referenceField, promptFields: workflow ? parseMcpMarkedFields(workflow).filter((field) => preset.comfyui!.exposedFieldIds.includes(field.id) && ['text', 'textarea'].includes(field.type)).map((field) => ({ id: field.id, label: field.label })) : [] } : {}) };
+    }),
+    expressionPresets: PromptPresetModel.findAllWithItems().map((preset) => ({ id: preset.id, name: preset.name, items: preset.items.map(({ description, value }) => ({ description, value })) })),
+  }, null, 2);
+}
+
 /** Chat setup tools (scope `configure`, chat accounts with admin rights only): read the setup, propose changes as cards. */
 export function registerChatSetupTools(server: McpServer, context: McpRequestContext): void {
+  server.tool('propose_profile_assets', 'Propose character asset generation (action=create), or application of already chosen batch candidates (action=apply), as separate approval cards. Read get_chat_setup_guide(topic=profile_assets) first for real preset IDs and ComfyUI prompt fields. Administrators must approve each card; this tool starts no jobs and changes no profile or group. For create, input uses presetId, expressionPresetId (prompt preset descriptions are emotion keywords), optional expressions and slots; ComfyUI needs promptField. For apply, give batch_id. Default target is your speaking profile.', {
+    action: z.enum(['create', 'apply']).optional(), profile_id: z.number().int().positive().optional(),
+    input: chatAssetBatchInputSchema.omit({ idempotencyKey: true }).optional(), batch_id: z.number().int().positive().optional(),
+    avatarCrop: z.object({ x: z.number(), y: z.number(), scale: z.number().positive() }).nullable().optional(),
+  }, async (args) => {
+    try {
+      if (!context.chatContext || !context.requester) throw new Error(NO_CHAT_ERROR);
+      const proposal = proposeProfileAssets(context.requester, context.chatContext, args);
+      return textResult({ proposalId: proposal.id, note: 'Review and approve this card; creation and application need separate approvals.' }, { structuredContent: { proposal } });
+    } catch (error) { return errorResult(error); }
+  });
   server.tool(
     'get_chat_setup_guide',
     'Read the reference for writing a chat display block (status card: JSON shape, limits, template syntax, runtime behavior) or a chat profile (fields, limits, placeholders, available model slots, lorebooks and shared blocks). Read it once before proposing.',
-    { topic: z.enum(['display_block', 'profile']) },
+    { topic: z.enum(['display_block', 'profile', 'profile_assets']) },
     async ({ topic }) => {
       try {
-        return { content: [{ type: 'text' as const, text: topic === 'display_block' ? DISPLAY_BLOCK_GUIDE : profileGuide() }] };
+        return { content: [{ type: 'text' as const, text: topic === 'display_block' ? DISPLAY_BLOCK_GUIDE : topic === 'profile_assets' ? profileAssetsGuide(context) : profileGuide() }] };
       } catch (error) { return errorResult(error); }
     },
   );

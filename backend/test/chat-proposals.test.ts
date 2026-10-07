@@ -430,8 +430,8 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const withScope = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['configure'])
     try {
       assert.ok(!without.tools.some((tool) => tool.function.name.startsWith('propose_')))
-      assert.equal(withScope.tools.filter((tool) => tool.function.name.startsWith('propose_')).length, 3)
-      assert.equal(withScope.tools.length, 8)
+      assert.equal(withScope.tools.filter((tool) => tool.function.name.startsWith('propose_')).length, 4)
+      assert.equal(withScope.tools.length, 9)
     } finally { await without.close(); await withScope.close() }
   })
 

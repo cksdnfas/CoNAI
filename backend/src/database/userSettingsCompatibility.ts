@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import { ensureFileStoreSchema } from './fileStoreSchema';
+import { ensureChatAssetSchema } from './chatAssetSchema';
 import { ensureBuiltinSystemModules as ensureBuiltinSystemModulesInDb } from './userSettingsBuiltinModules';
 
 function hasColumn(db: Database.Database, tableName: string, columnName: string): boolean {
@@ -399,6 +400,7 @@ function ensureGraphWorkflowsAllowDuplicateNames(db: Database.Database): void {
 
 /** Apply all post-migration compatibility fixes for older user database schemas. */
 export function ensureUserSettingsCompatibility(db: Database.Database): void {
+  ensureChatAssetSchema(db);
   ensureFileStoreSchema(db);
   ensureComfyUIServersUseEndpointSchema(db);
   ensureComfyUIServerSingleDefaultIndex(db);
