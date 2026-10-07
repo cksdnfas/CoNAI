@@ -9,6 +9,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { ImageDetailMedia } from '@/features/images/components/detail/image-detail-media'
 import { useImageSourceBack } from '@/features/images/image-source-navigation'
@@ -35,6 +36,7 @@ export function ImageMetadataEditPage() {
   const { t } = useI18n()
   const confirm = useConfirm()
   const [draft, setDraft] = useState<RewriteMetadataDraft | null>(null)
+  const [draftImageHash, setDraftImageHash] = useState<string | null>(null)
   const isDesktopPageLayout = useDesktopPageLayout()
   const handleBack = useImageSourceBack(`/images/${compositeHash ?? ''}`)
 
@@ -45,12 +47,13 @@ export function ImageMetadataEditPage() {
   })
 
   useEffect(() => {
-    if (!imageQuery.data) {
+    if (!imageQuery.data || imageQuery.data.composite_hash !== compositeHash) {
       return
     }
 
     setDraft(createRewriteDraftFromImage(imageQuery.data))
-  }, [imageQuery.data])
+    setDraftImageHash(compositeHash ?? null)
+  }, [compositeHash, imageQuery.data])
 
   const baselineDraft = useMemo(() => (imageQuery.data ? createRewriteDraftFromImage(imageQuery.data) : null), [imageQuery.data])
   const hasUnsavedChanges = Boolean(draft && baselineDraft && hasSavableDraftChanges(draft, baselineDraft))
@@ -118,15 +121,28 @@ export function ImageMetadataEditPage() {
     },
   })
 
-  if (!compositeHash) {
-    return null
-  }
-
   const image = imageQuery.data
   const renderUrl = getImageDetailRenderUrl(image)
   const downloadName = getDownloadName(image?.original_file_path, image?.composite_hash)
   const isEditableImage = image?.file_type === 'image'
   const busy = downloadMutation.isPending || saveMutation.isPending
+
+  useChatPageRegistration(compositeHash && draftImageHash === compositeHash && image?.composite_hash === compositeHash && isEditableImage && draft && !busy && !imageQuery.isError ? {
+    kind: 'metadata', title: t({ ko: '이미지 메타데이터 초안', en: 'Image metadata draft' }), resourceId: compositeHash,
+    fields: [
+      { id: 'prompt', label: t({ ko: '프롬프트', en: 'Prompt' }), type: 'text', value: draft.prompt },
+      { id: 'negativePrompt', label: t({ ko: '네거티브 프롬프트', en: 'Negative prompt' }), type: 'text', value: draft.negativePrompt },
+      { id: 'steps', label: 'Steps', type: 'number', value: draft.steps, min: 1, integer: true, allowEmpty: true },
+      { id: 'sampler', label: t({ ko: '샘플러', en: 'Sampler' }), type: 'text', value: draft.sampler },
+      { id: 'model', label: t({ ko: '모델', en: 'Model' }), type: 'text', value: draft.model },
+      { id: 'format', label: t({ ko: '다운로드 형식', en: 'Download format' }), type: 'select', value: draft.format, options: ['png', 'jpeg', 'webp'] },
+    ],
+    apply: (patch) => setDraft((current) => current ? { ...current, ...patch as Partial<RewriteMetadataDraft> } : current),
+  } : null)
+
+  if (!compositeHash) {
+    return null
+  }
 
   const handleCopyHash = async () => {
     if (!image?.composite_hash) {

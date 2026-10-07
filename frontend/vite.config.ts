@@ -54,9 +54,12 @@ export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, envDir, '')
   const frontendPort = resolveFrontendPort(env.FRONTEND_URL)
   const reactCompilerEnabled = env.CONAI_REACT_COMPILER === 'true'
+  const backendTarget = env.VITE_API_BASE_URL || 'http://localhost:1666'
 
   return {
     envDir,
+    // Separate caches keep an isolated local test server from reusing another server's shared bundle.
+    cacheDir: env.CONAI_VITE_CACHE_DIR || undefined,
     plugins: [
       react(),
       ...(reactCompilerEnabled
@@ -92,19 +95,19 @@ export default defineConfig(({ command, mode }) => {
       strictPort: true,
       proxy: {
         '/api': {
-          target: 'http://localhost:1666',
+          target: backendTarget,
           changeOrigin: true,
         },
         '/uploads': {
-          target: 'http://localhost:1666',
+          target: backendTarget,
           changeOrigin: true,
         },
         '/temp': {
-          target: 'http://localhost:1666',
+          target: backendTarget,
           changeOrigin: true,
         },
         '/save': {
-          target: 'http://localhost:1666',
+          target: backendTarget,
           changeOrigin: true,
         },
       },

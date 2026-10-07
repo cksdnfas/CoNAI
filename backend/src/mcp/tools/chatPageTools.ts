@@ -20,10 +20,11 @@ export function registerChatPageTools(server: McpServer, context: McpRequestCont
     try { requireChatPageAccess(context.requester!, page); return result(page) }
     catch (error) { return failure(error) }
   })
-  if (page.fields.length === 0) return
-  server.tool('propose_page_changes', 'Propose changes to registered fields on the connected CoNAI page. Only propose what the user requested. Nothing is applied until the user presses 적용 (Apply) on the review card. Never claim the fields were changed or a generation was started. Unknown fields, invalid numbers and invalid choices are rejected.', {
+  const editable = page.fields.filter((field) => field.editable !== false)
+  if (editable.length === 0) return
+  server.tool('propose_page_changes', 'Propose changes to editable registered fields on the connected CoNAI page. Fields with editable=false are read-only context. Only propose what the user requested. Nothing is applied until the user presses 적용 (Apply) on the review card. Never claim the fields were changed or a generation was started. Unknown fields, invalid numbers and invalid choices are rejected.', {
     changes: z.array(z.object({
-      fieldId: z.enum(page.fields.map((field) => field.id) as [string, ...string[]]).describe('The exact field ID from get_current_page.'),
+      fieldId: z.enum(editable.map((field) => field.id) as [string, ...string[]]).describe('The exact editable field ID from get_current_page.'),
       value: z.union([z.string().max(CHAT_PAGE_LIMITS.text), z.number().finite(), z.boolean()]),
     })).min(1).max(CHAT_PAGE_LIMITS.changes),
   }, async ({ changes }) => {
@@ -32,7 +33,7 @@ export function registerChatPageTools(server: McpServer, context: McpRequestCont
       const validated = buildChatPageChanges(page, changes)
       const { fields: _fields, ...target } = page
       const proposal = ChatProposalStore.add(context.chatContext!, { kind: 'page_fields', page: target, changes: validated, expiresAt: Date.now() + CHAT_PAGE_LIMITS.lifetimeMs })
-      return { ...result({ proposalId: proposal.id, fields: validated.map((change) => change.label), status: 'awaiting_user_apply' }), structuredContent: { proposal } }
+      return { ...result({ proposalId: proposal.id, fields: validated.map((change) => change.label), changes: validated, status: 'awaiting_user_apply' }), structuredContent: { proposal } }
     } catch (error) { return failure(error) }
   })
 }

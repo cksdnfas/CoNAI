@@ -77,6 +77,41 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     assert.throws(() => normalizeChatPageSnapshot({ ...page, path: 'https://example.com' }), /페이지/)
   })
 
+  await t.test('page extensions: registered routes, image identity, and read-only context', () => {
+    const library = normalizeChatPageSnapshot({ ...page, path: '/', kind: 'library', resourceId: 'library:wide' })
+    assert.equal(library.kind, 'library')
+    assert.throws(() => normalizeChatPageSnapshot({ ...library, path: '/settings' }), /대상 페이지/)
+    assert.throws(() => normalizeChatPageSnapshot({ ...page, path: '/prompts' }), /대상 페이지/)
+    const prompts = normalizeChatPageSnapshot({ ...page, path: '/prompts', kind: 'prompt_search', resourceId: 'positive:all', fields: [
+      { id: 'searchInput', label: 'Search draft', type: 'text', value: '' },
+      { id: 'appliedSearch', label: 'Applied search', type: 'text', value: 'cat', editable: false },
+    ] })
+    assert.throws(() => buildChatPageChanges(prompts, [{ fieldId: 'appliedSearch', value: 'dog' }]), /읽기 전용/)
+    const { fields: _fields, ...target } = prompts
+    const forged = { kind: 'page_fields' as const, page: target, changes: [{ fieldId: 'appliedSearch', label: 'Applied search', before: 'cat', value: 'dog' }], expiresAt: Date.now() + 60_000 }
+    assert.throws(() => chatPagePatch(prompts, forged), /읽기 전용/)
+    const proposal = { ...forged, changes: buildChatPageChanges(prompts, [{ fieldId: 'searchInput', value: 'dog' }]) }
+    assert.deepEqual(chatPagePatch(prompts, proposal), { searchInput: 'dog' })
+    assert.throws(() => chatPagePatch({ ...prompts, resourceId: 'positive:3' }, proposal), /페이지/)
+    const metadata = normalizeChatPageSnapshot({ ...page, path: '/images/image-a/metadata', kind: 'metadata', resourceId: 'image-a' })
+    assert.equal(metadata.kind, 'metadata')
+    assert.throws(() => normalizeChatPageSnapshot({ ...metadata, resourceId: 'image-b' }), /대상 페이지/)
+    assert.throws(() => normalizeChatPageSnapshot({ ...metadata, path: '/images/image-a' }), /대상 페이지/)
+  })
+
+  await t.test('read-only page context never offers a modification tool', async () => {
+    const context: ChatExecutionContext = { threadId: pageThreadId, profileId: pageProfile.id, kind: 'direct', replyId: 'page-read-only', page: { ...page, fields: page.fields.map((field) => ({ ...field, editable: false })) } }
+    const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read'], ['get_current_page', 'propose_page_changes'], { chatContext: context })
+    try {
+      assert.deepEqual(bridge.tools.map((tool) => tool.function.name), ['get_current_page'])
+      const read = await bridge.call('get_current_page', {})
+      assert.ok(!read.isError)
+      assert.match(JSON.stringify(read.content), /editable/)
+      assert.ok((await bridge.call('propose_page_changes', { changes: [{ fieldId: 'steps', value: 30 }] })).isError)
+    } finally { unregister(); await bridge.close() }
+  })
+
   await t.test('page tools: explicit binding, proposed fields only, and reply expiry', async () => {
     const context: ChatExecutionContext = { threadId: pageThreadId, profileId: pageProfile.id, kind: 'direct', replyId: 'page-tools', page }
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
@@ -91,6 +126,8 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       const created = await bridge.call('propose_page_changes', { changes: [{ fieldId: 'steps', value: 30 }] })
       assert.ok(!created.isError)
       assert.match(JSON.stringify(created.structuredContent), /page_fields/)
+      const resultText = (created.content?.[0] as { text: string }).text
+      assert.deepEqual(JSON.parse(resultText).changes, [{ fieldId: 'steps', label: 'Steps', before: '20', value: '30' }], 'the model receives the validated diff instead of guessing current values from old replies')
       assert.ok((await bridge.call('propose_page_changes', { changes: [{ fieldId: 'steps', value: 51 }] })).isError)
       unregister()
       assert.ok((await bridge.call('get_current_page', {})).isError)

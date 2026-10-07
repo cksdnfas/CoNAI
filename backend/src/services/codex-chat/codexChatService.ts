@@ -161,7 +161,7 @@ const startingThreads = new Set<number>()
 function sessionKey(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, roomTools: boolean, generationPresetIds: number[], chatContext?: ChatExecutionContext) {
   const tools = toolAllowlist ? [...toolAllowlist].sort().join(',') : '*'
   const presets = ChatGenerationPresetStore.signature(generationPresetIds)
-  const pageTools = chatContext?.page ? `|page:${createHash('sha1').update(JSON.stringify({ kind: chatContext.page.kind, fields: chatContext.page.fields.map((field) => field.id) })).digest('hex').slice(0, 12)}` : ''
+  const pageTools = chatContext?.page ? `|page:${createHash('sha1').update(JSON.stringify({ kind: chatContext.page.kind, fields: chatContext.page.fields.filter((field) => field.editable !== false).map((field) => field.id) })).digest('hex').slice(0, 12)}` : ''
   return `${requester.accountId === null ? 'bootstrap' : `account:${requester.accountId}`}|${[...scopes].sort().join(',')}|${tools}${roomTools ? '|room' : ''}${presets ? `|gen:${presets}` : ''}${chatContext ? `|chat:${chatContext.threadId}:${chatContext.profileId}` : ''}${pageTools}`
 }
 

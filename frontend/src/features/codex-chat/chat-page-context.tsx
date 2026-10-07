@@ -10,7 +10,7 @@ import { useI18n } from '@/i18n'
 import { acknowledgeChatPageProposal, checkChatPageProposal } from '@/lib/api-codex-chat'
 
 type PageProposal = Extract<ChatProposal, { kind: 'page_fields' }>
-type Editor = { instanceId: string; path: string; title: string; kind: 'nai' | 'comfyui'; resourceId: string | null; fields: ChatPageField[]; apply: (patch: Record<string, ChatPageValue>) => void }
+type Editor = { instanceId: string; path: string; title: string; kind: Exclude<ChatPageSnapshot['kind'], 'page'>; resourceId: string | null; fields: ChatPageField[]; apply: (patch: Record<string, ChatPageValue>) => void }
 type PageApi = {
   snapshot: ChatPageSnapshot | null
   available: boolean
@@ -88,7 +88,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
 export function useChatPage() { return useContext(PageContext) }
 
 /** Primitive descriptors stay stable across unrelated chat renders; setters always read their latest closure. */
-export function useChatPageRegistration(input: Omit<Editor, 'instanceId' | 'path'> | null) {
+export function useChatPageRegistration(input: Omit<Editor, 'instanceId' | 'path'> | null, options?: { preserveOnSearchChange?: boolean }) {
   const page = useChatPage()
   const register = page?.register
   const location = useLocation()
@@ -97,7 +97,9 @@ export function useChatPageRegistration(input: Omit<Editor, 'instanceId' | 'path
   const description = input ? JSON.stringify({ title: input.title, kind: input.kind, resourceId: input.resourceId, fields: input.fields }) : null
   const kind = input?.kind
   const resourceId = input?.resourceId
-  const instanceId = useMemo(() => ({ key: `${location.key}:${location.pathname}:${kind}:${resourceId}`, id: crypto.randomUUID() }), [location.key, location.pathname, kind, resourceId]).id
+  // View controls that write URL search params retain undo within the same mounted view.
+  const navigationKey = options?.preserveOnSearchChange ? location.pathname : location.key
+  const instanceId = useMemo(() => ({ key: `${navigationKey}:${location.pathname}:${kind}:${resourceId}`, id: crypto.randomUUID() }), [navigationKey, location.pathname, kind, resourceId]).id
   useLayoutEffect(() => {
     if (!register || !description) return
     const data = JSON.parse(description) as Omit<Editor, 'instanceId' | 'path' | 'apply'>
@@ -118,5 +120,6 @@ export function ChatPageConnectionNotice({ allowed }: { allowed: boolean }) {
   const page = useChatPage()
   const { t } = useI18n()
   if (!page?.snapshot || !allowed) return null
-  return <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground"><Monitor className="size-3.5 shrink-0" /><span>{t({ ko: '연결된 페이지: {name}', en: 'Connected page: {name}' }, { name: page.snapshot.title })}{page.snapshot.fields.length ? t({ ko: ' · 입력 {count}개', en: ' · {count} inputs' }, { count: page.snapshot.fields.length }) : ''}</span></p>
+  const inputCount = page.snapshot.fields.filter((field) => field.editable !== false).length
+  return <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground"><Monitor className="size-3.5 shrink-0" /><span>{t({ ko: '연결된 페이지: {name}', en: 'Connected page: {name}' }, { name: page.snapshot.title })}{inputCount ? t({ ko: ' · 입력 {count}개', en: ' · {count} inputs' }, { count: inputCount }) : ''}</span></p>
 }

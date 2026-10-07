@@ -24,6 +24,7 @@ import { canDeletePromptItem, isDanbooruPromptGroup, isLockedPromptGroup, isLock
 import { usePromptPageMutations } from './use-prompt-page-mutations'
 import { usePromptPageQueries } from './use-prompt-page-queries'
 import { useI18n } from '@/i18n'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 
 type AssignModalState =
@@ -225,6 +226,24 @@ function PromptPageContent() {
     setSearchQuery(searchInput)
     setPage(1)
   }
+
+  useChatPageRegistration(isPromptTypeView(view) ? {
+    kind: 'prompt_search', title: t({ ko: '프롬프트 목록 · {type}', en: 'Prompt list · {type}' }, { type: promptType }),
+    resourceId: `${promptType}:${selectedGroupId === undefined ? 'all' : selectedGroupId === null ? 'ungrouped' : selectedGroupId}`,
+    fields: [
+      { id: 'searchInput', label: t({ ko: '검색어 입력 (Enter로 검색 실행)', en: 'Search draft (press Enter to search)' }), type: 'text', value: searchInput },
+      { id: 'sortBy', label: t({ ko: '정렬 기준 (usage_count: 사용량, created_at: 생성일, prompt: 이름)', en: 'Sort field (usage_count, created_at, prompt)' }), type: 'select', value: sortBy, options: ['usage_count', 'created_at', 'prompt'] },
+      { id: 'sortOrder', label: t({ ko: '정렬 방향 (ASC: 오름차순, DESC: 내림차순)', en: 'Sort direction (ASC or DESC)' }), type: 'select', value: sortOrder, options: ['ASC', 'DESC'] },
+      { id: 'appliedSearch', label: t({ ko: '현재 검색 결과의 검색어', en: 'Currently applied search' }), type: 'text', value: searchQuery, editable: false },
+      { id: 'selectedGroup', label: t({ ko: '선택한 프롬프트 그룹', en: 'Selected prompt group' }), type: 'text', value: selectedGroup?.group_name ?? (selectedGroupId === null ? t({ ko: '미분류', en: 'Ungrouped' }) : t({ ko: '전체', en: 'All' })), editable: false },
+    ],
+    apply: (patch) => {
+      if (patch.searchInput !== undefined) setSearchInput(String(patch.searchInput))
+      if (patch.sortBy !== undefined) setSortBy(patch.sortBy as PromptSortBy)
+      if (patch.sortOrder !== undefined) setSortOrder(patch.sortOrder as PromptSortOrder)
+      if (patch.sortBy !== undefined || patch.sortOrder !== undefined) setPage(1)
+    },
+  } : null)
 
   const handleClearSearch = () => {
     setSearchInput('')

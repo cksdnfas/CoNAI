@@ -22,6 +22,7 @@ import { useImageListColumnPreference } from '@/features/images/components/image
 import { SelectionBarAction } from '@/components/common/selection-action-bar'
 import { SearchChipStrip } from '@/features/search/components/search-chip-strip'
 import { useI18n } from '@/i18n'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { COUNT_UNITS } from '@/lib/count-display'
 import { cn } from '@/lib/utils'
 import type { ImageViewModalAccessOptions } from '@/features/images/components/detail/image-view-modal-context'
@@ -56,6 +57,7 @@ export function HomePage() {
     defaultColumnCount: defaultHomeColumnCount,
     minColumnCount: minHomeColumnCount,
     maxColumnCount: maxHomeColumnCount,
+    viewportClass,
   } = useImageListColumnPreference('home')
   const {
     authStatusQuery,
@@ -106,6 +108,18 @@ export function HomePage() {
     enabled: !authStatusQuery.isLoading && !isAuthStatusUnavailable && !canViewHome,
     permissionKey: 'page.home.view',
   })
+
+  useChatPageRegistration(canViewHome && !isAnonymousSession ? {
+    kind: 'library', title: t({ ko: '이미지 라이브러리', en: 'Image library' }), resourceId: `library:${viewportClass}`,
+    fields: [
+      { id: 'sortOrder', label: t({ ko: '정렬 (newest: 최신순, oldest: 오래된순)', en: 'Sort (newest or oldest)' }), type: 'select', value: sortOrder, options: ['newest', 'oldest'] },
+      { id: 'columns', label: t({ ko: '한 줄의 이미지 수', en: 'Images per row' }), type: 'number', value: homeColumnCount, min: minHomeColumnCount, max: maxHomeColumnCount, integer: true },
+    ],
+    apply: (patch) => {
+      if (patch.sortOrder !== undefined) setSortOrder(patch.sortOrder === 'oldest' ? 'oldest' : 'newest')
+      if (patch.columns !== undefined) setHomeColumnCount(Number(patch.columns))
+    },
+  } : null, { preserveOnSearchChange: true })
 
   if (authStatusQuery.isLoading) {
     return <div className="min-h-[40vh] rounded-sm bg-fill animate-pulse" />

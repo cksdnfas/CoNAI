@@ -6,6 +6,8 @@ export type ChatPageField = {
   label: string
   type: 'text' | 'number' | 'select' | 'boolean'
   value: ChatPageValue
+  /** False for visible context that may be read but never changed by a proposal. */
+  editable?: false
   min?: number
   max?: number
   integer?: boolean
@@ -19,7 +21,7 @@ export type ChatPageSnapshot = {
   connectionId: string
   path: string
   title: string
-  kind: 'page' | 'nai' | 'comfyui'
+  kind: 'page' | 'nai' | 'comfyui' | 'library' | 'prompt_search' | 'metadata'
   resourceId: string | null
   fields: ChatPageField[]
 }

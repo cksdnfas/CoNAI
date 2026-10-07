@@ -35,8 +35,9 @@ export function normalizeChatPageSnapshot(value: unknown): ChatPageSnapshot {
   const path = text(raw.path, 240)
   if (!chatPagePermission(path)) throw new Error('이 페이지는 채팅에 연결할 수 없어.')
   const kind = raw.kind
-  if (kind !== 'page' && kind !== 'nai' && kind !== 'comfyui') throw new Error('페이지 종류가 올바르지 않아.')
-  if (kind !== 'page' && path !== '/generation') throw new Error('생성 입력은 생성 페이지에서만 연결할 수 있어.')
+  if (kind !== 'page' && kind !== 'nai' && kind !== 'comfyui' && kind !== 'library' && kind !== 'prompt_search' && kind !== 'metadata') throw new Error('페이지 종류가 올바르지 않아.')
+  const metadataHash = /^\/images\/([\w.-]+)\/metadata$/.exec(path)?.[1]
+  if (((kind === 'nai' || kind === 'comfyui') && path !== '/generation') || (kind === 'library' && path !== '/') || (kind === 'prompt_search' && path !== '/prompts') || (kind === 'metadata' && (!metadataHash || raw.resourceId !== metadataHash))) throw new Error('입력 종류와 대상 페이지가 맞지 않아.')
   if (!Array.isArray(raw.fields) || raw.fields.length > CHAT_PAGE_LIMITS.fields || (kind === 'page' && raw.fields.length > 0)) throw new Error('페이지 필드 목록이 올바르지 않아.')
   const ids = new Set<string>()
   const fields: ChatPageField[] = raw.fields.map((item) => {
@@ -51,6 +52,7 @@ export function normalizeChatPageSnapshot(value: unknown): ChatPageSnapshot {
     if (type === 'boolean' ? typeof current !== 'boolean' : !segments && typeof current !== 'string' && !(type === 'number' && typeof current === 'number' && Number.isFinite(current))) throw new Error('필드 값이 올바르지 않아.')
     if (typeof current === 'string' && current.length > CHAT_PAGE_LIMITS.text) throw new Error('필드 내용이 너무 길어.')
     const result: ChatPageField = { id, label: text(field.label, 160), type, value: (segments ? [...current as string[]] : current) as ChatPageValue }
+    if (field.editable === false) result.editable = false
     for (const bound of ['min', 'max'] as const) {
       if (field[bound] !== undefined) {
         if (typeof field[bound] !== 'number' || !Number.isFinite(field[bound])) throw new Error('숫자 범위가 올바르지 않아.')
@@ -108,6 +110,7 @@ export function buildChatPageChanges(page: ChatPageSnapshot, input: unknown): Ch
     const change = record(item)
     const field = page.fields.find((entry) => entry.id === change.fieldId)
     if (!field || seen.has(field.id)) throw new Error('등록되지 않았거나 중복된 입력 필드야.')
+    if (field.editable === false) throw new Error(`${field.label}: 읽기 전용 항목은 변경할 수 없어.`)
     seen.add(field.id)
     return { fieldId: field.id, label: field.label, before: field.value, value: normalizeChatPageValue(field, change.value) }
   }).filter((change) => change.before !== change.value)
@@ -122,6 +125,7 @@ export function chatPagePatch(page: ChatPageSnapshot, proposal: ChatPageProposal
   const entries = proposal.changes.map((change) => {
     const field = page.fields.find((entry) => entry.id === change.fieldId)
     if (!field || JSON.stringify(field.value) !== JSON.stringify(undo ? change.value : change.before)) throw new Error(`${change.label}: 입력값이 바뀌었어. 덮어쓰지 않았어.`)
+    if (field.editable === false) throw new Error(`${change.label}: 읽기 전용 항목은 변경할 수 없어.`)
     return [field.id, undo ? change.before : normalizeChatPageValue(field, change.value)] as const
   })
   return Object.fromEntries(entries)
