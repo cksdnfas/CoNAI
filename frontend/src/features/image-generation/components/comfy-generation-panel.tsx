@@ -48,6 +48,7 @@ import { ComfyWorkflowControllerPanel } from './comfy-workflow-controller-panel'
 import { GenerationToolbarStatus, usePortalTargetById } from './generation-toolbar-status'
 import { findAutoCollectedPowerLoraOptions } from './power-lora-loader-utils'
 import { useComfyDropdownListActions } from './use-comfy-dropdown-list-actions'
+import { useComfyChatPage } from './use-generation-chat-page'
 import { useComfyGenerationActions } from './use-comfy-generation-actions'
 import { useComfyModuleSave } from './use-comfy-module-save'
 import { useComfyServerController } from './use-comfy-server-controller'
@@ -364,6 +365,8 @@ export function ComfyGenerationPanel({
     }))
     clearWorkflowFieldIssue(fieldId)
   }, [clearWorkflowFieldIssue])
+
+  useComfyChatPage(selectedWorkflow, selectedWorkflowFields, workflowDraft, workflowDraftOwnerId, handleWorkflowFieldChange)
 
   useEffect(() => {
     if (!selectedWorkflowId) {

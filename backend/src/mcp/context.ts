@@ -52,6 +52,8 @@ export function isChatMcpSource(source: McpRequestContext['source']) {
  * The job is linked to the reply at submission and the app attaches the result when it lands.
  */
 export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job']);
+/** A connected page grants a bounded input task, never access to unrelated private data or side effects. */
+export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'propose_page_changes']);
 
 /** Chat agents must not spend paid NovelAI multi-sample generations on their own; one image per request is free. */
 export function assertChatNaiSampleCount(context: McpRequestContext, nSamples: unknown) {
@@ -63,6 +65,8 @@ export function assertChatNaiSampleCount(context: McpRequestContext, nSamples: u
 export const ALL_MCP_HTTP_SCOPES: McpHttpScope[] = ['read', 'generate', 'organize', 'backup', 'restore'];
 
 const TOOL_SCOPES: Record<string, McpHttpScope> = {
+  get_current_page: 'read',
+  propose_page_changes: 'read',
   list_files: 'read',
   get_file_info: 'read',
   read_file_text: 'read',

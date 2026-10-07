@@ -10,6 +10,7 @@ import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { CodexChatProvider } from '@/features/codex-chat/codex-chat-provider'
+import { ChatPageProvider } from '@/features/codex-chat/chat-page-context'
 import { CODEX_CHAT_ROUTE, useCodexChat } from '@/features/codex-chat/codex-chat-context'
 import { CodexChatDock, CodexChatHeaderButton, useCodexChatDockVisible } from '@/features/codex-chat/codex-chat-shell'
 import { ImageViewModalProvider } from '@/features/images/components/detail/image-view-modal-provider'
@@ -80,9 +81,11 @@ export function AppShell() {
   return (
     <HomeSearchProvider>
       <ImageViewModalProvider>
-        <CodexChatProvider>
-          <AppShellLayout />
-        </CodexChatProvider>
+        <ChatPageProvider>
+          <CodexChatProvider>
+            <AppShellLayout />
+          </CodexChatProvider>
+        </ChatPageProvider>
       </ImageViewModalProvider>
     </HomeSearchProvider>
   )

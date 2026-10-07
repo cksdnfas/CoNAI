@@ -10,13 +10,14 @@ type Copy = { ko: string; en: string }
  * description, so nothing is hidden by an outdated catalog.
  */
 export type ChatToolGroupId =
-  | 'images' | 'history' | 'prompts' | 'workflows' | 'files' | 'emoticons' | 'backups'
+  | 'images' | 'history' | 'prompts' | 'workflows' | 'files' | 'emoticons' | 'backups' | 'pages'
   | 'image-gen' | 'workflow-run'
   | 'configure'
   | 'image-groups' | 'prompt-groups' | 'file-ops' | 'emoticon-ops'
   | 'other'
 
 const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
+  { id: 'pages', scope: 'read', label: { ko: '현재 화면', en: 'Current page' } },
   { id: 'images', scope: 'read', label: { ko: '이미지 보기', en: 'Images' } },
   { id: 'history', scope: 'read', label: { ko: '생성 기록·작업', en: 'History and jobs' } },
   { id: 'prompts', scope: 'read', label: { ko: '프롬프트', en: 'Prompts' } },
@@ -34,6 +35,8 @@ const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
 ]
 
 const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }> = {
+  get_current_page: { group: 'pages', label: { ko: '현재 페이지 읽기', en: 'Read current page' }, ko: '네가 연결한 CoNAI 페이지와 등록된 입력값을 읽어.' },
+  propose_page_changes: { group: 'pages', label: { ko: '필드 입력 제안', en: 'Propose input changes' }, ko: '연결된 페이지의 필드 변경안을 보여줘. 네가 적용을 눌러야 입력값이 바뀌어.' },
   search_images: { group: 'images', label: { ko: '이미지 검색', en: 'Search images' }, ko: '프롬프트 글, 도구, 모델, 크기, 날짜, 그룹으로 이미지·영상을 찾아.' },
   search_images_by_tags: { group: 'images', label: { ko: '태그로 이미지 검색', en: 'Search by tags' }, ko: '자동 태그(WD Tagger)로 이미지를 찾아. 캐릭터·등급 필터도 돼.' },
   get_image_metadata: { group: 'images', label: { ko: '이미지 정보', en: 'Image metadata' }, ko: '이미지 하나의 프롬프트·모델·크기 같은 상세 정보를 읽어.' },

@@ -49,7 +49,7 @@ function toProposal(row: ProposalRow): ChatProposal {
   let body: Record<string, unknown> = {}
   try { body = JSON.parse(row.proposal) as Record<string, unknown> } catch { body = {} }
   const merged: Record<string, unknown> = { ...body, id: row.id }
-  if (row.kind === 'profile_update') {
+  if (row.kind === 'profile_update' || row.kind === 'page_fields') {
     if (row.saved === 1) merged.saved = true
   } else if (row.saved === 1) {
     merged.savedId = row.saved_id

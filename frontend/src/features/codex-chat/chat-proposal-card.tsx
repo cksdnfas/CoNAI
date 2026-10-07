@@ -38,6 +38,7 @@ import {
 import { getErrorMessage } from '@/lib/error-message'
 import { ChatDisplayBlockView, parseBlockPayload } from './chat-display-block'
 import { codexChatThreadQueryKey } from './codex-chat-context'
+import { ChatPageProposalCard } from './chat-page-proposal-card'
 
 type Proposal = NonNullable<CodexChatToolCall['proposal']>
 type BlockProposal = Extract<Proposal, { kind: 'display_block' }>
@@ -68,6 +69,7 @@ export function ChatProposalCards({ calls, threadId }: { calls: CodexChatToolCal
 }
 
 function ProposalCard({ proposal, threadId }: { proposal: Proposal; threadId?: number }) {
+  if (proposal.kind === 'page_fields') return <ChatPageProposalCard proposal={proposal} />
   if (proposal.kind === 'display_block') return <BlockProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'profile') return <ProfileProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'lore') return <LoreProposalCard proposal={proposal} threadId={threadId} />

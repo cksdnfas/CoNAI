@@ -1,6 +1,6 @@
 import { requestApiData, requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
-import type { ChatStreamEvent, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting } from '@conai/shared'
+import type { ChatStreamEvent, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal } from '@conai/shared'
 
 export type ChatScope = 'read' | 'generate' | 'organize' | 'configure'
 export type ChatEngine = 'llm' | 'codex'
@@ -117,6 +117,7 @@ export function chatEmoticonUrl(profileId: number, compositeHash: string) {
 
 /** What a chat user sees of a profile; `usable` says whether this session can start a chat with it. */
 export interface ChatProfileSummary {
+  canUsePageContext: boolean
   tagline: string
   model: string
   /** The line the chat UI shows for the model: `slot · model`, `connection · model` or `Codex · model`. */
@@ -1282,8 +1283,16 @@ export function interruptCodexChatThread(threadId: number) {
  * Send a message and read the NDJSON turn stream. No timeout: a turn with generation jobs can run for minutes.
  * Aborting only stops reading; the server finishes and stores the reply.
  */
-export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = [], picks: string[] = [], mediaHashes: string[] = [], replyToMessageId?: number) {
-  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds, picks, mediaHashes, replyToMessageId }, onEvent, signal)
+export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = [], picks: string[] = [], mediaHashes: string[] = [], replyToMessageId?: number, pageContext?: ChatPageSnapshot) {
+  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext }, onEvent, signal)
+}
+
+export function checkChatPageProposal(proposal: Extract<ChatProposal, { kind: 'page_fields' }>, undo = false) {
+  return requestApiData<typeof proposal>(`/api/chat-proposals/${proposal.id}/page-check`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ instanceId: proposal.page.instanceId, connectionId: proposal.page.connectionId, undo }) })
+}
+
+export function acknowledgeChatPageProposal(proposal: Extract<ChatProposal, { kind: 'page_fields' }>) {
+  return requestApiData<typeof proposal>(`/api/chat-proposals/${proposal.id}/page-applied`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ instanceId: proposal.page.instanceId, connectionId: proposal.page.connectionId }) })
 }
 
 /** Carry on a cut last reply (API LLM direct chats); the stream reads like a regeneration. */

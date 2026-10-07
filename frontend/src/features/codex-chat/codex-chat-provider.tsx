@@ -5,11 +5,13 @@ import { useI18n } from '@/i18n'
 import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread, type CodexChatThread, getCodexChatStatus, getCodexChatThread, previewChatGreeting, interruptCodexChatThread, pickSnapshot, readThreadFlagIds, streamCodexChatMessage, streamChatContinue, streamChatRewrite, type ChatFlag, type ChatMediaAttachment, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { CHAT_STATUS_QUERY_KEY } from '@/lib/api-codex-chat'
+import { CHAT_PROFILES_QUERY_KEY, type ChatProfileSummary } from '@/lib/api-codex-chat'
 import { summarizeChatError } from './chat-error-chip'
 import type { StoredFileEntry } from '@conai/shared'
 import { getCodexChatThreadMedia } from '@/lib/api-codex-chat'
 import { FILES_QUERY_KEY, uploadStoredFiles } from '@/lib/api-files'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { useChatPage } from './chat-page-context'
 import {
   CODEX_CHAT_THREADS_QUERY_KEY,
   CodexChatContext,
@@ -56,6 +58,9 @@ function writeStoredDrafts(key: string, drafts: Record<number, string>) {
  * user moves between pages or switches panel ↔ page.
  */
 export function CodexChatProvider({ children }: PropsWithChildren) {
+  const pageBridge = useChatPage()
+  const capturePage = pageBridge?.capture
+  const disconnectPage = pageBridge?.disconnect
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
@@ -256,11 +261,12 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   }, [setDraft])
 
   const selectThread = useCallback((threadId: number | null | undefined) => {
+    if (selectedRef.current !== threadId) disconnectPage?.()
     dropPending()
     switchComposer(threadId)
     setListOpen(false)
     setView('chat')
-  }, [dropPending, switchComposer])
+  }, [disconnectPage, dropPending, switchComposer])
 
   const showList = useCallback((open: boolean) => {
     if (open) dropPending()
@@ -269,6 +275,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   }, [dropPending])
 
   const prepareChat = useCallback((profileId: number, userProfileId?: number | null) => {
+    disconnectPage?.()
     switchComposer(null)
     setDraft(PENDING_DRAFT_KEY, '')
     const pending: CodexChatPendingChat = { profileId, userProfileId, greeting: null }
@@ -286,7 +293,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       setPendingChat(null)
       showSnackbar({ message: getErrorMessage(error, t({ ko: '채팅을 시작하지 못했어.', en: 'Could not start a chat.' })), tone: 'error' })
     })
-  }, [setDraft, showSnackbar, switchComposer, t])
+  }, [disconnectPage, setDraft, showSnackbar, switchComposer, t])
 
   const reply = useCallback(async (threadId: number, rewrite?: { messageId: number; content?: string; continue?: boolean }, literalText?: string) => {
     const replyingTo = !rewrite && draftReplyRef.current?.threadId === threadId ? draftReplyRef.current : null
@@ -301,6 +308,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     }
     const cachedThread = queryClient.getQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(threadId))?.thread
     const isGroup = cachedThread?.kind === 'group'
+    const pageAllowed = !isGroup && queryClient.getQueryData<ChatProfileSummary[]>(CHAT_PROFILES_QUERY_KEY)?.find((profile) => profile.id === cachedThread?.profile_id)?.canUsePageContext === true
     // The chat's switched-on flags go with a new message (a rewrite replays the ones stored on the message).
     const flags = rewrite ? [] : (queryClient.getQueryData<ChatFlag[]>(CHAT_FLAGS_QUERY_KEY) ?? []).filter((flag) => readThreadFlagIds(cachedThread).includes(flag.id))
     const shownFlags = [...flags, ...picked.map(pickSnapshot)]
@@ -435,7 +443,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       }
       if (rewrite?.continue) await streamChatContinue(sentThreadId, rewrite.messageId, onEvent, controller.signal)
       else if (rewrite) await streamChatRewrite(sentThreadId, rewrite.messageId, rewrite.content, onEvent, controller.signal)
-      else await streamCodexChatMessage(sentThreadId, text, onEvent, controller.signal, attachments.map((file) => file.id), flags.map((flag) => flag.id), picked, mediaAttachments.map((item) => item.compositeHash), replyingTo?.quote.messageId)
+      else await streamCodexChatMessage(sentThreadId, text, onEvent, controller.signal, attachments.map((file) => file.id), flags.map((flag) => flag.id), picked, mediaAttachments.map((item) => item.compositeHash), replyingTo?.quote.messageId, pageAllowed ? capturePage?.() : undefined)
     } catch (error) {
       if (!controller.signal.aborted) {
         showSnackbar({ message: summarizeChatError(getErrorMessage(error, t({ ko: '응답 실패', en: 'Reply failed' })), t), tone: 'error' })
@@ -463,7 +471,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       settle()
     }
     return accepted
-  }, [queryClient, showSnackbar, t, setDraftReply, setDraft])
+  }, [capturePage, queryClient, showSnackbar, t, setDraftReply, setDraft])
 
   const send = useCallback(async (threadId: number, text?: string) => { await reply(threadId, undefined, text) }, [reply])
 

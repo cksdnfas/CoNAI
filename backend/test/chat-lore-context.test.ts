@@ -37,6 +37,13 @@ test('lore context: books per request, the index, always-on entries, linked file
   const { readLoreFile, loreFileResultText } = await import('../src/mcp/tools/chatLoreTools')
   const { openChatMcpBridge } = await import('../src/services/codex-chat/chatMcpBridge')
   const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
+  const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+  const { AuthAccount } = await import('../src/models/AuthAccount')
+  const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
+  updateChatSettings({ enabled: true })
+  // This fixture tests private lore ownership; the chat engine still needs an active authorized reader.
+  t.mock.method(AuthAccount, 'findById', () => ({ id: 1, status: 'active' }))
+  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.llm.use'] }))
 
   const me = fileOwnerKey(1)
   const other = fileOwnerKey(2)

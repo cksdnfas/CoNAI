@@ -18,6 +18,7 @@ import { CodexAppServerClient, type CodexAppServerNotification } from './codexAp
 import { ChatProfileStore, chatGreetings, pickChatGreeting, type ChatProfile } from './chatProfiles'
 import { loadChatSettings, type ChatScope } from './chatSettings'
 import { intersectChatScopes, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken, setCodexChatExecution } from './codexChatAccess'
+import { chatPageReference, parseChatPageContext } from './chatPageContext'
 import { attachJobResults, collectCodexChatMedia } from './codexChatMedia'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
@@ -160,7 +161,8 @@ const startingThreads = new Set<number>()
 function sessionKey(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, roomTools: boolean, generationPresetIds: number[], chatContext?: ChatExecutionContext) {
   const tools = toolAllowlist ? [...toolAllowlist].sort().join(',') : '*'
   const presets = ChatGenerationPresetStore.signature(generationPresetIds)
-  return `${requester.accountId === null ? 'bootstrap' : `account:${requester.accountId}`}|${[...scopes].sort().join(',')}|${tools}${roomTools ? '|room' : ''}${presets ? `|gen:${presets}` : ''}${chatContext ? `|chat:${chatContext.threadId}:${chatContext.profileId}` : ''}`
+  const pageTools = chatContext?.page ? `|page:${createHash('sha1').update(JSON.stringify({ kind: chatContext.page.kind, fields: chatContext.page.fields.map((field) => field.id) })).digest('hex').slice(0, 12)}` : ''
+  return `${requester.accountId === null ? 'bootstrap' : `account:${requester.accountId}`}|${[...scopes].sort().join(',')}|${tools}${roomTools ? '|room' : ''}${presets ? `|gen:${presets}` : ''}${chatContext ? `|chat:${chatContext.threadId}:${chatContext.profileId}` : ''}${pageTools}`
 }
 
 /** The profile's model and reasoning effort, falling back to the CLI config and then the model's default effort. */
@@ -1068,10 +1070,10 @@ export const CodexChatService = {
    * Send one user message and stream the turn to `listener`. Resolves with the stored assistant message.
    * The turn keeps running (and is stored) when the listener goes away, e.g. the browser closes the stream.
    */
-  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown, replyToMessageId?: unknown) {
+  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown, replyToMessageId?: unknown, pageContext?: unknown) {
     const thread = requireThread(requester, threadId)
     if (thread.engine === 'llm') {
-      return LlmChatService.sendMessage(requester, thread, text, listener, fileIds, flagIds, picks, mediaHashes, replyToMessageId)
+      return LlmChatService.sendMessage(requester, thread, text, listener, fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext)
     }
     assertChatAvailable(requester)
     const attachments = validateChatAttachments(requester, fileIds)
@@ -1088,9 +1090,10 @@ export const CodexChatService = {
     startingThreads.add(threadId)
     try {
       const profile = requireCodexProfile(thread.profile_id)
+      const page = parseChatPageContext(pageContext, requester, profile)
       const routing = userReplyRouting(thread, replyToMessageId)
       const scopes = profile.mcpEnabled ? intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)) : []
-      const session = await ensureSession(requester, scopes, profile.toolAllowlist, false, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct' })
+      const session = await ensureSession(requester, scopes, profile.toolAllowlist, false, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct', page })
       const run = resolveCodexRun(session, profile)
       const codexThreadId = await ensureCodexThread(session, thread.codex_thread_id, profile, (id) => CodexChatStore.setCodexThreadId(threadId, id))
       // A new Codex thread for a chat that already has a past (branched, imported, or its memory was reset).
@@ -1130,7 +1133,7 @@ export const CodexChatService = {
       emit(turn, { type: 'user', message: userMessage })
       turn.controller = new AbortController()
       turn.delivery = beginDirectReply(thread, profile.id, CodexChatStore.listMessages(threadId), userMessage, turn.controller.signal, (delivery) => emit(turn, { type: 'routing', routing: delivery }))
-      setCodexChatExecution(session.token, turn.delivery.context)
+      setCodexChatExecution(session.token, { ...turn.delivery.context, page })
 
       try {
         // Codex keeps every turn's input in its memory, so lore already given since the last compaction (same entry,
@@ -1147,7 +1150,7 @@ export const CodexChatService = {
         const directive = [buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile, user)), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
         const reference = referenceBlock([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text])
         const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user) : ''
-        const input = [recap, reference, REPLY_GUIDANCE, buildReplyContext(history, routing), chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }])), directive].filter(Boolean).join('\n\n')
+        const input = [recap, reference, REPLY_GUIDANCE, buildReplyContext(history, routing), chatPageReference(page), chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }])), directive].filter(Boolean).join('\n\n')
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
           threadId: codexThreadId,
           model: run.model,

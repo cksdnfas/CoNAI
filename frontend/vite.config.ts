@@ -76,6 +76,8 @@ export default defineConfig(({ command, mode }) => {
       },
       dedupe: ['react', 'react-dom'],
     },
+    // The linked shared workspace publishes CommonJS; dev pages need its named exports prebundled.
+    optimizeDeps: { include: ['@conai/shared'] },
     build: {
       chunkSizeWarningLimit: 550,
       rollupOptions: {

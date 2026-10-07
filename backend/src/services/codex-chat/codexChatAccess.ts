@@ -1,7 +1,7 @@
 import crypto from 'crypto'
 import type { ChatExecutionContext } from '@conai/shared'
 import type { Request } from 'express'
-import type { McpRequester } from '../../mcp/context'
+import { getMcpToolScope, isChatGenerationTool, CHAT_ROOM_TOOLS, type McpRequester, type McpRequestContext } from '../../mcp/context'
 import { AuthAccount } from '../../models/AuthAccount'
 import { hasConfiguredAuth } from '../../routes/auth-route-helpers'
 import { AuthAccessControlService } from '../authAccessControlService'
@@ -54,6 +54,15 @@ export function resolveChatAccess(accountId: number | null): ChatAccess {
 /** A chat's configured scopes, narrowed to what the chatting account may use. */
 export function intersectChatScopes(configured: readonly ChatScope[], access: ChatAccess) {
   return configured.filter((scope) => access.scopes.includes(scope))
+}
+
+/** Recheck account revocation for in-process API LLM tools as well as loopback Codex tools. */
+export function requireChatMcpAccountAccess(context: McpRequestContext, toolName: string) {
+  if (!context.requester || !loadChatSettings().enabled) throw new Error('채팅이 꺼졌거나 사용할 권한이 없어.')
+  const access = resolveChatAccess(context.requester.accountId)
+  if (context.source === 'codex-chat' ? !access.codex : !access.llm) throw new Error('채팅 권한이 변경됐어.')
+  const scope = isChatGenerationTool(toolName) ? 'generate' : getMcpToolScope(toolName)
+  if (!CHAT_ROOM_TOOLS.has(toolName) && (!scope || !access.scopes.includes(scope as ChatScope))) throw new Error('이 도구를 사용할 권한이 변경됐어.')
 }
 
 const tokens = new Map<string, { requester: McpRequester; scopes: ChatScope[]; toolAllowlist: string[] | null; roomTools: boolean; generationPresetIds: number[]; chatContext?: ChatExecutionContext }>()

@@ -2,6 +2,8 @@ import fs from 'fs'
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import multer from 'multer'
 import express, { type NextFunction, type Request, type Response } from 'express'
+import { ChatPageContextError } from '../services/codex-chat/chatPageContext'
+import { CHAT_PAGE_TOOL_INFO } from '../mcp/tools/chatPageTools'
 import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
@@ -87,7 +89,7 @@ function isGroupThread(req: Request, threadId: number) {
 }
 
 function sendChatError(res: Response, error: unknown) {
-  if (error instanceof CodexChatError || error instanceof LlmChatError || error instanceof FileStoreError || error instanceof ChatReplyError || error instanceof ChatSuggestError || error instanceof LorebookError) {
+  if (error instanceof ChatPageContextError || error instanceof CodexChatError || error instanceof LlmChatError || error instanceof FileStoreError || error instanceof ChatReplyError || error instanceof ChatSuggestError || error instanceof LorebookError) {
     res.status(error.status).json({ success: false, error: error.message })
     return
   }
@@ -144,6 +146,7 @@ function toPublicProfile(profile: ChatProfile, accountId: number | null) {
     style: profile.style,
     backgroundVersion: backgroundVersionOf(profile),
     // The composer shows the suggestion button only when someone can answer it.
+    canUsePageContext: profile.mcpEnabled && profile.mcpScopes.includes('read') && resolveChatAccess(accountId).scopes.includes('read') && (!profile.toolAllowlist || profile.toolAllowlist.includes('get_current_page')),
     suggestEnabled: canSuggest(profile, accountId),
   }
 }
@@ -1136,7 +1139,7 @@ router.get('/admin/tools', requireAdmin, asyncHandler(async (req: Request, res: 
   try {
     res.json({
       success: true,
-      data: bridge.tools.map((tool) => ({ name: tool.function.name, description: tool.function.description ?? '', scope: getMcpToolScope(tool.function.name) })),
+      data: [...bridge.tools.map((tool) => ({ name: tool.function.name, description: tool.function.description ?? '', scope: getMcpToolScope(tool.function.name) })), ...CHAT_PAGE_TOOL_INFO],
     })
   } finally {
     await bridge.close()
@@ -1578,9 +1581,13 @@ router.post('/threads/:threadId/messages', requireChatAccess, asyncHandler(async
     return
   }
 
+  if (req.body?.pageContext != null && isGroupThread(req, threadId)) {
+    sendRouteBadRequest(res, '페이지 연결은 1:1 채팅에서 사용할 수 있어.')
+    return
+  }
   await streamChatReply(res, (write) => isGroupThread(req, threadId)
     ? GroupChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.mediaHashes, req.body?.picks, req.body?.replyToMessageId)
-    : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.picks, req.body?.mediaHashes, req.body?.replyToMessageId))
+    : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.picks, req.body?.mediaHashes, req.body?.replyToMessageId, req.body?.pageContext))
 }))
 
 // ---- Chat user profiles: who the account is in a chat (name, persona, avatar), one per chat ----------------------

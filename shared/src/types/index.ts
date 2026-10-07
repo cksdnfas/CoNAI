@@ -13,3 +13,4 @@ export * from './generationHistory';
 export * from './filter';
 export * from './codex';
 export * from './chat';
+export * from './chatPage';

@@ -1,5 +1,5 @@
 import { validateChatMediaAttachments } from './chatMediaAttachments'
-import type { ChatExecutionContext } from '@conai/shared'
+import type { ChatExecutionContext, ChatPageSnapshot, ChatProposal } from '@conai/shared'
 import { isCodexChatCreationTool } from '@conai/shared'
 import { beginDirectReply, userReplyRouting } from './chatReplies'
 import type { McpRequester } from '../../mcp/context'
@@ -24,6 +24,7 @@ import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionM
 import { ChatSummaryStore } from './chatMemory'
 import { buildChatMessages, cutToolOutput, estimateMessagesTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
 import { addressLabelFilter, restatement, roundSeparator } from './chatReplyText'
+import { chatPageReference, parseChatPageContext } from './chatPageContext'
 
 /** Tool output kept on the stored call for replay; the model gets more of it within the reply itself. */
 const STORED_TOOL_OUTPUT_LENGTH = 4000
@@ -58,6 +59,7 @@ function chatConnectionOf(profile: ChatProfile) {
 
 type LlmTurn = {
   chatContext?: ChatExecutionContext
+  page?: ChatPageSnapshot
   delivery?: ReturnType<typeof beginDirectReply>
   threadId: number
   replacingMessageId?: number
@@ -147,6 +149,10 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
     record.arguments = parseArguments(call.function.arguments)
     emit(turn, { type: 'tool', call: { ...record } })
     const result = await bridge.call(record.tool, record.arguments as Record<string, unknown>, turn.controller.signal)
+    if (record.tool === 'propose_page_changes' && !result.isError) {
+      const structured = result.structuredContent as { proposal?: ChatProposal } | undefined
+      if (structured?.proposal?.kind === 'page_fields') record.proposal = structured.proposal
+    }
     const { texts, historyIds, compositeHashes, jobIds, pendingJobIds } = readMcpToolResult(result, record.tool)
     output = texts.join('\n') || (result.structuredContent ? JSON.stringify(result.structuredContent) : '')
     const found = readToolImages(result)
@@ -167,8 +173,10 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
     }
   }
 
-  record.summary = output ? truncateToolSummary(output) : null
-  record.output = output.slice(0, STORED_TOOL_OUTPUT_LENGTH)
+  // A later request must read its own fresh snapshot, not replay private state from an old page.
+  const pageRead = record.tool === 'get_current_page' && record.status === 'completed'
+  record.summary = pageRead ? '현재 요청에 연결한 페이지를 읽었어.' : output ? truncateToolSummary(output) : null
+  record.output = pageRead ? '(Page snapshot omitted; use get_current_page for the current request.)' : output.slice(0, STORED_TOOL_OUTPUT_LENGTH)
   emit(turn, { type: 'tool', call: { ...record } })
   return (output.length > outputLimit ? cutToolOutput(output, outputLimit) : output) || '(no output)'
 }
@@ -183,7 +191,9 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     // Continuing: the cut reply as the model's own turn, then the request to carry on from its last word — room for
     // both is kept before the window is chosen.
     const continuation: ChatCompletionMessage[] = turn.continuing === undefined ? [] : [{ role: 'assistant', content: turn.continuing }, { role: 'user', content: CONTINUE_DIRECTIVE }]
-    const extraTokens = continuation.length ? estimateMessagesTokens(profile.id, continuation) : 0
+    const reference = chatPageReference(turn.page)
+    const pageMessages: ChatCompletionMessage[] = reference ? [{ role: 'user', content: reference }] : []
+    const extraTokens = estimateMessagesTokens(profile.id, [...continuation, ...pageMessages])
     if (config.summaryEnabled) {
       await whileWaiting(turn, 'summary', fitThreadSummary(thread.id, profile, listMessages(), turn.controller.signal, tools, { attachmentTexts, extraTokens }))
     }
@@ -192,7 +202,8 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
       profile, thread: current, messages: listMessages(), config, tools, segments: config.summaryEnabled ? ChatSummaryStore.list(thread.id) : [], attachmentTexts, extraTokens,
       onMeta: (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(profile, 'chat')?.model ?? null } },
     })
-    return [...request, ...continuation]
+    const latestUser = request.map((message) => message.role).lastIndexOf('user')
+    return [...request.slice(0, latestUser), ...pageMessages, ...request.slice(latestUser), ...continuation]
   }, false, { maxTokens: config.maxTokens })
 }
 
@@ -385,11 +396,12 @@ const CONTINUE_DIRECTIVE = '[이어쓰기] 방금 네 답변이 길이 제한으
  * carried on — the turn starts with its text and tool calls, and is stored as a new variant of it.
  */
 function startReply(requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile, listener: (event: CodexChatStreamEvent) => void,
-  prepare: () => CodexChatStreamEvent, replacingMessageId?: number, continuing?: CodexChatMessageRecord) {
+  prepare: () => CodexChatStreamEvent, replacingMessageId?: number, continuing?: CodexChatMessageRecord, page?: ChatPageSnapshot) {
   if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
   let resolveFinished: (message: CodexChatMessageRecord) => void = () => {}
   let rejectFinished: (error: unknown) => void = () => {}
   const turn: LlmTurn = {
+    page,
     threadId: thread.id, replacingMessageId, controller: new AbortController(), text: '', reasoning: '', toolCalls: new Map(), finishReason: null,
     offeredTools: [], listeners: new Set([listener]), finished: new Promise((resolve, reject) => { resolveFinished = resolve; rejectFinished = reject }),
   }
@@ -411,6 +423,7 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
   const updatedThread = CodexChatStore.findThreadById(thread.id) as CodexChatThreadRecord
   const history = CodexChatStore.listMessages(thread.id).filter((entry) => entry.id !== replacingMessageId)
   turn.delivery = beginDirectReply(updatedThread, profile.id, history, [...history].reverse().find((entry) => entry.role === 'user') ?? null, turn.controller.signal, (routing) => emit(turn, { type: 'routing', routing }))
+  if (page) turn.chatContext = { ...turn.delivery.context, page }
   void runReply(turn, requester, updatedThread, profile)
     .then(() => finishTurn(turn, profile, turn.controller.signal.aborted ? 'interrupted' : 'completed', null), (error: unknown) => {
       const aborted = turn.controller.signal.aborted
@@ -507,9 +520,10 @@ export const LlmChatService = {
    * Send one user message and stream the reply to `listener`. Resolves with the stored assistant message; the reply
    * keeps running (and is stored) when the listener goes away.
    */
-  async sendMessage(requester: McpRequester, thread: CodexChatThreadRecord, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown, replyToMessageId?: unknown) {
+  async sendMessage(requester: McpRequester, thread: CodexChatThreadRecord, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown, replyToMessageId?: unknown, pageContext?: unknown) {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id)
+    const page = parseChatPageContext(pageContext, requester, profile)
     const attachments = validateChatAttachments(requester, fileIds)
     const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length)
     const flags = [...ChatFlagStore.resolve(requester, parseFlagIds(flagIds)), ...parsePicks(picks)]
@@ -526,7 +540,7 @@ export const LlmChatService = {
       ChatFlagStore.setThreadFlags(thread.id, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       if (!thread.title) CodexChatStore.renameThread(thread.id, (trimmed || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' '))
       return { type: 'user', message: CodexChatStore.listMessages(thread.id).find((entry) => entry.id === userMessageId) as CodexChatMessageRecord }
-    })
+    }, undefined, undefined, page)
   },
 
   async rewriteMessage(requester: McpRequester, thread: CodexChatThreadRecord, messageId: number, content: string | undefined, listener: (event: CodexChatStreamEvent) => void) {

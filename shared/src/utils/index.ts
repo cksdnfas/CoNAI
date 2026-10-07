@@ -10,3 +10,4 @@ export * from './responseHelpers';
 
 export * from './chatMentions';
 export * from './chatAddress';
+export * from './chatPage';

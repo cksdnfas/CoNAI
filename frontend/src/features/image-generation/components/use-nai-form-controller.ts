@@ -22,6 +22,18 @@ import {
 } from '../image-generation-shared'
 import { loadPersistedNaiFormDraft, persistNaiFormDraft } from '../image-generation-drafts'
 
+/** Shared local form update path for user input and reviewed chat input; never submits a request. */
+export function applyNaiFormPatch(current: NAIFormDraft, patch: Partial<NAIFormDraft>): NAIFormDraft {
+  const nextForm = { ...current, ...patch }
+  if (patch.model !== undefined && patch.model !== current.model) {
+    nextForm.vibes = current.vibes.map((vibe) => (vibe.image ? { ...vibe, encoded: '' } : vibe))
+  }
+  if (patch.width !== undefined || patch.height !== undefined) {
+    nextForm.resolutionPreset = resolveNaiResolutionPreset(nextForm.width, nextForm.height)
+  }
+  return nextForm
+}
+
 /** Own the editable NAI form state and all local form-manipulation handlers for the panel. */
 export function useNaiFormController({
   showSnackbar,
@@ -137,26 +149,7 @@ export function useNaiFormController({
       value = String(clampedValue)
     }
 
-    setNaiForm((current) => {
-      const nextForm = {
-        ...current,
-        [field]: value,
-      }
-
-      // Vibe encodings are model-specific; re-encode the ones we still have images for on submit.
-      if (field === 'model' && value !== current.model) {
-        nextForm.vibes = current.vibes.map((vibe) => (vibe.image ? { ...vibe, encoded: '' } : vibe))
-      }
-
-      if (field === 'width' || field === 'height') {
-        nextForm.resolutionPreset = resolveNaiResolutionPreset(
-          field === 'width' ? value : nextForm.width,
-          field === 'height' ? value : nextForm.height,
-        )
-      }
-
-      return nextForm
-    })
+    setNaiForm((current) => applyNaiFormPatch(current, { [field]: value }))
   }
 
   /** Apply one resolution preset to width/height, or fall back to custom when unknown. */

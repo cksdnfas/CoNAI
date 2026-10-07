@@ -43,6 +43,7 @@ import { useNaiFormController } from './use-nai-form-controller'
 import { ChatGenerationPresetSaveModal } from '@/features/settings/components/chat-generation-preset-save-modal'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { normalizeTextSegmentSpreadsheetText } from './text-segment-spreadsheet-input'
+import { useNaiChatPage } from './use-generation-chat-page'
 
 const ImageEditorModal = lazy(() => import('@/features/image-editor/image-editor-modal'))
 
@@ -93,6 +94,8 @@ export function NaiGenerationPanel({
     handleCharacterReferenceImageChange,
     handleRemoveCharacterReference,
   } = useNaiFormController({ showSnackbar })
+
+  useNaiChatPage(naiForm, setNaiForm)
 
   const confirm = useConfirm()
   const pendingHistorySettingsLoad = usePendingHistorySettingsLoad()

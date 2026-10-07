@@ -44,6 +44,7 @@ function buildIdempotencyRequestHash(value: Record<string, unknown>) {
 
 /** Scope idempotency to the authenticated MCP key, with one local transport fallback. */
 function resolveIdempotencyScope(context: McpRequestContext) {
+  if (isChatMcpSource(context.source) && context.requester) return `chat-account:${context.requester.accountId ?? 'bootstrap'}`;
   return context.keyId ? `mcp-key:${context.keyId}` : 'mcp-local';
 }
 
@@ -118,6 +119,8 @@ export async function enqueueMcpGenerationJob(context: McpRequestContext, input:
   if (idempotency_key && idempotencyScope && requestHash) {
     const existing = GenerationQueueModel.findIdempotentJob(idempotencyScope, idempotency_key);
     if (existing) {
+      const ownedJob = GenerationQueueModel.findById(existing.job_id);
+      if (isChatMcpSource(context.source) && ownedJob?.requested_by_account_id !== context.requester?.accountId) throw new Error('Idempotent generation job ownership mismatch');
       if (existing.request_hash !== requestHash) {
         throw new Error(`idempotency_key "${idempotency_key}" was already used with a different request payload`);
       }

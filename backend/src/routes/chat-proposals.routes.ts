@@ -6,9 +6,47 @@ import { applyLoreProposal, LoreProposalError } from '../services/codex-chat/cha
 import { LorebookError } from '../services/codex-chat/chatLorebookFiles'
 import { FileStoreError } from '../services/fileStoreService'
 import { CodexChatStore } from '../services/codex-chat/codexChatStore'
-import { getRequesterAccountId } from './requester-session-helpers'
+import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers'
+import { ChatPageContextError, requireChatPageAccess, requireChatPageProposalBinding } from '../services/codex-chat/chatPageContext'
+import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess'
+import { ChatProfileStore } from '../services/codex-chat/chatProfiles'
+import type { ChatProposal } from '@conai/shared'
 
 const router = express.Router()
+
+/** This only authorizes an owned review card. The browser validates its live field state and applies locally. */
+function pageProposal(req: Request, res: Response, receipt = false): Extract<ChatProposal, { kind: 'page_fields' }> | null {
+  const id = visibleProposalId(req, res)
+  if (id === null) return null
+  try {
+    const proposal = ChatProposalStore.find(id)
+    if (proposal?.kind !== 'page_fields') throw new ChatPageContextError('페이지 입력 제안이 아니야.')
+    const thread = CodexChatStore.findThread(ChatProposalStore.threadIdOf(id)!, getRequesterAccountId(req))!
+    const profile = thread.profile_id === null ? null : ChatProfileStore.find(thread.profile_id)
+    if (!profile?.isEnabled || !profile.mcpEnabled || !profile.mcpScopes.includes('read') || (profile.toolAllowlist && !profile.toolAllowlist.includes('propose_page_changes'))) throw new ChatPageContextError('프로필의 페이지 입력 도구 권한이 변경됐어.', 403)
+    const requester = { accountId: getRequesterAccountId(req), accountType: getRequesterAccountType(req) }
+    requireChatMcpAccountAccess({ requester, scopes: ['read'], source: thread.engine === 'codex' ? 'codex-chat' : 'llm-chat' }, 'propose_page_changes')
+    requireChatPageAccess(requester, proposal.page)
+    const undo = req.body?.undo === true
+    if (proposal.dismissed || (!receipt && !undo && proposal.saved)) throw new ChatPageContextError('이미 적용하거나 무시한 제안이야.', 409)
+    requireChatPageProposalBinding(undo ? { ...proposal, expiresAt: Number.MAX_SAFE_INTEGER } : proposal, req.body)
+    return proposal
+  } catch (error) {
+    res.status(error instanceof ChatPageContextError ? error.status : 403).json({ success: false, error: error instanceof Error ? error.message : '페이지 입력 권한을 확인하지 못했어.' })
+    return null
+  }
+}
+
+router.post('/:proposalId/page-check', (req: Request, res: Response) => {
+  const proposal = pageProposal(req, res)
+  if (proposal) res.json({ success: true, data: proposal })
+})
+
+/** A receipt after the browser applied the registered form setters; never changes application data. */
+router.post('/:proposalId/page-applied', (req: Request, res: Response) => {
+  const proposal = pageProposal(req, res, true)
+  if (proposal) res.json({ success: true, data: ChatProposalStore.markSaved(proposal.id, null) })
+})
 
 function parseId(value: unknown) {
   const id = Number(value)

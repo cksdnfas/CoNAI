@@ -33,7 +33,8 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
   const { ChatSharedBlockStore } = await import('../src/services/codex-chat/chatDisplayBlocks')
   const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
   const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
-  const { CHAT_SCOPES } = await import('../src/services/codex-chat/chatSettings')
+  const { CHAT_SCOPES, updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+  updateChatSettings({ enabled: true })
   const { intersectChatScopes } = await import('../src/services/codex-chat/codexChatAccess')
   const { MCP_HTTP_SCOPES } = await import('../src/services/mcpHttpSettingsService')
   const { ALL_MCP_HTTP_SCOPES, getMcpToolScope } = await import('../src/mcp/context')
@@ -48,6 +49,85 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
   const controller = new AbortController()
   const replyContext = (replyId: string): ChatExecutionContext => ({ threadId, profileId: profile.id, kind: 'direct', replyId })
   const BLOCK = { key: 'Status', instruction: 'Update on scene change', example: '{"hp": 100}', template: '<b>{{hp}}</b>', fields: [{ name: 'hp', min: 0, max: 100, step: 10 }] }
+
+  const { normalizeChatPageSnapshot, buildChatPageChanges, chatPagePatch } = await import('@conai/shared')
+  const page = normalizeChatPageSnapshot({ instanceId: 'page-test-123', connectionId: 'connection-test-123', path: '/generation', title: 'Test workflow', kind: 'comfyui', resourceId: '1', fields: [
+    { id: 'prompt', label: 'Prompt', type: 'text', value: ['old', 'second'] },
+    { id: 'steps', label: 'Steps', type: 'number', value: '20', min: 1, max: 50, integer: true },
+    { id: 'sampler', label: 'Sampler', type: 'select', value: 'euler', options: ['euler', 'euler_ancestral'] },
+  ], apiKey: 'must-not-be-retained' })
+  const pageProfile = ChatProfileStore.create({ name: 'Page assistant', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page', 'propose_page_changes'] })
+  const pageThreadId = CodexChatStore.createThread(null, 'page chat', 'llm', pageProfile.id)
+
+  await t.test('page inputs: atomic validation, stale targets, edited values, and safe undo', () => {
+    assert.ok(!('apiKey' in page))
+    const changes = buildChatPageChanges(page, [{ fieldId: 'prompt', value: 'new' }, { fieldId: 'steps', value: 30 }])
+    const { fields: _fields, ...target } = page
+    const proposal = { kind: 'page_fields' as const, page: target, changes, expiresAt: Date.now() + 60_000 }
+    assert.deepEqual(chatPagePatch(page, proposal), { prompt: 'new', steps: '30' })
+    assert.throws(() => buildChatPageChanges(page, [{ fieldId: 'prompt', value: 'new' }, { fieldId: 'steps', value: 51 }]), /범위/)
+    assert.throws(() => buildChatPageChanges(page, [{ fieldId: 'sampler', value: 'unknown' }]), /선택 목록/)
+    assert.throws(() => buildChatPageChanges(page, [{ fieldId: 'apiKey', value: 'secret' }]), /등록되지/)
+    assert.throws(() => chatPagePatch({ ...page, instanceId: 'another-page' }, proposal), /페이지/)
+    assert.throws(() => chatPagePatch({ ...page, connectionId: 'new-connection' }, proposal), /페이지/)
+    assert.throws(() => chatPagePatch({ ...page, fields: page.fields.map((field) => field.id === 'steps' ? { ...field, value: '21' } : field) }, proposal), /입력값/)
+    const applied = { ...page, fields: page.fields.map((field) => ({ ...field, value: changes.find((change) => change.fieldId === field.id)?.value ?? field.value })) }
+    assert.deepEqual(chatPagePatch(applied, proposal, true), { prompt: ['old', 'second'], steps: '20' })
+    assert.throws(() => chatPagePatch(page, { ...proposal, expiresAt: 0 }), /유효 시간/)
+    assert.throws(() => normalizeChatPageSnapshot({ ...page, path: 'https://example.com' }), /페이지/)
+  })
+
+  await t.test('page tools: explicit binding, proposed fields only, and reply expiry', async () => {
+    const context: ChatExecutionContext = { threadId: pageThreadId, profileId: pageProfile.id, kind: 'direct', replyId: 'page-tools', page }
+    const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read'], ['get_current_page', 'propose_page_changes'], { chatContext: context })
+    const unbound = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read'])
+    const broad = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'generate', 'organize', 'configure'], null, { chatContext: context })
+    try {
+      assert.ok(!unbound.tools.some((tool) => tool.function.name === 'get_current_page'))
+      assert.ok(!broad.tools.some((tool) => ['submit_generation_job', 'generate_nai', 'delete_files', 'propose_profile_update'].includes(tool.function.name)), 'page mode withholds side-effect tools even for broad profiles')
+      assert.ok(broad.tools.every((tool) => ['get_current_page', 'propose_page_changes'].includes(tool.function.name)), 'page text cannot request unrelated private files or library data')
+      assert.ok(!(await bridge.call('get_current_page', {})).isError)
+      const created = await bridge.call('propose_page_changes', { changes: [{ fieldId: 'steps', value: 30 }] })
+      assert.ok(!created.isError)
+      assert.match(JSON.stringify(created.structuredContent), /page_fields/)
+      assert.ok((await bridge.call('propose_page_changes', { changes: [{ fieldId: 'steps', value: 51 }] })).isError)
+      unregister()
+      assert.ok((await bridge.call('get_current_page', {})).isError)
+    } finally { unregister(); await bridge.close(); await unbound.close(); await broad.close() }
+  })
+
+  await t.test('API LLM tools reject account permission revocation during a reply', async (sub) => {
+    const { AuthAccount } = await import('../src/models/AuthAccount')
+    const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
+    let permissions = ['chat.llm.use', 'chat.tools.read', 'page.generation.view']
+    sub.mock.method(AuthAccount, 'findById', () => ({ status: 'active' }))
+    sub.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: permissions }))
+    const context: ChatExecutionContext = { threadId: pageThreadId, profileId: pageProfile.id, kind: 'direct', replyId: 'page-revoke', page }
+    const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge({ accountId: 7, accountType: 'guest' }, ['read'], ['get_current_page'], { chatContext: context })
+    try {
+      assert.ok(!(await bridge.call('get_current_page', {})).isError)
+      permissions = ['chat.llm.use']
+      assert.ok((await bridge.call('get_current_page', {})).isError)
+    } finally { unregister(); await bridge.close() }
+  })
+
+  await t.test('generation retry keys cannot reuse another chat account job', async (sub) => {
+    const { enqueueMcpGenerationJob } = await import('../src/mcp/tools/generationJobTools')
+    const { GenerationQueueService } = await import('../src/services/generationQueueService')
+    const { HistoryQueryRepository } = await import('../src/repositories/history/HistoryQueryRepository')
+    sub.mock.method(GenerationQueueService, 'requestDispatch', () => {})
+    sub.mock.method(HistoryQueryRepository, 'findAllWithMetadata', () => [])
+    const input = { service_type: 'novelai' as const, request_payload: { prompt: 'isolated test', n_samples: 1 }, idempotency_key: 'same-retry-key' }
+    const caller = (accountId: number) => ({ requester: { accountId, accountType: 'guest' as const }, source: 'llm-chat' as const, scopes: ['generate' as const] })
+    const first = await enqueueMcpGenerationJob(caller(7), input)
+    const second = await enqueueMcpGenerationJob(caller(8), input)
+    const retry = await enqueueMcpGenerationJob(caller(7), input)
+    assert.notEqual(first?.id, second?.id)
+    assert.equal(retry?.id, first?.id)
+    assert.equal(retry?.idempotency_reused, true)
+  })
 
   await t.test('configure scope: permission, HTTP exclusion, tool gating', async () => {
     assert.ok((CHAT_SCOPES as readonly string[]).includes('configure'))
@@ -231,8 +311,8 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
     t.after(() => new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections() }))
     const port = (server.address() as { port: number }).port
-    const post = async (id: number | string, body: unknown) => {
-      const response = await fetch(`http://127.0.0.1:${port}/api/chat-proposals/${id}/saved`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    const post = async (id: number | string, body: unknown, operation = 'saved') => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/chat-proposals/${id}/${operation}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       return { status: response.status, json: await response.json() as { success: boolean; data?: { id: number; savedId: number | null; saved: boolean } } }
     }
     const block = ChatProposalStore.add(replyContext('r-route'), { kind: 'display_block', name: 'n', block: { key: 'n' }, linkProfileId: null })
@@ -250,5 +330,18 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const foreignThread = CodexChatStore.createThread(5, 'foreign', 'llm', profile.id)
     const foreign = ChatProposalStore.add({ threadId: foreignThread, profileId: profile.id, kind: 'direct', replyId: 'r-foreign' }, { kind: 'profile', input: { name: 'F' } })
     assert.equal((await post(foreign.id, { savedId: 1 })).status, 404)
+    const { fields: _fields, ...target } = page
+    const proposed = ChatProposalStore.add({ threadId: pageThreadId, profileId: pageProfile.id, kind: 'direct', replyId: 'page-route' }, { kind: 'page_fields', page: target, changes: buildChatPageChanges(page, [{ fieldId: 'steps', value: 30 }]), expiresAt: Date.now() + 60_000 })
+    const binding = { instanceId: page.instanceId, connectionId: page.connectionId }
+    assert.equal((await post(proposed.id, { ...binding, connectionId: 'wrong-connection' }, 'page-check')).status, 409)
+    assert.equal((await post(proposed.id, binding, 'page-check')).status, 200)
+    const reviewed = ChatProposalStore.find(proposed.id)
+    assert.ok(reviewed?.kind === 'page_fields')
+    assert.ok(!reviewed.saved, 'authorizing a card is not applying it')
+    assert.equal((await post(proposed.id, binding, 'page-applied')).status, 200)
+    assert.equal((await post(proposed.id, binding, 'page-check')).status, 409, 'no duplicate apply')
+    assert.equal((await post(proposed.id, { ...binding, undo: true }, 'page-check')).status, 200)
+    ChatProfileStore.update(pageProfile.id, { mcpEnabled: false })
+    assert.equal((await post(proposed.id, { ...binding, undo: true }, 'page-check')).status, 403)
   })
 })

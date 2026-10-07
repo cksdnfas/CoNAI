@@ -1,3 +1,5 @@
+import type { ChatPageProposal, ChatPageSnapshot } from './chatPage'
+
 /** A recipient is a member profile, the human, or a room announcement (no automatic reply). */
 export type ChatRecipient = number | 'user' | 'room'
 
@@ -25,6 +27,8 @@ export type ChatExecutionContext = {
   profileId: number
   kind: 'direct' | 'group'
   replyId?: string
+  /** Validated, opted-in browser state for this reply only; never grants server-side authority. */
+  page?: ChatPageSnapshot
 }
 
 /** Wire contracts shared by the chat server and client. */
@@ -53,6 +57,7 @@ export type ChatToolCall = {
  * aside (무시).
  */
 export type ChatProposal = { id: number; dismissed?: boolean } & (
+  | ChatPageProposal
   | {
       kind: 'display_block'
       /** Shared block name (defaults to the block key). */
