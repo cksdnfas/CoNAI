@@ -66,7 +66,9 @@ export function LoginPage() {
     return t('loginPage.signInFailed')
   }
 
-  const applyAuthenticatedSession = (result: AuthMutationRecord, fallbackUsername: string) => {
+  const applyAuthenticatedSession = async (result: AuthMutationRecord, fallbackUsername: string) => {
+    await queryClient.cancelQueries()
+    queryClient.clear()
     queryClient.setQueryData(AUTH_STATUS_QUERY_KEY, {
       hasCredentials: true,
       authenticated: true,
@@ -83,7 +85,7 @@ export function LoginPage() {
     mutationFn: ({ nextUsername, nextPassword }: { nextUsername: string; nextPassword: string }) =>
       loginLocalAccount(nextUsername, nextPassword),
     onSuccess: async (result) => {
-      applyAuthenticatedSession(result, username.trim())
+      await applyAuthenticatedSession(result, username.trim())
       setPassword('')
       setLoginFormNotice(null)
       closeSnackbar()
@@ -107,8 +109,8 @@ export function LoginPage() {
         throw new GuestSignInAfterCreateError(nextUsername, error)
       }
     },
-    onSuccess: (result) => {
-      applyAuthenticatedSession(result, guestUsername.trim())
+    onSuccess: async (result) => {
+      await applyAuthenticatedSession(result, guestUsername.trim())
       setGuestUsername('')
       setGuestPassword('')
       setIsGuestModalOpen(false)

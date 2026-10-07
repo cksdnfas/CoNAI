@@ -1,3 +1,5 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
+import { FeaturePermissionNotice } from '@/features/auth/feature-permission-notice'
 import { Suspense, lazy, useMemo, type ReactNode } from 'react'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -616,6 +618,8 @@ function ModuleWorkflowWorkspaceInner({ toolbar }: ModuleWorkflowWorkspaceProps)
 }
 
 export function ModuleWorkflowWorkspace({ toolbar }: ModuleWorkflowWorkspaceProps) {
+  const { canViewWorkflows } = useFeaturePermissions()
+  if (!canViewWorkflows) return <FeaturePermissionNotice permission="workflows.view" />
   return (
     <ReactFlowProvider>
       <ModuleWorkflowWorkspaceInner toolbar={toolbar} />

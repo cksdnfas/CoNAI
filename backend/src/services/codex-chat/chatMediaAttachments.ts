@@ -1,4 +1,5 @@
 import fs from 'fs'
+import { IMAGE_VIEW_PERMISSION } from '@conai/shared'
 import type { McpRequester } from '../../mcp/context'
 import { AuthAccount } from '../../models/AuthAccount'
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel'
@@ -17,9 +18,7 @@ function requireChatMediaAccess(requester: McpRequester) {
   const permissions = id === null
     ? (hasConfiguredAuth() ? [] : AuthAccessControlService.resolveBootstrapAccess().permissionKeys)
     : (AuthAccount.findById(id)?.status === 'active' ? AuthAccessControlService.resolveForAccountId(id).permissionKeys : [])
-  // Hash references, like the image files themselves (registerAppRoutes IMAGE_FILE_READ_PERMISSION_KEYS): a chat user
-  // may send back an image their chat showed them. Browsing the library to pick one stays with the page permissions.
-  if (!permissions.some((key) => key === 'page.home.view' || key === 'page.image-detail.view' || key === 'chat.codex.use' || key === 'chat.llm.use')) {
+  if (!permissions.includes(IMAGE_VIEW_PERMISSION)) {
     throw new FileStoreError('앱 미디어 접근 권한이 없어.', 403)
   }
 }

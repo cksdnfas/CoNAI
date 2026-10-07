@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getGraphExecution, getGraphExecutionPreviews, type GraphExecutionArtifactRecord, type GraphExecutionRecord, type GraphWorkflowExposedInput, type GraphWorkflowFolderRecord, type GraphWorkflowRecord, type ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { useI18n } from '@/i18n'
-import type { AppSettings } from '@conai/shared'
+import type { RuntimeWorkflowSettings } from '@/lib/api-settings'
 import { buildNodeArtifactGroups, buildNodeArtifactPreview, buildGraphEditorSnapshot, getModuleNodeDisplayLabel, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
 import { deriveWorkflowExposedInputsFromNodes } from './module-graph-workflow-inputs'
 import { buildWorkflowValidationIssues } from './module-graph-validation'
@@ -50,7 +50,7 @@ export function useModuleGraphPageViewModel({
   selectedNodeId: string | null
   selectedEdgeId: string | null
   executionDetail?: GraphExecutionDetailRecord
-  settings?: AppSettings | null
+  settings?: RuntimeWorkflowSettings | null
   workflowExposedInputs: GraphWorkflowExposedInput[]
   workflowRunInputValues: Record<string, unknown>
 }) {

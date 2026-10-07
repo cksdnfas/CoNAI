@@ -4,7 +4,7 @@ import { Trash2 } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { removeDeletedImagesFromListCaches } from '@/features/images/image-list-cache'
 import { useI18n } from '@/i18n'
 import { withChatMediaDeleteWarning } from '@/features/images/chat-media-delete-warning'
@@ -21,10 +21,9 @@ interface ImageDeleteActionProps {
   onDeleted?: (compositeHash: string) => void
 }
 
-/** Same rule as the gallery selection bars: only admins can delete images. */
+/** Shared image deletion feature, independent of page access. */
 export function useCanDeleteImages() {
-  const authStatusQuery = useAuthStatusQuery()
-  return authStatusQuery.data?.isAdmin === true
+  return useImagePermissions().canDeleteImages
 }
 
 /** Move one image to the Recycle Bin after a destructive confirm. Renders nothing without the permission. */

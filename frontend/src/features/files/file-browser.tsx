@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useMemo, useRef, useState, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, Download, File, FileText, Film, Folder, FolderInput, FolderPlus, Image as ImageIcon, LayoutGrid, List, Music, Pencil, RefreshCw, Trash2, Upload, Users } from 'lucide-react'
@@ -98,7 +99,8 @@ function FileTile({ entry, owner, selected, showCheckbox, canSelect, draggable, 
 }) {
   const { t } = useI18n()
   const [thumbFailed, setThumbFailed] = useState(false)
-  const showThumb = entry.kind === 'file' && ['image', 'video'].includes(mediaKind(entry)) && entry.mimeType !== 'image/svg+xml' && !thumbFailed
+  const { canViewImages } = useImagePermissions()
+  const showThumb = canViewImages && entry.kind === 'file' && ['image', 'video'].includes(mediaKind(entry)) && entry.mimeType !== 'image/svg+xml' && !thumbFailed
   const extension = entry.kind === 'file' ? extensionOf(entry.name) : null
 
   return (
@@ -201,7 +203,8 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
   const permissions = useMemo(() => auth.data?.permissionKeys ?? [], [auth.data?.permissionKeys])
   const isPicker = onPick !== undefined
   const chatCanReadFiles = useChatPageDataPermissions().canReadFiles
-  const canUpload = permissions.includes('files.upload')
+  const canViewFiles = permissions.includes('files.view')
+  const canUpload = canViewFiles && permissions.includes('files.upload')
   const canOrganize = permissions.includes('files.organize')
   const canDelete = permissions.includes('files.delete')
   // Without configured credentials there is one local user who may store anything.
@@ -227,8 +230,8 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
     }
   }
   const uploadInput = useRef<HTMLInputElement>(null)
-  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'list', parentId, offset], queryFn: () => listStoredFiles(parentId, offset, storeOwner), enabled: !browsingAll })
-  const foldersQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'folders'], queryFn: () => listStoredFolders(storeOwner), enabled: !browsingAll })
+  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'list', parentId, offset], queryFn: () => listStoredFiles(parentId, offset, storeOwner), enabled: canViewFiles && !browsingAll })
+  const foldersQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'folders'], queryFn: () => listStoredFolders(storeOwner), enabled: canViewFiles && !browsingAll })
   const ownersQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'owners'], queryFn: listStoredFileOwners, enabled: canBrowseAll })
   const folders = useMemo(() => folderTree(foldersQuery.data ?? []), [foldersQuery.data])
   const entries = query.data?.entries ?? []

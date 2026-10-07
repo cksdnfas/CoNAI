@@ -1,3 +1,4 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Pause, Play, Plus, Rocket, Save, SquarePen, Trash2 } from 'lucide-react'
@@ -112,6 +113,7 @@ export function ModuleWorkflowSchedulesPanel({
   onDeleteSchedule: (scheduleId: number) => Promise<void> | void
   onRunNow: (scheduleId: number) => Promise<void> | void
 }) {
+  const { canExecuteGeneration, canUpdateWorkflows } = useFeaturePermissions()
   const { t, formatNumber, formatDateTime } = useI18n()
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null)
   const [editingScheduleId, setEditingScheduleId] = useState<number | null>(null)
@@ -272,7 +274,7 @@ export function ModuleWorkflowSchedulesPanel({
         heading={t({ ko: '자동 실행', en: 'Autorun' })}
         actions={(
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button type="button" size="sm" variant="secondary" onClick={openCreateEditor} disabled={workflows.length === 0 || isMutating}>
+            <Button type="button" size="sm" variant="secondary" onClick={openCreateEditor} disabled={!(canExecuteGeneration && canUpdateWorkflows) || (workflows.length === 0 || isMutating)}>
               <Plus className="h-4 w-4" />
               {t({ ko: '자동 실행 추가', en: 'Add autorun' })}
             </Button>
@@ -312,22 +314,22 @@ export function ModuleWorkflowSchedulesPanel({
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <IconButton size="icon-sm" variant="ghost" onClick={() => openEditEditor(schedule)} disabled={isMutating} label={t({ ko: '자동 실행 수정', en: 'Edit autorun' })}>
+                      <IconButton size="icon-sm" variant="ghost" onClick={() => openEditEditor(schedule)} disabled={!(canExecuteGeneration && canUpdateWorkflows) || (isMutating)} label={t({ ko: '자동 실행 수정', en: 'Edit autorun' })}>
                         <SquarePen className="h-4 w-4" />
                       </IconButton>
                       {schedule.status === 'active' ? (
-                        <IconButton size="icon-sm" variant="ghost" onClick={() => void onPauseSchedule(schedule.id)} disabled={isMutating} label={t({ ko: '자동 실행 일시정지', en: 'Pause autorun' })}>
+                        <IconButton size="icon-sm" variant="ghost" onClick={() => void onPauseSchedule(schedule.id)} disabled={!canExecuteGeneration || isMutating} label={t({ ko: '자동 실행 일시정지', en: 'Pause autorun' })}>
                           <Pause className="h-4 w-4" />
                         </IconButton>
                       ) : (
-                        <IconButton size="icon-sm" variant="ghost" onClick={() => void onResumeSchedule(schedule.id)} disabled={isMutating} label={t({ ko: '자동 실행 재개', en: 'Resume autorun' })}>
+                        <IconButton size="icon-sm" variant="ghost" onClick={() => void onResumeSchedule(schedule.id)} disabled={!canExecuteGeneration || isMutating} label={t({ ko: '자동 실행 재개', en: 'Resume autorun' })}>
                           <Play className="h-4 w-4" />
                         </IconButton>
                       )}
-                      <IconButton size="icon-sm" variant="ghost" onClick={() => void onRunNow(schedule.id)} disabled={isMutating} label={t({ ko: '지금 1회 실행', en: 'Run once now' })}>
+                      <IconButton size="icon-sm" variant="ghost" onClick={() => void onRunNow(schedule.id)} disabled={!canExecuteGeneration || isMutating} label={t({ ko: '지금 1회 실행', en: 'Run once now' })}>
                         <Rocket className="h-4 w-4" />
                       </IconButton>
-                      <IconButton size="icon-sm" variant="ghost" onClick={() => void onDeleteSchedule(schedule.id)} disabled={isMutating} label={t({ ko: '자동 실행 삭제', en: 'Delete autorun' })}>
+                      <IconButton size="icon-sm" variant="ghost" onClick={() => void onDeleteSchedule(schedule.id)} disabled={!canUpdateWorkflows || isMutating} label={t({ ko: '자동 실행 삭제', en: 'Delete autorun' })}>
                         <Trash2 className="h-4 w-4" />
                       </IconButton>
                     </div>
@@ -436,7 +438,7 @@ export function ModuleWorkflowSchedulesPanel({
             <Button type="button" variant="secondary" onClick={resetDraft} disabled={isMutating}>
               {t({ ko: '취소', en: 'Cancel' })}
             </Button>
-            <Button type="submit" disabled={isMutating || submitDisabled}>
+            <Button type="submit" disabled={!(canExecuteGeneration && canUpdateWorkflows) || (isMutating || submitDisabled)}>
               {editorMode === 'edit' ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
               {editorMode === 'edit' ? t({ ko: '저장', en: 'Save' }) : t({ ko: '추가', en: 'Add' })}
             </Button>

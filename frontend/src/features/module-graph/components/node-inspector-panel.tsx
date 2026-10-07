@@ -1,3 +1,4 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { ProviderIcon } from '@/components/common/provider-icons'
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -106,6 +107,7 @@ export function NodeInspectorPanel({
   showHeader = true,
 }: NodeInspectorPanelProps) {
   const { t, formatNumber } = useI18n()
+  const { canExecuteGeneration } = useFeaturePermissions()
   const resolvedExecuteSelectedNodeLabel = executeSelectedNodeLabel ?? t({ ko: '선택 노드 실행', en: 'Run selected node' })
   const resolvedForceExecuteSelectedNodeLabel = forceExecuteSelectedNodeLabel ?? t({ ko: '강제 재실행', en: 'Force rerun' })
   const [collapsedOutputGroupKeys, setCollapsedOutputGroupKeys] = useState<string[]>([])
@@ -482,11 +484,11 @@ export function NodeInspectorPanel({
               </div>
               {onExecuteSelectedNode ? (
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="sm" onClick={onExecuteSelectedNode} disabled={executeSelectedNodeDisabled}>
+                  <Button type="button" size="sm" onClick={onExecuteSelectedNode} disabled={!canExecuteGeneration || executeSelectedNodeDisabled}>
                     {resolvedExecuteSelectedNodeLabel}
                   </Button>
                   {onForceExecuteSelectedNode ? (
-                    <IconButton size="icon-sm" variant="secondary" onClick={onForceExecuteSelectedNode} disabled={executeSelectedNodeDisabled} label={resolvedForceExecuteSelectedNodeLabel}>
+                    <IconButton size="icon-sm" variant="secondary" onClick={onForceExecuteSelectedNode} disabled={!canExecuteGeneration || executeSelectedNodeDisabled} label={resolvedForceExecuteSelectedNodeLabel}>
                       <RotateCcw />
                     </IconButton>
                   ) : null}

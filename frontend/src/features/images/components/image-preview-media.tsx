@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import type { CSSProperties, DragEventHandler } from 'react'
 import type { ImageRecord } from '@/types/image'
 import {
@@ -28,7 +29,8 @@ export function ImagePreviewMedia({
   onDragStart,
   onError,
 }: ImagePreviewMediaProps) {
-  if (!image) {
+  const { canViewImages } = useImagePermissions()
+  if (!canViewImages || !image) {
     return null
   }
 

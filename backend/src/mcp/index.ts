@@ -49,6 +49,7 @@ router.post('/mcp', async (req: Request, res: Response) => {
       toolAllowlist: auth?.toolAllowlist ?? null,
       chatRoomTools: auth?.chatRoomTools ? 'all' : false,
       generationPresetIds: auth?.generationPresetIds ?? [],
+      generationPresetSnapshot: auth?.generationPresetSnapshot,
       chatContext: auth?.chatContext,
     });
     const transport = new StreamableHTTPServerTransport({

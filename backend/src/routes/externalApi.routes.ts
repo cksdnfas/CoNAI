@@ -1,3 +1,4 @@
+import { settingsService } from '../services/settingsService';
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { ExternalApiProvider } from '../models/ExternalApiProvider';
@@ -7,7 +8,7 @@ import { resolveProfileModel } from '../services/codex-chat/chatModelRoles';
 import { modelReferencesOfConnection } from '../services/codex-chat/modelSlots';
 import { fetchOpenAiCompatibleModels, toOpenAiApiBase } from '../services/codex-chat/llmChatCompletion';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { optionalAuth, requirePermission } from '../middleware/authMiddleware';
+import { optionalAuth, requireAdmin, requirePermission } from '../middleware/authMiddleware';
 import { hasConfiguredAuth } from './auth-route-helpers';
 import type {
   CreateExternalApiProviderInput,
@@ -29,7 +30,7 @@ router.use(optionalAuth);
  * GET /api/external-api/llm-options
  * Returns sanitized provider metadata without secrets or base URLs.
  */
-router.get('/llm-options', requirePermission('page.generation.view'), asyncHandler(async (_req: Request, res: Response) => {
+router.get('/llm-options', requirePermission('workflows.view'), asyncHandler(async (_req: Request, res: Response) => {
   const providers = ExternalApiProvider.findEnabledLlmOptions();
 
   res.json({
@@ -42,7 +43,7 @@ router.get('/llm-options', requirePermission('page.generation.view'), asyncHandl
  * API LLM chat profiles a workflow LLM node can use: name, connection and model only (no prompts or secrets).
  * GET /api/external-api/llm-profile-options
  */
-router.get('/llm-profile-options', requirePermission('page.generation.view'), asyncHandler(async (_req: Request, res: Response) => {
+router.get('/llm-profile-options', requirePermission('workflows.view'), asyncHandler(async (_req: Request, res: Response) => {
   res.json({
     success: true,
     data: ChatProfileStore.list()
@@ -65,7 +66,7 @@ router.get('/llm-profile-options', requirePermission('page.generation.view'), as
  * Get external API credential security status.
  * GET /api/external-api/security-status
  */
-router.get('/security-status', requirePermission('page.settings.view'), asyncHandler(async (_req: Request, res: Response) => {
+router.get('/security-status', requireAdmin, asyncHandler(async (_req: Request, res: Response) => {
   res.json({
     success: true,
     data: {
@@ -75,7 +76,12 @@ router.get('/security-status', requirePermission('page.settings.view'), asyncHan
   });
 }));
 
-router.use(requirePermission('page.settings.view'));
+/** Bounded authored LLM preset options for workflow nodes, without global configuration access. */
+router.get('/llm-presets/options', requirePermission('workflows.view'), (_req: Request, res: Response) => {
+  res.json({ success: true, data: settingsService.getLlmPresetOptions() });
+});
+
+router.use(requireAdmin);
 
 /**
  * Get all external API providers
@@ -307,7 +313,7 @@ router.patch('/providers/:name/toggle', asyncHandler(async (req: Request, res: R
  * POST /api/external-api/llm-models
  * Body: { provider_type, base_url, api_key?, provider_name? } — without api_key, the stored key of provider_name is used.
  */
-router.post('/llm-models', requirePermission('page.settings.view'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/llm-models', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as { provider_type?: unknown; base_url?: unknown; api_key?: unknown; provider_name?: unknown };
   const providerType = body.provider_type;
   const baseUrl = typeof body.base_url === 'string' ? body.base_url.trim() : '';

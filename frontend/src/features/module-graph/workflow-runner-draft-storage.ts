@@ -2,8 +2,8 @@ import type { GraphWorkflowExposedInput } from '@/lib/api-module-graph'
 
 const WORKFLOW_RUNNER_DRAFT_STORAGE_KEY_PREFIX = 'conai:module-graph:workflow-runner-draft:v1:'
 
-function buildWorkflowRunnerDraftStorageKey(workflowId: number) {
-  return `${WORKFLOW_RUNNER_DRAFT_STORAGE_KEY_PREFIX}${workflowId}`
+function buildWorkflowRunnerDraftStorageKey(owner: string, workflowId: number) {
+  return `${WORKFLOW_RUNNER_DRAFT_STORAGE_KEY_PREFIX}${workflowId}:${owner}`
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -77,10 +77,11 @@ function writeLocalStorageJson(key: string, value: unknown) {
 }
 
 export function loadPersistedWorkflowRunnerDraft(
+  owner: string,
   workflowId: number,
   inputDefinitions: GraphWorkflowExposedInput[],
 ): Record<string, unknown> {
-  const rawValue = readLocalStorageJson<Record<string, unknown>>(buildWorkflowRunnerDraftStorageKey(workflowId))
+  const rawValue = readLocalStorageJson<Record<string, unknown>>(buildWorkflowRunnerDraftStorageKey(owner, workflowId))
   if (!rawValue) {
     return {}
   }
@@ -103,6 +104,7 @@ export function loadPersistedWorkflowRunnerDraft(
 }
 
 export function persistWorkflowRunnerDraft(
+  owner: string,
   workflowId: number,
   inputDefinitions: GraphWorkflowExposedInput[],
   inputValues: Record<string, unknown>,
@@ -119,16 +121,16 @@ export function persistWorkflowRunnerDraft(
     })
     .filter(([, value]) => value !== undefined)
 
-  writeLocalStorageJson(buildWorkflowRunnerDraftStorageKey(workflowId), Object.fromEntries(persistableEntries))
+  writeLocalStorageJson(buildWorkflowRunnerDraftStorageKey(owner, workflowId), Object.fromEntries(persistableEntries))
 }
 
-export function clearPersistedWorkflowRunnerDraft(workflowId: number) {
+export function clearPersistedWorkflowRunnerDraft(owner: string, workflowId: number) {
   if (typeof window === 'undefined') {
     return
   }
 
   try {
-    window.localStorage.removeItem(buildWorkflowRunnerDraftStorageKey(workflowId))
+    window.localStorage.removeItem(buildWorkflowRunnerDraftStorageKey(owner, workflowId))
   } catch {
     // Ignore storage cleanup failures.
   }

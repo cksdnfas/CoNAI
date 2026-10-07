@@ -1,3 +1,4 @@
+import { allowAnonymousAnyPermission } from '../../middleware/authMiddleware';
 import { Router, Request, Response } from 'express';
 import { calculateAnlasCost, getMaxSamples, isOpusFreeGeneration } from '../../utils/nai/anlasCost';
 
@@ -18,7 +19,7 @@ interface CostCalculationRequest {
  * POST /api/nai/cost/calculate
  * NovelAI 이미지 생성 비용 계산 (SMEA 비활성화 버전)
  */
-router.post('/calculate', async (req: Request, res: Response) => {
+router.post('/calculate', allowAnonymousAnyPermission(['workflows.view', 'generation.execute']), async (req: Request, res: Response) => {
   try {
     const {
       width,

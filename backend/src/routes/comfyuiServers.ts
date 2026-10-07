@@ -1,3 +1,4 @@
+import { requireAdmin } from '../middleware/authMiddleware';
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { ComfyUIServerModel, WorkflowServerModel } from '../models/ComfyUIServer';
@@ -330,7 +331,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  * 새 서버 생성
  * POST /api/comfyui-servers
  */
-router.post('/', asyncHandler(async (req: Request, res: Response) => {
+router.post('/', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const { name, endpoint, description, is_active, is_default } = req.body;
 
   if (!name || !endpoint) {
@@ -400,7 +401,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  * 서버 업데이트
  * PUT /api/comfyui-servers/:id
  */
-router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
+router.put('/:id', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const id = getServerIdOrSendBadRequest(req, res);
   if (id === null) {
     return;
@@ -484,7 +485,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
  * 서버 삭제
  * DELETE /api/comfyui-servers/:id
  */
-router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const id = getServerIdOrSendBadRequest(req, res);
   if (id === null) {
     return;

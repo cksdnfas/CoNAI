@@ -1,3 +1,4 @@
+import { requirePermission } from '../../middleware/authMiddleware';
 import { Router, type Request, type Response } from 'express'
 import { GraphWorkflowModel } from '../../models/GraphWorkflow'
 import { GraphExecutionModel } from '../../models/GraphExecution'
@@ -176,7 +177,7 @@ export function createGraphWorkflowExecutionRoutes() {
     }
   }))
 
-  router.post('/:id/execute', asyncHandler(async (req: Request, res: Response) => {
+  router.post('/:id/execute', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
     const id = parseGraphRouteInteger(req.params.id)
     if (isNaN(id)) {
       return sendRouteBadRequest(res, 'Invalid graph workflow ID')
@@ -202,7 +203,7 @@ export function createGraphWorkflowExecutionRoutes() {
     }
   }))
 
-  router.post('/:id/nodes/:nodeId/execute', asyncHandler(async (req: Request, res: Response) => {
+  router.post('/:id/nodes/:nodeId/execute', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
     const id = parseGraphRouteInteger(req.params.id)
     const nodeId = routeParam(req.params.nodeId)
     if (isNaN(id) || !nodeId) {
@@ -238,7 +239,7 @@ export function createGraphWorkflowExecutionRoutes() {
     }
   }))
 
-  router.post('/executions/:executionId/cancel', asyncHandler(async (req: Request, res: Response) => {
+  router.post('/executions/:executionId/cancel', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
     const executionId = parseGraphRouteInteger(req.params.executionId)
     if (isNaN(executionId)) {
       return sendRouteBadRequest(res, 'Invalid execution ID')
@@ -257,7 +258,7 @@ export function createGraphWorkflowExecutionRoutes() {
     }
   }))
 
-  router.post('/executions/cleanup-empty', asyncHandler(async (req: Request, res: Response) => {
+  router.post('/executions/cleanup-empty', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
     const executionIds: number[] = Array.isArray(req.body?.execution_ids)
       ? Array.from(new Set<number>(req.body.execution_ids
         .map((value: unknown) => Number(value))

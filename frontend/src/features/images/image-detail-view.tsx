@@ -1,3 +1,5 @@
+import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Info } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -10,7 +12,7 @@ import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { getImage, getImageDetailQueryKey, getImageDuplicates, getPromptSimilarImages, getSimilarImages } from '@/lib/api-images'
 import { getRuntimeSimilaritySettings } from '@/lib/api-settings'
-import { getAppSettings } from '@/lib/api-settings-general'
+import { getImageViewerSettings } from '@/lib/api-settings'
 import { getErrorMessage } from '@/lib/error-message'
 import { useI18n } from '@/i18n'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
@@ -222,11 +224,13 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     }
   }, [compositeHash, queryClient])
 
+  const { canViewImages } = useImagePermissions()
   const authStatusQuery = useAuthStatusQuery()
   const appearanceQuery = useGlobalAppearanceSettingsQuery()
   const appSettingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
+    queryKey: ['image-viewer-settings'],
+    queryFn: getImageViewerSettings,
+    enabled: canViewImages,
     staleTime: 60_000,
   })
   const effectiveAppearanceSettings = appearanceQuery.data
@@ -242,13 +246,13 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const imageQuery = useQuery({
     queryKey: imageDetailQueryKey,
     queryFn: ({ signal }) => getImage(compositeHash, { signal }, imageDetailSource),
-    enabled: Boolean(compositeHash),
+    enabled: canViewImages && Boolean(compositeHash),
     placeholderData: cachedInitialImage,
     staleTime: 0,
   })
   const refetchImage = imageQuery.refetch
 
-  const image = imageQuery.data
+  const image = canViewImages ? imageQuery.data : undefined
   useImageDetailChatPage(image, presentation, activeImageAreaTab, setActiveImageAreaTab)
   const mediaKind = image ? getImageListMediaKind(image) : null
   const canLoadRelatedImages = mediaKind === 'image'
@@ -570,6 +574,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
       ) : null}
     </div>
   )
+
+  if (!canViewImages) return <ImagePermissionNotice />
 
   if (presentation === 'modal') {
     const activeTabIsCurrent = activeImageAreaTab === 'current'

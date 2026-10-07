@@ -13,8 +13,12 @@ import { McpArtifactService } from '../../services/mcpArtifactService';
 import { normalizeWorkflowNumericPromptValues } from '../../services/workflowNumericFieldPolicy';
 import { parseGenerationQueueRoutingTag } from '../../services/generationQueueRouting';
 import { assertChatNaiSampleCount, isChatMcpSource, type McpRequestContext } from '../context';
-import { normalizeMcpWorkflowInputs, parseMcpMarkedFields } from './mcpComfyWorkflowService';
+import { normalizeMcpWorkflowInputs, parseMcpMarkedFields, requireChatWorkflowInputs } from './mcpComfyWorkflowService';
 import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup';
+import { requireMcpResourceOwner, requireMcpToolAccess } from '../toolAccess';
+import { requireRequesterPermission } from '../../middleware/featureAccess';
+import { validateMcpToolArguments } from '../requestSecurity';
+import { canRequesterViewImages } from '../../middleware/imageAccess';
 import {
   describeMcpGenerationJobRouting,
   getMcpGenerationRoutingOptions,
@@ -54,10 +58,12 @@ const WAIT_TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 async function describeJob(jobId: number, context: McpRequestContext) {
   const job = GenerationQueueModel.findListRecordById(jobId);
   if (!job) return null;
-  const histories = HistoryQueryRepository.findAllWithMetadata({ queue_job_id: jobId, limit: 100 });
+  requireMcpResourceOwner(context, job);
+  const histories = !context.requester || canRequesterViewImages(context.requester)
+    ? HistoryQueryRepository.findAllWithMetadata({ queue_job_id: jobId, limit: 100 }) : [];
   const artifacts = context.baseUrl
     ? (await Promise.all(histories.map((history) => history.id
-        ? McpArtifactService.createHistoryDescriptor(history.id, context.baseUrl as string)
+        ? McpArtifactService.createHistoryDescriptor(history.id, context.baseUrl as string, context.requester)
         : null))).filter(Boolean)
     : [];
   const workflow = job.workflow_id ? WorkflowModel.findByIdIncludingDeleted(job.workflow_id) : null;
@@ -91,9 +97,15 @@ export type McpGenerationJobInput = {
  * Create one durable generation job for an MCP caller (submit_generation_job and the chat generation presets):
  * routing, ComfyUI input normalization, idempotent retries and ownership. Returns the job as the tools describe it.
  */
-export async function enqueueMcpGenerationJob(context: McpRequestContext, input: McpGenerationJobInput) {
+export async function enqueueMcpGenerationJob(context: McpRequestContext, input: McpGenerationJobInput, toolName = 'submit_generation_job') {
   if (context.chatContext) requireActiveChatReply(context.chatContext);
+  if (isChatMcpSource(context.source)) requireMcpToolAccess(context, toolName, input);
   const { service_type, workflow_id, server_id, server_tag, inputs, request_payload, group_id, group_path, priority = 100, idempotency_key, request_summary } = input;
+  let usesImages = false;
+  const requireManagedMedia = () => { usesImages = true; requireRequesterPermission(context.requester, 'images.view'); };
+  if (isChatMcpSource(context.source) && service_type === 'codex') throw new Error('Codex generation is unavailable from chat because its host capabilities cannot be isolated. Use the website generation controls.');
+  if (context.requester && service_type === 'comfyui') requireRequesterPermission(context.requester, 'workflows.view');
+  if (isChatMcpSource(context.source)) validateMcpToolArguments(input, requireManagedMedia);
   const normalizedServerTag = parseGenerationQueueRoutingTag(server_tag, 'server_tag');
   if (server_id != null && normalizedServerTag !== undefined) {
     throw new Error('server_id and server_tag cannot be combined');
@@ -152,7 +164,9 @@ export async function enqueueMcpGenerationJob(context: McpRequestContext, input:
       serverTag: normalizedServerTag,
     });
     const markedFields = parseMcpMarkedFields(workflow);
+    if (isChatMcpSource(context.source)) validateMcpToolArguments(markedFields.map((field) => field.default_value), requireManagedMedia);
     const rawInputs = (inputs ?? payload.prompt_data ?? {}) as Record<string, unknown>;
+    requireChatWorkflowInputs(context, markedFields, rawInputs);
     const suppliedInputs = normalizeWorkflowNumericPromptValues(
       markedFields,
       rawInputs,
@@ -183,6 +197,12 @@ export async function enqueueMcpGenerationJob(context: McpRequestContext, input:
 
   // 경로는 없는 그룹을 만들기 때문에 다른 검증을 모두 통과한 뒤에 해석한다.
   const targetGroupId = resolveMcpTargetGroup(group_id, group_path);
+
+  if (isChatMcpSource(context.source)) {
+    requireMcpToolAccess(context, toolName, input);
+    // Delayed jobs recheck this server-issued grant before dispatch, rather than retaining submission authority.
+    payload = { ...payload, __conaiChatGrant: { toolName, context, usesImages } };
+  }
 
   const createData = {
     service_type,
@@ -234,6 +254,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     async ({ history_id }) => {
       const record = HistoryQueryRepository.findAllWithMetadata({ ids: [history_id], limit: 1 })[0];
       if (!record) return { isError: true, content: [{ type: 'text' as const, text: 'Generation history not found' }] };
+      requireMcpResourceOwner(context, record, true);
       return { content: [{ type: 'text' as const, text: JSON.stringify(buildGenerationHistoryRequestSnapshot(record), null, 2) }] };
     },
   );
@@ -327,6 +348,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
         if (!record) {
           return { isError: true, content: [{ type: 'text' as const, text: `Queue job ${job_id} not found` }] };
         }
+        requireMcpResourceOwner(context, record);
         const finished = WAIT_TERMINAL_STATUSES.has(record.status);
         if (finished || Date.now() >= deadline) {
           const job = await describeJob(job_id, context);
@@ -357,7 +379,12 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
       if (!context.baseUrl) {
         return { isError: true, content: [{ type: 'text' as const, text: 'Artifact downloads require the Streamable HTTP transport' }] };
       }
-      const artifact = await McpArtifactService.refreshDescriptor(artifact_id, context.baseUrl);
+      if (context.requester) {
+        const identity = McpArtifactService.identity(artifact_id);
+        if (!identity || identity.kind !== 'history') return { isError: true, content: [{ type: 'text' as const, text: 'Artifact not accessible to this account' }] };
+        requireMcpResourceOwner(context, HistoryQueryRepository.findAllWithMetadata({ ids: [identity.id], limit: 1 })[0], true);
+      }
+      const artifact = await McpArtifactService.refreshDescriptor(artifact_id, context.baseUrl, context.requester);
       return artifact
         ? { content: [{ type: 'text' as const, text: JSON.stringify(artifact, null, 2) }] }
         : { isError: true, content: [{ type: 'text' as const, text: 'Artifact not found or artifact ID is invalid' }] };
@@ -370,6 +397,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     { job_id: z.number().int().positive() },
     async ({ job_id }) => {
       try {
+        requireMcpResourceOwner(context, GenerationQueueModel.findListRecordById(job_id));
         await GenerationQueueService.requestCancellation(job_id, { origin: 'user' });
         return { content: [{ type: 'text' as const, text: JSON.stringify(await describeJob(job_id, context), null, 2) }] };
       } catch (error) {

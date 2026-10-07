@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
@@ -219,6 +220,7 @@ function isModalKeyboardEditingTarget(target: EventTarget | null) {
 
 /** Provide a global image view modal for app-shell image browsing flows. */
 export function ImageViewModalProvider({ children }: PropsWithChildren) {
+  const { canViewImages } = useImagePermissions()
   const queryClient = useQueryClient()
   const [modalState, setModalState] = useState<ImageViewModalState>({
     compositeHash: null,
@@ -247,7 +249,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
   useEffect(() => scheduleImageViewModalOverlayPreload(), [])
 
   useEffect(() => {
-    if (!modalState.compositeHash || activeIndex < 0) {
+    if (!canViewImages || !modalState.compositeHash || activeIndex < 0) {
       return
     }
 
@@ -263,13 +265,14 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
         staleTime: 0,
       })
     }
-  }, [activeIndex, modalState.compositeHash, modalState.compositeHashes, modalState.sourceItemsByHash, queryClient])
+  }, [canViewImages, activeIndex, modalState.compositeHash, modalState.compositeHashes, modalState.sourceItemsByHash, queryClient])
 
   // 썸네일 스트립은 성능 문제로 잠시 비활성화한다.
   // 탐색 컨텍스트 자체는 유지하므로, 필요할 때 UI와 배치 로드만 다시 연결하면 된다.
 
   /** Open the image view modal with an optional ordered navigation context. */
   const openImageView = useCallback((input: ImageViewModalOpenInput) => {
+    if (!canViewImages) return
     const compositeHashes = buildUniqueCompositeHashes(input.compositeHashes)
     const hasInputCompositeHash = compositeHashes.includes(input.compositeHash)
     const nextCompositeHashes = hasInputCompositeHash
@@ -312,7 +315,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
         accessOptions: input.accessOptions ?? current.accessOptions,
       }
     })
-  }, [queryClient])
+  }, [canViewImages, queryClient])
 
   const syncImageViewSequence = useCallback((input: ImageViewModalSyncInput) => {
     setModalState((current) => {
@@ -518,7 +521,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
   return (
     <ImageViewModalContext.Provider value={contextValue}>
       {children}
-      {modalState.compositeHash ? (
+      {canViewImages && modalState.compositeHash ? (
         <Suspense fallback={null}>
           <ImageViewModalOverlayLazy
             compositeHash={modalState.compositeHash}

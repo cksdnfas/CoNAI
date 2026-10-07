@@ -7,7 +7,7 @@ import { requirePermission } from '../middleware/authMiddleware';
 
 const router = Router();
 
-router.post('/parse', requirePermission('page.wildcards.view'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/parse', requirePermission('wildcards.view'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { text, tool, count = 1 } = req.body;
 

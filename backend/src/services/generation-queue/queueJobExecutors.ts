@@ -30,6 +30,11 @@ import { updateQueueRequestDebugMeta, writeQueueComfyDebugSnapshot } from './que
 import { classifySubmitFailure } from './queueSubmitFailureClassifier'
 import { clearGenerationQueueLiveProgress, setGenerationQueueLiveProgress } from './queueProgressRegistry'
 import { publishQueueJobEvent, publishQueueJobProgressEvent } from '../runtime-events/runtimeEventPublishers'
+import { requireMcpToolAccess } from '../../mcp/toolAccess'
+import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { isChatMcpSource, type McpRequestContext } from '../../mcp/context'
+import { parseStoredRequestPayload } from './queuePayloads'
+import { getUserSettingsDb } from '../../database/userSettingsDb'
 import {
   handleComfySubmitFailure,
   markNaiSubmitAmbiguous,
@@ -101,11 +106,24 @@ function isQueueCancelRequested(jobId: number) {
   return GenerationQueueModel.readCancelState(jobId)?.cancelRequested === true
 }
 
+export function requireQueuedChatGenerationAccess(job: GenerationQueueJobRecord) {
+  const grant = parseStoredRequestPayload(job).__conaiChatGrant as { toolName?: string; context?: McpRequestContext; usesImages?: boolean } | undefined
+  if (!grant && getUserSettingsDb().prepare('SELECT 1 FROM chat_generation_links WHERE job_id = ?').get(job.id)) throw new Error('This older chat generation job has no current authorization binding. Resubmit it from chat.')
+  if (grant) {
+    if (!grant.context || !isChatMcpSource(grant.context.source) || !grant.toolName || job.service_type === 'codex') throw new Error('Invalid or unsafe chat generation grant.')
+    const authority = { ...grant.context, requester: { accountId: job.requested_by_account_id ?? null, accountType: null } }
+    requireMcpToolAccess(authority, grant.toolName, { group_id: job.requested_group_id }, 'queued')
+    if (job.service_type === 'comfyui') requireRequesterPermission(authority.requester, 'workflows.view')
+    if (grant.usesImages) requireRequesterPermission(authority.requester, 'images.view')
+  }
+}
+
 export async function executeGenerationQueueJob(
   job: GenerationQueueJobRecord,
   assignedServer: ComfyUIServerRecord | null,
   context: QueueJobExecutorContext,
 ) {
+  requireQueuedChatGenerationAccess(job)
   if (job.service_type === 'comfyui') {
     await executeComfyUiJob(job, assignedServer, context)
     return

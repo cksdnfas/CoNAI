@@ -1,4 +1,3 @@
-import { executeCodexMessageRequest } from '../codexMessageService'
 import { resolveProfileModel } from './chatModelRoles'
 import { ChatProfileStore, profileGenerationOptions, type ChatProfile } from './chatProfiles'
 import { stripBlockFences, usableBlockKeys } from './chatBlockState'
@@ -21,8 +20,6 @@ import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatS
 
 export const SUGGESTION_COUNT = 3
 const SUGGESTION_TIMEOUT_MS = 60_000
-/** A one-shot Codex run starts a whole Codex process first. */
-const CODEX_SUGGESTION_TIMEOUT_MS = 180_000
 /** The chat's own Codex model, asked only for a few short lines. */
 const CODEX_SUGGESTION_EFFORT = 'low'
 const TRANSCRIPT_TURNS = 12
@@ -103,7 +100,7 @@ export function suggestionRunnerOf(profile: ChatProfile, accountId?: number | nu
 /** Whether the composer's suggestion button has someone to ask (a connection that cannot be used counts as none). */
 export function canSuggest(profile: ChatProfile, accountId?: number | null) {
   try {
-    return suggestionRunnerOf(profile, accountId) !== null
+    return suggestionRunnerOf(profile, accountId)?.kind === 'llm'
   } catch {
     return false
   }
@@ -207,6 +204,7 @@ export async function suggestReplies(profile: ChatProfile, thread: CodexChatThre
     throw new ChatSuggestError(`추천 모델 연결을 쓸 수 없어: ${error instanceof Error ? error.message : String(error)}`, 409)
   }
   if (!runner) throw new ChatSuggestError(profile.suggestEnabled ? '이 프로필에는 추천에 쓸 연결이 없어. 프로필 설정에서 추천 연결을 골라줘.' : '이 프로필은 답장 추천을 안 써.', 409)
+  if (runner.kind === 'codex') throw new ChatSuggestError('Codex 단독 실행은 채팅에서 사용할 수 없어. 답장 추천에는 API LLM 연결을 골라줘.', 409)
 
   const user = userPersonaForThread(thread)
   const transcript = buildSuggestionTranscript(messages, user.name, nameOf, usableBlockKeys(profile.style.blocks))
@@ -223,23 +221,11 @@ export async function suggestReplies(profile: ChatProfile, thread: CodexChatThre
   ].filter(Boolean).join('\n')
   const prompt = `${transcript}\n\n---\n${user.name}이(가) 다음에 할 말 ${SUGGESTION_COUNT}개를 JSON 배열로.`
 
-  const timeout = AbortSignal.timeout(runner.kind === 'codex' ? CODEX_SUGGESTION_TIMEOUT_MS : SUGGESTION_TIMEOUT_MS)
+  const timeout = AbortSignal.timeout(SUGGESTION_TIMEOUT_MS)
   const combined = signal ? AbortSignal.any([signal, timeout]) : timeout
   let answer: string
   try {
-    answer = runner.kind === 'codex'
-      ? (await executeCodexMessageRequest({
-        task: 'You write reply suggestions for a CoNAI chat.',
-        systemPrompt: system,
-        context: transcript,
-        prompt: `${user.name}이(가) 다음에 할 말 ${SUGGESTION_COUNT}개를 JSON 배열로.`,
-        model: runner.model,
-        reasoningEffort: runner.reasoningEffort,
-        shouldCancel: () => combined.aborted,
-        timeoutMs: CODEX_SUGGESTION_TIMEOUT_MS,
-        cleanup: true,
-      })).text
-      : await completeChat(runner.target, [
+    answer = await completeChat(runner.target, [
         { role: 'system', content: system },
         { role: 'user', content: prompt },
       ], combined)

@@ -27,7 +27,7 @@ import type {
 } from '@/lib/api-auth'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
-import { getChildPermissionKeys } from './security-permission-catalog'
+import { setPermissionGrant } from './security-permission-catalog'
 
 const AUTH_ACCOUNTS_QUERY_KEY = ['auth-accounts'] as const
 const AUTH_PERMISSION_GROUPS_QUERY_KEY = ['auth-permission-groups', 'all'] as const
@@ -413,13 +413,9 @@ export function useSecurityTabData() {
   }
 
   const togglePermissionKey = (permissionKey: string, enabled: boolean) => {
-    // Turning a page off also drops the actions nested under it, since they don't work without the page.
-    const removedKeys = new Set([permissionKey, ...getChildPermissionKeys(permissionKey)])
     setPermissionGroupDraft((current) => ({
       ...current,
-      permissionKeys: enabled
-        ? Array.from(new Set([...current.permissionKeys, permissionKey]))
-        : current.permissionKeys.filter((currentPermissionKey) => !removedKeys.has(currentPermissionKey)),
+      permissionKeys: setPermissionGrant(current.permissionKeys, permissionKey, enabled),
     }))
   }
 

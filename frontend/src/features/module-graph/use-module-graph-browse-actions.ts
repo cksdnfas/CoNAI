@@ -2,6 +2,8 @@ import { useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useI18n } from '@/i18n'
+import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import type { Dispatch, SetStateAction } from 'react'
 import {
   createGraphWorkflow,
@@ -100,6 +102,7 @@ export function useModuleGraphBrowseActions({
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
   const { t, formatNumber } = useI18n()
+  const draftStorageOwner = resolveAccountDraftOwner(useAuthStatusQuery().data)
   const queryClient = useQueryClient()
   const confirm = useConfirm()
 
@@ -108,7 +111,7 @@ export function useModuleGraphBrowseActions({
     const { nodes: nextNodes, edges: nextEdges } = buildFlowFromGraphRecord(graph, modules)
     const exposedInputs = deriveWorkflowExposedInputsFromNodes(nextNodes)
     const defaultInputValues = buildWorkflowRunInputDefaults(exposedInputs)
-    const persistedInputValues = loadPersistedWorkflowRunnerDraft(graph.id, exposedInputs)
+    const persistedInputValues = loadPersistedWorkflowRunnerDraft(draftStorageOwner, graph.id, exposedInputs)
 
     setNodes(nextNodes)
     setEdges(nextEdges)
@@ -138,7 +141,7 @@ export function useModuleGraphBrowseActions({
         },
       }),
     )
-  }, [modules, setDraftWorkflowFolderId, setEdges, setLastSavedSnapshot, setNodes, setSelectedEdgeId, setSelectedExecutionId, setSelectedFolderId, setSelectedGraphId, setSelectedNodeId, setWorkflowDebugMode, setWorkflowDescription, setWorkflowExposedInputs, setWorkflowName, setWorkflowRunInputValues])
+  }, [draftStorageOwner, modules, setDraftWorkflowFolderId, setEdges, setLastSavedSnapshot, setNodes, setSelectedEdgeId, setSelectedExecutionId, setSelectedFolderId, setSelectedGraphId, setSelectedNodeId, setWorkflowDebugMode, setWorkflowDescription, setWorkflowExposedInputs, setWorkflowName, setWorkflowRunInputValues])
 
   /**
    * Load one saved workflow into the editor, optionally opening editor mode immediately.
@@ -413,7 +416,7 @@ export function useModuleGraphBrowseActions({
 
     try {
       const result = await deleteGraphWorkflow(selectedGraphRecord.id)
-      clearPersistedWorkflowRunnerDraft(selectedGraphRecord.id)
+      clearPersistedWorkflowRunnerDraft(draftStorageOwner, selectedGraphRecord.id)
       resetWorkflowDraft()
       setWorkflowView('browse')
       setIsEditorSupportOpen(false)
@@ -432,7 +435,7 @@ export function useModuleGraphBrowseActions({
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '워크플로우 삭제에 실패했어.', en: 'Failed to delete the workflow.' }), tone: 'error' })
     }
-  }, [confirm, formatNumber, refetchGraphWorkflows, resetWorkflowDraft, selectedGraphRecord, setIsEditorSupportOpen, setWorkflowView, showSnackbar, t])
+  }, [confirm, draftStorageOwner, formatNumber, refetchGraphWorkflows, resetWorkflowDraft, selectedGraphRecord, setIsEditorSupportOpen, setWorkflowView, showSnackbar, t])
 
   /** Leave editor mode, restoring the selected saved workflow when needed. */
   const handleLeaveWorkflowEditor = useCallback(async () => {

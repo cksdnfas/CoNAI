@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { allowImagesView } from '../middleware/imageAccess';
 import { settingsService } from '../services/settingsService';
 import { buildGraphWorkflowBrowseContent } from '../services/graphWorkflowViewService';
 import { GraphWorkflowFolderModel } from '../models/GraphWorkflowFolder';
@@ -21,7 +22,7 @@ router.get('/settings', asyncHandler(async (_req: Request, res: Response) => {
 }));
 
 /** Return one read-only workflow browse snapshot for wallpaper live widgets. */
-router.get('/browse-content', asyncHandler(async (req: Request, res: Response) => {
+router.get('/browse-content', allowImagesView, asyncHandler(async (req: Request, res: Response) => {
   const folderIdResult = parseOptionalGraphFolderId(req.query.folder_id);
   if (!folderIdResult.ok) {
     return res.status(400).json(errorResponse('Invalid graph workflow folder ID'));
@@ -37,7 +38,7 @@ router.get('/browse-content', asyncHandler(async (req: Request, res: Response) =
 }));
 
 /** Return one read-only group preview image list for wallpaper live widgets. */
-router.get('/groups/:id/preview-images', asyncHandler(async (req: Request, res: Response) => {
+router.get('/groups/:id/preview-images', allowImagesView, asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const count = parseInt(req.query.count as string) || 8;

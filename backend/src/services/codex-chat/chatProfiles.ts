@@ -106,7 +106,7 @@ export type ChatProfile = {
   mcpEnabled: boolean
   /** The shared tool preset (chat_tool_presets) whose scopes and allowlist apply; null keeps the profile's own below. */
   toolPresetId: number | null
-  /** Read-only: the linked preset's name (a preset that went missing reads as null and the profile's own grant applies). */
+  /** Read-only: the linked preset's name; a missing linked preset revokes its tool grant. */
   toolPresetName?: string | null
   mcpScopes: ChatScope[]
   /** Only these tools (within the scopes); null offers every tool the scopes allow. */
@@ -322,7 +322,7 @@ function toProfile(row: ProfileRow): ChatProfile {
   const storedSections = parseJsonArray(row.prompt_sections)
   const allowlist = parseJsonArray(row.tool_allowlist)
   const blockIds = normalizeBlockIds(row.block_ids)
-  // A linked preset's grant replaces the profile's own columns; a preset that no longer exists leaves them in force.
+  // A missing linked preset revokes its grant; it cannot restore the profile's older direct grant.
   const preset = row.tool_preset_id === null ? null : ChatToolPresetStore.find(row.tool_preset_id)
   return {
     id: row.id,
@@ -348,10 +348,10 @@ function toProfile(row: ProfileRow): ChatProfile {
     temperature: row.temperature,
     maxTokens: row.max_tokens,
     mcpEnabled: row.mcp_enabled === 1,
-    toolPresetId: preset ? preset.id : null,
+    toolPresetId: row.tool_preset_id,
     toolPresetName: preset ? preset.name : null,
-    mcpScopes: preset ? preset.scopes : parseScopes(row.mcp_scopes),
-    toolAllowlist: preset ? preset.toolAllowlist : allowlist ? allowlist.filter((name): name is string => typeof name === 'string') : null,
+    mcpScopes: preset ? preset.scopes : row.tool_preset_id !== null ? [] : parseScopes(row.mcp_scopes),
+    toolAllowlist: preset ? preset.toolAllowlist : row.tool_preset_id !== null ? [] : allowlist ? allowlist.filter((name): name is string => typeof name === 'string') : null,
     toolOutputLimit: row.tool_output_limit ?? CHAT_PROFILE_DEFAULTS.toolOutputLimit,
     generationPresetIds: ChatGenerationPresetStore.existing(normalizeGenerationPresetIds(row.generation_preset_ids)),
     contextTurns: row.context_turns ?? CHAT_PROFILE_DEFAULTS.contextTurns,

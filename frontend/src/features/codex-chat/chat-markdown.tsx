@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { createContext, memo, useContext, useMemo, useState, type ComponentProps, type ReactNode } from 'react'
 import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -8,7 +9,9 @@ import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { chatAssetUrl, chatEmoticonUrl, chatMediaUrl, type ChatDisplayBlock } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
+import { buildApiUrl } from '@/lib/api-url'
 import { BlockChangeChips, ChatDisplayBlocksContext, parseBlockPayload, useChatDisplayBlock } from './chat-display-block'
+import { isolatedChatPreview } from './chat-preview'
 
 const PREVIEWABLE_LANGUAGES = new Set(['html', 'htm', 'svg', 'xml'])
 
@@ -25,14 +28,14 @@ function textOf(node: ReactNode): string {
   return ''
 }
 
-/** HTML / SVG from a reply, rendered in a sandboxed frame: scripts run, but with no access to the app or its cookies. */
+/** Static generated HTML/SVG, with scripts, navigation grants and network loading disabled. */
 function HtmlPreviewModal({ open, source, onClose }: { open: boolean; source: string; onClose: () => void }) {
   const { t } = useI18n()
   const document = /<svg[\s>]/i.test(source.trim().slice(0, 200)) && !/<html[\s>]/i.test(source) ? `<!doctype html><body style="margin:0;display:grid;place-items:center;min-height:100vh">${source}</body>` : source
   return (
     <Modal open={open} onClose={onClose} title={t({ ko: 'HTML 미리보기', en: 'HTML preview' })} widthClassName="max-w-5xl">
       <ModalBody>
-        <iframe title={t({ ko: 'HTML 미리보기', en: 'HTML preview' })} sandbox="allow-scripts" srcDoc={document} className="h-[70vh] w-full rounded-sm border border-line bg-white" />
+        <iframe title={t({ ko: 'HTML 미리보기', en: 'HTML preview' })} sandbox="" srcDoc={isolatedChatPreview(document)} className="h-[70vh] w-full rounded-sm border border-line bg-white" />
       </ModalBody>
     </Modal>
   )
@@ -129,8 +132,11 @@ function urlTransform(url: string) {
 }
 
 function MarkdownImage({ src, alt }: ComponentProps<'img'>) {
+  const { canViewImages } = useImagePermissions()
   const emoticons = useContext(ChatEmoticonsContext)
   const source = typeof src === 'string' ? src : ''
+  const appMedia = source.startsWith(EMOTE_SCHEME) || source.startsWith(STICKER_SCHEME) || ['/api/images/', '/api/generation-history/', '/api/files/', '/api/codex-chat/media/', '/api/codex-chat/assets/', '/api/codex-chat/profiles/', '/uploads/', '/temp/', '/save/'].some((prefix) => source.startsWith(buildApiUrl(prefix)))
+  if (!canViewImages && appMedia) return <span>{alt ?? ''}</span>
   const sticker = source.startsWith(STICKER_SCHEME)
   if (emoticons && (sticker || source.startsWith(EMOTE_SCHEME))) {
     const hash = source.slice(sticker ? STICKER_SCHEME.length : EMOTE_SCHEME.length)

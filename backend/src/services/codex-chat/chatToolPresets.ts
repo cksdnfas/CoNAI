@@ -1,5 +1,5 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
-import { getMcpToolScope } from '../../mcp/context'
+import { getMcpToolScope, CHAT_ROOM_TOOLS } from '../../mcp/context'
 import { ChatProfileError } from './chatProfileError'
 import { CHAT_SCOPES, type ChatScope } from './chatSettings'
 
@@ -47,6 +47,7 @@ export function normalizePresetAllowlist(value: unknown, scopes: ChatScope[]): s
   if (!list) return null
   const names = list.filter((name): name is string => typeof name === 'string' && TOOL_NAME_PATTERN.test(name))
   return [...new Set(names)].filter((name) => {
+    if (CHAT_ROOM_TOOLS.has(name)) return true
     const scope = getMcpToolScope(name)
     return scope !== null && (scopes as string[]).includes(scope)
   })

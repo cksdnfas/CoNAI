@@ -14,11 +14,12 @@ import { Text } from '@/components/ui/text'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
 import { useI18n } from '@/i18n'
 import type { GenerationWorkflowDetail, WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { DEFAULT_COMFY_MODEL_API_PATHS, getGenerationWorkflow, getGenerationCustomDropdownLists, scanGenerationComfyUIModelDropdownLists } from '@/lib/api-image-generation-workflows'
 import { getPublicGenerationWorkflow, queuePublicGenerationWorkflowJob } from '@/lib/api-public-workflows'
-import { getAppSettings } from '@/lib/api-settings-general'
+import { getRuntimeImageSaveSettings } from '@/lib/api-settings'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
@@ -76,6 +77,7 @@ export function PublicComfyWorkflowPage() {
   const { t } = useI18n()
   const confirm = useConfirm()
   const authStatusQuery = useAuthStatusQuery()
+  const draftStorageOwner = resolveAccountDraftOwner(authStatusQuery.data)
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
   const [workflowDraft, setWorkflowDraft] = useState<Record<string, WorkflowFieldDraftValue>>({})
@@ -95,8 +97,8 @@ export function PublicComfyWorkflowPage() {
   })
 
   const appSettingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
+    queryKey: ['runtime-image-save-settings'],
+    queryFn: getRuntimeImageSaveSettings,
     enabled: authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated === true,
   })
 
@@ -119,10 +121,10 @@ export function PublicComfyWorkflowPage() {
     }
 
     const baseDraft = buildWorkflowDraft(workflowFields)
-    const persistedDraft = loadPersistedComfyWorkflowDraft(workflow.id, workflowFields)
+    const persistedDraft = loadPersistedComfyWorkflowDraft(draftStorageOwner, workflow.id, workflowFields)
     setWorkflowDraft({ ...baseDraft, ...persistedDraft })
     setWorkflowDraftOwnerId(workflow.id)
-  }, [workflow, workflowFields])
+  }, [draftStorageOwner, workflow, workflowFields])
 
   useEffect(() => {
     if (!workflow) {
@@ -130,8 +132,8 @@ export function PublicComfyWorkflowPage() {
     }
 
     if (workflowDraftOwnerId !== workflow.id) return
-    persistComfyWorkflowDraft(workflow.id, workflowDraft)
-  }, [workflow, workflowDraft, workflowDraftOwnerId])
+    persistComfyWorkflowDraft(draftStorageOwner, workflow.id, workflowDraft)
+  }, [draftStorageOwner, workflow, workflowDraft, workflowDraftOwnerId])
 
   useEffect(() => {
     setQueueRegistrationCount((current) => String(clampQueueRegistrationCount(current, publicQueueMaxCount)))
@@ -190,7 +192,7 @@ export function PublicComfyWorkflowPage() {
     }
 
     void deleteComfyWorkflowDraftInputAssets(workflowDraft)
-    clearPersistedComfyWorkflowDraft(workflow.id)
+    clearPersistedComfyWorkflowDraft(draftStorageOwner, workflow.id)
     setWorkflowDraft(baseDraft)
   }
 

@@ -1,3 +1,4 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, Plus, Search, Settings2 } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -57,6 +58,7 @@ function getModuleHoverTitle(module: ModuleDefinitionRecord) {
 
 /** Render the reusable module library for graph authoring. */
 export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule, onOpenCustomNodeManager, showHeader = true, surface = 'card' }: ModuleLibraryPanelProps) {
+  const { isAdmin } = useFeaturePermissions()
   const { t } = useI18n()
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState<ModuleLibraryTab>('saved')
@@ -162,7 +164,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
   }
 
   const customNodeManagerButton = activeTab === 'custom-nodes' && onOpenCustomNodeManager ? (
-    <IconButton size="icon-sm" variant="secondary" onClick={onOpenCustomNodeManager} label={t({ ko: '커스텀 노드 관리', en: 'Manage custom nodes' })}>
+    <IconButton size="icon-sm" variant="secondary" onClick={onOpenCustomNodeManager} label={t({ ko: '커스텀 노드 관리', en: 'Manage custom nodes' })} disabled={!(isAdmin)}>
       <Settings2 />
     </IconButton>
   ) : null

@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Map as MapIcon, MessageSquare, type LucideIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Map as MapIcon, type LucideIcon } from 'lucide-react'
 import { matchPath, NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { prefetchAppRoute } from '@/app/lazy-routes'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
@@ -11,7 +11,7 @@ import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { CodexChatProvider } from '@/features/codex-chat/codex-chat-provider'
 import { ChatPageProvider } from '@/features/codex-chat/chat-page-context'
-import { CODEX_CHAT_ROUTE, useCodexChat } from '@/features/codex-chat/codex-chat-context'
+import { CODEX_CHAT_ROUTE } from '@/features/codex-chat/codex-chat-context'
 import { CodexChatDock, CodexChatHeaderButton, useCodexChatDockVisible } from '@/features/codex-chat/codex-chat-shell'
 import { ImageViewModalProvider } from '@/features/images/components/detail/image-view-modal-provider'
 import { registerTranslationCatalog, useI18n } from '@/i18n'
@@ -51,8 +51,6 @@ type NavItem = { id: HeaderNavigationItemKey; to: string; labelKey: string; icon
 const navItems: NavItem[] = [
   { id: 'access', to: '/access', labelKey: 'appShell.availablePages', icon: MapIcon, permissionKey: null },
   ...PRIMARY_NAV_ORDER.flatMap((path): NavItem[] => {
-    // The chat page has no page permission: it shows whenever the account can chat (checked at render).
-    if (path === CODEX_CHAT_ROUTE) return [{ id: 'chat', to: CODEX_CHAT_ROUTE, labelKey: 'appShell.chat', icon: MessageSquare, permissionKey: null }]
     const item = PAGE_ACCESS_CATALOG.find((entry) => entry.path === path)
     return item ? [{ id: PRIMARY_NAV_ITEM_IDS[path], to: item.path, labelKey: item.labelKey, icon: item.icon, permissionKey: item.permissionKey }] : []
   }),
@@ -104,9 +102,7 @@ function AppShellLayout() {
   const headerNavigation = headerNavigationQuery.data ?? DEFAULT_HEADER_NAVIGATION_SETTINGS
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
   const isAnonymousSession = authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated !== true
-  const canUseChat = useCodexChat()?.canUse === true
   const visibleNavItems = navItems.filter((item) => headerNavigation[item.id] !== false
-    && (item.id !== 'chat' || canUseChat)
     && (item.permissionKey === null || hasAuthPermission(permissionKeys, item.permissionKey)))
   const logoTarget = '/access'
   const isWallpaperRuntime = location.pathname === '/wallpaper/runtime'

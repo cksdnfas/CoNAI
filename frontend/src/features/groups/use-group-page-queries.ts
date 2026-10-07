@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useMemo } from 'react'
 import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getAutoFolderGroupFileCounts } from '@/lib/api-auto-folder-groups'
@@ -35,22 +36,25 @@ export function useGroupPageQueries({
   selectedGroupImageIds: string[]
   downloadScope: 'group' | 'selection' | null
 }) {
+  const { canViewImages } = useImagePermissions()
   const queryClient = useQueryClient()
 
   const groupsQuery = useQuery({
     queryKey: ['groups-hierarchy-all', selectedSource.key],
+    enabled: canViewImages,
     queryFn: selectedSource.getAllGroups,
   })
 
   const assignableCustomGroupsQuery = useQuery({
     queryKey: ['groups-hierarchy-all', 'assignable-custom'],
+    enabled: canViewImages,
     queryFn: getGroupsHierarchyAll,
   })
 
   const selectedGroupQuery = useQuery({
     queryKey: ['group-detail', selectedSource.key, selectedGroupId],
     queryFn: () => selectedSource.getGroup(selectedGroupId!),
-    enabled: Number.isFinite(selectedGroupId),
+    enabled: canViewImages && Number.isFinite(selectedGroupId),
   })
 
   const groupImagesQuery = useInfiniteQuery({
@@ -72,7 +76,7 @@ export function useGroupPageQueries({
         cursorHash: lastPage.pagination.nextCursorHash,
       }
     },
-    enabled: Number.isFinite(selectedGroupId),
+    enabled: canViewImages && Number.isFinite(selectedGroupId),
   })
 
   // Real per-filter totals for the 전체/수동/자동 segments (one-row pages; the server counts the same way as the list).
@@ -80,7 +84,7 @@ export function useGroupPageQueries({
     queries: COLLECTION_FILTERS.map((collectionType) => ({
       queryKey: ['group-images', 'custom', selectedGroupId, 'filter-total', collectionType],
       queryFn: () => getGroupImages(selectedGroupId!, { limit: 1, collectionType, includeChildren: true }),
-      enabled: isCustomSource && Number.isFinite(selectedGroupId) && collectionType !== groupImageCollectionFilter,
+      enabled: canViewImages && isCustomSource && Number.isFinite(selectedGroupId) && collectionType !== groupImageCollectionFilter,
       staleTime: 30_000,
     })),
   })
@@ -102,7 +106,7 @@ export function useGroupPageQueries({
       : getAutoFolderGroupFileCounts(selectedGroupId!, { includeChildren: true })),
     // File counts inspect every candidate path on disk. Defer that expensive work
     // until the secondary download dialog is actually opened.
-    enabled: Number.isFinite(selectedGroupId) && downloadScope === 'group',
+    enabled: canViewImages && Number.isFinite(selectedGroupId) && downloadScope === 'group',
   })
 
   const refreshCustomGroupQueries = async () => {

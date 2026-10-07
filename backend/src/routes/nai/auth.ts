@@ -1,3 +1,4 @@
+import { requireAdmin } from '../../middleware/authMiddleware';
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import { setToken } from '../../utils/nai/auth';
@@ -13,7 +14,7 @@ interface TokenLoginRequest {
  * Body: { token: string }
  * Response: { accessToken: string, expiresAt: string }
  */
-router.post('/login-with-token', async (req: Request<{}, {}, TokenLoginRequest>, res: Response): Promise<void> => {
+router.post('/login-with-token', requireAdmin, async (req: Request<{}, {}, TokenLoginRequest>, res: Response): Promise<void> => {
   try {
     let { token } = req.body;
 

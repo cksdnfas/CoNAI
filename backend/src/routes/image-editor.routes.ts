@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { allowImagesView, requireImageAction } from '../middleware/imageAccess';
 import { ImageEditorService } from '../services/imageEditorService';
 import type { EditOptions } from '../services/tempImageService';
 import path from 'path';
@@ -26,6 +27,8 @@ import {
 } from './imageEditorCanvasHandlers';
 
 const router = Router();
+router.use((req, res, next) => req.method === 'GET' || req.method === 'HEAD'
+  ? allowImagesView(req, res, next) : requireImageAction('images.update')(req, res, next));
 
 /**
  * List save-folder images for attachment picker UIs.

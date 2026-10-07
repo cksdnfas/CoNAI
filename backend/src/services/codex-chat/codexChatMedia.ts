@@ -15,12 +15,14 @@ export type CodexChatMediaItem = {
   mimeType: string | null
   width: number | null
   height: number | null
+  /** Existing owner-scoped history source, when this chat references a generated result. */
+  historyId?: number
 }
 
 /** Keep comfortably below SQLite's default 999 binding limit. */
 const LOOKUP_CHUNK_SIZE = 400
 
-type MediaReference = { messageId: number; createdDate: string; source: CodexChatMediaSource }
+type MediaReference = { messageId: number; createdDate: string; source: CodexChatMediaSource; historyId?: number }
 
 function chunked<T>(values: T[]) {
   const chunks: T[][] = []
@@ -248,6 +250,7 @@ export function collectCodexChatMedia(messages: CodexChatMessageRecord[]): Codex
 
   const historyIds = [...new Set(assistantCalls.flatMap(({ calls }) => calls.flatMap((call) => call.historyIds ?? [])))]
   const historyHashById = readHistoryHashes(historyIds)
+  const historyIdByHash = new Map([...historyHashById].map(([id, hash]) => [hash, id]))
 
   // Same order as the thumbnails in the transcript: per message, history results first, then library hashes.
   const references = new Map<string, MediaReference>()
@@ -268,7 +271,8 @@ export function collectCodexChatMedia(messages: CodexChatMessageRecord[]): Codex
         }
         const existing = references.get(hash)
         if (!existing || (existing.source === 'found' && reference.source === 'generated')) {
-          references.set(hash, reference)
+          const historyId = historyIdByHash.get(hash)
+          references.set(hash, historyId ? { ...reference, historyId } : reference)
         }
       }
     }

@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { Pencil } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { IconButton } from '@/components/ui/icon-button'
@@ -14,12 +15,13 @@ interface ImageMetadataEditActionProps {
 
 /** Open the metadata editor for one still image (closes the viewer first). Renders nothing for other media. */
 export function ImageMetadataEditAction({ image, variant = 'ghost' }: ImageMetadataEditActionProps) {
+  const { canEditMetadata, canOpenMetadataEditor } = useImagePermissions()
   const navigate = useNavigate()
   const location = useLocation()
   const imageViewModal = useImageViewModal()
   const { t } = useI18n()
 
-  if (!image?.composite_hash || image.file_type !== 'image') {
+  if (!canEditMetadata || !canOpenMetadataEditor || !image?.composite_hash || image.file_type !== 'image') {
     return null
   }
 

@@ -1,3 +1,4 @@
+import { hasConfiguredAuth } from '../routes/auth-route-helpers';
 import { GroupModel, ImageGroupModel } from '../models/Group';
 import { AuthAccessControlService } from './authAccessControlService';
 import { GroupPathError, GroupPathService } from './groupPathService';
@@ -19,15 +20,21 @@ export type GenerationTargetGroupResult =
   | { ok: true; groupId: number | null; path: string | null }
   | { ok: false; status: 400 | 403 | 404; error: string };
 
-const GROUP_PERMISSION_KEY = 'page.groups.view';
+const GROUP_PERMISSION_KEY = 'groups.update';
 
 function hasValue(value: unknown): boolean {
   return value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '');
 }
 
+/** Callers already enforce the trusted HTTP/bootstrap boundary. Configured null accounts never inherit it. */
+function hasGroupPermission(accountId: number | null | undefined, permission: string): boolean {
+  if (accountId == null) return !hasConfiguredAuth() && AuthAccessControlService.resolveBootstrapAccess().permissionKeys.includes(permission);
+  return AuthAccessControlService.hasPermission(accountId, permission);
+}
+
 /** 그룹 지정 권한. 그룹 생성/이미지 추가 라우트와 같은 권한 키를 요구한다. */
 export function canAssignGenerationGroup(accountId: number | null | undefined): boolean {
-  return AuthAccessControlService.hasPermission(accountId ?? null, GROUP_PERMISSION_KEY);
+  return hasGroupPermission(accountId, GROUP_PERMISSION_KEY);
 }
 
 /**
@@ -102,6 +109,9 @@ export class GenerationTargetGroupService {
     }
     if (!canAssignGenerationGroup(accountId)) {
       return { ok: false, status: 403, error: 'Group permission is required to assign generated images to a group' };
+    }
+    if (hasValue(input.groupPath) && !hasGroupPermission(accountId, 'groups.create')) {
+      return { ok: false, status: 403, error: 'Group creation permission is required to resolve generated image group paths' };
     }
     return this.resolve(input);
   }

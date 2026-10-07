@@ -1,13 +1,17 @@
 import crypto from 'crypto'
 import type { ChatExecutionContext } from '@conai/shared'
 import type { Request } from 'express'
-import { getMcpToolScope, isChatGenerationTool, CHAT_ROOM_TOOLS, type McpRequester, type McpRequestContext } from '../../mcp/context'
+import { getMcpToolScope, isChatGenerationTool, chatGenerationToolName, CHAT_ROOM_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, type McpRequester, type McpRequestContext } from '../../mcp/context'
 import { AuthAccount } from '../../models/AuthAccount'
 import { hasConfiguredAuth } from '../../routes/auth-route-helpers'
 import { AuthAccessControlService } from '../authAccessControlService'
 import type { McpHttpAuthentication } from '../mcpHttpSettingsService'
 import { isDirectLoopbackRequest } from '../../utils/bootstrapAccess'
 import { CHAT_SCOPES, loadChatSettings, type ChatScope } from './chatSettings'
+import { ChatProfileStore } from './chatProfiles'
+import { ChatGenerationPresetStore } from './chatGenerationPresets'
+import { CodexChatStore } from './codexChatStore'
+import { ChatGroupStore } from './chatGroupStore'
 
 const CHAT_MCP_TOKEN_PREFIX = 'conai_chat_'
 
@@ -63,9 +67,28 @@ export function requireChatMcpAccountAccess(context: McpRequestContext, toolName
   if (context.source === 'codex-chat' ? !access.codex : !access.llm) throw new Error('채팅 권한이 변경됐어.')
   const scope = isChatGenerationTool(toolName) ? 'generate' : getMcpToolScope(toolName)
   if (!CHAT_ROOM_TOOLS.has(toolName) && (!scope || !access.scopes.includes(scope as ChatScope))) throw new Error('이 도구를 사용할 권한이 변경됐어.')
+  const chat = context.chatContext
+  const profile = chat ? ChatProfileStore.find(chat.profileId) : null
+  const thread = chat ? CodexChatStore.findThread(chat.threadId, context.requester.accountId) : null
+  if (!chat || !profile?.isEnabled || profile.engine !== (context.source === 'codex-chat' ? 'codex' : 'llm') || !thread
+    || (chat.kind === 'group' ? !ChatGroupStore.member(chat.threadId, chat.profileId) : thread.profile_id !== chat.profileId)) {
+    throw new Error('이 채팅의 프로필 또는 방 접근 권한이 변경됐어.')
+  }
+  if (profile.toolAllowlist && !profile.toolAllowlist.includes(toolName)) throw new Error('프로필에서 이 도구를 더 이상 허용하지 않아.')
+  if (!CHAT_ROOM_TOOLS.has(toolName) && (!profile.mcpEnabled || !profile.mcpScopes.includes(scope as ChatScope))) throw new Error('프로필의 도구 권한이 변경됐어.')
+  if (toolName === 'view_images' && !profile.visionEnabled) throw new Error('프로필의 이미지 조회가 꺼져 있어.')
+  if (toolName === 'save_lore' && !profile.allowLoreProposals) throw new Error('프로필의 로어 제안이 꺼져 있어.')
+  if (profile.generationPresetIds.length > 0 && GENERATION_PRESET_BLOCKED_TOOLS.has(toolName)) throw new Error('생성 프리셋만 사용할 수 있어.')
+  if (isChatGenerationTool(toolName)) {
+    const index = (context.generationPresetIds ?? []).findIndex((_, index) => chatGenerationToolName(index) === toolName)
+    if (index < 0 || profile.generationPresetIds[index] !== context.generationPresetIds?.[index]
+      || context.generationPresetSnapshot !== JSON.stringify(ChatGenerationPresetStore.resolve(context.generationPresetIds ?? []))) {
+      throw new Error('생성 프리셋이 변경됐어. 새 답변에서 다시 사용해 줘.')
+    }
+  }
 }
 
-const tokens = new Map<string, { requester: McpRequester; scopes: ChatScope[]; toolAllowlist: string[] | null; roomTools: boolean; generationPresetIds: number[]; chatContext?: ChatExecutionContext }>()
+const tokens = new Map<string, { requester: McpRequester; scopes: ChatScope[]; toolAllowlist: string[] | null; roomTools: boolean; generationPresetIds: number[]; generationPresetSnapshot: string; chatContext?: ChatExecutionContext }>()
 
 /**
  * One token per chat app-server process; it lets that process reach `/mcp` as the chatting account with the
@@ -73,7 +96,7 @@ const tokens = new Map<string, { requester: McpRequester; scopes: ChatScope[]; t
  */
 export function issueCodexChatMcpToken(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, roomTools = false, generationPresetIds: number[] = [], chatContext?: ChatExecutionContext) {
   const token = `${CHAT_MCP_TOKEN_PREFIX}${crypto.randomBytes(32).toString('base64url')}`
-  tokens.set(token, { requester, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null, roomTools, generationPresetIds: [...generationPresetIds], chatContext })
+  tokens.set(token, { requester: { ...requester }, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null, roomTools, generationPresetIds: [...generationPresetIds], generationPresetSnapshot: JSON.stringify(ChatGenerationPresetStore.resolve(generationPresetIds)), chatContext })
   return token
 }
 
@@ -118,6 +141,7 @@ export function authenticateCodexChatMcpRequest(req: Request, candidate: string 
     toolAllowlist: grant.toolAllowlist,
     chatRoomTools: grant.roomTools,
     generationPresetIds: grant.generationPresetIds,
+    generationPresetSnapshot: grant.generationPresetSnapshot,
     chatContext: grant.chatContext ? { ...grant.chatContext } : undefined,
   }
 }

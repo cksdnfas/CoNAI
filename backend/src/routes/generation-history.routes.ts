@@ -5,6 +5,7 @@ import { HistoryCommandService } from '../services/historyCommandService';
 import { buildGenerationHistoryRequestSnapshot } from '../services/generationHistoryRequestSnapshot';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { requireAdmin } from '../middleware/authMiddleware';
+import { requireImagesView, requireImageAction } from '../middleware/imageAccess';
 import {
   applyHistoryAccessScope,
   buildHistoryQueryFilters,
@@ -23,6 +24,12 @@ import {
 } from './generation-history/mediaRouteHandlers';
 
 const router = express.Router();
+router.use((req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD') requireImagesView(req, res, next);
+  else if (req.path === '/download/batch') requireImagesView(req, res, next);
+  else if (req.method === 'DELETE' && req.query.deleteFiles === 'true') requireImageAction('images.delete')(req, res, next);
+  else requireImagesView(req, res, next);
+});
 const CLEARABLE_HISTORY_STATUSES = ['completed', 'failed'] as const;
 
 /**
@@ -98,6 +105,7 @@ router.post(
  */
 router.get(
   '/recent',
+  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const { limit = '50' } = req.query;
     const records = await GenerationHistoryService.getRecentHistory(parseInt(limit as string));
@@ -115,6 +123,7 @@ router.get(
  */
 router.get(
   '/statistics',
+  requireAdmin,
   asyncHandler(async (_req: Request, res: Response) => {
     const stats = await GenerationHistoryService.getStatistics();
 
@@ -319,6 +328,7 @@ router.get(
  */
 router.get(
   '/workflow/:workflowId/statistics',
+  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     const workflowId = routeParam(req.params.workflowId);
     const stats = await GenerationHistoryService.getWorkflowListStatistics(parseInt(workflowId));
@@ -346,6 +356,7 @@ router.get(
  */
 router.post(
   '/cleanup',
+  requireAdmin,
   asyncHandler(async (req: Request, res: Response) => {
     await handleGenerationHistoryCleanup(req, res);
   })

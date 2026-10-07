@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useMemo, useState } from 'react'
 import { useInfiniteQuery, useQueries } from '@tanstack/react-query'
 import { ImageOff, Search, X } from 'lucide-react'
@@ -27,6 +28,7 @@ export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, app
   title?: string; applyLabel?: string; note?: string | null
 }) {
   const { t } = useI18n()
+  const { canViewImages } = useImagePermissions()
   const { showSnackbar } = useSnackbar()
   const [input, setInput] = useState('')
   const [search, setSearch] = useState('')
@@ -36,6 +38,7 @@ export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, app
   const query = useInfiniteQuery({
     queryKey: ['chat-media-picker', search, tool, order],
     initialPageParam: 1,
+    enabled: canViewImages,
     queryFn: ({ pageParam, signal }) => search || tool ? searchImagesComplex({
       complex_filter: {
         or_group: search ? [
@@ -103,15 +106,16 @@ export function ChatMediaAttachments({ items = [], onRemove, disabled = false }:
   items?: ChatMediaAttachment[]; onRemove?: (hash: string) => void; disabled?: boolean
 }) {
   const { t } = useI18n()
+  const { canViewImages } = useImagePermissions()
   const viewer = useImageViewModal()
-  const queries = useQueries({ queries: items.map((item) => ({ queryKey: getImageDetailQueryKey(item.compositeHash), queryFn: ({ signal }: { signal: AbortSignal }) => getImage(item.compositeHash, { signal }), retry: false })) })
+  const queries = useQueries({ queries: items.map((item) => ({ enabled: canViewImages, queryKey: getImageDetailQueryKey(item.compositeHash), queryFn: ({ signal }: { signal: AbortSignal }) => getImage(item.compositeHash, { signal }), retry: false })) })
   const images = queries.flatMap((query) => query.data ? [query.data] : [])
   const safety = useImageFeedSafety({ items: images, enabled: items.length > 0 })
   const visible = new Map(safety.visibleItems.map((image) => [image.composite_hash, image]))
   if (!items.length) return null
   return <div className={cn('flex flex-wrap gap-2', onRemove ? 'mb-2' : 'mt-2 justify-end')}>
     {items.map((item) => {
-      const image: ImageRecord | undefined = visible.get(item.compositeHash)
+      const image: ImageRecord | undefined = canViewImages ? visible.get(item.compositeHash) : undefined
       return <div key={item.compositeHash} className="relative flex w-24 flex-col overflow-hidden rounded-sm bg-surface-high">
         <Button variant="ghost" className="h-20 w-full overflow-hidden p-0" disabled={!image || !viewer} title={item.name} onClick={() => viewer?.openImageView({ compositeHash: item.compositeHash, sourceItems: image ? [image] : [] })}>
           {image ? <img src={buildApiUrl(`/api/images/${encodeURIComponent(item.compositeHash)}/thumbnail`)} alt={item.name} loading="lazy" className={cn('size-full object-cover', safety.shouldBlurItemPreview(image) && 'blur-md')} /> : <ImageOff className="size-5 text-muted-foreground" />}

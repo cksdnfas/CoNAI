@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ExternalLink, RefreshCcw, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
@@ -36,6 +37,7 @@ export function ImageViewModalActions({
   accessOptions,
   onClose,
 }: ImageViewModalActionsProps) {
+  const permissions = useImagePermissions()
   const navigate = useNavigate()
   const location = useLocation()
   const { t, formatNumber } = useI18n()
@@ -55,10 +57,10 @@ export function ImageViewModalActions({
     }, { t, formatNumber }).text
     : `${formatNumber(activeIndex + 1)} / ${formatNumber(totalCount)}${sequenceHasMore ? '+' : ''}`
 
-  const allowDetailNavigation = accessOptions?.allowDetailNavigation !== false
+  const allowDetailNavigation = permissions.canOpenDetailPage && accessOptions?.allowDetailNavigation !== false
   const allowEditAction = accessOptions?.allowEditAction !== false
-  const allowGroupAssignAction = accessOptions?.allowGroupAssignAction !== false
-  const allowDeleteAction = accessOptions?.allowDeleteAction === true
+  const allowGroupAssignAction = permissions.canAssignGroups && accessOptions?.allowGroupAssignAction !== false
+  const allowDeleteAction = permissions.canDeleteImages && accessOptions?.allowDeleteAction === true
   const historyReuseId = accessOptions?.allowHistoryReuseActions === true && typeof controls.image?.generation_history_id === 'number'
     ? controls.image.generation_history_id
     : null
@@ -92,8 +94,8 @@ export function ImageViewModalActions({
 
   const historyReuseButtons = historyReuseId !== null ? <GenerationHistoryReuseActions key={historyReuseId} historyId={historyReuseId} /> : null
   const groupAssignButton = allowGroupAssignAction ? <ImageGroupAssignAction image={controls.image} variant="overlay" /> : null
-  const metadataEditButton = allowEditAction ? <ImageMetadataEditAction image={controls.image} variant="overlay" /> : null
-  const editButton = allowEditAction ? <ImageEditAction image={controls.image} variant="overlay" /> : null
+  const metadataEditButton = allowEditAction && permissions.canEditMetadata ? <ImageMetadataEditAction image={controls.image} variant="overlay" /> : null
+  const editButton = allowEditAction && permissions.canEditImages ? <ImageEditAction image={controls.image} variant="overlay" /> : null
   const downloadButton = controls.downloadUrl ? <ImageDownloadTriggerButton image={controls.image} variant="overlay" /> : null
   const deleteButton = allowDeleteAction ? (
     <ImageDeleteAction

@@ -1,4 +1,5 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { createHash } from 'crypto'
 import { WorkflowModel } from '../../models/Workflow'
 import { ChatProfileError } from './chatProfileError'
 
@@ -261,9 +262,7 @@ export const ChatGenerationPresetStore = {
   /** Changes whenever a linked preset is edited, so a Codex process (whose tool schemas are fixed at start) is replaced. */
   signature(ids: number[]) {
     if (ids.length === 0) return ''
-    const rows = getUserSettingsDb().prepare(`SELECT id, updated_date FROM chat_generation_presets WHERE id IN (${ids.map(() => '?').join(', ')})`).all(...ids) as Array<{ id: number; updated_date: string }>
-    const byId = new Map(rows.map((row) => [row.id, row.updated_date]))
-    return ids.flatMap((id) => (byId.has(id) ? [`${id}@${byId.get(id)}`] : [])).join(',')
+    return createHash('sha256').update(JSON.stringify(ChatGenerationPresetStore.resolve(ids))).digest('hex')
   },
 
   create(input: ChatGenerationPresetInput) {

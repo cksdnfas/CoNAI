@@ -1,3 +1,4 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { AlertTriangle, Boxes, Bug, CheckCircle2, Copy, RotateCcw, Save, SlidersHorizontal, Trash2, Unplug, Workflow, X } from 'lucide-react'
 import type { WorkflowValidationIssue } from './workflow-validation-panel'
@@ -152,6 +153,7 @@ export function ModuleWorkflowEditorView({
   hasSelectedNode,
   hasSelectedEdge,
 }: ModuleWorkflowEditorViewProps) {
+  const { canUpdateWorkflows } = useFeaturePermissions()
   const { t, formatNumber } = useI18n()
   const [isValidationPopupOpen, setIsValidationPopupOpen] = useState(false)
   const validationPopupRef = useRef<HTMLDivElement | null>(null)
@@ -182,7 +184,7 @@ export function ModuleWorkflowEditorView({
                     size="sm"
                     onClick={onOpenSaveModal}
                     aria-label={t({ ko: '워크플로우 저장', en: 'Save workflow' })}
-                  >
+                   disabled={!(canUpdateWorkflows)}>
                     <Save className="h-4 w-4" />
                     {t({ ko: '저장', en: 'Save' })}
                   </Button>

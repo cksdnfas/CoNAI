@@ -1,3 +1,5 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -31,6 +33,8 @@ export function NaiAssetSaveModal({
   onSave,
 }: NaiAssetSaveModalProps) {
   const { t } = useI18n()
+  const { canUpdateWorkflows } = useFeaturePermissions()
+  const { canViewImages } = useImagePermissions()
   const effectiveSubmitLabel = submitLabel ?? t('image-generation.components.nai.asset.save.modal.save')
 
   return (
@@ -53,7 +57,7 @@ export function NaiAssetSaveModal({
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>
             {t('image-generation.components.nai.asset.save.modal.cancel')}
           </Button>
-          <Button type="button" onClick={onSave} disabled={isSaving || name.trim().length === 0}>
+          <Button type="button" onClick={onSave} disabled={!canUpdateWorkflows || !canViewImages || isSaving || name.trim().length === 0}>
             {isSaving
               ? t('image-generation.components.nai.asset.save.modal.saving.with.action', { action: effectiveSubmitLabel })
               : effectiveSubmitLabel}

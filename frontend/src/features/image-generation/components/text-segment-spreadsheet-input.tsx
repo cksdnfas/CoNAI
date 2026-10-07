@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Separator } from '@/components/ui/separator'
 import { useI18n } from '@/i18n'
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { cn } from '@/lib/utils'
 import { getTextSegmentSpreadsheetRows, type TextSegmentSpreadsheetValue } from './prompt-text-segment-helpers'
 import { PromptPresetInlinePicker } from './prompt-preset-inline-picker'
@@ -40,6 +41,7 @@ export function TextSegmentSpreadsheetInput({
   onChange,
 }: TextSegmentSpreadsheetInputProps) {
   const { t } = useI18n()
+  const { canViewPrompts } = useFeaturePermissions()
   const rows = getTextSegmentSpreadsheetRows(value)
   const presetButtonRefs = useRef(new Map<number, HTMLButtonElement | null>())
   const [presetPickerRowIndex, setPresetPickerRowIndex] = useState<number | null>(null)
@@ -53,6 +55,7 @@ export function TextSegmentSpreadsheetInput({
   }
 
   const handleInsertPreset = (index: number, insertionText: string) => {
+    if (!canViewPrompts) return
     const currentValue = rows[index] ?? ''
     const separator = currentValue.trim().length > 0 && !currentValue.endsWith('\n') ? '\n' : ''
     handleRowChange(index, `${currentValue}${separator}${insertionText}`)
@@ -103,6 +106,7 @@ export function TextSegmentSpreadsheetInput({
                   }}
                   size="icon-sm"
                   variant="ghost"
+                  disabled={!canViewPrompts}
                   onClick={() => setPresetPickerRowIndex((current) => current === index ? null : index)}
                   label={t('image-generation.components.text.segment.spreadsheet.input.insert.preset.into.prompt.row', { row: index + 1 })}
                   tooltipSide="left"

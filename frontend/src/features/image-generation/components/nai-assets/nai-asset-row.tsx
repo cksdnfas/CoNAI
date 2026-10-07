@@ -1,3 +1,5 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import type { ReactNode } from 'react'
 import { ImageIcon, ImagePlus, MoreHorizontal, Save, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -40,6 +42,8 @@ export function NaiAssetRow({
   onRemove,
 }: NaiAssetRowProps) {
   const { t } = useI18n()
+  const { canUpdateWorkflows } = useFeaturePermissions()
+  const { canViewImages } = useImagePermissions()
   const strengthLabel = t({ ko: '강도', en: 'Strength' })
 
   return (
@@ -85,7 +89,7 @@ export function NaiAssetRow({
             </PopoverClose>
             {onSave ? (
               <PopoverClose asChild>
-                <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={onSave} disabled={saveDisabled} title={saveTitle}>
+                <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={onSave} disabled={!canUpdateWorkflows || !canViewImages || saveDisabled} title={saveTitle}>
                   <Save />
                   {t({ ko: '라이브러리에 저장', en: 'Save to library' })}
                 </Button>

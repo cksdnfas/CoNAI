@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useIsMutating, useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { Activity, ArrowLeft, ArrowUp, Download, Eraser, Flag, FoldVertical, LayoutGrid, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, UserRound, X } from 'lucide-react'
@@ -299,11 +300,12 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const memberProfiles = useMemo(() => memberIdsKey ? memberIdsKey.split(',').flatMap((id) => profilesById.get(Number(id)) ?? []) : [], [memberIdsKey, profilesById])
   const memberNames = useMemo(() => memberProfiles.map((member) => member.name), [memberProfiles])
   const speakerProfiles = useMemo(() => isGroup ? memberProfiles : profile ? [profile] : [], [isGroup, memberProfiles, profile])
+  const { canViewImages } = useImagePermissions()
   const emoticonData = useQueries({
     queries: speakerProfiles.map((entry) => ({
       queryKey: chatProfileEmoticonsQueryKey(entry.id),
       queryFn: () => listChatProfileEmoticons(entry.id),
-      enabled: Boolean(entry.style?.emoticonGroupIds?.length),
+      enabled: canViewImages && Boolean(entry.style?.emoticonGroupIds?.length),
       staleTime: 60_000,
     })),
     combine: pickEmoticonData,
@@ -328,7 +330,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     const entry = profileId === null ? undefined : profilesById.get(profileId)
     return entry ? toSpeaker(entry) : null
   }, [profilesById, toSpeaker])
-  const backgroundUrl = appearance.showBackground && profile?.backgroundVersion ? chatProfileBackgroundUrl(profile.id, profile.backgroundVersion) : null
+  const backgroundUrl = canViewImages && appearance.showBackground && profile?.backgroundVersion ? chatProfileBackgroundUrl(profile.id, profile.backgroundVersion) : null
 
   const codexStatusQuery = useQuery({ queryKey: ['codex-generation-status'], queryFn: getCodexGenerationStatus, staleTime: 30_000, enabled: isCodexThread && (thread !== null || pendingProfile !== null) })
   const codexStatus = codexStatusQuery.data?.data ?? null

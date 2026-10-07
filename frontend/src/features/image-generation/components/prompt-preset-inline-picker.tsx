@@ -8,6 +8,7 @@ import { anchoredPopupBodyClassName, anchoredPopupHeaderClassName, anchoredPopup
 import { buildPromptPresetInsertionText, getPromptPresets, type PromptPresetRecord } from '@/lib/api-prompt-presets'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import type { RefObject } from 'react'
 
 type PromptPresetTreeEntry = {
@@ -41,13 +42,15 @@ export function PromptPresetInlinePicker({
   onInsert: (text: string) => void
 }) {
   const { t } = useI18n()
+  const { canViewPrompts } = useFeaturePermissions()
   const presetsQuery = useQuery({
     queryKey: ['prompt-presets', 'inline-picker'],
     queryFn: () => getPromptPresets({ hierarchical: true, withItems: true }),
     staleTime: 60_000,
+    enabled: canViewPrompts,
   })
 
-  const entries = useMemo(() => flattenPromptPresetTree(presetsQuery.data ?? []), [presetsQuery.data])
+  const entries = useMemo(() => canViewPrompts ? flattenPromptPresetTree(presetsQuery.data ?? []) : [], [canViewPrompts, presetsQuery.data])
   const presetNavItems = useMemo(() => entries.map((entry) => entry.preset), [entries])
   const insertableCount = entries.reduce((count, entry) => count + (entry.insertionText ? 1 : 0), 0)
   const presetEntriesById = useMemo(() => {
@@ -59,6 +62,7 @@ export function PromptPresetInlinePicker({
   }, [entries])
 
   const handleSelect = (preset: PromptPresetRecord) => {
+    if (!canViewPrompts) return
     const insertionText = presetEntriesById.get(preset.id)?.insertionText ?? ''
     if (!insertionText) {
       return
@@ -67,6 +71,8 @@ export function PromptPresetInlinePicker({
     onInsert(insertionText)
     onClose()
   }
+
+  if (!canViewPrompts) return null
 
   return (
     <AnchoredPopup open={open} anchorRef={anchorRef} onClose={onClose} align="end" side="bottom" className="w-[min(28rem,calc(100vw-1.5rem))] overflow-hidden p-0" closeOnBack>

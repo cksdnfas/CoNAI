@@ -4,9 +4,11 @@ import { Heading } from '@/components/ui/heading'
 import { Panel } from '@/components/ui/panel'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
-import { hasAuthPermission } from './auth-permissions'
+import { hasAuthPermission, resolveAccountDraftOwner } from './auth-permissions'
 import { resolveRoutePermissionKey } from './auth-route-permissions'
 import { useAuthStatusQuery } from './use-auth-status-query'
+import { ImagePermissionsContext, resolveImagePermissions } from './use-image-permissions'
+import { FeaturePermissionsContext, resolveFeaturePermissions } from './use-feature-permissions'
 
 /** Block app-shell routes until the local login requirement is satisfied. */
 export function ProtectedAppShell() {
@@ -29,7 +31,7 @@ export function ProtectedAppShell() {
     }
   }
 
-  return <AppShell />
+  return <FeaturePermissionsContext.Provider value={resolveFeaturePermissions(authStatusQuery.data?.permissionKeys, authStatusQuery.data?.authenticated, authStatusQuery.data?.isAdmin)}><ImagePermissionsContext.Provider value={resolveImagePermissions(authStatusQuery.data?.permissionKeys, authStatusQuery.data?.authenticated)}><AppShell key={resolveAccountDraftOwner(authStatusQuery.data)} /></ImagePermissionsContext.Provider></FeaturePermissionsContext.Provider>
 }
 
 /** Shown to other machines before the first admin exists; bootstrap access stays on the server PC. */

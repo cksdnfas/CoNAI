@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { Suspense, lazy, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Paintbrush } from 'lucide-react'
@@ -6,7 +7,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { getExistingImageEditorSourceUrl, saveEditedImageToCanvas } from '@/lib/api-images'
-import { getAppSettings } from '@/lib/api-settings-general'
+import { getImageViewerSettings } from '@/lib/api-settings'
 import {
   DEFAULT_IMAGE_SAVE_SETTINGS,
   buildImageSaveOutput,
@@ -26,6 +27,7 @@ interface ImageEditActionProps {
 
 /** Render a reusable image edit action that saves the edited result into save/canvas. */
 export function ImageEditAction({ image, variant = 'secondary' }: ImageEditActionProps) {
+  const { canEditImages } = useImagePermissions()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
@@ -35,11 +37,11 @@ export function ImageEditAction({ image, variant = 'secondary' }: ImageEditActio
   const [pendingCanvasSaveInfo, setPendingCanvasSaveInfo] = useState<ImageSaveSourceInfo | null>(null)
   const fileId = typeof image?.file_id === 'number' && image.file_id > 0 ? image.file_id : null
   const sourceImageUrl = getExistingImageEditorSourceUrl(image)
-  const canEditImage = Boolean(fileId && sourceImageUrl && image?.file_type === 'image')
+  const canEditImage = canEditImages && Boolean(fileId && sourceImageUrl && image?.file_type === 'image')
 
   const appSettingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
+    queryKey: ['image-viewer-settings'],
+    queryFn: getImageViewerSettings,
     enabled: canEditImage && (isEditorOpen || pendingCanvasSaveDataUrl !== null),
   })
 

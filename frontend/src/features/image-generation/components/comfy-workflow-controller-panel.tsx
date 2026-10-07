@@ -1,3 +1,4 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, BookmarkPlus, ChevronDown, RotateCcw, Save } from 'lucide-react'
@@ -228,6 +229,7 @@ export function ComfyWorkflowControllerPanel({
   onGenerateSelected,
   onRevealFieldIssues,
 }: ComfyWorkflowControllerPanelProps) {
+  const { canUpdateWorkflows } = useFeaturePermissions()
   const { t } = useI18n()
   const routingSummary = useMemo(
     () => buildComfyWorkflowServerRoutingSummary(servers, serverTests),
@@ -437,7 +439,7 @@ export function ComfyWorkflowControllerPanel({
         <ArrowLeft />
       </IconButton>
       <Heading level={3} as="div" className="min-w-0 flex-1 truncate">{workflowName}</Heading>
-      <IconButton variant="ghost" size="icon-sm" onClick={onOpenModuleSave} disabled={isGenerating} label={saveModuleLabel}>
+      <IconButton variant="ghost" size="icon-sm" onClick={onOpenModuleSave} disabled={!(canUpdateWorkflows) || (isGenerating)} label={saveModuleLabel}>
         <Save />
       </IconButton>
       {onSaveChatPreset ? (

@@ -29,7 +29,7 @@ export async function updateLlmSettings(settings: Partial<LlmSettings>) {
 }
 
 export async function getLlmPresetOptions() {
-  const response = await fetchJson<ApiResponse<LlmPresetOptionCollections>>('/api/settings/llm-presets/options')
+  const response = await fetchJson<ApiResponse<LlmPresetOptionCollections>>('/api/external-api/llm-presets/options')
   if (!response.success) {
     throw createApiFallbackError(response.error, 'settings.llmPresets.load')
   }

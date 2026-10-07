@@ -9,7 +9,7 @@ import {
   type UploadStreamCallbacks,
   type UploadTransferProgress,
 } from '@/lib/api-images'
-import { getAppSettings } from '@/lib/api-settings-general'
+import { getRuntimeImageSaveSettings } from '@/lib/api-settings'
 import {
   DEFAULT_IMAGE_SAVE_SETTINGS,
   loadImageSaveSourceInfo,
@@ -76,8 +76,8 @@ export function useUploadPageUploadFlow({
   const [pendingUploadSaveInfo, setPendingUploadSaveInfo] = useState<ImageSaveSourceInfo | null>(null)
 
   const appSettingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
+    queryKey: ['runtime-image-save-settings'],
+    queryFn: getRuntimeImageSaveSettings,
   })
 
   const effectiveImageSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS

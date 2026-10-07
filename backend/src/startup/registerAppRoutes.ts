@@ -1,3 +1,5 @@
+import { IMAGE_VIEW_PERMISSION } from '@conai/shared';
+import { allowImagesView, requireImagesView } from '../middleware/imageAccess';
 import express, { type Express, type Request, type RequestHandler, type Response } from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -49,7 +51,6 @@ import { mcpRoutes } from '../mcp';
 import { errorHandler } from '../middleware/errorHandler';
 import {
   allowAnonymousAnyPermission,
-  allowAnonymousPermission,
   optionalAuth,
   requireAdmin,
   requireAuth,
@@ -74,10 +75,10 @@ export interface RegisterAppRoutesResult {
 
 /** Register one authenticated runtime directory with shared cache headers. */
 function registerRuntimeStaticDirectory(app: Express, mountPath: string, directoryPath: string): void {
-  app.use(mountPath, requireAuth, express.static(directoryPath, {
+  app.use(mountPath, requireAuth, requireImagesView, express.static(directoryPath, {
     setHeaders: (res) => {
       // Files can be replaced in place at the same URL and may contain private user media.
-      res.setHeader('Cache-Control', 'private, max-age=86400, must-revalidate');
+      res.setHeader('Cache-Control', 'private, no-cache');
     },
     etag: true,
     lastModified: true,
@@ -106,28 +107,6 @@ function renderIntegratedFrontendIndex(req: Request, res: Response, htmlTemplate
     : `${bootstrapScript}${htmlTemplate}`;
 }
 
-const IMAGE_READ_PERMISSION_KEYS = ['page.home.view', 'page.image-detail.view'] as const;
-const HOME_IMAGE_READ_PERMISSION_KEYS = ['page.home.view', 'page.image-detail.view'] as const;
-const RUNTIME_MEDIA_SETTINGS_READ_PERMISSION_KEYS = [
-  ...HOME_IMAGE_READ_PERMISSION_KEYS,
-  'page.generation.view',
-] as const;
-/**
- * One library file by its hash (the hash is the pixel SHA-256, so it is only known to someone who was shown the
- * image). Chat users open the images their chats show — search results, their generations — at full size, as any
- * signed-in account already can their thumbnails; browsing and searching the library keeps the page permissions.
- */
-const IMAGE_FILE_READ_PERMISSION_KEYS = [
-  ...IMAGE_READ_PERMISSION_KEYS,
-  'chat.codex.use',
-  'chat.llm.use',
-] as const;
-const WALLPAPER_IMAGE_READ_PERMISSION_KEYS = [
-  'page.home.view',
-  'page.image-detail.view',
-  'page.wallpaper.runtime.view',
-] as const;
-
 function isReadMethod(req: Request): boolean {
   return req.method === 'GET' || req.method === 'HEAD';
 }
@@ -154,9 +133,9 @@ function isImageReadRequest(req: Request): boolean {
   ].includes(req.path);
 }
 
-function allowReadAccess(permissionKeys: readonly string[]): RequestHandler {
+function allowReadAccess(permissionKeys: readonly string[], readPostPaths: readonly string[] = []): RequestHandler {
   return (req, res, next) => {
-    if (isReadMethod(req)) {
+    if (isReadMethod(req) || (req.method === 'POST' && readPostPaths.includes(req.path))) {
       allowAnonymousAnyPermission(permissionKeys)(req, res, next);
       return;
     }
@@ -165,45 +144,13 @@ function allowReadAccess(permissionKeys: readonly string[]): RequestHandler {
   };
 }
 
-/** Allow authenticated public-workflow users to read non-sensitive runtime media policy. */
-const allowRuntimeMediaSettingsRead: RequestHandler = (req, res, next) => {
-  if (isReadMethod(req) && req.session?.authenticated === true) {
-    next();
-    return;
-  }
-
-  allowReadAccess(RUNTIME_MEDIA_SETTINGS_READ_PERMISSION_KEYS)(req, res, next);
-};
-
-/**
- * History requests whose handlers already enforce per-record owner-or-admin access: the list (scoped to the requester
- * by applyHistoryAccessScope), one row, and its media. Chat polls the rows its own generations wrote.
- */
-function isOwnerScopedHistoryMediaRequest(req: Request): boolean {
-  if (isReadMethod(req)) {
-    return req.path === '/' || /^\/\d+(?:\/(?:file|thumbnail|image))?$/.test(req.path);
-  }
-
-  return req.method === 'POST' && req.path === '/download/batch';
+/** Preserve the existing authenticated data boundary while authorizing reads by feature. */
+function requireReadAccess(permissionKey: string, readPostPaths: readonly string[] = []): RequestHandler {
+  return (req, res, next) => {
+    if (isReadMethod(req) || (req.method === 'POST' && readPostPaths.includes(req.path))) requirePermission(permissionKey)(req, res, next);
+    else optionalAuth(req, res, next);
+  };
 }
-
-/**
- * Allow authenticated public-workflow users to load their own generation-history media.
- *
- * The public-workflow surface (mounted with requireAuth only) hands guests a history list
- * whose media URLs point at /api/generation-history/:id/{file,thumbnail,image}. Those
- * handlers all pass through canAccessHistoryRecord (owner-or-admin), so the page permission
- * is not the effective guard there — requiring it 403'd every thumbnail for accounts without
- * page.generation.view. Every other history route keeps the page permission.
- */
-const allowScopedGenerationHistoryAccess: RequestHandler = (req, res, next) => {
-  if (req.session?.authenticated === true && isOwnerScopedHistoryMediaRequest(req)) {
-    next();
-    return;
-  }
-
-  requirePermission('page.generation.view')(req, res, next);
-};
 
 /** Register API routes, runtime static directories, frontend assets, and terminal handlers. */
 export function registerAppRoutes(app: Express, options: RegisterAppRoutesOptions): RegisterAppRoutesResult {
@@ -226,12 +173,11 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/external-api', optionalAuth, externalApiRoutes);
   app.use('/api/civitai', options.readOnlyLimiter, optionalAuth, civitaiRoutes);
   app.use('/api/wallpaper-runtime', options.readOnlyLimiter, (req, res, next) => {
-    if (req.session?.authenticated === true) {
-      optionalAuth(req, res, next);
+    if (req.path === '/browse-content' || /^\/groups\/[^/]+\/preview-images$/.test(req.path)) {
+      allowImagesView(req, res, next);
       return;
     }
-
-    allowAnonymousPermission('page.wallpaper.runtime.view')(req, res, next);
+    next(); // Sanitized wallpaper settings are public runtime preferences.
   }, wallpaperRuntimeRoutes);
   app.use('/api/images', options.readOnlyLimiter, (req, res, next) => {
     if (isImageUploadPayloadRequest(req)) {
@@ -248,38 +194,20 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
       return;
     }
 
-    const isWallpaperRuntimeThumbnailRequest = (req.method === 'GET' || req.method === 'HEAD')
-      && /^\/[^/]+\/thumbnail$/.test(req.path);
-
-    if (isWallpaperRuntimeThumbnailRequest) {
-      if (req.session?.authenticated === true) {
-        optionalAuth(req, res, next);
-        return;
-      }
-
-      allowAnonymousAnyPermission(WALLPAPER_IMAGE_READ_PERMISSION_KEYS)(req, res, next);
-      return;
-    }
-
-    if (isReadMethod(req) && /^\/[^/]+\/file$/.test(req.path)) {
-      allowAnonymousAnyPermission(IMAGE_FILE_READ_PERMISSION_KEYS)(req, res, next);
-      return;
-    }
-
     if (isImageReadRequest(req)) {
-      allowAnonymousAnyPermission(IMAGE_READ_PERMISSION_KEYS)(req, res, next);
+      allowImagesView(req, res, next);
       return;
     }
 
     optionalAuth(req, res, next);
   }, imageRoutes);
-  app.use('/api/prompt-collection', options.readOnlyLimiter, optionalAuth, requirePermission('page.prompts.view'), promptCollectionRoutes);
-  app.use('/api/danbooru-browser', options.readOnlyLimiter, optionalAuth, requirePermission('page.prompts.view'), danbooruBrowserRoutes);
-  app.use('/api/prompt-groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.prompts.view'), promptGroupRoutes);
-  app.use('/api/negative-prompt-groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.prompts.view'), negativePromptGroupRoutes);
-  app.use('/api/prompt-presets', optionalAuth, promptPresetRoutes);
-  app.use('/api/groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.groups.view'), groupRoutes);
-  app.use('/api/auto-folder-groups', options.readOnlyLimiter, optionalAuth, requirePermission('page.groups.view'), autoFolderGroupRoutes);
+  app.use('/api/prompt-collection', options.readOnlyLimiter, requireReadAccess('prompts.view', ['/resolve-groups']), promptCollectionRoutes);
+  app.use('/api/danbooru-browser', options.readOnlyLimiter, requireReadAccess('prompts.view'), danbooruBrowserRoutes);
+  app.use('/api/prompt-groups', options.readOnlyLimiter, requireReadAccess('prompts.view'), promptGroupRoutes);
+  app.use('/api/negative-prompt-groups', options.readOnlyLimiter, requireReadAccess('prompts.view'), negativePromptGroupRoutes);
+  app.use('/api/prompt-presets', requireReadAccess('prompts.view'), promptPresetRoutes);
+  app.use('/api/groups', options.readOnlyLimiter, groupRoutes);
+  app.use('/api/auto-folder-groups', options.readOnlyLimiter, autoFolderGroupRoutes);
   app.get('/api/settings/appearance-public', options.readOnlyLimiter, (_req, res) => {
     res.json({
       success: true,
@@ -293,18 +221,36 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
     });
   });
   app.use('/api/runtime-appearance', optionalAuth, runtimeAppearanceRoutes);
-  app.use('/api/runtime-media-settings', options.readOnlyLimiter, allowRuntimeMediaSettingsRead, runtimeMediaSettingsRoutes);
-  app.use('/api/settings', optionalAuth, requirePermission('page.settings.view'), settingsRoutes);
+  app.get('/api/runtime-settings/language', options.readOnlyLimiter, (_req, res) => {
+    res.json({ success: true, data: { general: { language: settingsService.loadSettings().general.language } } });
+  });
+  app.get('/api/runtime-settings/image-save', options.readOnlyLimiter, requireAuth, allowAnonymousAnyPermission(['images.view', 'generation.execute', 'workflows.view', 'upload.create']), (_req, res) => {
+    res.json({ success: true, data: { imageSave: settingsService.loadSettings().imageSave } });
+  });
+  app.get('/api/runtime-settings/workflows', options.readOnlyLimiter, requirePermission('workflows.view'), (_req, res) => {
+    const { tagger, kaloscope } = settingsService.loadSettings();
+    res.json({ success: true, data: { tagger: { enabled: tagger.enabled }, kaloscope: { enabled: kaloscope.enabled } } });
+  });
+  app.use('/api/runtime-media-settings', options.readOnlyLimiter, allowReadAccess([IMAGE_VIEW_PERMISSION]), runtimeMediaSettingsRoutes);
+  app.use('/api/settings', requireAdmin, settingsRoutes);
   app.use('/api/workflow-input-assets', options.uploadLimiter, requireAuth, workflowInputAssetRoutes);
-  app.use('/api/workflows', options.readOnlyLimiter, optionalAuth, requirePermission('page.generation.view'), workflowRoutes);
+  app.use('/api/workflows', options.readOnlyLimiter, requireReadAccess('workflows.view'), workflowRoutes);
   app.use('/api/public-workflows', requireAuth, publicWorkflowRoutes);
-  app.use('/api/comfyui-servers', optionalAuth, requirePermission('page.generation.view'), comfyuiServerRoutes);
-  app.use('/api/custom-dropdown-lists', optionalAuth, requirePermission('page.generation.view'), customDropdownListRoutes);
-  app.use('/api/custom-nodes', optionalAuth, requirePermission('page.generation.view'), customNodeRoutes);
-  app.use('/api/module-definitions', optionalAuth, requirePermission('page.generation.view'), moduleDefinitionRoutes);
-  app.use('/api/graph-workflows', optionalAuth, requirePermission('page.generation.view'), graphWorkflowRoutes);
-  app.use('/api/nai', options.uploadLimiter, optionalAuth, requirePermission('page.generation.view'), naiRoutes);
-  app.use('/api/generation-history', options.readOnlyLimiter, optionalAuth, allowScopedGenerationHistoryAccess, generationHistoryRoutes);
+  app.use('/api/comfyui-servers', requireReadAccess('workflows.view'), comfyuiServerRoutes);
+  app.use('/api/custom-dropdown-lists', (req, res, next) => {
+    // Bitmap URLs are also consumed by published workflows without global workflow-data access.
+    if (isReadMethod(req) && req.path === '/comfy-model-thumbnail') optionalAuth(req, res, next);
+    else requireReadAccess('workflows.view')(req, res, next);
+  }, customDropdownListRoutes);
+  app.use('/api/custom-nodes', requireReadAccess('workflows.view'), customNodeRoutes);
+  app.use('/api/module-definitions', requireReadAccess('workflows.view'), moduleDefinitionRoutes);
+  app.use('/api/graph-workflows', (req, res, next) => {
+    const readsMedia = isReadMethod(req) && (req.path === '/browse-content' || /^\/executions\/(?:previews|\d+)$/.test(req.path));
+    if (readsMedia) requirePermission('workflows.view')(req, res, () => requireImagesView(req, res, next));
+    else requireReadAccess('workflows.view')(req, res, next);
+  }, graphWorkflowRoutes);
+  app.use('/api/nai', options.uploadLimiter, optionalAuth, naiRoutes);
+  app.use('/api/generation-history', options.readOnlyLimiter, optionalAuth, generationHistoryRoutes);
   app.use('/api/generation-queue', requireAuth, generationQueueRoutes);
   app.use('/api/codex-chat', requireAuth, codexChatRoutes);
   app.use('/api/chat-proposals', requireAuth, chatProposalRoutes);
@@ -312,14 +258,14 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
     const limiter = req.method === 'POST' && req.path === '/upload' ? options.uploadLimiter : options.readOnlyLimiter;
     limiter(req, res, next);
   }, filesRoutes);
-  app.use('/api/wildcards', optionalAuth, wildcardUtilityRoutes);
+  app.use('/api/wildcards', wildcardUtilityRoutes);
   app.use('/api/wildcards', optionalAuth, wildcardMutationRoutes);
-  app.use('/api/wildcards', optionalAuth, wildcardReadRoutes);
+  app.use('/api/wildcards', wildcardReadRoutes);
   app.use('/api/folders', requireAdmin, watchedFoldersRoutes);
   app.use('/api/backup-sources', requireAdmin, backupSourcesRoutes);
   app.use('/api/search-history', optionalAuth, searchHistoryRoutes);
-  app.use('/api/search-options', options.readOnlyLimiter, allowReadAccess(HOME_IMAGE_READ_PERMISSION_KEYS), searchOptionsRoutes);
-  app.use('/api/background-queue', optionalAuth, requirePermission('page.generation.view'), backgroundQueueRoutes);
+  app.use('/api/search-options', options.readOnlyLimiter, allowReadAccess([IMAGE_VIEW_PERMISSION]), searchOptionsRoutes);
+  app.use('/api/background-queue', requireReadAccess('workflows.view'), backgroundQueueRoutes);
   app.use('/api/system', optionalAuth, systemRoutes);
   app.use('/api/image-editor', options.uploadLimiter, optionalAuth, imageEditorRoutes);
   app.use('/api/file-verification', optionalAuth, fileVerificationRoutes);

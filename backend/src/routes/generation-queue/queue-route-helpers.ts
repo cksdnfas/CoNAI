@@ -2,7 +2,6 @@ import type { Request, Response } from 'express'
 import { AuthAccount } from '../../models/AuthAccount'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { parseGenerationQueueRoutingTag } from '../../services/generationQueueRouting'
-import { AuthAccessControlService } from '../../services/authAccessControlService'
 import { readQueueDebugMeta } from '../../services/generation-queue/queueDebugMeta'
 import type { GenerationQueueJobListRecord, GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
 import { getRequesterAccountId, isAdminRequest } from '../requester-session-helpers'
@@ -104,11 +103,6 @@ export function resolveAccessibleQueueJob(req: Request, res: Response): { jobId:
   }
 
   return { jobId, job }
-}
-
-export function hasGenerationPageAccess(req: Request) {
-  const accountId = getRequesterAccountId(req)
-  return AuthAccessControlService.hasPermission(accountId, 'page.generation.view')
 }
 
 export function buildQueueRequesterUsernameMap(records: Array<Pick<GenerationQueueJobRecord, 'requested_by_account_id'>>) {

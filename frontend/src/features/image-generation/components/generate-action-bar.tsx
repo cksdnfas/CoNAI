@@ -1,3 +1,4 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, type ComponentProps, type ReactNode } from 'react'
 import { AlertTriangle, Loader2, RotateCcw, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -163,14 +164,15 @@ export function GenerateActionBar({
 }: GenerateActionBarProps) {
   const { t } = useI18n()
   const isSticky = variant === 'sticky'
-  const canGenerate = !generateDisabled && !isGenerating
+  const { canExecuteGeneration } = useFeaturePermissions()
+  const canGenerate = canExecuteGeneration && !generateDisabled && !isGenerating
   const shortcutHint = isMacPlatform() ? '⌘ Enter' : 'Ctrl+Enter'
 
   useGenerateShortcut(shortcut, () => {
     if (canGenerate) onGenerate()
   })
 
-  const visibleLabel = isGenerating ? (generatingLabel ?? generateLabel) : generateLabel
+  const visibleLabel = !canExecuteGeneration ? t({ ko: '생성 권한 필요', en: 'Generation permission required' }) : isGenerating ? (generatingLabel ?? generateLabel) : generateLabel
   const repeatLabel = t({ ko: '반복', en: 'Repeat' })
   const repeatHint = t({ ko: '큐에 넣을 작업 수', en: 'Jobs to add to the queue' })
   const resolvedResetLabel = resetLabel ?? t({ ko: '초기화', en: 'Reset' })

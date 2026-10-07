@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { SquareTerminal } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { ChatEngine } from '@/lib/api-codex-chat'
@@ -30,7 +31,8 @@ export function ChatProfileAvatar({ name, avatar, engine, size = 'md', className
   className?: string
 }) {
   const base = cn('inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold', SIZE_CLASS[size], className)
-  if (avatar) {
+  const { canViewImages } = useImagePermissions()
+  if (canViewImages && avatar) {
     return <img src={avatar} alt="" draggable={false} className={cn(base, 'object-cover')} />
   }
   if (engine === 'codex') {

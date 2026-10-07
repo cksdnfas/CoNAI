@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useRef, useState } from 'react'
 import { EyeOff, File, FolderOpen, Images, Paperclip, Upload, X } from 'lucide-react'
 import type { StoredFileEntry } from '@conai/shared'
@@ -21,8 +22,8 @@ export function ChatAttachButton({ chat, disabled }: { chat: CodexChatApi; disab
   const [pickerOpen, setPickerOpen] = useState(false)
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false)
   const permissions = auth.data?.permissionKeys ?? []
-  const canPickFiles = permissions.includes('page.files.view')
-  const canPickMedia = permissions.includes('page.home.view') || permissions.includes('page.image-detail.view')
+  const canPickFiles = permissions.includes('files.view')
+  const canPickMedia = useImagePermissions().canViewImages
   if (!canPickFiles && !canPickMedia) return null
   const canUpload = canPickFiles && permissions.includes('files.upload')
   const label = t({ ko: '파일 첨부', en: 'Attach files' })

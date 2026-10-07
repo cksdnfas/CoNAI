@@ -3,7 +3,7 @@ import type {
   ModuleDefinitionRecord,
 } from '@/lib/api-module-graph'
 import type { TranslationInput, TranslationParams } from '@/i18n'
-import type { AppSettings } from '@conai/shared'
+import type { RuntimeWorkflowSettings } from '@/lib/api-settings'
 import type { WorkflowValidationIssue } from './module-graph-types'
 import { hasMeaningfulValue } from './module-graph-value-utils'
 import { isFinalResultModule } from './module-graph-module-helpers'
@@ -24,7 +24,7 @@ export type ValidationEdgeRecord = {
 type ValidationTranslator = (input: TranslationInput, params?: TranslationParams) => string
 
 /** Resolve system capability validation issues from current application settings. */
-function resolveSystemCapabilityIssue(module: ModuleDefinitionRecord, translate: ValidationTranslator, settings?: AppSettings | null) {
+function resolveSystemCapabilityIssue(module: ModuleDefinitionRecord, translate: ValidationTranslator, settings?: RuntimeWorkflowSettings | null) {
   if (module.engine_type !== 'system' || !settings) {
     return null
   }
@@ -52,7 +52,7 @@ export function buildWorkflowValidationIssues(params: {
   edges: ValidationEdgeRecord[]
   exposedInputs: GraphWorkflowExposedInput[]
   runtimeInputValues?: Record<string, unknown>
-  settings?: AppSettings | null
+  settings?: RuntimeWorkflowSettings | null
   translate: ValidationTranslator
 }) {
   const { nodes, edges, exposedInputs, runtimeInputValues = {}, settings, translate } = params

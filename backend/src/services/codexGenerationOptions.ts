@@ -61,10 +61,10 @@ function readReasoningEfforts(value: unknown, key: 'reasoningEffort' | 'effort')
 }
 
 /** Ask a short-lived `codex app-server` for the account's visible models (`model/list`). */
-async function listModelsFromAppServer(): Promise<CodexModelSuggestion[]> {
+async function listModelsFromAppServer(existingClient?: import('./codex-chat/codexAppServerClient').CodexAppServerClient): Promise<CodexModelSuggestion[]> {
   // Loaded lazily: the app-server client imports the executor, which imports this module.
   const { CodexAppServerClient } = await import('./codex-chat/codexAppServerClient')
-  const client = await CodexAppServerClient.start({ args: [], env: process.env, cwd: os.tmpdir() })
+  const client = existingClient ?? await CodexAppServerClient.start({ args: [], env: process.env, cwd: os.tmpdir() })
   try {
     const { config } = await client.request<{ config?: { model?: string | null } }>('config/read', { includeLayers: false }, MODEL_LIST_TIMEOUT_MS)
       .catch(() => ({ config: undefined }))
@@ -90,7 +90,7 @@ async function listModelsFromAppServer(): Promise<CodexModelSuggestion[]> {
     }
     return models
   } finally {
-    client.close()
+    if (!existingClient) client.close()
   }
 }
 
@@ -127,7 +127,12 @@ async function loadCodexModelSuggestions(): Promise<CodexModelSuggestions> {
 }
 
 /** Best-effort suggestions only: never require them or restrict user-supplied model IDs to them. */
-export async function getCodexModelSuggestions(): Promise<CodexModelSuggestions> {
+export async function getCodexModelSuggestions(options: { client?: import('./codex-chat/codexAppServerClient').CodexAppServerClient; cacheOnly?: boolean } = {}): Promise<CodexModelSuggestions> {
+  if (options.client) return { models: await listModelsFromAppServer(options.client), source: 'cli' }
+  if (options.cacheOnly) {
+    try { return { models: await readModelsCacheFile(), source: 'cli-cache' } }
+    catch { return { models: [], source: 'unavailable' } }
+  }
   if (modelListCache && modelListCache.expiresAt > Date.now()) return modelListCache.value
   modelListInFlight ??= loadCodexModelSuggestions().then((value) => {
     // Only a live answer is cached, so a login or CLI install shows up on the next request.

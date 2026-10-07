@@ -61,9 +61,16 @@ function detectMediaFamilies(data: Buffer): Set<'image' | 'video' | 'audio'> {
   return families;
 }
 
-function inspectValue(value: unknown, state: { decodedBytes: number }): void {
+function inspectValue(value: unknown, state: { decodedBytes: number; onManagedMedia?: () => void }, depth = 0, chat = false, structured = false): void {
+  if (depth > 40) throw new McpRequestValidationError('MCP input nesting is too deep.', 400, -32602);
   if (typeof value === 'string') {
     if (!value.startsWith('data:')) {
+      // Composite node fields may encode an object as JSON; its path keys are still untrusted.
+      if (chat && structured && /^[\s]*[\[{]/.test(value)) {
+        let parsed: unknown;
+        try { parsed = JSON.parse(value); } catch { return; }
+        inspectValue(parsed, state, depth + 1, chat);
+      }
       return;
     }
 
@@ -90,7 +97,7 @@ function inspectValue(value: unknown, state: { decodedBytes: number }): void {
   }
 
   if (Array.isArray(value)) {
-    value.forEach((item) => inspectValue(item, state));
+    value.forEach((item) => inspectValue(item, state, depth + 1, chat));
     return;
   }
 
@@ -99,6 +106,8 @@ function inspectValue(value: unknown, state: { decodedBytes: number }): void {
   }
 
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (chat && key === 'composite_hash' && child) state.onManagedMedia?.();
+    if (chat && key === '__ref') throw new McpRequestValidationError('Chat media must use data URLs or managed image hashes, not internal storage references.', 400, -32602);
     if (FORBIDDEN_PATH_KEYS.has(key.toLowerCase())) {
       throw new McpRequestValidationError(
         `MCP file path input is not allowed (${key}). Use data_url or composite_hash.`,
@@ -106,8 +115,13 @@ function inspectValue(value: unknown, state: { decodedBytes: number }): void {
         -32602,
       );
     }
-    inspectValue(child, state);
+    inspectValue(child, state, depth + 1, chat, ['timeline_data', 'builder_state'].includes(key));
   }
+}
+
+/** The same filesystem/media boundary for in-process chat tools and HTTP MCP. */
+export function validateMcpToolArguments(args: unknown, onManagedMedia?: () => void): void {
+  inspectValue(args, { decodedBytes: 0, onManagedMedia }, 0, true);
 }
 
 /** Validate decoded media totals and reject client-supplied server filesystem paths. */

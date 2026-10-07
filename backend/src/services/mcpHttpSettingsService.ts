@@ -26,6 +26,7 @@ export interface McpHttpAuthentication {
   chatRoomTools?: boolean;
   /** Codex chat sessions: the profile's generation presets (each a generate_image tool; free-form generation withheld). */
   generationPresetIds?: number[];
+  generationPresetSnapshot?: string;
 }
 
 function generateApiKey(): string {

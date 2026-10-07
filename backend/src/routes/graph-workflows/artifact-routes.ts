@@ -5,14 +5,14 @@ import {
   deleteGraphWorkflowArtifactsInScope,
 } from '../../services/graphWorkflowOutputManagementService'
 import { asyncHandler } from '../../middleware/asyncHandler'
-import { requireAdmin } from '../../middleware/authMiddleware'
+import { requireAdmin, requirePermission } from '../../middleware/authMiddleware'
 import { sendRouteBadRequest } from '../routeValidation'
 import type { ModuleGraphResponse } from '../../types/moduleGraph'
 
 export function createGraphWorkflowArtifactRoutes() {
   const router = Router()
 
-  router.post('/artifacts/copy-to-folder', asyncHandler(async (req: Request, res: Response) => {
+  router.post('/artifacts/copy-to-folder', requirePermission('images.update'), requirePermission('images.view'), asyncHandler(async (req: Request, res: Response) => {
     const folderId = Number(req.body?.folder_id)
     const sourcePaths: string[] = Array.isArray(req.body?.source_paths)
       ? Array.from(new Set<string>(req.body.source_paths

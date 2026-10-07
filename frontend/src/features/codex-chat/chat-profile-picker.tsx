@@ -35,7 +35,7 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState<number[]>([])
   const importRef = useRef<HTMLInputElement>(null)
-  const canBrowseFiles = useAuthStatusQuery().data?.permissionKeys.includes('page.files.view') === true && onImportFiles !== undefined
+  const canBrowseFiles = useAuthStatusQuery().data?.permissionKeys.includes('files.view') === true && onImportFiles !== undefined
   /** The file store picker, opened in the chat backup folder when there is one; undefined while closed. */
   const [filePickerAt, setFilePickerAt] = useState<string | null | undefined>(undefined)
   const openFilePicker = async () => {

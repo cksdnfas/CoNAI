@@ -6,7 +6,7 @@ import { registerImageGroupTools } from './tools/imageGroupTools';
 import { registerResourceTools } from './tools/resourceTools';
 import { registerPromptOrganizationTools } from './tools/promptOrganizationTools';
 import { registerGraphWorkflowTools } from './tools/graphWorkflowTools';
-import { ALL_MCP_HTTP_SCOPES, CHAT_BLOCKED_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, isChatGenerationTool, isChatMcpSource, isMcpToolAllowed, type McpRequestContext } from './context';
+import { ALL_MCP_HTTP_SCOPES, isChatMcpSource, type McpRequestContext } from './context';
 import { registerChatGenerationTools } from './tools/chatGenerationTools';
 import { registerWorkflowTransferTools } from './tools/workflowTransferTools';
 import { registerPromptPresetTools } from './tools/promptPresetTools';
@@ -15,9 +15,11 @@ import { registerEmoticonTools } from './tools/emoticonTools';
 import { registerChatRoomTools } from './tools/chatRoomTools';
 import { registerChatLoreTools } from './tools/chatLoreTools';
 import { registerChatSetupTools } from './tools/chatSetupTools';
-import { requireActiveChatReply } from '../services/codex-chat/chatReplyRegistry';
-import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess';
 import { registerChatPageTools } from './tools/chatPageTools';
+import { isContextToolAllowed, requireMcpToolAccess } from './toolAccess';
+import { ChatGenerationPresetStore } from '../services/codex-chat/chatGenerationPresets';
+
+
 
 /**
  * MCP 서버 팩토리
@@ -31,27 +33,15 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   });
 
   const originalTool = server.tool.bind(server);
-  const presetMode = (context.generationPresetIds?.length ?? 0) > 0;
+  if (isChatMcpSource(context.source) && context.generationPresetSnapshot === undefined) context.generationPresetSnapshot = JSON.stringify(ChatGenerationPresetStore.resolve(context.generationPresetIds ?? []));
   (server as McpServer & { tool: typeof server.tool }).tool = ((...args: unknown[]) => {
     const toolName = typeof args[0] === 'string' ? args[0] : '';
-    const allowed = CHAT_ROOM_TOOLS.has(toolName)
-      ? Boolean(context.chatContext) && (context.chatRoomTools === 'all' || (context.chatRoomTools === 'call' && ['room_call_member', 'chat_reply_to'].includes(toolName))) && (!GROUP_ONLY_CHAT_TOOLS.has(toolName) || context.chatContext?.kind === 'group')
-      : isChatGenerationTool(toolName)
-        ? presetMode && context.scopes.includes('generate')
-        : isMcpToolAllowed(toolName, context.scopes)
-          && (!context.toolAllowlist || context.toolAllowlist.includes(toolName))
-          && !(presetMode && GENERATION_PRESET_BLOCKED_TOOLS.has(toolName))
-          && !(isChatMcpSource(context.source) && CHAT_BLOCKED_TOOLS.has(toolName));
-    // Opting into page input must not expose generation or destructive tools to page-supplied text.
-    if (!allowed || (context.chatContext?.page && !CHAT_PAGE_TOOLS.has(toolName))) {
-      return undefined;
-    }
+    if (!isContextToolAllowed(context, toolName)) return undefined;
     const handler = args[args.length - 1];
-    if (isChatMcpSource(context.source) && typeof handler === 'function') {
+    if (typeof handler === 'function' && (isChatMcpSource(context.source) || context.requester)) {
       args[args.length - 1] = async (...input: unknown[]) => {
         try {
-          requireChatMcpAccountAccess(context, toolName);
-          if (context.chatContext) requireActiveChatReply(context.chatContext);
+          requireMcpToolAccess(context, toolName, input[0] as Record<string, unknown> | undefined);
         }
         catch (error) { return { isError: true, content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }] }; }
         return handler(...input);

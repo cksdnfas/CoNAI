@@ -11,7 +11,7 @@ import { useCodexChatPage } from './use-codex-chat-page'
 import { Text } from '@/components/ui/text'
 import { Field } from '@/components/ui/field'
 import { Select } from '@/components/ui/select'
-import { getAppSettings } from '@/lib/api-settings-general'
+import { getRuntimeImageSaveSettings } from '@/lib/api-settings'
 import { createGenerationQueueJob, getCodexGenerationModels, getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { useI18n } from '@/i18n'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
@@ -34,6 +34,7 @@ import { CodexDeviceLoginDialog } from './codex-device-login-dialog'
 import { CodexCliUpdateButton } from './codex-cli-update-button'
 import { CodexModelSelect } from './codex-model-select'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
 
 type CodexGenerationPanelProps = {
   onHistoryRefresh: () => void
@@ -87,13 +88,13 @@ const DEFAULT_CODEX_FORM: CodexFormDraft = {
 
 type PersistedCodexFormDraft = Pick<CodexFormDraft, 'model' | 'prompt' | 'negativePrompt' | 'count' | 'aspectRatio' | 'resolution' | 'imageMode'>
 
-function loadPersistedCodexFormDraft(): CodexFormDraft {
+function loadPersistedCodexFormDraft(owner: string): CodexFormDraft {
   if (typeof window === 'undefined') {
     return DEFAULT_CODEX_FORM
   }
 
   try {
-    const rawValue = window.localStorage.getItem(CODEX_FORM_DRAFT_STORAGE_KEY)
+    const rawValue = window.localStorage.getItem(`${CODEX_FORM_DRAFT_STORAGE_KEY}:${owner}`)
     if (!rawValue) {
       return DEFAULT_CODEX_FORM
     }
@@ -114,7 +115,7 @@ function loadPersistedCodexFormDraft(): CodexFormDraft {
   }
 }
 
-function persistCodexFormDraft(form: CodexFormDraft) {
+function persistCodexFormDraft(owner: string, form: CodexFormDraft) {
   if (typeof window === 'undefined') {
     return
   }
@@ -130,7 +131,7 @@ function persistCodexFormDraft(form: CodexFormDraft) {
   }
 
   try {
-    window.localStorage.setItem(CODEX_FORM_DRAFT_STORAGE_KEY, JSON.stringify(persistableDraft))
+    window.localStorage.setItem(`${CODEX_FORM_DRAFT_STORAGE_KEY}:${owner}`, JSON.stringify(persistableDraft))
   } catch {
     // Ignore quota/private-mode persistence failures.
   }
@@ -231,7 +232,9 @@ export function CodexGenerationPanel({
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
-  const [codexForm, setCodexForm] = useState<CodexFormDraft>(() => loadPersistedCodexFormDraft())
+  const authStatusQuery = useAuthStatusQuery()
+  const draftStorageOwner = resolveAccountDraftOwner(authStatusQuery.data)
+  const [codexForm, setCodexForm] = useState<CodexFormDraft>(() => loadPersistedCodexFormDraft(draftStorageOwner))
   const [isSubmitting, setIsSubmitting] = useState(false)
   const modelOptionsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 60_000, retry: false })
   useCodexChatPage(codexForm, setCodexForm, modelOptionsQuery.data?.data.models ?? [])
@@ -262,8 +265,8 @@ export function CodexGenerationPanel({
   }, [codexForm, confirm, pendingHistorySettingsLoad, showSnackbar, t])
 
   const appSettingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
+    queryKey: ['runtime-image-save-settings'],
+    queryFn: getRuntimeImageSaveSettings,
   })
 
   const codexStatusQuery = useQuery({
@@ -288,11 +291,11 @@ export function CodexGenerationPanel({
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      persistCodexFormDraft(codexForm)
+      persistCodexFormDraft(draftStorageOwner, codexForm)
     }, 250)
 
     return () => window.clearTimeout(timeout)
-  }, [codexForm])
+  }, [codexForm, draftStorageOwner])
 
   const operationLabel = useMemo(() => {
     if (codexForm.imageMode === 'edit' && codexForm.referenceImage && codexForm.maskImage) {
@@ -321,7 +324,6 @@ export function CodexGenerationPanel({
   const codexStatus = codexStatusQuery.data?.data ?? null
   const canGenerateWithCodex = codexStatusQuery.isSuccess ? Boolean(codexStatus?.available) : false
   const showStatusRecovery = codexStatusQuery.isError || (codexStatusQuery.isSuccess && !codexStatus?.available)
-  const authStatusQuery = useAuthStatusQuery()
   // 서버 전체를 한 계정으로 로그인시키는 동작이라 관리자에게만 노출한다.
   const isAdmin = authStatusQuery.data?.isAdmin === true
   const canStartCodexLogin = isAdmin

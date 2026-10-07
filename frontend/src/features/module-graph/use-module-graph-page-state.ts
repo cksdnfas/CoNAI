@@ -4,9 +4,12 @@ import type { GraphWorkflowExposedInput, GraphWorkflowFolderRecord } from '@/lib
 import type { EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
 import { buildGraphEditorSnapshot, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
 import { persistWorkflowRunnerDraft } from './workflow-runner-draft-storage'
+import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 
 /** Own local page state for the module-graph workspace screen. */
 export function useModuleGraphPageState() {
+  const draftStorageOwner = resolveAccountDraftOwner(useAuthStatusQuery().data)
   const [workflowName, setWorkflowName] = useState('Workflow Draft')
   const [workflowDescription, setWorkflowDescription] = useState('')
   const [workflowDebugMode, setWorkflowDebugMode] = useState(false)
@@ -68,11 +71,11 @@ export function useModuleGraphPageState() {
     }
 
     const timeout = window.setTimeout(() => {
-      persistWorkflowRunnerDraft(selectedGraphId, workflowExposedInputs, workflowRunInputValues)
+      persistWorkflowRunnerDraft(draftStorageOwner, selectedGraphId, workflowExposedInputs, workflowRunInputValues)
     }, 250)
 
     return () => window.clearTimeout(timeout)
-  }, [selectedGraphId, workflowExposedInputs, workflowRunInputValues])
+  }, [draftStorageOwner, selectedGraphId, workflowExposedInputs, workflowRunInputValues])
 
   return {
     editorSessionId,

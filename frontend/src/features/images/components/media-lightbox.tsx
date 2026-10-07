@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, ImageOff, Info, X } from 'lucide-react'
@@ -483,7 +484,8 @@ function MediaLightboxOverlay({ items, index, onIndexChange, onClose, renderActi
  * "Details" opens the regular image modal on top; browser back, Esc, ✕ or a click outside the media close it.
  */
 export function MediaLightbox({ items, index, onIndexChange, onClose, renderActions }: MediaLightboxProps) {
-  const open = index !== null && items.length > 0
+  const { canViewImages } = useImagePermissions()
+  const open = canViewImages && index !== null && items.length > 0
   useOverlayBackClose({ open, onClose })
 
   if (!open) {

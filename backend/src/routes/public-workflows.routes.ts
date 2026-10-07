@@ -1,8 +1,10 @@
+import { requirePermission } from '../middleware/authMiddleware';
 import { Router, type Request, type Response } from 'express';
 import { ZipArchive } from 'archiver';
 import fs from 'fs';
 import path from 'path';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { requireImagesView } from '../middleware/imageAccess';
 import { userSettingsDb } from '../database/userSettingsDb';
 import { WorkflowModel } from '../models/Workflow';
 import { WorkflowServerModel } from '../models/ComfyUIServer';
@@ -252,7 +254,7 @@ router.get('/:slug', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /** GET /api/public-workflows/:slug/artifacts */
-router.get('/:slug/artifacts', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:slug/artifacts', requireImagesView, asyncHandler(async (req: Request, res: Response) => {
   const workflow = loadPublicArtifactWorkflow(req, res);
   if (!workflow) {
     return;
@@ -282,7 +284,7 @@ router.get('/:slug/artifacts', asyncHandler(async (req: Request, res: Response) 
 }));
 
 /** GET /api/public-workflows/:slug/artifacts/archive */
-router.get('/:slug/artifacts/archive', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:slug/artifacts/archive', requireImagesView, asyncHandler(async (req: Request, res: Response) => {
   const workflow = loadPublicArtifactWorkflow(req, res);
   if (!workflow) {
     return;
@@ -337,7 +339,7 @@ router.get('/:slug/artifacts/archive', asyncHandler(async (req: Request, res: Re
 }));
 
 /** GET /api/public-workflows/:slug/artifacts/file */
-router.get('/:slug/artifacts/file', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:slug/artifacts/file', requireImagesView, asyncHandler(async (req: Request, res: Response) => {
   const workflow = loadPublicArtifactWorkflow(req, res);
   if (!workflow) {
     return;
@@ -369,7 +371,7 @@ router.get('/:slug/artifacts/file', asyncHandler(async (req: Request, res: Respo
 }));
 
 /** GET /api/public-workflows/:slug/history */
-router.get('/:slug/history', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:slug/history', requireImagesView, asyncHandler(async (req: Request, res: Response) => {
   const workflow = getPublicWorkflowOrNull(String(req.params.slug || ''));
   if (!workflow) {
     res.status(404).json({ success: false, error: 'Public workflow not found' });
@@ -441,7 +443,7 @@ router.delete('/:slug/history', asyncHandler(async (req: Request, res: Response)
 }));
 
 /** POST /api/public-workflows/:slug/queue */
-router.post('/:slug/queue', asyncHandler(async (req: Request, res: Response) => {
+router.post('/:slug/queue', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
   const workflow = getPublicWorkflowOrNull(String(req.params.slug || ''));
   if (!workflow) {
     res.status(404).json({ success: false, error: 'Public workflow not found' });

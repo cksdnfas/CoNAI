@@ -29,7 +29,7 @@ export type CodexAppServerNotification = {
  * Answers for requests the app-server sends to its client. Chat is MCP-only, so every approval and permission
  * request is declined; MCP tool approvals never reach here because the conai server is configured to auto-approve.
  */
-function declineServerRequest(method: string): { result?: unknown; error?: { code: number; message: string } } {
+export function declineServerRequest(method: string): { result?: unknown; error?: { code: number; message: string } } {
   switch (method) {
     case 'item/commandExecution/requestApproval':
     case 'item/fileChange/requestApproval':
@@ -57,7 +57,7 @@ export class CodexAppServerClient extends EventEmitter {
     this.resolveExited = resolve
   })
 
-  private constructor(child: ChildProcess) {
+  private constructor(child: ChildProcess, private readonly chatOnly = false) {
     super()
     this.child = child
 
@@ -69,7 +69,7 @@ export class CodexAppServerClient extends EventEmitter {
     child.once('close', (code, signal) => this.handleExit(`Codex app-server exited (${signal ?? code ?? 'unknown'})`))
   }
 
-  static async start(options: { args: string[]; env: NodeJS.ProcessEnv; cwd: string }) {
+  static async start(options: { args: string[]; env: NodeJS.ProcessEnv; cwd: string; chatOnly?: boolean }) {
     const resolved = resolveCodexCommand()
     const child = spawn(resolved.command, [...resolved.prefixArgs, 'app-server', ...options.args], {
       cwd: options.cwd,
@@ -79,11 +79,11 @@ export class CodexAppServerClient extends EventEmitter {
       // POSIX에서는 프로세스 그룹째 종료하려고 detached로 띄운다.
       detached: process.platform !== 'win32',
     })
-    const client = new CodexAppServerClient(child)
-    await client.request('initialize', {
+    const client = new CodexAppServerClient(child, options.chatOnly)
+    try { await client.request('initialize', {
       clientInfo: { name: 'conai', title: 'CoNAI', version: '1.0.0' },
       capabilities: { experimentalApi: false, requestAttestation: false },
-    })
+    }) } catch (error) { client.close(); throw error }
     client.notify('initialized', {})
     return client
   }
@@ -141,6 +141,7 @@ export class CodexAppServerClient extends EventEmitter {
 
     if (message.id !== undefined && message.method) {
       this.write({ id: message.id, ...declineServerRequest(message.method) })
+      if (this.chatOnly) this.close()
       return
     }
 

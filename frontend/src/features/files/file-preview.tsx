@@ -8,6 +8,8 @@ import { IconButton } from '@/components/ui/icon-button'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
+import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
 import { useI18n } from '@/i18n'
 import { FILES_QUERY_KEY, formatFileSize, getStoredFileNeighbors, readStoredFileText, storedFileDownloadUrl, storedFileViewUrl } from '@/lib/api-files'
 
@@ -39,6 +41,8 @@ function tableRows(text: string, delimiter: string, complete: boolean) {
 export function FilePreview({ entry, owner = null, onClose, onNavigate }: { entry: StoredFileEntry; owner?: string | null; onClose: () => void; onNavigate: (entry: StoredFileEntry) => void }) {
   const { t } = useI18n()
   const auth = useAuthStatusQuery()
+  const { canViewImages } = useImagePermissions()
+  const [deniedEntryId, setDeniedEntryId] = useState<string | null>(null)
   const accountKey = `${auth.data?.accountId ?? (auth.data?.hasCredentials ? 'anonymous' : 'bootstrap')}:${owner ?? ''}`
   const neighbors = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'neighbors', entry.id], queryFn: () => getStoredFileNeighbors(entry.id, owner) })
   useEffect(() => {
@@ -55,11 +59,12 @@ export function FilePreview({ entry, owner = null, onClose, onNavigate }: { entr
     <IconButton size="icon-sm" variant="ghost" label={t({ ko: '이전 파일', en: 'Previous file' })} disabled={!neighbors.data?.previous} onClick={() => { if (neighbors.data?.previous) onNavigate(neighbors.data.previous) }}><ChevronLeft /></IconButton>
     <IconButton size="icon-sm" variant="ghost" label={t({ ko: '다음 파일', en: 'Next file' })} disabled={!neighbors.data?.next} onClick={() => { if (neighbors.data?.next) onNavigate(neighbors.data.next) }}><ChevronRight /></IconButton>
     <span className="flex-1 text-xs text-muted-foreground">{formatFileSize(entry.size)}</span>
-    <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '다운로드', en: 'Download' })}><a href={storedFileDownloadUrl(entry.id, owner)} download><Download /></a></IconButton>
-  </div>}><FilePreviewContent key={entry.id} entry={entry} owner={owner} accountKey={accountKey} /></Modal>
+    {deniedEntryId !== entry.id && (canViewImages || (!entry.mimeType?.startsWith('image/') && !entry.mimeType?.startsWith('video/'))) ? <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '다운로드', en: 'Download' })}><a href={storedFileDownloadUrl(entry.id, owner)} download><Download /></a></IconButton> : null}
+  </div>}><FilePreviewContent key={entry.id} entry={entry} owner={owner} accountKey={accountKey} onPermissionResult={(denied) => setDeniedEntryId(denied ? entry.id : null)} /></Modal>
 }
 
-function FilePreviewContent({ entry, owner, accountKey }: { entry: StoredFileEntry; owner: string | null; accountKey: string }) {
+function FilePreviewContent({ entry, owner, accountKey, onPermissionResult }: { entry: StoredFileEntry; owner: string | null; accountKey: string; onPermissionResult: (denied: boolean) => void }) {
+  const { canViewImages } = useImagePermissions()
   const { t } = useI18n()
   const [offset, setOffset] = useState(0)
   const [firstLine, setFirstLine] = useState(1)
@@ -69,9 +74,11 @@ function FilePreviewContent({ entry, owner, accountKey }: { entry: StoredFileEnt
   const url = storedFileViewUrl(entry.id, owner)
   const [mediaFailed, setMediaFailed] = useState(false)
   // The server determines the actual safe MIME; uploaded MIME and renames are not trusted.
-  const mime = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'view-type', entry.id, entry.updatedAt], queryFn: async () => {
+  const mime = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'view-type', entry.id, entry.updatedAt, canViewImages], queryFn: async () => {
     const response = await fetch(url, { method: 'HEAD', credentials: 'include' })
+    if (response.status === 403) { onPermissionResult(true); throw new Error('Image permission required') }
     if (!response.ok) throw new Error('No preview')
+    onPermissionResult(false)
     return response.headers.get('Content-Type') ?? ''
   }, retry: false })
   const kind = mime.data?.startsWith('text/plain') ? 'text' : mime.data?.startsWith('image/') ? 'image' : mime.data?.startsWith('video/') ? 'video' : mime.data?.startsWith('audio/') ? 'audio' : mime.data === 'application/pdf' ? 'pdf' : null
@@ -88,7 +95,8 @@ function FilePreviewContent({ entry, owner, accountKey }: { entry: StoredFileEnt
   const rows = useMemo(() => tabular ? tableRows(text, extension === 'tsv' ? '\t' : ',', query.data?.nextOffset === null) : [], [extension, tabular, text, query.data?.nextOffset])
   const unavailable = <EmptyState icon={File} title={t({ ko: '미리 볼 수 없는 파일이야', en: 'No preview for this file' })} />
   let content
-  if (mime.isPending) content = <LoadingState />
+  if (mime.error?.message === 'Image permission required' || (!canViewImages && (kind === 'image' || kind === 'video'))) content = <ImagePermissionNotice />
+  else if (mime.isPending) content = <LoadingState />
   else if (mime.isError || mediaFailed) content = unavailable
   else if (kind === 'image') content = <img src={url} alt={entry.name} onError={() => setMediaFailed(true)} className="mx-auto max-h-[65vh] max-w-full object-contain" />
   else if (kind === 'video') content = <video src={url} controls preload="metadata" onError={() => setMediaFailed(true)} className="mx-auto max-h-[65vh] max-w-full" />

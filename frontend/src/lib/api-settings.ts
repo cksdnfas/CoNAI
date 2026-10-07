@@ -49,6 +49,35 @@ export interface RuntimeGenerationHistorySettings {
   applyRatingSafetyToGenerationHistory: boolean
 }
 
+export async function getImageViewerSettings() {
+  const result = await fetchJson<ApiResponse<{ general: Pick<AppSettings['general'], 'imageSimilarityCheckMode'>; imageSave: ImageSaveSettings; kaloscope: Pick<AppSettings['kaloscope'], 'artistLinkUrlTemplate'> }>>('/api/runtime-media-settings/viewer')
+  if (!result.success || !result.data) throw new Error('Failed to load image viewer settings')
+  return result.data
+}
+
+export type RuntimeWorkflowSettings = {
+  tagger: Pick<AppSettings['tagger'], 'enabled'>
+  kaloscope: Pick<AppSettings['kaloscope'], 'enabled'>
+}
+
+export async function getRuntimeImageSaveSettings() {
+  const result = await fetchJson<ApiResponse<{ imageSave: ImageSaveSettings }>>('/api/runtime-settings/image-save')
+  if (!result.success || !result.data) throw new Error('Failed to load image save preferences')
+  return result.data
+}
+
+export async function getRuntimeWorkflowSettings() {
+  const result = await fetchJson<ApiResponse<RuntimeWorkflowSettings>>('/api/runtime-settings/workflows')
+  if (!result.success || !result.data) throw new Error('Failed to load workflow capabilities')
+  return result.data
+}
+
+export async function getRuntimeLanguageSettings() {
+  const result = await fetchJson<ApiResponse<{ general: Pick<AppSettings['general'], 'language'> }>>('/api/runtime-settings/language')
+  if (!result.success || !result.data) throw new Error('Failed to load UI language')
+  return result.data
+}
+
 export interface FileVerificationRunResult {
   totalChecked: number
   missingFound: number

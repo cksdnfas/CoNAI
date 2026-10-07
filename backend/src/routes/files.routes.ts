@@ -2,6 +2,7 @@ import fs from 'fs';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import multer from 'multer';
 import { requirePermission } from '../middleware/authMiddleware';
+import { requireImagesView } from '../middleware/imageAccess';
 import { createUploadStorage, wrapUploadMiddleware, MAX_UPLOAD_FILE_SIZE_BYTES, MAX_MULTIPLE_UPLOAD_FILES, MAX_MULTIPLE_UPLOAD_TOTAL_BYTES } from '../middleware/upload';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { FileStoreError, FileStoreService, assertFileTypeAllowed, fileOwnerKey, parseFileId, parseOwnerKey } from '../services/fileStoreService';
@@ -11,7 +12,7 @@ import { hasConfiguredAuth } from './auth-route-helpers';
 import { getRequesterAccountId } from './requester-session-helpers';
 
 const router = Router();
-router.use(requirePermission('page.files.view'));
+router.use(requirePermission('files.view'));
 router.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
 
 /** `requirePermission` refreshed the session's keys just before this, so they are current for the whole request. */
@@ -96,6 +97,11 @@ router.get('/:id/view', asyncHandler(async (req, res, next) => {
   const { entry, filePath } = FileStoreService.resolveFile(owner(req), id(req));
   const mime = await filePreviewMime(entry, filePath);
   if (!mime) throw new FileStoreError('미리 볼 수 없는 형식이야.', 415);
+  if (/^(image|video)\//.test(mime)) {
+    let allowed = false;
+    requireImagesView(req, res, () => { allowed = true; });
+    if (!allowed) return;
+  }
   res.setHeader('Content-Type', mime);
   res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(entry.name)}`);
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -109,23 +115,29 @@ router.get('/:id/view', asyncHandler(async (req, res, next) => {
   });
 }));
 /** GET /api/files/:id/thumbnail — cached, bounded image/video WebP for the icon view and picker. */
-router.get('/:id/thumbnail', asyncHandler(async (req, res) => {
+router.get('/:id/thumbnail', requireImagesView, asyncHandler(async (req, res) => {
   const store = owner(req);
   const { entry, filePath } = FileStoreService.resolveFile(store, id(req));
   const cached = await getFileThumbnail(store, entry, filePath);
   res.setHeader('Content-Type', 'image/webp');
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Cache-Control', 'private, max-age=3600');
+  res.setHeader('Cache-Control', 'private, no-cache');
   res.sendFile(cached, { dotfiles: 'allow' });
 }));
-router.get('/:id/download', (req, res, next) => {
+router.get('/:id/download', asyncHandler(async (req, res, next) => {
   const { entry, filePath } = FileStoreService.resolveFile(owner(req), id(req));
+  const mime = await filePreviewMime(entry, filePath);
+  if (mime && /^(image|video)\//.test(mime)) {
+    let allowed = false;
+    requireImagesView(req, res, () => { allowed = true; });
+    if (!allowed) return;
+  }
   // Even HTML and SVG are inert downloads; never expose the private root with express.static.
   res.setHeader('Content-Type', 'application/octet-stream');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'private, no-store');
   res.download(filePath, entry.name, { dotfiles: 'allow' }, (error) => { if (error && !res.headersSent) next(error); });
-});
+}));
 router.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
   if (error instanceof FileStoreError) {
     res.status(error.status).json({ success: false, error: error.message });

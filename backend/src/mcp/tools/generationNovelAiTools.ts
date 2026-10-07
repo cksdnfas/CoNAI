@@ -5,6 +5,7 @@ import { executeNaiGeneration } from '../../services/naiGenerationExecutor';
 import { getToken } from '../../utils/nai/auth';
 import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup';
 import { assertChatNaiSampleCount, type McpRequestContext } from '../context';
+import { canRequesterViewImages } from '../../middleware/imageAccess';
 
 export function registerNovelAiGenerationTools(server: McpServer, context: McpRequestContext): void {
   // NovelAI 이미지 생성
@@ -90,9 +91,9 @@ export function registerNovelAiGenerationTools(server: McpServer, context: McpRe
             type: 'text' as const,
             text: JSON.stringify({
               success: true,
-              historyIds,
+              ...(!context.requester || canRequesterViewImages(context.requester) ? { historyIds } : {}),
               count: historyIds.length,
-              metadata: {
+              ...(!context.requester || canRequesterViewImages(context.requester) ? { metadata: {
                 prompt: metadata.prompt,
                 negative_prompt: metadata.negative_prompt,
                 seed: metadata.seed,
@@ -101,7 +102,7 @@ export function registerNovelAiGenerationTools(server: McpServer, context: McpRe
                 scale: metadata.scale,
                 sampler: metadata.sampler,
                 model: metadata.model,
-              },
+              } } : {}),
             }, null, 2),
           }],
         };

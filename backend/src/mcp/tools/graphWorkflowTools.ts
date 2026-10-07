@@ -108,7 +108,7 @@ async function compactGraphExecution(executionId: number, context: McpRequestCon
       artifact_type: result.artifact_type,
       created_date: result.created_date,
     })),
-    artifacts: context.baseUrl
+    artifacts: context.baseUrl && !context.requester
       ? (await Promise.all(GraphExecutionArtifactModel.findByExecution(executionId)
           .map((artifact) => McpArtifactService.createGraphDescriptor(artifact.id, context.baseUrl as string))))
           .filter(Boolean)

@@ -95,9 +95,8 @@ export const appRouter = createHashRouter([
         element: <RequireAuthPermission permissionKey="page.wildcards.view"><WildcardRoute /></RequireAuthPermission>,
       },
       {
-        // Admin-only; the page itself checks chat availability (no page permission key exists for it).
         path: 'chat',
-        element: <CodexChatRoute />,
+        element: <RequireAuthPermission permissionKey="page.chat.view"><CodexChatRoute /></RequireAuthPermission>,
       },
       {
         path: 'public/workflows/:slug',

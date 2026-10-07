@@ -1,3 +1,5 @@
+import { GenerationTargetGroupService } from '../../services/generationTargetGroupService';
+import { requirePermission } from '../../middleware/authMiddleware';
 import { Router, type Request, type Response } from 'express'
 import axios from 'axios'
 // @ts-ignore - no types available
@@ -73,7 +75,7 @@ function respondWithNaiError(res: Response, error: any, fallbackError: string) {
   })
 }
 
-router.post('/image', async (req: Request<{}, {}, NAIMetadataInputParams & { imageSaveOptions?: GeneratedImageSaveOptions }>, res: Response): Promise<void> => {
+router.post('/image', requirePermission('generation.execute'), async (req: Request<{}, {}, NAIMetadataInputParams & { imageSaveOptions?: GeneratedImageSaveOptions }>, res: Response): Promise<void> => {
   try {
     const token = resolveToken(req)
     if (!token) {
@@ -81,6 +83,8 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataInputParams & { ima
       return
     }
 
+    const groupTarget = GenerationTargetGroupService.resolveForAccount(req.session?.accountId, { groupId: req.body.groupId })
+    if (!groupTarget.ok) { res.status(groupTarget.status).json({ error: groupTarget.error }); return }
     const { metadata, imageBuffers } = await executeNaiGeneration(req.body, token)
     const requestedByAccountId = typeof req.session?.accountId === 'number' ? req.session.accountId : undefined
     const requestedByAccountType = req.session?.accountType
@@ -103,7 +107,7 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataInputParams & { ima
     const historyIds: number[] = []
 
     try {
-      const groupId = metadata.groupId
+      const groupId = groupTarget.groupId ?? undefined
 
       for (let index = 0; index < imageBuffers.length; index += 1) {
         const historyId = await GenerationHistoryService.createNAIHistory({
@@ -148,7 +152,7 @@ router.post('/image', async (req: Request<{}, {}, NAIMetadataInputParams & { ima
   }
 })
 
-router.post('/encode-vibe', async (req: Request<{}, {}, { image?: string; model?: string; information_extracted?: number }>, res: Response): Promise<void> => {
+router.post('/encode-vibe', requirePermission('generation.execute'), async (req: Request<{}, {}, { image?: string; model?: string; information_extracted?: number }>, res: Response): Promise<void> => {
   try {
     const token = resolveToken(req)
     if (!token) {
@@ -185,7 +189,7 @@ router.post('/encode-vibe', async (req: Request<{}, {}, { image?: string; model?
   }
 })
 
-router.post('/upscale', async (req: Request<{}, {}, { image?: string; scale?: number }>, res: Response): Promise<void> => {
+router.post('/upscale', requirePermission('generation.execute'), requirePermission('images.view'), async (req: Request<{}, {}, { image?: string; scale?: number }>, res: Response): Promise<void> => {
   try {
     const token = resolveToken(req)
     if (!token) {

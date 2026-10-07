@@ -1,3 +1,4 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, ClipboardCopy, Copy, ExternalLink, Eye, EyeOff, GripVertical, HelpCircle, LayoutTemplate, Lock, MoreHorizontal, Plus, Redo2, Save, Trash2, Undo2 } from 'lucide-react'
@@ -14,7 +15,7 @@ import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { getGroupsHierarchyAll } from '@/lib/api-groups'
-import { getAppSettings } from '@/lib/api-settings-general'
+import { getWallpaperRuntimeSettings } from '@/lib/api-settings-appearance'
 import { updateAppearanceSettings } from '@/lib/api-settings-appearance'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
@@ -100,6 +101,7 @@ function removeSelectedWidget(layoutPreset: WallpaperLayoutPreset, widgetId: str
 }
 
 export function WallpaperEditorPage() {
+  const { isAdmin } = useFeaturePermissions()
   const { t } = useI18n()
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
@@ -136,8 +138,8 @@ export function WallpaperEditorPage() {
   })
 
   const wallpaperSettingsQuery = useQuery({
-    queryKey: ['app-settings', 'wallpaper-layout'],
-    queryFn: getAppSettings,
+    queryKey: ['wallpaper-runtime-settings'],
+    queryFn: getWallpaperRuntimeSettings,
     staleTime: 60_000,
   })
 
@@ -253,8 +255,8 @@ export function WallpaperEditorPage() {
     }
 
     hasHydratedServerPresetsRef.current = true
-    const serverPresets = toWallpaperLayoutPresetViewModels(wallpaperSettingsQuery.data.appearance.wallpaperLayoutPresets)
-    const serverActivePresetId = wallpaperSettingsQuery.data.appearance.wallpaperActivePresetId
+    const serverPresets = toWallpaperLayoutPresetViewModels(wallpaperSettingsQuery.data.wallpaperLayoutPresets)
+    const serverActivePresetId = wallpaperSettingsQuery.data.wallpaperActivePresetId
 
     if (serverPresets.length === 0 && serverActivePresetId === null) {
       return
@@ -273,6 +275,7 @@ export function WallpaperEditorPage() {
     nextActivePresetId: string | null,
     successMessage?: string,
   ) => {
+    if (!isAdmin) { notifyError(t({ ko: '서버 설정 변경은 관리자 권한이 필요해.', en: 'Changing server settings requires an administrator.' })); return }
     wallpaperPresetMutation.mutate(
       {
         wallpaperLayoutPresets: nextPresets,
@@ -509,7 +512,7 @@ export function WallpaperEditorPage() {
           {activePreset && hasUnsavedPresetChanges ? (
             <span className="ml-1 size-2 shrink-0 rounded-full bg-primary" role="status" aria-label={unsavedLabel} title={unsavedLabel} />
           ) : null}
-          <Button size="sm" className="ml-1" disabled={wallpaperPresetMutation.isPending} onClick={() => handleSavePreset()}>
+          <Button size="sm" className="ml-1" disabled={!(isAdmin) || (wallpaperPresetMutation.isPending)} onClick={() => handleSavePreset()}>
             <Save />
             {t({ ko: '저장', en: 'Save' })}
           </Button>
@@ -563,10 +566,10 @@ export function WallpaperEditorPage() {
       >
         {[
           { icon: Plus, label: t({ ko: '새 캔버스', en: 'New canvas' }), disabled: false, action: () => void handleCreateBlankCanvas() },
-          { icon: Copy, label: t({ ko: '다른 이름으로 저장', en: 'Save as new' }), disabled: wallpaperPresetMutation.isPending, action: () => handleSavePreset({ saveAsNew: true }) },
+          { icon: Copy, label: t({ ko: '다른 이름으로 저장', en: 'Save as new' }), disabled: !isAdmin || wallpaperPresetMutation.isPending, action: () => handleSavePreset({ saveAsNew: true }) },
           { icon: ClipboardCopy, label: t({ ko: 'Lively URL 복사', en: 'Copy Lively URL' }), disabled: !activePresetRuntimeUrl, action: () => void handleCopyRuntimeUrl() },
           { icon: ExternalLink, label: t({ ko: '저장 월페이퍼 열기', en: 'Open saved wallpaper' }), disabled: !activePresetRuntimePath, action: () => activePresetRuntimePath && window.open(activePresetRuntimePath, '_blank', 'noopener,noreferrer') },
-          { icon: Trash2, label: t({ ko: '프리셋 삭제', en: 'Delete preset' }), disabled: !activePreset || wallpaperPresetMutation.isPending, action: handleDeletePreset, destructive: true },
+          { icon: Trash2, label: t({ ko: '프리셋 삭제', en: 'Delete preset' }), disabled: !isAdmin || !activePreset || wallpaperPresetMutation.isPending, action: handleDeletePreset, destructive: true },
         ].map(({ icon: Icon, label, disabled, action, destructive }) => (
           <Button
             key={label}

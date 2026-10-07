@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ImagePlus, Loader2, RefreshCw, Trash2 } from 'lucide-react'
@@ -18,7 +19,7 @@ import { useDropZoneState } from '@/features/upload/use-drop-zone-state'
 import { listGenerationSaveImages } from '@/lib/api-image-generation-history'
 import type { SaveBrowserImageRecord } from '@/lib/api-image-generation-types'
 import { getImages } from '@/lib/api-images'
-import { getAppSettings } from '@/lib/api-settings-general'
+import { getImageViewerSettings } from '@/lib/api-settings'
 import {
   DEFAULT_IMAGE_SAVE_SETTINGS,
   buildImageSaveOutput,
@@ -248,21 +249,23 @@ export function ImageAttachmentPickerButton({
     }))
   }, [hasLibrarySource, librarySourceLabel, t, uploadOnly])
 
+  const { canViewImages } = useImagePermissions()
   const appSettingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
+    queryKey: ['image-viewer-settings'],
+    enabled: canViewImages,
+    queryFn: getImageViewerSettings,
   })
 
   const systemImagesQuery = useQuery({
     queryKey: ['image-attachment-system-images', systemPage],
     queryFn: () => getImages({ page: systemPage, limit: SYSTEM_IMAGE_PAGE_SIZE }),
-    enabled: isOpen && !uploadOnly && source === 'system',
+    enabled: canViewImages && isOpen && !uploadOnly && source === 'system',
   })
 
   const saveImagesQuery = useQuery({
     queryKey: ['image-attachment-save-images'],
     queryFn: () => listGenerationSaveImages(),
-    enabled: isOpen && !uploadOnly && source === 'save',
+    enabled: canViewImages && isOpen && !uploadOnly && source === 'save',
   })
 
   useEffect(() => {

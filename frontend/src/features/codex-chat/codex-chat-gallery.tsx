@@ -1,3 +1,6 @@
+import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
+import { buildChatImageRecord } from './chat-image-record'
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { CornerDownLeft, ImageIcon, Search } from 'lucide-react'
@@ -11,7 +14,6 @@ import { ImagePreviewMedia } from '@/features/images/components/image-preview-me
 import { MediaLightbox } from '@/features/images/components/media-lightbox'
 import { useI18n } from '@/i18n'
 import { getCodexChatThreadMedia, type CodexChatMediaItem } from '@/lib/api-codex-chat'
-import { buildApiUrl } from '@/lib/api-url'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import { ChatReferenceButton, ChatThumbOverlay } from './chat-reference'
@@ -27,15 +29,7 @@ function parseServerDate(value: string) {
 }
 
 function toImageRecord(media: CodexChatMediaItem): ImageRecord {
-  return {
-    id: media.compositeHash,
-    composite_hash: media.compositeHash,
-    thumbnail_url: buildApiUrl(`/api/images/${media.compositeHash}/thumbnail`),
-    image_url: buildApiUrl(`/api/images/${media.compositeHash}/file`),
-    mime_type: media.mimeType,
-    width: media.width,
-    height: media.height,
-  }
+  return buildChatImageRecord(media.compositeHash, undefined, media)
 }
 
 function GalleryTile({ entry, showFoundMark, onOpen }: { entry: GalleryEntry; showFoundMark: boolean; onOpen: () => void }) {
@@ -79,7 +73,8 @@ export function CodexChatGallery({ threadId, columns }: { threadId: number; colu
   const chat = useCodexChat()
   const [filter, setFilter] = useState<GalleryFilter>('all')
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
-  const mediaQuery = useQuery({ queryKey: codexChatMediaQueryKey(threadId), queryFn: () => getCodexChatThreadMedia(threadId) })
+  const { canViewImages } = useImagePermissions()
+  const mediaQuery = useQuery({ enabled: canViewImages, queryKey: codexChatMediaQueryKey(threadId), queryFn: () => getCodexChatThreadMedia(threadId) })
 
   const allEntries = useMemo<GalleryEntry[]>(
     () => (mediaQuery.data ?? []).map((media) => ({ media, image: toImageRecord(media) })),
@@ -124,6 +119,8 @@ export function CodexChatGallery({ threadId, columns }: { threadId: number; colu
       <span className="text-xs tabular-nums text-muted-foreground">{formatNumber(count)}</span>
     </span>
   )
+
+  if (!canViewImages) return <ImagePermissionNotice />
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthAccount } from '../models/AuthAccount';
 import {
   hasConfiguredAuth,
+  clearSessionAuthAccess,
   hasFreshSessionAccessCache,
   markSessionAccessCacheFresh,
   setTrustedBootstrapSession,
@@ -31,7 +32,10 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction): vo
   }
 
   if (req.session?.authenticated === true) {
-    next();
+    if (typeof req.session.accountId !== 'number') {
+      clearSessionAuthAccess(req);
+      res.status(401).json({ error: 'Unauthorized' });
+    } else next();
   } else {
     res.status(401).json({ error: 'Unauthorized' });
   }
@@ -99,19 +103,13 @@ export function hasAdminAccess(req: Request): boolean {
 function refreshSessionAccess(req: Request): string[] {
   const accountId = req.session?.accountId;
   if (typeof accountId !== 'number') {
-    return req.session?.permissionKeys ?? [];
+    clearSessionAuthAccess(req);
+    return [];
   }
 
   const account = AuthAccount.findById(accountId);
   if (!account || account.status !== 'active') {
-    req.session.authenticated = false;
-    delete req.session.username;
-    delete req.session.accountId;
-    delete req.session.accountType;
-    delete req.session.groupKeys;
-    delete req.session.permissionKeys;
-    delete req.session.accessCacheAccountId;
-    delete req.session.accessCacheEpoch;
+    clearSessionAuthAccess(req);
     return [];
   }
 
@@ -176,7 +174,8 @@ function resolveRequestPermissionKeys(req: Request): { permissionKeys: string[];
   }
 
   if (req.session?.authenticated === true) {
-    return { permissionKeys: refreshSessionAccess(req), authenticated: true };
+    const permissionKeys = refreshSessionAccess(req);
+    return { permissionKeys, authenticated: req.session.authenticated === true };
   }
 
   return { permissionKeys: refreshAnonymousSessionAccess(req), authenticated: false };
@@ -206,6 +205,10 @@ export const requirePermission = (permissionKey: string) => (req: Request, res: 
   }
 
   const permissionKeys = refreshSessionAccess(req);
+  if (req.session.authenticated !== true) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
   if (permissionKeys.includes(permissionKey)) {
     next();
     return;
@@ -265,17 +268,5 @@ export const allowAnonymousAnyPermission = (requiredPermissionKeys: readonly str
  * - If auth credentials ARE configured: require authentication.
  */
 export const optionalAuth = (req: Request, res: Response, next: NextFunction): void => {
-  const hasCredentials = hasConfiguredAuth();
-
-  if (!hasCredentials) {
-    allowLocalBootstrapOrReject(req, res, next);
-    return;
-  }
-
-  if (req.session?.authenticated === true) {
-    next();
-    return;
-  }
-
-  res.status(401).json({ error: 'Unauthorized' });
+  requireAuth(req, res, next);
 };

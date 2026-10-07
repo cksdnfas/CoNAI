@@ -39,6 +39,8 @@ export function HeaderAccountMenu() {
   const logoutMutation = useMutation({
     mutationFn: logoutLocalAccount,
     onSuccess: async () => {
+      await queryClient.cancelQueries()
+      queryClient.clear()
       queryClient.setQueryData(AUTH_STATUS_QUERY_KEY, {
         hasCredentials: true,
         authenticated: false,

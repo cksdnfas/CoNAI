@@ -7,8 +7,10 @@ import { WorkflowModel } from '../../models/Workflow'
 import { asyncHandler } from '../../middleware/asyncHandler'
 import { listWorkflowArtifacts, resolveWorkflowArtifactPath } from '../../services/workflowArtifactService'
 import { WorkflowResponse } from '../../types/workflow'
+import { requireImagesView } from '../../middleware/imageAccess'
 
 const router = Router()
+router.use('/:id/artifacts', requireImagesView)
 
 function parseWorkflowId(req: Request) {
   const id = parseInt(routeParam(routeParam(req.params.id)))

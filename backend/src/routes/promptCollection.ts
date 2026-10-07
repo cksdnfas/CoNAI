@@ -169,7 +169,7 @@ router.get('/group/:groupId', async (req: Request, res: Response) => {
  * 동의어 설정
  * POST /api/prompt-collection/synonyms
  */
-router.post('/synonyms', async (req: Request, res: Response) => {
+router.post('/synonyms', requirePermission('prompts.update'), async (req: Request, res: Response) => {
   try {
     const { mainPrompt, synonyms, type = 'positive' } = req.body;
 
@@ -198,7 +198,7 @@ router.post('/synonyms', async (req: Request, res: Response) => {
  * 동의어 제거
  * DELETE /api/prompt-collection/synonyms/:promptId
  */
-router.delete('/synonyms/:promptId', async (req: Request, res: Response) => {
+router.delete('/synonyms/:promptId', requirePermission('prompts.update'), async (req: Request, res: Response) => {
   try {
     const promptId = parseRouteId(req.params.promptId, 'Prompt ID');
     const { synonym, type = 'positive' } = req.body;
@@ -275,7 +275,7 @@ router.get('/danbooru-grouping/preview', async (req: Request, res: Response) => 
  * 단부루 taxonomy 기반 프롬프트 그룹 자동 구성 적용
  * POST /api/prompt-collection/danbooru-grouping/apply
  */
-router.post('/danbooru-grouping/apply', async (req: Request, res: Response) => {
+router.post('/danbooru-grouping/apply', requirePermission('prompts.create'), requirePermission('prompts.update'), async (req: Request, res: Response) => {
   try {
     const includeAssignedPrompts = req.body?.includeAssignedPrompts === true || req.body?.include_assigned_prompts === true;
     const mode = req.body?.mode === 'overwrite-existing' || includeAssignedPrompts ? 'overwrite-existing' : 'unclassified-only';
@@ -292,7 +292,7 @@ router.post('/danbooru-grouping/apply', async (req: Request, res: Response) => {
  * 프롬프트 삭제
  * DELETE /api/prompt-collection/:promptId
  */
-router.delete('/:promptId', async (req: Request, res: Response) => {
+router.delete('/:promptId', requirePermission('prompts.delete'), async (req: Request, res: Response) => {
   try {
     const promptId = parseRouteId(req.params.promptId, 'Prompt ID');
     const { type = 'positive' } = req.query;
@@ -318,7 +318,7 @@ router.delete('/:promptId', async (req: Request, res: Response) => {
  * 그룹 ID 설정 (동의어와 별개 기능)
  * PUT /api/prompt-collection/group
  */
-router.put('/group', async (req: Request, res: Response) => {
+router.put('/group', requirePermission('prompts.update'), async (req: Request, res: Response) => {
   try {
     const { promptId, groupId, type = 'positive' } = req.body;
 
@@ -346,7 +346,7 @@ router.put('/group', async (req: Request, res: Response) => {
  * 프롬프트 수집 (수동)
  * POST /api/prompt-collection/collect
  */
-router.post('/collect', async (req: Request, res: Response) => {
+router.post('/collect', requirePermission('prompts.create'), async (req: Request, res: Response) => {
   try {
     const { prompt, negativePrompt } = req.body;
 
@@ -365,7 +365,7 @@ router.post('/collect', async (req: Request, res: Response) => {
  * 프롬프트를 그룹에 할당
  * PUT /api/prompt-collection/assign-group
  */
-router.put('/assign-group', async (req: Request, res: Response) => {
+router.put('/assign-group', requirePermission('prompts.update'), async (req: Request, res: Response) => {
   try {
     const { prompt_id, group_id, type = 'positive' } = req.body;
 
@@ -410,7 +410,7 @@ router.get('/group-statistics', async (req: Request, res: Response) => {
  * 프롬프트 대량 할당
  * POST /api/prompt-collection/batch-assign
  */
-router.post('/batch-assign', async (req: Request, res: Response) => {
+router.post('/batch-assign', requirePermission('prompts.update'), async (req: Request, res: Response) => {
   try {
     const { prompts, group_id, type = 'positive' } = req.body;
 

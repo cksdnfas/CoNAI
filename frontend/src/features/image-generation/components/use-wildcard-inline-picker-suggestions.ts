@@ -1,3 +1,4 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getDanbooruBrowserSummary } from '@/lib/api-danbooru-browser'
@@ -65,9 +66,10 @@ export function useWildcardInlinePickerSuggestions({
   recentWildcardNames,
   tool,
 }: UseWildcardInlinePickerSuggestionsOptions) {
+  const { canViewPrompts } = useFeaturePermissions()
   const activeGroupQuery = useMemo(
-    () => (syntaxSettings.triggers['danbooru-group'] ? resolveActiveDanbooruGroupQuery(value, caretPosition) : null),
-    [caretPosition, syntaxSettings.triggers, value],
+    () => (canViewPrompts && syntaxSettings.triggers['danbooru-group'] ? resolveActiveDanbooruGroupQuery(value, caretPosition) : null),
+    [canViewPrompts, caretPosition, syntaxSettings.triggers, value],
   )
   const activeWildcardQuery = useMemo(
     () => (syntaxSettings.triggers.wildcard ? resolveActiveWildcardQuery(value, caretPosition) : null),

@@ -1,5 +1,5 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useMutation } from '@tanstack/react-query'
-import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { downloadAutoFolderGroupArchive, rebuildAutoFolderGroups } from '@/lib/api-auto-folder-groups'
 import {
   addImagesToGroup,
@@ -60,10 +60,9 @@ export function useGroupPageActions({
   refreshCustomGroupQueries: () => Promise<unknown>
   refreshFolderGroupQueries: () => Promise<unknown>
 }) {
-  const authStatusQuery = useAuthStatusQuery()
   const { t, formatNumber } = useI18n()
   const confirm = useConfirm()
-  const canDeleteImages = authStatusQuery.data?.isAdmin === true
+  const { canDeleteImages } = useImagePermissions()
 
   const createGroupMutation = useMutation({
     mutationFn: createGroup,

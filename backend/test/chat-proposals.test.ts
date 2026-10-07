@@ -44,7 +44,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
 
   ExternalApiProvider.create({ provider_name: 'conn', display_name: 'Conn', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
   const slot = ModelSlotStore.create({ name: 'Fast Model', providerName: 'conn', model: 'm1' }).slot
-  const profile = ChatProfileStore.create({ name: 'Mina', engine: 'llm', providerName: 'conn', systemPrompt: 'old prompt', tagline: 'old tagline', mcpScopes: ['read'] })
+  const profile = ChatProfileStore.create({ name: 'Mina', engine: 'llm', providerName: 'conn', systemPrompt: 'old prompt', tagline: 'old tagline', mcpEnabled: true, mcpScopes: ['read', 'configure'] })
   const threadId = CodexChatStore.createThread(null, 'proposal chat', 'llm', profile.id)
   const controller = new AbortController()
   const replyContext = (replyId: string): ChatExecutionContext => ({ threadId, profileId: profile.id, kind: 'direct', replyId })
@@ -348,9 +348,10 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const { AuthAccount } = await import('../src/models/AuthAccount')
     const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
     let permissions = ['chat.llm.use', 'chat.tools.read', 'page.generation.view', 'workflows.view']
-    sub.mock.method(AuthAccount, 'findById', () => ({ status: 'active' }))
+    sub.mock.method(AuthAccount, 'findById', () => ({ status: 'active', account_type: 'guest' }))
     sub.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: permissions }))
-    const context: ChatExecutionContext = { threadId: pageThreadId, profileId: pageProfile.id, kind: 'direct', replyId: 'page-revoke', page }
+    const ownedThread = CodexChatStore.createThread(7, 'owned page', 'llm', pageProfile.id)
+    const context: ChatExecutionContext = { threadId: ownedThread, profileId: pageProfile.id, kind: 'direct', replyId: 'page-revoke', page }
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
     const bridge = await openChatMcpBridge({ accountId: 7, accountType: 'guest' }, ['read'], ['get_current_page'], { chatContext: context })
     try {
@@ -370,9 +371,10 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       sub.after(() => { db.prepare('DELETE FROM auth_permissions WHERE permission_key = ?').run('workflows.view') })
     }
     let permissions = ['chat.llm.use', 'chat.tools.read', 'page.generation.view']
-    sub.mock.method(AuthAccount, 'findById', () => ({ status: 'active' }))
+    sub.mock.method(AuthAccount, 'findById', () => ({ status: 'active', account_type: 'guest' }))
     sub.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: permissions }))
-    const context: ChatExecutionContext = { threadId: workflowThreadId, profileId: workflowProfile.id, kind: 'direct', replyId: 'workflow-feature-revoke', page: workflowPage }
+    const ownedThread = CodexChatStore.createThread(7, 'owned workflow', 'llm', workflowProfile.id)
+    const context: ChatExecutionContext = { threadId: ownedThread, profileId: workflowProfile.id, kind: 'direct', replyId: 'workflow-feature-revoke', page: workflowPage }
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
     const bridge = await openChatMcpBridge({ accountId: 7, accountType: 'guest' }, ['read'], null, { chatContext: context })
     try {
@@ -393,7 +395,19 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     sub.mock.method(GenerationQueueService, 'requestDispatch', () => {})
     sub.mock.method(HistoryQueryRepository, 'findAllWithMetadata', () => [])
     const input = { service_type: 'novelai' as const, request_payload: { prompt: 'isolated test', n_samples: 1 }, idempotency_key: 'same-retry-key' }
-    const caller = (accountId: number) => ({ requester: { accountId, accountType: 'guest' as const }, source: 'llm-chat' as const, scopes: ['generate' as const] })
+    const { AuthAccount } = await import('../src/models/AuthAccount')
+    const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
+    sub.mock.method(AuthAccount, 'findById', () => ({ status: 'active', account_type: 'guest' }))
+    sub.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.llm.use', 'chat.tools.generate', 'generation.execute', 'images.view'] }))
+    const generator = ChatProfileStore.create({ name: 'Generator', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['generate'] })
+    const callers = [7, 8].map((accountId) => {
+      const chatContext: ChatExecutionContext = { threadId: CodexChatStore.createThread(accountId, 'generation', 'llm', generator.id), profileId: generator.id, kind: 'direct', replyId: `generation-${accountId}` }
+      const close = registerChatReply(chatContext, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+      sub.after(close)
+      return { requester: { accountId, accountType: 'guest' as const }, source: 'llm-chat' as const, scopes: ['generate' as const], chatContext }
+    })
+    const caller = (accountId: number) => callers.find((caller) => caller.requester.accountId === accountId)!
+
     const first = await enqueueMcpGenerationJob(caller(7), input)
     const second = await enqueueMcpGenerationJob(caller(8), input)
     const retry = await enqueueMcpGenerationJob(caller(7), input)

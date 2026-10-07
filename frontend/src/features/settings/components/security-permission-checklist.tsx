@@ -15,7 +15,7 @@ interface SecurityPermissionChecklistProps {
   onToggle: (permissionKey: string, enabled: boolean) => void
 }
 
-/** Grantable permissions in labeled sections, with each page's actions indented under it and locked while the page is off. */
+/** Page access and feature grants are independent; only inherited grants are locked. */
 export function SecurityPermissionChecklist({ permissionCatalog, selectedKeys, inheritedSources, disabled, onToggle }: SecurityPermissionChecklistProps) {
   const { language, t } = useI18n()
   const sections = useMemo(() => buildPermissionSections(permissionCatalog), [permissionCatalog])
@@ -30,13 +30,14 @@ export function SecurityPermissionChecklist({ permissionCatalog, selectedKeys, i
     <div className="space-y-5">
       {sections.map((section) => (
         <div key={section.id}>
+          {(section.kind === 'page' || sections.find((item) => item.kind === 'feature')?.id === section.id) ? (
+            <h3 className="pb-2 text-sm font-semibold">{t(section.kind === 'page' ? { ko: '페이지 접근', en: 'Page access' } : { ko: '기능 사용', en: 'Feature usage' })}</h3>
+          ) : null}
           <h4 className="pb-1 text-xs font-semibold text-muted-foreground">{t(section.label)}</h4>
           {section.rows.map((row) => {
             const inheritedFrom = inheritedSources[row.key]
             const checked = isOn(row.key)
-            const parentOff = row.parentKey !== null && !isOn(row.parentKey)
-            // A stale action left on without its page stays unlockable so it can still be cleared.
-            const rowDisabled = disabled || inheritedFrom !== undefined || (parentOff && !checked)
+            const rowDisabled = disabled || inheritedFrom !== undefined
             return (
               <label
                 key={row.key}
@@ -46,7 +47,7 @@ export function SecurityPermissionChecklist({ permissionCatalog, selectedKeys, i
                   rowDisabled ? 'cursor-default' : 'cursor-pointer',
                 )}
               >
-                <span className={cn('min-w-0 text-sm', parentOff ? 'text-muted-foreground' : 'text-foreground')}>{t(row.label)}</span>
+                <span className="min-w-0 text-sm text-foreground">{t(row.label)}</span>
                 <span className="flex shrink-0 items-center gap-2">
                   {inheritedFrom !== undefined ? (
                     <span className="text-xs text-muted-foreground">

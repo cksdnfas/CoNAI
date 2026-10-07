@@ -1,3 +1,5 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
+import { FeaturePermissionNotice } from '@/features/auth/feature-permission-notice'
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RefreshCw, Trash2, XCircle } from 'lucide-react'
@@ -33,7 +35,7 @@ import { ErrorState } from '@/components/ui/error-state'
 type ReservationView = 'schedules' | 'executions'
 
 /** Render the dedicated workflow reservation page inside image generation. */
-export function WorkflowReservationsPanel() {
+function WorkflowReservationsPanelContent() {
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
   const confirm = useConfirm()
@@ -373,4 +375,9 @@ export function WorkflowReservationsPanel() {
       /> : null}
     </section>
   )
+}
+
+export function WorkflowReservationsPanel() {
+  const { canViewWorkflows } = useFeaturePermissions()
+  return canViewWorkflows ? <WorkflowReservationsPanelContent /> : <FeaturePermissionNotice permission="workflows.view" />
 }

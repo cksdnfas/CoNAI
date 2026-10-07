@@ -211,3 +211,11 @@
 모델이 과거 연결 ID를 잘못 쓰거나 잘못된 정규식을 제안할 수 있다. 도구는 그래프 구조와 공개 입력 규격을 검증하며, 모든 모듈의 처리 의미를 증명하지는 않는다. 카드에서 실제 변경을 확인하고 기존 저장·실행 검증과 결과 확인을 거친다. 로컬 모델 검증 중 리비전 복사 오류를 없애고 연결 ID 재사용 계약을 정리했으며, 접두어 처리는 실제 `prefix` 필드로 구성해 실행 결과를 확인했다.
 
 코드 그래프는 `python -m graphify update .`로 갱신한다. 이 명령은 코드만 증분 처리하므로 변경한 가이드·계획 문서는 다음 전체 코퍼스 재구축에서 다시 반영해야 한다.
+
+## 기존 의존성의 보안 검토 후속 항목
+
+2026-10-07 `npm audit --omit=dev --json`은 운영 의존성에서 취약 패키지 16개(Critical 1, High 12, Moderate 3)를 보고했다. 이번 변경에서 패키지 의존성이나 잠금 파일을 추가·변경하지 않았다. 전체 의존성 업그레이드와 호환성 검증은 별도 작업이 필요하며, 입력 기능 검증 통과를 운영 환경 전체의 보안 검증 통과로 해석하면 안 된다.
+
+- `@modelcontextprotocol/sdk`: OAuth HTTP 클라이언트가 신뢰하지 않는 MCP 서버에 연결할 때 인증 정보가 다른 인증 서버로 전달될 수 있다는 High 공지가 있다. 패치 버전은 1.31.0이다. 이번 API LLM 채팅은 내부 `InMemoryTransport`로 연결하고 OAuth 클라이언트를 사용하지 않으므로, 확인한 입력 기능 경로는 공지의 공격 조건과 맞지 않는다. 이는 코드 경로와 공지를 비교한 판단이며 전체 사용처를 모두 검증했다는 의미는 아니다. [MCP SDK 공식 보안 공지](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-6qxp-vccf-f47h)
+- `proxy-addr`: 일부 IPv4 매핑 IPv6 신뢰 서브넷 설정에서 전달 IP가 위조될 수 있다는 Critical 공지가 있다. 패치 버전은 2.0.8이다. 프로젝트의 `resolveTrustProxySetting`은 환경변수의 서브넷 문자열을 받을 수 있어, 운영 배포의 `TRUST_PROXY` 설정을 확인해야 한다. 로컬 입력 테스트만으로 운영 프록시의 노출 여부를 판단할 수 없다. [proxy-addr 공식 보안 공지](https://github.com/jshttp/proxy-addr/security/advisories/GHSA-jqcg-44mw-7w3h)
+- 나머지 보고 대상에는 `axios`, `multer`, `sharp`, `pdfjs-dist`와 압축·파일 패턴 처리 관련 패키지가 포함된다. 보고 개수는 패키지 기준이며 실제 공격 가능성이나 서로 다른 취약점 개수와 같지 않다. 사용 경로와 수정 버전의 호환성을 확인한 뒤 패치해야 한다.

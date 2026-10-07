@@ -74,6 +74,20 @@ export type SessionResponseAccount = {
   account_type: 'admin' | 'guest';
 };
 
+/** Discard invalid or pre-setup authentication without carrying bootstrap/admin grants into configured auth. */
+export function clearSessionAuthAccess(req: Request): void {
+  req.session.authenticated = false;
+  delete req.session.username;
+  delete req.session.accountId;
+  delete req.session.accountType;
+  delete req.session.groupKeys;
+  delete req.session.permissionKeys;
+  delete req.session.accessCacheAccountId;
+  delete req.session.accessCacheEpoch;
+  delete req.session.accessCacheUpdatedAt;
+  sessionAccessStampBySid.delete(req.sessionID);
+}
+
 export interface AuthStatusPayload {
   hasCredentials: boolean;
   authenticated: boolean;
@@ -197,6 +211,10 @@ export function buildAuthStatusPayload(req: Request): AuthStatusPayload {
       groupKeys: bootstrapAccess.groupKeys,
       permissionKeys: bootstrapAccess.permissionKeys,
     };
+  }
+
+  if (req.session?.authenticated === true && typeof accountId !== 'number') {
+    clearSessionAuthAccess(req);
   }
 
   // The SPA shell embeds this payload on every full page load, so the previous unconditional

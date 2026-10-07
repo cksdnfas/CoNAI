@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FolderPlus } from 'lucide-react'
@@ -17,6 +18,7 @@ interface ImageGroupAssignActionProps {
 
 /** Render a reusable single-image group assignment action for detail views. */
 export function ImageGroupAssignAction({ image, variant = 'secondary' }: ImageGroupAssignActionProps) {
+  const { canAssignGroups } = useImagePermissions()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
@@ -48,12 +50,12 @@ export function ImageGroupAssignAction({ image, variant = 'secondary' }: ImageGr
     },
   })
 
-  if (!compositeHash) {
+  if (!canAssignGroups || !compositeHash) {
     return null
   }
 
   const handleOpenModal = async () => {
-    if (!compositeHash) {
+    if (!canAssignGroups || !compositeHash) {
       return
     }
 

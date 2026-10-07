@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
 import { useI18n } from '@/i18n'
-import { getAppSettings } from '@/lib/api-settings-general'
+import { getImageViewerSettings } from '@/lib/api-settings'
 import type { AutoTestKaloscopeResult } from '@/lib/api-settings-kaloscope'
 import { buildArtistPromptTagUrl } from '@/lib/artist-prompt-links'
 import { ArtistPromptSection } from './prompt-result-sections'
@@ -17,8 +17,8 @@ export function KaloscopeResultBlock({ result, title, onAddSearchFilter }: Kalos
   const { t } = useI18n()
   const artistEntries = getSortedEntries(result.artists)
   const settingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
+    queryKey: ['image-viewer-settings'],
+    queryFn: getImageViewerSettings,
     staleTime: 60_000,
   })
   const artistLinkUrlTemplate = settingsQuery.data?.kaloscope.artistLinkUrlTemplate

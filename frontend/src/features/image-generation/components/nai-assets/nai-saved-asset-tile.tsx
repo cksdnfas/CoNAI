@@ -1,3 +1,5 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { type KeyboardEvent, useEffect, useState } from 'react'
 import { Pencil, Pin, PinOff, Trash2 } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
@@ -35,6 +37,8 @@ export function NaiSavedAssetTile({
   onTogglePin,
 }: NaiSavedAssetTileProps) {
   const { t } = useI18n()
+  const { canUpdateWorkflows } = useFeaturePermissions()
+  const { canViewImages } = useImagePermissions()
   const editLabel = t('image-generation.components.nai.saved.asset.tile.edit')
   const deleteLabel = t('image-generation.components.nai.saved.asset.tile.delete')
   const pinLabel = isPinned ? t({ ko: '핀 해제', en: 'Unpin' }) : t({ ko: '핀', en: 'Pin' })
@@ -105,7 +109,7 @@ export function NaiSavedAssetTile({
             {isPinned ? <PinOff /> : <Pin />}
           </IconButton>
         ) : null}
-        {onEdit ? (
+        {onEdit && canUpdateWorkflows && canViewImages ? (
           <IconButton
             size="icon-sm"
             variant="overlay"
@@ -118,7 +122,7 @@ export function NaiSavedAssetTile({
             <Pencil />
           </IconButton>
         ) : null}
-        {onDelete ? (
+        {onDelete && canUpdateWorkflows ? (
           <IconButton
             size="icon-sm"
             variant="overlay"

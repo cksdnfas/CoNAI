@@ -1,3 +1,4 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { FolderInput, Sparkles, Trash2 } from 'lucide-react'
 import type { MouseEvent } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -22,6 +23,7 @@ interface PromptListItemProps {
 
 /** One prompt as a hairline row: checkbox · text · group · row actions (on hover) · usage count. Click copies. */
 export function PromptListItem({ item, groupName, selected = false, active = false, canAssign = true, canDelete = true, onToggleSelect, onAssignGroup, onDelete, onActivate }: PromptListItemProps) {
+  const { canUpdatePrompts, canDeletePrompts } = useFeaturePermissions()
   const { t } = useI18n()
   const stopAction = (event: MouseEvent<HTMLElement>) => {
     event.preventDefault()
@@ -49,10 +51,10 @@ export function PromptListItem({ item, groupName, selected = false, active = fal
             data-no-select-drag="true"
             onClick={stopAction}
           >
-            <IconButton variant="ghost" size="icon-xs" onClick={() => onAssignGroup?.()} label={t('prompts.components.prompt.list.item.assign.prompt.group')} disabled={!canAssign}>
+            <IconButton variant="ghost" size="icon-xs" onClick={() => onAssignGroup?.()} label={t('prompts.components.prompt.list.item.assign.prompt.group')} disabled={!canAssign || !canUpdatePrompts}>
               <FolderInput />
             </IconButton>
-            {canDelete ? (
+            {canDelete && canDeletePrompts ? (
               <IconButton variant="ghost" size="icon-xs" onClick={() => onDelete?.()} label={t('prompts.components.prompt.list.item.delete.prompt')}>
                 <Trash2 />
               </IconButton>

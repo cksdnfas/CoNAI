@@ -1,3 +1,5 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
+import { FeaturePermissionNotice } from '@/features/auth/feature-permission-notice'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -12,11 +14,12 @@ import {
   getGenerationWorkflow,
   getGenerationWorkflows,
 } from '@/lib/api-image-generation-workflows'
-import { getAppSettings } from '@/lib/api-settings-general'
+import { getRuntimeImageSaveSettings } from '@/lib/api-settings'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { cn } from '@/lib/utils'
 import { ChatGenerationPresetSaveModal } from '@/features/settings/components/chat-generation-preset-save-modal'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
 import {
   buildWorkflowDraft,
   buildWorkflowPromptData,
@@ -100,7 +103,7 @@ function writeManagementOpen(isOpen: boolean) {
   }
 }
 
-export function ComfyGenerationPanel({
+function ComfyGenerationPanelContent({
   onHistoryRefresh,
   selectedWorkflowId,
   onSelectedWorkflowChange,
@@ -118,14 +121,16 @@ export function ComfyGenerationPanel({
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
   const [isAuthoringModalOpen, setIsAuthoringModalOpen] = useState(false)
   const [isChatPresetModalOpen, setIsChatPresetModalOpen] = useState(false)
-  const canSaveChatPreset = useAuthStatusQuery().data?.isAdmin === true
+  const authStatus = useAuthStatusQuery().data
+  const draftStorageOwner = resolveAccountDraftOwner(authStatus)
+  const canSaveChatPreset = authStatus?.isAdmin === true
   const [workflowEditorState, setWorkflowEditorState] = useState<ComfyWorkflowEditorState | null>(null)
   const [isManagementOpen, setIsManagementOpen] = useState(readManagementOpen)
   const activeWorkflowId = selectedWorkflowId !== null ? String(selectedWorkflowId) : ''
 
   const appSettingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
+    queryKey: ['runtime-image-save-settings'],
+    queryFn: getRuntimeImageSaveSettings,
   })
 
   const workflowsQuery = useQuery({
@@ -278,7 +283,7 @@ export function ComfyGenerationPanel({
     }
 
     const baseDraft = buildWorkflowDraft(selectedWorkflowFields)
-    const persistedDraft = loadPersistedComfyWorkflowDraft(selectedWorkflow.id, selectedWorkflowFields)
+    const persistedDraft = loadPersistedComfyWorkflowDraft(draftStorageOwner, selectedWorkflow.id, selectedWorkflowFields)
     const validFieldIds = new Set(selectedWorkflowFields.map((field) => field.id))
     const filteredPersistedDraft = Object.fromEntries(
       Object.entries(persistedDraft).filter(([fieldId]) => validFieldIds.has(fieldId)),
@@ -289,7 +294,7 @@ export function ComfyGenerationPanel({
       ...filteredPersistedDraft,
     })
     setWorkflowDraftOwnerId(selectedWorkflow.id)
-  }, [selectedWorkflow, selectedWorkflowFields])
+  }, [draftStorageOwner, selectedWorkflow, selectedWorkflowFields])
 
   const pendingHistorySettingsLoad = usePendingHistorySettingsLoad()
   const handledHistorySettingsLoadNonceRef = useRef(0)
@@ -328,13 +333,14 @@ export function ComfyGenerationPanel({
 
       setWorkflowDraft(result.draft)
       // 드롭다운 목록 갱신 등으로 초안이 저장본에서 다시 초기화돼도 불러온 값이 남도록 바로 저장한다.
-      persistComfyWorkflowDraft(targetWorkflowId, result.draft)
+      persistComfyWorkflowDraft(draftStorageOwner, targetWorkflowId, result.draft)
       clearWorkflowFieldIssues()
       showSnackbar({ message: getHistorySettingsLoadedMessage(t, request.historyId, result.hasImageInputs), tone: 'info' })
     })()
   }, [
     clearWorkflowFieldIssues,
     confirm,
+    draftStorageOwner,
     pendingHistorySettingsLoad,
     selectedWorkflow?.id,
     selectedWorkflowFields,
@@ -379,11 +385,11 @@ export function ComfyGenerationPanel({
     }
 
     const timeout = window.setTimeout(() => {
-      persistComfyWorkflowDraft(selectedWorkflowId, workflowDraft)
+      persistComfyWorkflowDraft(draftStorageOwner, selectedWorkflowId, workflowDraft)
     }, 250)
 
     return () => window.clearTimeout(timeout)
-  }, [selectedWorkflowId, workflowDraft])
+  }, [draftStorageOwner, selectedWorkflowId, workflowDraft])
 
   const handleWorkflowImageChange = useCallback(async (fieldId: string, image?: SelectedImageDraft) => {
     handleWorkflowFieldChange(fieldId, image ?? '')
@@ -499,11 +505,11 @@ export function ComfyGenerationPanel({
 
     void deleteComfyWorkflowDraftInputAssets(workflowDraft)
     if (selectedWorkflow) {
-      clearPersistedComfyWorkflowDraft(selectedWorkflow.id)
+      clearPersistedComfyWorkflowDraft(draftStorageOwner, selectedWorkflow.id)
     }
     setWorkflowDraft(baseDraft)
     clearWorkflowFieldIssues()
-  }, [clearWorkflowFieldIssues, confirm, selectedWorkflow, selectedWorkflowFields, t, workflowDraft])
+  }, [clearWorkflowFieldIssues, confirm, draftStorageOwner, selectedWorkflow, selectedWorkflowFields, t, workflowDraft])
 
   const handleOpenSelectedModuleSave = useCallback(() => {
     if (selectedWorkflow) {
@@ -654,4 +660,10 @@ export function ComfyGenerationPanel({
       />
     </>
   )
+}
+
+/** Workflow data is a feature, independent of the generation page's navigation grant. */
+export function ComfyGenerationPanel(props: ComfyGenerationPanelProps) {
+  const { canViewWorkflows } = useFeaturePermissions()
+  return canViewWorkflows ? <ComfyGenerationPanelContent {...props} /> : <FeaturePermissionNotice permission="workflows.view" />
 }

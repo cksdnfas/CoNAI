@@ -1,3 +1,6 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
+import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RotateCcw, Trash2 } from 'lucide-react'
@@ -54,7 +57,9 @@ type GenerationHistoryPanelViewProps = Omit<GenerationHistoryPanelProps, 'refres
 
 /** History list body for a feed owned by the caller (the result area shares one feed with the stage). */
 export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack, headerLeading }: GenerationHistoryPanelViewProps) {
+  const { canViewImages } = useImagePermissions()
   const { t, formatNumber } = useI18n()
+  const { canExecuteGeneration } = useFeaturePermissions()
   const {
     columnCount: historyColumnCount,
     setColumnCount: setHistoryColumnCount,
@@ -217,6 +222,8 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
     acknowledgeRecoveryRecords,
   })
 
+  if (!canViewImages) return <ImagePermissionNotice />
+
   return (
     <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-4 overflow-hidden' : 'space-y-4')}>
       <GenerationHistoryHeader
@@ -345,7 +352,7 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
                 size="icon-sm"
                 variant="secondary"
                 onClick={() => void handleRetrySelectedHistoryRecords()}
-                disabled={isRetryingRunRecovery}
+                disabled={!canExecuteGeneration || isRetryingRunRecovery}
                 label={isRetryingRunRecovery ? t({ ko: '재실행 등록 중', en: 'Queueing rerun' }) : t({ ko: '선택 재실행', en: 'Rerun selected' })}
                 data-no-select-drag="true"
               >

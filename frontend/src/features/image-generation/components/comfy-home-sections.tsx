@@ -1,3 +1,4 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useId, useMemo, useState } from 'react'
 import { Copy, ListTree, Pencil, Plus, RotateCcw, Save, Server, Trash2, Upload } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
@@ -37,6 +38,7 @@ export function ComfyWorkflowListSection({
   onCopyWorkflow,
   onDeleteWorkflow,
 }: WorkflowListSectionProps) {
+  const { canUpdateWorkflows } = useFeaturePermissions()
   const { t, formatNumber } = useI18n()
 
   return (
@@ -51,7 +53,7 @@ export function ComfyWorkflowListSection({
       actions={(
         <>
           <span className="px-1 text-xs tabular-nums text-muted-foreground">{workflows.length}</span>
-          <Button type="button" size="sm" variant="secondary" onClick={onCreateWorkflow}>
+          <Button type="button" size="sm" variant="secondary" onClick={onCreateWorkflow} disabled={!(canUpdateWorkflows)}>
             <Plus className="h-4 w-4" />
             {t({ ko: '등록', en: 'Add' })}
           </Button>
@@ -109,7 +111,7 @@ export function ComfyWorkflowListSection({
                           onEditWorkflow(workflow.id)
                         }}
                         label={t({ ko: '{name} 수정', en: 'Edit {name}' }, { name: workflow.name })}
-                      >
+                       disabled={!(canUpdateWorkflows)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </IconButton>
                       <IconButton
@@ -133,7 +135,7 @@ export function ComfyWorkflowListSection({
                           onDeleteWorkflow(workflow.id)
                         }}
                         label={t({ ko: '{name} 삭제', en: 'Delete {name}' }, { name: workflow.name })}
-                      >
+                       disabled={!(canUpdateWorkflows)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </IconButton>
                     </div>
@@ -163,6 +165,7 @@ type ServerListSectionProps = {
 
 export function ComfyServerListSection({ servers, activeServerCount, serverTests, onOpenCreateServer, onEditServer, onDeleteServer, onTestServer, onToggleServerActive }: ServerListSectionProps) {
   const activeId = useId()
+  const { isAdmin } = useFeaturePermissions()
   const { t, formatNumber } = useI18n()
   const inactiveServerCount = Math.max(0, servers.length - activeServerCount)
 
@@ -181,7 +184,7 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
           <Badge variant="outline" className="hidden sm:inline-flex">{t({ ko: '전체 {count}', en: '{count} total' }, { count: formatNumber(servers.length) })}</Badge>
           <Badge variant="secondary" className="hidden sm:inline-flex">{t({ ko: '활성 {count}', en: '{count} active' }, { count: formatNumber(activeServerCount) })}</Badge>
           {inactiveServerCount > 0 ? <Badge variant="outline" className="hidden sm:inline-flex">{t({ ko: '비활성 {count}', en: '{count} inactive' }, { count: formatNumber(inactiveServerCount) })}</Badge> : null}
-          <Button type="button" size="sm" variant="secondary" onClick={onOpenCreateServer}>
+          <Button type="button" size="sm" variant="secondary" onClick={onOpenCreateServer} disabled={!(isAdmin)}>
             <Plus className="h-4 w-4" />
             {t({ ko: '서버 등록', en: 'Add server' })}
           </Button>
@@ -244,7 +247,7 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
                         id={`${activeId}-${server.id}`}
                         size="sm"
                         checked={isActive}
-                        onCheckedChange={(checked) => onToggleServerActive(server.id, checked)}
+                        disabled={!isAdmin} onCheckedChange={(checked) => onToggleServerActive(server.id, checked)}
                       />
                     </div>
                     <Button
@@ -258,10 +261,10 @@ export function ComfyServerListSection({ servers, activeServerCount, serverTests
                       {testState?.isLoading ? t({ ko: '확인 중…', en: 'Checking…' }) : t({ ko: '테스트', en: 'Test' })}
                     </Button>
                     <div className="flex gap-1">
-                      <IconButton size="icon-xs" variant="ghost" onClick={() => onEditServer(server.id)} label={t({ ko: '{name} 수정', en: 'Edit {name}' }, { name: server.name })}>
+                      <IconButton size="icon-xs" variant="ghost" onClick={() => onEditServer(server.id)} label={t({ ko: '{name} 수정', en: 'Edit {name}' }, { name: server.name })} disabled={!(isAdmin)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </IconButton>
-                      <IconButton size="icon-xs" variant="ghost" onClick={() => onDeleteServer(server.id)} label={t({ ko: '{name} 삭제', en: 'Delete {name}' }, { name: server.name })}>
+                      <IconButton size="icon-xs" variant="ghost" onClick={() => onDeleteServer(server.id)} label={t({ ko: '{name} 삭제', en: 'Delete {name}' }, { name: server.name })} disabled={!(isAdmin)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </IconButton>
                     </div>
@@ -440,6 +443,7 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
 }
 
 export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false, onCreateManualList, onUpdateList, onDeleteList, onScanAutoLists }: DropdownListsSectionProps) {
+  const { canUpdateWorkflows, isAdmin } = useFeaturePermissions()
   const { t, formatNumber } = useI18n()
   const [activeTab, setActiveTab] = useState<DropdownTab>('custom')
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false)
@@ -470,12 +474,12 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm text-muted-foreground">{activeTab === 'custom' ? t({ ko: '{count}개 목록', en: '{count} lists' }, { count: formatNumber(customLists.length) }) : t({ ko: '{count}개 목록', en: '{count} lists' }, { count: formatNumber(autoLists.length) })}</div>
           {activeTab === 'custom' ? (
-            <Button type="button" size="sm" variant="secondary" onClick={() => setIsCustomModalOpen(true)}>
+            <Button type="button" size="sm" variant="secondary" onClick={() => setIsCustomModalOpen(true)} disabled={!(canUpdateWorkflows)}>
               <Plus className="h-4 w-4" />
               {t({ ko: '목록 추가', en: 'Add list' })}
             </Button>
           ) : (
-            <Button type="button" size="sm" variant="secondary" onClick={() => setIsAutoModalOpen(true)}>
+            <Button type="button" size="sm" variant="secondary" onClick={() => setIsAutoModalOpen(true)} disabled={!(isAdmin)}>
               <Upload className="h-4 w-4" />
               {t({ ko: '자동수집', en: 'Auto collect' })}
             </Button>
@@ -500,11 +504,11 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
                   </div>
                   {!list.is_auto_collected ? (
                     <div className="flex shrink-0 gap-2">
-                      <Button type="button" size="sm" variant="secondary" onClick={() => setEditingCustomList(list)} disabled={isSubmitting}>
+                      <Button type="button" size="sm" variant="secondary" onClick={() => setEditingCustomList(list)} disabled={!(canUpdateWorkflows) || (isSubmitting)}>
                         <Pencil className="h-4 w-4" />
                         {t({ ko: '수정', en: 'Edit' })}
                       </Button>
-                      <Button type="button" size="sm" variant="secondary" onClick={() => void onDeleteList(list.id)} disabled={isSubmitting}>
+                      <Button type="button" size="sm" variant="secondary" onClick={() => void onDeleteList(list.id)} disabled={!(canUpdateWorkflows) || (isSubmitting)}>
                         <Trash2 className="h-4 w-4" />
                         {t({ ko: '삭제', en: 'Delete' })}
                       </Button>

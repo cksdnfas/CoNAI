@@ -1,3 +1,4 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useRef } from 'react'
 import { ArrowLeft, Copy, Download, FolderPlus, PenSquare, Plus, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
@@ -49,6 +50,7 @@ export function ModuleGraphWorkflowListSidebar({
   onDeleteWorkflow: () => void
   onDeleteFolder: (folderId: number) => void
 }) {
+  const { canUpdateWorkflows } = useFeaturePermissions()
   const { t } = useI18n()
   const importInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -88,7 +90,7 @@ export function ModuleGraphWorkflowListSidebar({
               variant="ghost"
               onClick={onOpenBrowseManage}
               label={browseManageModalTitle}
-            >
+             disabled={!(canUpdateWorkflows)}>
               <FolderPlus />
             </IconButton>
           ) : null}
@@ -97,7 +99,7 @@ export function ModuleGraphWorkflowListSidebar({
             variant="ghost"
             onClick={onCreateWorkflow}
             label={t({ ko: '새 워크플로우', en: 'New workflow' })}
-          >
+           disabled={!(canUpdateWorkflows)}>
             <Plus />
           </IconButton>
           {workflowView === 'browse' ? (
@@ -120,7 +122,7 @@ export function ModuleGraphWorkflowListSidebar({
                 variant="ghost"
                 onClick={() => importInputRef.current?.click()}
                 label={t({ ko: '워크플로우 가져오기', en: 'Import workflow' })}
-              >
+               disabled={!(canUpdateWorkflows)}>
                 <Upload />
               </IconButton>
             </>
@@ -131,7 +133,7 @@ export function ModuleGraphWorkflowListSidebar({
               variant="ghost"
               onClick={onDuplicateWorkflow}
               label={t({ ko: '워크플로우 복제', en: 'Duplicate workflow' })}
-            >
+             disabled={!(canUpdateWorkflows)}>
               <Copy />
             </IconButton>
           ) : null}
@@ -151,7 +153,7 @@ export function ModuleGraphWorkflowListSidebar({
               variant="ghost"
               onClick={onEditWorkflow}
               label={t({ ko: '워크플로우 편집', en: 'Edit workflow' })}
-            >
+             disabled={!(canUpdateWorkflows)}>
               <PenSquare />
             </IconButton>
           ) : null}
@@ -161,7 +163,7 @@ export function ModuleGraphWorkflowListSidebar({
               variant="ghost"
               onClick={onDeleteWorkflow}
               label={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}
-            >
+             disabled={!(canUpdateWorkflows)}>
               <Trash2 />
             </IconButton>
           ) : null}
@@ -171,7 +173,7 @@ export function ModuleGraphWorkflowListSidebar({
               variant="ghost"
               onClick={() => onDeleteFolder(selectedFolderRecord.id)}
               label={t({ ko: '폴더 삭제', en: 'Delete folder' })}
-            >
+             disabled={!(canUpdateWorkflows)}>
               <Trash2 />
             </IconButton>
           ) : null}

@@ -7,7 +7,6 @@ import { PromptPresetModel, type PromptPresetCreateData, type PromptPresetItemIn
 
 const router = Router();
 
-router.use(requirePermission('page.prompts.view'));
 
 function normalizePresetItems(value: unknown): PromptPresetItemInput[] | null {
   if (!Array.isArray(value)) {

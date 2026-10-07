@@ -1,3 +1,5 @@
+import { buildChatImageRecord } from './chat-image-record'
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ImageIcon, Reply } from 'lucide-react'
@@ -6,8 +8,7 @@ import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { useI18n } from '@/i18n'
-import { getCodexChatThreadMedia, type ChatMediaAttachment } from '@/lib/api-codex-chat'
-import { buildApiUrl } from '@/lib/api-url'
+import { getCodexChatThreadMedia, type ChatMediaAttachment, type CodexChatMediaItem } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 import { codexChatMediaQueryKey, useCodexChatReference } from './codex-chat-context'
 
@@ -17,13 +18,14 @@ import { codexChatMediaQueryKey, useCodexChatReference } from './codex-chat-cont
  */
 export function useChatReference(compositeHash: string | null | undefined, mimeType: string | null) {
   const { t } = useI18n()
+  const { canViewImages } = useImagePermissions()
   const chat = useCodexChatReference()
   const active = Boolean(compositeHash) && (chat?.draftMediaAttachments.some((item) => item.compositeHash === compositeHash) ?? false)
   const toggle = useCallback(() => {
-    if (!chat || !compositeHash) return
+    if (!canViewImages || !chat || !compositeHash) return
     chat.toggleMediaAttachment({ compositeHash, name: t({ ko: '참조 이미지', en: 'Referenced image' }), mimeType })
-  }, [chat, compositeHash, mimeType, t])
-  return { available: chat !== null && Boolean(compositeHash), active, toggle }
+  }, [canViewImages, chat, compositeHash, mimeType, t])
+  return { available: canViewImages && chat !== null && Boolean(compositeHash), active, toggle }
 }
 
 export function ChatReferenceButton({ compositeHash, mimeType, size = 'icon-sm', className }: {
@@ -145,18 +147,20 @@ export function ChatThumbOverlay({ children, actions, className }: { children: R
   )
 }
 
-function ChatReferenceChip({ item, sourceMessageId }: { item: ChatMediaAttachment; sourceMessageId: number | undefined }) {
+function ChatReferenceChip({ item, sourceMessageId, media }: { item: ChatMediaAttachment; sourceMessageId: number | undefined; media?: CodexChatMediaItem }) {
   const { t } = useI18n()
+  const { canViewImages } = useImagePermissions()
   const chat = useCodexChatReference()
   const viewer = useImageViewModal()
   const isVideo = item.mimeType?.startsWith('video/') === true
-  const thumbnailUrl = buildApiUrl(`/api/images/${encodeURIComponent(item.compositeHash)}/thumbnail`)
-  const fileUrl = buildApiUrl(`/api/images/${encodeURIComponent(item.compositeHash)}/file`)
-  const hoverPreview = useMediaHoverPreview({ src: thumbnailUrl, fullSrc: isVideo ? null : fileUrl, videoSrc: isVideo ? fileUrl : null, caption: item.name })
+  const image = buildChatImageRecord(item.compositeHash, undefined, media)
+  const thumbnailUrl = image.thumbnail_url ?? ''
+  const fileUrl = image.image_url ?? ''
+  const hoverPreview = useMediaHoverPreview(canViewImages ? { src: thumbnailUrl, fullSrc: isVideo ? null : fileUrl, videoSrc: isVideo ? fileUrl : null, caption: item.name } : null)
   const canJump = sourceMessageId !== undefined && chat !== null
   const open = () => {
     if (canJump) chat.focusMessage(sourceMessageId)
-    else viewer?.openImageView({ compositeHash: item.compositeHash, sourceItems: [] })
+    else if (canViewImages) viewer?.openImageView({ compositeHash: item.compositeHash, sourceItems: [image] })
   }
   return (
     <>
@@ -165,7 +169,7 @@ function ChatReferenceChip({ item, sourceMessageId }: { item: ChatMediaAttachmen
         size="sm"
         className="gap-1.5"
         title={canJump ? t({ ko: '이 이미지가 나온 메시지로 이동', en: 'Go to the message with this image' }) : item.name}
-        disabled={!canJump && !viewer}
+        disabled={!canJump && (!canViewImages || !viewer)}
         onClick={open}
         {...hoverPreview.triggerProps}
       >
@@ -182,17 +186,18 @@ function ChatReferenceChip({ item, sourceMessageId }: { item: ChatMediaAttachmen
  * the reply the image first appeared in, or opens the image when it was picked from the library; hovering shows it.
  */
 export function ChatReferenceChips({ items = [], threadId }: { items?: ChatMediaAttachment[]; threadId: number | null }) {
+  const { canViewImages } = useImagePermissions()
   const mediaQuery = useQuery({
     queryKey: codexChatMediaQueryKey(threadId),
     queryFn: () => getCodexChatThreadMedia(threadId as number),
-    enabled: threadId !== null && items.length > 0,
+    enabled: canViewImages && threadId !== null && items.length > 0,
     staleTime: 30_000,
   })
   if (!items.length) return null
   const messageIdByHash = new Map((mediaQuery.data ?? []).map((media) => [media.compositeHash, media.messageId]))
   return (
     <div className="mt-1 flex flex-wrap justify-end gap-1">
-      {items.map((item) => <ChatReferenceChip key={item.compositeHash} item={item} sourceMessageId={messageIdByHash.get(item.compositeHash)} />)}
+      {items.map((item) => <ChatReferenceChip key={item.compositeHash} item={item} sourceMessageId={messageIdByHash.get(item.compositeHash)} media={mediaQuery.data?.find((media) => media.compositeHash === item.compositeHash)} />)}
     </div>
   )
 }

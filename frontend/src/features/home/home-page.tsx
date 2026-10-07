@@ -1,3 +1,5 @@
+import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { FolderPlus, ImageOff, SearchX, Trash2, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { CountSummary } from '@/components/ui/count-summary'
@@ -10,7 +12,6 @@ import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { AuthStatusErrorState } from '@/features/auth/require-auth-permission'
 import { useAuthPermissionRedirect } from '@/features/auth/use-auth-permission-redirect'
 import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
@@ -63,6 +64,7 @@ export function HomePage() {
   const {
     authStatusQuery,
     canViewHome,
+    canAssignGroups,
     canDeleteImages,
     isAnonymousSession,
     imagesQuery,
@@ -99,8 +101,7 @@ export function HomePage() {
   })
 
   const isAuthStatusUnavailable = authStatusQuery.isError && !canViewHome
-  // Signed-out visitors open the viewer only when the anonymous group grants image detail.
-  const canOpenImages = !isAnonymousSession || hasAuthPermission(authStatusQuery.data?.permissionKeys, 'page.image-detail.view')
+  const canOpenImages = useImagePermissions().canViewImages
   // A failed next page or background refetch keeps the loaded images on screen; only a failed first load replaces them.
   const hasFeedData = (imagesQuery.data?.pages.length ?? 0) > 0
   const isInitialLoadError = imagesQuery.isError && !hasFeedData
@@ -144,6 +145,8 @@ export function HomePage() {
   if (!canViewHome) {
     return <div className="min-h-[40vh] rounded-sm bg-fill animate-pulse" />
   }
+
+  if (!canOpenImages) return <ImagePermissionNotice />
 
   return (
     // Leave room under the list for the fixed selection bar while it is up.
@@ -274,14 +277,14 @@ export function HomePage() {
             selectedCount={selectedIds.length}
             downloadableCount={selectedCompositeHashes.length}
             isDownloading={isDownloading}
-            extraActions={
+            extraActions={canAssignGroups ? (
               <SelectionBarAction
                 icon={FolderPlus}
                 label={assignToGroupMutation.isPending ? t('homePage.addingToGroup') : t('homePage.addToGroup')}
                 onClick={handleOpenAssignModal}
                 disabled={assignToGroupMutation.isPending || groupsQuery.isPending}
               />
-            }
+            ) : null}
             trailingActions={canDeleteImages ? (
               <SelectionBarAction
                 icon={Trash2}

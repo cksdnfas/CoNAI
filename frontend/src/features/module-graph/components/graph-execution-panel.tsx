@@ -1,3 +1,4 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useMemo, useState } from 'react'
 import { Play, RotateCcw, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -76,6 +77,7 @@ export function GraphExecutionPanel({
   onCancelExecution,
   showHeader = true,
 }: GraphExecutionPanelProps) {
+  const { canExecuteGeneration } = useFeaturePermissions()
   const { t, formatNumber, formatDateTime } = useI18n()
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
 
@@ -127,7 +129,7 @@ export function GraphExecutionPanel({
         size="icon-sm"
         variant="ghost"
         onClick={onCancelExecution}
-        disabled={isCancellingExecution || (selectedExecutionStatus !== 'queued' && selectedExecutionStatus !== 'running')}
+        disabled={!(canExecuteGeneration) || (isCancellingExecution || (selectedExecutionStatus !== 'queued' && selectedExecutionStatus !== 'running'))}
         label={isCancellingExecution ? t({ ko: '실행 취소 요청 중', en: 'Requesting run cancel' }) : t({ ko: '실행 취소', en: 'Cancel run' })}
       >
         <Square className="h-4 w-4" />
@@ -136,7 +138,7 @@ export function GraphExecutionPanel({
         size="icon-sm"
         variant="ghost"
         onClick={onRetryExecution}
-        disabled={!retryable || isExecutingGraph}
+        disabled={!(canExecuteGeneration) || (!retryable || isExecutingGraph)}
         label={t({ ko: '실행 다시 시도', en: 'Retry run' })}
       >
         <RotateCcw className="h-4 w-4" />
@@ -145,7 +147,7 @@ export function GraphExecutionPanel({
         size="icon-sm"
         variant="ghost"
         onClick={onRerunGraph}
-        disabled={!selectedGraphId || isExecutingGraph}
+        disabled={!(canExecuteGeneration) || (!selectedGraphId || isExecutingGraph)}
         label={isExecutingGraph ? t({ ko: '워크플로우 실행 중', en: 'Workflow running' }) : t({ ko: '워크플로우 재실행', en: 'Rerun workflow' })}
       >
         <Play className="h-4 w-4" />

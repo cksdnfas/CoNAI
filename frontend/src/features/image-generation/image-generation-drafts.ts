@@ -92,8 +92,8 @@ function buildPersistableNaiFormDraft(form: NAIFormDraft): NAIFormDraft {
 }
 
 /** Restore the last persisted NAI editor draft, excluding heavy image payloads. */
-export function loadPersistedNaiFormDraft(): PersistedNaiFormDraft {
-  const rawValue = readLocalStorageJson<Partial<PersistedNaiFormDraft>>(NAI_FORM_DRAFT_STORAGE_KEY)
+export function loadPersistedNaiFormDraft(owner: string): PersistedNaiFormDraft {
+  const rawValue = readLocalStorageJson<Partial<PersistedNaiFormDraft>>(`${NAI_FORM_DRAFT_STORAGE_KEY}:${owner}`)
   const selectedCharacterIndex = typeof rawValue?.selectedCharacterIndex === 'number' ? rawValue.selectedCharacterIndex : null
 
   return {
@@ -103,15 +103,15 @@ export function loadPersistedNaiFormDraft(): PersistedNaiFormDraft {
 }
 
 /** Persist the current NAI editor draft while omitting image payloads that would bloat storage. */
-export function persistNaiFormDraft(form: NAIFormDraft, selectedCharacterIndex: number | null) {
-  writeLocalStorageJson(NAI_FORM_DRAFT_STORAGE_KEY, {
+export function persistNaiFormDraft(owner: string, form: NAIFormDraft, selectedCharacterIndex: number | null) {
+  writeLocalStorageJson(`${NAI_FORM_DRAFT_STORAGE_KEY}:${owner}`, {
     selectedCharacterIndex,
     form: buildPersistableNaiFormDraft(form),
   } satisfies PersistedNaiFormDraft)
 }
 
-function buildComfyWorkflowDraftStorageKey(workflowId: number) {
-  return `${COMFY_WORKFLOW_DRAFT_STORAGE_KEY_PREFIX}${workflowId}`
+function buildComfyWorkflowDraftStorageKey(owner: string, workflowId: number) {
+  return `${COMFY_WORKFLOW_DRAFT_STORAGE_KEY_PREFIX}${workflowId}:${owner}`
 }
 
 /** Check whether one stored draft value is a string-array textarea payload. */
@@ -188,8 +188,8 @@ function normalizeWorkflowDraftValue(field: WorkflowMarkedField, value: unknown)
 }
 
 /** Restore one persisted Comfy workflow draft, limited to text/select/number fields. */
-export function loadPersistedComfyWorkflowDraft(workflowId: number, fields?: WorkflowMarkedField[]): Record<string, WorkflowFieldDraftValue> {
-  const rawValue = readLocalStorageJson<Record<string, unknown>>(buildComfyWorkflowDraftStorageKey(workflowId))
+export function loadPersistedComfyWorkflowDraft(owner: string, workflowId: number, fields?: WorkflowMarkedField[]): Record<string, WorkflowFieldDraftValue> {
+  const rawValue = readLocalStorageJson<Record<string, unknown>>(buildComfyWorkflowDraftStorageKey(owner, workflowId))
   if (!rawValue) {
     return {}
   }
@@ -211,17 +211,17 @@ export function loadPersistedComfyWorkflowDraft(workflowId: number, fields?: Wor
 }
 
 /** Persist one Comfy workflow draft, skipping image payload fields. */
-export function persistComfyWorkflowDraft(workflowId: number, draft: Record<string, WorkflowFieldDraftValue>) {
+export function persistComfyWorkflowDraft(owner: string, workflowId: number, draft: Record<string, WorkflowFieldDraftValue>) {
   const persistableDraft = Object.fromEntries(
     Object.entries(draft).filter(([, value]) => typeof value === 'string' || isWorkflowTextDraftSegments(value) || isWorkflowNodeDraftValue(value)),
   )
 
-  writeLocalStorageJson(buildComfyWorkflowDraftStorageKey(workflowId), persistableDraft)
+  writeLocalStorageJson(buildComfyWorkflowDraftStorageKey(owner, workflowId), persistableDraft)
 }
 
 /** Remove one persisted Comfy workflow draft, usually after an explicit reset. */
-export function clearPersistedComfyWorkflowDraft(workflowId: number) {
-  removeLocalStorageValue(buildComfyWorkflowDraftStorageKey(workflowId))
+export function clearPersistedComfyWorkflowDraft(owner: string, workflowId: number) {
+  removeLocalStorageValue(buildComfyWorkflowDraftStorageKey(owner, workflowId))
 }
 
 /** Build the initial draft object for workflow marked fields. */

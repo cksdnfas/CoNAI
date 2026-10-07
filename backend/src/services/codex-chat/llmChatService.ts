@@ -324,7 +324,9 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
         if (turn.controller.signal.aborted) {
           return
         }
-        messages.push({ role: 'tool', tool_call_id: call.id, content: await runToolCall(turn, bridge, call, profile.toolOutputLimit, images) })
+        messages.push({ role: 'tool', tool_call_id: call.id, content: tools.some((tool) => tool.function.name === call.function.name)
+          ? await runToolCall(turn, bridge, call, profile.toolOutputLimit, images)
+          : `Unknown or not permitted tool: ${call.function.name}` })
       }
       // Tool messages carry text only, so images ride in a user message right after them (this request only).
       if (images.length > 0 && profile.visionEnabled) {

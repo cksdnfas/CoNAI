@@ -6,6 +6,9 @@ import { HistoryQueryRepository } from '../repositories/history/HistoryQueryRepo
 import { FileDiscoveryService } from './folderScan/fileDiscoveryService';
 import { ImageUploadService } from './imageUploadService';
 import { mcpHttpSettingsService } from './mcpHttpSettingsService';
+import type { McpRequester } from '../mcp/context';
+import { requireRequesterImagePermission } from '../middleware/imageAccess';
+import { requireMcpResourceOwner } from '../mcp/toolAccess';
 
 const MCP_ARTIFACT_PREFIX = 'mcp_artifact_';
 const DEFAULT_ARTIFACT_URL_TTL_SECONDS = 15 * 60;
@@ -129,6 +132,10 @@ async function sha256File(absolutePath: string): Promise<string> {
 }
 
 export class McpArtifactService {
+  /** Verify the stable identity before account authorization, without touching its host file. */
+  static identity(artifactId: string): McpArtifactPayload | null {
+    return decodeArtifactId(artifactId);
+  }
   static resolve(artifactId: string): ResolvedMcpArtifact | null {
     const payload = decodeArtifactId(artifactId);
     if (!payload) {
@@ -146,9 +153,15 @@ export class McpArtifactService {
     return token.length === expected.length && crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
   }
 
-  static async createHistoryDescriptor(historyId: number, baseUrl: string): Promise<McpArtifactDescriptor | null> {
+  static async createHistoryDescriptor(historyId: number, baseUrl: string, requester?: McpRequester): Promise<McpArtifactDescriptor | null> {
+    if (requester) {
+      requireRequesterImagePermission(requester);
+      requireMcpResourceOwner({ scopes: [], requester }, HistoryQueryRepository.findAllWithMetadata({ ids: [historyId], limit: 1 })[0], true);
+    }
     const artifact = resolveHistoryArtifact(historyId);
-    return artifact ? this.createDescriptor(artifact, baseUrl) : null;
+    if (!artifact) return null;
+    const descriptor = await this.createDescriptor(artifact, baseUrl);
+    return requester ? { ...descriptor, download_url: `${baseUrl.replace(/\/$/, '')}/api/generation-history/${historyId}/file` } : descriptor;
   }
 
   static async createGraphDescriptor(artifactId: number, baseUrl: string): Promise<McpArtifactDescriptor | null> {
@@ -157,7 +170,11 @@ export class McpArtifactService {
   }
 
   /** Resolve a stable artifact ID and issue a fresh short-lived download URL. */
-  static async refreshDescriptor(artifactId: string, baseUrl: string): Promise<McpArtifactDescriptor | null> {
+  static async refreshDescriptor(artifactId: string, baseUrl: string, requester?: McpRequester): Promise<McpArtifactDescriptor | null> {
+    if (requester) {
+      const identity = decodeArtifactId(artifactId);
+      return identity?.kind === 'history' ? this.createHistoryDescriptor(identity.id, baseUrl, requester) : null;
+    }
     const artifact = this.resolve(artifactId);
     return artifact ? this.createDescriptor(artifact, baseUrl) : null;
   }

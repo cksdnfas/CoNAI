@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { IMAGE_VIEW_PERMISSION } from '@conai/shared';
 import { getAuthDb } from '../database/authDb';
 import { invalidateResolvedAuthAccessCache } from '../services/authAccessControlService';
 
@@ -13,7 +14,20 @@ export interface PagePermissionRecord {
 
 /** Permissions the settings UI can grant; anything else stays admin-only through the seeded admin grant. */
 const BUILT_IN_EDITABLE_PERMISSION_KEYS = [
+  IMAGE_VIEW_PERMISSION,
+  'images.update',
+  'images.delete',
+  'images.metadata.edit',
+  'groups.create',
+  'groups.update',
+  'groups.delete',
+  'generation.execute',
+  'workflows.view',
+  'prompts.view',
+  'wildcards.view',
+  'page.chat.view',
   'page.files.view',
+  'files.view',
   'files.upload',
   'files.organize',
   'files.delete',
@@ -319,7 +333,7 @@ export class AuthPermissionGroup {
       throw new Error('Permission group not found');
     }
 
-    this.syncDirectBuiltInPermissions(groupRow.id, normalizedPermissionKeys);
+    db.transaction(() => this.syncDirectBuiltInPermissions(groupRow.id, normalizedPermissionKeys)).immediate();
     // The anonymous/guest rows back the memoized `group:*` resolutions, so drop them here
     // instead of at the call sites; a missed invalidation would keep revoked page access alive.
     invalidateResolvedAuthAccessCache();

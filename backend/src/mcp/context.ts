@@ -25,6 +25,8 @@ export interface McpRequestContext {
    * workflow discovery tools are withheld so the model draws only through the presets.
    */
   generationPresetIds?: number[];
+  /** Server-issued snapshot; edited presets require a fresh bridge/session before execution. */
+  generationPresetSnapshot?: string;
 }
 
 /** The tool name of the n-th generation preset a chat profile links (generate_image, generate_image_2, …). */
@@ -51,7 +53,7 @@ export function isChatMcpSource(source: McpRequestContext['source']) {
  * Withheld from chat agents: a chat reply must not block on a generation job (Codex jobs can run for minutes).
  * The job is linked to the reply at submission and the app attaches the result when it lands.
  */
-export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job']);
+export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'execute_graph_workflow', 'get_codex_generation_options', 'import_workflow_definition']);
 /** A connected page grants a bounded input task, never access to unrelated private data or side effects. */
 export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'propose_page_changes', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes', 'read_page_data', 'propose_page_action']);
 
@@ -158,6 +160,7 @@ export const CHAT_ROOM_TOOLS = new Set(['chat_reply_to', 'room_call_member', 'ro
 export const GROUP_ONLY_CHAT_TOOLS = new Set(['room_call_member', 'room_history_search', 'room_history_read']);
 
 export function getMcpToolScope(toolName: string): McpHttpScope | null {
+  if (isChatGenerationTool(toolName)) return 'generate';
   return TOOL_SCOPES[toolName] ?? null;
 }
 

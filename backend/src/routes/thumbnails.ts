@@ -1,3 +1,4 @@
+import { requireImageAction } from '../middleware/imageAccess';
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { RuntimeJobRunner } from '../services/runtimeJobs/runtimeJobRunner';
@@ -16,6 +17,7 @@ const router = Router();
  */
 router.post(
   '/regenerate',
+  requireImageAction('images.update'),
   asyncHandler(async (req: Request, res: Response) => {
     try {
       const job = RuntimeJobRunner.start('thumbnail-regenerate', {}, {

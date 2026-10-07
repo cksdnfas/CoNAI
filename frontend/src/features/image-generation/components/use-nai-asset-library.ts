@@ -1,3 +1,5 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -53,6 +55,9 @@ export function useNaiAssetLibrary({
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
   const { t } = useI18n()
+  const { canViewWorkflows, canUpdateWorkflows, canExecuteGeneration } = useFeaturePermissions()
+  const { canViewImages } = useImagePermissions()
+  const canReadAssets = canViewWorkflows && canViewImages
   const confirm = useConfirm()
   const [isSavingAsset, setIsSavingAsset] = useState(false)
   const [assetSaveTarget, setAssetSaveTarget] = useState<AssetSaveTarget | null>(null)
@@ -65,32 +70,34 @@ export function useNaiAssetLibrary({
   const savedVibesQuery = useQuery({
     queryKey: ['image-generation-nai-vibe-assets', naiForm.model],
     queryFn: () => listNaiVibeAssets(naiForm.model),
+    enabled: canReadAssets,
   })
 
   const savedCharacterReferencesQuery = useQuery({
     queryKey: ['image-generation-nai-character-reference-assets'],
     queryFn: listNaiCharacterReferenceAssets,
+    enabled: canReadAssets,
   })
 
   const filteredSavedVibes = useMemo(() => {
-    const items = savedVibesQuery.data || []
+    const items = canReadAssets ? savedVibesQuery.data || [] : []
     const keyword = savedVibeSearch.trim().toLowerCase()
     if (!keyword) {
       return items
     }
 
     return items.filter((item) => `${item.label} ${item.description ?? ''} ${item.model}`.toLowerCase().includes(keyword))
-  }, [savedVibeSearch, savedVibesQuery.data])
+  }, [canReadAssets, savedVibeSearch, savedVibesQuery.data])
 
   const filteredSavedCharacterReferences = useMemo(() => {
-    const items = savedCharacterReferencesQuery.data || []
+    const items = canReadAssets ? savedCharacterReferencesQuery.data || [] : []
     const keyword = savedCharacterReferenceSearch.trim().toLowerCase()
     if (!keyword) {
       return items
     }
 
     return items.filter((item) => `${item.label} ${item.description ?? ''} ${item.type}`.toLowerCase().includes(keyword))
-  }, [savedCharacterReferenceSearch, savedCharacterReferencesQuery.data])
+  }, [canReadAssets, savedCharacterReferenceSearch, savedCharacterReferencesQuery.data])
 
   const assetSaveModalTitle = assetSaveTarget?.mode === 'edit'
     ? assetSaveTarget.kind === 'vibe'
@@ -112,6 +119,7 @@ export function useNaiAssetLibrary({
       refetchUserData?: boolean
     },
   ) => {
+    if (!canExecuteGeneration) { showSnackbar({ message: t({ ko: '인코딩은 생성 권한이 필요해.', en: 'Encoding requires generation permission.' }), tone: 'error' }); return null }
     const vibe = naiForm.vibes[index]
     if (!vibe?.image || encodingVibeIndex !== null) {
       return null
@@ -376,7 +384,7 @@ export function useNaiAssetLibrary({
 
   /** Save or update the currently targeted vibe/reference asset. */
   const handleConfirmAssetSave = async () => {
-    if (!assetSaveTarget) {
+    if (!canUpdateWorkflows || !canViewImages || !assetSaveTarget) {
       return
     }
 

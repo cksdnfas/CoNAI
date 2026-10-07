@@ -26,7 +26,7 @@ export function requireFileStoreOwner(requester: McpRequester | undefined): stri
     if (hasConfiguredAuth()) throw new FileStoreError('로그인이 필요해.', 401);
     return fileOwnerKey(null);
   }
-  if (AuthAccount.findById(id)?.status !== 'active' || !AuthAccessControlService.hasPermission(id, 'page.files.view')) {
+  if (AuthAccount.findById(id)?.status !== 'active' || !AuthAccessControlService.hasPermission(id, 'files.view')) {
     throw new FileStoreError('파일 보관함 접근 권한이 없어.', 403);
   }
   return fileOwnerKey(id);

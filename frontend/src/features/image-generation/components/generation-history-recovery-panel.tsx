@@ -1,3 +1,4 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,7 @@ export function GenerationHistoryRecoveryPanel({
   handleAcknowledgeRunRecovery,
   handleRetryHistoryRecord,
 }: GenerationHistoryRecoveryPanelProps) {
+  const { canExecuteGeneration } = useFeaturePermissions()
   const { t, formatNumber } = useI18n()
 
   return (
@@ -44,7 +46,7 @@ export function GenerationHistoryRecoveryPanel({
             size="sm"
             variant="secondary"
             onClick={() => void handleRetryVisibleRecoveryRecords()}
-            disabled={isRetryingRunRecovery}
+            disabled={!(canExecuteGeneration) || (isRetryingRunRecovery)}
           >
             <RotateCcw className={cn('h-4 w-4', isRetryingRunRecovery && 'animate-spin')} />
             {isRetryingRunRecovery
@@ -85,7 +87,7 @@ export function GenerationHistoryRecoveryPanel({
                 variant="ghost"
                 className="shrink-0"
                 onClick={() => void handleRetryHistoryRecord(record)}
-                disabled={isRetryingRunRecovery}
+                disabled={!(canExecuteGeneration) || (isRetryingRunRecovery)}
                 data-no-select-drag="true"
               >
                 <RotateCcw className={cn('h-4 w-4', isRetrying && 'animate-spin')} />

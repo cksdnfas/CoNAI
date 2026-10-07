@@ -1,3 +1,4 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { ChevronDown, Folder, PenSquare, Trash2 } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
@@ -76,6 +77,7 @@ export function WorkflowRunnerPanel({
   onValidationIssueSelect,
   showHeader = true,
 }: WorkflowRunnerPanelProps) {
+  const { canExecuteGeneration, canUpdateWorkflows } = useFeaturePermissions()
   const { t, formatNumber } = useI18n()
   useWorkflowRunnerChatPage(selectedGraph, inputDefinitions, inputValues, onInputValueChange, !isExecuting)
   const graphSummaryLine = graphSummary
@@ -159,7 +161,7 @@ export function WorkflowRunnerPanel({
         : warningIssueCount > 0
           ? t({ ko: '실행은 가능하지만 경고 {count}개를 먼저 훑어봐.', en: 'The workflow can run, but review {count} warnings first.' }, { count: formatNumber(warningIssueCount) })
           : null
-  const canRun = Boolean(selectedGraph) && !isExecuting && canExecute
+  const canRun = canExecuteGeneration && Boolean(selectedGraph) && !isExecuting && canExecute
   // Read at shortcut time (after a deferred tick) so pending input commits have re-rendered with fresh values.
   const runStateRef = useRef({ canRun, onExecute })
   useEffect(() => {
@@ -194,7 +196,7 @@ export function WorkflowRunnerPanel({
             variant="inside"
             heading={t({ ko: '워크플로우 실행기', en: 'Workflow Runner' })}
             actions={
-              <IconButton size="icon-sm" variant="ghost" onClick={onEdit} disabled={!selectedGraph} label={t({ ko: '구조 수정', en: 'Edit graph' })}>
+              <IconButton size="icon-sm" variant="ghost" onClick={onEdit} disabled={!(canUpdateWorkflows) || (!selectedGraph)} label={t({ ko: '구조 수정', en: 'Edit graph' })}>
                 <PenSquare className="h-4 w-4" />
               </IconButton>
             }
@@ -214,15 +216,15 @@ export function WorkflowRunnerPanel({
 
                 <div className="flex shrink-0 items-center gap-2">
                   {onOpenFolderSettings ? (
-                    <IconButton size="icon-sm" variant="ghost" onClick={onOpenFolderSettings} disabled={!selectedGraph} label={t({ ko: '폴더 설정', en: 'Folder settings' })}>
+                    <IconButton size="icon-sm" variant="ghost" onClick={onOpenFolderSettings} disabled={!(canUpdateWorkflows) || (!selectedGraph)} label={t({ ko: '폴더 설정', en: 'Folder settings' })}>
                       <Folder className="h-4 w-4" />
                     </IconButton>
                   ) : null}
-                  <IconButton size="icon-sm" variant="ghost" onClick={onEdit} disabled={!selectedGraph} label={t({ ko: '구조 수정', en: 'Edit graph' })}>
+                  <IconButton size="icon-sm" variant="ghost" onClick={onEdit} disabled={!(canUpdateWorkflows) || (!selectedGraph)} label={t({ ko: '구조 수정', en: 'Edit graph' })}>
                     <PenSquare className="h-4 w-4" />
                   </IconButton>
                   {onDeleteWorkflow ? (
-                    <IconButton size="icon-sm" variant="ghost" onClick={onDeleteWorkflow} disabled={!selectedGraph} label={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}>
+                    <IconButton size="icon-sm" variant="ghost" onClick={onDeleteWorkflow} disabled={!(canUpdateWorkflows) || (!selectedGraph)} label={t({ ko: '워크플로우 삭제', en: 'Delete workflow' })}>
                       <Trash2 className="h-4 w-4" />
                     </IconButton>
                   ) : null}
@@ -357,7 +359,7 @@ export function WorkflowRunnerPanel({
               ) : null}
               <div className="flex flex-wrap items-center gap-2">
                 <Tip content={canRun ? t({ ko: 'Ctrl/⌘ + Enter로도 실행돼', en: 'Ctrl/⌘ + Enter also runs it' }) : null}>
-                  <Button type="button" onClick={onExecute} disabled={!canRun} aria-keyshortcuts="Control+Enter Meta+Enter">
+                  <Button type="button" onClick={onExecute} disabled={!(canExecuteGeneration) || (!canRun)} aria-keyshortcuts="Control+Enter Meta+Enter">
                     {isExecuting ? t({ ko: '실행 요청 중…', en: 'Requesting run…' }) : canExecute ? t({ ko: '실행', en: 'Run' }) : t({ ko: '실행 불가', en: 'Cannot run' })}
                   </Button>
                 </Tip>

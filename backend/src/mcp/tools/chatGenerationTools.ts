@@ -63,7 +63,7 @@ function registerNaiPreset(server: McpServer, context: McpRequestContext, preset
           variety_plus: config.varietyPlus,
           transparent_background: config.transparentBackground,
         };
-        return textResult(await enqueueMcpGenerationJob(context, { service_type: 'novelai', request_payload: payload, request_summary: `채팅 프리셋 · ${preset.name}` }));
+        return textResult(await enqueueMcpGenerationJob(context, { service_type: 'novelai', request_payload: payload, request_summary: `채팅 프리셋 · ${preset.name}` }, toolName));
       } catch (error) {
         return errorResult(`Generation job error: ${(error as Error).message}`);
       }
@@ -126,7 +126,7 @@ function registerComfyPreset(server: McpServer, context: McpRequestContext, pres
           server_tag: config.serverTag ?? undefined,
           inputs: { ...config.fixedInputs, ...supplied },
           request_summary: `채팅 프리셋 · ${preset.name}`,
-        }));
+        }, toolName));
       } catch (error) {
         return errorResult(`Generation job error: ${(error as Error).message}`);
       }

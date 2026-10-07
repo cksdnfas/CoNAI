@@ -6,6 +6,10 @@ import { reconcileComfyModelSelectionValues } from '../../services/comfyModelSel
 import { prepareComfyPromptData } from '../../services/prepareComfyPromptData'
 import { resolveWorkflowPromptValues } from '../../services/workflowPromptValueResolver'
 import { ImageUploadService } from '../../services/imageUploadService'
+import { isChatMcpSource, type McpRequestContext } from '../context'
+import { validateMcpToolArguments } from '../requestSecurity'
+import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { isProtectedWorkflowKey } from '@conai/shared'
 
 const MINIMAX_DIRECTOR_EDITOR = 'minimax_h3_director_dasiwa'
 const MINIMAX_META_KEY = '__conai_minimax_h3_director'
@@ -327,6 +331,15 @@ export function normalizeMcpWorkflowInputs(markedFields: MarkedField[], supplied
   return normalized
 }
 
+/** Registered generation is a website action; chat cannot fill execution-code, endpoint or host-path controls. */
+export function requireChatWorkflowInputs(context: McpRequestContext, fields: MarkedField[], supplied: Record<string, unknown>) {
+  if (!isChatMcpSource(context.source)) return
+  for (const field of fields) {
+    if (Object.prototype.hasOwnProperty.call(supplied, field.id)
+      && [field.id, field.label, field.jsonPath].some(isProtectedWorkflowKey)) throw new Error(`Chat cannot fill a protected workflow input: ${field.id}`)
+  }
+}
+
 export function createMcpComfyService(server: ComfyUIServerRecord) {
   return new ComfyUIService(server.endpoint, {
     backendType: server.backend_type,
@@ -358,8 +371,13 @@ export async function prepareMcpComfyWorkflow(params: {
   workflow: WorkflowRecord
   server: ComfyUIServerRecord
   suppliedInputs: Record<string, unknown>
+  context?: McpRequestContext
 }) {
   const markedFields = parseMcpMarkedFields(params.workflow)
+  if (isChatMcpSource(params.context?.source)) {
+    requireChatWorkflowInputs(params.context!, markedFields, params.suppliedInputs)
+    validateMcpToolArguments([params.suppliedInputs, ...markedFields.map((field) => field.default_value)], () => requireRequesterPermission(params.context?.requester, 'images.view'))
+  }
   const promptData = normalizeMcpWorkflowInputs(markedFields, params.suppliedInputs)
   const comfyService = createMcpComfyService(params.server)
   const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, promptData, {

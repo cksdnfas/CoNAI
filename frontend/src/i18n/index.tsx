@@ -9,7 +9,7 @@ import {
   type PropsWithChildren,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getAppSettings } from '@/lib/api-settings-general'
+import { getRuntimeLanguageSettings } from '@/lib/api-settings'
 import type { GeneralSettings } from '@conai/shared'
 import { authCatalog } from './resources/auth'
 import { shellCatalog } from './resources/shell'
@@ -210,8 +210,8 @@ export function I18nProvider({ children, catalog = DEFAULT_CATALOG }: PropsWithC
   const storedDefaultLanguage = useMemo(() => readStoredDefaultLanguage(), [])
   const [languageOverride, setLanguageOverrideState] = useState<AppLanguage | null>(() => readStoredValue(LANGUAGE_OVERRIDE_STORAGE_KEY))
   const settingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
+    queryKey: ['runtime-language-settings'],
+    queryFn: getRuntimeLanguageSettings,
     retry: false,
     staleTime: 30_000,
   })

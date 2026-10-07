@@ -8,7 +8,7 @@ import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { getNaiCostEstimate, getNaiUserData } from '@/lib/api-image-generation-nai'
-import { getAppSettings } from '@/lib/api-settings-general'
+import { getRuntimeImageSaveSettings } from '@/lib/api-settings'
 import {
   NAI_SAMPLE_COUNT_MAX,
   NAI_SAMPLE_COUNT_MIN,
@@ -128,8 +128,8 @@ export function NaiGenerationPanel({
   })
 
   const appSettingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
+    queryKey: ['runtime-image-save-settings'],
+    queryFn: getRuntimeImageSaveSettings,
   })
 
   const connected = naiUserQuery.data?.connected === true

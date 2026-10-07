@@ -1,3 +1,4 @@
+import { requirePermission } from '../middleware/authMiddleware';
 import { Router, Request, Response } from 'express'
 import { routeParam } from './routeParam'
 import { ModuleDefinitionModel } from '../models/ModuleDefinition'
@@ -150,7 +151,7 @@ function sendModuleDefinitionUpsert(
   return res.status(result.status).json(result.body)
 }
 
-router.post('/from-nai-snapshot', asyncHandler(async (req: Request, res: Response) => {
+router.post('/from-nai-snapshot', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
   const {
     name,
     description,
@@ -215,7 +216,7 @@ router.post('/from-nai-snapshot', asyncHandler(async (req: Request, res: Respons
   }
 }))
 
-router.post('/from-codex-snapshot', asyncHandler(async (req: Request, res: Response) => {
+router.post('/from-codex-snapshot', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
   const {
     name,
     description,
@@ -280,7 +281,7 @@ router.post('/from-codex-snapshot', asyncHandler(async (req: Request, res: Respo
   }
 }))
 
-router.post('/from-comfy-workflow/:workflowId', asyncHandler(async (req: Request, res: Response) => {
+router.post('/from-comfy-workflow/:workflowId', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
   const workflowId = parseInt(routeParam(routeParam(req.params.workflowId)))
   if (isNaN(workflowId)) {
     return res.status(400).json({ success: false, error: 'Invalid workflow ID' } as ModuleGraphResponse)
@@ -395,7 +396,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   }
 }))
 
-router.post('/', asyncHandler(async (req: Request, res: Response) => {
+router.post('/', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
   const {
     name,
     description,
@@ -451,7 +452,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   }
 }))
 
-router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
+router.put('/:id', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)))
   if (isNaN(id)) {
     return res.status(400).json({ success: false, error: 'Invalid module definition ID' } as ModuleGraphResponse)
@@ -489,7 +490,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   }
 }))
 
-router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)))
   if (isNaN(id)) {
     return res.status(400).json({ success: false, error: 'Invalid module definition ID' } as ModuleGraphResponse)

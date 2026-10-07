@@ -1,3 +1,4 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getWildcards } from '@/lib/api-wildcards'
@@ -11,14 +12,15 @@ interface UseWildcardInlinePickerDataOptions {
 }
 
 export function useWildcardInlinePickerData({ activeTab, enabled }: UseWildcardInlinePickerDataOptions) {
+  const { canViewWildcards } = useFeaturePermissions()
   const wildcardsQuery = useQuery({
     queryKey: ['wildcards', 'inline-picker'],
     queryFn: () => getWildcards({ hierarchical: true, withItems: true }),
-    enabled,
+    enabled: enabled && canViewWildcards,
     staleTime: 60_000,
   })
 
-  const wildcards = useMemo(() => wildcardsQuery.data ?? [], [wildcardsQuery.data])
+  const wildcards = useMemo(() => canViewWildcards ? wildcardsQuery.data ?? [] : [], [canViewWildcards, wildcardsQuery.data])
   const flattenedWildcards = useMemo(() => flattenWildcardRecords(wildcards), [wildcards])
   const {
     treeNodes: explorerTreeNodes,

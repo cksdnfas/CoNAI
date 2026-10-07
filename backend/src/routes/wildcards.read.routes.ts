@@ -8,7 +8,7 @@ import { withNativeEditRevisions } from '../services/nativeEditRevision';
 
 const router = Router();
 
-router.use(requirePermission('page.wildcards.view'));
+router.use(requirePermission('wildcards.view'));
 
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   try {

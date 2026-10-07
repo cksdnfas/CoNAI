@@ -1,3 +1,4 @@
+import { requireAdmin } from '../middleware/authMiddleware';
 import { spawn } from 'child_process';
 import { Router, type Request, type Response } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
@@ -63,7 +64,7 @@ router.get('/', asyncHandler(async (_req: Request, res: Response) => {
 }));
 
 /** Rescan `user/custom_nodes` and sync valid file-backed nodes into module_definitions. */
-router.post('/rescan', asyncHandler(async (_req: Request, res: Response) => {
+router.post('/rescan', requireAdmin, asyncHandler(async (_req: Request, res: Response) => {
   const result = await CustomNodeRegistryService.syncCustomNodesFromFileSystem();
   res.json({
     success: true,
@@ -72,7 +73,7 @@ router.post('/rescan', asyncHandler(async (_req: Request, res: Response) => {
 }));
 
 /** Scaffold one starter custom node folder under `user/custom_nodes`. */
-router.post('/scaffold', asyncHandler(async (req: Request, res: Response) => {
+router.post('/scaffold', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const { folderName, key, name, description, category, color, template } = req.body ?? {};
 
   if (!folderName || !key || !name) {
@@ -99,7 +100,7 @@ router.post('/scaffold', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /** Return source paths and manifest details for one valid local custom node package. */
-router.get('/:key/source', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:key/source', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const key = String(req.params.key ?? '').trim();
   if (!key) {
     return res.status(400).json({
@@ -133,7 +134,7 @@ router.get('/:key/source', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /** Run npm install inside one valid custom node folder when the package.json file exists. */
-router.post('/:key/install', asyncHandler(async (req: Request, res: Response) => {
+router.post('/:key/install', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const key = String(req.params.key ?? '').trim();
   if (!key) {
     return res.status(400).json({
@@ -181,7 +182,7 @@ router.post('/:key/install', asyncHandler(async (req: Request, res: Response) =>
 }));
 
 /** Open one valid local custom node folder in the host OS file explorer. */
-router.post('/:key/open-folder', asyncHandler(async (req: Request, res: Response) => {
+router.post('/:key/open-folder', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const key = String(req.params.key ?? '').trim();
   if (!key) {
     return res.status(400).json({
@@ -209,7 +210,7 @@ router.post('/:key/open-folder', asyncHandler(async (req: Request, res: Response
 }));
 
 /** Run one file-backed custom node directly with ad-hoc inputs for local development feedback. */
-router.post('/:key/test', asyncHandler(async (req: Request, res: Response) => {
+router.post('/:key/test', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const key = String(req.params.key ?? '').trim();
   if (!key) {
     return res.status(400).json({

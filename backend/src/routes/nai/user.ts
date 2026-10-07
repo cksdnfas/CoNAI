@@ -1,3 +1,4 @@
+import { requirePermission } from '../../middleware/authMiddleware';
 import { Router, Request, Response } from 'express';
 import { getToken } from '../../utils/nai/auth';
 
@@ -7,7 +8,7 @@ const router = Router();
  * GET /api/nai/user/data
  * NovelAI 사용자 정보 조회 (Anlas 잔액, Opus 잔여량, 구독 정보)
  */
-router.get('/data', async (req: Request, res: Response) => {
+router.get('/data', requirePermission('generation.execute'), async (req: Request, res: Response) => {
   try {
     // Authorization 헤더에서 토큰 추출 (프론트엔드에서 전송)
     const authHeader = req.headers.authorization;

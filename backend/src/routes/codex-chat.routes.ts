@@ -1,3 +1,4 @@
+import { requireImagesView, canRequesterViewImages } from '../middleware/imageAccess'
 import fs from 'fs'
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import multer from 'multer'
@@ -127,13 +128,14 @@ function backgroundVersionOf(profile: ChatProfile) {
 }
 
 function toPublicProfile(profile: ChatProfile, accountId: number | null) {
+  const canViewImages = canRequesterViewImages({ accountId, accountType: null })
   return {
     id: profile.id,
     name: profile.name,
     tagline: profile.tagline,
     model: effectiveModelOf(profile),
     modelLabel: modelLabelOf(profile),
-    avatar: profile.avatar,
+    avatar: canViewImages ? profile.avatar : null,
     engine: profile.engine,
     isEnabled: profile.isEnabled,
     contextTurns: profile.contextTurns,
@@ -144,7 +146,7 @@ function toPublicProfile(profile: ChatProfile, accountId: number | null) {
     loreDepth: profile.loreDepth,
     authorNote: profile.authorNote,
     style: profile.style,
-    backgroundVersion: backgroundVersionOf(profile),
+    backgroundVersion: canViewImages ? backgroundVersionOf(profile) : null,
     // The composer shows the suggestion button only when someone can answer it.
     canUsePageContext: profile.mcpEnabled && profile.mcpScopes.includes('read') && resolveChatAccess(accountId).scopes.includes('read') && (!profile.toolAllowlist || profile.toolAllowlist.includes('get_current_page')),
     suggestEnabled: canSuggest(profile, accountId),
@@ -192,7 +194,7 @@ router.get('/profiles', requireChatAccess, (req: Request, res: Response) => {
 })
 
 /** GET /api/codex-chat/profiles/:profileId/background — the chat background image (`?v=` busts the cache). */
-router.get('/profiles/:profileId/background', requireChatAccess, (req: Request, res: Response) => {
+router.get('/profiles/:profileId/background', requireChatAccess, requireImagesView, (req: Request, res: Response) => {
   const profileId = parseId(req.params.profileId)
   const match = profileId === null ? null : /^data:(image\/[a-z]+);base64,(.+)$/.exec(ChatProfileStore.find(profileId)?.background ?? '')
   if (!match) {
@@ -200,12 +202,12 @@ router.get('/profiles/:profileId/background', requireChatAccess, (req: Request, 
     return
   }
   res.setHeader('Content-Type', match[1])
-  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable')
+  res.setHeader('Cache-Control', 'private, no-cache')
   res.send(Buffer.from(match[2], 'base64'))
 })
 
 /** GET /api/codex-chat/profiles/:profileId/emoticons — keyword → image of the profile's linked emoticon groups. */
-router.get('/profiles/:profileId/emoticons', requireChatAccess, (req: Request, res: Response) => {
+router.get('/profiles/:profileId/emoticons', requireChatAccess, requireImagesView, (req: Request, res: Response) => {
   const profileId = parseId(req.params.profileId)
   const profile = profileId === null ? null : ChatProfileStore.find(profileId)
   if (!profile) {
@@ -216,10 +218,9 @@ router.get('/profiles/:profileId/emoticons', requireChatAccess, (req: Request, r
 })
 
 /**
- * GET /api/codex-chat/profiles/:profileId/emoticons/:hash — the emoticon image. Served here (not /api/images) so chat
- * users without library access still see it; only images of the profile's linked emoticon groups are served.
+ * GET /api/codex-chat/profiles/:profileId/emoticons/:hash — the emoticon image. The shared image-view capability is required; only images of the profile's linked emoticon groups are served.
  */
-router.get('/profiles/:profileId/emoticons/:compositeHash', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+router.get('/profiles/:profileId/emoticons/:compositeHash', requireChatAccess, requireImagesView, asyncHandler(async (req: Request, res: Response) => {
   const profileId = parseId(req.params.profileId)
   const profile = profileId === null ? null : ChatProfileStore.find(profileId)
   const compositeHash = String(req.params.compositeHash ?? '')
@@ -233,22 +234,22 @@ router.get('/profiles/:profileId/emoticons/:compositeHash', requireChatAccess, a
 
 /**
  * GET /api/codex-chat/media/:file — library media linked from chat text (`media:<hash>.<ext>`; the extension is
- * ignored). Served here, not /api/images, so chat users without library access see it, regardless of the safety
+ * ignored). Requires images.view while retaining the existing chat safety
  * policy and without waiting for postprocessing. The id is the pixel identity, so the response is cached for good.
  */
-router.get('/media/:file', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+router.get('/media/:file', requireChatAccess, requireImagesView, asyncHandler(async (req: Request, res: Response) => {
   const file = activeMediaFile(String(req.params.file ?? '').replace(/\.[a-z0-9]{2,5}$/, ''))
   if (!file) {
     res.status(404).json({ success: false, error: 'Not found' })
     return
   }
-  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable')
+  res.setHeader('Cache-Control', 'private, no-cache')
   if (file.mimeType.startsWith('video/')) streamRangeFile(req, res, file.path, file.mimeType)
   else await streamCacheableFile(req, res, file.path, file.mimeType)
 }))
 
 /** GET /api/codex-chat/media/:hash/thumbnail — the library thumbnail (a poster frame for video and animations). */
-router.get('/media/:compositeHash/thumbnail', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+router.get('/media/:compositeHash/thumbnail', requireChatAccess, requireImagesView, asyncHandler(async (req: Request, res: Response) => {
   const compositeHash = String(req.params.compositeHash ?? '')
   const metadata = MEDIA_HASH_PATTERN.test(compositeHash) ? MediaMetadataModel.findByHash(compositeHash) : null
   const file = metadata ? ImageFileModel.findActiveByHash(compositeHash)[0] : undefined
@@ -260,13 +261,13 @@ router.get('/media/:compositeHash/thumbnail', requireChatAccess, asyncHandler(as
 }))
 
 /** GET /api/codex-chat/assets/:name — an image copied in from a character card before card media went to the library. */
-router.get('/assets/:name', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+router.get('/assets/:name', requireChatAccess, requireImagesView, asyncHandler(async (req: Request, res: Response) => {
   const file = chatAssetFile(String(req.params.name ?? ''))
   if (!file) {
     res.status(404).json({ success: false, error: 'Not found' })
     return
   }
-  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable')
+  res.setHeader('Cache-Control', 'private, no-cache')
   await streamCacheableFile(req, res, file.path, file.mimeType)
 }))
 
@@ -637,7 +638,7 @@ async function assertCodexEffortSupported(input: ChatProfileInput) {
   if (input.engine !== 'codex' || !input.reasoningEffort) {
     return
   }
-  const catalog = await getCodexModelSuggestions()
+  const catalog = await getCodexModelSuggestions({ cacheOnly: true })
   const supported = catalog.models.find((entry) => (input.model ? entry.id === input.model : entry.isDefault))?.supportedReasoningEfforts
   if (supported && !supported.includes(input.reasoningEffort)) {
     throw new ChatProfileError('선택한 모델에서 지원하지 않는 추론 강도야.')
@@ -1337,7 +1338,7 @@ router.get('/threads/:threadId', requireChatAccess, (req: Request, res: Response
 })
 
 /** GET /api/codex-chat/threads/:threadId/media — images the chat generated or looked up, newest first. */
-router.get('/threads/:threadId/media', requireChatAccess, (req: Request, res: Response) => {
+router.get('/threads/:threadId/media', requireChatAccess, requireImagesView, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
   try {
@@ -1596,7 +1597,8 @@ router.post('/threads/:threadId/messages', requireChatAccess, asyncHandler(async
 const withModelReady = (profile: ChatUserProfile) => ({ ...profile, modelReady: userWriterReady(profile) })
 
 router.get('/user-profiles', requireChatAccess, (req: Request, res: Response) => {
-  res.json({ success: true, data: ChatUserProfileStore.list(getRequesterAccountId(req)).map(withModelReady) })
+  const canViewImages = canRequesterViewImages(requesterFrom(req))
+  res.json({ success: true, data: ChatUserProfileStore.list(getRequesterAccountId(req)).map((profile) => withModelReady(canViewImages ? profile : { ...profile, avatar: null })) })
 })
 
 /** GET /api/codex-chat/model-options — the models a user profile can write reply suggestions with (any chat user). */

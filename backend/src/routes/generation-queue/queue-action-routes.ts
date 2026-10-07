@@ -1,3 +1,4 @@
+import { requirePermission } from '../../middleware/authMiddleware'
 import express, { type Request, type Response } from 'express'
 import { asyncHandler } from '../../middleware/asyncHandler'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
@@ -22,7 +23,6 @@ import { getRequesterAccountType, isAdminRequest } from '../requester-session-he
 import { parsePositiveInteger, sendRouteBadRequest } from '../routeValidation'
 import {
   getRequesterAccountId,
-  hasGenerationPageAccess,
   parseRequestedServerTag,
   resolveAccessibleQueueJob,
   TERMINAL_QUEUE_STATUSES,
@@ -36,15 +36,7 @@ export function createGenerationQueueActionRoutes() {
 
   /** POST /api/generation-queue */
 
-  router.post('/', asyncHandler(async (req: Request, res: Response) => {
-
-    if (!hasGenerationPageAccess(req)) {
-
-      res.status(403).json({ success: false, error: 'Generation workspace permission is required to create queue jobs here' })
-
-      return
-
-    }
+  router.post('/', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
 
     const {
 
@@ -467,15 +459,7 @@ export function createGenerationQueueActionRoutes() {
 
   /** POST /api/generation-queue/:id/retry */
 
-  router.post('/:id/retry', asyncHandler(async (req: Request, res: Response) => {
-
-    if (!hasGenerationPageAccess(req)) {
-
-      res.status(403).json({ success: false, error: 'Generation workspace permission is required to retry queue jobs here' })
-
-      return
-
-    }
+  router.post('/:id/retry', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
 
     const resolvedJob = resolveAccessibleQueueJob(req, res)
 

@@ -1,3 +1,5 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
+import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ChevronRight, Copy, Download, Save } from 'lucide-react'
@@ -30,6 +32,7 @@ function hasSavableDraftChanges(draft: RewriteMetadataDraft, baseline: RewriteMe
 }
 
 export function ImageMetadataEditPage() {
+  const { canViewImages, canEditMetadata } = useImagePermissions()
   const { compositeHash } = useParams<{ compositeHash: string }>()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
@@ -43,7 +46,7 @@ export function ImageMetadataEditPage() {
   const imageQuery = useQuery({
     queryKey: ['image-detail', compositeHash],
     queryFn: () => getImage(compositeHash as string),
-    enabled: Boolean(compositeHash),
+    enabled: canViewImages && Boolean(compositeHash),
   })
 
   useEffect(() => {
@@ -165,7 +168,7 @@ export function ImageMetadataEditPage() {
     downloadMutation.mutate(draft)
   }
 
-  const canSave = Boolean(draft) && !busy && isEditableImage && hasUnsavedChanges && !draftValidationError
+  const canSave = canEditMetadata && Boolean(draft) && !busy && isEditableImage && hasUnsavedChanges && !draftValidationError
 
   const handleSave = async () => {
     if (!draft || !canSave) {
@@ -189,6 +192,8 @@ export function ImageMetadataEditPage() {
   const gridClassName = cn('grid', isDesktopPageLayout ? 'grid-cols-[minmax(0,1fr)_minmax(420px,0.8fr)]' : 'grid-cols-1')
   const fieldColumnClassName = isDesktopPageLayout ? 'min-w-0 border-l border-line py-6 pl-6' : 'min-w-0 border-t border-line pt-6'
 
+  if (!canViewImages) return <ImagePermissionNotice />
+
   return (
     <div>
       <PageToolbar
@@ -206,7 +211,7 @@ export function ImageMetadataEditPage() {
         )}
         actions={(
           <>
-            <IconButton size="icon-sm" variant="ghost" onClick={handleDownload} disabled={!draft || busy || !isEditableImage || Boolean(draftValidationError)} label={t({ ko: '다운로드', en: 'Download' })}>
+            <IconButton size="icon-sm" variant="ghost" onClick={handleDownload} disabled={!canEditMetadata || !draft || busy || !isEditableImage || Boolean(draftValidationError)} label={t({ ko: '다운로드', en: 'Download' })}>
               <Download className="size-4" />
             </IconButton>
             <Button
@@ -259,7 +264,7 @@ export function ImageMetadataEditPage() {
             {draft ? (
               <MetadataRewriteForm
                 draft={draft}
-                disabled={busy || !isEditableImage}
+                disabled={!canEditMetadata || busy || !isEditableImage}
                 formatLabel={t('metadata.image.metadata.edit.page.download.format')}
                 showHeader={false}
                 onDraftChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))}

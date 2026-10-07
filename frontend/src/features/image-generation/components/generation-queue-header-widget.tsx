@@ -121,7 +121,7 @@ export function GenerationQueueHeaderWidget() {
 
   useOverlayBackClose({ open: isOpen, onClose: () => setIsOpen(false) })
 
-  const hasGenerationPermission = (authStatusQuery.data?.permissionKeys ?? []).includes('page.generation.view')
+  const canViewWorkflows = (authStatusQuery.data?.permissionKeys ?? []).includes('workflows.view')
   // 큐 목록 REST 는 인증만 요구한다(permission-neutral). 페이지 권한은 워크플로 필터 목록과
   // 예약 탭에만 필요하므로, 큐 조회 자체는 인증 세션 기준으로 켠다.
   const canViewQueue = authStatusQuery.data !== undefined
@@ -131,7 +131,7 @@ export function GenerationQueueHeaderWidget() {
     queryKey: ['generation-workflows', 'header-widget'],
     queryFn: () => getGenerationWorkflows(true),
     staleTime: 60_000,
-    enabled: hasGenerationPermission,
+    enabled: canViewWorkflows,
   })
 
   const workflows = useMemo(() => workflowsQuery.data ?? [], [workflowsQuery.data])
@@ -171,14 +171,14 @@ export function GenerationQueueHeaderWidget() {
   const reservationWorkflowQuery = useQuery({
     queryKey: ['graph-workflows', 'header-widget', 'names'],
     queryFn: () => getGraphWorkflowNames(true),
-    enabled: isOpen && hasGenerationPermission,
+    enabled: isOpen && canViewWorkflows,
     staleTime: 60_000,
   })
 
   const reservationSchedulesQuery = useQuery({
     queryKey: ['graph-workflow-schedules', 'header-widget'],
     queryFn: () => getGraphWorkflowSchedules(),
-    enabled: isOpen && hasGenerationPermission,
+    enabled: isOpen && canViewWorkflows,
     staleTime: 30_000,
     refetchInterval: (query) => {
       const activeCount = query.state.data?.filter((schedule) => schedule.status === 'active').length ?? 0
@@ -265,8 +265,8 @@ export function GenerationQueueHeaderWidget() {
   }, [isOpen, latestQueueJobId])
 
   const hasUnreadQueueUpdate = isNotificationBaselineReady && latestQueueJobId > (lastSeenQueueJobId ?? 0)
-  // 예약 탭은 백엔드가 page.generation.view 로 403 을 주는 표면이므로 권한 없는 계정에는 숨긴다.
-  const effectiveTab: HeaderPopupTab = hasGenerationPermission ? activeTab : 'jobs'
+  // 예약 탭은 백엔드가 workflows.view 로 403 을 주는 표면이므로 권한 없는 계정에는 숨긴다.
+  const effectiveTab: HeaderPopupTab = canViewWorkflows ? activeTab : 'jobs'
 
   const handleRefresh = async () => {
     const refreshTargets = getGenerationQueueHeaderRefreshTargets({
@@ -364,7 +364,7 @@ export function GenerationQueueHeaderWidget() {
             value={effectiveTab}
             items={[
               { value: 'jobs', label: t('image-generation.components.generation.queue.header.widget.job.queue') },
-              ...(hasGenerationPermission
+              ...(canViewWorkflows
                 ? [{ value: 'reservations', label: t('image-generation.components.generation.queue.header.widget.reservations') }]
                 : []),
             ]}
@@ -385,7 +385,7 @@ export function GenerationQueueHeaderWidget() {
             selectedFilter={selectedFilter}
             onFilterChange={setSelectedFilter}
             workflows={workflows}
-            showWorkflowListError={hasGenerationPermission && workflowsQuery.isError}
+            showWorkflowListError={canViewWorkflows && workflowsQuery.isError}
             filteredActiveCount={filteredActiveCount}
             records={records}
             isPending={activeQueueQuery.isPending}

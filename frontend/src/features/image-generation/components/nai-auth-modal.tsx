@@ -1,3 +1,4 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { Input } from '@/components/ui/input'
@@ -28,7 +29,8 @@ export function NaiAuthModal({
   onSubmit,
 }: NaiAuthModalProps) {
   const { t } = useI18n()
-  const submitDisabled = isSubmitting || token.trim().length === 0
+  const { isAdmin } = useFeaturePermissions()
+  const submitDisabled = !isAdmin || isSubmitting || token.trim().length === 0
 
   return (
     <Modal
@@ -38,6 +40,7 @@ export function NaiAuthModal({
       widthClassName="max-w-2xl"
     >
       <ModalBody>
+        {!isAdmin ? <Text>{t({ ko: '서버 토큰 변경은 관리자 권한이 필요해.', en: 'Changing the server token requires an administrator.' })}</Text> : null}
         <FormField label={t({ ko: '영구 API 토큰', en: 'Persistent API Token' })}>
           <Input
             type="password"

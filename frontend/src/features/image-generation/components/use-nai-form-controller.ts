@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useI18n } from '@/i18n'
+import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import {
   canUseNaiCharacterPositions,
   clampNaiSampleCount,
@@ -42,7 +44,8 @@ export function useNaiFormController({
 }) {
   const { t } = useI18n()
   const confirm = useConfirm()
-  const [persistedDraft] = useState(() => loadPersistedNaiFormDraft())
+  const draftStorageOwner = resolveAccountDraftOwner(useAuthStatusQuery().data)
+  const [persistedDraft] = useState(() => loadPersistedNaiFormDraft(draftStorageOwner))
   const [selectedCharacterIndex, setSelectedCharacterIndex] = useState<number | null>(persistedDraft.selectedCharacterIndex)
   const [naiForm, setNaiForm] = useState<NAIFormDraft>(persistedDraft.form)
   const supportsCharacterPrompts = useMemo(() => supportsNaiCharacterPrompts(naiForm.model), [naiForm.model])
@@ -52,11 +55,11 @@ export function useNaiFormController({
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      persistNaiFormDraft(naiForm, selectedCharacterIndex)
+      persistNaiFormDraft(draftStorageOwner, naiForm, selectedCharacterIndex)
     }, 250)
 
     return () => window.clearTimeout(timeout)
-  }, [naiForm, selectedCharacterIndex])
+  }, [draftStorageOwner, naiForm, selectedCharacterIndex])
 
   useEffect(() => {
     if (naiForm.characterPositionAiChoice || canUseCharacterPositions) {

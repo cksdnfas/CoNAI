@@ -8,6 +8,8 @@ import { MediaPostprocessVisibilityService } from '../../services/mediaPostproce
 import { AutoTagSearchParams, TagFilter } from '../../types/autoTag';
 import type { McpRequestContext } from '../context';
 import { McpArtifactService } from '../../services/mcpArtifactService';
+import { ImageSafetyService } from '../../services/imageSafetyService';
+import { AuthAccount } from '../../models/AuthAccount';
 
 function sanitizeMetadata(metadata: Record<string, unknown>, includeHeavyFields: boolean) {
   const excluded = new Set(['original_file_path', 'thumbnail_path', 'storage_path', 'path']);
@@ -104,7 +106,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
       try {
         const metadata = MediaMetadataModel.findByHash(composite_hash);
 
-        if (!metadata || !MediaPostprocessVisibilityService.isReadyRecord(metadata)) {
+        if (!metadata || !MediaPostprocessVisibilityService.isReadyRecord(metadata) || ImageSafetyService.isHidden(metadata.rating_score)) {
           return {
             isError: true,
             content: [{ type: 'text' as const, text: `Image with hash ${composite_hash} not found` }],
@@ -144,6 +146,14 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
     async ({ service_type, generation_status, history_id, workflow_id, workflow_name, created_after, created_before, limit, offset }) => {
       try {
         const filters: any = { limit, offset };
+        if (context.requester?.accountId !== null && context.requester) {
+          const account = AuthAccount.findById(context.requester.accountId);
+          if (!account || account.status !== 'active') throw new Error('History requires an active account');
+          if (account.account_type !== 'admin') {
+            filters.requested_by_account_id = account.id;
+            filters.requested_by_account_type = account.account_type;
+          }
+        }
         if (history_id) filters.ids = [history_id];
         if (service_type) filters.service_type = service_type;
         if (generation_status) filters.generation_status = generation_status;

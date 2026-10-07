@@ -31,11 +31,15 @@ export const RUNTIME_EVENT_TOPICS: readonly RuntimeEventTopic[] = [
   'runtime-job',
 ]
 
-/**
- * `generation-queue` 를 제외한 토픽이 요구하는 권한 키.
- * 큐 토픽은 큐 목록 REST 와 같이 인증 세션만으로 구독할 수 있다(event-stream-auth 참고).
- */
-export const RUNTIME_EVENT_TOPIC_PERMISSION_KEY = 'page.generation.view'
+/** Topic rights match the corresponding REST surface; null means an owner-filtered authenticated session. */
+export const RUNTIME_EVENT_TOPIC_PERMISSIONS: Record<RuntimeEventTopic, string | null> = {
+  'generation-queue': null,
+  'runtime-job': null,
+  'generation-history': 'images.view',
+  'graph-schedule': 'workflows.view',
+  'graph-execution': 'workflows.view',
+}
+
 
 /**
  * SSE 데이터 프레임 공통 봉투.

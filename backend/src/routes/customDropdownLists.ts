@@ -1,3 +1,5 @@
+import { requireImagesView } from '../middleware/imageAccess';
+import { requireAdmin, requirePermission } from '../middleware/authMiddleware';
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { CustomDropdownListModel } from '../models/CustomDropdownList';
@@ -83,7 +85,7 @@ router.get('/by-name/:name', asyncHandler(async (req: Request, res: Response) =>
  * ComfyUI 자동수집 모델 썸네일 조회
  * GET /api/custom-dropdown-lists/comfy-model-thumbnail?folder=loras&value=...
  */
-router.get('/comfy-model-thumbnail', asyncHandler(async (req: Request, res: Response) => {
+router.get('/comfy-model-thumbnail', requireImagesView, asyncHandler(async (req: Request, res: Response) => {
   const result = await resolveComfyModelThumbnail({
     folder: req.query.folder,
     value: req.query.value,
@@ -151,7 +153,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  * 새 커스텀 드롭다운 목록 생성
  * POST /api/custom-dropdown-lists
  */
-router.post('/', asyncHandler(async (req: Request, res: Response) => {
+router.post('/', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
   const { name, description, items } = req.body;
 
   if (!name) {
@@ -209,7 +211,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  * 커스텀 드롭다운 목록 업데이트
  * PUT /api/custom-dropdown-lists/:id
  */
-router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
+router.put('/:id', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)));
   const { name, description, items } = req.body;
 
@@ -292,7 +294,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
  * 커스텀 드롭다운 목록 삭제
  * DELETE /api/custom-dropdown-lists/:id
  */
-router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {
@@ -334,7 +336,7 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
  * ComfyUI 모델 수집 (대표 서버 API 기반)
  * POST /api/custom-dropdown-lists/scan-comfyui-models
  */
-router.post('/scan-comfyui-models', asyncHandler(async (req: Request, res: Response) => {
+router.post('/scan-comfyui-models', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   try {
     const result = await collectAndReplaceComfyModelDropdownListsFromDefaultServer({
       apiPaths: req.body?.apiPaths ?? req.body?.modelApiPaths ?? req.body?.paths,

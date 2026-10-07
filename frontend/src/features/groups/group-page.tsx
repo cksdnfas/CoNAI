@@ -1,3 +1,5 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
+import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
 import { CheckCheck, FolderMinus, FolderPlus, Play, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -34,6 +36,7 @@ import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context
 import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 
 export function GroupPage() {
+  const { canViewImages } = useImagePermissions()
   const navigate = useNavigate()
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
@@ -280,6 +283,8 @@ export function GroupPage() {
   ) : (
     <PageToolbar title={rootLabel} actions={rootActions} />
   )
+
+  if (!canViewImages) return <ImagePermissionNotice />
 
   return (
     <PageWithSidebar

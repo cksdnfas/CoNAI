@@ -1,3 +1,4 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { memo, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useUpdateNodeInternals, type NodeProps } from '@xyflow/react'
 import { GripVertical, Play, RotateCcw } from 'lucide-react'
@@ -66,6 +67,7 @@ function normalizeCompositeNodeValue(value: unknown) {
 /** Render a cleaner module graph node card with source-node specific layout. */
 function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGraphNode>) {
   const { t } = useI18n()
+  const { canExecuteGeneration } = useFeaturePermissions()
   const { module } = data
   const updateNodeInternals = useUpdateNodeInternals()
   const uiFieldByKey = useMemo(() => buildModuleUiFieldMap(module.ui_schema), [module.ui_schema])
@@ -302,7 +304,7 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
               type="button"
               size="icon-sm"
               className="h-7 w-7"
-              disabled={data.executeNodeDisabled}
+              disabled={!canExecuteGeneration || data.executeNodeDisabled}
               onMouseDown={stopNodeActionEvent}
               onClick={(event) => {
                 stopNodeActionEvent(event)
@@ -320,7 +322,7 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
               size="icon-sm"
               variant="secondary"
               className="h-7 w-7"
-              disabled={data.executeNodeDisabled}
+              disabled={!canExecuteGeneration || data.executeNodeDisabled}
               onMouseDown={stopNodeActionEvent}
               onClick={(event) => {
                 stopNodeActionEvent(event)

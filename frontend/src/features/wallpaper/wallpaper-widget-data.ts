@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getWallpaperRuntimeBrowseContent, getWallpaperRuntimeGroupPreviewImages } from '@/lib/api-wallpaper-runtime'
@@ -47,6 +48,7 @@ function syncBrowseContentRefreshTimer(refetch: () => void) {
 
 /** Load one shared browse-content query at the shortest active widget cadence. */
 export function useWallpaperBrowseContentQuery(scope: string, refreshIntervalMs: number) {
+  const { canViewImages } = useImagePermissions()
   const queryClient = useQueryClient()
 
   useEffect(() => {
@@ -64,6 +66,7 @@ export function useWallpaperBrowseContentQuery(scope: string, refreshIntervalMs:
 
   return useQuery({
     queryKey: WALLPAPER_BROWSE_CONTENT_QUERY_KEY,
+    enabled: canViewImages,
     queryFn: () => getWallpaperRuntimeBrowseContent(),
     staleTime: 1_000,
     refetchInterval: false,
@@ -72,13 +75,14 @@ export function useWallpaperBrowseContentQuery(scope: string, refreshIntervalMs:
 
 /** Load one wallpaper widget image set from the existing group preview API. */
 export function useWallpaperGroupPreviewImagesQuery(scope: string, groupId: number | null, includeChildren: boolean, count: number) {
+  const { canViewImages } = useImagePermissions()
   return useQuery({
     queryKey: ['wallpaper-widget', scope, groupId, includeChildren, count],
     queryFn: async () => {
       const images = await getWallpaperRuntimeGroupPreviewImages(groupId as number, { includeChildren, count })
       return dedupeWallpaperPreviewImages(images)
     },
-    enabled: groupId !== null,
+    enabled: canViewImages && groupId !== null,
     staleTime: 5 * 60_000,
     refetchInterval: false,
     refetchOnWindowFocus: false,

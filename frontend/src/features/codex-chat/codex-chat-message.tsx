@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { memo, useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Check, ChevronLeft, ChevronRight, ImageOff, Scissors, Wrench, X } from 'lucide-react'
@@ -14,7 +15,6 @@ import { MediaLightbox } from '@/features/images/components/media-lightbox'
 import { useI18n } from '@/i18n'
 import type { ChatDisplayBlock, ChatEngine, CodexChatMediaInfo, CodexChatMessage, CodexChatToolCall } from '@/lib/api-codex-chat'
 import { requestJson } from '@/lib/api-request'
-import { buildApiUrl } from '@/lib/api-url'
 import { cn } from '@/lib/utils'
 import { getGenerationHistory } from '@/lib/api-image-generation-history'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
@@ -35,18 +35,8 @@ const THUMB_PLACEHOLDER_CLASS = { sm: 'h-28 w-28', md: 'h-40 w-40', full: 'aspec
 
 export type ThumbSize = keyof typeof THUMB_SIZE_CLASS
 
-/** A library image as the lightbox needs it; history rows and the thread's media map add mime type and size. */
-export function buildChatImageRecord(compositeHash: string, record?: GenerationHistoryRecord, info?: CodexChatMediaInfo): ImageRecord {
-  return {
-    id: compositeHash,
-    composite_hash: compositeHash,
-    thumbnail_url: buildApiUrl(`/api/images/${compositeHash}/thumbnail`),
-    image_url: buildApiUrl(`/api/images/${compositeHash}/file`),
-    mime_type: record?.actual_mime_type ?? info?.mimeType ?? null,
-    width: record?.actual_width ?? info?.width ?? record?.width ?? null,
-    height: record?.actual_height ?? info?.height ?? record?.height ?? null,
-  }
-}
+import { buildChatImageRecord } from './chat-image-record'
+export { buildChatImageRecord } from './chat-image-record'
 
 /**
  * The box a thumbnail occupies before it is drawn. With the image's dimensions known it is the exact size the image
@@ -619,6 +609,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
 }) {
   const { t } = useI18n()
   // Older stored replies and live streams may still carry the model's copy of the app's [message_id=...] label.
+  const { canViewImages } = useImagePermissions()
   const content = stripEchoedAddresses(written)
   const { avatarSize } = appearance
   const toolBadge = toolCalls.length > 0 && appearance.showToolChips ? <ToolCallsBadge calls={toolCalls} /> : null
@@ -663,7 +654,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
     <div className="space-y-2">
       <ChatMessageReply routing={routing} recipientLabel={recipientLabel} />
       {showReasoning ? <ReasoningBlock text={reasoning as string} active={streaming && !content} /> : null}
-      <CodexChatToolMedia calls={toolCalls} size={appearance.imageSize} layout={appearance.imageLayout} media={media} />
+      {canViewImages ? <CodexChatToolMedia calls={toolCalls} size={appearance.imageSize} layout={appearance.imageLayout} media={media} /> : null}
       <ChatProposalCards calls={toolCalls} threadId={threadId} />
       {ownText ? markdown(ownText) : null}
     </div>

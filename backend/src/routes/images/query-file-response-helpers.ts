@@ -5,7 +5,7 @@ import { routeParam } from '../routeParam';
 
 // Thumbnails and media keep stable URLs across in-place regeneration, so clients
 // must revalidate via the ETag/Last-Modified validators instead of caching forever.
-const FILE_CACHE_CONTROL = 'public, max-age=86400, must-revalidate';
+const FILE_CACHE_CONTROL = 'private, no-cache';
 
 /** Build a stable ETag from file mtime and size. */
 function generateETag(stats: fs.Stats): string {

@@ -14,10 +14,57 @@ import { buildOpenAiGenerationFields, readLlmConnectionConfig, summaryGeneration
 import { buildGroupLlmMessages } from '../src/services/codex-chat/groupChatContext'
 import { ChatSummaryStore, renderSummary, type ChatSummarySegment } from '../src/services/codex-chat/chatMemory'
 import { OwnedLorebookStore } from '../src/services/codex-chat/chatLorebookFiles'
+import { parseChatFeatureInventory, chatFeatureOverrides, chatRuntimeArgs, chatTurnRestrictions, verifyChatRuntime } from '../src/services/codex-chat/codexChatRuntime'
+import { declineServerRequest } from '../src/services/codex-chat/codexAppServerClient'
+import { isolatedChatPreview } from '../../frontend/src/features/codex-chat/chat-preview'
+import { describeChatWorkflowModule } from '../../shared/src/utils/chatWorkflow'
+import { requireChatWorkflowInputs } from '../src/mcp/tools/mcpComfyWorkflowService'
 
 // These requests run without a settings database: their chats have no lorebooks of their own.
 mock.method(OwnedLorebookStore, 'chatBookOf', () => null)
 mock.method(OwnedLorebookStore, 'threadLinks', () => [])
+
+test('chat runtime fails closed on unknown host capabilities, invalid inventories and inherited MCP', async () => {
+  const features = parseChatFeatureInventory(['shell_tool', 'unified_exec', 'hooks', 'plugins', 'apps', 'code_mode_host', 'code_mode', 'browser_use', 'computer_use', 'multi_agent', 'image_generation', 'view_image', 'skill_mcp_dependency_install', 'skill_search', 'skip_host_skill_discovery', 'future_host_tool'].map((name) => `${name} stable true`).join('\n'))
+  assert.throws(() => parseChatFeatureInventory(''), /cannot enforce/)
+  assert.throws(() => parseChatFeatureInventory('shell_tool ??? true'), /could not be verified/)
+  assert.equal(chatFeatureOverrides(features).future_host_tool, false)
+  assert.equal(chatFeatureOverrides(features).skip_host_skill_discovery, true)
+  assert.ok(chatRuntimeArgs(features, 'private-work', '1666').some((arg) => arg.includes('"future_host_tool"=false')))
+  assert.throws(() => chatRuntimeArgs(features, 'private-work', '1666/injected'), /port/)
+  assert.deepEqual(chatTurnRestrictions('private-work'), { cwd: 'private-work', approvalPolicy: 'never', sandboxPolicy: { type: 'readOnly', networkAccess: false } })
+  assert.equal(declineServerRequest('item/commandExecution/requestApproval').result !== undefined, true)
+  assert.equal(declineServerRequest('item/fileChange/requestApproval').result !== undefined, true)
+  assert.equal(declineServerRequest('unknown/host/request').error?.code, -32601)
+  const config = { approval_policy: 'never', sandbox_mode: 'read-only', web_search: 'disabled', project_doc_max_bytes: 0, features: chatFeatureOverrides(features), mcp_servers: { conai: { url: 'http://127.0.0.1:1666/mcp' } }, projects: { 'private-work': { trust_level: 'untrusted' } } }
+  const client = (configuration: unknown, pages: unknown[]) => ({ request: async (method: string) => method === 'config/read' ? { config: configuration } : pages.shift() }) as never
+  await assert.doesNotReject(verifyChatRuntime(client(config, [{ data: [{ name: 'conai' }], nextCursor: null }]), features, 'private-work', '1666'))
+  await assert.rejects(verifyChatRuntime(client({ ...config, features: { ...config.features, shell_tool: true } }, []), features, 'private-work', '1666'), /restriction/)
+  await assert.rejects(verifyChatRuntime(client({ ...config, mcp_servers: { conai: { ...config.mcp_servers.conai, command: 'host-tool' } } }, []), features, 'private-work', '1666'), /not isolated/)
+  await assert.rejects(verifyChatRuntime(client(config, [{ data: [{ name: 'conai' }], nextCursor: 'second' }, { data: [{ name: 'external-host-tool' }], nextCursor: null }]), features, 'private-work', '1666'), /unexpected MCP/)
+  await assert.rejects(verifyChatRuntime(client(config, [{ data: 'invalid' }]), features, 'private-work', '1666'), /unexpected MCP/)
+})
+
+test('generated HTML preview has a trusted network-denying CSP before all untrusted markup', () => {
+  const untrusted = '<html><head><meta http-equiv="Content-Security-Policy" content="default-src *"></head><body><script>fetch("http://localhost:1666/private")</script></body></html>'
+  const document = isolatedChatPreview(untrusted)
+  assert.ok(document.indexOf("connect-src 'none'") < document.indexOf(untrusted))
+  for (const directive of ["frame-src 'none'", "object-src 'none'", "base-uri 'none'", "form-action 'none'", "script-src 'none'"]) assert.ok(document.includes(directive))
+  assert.ok(document.endsWith(untrusted))
+})
+
+test('chat cannot fill or wire exact code/path controls while ordinary prompt inputs remain available', () => {
+  const module = describeChatWorkflowModule({ id: 1, name: 'Protected controls', engine_type: 'system', version: 1, template_defaults: {}, exposed_inputs: [
+    { key: 'code', label: 'Program', data_type: 'text' }, { key: 'prompt', label: 'Prompt', data_type: 'text' },
+  ], output_ports: [] })
+  assert.equal(module.fields.find((field) => field.key === 'code')?.editable, false)
+  assert.equal(module.inputs.find((field) => field.key === 'code')?.connectable, false)
+  assert.equal(module.fields.find((field) => field.key === 'prompt')?.editable, true)
+  const context = { source: 'llm-chat' as const, scopes: [] }
+  const fields = [{ id: 'code', label: 'Program', type: 'text' as const, jsonPath: '1.inputs.value' }, { id: 'prompt', label: 'Prompt', type: 'text' as const, jsonPath: '2.inputs.text' }]
+  assert.throws(() => requireChatWorkflowInputs(context, fields, { code: 'must not execute' }), /protected workflow input/)
+  assert.doesNotThrow(() => requireChatWorkflowInputs(context, fields, { prompt: 'ordinary image request' }))
+})
 
 const target: ChatCompletionTarget = {
   providerName: 'test', displayName: 'Test', endpoint: 'http://unused.invalid/chat/completions',

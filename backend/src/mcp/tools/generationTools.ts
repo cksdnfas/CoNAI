@@ -22,6 +22,8 @@ import { McpArtifactService } from '../../services/mcpArtifactService';
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
 import { resolveRequestBodyLimitsMb } from '../../middleware/requestBodyLimits';
 import { getMcpGenerationRoutingOptions, getMcpGenerationRoutingRules } from './generationJobRouting';
+import { canRequesterViewImages } from '../../middleware/imageAccess';
+import { isChatMcpSource } from '../context';
 
 export function registerGenerationTools(server: McpServer, context: McpRequestContext): void {
   registerWorkflowListTools(server);
@@ -45,11 +47,13 @@ function resolveUsableWorkflow(workflowId: number): WorkflowRecord {
 }
 
 async function replaceOutputPathsWithArtifacts(result: Awaited<ReturnType<typeof saveMcpComfyOutputs>>, context: McpRequestContext) {
-  if (!context.baseUrl) {
-    return result;
-  }
   const { outputPaths: _internalPaths, ...safeResult } = result;
-  const artifacts = (await Promise.all(result.historyIds.map((id) => McpArtifactService.createHistoryDescriptor(id, context.baseUrl as string)))).filter(Boolean);
+  if (context.requester && !canRequesterViewImages(context.requester)) {
+    const { historyId: _historyId, historyIds: _historyIds, ...receipt } = safeResult;
+    return receipt;
+  }
+  if (!context.baseUrl) return isChatMcpSource(context.source) ? safeResult : result;
+  const artifacts = (await Promise.all(result.historyIds.map((id) => McpArtifactService.createHistoryDescriptor(id, context.baseUrl as string, context.requester)))).filter(Boolean);
   return { ...safeResult, artifacts };
 }
 
@@ -132,11 +136,13 @@ async function saveMcpComfyOutputs(params: {
   suppliedInputs: Record<string, unknown>;
   groupId?: number;
   requester?: McpRequestContext['requester'];
+  context?: McpRequestContext;
 }) {
   const { comfyService, substitutedWorkflow } = await prepareMcpComfyWorkflow({
     workflow: params.workflow,
     server: params.server,
     suppliedInputs: params.suppliedInputs,
+    context: params.context,
   });
 
   const historyId = await GenerationHistoryService.createComfyUIHistory({
@@ -232,6 +238,7 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
           suppliedInputs: (inputs ?? prompt_data ?? {}) as Record<string, unknown>,
           groupId: targetGroupId,
           requester: context.requester,
+          context,
         });
         return { content: [{ type: 'text' as const, text: JSON.stringify(await replaceOutputPathsWithArtifacts(result, context), null, 2) }] };
       } catch (error) {
@@ -269,6 +276,7 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
               suppliedInputs,
               groupId: targetGroupId,
               requester: context.requester,
+              context,
             });
             return await replaceOutputPathsWithArtifacts(result, context);
           } catch (error) {

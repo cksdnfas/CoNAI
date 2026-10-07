@@ -1,3 +1,4 @@
+import { requirePermission } from '../../middleware/authMiddleware';
 import { Router, type Request, type Response } from 'express'
 import { GraphExecutionModel } from '../../models/GraphExecution'
 import { GraphWorkflowModel } from '../../models/GraphWorkflow'
@@ -379,7 +380,7 @@ export function createGraphWorkflowCrudRoutes() {
     }
   }))
 
-  router.post('/import', asyncHandler(async (req: Request, res: Response) => {
+  router.post('/import', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
     const folderIdResult = parseOptionalGraphFolderId(req.body?.folder_id)
     if (!folderIdResult.ok) {
       return sendRouteBadRequest(res, 'Invalid graph workflow folder ID')
@@ -419,7 +420,7 @@ export function createGraphWorkflowCrudRoutes() {
     }
   }))
 
-  router.post('/', asyncHandler(async (req: Request, res: Response) => {
+  router.post('/', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
     const { name, description, graph, folder_id, version, is_active } = req.body
     if (!name || !graph) {
       return sendRouteBadRequest(res, 'name and graph are required')
@@ -443,7 +444,7 @@ export function createGraphWorkflowCrudRoutes() {
     }
   }))
 
-  router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
+  router.put('/:id', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
     const id = parseGraphRouteInteger(req.params.id)
     if (isNaN(id)) {
       return sendRouteBadRequest(res, 'Invalid graph workflow ID')
@@ -484,7 +485,7 @@ export function createGraphWorkflowCrudRoutes() {
     }
   }))
 
-  router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
+  router.delete('/:id', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
     const id = parseGraphRouteInteger(req.params.id)
     if (isNaN(id)) {
       return sendRouteBadRequest(res, 'Invalid graph workflow ID')

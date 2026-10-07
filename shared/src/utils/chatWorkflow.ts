@@ -33,7 +33,7 @@ type EditorModule = {
 /** The same public interface is derived from the live server definition and the editor's definition. */
 export function describeChatWorkflowModule(module: EditorModule): ChatWorkflowModule {
   const operation = module.internal_fixed_values?.operation_key ?? module.template_defaults.operation_key
-  const protectedField = (field: { key: string; label: string; description?: string }) => isProtectedWorkflowKey(`${field.key} ${field.label} ${field.description ?? ''}`)
+  const protectedField = (field: { key: string; label: string; description?: string }) => [field.key, field.label, field.description ?? ''].some(isProtectedWorkflowKey)
   const port = (entry: EditorModule['exposed_inputs'][number]): ChatWorkflowPort => ({ key: entry.key, label: entry.label.slice(0, 160), dataType: entry.data_type, required: entry.required === true, multiple: entry.multiple === true, connectable: !protectedField(entry) })
   const schemas = new Map((module.ui_schema ?? []).map((field) => [field.key, field]))
   const keys = [...new Set([...module.exposed_inputs.map((field) => field.key), ...schemas.keys()])]

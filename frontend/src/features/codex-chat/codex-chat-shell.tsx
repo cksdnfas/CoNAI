@@ -1,3 +1,5 @@
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { Suspense, lazy, useCallback, useEffect, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
@@ -180,6 +182,7 @@ export function CodexChatHeaderButton() {
 /** The chat as a side panel on every page (full screen on narrow viewports). Hidden on /chat, which shows it as a page. */
 export function CodexChatDock() {
   const { t } = useI18n()
+  const canOpenChatPage = hasAuthPermission(useAuthStatusQuery().data?.permissionKeys, 'page.chat.view')
   const chat = useCodexChat()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -251,10 +254,10 @@ export function CodexChatDock() {
         <CodexChatViewLazy
           layout="panel"
           onClose={closePanel}
-          onExpand={() => {
+          onExpand={canOpenChatPage ? () => {
             closePanel()
             navigate(CODEX_CHAT_ROUTE)
-          }}
+          } : undefined}
         />
       </Suspense>
     </aside>

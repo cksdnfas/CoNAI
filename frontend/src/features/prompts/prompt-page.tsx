@@ -1,3 +1,5 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
+import { FeaturePermissionNotice } from '@/features/auth/feature-permission-notice'
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
@@ -60,14 +62,16 @@ function PanelFallback({ toolbarProps }: { toolbarProps: PromptPageToolbarBasePr
 /** /prompts. The old `?tab=wildcards` view was the same panel as /wildcards, so that link now goes there. */
 export function PromptPage() {
   const [searchParams] = useSearchParams()
+  const { canViewPrompts } = useFeaturePermissions()
   if (searchParams.get('tab') === 'wildcards') {
     return <Navigate to="/wildcards" replace />
   }
 
-  return <PromptPageContent />
+  return canViewPrompts ? <PromptPageContent /> : <FeaturePermissionNotice permission="prompts.view" />
 }
 
 function PromptPageContent() {
+  const { canCreatePrompts, canUpdatePrompts, canDeletePrompts } = useFeaturePermissions()
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
   const confirm = useConfirm()
@@ -474,20 +478,20 @@ function PromptPageContent() {
               setSelectedGroupId(groupId)
               setPage(1)
             }}
-            onCreateGroup={() => setGroupEditorState({ mode: 'create', defaultParentId: isSelectedGroupLocked ? null : (selectedGroupId ?? null) })}
+            onCreateGroup={canCreatePrompts ? () => setGroupEditorState({ mode: 'create', defaultParentId: isSelectedGroupLocked ? null : (selectedGroupId ?? null) }) : undefined}
             onExportGroups={() => void handleExportGroups()}
-            onImportGroups={() => importInputRef.current?.click()}
+            onImportGroups={canCreatePrompts && canUpdatePrompts && canDeletePrompts ? () => importInputRef.current?.click() : undefined}
             onOpenSummary={() => setIsSummaryModalOpen(true)}
-            onOpenCollect={() => setIsCollectModalOpen(true)}
-            onOpenDanbooruGrouping={() => setIsDanbooruGroupingModalOpen(true)}
+            onOpenCollect={canCreatePrompts ? () => setIsCollectModalOpen(true) : undefined}
+            onOpenDanbooruGrouping={canCreatePrompts && canUpdatePrompts ? () => setIsDanbooruGroupingModalOpen(true) : undefined}
           />
         )}
         sidebarFooter={(
           <PromptGroupActions
-            onEditGroup={selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupLocked ? () => setGroupEditorState({ mode: 'edit', group: selectedGroup }) : undefined}
-            onDeleteGroup={selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupProtected ? () => void handleDeleteSelectedGroup() : undefined}
-            onMoveGroupUp={canMoveGroupUp ? () => void handleMoveSelectedGroup('up') : undefined}
-            onMoveGroupDown={canMoveGroupDown ? () => void handleMoveSelectedGroup('down') : undefined}
+            onEditGroup={canUpdatePrompts && selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupLocked ? () => setGroupEditorState({ mode: 'edit', group: selectedGroup }) : undefined}
+            onDeleteGroup={canDeletePrompts && selectedGroup && selectedGroup.id !== 0 && !isSelectedGroupProtected ? () => void handleDeleteSelectedGroup() : undefined}
+            onMoveGroupUp={canUpdatePrompts && canMoveGroupUp ? () => void handleMoveSelectedGroup('up') : undefined}
+            onMoveGroupDown={canUpdatePrompts && canMoveGroupDown ? () => void handleMoveSelectedGroup('down') : undefined}
           />
         )}
         toolbar={(

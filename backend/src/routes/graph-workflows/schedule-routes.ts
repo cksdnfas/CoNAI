@@ -1,3 +1,4 @@
+import { requirePermission } from '../../middleware/authMiddleware';
 import { Router, type Request, type Response } from 'express'
 import { GraphWorkflowModel } from '../../models/GraphWorkflow'
 import { GraphWorkflowFolderModel } from '../../models/GraphWorkflowFolder'
@@ -110,7 +111,7 @@ export function createGraphWorkflowScheduleRoutes() {
     }
   }))
 
-  router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
+  router.post('/schedules', requirePermission('workflows.update'), requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
     const workflowId = Number(req.body?.graph_workflow_id)
     const name = typeof req.body?.name === 'string' ? req.body.name.trim() : ''
     const scheduleType = parseScheduleType(req.body?.schedule_type)
@@ -203,7 +204,7 @@ export function createGraphWorkflowScheduleRoutes() {
     }
   }))
 
-  router.put('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Response) => {
+  router.put('/schedules/:scheduleId', requirePermission('workflows.update'), requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
     const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, '잘못된 예약작업 ID야.')
     if (scheduleId === null) {
       return
@@ -293,7 +294,7 @@ export function createGraphWorkflowScheduleRoutes() {
     }
   }))
 
-  router.post('/schedules/:scheduleId/pause', asyncHandler(async (req: Request, res: Response) => {
+  router.post('/schedules/:scheduleId/pause', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
     const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, '잘못된 예약작업 ID야.')
     if (scheduleId === null) {
       return
@@ -314,7 +315,7 @@ export function createGraphWorkflowScheduleRoutes() {
     return res.json({ success: updated, data: { id: scheduleId, message: '예약작업을 일시정지했어.', queue_cleanup: queueCleanup } } as ModuleGraphResponse)
   }))
 
-  router.post('/schedules/:scheduleId/resume', asyncHandler(async (req: Request, res: Response) => {
+  router.post('/schedules/:scheduleId/resume', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
     const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, '잘못된 예약작업 ID야.')
     if (scheduleId === null) {
       return
@@ -345,7 +346,7 @@ export function createGraphWorkflowScheduleRoutes() {
     return res.json({ success: updated, data: { id: scheduleId, message: '예약작업을 다시 켰어.' } } as ModuleGraphResponse)
   }))
 
-  router.post('/schedules/:scheduleId/run-now', asyncHandler(async (req: Request, res: Response) => {
+  router.post('/schedules/:scheduleId/run-now', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
     const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, '잘못된 예약작업 ID야.')
     if (scheduleId === null) {
       return
@@ -393,7 +394,7 @@ export function createGraphWorkflowScheduleRoutes() {
     }
   }))
 
-  router.delete('/schedules/:scheduleId', asyncHandler(async (req: Request, res: Response) => {
+  router.delete('/schedules/:scheduleId', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
     const scheduleId = parseRequiredGraphRouteId(res, req.params.scheduleId, '잘못된 예약작업 ID야.')
     if (scheduleId === null) {
       return

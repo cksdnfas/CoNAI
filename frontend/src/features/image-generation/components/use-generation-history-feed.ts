@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -38,6 +39,7 @@ export type GenerationHistoryFeedOptions = {
  */
 export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId, publicWorkflowSlug, enabled = true }: GenerationHistoryFeedOptions) {
   const queryClient = useQueryClient()
+  const { canViewImages } = useImagePermissions()
   const authStatusQuery = useAuthStatusQuery()
   // SSE 가 살아 있으면 폴링을 끄고, 끊기면 아래 기존 refresh cadence 가 그대로 되살아난다.
   const { status: runtimeStreamStatus } = useRuntimeEventStream()
@@ -101,7 +103,7 @@ export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId
 
       return page
     },
-    enabled: enabled && !authStatusQuery.isPending,
+    enabled: canViewImages && enabled && !authStatusQuery.isPending,
     // Keep every loaded page: the active-generation refetch has to restart at offset 0 so newly
     // completed generations appear, and selection/visible-count state is derived from all pages.
     getNextPageParam: (lastPage, _allPages, lastPageParam) => {

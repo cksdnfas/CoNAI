@@ -1,3 +1,4 @@
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -48,7 +49,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
 
   const canViewHome = hasAuthPermission(authStatusQuery.data?.permissionKeys, 'page.home.view')
-  const canDeleteImages = authStatusQuery.data?.isAdmin === true
+  const { canViewImages, canDeleteImages, canAssignGroups } = useImagePermissions()
   const hasCredentials = authStatusQuery.data?.hasCredentials === true
   const isAuthenticated = authStatusQuery.data?.authenticated === true
   const isAnonymousSession = hasCredentials && !isAuthenticated
@@ -140,7 +141,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
         cursorHash: lastPage.nextCursorHash,
       }
     },
-    enabled: canViewHome,
+    enabled: canViewHome && canViewImages,
   })
 
   const hasFirstFeedPage = (imagesQuery.data?.pages.length ?? 0) > 0
@@ -170,14 +171,14 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
       const result = await getImagesCount({ signal })
       return result.total
     },
-    enabled: canViewHome && hasFirstFeedPage,
+    enabled: canViewHome && canViewImages && hasFirstFeedPage,
     staleTime: 60_000,
   })
 
   const groupsQuery = useQuery({
     queryKey: ['groups-hierarchy-all', 'custom'],
     queryFn: getGroupsHierarchyAll,
-    enabled: canViewHome && !isAnonymousSession,
+    enabled: canViewHome && canViewImages && !isAnonymousSession,
   })
 
   const assignToGroupMutation = useMutation({
@@ -214,7 +215,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     shouldBlurItemPreview,
   } = useImageFeedSafety({
     items: images,
-    enabled: canViewHome,
+    enabled: canViewHome && canViewImages,
     hasMore: Boolean(imagesQuery.hasNextPage),
     isLoading: imagesQuery.isPending,
     isError: imagesQuery.isError,
@@ -392,6 +393,8 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   return {
     authStatusQuery,
     canViewHome,
+    canViewImages,
+    canAssignGroups,
     canDeleteImages,
     isAnonymousSession,
     imagesQuery,

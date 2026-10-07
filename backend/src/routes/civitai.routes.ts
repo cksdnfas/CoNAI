@@ -1,3 +1,4 @@
+import { requireImagesView } from '../middleware/imageAccess';
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import {
@@ -251,7 +252,7 @@ router.post('/create-intent', asyncHandler(async (req: Request, res: Response) =
  * GET /api/civitai/temp-image/:token
  * This endpoint is accessed by Civitai servers to fetch the image
  */
-router.get('/temp-image/:token', asyncHandler(async (req: Request, res: Response) => {
+router.get('/temp-image/:token', requireImagesView, asyncHandler(async (req: Request, res: Response) => {
   const token = routeParam(req.params.token);
 
   // Find valid (non-expired) temp URL

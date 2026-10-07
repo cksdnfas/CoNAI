@@ -289,6 +289,10 @@ router.get('/by-path/:encodedPath', asyncHandler(async (req: Request, res: Respo
   try {
     const filePath = decodeURIComponent(encodedPath);
     const fileRecord = ImageFileModel.findByPath(filePath);
+    // Path fallback is only for known active library files, never arbitrary server or private-store paths.
+    if (!fileRecord || fileRecord.file_status !== 'active') {
+      return res.status(404).json({ success: false, error: 'File not found' });
+    }
 
     if (fileRecord?.file_status === 'active' && fileRecord.composite_hash) {
       const metadata = await MediaMetadataModel.findByHash(fileRecord.composite_hash);
@@ -316,7 +320,7 @@ router.get('/by-path/:encodedPath', asyncHandler(async (req: Request, res: Respo
     }
 
     res.setHeader('Content-Type', getMimeTypeFromFilePath(filePath));
-    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Cache-Control', 'private, no-cache');
 
     pipeFileToResponse(res, fs.createReadStream(resolvedPath));
     return;

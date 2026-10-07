@@ -1,3 +1,4 @@
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, Copy, Search, Settings2, SlidersHorizontal } from 'lucide-react'
@@ -19,7 +20,7 @@ import { useHomeSearch, type TextSearchScope } from '@/features/home/home-search
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { useI18n } from '@/i18n'
 import { resolvePromptGroups } from '@/lib/api-prompts'
-import { getAppSettings } from '@/lib/api-settings-general'
+import { getImageViewerSettings } from '@/lib/api-settings'
 import { updateKaloscopeSettings } from '@/lib/api-settings-kaloscope'
 import { buildArtistPromptTagUrl } from '@/lib/artist-prompt-links'
 import { copyTextToClipboard } from '@/lib/clipboard'
@@ -177,6 +178,7 @@ function MetaSection({ title, actions, children }: { title: string; actions?: Re
  * left accent line, groups as chips and a collapsed "기술 정보". No cards; sections are spacing plus small headings.
  */
 export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
+  const canConfigure = useAuthStatusQuery().data?.isAdmin === true
   const queryClient = useQueryClient()
   const imageViewModal = useImageViewModal()
   const { addScopedTextChip } = useHomeSearch()
@@ -220,15 +222,15 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   const canTogglePromptGrouping = positivePromptTermItems.length > 0 || negativePromptTermItems.length > 0
 
   const settingsQuery = useQuery({
-    queryKey: ['app-settings'],
-    queryFn: getAppSettings,
+    queryKey: ['image-viewer-settings'],
+    queryFn: getImageViewerSettings,
     staleTime: 60_000,
   })
 
   const artistPromptLinkMutation = useMutation({
     mutationFn: updateKaloscopeSettings,
-    onSuccess: (settings) => {
-      queryClient.setQueryData(['app-settings'], settings)
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['image-viewer-settings'] })
       showSnackbar({ message: t('images.components.detail.image.detail.meta.card.artist.prompt.link.settings.saved'), tone: 'info' })
       setIsArtistPromptSettingsOpen(false)
     },
@@ -445,7 +447,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
       {artistPromptSection ? (
         <MetaSection
           title={t({ ko: '작가 프롬프트', en: 'Artist prompt' })}
-          actions={(
+          actions={canConfigure ? (
             <IconButton
               size="icon-sm"
               variant="ghost"
@@ -454,7 +456,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
             >
               <Settings2 className="h-4 w-4" />
             </IconButton>
-          )}
+          ) : null}
         >
           <ArtistPromptSection
             label={artistPromptSection.label}

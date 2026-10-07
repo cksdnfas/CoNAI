@@ -11,8 +11,15 @@ PAGINATION } from '@conai/shared';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { enrichCompactImageWithFileView } from './images/utils';
 import fs from 'fs';
+import { allowImagesView } from '../middleware/imageAccess';
+import { requirePermission } from '../middleware/authMiddleware';
 
 const router = Router();
+router.use((req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    allowImagesView(req, res, next);
+  } else requirePermission('groups.update')(req, res, next);
+});
 
 /**
  * 모든 자동 폴더 그룹 조회 (통계 포함)

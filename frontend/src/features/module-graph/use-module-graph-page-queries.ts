@@ -12,7 +12,7 @@ import {
   type GraphExecutionListMeta,
   type GraphExecutionRecord,
 } from '@/lib/api-module-graph'
-import { getAppSettings } from '@/lib/api-settings-general'
+import { getRuntimeWorkflowSettings } from '@/lib/api-settings'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
@@ -53,8 +53,8 @@ export function useModuleGraphPageQueries({
   })
 
   const settingsQuery = useQuery({
-    queryKey: ['app-settings', 'module-graph-validation'],
-    queryFn: getAppSettings,
+    queryKey: ['runtime-workflow-settings'],
+    queryFn: getRuntimeWorkflowSettings,
   })
   const appearanceQuery = useGlobalAppearanceSettingsQuery()
 
@@ -160,6 +160,6 @@ export function useModuleGraphPageQueries({
     isLoadingMoreExecutions: graphExecutionsQuery.isPlaceholderData,
     loadMoreExecutions,
     selectedGraphWorkflow: selectedGraphWorkflowQuery.data ?? null,
-    reactFlowColorMode: appearanceQuery.data?.themeMode ?? settingsQuery.data?.appearance.themeMode ?? DEFAULT_APPEARANCE_SETTINGS.themeMode,
+    reactFlowColorMode: appearanceQuery.data?.themeMode ?? DEFAULT_APPEARANCE_SETTINGS.themeMode,
   }
 }

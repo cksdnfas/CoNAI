@@ -1,3 +1,5 @@
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import type { ReactNode } from 'react'
 import { ArrowUp, BookmarkPlus, ExternalLink, LogIn } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -170,6 +172,8 @@ export function NaiActionSection({
   onGenerate,
   onSaveChatPreset,
 }: NaiActionSectionProps) {
+  const { canExecuteGeneration } = useFeaturePermissions()
+  const { canViewImages } = useImagePermissions()
   const { t } = useI18n()
   const upscaleLabel = isUpscaling
     ? t('image-generation.components.nai.generation.panel.sections.upscaling')
@@ -193,7 +197,7 @@ export function NaiActionSection({
             </GenerateActionBarIconButton>
           ) : null}
           {canUpscale ? (
-            <GenerateActionBarIconButton label={upscaleLabel} onClick={onUpscale} disabled={isUpscaling || isGenerating}>
+            <GenerateActionBarIconButton label={upscaleLabel} onClick={onUpscale} disabled={!canExecuteGeneration || !canViewImages || isUpscaling || isGenerating}>
               <ArrowUp />
             </GenerateActionBarIconButton>
           ) : null}
