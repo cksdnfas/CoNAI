@@ -1,8 +1,6 @@
-import path from 'path'
 
 export const DEFAULT_CIVITAI_MODEL_LIMIT = 100
 export const DEFAULT_CIVITAI_MODEL_OFFSET = 0
-export const MAX_CIVITAI_POST_INTENT_IMAGES = 20
 
 export interface CivitaiModelPagination {
   limit: number
@@ -27,14 +25,6 @@ export interface CivitaiRescanModelReference {
   weight?: number
 }
 
-const CIVITAI_TEMP_IMAGE_CONTENT_TYPES: Record<string, string> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.gif': 'image/gif',
-}
-
 /** Preserve the Civitai route's legacy parseInt-or-fallback query semantics. */
 export function parseCivitaiRouteInteger(value: unknown, fallback: number): number {
   const parsed = Number.parseInt(String(value ?? ''))
@@ -46,23 +36,6 @@ export function resolveCivitaiModelPagination(query: { limit?: unknown; offset?:
     limit: parseCivitaiRouteInteger(query.limit, DEFAULT_CIVITAI_MODEL_LIMIT),
     offset: parseCivitaiRouteInteger(query.offset, DEFAULT_CIVITAI_MODEL_OFFSET),
   }
-}
-
-export function getCivitaiPostIntentImageError(compositeHashes: unknown): string | null {
-  if (!compositeHashes || !Array.isArray(compositeHashes) || compositeHashes.length === 0) {
-    return 'compositeHashes array is required'
-  }
-
-  if (compositeHashes.length > MAX_CIVITAI_POST_INTENT_IMAGES) {
-    return `Maximum ${MAX_CIVITAI_POST_INTENT_IMAGES} images allowed per post`
-  }
-
-  return null
-}
-
-export function getCivitaiTempImageContentType(imagePath: string): string {
-  const extension = path.extname(imagePath).toLowerCase()
-  return CIVITAI_TEMP_IMAGE_CONTENT_TYPES[extension] || 'application/octet-stream'
 }
 
 export function buildCivitaiRescanProgressResponse(

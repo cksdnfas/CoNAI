@@ -104,7 +104,6 @@ export const DATA_REMATCH_HASH_REFERENCE_TABLES = [
   'image_groups',
   'auto_folder_group_images',
   'image_models',
-  'civitai_temp_urls',
   'image_metadata_edit_revisions',
   'api_generation_history',
 ] as const;
@@ -705,7 +704,6 @@ export class DataRematchService {
     this.remapHashRefTableRows('media_auto_tag_index', oldHash, newHash);
     this.remapHashRefTableRows('auto_folder_group_images', oldHash, newHash);
     this.remapHashRefTableRows('image_models', oldHash, newHash);
-    this.remapHashRefTableRows('civitai_temp_urls', oldHash, newHash);
     this.remapHashRefTableRows('image_metadata_edit_revisions', oldHash, newHash);
   }
 

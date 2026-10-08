@@ -4,24 +4,15 @@ import { routeParam } from './routeParam';
 import {
   buildCivitaiRescanProgressResponse,
   collectCivitaiRescanModelReferences,
-  getCivitaiPostIntentImageError,
-  getCivitaiTempImageContentType,
   resolveCivitaiModelPagination,
   type CivitaiRescanProgressState,
 } from './civitai-route-helpers';
-import fs from 'fs';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { requireAdmin } from '../middleware/authMiddleware';
 import { CivitaiSettings } from '../models/CivitaiSettings';
 import { ModelInfo } from '../models/ModelInfo';
 import { ImageModel } from '../models/ImageModel';
-import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
-import { CivitaiTempUrl } from '../models/CivitaiTempUrl';
-import { resolveUploadsPath } from '../config/runtimePaths';
 import { CivitaiService } from '../services/civitaiService';
-import { CivitaiTempUrlService } from '../services/civitaiTempUrlService';
-import { ImageSafetyService } from '../services/imageSafetyService';
-import { MediaPostprocessVisibilityService } from '../services/mediaPostprocessVisibilityService';
 import { db } from '../database/init';
 
 const router = Router();
@@ -206,128 +197,6 @@ router.delete('/models', asyncHandler(async (req: Request, res: Response) => {
   res.json({
     success: true,
     message: `Cleared ${count} cached models`
-  });
-}));
-
-// ============================================
-// Post Intent System
-// ============================================
-
-/**
- * Create Post Intent URL
- * POST /api/civitai/create-intent
- */
-router.post('/create-intent', asyncHandler(async (req: Request, res: Response) => {
-  const { compositeHashes, includeMetadata, title, description, tags } = req.body;
-
-  const compositeHashesError = getCivitaiPostIntentImageError(compositeHashes);
-  if (compositeHashesError) {
-    res.status(400).json({
-      success: false,
-      error: compositeHashesError
-    });
-    return;
-  }
-
-  // Get base URL from request
-  const protocol = req.protocol;
-  const host = req.get('host');
-  const baseUrl = `${protocol}://${host}`;
-
-  const result = CivitaiTempUrlService.createIntentUrl(baseUrl, {
-    compositeHashes,
-    includeMetadata,
-    title,
-    description,
-    tags
-  });
-
-  res.json({
-    success: true,
-    data: result
-  });
-}));
-
-/**
- * Serve temporary image for Civitai
- * GET /api/civitai/temp-image/:token
- * This endpoint is accessed by Civitai servers to fetch the image
- */
-router.get('/temp-image/:token', requireImagesView, asyncHandler(async (req: Request, res: Response) => {
-  const token = routeParam(req.params.token);
-
-  // Find valid (non-expired) temp URL
-  const tempUrl = CivitaiTempUrl.findValidByToken(token);
-
-  if (!tempUrl) {
-    res.status(404).json({
-      success: false,
-      error: 'Image not found or expired'
-    });
-    return;
-  }
-
-  const metadata = MediaMetadataModel.findByHash(tempUrl.composite_hash);
-  if (
-    !metadata ||
-    !MediaPostprocessVisibilityService.isReadyRecord(metadata) ||
-    ImageSafetyService.isHidden(metadata.rating_score)
-  ) {
-    res.status(404).json({
-      success: false,
-      error: 'Image not found or expired'
-    });
-    return;
-  }
-
-  // Increment access count
-  CivitaiTempUrl.incrementAccessCount(token);
-
-  // Get image path from database
-  const imageData = db.prepare(`
-    SELECT if.original_file_path
-    FROM image_files if
-    WHERE if.composite_hash = ?
-      AND if.file_status = 'active'
-    ORDER BY if.last_verified_date DESC
-    LIMIT 1
-  `).get(tempUrl.composite_hash) as { original_file_path: string } | undefined;
-
-  if (!imageData || !imageData.original_file_path) {
-    res.status(404).json({
-      success: false,
-      error: 'Image file not found'
-    });
-    return;
-  }
-
-  const imagePath = resolveUploadsPath(imageData.original_file_path);
-
-  if (!fs.existsSync(imagePath)) {
-    res.status(404).json({
-      success: false,
-      error: 'Image file not found on disk'
-    });
-    return;
-  }
-
-  const contentType = getCivitaiTempImageContentType(imagePath);
-
-  // Send file
-  res.setHeader('Content-Type', contentType);
-  res.setHeader('Cache-Control', 'public, max-age=3600');
-  res.sendFile(imagePath);
-}));
-
-/**
- * Cleanup expired temp URLs
- * POST /api/civitai/cleanup-temp-urls
- */
-router.post('/cleanup-temp-urls', asyncHandler(async (req: Request, res: Response) => {
-  const count = CivitaiTempUrl.cleanupExpired();
-  res.json({
-    success: true,
-    message: `Cleaned up ${count} expired URLs`
   });
 }));
 
