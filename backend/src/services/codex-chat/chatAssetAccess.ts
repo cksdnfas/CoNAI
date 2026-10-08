@@ -1,6 +1,4 @@
-import { AuthAccount } from '../../models/AuthAccount'
-import { hasConfiguredAuth } from '../../routes/auth-route-helpers'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { isRequesterAdmin, requireRequesterPermission } from '../../middleware/featureAccess'
 import type { McpRequester } from '../../mcp/context'
 import { ChatProfileStore } from './chatProfiles'
 
@@ -10,8 +8,7 @@ export class ChatAssetError extends Error {
 
 /** Check live account authority, including delayed jobs; callers establish the trusted bootstrap HTTP boundary. */
 export function requireChatAssetAdmin(requester: McpRequester) {
-  const account = requester.accountId === null ? null : AuthAccount.findById(requester.accountId)
-  if (requester.accountId === null ? hasConfiguredAuth() : account?.status !== 'active' || account.account_type !== 'admin') {
+  if (!isRequesterAdmin(requester)) {
     throw new ChatAssetError('자산을 만들거나 적용할 관리자 권한이 없어.', 403)
   }
   requester.accountType = 'admin'

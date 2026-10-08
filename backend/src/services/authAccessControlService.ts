@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 import { withPagePermissions } from '@conai/shared';
 import { getAuthDb } from '../database/authDb';
+import { AuthAccount } from '../models/AuthAccount';
 
 export interface ResolvedAuthAccessRecord {
   groupKeys: string[];
@@ -61,6 +62,20 @@ export function invalidateResolvedAuthAccessCache(): void {
   resolvedAccessEpoch += 1;
 }
 
+/**
+ * The one administrator test: an active account whose type is admin. Admin group membership follows the type
+ * (AuthAccount.assignSystemGroup), so every admin-only check and the derived settings page agree.
+ */
+export function isActiveAdminAccount(accountId: number): boolean {
+  // Read through the account model (it imports this module too; both only call each other at run time).
+  return isActiveAdminRecord(AuthAccount.findById(accountId));
+}
+
+/** The same test on an account record a caller already read. */
+export function isActiveAdminRecord(account: { status: string; account_type: string } | null | undefined): boolean {
+  return account?.status === 'active' && account.account_type === 'admin';
+}
+
 /** Resolve inherited groups and effective permissions for one account. */
 export class AuthAccessControlService {
   /** Resolve effective access for one built-in group key. */
@@ -80,7 +95,7 @@ export class AuthAccessControlService {
         return { groupKeys: [], permissionKeys: [] };
       }
 
-      return this.resolveFromMembershipRows([groupRow]);
+      return this.resolveFromMembershipRows([groupRow], groupRow.group_key === 'admin');
     });
   }
 
@@ -114,7 +129,7 @@ export class AuthAccessControlService {
       ORDER BY g.priority ASC, g.id ASC
     `).all(accountId) as Array<{ id: number; group_key: string; parent_group_id: number | null }>;
 
-    return this.resolveFromMembershipRows(membershipRows);
+    return this.resolveFromMembershipRows(membershipRows, isActiveAdminAccount(accountId));
   }
 
   /** Check whether one account currently has one permission key. */
@@ -130,6 +145,7 @@ export class AuthAccessControlService {
   /** Resolve access from one or more direct membership rows. */
   private static resolveFromMembershipRows(
     membershipRows: Array<{ id: number; group_key: string; parent_group_id: number | null }>,
+    isAdmin: boolean,
   ): ResolvedAuthAccessRecord {
     const inheritedGroups = this.expandInheritedGroups(membershipRows);
     const groupIds = inheritedGroups.map((group) => group.id);
@@ -144,10 +160,10 @@ export class AuthAccessControlService {
         `).all(...groupIds) as Array<{ permission_key: string }>).map((row) => row.permission_key);
 
     const groupKeys = inheritedGroups.map((group) => group.group_key);
-    // Page keys are never stored; they follow from the features held (and settings from the admin group).
+    // Page keys are never stored; they follow from the features held (and settings from the administrator role).
     return {
       groupKeys,
-      permissionKeys: withPagePermissions(permissionKeys, groupKeys.includes('admin')),
+      permissionKeys: withPagePermissions(permissionKeys, isAdmin),
     };
   }
 

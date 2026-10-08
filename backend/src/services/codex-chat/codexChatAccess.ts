@@ -4,7 +4,7 @@ import type { Request } from 'express'
 import { getMcpToolScope, isChatGenerationTool, isConnectedChatPageTool, chatGenerationToolName, CHAT_ROOM_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, type McpRequester, type McpRequestContext } from '../../mcp/context'
 import { AuthAccount } from '../../models/AuthAccount'
 import { hasConfiguredAuth } from '../../routes/auth-route-helpers'
-import { AuthAccessControlService } from '../authAccessControlService'
+import { AuthAccessControlService, isActiveAdminRecord } from '../authAccessControlService'
 import type { McpHttpAuthentication } from '../mcpHttpSettingsService'
 import { isDirectLoopbackRequest } from '../../utils/bootstrapAccess'
 import { CHAT_SCOPES, loadChatSettings, type ChatScope } from './chatSettings'
@@ -63,7 +63,7 @@ export function resolveChatAccess(accountId: number | null): ChatAccess {
     permissionKeys = isAdmin ? AuthAccessControlService.resolveBootstrapAccess().permissionKeys : []
   } else {
     const account = AuthAccount.findById(accountId)
-    isAdmin = account?.status === 'active' && account.account_type === 'admin'
+    isAdmin = isActiveAdminRecord(account)
     const resolved = account?.status === 'active' ? AuthAccessControlService.resolveForAccountId(accountId) : null
     permissionKeys = resolved?.permissionKeys ?? []
     groupKeys = resolved?.groupKeys ?? []

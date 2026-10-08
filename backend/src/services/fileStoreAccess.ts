@@ -3,6 +3,7 @@ import { hasConfiguredAuth } from '../routes/auth-route-helpers';
 import { AuthAccessControlService } from './authAccessControlService';
 import { FileStoreError, fileOwnerKey } from './fileStoreService';
 import type { McpRequester } from '../mcp/context';
+import { isRequesterAdmin } from '../middleware/featureAccess';
 
 export type FileStoreAction = 'upload' | 'organize' | 'delete';
 
@@ -44,8 +45,5 @@ export function requireFileStoreAction(requester: McpRequester | undefined, acti
 
 /** Restricted file types are for administrators; bootstrap (no credentials configured) is the local administrator. */
 export function canStoreAnyFileType(requester: McpRequester | undefined): boolean {
-  const id = requester?.accountId ?? null;
-  if (id === null) return !hasConfiguredAuth();
-  const account = AuthAccount.findById(id);
-  return account?.status === 'active' && account.account_type === 'admin';
+  return isRequesterAdmin(requester ?? { accountId: null, accountType: null });
 }

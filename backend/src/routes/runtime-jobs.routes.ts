@@ -1,3 +1,4 @@
+import { isAdminRequest } from './requester-session-helpers';
 import { Router, Request, Response } from 'express';
 import { errorResponse, successResponse } from '@conai/shared';
 import { asyncHandler } from '../middleware/asyncHandler';
@@ -16,9 +17,6 @@ function resolveRequestAccountId(req: Request): number | null {
   return typeof accountId === 'number' ? accountId : null;
 }
 
-function isAdminRequest(req: Request): boolean {
-  return req.session?.accountType === 'admin';
-}
 
 /**
  * 잡 조회/취소 접근 제어.

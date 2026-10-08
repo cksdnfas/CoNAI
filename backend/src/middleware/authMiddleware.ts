@@ -7,7 +7,7 @@ import {
   markSessionAccessCacheFresh,
   setTrustedBootstrapSession,
 } from '../routes/auth-route-helpers';
-import { AuthAccessControlService, getResolvedAuthAccessEpoch } from '../services/authAccessControlService';
+import { AuthAccessControlService, getResolvedAuthAccessEpoch, isActiveAdminAccount, isActiveAdminRecord } from '../services/authAccessControlService';
 import { isDirectLoopbackRequest } from '../utils/bootstrapAccess';
 
 /** Keep trusted bootstrap mode on the local console only. */
@@ -59,7 +59,7 @@ export const requireAdmin = (req: Request, res: Response, next: NextFunction): v
   const accountId = req.session.accountId;
   if (typeof accountId === 'number') {
     const account = AuthAccount.findById(accountId);
-    if (account?.account_type === 'admin' && account.status === 'active') {
+    if (account && isActiveAdminRecord(account)) {
       req.session.accountType = 'admin';
       req.session.username = account.username;
       next();
@@ -89,8 +89,7 @@ export function hasAdminAccess(req: Request): boolean {
     return false;
   }
 
-  const account = AuthAccount.findById(accountId);
-  return account?.account_type === 'admin' && account.status === 'active';
+  return isActiveAdminAccount(accountId);
 }
 
 /**
