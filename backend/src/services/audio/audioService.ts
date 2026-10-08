@@ -199,6 +199,7 @@ export async function deleteAudioProject(id: string): Promise<{ deleted: true; r
     SELECT DISTINCT c.file_hash FROM audio_candidates c JOIN audio_groups g ON g.id = c.group_id WHERE g.project_id = ?
   `).all(project.id) as Array<{ file_hash: string }>;
   const snapshot = snapshotCandidatesForRelease(hashes.map((row) => row.file_hash));
+  await cancelOrdersOf((db().prepare('SELECT id FROM audio_groups WHERE project_id = ?').all(project.id) as Array<{ id: string }>).map((row) => row.id));
   db().prepare('DELETE FROM audio_projects WHERE id = ?').run(project.id);
   const released = await releaseUnreferencedAudioBlobs(hashes.map((row) => row.file_hash), snapshot);
   return { deleted: true, released: released.released };
@@ -293,6 +294,12 @@ export function updateAudioGroup(id: string, input: { name?: unknown; label?: un
   return getAudioGroup(current.id);
 }
 
+/** Queued or running generation of these groups' orders stops before the order rows cascade away. */
+async function cancelOrdersOf(groupIds: string[]): Promise<void> {
+  const { cancelAudioOrdersInGroups } = await import('./audioOrders');
+  await cancelAudioOrdersInGroups(groupIds);
+}
+
 /** Delete a group with its candidates and comments (never the inbox); unused blobs go to the RecycleBin. */
 export async function deleteAudioGroup(id: string): Promise<{ deleted: true; released: number }> {
   const group = getAudioGroup(id);
@@ -300,6 +307,7 @@ export async function deleteAudioGroup(id: string): Promise<{ deleted: true; rel
   const hashes = (db().prepare('SELECT DISTINCT file_hash FROM audio_candidates WHERE group_id = ?').all(group.id) as Array<{ file_hash: string }>)
     .map((row) => row.file_hash);
   const snapshot = snapshotCandidatesForRelease(hashes);
+  await cancelOrdersOf([group.id]);
   db().prepare('DELETE FROM audio_groups WHERE id = ?').run(group.id);
   const released = await releaseUnreferencedAudioBlobs(hashes, snapshot);
   return { deleted: true, released: released.released };
@@ -446,6 +454,8 @@ interface CandidateInsert {
   sourceKey?: string | null;
   parentId?: string | null;
   provenance?: unknown;
+  orderId?: string | null;
+  jobId?: number | null;
 }
 
 function insertCandidate(input: CandidateInsert): AudioCandidate {
@@ -457,11 +467,17 @@ function insertCandidate(input: CandidateInsert): AudioCandidate {
   const at = now();
   db().prepare(`
     INSERT INTO audio_candidates (id, group_id, file_hash, parent_id, origin, name, review, notes, provenance_json, source_key,
-      created_by_account_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, 'pending', '', ?, ?, ?, ?, ?)
+      order_id, job_id, created_by_account_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, 'pending', '', ?, ?, ?, ?, ?, ?, ?)
   `).run(id, input.groupId, input.file.hash, input.parentId ?? null, input.origin, input.name,
-    input.provenance === undefined ? null : JSON.stringify(input.provenance), input.sourceKey ?? null, input.accountId, at, at);
+    input.provenance === undefined ? null : JSON.stringify(input.provenance), input.sourceKey ?? null,
+    input.orderId ?? null, input.jobId == null ? null : String(input.jobId), input.accountId, at, at);
   return getAudioCandidate(id);
+}
+
+/** A generation result of an audio order (already ingested). `sourceKey` makes a re-collected output a no-op. */
+export function registerGeneratedAudioCandidate(input: Omit<CandidateInsert, 'origin' | 'parentId'>): AudioCandidate {
+  return insertCandidate({ ...input, origin: 'generated' });
 }
 
 /** Register an uploaded (multer-staged) file as a new candidate. The staged file is consumed. */
