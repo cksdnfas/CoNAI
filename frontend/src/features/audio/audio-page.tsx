@@ -353,6 +353,7 @@ export function AudioPage() {
       key={selected.id}
       candidate={selected}
       canEdit={permissions.canEdit}
+      showHeader={isDesktop}
       onClose={() => setSelectedId(null)}
       onSaved={(created) => {
         refreshAll()

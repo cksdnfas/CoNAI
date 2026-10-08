@@ -314,7 +314,7 @@ export function AudioCommentsDialog({ open, group, canEdit, onClose, onChanged }
 export function TextTabs<T extends string>({ value, items, onChange, className }: { value: T; items: Array<[T, string, number?]>; onChange: (value: T) => void; className?: string }) {
   return (
     <Tabs value={value} onValueChange={(next) => onChange(next as T)}>
-      <TabsList className={cn(TEXT_TAB_LIST_CLASS, 'overflow-x-auto', className)}>
+      <TabsList className={cn(TEXT_TAB_LIST_CLASS, className)}>
         {items.map(([id, label, count]) => (
           <TabsTrigger key={id} value={id} className={cn(TEXT_TAB_TRIGGER_CLASS, 'shrink-0')}>
             {label}

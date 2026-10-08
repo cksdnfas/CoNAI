@@ -47,8 +47,10 @@ function provenanceRows(candidate: AudioCandidate, t: ReturnType<typeof useI18n>
 type DragMode = { kind: 'start' | 'end' | 'move' | 'new'; originX: number; originStart: number; originEnd: number } | null
 
 /** The right-hand editor: region on the waveform, gain/pitch/speed/fades, region play, server preview, save as a new take. */
-export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, className }: {
+export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, className, showHeader = true }: {
   candidate: AudioCandidate
+  /** Off inside the narrow-screen sheet, which has its own title and close. */
+  showHeader?: boolean
   canEdit: boolean
   onClose: () => void
   onSaved: (created: AudioCandidate) => void
@@ -189,10 +191,12 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
 
   return (
     <div className={cn('flex flex-col gap-4', className)}>
-      <div className="flex items-center gap-2">
-        <h2 className="min-w-0 flex-1 truncate text-sm font-bold">{candidate.name}</h2>
-        <IconButton variant="ghost" size="icon-sm" label={t({ ko: '닫기', en: 'Close' })} onClick={onClose}><X /></IconButton>
-      </div>
+      {showHeader ? (
+        <div className="flex items-center gap-2">
+          <h2 className="min-w-0 flex-1 truncate text-sm font-bold">{candidate.name}</h2>
+          <IconButton variant="ghost" size="icon-sm" label={t({ ko: '닫기', en: 'Close' })} onClick={onClose}><X /></IconButton>
+        </div>
+      ) : null}
 
       <div
         className="relative h-24 cursor-crosshair touch-none select-none rounded-sm bg-foreground/[0.03]"

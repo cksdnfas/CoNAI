@@ -46,15 +46,23 @@ export function formatSeconds(value: number | null | undefined) {
   return value === null || value === undefined ? '—' : `${value.toFixed(2)}s`
 }
 
+const pad = (value: number) => String(value).padStart(2, '0')
+
+/** Short local time like the original list: `10-08 14:02`. */
+export function shortTime(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '' : `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 function signed(value: number, digits = 1) {
   return `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(value).toFixed(digits)}`
 }
 
 /** Second line of a row: seed and time for generated takes, the edit for edits, "업로드" for uploads. */
 function useRowDetail() {
-  const { t, formatDateTime } = useI18n()
+  const { t } = useI18n()
   return (candidate: AudioCandidate) => {
-    const when = formatDateTime(candidate.created_at, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    const when = shortTime(candidate.created_at)
     const edit = candidate.edit
     if (candidate.origin === 'edited' && edit) {
       const parts = [`${(edit.start ?? 0).toFixed(2)}–${edit.end !== undefined ? edit.end.toFixed(2) : '…'}s`]
@@ -164,7 +172,7 @@ export function AudioOrderRow({ order, canEdit, onCancel, onRetry, onDismiss }: 
   onRetry: () => void
   onDismiss: () => void
 }) {
-  const { t, formatDateTime } = useI18n()
+  const { t } = useI18n()
   const active = activeJobCount(order)
   const failed = order.jobs.filter((job) => job.status === 'failed')
   const waiting = order.jobs.filter((job) => job.status === 'pending' || job.status === 'queued').length
@@ -182,7 +190,7 @@ export function AudioOrderRow({ order, canEdit, onCancel, onRetry, onDismiss }: 
           {active > 0 ? t({ ko: '생성 중 {count}개', en: 'Generating {count}' }, { count: active }) : t({ ko: '실패 {count}개', en: '{count} failed' }, { count: failed.length })}
         </p>
         <p className="truncate font-mono text-2xs text-muted-foreground" title={failed[0]?.failure_message ?? undefined}>
-          {active === 0 && failed[0]?.failure_message ? failed[0].failure_message : `${meta} · ${formatDateTime(order.created_at, { hour: '2-digit', minute: '2-digit' })}`}
+          {active === 0 && failed[0]?.failure_message ? failed[0].failure_message : `${meta} · ${shortTime(order.created_at)}`}
         </p>
       </div>
       <span className="hidden sm:block" />
