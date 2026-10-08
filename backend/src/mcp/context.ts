@@ -56,10 +56,12 @@ export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'wait_audio_or
 export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'propose_page_changes', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes', 'read_page_data', 'propose_page_action']);
 
 /**
- * Workspace pages that come with their own tools: while such a page is connected, its tools stay offered next to the
- * page tools (the account still needs each tool's feature keys). Review and deletion of a take never have a tool.
+ * Tools a connected page of one kind adds to the page tools: the sprite page works through its own engine tools, so
+ * connecting it must not hide them. The audio page adds its workspace tools; reviewing or deleting a single take never has
+ * a tool. The account's feature keys still apply to each call.
  */
 export const CHAT_PAGE_KIND_TOOLS: Partial<Record<string, ReadonlySet<string>>> = {
+  sprite: new Set(['get_video_info', 'get_sprite_job', 'extract_sprite_sheet', 'extract_sprite_sheets_batch', 'normalize_sprite_sheets', 'create_sprite_animation', 'download_sprite_frames']),
   audio: new Set([
     'list_audio_projects', 'list_audio_groups', 'list_audio_candidates', 'get_audio_candidate', 'list_audio_group_comments',
     'create_audio_project', 'update_audio_project', 'create_audio_group', 'update_audio_group', 'move_audio_candidates', 'import_audio',
@@ -72,7 +74,7 @@ export const CHAT_PAGE_KIND_TOOLS: Partial<Record<string, ReadonlySet<string>>> 
 export function isConnectedChatPageTool(context: McpRequestContext, toolName: string) {
   const page = context.chatContext?.page;
   return isChatMcpSource(context.source) && context.chatContext?.kind === 'direct' && !!page
-    && (CHAT_PAGE_TOOLS.has(toolName) || CHAT_PAGE_KIND_TOOLS[page.kind]?.has(toolName) === true);
+    && (CHAT_PAGE_TOOLS.has(toolName) || Boolean(CHAT_PAGE_KIND_TOOLS[page.kind]?.has(toolName)));
 }
 
 /** Chat agents must not spend paid NovelAI multi-sample generations on their own; one image per request is free. */
