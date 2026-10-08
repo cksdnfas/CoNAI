@@ -16,7 +16,7 @@ import { CodexAppServerClient, type CodexAppServerNotification } from './codexAp
 import { prepareChatRuntime, parseChatFeatureInventory, chatRuntimeArgs, chatTurnRestrictions, verifyChatRuntime } from './codexChatRuntime'
 import { ChatProfileStore, chatGreetings, pickChatGreeting, type ChatProfile } from './chatProfiles'
 import { loadChatSettings, type ChatScope } from './chatSettings'
-import { resolveChatProfileToolGrant, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken, setCodexChatExecution } from './codexChatAccess'
+import { canUseChatProfile, resolveChatProfileToolGrant, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken, setCodexChatExecution } from './codexChatAccess'
 import { chatPageReference, parseChatPageContext } from './chatPageContext'
 import { attachJobResults, collectCodexChatMedia } from './codexChatMedia'
 import { canRequesterViewImages } from '../../middleware/imageAccess'
@@ -517,14 +517,17 @@ function assertChatAvailable(requester: McpRequester) {
   }
 }
 
-/** The enabled Codex profile a Codex chat runs with. */
-function requireCodexProfile(profileId: number | null) {
+/** The enabled Codex profile a Codex chat runs with, when this account may use it. */
+function requireCodexProfile(profileId: number | null, requester: McpRequester) {
   const profile = profileId === null ? null : ChatProfileStore.find(profileId)
   if (!profile || profile.engine !== 'codex') {
     throw new CodexChatError('이 채팅의 프로필이 지워졌어.', 409)
   }
   if (!profile.isEnabled) {
     throw new CodexChatError('이 채팅의 프로필이 꺼져 있어.', 409)
+  }
+  if (!canUseChatProfile(resolveChatAccess(requester.accountId), profile)) {
+    throw new CodexChatError('이 프로필로 채팅할 권한이 없어.', 403)
   }
   return profile
 }
@@ -810,7 +813,7 @@ export async function runCodexGroupReply(params: {
         ], splitTurns(missed).filter((turn) => !turn.some((message) => shown.some((entry) => entry.id === message.id))).length)
         turn.contextMeta.model = run.model ?? null
         assertChatAvailable(requester)
-        requireCodexProfile(profile.id)
+        requireCodexProfile(profile.id, requester)
         await verifyChatRuntime(session.client, session.features, session.runtime.cwd, process.env.PORT || String(PORTS.BACKEND_DEFAULT))
         const body = {
           threadId: codexThreadId,
@@ -861,7 +864,7 @@ export const CodexChatService = {
     let session: Session | null = null
     let codexThreadId: string | null = null
     try {
-      const profile = requireCodexProfile(thread.profile_id)
+      const profile = requireCodexProfile(thread.profile_id, requester)
       const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
       session = await ensureSession(requester, scopes, toolAllowlist, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct' })
       codexThreadId = await ensureCodexThread(session, thread.codex_thread_id, profile, (id) => CodexChatStore.setCodexThreadId(threadId, id))
@@ -965,7 +968,7 @@ export const CodexChatService = {
     let profile: ChatProfile
     if (found?.engine === 'codex') {
       assertChatAvailable(requester)
-      requireCodexProfile(found.id)
+      requireCodexProfile(found.id, requester)
       profile = found
     } else {
       profile = LlmChatService.requireStartableProfile(requester, profileId)
@@ -987,7 +990,7 @@ export const CodexChatService = {
       return requireThread(requester, LlmChatService.createThread(requester, profileId, user?.id ?? null, greetingIndex))
     }
     assertChatAvailable(requester)
-    requireCodexProfile(profile.id)
+    requireCodexProfile(profile.id, requester)
     const id = CodexChatStore.createThread(requester.accountId, '', 'codex', profile.id)
     if (user) ChatUserProfileStore.setThreadUserProfile(id, user.id)
     addChatGreeting(id, profile, userPersonaOf(user), greetingIndex)
@@ -1100,7 +1103,7 @@ export const CodexChatService = {
 
     startingThreads.add(threadId)
     try {
-      const profile = requireCodexProfile(thread.profile_id)
+      const profile = requireCodexProfile(thread.profile_id, requester)
       const page = parseChatPageContext(pageContext, requester)
       const routing = userReplyRouting(thread, replyToMessageId)
       const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
@@ -1172,7 +1175,7 @@ export const CodexChatService = {
         ])
         turn.contextMeta.model = run.model ?? null
         assertChatAvailable(requester)
-        requireCodexProfile(profile.id)
+        requireCodexProfile(profile.id, requester)
         await verifyChatRuntime(session.client, session.features, session.runtime.cwd, process.env.PORT || String(PORTS.BACKEND_DEFAULT))
         const body = {
           threadId: codexThreadId,

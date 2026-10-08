@@ -850,6 +850,12 @@ export function createUserSettingsSchema(db: Database.Database): void {
     db.exec('ALTER TABLE llm_chat_profiles ADD COLUMN tool_preset_id INTEGER');
     migrateProfileToolsToPresets(db);
   }
+  // Profiles gained an access list and tool presets became templates: the column arriving is the one-time signal
+  // to copy each linked preset's tools into its profile and drop the link.
+  if (!hasColumn('llm_chat_profiles', 'allowed_group_keys')) {
+    db.exec('ALTER TABLE llm_chat_profiles ADD COLUMN allowed_group_keys TEXT');
+    copyLinkedToolPresetsIntoProfiles(db);
+  }
 
   // Migrate workflows table
   if (!hasColumn('workflows', 'is_public_page')) {
@@ -1380,6 +1386,20 @@ export function createUserSettingsSchema(db: Database.Database): void {
 
   console.log('  ✅ User settings tables created (19 tables + indexes)');
 
+}
+
+/** A linked preset's scopes and tools become the profile's own; a missing preset leaves no tools, as it did when linked. */
+function copyLinkedToolPresetsIntoProfiles(db: Database.Database): void {
+  db.transaction(() => {
+    db.prepare(`
+      UPDATE llm_chat_profiles SET
+        mcp_scopes = COALESCE((SELECT scopes FROM chat_tool_presets WHERE id = tool_preset_id), mcp_scopes),
+        tool_allowlist = CASE WHEN EXISTS (SELECT 1 FROM chat_tool_presets WHERE id = tool_preset_id)
+          THEN (SELECT tool_allowlist FROM chat_tool_presets WHERE id = tool_preset_id) ELSE '[]' END,
+        tool_preset_id = NULL
+      WHERE tool_preset_id IS NOT NULL
+    `).run();
+  })();
 }
 
 /**

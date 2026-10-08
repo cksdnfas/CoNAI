@@ -515,7 +515,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       const view = JSON.parse(text(await bridge.call('get_chat_profile', {})))
       assert.equal(view.systemPrompt, 'old prompt')
       assert.equal(typeof view.mcpEnabled, 'boolean')
-      for (const forbidden of ['mcpScopes', 'toolAllowlist', 'toolPresetId', 'providerName', 'model', 'engine', 'background', 'avatar', 'generationPresetIds']) assert.equal(forbidden in view, false, forbidden)
+      for (const forbidden of ['mcpScopes', 'toolAllowlist', 'allowedGroupKeys', 'providerName', 'model', 'engine', 'background', 'avatar', 'generationPresetIds']) assert.equal(forbidden in view, false, forbidden)
       const blocks = JSON.parse(text(await bridge.call('list_display_blocks', {})))
       assert.deepEqual(blocks.map((row: { key: string }) => row.key), ['status'])
       assert.deepEqual(blocks[0].profiles, [{ id: profile.id, name: 'Mina' }])

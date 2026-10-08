@@ -45,6 +45,9 @@ export type ChatAccess = {
    */
   scopes: ChatScope[]
   diagnostics: ChatDiagnosticsScope
+  isAdmin: boolean
+  /** The account's permission groups (inherited ones included), for profiles limited to some groups. */
+  groupKeys: string[]
 }
 
 /**
@@ -53,6 +56,7 @@ export type ChatAccess = {
  */
 export function resolveChatAccess(accountId: number | null): ChatAccess {
   let permissionKeys: string[]
+  let groupKeys: string[] = []
   let isAdmin: boolean
   if (accountId === null) {
     isAdmin = !hasConfiguredAuth()
@@ -60,7 +64,9 @@ export function resolveChatAccess(accountId: number | null): ChatAccess {
   } else {
     const account = AuthAccount.findById(accountId)
     isAdmin = account?.status === 'active' && account.account_type === 'admin'
-    permissionKeys = account?.status === 'active' ? AuthAccessControlService.resolveForAccountId(accountId).permissionKeys : []
+    const resolved = account?.status === 'active' ? AuthAccessControlService.resolveForAccountId(accountId) : null
+    permissionKeys = resolved?.permissionKeys ?? []
+    groupKeys = resolved?.groupKeys ?? []
   }
 
   const has = (key: string) => permissionKeys.includes(key)
@@ -70,7 +76,18 @@ export function resolveChatAccess(accountId: number | null): ChatAccess {
     llm: has(CHAT_PERMISSION_KEYS.llm),
     scopes: CHAT_SCOPES.filter((scope) => scope !== 'configure' || isAdmin),
     diagnostics: loadChatSettings().diagnostics.enabled ? diagnosticsScopeOf(permissionKeys, isAdmin) : 'none',
+    isAdmin,
+    groupKeys,
   }
+}
+
+/**
+ * Whether the account may chat with this profile: the engine's key, and membership in one of the profile's groups when
+ * it names any. Administrators always may. Whether the profile is switched on is the caller's own check.
+ */
+export function canUseChatProfile(access: ChatAccess, profile: Pick<ChatProfile, 'engine' | 'allowedGroupKeys'>): boolean {
+  const engine = profile.engine === 'codex' ? access.codex : profile.engine === 'claude' ? access.claude : access.llm
+  return engine && (access.isAdmin || profile.allowedGroupKeys.length === 0 || profile.allowedGroupKeys.some((key) => access.groupKeys.includes(key)))
 }
 
 /** A chat's configured scopes, narrowed to what the chatting account may use. */
@@ -100,7 +117,7 @@ export function requireChatMcpAccountAccess(context: McpRequestContext, toolName
   const chat = context.chatContext
   const profile = chat ? ChatProfileStore.find(chat.profileId) : null
   const thread = chat ? CodexChatStore.findThread(chat.threadId, context.requester.accountId) : null
-  if (!chat || !profile?.isEnabled || (context.source === 'codex-chat' ? profile.engine !== 'codex' : profile.engine !== 'llm' && profile.engine !== 'claude') || !thread
+  if (!chat || !profile?.isEnabled || (context.source === 'codex-chat' ? profile.engine !== 'codex' : profile.engine !== 'llm' && profile.engine !== 'claude') || !canUseChatProfile(access, profile) || !thread
     || (chat.kind === 'group' ? !ChatGroupStore.member(chat.threadId, chat.profileId) : thread.profile_id !== chat.profileId)) {
     throw new Error('이 채팅의 프로필 또는 방 접근 권한이 변경됐어.')
   }

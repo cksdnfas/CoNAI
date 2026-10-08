@@ -31,7 +31,7 @@ const EMPTY: ChatToolPresetInput = { name: '', scopes: ['read'], toolAllowlist: 
 
 /**
  * Create or edit one tool preset: name, scopes and the tools within them. Saving reaches every profile that links it.
- * `onSaved` hands the saved preset back (the profile editor links a preset made from inside it).
+ * `onSaved` hands the saved preset back.
  */
 export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSaved, onDuplicate, duplicating }: {
   open: boolean
@@ -81,11 +81,6 @@ export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSa
   })
 
   const handleDelete = async () => {
-    const linked = preset?.profiles.length ?? 0
-    if (linked > 0) {
-      showSnackbar({ message: t({ ko: '프로필 {count}개가 쓰는 중이야. 먼저 그 프로필의 프리셋을 바꿔줘.', en: 'Used by {count} profiles. Change their preset first.' }, { count: linked }), tone: 'error' })
-      return
-    }
     const confirmed = await confirm({
       title: t({ ko: '도구 프리셋 삭제', en: 'Delete tool preset' }),
       description: t({ ko: '이 도구 프리셋을 지울까?', en: 'Delete this tool preset?' }),

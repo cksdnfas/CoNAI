@@ -63,7 +63,8 @@ function LinkedProfiles({ profiles }: { profiles: Array<{ id: number; name: stri
 }
 
 /** Meta line of a resource row: one fact about it, then who uses it. */
-function resourceMeta(fact: ReactNode, profiles: Array<{ id: number; name: string }>) {
+function resourceMeta(fact: ReactNode, profiles?: Array<{ id: number; name: string }>) {
+  if (!profiles) return fact
   return (
     <>
       {fact}
@@ -221,7 +222,7 @@ export function ChatSettingsResources() {
             key={preset.id}
             leading={<Wrench className={KIND_CLASS.tool} />}
             name={preset.name}
-            meta={resourceMeta(preset.toolAllowlist === null ? t({ ko: '모든 도구', en: 'Every tool' }) : t({ ko: '도구 {count}', en: '{count} tools' }, { count: preset.toolAllowlist.length }), preset.profiles)}
+            meta={resourceMeta(preset.toolAllowlist === null ? t({ ko: '모든 도구', en: 'Every tool' }) : t({ ko: '도구 {count}', en: '{count} tools' }, { count: preset.toolAllowlist.length }))}
             onOpen={() => setPresetEditor({ preset })}
           />
         ))}

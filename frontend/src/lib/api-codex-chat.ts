@@ -466,14 +466,13 @@ export interface ChatSharedBlock {
 /** The file a block exports as; import also takes a bare block or an array of either. */
 export const CHAT_BLOCK_FILE_MARK = 'conai_display_block'
 
-/** A tool preset (MCP scopes + tool allowlist); profiles link one by id, so editing it reaches every linked profile. */
+/** A tool preset (MCP scopes + tool allowlist) to load into a profile; loading copies it, so the preset can change freely. */
 export interface ChatToolPreset {
   id: number
   name: string
   scopes: ChatScope[]
   /** Only these tools; null offers every tool the scopes allow. */
   toolAllowlist: string[] | null
-  profiles: Array<{ id: number; name: string }>
   createdDate: string
   updatedDate: string
 }
@@ -568,13 +567,10 @@ export interface ChatProfile extends ChatProfileAssetFields {
   temperature: number | null
   maxTokens: number | null
   mcpEnabled: boolean
-  /** The shared tool preset whose scopes and tools apply; null keeps the profile's own scopes and allowlist. */
-  toolPresetId: number | null
-  /** Read-only: the linked preset's name. */
-  toolPresetName?: string | null
-  /** With a preset: the preset's scopes (read-only). Without: the profile's own. */
+  /** Permission groups whose accounts may chat with this profile; empty means everyone with the engine's permission. Administrators always may. */
+  allowedGroupKeys: string[]
   mcpScopes: ChatScope[]
-  /** Only these tools; null offers every tool the scopes allow. With a preset: the preset's list (read-only). */
+  /** Only these tools; null offers every tool the scopes allow. */
   toolAllowlist: string[] | null
   /** Generation presets the profile draws with; any linked withholds free-form generation and workflow lookups. */
   generationPresetIds: number[]

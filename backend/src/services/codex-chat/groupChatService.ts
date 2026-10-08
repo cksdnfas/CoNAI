@@ -16,7 +16,7 @@ import { ChatUserProfileStore, userPersonaForThread, type ChatUserProfile } from
 import { loadChatSettings } from './chatSettings'
 import { limitContextMeta, legacyContextMeta } from './chatContextDiagnostics'
 import { saveChatRequestCapture } from './chatRequestCaptures'
-import { resolveChatAccess } from './codexChatAccess'
+import { canUseChatProfile, resolveChatAccess } from './codexChatAccess'
 import { CodexChatError, CodexChatService, deleteCodexRollout, runCodexGroupReply, type CodexChatStreamEvent } from './codexChatService'
 import { CodexChatStore, type ChatBranchPurpose, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import { withGenerationOutcomes } from './codexChatMedia'
@@ -107,7 +107,7 @@ function memberProfiles(threadId: number) {
 function assertJoinable(requester: McpRequester, profiles: ChatProfile[], existing: ChatProfile[] = []) {
   const access = assertGroupChatAvailable(requester)
   for (const profile of profiles) {
-    if (!profile.isEnabled || !(profile.engine === 'codex' ? access.codex : profile.engine === 'claude' ? access.claude : access.llm)) throw new CodexChatError(`${profile.name} 프로필은 지금 쓸 수 없어.`, 409)
+    if (!profile.isEnabled || !canUseChatProfile(access, profile)) throw new CodexChatError(`${profile.name} 프로필은 지금 쓸 수 없어.`, 409)
   }
   const all = [...existing, ...profiles]
   if (all.length > GROUP_MEMBER_MAX) throw new CodexChatError(`참가자는 ${GROUP_MEMBER_MAX}명까지야.`)
@@ -133,7 +133,7 @@ function userRecipients(requester: McpRequester, thread: CodexChatThreadRecord, 
   const access = assertGroupChatAvailable(requester)
   for (const id of ids) {
     const member = members.find((entry) => entry.id === id)
-    if (!member?.isEnabled || !(member.engine === 'codex' ? access.codex : member.engine === 'claude' ? access.claude : access.llm)) throw new CodexChatError('답장 받을 참가자가 없거나 지금 응답할 수 없어. 수신자를 다시 지정해줘.', 409)
+    if (!member?.isEnabled || !canUseChatProfile(access, member)) throw new CodexChatError('답장 받을 참가자가 없거나 지금 응답할 수 없어. 수신자를 다시 지정해줘.', 409)
   }
   return ids as number[]
 }
@@ -169,7 +169,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     for (const id of next) {
       const member = memberProfiles(run.threadId).find((entry) => entry.id === id)
       if (id === profile.id) throw new CodexChatError('자기 자신에게는 자동 답장을 보낼 수 없어.')
-      if (!member?.isEnabled || !(member.engine === 'codex' ? access.codex : member.engine === 'claude' ? access.claude : access.llm)) throw new CodexChatError('답장 받을 참가자가 없거나 지금 응답할 수 없어.', 409)
+      if (!member?.isEnabled || !canUseChatProfile(access, member)) throw new CodexChatError('답장 받을 참가자가 없거나 지금 응답할 수 없어.', 409)
     }
     const others = [...run.reserved].reduce((sum, [id, targets]) => sum + (id === replyId ? 0 : targets.length), 0)
     if (next.length && (!run.chain || run.chainUsed + others + next.length > run.chainLimit)) throw new CodexChatError('이어 말하기 한도에 도달해서 참가자를 부르지 못했어. 사용자 차례로 돌아갈게.', 409)

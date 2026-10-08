@@ -4,9 +4,8 @@ import { ChatProfileError } from './chatProfileError'
 import { CHAT_SCOPES, type ChatScope } from './chatSettings'
 
 /**
- * A tool preset: a named MCP grant (scopes + optional tool allowlist) kept on its own, so chat profiles link it by id
- * the way they link lorebooks and display blocks. Editing the preset reaches every linked profile; a profile without
- * a preset keeps its own scopes and allowlist ("direct" setup).
+ * A tool preset: a named MCP setup (scopes + optional tool allowlist) to load into a profile. Loading copies it, so
+ * editing or deleting the preset never changes a profile.
  */
 export type ChatToolPreset = {
   id: number
@@ -14,8 +13,6 @@ export type ChatToolPreset = {
   scopes: ChatScope[]
   /** Only these tools (within the scopes); null offers every tool the scopes allow. */
   toolAllowlist: string[] | null
-  /** Profiles that link this preset. */
-  profiles: Array<{ id: number; name: string }>
   createdDate: string
   updatedDate: string
 }
@@ -59,18 +56,14 @@ function presetName(value: unknown) {
   return name
 }
 
-function linkedProfiles() {
-  return getUserSettingsDb().prepare('SELECT id, name, tool_preset_id FROM llm_chat_profiles WHERE tool_preset_id IS NOT NULL ORDER BY sort_order ASC, id ASC').all() as Array<{ id: number; name: string; tool_preset_id: number }>
-}
-
-function toPreset(row: PresetRow, profiles: ReturnType<typeof linkedProfiles>): ChatToolPreset {
+/** A preset is a template: loading it copies its scopes and tools into a profile, which keeps them after the preset changes. */
+function toPreset(row: PresetRow): ChatToolPreset {
   const scopes = normalizePresetScopes(row.scopes)
   return {
     id: row.id,
     name: row.name,
     scopes,
     toolAllowlist: normalizePresetAllowlist(row.tool_allowlist, scopes),
-    profiles: profiles.filter((profile) => profile.tool_preset_id === row.id).map(({ id, name }) => ({ id, name })),
     createdDate: row.created_date,
     updatedDate: row.updated_date,
   }
@@ -79,30 +72,12 @@ function toPreset(row: PresetRow, profiles: ReturnType<typeof linkedProfiles>): 
 export const ChatToolPresetStore = {
   list() {
     const rows = getUserSettingsDb().prepare('SELECT * FROM chat_tool_presets ORDER BY name COLLATE NOCASE ASC, id ASC').all() as PresetRow[]
-    const profiles = linkedProfiles()
-    return rows.map((row) => toPreset(row, profiles))
+    return rows.map(toPreset)
   },
 
   find(presetId: number) {
     const row = getUserSettingsDb().prepare('SELECT * FROM chat_tool_presets WHERE id = ?').get(presetId) as PresetRow | undefined
-    return row ? toPreset(row, linkedProfiles()) : null
-  },
-
-  /** The grant a preset gives, or null when the preset is gone (the profile then falls back to its own columns). */
-  grantOf(presetId: number | null): { scopes: ChatScope[]; toolAllowlist: string[] | null } | null {
-    if (presetId === null) return null
-    const row = getUserSettingsDb().prepare('SELECT scopes, tool_allowlist FROM chat_tool_presets WHERE id = ?').get(presetId) as Pick<PresetRow, 'scopes' | 'tool_allowlist'> | undefined
-    if (!row) return null
-    const scopes = normalizePresetScopes(row.scopes)
-    return { scopes, toolAllowlist: normalizePresetAllowlist(row.tool_allowlist, scopes) }
-  },
-
-  /** The id when that preset exists, else null. */
-  existing(presetId: unknown): number | null {
-    const id = Number(presetId)
-    if (!Number.isSafeInteger(id) || id <= 0) return null
-    const row = getUserSettingsDb().prepare('SELECT id FROM chat_tool_presets WHERE id = ?').get(id) as { id: number } | undefined
-    return row ? row.id : null
+    return row ? toPreset(row) : null
   },
 
   create(input: { name?: unknown; scopes?: unknown; toolAllowlist?: unknown }) {
@@ -127,13 +102,8 @@ export const ChatToolPresetStore = {
     return ChatToolPresetStore.find(presetId)
   },
 
-  /** A preset in use cannot go: the profiles would silently lose their tools. Unlink them (or pick another) first. */
+  /** Profiles keep the tools they loaded, so a preset can always go. */
   delete(presetId: number) {
-    const current = ChatToolPresetStore.find(presetId)
-    if (!current) return false
-    if (current.profiles.length > 0) {
-      throw new ChatProfileError(`프로필 ${current.profiles.length}개가 이 프리셋을 쓰고 있어. 먼저 그 프로필의 프리셋을 바꿔줘.`)
-    }
     return getUserSettingsDb().prepare('DELETE FROM chat_tool_presets WHERE id = ?').run(presetId).changes > 0
   },
 }

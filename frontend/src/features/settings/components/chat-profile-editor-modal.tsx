@@ -80,7 +80,7 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     temperature: profile?.temperature ?? null,
     maxTokens: profile?.maxTokens ?? null,
     mcpEnabled: profile?.mcpEnabled ?? false,
-    toolPresetId: profile?.toolPresetId ?? null,
+    allowedGroupKeys: profile?.allowedGroupKeys ?? [],
     generationPresetIds: profile?.generationPresetIds ?? [],
     mcpScopes: profile?.mcpScopes ?? ['read'],
     toolAllowlist: profile?.toolAllowlist ?? null,

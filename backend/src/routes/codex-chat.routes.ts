@@ -17,7 +17,7 @@ import { EmoticonService } from '../services/emoticonService'
 import { serveThumbnailOrOriginal, streamCacheableFile, streamRangeFile } from './images/query-file-helpers'
 import { ImageFileModel } from '../models/Image/ImageFileModel'
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel'
-import { resolveChatAccess, resolveChatProfileToolGrant } from '../services/codex-chat/codexChatAccess'
+import { canUseChatProfile, resolveChatAccess, resolveChatProfileToolGrant } from '../services/codex-chat/codexChatAccess'
 import { getMcpToolScope } from '../mcp/context'
 import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
 import { buildCodexInstructions, CODEX_COMPACT_TOKENS, CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
@@ -115,7 +115,7 @@ function sendChatError(res: Response, error: unknown) {
 function chatAccessOf(req: Request) {
   const access = resolveChatAccess(getRequesterAccountId(req))
   const enabled = loadChatSettings().enabled
-  return { codex: enabled && access.codex, llm: enabled && access.llm, claude: enabled && access.claude, scopes: access.scopes }
+  return { ...access, codex: enabled && access.codex, llm: enabled && access.llm, claude: enabled && access.claude }
 }
 
 function requireChatAccess(req: Request, res: Response, next: NextFunction) {
@@ -194,7 +194,7 @@ router.get('/profiles', requireChatAccess, (req: Request, res: Response) => {
     success: true,
     data: ChatProfileStore.list().map((profile) => ({
       ...toPublicProfile(profile, accountId),
-      usable: profile.isEnabled && (profile.engine === 'codex' ? access.codex : profile.engine === 'claude' ? access.claude : access.llm),
+      usable: profile.isEnabled && canUseChatProfile(access, profile),
       canReadFileText: profile.mcpEnabled && profile.mcpScopes.includes('read') && access.scopes.includes('read') && (!profile.toolAllowlist || profile.toolAllowlist.includes('read_file_text')),
     })),
   })

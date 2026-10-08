@@ -6,7 +6,7 @@ import { BACKGROUND_MAX_LENGTH, BACKGROUND_PATTERN, normalizeChatStyle, type Cha
 import { ChatLorebookStore, normalizeLorebookIds } from './chatLorebook'
 import { ChatSharedBlockStore, normalizeBlockIds } from './chatDisplayBlocks'
 import { ChatProfileError } from './chatProfileError'
-import { ChatToolPresetStore } from './chatToolPresets'
+import { AuthPermissionGroup } from '../../models/AuthPermissionGroup'
 import { ChatGenerationPresetStore, normalizeGenerationPresetIds } from './chatGenerationPresets'
 import { ModelSlotStore } from './modelSlots'
 import { fileProfileAssetsUnderGroup, normalizeAvatarCrop, normalizeProfileAssetHash, type ChatAvatarCrop } from './chatProfileAssets'
@@ -111,10 +111,8 @@ export type ChatProfile = {
   temperature: number | null
   maxTokens: number | null
   mcpEnabled: boolean
-  /** The shared tool preset (chat_tool_presets) whose scopes and allowlist apply; null keeps the profile's own below. */
-  toolPresetId: number | null
-  /** Read-only: the linked preset's name; a missing linked preset revokes its tool grant. */
-  toolPresetName?: string | null
+  /** Permission groups whose accounts may chat with this profile; empty means everyone with the engine's key. Administrators always may. */
+  allowedGroupKeys: string[]
   mcpScopes: ChatScope[]
   /** General tools within the scopes; linked generation presets have their own explicit grant. */
   toolAllowlist: string[] | null
@@ -224,7 +222,7 @@ type ProfileRow = {
   max_tokens: number | null
   mcp_enabled: number
   mcp_scopes: string
-  tool_preset_id: number | null
+  allowed_group_keys: string | null
   generation_preset_ids: string | null
   context_turns: number | null
   context_tokens: number | null
@@ -335,8 +333,6 @@ function toProfile(row: ProfileRow): ChatProfile {
   const storedSections = parseJsonArray(row.prompt_sections)
   const allowlist = parseJsonArray(row.tool_allowlist)
   const blockIds = normalizeBlockIds(row.block_ids)
-  // A missing linked preset revokes its grant; it cannot restore the profile's older direct grant.
-  const preset = row.tool_preset_id === null ? null : ChatToolPresetStore.find(row.tool_preset_id)
   let avatarCrop: ChatAvatarCrop | null = null
   try { avatarCrop = normalizeAvatarCrop(row.avatar_crop ? JSON.parse(row.avatar_crop) : null) } catch { /* Keep malformed legacy crops unset. */ }
   return {
@@ -369,10 +365,9 @@ function toProfile(row: ProfileRow): ChatProfile {
     temperature: row.temperature,
     maxTokens: row.max_tokens,
     mcpEnabled: row.mcp_enabled === 1,
-    toolPresetId: row.tool_preset_id,
-    toolPresetName: preset ? preset.name : null,
-    mcpScopes: preset ? preset.scopes : row.tool_preset_id !== null ? [] : parseScopes(row.mcp_scopes),
-    toolAllowlist: preset ? preset.toolAllowlist : row.tool_preset_id !== null ? [] : allowlist ? allowlist.filter((name): name is string => typeof name === 'string') : null,
+    allowedGroupKeys: (parseJsonArray(row.allowed_group_keys) ?? []).filter((key): key is string => typeof key === 'string'),
+    mcpScopes: parseScopes(row.mcp_scopes),
+    toolAllowlist: allowlist ? allowlist.filter((name): name is string => typeof name === 'string') : null,
     toolOutputLimit: row.tool_output_limit ?? CHAT_PROFILE_DEFAULTS.toolOutputLimit,
     generationPresetIds: ChatGenerationPresetStore.existing(normalizeGenerationPresetIds(row.generation_preset_ids)),
     contextTurns: row.context_turns ?? CHAT_PROFILE_DEFAULTS.contextTurns,
@@ -447,6 +442,13 @@ export function resolveSummaryPrompt(profile: ChatProfile) {
 }
 
 /** Validate a full profile (create) or a merged update, returning the column values. */
+/** Groups that can be named: custom groups and admin. Guest and anonymous would mean everyone, the same as an empty list. */
+function normalizeAllowedGroupKeys(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length === 0) return []
+  const known = new Set(AuthPermissionGroup.listAllGroups().map((group) => group.group_key).filter((key) => key !== 'guest' && key !== 'anonymous'))
+  return [...new Set(value.filter((key): key is string => typeof key === 'string' && known.has(key)))]
+}
+
 function toColumns(input: ChatProfileInput) {
   if (input.diagnosticsScope != null && input.diagnosticsScope !== 'view' && input.diagnosticsScope !== 'content') {
     throw new ChatProfileError('진단 범위가 올바르지 않아.')
@@ -522,7 +524,7 @@ function toColumns(input: ChatProfileInput) {
     temperature: optionalNumber(input.temperature, { min: 0, max: 2 }, false),
     max_tokens: optionalNumber(input.maxTokens, { min: 1, max: 1_000_000 }, true),
     mcp_enabled: input.mcpEnabled ? 1 : 0,
-    tool_preset_id: input.toolPresetId === null || input.toolPresetId === undefined ? null : ChatToolPresetStore.existing(input.toolPresetId),
+    allowed_group_keys: JSON.stringify(normalizeAllowedGroupKeys(input.allowedGroupKeys)),
     mcp_scopes: JSON.stringify(parseScopes(input.mcpScopes ?? ['read'])),
     tool_allowlist: Array.isArray(input.toolAllowlist)
       ? JSON.stringify([...new Set(input.toolAllowlist.filter((name): name is string => typeof name === 'string' && /^[a-z0-9_]{1,64}$/.test(name)))])

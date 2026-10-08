@@ -1,12 +1,11 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Pencil, Plus } from 'lucide-react'
+import { Download, Link2, Lock, Save } from 'lucide-react'
 import { Chip, ToggleChip } from '@/components/ui/chip'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
-import { Select } from '@/components/ui/select'
 import { Tip } from '@/components/ui/tooltip'
 import { getChatScopeCopy } from '@/features/codex-chat/chat-scope-copy'
-import { chatToolLabel } from '@/features/codex-chat/chat-tool-catalog'
 import { useI18n } from '@/i18n'
 import { CHAT_GENERATION_PRESETS_QUERY_KEY, CHAT_SCOPES, CHAT_TOOL_PRESETS_QUERY_KEY, listChatGenerationPresets, listChatToolPresets, type ChatProfileDefaults, type ChatToolPreset, type ChatToolPresetInput } from '@/lib/api-codex-chat'
 import { CollapsibleRow } from './chat-profile-sections'
@@ -15,11 +14,9 @@ import { ChatProfileToolLimits } from './chat-profile-tools'
 import { ChatToolPicker, useChatToolGroups } from './chat-tool-picker'
 import { ChatToolPresetEditorModal } from './chat-tool-preset-editor-modal'
 
-const DIRECT = 'direct'
-
 /**
- * CoNAI tools (MCP) for the profile: the switch, then which tool preset applies (or "direct": the profile's own
- * scopes and tools, picked here), and the folded limits for API LLM profiles.
+ * CoNAI tools (MCP) for the profile: the switch, the profile's own scopes and tools (a tool preset only loads a copy),
+ * the linked generation presets, and the folded limits for API LLM profiles.
  */
 export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
   open: boolean
@@ -30,83 +27,64 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
   const { t } = useI18n()
   const presetsQuery = useQuery({ queryKey: CHAT_TOOL_PRESETS_QUERY_KEY, queryFn: listChatToolPresets, enabled: open && draft.mcpEnabled })
   const presets = presetsQuery.data ?? []
-  const preset = presets.find((item) => item.id === draft.toolPresetId) ?? null
   const [presetEditor, setPresetEditor] = useState<{ preset: ChatToolPreset | null; initial?: ChatToolPresetInput } | null>(null)
-  const { groups, isPending } = useChatToolGroups(open && draft.mcpEnabled && draft.toolPresetId === null)
+  const { groups, isPending } = useChatToolGroups(open && draft.mcpEnabled)
   const generationPresetsQuery = useQuery({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY, queryFn: listChatGenerationPresets, enabled: open && draft.mcpEnabled })
   const generationPresets = generationPresetsQuery.data ?? []
-
-  const pickPreset = (value: string) => {
-    if (value === DIRECT) {
-      // Direct setup continues from the grant the preset gave, so nothing is lost by unlinking.
-      patch(preset ? { toolPresetId: null, mcpScopes: preset.scopes, toolAllowlist: preset.toolAllowlist } : { toolPresetId: null })
-      return
-    }
-    patch({ toolPresetId: Number(value) })
-  }
+  // A linked generation preset turns the generate scope on by itself (see resolveChatProfileToolGrant).
+  const presetGenerates = draft.generationPresetIds.length > 0
 
   return (
     <div className="space-y-4">
       <EditorGroup>
         <SwitchLine label={t({ ko: 'CoNAI 도구(MCP) 사용', en: 'Use CoNAI tools (MCP)' })} checked={draft.mcpEnabled} onCheckedChange={(mcpEnabled) => patch({ mcpEnabled })} />
-        <p className="text-xs text-muted-foreground">{t({ ko: '현재 페이지 연결은 페이지 접근 권한으로 사용할 수 있어. 아래 설정은 다른 채팅 도구에 적용돼.', en: 'Current page connection uses your page access permission. The settings below apply to other chat tools.' })}</p>
         {draft.mcpEnabled ? (
-          <div className="flex min-h-10 items-center justify-between gap-3 text-sm">
-            <span className="shrink-0">{t({ ko: '도구 프리셋', en: 'Tool preset' })}</span>
-            <div className="flex min-w-0 items-center gap-1">
-              <Select
-                variant="settings"
-                className="h-9 w-56 px-3"
-                value={draft.toolPresetId === null || !preset ? DIRECT : String(preset.id)}
-                onChange={(event) => pickPreset(event.target.value)}
-                aria-label={t({ ko: '도구 프리셋', en: 'Tool preset' })}
-              >
-                {presets.map((item) => <option key={item.id} value={String(item.id)}>{item.name}</option>)}
-                <option value={DIRECT}>{t({ ko: '직접 설정', en: 'Set here' })}</option>
-              </Select>
-              {preset ? (
-                <IconButton size="icon-sm" variant="ghost" onClick={() => setPresetEditor({ preset })} label={t({ ko: '프리셋 편집', en: 'Edit preset' })}><Pencil /></IconButton>
-              ) : (
+          <div className="space-y-3">
+            <div className="flex min-h-10 items-center gap-3 text-sm">
+              <span className="shrink-0">{t({ ko: '범위', en: 'Scopes' })}</span>
+              <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+                {(defaults?.scopes ?? CHAT_SCOPES).map((scope) => {
+                  const copy = getChatScopeCopy(scope, t)
+                  const forced = scope === 'generate' && presetGenerates
+                  const pressed = forced || draft.mcpScopes.includes(scope)
+                  const tip = forced ? t({ ko: '생성 프리셋이 켰어', en: 'On because a generation preset is linked' })
+                    : scope === 'configure' ? `${copy.description} ${t({ ko: '관리자 계정에서만 동작해.', en: 'Works only for administrator accounts.' })}`
+                    : copy.description
+                  return (
+                    <Tip key={scope} content={tip} side="bottom" align="start">
+                      <ToggleChip size="sm" pressed={pressed} disabled={forced || (pressed && draft.mcpScopes.length === 1)} onClick={() => patch({ mcpScopes: pressed ? draft.mcpScopes.filter((item) => item !== scope) : [...draft.mcpScopes, scope] })}>
+                        {forced ? <Link2 /> : scope === 'configure' ? <Lock /> : null}
+                        {copy.label}
+                      </ToggleChip>
+                    </Tip>
+                  )
+                })}
+              </div>
+              <div className="flex shrink-0 items-center gap-0.5">
+                <DropdownMenu>
+                  <Tip content={t({ ko: '도구 프리셋 불러오기', en: 'Load a tool preset' })}>
+                    <DropdownMenuTrigger asChild>
+                      <IconButton size="icon-sm" variant="ghost" disabled={presets.length === 0} label={t({ ko: '도구 프리셋 불러오기', en: 'Load a tool preset' })} tooltip={false}><Download /></IconButton>
+                    </DropdownMenuTrigger>
+                  </Tip>
+                  <DropdownMenuContent align="end" className="min-w-48">
+                    {presets.map((item) => (
+                      <DropdownMenuItem key={item.id} onSelect={() => patch({ mcpScopes: item.scopes, toolAllowlist: item.toolAllowlist })}>
+                        <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                        <span className="text-xs text-muted-foreground">{item.toolAllowlist === null ? t({ ko: '모든 도구', en: 'All tools' }) : t({ ko: '도구 {count}', en: '{count} tools' }, { count: item.toolAllowlist.length })}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <IconButton
                   size="icon-sm"
                   variant="ghost"
                   onClick={() => setPresetEditor({ preset: null, initial: { name: '', scopes: draft.mcpScopes, toolAllowlist: draft.toolAllowlist } })}
-                  label={t({ ko: '이 설정을 프리셋으로 저장', en: 'Save this setup as a preset' })}
+                  label={t({ ko: '프리셋으로 저장', en: 'Save as a preset' })}
                 >
-                  <Plus />
+                  <Save />
                 </IconButton>
-              )}
-            </div>
-          </div>
-        ) : null}
-        {draft.mcpEnabled && preset ? (
-          <div className="space-y-2 text-xs text-muted-foreground">
-            <div className="flex flex-wrap gap-1">
-              {preset.scopes.map((scope) => <Chip key={scope} size="sm">{getChatScopeCopy(scope, t).label}</Chip>)}
-            </div>
-            <p className="leading-relaxed">
-              {preset.toolAllowlist === null
-                ? t({ ko: '모든 도구', en: 'All tools' })
-                : preset.toolAllowlist.length === 0
-                  ? t({ ko: '없음', en: 'None' })
-                  : preset.toolAllowlist.map((name) => chatToolLabel(name, t)).join(' · ')}
-            </p>
-          </div>
-        ) : null}
-        {draft.mcpEnabled && !preset ? (
-          <div className="space-y-3">
-            <div className="flex flex-wrap gap-1.5">
-              {(defaults?.scopes ?? CHAT_SCOPES).map((scope) => {
-                const copy = getChatScopeCopy(scope, t)
-                const pressed = draft.mcpScopes.includes(scope)
-                return (
-                  <Tip key={scope} content={copy.description} side="bottom" align="start">
-                    <ToggleChip size="sm" pressed={pressed} disabled={pressed && draft.mcpScopes.length === 1} onClick={() => patch({ mcpScopes: pressed ? draft.mcpScopes.filter((item) => item !== scope) : [...draft.mcpScopes, scope] })}>
-                      {copy.label}
-                    </ToggleChip>
-                  </Tip>
-                )
-              })}
+              </div>
             </div>
             <div className="border-t border-line pt-3">
               <ChatToolPicker groups={groups} scopes={draft.mcpScopes} allowlist={draft.toolAllowlist} onChange={(toolAllowlist) => patch({ toolAllowlist })} loading={isPending} />
@@ -118,7 +96,6 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
             {/* Generation presets are made from the NAI / ComfyUI panels (or settings › chat); here the profile only links them. */}
             <CollapsibleRow
               title={t({ ko: '생성 프리셋', en: 'Generation presets' })}
-              info={t({ ko: '연결한 프리셋은 바로 생성 도구로 제공돼. 일반 도구 목록과 페이지 연결 여부에 영향받지 않아. 모델은 프리셋이 열어둔 필드만 채우고, 실행에는 계정의 생성 권한을 확인해.', en: 'Linked presets provide generation tools independently of the general tool selection and page connection. The model fills only exposed fields; execution checks the account’s generation permission.' })}
               meta={draft.generationPresetIds.length > 0 ? t({ ko: '{count}개', en: '{count}' }, { count: draft.generationPresetIds.length }) : t({ ko: '없음', en: 'None' })}
               defaultOpen={draft.generationPresetIds.length > 0}
             >
@@ -139,6 +116,12 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
                 })}
                 {generationPresetsQuery.isSuccess && generationPresets.length === 0 ? <span className="text-sm text-muted-foreground">{t({ ko: 'NAI나 ComfyUI 생성 패널에서 "채팅 프리셋으로 저장"을 눌러 먼저 만들어.', en: 'Make one first with "Save as chat preset" in the NAI or ComfyUI panel.' })}</span> : null}
               </div>
+              {presetGenerates ? (
+                <div className="flex flex-wrap gap-1.5 pt-2">
+                  <Chip size="sm" tone="muted">{t({ ko: '생성 범위 켜짐', en: 'Generate scope on' })}</Chip>
+                  <Chip size="sm" tone="muted">{t({ ko: '자유 생성·워크플로 조회 숨김', en: 'Free-form generation and workflow lookup hidden' })}</Chip>
+                </div>
+              ) : null}
             </CollapsibleRow>
           </div>
         ) : null}
@@ -158,7 +141,6 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
         preset={presetEditor?.preset ?? null}
         initial={presetEditor?.initial}
         onClose={() => setPresetEditor(null)}
-        onSaved={(saved) => patch({ toolPresetId: saved.id })}
       />
     </div>
   )

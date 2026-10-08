@@ -1,4 +1,7 @@
 import type { ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { ToggleChip } from '@/components/ui/chip'
+import { listAuthPermissionGroups } from '@/lib/api-auth'
 import { TriangleAlert } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Field } from '@/components/ui/field'
@@ -35,6 +38,31 @@ function AuxModelRow({ label, select, children }: { label: string; select: React
 }
 
 /** The engine and its knobs: model slots per role, sampling, reasoning; then how much of the chat and the lore it is sent. */
+/**
+ * Who may chat with this profile: everyone with the engine's permission, or members of the picked groups.
+ * Administrators always may, so picking only Administrators keeps the profile to them.
+ */
+function ChatProfileAudience({ draft, patch }: { draft: Draft; patch: PatchDraft }) {
+  const { t } = useI18n()
+  const groupsQuery = useQuery({ queryKey: ['auth-permission-groups', 'all'], queryFn: listAuthPermissionGroups, staleTime: 60_000, retry: false })
+  const groups = (groupsQuery.data ?? []).filter((group) => group.groupKey === 'admin' || !group.systemGroup)
+  const picked = draft.allowedGroupKeys
+  const toggle = (key: string) => patch({ allowedGroupKeys: picked.includes(key) ? picked.filter((item) => item !== key) : [...picked, key] })
+  return (
+    <div className="flex min-h-10 flex-wrap items-center justify-between gap-x-3 gap-y-2 text-sm">
+      <span className="shrink-0">{t({ ko: '사용 대상', en: 'Who can use it' })}</span>
+      <div className="flex min-w-0 flex-wrap justify-end gap-1.5">
+        <ToggleChip size="sm" pressed={picked.length === 0} onClick={() => patch({ allowedGroupKeys: [] })}>{t({ ko: '모두', en: 'Everyone' })}</ToggleChip>
+        {groups.map((group) => (
+          <ToggleChip key={group.groupKey} size="sm" pressed={picked.includes(group.groupKey)} onClick={() => toggle(group.groupKey)}>
+            {group.groupKey === 'admin' ? t({ ko: '관리자', en: 'Administrators' }) : group.name}
+          </ToggleChip>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, providersLoaded, slots, slotsReady, suggestWriters, connectionModels, summaryModels, translationModels, suggestModels, codexModels }: {
   draft: Draft
   patch: PatchDraft
@@ -151,6 +179,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
           ]}
           ariaLabel={t({ ko: '엔진', en: 'Engine' })}
         />
+        <ChatProfileAudience draft={draft} patch={patch} />
         {isLlm ? (
           <>
             <Field label={t({ ko: '대화 모델', en: 'Chat model' })}>

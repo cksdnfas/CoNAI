@@ -47,9 +47,8 @@ function profileModelLine(profile: ChatProfile, slots: ModelSlot[], t: ReturnTyp
   return profile.engine === 'codex' ? `Codex · ${model}` : `${profile.providerName} · ${model}`
 }
 
-/** The one tool chip of a profile: the preset name, else the allowed-tool count, else just "tools". */
+/** The one tool chip of a profile: the allowed-tool count, else just "tools". */
 function profileToolChip(profile: ChatProfile, t: ReturnType<typeof useI18n>['t']) {
-  if (profile.toolPresetName) return profile.toolPresetName
   if (Array.isArray(profile.toolAllowlist)) return t({ ko: '도구 {count}', en: '{count} tools' }, { count: profile.toolAllowlist.length })
   return t({ ko: '도구', en: 'Tools' })
 }

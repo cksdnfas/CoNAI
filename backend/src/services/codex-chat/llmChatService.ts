@@ -17,7 +17,7 @@ import { hasTranslation, resolveProfileModel } from './chatModelRoles'
 import { stripEchoedAddresses } from '@conai/shared'
 import { ChatUserProfileStore, userPersonaForThread, userPersonaOf } from './chatUserProfiles'
 import { loadChatSettings } from './chatSettings'
-import { resolveChatProfileToolGrant, resolveChatAccess } from './codexChatAccess'
+import { canUseChatProfile, resolveChatProfileToolGrant, resolveChatAccess } from './codexChatAccess'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import { withGenerationOutcomes } from './codexChatMedia'
 import type { CodexChatStreamEvent } from './codexChatService'
@@ -120,7 +120,7 @@ export function assertLlmChatAvailable(requester: McpRequester) {
 
 function requireProfileAccess(requester: McpRequester, profile: ChatProfile) {
   const access = resolveChatAccess(requester.accountId)
-  if (!loadChatSettings().enabled || !(profile.engine === 'claude' ? access.claude : access.llm)) throw new LlmChatError('이 프로필로 채팅할 권한이 없어.', 403)
+  if (!loadChatSettings().enabled || !canUseChatProfile(access, profile)) throw new LlmChatError('이 프로필로 채팅할 권한이 없어.', 403)
   const current = ChatProfileStore.find(profile.id)
   if (!current?.isEnabled || current.engine !== profile.engine) throw new LlmChatError('프로필 사용 설정이 변경됐어.', 409)
 }
