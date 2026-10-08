@@ -11,6 +11,7 @@ import { HistoryCommandService } from '../historyCommandService';
 import { PromptCollectionService } from '../promptCollectionService';
 import { SystemMaintenanceLockService } from '../systemMaintenanceLockService';
 import { collectUserDbMediaReferences } from './userMediaReferences';
+import { sweepAudioOrphans, type AudioOrphanResult } from '../audio/audioMaintenance';
 
 /**
  * Library garbage collection: rows and files that nothing will ever show again.
@@ -38,6 +39,8 @@ export interface MediaOrphanCleanupOptions {
   orphanOlderThanDays: number;
   sweepThumbnails: boolean;
   sweepTemp: boolean;
+  /** Audio store: files without a row (to the RecycleBin) and rows no candidate uses (released). */
+  sweepAudio: boolean;
   /** Thumbnail files newer than this are skipped: a generation may not have written its row yet. */
   thumbnailGraceMs: number;
   /** Temp leftovers newer than this are kept. */
@@ -50,6 +53,7 @@ export const DEFAULT_MEDIA_ORPHAN_CLEANUP_OPTIONS: MediaOrphanCleanupOptions = {
   orphanOlderThanDays: 30,
   sweepThumbnails: true,
   sweepTemp: true,
+  sweepAudio: true,
   thumbnailGraceMs: ONE_HOUR_MS,
   tempMaxAgeMs: ONE_DAY_MS,
 };
@@ -66,6 +70,8 @@ export interface MediaOrphanCleanupResult {
   };
   orphanThumbnails: { scanned: number; orphaned: number; deleted: number; bytes: number; emptyDirsRemoved: number };
   tempLeftovers: { graphExecutionDirs: number; incomingEntries: number; videoFrames: number; bytes: number };
+  /** The audio workspace store (audio.db + uploads/audio), counted separately from the image library. */
+  audio: AudioOrphanResult;
   userDbReferenceTokens: number;
   durationMs: number;
 }
@@ -87,6 +93,7 @@ function emptyResult(dryRun: boolean): MediaOrphanCleanupResult {
     orphanMetadata: { scanned: 0, candidates: 0, keptReferenced: 0, deleted: 0, thumbnailsDeleted: 0 },
     orphanThumbnails: { scanned: 0, orphaned: 0, deleted: 0, bytes: 0, emptyDirsRemoved: 0 },
     tempLeftovers: { graphExecutionDirs: 0, incomingEntries: 0, videoFrames: 0, bytes: 0 },
+    audio: { scannedFiles: 0, orphanFiles: 0, orphanBytes: 0, recoveredFiles: 0, unreferencedBlobs: 0, releasedBlobs: 0 },
     userDbReferenceTokens: 0,
     durationMs: 0,
   };
@@ -575,6 +582,7 @@ export function normalizeMediaOrphanCleanupOptions(input: Partial<MediaOrphanCle
     orphanOlderThanDays: days(options.orphanOlderThanDays, DEFAULT_MEDIA_ORPHAN_CLEANUP_OPTIONS.orphanOlderThanDays),
     sweepThumbnails: options.sweepThumbnails !== false,
     sweepTemp: options.sweepTemp !== false,
+    sweepAudio: options.sweepAudio !== false,
     thumbnailGraceMs: Math.max(0, Number(options.thumbnailGraceMs) || 0),
     tempMaxAgeMs: Math.max(0, Number(options.tempMaxAgeMs) || 0),
   };
@@ -608,12 +616,18 @@ export async function runMediaOrphanCleanup(
     await sweepTempLeftovers(options, result, hooks);
   }
 
+  if (options.sweepAudio) {
+    hooks.phase?.('audio');
+    result.audio = await sweepAudioOrphans({ dryRun: options.dryRun }, hooks);
+  }
+
   result.durationMs = Date.now() - startedAt;
   console.log(
     `🧹 Media orphan cleanup${options.dryRun ? ' [DRY RUN]' : ''}: ` +
       `missing rows ${result.missingFiles.matched}, orphan metadata ${result.orphanMetadata.deleted}` +
       ` (kept ${result.orphanMetadata.keptReferenced} referenced), orphan thumbnails ${result.orphanThumbnails.orphaned},` +
       ` temp leftovers ${result.tempLeftovers.graphExecutionDirs + result.tempLeftovers.incomingEntries + result.tempLeftovers.videoFrames}` +
+      `, audio orphan files ${result.audio.orphanFiles} / unused blobs ${result.audio.unreferencedBlobs}` +
       ` in ${result.durationMs}ms`,
   );
 

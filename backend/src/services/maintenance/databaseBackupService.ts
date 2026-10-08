@@ -78,9 +78,15 @@ export async function resolveDefaultBackupSources(): Promise<DatabaseBackupSourc
   const { db } = await import('../../database/init');
   const { getUserSettingsDb } = await import('../../database/userSettingsDb');
   const { getAuthDb } = await import('../../database/authDb');
+  const { getAudioDb, hasAudioDb } = await import('../../database/audioDb');
+  // audio.db only once the audio workspace exists, so a backup never creates an empty one.
+  const openAudioDb = () => {
+    if (!hasAudioDb()) throw new Error('No audio database');
+    return getAudioDb();
+  };
 
   const sources: DatabaseBackupSource[] = [{ fileName: 'images.db', db }];
-  for (const [fileName, open] of [['user.db', getUserSettingsDb], ['auth.db', getAuthDb]] as const) {
+  for (const [fileName, open] of [['user.db', getUserSettingsDb], ['auth.db', getAuthDb], ['audio.db', openAudioDb]] as const) {
     try {
       sources.push({ fileName, db: open() });
     } catch {
