@@ -140,7 +140,7 @@ export function WildcardDetailCard({
   }, [selectedWildcard?.id, selectedGeneralItems, selectedNaiItems, selectedComfyItems])
 
   if (!selectedWildcard) {
-    return <EmptyState size="compact" title={t({ ko: '항목을 선택하면 세부 정보를 보여줄게.', en: 'Select an item to see its details.' })} />
+    return <EmptyState size="compact" title={t({ ko: '선택된 항목 없음', en: 'Nothing selected' })} />
   }
 
   return (

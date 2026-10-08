@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Download, FolderOpen, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { FieldInfo } from '@/components/ui/field'
 import { Select } from '@/components/ui/select'
 import { Modal } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
@@ -104,8 +105,8 @@ export function MiniMaxH3DirectorPackPanel({ value, onChange, allowFiles, allowP
     <Button type="button" size="icon-sm" variant="secondary" disabled={disabled} onClick={() => setOpen(true)} aria-label={t({ ko: '참조 팩', en: 'Reference pack' })} title={t({ ko: '참조 팩', en: 'Reference pack' })}><FolderOpen className="h-4 w-4" /></Button>
     <Modal open={open} title={t({ ko: '참조 팩', en: 'Reference pack' })} onClose={() => { if (!busy) setOpen(false) }} widthClassName="max-w-xl">
       <div className="space-y-4 p-4">
-        <p className="text-xs text-muted-foreground">{t({ ko: 'DaSiWa JSON 형식이야. 미디어 파일은 들어 있지 않으니, 없는 파일은 적용하기 전에 연결해 줘.', en: 'DaSiWa JSON format. Media files are not embedded; attach any missing files before applying.' })}</p>
         <div className="flex flex-wrap items-center gap-2">
+          <FieldInfo>{t({ ko: 'DaSiWa JSON. 미디어 파일은 안 들어 있어서 없는 파일은 직접 연결해.', en: 'DaSiWa JSON. Media files are not embedded; attach missing ones yourself.' })}</FieldInfo>
           <Select aria-label={t({ ko: '데이터 범위', en: 'Data scope' })} value={effectiveScope} disabled={busy} onChange={(event) => setScope(event.target.value as MiniMaxDirectorPackScope)}>
             {allowFiles && allowPrompt ? <option value="all">{t({ ko: '전체', en: 'All' })}</option> : null}
             {allowFiles ? <option value="files">{t({ ko: '참조 파일', en: 'Reference files' })}</option> : null}

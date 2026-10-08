@@ -12,10 +12,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { Field } from '@/components/ui/field'
+import { Field, FieldInfo } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { IconButton } from '@/components/ui/icon-button'
-import { Inset } from '@/components/ui/inset'
 import { Switch } from '@/components/ui/switch'
 import { Text } from '@/components/ui/text'
 import { ToggleRow } from '@/components/ui/toggle-row'
@@ -175,15 +174,15 @@ export function ComfyWorkflowAuthoringModal({
                   />
                 </Field>
 
-                <Inset className="grid gap-2.5 px-3">
-                  <Text as="div" variant="overline" className="font-semibold">
+                <div className="grid gap-2.5">
+                  <Text as="div" variant="overline" className="flex items-center gap-1 font-semibold">
                     {t({ ko: '등급별 동시 대기열 제한', en: 'Per-role active queue limit' })}
-                  </Text>
-                  <Text as="div" variant="caption">
-                    {t({
-                      ko: '각 등급의 회원 한 명이 이 워크플로우에서 동시에 유지할 수 있는 대기열 개수야. 등급 전체 합산이 아니라 회원별 제한이고, 비워두면 무제한이야. 0은 등록 금지야.',
-                      en: 'How many active queue jobs a single member of each role can keep on this workflow. The limit applies per member, not to the whole role. Leave empty for unlimited; 0 blocks the role.',
-                    })}
+                    <FieldInfo>
+                      {t({
+                        ko: '회원 한 명이 동시에 둘 수 있는 대기열 개수야. 비우면 무제한, 0은 등록 금지.',
+                        en: 'Active queue jobs one member of the role can keep. Empty: unlimited; 0 blocks the role.',
+                      })}
+                    </FieldInfo>
                   </Text>
                   {roleLimitGroups.map((group) => (
                     <div key={group.groupKey} className="flex items-center justify-between gap-3">
@@ -206,7 +205,7 @@ export function ComfyWorkflowAuthoringModal({
                       />
                     </div>
                   ))}
-                </Inset>
+                </div>
               </>
             ) : null}
 

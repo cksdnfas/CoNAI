@@ -4,7 +4,6 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Field } from '@/components/ui/field'
-import { Inset } from '@/components/ui/inset'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
@@ -101,9 +100,9 @@ export function ComfyModuleSaveModal({
               })}
             </div>
           ) : (
-            <Inset className="text-sm text-muted-foreground">
-              {t({ ko: '노출 가능한 입력 필드가 없어. 이 워크플로우는 고정 모듈로 저장돼.', en: 'There are no exposable input fields. This workflow will be saved as a fixed module.' })}
-            </Inset>
+            <p className="text-sm text-muted-foreground">
+              {t({ ko: '노출할 필드 없음 · 고정 모듈로 저장', en: 'No exposable fields · saved as a fixed module' })}
+            </p>
           )}
         </div>
 

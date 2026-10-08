@@ -71,7 +71,6 @@ type SearchableImageAttachmentRecord = {
 type ImageAttachmentBrowserSectionProps = {
   searchValue: string
   searchPlaceholder: string
-  searchHint: string
   items: ImageRecord[]
   selectedIds: string[]
   onSelectedIdsChange: (nextIds: string[]) => void
@@ -141,7 +140,6 @@ function ImageAttachmentEmptyState({ title }: { title: string }) {
 function ImageAttachmentBrowserSection({
   searchValue,
   searchPlaceholder,
-  searchHint,
   items,
   selectedIds,
   onSelectedIdsChange,
@@ -159,7 +157,6 @@ function ImageAttachmentBrowserSection({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Input value={searchValue} onChange={(event) => onSearchChange(event.target.value)} placeholder={searchPlaceholder} className="max-w-md" />
-        <div className="text-xs text-muted-foreground">{searchHint}</div>
       </div>
 
       {isLoading ? (
@@ -594,7 +591,6 @@ export function ImageAttachmentPickerButton({
             <ImageAttachmentBrowserSection
               searchValue={systemSearch}
               searchPlaceholder={t({ ko: '불러온 시스템 이미지에서 이름 검색', en: 'Search loaded system images by name' })}
-              searchHint={t({ ko: '최신 이미지부터 불러오고 있어.', en: 'Loading newest images first.' })}
               items={filteredSystemImages}
               selectedIds={selectedSystemIds}
               onSelectedIdsChange={handleSystemSelectionChange}
@@ -632,7 +628,6 @@ export function ImageAttachmentPickerButton({
             <ImageAttachmentBrowserSection
               searchValue={saveSearch}
               searchPlaceholder={t({ ko: 'save 이미지 이름 검색', en: 'Search save images by name' })}
-              searchHint={t({ ko: 'save 폴더 아래 이미지를 재귀적으로 보여줘.', en: 'Shows images recursively under the save folder.' })}
               items={filteredSaveImages}
               selectedIds={selectedSaveIds}
               onSelectedIdsChange={handleSaveSelectionChange}

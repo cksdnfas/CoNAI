@@ -4,7 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { Field } from '@/components/ui/field'
+import { Field, FieldInfo } from '@/components/ui/field'
 import { Inset } from '@/components/ui/inset'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
@@ -243,10 +243,6 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
           </Alert>
         ) : null}
 
-        <Inset className="text-sm text-muted-foreground">
-          {t({ ko: '선택한 폴더 안의 `.safetensors`, 같은 이름의 `.txt`, 그리고 지정한 공용 텍스트 파일을 읽어서 auto-collected LoRA 트리를 다시 만든다.', en: 'Reads `.safetensors`, same-name `.txt`, and the configured shared text file inside the selected folder, then rebuilds the auto-collected LoRA tree.' })}
-        </Inset>
-
         <input ref={inputRef} type="file" className="hidden" multiple onChange={(event) => void handleFileChange(event)} />
 
         <Inset className="space-y-3 p-4">
@@ -255,6 +251,7 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
               <FolderOpen className="h-4 w-4" />
               {selectedFiles.length > 0 ? t({ ko: 'LoRA {count}개 선택됨', en: '{count} LoRA files selected' }, { count: formatNumber(selectedFiles.length) }) : t({ ko: 'LoRA 폴더 선택', en: 'Select LoRA folder' })}
             </Button>
+            <FieldInfo>{t({ ko: '폴더 안의 .safetensors, 같은 이름의 .txt, 공용 txt를 읽어 자동 수집 LoRA 트리를 다시 만들어.', en: 'Reads .safetensors, same-name .txt and the shared txt in the folder, then rebuilds the auto-collected LoRA tree.' })}</FieldInfo>
             {isPreparingFiles ? <div className="text-sm text-muted-foreground">{t({ ko: '폴더 구조 읽는 중…', en: 'Reading folder structure…' })}</div> : null}
           </div>
 
@@ -301,9 +298,9 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
           </Field>
         </div>
 
-        <Inset className="text-sm text-muted-foreground">
-          {t({ ko: '실행하면 기존 auto-collected LoRA 항목은 지워지고, 이번 폴더 기준으로 다시 생성된다.', en: 'Running this removes existing auto-collected LoRA entries and recreates them from this folder.' })}
-        </Inset>
+        <p className="text-sm text-warning">
+          {t({ ko: '기존 자동 수집 LoRA는 지우고 새로 만들어.', en: 'Existing auto-collected LoRA entries are replaced.' })}
+        </p>
 
         <ModalFooter>
           <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting || isPreparingFiles}>

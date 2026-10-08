@@ -4,6 +4,7 @@ import { Folder, FolderOpen } from 'lucide-react'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { FieldInfo } from '@/components/ui/field'
 import { anchoredPopupBodyClassName, anchoredPopupHeaderClassName, anchoredPopupLabelClassName, AnchoredPopup } from '@/components/ui/anchored-popup'
 import { buildPromptPresetInsertionText, getPromptPresets, type PromptPresetRecord } from '@/lib/api-prompt-presets'
 import { cn } from '@/lib/utils'
@@ -108,17 +109,13 @@ export function PromptPresetInlinePicker({
             renderIcon={(_, state) => (state.hasChildren || state.isSelected ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
           />
         ) : (
-          <div className="space-y-2 px-2 py-3 text-sm text-muted-foreground">
-            <div>{t('image-generation.components.prompt.preset.inline.picker.no.saved.presets')}</div>
-            <div className="text-xs">{t('image-generation.components.prompt.preset.inline.picker.create.first.in.prompts.presets')}</div>
-          </div>
+          <div className="px-2 py-3 text-sm text-muted-foreground">{t('image-generation.components.prompt.preset.inline.picker.no.saved.presets')}</div>
         )}
 
-        <div className="mt-4 text-xs leading-5 text-muted-foreground">
-          {t('image-generation.components.prompt.preset.inline.picker.description.comment.prefix')} <code>{t('image-generation.components.prompt.preset.inline.picker.description.comment.token')}</code> {t('image-generation.components.prompt.preset.inline.picker.description.comment.suffix')}
-        </div>
-
-        <div className="mt-3 flex justify-end">
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <FieldInfo>
+            {t('image-generation.components.prompt.preset.inline.picker.description.comment.prefix')} <code>{t('image-generation.components.prompt.preset.inline.picker.description.comment.token')}</code> {t('image-generation.components.prompt.preset.inline.picker.description.comment.suffix')}
+          </FieldInfo>
           <Button type="button" size="sm" variant="ghost" onClick={onClose}>{t('image-generation.components.prompt.preset.inline.picker.close')}</Button>
         </div>
       </div>

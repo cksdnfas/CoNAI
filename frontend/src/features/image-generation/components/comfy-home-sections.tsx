@@ -1,21 +1,33 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
-import { useEffect, useId, useMemo, useState } from 'react'
-import { Copy, ListTree, Pencil, Plus, RotateCcw, Save, Server, Trash2, Upload } from 'lucide-react'
-import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Copy, Ellipsis, Eye, ListFilter, ListTree, Pencil, Play, Plus, RefreshCw, RotateCcw, Save, Server, Star, Trash2, Upload } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Chip } from '@/components/ui/chip'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { IconButton } from '@/components/ui/icon-button'
+import { RowGroup } from '@/components/ui/row-group'
 import { Switch } from '@/components/ui/switch'
-import { Text } from '@/components/ui/text'
-import { Section } from '@/components/ui/section'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { DEFAULT_COMFY_MODEL_API_PATHS } from '@/lib/api-image-generation-workflows'
 import type { ComfyUIServer, CustomDropdownList, GenerationWorkflow } from '@/lib/api-image-generation-types'
+import { cn } from '@/lib/utils'
 import type { ComfyUIServerTestState } from '../image-generation-shared'
+
+/** Heading label of a home section: small icon + overline text (RowGroup styles the text). */
+function SectionLabel({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return <span className="inline-flex items-center gap-1.5 [&_svg]:size-3.5">{icon}{children}</span>
+}
+
+function EmptyListRow() {
+  const { t } = useI18n()
+  return <p className="py-3 text-sm text-muted-foreground">{t({ ko: '없음', en: 'None' })}</p>
+}
 
 type WorkflowListSectionProps = {
   workflows: GenerationWorkflow[]
@@ -39,123 +51,63 @@ export function ComfyWorkflowListSection({
   onDeleteWorkflow,
 }: WorkflowListSectionProps) {
   const { canUpdateWorkflows } = useFeaturePermissions()
-  const { t, formatNumber } = useI18n()
+  const { t } = useI18n()
 
   return (
-    <Section
-      variant="settings"
-      heading={(
-        <span className="flex items-center gap-2 whitespace-nowrap">
-          <ListTree className="h-4 w-4 text-muted-foreground" />
-          {t({ ko: '워크플로우', en: 'Workflows' })}
-        </span>
-      )}
+    <RowGroup
+      heading={<SectionLabel icon={<ListTree />}>{t({ ko: '워크플로우', en: 'Workflows' })}</SectionLabel>}
+      count={workflows.length}
       actions={(
-        <>
-          <span className="px-1 text-xs tabular-nums text-muted-foreground">{workflows.length}</span>
-          <Button type="button" size="sm" variant="secondary" onClick={onCreateWorkflow} disabled={!(canUpdateWorkflows)}>
-            <Plus className="h-4 w-4" />
-            {t({ ko: '등록', en: 'Add' })}
-          </Button>
-        </>
+        <IconButton size="icon-sm" variant="ghost" onClick={onCreateWorkflow} disabled={!canUpdateWorkflows} label={t({ ko: '워크플로우 등록', en: 'Add workflow' })}>
+          <Plus />
+        </IconButton>
       )}
     >
-      {workflows.length > 0 ? (
-        <div>
-          {workflows.map((workflow) => {
-            const isSelected = String(workflow.id) === selectedWorkflowId
-            return (
-              <div
-                key={workflow.id}
-                data-selected={isSelected || undefined}
-                className="border-b border-line px-2 py-2.5 transition-colors last:border-b-0 data-[selected=true]:bg-primary/8"
-                // The workflow's own colour marks the selected row as a left accent (tone, not an outline).
-                style={isSelected ? { boxShadow: `inset 3px 0 0 ${workflow.color || 'var(--color-primary)'}` } : undefined}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <Button
-                    type="button"
-                    variant="nav"
-                    onClick={() => onSelectWorkflow(workflow.id)}
-                    aria-current={isSelected || undefined}
-                    className="-mx-2 -my-1 h-auto min-w-0 flex-1 flex-col items-start gap-1 px-2 py-1 whitespace-normal"
-                  >
-                    <span className="flex w-full min-w-0 flex-wrap items-center gap-2">
-                      <span className="truncate text-sm font-medium text-foreground">{workflow.name}</span>
-                      {isSelected ? <Badge variant="default">{t({ ko: '선택됨', en: 'Selected' })}</Badge> : null}
-                    </span>
-                    {workflow.description ? <span className="line-clamp-2 text-xs text-muted-foreground">{workflow.description}</span> : null}
-                  </Button>
-
-                  <div className="flex shrink-0 items-start gap-2">
-                    {workflow.kind === 'audio' ? <Badge variant="secondary">{t({ ko: '오디오', en: 'Audio' })}</Badge> : null}
-                    <Badge variant="outline">{t({ ko: '필드 {count}', en: '{count} fields' }, { count: formatNumber((workflow.marked_fields ?? []).length) })}</Badge>
-                    <div className="flex gap-1">
-                      <IconButton
-                        size="icon-xs"
-                        variant="ghost"
-                        onClick={(event) => {
-                          event.preventDefault()
-                          event.stopPropagation()
-                          onSaveModule(workflow.id)
-                        }}
-                        label={t({ ko: '{name} 모듈 저장', en: 'Save module for {name}' }, { name: workflow.name })}
-                      >
-                        <Save className="h-3.5 w-3.5" />
-                      </IconButton>
-                      <IconButton
-                        size="icon-xs"
-                        variant="ghost"
-                        onClick={(event) => {
-                          event.preventDefault()
-                          event.stopPropagation()
-                          onEditWorkflow(workflow.id)
-                        }}
-                        label={t({ ko: '{name} 수정', en: 'Edit {name}' }, { name: workflow.name })}
-                       disabled={!(canUpdateWorkflows)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </IconButton>
-                      <IconButton
-                        size="icon-xs"
-                        variant="ghost"
-                        onClick={(event) => {
-                          event.preventDefault()
-                          event.stopPropagation()
-                          onCopyWorkflow(workflow.id)
-                        }}
-                        label={t({ ko: '{name} 복사', en: 'Copy {name}' }, { name: workflow.name })}
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </IconButton>
-                      <IconButton
-                        size="icon-xs"
-                        variant="ghost"
-                        onClick={(event) => {
-                          event.preventDefault()
-                          event.stopPropagation()
-                          onDeleteWorkflow(workflow.id)
-                        }}
-                        label={t({ ko: '{name} 삭제', en: 'Delete {name}' }, { name: workflow.name })}
-                       disabled={!(canUpdateWorkflows)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </IconButton>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      ) : (
-        <Text variant="muted">{t({ ko: '등록된 워크플로우가 없어.', en: 'No workflows registered.' })}</Text>
-      )}
-    </Section>
+      {workflows.length > 0 ? workflows.map((workflow) => {
+        const isSelected = String(workflow.id) === selectedWorkflowId
+        return (
+          <div
+            key={workflow.id}
+            data-selected={isSelected || undefined}
+            className="flex min-h-11 items-center gap-1 border-b border-line px-2 last:border-b-0 data-[selected=true]:bg-primary/8"
+            // The workflow's own colour marks the selected row as a left accent (tone, not an outline).
+            style={isSelected ? { boxShadow: `inset 3px 0 0 ${workflow.color || 'var(--color-primary)'}` } : undefined}
+          >
+            <Button
+              type="button"
+              variant="nav"
+              onClick={() => onSelectWorkflow(workflow.id)}
+              aria-current={isSelected || undefined}
+              className="-mx-2 h-auto min-w-0 flex-1 justify-start gap-2.5 px-2 py-2"
+            >
+              <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: workflow.color || 'var(--color-primary)' }} />
+              <Tip content={workflow.description || null} align="start">
+                <span className="truncate text-sm font-medium text-foreground">{workflow.name}</span>
+              </Tip>
+              {workflow.kind === 'audio' ? <Badge variant="secondary">{t({ ko: '오디오', en: 'Audio' })}</Badge> : null}
+            </Button>
+            <IconButton size="icon-sm" variant="ghost" onClick={() => onEditWorkflow(workflow.id)} disabled={!canUpdateWorkflows} label={t({ ko: '{name} 수정', en: 'Edit {name}' }, { name: workflow.name })}>
+              <Pencil />
+            </IconButton>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <IconButton size="icon-sm" variant="ghost" label={t({ ko: '더 보기', en: 'More' })}><Ellipsis /></IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => onSaveModule(workflow.id)}><Save />{t({ ko: '모듈 저장', en: 'Save module' })}</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onCopyWorkflow(workflow.id)}><Copy />{t({ ko: '복사', en: 'Copy' })}</DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" disabled={!canUpdateWorkflows} onSelect={() => onDeleteWorkflow(workflow.id)}><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )
+      }) : <EmptyListRow />}
+    </RowGroup>
   )
 }
 
 type ServerListSectionProps = {
   servers: ComfyUIServer[]
-  activeServerCount: number
   serverTests: Record<number, ComfyUIServerTestState>
   onOpenCreateServer: () => void
   onEditServer: (serverId: number) => void
@@ -164,121 +116,106 @@ type ServerListSectionProps = {
   onToggleServerActive: (serverId: number, isActive: boolean) => void
 }
 
-export function ComfyServerListSection({ servers, activeServerCount, serverTests, onOpenCreateServer, onEditServer, onDeleteServer, onTestServer, onToggleServerActive }: ServerListSectionProps) {
-  const activeId = useId()
+type ServerState = { tone: 'ok' | 'busy' | 'bad' | 'none'; label: string }
+
+const SERVER_DOT_CLASS: Record<ServerState['tone'], string> = {
+  ok: 'bg-success',
+  busy: 'bg-warning',
+  bad: 'bg-destructive',
+  none: 'bg-muted-foreground/40',
+}
+
+export function ComfyServerListSection({ servers, serverTests, onOpenCreateServer, onEditServer, onDeleteServer, onTestServer, onToggleServerActive }: ServerListSectionProps) {
   const { isAdmin } = useFeaturePermissions()
   const { t, formatNumber } = useI18n()
-  const inactiveServerCount = Math.max(0, servers.length - activeServerCount)
 
   return (
-    <Section
-      variant="settings"
-      heading={(
-        <span className="flex items-center gap-2 whitespace-nowrap">
-          <Server className="h-4 w-4 text-muted-foreground" />
-          {t({ ko: '서버', en: 'Servers' })}
-        </span>
-      )}
+    <RowGroup
+      heading={<SectionLabel icon={<Server />}>{t({ ko: '서버', en: 'Servers' })}</SectionLabel>}
+      count={servers.length}
       actions={(
-        <>
-          {/* Counts are secondary: hidden on phones so the heading and the add action keep their room. */}
-          <Badge variant="outline" className="hidden sm:inline-flex">{t({ ko: '전체 {count}', en: '{count} total' }, { count: formatNumber(servers.length) })}</Badge>
-          <Badge variant="secondary" className="hidden sm:inline-flex">{t({ ko: '활성 {count}', en: '{count} active' }, { count: formatNumber(activeServerCount) })}</Badge>
-          {inactiveServerCount > 0 ? <Badge variant="outline" className="hidden sm:inline-flex">{t({ ko: '비활성 {count}', en: '{count} inactive' }, { count: formatNumber(inactiveServerCount) })}</Badge> : null}
-          <Button type="button" size="sm" variant="secondary" onClick={onOpenCreateServer} disabled={!(isAdmin)}>
-            <Plus className="h-4 w-4" />
-            {t({ ko: '서버 등록', en: 'Add server' })}
-          </Button>
-        </>
+        <IconButton size="icon-sm" variant="ghost" onClick={onOpenCreateServer} disabled={!isAdmin} label={t({ ko: '서버 등록', en: 'Add server' })}>
+          <Plus />
+        </IconButton>
       )}
     >
-      {servers.length > 0 ? (
-        <div>
-          {servers.map((server) => {
-            const testState = serverTests[server.id]
-            const connectionStatus = testState?.status
-            const isModalServer = server.backend_type === 'modal' || connectionStatus?.backend_type === 'modal'
-            const isActive = server.is_active !== false
+      {servers.length > 0 ? servers.map((server) => {
+        const testState = serverTests[server.id]
+        const connectionStatus = testState?.status
+        const isModalServer = server.backend_type === 'modal' || connectionStatus?.backend_type === 'modal'
+        const isActive = server.is_active !== false
+        const running = connectionStatus?.running_count ?? 0
+        const pending = connectionStatus?.pending_count ?? 0
+        const state: ServerState = !isActive
+          ? { tone: 'none', label: t({ ko: '비활성', en: 'Inactive' }) }
+          : isModalServer
+            ? { tone: 'none', label: t('image-generation.components.comfy.home.sections.modal.server.auto.check.skipped') }
+            : testState?.isLoading
+              ? { tone: 'none', label: t({ ko: '확인 중…', en: 'Checking…' }) }
+              : connectionStatus
+                ? connectionStatus.is_connected
+                  ? connectionStatus.is_idle
+                    ? { tone: 'ok', label: t({ ko: '연결됨', en: 'Connected' }) }
+                    : { tone: 'busy', label: t({ ko: '사용 중', en: 'Busy' }) }
+                  : { tone: 'bad', label: t({ ko: '실패', en: 'Failed' }) }
+                : testState?.error
+                  ? { tone: 'bad', label: t({ ko: '실패', en: 'Failed' }) }
+                  : { tone: 'none', label: t({ ko: '확인 전', en: 'Not checked' }) }
+        const errors = [!isModalServer ? connectionStatus?.error_message : undefined, testState?.error].filter(Boolean)
+        const description = server.description?.trim() && server.description.trim() !== server.name ? server.description : null
 
-            return (
-              <div key={server.id} className="border-b border-line py-2.5 text-sm text-muted-foreground last:border-b-0">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-medium text-foreground">{server.name}</span>
-                      <Badge variant={isActive ? 'success' : 'outline'}>{isActive ? t({ ko: '활성', en: 'Active' }) : t({ ko: '비활성', en: 'Inactive' })}</Badge>
-                      {!isModalServer && server.is_default ? <Badge variant="secondary">{t({ ko: '대표', en: 'Default' })}</Badge> : null}
-                      {isModalServer ? <Badge variant="outline">Modal</Badge> : null}
-                      {isModalServer ? (
-                        <Badge variant="outline">{t('image-generation.components.comfy.home.sections.modal.server.auto.check.skipped')}</Badge>
-                      ) : connectionStatus ? (
-                        <Badge variant={connectionStatus.is_connected ? 'success' : 'destructive'}>
-                          {connectionStatus.is_connected ? t({ ko: '연결됨', en: 'Connected' }) : t({ ko: '실패', en: 'Failed' })}
-                        </Badge>
-                      ) : null}
-                      {connectionStatus?.is_connected && !isModalServer ? (
-                        <Badge variant={connectionStatus.is_idle ? 'outline' : 'warning'}>
-                          {connectionStatus.is_idle ? 'idle' : t({ ko: '사용 중', en: 'Busy' })}
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <div className="mt-1 break-all text-2xs">{server.endpoint}</div>
-                    {server.description ? <div className="mt-1 text-2xs">{server.description}</div> : null}
-                    {server.routing_tags && server.routing_tags.length > 0 ? (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {server.routing_tags.map((tag) => (
-                          <Badge key={`${server.id}:${tag}`} variant="outline">#{tag}</Badge>
-                        ))}
-                      </div>
-                    ) : null}
-                    {connectionStatus?.response_time !== undefined ? <div className="mt-1 text-2xs">{connectionStatus.response_time}ms</div> : null}
-                    {connectionStatus?.is_connected && !isModalServer ? (
-                      <div className="mt-1 text-2xs">
-                        {t({ ko: '실행 {running} · 대기 {pending}', en: 'Running {running} · Pending {pending}' }, { running: formatNumber(connectionStatus.running_count ?? 0), pending: formatNumber(connectionStatus.pending_count ?? 0) })}
-                      </div>
-                    ) : null}
-                    {connectionStatus?.error_message && !isModalServer ? <div className="mt-1 text-2xs text-destructive">{connectionStatus.error_message}</div> : null}
-                    {testState?.error ? <div className="mt-1 text-2xs text-destructive">{testState.error}</div> : null}
-                  </div>
-
-                  <div className="flex shrink-0 flex-col items-end gap-2">
-                    <div className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                      <label htmlFor={`${activeId}-${server.id}`} className="cursor-pointer">{t({ ko: '활성', en: 'Active' })}</label>
-                      <Switch
-                        id={`${activeId}-${server.id}`}
-                        size="sm"
-                        checked={isActive}
-                        disabled={!isAdmin} onCheckedChange={(checked) => onToggleServerActive(server.id, checked)}
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => onTestServer(server.id)}
-                      disabled={testState?.isLoading === true}
-                      title={isModalServer ? t({ ko: 'Modal 서버 테스트는 원격 endpoint를 호출해서 비용이 발생할 수 있어.', en: 'Testing a Modal server may call the remote endpoint and incur costs.' }) : undefined}
-                    >
-                      {testState?.isLoading ? t({ ko: '확인 중…', en: 'Checking…' }) : t({ ko: '테스트', en: 'Test' })}
-                    </Button>
-                    <div className="flex gap-1">
-                      <IconButton size="icon-xs" variant="ghost" onClick={() => onEditServer(server.id)} label={t({ ko: '{name} 수정', en: 'Edit {name}' }, { name: server.name })} disabled={!(isAdmin)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </IconButton>
-                      <IconButton size="icon-xs" variant="ghost" onClick={() => onDeleteServer(server.id)} label={t({ ko: '{name} 삭제', en: 'Delete {name}' }, { name: server.name })} disabled={!(isAdmin)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </IconButton>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      ) : (
-        <Text variant="muted">{t({ ko: '연결된 서버가 없어.', en: 'No connected servers.' })}</Text>
-      )}
-    </Section>
+        return (
+          <div key={server.id} className="border-b border-line py-1 last:border-b-0">
+            <div className="flex min-h-10 min-w-0 items-center gap-2.5">
+              <Tip content={state.label}>
+                <span role="img" aria-label={state.label} className={cn('size-2 shrink-0 rounded-full', SERVER_DOT_CLASS[state.tone])} />
+              </Tip>
+              <Tip content={description} align="start">
+                <span className="max-w-[40%] shrink-0 truncate text-sm font-medium text-foreground">{server.name}</span>
+              </Tip>
+              {!isModalServer && server.is_default ? (
+                <Tip content={t({ ko: '대표', en: 'Default' })}>
+                  <Star role="img" aria-label={t({ ko: '대표', en: 'Default' })} className="size-3.5 shrink-0 fill-current text-warning" />
+                </Tip>
+              ) : null}
+              {isModalServer ? <Chip size="sm" tone="muted">Modal</Chip> : null}
+              {(server.routing_tags ?? []).map((tag) => <Chip key={`${server.id}:${tag}`} size="sm" tone="muted">#{tag}</Chip>)}
+              <span className="min-w-0 flex-1 truncate font-mono text-2xs text-muted-foreground" title={server.endpoint}>{server.endpoint}</span>
+              {connectionStatus?.response_time !== undefined ? <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">{connectionStatus.response_time}ms</span> : null}
+              {connectionStatus?.is_connected && !isModalServer && (running > 0 || pending > 0) ? (
+                <Chip size="sm" tone="warning" className="tabular-nums">
+                  {t({ ko: '실행 {running} · 대기 {pending}', en: 'Running {running} · Pending {pending}' }, { running: formatNumber(running), pending: formatNumber(pending) })}
+                </Chip>
+              ) : null}
+              <Switch
+                size="sm"
+                aria-label={t({ ko: '활성', en: 'Active' })}
+                checked={isActive}
+                disabled={!isAdmin}
+                onCheckedChange={(checked) => onToggleServerActive(server.id, checked)}
+              />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <IconButton size="icon-sm" variant="ghost" label={t({ ko: '더 보기', en: 'More' })}><Ellipsis /></IconButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    disabled={testState?.isLoading === true}
+                    onSelect={() => onTestServer(server.id)}
+                    title={isModalServer ? t({ ko: 'Modal 서버 테스트는 원격 endpoint를 호출해서 비용이 발생할 수 있어.', en: 'Testing a Modal server may call the remote endpoint and incur costs.' }) : undefined}
+                  >
+                    <Play />{t({ ko: '테스트', en: 'Test' })}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem disabled={!isAdmin} onSelect={() => onEditServer(server.id)}><Pencil />{t({ ko: '수정', en: 'Edit' })}</DropdownMenuItem>
+                  <DropdownMenuItem variant="destructive" disabled={!isAdmin} onSelect={() => onDeleteServer(server.id)}><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            {errors.length > 0 ? <div className="pb-1 pl-4.5 text-2xs break-all text-destructive">{errors.join(' / ')}</div> : null}
+          </div>
+        )
+      }) : <EmptyListRow />}
+    </RowGroup>
   )
 }
 
@@ -406,7 +343,7 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
   return (
     <Modal open={open} onClose={onClose} title={t({ ko: 'ComfyUI 자동수집', en: 'ComfyUI auto collect' })} widthClassName="max-w-3xl">
       <ModalBody className="space-y-5">
-        <Field label={t({ ko: 'API 목록', en: 'API paths' })}>
+        <Field label={t({ ko: 'API 목록', en: 'API paths' })} info={t({ ko: '대표 ComfyUI 서버에서 수집해. 통합·개별 목록과 하위 폴더 통합은 항상 적용돼.', en: 'Collected from the default ComfyUI server; merged and separate lists and subfolder merging always apply.' })}>
           <Textarea
             variant="settings"
             rows={8}
@@ -424,11 +361,6 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
             <RotateCcw className="h-4 w-4" />
             {t({ ko: '기본값 초기화', en: 'Reset defaults' })}
           </Button>
-        </div>
-
-        <div className="space-y-1 text-sm">
-          <div className="font-medium text-foreground">{t({ ko: '대표 서버 API 기준', en: 'Representative server API' })}</div>
-          <p className="text-muted-foreground">{t({ ko: '자동수집은 대표 ComfyUI 서버에서 실행되고, 통합 + 개별 생성과 하위 폴더 통합은 항상 적용돼.', en: 'Auto collect runs against the representative ComfyUI server; merged + separate lists and subfolder merging are always applied.' })}</p>
         </div>
 
         <ModalFooter>
@@ -455,78 +387,73 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
   const customLists = useMemo(() => dropdownLists.filter((list) => !list.is_auto_collected), [dropdownLists])
   const autoLists = useMemo(() => dropdownLists.filter((list) => list.is_auto_collected), [dropdownLists])
   const visibleLists = activeTab === 'custom' ? customLists : autoLists
-  const dropdownListPreviewTextById = useMemo(
-    () => new Map(dropdownLists.map((list) => [list.id, list.items.slice(0, 6).join(', ')])),
-    [dropdownLists],
-  )
+  const tabs: Array<{ value: DropdownTab; label: string; count: number }> = [
+    { value: 'custom', label: t({ ko: '커스텀', en: 'Custom' }), count: customLists.length },
+    { value: 'auto', label: t({ ko: '자동수집', en: 'Auto collect' }), count: autoLists.length },
+  ]
 
   return (
-    <section className="space-y-3">
-      <Section variant="settings" heading={t({ ko: '드롭다운 목록', en: 'Dropdown lists' })} actions={<Badge variant="outline">{dropdownLists.length}</Badge>}>
-        <SegmentedTabBar
-          value={activeTab}
-          onChange={(value) => setActiveTab(value as DropdownTab)}
-          items={[
-            { value: 'custom', label: t({ ko: '커스텀', en: 'Custom' }) },
-            { value: 'auto', label: t({ ko: '자동수집', en: 'Auto collect' }) },
-          ]}
-        />
-
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-sm text-muted-foreground">{activeTab === 'custom' ? t({ ko: '{count}개 목록', en: '{count} lists' }, { count: formatNumber(customLists.length) }) : t({ ko: '{count}개 목록', en: '{count} lists' }, { count: formatNumber(autoLists.length) })}</div>
-          {activeTab === 'custom' ? (
-            <Button type="button" size="sm" variant="secondary" onClick={() => setIsCustomModalOpen(true)} disabled={!(canUpdateWorkflows)}>
-              <Plus className="h-4 w-4" />
-              {t({ ko: '목록 추가', en: 'Add list' })}
-            </Button>
-          ) : (
-            <Button type="button" size="sm" variant="secondary" onClick={() => setIsAutoModalOpen(true)} disabled={!(isAdmin)}>
-              <Upload className="h-4 w-4" />
-              {t({ ko: '자동수집', en: 'Auto collect' })}
-            </Button>
-          )}
-        </div>
-
-        {visibleLists.length > 0 ? (
-          <div>
-            {visibleLists.map((list) => (
-              <div key={list.id} className="border-b border-line py-2.5 text-sm text-muted-foreground last:border-b-0">
-                <div className="flex items-start justify-between gap-3">
-                  {/* Auto lists also open read-only from the explicit View button; manual lists use Edit. */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-medium text-foreground">{list.name}</span>
-                      <Badge variant={list.is_auto_collected ? 'secondary' : 'outline'}>{list.is_auto_collected ? 'auto' : 'manual'}</Badge>
-                      <Badge variant="outline">{t({ ko: '항목 {count}', en: '{count} items' }, { count: formatNumber(list.items.length) })}</Badge>
-                    </div>
-                    {list.description ? <div className="mt-1 line-clamp-2 text-2xs">{list.description}</div> : null}
-                    {list.source_path ? <div className="mt-1 line-clamp-1 text-2xs">{t({ ko: '소스 {path}', en: 'Source {path}' }, { path: list.source_path })}</div> : null}
-                    {list.items.length > 0 ? <div className="mt-1 line-clamp-1 text-2xs">{dropdownListPreviewTextById.get(list.id)}</div> : null}
-                  </div>
-                  {!list.is_auto_collected ? (
-                    <div className="flex shrink-0 gap-2">
-                      <Button type="button" size="sm" variant="secondary" onClick={() => setEditingCustomList(list)} disabled={!(canUpdateWorkflows) || (isSubmitting)}>
-                        <Pencil className="h-4 w-4" />
-                        {t({ ko: '수정', en: 'Edit' })}
-                      </Button>
-                      <Button type="button" size="sm" variant="secondary" onClick={() => void onDeleteList(list.id)} disabled={!(canUpdateWorkflows) || (isSubmitting)}>
-                        <Trash2 className="h-4 w-4" />
-                        {t({ ko: '삭제', en: 'Delete' })}
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button type="button" size="sm" variant="secondary" onClick={() => setViewingAutoList(list)}>
-                      {t({ ko: '보기', en: 'View' })}
-                    </Button>
-                  )}
-                </div>
-              </div>
+    <section>
+      {/* RowGroup's heading row, with text tabs beside the label. */}
+      <div className="mb-1 flex min-h-8 items-center justify-between gap-3 border-b border-foreground/15">
+        <div className="flex min-w-0 items-center gap-4">
+          <h3 className="flex shrink-0 items-center text-2xs font-semibold uppercase tracking-overline text-muted-foreground">
+            <SectionLabel icon={<ListFilter />}>{t({ ko: '드롭다운 목록', en: 'Dropdown lists' })}</SectionLabel>
+          </h3>
+          <div role="tablist" className="flex min-w-0 items-center gap-3">
+            {tabs.map((tab) => (
+              // eslint-disable-next-line no-restricted-syntax -- text tabs inside the heading row
+              <button
+                key={tab.value}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab.value}
+                onClick={() => setActiveTab(tab.value)}
+                className={cn(
+                  '-mb-px cursor-pointer border-b-2 py-1.5 text-xs font-medium whitespace-nowrap outline-none transition-colors focus-visible:text-foreground',
+                  activeTab === tab.value ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {tab.label} <span className="tabular-nums text-muted-foreground/60">{formatNumber(tab.count)}</span>
+              </button>
             ))}
           </div>
+        </div>
+        {activeTab === 'custom' ? (
+          <IconButton size="icon-sm" variant="ghost" onClick={() => setIsCustomModalOpen(true)} disabled={!canUpdateWorkflows} label={t({ ko: '목록 추가', en: 'Add list' })}>
+            <Plus />
+          </IconButton>
         ) : (
-          <Text variant="muted">{activeTab === 'custom' ? t({ ko: '등록된 커스텀 목록이 없어.', en: 'No custom lists registered.' }) : t({ ko: '자동수집된 목록이 없어.', en: 'No auto-collected lists.' })}</Text>
+          <IconButton size="icon-sm" variant="ghost" onClick={() => setIsAutoModalOpen(true)} disabled={!isAdmin} label={t({ ko: '자동수집', en: 'Auto collect' })}>
+            <RefreshCw />
+          </IconButton>
         )}
-      </Section>
+      </div>
+
+      {visibleLists.length > 0 ? visibleLists.map((list) => {
+        const details = [
+          list.description,
+          list.source_path ? t({ ko: '소스 {path}', en: 'Source {path}' }, { path: list.source_path }) : null,
+          list.items.slice(0, 6).join(', ') || null,
+        ].filter(Boolean)
+        return (
+          <div key={list.id} className="flex min-h-11 items-center gap-2 border-b border-line last:border-b-0">
+            <Tip content={details.length > 0 ? <span className="whitespace-pre-line">{details.join('\n')}</span> : null} align="start">
+              <span className="min-w-0 truncate text-sm font-medium text-foreground">{list.name}</span>
+            </Tip>
+            <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">{formatNumber(list.items.length)}</span>
+            <span className="flex-1" />
+            {list.is_auto_collected ? (
+              <IconButton size="icon-sm" variant="ghost" onClick={() => setViewingAutoList(list)} label={t({ ko: '보기', en: 'View' })}><Eye /></IconButton>
+            ) : (
+              <>
+                <IconButton size="icon-sm" variant="ghost" onClick={() => setEditingCustomList(list)} disabled={!canUpdateWorkflows || isSubmitting} label={t({ ko: '수정', en: 'Edit' })}><Pencil /></IconButton>
+                <IconButton size="icon-sm" variant="ghost" onClick={() => void onDeleteList(list.id)} disabled={!canUpdateWorkflows || isSubmitting} label={t({ ko: '삭제', en: 'Delete' })}><Trash2 /></IconButton>
+              </>
+            )}
+          </div>
+        )
+      }) : <EmptyListRow />}
 
       <CustomDropdownListEditorModal
         open={isCustomModalOpen}

@@ -84,25 +84,6 @@ function resolveComfyModelPreviewFolder(dropdownList: CustomDropdownList) {
 }
 
 /** Render the ComfyUI home/workflow views and coordinate server-targeted generation. */
-/** The management area (servers, dropdown lists) stays as it was left; it starts open. */
-const COMFY_MANAGEMENT_OPEN_STORAGE_KEY = 'conai.comfy.management-open'
-
-function readManagementOpen() {
-  try {
-    return window.localStorage.getItem(COMFY_MANAGEMENT_OPEN_STORAGE_KEY) !== '0'
-  } catch {
-    return true
-  }
-}
-
-function writeManagementOpen(isOpen: boolean) {
-  try {
-    window.localStorage.setItem(COMFY_MANAGEMENT_OPEN_STORAGE_KEY, isOpen ? '1' : '0')
-  } catch {
-    // Storage can be unavailable (private mode, blocked site data); the toggle still works for this session.
-  }
-}
-
 function ComfyGenerationPanelContent({
   onHistoryRefresh,
   selectedWorkflowId,
@@ -125,7 +106,6 @@ function ComfyGenerationPanelContent({
   const draftStorageOwner = resolveAccountDraftOwner(authStatus)
   const canSaveChatPreset = authStatus?.isAdmin === true
   const [workflowEditorState, setWorkflowEditorState] = useState<ComfyWorkflowEditorState | null>(null)
-  const [isManagementOpen, setIsManagementOpen] = useState(readManagementOpen)
   const activeWorkflowId = selectedWorkflowId !== null ? String(selectedWorkflowId) : ''
 
   const appSettingsQuery = useQuery({
@@ -573,11 +553,8 @@ function ComfyGenerationPanelContent({
 
             <ComfyManagementArea
               servers={servers}
-              activeServerCount={activeServers.length}
               serverTests={comfyServerTests}
               dropdownLists={dropdownListsQuery.data}
-              isManagementOpen={isManagementOpen}
-              onToggleManagement={() => setIsManagementOpen((current) => { writeManagementOpen(!current); return !current })}
               isRefreshingDropdownLists={isRefreshingDropdownLists}
               onCreateManualList={(input) => handleCreateDropdownList(input)}
               onUpdateList={(listId, input) => handleUpdateDropdownList(listId, input)}
@@ -656,7 +633,7 @@ function ComfyGenerationPanelContent({
           const fixedInputs = Object.fromEntries(Object.entries(promptData).filter(([key]) => !exposedFieldIds.includes(key)))
           return { kind: 'comfyui' as const, nai: null, comfyui: { workflowId: selectedWorkflow.id, serverId: null, serverTag: null, fixedInputs, exposedFieldIds } }
         }}
-        summary={selectedWorkflow ? t({ ko: '워크플로 "{name}"의 지금 값이 고정돼. 텍스트 필드는 모델이 쓰고, 어느 필드를 열어둘지는 설정 › 채팅에서 바꿔.', en: 'The current values of workflow "{name}" are fixed. Text fields go to the model; change which fields are exposed in settings › chat.' }, { name: selectedWorkflow.name ?? String(selectedWorkflow.id) }) : null}
+        summary={selectedWorkflow ? t({ ko: '워크플로 {name}', en: 'Workflow {name}' }, { name: selectedWorkflow.name ?? String(selectedWorkflow.id) }) : null}
         onClose={() => setIsChatPresetModalOpen(false)}
       />
     </>
