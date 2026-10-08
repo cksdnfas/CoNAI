@@ -29,6 +29,7 @@ import {
   SimilarityCandidateRecord,
 } from './ImageSimilarityQueryBuilder';
 import { hamming64, parseHash64 } from './similarityIndexSql';
+import { sortedUniqueChunks } from '../../utils/sqlInChunks';
 import { greedyDuplicateGroups, planBandLayout } from './duplicateGrouping';
 import {
   buildColorSimilarMatch,
@@ -697,9 +698,11 @@ export class ImageSimilarityModel {
       // 그룹의 모든 composite_hash 추출
       const compositeHashes = metadataGroup.map(m => m.composite_hash);
 
-      // image_files에서 해당 composite_hash를 가진 모든 파일 조회
-      const { query, params } = buildDuplicateGroupFilesQuery(compositeHashes);
-      const fileRecords = db.prepare(query).all(...params) as any[];
+      // image_files에서 해당 composite_hash를 가진 모든 파일 조회 (정렬된 청크를 이어 붙이면 ORDER BY composite_hash, id 와 같다)
+      const fileRecords = sortedUniqueChunks(compositeHashes).flatMap((hashChunk) => {
+        const { query, params } = buildDuplicateGroupFilesQuery(hashChunk);
+        return db.prepare(query).all(...params) as any[];
+      });
 
       // 실제 파일이 없는 경우 그룹에서 제외 (고아 메타데이터 필터링)
       if (fileRecords.length === 0) {
