@@ -3,7 +3,7 @@ import * as path from 'path';
 import { runtimePaths } from '../../config/runtimePaths';
 import type { ComfyUIHistoryResponse, ComfyUIOutputFile } from '../../types/workflow';
 
-export type ComfyOutputKind = 'image' | 'animated' | 'video';
+export type ComfyOutputKind = 'image' | 'animated' | 'video' | 'audio';
 
 export type CollectedComfyOutput = ComfyUIOutputFile & {
   nodeId: string;
@@ -108,6 +108,40 @@ export function extractComfyOutputInfo(
   const uniqueOutputs = deduplicateComfyOutputs(allOutputs);
   console.log(`📦 Found ${allOutputs.length} outputs, returning ${uniqueOutputs.length} unique output(s)`);
   return uniqueOutputs;
+}
+
+const AUDIO_OUTPUT_EXTENSIONS = new Set(['.flac', '.wav', '.mp3', '.ogg', '.opus', '.m4a', '.aac', '.weba']);
+
+function isAudioFile(file: ComfyUIOutputFile): boolean {
+  const format = (file.format || '').toLowerCase();
+  return format.startsWith('audio/') || AUDIO_OUTPUT_EXTENSIONS.has(path.extname(file.filename || '').toLowerCase());
+}
+
+/**
+ * Audio outputs of one prompt, for audio orders only: SaveAudio* nodes report them in an `audio` bucket, and
+ * CoNAIArtifactFileOutput in `files`. Every audio output of every node is returned (an audio graph rarely has more
+ * than one save node); image/video outputs are ignored. Image workflows never call this, so their collection
+ * (`extractComfyOutputInfo`) is unchanged.
+ */
+export function extractComfyAudioOutputs(history: ComfyUIHistoryResponse, promptId: string): CollectedComfyOutput[] {
+  const item = history[promptId];
+  if (!item || !item.outputs) {
+    return [];
+  }
+
+  const outputs: CollectedComfyOutput[] = [];
+  const nodeIds = Object.keys(item.outputs).sort((left, right) => parseNodeOrder(left) - parseNodeOrder(right) || left.localeCompare(right));
+  for (const nodeId of nodeIds) {
+    const output = item.outputs[nodeId];
+    for (const bucket of ['audio', 'files'] as const) {
+      const files = output[bucket];
+      if (!Array.isArray(files)) continue;
+      for (const file of files) {
+        if (bucket === 'audio' || isAudioFile(file)) outputs.push({ ...file, nodeId, kind: 'audio' });
+      }
+    }
+  }
+  return deduplicateComfyOutputs(outputs);
 }
 
 export function writeModalOutputToTemp(file: ModalComfyFile, fallbackName: string, kind: ComfyOutputKind): CollectedComfyOutput & { tempPath: string } {

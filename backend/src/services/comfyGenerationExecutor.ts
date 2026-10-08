@@ -6,6 +6,10 @@ import { moveFileIntoWorkflowArtifacts, writeWorkflowArtifactDirectoryThumbnail 
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver'
 import type { WorkflowRecord } from '../types/workflow'
 import type { GenerationQueueLiveProgress } from '../types/generationQueue'
+import type { CollectedComfyOutput } from './comfyui/outputCollector'
+
+/** Downloaded outputs handed to an output sink; it owns the temp files while it runs. */
+export type ComfyCollectedOutputFile = CollectedComfyOutput & { tempPath: string }
 
 export interface ComfyGenerationRepresentativeImage {
   originalPath: string
@@ -31,6 +35,11 @@ export interface ExecuteComfyGenerationInput {
   /** PJ-3: `/queue` 역매칭용 CoNAI 잡 마커 */
   queueJobId?: number | null
   signal?: AbortSignal
+  /**
+   * Audio orders: collect the prompt's audio outputs and hand them here instead of the image library or the workflow
+   * artifacts. Temp files the sink leaves behind are removed afterwards.
+   */
+  outputSink?: (outputs: ComfyCollectedOutputFile[], promptId: string) => Promise<unknown>
 }
 
 export interface ComfyGenerationSavedArtifact {
@@ -50,6 +59,8 @@ export interface ExecuteComfyGenerationResult {
   representativeImage: ComfyGenerationRepresentativeImage | null
   /** 저장된 모든 이미지 출력의 composite hash (대표 이미지 포함, 저장 순서) */
   savedImageHashes: string[]
+  /** What the output sink returned (audio orders only). */
+  sinkResult?: unknown
 }
 
 export function isComfyGenerationCancelledError(error: unknown) {
@@ -126,8 +137,12 @@ export async function executeComfyGeneration(
     onCancelRequested,
     queueJobId,
     signal,
+    outputSink,
   } = input
   const normalizedWorkflow = normalizeCoNaiArtifactFileOutputNodes(workflow)
+  if (outputSink && comfyService.isModalBackend()) {
+    throw new Error('Audio orders cannot run on a Modal ComfyUI backend')
+  }
 
   const isArtifactWorkflow = artifactWorkflow?.result_view_mode === 'artifact_explorer'
   const progressMonitor = !comfyService.isModalBackend() && queueJobId != null && onProgress
@@ -174,9 +189,34 @@ export async function executeComfyGeneration(
         onCancelRequested,
         signal,
         onlyFinalOutput: !isArtifactWorkflow,
+        audioOutputs: Boolean(outputSink),
       })
   } finally {
     progressMonitor?.close()
+  }
+
+  if (outputSink) {
+    try {
+      if (await shouldCancel?.()) {
+        throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)
+      }
+      const sinkResult = await outputSink(collectedOutputs, promptId)
+      return {
+        promptId,
+        attemptedImageCount: 0,
+        savedImageCount: 0,
+        attemptedArtifactCount: 0,
+        savedArtifactCount: 0,
+        savedArtifacts: [],
+        representativeImage: null,
+        savedImageHashes: [],
+        sinkResult,
+      }
+    } finally {
+      for (const output of collectedOutputs) {
+        await fs.promises.rm(output.tempPath, { force: true }).catch(() => undefined)
+      }
+    }
   }
 
   if (await shouldCancel?.()) {
