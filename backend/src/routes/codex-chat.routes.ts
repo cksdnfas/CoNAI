@@ -156,6 +156,7 @@ function toPublicProfile(profile: ChatProfile, accountId: number | null) {
     backgroundVersion: canViewImages ? backgroundVersionOf(profile) : null,
     // The composer shows the suggestion button only when someone can answer it.
     suggestEnabled: canSuggest(profile, accountId),
+    pageAssist: profile.pageAssist,
   }
 }
 

@@ -1104,6 +1104,7 @@ export const CodexChatService = {
     startingThreads.add(threadId)
     try {
       const profile = requireCodexProfile(thread.profile_id, requester)
+      if (pageContext != null && !profile.pageAssist) throw new CodexChatError('이 프로필은 페이지 어시스턴트가 꺼져 있어.', 400)
       const page = parseChatPageContext(pageContext, requester)
       const routing = userReplyRouting(thread, replyToMessageId)
       const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))

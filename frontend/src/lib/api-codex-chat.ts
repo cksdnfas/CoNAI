@@ -231,6 +231,8 @@ export interface ChatProfileSummary extends ChatProfileAssetFields {
   canReadFileText: boolean
   /** The composer offers reply suggestions (a connection is set up to answer them). */
   suggestEnabled: boolean
+  /** The chat can be connected to the current page (monitor button). */
+  pageAssist: boolean
   id: number
   name: string
   /** Kept optional for older servers; current lists serve avatar bytes through the asset route. */
@@ -604,6 +606,7 @@ export interface ChatProfile extends ChatProfileAssetFields {
   maxToolRounds: number
   /** LLM: the model can look at images (view_images). */
   visionEnabled: boolean
+  pageAssist: boolean
   /** The model may propose chat lorebook entries (save_lore). */
   allowLoreProposals: boolean
   style: ChatStyle

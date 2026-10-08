@@ -105,6 +105,7 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     suggestUserProfileId: profile?.suggestUserProfileId ?? null,
     maxToolRounds: profile?.maxToolRounds ?? defaults?.maxToolRounds ?? 8,
     visionEnabled: profile?.visionEnabled ?? false,
+    pageAssist: profile?.pageAssist ?? false,
     allowLoreProposals: profile?.allowLoreProposals ?? true,
     style: { ...FALLBACK_STYLE, ...(profile?.style ?? defaults?.style) },
     isEnabled: profile?.isEnabled ?? true,

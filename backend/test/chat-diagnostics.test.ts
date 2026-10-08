@@ -64,7 +64,7 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
   assert.deepEqual(loadChatSettings().diagnostics, { enabled: true, captureRaw: false, captureLimit: 20 })
   updateChatSettings({ enabled: true, diagnostics: { enabled: true, captureRaw: false, captureLimit: 2 } })
   const requester = { accountId: 1, accountType: 'admin' as const }
-  const profile = ChatProfileStore.create({ name: '카이', engine: 'llm', providerName: 'test', model: 'm', systemPrompt: 'ADMIN_SYSTEM_PRIVATE',
+  const profile = ChatProfileStore.create({ name: '카이', engine: 'llm', providerName: 'test', model: 'm', pageAssist: true, systemPrompt: 'ADMIN_SYSTEM_PRIVATE',
     promptSections: [{ id: 'private', title: '설정', kind: 'text', enabled: true, content: 'ADMIN_SECTION_PRIVATE' }, { id: 'post', title: '', kind: 'post', enabled: true, content: 'ADMIN_POST_PRIVATE' }],
     authorNote: '사용자에게 보이는 작가 노트', extraParams: '{"private_custom":"EXTRA_SECRET"}', summaryEnabled: false, mcpEnabled: false })
   const threadId = CodexChatStore.createThread(requester.accountId, '진단 / 시험', 'llm', profile.id)
@@ -109,6 +109,14 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
     const messageSections = meta.sections!.filter((section) => section.role !== 'tool-definition')
     assert.equal(messageSections.length, continued.length)
     assert.deepEqual(messageSections.slice(-2).map(({ kind, role }) => [kind, role]), [['continuation', 'assistant'], ['continuation', 'user']])
+  })
+
+  await t.test('a profile with the page assistant off refuses a connected page', async () => {
+    const page = { instanceId: 'page-87654321', connectionId: 'connection-87654321', revision: 'revision-87654321', title: '테스트 페이지', path: '/groups', kind: 'groups', resourceId: null, fields: [], actions: [] }
+    ChatProfileStore.update(profile.id, { pageAssist: false })
+    try {
+      await assert.rejects(LlmChatService.sendMessage(requester, thread(), '페이지 봐줘', () => {}, undefined, undefined, undefined, undefined, undefined, page), /어시스턴트/)
+    } finally { ChatProfileStore.update(profile.id, { pageAssist: true }) }
   })
 
   await t.test('view/content/prompts are cumulative and rechecked on every historical read and export', async () => {

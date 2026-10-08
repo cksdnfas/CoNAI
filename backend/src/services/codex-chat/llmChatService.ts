@@ -609,6 +609,7 @@ export const LlmChatService = {
   async sendMessage(requester: McpRequester, thread: CodexChatThreadRecord, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown, replyToMessageId?: unknown, pageContext?: unknown) {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id, requester)
+    if (pageContext != null && !profile.pageAssist) throw new LlmChatError('이 프로필은 페이지 어시스턴트가 꺼져 있어.', 400)
     const page = parseChatPageContext(pageContext, requester)
     const attachments = validateChatAttachments(requester, fileIds)
     const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length)

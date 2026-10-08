@@ -1073,7 +1073,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         </Tip>
       ) : null}
       <ChatDraftAttachments chat={chat} disabled={isBusy} canReadText={profile?.canReadFileText === true} />
-      {!isGroup ? <ChatPageConnectionNotice /> : null}
+      {!isGroup && profile?.pageAssist ? <ChatPageConnectionNotice /> : null}
       {picks.length > 0 ? (
         <div className="mb-2 flex flex-wrap gap-1.5">
           {picks.map((label) => (
@@ -1101,7 +1101,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       ) : null}
       <div className={cn('flex items-end gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-primary/55', backgroundUrl && 'bg-background/85 backdrop-blur-sm')}>
         <ChatAttachButton chat={chat} disabled={isBusy || activeThreadId === null} />
-        <ChatPageConnectButton disabled={isBusy || isGroup} />
+        {!isGroup && profile?.pageAssist ? <ChatPageConnectButton disabled={isBusy} /> : null}
         {flags.length > 0 ? <ChatFlagButton buttonRef={flagButtonRef} count={activeFlagIds.length} open={flagTrayOpen} disabled={activeThreadId === null} onToggle={() => setFlagTrayOpen((open) => !open)} /> : null}
         {profile?.suggestEnabled ? <ChatSuggestButton buttonRef={suggestButtonRef} open={suggestions.open} loading={suggestions.loading} disabled={isBusy || activeThreadId === null} onToggle={suggestions.toggle} /> : null}
         <textarea

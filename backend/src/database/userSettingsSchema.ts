@@ -808,6 +808,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['avatar_crop', 'TEXT'],
     ['background_hash', 'TEXT'],
     ['vision_enabled', 'INTEGER'],
+    // Page assistant: the chat may be connected to the current CoNAI page (the monitor button). Off unless switched on.
+    ['page_assist', 'INTEGER'],
     ['reasoning_budget_tokens', 'INTEGER'],
     ['extra_params', 'TEXT'],
     // Translation model (user input → English for the model, replies → Korean for display); null: no translation.

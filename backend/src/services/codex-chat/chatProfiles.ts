@@ -171,6 +171,8 @@ export type ChatProfile = {
   maxToolRounds: number
   /** LLM: the model can look at images (view_images results are sent to it). */
   visionEnabled: boolean
+  /** Page assistant: a direct chat with this profile can be connected to the current CoNAI page. */
+  pageAssist: boolean
   /** The model may propose chat lorebook entries (save_lore) for the user to save. */
   allowLoreProposals: boolean
   /** Typeface, roleplay colours, background dimming. */
@@ -245,6 +247,7 @@ type ProfileRow = {
   chat_style: string | null
   background_image: string | null
   vision_enabled: number | null
+  page_assist: number | null
   allow_lore_proposals: number | null
   is_enabled: number
   sort_order: number
@@ -389,6 +392,7 @@ function toProfile(row: ProfileRow): ChatProfile {
     suggestUserProfileId: row.suggest_profile_id === null ? row.suggest_user_profile_id : null,
     maxToolRounds: row.max_tool_rounds ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
     visionEnabled: row.vision_enabled === 1,
+    pageAssist: row.page_assist === 1,
     allowLoreProposals: row.allow_lore_proposals !== 0,
     // Display blocks live in chat_display_blocks; the profile only links them (the style column's own list is legacy).
     style: { ...normalizeChatStyle(row.chat_style), blocks: ChatSharedBlockStore.blocksOf(blockIds) },
@@ -545,6 +549,7 @@ function toColumns(input: ChatProfileInput) {
     suggest_user_profile_id: input.suggestProfileId ? null : optionalNumber(input.suggestUserProfileId, { min: 1, max: Number.MAX_SAFE_INTEGER }, true),
     max_tool_rounds: optionalNumber(input.maxToolRounds, CHAT_PROFILE_LIMITS.maxToolRounds, true) ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
     vision_enabled: input.visionEnabled ? 1 : 0,
+    page_assist: input.pageAssist ? 1 : 0,
     allow_lore_proposals: input.allowLoreProposals === false ? 0 : 1,
     chat_style: JSON.stringify({ ...normalizeChatStyle(input.style), blocks: [] }),
     background_image: background,

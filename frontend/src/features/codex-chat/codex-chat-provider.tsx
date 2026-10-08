@@ -4,7 +4,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread, type CodexChatThread, getCodexChatStatus, getCodexChatThread, previewChatGreeting, interruptCodexChatThread, pickSnapshot, readThreadFlagIds, streamCodexChatMessage, streamChatContinue, streamChatRewrite, type ChatFlag, type ChatMediaAttachment, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
-import { CHAT_STATUS_QUERY_KEY, threadLorebooksQueryKey } from '@/lib/api-codex-chat'
+import { CHAT_PROFILES_QUERY_KEY, CHAT_STATUS_QUERY_KEY, threadLorebooksQueryKey, type ChatProfileSummary } from '@/lib/api-codex-chat'
 import { summarizeChatError } from './chat-error-chip'
 import type { StoredFileEntry } from '@conai/shared'
 import { getCodexChatThreadMedia } from '@/lib/api-codex-chat'
@@ -307,7 +307,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     }
     const cachedThread = queryClient.getQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(threadId))?.thread
     const isGroup = cachedThread?.kind === 'group'
-    const pageAllowed = cachedThread?.kind === 'direct'
+    // Only a direct chat whose profile has the page assistant on sends the connected page.
+    const pageAllowed = cachedThread?.kind === 'direct' && queryClient.getQueryData<ChatProfileSummary[]>(CHAT_PROFILES_QUERY_KEY)?.find((profile) => profile.id === cachedThread?.profile_id)?.pageAssist === true
     // The chat's switched-on flags go with a new message (a rewrite replays the ones stored on the message).
     const flags = rewrite ? [] : (queryClient.getQueryData<ChatFlag[]>(CHAT_FLAGS_QUERY_KEY) ?? []).filter((flag) => readThreadFlagIds(cachedThread).includes(flag.id))
     const shownFlags = [...flags, ...picked.map(pickSnapshot)]
