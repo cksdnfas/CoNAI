@@ -32,7 +32,7 @@ const routeModuleLoaders = {
   ),
   'home-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/home/home-page'),
-    [() => import('@/i18n/resources/home').then((module) => module.homeCatalog), () => import('@/i18n/resources/search').then((module) => module.searchCatalog), () => import('@/i18n/resources/images').then((module) => module.imagesCatalog)],
+    [() => import('@/i18n/resources/home').then((module) => module.homeCatalog), () => import('@/i18n/resources/search').then((module) => module.searchCatalog), () => import('@/i18n/resources/images').then((module) => module.imagesCatalog), () => import('@/i18n/resources/groups').then((module) => module.groupsCatalog)],
   ),
   'image-generation-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/image-generation/image-generation-page'),
@@ -49,7 +49,7 @@ const routeModuleLoaders = {
   'codex-chat-page': () => import('@/features/codex-chat/codex-chat-page'),
   'image-detail-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/images/image-detail-page'),
-    [() => import('@/i18n/resources/images').then((module) => module.imagesCatalog), () => import('@/i18n/resources/image-editor').then((module) => module.imageEditorCatalog)],
+    [() => import('@/i18n/resources/images').then((module) => module.imagesCatalog), () => import('@/i18n/resources/image-editor').then((module) => module.imageEditorCatalog), () => import('@/i18n/resources/groups').then((module) => module.groupsCatalog)],
   ),
   'image-metadata-edit-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/metadata/image-metadata-edit-page'),
@@ -57,7 +57,7 @@ const routeModuleLoaders = {
   ),
   'prompt-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/prompts/prompt-page'),
-    [() => import('@/i18n/resources/prompts').then((module) => module.promptsCatalog)],
+    [() => import('@/i18n/resources/prompts').then((module) => module.promptsCatalog), () => import('@/i18n/resources/groups').then((module) => module.groupsCatalog)],
   ),
   'settings-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/settings/settings-page'),
