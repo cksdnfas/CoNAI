@@ -16,6 +16,7 @@ import { registerChatRoomTools } from './tools/chatRoomTools';
 import { registerChatLoreTools } from './tools/chatLoreTools';
 import { registerChatSetupTools } from './tools/chatSetupTools';
 import { registerChatPageTools } from './tools/chatPageTools';
+import { registerSpriteTools } from './tools/spriteTools';
 import { isContextToolAllowed, requireMcpToolAccess } from './toolAccess';
 import { ChatGenerationPresetStore } from '../services/codex-chat/chatGenerationPresets';
 
@@ -66,6 +67,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   registerChatLoreTools(server, context);
   registerChatSetupTools(server, context);
   registerChatPageTools(server, context);
+  registerSpriteTools(server, context);
 
   return server;
 }

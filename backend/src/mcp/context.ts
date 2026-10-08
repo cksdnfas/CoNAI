@@ -51,7 +51,7 @@ export function isChatMcpSource(source: McpRequestContext['source']) {
  * Withheld from chat agents: a chat reply must not block on a generation job (Codex jobs can run for minutes).
  * The job is linked to the reply at submission and the app attaches the result when it lands.
  */
-export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'execute_graph_workflow', 'get_codex_generation_options', 'import_workflow_definition']);
+export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'execute_graph_workflow', 'get_codex_generation_options', 'import_workflow_definition', 'wait_sprite_job']);
 /** A page grants a bounded input task; explicitly linked generation presets keep their independent grant. */
 export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'propose_page_changes', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes', 'read_page_data', 'propose_page_action']);
 
@@ -119,6 +119,14 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   wait_generation_job: 'read',
   get_generation_artifacts: 'read',
   refresh_artifact_download: 'read',
+  get_video_info: 'read',
+  get_sprite_job: 'read',
+  wait_sprite_job: 'read',
+  download_sprite_frames: 'read',
+  extract_sprite_sheet: 'generate',
+  extract_sprite_sheets_batch: 'generate',
+  normalize_sprite_sheets: 'generate',
+  create_sprite_animation: 'generate',
   generate_comfyui: 'generate',
   generate_comfyui_all_servers: 'generate',
   generate_nai: 'generate',
