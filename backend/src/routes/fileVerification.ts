@@ -4,6 +4,7 @@ import { SystemSettingsService } from '../services/systemSettingsService';
 import { AutoScanScheduler } from '../services/autoScanScheduler';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { successResponse } from '@conai/shared';
+import { respondWithStartedJob } from './runtimeJobRouteHelpers';
 import {
   applyFileVerificationSettingsUpdate,
   parseFileVerificationLogLimit,
@@ -38,16 +39,13 @@ router.get(
 
 /**
  * POST /api/file-verification/verify
- * 파일 검증 수동 실행
+ * 파일 검증 수동 실행 — 202 + `file-verification` 잡. `VerificationResult` 는 잡 result 에 그대로 담긴다.
+ * (예전에는 검증이 끝날 때까지 요청을 붙잡고 있었다.)
  */
 router.post(
   '/verify',
   asyncHandler(async (req: Request, res: Response) => {
-    const result = await FileVerificationService.verifyAllFiles();
-    return res.json({
-      success: true,
-      result,
-    });
+    return respondWithStartedJob(req, res, 'file-verification', {}, '파일 검증이 이미 실행 중입니다');
   })
 );
 

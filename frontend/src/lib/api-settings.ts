@@ -11,6 +11,7 @@ import type {
   VideoOptimizationSettings,
 } from '@conai/shared'
 import type { RatingTierRecord } from '@/features/search/search-types'
+import type { RuntimeJobRecord } from '@/types/runtime-job'
 
 export interface RatingTierUpdateInput {
   tier_name: string
@@ -163,16 +164,17 @@ export async function getRuntimeGenerationHistorySettings() {
   return response.data
 }
 
+/** Start a full file verification. 202 + job; the `FileVerificationRunResult` arrives as the job's result. */
 export async function runFileVerification() {
-  const response = await fetchJson<{ success: boolean; result?: FileVerificationRunResult; error?: string }>('/api/file-verification/verify', {
+  const response = await fetchJson<ApiResponse<RuntimeJobRecord<FileVerificationRunResult>>>('/api/file-verification/verify', {
     method: 'POST',
   })
 
-  if (!response.success || !response.result) {
+  if (!response.success || !response.data) {
     throw createApiFallbackError(response.error, 'settings.fileVerification.run')
   }
 
-  return response.result
+  return response.data
 }
 
 export async function updateMetadataSettings(settings: Partial<MetadataExtractionSettings>) {

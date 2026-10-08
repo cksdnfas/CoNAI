@@ -26,6 +26,23 @@ export class RatingScoreService {
       throw new Error('Rating weights not found. Please run database migrations.');
     }
 
+    const { score: totalScore, breakdown } = this.scoreWithWeights(ratingData, weights);
+
+    // 점수로 등급 찾기
+    const tier = await RatingScoreModel.getTierByScore(totalScore);
+
+    return {
+      score: totalScore,
+      tier,
+      breakdown,
+      rawRating: ratingData
+    };
+  }
+
+  /**
+   * 가중치를 받아 점수만 계산 (등급 조회 없음). 라이브러리 전체 재계산이 행마다 가중치를 다시 읽지 않도록 분리했다.
+   */
+  static scoreWithWeights(ratingData: RatingData, weights: RatingWeights): Pick<RatingScoreResult, 'score' | 'breakdown'> {
     // 소수점 3자리 반올림 헬퍼 함수
     const round3 = (value: number): number => Math.round(value * 1000) / 1000;
 
@@ -35,22 +52,15 @@ export class RatingScoreService {
     const questionableScore = round3(ratingData.questionable) * weights.questionable_weight;
     const explicitScore = round3(ratingData.explicit) * weights.explicit_weight;
 
-    // 총점 계산
-    const totalScore = generalScore + sensitiveScore + questionableScore + explicitScore;
-
-    // 점수로 등급 찾기
-    const tier = await RatingScoreModel.getTierByScore(totalScore);
-
     return {
-      score: totalScore,
-      tier,
+      // 총점 계산
+      score: generalScore + sensitiveScore + questionableScore + explicitScore,
       breakdown: {
         general: generalScore,
         sensitive: sensitiveScore,
         questionable: questionableScore,
         explicit: explicitScore
       },
-      rawRating: ratingData
     };
   }
 

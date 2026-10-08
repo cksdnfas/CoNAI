@@ -18,6 +18,12 @@ export type RuntimeJobKind =
   | 'recycle-bin-retention'
   | 'database-compaction'
   | 'duplicate-group-scan'
+  | 'auto-tag-reset'
+  | 'rating-score-recalculate'
+  | 'auto-tag-batch-all'
+  | 'auto-tag-collection-sync'
+  | 'prompt-similarity-rebuild'
+  | 'file-verification'
 
 export type RuntimeJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 

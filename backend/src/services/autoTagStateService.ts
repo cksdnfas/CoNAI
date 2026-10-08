@@ -81,6 +81,103 @@ function capabilitySignature(capabilities: AutoTagStateCapabilities): string {
   return `${capabilities.taggerAutoEnabled ? 1 : 0}:${capabilities.kaloscopeAutoEnabled ? 1 : 0}`;
 }
 
+const COMPLETED_SIGNATURE_KEY = 'auto_tag_state_synced_capabilities';
+/** Rows per recompute range; each range is one short write transaction. */
+const RECOMPUTE_RANGE_SIZE = 500;
+let recomputeInFlight: Promise<void> | null = null;
+
+function readStoredSignature(): string | null {
+  const stored = db.prepare(`
+    SELECT tagger_enabled, kaloscope_enabled FROM ${META_TABLE} WHERE id = 1
+  `).get() as { tagger_enabled: number | null; kaloscope_enabled: number | null } | undefined;
+  return stored && stored.tagger_enabled !== null && stored.kaloscope_enabled !== null
+    ? `${stored.tagger_enabled ? 1 : 0}:${stored.kaloscope_enabled ? 1 : 0}`
+    : null;
+}
+
+function readCompletedSignature(): string | null {
+  try {
+    const row = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(COMPLETED_SIGNATURE_KEY) as { value: string } | undefined;
+    return row?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCompletedSignature(signature: string): void {
+  db.prepare(`
+    INSERT INTO system_settings (key, value, description, updated_at)
+    VALUES (?, ?, 'auto_tag_state recompute finished for these tagger capabilities', CURRENT_TIMESTAMP)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+  `).run(COMPLETED_SIGNATURE_KEY, signature);
+}
+
+/**
+ * Bring every row's auto_tag_state in line with the capabilities in the meta row, one rowid range per transaction.
+ * The SQL reads the capabilities from the meta row itself (CAPABILITY_*_SQL), so a change made mid-run applies to
+ * the remaining ranges; the outer loop then repeats the pass for the ranges already done.
+ */
+async function runCapabilityRecompute(): Promise<void> {
+  const rangeEnd = db.prepare(`SELECT rowid AS id FROM media_metadata WHERE rowid > ? ORDER BY rowid LIMIT 1 OFFSET ${RECOMPUTE_RANGE_SIZE - 1}`);
+  const promote = db.prepare(`
+    UPDATE media_metadata
+    SET ${STATE_COLUMN} = 'pending'
+    WHERE rowid > ? AND rowid <= ?
+      AND ${STATE_COLUMN} IS NOT 'pending'
+      AND ${needsAutoTagWorkSql('auto_tags')}
+      AND ${hasTaggableFileSql('media_metadata.composite_hash')}
+  `);
+  const settle = db.prepare(`
+    UPDATE media_metadata
+    SET ${STATE_COLUMN} = 'done'
+    WHERE rowid > ? AND rowid <= ?
+      AND ${STATE_COLUMN} = 'pending'
+      AND NOT ${needsAutoTagWorkSql('auto_tags')}
+  `);
+  const recomputeRange = db.transaction((from: number, to: number) => ({
+    promoted: promote.run(from, to).changes,
+    settled: settle.run(from, to).changes,
+  }));
+
+  try {
+    for (;;) {
+      const signature = readStoredSignature();
+      if (signature === null) {
+        return;
+      }
+
+      let promoted = 0;
+      let settled = 0;
+      let cursor = 0;
+      for (;;) {
+        const end = rangeEnd.get(cursor) as { id: number } | undefined;
+        const to = end ? end.id : Number.MAX_SAFE_INTEGER;
+        const changes = recomputeRange(cursor, to);
+        promoted += changes.promoted;
+        settled += changes.settled;
+        if (!end) {
+          break;
+        }
+        cursor = to;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+
+      if (readStoredSignature() !== signature) {
+        continue;
+      }
+
+      writeCompletedSignature(signature);
+      syncedCapabilitySignature = signature;
+      if (promoted > 0 || settled > 0) {
+        console.log(`[AutoTagState] Recomputed auto_tag_state for capabilities ${signature} (+${promoted} pending, -${settled} settled)`);
+      }
+      return;
+    }
+  } catch (error) {
+    console.warn('[AutoTagState] Failed to recompute auto-tag states:', error instanceof Error ? error.message : error);
+  }
+}
+
 export class AutoTagStateService {
   /** True when migration 028 is applied and the partial index can drive lookups. */
   static isIndexedStateAvailable(): boolean {
@@ -107,8 +204,14 @@ export class AutoTagStateService {
   /**
    * Recompute the stored state when the enabled tagger set changes.
    *
-   * The recorded capabilities also feed the migration 028 triggers, so they must
-   * be persisted before the recompute runs.
+   * The recorded capabilities also feed the migration 028 triggers, so they are persisted first (one tiny write).
+   * The recompute itself walks media_metadata one rowid range at a time in the background, one short transaction
+   * per range, instead of two full-table UPDATEs inside one transaction on the caller's stack. Until it finishes a
+   * row may still carry its old state; the scheduler's residual json_extract filter keeps the rows it picks correct,
+   * and rows that just became pending are picked up on a later poll.
+   *
+   * Completion is recorded separately (`system_settings.auto_tag_state_synced_capabilities`), so a recompute that a
+   * restart interrupted runs again instead of being taken as done because the meta row already matches.
    */
   static syncCapabilityState(capabilities: AutoTagStateCapabilities): void {
     if (!this.isIndexedStateAvailable()) {
@@ -121,20 +224,17 @@ export class AutoTagStateService {
     }
 
     try {
-      const stored = db.prepare(`
-        SELECT tagger_enabled, kaloscope_enabled FROM ${META_TABLE} WHERE id = 1
-      `).get() as { tagger_enabled: number | null; kaloscope_enabled: number | null } | undefined;
+      const storedSignature = readStoredSignature();
+      // Databases from before the marker recomputed atomically with the meta write, so a matching meta row there
+      // means the states are current.
+      const completedSignature = readCompletedSignature() ?? storedSignature;
 
-      const storedSignature = stored && stored.tagger_enabled !== null && stored.kaloscope_enabled !== null
-        ? `${stored.tagger_enabled ? 1 : 0}:${stored.kaloscope_enabled ? 1 : 0}`
-        : null;
-
-      if (storedSignature === signature) {
+      if (storedSignature === signature && completedSignature === signature) {
         syncedCapabilitySignature = signature;
         return;
       }
 
-      const recompute = db.transaction(() => {
+      if (storedSignature !== signature) {
         db.prepare(`
           INSERT INTO ${META_TABLE} (id, tagger_enabled, kaloscope_enabled, updated_at)
           VALUES (1, ?, ?, CURRENT_TIMESTAMP)
@@ -143,34 +243,22 @@ export class AutoTagStateService {
             kaloscope_enabled = excluded.kaloscope_enabled,
             updated_at = CURRENT_TIMESTAMP
         `).run(capabilities.taggerAutoEnabled ? 1 : 0, capabilities.kaloscopeAutoEnabled ? 1 : 0);
+      }
 
-        const promoted = db.prepare(`
-          UPDATE media_metadata
-          SET ${STATE_COLUMN} = 'pending'
-          WHERE ${STATE_COLUMN} IS NOT 'pending'
-            AND ${needsAutoTagWorkSql('auto_tags')}
-            AND ${hasTaggableFileSql('media_metadata.composite_hash')}
-        `).run().changes;
-
-        const settled = db.prepare(`
-          UPDATE media_metadata
-          SET ${STATE_COLUMN} = 'done'
-          WHERE ${STATE_COLUMN} = 'pending'
-            AND NOT ${needsAutoTagWorkSql('auto_tags')}
-        `).run().changes;
-
-        return { promoted, settled };
-      })();
-
-      syncedCapabilitySignature = signature;
-
-      if (recompute.promoted > 0 || recompute.settled > 0) {
-        console.log(
-          `[AutoTagState] Recomputed auto_tag_state for capabilities ${signature} (+${recompute.promoted} pending, -${recompute.settled} settled)`,
-        );
+      if (!recomputeInFlight) {
+        recomputeInFlight = runCapabilityRecompute().finally(() => {
+          recomputeInFlight = null;
+        });
       }
     } catch (error) {
       console.warn('[AutoTagState] Failed to sync auto-tag state capabilities:', error instanceof Error ? error.message : error);
+    }
+  }
+
+  /** Resolve once the background capability recompute (if any) has finished. Tests and benchmarks wait on it. */
+  static async waitForCapabilitySync(): Promise<void> {
+    while (recomputeInFlight) {
+      await recomputeInFlight;
     }
   }
 

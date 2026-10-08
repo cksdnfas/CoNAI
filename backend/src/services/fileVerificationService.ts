@@ -6,6 +6,8 @@ import { resolveUploadsPath, runtimePaths } from '../config/runtimePaths';
 import type { FileType } from '../types/image';
 import { checkFileAccess } from '../utils/fileAccess';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
+import { maybeTruncateImagesWal } from '../database/walMaintenance';
+import { LIBRARY_BATCH_SIZE, chunkArray, pageBoundary, type LibraryBatchHooks } from './maintenance/libraryBatch';
 
 /**
  * 파일 검증 결과
@@ -58,8 +60,21 @@ interface ImageFileRecord {
 
 interface FileVerificationOutcome {
   hasIssue: boolean;
+  /** The image_files row should go (original gone, nothing left to show). */
   deleted: boolean;
+  /** The row was checked and stays; `last_verified_date` moves. False when the check was skipped. */
+  verified: boolean;
 }
+
+export interface VerifyAllFilesOptions {
+  hooks?: LibraryBatchHooks;
+  verificationType?: string;
+}
+
+/** Files checked concurrently inside one page (filesystem calls, NAS friendly). */
+const VERIFY_CONCURRENCY = 50;
+/** Errors kept in the result and the log row; the count stays exact. */
+const MAX_REPORTED_ERRORS = 1000;
 
 /**
  * 파일 검증 서비스
@@ -71,7 +86,6 @@ interface FileVerificationOutcome {
  * - 검증 결과를 로그로 저장 (30일간 보관)
  */
 export class FileVerificationService {
-  private static readonly BATCH_SIZE = 50;
   private static isRunning = false;
   private static currentProgress = {
     totalFiles: 0,
@@ -82,87 +96,114 @@ export class FileVerificationService {
 
   /**
    * 전체 파일 검증 실행
+   *
+   * image_files 를 id 키셋으로 한 페이지(500행)씩 읽고, 페이지 안에서는 파일시스템 확인을 50개씩 병렬로 돌린 뒤
+   * 그 페이지의 결과(삭제/검증 시각 갱신)를 트랜잭션 하나로 반영한다. 예전에는 전체 목록을 메모리에 올리고
+   * 파일마다 autocommit UPDATE 를 했으며 50개마다 100ms 를 쉬었다.
    */
-  static async verifyAllFiles(): Promise<VerificationResult> {
+  static async verifyAllFiles(options: VerifyAllFilesOptions = {}): Promise<VerificationResult> {
     if (this.isRunning) {
       throw new Error('파일 검증이 이미 실행 중입니다');
     }
 
     this.isRunning = true;
+    const hooks = options.hooks ?? {};
     const startTime = Date.now();
     const errors: Array<{ fileId: number; filePath: string; error: string }> = [];
 
     let totalChecked = 0;
     let missingFound = 0;
     let deletedRecords = 0;
+    let errorCount = 0;
 
     try {
       console.log('🔍 파일 검증 시작...');
 
-      const allFiles = db
-        .prepare(`
-          SELECT
-            if.id,
-            if.composite_hash,
-            if.original_file_path,
-            if.file_type,
-            if.mime_type,
-            mm.thumbnail_path
-          FROM image_files if
-          LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
-          WHERE if.file_status = 'active'
-          ORDER BY if.id ASC
-        `)
-        .all() as ImageFileRecord[];
+      const totalFiles = (db.prepare(`SELECT COUNT(*) AS total FROM image_files WHERE file_status = 'active'`).get() as { total: number }).total;
+      const nextPage = db.prepare(`
+        SELECT
+          if.id,
+          if.composite_hash,
+          if.original_file_path,
+          if.file_type,
+          if.mime_type,
+          mm.thumbnail_path
+        FROM image_files if
+        LEFT JOIN media_metadata mm ON if.composite_hash = mm.composite_hash
+        WHERE if.file_status = 'active' AND if.id > ?
+        ORDER BY if.id ASC
+        LIMIT ${LIBRARY_BATCH_SIZE}
+      `);
+      const deleteRecord = db.prepare(`DELETE FROM image_files WHERE id = ?`);
+      const markVerified = db.prepare(`UPDATE image_files SET last_verified_date = CURRENT_TIMESTAMP WHERE id = ?`);
+      const applyPage = db.transaction((deleteIds: number[], verifiedIds: number[]) => {
+        for (const id of deleteIds) deleteRecord.run(id);
+        for (const id of verifiedIds) markVerified.run(id);
+      });
 
-      console.log(`  📊 총 ${allFiles.length}개 파일 검증 예정`);
+      console.log(`  📊 총 ${totalFiles}개 파일 검증 예정`);
 
       this.currentProgress = {
-        totalFiles: allFiles.length,
+        totalFiles,
         checkedFiles: 0,
         missingFiles: 0,
         startTime,
       };
+      hooks.progress?.(0, totalFiles);
 
-      for (let i = 0; i < allFiles.length; i += this.BATCH_SIZE) {
-        const batch = allFiles.slice(i, i + this.BATCH_SIZE);
-        const batchResults = await Promise.allSettled(
-          batch.map((file) => this.verifyFile(file))
-        );
+      let cursor = 0;
+      for (;;) {
+        hooks.throwIfCancelled?.();
+        const page = nextPage.all(cursor) as ImageFileRecord[];
+        if (page.length === 0) {
+          break;
+        }
+        cursor = page[page.length - 1].id;
 
-        batchResults.forEach((result, index) => {
-          const file = batch[index];
-          totalChecked++;
-          this.currentProgress.checkedFiles = totalChecked;
+        const deleteIds: number[] = [];
+        const verifiedIds: number[] = [];
+        for (const batch of chunkArray(page, VERIFY_CONCURRENCY)) {
+          const batchResults = await Promise.allSettled(batch.map((file) => this.verifyFile(file)));
 
-          if (result.status === 'fulfilled') {
-            const { hasIssue, deleted } = result.value;
-            if (hasIssue) {
-              missingFound++;
-              this.currentProgress.missingFiles = missingFound;
+          batchResults.forEach((result, index) => {
+            const file = batch[index];
+            totalChecked++;
+
+            if (result.status === 'fulfilled') {
+              const { hasIssue, deleted, verified } = result.value;
               if (deleted) {
-                deletedRecords++;
+                deleteIds.push(file.id);
+              } else if (verified) {
+                verifiedIds.push(file.id);
               }
+              if (hasIssue) {
+                missingFound++;
+                if (deleted) {
+                  deletedRecords++;
+                }
+              }
+            } else {
+              errorCount++;
+              if (errors.length < MAX_REPORTED_ERRORS) {
+                errors.push({
+                  fileId: file.id,
+                  filePath: file.original_file_path,
+                  error: result.reason?.message || '알 수 없는 오류',
+                });
+              }
+              hooks.recordError?.(file.original_file_path, result.reason);
+              console.error(`  ❌ 파일 검증 오류: ${file.original_file_path}`, result.reason);
             }
-          } else {
-            errors.push({
-              fileId: file.id,
-              filePath: file.original_file_path,
-              error: result.reason?.message || '알 수 없는 오류',
-            });
-            console.error(`  ❌ 파일 검증 오류: ${file.original_file_path}`, result.reason);
-          }
-        });
-
-        if ((i + this.BATCH_SIZE) % 500 === 0 || i + this.BATCH_SIZE >= allFiles.length) {
-          console.log(
-            `  ⏳ 진행: ${totalChecked}/${allFiles.length} (이슈: ${missingFound}개)`
-          );
+          });
         }
 
-        if (i + this.BATCH_SIZE < allFiles.length) {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
+        applyPage(deleteIds, verifiedIds);
+        this.currentProgress.checkedFiles = totalChecked;
+        this.currentProgress.missingFiles = missingFound;
+        hooks.progress?.(totalChecked, totalFiles);
+        console.log(`  ⏳ 진행: ${totalChecked}/${totalFiles} (이슈: ${missingFound}개)`);
+        maybeTruncateImagesWal('file-verification');
+        await pageBoundary(hooks);
       }
 
       const duration = Date.now() - startTime;
@@ -172,6 +213,9 @@ export class FileVerificationService {
       console.log(`  ⚠️  이슈 발견: ${missingFound}개`);
       console.log(`  🗑️  삭제된 레코드: ${deletedRecords}개`);
       console.log(`  ⏱️  소요 시간: ${(duration / 1000).toFixed(2)}초`);
+      if (errorCount > errors.length) {
+        console.warn(`  ⚠️  오류 ${errorCount}개 중 ${errors.length}개만 결과에 남김`);
+      }
 
       const result: VerificationResult = {
         totalChecked,
@@ -181,12 +225,16 @@ export class FileVerificationService {
         errors,
       };
 
-      this.saveVerificationLog(result, 'manual');
+      this.saveVerificationLog(result, options.verificationType ?? 'manual', errorCount);
       this.cleanupOldLogs();
 
       return result;
     } catch (error) {
-      console.error('❌ 파일 검증 중 오류 발생:', error);
+      if ((error as Error)?.name === 'RuntimeJobCancelledError') {
+        console.log(`⏹️  파일 검증 취소됨 (${totalChecked}개 확인 후, 끝난 페이지는 반영됨)`);
+      } else {
+        console.error('❌ 파일 검증 중 오류 발생:', error);
+      }
       throw error;
     } finally {
       this.isRunning = false;
@@ -200,7 +248,7 @@ export class FileVerificationService {
   }
 
   /**
-   * 단일 파일 검증
+   * 단일 파일 검증. DB 는 건드리지 않고 판정만 돌려준다 — 페이지 단위로 모아 한 트랜잭션에 반영한다.
    */
   private static async verifyFile(file: ImageFileRecord): Promise<FileVerificationOutcome> {
     try {
@@ -214,45 +262,40 @@ export class FileVerificationService {
         console.warn(
           `  ⏭️  원본 접근 실패(${originalAccess.errorCode || 'unknown'}), 이번 검증 건너뜀: ${file.original_file_path}`
         );
-        return { hasIssue: false, deleted: false };
+        return { hasIssue: false, deleted: false, verified: false };
       }
 
       const originalExists = originalAccess.exists;
-      const thumbnailExists = this.thumbnailExists(file.thumbnail_path);
 
       if (this.isVideoLike(file)) {
         if (!originalExists) {
           const fileName = path.basename(file.original_file_path);
           console.log(`  ⚠️  원본 없음(video/animated), DB 삭제: ${fileName}`);
-          this.deleteImageFileRecord(file.id);
-          return { hasIssue: true, deleted: true };
+          return { hasIssue: true, deleted: true, verified: false };
         }
 
-        this.markVerified(file.id);
-        return { hasIssue: false, deleted: false };
+        return { hasIssue: false, deleted: false, verified: true };
       }
+
+      const thumbnailExists = await this.thumbnailExists(file.thumbnail_path);
 
       if (!originalExists && !thumbnailExists) {
         const fileName = path.basename(file.original_file_path);
         console.log(`  ⚠️  원본/썸네일 모두 없음(image), DB 삭제: ${fileName}`);
-        this.deleteImageFileRecord(file.id);
-        return { hasIssue: true, deleted: true };
+        return { hasIssue: true, deleted: true, verified: false };
       }
 
       if (!originalExists && thumbnailExists) {
         console.log(`  ⚠️  원본 없음(image), 썸네일 유지로 보류: ${file.original_file_path}`);
-        this.markVerified(file.id);
-        return { hasIssue: true, deleted: false };
+        return { hasIssue: true, deleted: false, verified: true };
       }
 
       if (!thumbnailExists) {
         await this.regenerateThumbnail(file, originalPath);
-        this.markVerified(file.id);
-        return { hasIssue: true, deleted: false };
+        return { hasIssue: true, deleted: false, verified: true };
       }
 
-      this.markVerified(file.id);
-      return { hasIssue: false, deleted: false };
+      return { hasIssue: false, deleted: false, verified: true };
     } catch (error) {
       throw new Error(`파일 검증 실패: ${(error as Error).message}`);
     }
@@ -266,7 +309,7 @@ export class FileVerificationService {
     );
   }
 
-  private static thumbnailExists(thumbnailPath: string | null): boolean {
+  private static async thumbnailExists(thumbnailPath: string | null): Promise<boolean> {
     if (!thumbnailPath) {
       return false;
     }
@@ -275,7 +318,12 @@ export class FileVerificationService {
       ? thumbnailPath
       : path.join(runtimePaths.tempDir, thumbnailPath);
 
-    return fs.existsSync(absoluteThumbnailPath);
+    try {
+      await fs.promises.access(absoluteThumbnailPath);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private static async regenerateThumbnail(file: ImageFileRecord, originalPath: string): Promise<void> {
@@ -288,24 +336,13 @@ export class FileVerificationService {
     MediaMetadataModel.update(file.composite_hash, { thumbnail_path: thumbnailPath });
   }
 
-  private static deleteImageFileRecord(fileId: number): void {
-    db.prepare(`DELETE FROM image_files WHERE id = ?`).run(fileId);
-  }
-
-  private static markVerified(fileId: number): void {
-    db.prepare(`
-      UPDATE image_files
-      SET last_verified_date = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(fileId);
-  }
-
   /**
    * 검증 로그 저장
    */
   private static saveVerificationLog(
     result: VerificationResult,
-    verificationType: string
+    verificationType: string,
+    errorCount: number = result.errors.length
   ): void {
     const errorDetails =
       result.errors.length > 0 ? JSON.stringify(result.errors) : null;
@@ -328,7 +365,7 @@ export class FileVerificationService {
       result.deletedRecords,
       result.duration,
       verificationType,
-      result.errors.length,
+      errorCount,
       errorDetails
     );
   }

@@ -24,7 +24,7 @@ import {
   updateWatchedFolder,
   validateWatchedFolderPath,
 } from '@/lib/api-folders'
-import { runFileVerification } from '@/lib/api-settings'
+import { runFileVerification, type FileVerificationRunResult } from '@/lib/api-settings'
 import { useRuntimeJobAction } from '@/lib/use-runtime-job'
 import type { BackupSourceUpdateInput, ScanAllSummary, WatchedFolderUpdateInput } from '@/types/folder'
 import { createNewBackupSourceDraft, createNewWatchedFolderDraft, normalizeBackupTargetPath, parseCommaSeparatedInput } from './settings-utils'
@@ -155,13 +155,22 @@ export function useFolderSettingsTab({ isActive, notifyInfo, notifyError }: UseF
     await refreshFolderQueries()
   }
 
-  const verifyAllFilesMutation = useMutation({
-    mutationFn: runFileVerification,
-    onSuccess: async (result) => {
-      notifyInfo(t({ ko: '파일 검증 완료: 검사 {checked}개, 이슈 {missing}개, 정리 {deleted}개', en: 'File verification complete: checked {checked}, issues {missing}, cleaned {deleted}' }, { checked: formatNumber(result.totalChecked), missing: formatNumber(result.missingFound), deleted: formatNumber(result.deletedRecords) }))
-      await refreshFolderQueries()
+  /** 전체 파일 검증도 잡이다. 완료 요약 토스트는 잡이 끝날 때 뜬다. */
+  const verifyAllFilesJob = useRuntimeJobAction<FileVerificationRunResult>(runFileVerification, {
+    onCompleted: (job) => {
+      const result = job.result
+      notifyInfo(t({ ko: '파일 검증 완료: 검사 {checked}개, 이슈 {missing}개, 정리 {deleted}개', en: 'File verification complete: checked {checked}, issues {missing}, cleaned {deleted}' }, { checked: formatNumber(result?.totalChecked ?? 0), missing: formatNumber(result?.missingFound ?? 0), deleted: formatNumber(result?.deletedRecords ?? 0) }))
+      void refreshFolderQueries()
     },
-    onError: (error) => {
+    onCancelled: (job) => {
+      notifyInfo(t({ ko: '파일 검증을 {processed}개 확인 후 중단했어.', en: 'File verification stopped after {processed} files.' }, { processed: formatNumber(job.progress.processed) }))
+      void refreshFolderQueries()
+    },
+    onFailed: (job) => {
+      notifyError(job.failureMessage ?? t({ ko: '파일 검증에 실패했어.', en: 'File verification failed.' }))
+      void refreshFolderQueries()
+    },
+    onStartError: (error) => {
       notifyError(error instanceof Error ? error.message : t({ ko: '파일 검증에 실패했어.', en: 'File verification failed.' }))
     },
   })
@@ -293,8 +302,11 @@ export function useFolderSettingsTab({ isActive, notifyInfo, notifyError }: UseF
       onValidateBackupPath: () => void validateBackupPathMutation.mutateAsync(newBackupSource.source_path),
       onAddBackupSource: handleAddBackupSource,
       onRefresh: () => void refreshFolderQueries(),
-      onVerifyAllFiles: () => void verifyAllFilesMutation.mutateAsync(),
-      isVerifyingAllFiles: verifyAllFilesMutation.isPending,
+      onVerifyAllFiles: () => void verifyAllFilesJob.run(),
+      isVerifyingAllFiles: verifyAllFilesJob.isStarting || verifyAllFilesJob.isRunning,
+      verifyAllFilesJob: verifyAllFilesJob.job,
+      onCancelVerifyAllFiles: () => void verifyAllFilesJob.cancel(),
+      isCancellingVerifyAllFiles: verifyAllFilesJob.isCancelling,
       onScanAll: () => void handleScanAllFolders(),
       scanAllJob: scanAllJob.job,
       isScanningAll: scanAllJob.isStarting || scanAllJob.isRunning,

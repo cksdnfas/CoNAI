@@ -259,32 +259,7 @@ router.post('/:id/images/bulk', asyncHandler(async (req: Request, res: Response)
       return;
     }
 
-    let addedCount = 0;
-    let convertedCount = 0;
-    let skippedCount = 0;
-    const errors: string[] = [];
-
-    for (const compositeHash of composite_hashes) {
-      try {
-        const collectionType = await ImageGroupModel.getCollectionType(groupId, compositeHash);
-
-        if (collectionType === 'manual') {
-          skippedCount++;
-          continue;
-        } else if (collectionType === 'auto') {
-          const converted = await ImageGroupModel.convertToManual(groupId, compositeHash);
-          if (converted) {
-            convertedCount++;
-          }
-          continue;
-        }
-
-        await ImageGroupModel.addImageToGroup(groupId, compositeHash, 'manual', 0);
-        addedCount++;
-      } catch (error) {
-        errors.push(`Image ${compositeHash}: ${(error as Error).message}`);
-      }
-    }
+    const { addedCount, convertedCount, skippedCount, errors } = await ImageGroupModel.addImagesManuallyInPages(groupId, composite_hashes);
 
     return res.status(201).json(
       successResponse({
@@ -312,22 +287,7 @@ router.post('/:id/images/bulk-remove', asyncHandler(async (req: Request, res: Re
       return;
     }
 
-    let removedCount = 0;
-    let skippedCount = 0;
-    const errors: string[] = [];
-
-    for (const compositeHash of composite_hashes) {
-      try {
-        const removed = await ImageGroupModel.removeImageFromGroup(groupId, compositeHash);
-        if (removed) {
-          removedCount++;
-        } else {
-          skippedCount++;
-        }
-      } catch (error) {
-        errors.push(`Image ${compositeHash}: ${(error as Error).message}`);
-      }
-    }
+    const { removedCount, skippedCount, errors } = await ImageGroupModel.removeImagesInPages(groupId, composite_hashes);
 
     return res.json(
       successResponse({
