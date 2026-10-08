@@ -72,6 +72,7 @@ const routeModuleLoaders = {
     [() => import('@/i18n/resources/upload').then((module) => module.uploadCatalog)],
   ),
   'files-page': () => import('@/features/files/files-page'),
+  'sprite-page': () => import('@/features/sprite/sprite-page'),
   'wallpaper-editor-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/wallpaper/wallpaper-editor-page'),
     [() => import('@/i18n/resources/wallpaper').then((module) => module.wallpaperCatalog)],
@@ -178,6 +179,10 @@ function getRouteModuleLoader(to: string): RouteModuleLoader | null {
     return routeModuleLoaders['files-page']
   }
 
+  if (pathname === '/sprite') {
+    return routeModuleLoaders['sprite-page']
+  }
+
   if (pathname === '/settings') {
     return routeModuleLoaders['settings-page']
   }
@@ -281,6 +286,15 @@ const FilesPageLazy = lazy(async () => {
 
 export function FilesRoute() {
   return withSuspense(<FilesPageLazy />)
+}
+
+const SpritePageLazy = lazy(async () => {
+  const module = await loadLazyRoute('sprite-page', routeModuleLoaders['sprite-page'])
+  return { default: module.SpritePage }
+})
+
+export function SpriteRoute() {
+  return withSuspense(<SpritePageLazy />)
 }
 
 const WallpaperEditorPageLazy = lazy(async () => {
