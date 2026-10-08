@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
+import { FieldInfo } from '@/components/ui/field'
 import { ListRow } from '@/components/ui/list-row'
 import { RowGroup } from '@/components/ui/row-group'
 import { SettingRow } from '@/components/ui/setting-row'
@@ -112,8 +113,7 @@ export function WildcardSyntaxSettingsPanel() {
           })}
           <SettingRow
             htmlFor="wildcard-syntax-character-related"
-            label={t({ ko: '캐릭터 관련 태그', en: 'Character Related Tags' })}
-            description={t({ ko: '감지된 캐릭터 칩에서 관련 태그 팝업 열기', en: 'Open related tags from detected character chips' })}
+            label={<span className="inline-flex items-center gap-1">{t({ ko: '캐릭터 관련 태그', en: 'Character Related Tags' })}<FieldInfo>{t({ ko: '감지된 캐릭터 칩에서 관련 태그 팝업 열기', en: 'Open related tags from detected character chips' })}</FieldInfo></span>}
           >
             <Switch
               id="wildcard-syntax-character-related"
@@ -124,16 +124,17 @@ export function WildcardSyntaxSettingsPanel() {
         </RowGroup>
       </div>
 
-      <RowGroup headingAs="h2" heading={t({ ko: '문법 안내', en: 'Syntax Guide' })}>
+      <RowGroup
+        headingAs="h2"
+        heading={t({ ko: '문법 안내', en: 'Syntax Guide' })}
+        actions={<FieldInfo>{t({ ko: '완결된 __...__, ++...++, 쉼표 뒤 빈 구간에서는 추천 팝업을 띄우지 않아.', en: 'Suggestion popups stay hidden on completed __...__, ++...++, and empty comma-separated segments.' })}</FieldInfo>}
+      >
         {HELP_ITEMS.map((item) => (
           <ListRow key={item.syntax}>
             <span className="w-44 shrink-0 font-mono text-xs">{item.syntax}</span>
             <span className="min-w-0 text-xs text-muted-foreground">{t({ ko: item.ko, en: item.en })}</span>
           </ListRow>
         ))}
-        <ListRow>
-          <span className="text-xs text-muted-foreground">{t({ ko: '완결된 __...__, ++...++, 쉼표 뒤 빈 구간에서는 추천 팝업을 띄우지 않아.', en: 'Suggestion popups stay hidden on completed __...__, ++...++, and empty comma-separated segments.' })}</span>
-        </ListRow>
       </RowGroup>
     </div>
   )

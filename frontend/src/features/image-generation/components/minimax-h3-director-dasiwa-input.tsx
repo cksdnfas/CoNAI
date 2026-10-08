@@ -645,7 +645,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           <Textarea
             rows={3}
             value={String(item.prompt ?? '')}
-            placeholder={t({ ko: '이 참조가 제공할 역할·속성·동작을 적어줘.', en: 'Describe the role, attributes, or motion this reference provides.' })}
+            placeholder={t({ ko: '역할·속성·동작', en: 'Role, attributes, motion' })}
             onChange={(event) => updateTimelineItem(item.id, { prompt: event.target.value })}
           />
         </FormField>
@@ -732,12 +732,6 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         </div>
       </div>
 
-      {mode === 'Image Inpaint' ? (
-        <Inset className="px-3 py-2 text-xs text-muted-foreground">
-          {t({ ko: '이미지 1장만 사용하며 영상·오디오는 지원하지 않아. 결과는 단일 이미지로 저장돼.', en: 'Uses exactly one image with no video or audio references. The result is saved as a single image.' })}
-        </Inset>
-      ) : null}
-
       {boundedValue.error ? <Alert variant="destructive"><AlertDescription>{boundedValue.error}</AlertDescription></Alert> : null}
 
       {isFieldVisible('timeline_data') && !hiddenControls?.includes('resolution') ? (
@@ -790,7 +784,6 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
                   }}
                 />
               </FormField>
-              {mode === 'Image Inpaint' ? <div className="text-2xs text-muted-foreground">{t({ ko: 'Image Inpaint는 내부 5프레임·단일 이미지 출력으로 고정돼.', en: 'Image Inpaint uses a fixed five-frame latent and produces one image.' })}</div> : null}
             </div>
           ) : null}
           {isFieldVisible('frame_rate') ? (
@@ -887,14 +880,14 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
             })}
           </div>
         ) : mode === 'T2VA' ? (
-          <div className="flex min-h-28 items-center justify-center rounded-sm bg-foreground/4 px-3 text-center text-xs text-muted-foreground">{t({ ko: 'T2VA는 입력 프레임 없이 텍스트로 생성해.', en: 'T2VA generates from text without input frames.' })}</div>
+          <div className="flex min-h-28 items-center justify-center rounded-sm bg-foreground/4 px-3 text-center text-xs text-muted-foreground">{t({ ko: '입력 프레임 없음', en: 'No input frames' })}</div>
         ) : visualItems.length > 0 ? (
           <div className="grid items-start gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 14rem), 1fr))' }}>
             {visualItems.map((item) => renderMediaCard(item, visualItems.filter((candidate) => candidate.type === item.type && candidate.slot <= item.slot).length))}
           </div>
         ) : (
           <Button type="button" variant="subtle" className="h-auto min-h-28 w-full px-3 text-xs whitespace-normal" onClick={() => visualInputRef.current?.click()}>
-            {mode === null ? t({ ko: '실행 모드는 상위 노드가 결정해. 참조 미디어를 추가할 수 있어.', en: 'An upstream node selects the mode. You can add reference media.' }) : t({ ko: '이미지를 추가하거나 끌어다 놓아 줘.', en: 'Add or drop an image.' })}
+            {mode === null ? t({ ko: '참조 미디어 추가', en: 'Add reference media' }) : t({ ko: '이미지 추가', en: 'Add image' })}
           </Button>
         )}
       </div>
@@ -932,7 +925,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         </div>
         {isReferenceMediaMode ? renderInputPort?.('reference_audio') : null}
         {!isReferenceMediaMode ? (
-          <div className="flex min-h-20 items-center justify-center rounded-sm bg-foreground/4 px-3 text-center text-xs text-muted-foreground">{t({ ko: '기본 모드에서는 오디오 참조를 사용하지 않아.', en: 'Base modes do not use audio references.' })}</div>
+          <div className="flex min-h-20 items-center justify-center rounded-sm bg-foreground/4 px-3 text-center text-xs text-muted-foreground">{t({ ko: '오디오 참조 없음', en: 'No audio references' })}</div>
         ) : audioItems.length > 0 ? (
           <div className="grid items-start gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 14rem), 1fr))' }}>
             {audioItems.map((item, index) => getMediaLane(item) === 'audio'

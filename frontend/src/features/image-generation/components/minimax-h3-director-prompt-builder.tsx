@@ -114,7 +114,7 @@ export function MiniMaxH3DirectorPromptBuilder({
           <Textarea
             rows={10}
             value={state.simple_prompt}
-            placeholder={t({ ko: 'MiniMax H3에 전달할 전체 프롬프트를 작성해줘.', en: 'Write the complete prompt for MiniMax H3.' })}
+            placeholder={t({ ko: '전체 프롬프트', en: 'Full prompt' })}
             className={cn(invalid && 'border-destructive')}
             onChange={(event) => patchState({ simple_prompt: event.target.value })}
           />

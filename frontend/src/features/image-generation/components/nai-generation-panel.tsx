@@ -505,7 +505,7 @@ export function NaiGenerationPanel({
       <ChatGenerationPresetSaveModal
         open={isChatPresetModalOpen}
         build={buildChatPreset}
-        summary={t({ ko: '모델 {model}, {size}, 스텝 {steps}, CFG {scale}와 지금 프롬프트·네거티브·바이브·캐릭터 레퍼런스가 고정돼. 모델은 상황 프롬프트만 써.', en: 'Model {model}, {size}, {steps} steps, CFG {scale} and the current prompt, negative, vibes and character references are fixed. The model writes only the scene.' }, { model: naiForm.model, size: chatPresetSizeLabel, steps: naiForm.steps, scale: naiForm.scale })}
+        summary={t({ ko: '{model} · {size} · 스텝 {steps} · CFG {scale}', en: '{model} · {size} · {steps} steps · CFG {scale}' }, { model: naiForm.model, size: chatPresetSizeLabel, steps: naiForm.steps, scale: naiForm.scale })}
         onClose={() => setIsChatPresetModalOpen(false)}
       />
 

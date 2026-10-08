@@ -239,7 +239,6 @@ export function WildcardInlinePickerPopupContent({
       ) : (
         <div className="space-y-2 px-3 py-3 text-sm text-muted-foreground">
           <div>{activeSource === 'preprocess' ? t({ ko: '일치하는 전처리 없음', en: 'No matching preprocess entries' }) : t('image-generation.components.wildcard.inline.picker.field.no.matching.wildcards')}</div>
-          {activeSource === 'wildcard' && filterMode === 'available-only' ? <div className="text-xs">{t('image-generation.components.wildcard.inline.picker.field.search.mode.may.hide.wildcards.dedicated.to')}</div> : null}
         </div>
       )}
     </>
