@@ -273,10 +273,11 @@ export class ComplexFilterService {
    */
   static async buildComplexSearchHashesQuery(
     filter: ComplexFilter,
-    basicParams?: ComplexSearchScope
+    basicParams?: ComplexSearchScope,
+    options: Pick<ComplexQueryBuildOptions, 'includeMediaWithoutActiveFile'> = {},
   ): Promise<{ query: string; params: any[] }> {
     const weights = await RatingScoreService.getWeights();
-    const { params, cteClause, countFromClause, whereClause } = this.buildComplexQuery(filter, weights, basicParams);
+    const { params, cteClause, countFromClause, whereClause } = this.buildComplexQuery(filter, weights, basicParams, options);
     const query = `
       ${cteClause}
       SELECT DISTINCT im.composite_hash

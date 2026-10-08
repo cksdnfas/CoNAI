@@ -154,7 +154,8 @@ export class AutoCollectionOrchestrator {
       // write lock (it used to run inside the BEGIN IMMEDIATE that applied the diff).
       const matchingHashesQuery = await ComplexFilterService.buildComplexSearchHashesQuery(
         complexFilter,
-        undefined
+        undefined,
+        { includeMediaWithoutActiveFile: true },
       );
       const { removedCount, addedCount } = await ImageGroupModel.replaceAutoCollectedImagesStaged(groupId, (tempTable) => {
         db.prepare(`
