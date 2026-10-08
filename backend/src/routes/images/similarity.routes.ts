@@ -2,9 +2,14 @@ import { Router, Request, Response } from 'express';
 import path from 'path';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import {
+  DUPLICATE_GROUP_SYNC_CANDIDATE_LIMIT,
   DuplicateGroupScanTooLargeError,
   ImageSimilarityModel,
 } from '../../models/Image/ImageSimilarityModel';
+import { DuplicateGroupScanStore } from '../../services/duplicateGroupScanStore';
+import { RuntimeJobRunner } from '../../services/runtimeJobs/runtimeJobRunner';
+import { RuntimeJobConflictError, RuntimeJobStore } from '../../services/runtimeJobs/runtimeJobStore';
+import { isAdminRequest } from '../requester-session-helpers';
 import { ImageSimilarityService } from '../../services/imageSimilarity';
 import { SIMILARITY_THRESHOLDS } from '../../types/similarity';
 import { runtimePaths } from '../../config/runtimePaths';
@@ -185,18 +190,90 @@ router.get('/:id/similar-color', asyncHandler(async (req: Request, res: Response
   }
 }));
 
+const DUPLICATE_GROUP_PAGE_DEFAULT = 100;
+const DUPLICATE_GROUP_PAGE_MAX = 1000;
+
+/** One page of a finished `duplicate-group-scan` job (GET /duplicates/all?jobId=...). */
+function sendDuplicateGroupScanPage(req: Request, res: Response, jobId: string) {
+  const ownership = RuntimeJobStore.getOwnership(jobId);
+  const requesterId = typeof req.session?.accountId === 'number' ? req.session.accountId : null;
+  if (!ownership || (ownership.requestedByAccountId !== null && !isAdminRequest(req) && ownership.requestedByAccountId !== requesterId)) {
+    return res.status(404).json(errorResponse('Duplicate group scan not found'));
+  }
+
+  const job = RuntimeJobStore.get(jobId);
+  if (!job || job.kind !== 'duplicate-group-scan') {
+    return res.status(404).json(errorResponse('Duplicate group scan not found'));
+  }
+  if (job.status !== 'completed') {
+    return res.status(409).json({ ...errorResponse('Duplicate group scan is not finished'), data: job });
+  }
+
+  const refs = DuplicateGroupScanStore.read(jobId);
+  if (!refs) {
+    return res.status(410).json(errorResponse('Duplicate group scan results have expired'));
+  }
+
+  const offset = Math.max(0, parseIntegerWithFallback(req.query.offset, 0));
+  const limit = Math.min(DUPLICATE_GROUP_PAGE_MAX, Math.max(1, parseIntegerWithFallback(req.query.limit, DUPLICATE_GROUP_PAGE_DEFAULT)));
+  const enrichedGroups = enrichDuplicateGroups(ImageSimilarityModel.hydrateDuplicateGroupRefs(refs.slice(offset, offset + limit)));
+  const result = job.result as { threshold?: number; minGroupSize?: number } | null;
+
+  return res.json(successResponse({
+    groups: enrichedGroups,
+    totalGroups: refs.length,
+    totalImages: refs.reduce((sum, ref) => sum + ref.fileIds.length, 0),
+    query: {
+      threshold: result?.threshold,
+      minGroupSize: result?.minGroupSize,
+      jobId,
+      offset,
+      limit
+    }
+  }));
+}
+
 /**
  * GET /api/images/duplicates/all
  * 전체 중복 이미지 그룹 검색
+ *
+ * Libraries up to DUPLICATE_GROUP_SYNC_CANDIDATE_LIMIT candidates are grouped in the request (same response as
+ * before). Larger ones start a `duplicate-group-scan` runtime job and answer 202 with it; once it completes,
+ * `?jobId=<id>&offset=&limit=` returns the groups page by page in the same shape.
  */
 router.get('/duplicates/all', asyncHandler(async (req: Request, res: Response) => {
   try {
+    if (typeof req.query.jobId === 'string' && req.query.jobId.length > 0) {
+      return sendDuplicateGroupScanPage(req, res, req.query.jobId);
+    }
+
     const threshold = parseIntegerWithFallback(req.query.threshold, SIMILARITY_THRESHOLDS.NEAR_DUPLICATE);
     const minGroupSize = parseIntegerWithFallback(req.query.minGroupSize, 2);
 
+    const candidateCount = ImageSimilarityModel.estimateDuplicateGroupCandidates();
+    if (candidateCount > DUPLICATE_GROUP_SYNC_CANDIDATE_LIMIT) {
+      try {
+        const job = RuntimeJobRunner.start('duplicate-group-scan', { threshold, minGroupSize }, {
+          requestedByAccountId: typeof req.session?.accountId === 'number' ? req.session.accountId : null,
+          total: candidateCount,
+        });
+        return res.status(202).json(successResponse({ job, candidateCount, query: { threshold, minGroupSize } }));
+      } catch (error) {
+        if (error instanceof RuntimeJobConflictError) {
+          return res.status(409).json({
+            ...errorResponse('A duplicate group scan is already running'),
+            code: 'JOB_ALREADY_RUNNING',
+            data: error.liveJob,
+          });
+        }
+        throw error;
+      }
+    }
+
     const groups = await ImageSimilarityModel.findAllDuplicateGroups({
       threshold,
-      minGroupSize
+      minGroupSize,
+      allowLargeSyncScan: true
     });
 
     const enrichedGroups = enrichDuplicateGroups(groups);

@@ -8,7 +8,7 @@ const DCT_SIZE = 32;
 const PHASH_LOW_FREQUENCY_SIZE = 8;
 const DCT_NORMALIZATION = 2 / DCT_SIZE;
 const INV_SQRT_2 = 1 / Math.sqrt(2);
-const MAX_RGB_DISTANCE = Math.sqrt(3 * 255 * 255);
+export const MAX_RGB_DISTANCE = Math.sqrt(3 * 255 * 255);
 const DCT_COSINES = Array.from({ length: PHASH_LOW_FREQUENCY_SIZE }, (_unused, frequency) =>
   Array.from({ length: DCT_SIZE }, (_unusedPixel, pixel) =>
     Math.cos(((2 * pixel + 1) * frequency * Math.PI) / (2 * DCT_SIZE))
@@ -179,6 +179,11 @@ export class ImageSimilarityService {
 
   private static getColorDescriptor(histogram: ColorHistogram): ColorDescriptor {
     return histogram.descriptor ?? this.buildColorDescriptor(histogram);
+  }
+
+  /** The descriptor calculateColorSimilarity scores this histogram with (embedded, else computed from the bins). */
+  static colorDescriptor(histogram: ColorHistogram): ColorDescriptor {
+    return this.getColorDescriptor(histogram);
   }
 
   private static calculateRgbDistance(rgb1: [number, number, number], rgb2: [number, number, number]): number {

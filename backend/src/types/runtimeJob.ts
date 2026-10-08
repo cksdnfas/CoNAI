@@ -21,6 +21,7 @@ export type RuntimeJobKind =
   | 'database-backup'
   | 'recycle-bin-retention'
   | 'database-compaction'
+  | 'duplicate-group-scan'
 
 export type RuntimeJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
@@ -37,6 +38,7 @@ export const RUNTIME_JOB_KINDS: readonly RuntimeJobKind[] = [
   'database-backup',
   'recycle-bin-retention',
   'database-compaction',
+  'duplicate-group-scan',
 ]
 
 export const RUNTIME_JOB_TERMINAL_STATUSES: readonly RuntimeJobStatus[] = ['completed', 'failed', 'cancelled']
