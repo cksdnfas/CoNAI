@@ -15,12 +15,9 @@ import {
   buildAutoTagRatingExpr,
   pushAutoTagPathMatchParams,
 } from './autoTagSqlShared';
-import {
-  normalizeAutoTagIndexSearchKeys,
-  normalizeAutoTagSearchTerm,
-} from './autoTagSearch/autoTagSearchTerms';
+import { normalizeAutoTagSearchTerm } from './autoTagSearch/autoTagSearchTerms';
 import { AutoTagSearchMatcher } from './autoTagSearch/AutoTagSearchMatcher';
-import { AutoTagIndexService } from './autoTagIndexService';
+import { AutoTagIndexService, MEDIA_ROW_ID_COLUMN, buildIndexedMediaSubquery } from './autoTagIndexService';
 
 /**
  * 자동태그 검색 서비스
@@ -297,41 +294,33 @@ export class AutoTagSearchService {
     return { conditions, params };
   }
 
+  /** `i.<row id> [NOT] IN (<index subquery>)`; rewriteIndexedConditionForOrderedScan recognises exactly this shape. */
+  private static wrapIndexedSubquery(
+    subquery: ReturnType<typeof buildIndexedMediaSubquery>,
+    negate = false,
+  ): QueryBuilderResult {
+    if (!subquery) {
+      return { conditions: [], params: [] };
+    }
+    return {
+      conditions: [`i.${MEDIA_ROW_ID_COLUMN} ${negate ? 'NOT ' : ''}IN (${subquery.sql})`],
+      params: subquery.params,
+    };
+  }
+
   private static buildIndexedTagMatchCondition(
     tagFilter: TagFilter,
     tagTypes: readonly string[],
   ): QueryBuilderResult {
-    const searchKeys = normalizeAutoTagIndexSearchKeys(tagFilter.tag);
-    if (searchKeys.length === 0) {
-      return { conditions: [], params: [] };
-    }
-
-    const typePlaceholders = tagTypes.map(() => '?').join(', ');
-    const keyPlaceholders = searchKeys.map(() => '?').join(', ');
-    const scoreConditions: string[] = [];
-    const params: any[] = [...tagTypes, ...searchKeys];
-
     const hasMinFilter = tagFilter.min_score !== undefined && tagFilter.min_score > 0;
     const hasMaxFilter = tagFilter.max_score !== undefined && tagFilter.max_score < 1;
 
-    if (hasMinFilter) {
-      scoreConditions.push('score >= ?');
-      params.push(tagFilter.min_score);
-    }
-    if (hasMaxFilter) {
-      scoreConditions.push('score <= ?');
-      params.push(tagFilter.max_score);
-    }
-
-    const condition = `i.composite_hash IN (
-      SELECT composite_hash
-      FROM media_auto_tag_index
-      WHERE tag_type IN (${typePlaceholders})
-        AND search_key IN (${keyPlaceholders})
-        ${scoreConditions.length > 0 ? `AND ${scoreConditions.join(' AND ')}` : ''}
-    )`;
-
-    return { conditions: [condition], params };
+    return this.wrapIndexedSubquery(buildIndexedMediaSubquery({
+      tagTypes,
+      tag: tagFilter.tag,
+      minScore: hasMinFilter ? tagFilter.min_score : undefined,
+      maxScore: hasMaxFilter ? tagFilter.max_score : undefined,
+    }));
   }
 
   private static buildIndexedCharacterConditions(character: CharacterFilter): QueryBuilderResult {
@@ -339,12 +328,12 @@ export class AutoTagSearchService {
     const params: any[] = [];
 
     if (character.has_character !== undefined) {
-      params.push('character');
-      conditions.push(`i.composite_hash ${character.has_character ? '' : 'NOT '}IN (
-        SELECT composite_hash
-        FROM media_auto_tag_index
-        WHERE tag_type = ?
-      )`);
+      const hasCharacter = this.wrapIndexedSubquery(
+        buildIndexedMediaSubquery({ tagTypes: ['character'] }),
+        !character.has_character,
+      );
+      conditions.push(...hasCharacter.conditions);
+      params.push(...hasCharacter.params);
     }
 
     if (character.name) {
@@ -364,41 +353,21 @@ export class AutoTagSearchService {
   }
 
   private static buildIndexedModelCondition(model: string): QueryBuilderResult {
-    const searchKeys = normalizeAutoTagIndexSearchKeys(model);
-    if (searchKeys.length === 0) {
-      return { conditions: [], params: [] };
-    }
-
-    const keyPlaceholders = searchKeys.map(() => '?').join(', ');
-    return {
-      conditions: [`i.composite_hash IN (
-        SELECT composite_hash
-        FROM media_auto_tag_index
-        WHERE tag_type = ?
-          AND search_key IN (${keyPlaceholders})
-      )`],
-      params: ['model', ...searchKeys],
-    };
+    return this.wrapIndexedSubquery(buildIndexedMediaSubquery({ tagTypes: ['model'], tag: model }));
   }
 
+  /**
+   * Ordered page scans walk media_metadata in sort order and stop at LIMIT, so a per-row EXISTS through the
+   * media_id index beats materialising the whole IN set first.
+   */
   private static rewriteIndexedConditionForOrderedScan(condition: string): string {
-    const match = condition.match(/^i\.composite_hash\s+(NOT\s+)?IN\s+\(\s*SELECT composite_hash\s+FROM media_auto_tag_index\s+WHERE\s+([\s\S]*)\s*\)$/);
+    const prefix = new RegExp(`^i\\.${MEDIA_ROW_ID_COLUMN} (NOT )?IN \\(SELECT mat\\.media_id FROM (media_auto_tags mat JOIN auto_tag_terms t ON t\\.term_id = mat\\.term_id) WHERE ([\\s\\S]*)\\)$`);
+    const match = condition.match(prefix);
     if (!match) {
       return condition;
     }
 
-    const negate = Boolean(match[1]);
-    const indexPredicate = match[2]
-      .replace(/\btag_type\b/g, 'ati.tag_type')
-      .replace(/\bsearch_key\b/g, 'ati.search_key')
-      .replace(/\bscore\b/g, 'ati.score');
-
-    return `${negate ? 'NOT ' : ''}EXISTS (
-      SELECT 1
-      FROM media_auto_tag_index ati
-      WHERE ati.composite_hash = i.composite_hash
-        AND ${indexPredicate}
-    )`;
+    return `${match[1] ? 'NOT ' : ''}EXISTS (SELECT 1 FROM ${match[2]} WHERE mat.media_id = i.${MEDIA_ROW_ID_COLUMN} AND ${match[3]})`;
   }
 
   /**

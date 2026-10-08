@@ -37,25 +37,20 @@ export function normalizeAutoTagSearchTerm(term: string, exactMatch = false): st
   return Array.from(variants);
 }
 
-/** Collapse separator variants into one key for compact indexed equality lookups. */
+/** Collapse separator variants into one key for indexed equality lookups. */
 function compactAutoTagSearchKey(term: string): string {
   return term.trim().toLowerCase().replace(/[_\s-]+/g, '');
 }
 
-/** Build the small key set stored in media_auto_tag_index. */
-export function normalizeAutoTagIndexSearchKeys(term: string): string[] {
+/**
+ * The one search key stored per tag in `auto_tag_terms` and used for indexed lookups: separators removed, or the
+ * lower-cased text itself when it is nothing but separators. Two terms share a canonical key exactly when one's
+ * normalized or compact form equals the other's, which is what the old two-key index matched. Empty for blank input.
+ * Migration 040 carries a copy of this rule; keep them identical.
+ */
+export function canonicalAutoTagSearchKey(term: string): string {
   const normalized = term.trim().toLowerCase();
-  if (!normalized) {
-    return [];
-  }
-
-  const keys = new Set<string>([normalized]);
-  const compactKey = compactAutoTagSearchKey(normalized);
-  if (compactKey) {
-    keys.add(compactKey);
-  }
-
-  return Array.from(keys);
+  return compactAutoTagSearchKey(normalized) || normalized;
 }
 
 /** Find JSON keys that match any normalized search variant. */

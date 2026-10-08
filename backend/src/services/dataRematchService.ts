@@ -6,6 +6,7 @@ import { db } from '../database/init';
 import { getUserSettingsDb } from '../database/userSettingsDb';
 import { resolveUploadsPath } from '../config/runtimePaths';
 import { ImageSimilarityService } from './imageSimilarity';
+import { AutoTagIndexService, MEDIA_ROW_ID_COLUMN } from './autoTagIndexService';
 import { BackgroundQueueService } from './backgroundQueue';
 import { SystemMaintenanceLockService, SystemMaintenanceLockSnapshot } from './systemMaintenanceLockService';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
@@ -99,7 +100,7 @@ export const DATA_REMATCH_EXCLUDED_FILE_TYPES = ['video'] as const;
 export const HASH_REGENERATION_BLOCKED_PIPELINES = ['auto-tag-extraction', 'artist-extraction'] as const;
 export const DATA_REMATCH_HASH_REFERENCE_TABLES = [
   'media_metadata',
-  'media_auto_tag_index',
+  'media_auto_tags',
   'image_files',
   'image_groups',
   'auto_folder_group_images',
@@ -701,10 +702,20 @@ export class DataRematchService {
     if (oldHash === newHash) return;
 
     this.remapHashRefTableRows('image_groups', oldHash, newHash);
-    this.remapHashRefTableRows('media_auto_tag_index', oldHash, newHash);
+    this.remapAutoTagRows(oldHash, newHash);
     this.remapHashRefTableRows('auto_folder_group_images', oldHash, newHash);
     this.remapHashRefTableRows('image_models', oldHash, newHash);
     this.remapHashRefTableRows('image_metadata_edit_revisions', oldHash, newHash);
+  }
+
+  /** media_auto_tags is keyed by media row id, not by hash: move the old row's tags onto the new row. */
+  private static remapAutoTagRows(oldHash: string, newHash: string): void {
+    const findMediaId = db.prepare(`SELECT ${MEDIA_ROW_ID_COLUMN} AS media_id FROM media_metadata WHERE composite_hash = ?`);
+    const from = findMediaId.get(oldHash) as { media_id: number } | undefined;
+    const to = findMediaId.get(newHash) as { media_id: number } | undefined;
+    if (from && to) {
+      AutoTagIndexService.remapMedia(from.media_id, to.media_id);
+    }
   }
 
   private static remapHashRefTableRows(tableName: string, oldHash: string, newHash: string): void {

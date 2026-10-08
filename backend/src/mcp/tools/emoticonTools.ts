@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { db } from '../../database/init';
 import { GroupModel } from '../../models/Group';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
+import { MEDIA_ROW_ID_COLUMN } from '../../services/autoTagIndexService';
 import { EMOTICON_PROMPT_BUDGET, EmoticonService } from '../../services/emoticonService';
 import { requireFileStoreOwner } from '../../services/fileStoreAccess';
 import { FileStoreService } from '../../services/fileStoreService';
@@ -35,9 +36,12 @@ function resolveGroup(groupId?: number, groupPath?: string) {
 
 function topTags(compositeHash: string) {
   const rows = db.prepare(`
-    SELECT tag_key, tag_type FROM media_auto_tag_index
-    WHERE composite_hash = ? AND tag_type IN ('general', 'character')
-    ORDER BY CASE tag_type WHEN 'character' THEN 0 ELSE 1 END, score DESC LIMIT 10
+    SELECT t.tag_key, t.tag_type
+    FROM media_metadata m
+    JOIN media_auto_tags mat ON mat.media_id = m.${MEDIA_ROW_ID_COLUMN}
+    JOIN auto_tag_terms t ON t.term_id = mat.term_id
+    WHERE m.composite_hash = ? AND t.tag_type IN ('general', 'character')
+    ORDER BY CASE t.tag_type WHEN 'character' THEN 0 ELSE 1 END, mat.score DESC LIMIT 10
   `).all(compositeHash) as Array<{ tag_key: string; tag_type: string }>;
   return rows.map((row) => row.tag_key);
 }
