@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
-import { Link2, Link2Off, Scaling } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
+import { ImageUpscale, Link2, Link2Off } from 'lucide-react'
 import { SelectionBarAction } from '@/components/common/selection-action-bar'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -35,6 +36,8 @@ function clampSide(value: number) {
 export function ImageBatchResizeAction({ compositeHashes, referenceSize }: ImageBatchResizeActionProps) {
   const { t, formatNumber } = useI18n()
   const { showSnackbar } = useSnackbar()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const refWidth = referenceSize?.width && referenceSize.width > 0 ? referenceSize.width : null
   const refHeight = referenceSize?.height && referenceSize.height > 0 ? referenceSize.height : null
@@ -62,6 +65,11 @@ export function ImageBatchResizeAction({ compositeHashes, referenceSize }: Image
       onFailed: (job) => setError(job.failureMessage ?? t({ ko: '크기를 바꾸지 못했어', en: 'Resize failed' })),
       onCompleted: (job) => {
         setOpen(false)
+        void Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all'] }),
+          queryClient.invalidateQueries({ queryKey: ['group-detail', 'custom'] }),
+          queryClient.invalidateQueries({ queryKey: ['group-images', 'custom'] }),
+        ])
         const result = job.result
         if (!result) return
         const skipped = result.skipped.length + result.failed.length
@@ -71,9 +79,14 @@ export function ImageBatchResizeAction({ compositeHashes, referenceSize }: Image
           content: (
             <span className="flex flex-wrap items-center gap-x-2">
               <span>{message}{skipped > 0 ? t({ ko: ` · ${formatNumber(skipped)}개 건너뜀`, en: ` · ${formatNumber(skipped)} skipped` }) : ''}</span>
-              <Link to={`/groups/${result.groupId}`} className="font-semibold text-primary underline-offset-2 hover:underline">
+              {/* The snackbar renders outside the router, so navigate with the hook captured here instead of a <Link>. */}
+              <a
+                href={`#/groups/${result.groupId}`}
+                onClick={(event) => { event.preventDefault(); navigate(`/groups/${result.groupId}`) }}
+                className="font-semibold text-primary underline-offset-2 hover:underline"
+              >
                 {t({ ko: '그룹 열기', en: 'Open group' })}
-              </Link>
+              </a>
             </span>
           ),
           durationMs: 6000,
@@ -104,7 +117,7 @@ export function ImageBatchResizeAction({ compositeHashes, referenceSize }: Image
   return (
     <>
       <SelectionBarAction
-        icon={Scaling}
+        icon={ImageUpscale}
         label={t({ ko: '크기 변경', en: 'Resize' })}
         onClick={() => setOpen(true)}
         disabled={compositeHashes.length === 0}
@@ -163,7 +176,7 @@ export function ImageBatchResizeAction({ compositeHashes, referenceSize }: Image
             {resize.job && resize.isRunning ? <RuntimeJobProgress job={resize.job} cancel={resize.cancel} isCancelling={resize.isCancelling} /> : null}
             <ModalFooter>
               <Button type="submit" disabled={busy || compositeHashes.length === 0}>
-                <Scaling className="h-4 w-4" />
+                <ImageUpscale className="h-4 w-4" />
                 {t({ ko: '크기 변경', en: 'Resize' })}
               </Button>
             </ModalFooter>
