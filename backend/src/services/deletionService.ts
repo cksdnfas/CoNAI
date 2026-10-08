@@ -8,6 +8,9 @@ import { PromptCollectionService } from './promptCollectionService';
 import { settingsService } from './settingsService';
 import { deleteFile as recycleBinDeleteFile } from '../utils/recycleBin';
 import { runtimePaths } from '../config/runtimePaths';
+import { db } from '../database/init';
+import { ImageStatsModel } from '../models/Image/ImageStatsModel';
+import { resolveThumbnailAbsolutePath } from '../utils/thumbnailGenerator';
 
 /**
  * 통합 삭제 서비스
@@ -51,6 +54,43 @@ export class DeletionService {
       console.error(`❌ Failed to delete file: ${absolutePath}`, error);
       throw error;
     }
+  }
+
+  /**
+   * Remove a thumbnail for good. Thumbnails are temp-relative (not uploads-relative) and regenerable, so they never
+   * go to the RecycleBin.
+   */
+  private static async deleteThumbnailFile(thumbnailPath: string): Promise<void> {
+    const absolutePath = resolveThumbnailAbsolutePath(thumbnailPath);
+    if (!absolutePath) {
+      console.warn(`⚠️ Thumbnail path outside the temp dir (skipping): ${thumbnailPath}`);
+      return;
+    }
+
+    try {
+      await fs.promises.unlink(absolutePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Delete one media row and every image_files row that points at it, in one transaction. The image_files FK is
+   * ON DELETE SET NULL, so deleting only the metadata would leave active file rows with a NULL hash behind.
+   */
+  private static deleteMetadataWithFiles(compositeHash: string): boolean {
+    const deleted = db.transaction(() => {
+      db.prepare('DELETE FROM image_files WHERE composite_hash = ?').run(compositeHash);
+      return db.prepare('DELETE FROM media_metadata WHERE composite_hash = ?').run(compositeHash).changes > 0;
+    })();
+
+    if (deleted) {
+      ImageStatsModel.invalidateAutoTagStatsCache();
+    }
+
+    return deleted;
   }
 
   /**
@@ -148,14 +188,14 @@ export class DeletionService {
     // 썸네일 파일 - 항상 즉시 삭제 (복구 시 자동 생성 가능)
     if (metadata.thumbnail_path) {
       try {
-        await this.deletePhysicalFile(metadata.thumbnail_path, false);
+        await this.deleteThumbnailFile(metadata.thumbnail_path);
       } catch (error) {
         console.warn(`⚠️ Failed to delete thumbnail (continuing): ${metadata.thumbnail_path}`, error);
       }
     }
 
-    // 6. 데이터베이스 삭제 (CASCADE로 image_files 자동 삭제)
-    const deleted = MediaMetadataModel.delete(compositeHash);
+    // 6. 데이터베이스 삭제 (image_files FK는 SET NULL이므로 파일 행도 같은 트랜잭션에서 직접 삭제)
+    const deleted = this.deleteMetadataWithFiles(compositeHash);
 
     if (!deleted) {
       throw new Error('Failed to delete image from database');
@@ -233,17 +273,17 @@ export class DeletionService {
             metadata.auto_tags,
           );
 
-          // 썸네일 삭제
+          // 썸네일 삭제 (재생성 가능하므로 RecycleBin 없이 즉시 삭제)
           if (metadata.thumbnail_path) {
             try {
-              await this.deletePhysicalFile(metadata.thumbnail_path, useRecycleBin);
+              await this.deleteThumbnailFile(metadata.thumbnail_path);
             } catch (error) {
               console.warn(`⚠️ Failed to delete thumbnail (non-critical)`);
             }
           }
 
-          // 메타데이터 삭제
-          MediaMetadataModel.delete(composite_hash);
+          // 메타데이터 삭제 (남은 missing/deleted 파일 행도 함께 정리)
+          this.deleteMetadataWithFiles(composite_hash);
           this.cleanupGenerationHistoryForHash(composite_hash);
           console.log(`✅ Metadata cleaned up for ${composite_hash}`);
         }

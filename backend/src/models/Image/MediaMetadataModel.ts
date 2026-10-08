@@ -222,7 +222,8 @@ export class MediaMetadataModel {
   }
 
   /**
-   * 메타데이터 삭제 (CASCADE로 image_files도 삭제됨)
+   * 메타데이터 삭제. image_files FK는 ON DELETE SET NULL이라 파일 행은 남는다 — 함께 지우려면
+   * DeletionService 경로를 쓴다.
    */
   static delete(compositeHash: string): boolean {
     const info = db.prepare('DELETE FROM media_metadata WHERE composite_hash = ?').run(compositeHash);
