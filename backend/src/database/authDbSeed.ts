@@ -131,6 +131,13 @@ export function migratePermissionsV2(db: Database.Database): void {
   db.transaction(() => {
     const version = 'permissions_v2';
     if (db.prepare('SELECT 1 FROM auth_seed_state WHERE seed_key = ?').get(version)) return;
+    const grantsByGroup = () => new Map((db.prepare(`
+      SELECT g.group_key, GROUP_CONCAT(p.permission_key) AS keys FROM auth_permission_groups g
+      LEFT JOIN auth_group_permissions gp ON gp.group_id = g.id AND gp.allowed = 1
+      LEFT JOIN auth_permissions p ON p.id = gp.permission_id
+      WHERE g.group_key != 'admin' GROUP BY g.id ORDER BY g.priority, g.id
+    `).all() as Array<{ group_key: string; keys: string | null }>).map((row) => [row.group_key, (row.keys ?? '').split(',').filter(Boolean).sort()]));
+    const before = grantsByGroup();
     const grant = db.prepare(`
       INSERT OR IGNORE INTO auth_group_permissions (group_id, permission_id, allowed)
       SELECT DISTINCT gp.group_id, target.id, 1 FROM auth_group_permissions gp
@@ -149,6 +156,12 @@ export function migratePermissionsV2(db: Database.Database): void {
       SELECT (SELECT id FROM auth_permission_groups WHERE group_key = 'guest'), permission_id, 1 FROM (${memberOnly})`).run(visitorKeys);
     db.prepare(`DELETE FROM auth_group_permissions WHERE group_id = (SELECT id FROM auth_permission_groups WHERE group_key = 'anonymous')
       AND permission_id IN (${memberOnly})`).run(visitorKeys);
+    // One line per group so an administrator can review what each group can do after the conversion.
+    const catalog = new Set<string>(PERMISSION_KEYS);
+    console.log('🔐 Permissions converted to the 18-key catalog (permissions_v2):');
+    for (const [group, after] of grantsByGroup()) {
+      console.log(`  - ${group}: [${(before.get(group) ?? []).join(', ')}] → [${after.filter((key) => catalog.has(key)).join(', ')}]`);
+    }
     db.prepare('INSERT INTO auth_seed_state (seed_key) VALUES (?)').run(version);
   }).immediate();
 }
