@@ -16,3 +16,4 @@ export * from './chat';
 export * from './chatPage';
 export * from './chatWorkflow';
 export * from './chatPageAction';
+export * from './chatJudge';

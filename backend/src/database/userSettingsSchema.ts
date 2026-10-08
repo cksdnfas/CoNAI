@@ -6,6 +6,7 @@ import {
   applyGenerationQueueInputRefs,
 } from './generationQueueSchema';
 import { migrateLlmConnectionGenerationDefaults } from './llmConnectionDefaultsMigration';
+import { DEFAULT_JUDGE_PRESETS } from '../services/codex-chat/chatJudgeDefaults';
 
 /** Bootstrap core user-settings tables, indexes, and simple column backfills. */
 export function createUserSettingsSchema(db: Database.Database): void {
@@ -518,6 +519,29 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
+  // Judge presets: a decision model's connection plus the questions it answers about each API LLM chat turn
+  // (items, JSON) and the follow-up message settings (JSON); chat profiles reference one (llm_chat_profiles.judge_preset_id).
+  // The built-in presets are written once, when the table is new; deleting them later keeps them deleted.
+  const judgePresetsExisted = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chat_judge_presets'").get());
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_judge_presets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      provider_name TEXT,
+      model TEXT NOT NULL DEFAULT '',
+      escalation_provider_name TEXT,
+      escalation_model TEXT NOT NULL DEFAULT '',
+      items TEXT NOT NULL DEFAULT '[]',
+      follow_up TEXT NOT NULL DEFAULT '{}',
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  if (!judgePresetsExisted) {
+    const insertJudgePreset = db.prepare('INSERT INTO chat_judge_presets (name, items, follow_up) VALUES (?, ?, ?)');
+    for (const preset of DEFAULT_JUDGE_PRESETS) insertJudgePreset.run(preset.name, JSON.stringify(preset.items), JSON.stringify(preset.followUp));
+  }
+
   // Model slots: a named LLM connection + model; chat profiles and workflow nodes reference them by id per role.
   db.exec(`
     CREATE TABLE IF NOT EXISTS llm_model_slots (
@@ -754,6 +778,44 @@ export function createUserSettingsSchema(db: Database.Database): void {
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (message_id, alternative)
   )`);
+  // Judge log: one run per judge call on a chat turn (the request as sent, timing, error) and its items' answers.
+  // `reply_id` ties a before-reply run to the reply it steered (tool use, lore proposals); `follow_up_message_id` is
+  // the follow-up an after-reply run sent. No foreign keys to presets/profiles: a log outlives their edits.
+  db.exec(`CREATE TABLE IF NOT EXISTS chat_judge_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    thread_id INTEGER NOT NULL REFERENCES codex_chat_threads(id) ON DELETE CASCADE,
+    profile_id INTEGER NOT NULL,
+    preset_id INTEGER NOT NULL,
+    stage TEXT NOT NULL CHECK (stage IN ('before', 'after')),
+    message_id INTEGER,
+    reply_id TEXT,
+    engine TEXT NOT NULL,
+    provider_name TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT '',
+    latency_ms INTEGER NOT NULL DEFAULT 0,
+    error TEXT,
+    request TEXT,
+    tools_called TEXT,
+    follow_up_message_id INTEGER
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_judge_runs_created ON chat_judge_runs(created_at)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_judge_runs_reply ON chat_judge_runs(reply_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_judge_runs_thread ON chat_judge_runs(thread_id, id)');
+  db.exec(`CREATE TABLE IF NOT EXISTS chat_judge_items (
+    run_id INTEGER NOT NULL REFERENCES chat_judge_runs(id) ON DELETE CASCADE,
+    item_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    probability REAL,
+    confidence REAL,
+    choice TEXT,
+    verdict TEXT NOT NULL,
+    decided_by TEXT NOT NULL,
+    action TEXT NOT NULL,
+    tools TEXT,
+    PRIMARY KEY (run_id, item_id)
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_judge_items_item ON chat_judge_items(item_id)');
   // LLM chat summaries by stretch of conversation: level 0 summarizes messages from..until, level 1 (at most one per
   // thread) is the plot folded from the older level-0 rows, which stay for recall. `codex_chat_threads.summary` keeps
   // the rendered text the model gets.
@@ -839,6 +901,10 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['suggest_user_profile_id', 'INTEGER'],
     // The model may propose chat lorebook entries (save_lore).
     ['allow_lore_proposals', 'INTEGER NOT NULL DEFAULT 1'],
+    // Judge preset (chat_judge_presets; no foreign key, like the slots) and an override of its judge connection.
+    ['judge_preset_id', 'INTEGER'],
+    ['judge_provider_name', 'TEXT'],
+    ['judge_model', 'TEXT'],
   ];
   for (const [columnName, definition] of chatProfileColumns) {
     if (!hasColumn('llm_chat_profiles', columnName)) {

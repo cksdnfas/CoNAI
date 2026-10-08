@@ -1,9 +1,10 @@
 /**
  * Provider type classification
  */
-export type ProviderType = 'general' | 'llm_openai_compatible' | 'llm_ollama';
+/** `decision_typesafe`: a TypeSafe decision model (Jev) for chat judge presets, not a chat LLM. */
+export type ProviderType = 'general' | 'llm_openai_compatible' | 'llm_ollama' | 'decision_typesafe';
 
-export const PROVIDER_TYPES: ProviderType[] = ['general', 'llm_openai_compatible', 'llm_ollama'];
+export const PROVIDER_TYPES: ProviderType[] = ['general', 'llm_openai_compatible', 'llm_ollama', 'decision_typesafe'];
 
 /**
  * External API Provider stored in database

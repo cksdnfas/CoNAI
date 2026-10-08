@@ -7,6 +7,7 @@ import { ChatProfileStore } from '../services/codex-chat/chatProfiles';
 import { resolveProfileModel } from '../services/codex-chat/chatModelRoles';
 import { modelReferencesOfConnection } from '../services/codex-chat/modelSlots';
 import { fetchOpenAiCompatibleModels, toOpenAiApiBase } from '../services/codex-chat/llmChatCompletion';
+import { listTypesafeModels } from '../services/typesafeClient';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { optionalAuth, requireAdmin, requirePermission } from '../middleware/authMiddleware';
 import { hasConfiguredAuth } from './auth-route-helpers';
@@ -19,7 +20,7 @@ import type {
 const router = Router();
 
 function isProviderType(value: unknown): value is ProviderType {
-  return value === 'general' || value === 'llm_openai_compatible' || value === 'llm_ollama';
+  return value === 'general' || value === 'llm_openai_compatible' || value === 'llm_ollama' || value === 'decision_typesafe';
 }
 
 // Apply optional authentication to all routes
@@ -140,7 +141,7 @@ router.post('/providers', asyncHandler(async (req: Request, res: Response) => {
   if (input.provider_type !== undefined && !isProviderType(input.provider_type)) {
     res.status(400).json({
       success: false,
-      error: 'provider_type must be general, llm_openai_compatible, or llm_ollama'
+      error: 'provider_type must be general, llm_openai_compatible, llm_ollama, or decision_typesafe'
     });
     return;
   }
@@ -185,7 +186,7 @@ router.put('/providers/:name', asyncHandler(async (req: Request, res: Response) 
   if (input.provider_type !== undefined && !isProviderType(input.provider_type)) {
     res.status(400).json({
       success: false,
-      error: 'provider_type must be general, llm_openai_compatible, or llm_ollama'
+      error: 'provider_type must be general, llm_openai_compatible, llm_ollama, or decision_typesafe'
     });
     return;
   }
@@ -317,7 +318,7 @@ router.post('/llm-models', requireAdmin, asyncHandler(async (req: Request, res: 
   const body = (req.body ?? {}) as { provider_type?: unknown; base_url?: unknown; api_key?: unknown; provider_name?: unknown };
   const providerType = body.provider_type;
   const baseUrl = typeof body.base_url === 'string' ? body.base_url.trim() : '';
-  if ((providerType !== 'llm_openai_compatible' && providerType !== 'llm_ollama') || !baseUrl) {
+  if ((providerType !== 'llm_openai_compatible' && providerType !== 'llm_ollama' && providerType !== 'decision_typesafe') || !baseUrl) {
     res.status(400).json({ success: false, error: 'provider_type (llm) and base_url are required' });
     return;
   }
@@ -325,7 +326,10 @@ router.post('/llm-models', requireAdmin, asyncHandler(async (req: Request, res: 
   const providerName = typeof body.provider_name === 'string' ? body.provider_name.trim() : '';
   const apiKey = typedKey || (providerName ? ExternalApiProvider.getDecryptedKey(providerName, true) : null);
   try {
-    res.json({ success: true, data: { models: await fetchOpenAiCompatibleModels(toOpenAiApiBase(providerType, baseUrl), apiKey) } });
+    const models = providerType === 'decision_typesafe'
+      ? await listTypesafeModels(baseUrl, apiKey)
+      : await fetchOpenAiCompatibleModels(toOpenAiApiBase(providerType, baseUrl), apiKey);
+    res.json({ success: true, data: { models } });
   } catch (error) {
     res.status(502).json({ success: false, error: error instanceof Error ? error.message : 'Could not list models' });
   }

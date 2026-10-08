@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import type { ProviderType } from '../types/externalApi';
+import { listTypesafeModels } from './typesafeClient';
 
 /**
  * External API Service
@@ -213,6 +214,14 @@ export class ExternalApiService {
         return baseUrl ? this.testOpenAiCompatibleConnection(baseUrl, apiKey) : false;
       case 'llm_ollama':
         return baseUrl ? this.testOllamaConnection(baseUrl) : false;
+      case 'decision_typesafe':
+        try {
+          await listTypesafeModels(baseUrl, apiKey);
+          return true;
+        } catch (error) {
+          console.error('TypeSafe connection test failed:', error);
+          return false;
+        }
       default:
         switch (providerName) {
           case 'civitai':

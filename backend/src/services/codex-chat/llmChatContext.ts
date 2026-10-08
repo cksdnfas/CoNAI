@@ -479,13 +479,13 @@ export function flagDirectiveFor(messages: CodexChatMessageRecord[], profile: Ch
 }
 
 /** Add `directive` after the last user turn (merged into it, so turns keep alternating). */
-export function appendUserDirective(messages: ChatCompletionMessage[], directive: string): ChatCompletionMessage[] {
+export function appendUserDirective(messages: ChatCompletionMessage[], directive: string, kind: 'last-instruction' | 'judge' = 'last-instruction'): ChatCompletionMessage[] {
   if (!directive) return messages
   const last = messages[messages.length - 1]
   if (last?.role === 'user' && typeof last.content === 'string') return [...messages.slice(0, -1), markContextParts({ ...last, content: `${last.content}\n\n${directive}` }, [
-    ...(contextPartsOf(last).length ? contextPartsOf(last) : [{ kind: 'window' as const, text: last.content }]), { kind: 'last-instruction', text: directive },
+    ...(contextPartsOf(last).length ? contextPartsOf(last) : [{ kind: 'window' as const, text: last.content }]), { kind, text: directive },
   ])]
-  return [...messages, markContextMessage({ role: 'user', content: directive }, 'last-instruction')]
+  return [...messages, markContextMessage({ role: 'user', content: directive }, kind)]
 }
 
 export function sendableMessages(messages: CodexChatMessageRecord[]) {
