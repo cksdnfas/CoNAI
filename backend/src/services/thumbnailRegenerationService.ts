@@ -5,6 +5,7 @@ import { FileVerificationService } from './fileVerificationService';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 import { resolveUploadsPath, runtimePaths } from '../config/runtimePaths';
 import type { RuntimeJobContext } from './runtimeJobs/runtimeJobRunner';
+import { LIBRARY_BATCH_SIZE, placeholders } from './maintenance/libraryBatch';
 
 /**
  * 썸네일 재생성 결과
@@ -32,9 +33,13 @@ interface ImageFileRecord {
   file_type: 'image' | 'video' | 'animated';
 }
 
-interface MediaMetadataRecord {
-  composite_hash: string;
-  thumbnail_path: string | null;
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.promises.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -66,92 +71,129 @@ export class ThumbnailRegenerationService {
       console.log('📋 Phase 1: 파일 검증 실행...');
       ctx.flush({ phase: 'verification', total: 0, processed: 0, currentLabel: null });
 
-      await FileVerificationService.verifyAllFiles();
+      await FileVerificationService.verifyAllFiles({
+        hooks: { yield: () => ctx.yield(), throwIfCancelled: () => ctx.throwIfCancelled() },
+      });
       console.log('✅ Phase 1: 파일 검증 완료');
       ctx.throwIfCancelled();
 
+      // Phase 2 walks the active image files one composite_hash page at a time: async existence checks, async
+      // unlinks, and one transaction per page to clear the stored paths. The files to regenerate are staged in a
+      // connection-private temp table, so Phase 3 never holds the whole list in memory either.
       console.log('🗑️  Phase 2: 기존 썸네일 삭제 및 DB 정리...');
       ctx.flush({ phase: 'deletion' });
 
-      const imageFiles = db
-        .prepare(`
-          SELECT DISTINCT composite_hash, original_file_path, file_type
-          FROM image_files
-          WHERE composite_hash IS NOT NULL
-            AND file_status = 'active'
-            AND file_type = 'image'
-          ORDER BY composite_hash ASC
-        `)
-        .all() as ImageFileRecord[];
+      db.exec(`
+        CREATE TEMP TABLE IF NOT EXISTS temp_thumbnail_regeneration (
+          composite_hash TEXT PRIMARY KEY,
+          original_file_path TEXT NOT NULL
+        ) WITHOUT ROWID
+      `);
+      db.prepare('DELETE FROM temp_thumbnail_regeneration').run();
 
-      const filesWithExistingOriginals = imageFiles.filter((file) =>
-        fs.existsSync(resolveUploadsPath(file.original_file_path))
-      );
-      const validHashes = new Set(filesWithExistingOriginals.map((row) => row.composite_hash));
-      console.log(`  📊 썸네일 재생성 대상 해시: ${validHashes.size}개`);
+      const nextHashPage = db.prepare(`
+        SELECT DISTINCT composite_hash
+        FROM image_files
+        WHERE composite_hash IS NOT NULL
+          AND file_status = 'active'
+          AND file_type = 'image'
+          AND composite_hash > ?
+        ORDER BY composite_hash ASC
+        LIMIT ${LIBRARY_BATCH_SIZE}
+      `);
+      const filesOfHashes = (count: number) => db.prepare(`
+        SELECT f.composite_hash, f.original_file_path, f.file_type, mm.thumbnail_path
+        FROM image_files f
+        LEFT JOIN media_metadata mm ON mm.composite_hash = f.composite_hash
+        WHERE f.composite_hash IN (${placeholders(count)})
+          AND f.file_status = 'active'
+          AND f.file_type = 'image'
+        ORDER BY f.composite_hash, f.id
+      `);
+      const stageFile = db.prepare('INSERT OR IGNORE INTO temp_thumbnail_regeneration (composite_hash, original_file_path) VALUES (?, ?)');
+      const clearPath = db.prepare('UPDATE media_metadata SET thumbnail_path = NULL WHERE composite_hash = ?');
+      const clearPage = db.transaction((hashes: string[]) => {
+        for (const hash of hashes) clearPath.run(hash);
+      });
 
-      const metadataWithThumbnails = db
-        .prepare(`
-          SELECT composite_hash, thumbnail_path
-          FROM media_metadata
-          WHERE thumbnail_path IS NOT NULL
-        `)
-        .all() as MediaMetadataRecord[];
+      let hashCursor = '';
+      for (;;) {
+        ctx.throwIfCancelled();
+        const hashes = (nextHashPage.all(hashCursor) as Array<{ composite_hash: string }>).map((row) => row.composite_hash);
+        if (hashes.length === 0) {
+          break;
+        }
+        hashCursor = hashes[hashes.length - 1];
 
-      console.log(`  📊 썸네일이 있는 메타데이터: ${metadataWithThumbnails.length}개`);
+        const files = filesOfHashes(hashes.length).all(...hashes) as Array<ImageFileRecord & { thumbnail_path: string | null }>;
+        const existing = await Promise.all(files.map((file) => pathExists(resolveUploadsPath(file.original_file_path))));
+        const regenerate = new Map<string, ImageFileRecord & { thumbnail_path: string | null }>();
+        files.forEach((file, index) => {
+          if (existing[index] && !regenerate.has(file.composite_hash)) {
+            regenerate.set(file.composite_hash, file);
+          }
+        });
 
-      for (const metadata of metadataWithThumbnails) {
-        if (validHashes.has(metadata.composite_hash) && metadata.thumbnail_path) {
+        for (const file of regenerate.values()) {
+          if (!file.thumbnail_path) {
+            continue;
+          }
           try {
-            const absolutePath = path.isAbsolute(metadata.thumbnail_path)
-              ? metadata.thumbnail_path
-              : path.join(runtimePaths.tempDir, metadata.thumbnail_path);
-
-            if (fs.existsSync(absolutePath)) {
-              fs.unlinkSync(absolutePath);
-              thumbnailsDeleted++;
-            }
+            const absolutePath = path.isAbsolute(file.thumbnail_path)
+              ? file.thumbnail_path
+              : path.join(runtimePaths.tempDir, file.thumbnail_path);
+            await fs.promises.unlink(absolutePath);
+            thumbnailsDeleted++;
           } catch (error) {
-            console.error(`  ⚠️  썸네일 삭제 실패: ${metadata.thumbnail_path}`, error);
-            errors.push({
-              hash: metadata.composite_hash,
-              error: `Failed to delete thumbnail: ${(error as Error).message}`,
-            });
-            ctx.recordError(metadata.composite_hash, `Failed to delete thumbnail: ${(error as Error).message}`);
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+              console.error(`  ⚠️  썸네일 삭제 실패: ${file.thumbnail_path}`, error);
+              errors.push({
+                hash: file.composite_hash,
+                error: `Failed to delete thumbnail: ${(error as Error).message}`,
+              });
+              ctx.recordError(file.composite_hash, `Failed to delete thumbnail: ${(error as Error).message}`);
+            }
           }
         }
+
+        const regenerateHashes = [...regenerate.keys()];
+        clearPage(regenerateHashes);
+        for (const file of regenerate.values()) stageFile.run(file.composite_hash, file.original_file_path);
+        await ctx.yield();
       }
 
-      const deleteStmt = db.prepare(`
-        UPDATE media_metadata
-        SET thumbnail_path = NULL
-        WHERE composite_hash = ?
-      `);
-
-      const clearThumbnailPaths = db.transaction((hashes: Iterable<string>) => {
-        for (const hash of hashes) {
-          deleteStmt.run(hash);
-        }
-      });
-      clearThumbnailPaths(validHashes);
-
+      const totalToRegenerate = (db.prepare('SELECT COUNT(*) AS c FROM temp_thumbnail_regeneration').get() as { c: number }).c;
+      console.log(`  📊 썸네일 재생성 대상 해시: ${totalToRegenerate}개`);
       console.log(`✅ Phase 2: 썸네일 삭제 및 DB 정리 완료 (삭제: ${thumbnailsDeleted}개)`);
 
       console.log('🖼️  Phase 3: 썸네일 재생성...');
       ctx.flush({
         phase: 'generation',
-        total: filesWithExistingOriginals.length,
+        total: totalToRegenerate,
         processed: 0,
         succeeded: 0,
         failed: 0,
       });
 
-      for (let i = 0; i < filesWithExistingOriginals.length; i += this.BATCH_SIZE) {
+      const nextStaged = db.prepare(`
+        SELECT composite_hash, original_file_path, 'image' AS file_type
+        FROM temp_thumbnail_regeneration
+        WHERE composite_hash > ?
+        ORDER BY composite_hash
+        LIMIT ${this.BATCH_SIZE}
+      `);
+      let stagedCursor = '';
+      for (;;) {
         // 취소 체크포인트는 배치 경계에만 둔다. 배치 내부는 Promise.allSettled 로 묶여 있어
         // 중간에 끊으면 이미 시작한 생성 작업의 결과가 집계되지 않는다.
         ctx.throwIfCancelled();
 
-        const batch = filesWithExistingOriginals.slice(i, i + this.BATCH_SIZE);
+        const batch = nextStaged.all(stagedCursor) as ImageFileRecord[];
+        if (batch.length === 0) {
+          break;
+        }
+        stagedCursor = batch[batch.length - 1].composite_hash;
+
         const batchResults = await Promise.allSettled(
           batch.map((file) => this.regenerateThumbnail(file))
         );
@@ -179,16 +221,16 @@ export class ThumbnailRegenerationService {
           currentLabel: batch[batch.length - 1]?.original_file_path ?? null,
         });
 
-        if ((i + this.BATCH_SIZE) % 100 === 0 || i + this.BATCH_SIZE >= filesWithExistingOriginals.length) {
+        if (totalProcessed % 100 === 0 || totalProcessed >= totalToRegenerate) {
           console.log(
-            `  ⏳ 진행: ${totalProcessed}/${filesWithExistingOriginals.length} (생성: ${thumbnailsGenerated}개)`
+            `  ⏳ 진행: ${totalProcessed}/${totalToRegenerate} (생성: ${thumbnailsGenerated}개)`
           );
         }
 
-        if (i + this.BATCH_SIZE < filesWithExistingOriginals.length) {
-          await new Promise((resolve) => setTimeout(resolve, 50));
-        }
+        // 생성은 sharp 스레드풀을 쓰므로 배치 사이에 숨을 돌려 다른 요청의 이미지 처리를 굶기지 않는다.
+        await new Promise((resolve) => setTimeout(resolve, 50));
       }
+      db.prepare('DELETE FROM temp_thumbnail_regeneration').run();
 
       const duration = Date.now() - startTime;
 

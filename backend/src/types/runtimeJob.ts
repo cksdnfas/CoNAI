@@ -21,6 +21,12 @@ export type RuntimeJobKind =
   | 'database-backup'
   | 'recycle-bin-retention'
   | 'database-compaction'
+  | 'auto-tag-reset'
+  | 'rating-score-recalculate'
+  | 'auto-tag-batch-all'
+  | 'auto-tag-collection-sync'
+  | 'prompt-similarity-rebuild'
+  | 'file-verification'
 
 export type RuntimeJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
@@ -37,6 +43,12 @@ export const RUNTIME_JOB_KINDS: readonly RuntimeJobKind[] = [
   'database-backup',
   'recycle-bin-retention',
   'database-compaction',
+  'auto-tag-reset',
+  'rating-score-recalculate',
+  'auto-tag-batch-all',
+  'auto-tag-collection-sync',
+  'prompt-similarity-rebuild',
+  'file-verification',
 ]
 
 export const RUNTIME_JOB_TERMINAL_STATUSES: readonly RuntimeJobStatus[] = ['completed', 'failed', 'cancelled']

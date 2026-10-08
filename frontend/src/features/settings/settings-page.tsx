@@ -601,6 +601,9 @@ export function SettingsPage() {
               isCancellingScanAll={foldersTabProps.isCancellingScanAll}
               onVerifyAllFiles={foldersTabProps.onVerifyAllFiles}
               isVerifyingAllFiles={foldersTabProps.isVerifyingAllFiles}
+              verifyAllFilesJob={foldersTabProps.verifyAllFilesJob}
+              onCancelVerifyAllFiles={foldersTabProps.onCancelVerifyAllFiles}
+              isCancellingVerifyAllFiles={foldersTabProps.isCancellingVerifyAllFiles}
               onReextractAll={() => void metadataReextractMutation.mutateAsync()}
               isReextracting={metadataReextractMutation.isPending}
               autoTabProps={autoTabProps}

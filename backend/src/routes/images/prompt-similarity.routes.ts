@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { PromptSimilarityService } from '../../services/promptSimilarityService';
 import { enrichImageWithFileView } from './utils';
+import { respondWithStartedJob } from '../runtimeJobRouteHelpers';
 
 const router = Router();
 
@@ -33,15 +34,11 @@ router.get(
   }),
 );
 
+/** POST /rebuild — 202 + `prompt-similarity-rebuild` job; the counts (`PromptSimilarityRebuildResult`) are its result. */
 router.post(
   '/rebuild',
-  asyncHandler(async (_req: Request, res: Response) => {
-    const result = PromptSimilarityService.rebuildAll();
-    res.json({
-      success: true,
-      data: result,
-      message: `Prompt similarity rebuild complete (${result.updated}/${result.processed})`,
-    });
+  asyncHandler(async (req: Request, res: Response) => {
+    return respondWithStartedJob(req, res, 'prompt-similarity-rebuild', {}, 'Prompt similarity rebuild is already running');
   }),
 );
 

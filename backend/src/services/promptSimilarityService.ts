@@ -11,6 +11,8 @@ import {
 import { ImageSafetyService } from './imageSafetyService';
 import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
 import { settingsService } from './settingsService';
+import { maybeTruncateImagesWal } from '../database/walMaintenance';
+import { LIBRARY_BATCH_SIZE, pageBoundary, type LibraryBatchHooks } from './maintenance/libraryBatch';
 
 const PROMPT_SIMILARITY_VERSION = 1;
 const MINHASH_SIGNATURE_SIZE = 16;
@@ -306,13 +308,23 @@ export class PromptSimilarityService {
     });
   }
 
-  /** Rebuild prompt similarity fields for all rows using the active algorithm. */
-  static rebuildAll(): PromptSimilarityRebuildResult {
+  /**
+   * Rebuild prompt similarity fields for all rows using the active algorithm.
+   *
+   * Runs as the `prompt-similarity-rebuild` job: one rowid page at a time, one transaction per page, yielding in
+   * between (it used to load every prompt and rewrite every row in one transaction inside the request).
+   */
+  static async rebuildAll(hooks: LibraryBatchHooks = {}): Promise<PromptSimilarityRebuildResult> {
     const settings = this.getEffectiveSettings();
-    const rows = db.prepare(`
-      SELECT composite_hash, prompt, negative_prompt, auto_tags
+    const total = (db.prepare('SELECT COUNT(*) AS c FROM media_metadata').get() as { c: number }).c;
+    const nextPage = db.prepare(`
+      SELECT rowid AS row_id, composite_hash, prompt, negative_prompt, auto_tags
       FROM media_metadata
-    `).all() as Array<Pick<ImageMetadataRecord, 'composite_hash' | 'prompt' | 'negative_prompt' | 'auto_tags'>>;
+      WHERE rowid > ?
+      ORDER BY rowid
+      LIMIT ${LIBRARY_BATCH_SIZE}
+    `);
+    type RebuildRow = Pick<ImageMetadataRecord, 'composite_hash' | 'prompt' | 'negative_prompt' | 'auto_tags'> & { row_id: number };
 
     const updateStatement = db.prepare(`
       UPDATE media_metadata
@@ -326,10 +338,10 @@ export class PromptSimilarityService {
         neg_prompt_fingerprint = ?,
         auto_prompt_fingerprint = ?,
         prompt_similarity_updated_date = ?
-      WHERE composite_hash = ?
+      WHERE rowid = ?
     `);
 
-    const runTransaction = db.transaction((records: typeof rows) => {
+    const runTransaction = db.transaction((records: RebuildRow[]) => {
       let updated = 0;
       let skipped = 0;
 
@@ -350,7 +362,7 @@ export class PromptSimilarityService {
           fields.neg_prompt_fingerprint,
           fields.auto_prompt_fingerprint,
           fields.prompt_similarity_updated_date,
-          record.composite_hash,
+          record.row_id,
         );
         updated += 1;
       }
@@ -358,12 +370,33 @@ export class PromptSimilarityService {
       return { updated, skipped };
     });
 
-    const result = runTransaction(rows);
+    let cursor = 0;
+    let processed = 0;
+    let updated = 0;
+    let skipped = 0;
+    hooks.progress?.(0, total);
+    for (;;) {
+      hooks.throwIfCancelled?.();
+      const rows = nextPage.all(cursor) as RebuildRow[];
+      if (rows.length === 0) {
+        break;
+      }
+      cursor = rows[rows.length - 1].row_id;
+
+      const result = runTransaction(rows);
+      processed += rows.length;
+      updated += result.updated;
+      skipped += result.skipped;
+      hooks.progress?.(processed, total);
+      await pageBoundary(hooks);
+    }
+
+    maybeTruncateImagesWal('prompt-similarity-rebuild');
     return {
       algorithm: settings.algorithm,
-      processed: rows.length,
-      updated: result.updated,
-      skipped: result.skipped,
+      processed,
+      updated,
+      skipped,
     };
   }
 

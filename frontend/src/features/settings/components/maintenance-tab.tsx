@@ -7,6 +7,7 @@ import { useConfirm, type ConfirmOptions } from '@/components/ui/confirm-dialog'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import type { RuntimeJobRecord } from '@/types/runtime-job'
 import type { ScanAllSummary } from '@/types/folder'
+import type { FileVerificationRunResult } from '@/lib/api-settings'
 import { useI18n } from '@/i18n'
 import { AutoTestCard } from './auto-test-card'
 import type { AutoTabProps } from './auto-tab-types'
@@ -65,6 +66,9 @@ interface MaintenanceTabProps {
   isCancellingScanAll: boolean
   onVerifyAllFiles: () => void
   isVerifyingAllFiles: boolean
+  verifyAllFilesJob: RuntimeJobRecord<FileVerificationRunResult> | undefined
+  onCancelVerifyAllFiles: () => void
+  isCancellingVerifyAllFiles: boolean
   onReextractAll: () => void
   isReextracting: boolean
   autoTabProps: AutoTabProps
@@ -79,6 +83,9 @@ export function MaintenanceTab({
   isCancellingScanAll,
   onVerifyAllFiles,
   isVerifyingAllFiles,
+  verifyAllFilesJob,
+  onCancelVerifyAllFiles,
+  isCancellingVerifyAllFiles,
   onReextractAll,
   isReextracting,
   autoTabProps,
@@ -118,7 +125,9 @@ export function MaintenanceTab({
             tone: 'destructive',
           }}
           onRun={onVerifyAllFiles}
-        />
+        >
+          <RuntimeJobProgress job={verifyAllFilesJob} cancel={onCancelVerifyAllFiles} isCancelling={isCancellingVerifyAllFiles} />
+        </MaintenanceActionRow>
 
         <MaintenanceActionRow
           icon={<FileSearch className="h-4 w-4" />}

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../../middleware/asyncHandler';
-import { MaintenanceService } from '../../services/maintenanceService';
+import { respondWithStartedJob } from '../runtimeJobRouteHelpers';
 import { AutoScanScheduler } from '../../services/autoScanScheduler';
 import { autoTagScheduler } from '../../services/autoTagScheduler';
 import { SystemSettingsService } from '../../services/systemSettingsService';
@@ -107,23 +107,11 @@ router.put(
   }),
 );
 
+/** POST /maintenance/sync-tags — 202 + `auto-tag-collection-sync` job; `{ processed, collected }` is its result. */
 router.post(
   '/maintenance/sync-tags',
   asyncHandler(async (req: Request, res: Response) => {
-    try {
-      const result = await MaintenanceService.syncAutoTags();
-      res.json({
-        success: true,
-        data: result,
-        message: `Sync complete. Processed ${result.processed} images, collected ${result.collected} tags.`,
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error during sync',
-      });
-    }
-    return;
+    return respondWithStartedJob(req, res, 'auto-tag-collection-sync', {}, 'Auto-tag sync is already running');
   }),
 );
 
