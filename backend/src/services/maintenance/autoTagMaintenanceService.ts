@@ -52,9 +52,9 @@ function invalidateTagCaches(): void {
  * Clear every row's auto_tags (the auto-tag state triggers move them back to 'pending' for the scheduler) and empty
  * the tag search index.
  *
- * The index is emptied first with unqualified DELETEs: SQLite truncates a table without WHERE or triggers by freeing
- * its pages, far faster than deleting millions of index rows page by page, and it is what the old reset did. A row
- * the scheduler re-tags while the reset is still running then keeps its fresh index rows.
+ * The index is emptied first in one truncating clear (see AutoTagIndexService.clearAll), far faster than deleting
+ * millions of index rows page by page. A row the scheduler re-tags while the reset is still running then keeps its
+ * fresh index rows.
  */
 export async function resetAllAutoTags(hooks: LibraryBatchHooks = {}): Promise<AutoTagResetResult> {
   const total = countTaggedMedia();

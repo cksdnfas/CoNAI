@@ -108,6 +108,7 @@ test('auto-tag reset clears every page and the tag index, one page per transacti
   assert.equal((db.prepare("SELECT COUNT(*) c FROM media_metadata WHERE composite_hash LIKE 'r%' AND auto_tags IS NOT NULL").get() as { c: number }).c, 0)
   assert.equal((db.prepare('SELECT COUNT(*) c FROM media_auto_tags').get() as { c: number }).c, 0)
   assert.equal((db.prepare('SELECT COUNT(*) c FROM auto_tag_terms').get() as { c: number }).c, 0)
+  assert.equal(db.pragma('foreign_keys', { simple: true }), 1, 'the truncating index clear turns foreign keys back on')
   assert.equal((db.prepare("SELECT COUNT(*) c FROM media_metadata WHERE composite_hash LIKE 'r%' AND auto_tag_state = 'pending'").get() as { c: number }).c, 1203,
     'the auto-tag state trigger queues every reset row for the scheduler')
   assert.ok(state.yields >= 3, `yielded between pages (${state.yields})`)

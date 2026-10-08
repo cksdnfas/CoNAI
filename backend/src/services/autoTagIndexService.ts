@@ -244,15 +244,34 @@ export class AutoTagIndexService {
     prepared().deleteForMedia.run(fromMediaId);
   }
 
+  /**
+   * Empty the whole index. The term_id foreign key makes SQLite delete row by row (seconds of event-loop block and
+   * write lock on millions of rows), so foreign keys are switched off around the two DELETEs to let SQLite truncate
+   * both tables instead. That is safe: the child table is emptied before its parent in the same transaction, and the
+   * code is synchronous on the single connection, so nothing else runs while the pragma is off. Inside an outer
+   * transaction the pragma is a no-op and the DELETEs fall back to the slow path.
+   */
   static clearAll(): void {
     if (!this.hasIndexTable()) {
       return;
     }
 
-    db.transaction(() => {
+    const clear = db.transaction(() => {
       db.prepare('DELETE FROM media_auto_tags').run();
       db.prepare('DELETE FROM auto_tag_terms').run();
-    })();
+    });
+    const restoreForeignKeys = !db.inTransaction && Boolean(db.pragma('foreign_keys', { simple: true }));
+    if (!restoreForeignKeys) {
+      clear();
+      return;
+    }
+
+    db.pragma('foreign_keys = OFF');
+    try {
+      clear();
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
   }
 }
 
