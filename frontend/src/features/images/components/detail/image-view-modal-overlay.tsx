@@ -2,6 +2,7 @@ import { createPortal } from 'react-dom'
 import { useEffect, useRef } from 'react'
 import { useI18n } from '@/i18n'
 import { ImageDetailView } from '@/features/images/image-detail-view'
+import { useChatDockedBesidePage } from '@/features/codex-chat/chat-reference'
 import { ImageViewModalActions } from './image-view-modal-actions'
 import type { ImageRecord } from '@/types/image'
 import type { ImageViewModalAccessOptions, ImageViewSequenceTotal } from './image-view-modal-context'
@@ -40,6 +41,8 @@ export function ImageViewModalOverlay({
 }: ImageViewModalOverlayProps) {
   const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement | null>(null)
+  // A docked chat panel stays usable beside the viewer: the viewer takes the page's side only.
+  const besideChat = useChatDockedBesidePage()
 
   useEffect(() => {
     const containerElement = containerRef.current
@@ -51,15 +54,14 @@ export function ImageViewModalOverlay({
   }, [compositeHash, openSessionId])
 
   return createPortal(
-    // eslint-disable-next-line no-restricted-syntax -- full-bleed lightbox: Modal adds a titled, padded card this viewer must not have
-    <div className="fixed inset-0 z-[90] bg-black" onMouseDown={onClose}>
+    <div className="fixed inset-y-0 left-0 right-[var(--chat-dock-width,0px)] z-[90] bg-black" onMouseDown={onClose}>
       <div
         ref={containerRef}
         role="dialog"
-        aria-modal="true"
+        aria-modal={!besideChat}
         aria-label={t('images.components.detail.image.view.modal.overlay.view.image')}
         tabIndex={-1}
-        className="h-[100dvh] w-[100vw] overflow-hidden bg-background outline-none"
+        className="h-[100dvh] w-full overflow-hidden bg-background outline-none"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <ImageDetailView

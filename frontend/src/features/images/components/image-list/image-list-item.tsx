@@ -5,6 +5,7 @@ import { ImagePreviewMedia } from '@/features/images/components/image-preview-me
 import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
 import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/images/components/image-preview-state'
 import { ImageEditAction } from '@/features/images/components/detail/image-edit-action'
+import { ChatDockReferenceButton } from '@/features/codex-chat/chat-reference'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
@@ -199,6 +200,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
     >
+      {hasRevealedQuickActions ? <ChatDockReferenceButton compositeHash={image.composite_hash} mimeType={image.mime_type ?? null} /> : null}
       {hasRevealedQuickActions ? <ImageEditAction image={image} /> : null}
       {renderOverlay}
     </div>

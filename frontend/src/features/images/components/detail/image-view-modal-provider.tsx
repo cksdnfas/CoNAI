@@ -451,7 +451,8 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       width: document.body.style.width,
     }
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) {
+      // Keys typed in a docked chat panel beside the viewer belong to the chat.
+      if (event.defaultPrevented || (event.target instanceof Element && event.target.closest('[data-chat-dock]'))) {
         return
       }
 

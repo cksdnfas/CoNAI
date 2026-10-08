@@ -85,13 +85,14 @@ function DeferredGenerationQueueHeaderWidget() {
 export function AppShell() {
   return (
     <HomeSearchProvider>
-      <ImageViewModalProvider>
-        <ChatPageProvider>
-          <CodexChatProvider>
+      <ChatPageProvider>
+        <CodexChatProvider>
+          {/* Inside the chat: the viewer's "참조" button and its room for the docked panel read the chat state. */}
+          <ImageViewModalProvider>
             <AppShellLayout />
-          </CodexChatProvider>
-        </ChatPageProvider>
-      </ImageViewModalProvider>
+          </ImageViewModalProvider>
+        </CodexChatProvider>
+      </ChatPageProvider>
     </HomeSearchProvider>
   )
 }

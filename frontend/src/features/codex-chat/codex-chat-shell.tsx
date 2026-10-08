@@ -11,10 +11,8 @@ import { useI18n } from '@/i18n'
 import { listCodexChatThreads } from '@/lib/api-codex-chat'
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
-import { CODEX_CHAT_ROUTE, CODEX_CHAT_THREADS_QUERY_KEY, useCodexChat } from './codex-chat-context'
+import { CHAT_DOCK_MIN_WIDTH_PX, CODEX_CHAT_ROUTE, CODEX_CHAT_THREADS_QUERY_KEY, useCodexChat } from './codex-chat-context'
 
-/** Docked beside the page from this width (Tailwind `lg`); below it the panel covers the screen. */
-const DOCK_MIN_WIDTH_PX = 1024
 const DOCK_DEFAULT_WIDTH_PX = 420
 const DOCK_RESIZE_MIN_PX = 360
 const DOCK_RESIZE_MAX_PX = 1100
@@ -213,7 +211,7 @@ export function CodexChatDock() {
   const chat = useCodexChat()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const isDocked = useMinWidth(DOCK_MIN_WIDTH_PX)
+  const isDocked = useMinWidth(CHAT_DOCK_MIN_WIDTH_PX)
   const visible = useCodexChatDockVisible()
   const closePanel = chat?.closePanel ?? (() => {})
   const coversScreen = visible && !isDocked
@@ -269,6 +267,8 @@ export function CodexChatDock() {
   return (
     <aside
       aria-label={t({ ko: '채팅', en: 'Chat' })}
+      // The image viewer leaves keys pressed in here to the chat.
+      data-chat-dock=""
       // Docked under the header's layer: header popups (queue, search, account) must open over the panel.
       className={isDocked
         ? 'fixed bottom-0 right-0 top-(--theme-shell-header-height) z-sticky flex flex-col border-l border-line bg-background'

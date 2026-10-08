@@ -7,6 +7,7 @@ import { formatCountDisplay } from '@/lib/count-display'
 import { type ImageDetailViewHeaderControls } from '@/features/images/image-detail-view'
 import { prepareImageSourceState } from '@/features/images/image-source-navigation'
 import { GenerationHistoryReuseActions } from '@/features/image-generation/components/generation-history-reuse-actions'
+import { ChatDockReferenceButton } from '@/features/codex-chat/chat-reference'
 import { ImageDeleteAction } from './image-delete-action'
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
@@ -111,6 +112,7 @@ export function ImageViewModalActions({
         {navigationButtons}
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        <ChatDockReferenceButton compositeHash={compositeHash} mimeType={controls.image?.mime_type ?? null} />
         {historyReuseButtons}
         {groupAssignButton}
         {metadataEditButton}

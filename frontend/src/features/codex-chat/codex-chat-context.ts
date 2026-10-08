@@ -4,6 +4,8 @@ import type { StoredFileEntry, ChatMessageRouting, ChatReplyQuote } from '@conai
 
 export const CODEX_CHAT_ROUTE = '/chat'
 export const CODEX_CHAT_THREADS_QUERY_KEY = ['codex-chat-threads'] as const
+/** The side panel docks beside the page from this width (Tailwind `lg`); below it the panel covers the screen. */
+export const CHAT_DOCK_MIN_WIDTH_PX = 1024
 
 export function codexChatThreadQueryKey(threadId: number | null) {
   return ['codex-chat-thread', threadId] as const
@@ -143,6 +145,8 @@ export const CodexChatContext = createContext<CodexChatApi | null>(null)
  * re-render on every composer keystroke (the full API changes with `draft`).
  */
 export type CodexChatReferenceApi = {
+  /** Chat is usable and its side panel is open (see `useChatDockedBesidePage` for "docked beside this page"). */
+  panelOpen: boolean
   draftMediaAttachments: ChatMediaAttachment[]
   toggleMediaAttachment: (item: ChatMediaAttachment) => void
   focusMessage: (messageId: number) => void

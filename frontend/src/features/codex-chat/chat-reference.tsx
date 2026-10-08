@@ -2,6 +2,7 @@ import { buildChatImageRecord } from './chat-image-record'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useLocation } from 'react-router-dom'
 import { ImageIcon, Reply } from 'lucide-react'
 import { useMediaHoverPreview } from '@/components/common/media-hover-preview'
 import { Button } from '@/components/ui/button'
@@ -9,8 +10,9 @@ import { IconButton } from '@/components/ui/icon-button'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { useI18n } from '@/i18n'
 import { getCodexChatThreadMedia, type ChatMediaAttachment, type CodexChatMediaItem } from '@/lib/api-codex-chat'
+import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
-import { codexChatMediaQueryKey, useCodexChatReference } from './codex-chat-context'
+import { CHAT_DOCK_MIN_WIDTH_PX, CODEX_CHAT_ROUTE, codexChatMediaQueryKey, useCodexChatReference } from './codex-chat-context'
 
 /**
  * "참조": attach a library image seen in the chat to the next message (it goes along as an app-media attachment, the
@@ -46,6 +48,19 @@ export function ChatReferenceButton({ compositeHash, mimeType, size = 'icon-sm',
       <Reply />
     </IconButton>
   )
+}
+
+/** The chat panel is docked beside this page (wide viewport, not /chat), so the page can hand it images while both show. */
+export function useChatDockedBesidePage() {
+  const panelOpen = useCodexChatReference()?.panelOpen === true
+  const { pathname } = useLocation()
+  const wide = useMinWidth(CHAT_DOCK_MIN_WIDTH_PX)
+  return panelOpen && wide && pathname !== CODEX_CHAT_ROUTE
+}
+
+/** "참조" for images outside the chat (library tiles, the image viewer): only while the docked chat is beside them. */
+export function ChatDockReferenceButton(props: Parameters<typeof ChatReferenceButton>[0]) {
+  return useChatDockedBesidePage() ? <ChatReferenceButton {...props} /> : null
 }
 
 const LONG_PRESS_DELAY_MS = 450
