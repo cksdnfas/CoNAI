@@ -44,13 +44,30 @@ function requiredToolKeys(toolName: string): readonly string[] {
   return typeof required === 'string' ? [required] : required;
 }
 
+/**
+ * Listing asks this once per tool (80-odd) for one context, so the account and profile are read once per context for a
+ * moment. Calls never use it: requireMcpToolAccess rechecks the account directly.
+ */
+const listingFacts = new WeakMap<McpRequestContext, { at: number; keys: Set<string>; admin: boolean; profile: ReturnType<typeof ChatProfileStore.find> }>();
+function factsFor(context: McpRequestContext) {
+  const cached = listingFacts.get(context);
+  if (cached && Date.now() - cached.at < 1000) return cached;
+  const requester = context.requester!;
+  const facts = {
+    at: Date.now(),
+    keys: new Set(requesterPermissionKeys(requester)),
+    admin: isRequesterAdmin(requester),
+    profile: context.chatContext ? ChatProfileStore.find(context.chatContext.profileId) : null,
+  };
+  listingFacts.set(context, facts);
+  return facts;
+}
+
 /** What the account itself must hold: the same key the web needs for that action, and the admin role for chat setup. */
 function accountHoldsTool(context: McpRequestContext, toolName: string): boolean {
-  const requester = context.requester!;
-  const keys = requesterPermissionKeys(requester);
-  if (!requiredToolKeys(toolName).every((key) => keys.includes(key))) return false;
-  if (getMcpToolScope(toolName) === 'configure' && !isRequesterAdmin(requester)) return false;
-  const profile = context.chatContext ? ChatProfileStore.find(context.chatContext.profileId) : null;
+  const { keys, admin, profile } = factsFor(context);
+  if (!requiredToolKeys(toolName).every((key) => keys.has(key))) return false;
+  if (getMcpToolScope(toolName) === 'configure' && !admin) return false;
   if (profile && toolName === 'view_images' && !profile.visionEnabled) return false;
   if (profile && toolName === 'save_lore' && !profile.allowLoreProposals) return false;
   return true;
