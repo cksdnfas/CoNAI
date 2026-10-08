@@ -3,9 +3,8 @@ import { FeaturePermissionNotice } from '@/features/auth/feature-permission-noti
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { RefreshCw, Trash2, XCircle } from 'lucide-react'
-import { SelectionActionBar } from '@/components/common/selection-action-bar'
+import { SelectionActionBar, SelectionBarAction } from '@/components/common/selection-action-bar'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
@@ -350,26 +349,19 @@ function WorkflowReservationsPanelContent() {
         onClear={() => setSelectedReservationExecutionIds([])}
         actions={(
           <>
-            <Button
-              size="sm"
-              variant="secondary"
+            <SelectionBarAction
+              icon={XCircle}
+              label={t({ ko: '활성 취소 ({count})', en: 'Cancel active ({count})' }, { count: formatNumber(cancelableReservationExecutions.length) })}
               onClick={() => void handleCancelSelectedReservationExecutions()}
               disabled={isCleaningReservations || cancelableReservationExecutions.length === 0}
-              data-no-select-drag="true"
-            >
-              <XCircle className="h-4 w-4" />
-              {t({ ko: '활성 취소 ({count})', en: 'Cancel active ({count})' }, { count: formatNumber(cancelableReservationExecutions.length) })}
-            </Button>
-            <Button
-              size="sm"
+            />
+            <SelectionBarAction
+              icon={Trash2}
+              label={t({ ko: '빈 실행 삭제 ({count})', en: 'Delete empty runs ({count})' }, { count: formatNumber(deletableReservationExecutions.length) })}
               variant="destructive"
               onClick={() => void handleCleanupSelectedReservations()}
               disabled={isCleaningReservations || deletableReservationExecutions.length === 0}
-              data-no-select-drag="true"
-            >
-              <Trash2 className="h-4 w-4" />
-              {t({ ko: '빈 실행 삭제 ({count})', en: 'Delete empty runs ({count})' }, { count: formatNumber(deletableReservationExecutions.length) })}
-            </Button>
+            />
           </>
         )}
       /> : null}

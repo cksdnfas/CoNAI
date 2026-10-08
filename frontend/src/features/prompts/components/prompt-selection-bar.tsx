@@ -1,8 +1,6 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { FolderInput, Trash2 } from 'lucide-react'
-import { SelectionActionBar } from '@/components/common/selection-action-bar'
-import { Button } from '@/components/ui/button'
-import { IconButton } from '@/components/ui/icon-button'
+import { SelectionActionBar, SelectionBarAction } from '@/components/common/selection-action-bar'
 import { useI18n } from '@/i18n'
 
 interface PromptSelectionBarProps {
@@ -24,14 +22,20 @@ export function PromptSelectionBar({ selectedCount, isSubmitting = false, isDele
       onClear={onClear}
       actions={(
         <>
-          <IconButton size="icon-sm" variant="secondary" onClick={onDeleteSelected} disabled={!canDeletePrompts || !onDeleteSelected || isDeleting} data-no-select-drag="true" label={isDeleting ? t('prompts.components.prompt.selection.bar.deleting') : t('prompts.components.prompt.selection.bar.delete')}>
-            <Trash2 />
-          </IconButton>
+          <SelectionBarAction
+            icon={Trash2}
+            label={isDeleting ? t('prompts.components.prompt.selection.bar.deleting') : t('prompts.components.prompt.selection.bar.delete')}
+            onClick={onDeleteSelected}
+            disabled={!canDeletePrompts || !onDeleteSelected || isDeleting}
+          />
 
-          <Button size="sm" onClick={onAssignGroup} disabled={!canUpdatePrompts || isSubmitting} data-no-select-drag="true">
-            <FolderInput className="h-4 w-4" />
-            {isSubmitting ? t('prompts.components.prompt.selection.bar.applying') : t('prompts.components.prompt.selection.bar.assign.group')}
-          </Button>
+          <SelectionBarAction
+            icon={FolderInput}
+            label={isSubmitting ? t('prompts.components.prompt.selection.bar.applying') : t('prompts.components.prompt.selection.bar.assign.group')}
+            variant="default"
+            onClick={onAssignGroup}
+            disabled={!canUpdatePrompts || isSubmitting}
+          />
         </>
       )}
     />

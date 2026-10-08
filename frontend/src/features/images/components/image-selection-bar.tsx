@@ -24,7 +24,7 @@ interface ImageSelectionBarProps {
 
 /**
  * Bottom action bar for image selections. Actions passed in should be SelectionBarAction so every
- * gallery shows the same buttons: icon + label on wide screens, icon + tooltip on narrow ones.
+ * gallery shows the same icon buttons with tooltips.
  */
 export function ImageSelectionBar({
   selectedCount,

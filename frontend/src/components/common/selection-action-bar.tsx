@@ -1,40 +1,22 @@
 import type { ComponentProps, ComponentType, ReactNode } from 'react'
 import { X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import type { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
-import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
-
-/** Width from which selection bar actions show their text label next to the icon. */
-const SELECTION_BAR_LABEL_MIN_WIDTH = 1024
 
 interface SelectionBarActionProps extends Omit<ComponentProps<typeof Button>, 'children' | 'size' | 'aria-label'> {
   icon: ComponentType<{ className?: string }>
-  /** Visible text on wide screens; tooltip and accessible name when the button is icon-only. */
+  /** Tooltip and accessible name (the button shows only its icon). */
   label: string
 }
 
-/**
- * One selection bar action: icon + text on wide screens, an icon button with a tooltip on narrow ones.
- * Marked so a drag-select never starts from it.
- */
+/** One selection bar action: an icon button with a tooltip, marked so a drag-select never starts from it. */
 export function SelectionBarAction({ icon: Icon, label, variant = 'secondary', ...props }: SelectionBarActionProps) {
-  const showLabel = useMinWidth(SELECTION_BAR_LABEL_MIN_WIDTH)
-
-  if (!showLabel) {
-    return (
-      <IconButton label={label} size="icon-sm" variant={variant} tooltipSide="top" data-no-select-drag="true" {...props}>
-        <Icon className="h-4 w-4" />
-      </IconButton>
-    )
-  }
-
   return (
-    <Button type="button" size="sm" variant={variant} data-no-select-drag="true" {...props}>
+    <IconButton label={label} size="icon-sm" variant={variant} tooltipSide="top" data-no-select-drag="true" {...props}>
       <Icon className="h-4 w-4" />
-      {label}
-    </Button>
+    </IconButton>
   )
 }
 
@@ -45,7 +27,7 @@ interface SelectionActionBarProps {
   actions?: ReactNode
   onClear?: () => void
   clearLabel?: string
-  /** Clear button follows SelectionBarAction: icon + text on wide screens, icon + tooltip on narrow ones. */
+  /** Clear button is a ghost SelectionBarAction (sits with the other actions) instead of a secondary icon button. */
   responsiveActions?: boolean
   className?: string
 }
