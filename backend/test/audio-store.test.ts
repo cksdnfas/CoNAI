@@ -245,6 +245,9 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
     fs.utimesSync(stray, old, old)
     const unused = await service.importAudioUpload({ groupId: snow.id }, staged(tone('e.wav', 1200)), 'unused.wav', null)
     audioDb.prepare('DELETE FROM audio_candidates WHERE id = ?').run(unused.id)
+    // A blob registered moments ago may still be waiting for its candidate row: the grace period keeps it.
+    assert.equal((await maintenance.sweepAudioOrphans({ dryRun: true })).unreferencedBlobs, 0)
+    audioDb.prepare('UPDATE audio_files SET created_at = ? WHERE hash = ?').run(old.toISOString(), unused.file_hash)
 
     const dry = await maintenance.sweepAudioOrphans({ dryRun: true })
     assert.equal(dry.orphanFiles, 1)

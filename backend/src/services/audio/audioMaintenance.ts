@@ -326,9 +326,11 @@ export async function sweepAudioOrphans(options: { dryRun: boolean; graceMs?: nu
     }
   }, hooks);
 
+  // Same grace as the files: an ingest registers the blob a moment before its candidate row exists.
   const unreferenced = (db().prepare(`
-    SELECT f.hash FROM audio_files f WHERE NOT EXISTS (SELECT 1 FROM audio_candidates c WHERE c.file_hash = f.hash)
-  `).all() as Array<{ hash: string }>).map((row) => row.hash);
+    SELECT f.hash FROM audio_files f
+    WHERE f.created_at < ? AND NOT EXISTS (SELECT 1 FROM audio_candidates c WHERE c.file_hash = f.hash)
+  `).all(new Date(cutoff).toISOString()) as Array<{ hash: string }>).map((row) => row.hash);
   result.unreferencedBlobs = unreferenced.length;
   if (!options.dryRun && unreferenced.length > 0) {
     result.releasedBlobs = (await releaseUnreferencedAudioBlobs(unreferenced)).released;
