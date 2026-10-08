@@ -17,6 +17,7 @@ import { registerChatLoreTools } from './tools/chatLoreTools';
 import { registerChatSetupTools } from './tools/chatSetupTools';
 import { registerChatPageTools } from './tools/chatPageTools';
 import { registerSpriteTools } from './tools/spriteTools';
+import { registerAudioTools } from './tools/audioTools';
 import { isContextToolAllowed, requireMcpToolAccess } from './toolAccess';
 import { ChatGenerationPresetStore } from '../services/codex-chat/chatGenerationPresets';
 
@@ -60,6 +61,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   registerFileStoreTools(server, context);
   registerImageGroupTools(server);
   registerEmoticonTools(server, context);
+  registerAudioTools(server, context);
   registerResourceTools(server);
   registerPromptOrganizationTools(server);
   registerWorkflowTransferTools(server);

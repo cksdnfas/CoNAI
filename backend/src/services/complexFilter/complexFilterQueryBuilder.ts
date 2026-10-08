@@ -99,6 +99,11 @@ export type ComplexQueryBuildOptions = {
    * known total. Count and hash-only queries are unaffected.
    */
   walkFirstSeenIndex?: boolean;
+  /**
+   * Also match media with no active file. Search results never want them (the feed doesn't show them); group
+   * auto-collect keeps its previous membership rules.
+   */
+  includeMediaWithoutActiveFile?: boolean;
 };
 
 export function buildComplexFilterQuery(
@@ -163,7 +168,18 @@ export function buildComplexFilterQuery(
     statsSources.andResults = addGroupCte('and_results', filter.and_group, 'AND');
   }
 
-  const finalConditions: string[] = [getVisibleImageCondition(), getReadyImageCondition(), ...basicScope.conditions];
+  // Same population as the feed: only media that still has an active file (orphans kept for chat/group
+  // references, or rows whose files are all missing/deleted, are not search results).
+  const activeFileCondition = `EXISTS (
+    SELECT 1 FROM image_files af
+    WHERE af.composite_hash = im.composite_hash AND af.file_status = 'active'
+  )`;
+  const finalConditions: string[] = [
+    getVisibleImageCondition(),
+    getReadyImageCondition(),
+    ...(options.includeMediaWithoutActiveFile ? [] : [activeFileCondition]),
+    ...basicScope.conditions,
+  ];
   const finalParams = [...basicScope.params];
 
   if (statsSources.orResults) {

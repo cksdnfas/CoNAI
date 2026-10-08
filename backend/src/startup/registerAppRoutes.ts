@@ -23,6 +23,8 @@ import generationQueueRoutes from '../routes/generation-queue.routes';
 import codexChatRoutes from '../routes/codex-chat.routes';
 import chatProposalRoutes from '../routes/chat-proposals.routes';
 import filesRoutes from '../routes/files.routes';
+import audioRoutes from '../routes/audio.routes';
+import { isAudioStorePath } from '../services/audio/audioStore';
 import systemFolderRoutes from '../routes/system-folders.routes';
 import { wildcardMutationRoutes } from '../routes/wildcards.mutation.routes';
 import { wildcardReadRoutes } from '../routes/wildcards.read.routes';
@@ -156,6 +158,22 @@ function requireReadAccess(permissionKey: string, readPostPaths: readonly string
 
 /** Register API routes, runtime static directories, frontend assets, and terminal handlers. */
 export function registerAppRoutes(app: Express, options: RegisterAppRoutesOptions): RegisterAppRoutesResult {
+  // The audio store lives under uploads but is only served through /api/audio (audio.view), never statically.
+  // Resolve the request like serve-static would, so `//audio`, `%2e%2e` or case tricks cannot reach it either.
+  app.use('/uploads', (req, res, next) => {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(req.path);
+    } catch {
+      next();
+      return;
+    }
+    if (isAudioStorePath(path.join(options.uploadsDir, path.normalize(decoded)))) {
+      res.status(404).end();
+      return;
+    }
+    next();
+  });
   registerRuntimeStaticDirectory(app, '/uploads', options.uploadsDir);
   registerRuntimeStaticDirectory(app, '/temp', options.tempDir);
   registerRuntimeStaticDirectory(app, '/save', options.saveDir);
@@ -260,6 +278,10 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
     const limiter = req.method === 'POST' && req.path === '/upload' ? options.uploadLimiter : options.readOnlyLimiter;
     limiter(req, res, next);
   }, filesRoutes);
+  app.use('/api/audio', requireAuth, (req, res, next) => {
+    const limiter = req.method === 'POST' && /\/upload$/.test(req.path) ? options.uploadLimiter : options.readOnlyLimiter;
+    limiter(req, res, next);
+  }, audioRoutes);
   app.use('/api/system-folders', requireAuth, options.readOnlyLimiter, systemFolderRoutes);
   app.use('/api/wildcards', wildcardUtilityRoutes);
   app.use('/api/wildcards', optionalAuth, wildcardMutationRoutes);

@@ -4,9 +4,10 @@ import {
   cancelRuntimeJob,
   getRuntimeJob,
   isRuntimeJobTerminal,
+  listRuntimeJobs,
   resolveRuntimeJobPollIntervalMs,
 } from '@/lib/api-runtime-jobs'
-import type { RuntimeJobRecord } from '@/types/runtime-job'
+import type { RuntimeJobKind, RuntimeJobRecord } from '@/types/runtime-job'
 
 /**
  * 잡 진행률 폴링 훅.
@@ -137,14 +138,32 @@ export interface UseRuntimeJobActionResult<TResult> extends UseRuntimeJobResult<
 /**
  * 202 응답 → 잡 추적을 한 번에 다루는 래퍼. 버튼 하나짜리 UI 용.
  * 시작 응답을 캐시에 심어 두므로 첫 렌더부터 진행률이 보인다.
+ * `resumeKind` 를 주면 마운트할 때 그 종류의 실행 중인 잡을 찾아 이어서 추적한다 (새로고침해도 진행률 유지).
  */
 export function useRuntimeJobAction<TResult = unknown>(
   start: () => Promise<RuntimeJobRecord<TResult>>,
-  options: UseRuntimeJobOptions<TResult> & { onStartError?: (error: unknown) => void } = {},
+  options: UseRuntimeJobOptions<TResult> & { onStartError?: (error: unknown) => void; resumeKind?: RuntimeJobKind } = {},
 ): UseRuntimeJobActionResult<TResult> {
   const queryClient = useQueryClient()
   const [jobId, setJobId] = useState<string | null>(null)
   const tracked = useRuntimeJob<TResult>(jobId, options)
+  const resumeKind = options.resumeKind
+
+  const resumeQuery = useQuery({
+    queryKey: [RUNTIME_JOB_QUERY_KEY, 'resume', resumeKind],
+    queryFn: async () => (await listRuntimeJobs({ kind: resumeKind, status: ['queued', 'running'], limit: 1 }))[0] ?? null,
+    enabled: resumeKind !== undefined,
+    staleTime: 0,
+  })
+
+  useEffect(() => {
+    const running = resumeQuery.data
+    if (!running) {
+      return
+    }
+    queryClient.setQueryData(runtimeJobQueryKey(running.jobId), running)
+    setJobId((current) => current ?? running.jobId)
+  }, [queryClient, resumeQuery.data])
 
   const startMutation = useMutation({
     mutationFn: start,
