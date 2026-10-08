@@ -203,6 +203,8 @@ export type WorkflowNodeNumericBounds = Record<string, WorkflowNodeNumericBound>
 
 export type WorkflowResultViewMode = 'history' | 'artifact_explorer'
 export type WorkflowArtifactDirectoryMode = 'shared' | 'per_run'
+/** image = library media; audio = audio workspace orders only (hidden from the image generation lists). */
+export type WorkflowKind = 'image' | 'audio'
 
 /** 등급(권한 그룹 key)별 회원 1인당 동시 대기열 제한. 항목이 없는 등급은 무제한. */
 export type WorkflowRoleQueueLimits = Record<string, number>
@@ -220,6 +222,7 @@ export interface GenerationWorkflow {
   result_view_mode: WorkflowResultViewMode
   artifact_root_path?: string | null
   artifact_directory_mode: WorkflowArtifactDirectoryMode
+  kind?: WorkflowKind
   color: string
   marked_fields: WorkflowMarkedField[]
 }
@@ -499,6 +502,7 @@ export interface CreateGenerationWorkflowPayload {
   result_view_mode?: WorkflowResultViewMode
   artifact_root_path?: string | null
   artifact_directory_mode?: WorkflowArtifactDirectoryMode
+  kind?: WorkflowKind
   color?: string
 }
 

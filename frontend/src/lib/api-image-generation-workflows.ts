@@ -10,6 +10,7 @@ import type {
   GenerationWorkflowDetail,
   UpdateComfyUIServerPayload,
   WorkflowArtifactListing,
+  WorkflowKind,
 } from './api-image-generation-types'
 
 export const DEFAULT_COMFY_MODEL_API_PATHS = [
@@ -126,10 +127,13 @@ function normalizeComfyUIServerStatus(payload: Record<string, unknown>): ComfyUI
 }
 
 /** Load the workflows available for ComfyUI generation. */
-export async function getGenerationWorkflows(activeOnly = true) {
+export async function getGenerationWorkflows(activeOnly = true, kind: WorkflowKind | 'all' = 'image') {
   const searchParams = new URLSearchParams()
   if (activeOnly) {
     searchParams.set('active', 'true')
+  }
+  if (kind !== 'all') {
+    searchParams.set('kind', kind)
   }
 
   const response = await requestJson<WorkflowListResponse>(`/api/workflows${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)

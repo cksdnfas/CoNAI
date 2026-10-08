@@ -4,7 +4,9 @@ import {
   WorkflowCreateData,
   WorkflowUpdateData,
   WorkflowRoleQueueLimits,
-  MarkedField
+  MarkedField,
+  WorkflowKind,
+  normalizeWorkflowKind
 } from '../types/workflow';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
 
@@ -97,6 +99,7 @@ export class WorkflowModel {
       result_view_mode: workflow.result_view_mode === 'artifact_explorer' ? 'artifact_explorer' : 'history',
       artifact_root_path: workflow.artifact_root_path ?? null,
       artifact_directory_mode: workflow.artifact_directory_mode === 'per_run' ? 'per_run' : 'shared',
+      kind: normalizeWorkflowKind(workflow.kind),
     }
   }
 
@@ -109,8 +112,8 @@ export class WorkflowModel {
 
     const info = userSettingsDb.prepare(`
       INSERT INTO workflows (
-        name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, public_queue_role_limits, result_view_mode, artifact_root_path, artifact_directory_mode, color
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, public_queue_role_limits, result_view_mode, artifact_root_path, artifact_directory_mode, kind, color
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       workflowData.name,
       workflowData.description || null,
@@ -125,6 +128,7 @@ export class WorkflowModel {
       workflowData.result_view_mode === 'artifact_explorer' ? 'artifact_explorer' : 'history',
       workflowData.artifact_root_path?.trim() || null,
       workflowData.artifact_directory_mode === 'per_run' ? 'per_run' : 'shared',
+      normalizeWorkflowKind(workflowData.kind),
       workflowData.color || '#2196f3'
     );
 
@@ -147,14 +151,19 @@ export class WorkflowModel {
   /**
    * 모든 워크플로우 조회
    */
-  static findAll(activeOnly: boolean = false): WorkflowRecord[] {
+  static findAll(activeOnly: boolean = false, kind?: WorkflowKind): WorkflowRecord[] {
     let query = 'SELECT * FROM workflows WHERE deleted_at IS NULL';
+    const params: unknown[] = [];
     if (activeOnly) {
       query += ' AND is_active = 1';
     }
+    if (kind) {
+      query += ' AND kind = ?';
+      params.push(kind);
+    }
     query += ' ORDER BY created_date DESC';
 
-    const rows = userSettingsDb.prepare(query).all() as WorkflowRecord[];
+    const rows = userSettingsDb.prepare(query).all(...params) as WorkflowRecord[];
     return (rows || []).map((row) => this.normalizeWorkflowRecord(row)).filter((row): row is WorkflowRecord => row !== null);
   }
 
@@ -165,21 +174,26 @@ export class WorkflowModel {
    * 이름/색/마킹 필드만 쓰므로 컬럼에서 아예 제외하고, 작성/복사 모달은 `GET /api/workflows/:id`
    * 로 전체 정의를 받는다.
    */
-  static findAllSummaries(activeOnly: boolean = false): WorkflowSummaryRecord[] {
+  static findAllSummaries(activeOnly: boolean = false, kind?: WorkflowKind): WorkflowSummaryRecord[] {
     let query = `
       SELECT
         id, name, description, marked_fields, api_endpoint, is_active,
         is_public_page, public_slug, public_queue_max_count, public_queue_role_limits, result_view_mode,
-        artifact_root_path, artifact_directory_mode, color, created_date, updated_date, deleted_at
+        artifact_root_path, artifact_directory_mode, kind, color, created_date, updated_date, deleted_at
       FROM workflows
       WHERE deleted_at IS NULL
     `;
+    const params: unknown[] = [];
     if (activeOnly) {
       query += ' AND is_active = 1';
     }
+    if (kind) {
+      query += ' AND kind = ?';
+      params.push(kind);
+    }
     query += ' ORDER BY created_date DESC';
 
-    const rows = userSettingsDb.prepare(query).all() as WorkflowSummaryRecord[];
+    const rows = userSettingsDb.prepare(query).all(...params) as WorkflowSummaryRecord[];
     return (rows || []).map((row) => ({
       ...row,
       is_active: (row as unknown as { is_active: boolean | number }).is_active === true
@@ -191,6 +205,7 @@ export class WorkflowModel {
       result_view_mode: row.result_view_mode === 'artifact_explorer' ? 'artifact_explorer' : 'history',
       artifact_root_path: row.artifact_root_path ?? null,
       artifact_directory_mode: row.artifact_directory_mode === 'per_run' ? 'per_run' : 'shared',
+      kind: normalizeWorkflowKind(row.kind),
     }));
   }
 
@@ -223,7 +238,8 @@ export class WorkflowModel {
         : undefined,
       artifact_directory_mode: workflowData.artifact_directory_mode !== undefined
         ? (workflowData.artifact_directory_mode === 'per_run' ? 'per_run' : 'shared')
-        : undefined
+        : undefined,
+      kind: workflowData.kind !== undefined ? normalizeWorkflowKind(workflowData.kind) : undefined
     };
 
     const updates = filterDefined(cleanData);

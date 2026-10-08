@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from '../routeParam';
 import { WorkflowModel, normalizePublicQueueRoleLimits, parseWorkflowRoleQueueLimits } from '../../models/Workflow';
-import { WorkflowResponse, WorkflowCreateData, WorkflowUpdateData } from '../../types/workflow';
+import { WorkflowResponse, WorkflowCreateData, WorkflowUpdateData, normalizeWorkflowKind, type WorkflowKind } from '../../types/workflow';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { getWorkflowNumericFieldDefinitionError } from '../../services/workflowNumericFieldPolicy';
 import { requirePermission } from '../../middleware/authMiddleware';
@@ -11,6 +11,17 @@ const router = Router();
 
 function normalizeResultViewMode(value: unknown) {
   return value === 'artifact_explorer' ? 'artifact_explorer' : 'history';
+}
+
+/** `?kind=image|audio` narrows a list; anything else (or nothing) lists every kind. */
+function parseWorkflowKindFilter(value: unknown): WorkflowKind | undefined {
+  return value === 'image' || value === 'audio' ? value : undefined;
+}
+
+/** Undefined keeps the stored kind; anything else must be exactly 'image' or 'audio'. */
+function readWorkflowKindInput(value: unknown): WorkflowKind | undefined | 'invalid' {
+  if (value === undefined || value === null) return undefined;
+  return value === 'image' || value === 'audio' ? value : 'invalid';
 }
 
 function normalizeArtifactDirectoryMode(value: unknown) {
@@ -64,7 +75,8 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   try {
     const activeOnly = req.query.active === 'true';
     // WF-3: 목록에서 `workflow_json` 을 제외한다. 전체 정의가 필요한 화면은 `GET /api/workflows/:id` 를 쓴다.
-    const workflows = WorkflowModel.findAllSummaries(activeOnly);
+    // `kind` narrows the list: the image generation page asks for `image`, the audio workspace for `audio`.
+    const workflows = WorkflowModel.findAllSummaries(activeOnly, parseWorkflowKindFilter(req.query.kind));
 
     // marked_fields를 JSON 객체로 파싱
     const parsedWorkflows = workflows.map(workflow => ({
@@ -199,6 +211,7 @@ router.post('/import', requirePermission('workflows.edit'), asyncHandler(async (
     result_view_mode: definition.result_view_mode,
     artifact_root_path: definition.artifact_root_path,
     artifact_directory_mode: definition.artifact_directory_mode,
+    kind: normalizeWorkflowKind(definition.kind),
   });
   res.status(201).json({ success: true, data: { id } });
 }));
@@ -214,6 +227,10 @@ router.post('/:id/restore', requirePermission('workflows.edit'), asyncHandler(as
 
 router.post('/', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
   const { name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, public_queue_role_limits, result_view_mode, artifact_root_path, artifact_directory_mode, color } = req.body;
+  const kind = readWorkflowKindInput(req.body?.kind);
+  if (kind === 'invalid') {
+    return res.status(400).json({ success: false, error: "kind must be 'image' or 'audio'" } as WorkflowResponse);
+  }
 
   if (!name || !workflow_json) {
     return res.status(400).json({
@@ -278,6 +295,7 @@ router.post('/', requirePermission('workflows.edit'), asyncHandler(async (req: R
       result_view_mode: normalizeResultViewMode(result_view_mode),
       artifact_root_path: normalizeArtifactRootPath(artifact_root_path),
       artifact_directory_mode: normalizeArtifactDirectoryMode(artifact_directory_mode),
+      kind: kind ?? 'image',
       color
     };
 
@@ -309,6 +327,11 @@ router.post('/', requirePermission('workflows.edit'), asyncHandler(async (req: R
 router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)));
   const { name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, public_queue_role_limits, result_view_mode, artifact_root_path, artifact_directory_mode, color } = req.body;
+  const kind = readWorkflowKindInput(req.body?.kind);
+
+  if (kind === 'invalid') {
+    return res.status(400).json({ success: false, error: "kind must be 'image' or 'audio'" } as WorkflowResponse);
+  }
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -385,6 +408,7 @@ router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req:
       result_view_mode: result_view_mode === undefined ? undefined : normalizeResultViewMode(result_view_mode),
       artifact_root_path: artifact_root_path === undefined ? undefined : normalizeArtifactRootPath(artifact_root_path),
       artifact_directory_mode: artifact_directory_mode === undefined ? undefined : normalizeArtifactDirectoryMode(artifact_directory_mode),
+      kind,
       color
     };
 
