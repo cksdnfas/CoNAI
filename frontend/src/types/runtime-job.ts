@@ -17,6 +17,7 @@ export type RuntimeJobKind =
   | 'database-backup'
   | 'recycle-bin-retention'
   | 'database-compaction'
+  | 'duplicate-group-scan'
 
 export type RuntimeJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 

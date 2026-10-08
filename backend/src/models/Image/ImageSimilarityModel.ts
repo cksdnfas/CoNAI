@@ -1,6 +1,7 @@
 import { db } from '../../database/init';
 import { ImageMetadataRecord } from '../../types/image';
 import {
+  ColorHistogram,
   SimilarImage,
   DuplicateGroup,
   SimilaritySearchOptions,
@@ -14,12 +15,21 @@ import { MediaImageFeaturesModel, type ColorHistogramInput } from './MediaImageF
 import {
   buildColorCandidateQuery,
   buildDuplicateCandidateQuery,
-  buildDuplicateGroupMetadataCountQuery,
   buildDuplicateGroupFilesQuery,
   buildDuplicateGroupMetadataQuery,
+  buildDuplicateGroupFileIdsQuery,
+  buildDuplicateGroupFilesByIdQuery,
+  buildDuplicateGroupIndexQuery,
+  buildDuplicateGroupMetadataCountQuery,
+  buildColorCandidateRowsQuery,
+  buildColorDescriptorScanQuery,
+  buildIndexedCandidateQuery,
   buildSimilarCandidateQuery,
+  IndexedHashGate,
   SimilarityCandidateRecord,
 } from './ImageSimilarityQueryBuilder';
+import { hamming64, parseHash64 } from './similarityIndexSql';
+import { greedyDuplicateGroups, planBandLayout } from './duplicateGrouping';
 import {
   buildColorSimilarMatch,
   buildDuplicateMatch,
@@ -32,12 +42,43 @@ import {
   sortSimilarResults,
 } from './ImageSimilarityMatchBuilder';
 
-export const DUPLICATE_GROUP_SYNC_CANDIDATE_LIMIT = 5000;
+/**
+ * Libraries up to this many duplicate-group candidates are grouped inside the request; larger ones run as a
+ * `duplicate-group-scan` runtime job (the indexed grouping takes about a second per few hundred thousand).
+ */
+export const DUPLICATE_GROUP_SYNC_CANDIDATE_LIMIT = 50000;
+
+/** SQLite host-parameter budget per IN list. */
+const IN_LIST_CHUNK = 500;
+
+export type DuplicateGroupScanHooks = {
+  /** Awaited every few thousand candidates: event-loop yield, cancellation check, progress. */
+  onProgress?: (processed: number, total: number) => Promise<void> | void;
+};
 
 type DuplicateGroupScanOptions = DuplicateSearchOptions & {
   candidateLimit?: number;
   allowLargeSyncScan?: boolean;
+  hooks?: DuplicateGroupScanHooks;
 };
+
+/** One duplicate group by reference: what a long scan stores and pages through. */
+export type DuplicateGroupRef = {
+  groupId: string;
+  similarity: number;
+  matchType: SimilarityMatchType;
+  /** Active file ids in display order (composite_hash, then file id). */
+  fileIds: number[];
+};
+
+/** Internal switch for tests and comparisons: force the original full candidate scan. */
+type CandidateStrategy = { candidateStrategy?: 'auto' | 'full-scan' };
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
+  return chunks;
+}
 
 export class DuplicateGroupScanTooLargeError extends Error {
   readonly candidateCount: number;
@@ -111,8 +152,8 @@ export class ImageSimilarityModel {
       .filter((value): value is string => typeof value === 'string' && value.length > 0))];
     const hydratedByKey = new Map<string, any>();
 
-    if (fileIds.length > 0) {
-      const placeholders = fileIds.map(() => '?').join(',');
+    for (const fileIdChunk of chunk(fileIds, IN_LIST_CHUNK)) {
+      const placeholders = fileIdChunk.map(() => '?').join(',');
       const rows = db.prepare(`
         SELECT
           im.*,
@@ -128,7 +169,7 @@ export class ImageSimilarityModel {
         JOIN media_metadata im ON f.composite_hash = im.composite_hash
         LEFT JOIN watched_folders wf ON f.folder_id = wf.id
         WHERE f.id IN (${placeholders})
-      `).all(...fileIds) as any[];
+      `).all(...fileIdChunk) as any[];
 
       for (const row of rows) {
         hydratedByKey.set(`file:${row.file_id}`, row);
@@ -136,8 +177,8 @@ export class ImageSimilarityModel {
       }
     }
 
-    if (compositeHashes.length > 0) {
-      const placeholders = compositeHashes.map(() => '?').join(',');
+    for (const hashChunk of chunk(compositeHashes, IN_LIST_CHUNK)) {
+      const placeholders = hashChunk.map(() => '?').join(',');
       const rows = db.prepare(`
         SELECT
           im.*,
@@ -154,7 +195,7 @@ export class ImageSimilarityModel {
         LEFT JOIN watched_folders wf ON f.folder_id = wf.id
         WHERE im.composite_hash IN (${placeholders})
         GROUP BY im.composite_hash
-      `).all(...compositeHashes) as any[];
+      `).all(...hashChunk) as any[];
 
       for (const row of rows) {
         if (!hydratedByKey.has(`hash:${row.composite_hash}`)) {
@@ -278,9 +319,18 @@ export class ImageSimilarityModel {
   /**
    * 특정 이미지의 중복 검색 (composite_hash 기반)
    */
+  /**
+   * A hash component gates candidates only when it carries weight and the target has a parsable hash; candidates
+   * missing that hash pass it (the match builders skip the component for them).
+   */
+  private static hashGate(weight: number, targetHash: string | null | undefined, threshold: number): IndexedHashGate | null {
+    const hash = weight > 0 ? parseHash64(targetHash) : null;
+    return hash ? { hash, threshold } : null;
+  }
+
   static async findDuplicates(
     compositeHash: string,
-    options: DuplicateSearchOptions = {}
+    options: DuplicateSearchOptions & CandidateStrategy = {}
   ): Promise<SimilarImage[]> {
     const {
       includeMetadata = true
@@ -289,8 +339,26 @@ export class ImageSimilarityModel {
     const weights = this.getDuplicateWeights(options);
     const thresholds = this.getDuplicateThresholds(options);
     const targetImage = this.requirePerceptualHashImage(compositeHash);
-    const { query, params } = buildDuplicateCandidateQuery(targetImage, includeMetadata);
-    const candidates = db.prepare(query).all(...params) as SimilarityCandidateRecord[];
+    // Every candidate's pHash must pass when pHash carries weight, so the pHash index can select the candidates.
+    const perceptual = options.candidateStrategy === 'full-scan'
+      ? null
+      : this.hashGate(weights.perceptualHash, targetImage.perceptual_hash, thresholds.perceptualHash);
+    let candidates: SimilarityCandidateRecord[];
+    if (perceptual) {
+      const { query, params } = buildIndexedCandidateQuery({
+        targetImage,
+        perceptual,
+        dHash: this.hashGate(weights.dHash, targetImage.dhash, thresholds.dHash),
+        aHash: this.hashGate(weights.aHash, targetImage.ahash, thresholds.aHash),
+        fileJoin: 'any',
+        includeColorHistogram: false,
+        metadataBounds: includeMetadata,
+      });
+      candidates = db.prepare(query).all(params) as SimilarityCandidateRecord[];
+    } else {
+      const { query, params } = buildDuplicateCandidateQuery(targetImage, includeMetadata);
+      candidates = db.prepare(query).all(...params) as SimilarityCandidateRecord[];
+    }
 
     const results = candidates
       .map(candidate => buildDuplicateMatch(targetImage, candidate, weights, thresholds))
@@ -322,7 +390,7 @@ export class ImageSimilarityModel {
    */
   static async findSimilar(
     compositeHash: string,
-    options: SimilaritySearchOptions = {}
+    options: SimilaritySearchOptions & CandidateStrategy = {}
   ): Promise<SimilarImage[]> {
     const {
       limit = 20,
@@ -335,10 +403,32 @@ export class ImageSimilarityModel {
     const useMetadataFilter = options.useMetadataFilter ?? false;
     const targetImage = this.requirePerceptualHashImage(compositeHash);
     const includeColorSimilarity = Boolean(options.includeColorSimilarity || weights.color > 0 || thresholds.color > 0);
-    const { query, params } = buildSimilarCandidateQuery(targetImage, useMetadataFilter, includeColorSimilarity);
-    const candidates = db.prepare(query).all(...params) as SimilarityCandidateRecord[];
-
     const targetHistogram = loadTargetHistogram(targetImage, includeColorSimilarity);
+    // With pHash weight 0 a candidate can match on the other components alone, so only the full scan is exact.
+    const perceptual = options.candidateStrategy === 'full-scan'
+      ? null
+      : this.hashGate(weights.perceptualHash, targetImage.perceptual_hash, thresholds.perceptualHash);
+    let candidates: SimilarityCandidateRecord[];
+    if (perceptual) {
+      const colorDescriptor = targetHistogram && weights.color > 0 && thresholds.color > 0
+        ? ImageSimilarityService.colorDescriptor(targetHistogram)
+        : null;
+      const { query, params } = buildIndexedCandidateQuery({
+        targetImage,
+        perceptual,
+        dHash: this.hashGate(weights.dHash, targetImage.dhash, thresholds.dHash),
+        aHash: this.hashGate(weights.aHash, targetImage.ahash, thresholds.aHash),
+        color: colorDescriptor ? { descriptor: colorDescriptor, minimum: thresholds.color } : null,
+        fileJoin: 'active',
+        includeColorHistogram: includeColorSimilarity,
+        metadataBounds: useMetadataFilter,
+      });
+      candidates = db.prepare(query).all(params) as SimilarityCandidateRecord[];
+    } else {
+      const { query, params } = buildSimilarCandidateQuery(targetImage, useMetadataFilter, includeColorSimilarity);
+      candidates = db.prepare(query).all(...params) as SimilarityCandidateRecord[];
+    }
+
     const results = candidates
       .map(candidate => buildSimilarMatch(targetImage, candidate, weights, thresholds, targetHistogram))
       .filter((candidate): candidate is SimilarImage => candidate !== null);
@@ -375,7 +465,7 @@ export class ImageSimilarityModel {
    * 4. 각 그룹의 composite_hash로 image_files에서 실제 중복 파일 조회
    */
   static async findAllDuplicateGroups(
-    options: DuplicateGroupScanOptions = {}
+    options: DuplicateGroupScanOptions & CandidateStrategy = {}
   ): Promise<DuplicateGroup[]> {
     const {
       threshold = SIMILARITY_THRESHOLDS.NEAR_DUPLICATE,
@@ -385,11 +475,153 @@ export class ImageSimilarityModel {
     } = options;
 
     const boundedCandidateLimit = Math.max(1, Math.floor(candidateLimit));
-    const candidateCount = this.countDuplicateGroupCandidates();
-    if (!allowLargeSyncScan && candidateCount > boundedCandidateLimit) {
-      throw new DuplicateGroupScanTooLargeError(candidateCount, boundedCandidateLimit);
+    if (!allowLargeSyncScan) {
+      const candidateCount = this.countDuplicateGroupCandidates();
+      if (candidateCount > boundedCandidateLimit) {
+        throw new DuplicateGroupScanTooLargeError(candidateCount, boundedCandidateLimit);
+      }
     }
 
+    if (options.candidateStrategy === 'full-scan') {
+      return this.findAllDuplicateGroupsByFullScan(threshold, minGroupSize);
+    }
+
+    const refs = await this.scanDuplicateGroupRefs({ threshold, minGroupSize, hooks: options.hooks });
+    return this.hydrateDuplicateGroupRefs(refs);
+  }
+
+  /**
+   * Duplicate groups as compact references (file ids in display order), already sorted like findAllDuplicateGroups.
+   * Same greedy grouping and the same group/similarity rules as the original full scan, with neighbours found through
+   * band buckets over the pHash halves of media_similarity_index. Large libraries run this in the
+   * `duplicate-group-scan` runtime job and page through the stored references.
+   */
+  static async scanDuplicateGroupRefs(options: {
+    threshold?: number;
+    minGroupSize?: number;
+    hooks?: DuplicateGroupScanHooks;
+  } = {}): Promise<DuplicateGroupRef[]> {
+    const threshold = options.threshold ?? SIMILARITY_THRESHOLDS.NEAR_DUPLICATE;
+    const minGroupSize = options.minGroupSize ?? 2;
+    const onProgress = options.hooks?.onProgress;
+
+    // STEP 1: pHash halves of every visible media row with an active file, in composite_hash order.
+    const rows = db.prepare(buildDuplicateGroupIndexQuery()).all() as Array<{
+      media_id: number;
+      p_hi: number;
+      p_lo: number;
+      active_files: number;
+    }>;
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const layout = planBandLayout(rows.length, threshold);
+    if (!layout) {
+      // Thresholds this loose would compare a large share of all pairs; refuse like the old synchronous cap did.
+      throw new DuplicateGroupScanTooLargeError(rows.length, DUPLICATE_GROUP_SYNC_CANDIDATE_LIMIT);
+    }
+
+    const hi = Uint32Array.from(rows, (row) => row.p_hi);
+    const lo = Uint32Array.from(rows, (row) => row.p_lo);
+    const activeFiles = Int32Array.from(rows, (row) => row.active_files);
+
+    // STEP 2: the same greedy grouping as the full scan, with neighbours from band buckets.
+    const positionGroups = await greedyDuplicateGroups(
+      hi,
+      lo,
+      threshold,
+      layout,
+      (position) => activeFiles[position] >= minGroupSize,
+      { onProgress },
+    );
+
+    const kept = positionGroups.filter((group) => {
+      const totalFileCount = group.reduce((sum, position) => sum + activeFiles[position], 0);
+      return totalFileCount >= minGroupSize || group.length >= minGroupSize;
+    });
+
+    // STEP 3: active file ids of the kept groups, a few hundred media rows per query.
+    const filesByMediaId = new Map<number, Array<{ file_id: number; composite_hash: string }>>();
+    const mediaIdChunks = chunk(kept.flatMap((group) => group.map((position) => rows[position].media_id)), IN_LIST_CHUNK);
+    for (let index = 0; index < mediaIdChunks.length; index += 1) {
+      const { query, params } = buildDuplicateGroupFileIdsQuery(mediaIdChunks[index]);
+      for (const record of db.prepare(query).all(...params) as Array<{ media_id: number; file_id: number; composite_hash: string }>) {
+        const list = filesByMediaId.get(record.media_id);
+        if (list) list.push(record); else filesByMediaId.set(record.media_id, [record]);
+      }
+      if (index % 20 === 19 && onProgress) {
+        await onProgress(rows.length, rows.length);
+      }
+    }
+
+    const refs: DuplicateGroupRef[] = [];
+    for (const group of kept) {
+      // Members are in composite_hash order, so this matches ORDER BY composite_hash, file id.
+      const files = group.flatMap((position) => filesByMediaId.get(rows[position].media_id) ?? []);
+      if (files.length === 0) {
+        continue;
+      }
+
+      const uniqueMetadataCount = group.length;
+      const totalFileCount = files.length;
+      if (totalFileCount < minGroupSize && uniqueMetadataCount < minGroupSize) {
+        continue;
+      }
+
+      const seed = group[0];
+      let avgSimilarity: number;
+      let matchType: SimilarityMatchType;
+      if (uniqueMetadataCount === 1 && totalFileCount >= 2) {
+        avgSimilarity = 100;
+        matchType = 'exact' as SimilarityMatchType;
+      } else {
+        avgSimilarity = group.reduce((sum, position, index) => {
+          if (index === 0) return sum;
+          const distance = hamming64({ hi: hi[seed], lo: lo[seed] }, { hi: hi[position], lo: lo[position] });
+          return sum + ImageSimilarityService.hammingDistanceToSimilarity(distance);
+        }, 0) / (group.length - 1 || 1);
+        matchType = ImageSimilarityService.determineMatchType(threshold);
+      }
+
+      refs.push({
+        groupId: `group_${files[0].composite_hash.substring(0, 16)}`,
+        similarity: Math.round(avgSimilarity * 100) / 100,
+        matchType,
+        fileIds: files.map((file) => file.file_id),
+      });
+    }
+
+    return refs.sort((a, b) => {
+      const simDiff = b.similarity - a.similarity;
+      if (simDiff !== 0) return simDiff;
+      return b.fileIds.length - a.fileIds.length;
+    });
+  }
+
+  /** Load the file rows (metadata + file columns) of duplicate group references, keeping their order. */
+  static hydrateDuplicateGroupRefs(refs: DuplicateGroupRef[]): DuplicateGroup[] {
+    const rowsByFileId = new Map<number, any>();
+    for (const fileIds of chunk(refs.flatMap((ref) => ref.fileIds), IN_LIST_CHUNK)) {
+      const { query, params } = buildDuplicateGroupFilesByIdQuery(fileIds);
+      for (const row of db.prepare(query).all(...params) as any[]) {
+        rowsByFileId.set(row.file_id, row);
+      }
+    }
+
+    const groups: DuplicateGroup[] = [];
+    for (const ref of refs) {
+      // Files deleted or hidden since the scan drop out; a group that loses every file disappears.
+      const images = ref.fileIds.map((fileId) => rowsByFileId.get(fileId)).filter((row) => row !== undefined);
+      if (images.length > 0) {
+        groups.push({ groupId: ref.groupId, images, similarity: ref.similarity, matchType: ref.matchType });
+      }
+    }
+    return groups;
+  }
+
+  /** The original O(n²) grouping over every candidate's metadata row; kept as the reference implementation. */
+  private static async findAllDuplicateGroupsByFullScan(threshold: number, minGroupSize: number): Promise<DuplicateGroup[]> {
     // STEP 1: image_files에 실제 존재하는 파일의 메타데이터만 조회 (고아 데이터 제외)
     const allMetadata = db.prepare(buildDuplicateGroupMetadataQuery()).all() as ImageMetadataRecord[];
 
@@ -511,10 +743,15 @@ export class ImageSimilarityModel {
   static async findSimilarByColor(
     compositeHash: string,
     threshold: number = SIMILARITY_THRESHOLDS.COLOR_SIMILAR * 100,
-    limit: number = 20
+    limit: number = 20,
+    options: CandidateStrategy = {}
   ): Promise<SimilarImage[]> {
     const targetImage = this.requireColorHistogramImage(compositeHash);
     const targetHist = ImageSimilarityService.deserializeHistogram(targetImage.color_histogram!);
+    if (options.candidateStrategy !== 'full-scan') {
+      return this.hydrateSimilarityMatches(this.findTopColorMatches(targetImage, targetHist, threshold, limit));
+    }
+
     const { query, params } = buildColorCandidateQuery(compositeHash);
     const candidates = db.prepare(query).all(...params) as SimilarityCandidateRecord[];
 
@@ -524,6 +761,62 @@ export class ImageSimilarityModel {
 
     sortColorSimilarResults(results);
     return this.hydrateSimilarityMatches(results.slice(0, limit));
+  }
+
+  /**
+   * Colour matches from the descriptor columns of media_similarity_index: every row in the luminance window is scored
+   * with calculateColorSimilarity on the stored descriptor (the numbers the histogram's own descriptor holds), ranked
+   * by score then media_id, and only the top media rows are loaded and re-scored from their histograms. The ranking
+   * equals the full scan's order (score descending, ties in media_id / file id order).
+   */
+  private static findTopColorMatches(
+    targetImage: ImageMetadataRecord,
+    targetHist: ReturnType<typeof ImageSimilarityService.deserializeHistogram>,
+    threshold: number,
+    limit: number,
+  ): SimilarImage[] {
+    const targetDescriptor = ImageSimilarityService.colorDescriptor(targetHist);
+    const target = { descriptor: targetDescriptor } as ColorHistogram;
+    const scan = buildColorDescriptorScanQuery(targetDescriptor.luminance, threshold);
+    const mediaIds: number[] = [];
+    const scores: number[] = [];
+    for (const row of db.prepare(scan.query).raw().iterate(...scan.params) as Iterable<number[]>) {
+      const score = ImageSimilarityService.calculateColorSimilarity(target, {
+        descriptor: {
+          averageRgb: [row[1], row[2], row[3]],
+          dominantRgb: [row[4], row[5], row[6]],
+          luminance: row[7],
+          saturation: row[8],
+        },
+      } as ColorHistogram);
+      if (score >= threshold) {
+        mediaIds.push(row[0]);
+        scores.push(score);
+      }
+    }
+
+    const order = Array.from(mediaIds.keys()).sort((left, right) => (scores[right] - scores[left]) || (mediaIds[left] - mediaIds[right]));
+    const wanted = Math.max(0, Math.floor(limit));
+    const results: SimilarImage[] = [];
+    for (let start = 0; start < order.length && results.length < wanted; start += IN_LIST_CHUNK) {
+      const rankIds = order.slice(start, start + IN_LIST_CHUNK).map((index) => mediaIds[index]);
+      const { query, params } = buildColorCandidateRowsQuery(targetImage.composite_hash, rankIds);
+      const rowsByMedia = new Map<number, SimilarityCandidateRecord[]>();
+      for (const row of db.prepare(query).all(...params) as Array<SimilarityCandidateRecord & { media_id: number }>) {
+        const list = rowsByMedia.get(row.media_id);
+        if (list) list.push(row); else rowsByMedia.set(row.media_id, [row]);
+      }
+      for (const mediaId of rankIds) {
+        for (const candidate of rowsByMedia.get(mediaId) ?? []) {
+          const match = buildColorSimilarMatch(targetImage, targetHist, candidate, threshold);
+          if (match) results.push(match);
+        }
+      }
+    }
+
+    // Same comparator as the full scan; the input is already in that order, so this only guards the cut.
+    sortColorSimilarResults(results);
+    return results.slice(0, wanted);
   }
 
   /**

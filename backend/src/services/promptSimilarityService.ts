@@ -11,6 +11,21 @@ import {
 import { ImageSafetyService } from './imageSafetyService';
 import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
 import { settingsService } from './settingsService';
+import { parseHash64, popcount32 } from '../models/Image/similarityIndexSql';
+
+/**
+ * Extra rows the indexed prompt search reads back past the result limit. Ranking uses the same arithmetic as the
+ * final scoring, so this only guards the cut.
+ */
+const PROMPT_SQL_LIMIT_SLACK = 20;
+/** Ranked media rows checked against the visibility conditions per query. */
+const PROMPT_ROW_BATCH = 200;
+
+const SIMHASH_INDEX_PREFIX: Record<'positive' | 'negative' | 'auto', string> = {
+  positive: 'pos',
+  negative: 'neg',
+  auto: 'auto',
+};
 
 const PROMPT_SIMILARITY_VERSION = 1;
 const MINHASH_SIGNATURE_SIZE = 16;
@@ -163,7 +178,11 @@ export class PromptSimilarityService {
   }
 
   /** Search prompt-similar images for one source composite hash. */
-  static findSimilarByCompositeHash(compositeHash: string, limitOverride?: number): PromptSimilarityMatch[] {
+  static findSimilarByCompositeHash(
+    compositeHash: string,
+    limitOverride?: number,
+    options: { candidateStrategy?: 'auto' | 'full-scan' } = {},
+  ): PromptSimilarityMatch[] {
     const settings = this.getEffectiveSettings();
     if (!settings.enabled) {
       return [];
@@ -197,32 +216,15 @@ export class PromptSimilarityService {
       return [];
     }
 
-    const visibleCondition = ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
-    const readyCondition = MediaPostprocessVisibilityService.buildReadyCondition('im');
-    const candidateFingerprintCondition = this.buildPromptCandidateFingerprintCondition(activeFields);
-    const rows = db.prepare(`
-      SELECT
-        im.composite_hash,
-        im.prompt_similarity_algorithm,
-        im.prompt_similarity_version,
-        im.pos_prompt_fingerprint,
-        im.neg_prompt_fingerprint,
-        im.auto_prompt_fingerprint,
-        im.prompt_similarity_updated_date
-      FROM media_metadata im
-      WHERE im.composite_hash != ?
-        AND im.prompt_similarity_algorithm = ?
-        AND im.prompt_similarity_version = ?
-        AND (${candidateFingerprintCondition})
-        AND ${visibleCondition}
-        AND ${readyCondition}
-        AND EXISTS (
-          SELECT 1
-          FROM image_files if
-          WHERE if.composite_hash = im.composite_hash
-            AND if.file_status = 'active'
-        )
-    `).all(compositeHash, settings.algorithm, PROMPT_SIMILARITY_VERSION) as PromptSimilarityCandidateRow[];
+    const resultLimit = typeof limitOverride === 'number' && Number.isFinite(limitOverride)
+      ? Math.max(1, Math.min(100, Math.round(limitOverride)))
+      : settings.resultLimit;
+
+    const rows = options.candidateStrategy !== 'full-scan'
+      && settings.algorithm === 'simhash'
+      && this.hasIndexableSimHashSource(sourcePrepared, activeFields)
+      ? this.findSimHashCandidates(compositeHash, settings, activeFields, sourcePrepared, resultLimit + PROMPT_SQL_LIMIT_SLACK)
+      : this.findCandidatesByFullScan(compositeHash, settings, activeFields);
 
     const matches: PromptSimilarityMatch[] = [];
     for (const row of rows) {
@@ -257,11 +259,172 @@ export class PromptSimilarityService {
 
     matches.sort((left, right) => right.combinedSimilarity - left.combinedSimilarity);
 
-    const resultLimit = typeof limitOverride === 'number' && Number.isFinite(limitOverride)
-      ? Math.max(1, Math.min(100, Math.round(limitOverride)))
-      : settings.resultLimit;
-
     return this.hydratePromptMatches(matches.slice(0, resultLimit));
+  }
+
+  /** The SQL path needs every active source fingerprint absent (scores 0) or representable as two 32-bit halves. */
+  private static hasIndexableSimHashSource(
+    source: PromptSimilarityPreparedTexts,
+    activeFields: PromptSimilarityFieldName[],
+  ): boolean {
+    return activeFields.every((fieldName) => {
+      const fingerprint = this.sourceFingerprint(source, fieldName);
+      return fingerprint === null || parseHash64(fingerprint) !== null;
+    });
+  }
+
+  private static sourceFingerprint(source: PromptSimilarityPreparedTexts, fieldName: PromptSimilarityFieldName): string | null {
+    if (fieldName === 'positive') return source.positiveFingerprint;
+    if (fieldName === 'negative') return source.negativeFingerprint;
+    return source.autoFingerprint;
+  }
+
+  /**
+   * SimHash candidates ranked from media_similarity_index (migration 042): the integer fingerprint halves of every row
+   * are scored with the arithmetic of calculateFieldScore / calculateCombinedSimilarity (same expressions, same
+   * order), ranked by combined score then media_id, and only the best rows are checked against the visibility
+   * conditions and read back, a few hundred at a time. Rows whose stored fingerprint the index cannot represent are
+   * always read back and scored by the caller.
+   */
+  private static findSimHashCandidates(
+    compositeHash: string,
+    settings: PromptSimilaritySettings,
+    activeFields: PromptSimilarityFieldName[],
+    source: PromptSimilarityPreparedTexts,
+    limit: number,
+  ): PromptSimilarityCandidateRow[] {
+    const fields = activeFields.map((fieldName) => ({
+      source: parseHash64(this.sourceFingerprint(source, fieldName)),
+      prefix: SIMHASH_INDEX_PREFIX[fieldName],
+      weight: settings.weights[fieldName],
+      threshold: settings.fieldThresholds[fieldName],
+    }));
+    const columns = ['media_id', 'prompt_unparsed', ...fields.flatMap(({ prefix }) => [`${prefix}_hi`, `${prefix}_lo`])];
+
+    const mediaIds: number[] = [];
+    const combinedScores: number[] = [];
+    const unparsedIds: number[] = [];
+    for (const row of db.prepare(`SELECT ${columns.join(', ')} FROM media_similarity_index`).raw().iterate() as Iterable<Array<number | null>>) {
+      const mediaId = row[0] as number;
+      if (row[1] === 1) {
+        unparsedIds.push(mediaId);
+        continue;
+      }
+      let passed = true;
+      let totalWeight = 0;
+      let weightedScore = 0;
+      for (let index = 0; index < fields.length; index += 1) {
+        const field = fields[index];
+        const hi = row[2 + index * 2];
+        const lo = row[3 + index * 2];
+        const similarity = field.source && hi !== null && lo !== null
+          ? clampPercentage(((64 - (popcount32((hi as number) ^ field.source.hi) + popcount32((lo as number) ^ field.source.lo))) / 64) * 100)
+          : 0;
+        if (!(similarity >= field.threshold)) {
+          passed = false;
+          break;
+        }
+        totalWeight += field.weight;
+        weightedScore += similarity * field.weight;
+      }
+      if (!passed) continue;
+      const combined = totalWeight <= 0 ? 0 : roundScore(weightedScore / totalWeight);
+      if (combined >= settings.combinedThreshold) {
+        mediaIds.push(mediaId);
+        combinedScores.push(combined);
+      }
+    }
+
+    const order = Array.from(mediaIds.keys())
+      .sort((left, right) => (combinedScores[right] - combinedScores[left]) || (mediaIds[left] - mediaIds[right]));
+    const rows: PromptSimilarityCandidateRow[] = [];
+    for (let start = 0; start < order.length && rows.length < limit; start += PROMPT_ROW_BATCH) {
+      const batch = order.slice(start, start + PROMPT_ROW_BATCH).map((index) => mediaIds[index]);
+      const byId = new Map(this.loadPromptCandidateRows(compositeHash, settings, activeFields, batch).map((row) => [row.media_id, row]));
+      for (const mediaId of batch) {
+        const row = byId.get(mediaId);
+        if (row) rows.push(row);
+      }
+    }
+
+    for (let start = 0; start < unparsedIds.length; start += PROMPT_ROW_BATCH) {
+      rows.push(...this.loadPromptCandidateRows(compositeHash, settings, activeFields, unparsedIds.slice(start, start + PROMPT_ROW_BATCH)));
+    }
+    return rows;
+  }
+
+  /** Candidate rows for some media ids that pass the same conditions as the full scan. */
+  private static loadPromptCandidateRows(
+    compositeHash: string,
+    settings: PromptSimilaritySettings,
+    activeFields: PromptSimilarityFieldName[],
+    mediaIds: number[],
+  ): Array<PromptSimilarityCandidateRow & { media_id: number }> {
+    if (mediaIds.length === 0) {
+      return [];
+    }
+    const visibleCondition = ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
+    const readyCondition = MediaPostprocessVisibilityService.buildReadyCondition('im');
+    const candidateFingerprintCondition = this.buildPromptCandidateFingerprintCondition(activeFields);
+    return db.prepare(`
+      SELECT
+        im.media_id,
+        im.composite_hash,
+        im.prompt_similarity_algorithm,
+        im.prompt_similarity_version,
+        im.pos_prompt_fingerprint,
+        im.neg_prompt_fingerprint,
+        im.auto_prompt_fingerprint,
+        im.prompt_similarity_updated_date
+      FROM media_metadata im
+      WHERE im.media_id IN (${mediaIds.map(() => '?').join(',')})
+        AND im.composite_hash != ?
+        AND im.prompt_similarity_algorithm = ?
+        AND im.prompt_similarity_version = ?
+        AND (${candidateFingerprintCondition})
+        AND ${visibleCondition}
+        AND ${readyCondition}
+        AND EXISTS (
+          SELECT 1
+          FROM image_files if
+          WHERE if.composite_hash = im.composite_hash
+            AND if.file_status = 'active'
+        )
+    `).all(...mediaIds, compositeHash, settings.algorithm, PROMPT_SIMILARITY_VERSION) as Array<PromptSimilarityCandidateRow & { media_id: number }>;
+  }
+
+  /** Original candidate scan: every row with a usable fingerprint, scored in JS (MinHash, odd source fingerprints). */
+  private static findCandidatesByFullScan(
+    compositeHash: string,
+    settings: PromptSimilaritySettings,
+    activeFields: PromptSimilarityFieldName[],
+  ): PromptSimilarityCandidateRow[] {
+    const visibleCondition = ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
+    const readyCondition = MediaPostprocessVisibilityService.buildReadyCondition('im');
+    const candidateFingerprintCondition = this.buildPromptCandidateFingerprintCondition(activeFields);
+    return db.prepare(`
+      SELECT
+        im.composite_hash,
+        im.prompt_similarity_algorithm,
+        im.prompt_similarity_version,
+        im.pos_prompt_fingerprint,
+        im.neg_prompt_fingerprint,
+        im.auto_prompt_fingerprint,
+        im.prompt_similarity_updated_date
+      FROM media_metadata im
+      WHERE im.composite_hash != ?
+        AND im.prompt_similarity_algorithm = ?
+        AND im.prompt_similarity_version = ?
+        AND (${candidateFingerprintCondition})
+        AND ${visibleCondition}
+        AND ${readyCondition}
+        AND EXISTS (
+          SELECT 1
+          FROM image_files if
+          WHERE if.composite_hash = im.composite_hash
+            AND if.file_status = 'active'
+        )
+    `).all(compositeHash, settings.algorithm, PROMPT_SIMILARITY_VERSION) as PromptSimilarityCandidateRow[];
   }
 
   /** Hydrate only final prompt matches; scoring does not need large image metadata blobs. */

@@ -101,7 +101,9 @@ test('maintenance routes are admin-only and search history is per account', { ti
       job = (await call(`/api/jobs/${job.jobId}`, adminId)).body.data
     }
     assert.equal(job.status, 'completed', `VACUUM finished: ${job.failureMessage ?? ''}`)
-    assert.ok(job.result.bytesAfter <= job.result.bytesBefore)
+    // A fresh test database has no free pages to reclaim; VACUUM rewrites the schema in its own order, which can cost
+    // a page of packing on an already compact file.
+    assert.ok(job.result.bytesAfter <= job.result.bytesBefore + 4096, JSON.stringify(job.result))
   })
 
   await t.test('database stats, backup download and delete', async () => {

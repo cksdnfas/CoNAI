@@ -9,6 +9,7 @@ import { registerMediaOrphanCleanupJobHandlers } from './handlers/mediaOrphanCle
 import { registerDatabaseBackupJobHandlers } from './handlers/databaseBackupHandlers'
 import { registerRecycleBinRetentionJobHandlers } from './handlers/recycleBinRetentionHandlers'
 import { registerDatabaseCompactionJobHandlers } from './handlers/databaseCompactionHandlers'
+import { registerDuplicateGroupScanJobHandlers } from './handlers/duplicateGroupScanHandlers'
 
 export { RuntimeJobRunner, RuntimeJobCancelledError } from './runtimeJobRunner'
 export type { RuntimeJobContext, RuntimeJobHandlerOptions } from './runtimeJobRunner'
@@ -43,6 +44,7 @@ export function registerRuntimeJobHandlers(): void {
   registerDatabaseBackupJobHandlers()
   registerRecycleBinRetentionJobHandlers()
   registerDatabaseCompactionJobHandlers()
+  registerDuplicateGroupScanJobHandlers()
 }
 
 /** Register handlers and recover interrupted jobs. `index.ts` 기동 시퀀스가 1회 호출한다. */
