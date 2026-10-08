@@ -1,0 +1,46 @@
+{
+  "source": "norm_sheet_c_2x2_edge_empty.png",
+  "output": "norm_sheet_c_2x2_edge_empty-normalized.png",
+  "mode": "per_sheet",
+  "input_grid": {
+    "columns": 2,
+    "rows": 2,
+    "frame_count": 4,
+    "spacing": 0,
+    "read_order": "row_major"
+  },
+  "input_cell_size": [
+    28,
+    28
+  ],
+  "output_grid": {
+    "columns": 2,
+    "rows": 2,
+    "frame_count": 4,
+    "spacing": 0,
+    "read_order": "row_major"
+  },
+  "output_cell_size": [
+    27,
+    30
+  ],
+  "anchor_policy": "bottom_center",
+  "input_anchor": [
+    14,
+    28
+  ],
+  "output_anchor": [
+    16,
+    29
+  ],
+  "alpha_threshold": 20,
+  "padding": 2,
+  "output_format": "png",
+  "output_quality": 100,
+  "frame_order_preserved": true,
+  "warnings": [
+    "원본 셀 경계에 불투명 픽셀이 닿은 프레임: 2. 원본에서 이미 잘렸거나 인접 셀로 넘어갔는지 확인하세요.",
+    "완전히 투명한 프레임을 빈 셀로 유지했습니다: 4."
+  ],
+  "metadata_file": "norm_sheet_c_2x2_edge_empty-normalized.json"
+}

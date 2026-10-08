@@ -1,0 +1,43 @@
+{
+  "source": "norm_sheet_a_4x2_32px.png",
+  "output": "norm_sheet_a_4x2_32px-normalized.png",
+  "mode": "per_sheet",
+  "input_grid": {
+    "columns": 4,
+    "rows": 2,
+    "frame_count": 7,
+    "spacing": 0,
+    "read_order": "row_major"
+  },
+  "input_cell_size": [
+    32,
+    32
+  ],
+  "output_grid": {
+    "columns": 4,
+    "rows": 2,
+    "frame_count": 7,
+    "spacing": 0,
+    "read_order": "row_major"
+  },
+  "output_cell_size": [
+    25,
+    30
+  ],
+  "anchor_policy": "bottom_center",
+  "input_anchor": [
+    16,
+    32
+  ],
+  "output_anchor": [
+    12,
+    31
+  ],
+  "alpha_threshold": 100,
+  "padding": 2,
+  "output_format": "png",
+  "output_quality": 100,
+  "frame_order_preserved": true,
+  "warnings": [],
+  "metadata_file": "norm_sheet_a_4x2_32px-normalized.json"
+}

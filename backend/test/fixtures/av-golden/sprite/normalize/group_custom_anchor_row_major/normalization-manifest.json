@@ -1,0 +1,105 @@
+{
+  "mode": "group",
+  "sheet_count": 2,
+  "anchor_policy": "custom",
+  "alpha_threshold": 20,
+  "padding": 2,
+  "output_format": "png",
+  "output_quality": 100,
+  "sheets": [
+    {
+      "source": "norm_sheet_a_4x2_32px.png",
+      "output": "norm_sheet_a_4x2_32px-normalized.png",
+      "mode": "group",
+      "input_grid": {
+        "columns": 4,
+        "rows": 2,
+        "frame_count": 7,
+        "spacing": 0,
+        "read_order": "row_major"
+      },
+      "input_cell_size": [
+        32,
+        32
+      ],
+      "output_grid": {
+        "columns": 4,
+        "rows": 2,
+        "frame_count": 7,
+        "spacing": 0,
+        "read_order": "row_major"
+      },
+      "output_cell_size": [
+        27,
+        39
+      ],
+      "anchor_policy": "custom",
+      "input_anchor": [
+        16,
+        30
+      ],
+      "output_anchor": [
+        13,
+        36
+      ],
+      "alpha_threshold": 20,
+      "padding": 2,
+      "output_format": "png",
+      "output_quality": 100,
+      "frame_order_preserved": true,
+      "warnings": [],
+      "metadata_file": "norm_sheet_a_4x2_32px-normalized.json"
+    },
+    {
+      "source": "norm_sheet_b_3x3_24x40_sp2.png",
+      "output": "norm_sheet_b_3x3_24x40_sp2-normalized.png",
+      "mode": "group",
+      "input_grid": {
+        "columns": 3,
+        "rows": 3,
+        "frame_count": 8,
+        "spacing": 2,
+        "read_order": "row_major"
+      },
+      "input_cell_size": [
+        24,
+        40
+      ],
+      "output_grid": {
+        "columns": 3,
+        "rows": 3,
+        "frame_count": 8,
+        "spacing": 0,
+        "read_order": "row_major"
+      },
+      "output_cell_size": [
+        27,
+        39
+      ],
+      "anchor_policy": "custom",
+      "input_anchor": [
+        12,
+        38
+      ],
+      "output_anchor": [
+        13,
+        36
+      ],
+      "alpha_threshold": 20,
+      "padding": 2,
+      "output_format": "png",
+      "output_quality": 100,
+      "frame_order_preserved": true,
+      "warnings": [],
+      "metadata_file": "norm_sheet_b_3x3_24x40_sp2-normalized.json"
+    }
+  ],
+  "common_output_cell_size": [
+    27,
+    39
+  ],
+  "common_output_anchor": [
+    13,
+    36
+  ]
+}

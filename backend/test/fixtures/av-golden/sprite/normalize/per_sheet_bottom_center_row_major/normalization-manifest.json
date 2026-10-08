@@ -1,0 +1,143 @@
+{
+  "mode": "per_sheet",
+  "sheet_count": 3,
+  "anchor_policy": "bottom_center",
+  "alpha_threshold": 20,
+  "padding": 2,
+  "output_format": "png",
+  "output_quality": 100,
+  "sheets": [
+    {
+      "source": "norm_sheet_a_4x2_32px.png",
+      "output": "norm_sheet_a_4x2_32px-normalized.png",
+      "mode": "per_sheet",
+      "input_grid": {
+        "columns": 4,
+        "rows": 2,
+        "frame_count": 7,
+        "spacing": 0,
+        "read_order": "row_major"
+      },
+      "input_cell_size": [
+        32,
+        32
+      ],
+      "output_grid": {
+        "columns": 4,
+        "rows": 2,
+        "frame_count": 7,
+        "spacing": 0,
+        "read_order": "row_major"
+      },
+      "output_cell_size": [
+        27,
+        32
+      ],
+      "anchor_policy": "bottom_center",
+      "input_anchor": [
+        16,
+        32
+      ],
+      "output_anchor": [
+        13,
+        31
+      ],
+      "alpha_threshold": 20,
+      "padding": 2,
+      "output_format": "png",
+      "output_quality": 100,
+      "frame_order_preserved": true,
+      "warnings": [],
+      "metadata_file": "norm_sheet_a_4x2_32px-normalized.json"
+    },
+    {
+      "source": "norm_sheet_b_3x3_24x40_sp2.png",
+      "output": "norm_sheet_b_3x3_24x40_sp2-normalized.png",
+      "mode": "per_sheet",
+      "input_grid": {
+        "columns": 3,
+        "rows": 3,
+        "frame_count": 8,
+        "spacing": 2,
+        "read_order": "row_major"
+      },
+      "input_cell_size": [
+        24,
+        40
+      ],
+      "output_grid": {
+        "columns": 3,
+        "rows": 3,
+        "frame_count": 8,
+        "spacing": 0,
+        "read_order": "row_major"
+      },
+      "output_cell_size": [
+        25,
+        35
+      ],
+      "anchor_policy": "bottom_center",
+      "input_anchor": [
+        12,
+        40
+      ],
+      "output_anchor": [
+        12,
+        38
+      ],
+      "alpha_threshold": 20,
+      "padding": 2,
+      "output_format": "png",
+      "output_quality": 100,
+      "frame_order_preserved": true,
+      "warnings": [],
+      "metadata_file": "norm_sheet_b_3x3_24x40_sp2-normalized.json"
+    },
+    {
+      "source": "norm_sheet_c_2x2_edge_empty.png",
+      "output": "norm_sheet_c_2x2_edge_empty-normalized.png",
+      "mode": "per_sheet",
+      "input_grid": {
+        "columns": 2,
+        "rows": 2,
+        "frame_count": 4,
+        "spacing": 0,
+        "read_order": "row_major"
+      },
+      "input_cell_size": [
+        28,
+        28
+      ],
+      "output_grid": {
+        "columns": 2,
+        "rows": 2,
+        "frame_count": 4,
+        "spacing": 0,
+        "read_order": "row_major"
+      },
+      "output_cell_size": [
+        27,
+        30
+      ],
+      "anchor_policy": "bottom_center",
+      "input_anchor": [
+        14,
+        28
+      ],
+      "output_anchor": [
+        16,
+        29
+      ],
+      "alpha_threshold": 20,
+      "padding": 2,
+      "output_format": "png",
+      "output_quality": 100,
+      "frame_order_preserved": true,
+      "warnings": [
+        "원본 셀 경계에 불투명 픽셀이 닿은 프레임: 2. 원본에서 이미 잘렸거나 인접 셀로 넘어갔는지 확인하세요.",
+        "완전히 투명한 프레임을 빈 셀로 유지했습니다: 4."
+      ],
+      "metadata_file": "norm_sheet_c_2x2_edge_empty-normalized.json"
+    }
+  ]
+}
