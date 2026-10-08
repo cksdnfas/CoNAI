@@ -158,6 +158,8 @@ export class MediaMetadataFileQueries {
     limit?: number;
     sortBy?: 'first_seen_date' | 'width' | 'height' | 'scan_date' | 'file_size';
     sortOrder?: 'ASC' | 'DESC';
+    /** Visible-library total already known (the route serves it from the shared total cache). */
+    total?: number;
   }): { items: any[]; total: number } {
     const page = options.page || 1;
     const limit = options.limit || 20;
@@ -167,23 +169,26 @@ export class MediaMetadataFileQueries {
     const visibleCondition = getVisibleMediaMetadataCondition();
     const readyCondition = getReadyMediaMetadataCondition();
 
-    const countRow = db.prepare(
-      buildVisibleWithActiveFileCountQuery(visibleCondition, readyCondition),
-    ).get() as { total: number };
+    // Same aggregate as countVisibleWithActiveFile(); counted here only when the caller has no cached value.
+    const total = typeof options.total === 'number'
+      ? options.total
+      : (db.prepare(buildVisibleWithActiveFileCountQuery(visibleCondition, readyCondition)).get() as { total: number }).total;
 
     let orderByClause: string;
     let selectClause = COMPACT_ACTIVE_FILE_WITH_METADATA_SELECT;
     let whereClause = `WHERE if.file_status = 'active' AND if.composite_hash IS NOT NULL AND ${visibleCondition} AND ${readyCondition}`;
+    // The file-id tie-break makes offset pages stable: rows with equal sort values used to come back in whatever
+    // order the current plan produced, so neighbouring pages could repeat or skip them.
     if (sortBy === 'scan_date') {
-      orderByClause = `ORDER BY if.scan_date ${sortOrder}`;
+      orderByClause = `ORDER BY if.scan_date ${sortOrder}, if.id ${sortOrder}`;
     } else if (sortBy === 'file_size') {
-      orderByClause = `ORDER BY if.file_size ${sortOrder}`;
+      orderByClause = `ORDER BY if.file_size ${sortOrder}, if.id ${sortOrder}`;
     } else if (sortBy === 'first_seen_date') {
       selectClause = METADATA_FIRST_SEEN_WITH_ACTIVE_FILE_SELECT;
       whereClause = `WHERE ${visibleCondition} AND ${readyCondition}`;
       orderByClause = `ORDER BY mm.first_seen_date ${sortOrder}, mm.composite_hash ${sortOrder}`;
     } else {
-      orderByClause = `ORDER BY mm.${sortBy} ${sortOrder}`;
+      orderByClause = `ORDER BY mm.${sortBy} ${sortOrder}, if.id ${sortOrder}`;
     }
 
     const query = `
@@ -194,7 +199,7 @@ export class MediaMetadataFileQueries {
     `;
 
     const items = db.prepare(query).all(limit, offset);
-    return { items, total: countRow.total };
+    return { items, total };
   }
 
   /** List active images with cursor pagination for infinite scroll surfaces. */

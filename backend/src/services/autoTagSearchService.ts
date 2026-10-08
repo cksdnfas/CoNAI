@@ -18,6 +18,7 @@ import {
 import { normalizeAutoTagSearchTerm } from './autoTagSearch/autoTagSearchTerms';
 import { AutoTagSearchMatcher } from './autoTagSearch/AutoTagSearchMatcher';
 import { AutoTagIndexService, MEDIA_ROW_ID_COLUMN, buildIndexedMediaSubquery } from './autoTagIndexService';
+import { buildOnOrAfterDateSql, buildOnOrBeforeDateSql } from '../utils/sqlDateRange';
 
 /**
  * 자동태그 검색 서비스
@@ -64,11 +65,11 @@ export class AutoTagSearchService {
         params.push(`%${basicSearchParams.model_name}%`);
       }
       if (basicSearchParams.start_date) {
-        conditions.push('DATE(i.upload_date) >= DATE(?)');
+        conditions.push(buildOnOrAfterDateSql('i.upload_date'));
         params.push(basicSearchParams.start_date);
       }
       if (basicSearchParams.end_date) {
-        conditions.push('DATE(i.upload_date) <= DATE(?)');
+        conditions.push(buildOnOrBeforeDateSql('i.upload_date'));
         params.push(basicSearchParams.end_date);
       }
     }

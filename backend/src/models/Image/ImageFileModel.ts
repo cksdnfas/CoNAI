@@ -1,5 +1,6 @@
 import { db } from '../../database/init';
 import { ImageFileRecord } from '../../types/image';
+import { placeholdersFor, sortedUniqueChunks } from '../../utils/sqlInChunks';
 
 /**
  * 이미지 파일 위치 모델
@@ -28,12 +29,16 @@ export class ImageFileModel {
       return [];
     }
 
-    const placeholders = compositeHashes.map(() => '?').join(',');
-    return db.prepare(`
-      SELECT * FROM image_files
-      WHERE composite_hash IN (${placeholders}) AND file_status = 'active'
-      ORDER BY composite_hash ASC, last_verified_date DESC, id DESC
-    `).all(...compositeHashes) as ImageFileRecord[];
+    // Sorted chunks keep the global ORDER BY composite_hash order while staying under the parameter limit.
+    const rows: ImageFileRecord[] = [];
+    for (const chunk of sortedUniqueChunks(compositeHashes)) {
+      rows.push(...(db.prepare(`
+        SELECT * FROM image_files
+        WHERE composite_hash IN (${placeholdersFor(chunk)}) AND file_status = 'active'
+        ORDER BY composite_hash ASC, last_verified_date DESC, id DESC
+      `).all(...chunk) as ImageFileRecord[]));
+    }
+    return rows;
   }
 
   /**

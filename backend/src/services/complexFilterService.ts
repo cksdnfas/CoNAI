@@ -8,12 +8,15 @@ import { RatingScoreService } from './ratingScoreService';
 import { matchesComplexFilterImage } from './complexFilter/complexFilterEvaluator';
 import {
   buildComplexFilterQuery,
+  ComplexQueryBuildOptions,
   ComplexQueryBuildResult,
   ComplexSearchScope,
 } from './complexFilter/complexFilterQueryBuilder';
 import { validateComplexFilter } from './complexFilter/complexFilterValidator';
 import { ImageMetadataRecord } from '../types/image';
 import { RatingWeights } from '../types/rating';
+import { peekSearchTotal, resolveSearchTotal } from './aggregateCache';
+import { buildIdPageResponse, normalizeIdPage, type IdPage, type IdPageResponse } from '../utils/idPage';
 
 /**
  * Complex Filter Service
@@ -29,6 +32,9 @@ import { RatingWeights } from '../types/rating';
  * Final result = (OR results ∩ AND results) - Exclude results
  */
 
+/** Share of the library a complex search must match before its page walks the date index. */
+const COMPLEX_DATE_WALK_MIN_SHARE = 0.1;
+
 export class ComplexFilterService {
 
   /**
@@ -40,9 +46,10 @@ export class ComplexFilterService {
   static buildComplexQuery(
     filter: ComplexFilter,
     weights: RatingWeights | null,
-    basicParams?: ComplexSearchScope
+    basicParams?: ComplexSearchScope,
+    options?: ComplexQueryBuildOptions,
   ): ComplexQueryBuildResult {
-    return buildComplexFilterQuery(filter, weights, basicParams);
+    return buildComplexFilterQuery(filter, weights, basicParams, options);
   }
 
   /**
@@ -72,7 +79,7 @@ export class ComplexFilterService {
 
     // Build query
     const {
-      query: baseQuery,
+      query: defaultBaseQuery,
       params,
       cteClause,
       cteParams,
@@ -90,17 +97,22 @@ export class ComplexFilterService {
     // can neither drop nor add composite hashes. Dropping it from the count keeps
     // the exact same result while removing an image_files fan-out over the whole
     // match set, so the count query can stay inside media_metadata's indexes.
+    //
+    // The count cannot stop early the way an ordered LIMIT page can, and it is identical for every page of one
+    // search, so it shares the image search's 30s total cache (keyed by the exact SQL and parameters).
     const shouldCountTotal = !pagination?.useCursor || pagination.includeTotal !== false;
+    const countQuery = `
+      ${cteClause}
+      SELECT COUNT(DISTINCT im.composite_hash) as total
+      ${countFromClause}
+      ${whereClause}
+    `;
     let total = 0;
     if (shouldCountTotal) {
-      const countQuery = `
-        ${cteClause}
-        SELECT COUNT(DISTINCT im.composite_hash) as total
-        ${countFromClause}
-        ${whereClause}
-      `;
-      const countRow = db.prepare(countQuery).get(...params) as any;
-      total = countRow?.total || 0;
+      total = resolveSearchTotal('complexSearch', [countQuery], params, () => {
+        const countRow = db.prepare(countQuery).get(...params) as { total?: number } | undefined;
+        return countRow?.total || 0;
+      });
     }
 
     // Apply pagination
@@ -115,8 +127,10 @@ export class ComplexFilterService {
       sortBy = 'first_seen_date';
     }
 
+    // first_seen_date is never NULL (migration 043 backfills and keeps it filled), so the bare column orders exactly
+    // like the former COALESCE(…, '') and lets idx_metadata_first_seen_hash_desc serve ORDER BY … LIMIT.
     const sortExpressions = {
-      first_seen_date: `COALESCE(im.first_seen_date, '')`,
+      first_seen_date: 'im.first_seen_date',
       filename: `COALESCE(if.original_file_path, '')`,
       file_size: 'COALESCE(if.file_size, 0)',
       width: 'COALESCE(im.width, 0)',
@@ -126,12 +140,25 @@ export class ComplexFilterService {
     const cursorDirection = sortOrder === 'ASC' ? '>' : '<';
     const useCursor = pagination?.useCursor === true;
     const hasCursor = useCursor && pagination?.cursorValue !== undefined && pagination.cursorHash;
-    const cursorClause = hasCursor
-      ? `AND (${sortExpression} ${cursorDirection} ? OR (${sortExpression} = ? AND im.composite_hash ${cursorDirection} ?))`
-      : '';
-    const dataParams = hasCursor
-      ? [...params, pagination.cursorValue, pagination.cursorValue, pagination.cursorHash]
-      : params;
+    const sortsByFirstSeen = sortBy === 'first_seen_date';
+    // For the first_seen order the cursor is a row value, which the (first_seen_date, composite_hash) index can seek
+    // to; it is the same predicate as the OR form (neither column is ever NULL).
+    const cursorClause = !hasCursor
+      ? ''
+      : sortsByFirstSeen
+        ? `AND (im.first_seen_date, im.composite_hash) ${cursorDirection} (?, ?)`
+        : `AND (${sortExpression} ${cursorDirection} ? OR (${sortExpression} = ? AND im.composite_hash ${cursorDirection} ?))`;
+    const dataParams = !hasCursor
+      ? params
+      : sortsByFirstSeen
+        ? [...params, pagination.cursorValue, pagination.cursorHash]
+        : [...params, pagination.cursorValue, pagination.cursorValue, pagination.cursorHash];
+    // Dense matches: walk the first_seen index and stop at LIMIT. Sparse matches: let the planner drive from the
+    // matched set and sort it. Decided from the total (counted above, or still cached from an earlier page).
+    const knownTotal = shouldCountTotal ? total : peekSearchTotal('complexSearch', [countQuery], params);
+    const baseQuery = sortsByFirstSeen && this.shouldWalkFirstSeenIndex(knownTotal, useCursor ? 0 : offset, limit)
+      ? this.buildComplexQuery(filter, weights, basicParams, { walkFirstSeenIndex: true }).query
+      : defaultBaseQuery;
     const dataQuery = `
       ${baseQuery}
       ${cursorClause}
@@ -166,6 +193,22 @@ export class ComplexFilterService {
       nextCursorHash: lastRow?.composite_hash ?? null,
       stats,
     };
+  }
+
+  /**
+   * Walking the first_seen index visits about (offset + limit) * libraryRows / matches rows before the page is full
+   * when matches are spread over time; driving from the matched set costs about one lookup (plus a sort) per match.
+   * Walk when the first is smaller and matches are dense (at least a tenth of the library), which bounds how badly
+   * a time-clustered match set (e.g. a tag only old images carry) can make the walk skip. The library size is
+   * MAX(media_id) (an O(log n) lookup): ids are never reused, so it only overestimates, which only makes the walk
+   * less likely.
+   */
+  private static shouldWalkFirstSeenIndex(matches: number | null, offset: number, limit: number): boolean {
+    if (matches === null || matches <= 0) {
+      return false;
+    }
+    const libraryRows = (db.prepare('SELECT MAX(media_id) as maxId FROM media_metadata').get() as { maxId: number | null }).maxId ?? 0;
+    return matches >= libraryRows * COMPLEX_DATE_WALK_MIN_SHARE && ((offset + limit + 1) * libraryRows) / matches < matches;
   }
 
   /** Count one generated CTE using the same scoped parameters as the search query. */
@@ -207,13 +250,20 @@ export class ComplexFilterService {
    */
   static async executeComplexSearchIds(
     filter: ComplexFilter,
-    basicParams?: ComplexSearchScope
-  ): Promise<string[]> {
+    basicParams?: ComplexSearchScope,
+    page: IdPage = normalizeIdPage(null),
+  ): Promise<IdPageResponse<string>> {
     const { query: hashesQuery, params } = await this.buildComplexSearchHashesQuery(filter, basicParams);
 
-    // Execute query
-    const rows = db.prepare(hashesQuery).all(...params) as { composite_hash: string }[];
-    return rows.map(row => row.composite_hash);
+    // Paged in hash order (the hash set had no order before) so a whole-library match never ships in one response.
+    const rows = db.prepare(`
+      SELECT composite_hash FROM (${hashesQuery}) AS matched
+      ORDER BY composite_hash
+      LIMIT ? OFFSET ?
+    `).all(...params, page.limit + 1, page.offset) as { composite_hash: string }[];
+    return buildIdPageResponse(rows.map(row => row.composite_hash), page, () => resolveSearchTotal('complexSearchIds', [hashesQuery], params, () => (
+      (db.prepare(`SELECT COUNT(*) as total FROM (${hashesQuery}) AS matched`).get(...params) as { total: number }).total
+    )));
   }
 
   /**

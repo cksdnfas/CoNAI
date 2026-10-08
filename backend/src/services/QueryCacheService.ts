@@ -20,6 +20,7 @@ const { LRUCache } = require('lru-cache') as {
 };
 
 import { logger } from '../utils/logger';
+import { AggregateCache } from './aggregateCache';
 
 interface CacheStats {
   hits: number;
@@ -160,6 +161,9 @@ export class QueryCacheService {
         clearTimeout(this.galleryInvalidationTimer);
         this.galleryInvalidationTimer = null;
       }
+
+      // Whole-library aggregates (tree counts, suggestions, thumbnail stats) move with the same events.
+      AggregateCache.invalidate('library');
 
       if (!this.galleryCache) {
         return;

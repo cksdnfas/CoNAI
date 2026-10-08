@@ -7,6 +7,7 @@ import {
   ComplexFilter,
 } from '@conai/shared';
 import { enrichCompactImageWithFileView } from './utils';
+import { normalizeIdPage } from '../../utils/idPage';
 
 const router = Router();
 
@@ -176,17 +177,16 @@ router.post('/ids', asyncHandler(async (req: Request, res: Response) => {
       });
     }
 
-    const ids = await ComplexFilterService.executeComplexSearchIds(
+    // Paged: up to ID_PAGE_DEFAULT_LIMIT ids come back whole as before; longer lists carry hasMore / nextOffset.
+    const data = await ComplexFilterService.executeComplexSearchIds(
       filter,
-      buildSearchScope(requestBody)
+      buildSearchScope(requestBody),
+      normalizeIdPage(req.body),
     );
 
     return res.json({
       success: true,
-      data: {
-        ids,
-        total: ids.length
-      }
+      data,
     });
   } catch (error) {
     console.error('Complex search IDs error:', error);

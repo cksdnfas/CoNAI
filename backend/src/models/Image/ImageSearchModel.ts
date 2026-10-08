@@ -10,6 +10,8 @@ import {
 } from './ImageSearchHelpers';
 import { ImageSafetyService } from '../../services/imageSafetyService';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
+import { resolveSearchTotal } from '../../services/aggregateCache';
+import { buildIdPageResponse, normalizeIdPage, type IdPage, type IdPageResponse } from '../../utils/idPage';
 
 /**
  * 이미지 검색 모델 (새 구조 기반)
@@ -28,73 +30,6 @@ function getVisibleImageCondition() {
 
 function getReadyImageCondition() {
   return MediaPostprocessVisibilityService.buildReadyCondition('im');
-}
-
-/**
- * Shared search total cache.
- *
- * Every search runs its WHERE clause twice: once as `COUNT(DISTINCT …)` for the
- * total and once for the page. The count is the expensive half — it cannot stop
- * early the way an ordered `LIMIT` page can — and the answer barely moves between
- * two consecutive requests from the same user. Caching it for 30s removes the
- * duplicate execution from the request path without changing the response shape.
- *
- * Originally written for `searchByAutoTags`; `advancedSearch` now shares it
- * (HEAVY-1), which is why the naming is search-generic.
- */
-const SEARCH_TOTAL_CACHE_TTL_MS = 30_000;
-const SEARCH_TOTAL_CACHE_MAX_ENTRIES = 250;
-
-type SearchTotalCacheEntry = {
-  total: number;
-  expiresAt: number;
-};
-
-const searchTotalCache = new Map<string, SearchTotalCacheEntry>();
-
-function getSearchTotalCacheKey(scope: string, conditions: string[], params: unknown[]): string {
-  return JSON.stringify({ scope, conditions, params });
-}
-
-function getCachedSearchTotal(cacheKey: string, now = Date.now()): number | null {
-  const cached = searchTotalCache.get(cacheKey);
-  if (!cached) {
-    return null;
-  }
-
-  if (cached.expiresAt <= now) {
-    searchTotalCache.delete(cacheKey);
-    return null;
-  }
-
-  return cached.total;
-}
-
-function setCachedSearchTotal(cacheKey: string, total: number, now = Date.now()): void {
-  if (searchTotalCache.size >= SEARCH_TOTAL_CACHE_MAX_ENTRIES) {
-    const oldestKey = searchTotalCache.keys().next().value;
-    if (oldestKey) {
-      searchTotalCache.delete(oldestKey);
-    }
-  }
-
-  searchTotalCache.set(cacheKey, {
-    total,
-    expiresAt: now + SEARCH_TOTAL_CACHE_TTL_MS,
-  });
-}
-
-/** Resolve a search total from cache, computing it at most once per TTL. */
-function resolveSearchTotal(scope: string, conditions: string[], params: unknown[], compute: () => number): number {
-  const cacheKey = getSearchTotalCacheKey(scope, conditions, params);
-  const cached = getCachedSearchTotal(cacheKey);
-  if (cached !== null) {
-    return cached;
-  }
-
-  const total = compute();
-  setCachedSearchTotal(cacheKey, total);
-  return total;
 }
 
 export class ImageSearchModel {
@@ -482,10 +417,11 @@ export class ImageSearchModel {
    * ✅ 완전히 composite_hash 기반으로 전환됨 (string[] 반환)
    */
   static async searchImageIds(
-    searchParams: ImageSearchParamsInput
+    searchParams: ImageSearchParamsInput,
+    page: IdPage = normalizeIdPage(null),
   ): Promise<string[]> {
     // searchCompositeHashes() 메서드로 위임
-    return this.searchCompositeHashes(searchParams);
+    return this.searchCompositeHashes(searchParams, page);
   }
 
   /**
@@ -493,9 +429,10 @@ export class ImageSearchModel {
    * @returns image_files.id 숫자 배열
    */
   static async searchImageFileIds(
-    searchParams: ImageSearchParamsInput
-  ): Promise<number[]> {
-    // No LIMIT here: every match is returned, so the index helps at any width.
+    searchParams: ImageSearchParamsInput,
+    page: IdPage = normalizeIdPage(null),
+  ): Promise<IdPageResponse<number>> {
+    // A page can still hold tens of thousands of matches, so the prompt index stays on at any width.
     const { conditions, params, groupJoinClause } = buildImageSearchFilterParts(searchParams, {
       requireCompositeHash: true,
       requireActiveFile: true,
@@ -504,18 +441,29 @@ export class ImageSearchModel {
 
     const safeConditions = [...conditions, getVisibleImageCondition(), getReadyImageCondition()];
     const whereClause = safeConditions.length > 0 ? `WHERE ${safeConditions.join(' AND ')}` : '';
-
-    const query = `
-      SELECT if.id
+    const fromWhere = `
       FROM media_metadata im
       INNER JOIN image_files if ON im.composite_hash = if.composite_hash
       ${groupJoinClause}
       ${whereClause}
-      ORDER BY im.first_seen_date DESC, if.id ASC
     `;
 
-    const rows = db.prepare(query).all(...params) as Array<{ id: number }>;
-    return rows.map(row => row.id);
+    // CROSS JOIN pins media_metadata as the outer loop, so the first_seen index yields rows in ORDER BY order and the
+    // page stops at LIMIT instead of joining every active file and sorting them all (same rows, same order).
+    const query = `
+      SELECT if.id
+      FROM media_metadata im
+      CROSS JOIN image_files if ON im.composite_hash = if.composite_hash
+      ${groupJoinClause}
+      ${whereClause}
+      ORDER BY im.first_seen_date DESC, if.id ASC
+      LIMIT ? OFFSET ?
+    `;
+
+    const rows = db.prepare(query).all(...params, page.limit + 1, page.offset) as Array<{ id: number }>;
+    return buildIdPageResponse(rows.map(row => row.id), page, () => resolveSearchTotal('searchImageFileIds', [fromWhere], params, () => (
+      (db.prepare(`SELECT COUNT(*) as total ${fromWhere}`).get(...params) as { total: number }).total
+    )));
   }
 
   /**
@@ -523,9 +471,10 @@ export class ImageSearchModel {
    * @returns composite_hash 문자열 배열
    */
   static async searchCompositeHashes(
-    searchParams: ImageSearchParamsInput
+    searchParams: ImageSearchParamsInput,
+    page: IdPage = normalizeIdPage(null),
   ): Promise<string[]> {
-    // No LIMIT here either: the whole match set is materialised for the caller.
+    // Capped by the id page so a whole-library match never materialises at once; the tie-break makes pages stable.
     const { conditions, params, groupJoinClause } = buildImageSearchFilterParts(searchParams, {
       promptIndexMode: 'always',
     });
@@ -539,10 +488,11 @@ export class ImageSearchModel {
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
       ${groupJoinClause}
       ${whereClause}
-      ORDER BY im.first_seen_date DESC
+      ORDER BY im.first_seen_date DESC, im.composite_hash DESC
+      LIMIT ? OFFSET ?
     `;
 
-    const rows = db.prepare(query).all(...params) as { composite_hash: string }[];
+    const rows = db.prepare(query).all(...params, page.limit, page.offset) as { composite_hash: string }[];
     return rows.map(row => row.composite_hash);
   }
 

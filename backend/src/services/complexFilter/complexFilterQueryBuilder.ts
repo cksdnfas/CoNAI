@@ -4,6 +4,7 @@ import { ImageSafetyService } from '../imageSafetyService';
 import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibilityService';
 import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../../utils/sqlLike';
 import { buildComplexFilterAutoTagCondition } from './complexFilterAutoTagSql';
+import { buildOnOrAfterDateSql, buildOnOrBeforeDateSql } from '../../utils/sqlDateRange';
 
 export type ComplexSearchScope = {
   ai_tool?: string;
@@ -33,7 +34,7 @@ export type ComplexQueryBuildResult = {
   countFromClause: string;
   /** Final WHERE clause shared by the data, count, and hash-only query variants. */
   whereClause: string;
-  /** GROUP BY clause that collapses duplicate active file rows per composite hash. */
+  /** Kept for callers that splice it in; empty now that the data query joins one file row per hash. */
   groupByClause: string;
   statsSources: ComplexQueryStatsSources;
 };
@@ -88,10 +89,23 @@ function buildPromptNormalizedSqlExpression(valueExpression: string, caseSensiti
   return caseSensitive ? expression : `LOWER(${expression})`;
 }
 
+/** The index that serves `ORDER BY im.first_seen_date, im.composite_hash` (either direction). */
+export const FIRST_SEEN_ORDER_INDEX = 'idx_metadata_first_seen_hash_desc';
+
+export type ComplexQueryBuildOptions = {
+  /**
+   * Make the data query walk media_metadata in first_seen order (and stop at LIMIT) instead of letting the planner
+   * drive from the matched hash set and sort it. Only worth it when matches are dense; the caller decides from the
+   * known total. Count and hash-only queries are unaffected.
+   */
+  walkFirstSeenIndex?: boolean;
+};
+
 export function buildComplexFilterQuery(
   filter: ComplexFilter,
   weights: RatingWeights | null,
-  basicParams?: ComplexSearchScope
+  basicParams?: ComplexSearchScope,
+  options: ComplexQueryBuildOptions = {},
 ): ComplexQueryBuildResult {
   const cteParams: any[] = [];
   const ctes: string[] = [];
@@ -168,13 +182,23 @@ export function buildComplexFilterQuery(
     FROM media_metadata im
   `;
 
-  const fromClause = `${countFromClause}
-    LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
+  // One deterministically chosen active file row per hash: the oldest (MIN id), exactly the row the former
+  // `MIN(if.id) ... GROUP BY im.composite_hash` form projected its bare if.* columns from. Joining it directly keeps
+  // one row per media without a GROUP BY, so an index in sort order can serve ORDER BY and LIMIT can stop early
+  // instead of grouping and sorting the whole match set.
+  const dataSource = options.walkFirstSeenIndex
+    ? `FROM media_metadata im INDEXED BY ${FIRST_SEEN_ORDER_INDEX}`
+    : countFromClause;
+  const fromClause = `${dataSource}
+    LEFT JOIN image_files if ON if.id = (
+      SELECT MIN(if2.id)
+      FROM image_files if2
+      WHERE if2.composite_hash = im.composite_hash AND if2.file_status = 'active'
+    )
   `;
 
   // Compact list-feed select: search results reuse the same enrichment shape as the
   // normal image feed, so wide columns (prompts, histograms, hashes) stay out of the payload.
-  // MIN(if.id) + GROUP BY makes SQLite pick the bare if.* columns from that same file row.
   const selectClause = `
     SELECT
       im.composite_hash,
@@ -184,7 +208,7 @@ export function buildComplexFilterQuery(
       im.rating_score,
       im.first_seen_date,
       im.metadata_updated_date,
-      MIN(if.id) as file_id,
+      if.id as file_id,
       if.original_file_path,
       if.file_status,
       if.file_type,
@@ -194,7 +218,7 @@ export function buildComplexFilterQuery(
     ${fromClause}
   `;
 
-  const groupByClause = 'GROUP BY im.composite_hash';
+  const groupByClause = '';
   const cteClause = ctes.length > 0 ? `WITH ${ctes.join(', ')}` : '';
   const query = cteClause.length > 0
     ? `${cteClause} ${selectClause} ${finalWhere}`
@@ -226,11 +250,11 @@ function buildBasicScopeConditions(basicParams?: ComplexSearchScope): BasicScope
     params.push(buildSqlContainsPattern(basicParams.model_name));
   }
   if (basicParams?.start_date) {
-    conditions.push('DATE(im.first_seen_date) >= DATE(?)');
+    conditions.push(buildOnOrAfterDateSql('im.first_seen_date'));
     params.push(basicParams.start_date);
   }
   if (basicParams?.end_date) {
-    conditions.push('DATE(im.first_seen_date) <= DATE(?)');
+    conditions.push(buildOnOrBeforeDateSql('im.first_seen_date'));
     params.push(basicParams.end_date);
   }
 

@@ -6,6 +6,7 @@ import { ImageListResponse } from '../../types/image';
 import { enrichCompactImageWithFileView, enrichImageWithFileView } from './utils';
 import { QueryCacheService } from '../../services/QueryCacheService';
 import { routeParam } from '../routeParam';
+import { normalizeIdPage } from '../../utils/idPage';
 import {
   buildBatchImageListResponse,
   buildBatchThumbnailLookupResults,
@@ -87,11 +88,14 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
       return res.json(cached);
     }
 
+    // The page cache above is cleared on every ingest; the total is the same whole-library count the cursor feed
+    // serves from the shared total cache, so the offset feed reuses it instead of recounting for every page.
     const result = await MediaMetadataModel.findAllWithFiles({
       page,
       limit,
       sortBy,
-      sortOrder
+      sortOrder,
+      total: resolveCachedVisibleTotal(VISIBLE_FEED_TOTAL_SCOPE),
     });
 
     const enrichedImages = result.items.map(enrichCompactImageWithFileView);
@@ -228,14 +232,12 @@ router.post('/search/ids', asyncHandler(async (req: Request, res: Response) => {
   try {
     const searchParams = buildImageSearchParams(req.body);
 
-    const ids = await ImageSearchModel.searchImageFileIds(searchParams);
+    // Paged: up to ID_PAGE_DEFAULT_LIMIT ids come back whole as before; longer lists carry hasMore / nextOffset.
+    const data = await ImageSearchModel.searchImageFileIds(searchParams, normalizeIdPage(req.body));
 
     res.json({
       success: true,
-      data: {
-        ids: ids,
-        total: ids.length
-      }
+      data,
     });
     return;
   } catch (error) {

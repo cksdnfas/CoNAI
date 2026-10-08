@@ -176,10 +176,12 @@ export class MediaPostprocessVisibilityService {
       return 0;
     }
 
+    // A NULL status reads as 'ready' either way, so the bare equality selects the same rows and can use
+    // idx_metadata_postprocess_status for the (normally tiny) pending set instead of scanning the table.
     const rows = db.prepare(`
       SELECT composite_hash, auto_tags
       FROM media_metadata
-      WHERE COALESCE(postprocess_status, 'ready') = 'pending'
+      WHERE postprocess_status = 'pending'
     `).all() as PendingPostprocessRow[];
 
     const releasedHashes: string[] = [];

@@ -9,6 +9,7 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { enrichCompactImageWithFileView, enrichImageRecord, enrichImageWithFileView } from './images/utils';
 import { pipeFileToResponse } from './images/query-file-response-helpers';
 import { parsePositiveIntegerQuery } from './routeValidation';
+import { normalizeIdPage } from '../utils/idPage';
 
 const GROUP_PREVIEW_IMAGE_COUNT_MAX = 20;
 const GROUP_PREVIEW_COUNT_ERROR = 'count must be an integer between 1 and 20';
@@ -185,12 +186,10 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
 router.get('/:id/image-ids', asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
-    const fileIds = await ImageGroupModel.getImageFileIdsForGroup(id);
+    // Paged: up to ID_PAGE_DEFAULT_LIMIT ids come back whole as before; longer lists carry hasMore / nextOffset.
+    const page = await ImageGroupModel.getImageFileIdsForGroup(id, normalizeIdPage(req.query));
 
-    return res.json(successResponse({
-      ids: fileIds,
-      total: fileIds.length
-    }));
+    return res.json(successResponse(page));
   } catch (error) {
     console.error('Error getting image IDs from group:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to get image IDs from group';
