@@ -9,10 +9,12 @@ async function runDatabaseBackupJob(ctx: RuntimeJobContext<DatabaseBackupJobPara
   return runDatabaseBackup({
     keep: ctx.params.keep,
     hooks: {
-      progress: (fileName, totalPages, remainingPages) => ctx.report({
+      // Per file, in bytes: phase/currentLabel name the file, processed/total are that file's copied/total bytes.
+      progress: (fileName, totalPages, remainingPages, pageSize) => ctx.report({
+        phase: fileName,
         currentLabel: fileName,
-        total: totalPages,
-        processed: totalPages - remainingPages,
+        total: totalPages * pageSize,
+        processed: (totalPages - remainingPages) * pageSize,
       }),
       throwIfCancelled: () => ctx.throwIfCancelled(),
     },

@@ -11,6 +11,7 @@ import { useI18n } from '@/i18n'
 import { AutoTestCard } from './auto-test-card'
 import type { AutoTabProps } from './auto-tab-types'
 import { DataRematchSection } from './data-rematch-section'
+import { DatabaseMaintenanceSection } from './database-maintenance-section'
 
 interface MaintenanceActionRowProps {
   icon: ReactNode
@@ -133,6 +134,8 @@ export function MaintenanceTab({
           onRun={onReextractAll}
         />
       </RowGroup>
+
+      <DatabaseMaintenanceSection />
 
       <DataRematchSection />
 
