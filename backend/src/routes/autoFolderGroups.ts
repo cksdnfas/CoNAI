@@ -18,7 +18,7 @@ const router = Router();
 router.use((req, res, next) => {
   if (req.method === 'GET' || req.method === 'HEAD') {
     allowImagesView(req, res, next);
-  } else requirePermission('groups.update')(req, res, next);
+  } else requirePermission('images.edit')(req, res, next);
 });
 
 /**

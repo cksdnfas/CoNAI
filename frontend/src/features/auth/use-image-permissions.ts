@@ -11,9 +11,9 @@ export function resolveImagePermissions(permissionKeys?: string[], authenticated
     canOpenDetailPage: canViewImages && has('page.image-detail.view'),
     canOpenMetadataEditor: canViewImages && has('page.metadata-editor.view'),
     canExportImages: canViewImages,
-    canEditImages: authenticated && canViewImages && has('images.update'),
-    canEditMetadata: authenticated && canViewImages && has('images.metadata.edit'),
-    canAssignGroups: authenticated && canViewImages && has('groups.update'),
+    canEditImages: authenticated && canViewImages && has('images.edit'),
+    canEditMetadata: authenticated && canViewImages && has('images.edit'),
+    canAssignGroups: authenticated && canViewImages && has('images.edit'),
     canDeleteImages: authenticated && canViewImages && has('images.delete'),
   }
 }

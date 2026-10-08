@@ -23,7 +23,8 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
   user.initializeUserSettingsDb()
   ;(await import('../src/database/apiGenerationDb')).initializeApiGenerationDb()
   const { createAuthTables } = await import('../src/database/authDbSchema')
-  const { seedAccessControlDefaults, migrateImageViewPermission, migrateIndependentFeaturePermissions, LEGACY_IMAGE_VIEW_PERMISSION_KEYS } = await import('../src/database/authDbSeed')
+  const { seedAccessControlDefaults } = await import('../src/database/authDbSeed')
+  const { PERMISSION_KEYS, withPagePermissions } = await import('@conai/shared')
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
   const { invalidateConfiguredAuthCache } = await import('../src/routes/auth-route-helpers')
   const { AuthAccessControlService, invalidateResolvedAuthAccessCache } = await import('../src/services/authAccessControlService')
@@ -40,60 +41,42 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
   })
   const { buildPermissionSections, setPermissionGrant } = await import('../../frontend/src/features/settings/components/security-permission-catalog')
 
-  await t.test('versioned migration converts only explicit legacy grants and never repeats', () => {
+  await t.test('permissions v2 folds old keys once and moves member-only anonymous grants to guests', () => {
     const db = new Database(':memory:')
     createAuthTables(db)
+    // An auth database from before v2: old keys exist, grants use them, and nothing has been converted yet.
+    const legacy = ['page.home.view', 'prompts.view', 'groups.update', 'prompts.create', 'upload.create', 'files.organize', 'wildcards.lora.scan', 'workflows.update', 'chat.codex.use', 'chat.tools.read', 'images.copy']
+    for (const key of legacy) db.prepare('INSERT INTO auth_permissions (permission_key, resource, action) VALUES (?, ?, ?)').run(key, key, 'x')
+    for (const key of ['anonymous', 'editor', 'uploader', 'agent']) db.prepare('INSERT INTO auth_permission_groups (group_key, name) VALUES (?, ?)').run(key, key)
+    const grant = (group: string, key: string) => db.prepare('INSERT INTO auth_group_permissions (group_id, permission_id, allowed) SELECT g.id, p.id, 1 FROM auth_permission_groups g, auth_permissions p WHERE g.group_key = ? AND p.permission_key = ?').run(group, key)
+    grant('anonymous', 'page.home.view'); grant('anonymous', 'prompts.view')
+    grant('editor', 'groups.update'); grant('editor', 'prompts.create'); grant('editor', 'wildcards.lora.scan'); grant('editor', 'workflows.update')
+    grant('uploader', 'upload.create'); grant('uploader', 'files.organize'); grant('uploader', 'images.copy')
+    grant('agent', 'chat.codex.use'); grant('agent', 'chat.tools.read')
     seedAccessControlDefaults(db)
-    const grant = (group: number, key: string, allowed = 1) => db.prepare('INSERT INTO auth_group_permissions (group_id, permission_id, allowed) SELECT ?, id, ? FROM auth_permissions WHERE permission_key = ?').run(group, allowed, key)
-    const groups = [...LEGACY_IMAGE_VIEW_PERMISSION_KEYS, 'page.files.view', 'upload.create', 'denied', 'explicit-denial']
-    groups.forEach((key, index) => {
-      db.prepare('INSERT INTO auth_permission_groups (id, group_key, name) VALUES (?, ?, ?)').run(100 + index, key, key)
-      if (key === 'denied') grant(100 + index, 'page.home.view', 0)
-      else if (key === 'explicit-denial') { grant(100 + index, 'page.home.view'); grant(100 + index, 'images.view', 0) }
-      else grant(100 + index, key)
-    })
-    db.prepare("DELETE FROM auth_seed_state WHERE seed_key IN ('images_view_v1', 'files_view_v1', 'workflows_view_v1')").run()
-    db.exec("CREATE TRIGGER fail_image_marker BEFORE INSERT ON auth_seed_state WHEN NEW.seed_key = 'images_view_v1' BEGIN SELECT RAISE(ABORT, 'test rollback'); END")
-    assert.throws(() => migrateImageViewPermission(db), /test rollback/)
-    assert.equal(db.prepare('SELECT 1 FROM auth_group_permissions gp JOIN auth_permissions p ON p.id = gp.permission_id WHERE gp.group_id = 100 AND p.permission_key = ?').get('images.view'), undefined)
-    db.exec('DROP TRIGGER fail_image_marker')
+    const keys = (group: string) => (db.prepare('SELECT p.permission_key AS key FROM auth_group_permissions gp JOIN auth_permissions p ON p.id = gp.permission_id JOIN auth_permission_groups g ON g.id = gp.group_id WHERE g.group_key = ? AND gp.allowed = 1 ORDER BY key').all(group) as Array<{ key: string }>).map((row) => row.key)
+    assert.deepEqual(keys('editor'), ['images.edit', 'prompts.edit', 'wildcards.edit', 'workflows.edit'])
+    assert.deepEqual(keys('uploader'), ['files.edit', 'images.upload'])
+    assert.deepEqual(keys('agent'), ['chat.agent.use', 'chat.diagnostics.view', 'images.view'], 'older conversions still run first; bot tool keys are gone')
+    assert.deepEqual(keys('anonymous'), ['auth.guest.create', 'images.view'], 'visitors keep only what a signed-out visitor can use')
+    assert.ok(keys('guest').includes('prompts.view'), 'member-only anonymous grants move to the group every account inherits')
+    assert.deepEqual(keys('admin'), [...PERMISSION_KEYS].sort())
+    assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM auth_permissions WHERE permission_key NOT IN (${PERMISSION_KEYS.map(() => '?').join(', ')})`).get(...PERMISSION_KEYS).n, 0)
+    db.prepare("DELETE FROM auth_group_permissions WHERE group_id = (SELECT id FROM auth_permission_groups WHERE group_key = 'editor') AND permission_id = (SELECT id FROM auth_permissions WHERE permission_key = 'images.edit')").run()
     seedAccessControlDefaults(db)
-    groups.forEach((key, index) => {
-      const row = db.prepare('SELECT allowed FROM auth_group_permissions gp JOIN auth_permissions p ON p.id = gp.permission_id WHERE gp.group_id = ? AND p.permission_key = ?').get(100 + index, 'images.view') as { allowed: number } | undefined
-      assert.equal(row?.allowed === 1, LEGACY_IMAGE_VIEW_PERMISSION_KEYS.includes(key as never), key)
-    })
-    db.prepare('DELETE FROM auth_group_permissions WHERE group_id = 100 AND permission_id = (SELECT id FROM auth_permissions WHERE permission_key = ?)').run('images.view')
-    seedAccessControlDefaults(db)
-    assert.equal(db.prepare('SELECT 1 FROM auth_group_permissions WHERE group_id = 100 AND permission_id = (SELECT id FROM auth_permissions WHERE permission_key = ?)').get('images.view'), undefined)
-    assert.ok(db.prepare('SELECT 1 FROM auth_group_permissions gp JOIN auth_permissions p ON p.id = gp.permission_id JOIN auth_permission_groups g ON g.id = gp.group_id WHERE g.group_key = ? AND p.permission_key = ? AND gp.allowed = 1').get('admin', 'images.view'))
+    assert.ok(!keys('editor').includes('images.edit'), 'restart never restores a later revocation')
     db.close()
   })
 
-  await t.test('feature migration is finite, atomic and preserves later choices', () => {
-    const db = new Database(':memory:')
-    createAuthTables(db)
-    seedAccessControlDefaults(db)
-    const mappings = [['page.prompts.view', 'prompts.view'], ['page.wildcards.view', 'wildcards.view'], ['page.generation.view', 'generation.execute'], ['chat.codex.use', 'page.chat.view'], ['chat.llm.use', 'page.chat.view']]
-    mappings.forEach(([legacy], index) => {
-      db.prepare('INSERT INTO auth_permission_groups (id, group_key, name) VALUES (?, ?, ?)').run(200 + index, legacy, legacy)
-      db.prepare('INSERT INTO auth_group_permissions (group_id, permission_id, allowed) SELECT ?, id, 1 FROM auth_permissions WHERE permission_key = ?').run(200 + index, legacy)
-    })
-    db.prepare("INSERT INTO auth_group_permissions (group_id, permission_id, allowed) SELECT 201, id, 0 FROM auth_permissions WHERE permission_key = 'wildcards.view'").run()
-    db.prepare("DELETE FROM auth_seed_state WHERE seed_key = 'independent_features_v1'").run()
-    db.exec("CREATE TRIGGER fail_feature_marker BEFORE INSERT ON auth_seed_state WHEN NEW.seed_key = 'independent_features_v1' BEGIN SELECT RAISE(ABORT, 'feature rollback'); END")
-    assert.throws(() => migrateIndependentFeaturePermissions(db), /feature rollback/)
-    const has = (id: number, key: string) => db.prepare('SELECT allowed FROM auth_group_permissions gp JOIN auth_permissions p ON p.id = gp.permission_id WHERE gp.group_id = ? AND p.permission_key = ?').get(id, key) as { allowed: number } | undefined
-    assert.equal(has(200, 'prompts.view'), undefined)
-    db.exec('DROP TRIGGER fail_feature_marker')
-    seedAccessControlDefaults(db)
-    mappings.forEach(([, feature], index) => assert.equal(has(200 + index, feature)?.allowed, index === 1 ? 0 : 1))
-    for (const id of [203, 204]) assert.equal(has(id, 'generation.execute'), undefined, 'chat use never becomes broad execution')
-    for (const key of ['prompts.create', 'prompts.update', 'prompts.delete', 'workflows.update']) assert.equal(has(200, key), undefined)
-    db.prepare("DELETE FROM auth_group_permissions WHERE group_id = 202 AND permission_id = (SELECT id FROM auth_permissions WHERE permission_key = 'generation.execute')").run()
-    seedAccessControlDefaults(db)
-    assert.equal(has(202, 'generation.execute'), undefined)
-    assert.ok(has(3, 'generation.execute')?.allowed)
-    db.close()
+  await t.test('pages follow the features they show and are never stored', () => {
+    assert.deepEqual(withPagePermissions(['images.view'], false).filter((key) => key.startsWith('page.')).sort(), ['page.groups.view', 'page.home.view', 'page.image-detail.view', 'page.wallpaper.runtime.view', 'page.wallpaper.view'])
+    assert.ok(withPagePermissions(['images.view', 'images.edit'], false).includes('page.metadata-editor.view'))
+    assert.ok(!withPagePermissions(['images.edit'], false).includes('page.metadata-editor.view'), 'the metadata page also needs image viewing')
+    assert.ok(withPagePermissions(['workflows.view'], false).includes('page.generation.view'))
+    assert.ok(withPagePermissions(['chat.agent.use'], false).includes('page.chat.view'))
+    assert.ok(!withPagePermissions(PERMISSION_KEYS, false).includes('page.settings.view'), 'settings follow the administrator role')
+    assert.ok(withPagePermissions([], true).includes('page.settings.view'))
+    assert.deepEqual(withPagePermissions(['page.home.view'], false), [], 'a stored page key never survives')
   })
 
   const express = (await import('express')).default
@@ -169,14 +152,14 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     const requester = { accountId, accountType: 'guest' as const }
     const bridge = await openChatMcpBridge(requester, ['read'], null, { chatContext })
     try {
-      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.llm.use', 'chat.tools.read', 'prompts.view'] })
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.use', 'prompts.view'] })
       assert.throws(() => LlmChatService.requireStartableProfile(requester, profile.id), /권한/)
       assert.equal((await bridge.call('list_prompt_presets', {})).isError, true)
-      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.claude.use', 'chat.tools.read', 'prompts.view'] })
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.agent.use', 'prompts.view'] })
       assert.equal(LlmChatService.requireStartableProfile(requester, profile.id).engine, 'claude')
       const permitted = await bridge.call('list_prompt_presets', {})
       assert.notEqual(permitted.isError, true, JSON.stringify(permitted))
-      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.tools.read', 'prompts.view'] })
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['prompts.view'] })
       assert.equal((await bridge.call('list_prompt_presets', {})).isError, true)
     } finally { endReply(); await bridge.close(); AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] }) }
   })
@@ -195,12 +178,12 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     assert.equal(await status('/api/groups'), 401)
     assert.equal(await status('/api/groups', accountId, 'POST'), 403)
     assert.equal(await status('/api/images/bulk', accountId, 'DELETE'), 403)
-    AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['page.home.view', 'page.image-detail.view', 'page.groups.view', 'chat.llm.use', 'generation.execute'] })
+    AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.use', 'generation.execute'] })
     for (const url of ['/api/images/metadata/bad', '/api/images/bad/thumbnail', '/api/images/bad/file', '/api/generation-history', '/api/runtime-media-settings/viewer', '/uploads/permission.png', '/temp/permission.png', '/save/permission.png']) assert.equal(await status(url, accountId), 403, url)
     assert.throws(() => requireRequesterImagePermission({ accountId, accountType: 'guest' }), /images.view/)
     AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view', 'images.delete'] })
     assert.equal(await status('/api/images/bulk', accountId, 'DELETE'), 400)
-    assert.equal(AuthAccessControlService.resolveForAccountId(accountId).permissionKeys.includes('page.home.view'), false)
+    assert.equal(AuthAccessControlService.resolveForAccountId(accountId).permissionKeys.includes('page.home.view'), true, 'the home page follows image viewing')
   })
   await t.test('stored workflow media requires images.view regardless of MIME, pages or generation grants', async () => {
     const { storeWorkflowInputAssetFile } = await import('../src/services/workflowInputAssetStore')
@@ -216,7 +199,7 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
       const ref = storeWorkflowInputAssetFile(temporaryPath, { fileName: fixture.name, mimeType: fixture.mime, bytes: fixture.bytes.length })
       return { ...fixture, url: `/api/workflow-input-assets/${ref.id}` }
     })
-    AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['page.home.view', 'page.generation.view', 'workflows.view', 'generation.execute'] })
+    AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['workflows.view', 'generation.execute'] })
     for (const asset of assets) {
       for (const suffix of ['', `?mime=${encodeURIComponent(asset.mime)}`, '?mime=audio%2Fwav', '?mime=text%2Fplain']) {
         for (const method of ['GET', 'HEAD']) assert.equal(await status(asset.url + suffix, accountId, method), 403, `${method} ${asset.name}${suffix}`)
@@ -273,7 +256,7 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
       const result = await client.callTool({ name: 'get_generation_history', arguments: { history_id: other } })
       assert.deepEqual(JSON.parse((result.content as Array<{ text: string }>)[0].text).records, [])
       assert.equal((await client.callTool({ name: 'resolve_image_group_path', arguments: { group_path: 'must-not-create', create: true } })).isError, true)
-      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.llm.use', 'chat.tools.read'] })
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.use'] })
       assert.equal((await client.callTool({ name: 'get_image_metadata', arguments: { composite_hash: 'a'.repeat(48) } })).isError, true)
     } finally {
       await client.close()
@@ -303,7 +286,7 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     updateChatSettings({ enabled: true })
     const profile = ChatProfileStore.create({ name: 'Page connection only', engine: 'llm', providerName: 'fixture', mcpEnabled: false, mcpScopes: [], toolAllowlist: [] })
     const visible = { instanceId: 'visible-page', connectionId: 'visible-connection', path: '/generation', title: 'Generation', kind: 'nai', resourceId: null, fields: [{ id: 'prompt', label: 'Prompt', type: 'text', value: 'visible draft', editable: false }], data: { files: [{ id: 'private-file' }] } }
-    const keys = ['chat.llm.use', 'chat.codex.use', 'page.generation.view']
+    const keys = ['chat.use', 'chat.agent.use', 'generation.execute']
     AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: keys })
     const controller = new AbortController()
     try {
@@ -330,10 +313,10 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
             assert.ok(parseChatPageContext(published, requester), 'published page follows native page access')
             WorkflowModel.update(workflowId, { is_public_page: false })
             assert.throws(() => parseChatPageContext(published, requester), /공개/)
-            AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: keys.filter((key) => !key.startsWith('page.')) })
+            AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: keys.filter((key) => key !== 'generation.execute') })
             assert.throws(() => parseChatPageContext(visible, requester), /페이지/)
             assert.equal((await bridge.call('get_current_page', {})).isError, true, 'page revocation applies to an open reply')
-            AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['page.generation.view'] })
+            AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['generation.execute'] })
             assert.equal((await bridge.call('get_current_page', {})).isError, true, 'page access does not grant chat use')
             AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: keys })
           }
@@ -378,14 +361,13 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     const controller = new AbortController()
     const page = normalizeChatPageSnapshot({ instanceId: 'page-instance', connectionId: 'page-connection', path: '/generation', title: 'Generation', kind: 'page', resourceId: null, fields: [] })
     assert.ok(resolveChatAccess(adminId).scopes.includes('generate'), 'administrator already holds account generation scope')
-    const permittedGuestKeys = ['chat.llm.use', 'chat.tools.read', 'chat.tools.generate', 'generation.execute', 'workflows.view']
+    const permittedGuestKeys = ['chat.use', 'generation.execute', 'workflows.view']
     const cases: Array<[number, 'admin' | 'guest', boolean]> = [[adminId, 'admin', false], [adminId, 'admin', true], [accountId, 'guest', false], [accountId, 'guest', true]]
     for (const [callerId, accountType, connected] of cases) {
-      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: connected ? [...permittedGuestKeys, 'page.generation.view'] : permittedGuestKeys })
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: permittedGuestKeys })
       const requester = { accountId: callerId, accountType }
       const current = ChatProfileStore.find(profile.id)!
       const connectedPage = parseChatPageContext(connected ? page : undefined, requester)
-      if (accountType === 'guest' && !connected) assert.equal(AuthAccessControlService.hasPermission(callerId, 'page.generation.view'), false, 'generation remains available with its page disabled')
       const context = { threadId: CodexChatStore.createThread(callerId, 'linked presets', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: `linked-${callerId}-${connected}`, ...(connectedPage ? { page: connectedPage } : {}) }
       const stop = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
       const grant = resolveChatProfileToolGrant(current, resolveChatAccess(callerId))
@@ -415,13 +397,14 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     }
     const guestContext = { threadId: CodexChatStore.createThread(accountId, 'denied presets', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: 'linked-denied' }
     const stop = registerChatReply(guestContext, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
-    AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.llm.use', 'chat.tools.generate'] })
+    AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.use'] })
     const grant = resolveChatProfileToolGrant(ChatProfileStore.find(profile.id)!, resolveChatAccess(accountId))
     const denied = await openChatMcpBridge({ accountId, accountType: 'guest' }, grant.scopes, grant.toolAllowlist, { chatContext: guestContext, generationPresetIds: [nai.id, comfy.id] })
     try {
       assert.equal((await denied.call('generate_image', { prompt: 'no execution grant' })).isError, true)
-      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.llm.use', 'generation.execute'] })
-      assert.equal(resolveChatProfileToolGrant(ChatProfileStore.find(profile.id)!, resolveChatAccess(accountId)).scopes.includes('generate'), false)
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.use', 'generation.execute'] })
+      assert.ok(resolveChatProfileToolGrant(ChatProfileStore.find(profile.id)!, resolveChatAccess(accountId)).scopes.includes('generate'), 'the bot follows the account generation grant')
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['generation.execute'] })
       assert.equal((await denied.call('generate_image', { prompt: 'no chat grant' })).isError, true)
     } finally { stop(); await denied.close(); AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] }) }
   })
@@ -440,7 +423,7 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     const { enqueueMcpGenerationJob } = await import('../src/mcp/tools/generationJobTools')
     const { requireQueuedChatGenerationAccess } = await import('../src/services/generation-queue/queueJobExecutors')
     const db = user.getUserSettingsDb()
-    const permissions = ['chat.llm.use', 'chat.tools.read', 'chat.tools.generate', 'chat.tools.configure', 'images.view', 'prompts.view', 'prompts.create', 'generation.execute', 'workflows.view']
+    const permissions = ['chat.use', 'images.view', 'prompts.view', 'prompts.edit', 'generation.execute', 'workflows.view']
     const grant = (keys = permissions) => AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: keys })
     grant()
     updateChatSettings({ enabled: true })
@@ -570,12 +553,12 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     assert.equal(await status('/api/prompt-collection/resolve-groups', accountId, 'POST'), 400)
     assert.equal(await status('/api/wildcards/parse', accountId, 'POST'), 400)
     assert.equal(await status('/api/generation-queue', accountId, 'POST'), 403)
-    AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['page.prompts.view', 'page.wildcards.view', 'page.generation.view', 'page.settings.view', 'chat.llm.use', 'chat.tools.generate'] })
+    AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.use'] })
     for (const url of reads) assert.equal(await status(url, accountId), 403, url)
     assert.equal(await status('/api/generation-queue', accountId), 200, 'session-only queue read survives')
-    assert.equal(await status('/api/generation-queue', accountId, 'POST'), 403, 'chat scopes do not imply execution')
+    assert.equal(await status('/api/generation-queue', accountId, 'POST'), 403, 'chat use does not imply execution')
     for (const url of ['/api/settings', '/api/settings/general', '/api/external-api/providers', '/api/comfyui-servers']) assert.equal(await status(url, accountId, url.endsWith('general') ? 'PUT' : url.endsWith('servers') ? 'POST' : 'GET'), 403, url)
-    AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['workflows.view', 'workflows.update'] })
+    AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['workflows.view', 'workflows.edit'] })
     assert.equal(await status('/api/custom-dropdown-lists/comfy-model-thumbnail', accountId), 403)
     assert.equal(await status('/api/nai/store/vibes/missing', accountId, 'PUT'), 403)
     assert.equal(await status('/api/nai/store/character-references', accountId, 'POST'), 403)
@@ -590,9 +573,8 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] })
     assert.equal(await status('/api/custom-dropdown-lists/comfy-model-thumbnail', accountId), 400, 'bitmap reads do not require workflow data/page rights')
     assert.equal(await status('/api/settings', adminId), 200, 'admin configuration independent of navigation')
-    AuthPermissionGroup.replaceBuiltInPageAccess('anonymous', ['prompts.view', 'wildcards.view', 'workflows.view'])
+    assert.throws(() => AuthPermissionGroup.replaceBuiltInPageAccess('anonymous', ['prompts.view', 'wildcards.view', 'workflows.view']), /invalid/, 'visitors cannot be given member-only features')
     for (const url of reads) assert.equal(await status(url), 401, 'preserve login boundary: ' + url)
-    AuthPermissionGroup.replaceBuiltInPageAccess('anonymous', [])
     AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] })
   })
   await t.test('SSE uses live functional grants, rejects bootstrap residue and never writes sessions', async () => {
@@ -630,16 +612,15 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] })
   })
   await t.test('anonymous and inherited grants use the same feature and scoped replacements roll back', async () => {
-    AuthPermissionGroup.replaceBuiltInPageAccess('anonymous', ['images.view', 'page.home.view'])
-    assert.equal(await status('/api/images/metadata/bad'), 400)
     AuthPermissionGroup.replaceBuiltInPageAccess('anonymous', ['images.view'])
     assert.equal(await status('/api/images/metadata/bad'), 400)
     assert.ok(AuthAccessControlService.resolveForGroupKey('guest').permissionKeys.includes('images.view'))
-    auth.exec("CREATE TRIGGER fail_replace BEFORE INSERT ON auth_group_permissions WHEN NEW.permission_id = (SELECT id FROM auth_permissions WHERE permission_key = 'page.home.view') BEGIN SELECT RAISE(ABORT, 'test replacement rollback'); END")
-    assert.throws(() => AuthPermissionGroup.replaceBuiltInPageAccess('anonymous', ['page.home.view']), /rollback/)
+    assert.ok(AuthAccessControlService.resolveForGroupKey('anonymous').permissionKeys.includes('page.home.view'), 'the visitor home page follows image viewing')
+    auth.exec("CREATE TRIGGER fail_replace BEFORE INSERT ON auth_group_permissions WHEN NEW.permission_id = (SELECT id FROM auth_permissions WHERE permission_key = 'auth.guest.create') BEGIN SELECT RAISE(ABORT, 'test replacement rollback'); END")
+    assert.throws(() => AuthPermissionGroup.replaceBuiltInPageAccess('anonymous', ['auth.guest.create']), /rollback/)
     auth.exec('DROP TRIGGER fail_replace')
     assert.ok(AuthAccessControlService.resolveForGroupKey('anonymous').permissionKeys.includes('images.view'))
-    AuthPermissionGroup.replaceBuiltInPageAccess('anonymous', ['page.home.view'])
+    AuthPermissionGroup.replaceBuiltInPageAccess('anonymous', ['auth.guest.create'])
     assert.equal(await status('/api/images/metadata/bad'), 401)
     invalidateResolvedAuthAccessCache()
   })
@@ -657,10 +638,12 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     assert.equal(resolveFeaturePermissions(['page.generation.view', 'page.prompts.view'], true).canExecuteGeneration, false)
     assert.equal(resolveFeaturePermissions(['generation.execute'], true).canExecuteGeneration, true)
     assert.equal(resolveFeaturePermissions(['prompts.view', 'workflows.view'], true).canUpdateWorkflows, false)
-    const keys = ['page.home.view', 'images.view', 'images.metadata.edit', 'groups.update']
+    const keys = ['page.home.view', 'images.view', 'images.edit', 'images.edit']
     assert.deepEqual(setPermissionGrant(keys, 'page.home.view', false), keys.slice(1))
-    const sections = buildPermissionSections(AuthPermissionGroup.listBuiltInEditablePermissions().map((row) => ({ permissionKey: row.permission_key, label: row.description ?? row.permission_key })))
-    assert.equal(sections.find((section) => section.rows.some((row) => row.key === 'images.view'))?.kind, 'feature')
-    assert.ok(sections.flatMap((section) => section.rows).every((row) => row.parentKey === null))
+    const available = AuthPermissionGroup.listBuiltInEditablePermissions().map((row) => ({ permissionKey: row.permission_key, label: row.description ?? row.permission_key }))
+    const memberRows = buildPermissionSections(available, 'guest').flatMap((section) => section.rows.map((row) => row.key))
+    assert.ok(memberRows.every((key) => !key.startsWith('page.')), 'pages are never granted')
+    assert.ok(!memberRows.includes('auth.guest.create'), 'guest signup is only for visitors')
+    assert.deepEqual(buildPermissionSections(available, 'anonymous').flatMap((section) => section.rows.map((row) => row.key)), ['images.view', 'auth.guest.create'])
   })
 })

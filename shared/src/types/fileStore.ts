@@ -18,7 +18,7 @@ export interface FileStoreListing {
   limit: number;
 }
 
-/** One account's file store as seen by someone with `files.browse.all`. */
+/** One account's file store as seen by an administrator. */
 export interface StoredFileOwner {
   ownerKey: string;
   accountId: number | null;

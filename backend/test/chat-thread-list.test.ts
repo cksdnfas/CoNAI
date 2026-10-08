@@ -30,7 +30,7 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
 
   updateChatSettings({ enabled: true })
   t.mock.method(AuthAccount, 'findById', () => ({ id: 1, status: 'active' }))
-  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.llm.use'] }))
+  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use'] }))
   const requester = { accountId: 1, accountType: 'admin' as const }
   const stranger = { accountId: 2, accountType: 'admin' as const }
   const profile = ChatProfileStore.create({ name: '루나', engine: 'llm', providerName: 'test', model: 'm', mcpEnabled: false, summaryEnabled: false })

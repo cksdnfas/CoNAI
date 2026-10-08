@@ -1,50 +1,7 @@
-/** Resolve the page-view permission key that matches one app pathname. */
+import { chatPagePermission } from '@conai/shared'
+
+/** Resolve the page key for one app pathname from the shared route map; pages open to every signed-in account have none. */
 export function resolveRoutePermissionKey(pathname: string) {
-  if (pathname === '/chat') return 'page.chat.view'
-  if (pathname === '/files') return 'page.files.view'
-  if (pathname === '/') {
-    return 'page.home.view'
-  }
-
-  if (pathname === '/groups' || pathname.startsWith('/groups/')) {
-    return 'page.groups.view'
-  }
-
-  if (pathname === '/prompts') {
-    return 'page.prompts.view'
-  }
-
-  if (pathname === '/generation' || pathname === '/graph') {
-    return 'page.generation.view'
-  }
-
-  if (pathname === '/wildcards') {
-    return 'page.wildcards.view'
-  }
-
-  if (pathname.startsWith('/images/') && pathname.endsWith('/metadata')) {
-    return 'page.metadata-editor.view'
-  }
-
-  if (pathname.startsWith('/images/')) {
-    return 'page.image-detail.view'
-  }
-
-  if (pathname === '/upload') {
-    return 'page.upload.view'
-  }
-
-  if (pathname === '/settings') {
-    return 'page.settings.view'
-  }
-
-  if (pathname === '/wallpaper') {
-    return 'page.wallpaper.view'
-  }
-
-  if (pathname === '/wallpaper/runtime') {
-    return 'page.wallpaper.runtime.view'
-  }
-
-  return null
+  if (pathname === '/graph') return 'page.generation.view'
+  return chatPagePermission(pathname) || null
 }

@@ -14,8 +14,8 @@ export interface WildcardWorkspacePermissionState {
 export function getWildcardWorkspacePermissions(permissionKeys: string[]): WildcardWorkspacePermissionState {
   return {
     canEditWildcardEntries: hasAuthPermission(permissionKeys, 'wildcards.edit'),
-    canDeleteWildcardEntries: hasAuthPermission(permissionKeys, 'wildcards.delete'),
-    canScanLora: hasAuthPermission(permissionKeys, 'wildcards.lora.scan'),
+    canDeleteWildcardEntries: hasAuthPermission(permissionKeys, 'wildcards.edit'),
+    canScanLora: hasAuthPermission(permissionKeys, 'wildcards.edit'),
   }
 }
 

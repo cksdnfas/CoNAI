@@ -113,7 +113,7 @@ router.put('/:id', requirePermission('wildcards.edit'), asyncHandler(async (req:
   }
 }));
 
-router.delete('/:id', requirePermission('wildcards.delete'), asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id', requirePermission('wildcards.edit'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)));
   const cascade = req.query.cascade === 'true';
 

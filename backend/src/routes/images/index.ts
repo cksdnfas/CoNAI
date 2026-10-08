@@ -29,12 +29,12 @@ router.use('/', taggingRoutes);
 router.use('/metadata', metadataRoutes);
 
 // Hash generation routes (안전장치: 해시 생성)
-router.use('/generate-hash', requireImageAction('images.update'));
+router.use('/generate-hash', requireImageAction('images.edit'));
 router.use('/', hashRoutes);
 
 // Prompt similarity routes
 router.use('/prompt-similarity', (req, res, next) => req.method === 'POST'
-  ? requireImageAction('images.update')(req, res, next) : next(), promptSimilarityRoutes);
+  ? requireImageAction('images.edit')(req, res, next) : next(), promptSimilarityRoutes);
 
 // Query and download routes
 router.use('/', queryRoutes);
@@ -44,13 +44,13 @@ router.use('/search/complex', complexSearchRoutes);
 
 // Similarity search routes (must come before managementRoutes to avoid /:compositeHash catching /files/bulk)
 router.use('/similarity', (req, res, next) => req.method === 'POST'
-  ? requireImageAction('images.update')(req, res, next) : next());
+  ? requireImageAction('images.edit')(req, res, next) : next());
 router.use('/', similarityRoutes);
 
 // Management routes (delete, update, etc.)
 router.use('/', (req, res, next) => {
   if (req.method === 'DELETE') requireImageAction('images.delete')(req, res, next);
-  else if (req.method === 'PATCH' || req.path.endsWith('/rewrite-metadata/download')) requireImageAction('images.metadata.edit')(req, res, next);
+  else if (req.method === 'PATCH' || req.path.endsWith('/rewrite-metadata/download')) requireImageAction('images.edit')(req, res, next);
   else next();
 }, managementRoutes);
 

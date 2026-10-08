@@ -140,7 +140,7 @@ function ownerLabel(owner: StoredFileOwner, t: ReturnType<typeof useI18n>['t']) 
   return t({ ko: '삭제된 계정 {key}', en: 'Deleted account {key}' }, { key: owner.ownerKey })
 }
 
-/** Every account's store at a glance (admins with `files.browse.all`); choosing one opens it. */
+/** Every account's store at a glance (administrators); choosing one opens it. */
 function OwnerList({ owners, onOpen }: { owners: StoredFileOwner[]; onOpen: (owner: StoredFileOwner) => void }) {
   const { t } = useI18n()
   return (
@@ -182,7 +182,7 @@ function OwnerList({ owners, onOpen }: { owners: StoredFileOwner[]; onOpen: (own
 /**
  * The account's private file store: folder tree, list, upload / drag-in, move, rename, delete.
  * With `onPick` it becomes a picker (inside a modal): only files can be chosen and nothing is changed but uploads.
- * With `owner` + `onOwnerChange`, holders of `files.browse.all` can switch to any account's store (`ALL_OWNERS` lists them).
+ * With `owner` + `onOwnerChange`, administrators can switch to any account's store (`ALL_OWNERS` lists them).
  */
 export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, owner = null, onOwnerChange }: {
   parentId: string | null
@@ -204,12 +204,12 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
   const isPicker = onPick !== undefined
   const chatCanReadFiles = useChatPageDataPermissions().canReadFiles
   const canViewFiles = permissions.includes('files.view')
-  const canUpload = canViewFiles && permissions.includes('files.upload')
-  const canOrganize = permissions.includes('files.organize')
+  const canUpload = canViewFiles && permissions.includes('files.edit')
+  const canOrganize = permissions.includes('files.edit')
   const canDelete = permissions.includes('files.delete')
-  // Without configured credentials there is one local user who may store anything.
-  const canUploadAny = permissions.includes('files.upload.any') || auth.data?.hasCredentials === false
-  const canBrowseAll = !isPicker && onOwnerChange !== undefined && permissions.includes('files.browse.all')
+  // Restricted file types and other accounts' stores are for administrators (the local owner before accounts exist).
+  const canUploadAny = auth.data?.isAdmin === true || auth.data?.hasCredentials === false
+  const canBrowseAll = !isPicker && onOwnerChange !== undefined && auth.data?.isAdmin === true
   const browsingAll = canBrowseAll && owner === ALL_OWNERS
   /** Store sent to the API: null for the requester's own store. */
   const storeOwner = canBrowseAll && owner && owner !== ALL_OWNERS ? owner : null

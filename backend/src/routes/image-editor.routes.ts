@@ -28,7 +28,7 @@ import {
 
 const router = Router();
 router.use((req, res, next) => req.method === 'GET' || req.method === 'HEAD'
-  ? allowImagesView(req, res, next) : requireImageAction('images.update')(req, res, next));
+  ? allowImagesView(req, res, next) : requireImageAction('images.edit')(req, res, next));
 
 /**
  * List save-folder images for attachment picker UIs.

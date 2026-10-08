@@ -64,11 +64,11 @@ export function validateChatPageArguments(schema: ChatPageSchema, input: unknown
 /** IDs and route bindings are maintained by the app; snapshots cannot grant arbitrary native actions. */
 export const CHAT_PAGE_ACTION_PERMISSIONS: Record<string, string | null> = {
   'page.navigate': null, 'page.refresh': null,
-  'prompt.create': 'prompts.create', 'prompt.update': 'prompts.update', 'prompt.select': 'prompts.view',
-  'preset.create': 'prompts.create', 'preset.update': 'prompts.update', 'preset.select': 'prompts.view', 'preset.draft': 'prompts.view', 'preset.insert': 'prompts.view',
+  'prompt.create': 'prompts.edit', 'prompt.update': 'prompts.edit', 'prompt.select': 'prompts.view',
+  'preset.create': 'prompts.edit', 'preset.update': 'prompts.edit', 'preset.select': 'prompts.view', 'preset.draft': 'prompts.view', 'preset.insert': 'prompts.view',
   'wildcard.create': 'wildcards.edit', 'wildcard.update': 'wildcards.edit', 'wildcard.select': 'wildcards.view', 'wildcard.draft': 'wildcards.view',
-  'comfy.select': 'workflows.view', 'comfy.refresh': 'workflows.view', 'comfy.open_create': 'workflows.update', 'comfy.open_edit': 'workflows.update',
-  'comfy.author': 'workflows.view', 'comfy.save': 'workflows.update', 'comfy.register': 'workflows.update', 'comfy.node': null,
+  'comfy.select': 'workflows.view', 'comfy.refresh': 'workflows.view', 'comfy.open_create': 'workflows.edit', 'comfy.open_edit': 'workflows.edit',
+  'comfy.author': 'workflows.view', 'comfy.save': 'workflows.edit', 'comfy.register': 'workflows.edit', 'comfy.node': null,
   'media.attach': null, 'media.clear': null,
   'nai.characters': null,
   'workflow.select': 'workflows.view', 'workflow.inputs': 'workflows.view',

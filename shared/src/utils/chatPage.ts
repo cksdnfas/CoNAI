@@ -14,7 +14,10 @@ function text(value: unknown, max: number, empty = false): string {
   return value
 }
 
-/** Route access follows the app: an empty key means an authenticated page with no separate page grant. */
+/**
+ * The one app route → page key map, read by route guards, the access page and chat page links. Page keys are derived
+ * from feature keys (see PAGE_PERMISSION_RULES); an empty key means any signed-in account, null an unknown route.
+ */
 export function chatPagePermission(path: string): string | null {
   if (path === '/') return 'page.home.view'
   if (path === '/chat') return 'page.chat.view'

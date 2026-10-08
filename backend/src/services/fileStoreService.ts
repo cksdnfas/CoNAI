@@ -16,7 +16,7 @@ type FileRow = {
 };
 
 export const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.json', '.jsonl', '.csv', '.tsv', '.yaml', '.yml', '.xml', '.html', '.htm', '.svg', '.css', '.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.py', '.sh', '.sql', '.log', '.ini', '.toml', '.srt', '.vtt']);
-/** Extensions anyone with `files.upload` may store. Everything else (executables, archives, unknown) needs `files.upload.any`. */
+/** Extensions anyone with `files.edit` may store. Everything else (executables, archives, unknown) is for administrators. */
 export const DEFAULT_UPLOAD_EXTENSIONS: ReadonlySet<string> = new Set([
   ...TEXT_EXTENSIONS,
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.bmp', '.tif', '.tiff', '.heic', '.heif', '.ico', '.psd',

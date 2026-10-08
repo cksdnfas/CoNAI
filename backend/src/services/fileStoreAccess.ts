@@ -7,8 +7,8 @@ import type { McpRequester } from '../mcp/context';
 export type FileStoreAction = 'upload' | 'organize' | 'delete';
 
 export const FILE_STORE_ACTION_PERMISSIONS: Record<FileStoreAction, string> = {
-  upload: 'files.upload',
-  organize: 'files.organize',
+  upload: 'files.edit',
+  organize: 'files.edit',
   delete: 'files.delete',
 };
 
@@ -42,8 +42,10 @@ export function requireFileStoreAction(requester: McpRequester | undefined, acti
   return owner;
 }
 
-/** Bootstrap (no credentials configured) is a single local user and may store anything. */
+/** Restricted file types are for administrators; bootstrap (no credentials configured) is the local administrator. */
 export function canStoreAnyFileType(requester: McpRequester | undefined): boolean {
   const id = requester?.accountId ?? null;
-  return id === null ? !hasConfiguredAuth() : AuthAccessControlService.hasPermission(id, 'files.upload.any');
+  if (id === null) return !hasConfiguredAuth();
+  const account = AuthAccount.findById(id);
+  return account?.status === 'active' && account.account_type === 'admin';
 }

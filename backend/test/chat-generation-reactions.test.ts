@@ -29,7 +29,7 @@ test('generation reactions: opt-in, one-shot recovery, user precedence and speak
   const { subscribeToRuntimeEvents, publishRuntimeEvent } = await import('../src/services/runtime-events/runtimeEventBus')
   updateChatSettings({ enabled: true, diagnostics: { enabled: true, captureRaw: false } })
   t.mock.method(AuthAccount, 'findById', () => ({ id: 1, account_type: 'admin', status: 'active' }))
-  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.llm.use', 'chat.codex.use'] }))
+  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use', 'chat.agent.use'] }))
   t.mock.method(ExternalApiProvider, 'findByName', () => ({ provider_name: 'test', display_name: 'Test', is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid/v1', additional_config: '{}' }))
   t.mock.method(ExternalApiProvider, 'getDecryptedKey', () => null)
   // Any request a subtest did not explicitly mock fails locally, never on the network.
@@ -320,7 +320,7 @@ test('generation reactions: opt-in, one-shot recovery, user precedence and speak
     images.db.prepare("INSERT INTO image_files (composite_hash, original_file_path, folder_id, file_size, mime_type) VALUES (?, ?, ?, ?, 'image/png')").run(hash, file, folderId, fs.statSync(file).size)
     const visionProfile = ChatProfileStore.create({ name: '비전', engine: 'llm', providerName: 'test', model: 'vision-model', visionEnabled: true, summaryEnabled: false, mcpEnabled: false })
     let canView = true
-    s.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.llm.use', ...(canView ? ['images.view'] : [])] }))
+    s.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use', ...(canView ? ['images.view'] : [])] }))
     const bodies: any[] = []
     s.mock.method(globalThis, 'fetch', async (_url, init) => { bodies.push(JSON.parse(String(init?.body))); return replyResponse('그림을 봤어.') })
     const run = async () => {

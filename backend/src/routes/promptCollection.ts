@@ -10,7 +10,6 @@ import { PromptGroupModel } from '../models/PromptGroup';
 import { getPromptCollectionTableName } from '../utils/promptTables';
 import { isProtectedLoRAGroup } from '../services/promptCollectionProtection';
 import { nativeEditRevision, requireNativeEditRevision } from '../services/nativeEditRevision';
-import { getAuthDb } from '../database/authDb';
 import {
   successResponse,
   errorResponse,
@@ -169,7 +168,7 @@ router.get('/group/:groupId', async (req: Request, res: Response) => {
  * 동의어 설정
  * POST /api/prompt-collection/synonyms
  */
-router.post('/synonyms', requirePermission('prompts.update'), async (req: Request, res: Response) => {
+router.post('/synonyms', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
   try {
     const { mainPrompt, synonyms, type = 'positive' } = req.body;
 
@@ -198,7 +197,7 @@ router.post('/synonyms', requirePermission('prompts.update'), async (req: Reques
  * 동의어 제거
  * DELETE /api/prompt-collection/synonyms/:promptId
  */
-router.delete('/synonyms/:promptId', requirePermission('prompts.update'), async (req: Request, res: Response) => {
+router.delete('/synonyms/:promptId', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
   try {
     const promptId = parseRouteId(req.params.promptId, 'Prompt ID');
     const { synonym, type = 'positive' } = req.body;
@@ -275,7 +274,7 @@ router.get('/danbooru-grouping/preview', async (req: Request, res: Response) => 
  * 단부루 taxonomy 기반 프롬프트 그룹 자동 구성 적용
  * POST /api/prompt-collection/danbooru-grouping/apply
  */
-router.post('/danbooru-grouping/apply', requirePermission('prompts.create'), requirePermission('prompts.update'), async (req: Request, res: Response) => {
+router.post('/danbooru-grouping/apply', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
   try {
     const includeAssignedPrompts = req.body?.includeAssignedPrompts === true || req.body?.include_assigned_prompts === true;
     const mode = req.body?.mode === 'overwrite-existing' || includeAssignedPrompts ? 'overwrite-existing' : 'unclassified-only';
@@ -292,7 +291,7 @@ router.post('/danbooru-grouping/apply', requirePermission('prompts.create'), req
  * 프롬프트 삭제
  * DELETE /api/prompt-collection/:promptId
  */
-router.delete('/:promptId', requirePermission('prompts.delete'), async (req: Request, res: Response) => {
+router.delete('/:promptId', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
   try {
     const promptId = parseRouteId(req.params.promptId, 'Prompt ID');
     const { type = 'positive' } = req.query;
@@ -318,7 +317,7 @@ router.delete('/:promptId', requirePermission('prompts.delete'), async (req: Req
  * 그룹 ID 설정 (동의어와 별개 기능)
  * PUT /api/prompt-collection/group
  */
-router.put('/group', requirePermission('prompts.update'), async (req: Request, res: Response) => {
+router.put('/group', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
   try {
     const { promptId, groupId, type = 'positive' } = req.body;
 
@@ -346,7 +345,7 @@ router.put('/group', requirePermission('prompts.update'), async (req: Request, r
  * 프롬프트 수집 (수동)
  * POST /api/prompt-collection/collect
  */
-router.post('/collect', requirePermission('prompts.create'), async (req: Request, res: Response) => {
+router.post('/collect', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
   try {
     const { prompt, negativePrompt } = req.body;
 
@@ -365,7 +364,7 @@ router.post('/collect', requirePermission('prompts.create'), async (req: Request
  * 프롬프트를 그룹에 할당
  * PUT /api/prompt-collection/assign-group
  */
-router.put('/assign-group', requirePermission('prompts.update'), async (req: Request, res: Response) => {
+router.put('/assign-group', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
   try {
     const { prompt_id, group_id, type = 'positive' } = req.body;
 
@@ -410,7 +409,7 @@ router.get('/group-statistics', async (req: Request, res: Response) => {
  * 프롬프트 대량 할당
  * POST /api/prompt-collection/batch-assign
  */
-router.post('/batch-assign', requirePermission('prompts.update'), async (req: Request, res: Response) => {
+router.post('/batch-assign', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
   try {
     const { prompts, group_id, type = 'positive' } = req.body;
 
@@ -447,14 +446,14 @@ function promptAuthorInput(req: Request) {
   }
   return { type: type as PromptCollectionType, prompt: prompt.trim(), synonyms: [...new Set(synonyms.map((item: string) => item.trim()).filter(Boolean))], groupId };
 }
-router.get('/item/:id', (req, res, next) => requirePermission(getAuthDb().prepare('SELECT 1 FROM auth_permissions WHERE permission_key = ?').get('prompts.view') ? 'prompts.view' : 'page.prompts.view')(req, res, next), (req: Request, res: Response) => {
+router.get('/item/:id', requirePermission('prompts.view'), (req: Request, res: Response) => {
   const type = req.query.type;
   if (!['positive', 'negative', 'auto'].includes(String(type))) return res.status(400).json(errorResponse('Invalid prompt type'));
   const record = PromptCollectionModel.findById(Number(req.params.id), type as PromptCollectionType);
   if (!record) return res.status(404).json(errorResponse('Prompt not found'));
   return res.json(successResponse({ ...record, synonyms: record.synonyms ? JSON.parse(record.synonyms) : [], type, assistant_revision: nativeEditRevision(record) }));
 });
-router.post('/item', requirePermission('prompts.create'), (req: Request, res: Response) => {
+router.post('/item', requirePermission('prompts.edit'), (req: Request, res: Response) => {
   try {
     const input = promptAuthorInput(req);
     const table = getPromptCollectionTableName(input.type);
@@ -466,7 +465,7 @@ router.post('/item', requirePermission('prompts.create'), (req: Request, res: Re
     return res.status(201).json(successResponse({ id }));
   } catch (error) { return res.status(400).json(errorResponse(error instanceof Error ? error.message : 'Invalid prompt')); }
 });
-router.put('/item/:id', requirePermission('prompts.update'), (req: Request, res: Response) => {
+router.put('/item/:id', requirePermission('prompts.edit'), (req: Request, res: Response) => {
   try {
     const input = promptAuthorInput(req);
     const id = Number(req.params.id);

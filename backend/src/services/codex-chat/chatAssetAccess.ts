@@ -23,8 +23,8 @@ export function requireChatAssetGeneration(requester: McpRequester, profileId: n
   const profile = ChatProfileStore.find(profileId)
   if (!profile) throw new ChatAssetError('프로필을 찾을 수 없어.', 404)
   requireRequesterPermission(requester, 'generation.execute')
-  requireRequesterPermission(requester, 'groups.update')
-  requireRequesterPermission(requester, 'groups.create')
+  requireRequesterPermission(requester, 'images.edit')
+  requireRequesterPermission(requester, 'images.edit')
   if (service === 'comfyui') requireRequesterPermission(requester, 'workflows.view')
   if (service !== 'comfyui' && service !== 'novelai') throw new ChatAssetError('자산 생성은 NAI 또는 ComfyUI 프리셋을 골라줘.')
   return profile

@@ -153,7 +153,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  * 새 커스텀 드롭다운 목록 생성
  * POST /api/custom-dropdown-lists
  */
-router.post('/', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
   const { name, description, items } = req.body;
 
   if (!name) {
@@ -211,7 +211,7 @@ router.post('/', requirePermission('workflows.update'), asyncHandler(async (req:
  * 커스텀 드롭다운 목록 업데이트
  * PUT /api/custom-dropdown-lists/:id
  */
-router.put('/:id', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
+router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)));
   const { name, description, items } = req.body;
 
@@ -294,7 +294,7 @@ router.put('/:id', requirePermission('workflows.update'), asyncHandler(async (re
  * 커스텀 드롭다운 목록 삭제
  * DELETE /api/custom-dropdown-lists/:id
  */
-router.delete('/:id', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)));
 
   if (isNaN(id)) {

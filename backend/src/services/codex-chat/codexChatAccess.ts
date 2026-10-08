@@ -16,15 +16,12 @@ import { requireChatPageAccess } from './chatPageContext'
 
 const CHAT_MCP_TOKEN_PREFIX = 'conai_chat_'
 
-export const CHAT_DIAGNOSTICS_PERMISSION_KEYS = {
-  view: 'chat.diagnostics.view', content: 'chat.diagnostics.content', prompts: 'chat.diagnostics.prompts',
-} as const
 export type ChatDiagnosticsScope = 'none' | 'view' | 'content' | 'prompts'
 
-export function diagnosticsScopeOf(permissionKeys: readonly string[]): ChatDiagnosticsScope {
-  if (!permissionKeys.includes(CHAT_DIAGNOSTICS_PERMISSION_KEYS.view)) return 'none'
-  if (!permissionKeys.includes(CHAT_DIAGNOSTICS_PERMISSION_KEYS.content)) return 'view'
-  return permissionKeys.includes(CHAT_DIAGNOSTICS_PERMISSION_KEYS.prompts) ? 'prompts' : 'content'
+/** `chat.diagnostics.view` shows how your own replies were composed; administrator prompts stay with administrators. */
+export function diagnosticsScopeOf(permissionKeys: readonly string[], isAdmin: boolean): ChatDiagnosticsScope {
+  if (isAdmin) return 'prompts'
+  return permissionKeys.includes('chat.diagnostics.view') ? 'content' : 'none'
 }
 
 export function narrowDiagnosticsScope(scope: ChatDiagnosticsScope, profileScope: 'view' | 'content' | null | undefined): ChatDiagnosticsScope {
@@ -33,37 +30,36 @@ export function narrowDiagnosticsScope(scope: ChatDiagnosticsScope, profileScope
 }
 
 export const CHAT_PERMISSION_KEYS = {
-  codex: 'chat.codex.use',
-  llm: 'chat.llm.use',
-  claude: 'chat.claude.use',
+  codex: 'chat.agent.use',
+  llm: 'chat.use',
+  claude: 'chat.agent.use',
 } as const
-
-const CHAT_TOOL_PERMISSION_KEYS: Record<ChatScope, string> = {
-  read: 'chat.tools.read',
-  generate: 'chat.tools.generate',
-  organize: 'chat.tools.organize',
-  configure: 'chat.tools.configure',
-}
 
 export type ChatAccess = {
   claude: boolean
   codex: boolean
   llm: boolean
-  /** MCP scopes this account may hand to a chat agent; a chat's own scope setting is intersected with it. */
+  /**
+   * Scopes this account's chats may use: every scope, except chat setup proposals which are for administrators.
+   * Each tool still needs the same feature key the web needs for that action.
+   */
   scopes: ChatScope[]
   diagnostics: ChatDiagnosticsScope
 }
 
 /**
- * What one account may do with chat, from its permission keys (admins hold every key through the seeded admin
- * group). `null` is the trusted bootstrap owner, allowed everything only while no accounts are configured.
+ * What one account may do with chat, from its permission keys. `null` is the trusted bootstrap owner, allowed
+ * everything only while no accounts are configured.
  */
 export function resolveChatAccess(accountId: number | null): ChatAccess {
   let permissionKeys: string[]
+  let isAdmin: boolean
   if (accountId === null) {
-    permissionKeys = hasConfiguredAuth() ? [] : AuthAccessControlService.resolveBootstrapAccess().permissionKeys
+    isAdmin = !hasConfiguredAuth()
+    permissionKeys = isAdmin ? AuthAccessControlService.resolveBootstrapAccess().permissionKeys : []
   } else {
     const account = AuthAccount.findById(accountId)
+    isAdmin = account?.status === 'active' && account.account_type === 'admin'
     permissionKeys = account?.status === 'active' ? AuthAccessControlService.resolveForAccountId(accountId).permissionKeys : []
   }
 
@@ -72,8 +68,8 @@ export function resolveChatAccess(accountId: number | null): ChatAccess {
     claude: has(CHAT_PERMISSION_KEYS.claude),
     codex: has(CHAT_PERMISSION_KEYS.codex),
     llm: has(CHAT_PERMISSION_KEYS.llm),
-    scopes: CHAT_SCOPES.filter((scope) => has(CHAT_TOOL_PERMISSION_KEYS[scope])),
-    diagnostics: loadChatSettings().diagnostics.enabled ? diagnosticsScopeOf(permissionKeys) : 'none',
+    scopes: CHAT_SCOPES.filter((scope) => scope !== 'configure' || isAdmin),
+    diagnostics: loadChatSettings().diagnostics.enabled ? diagnosticsScopeOf(permissionKeys, isAdmin) : 'none',
   }
 }
 
@@ -151,8 +147,8 @@ export function setCodexChatExecution(token: string, context: ChatExecutionConte
 
 /**
  * Authenticate an internal chat token. Only direct loopback requests qualify (the app-server runs next to the
- * backend), and the grant is re-checked on every call: chat enabled, the account still holds `chat.codex.use`, and the
- * scopes are the profile's, narrowed to the account's current `chat.tools.*` keys.
+ * backend), and the grant is re-checked on every call: chat enabled, the account still holds `chat.agent.use`, and the
+ * scopes are the profile's, narrowed to what the account may use.
  * Works while the public HTTP MCP endpoint is disabled.
  */
 export function authenticateCodexChatMcpRequest(req: Request, candidate: string | null): McpHttpAuthentication | null {

@@ -36,7 +36,7 @@ router.post('/parse', requirePermission('wildcards.view'), asyncHandler(async (r
   }
 }));
 
-router.post('/scan-lora-folder', requirePermission('wildcards.lora.scan'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/scan-lora-folder', requirePermission('wildcards.edit'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { loraFiles, loraWeight = 1.0, duplicateHandling = 'number' } = req.body;
 

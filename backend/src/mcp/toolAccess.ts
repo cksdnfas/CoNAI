@@ -10,25 +10,25 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   search_prompts: 'prompts.view', get_most_used_prompts: 'prompts.view', list_prompt_groups: 'prompts.view',
   list_prompt_presets: 'prompts.view', get_prompt_group_structure: 'prompts.view', get_unclassified_prompts: 'prompts.view',
   get_prompts_in_group: 'prompts.view', backup_prompt_data: 'prompts.view', list_backups: 'prompts.view',
-  create_prompt_preset: 'prompts.create', create_prompt_group: 'prompts.create', batch_create_groups: 'prompts.create',
-  assign_prompts_to_group: 'prompts.update', move_prompts_between_groups: 'prompts.update',
-  restore_prompt_data: ['prompts.create', 'prompts.update', 'prompts.delete'], search_wildcards: 'wildcards.view',
+  create_prompt_preset: 'prompts.edit', create_prompt_group: 'prompts.edit', batch_create_groups: 'prompts.edit',
+  assign_prompts_to_group: 'prompts.edit', move_prompts_between_groups: 'prompts.edit',
+  restore_prompt_data: 'prompts.edit', search_wildcards: 'wildcards.view',
   list_workflows: 'workflows.view', get_workflow_details: 'workflows.view', list_comfyui_servers: 'workflows.view',
   list_custom_dropdown_lists: 'workflows.view', search_custom_dropdown_items: 'workflows.view',
   get_workflow_editor: 'workflows.view', list_workflow_modules: 'workflows.view', propose_workflow_changes: 'workflows.view',
   list_graph_workflows: 'workflows.view', get_graph_workflow_details: 'workflows.view',
   get_graph_workflow_execution: ['workflows.view', 'images.view'], export_workflow_definition: 'workflows.view',
-  import_workflow_definition: 'workflows.update', restore_deleted_workflow: 'workflows.update',
+  import_workflow_definition: 'workflows.edit', restore_deleted_workflow: 'workflows.edit',
   get_generation_routing_options: 'workflows.view', get_generation_history_request: 'images.view',
   refresh_artifact_download: 'images.view',
   search_images: 'images.view', get_image_metadata: 'images.view', get_generation_history: 'images.view',
   search_images_by_tags: 'images.view', view_images: 'images.view', list_emoticons: 'images.view',
   list_emoticon_groups: 'images.view', list_image_groups: 'images.view', get_image_groups: 'images.view',
-  add_images_to_group: ['images.view', 'groups.update'], remove_images_from_group: ['images.view', 'groups.update'], move_images_between_groups: ['images.view', 'groups.update'],
-  set_emoticon_keywords: ['images.view', 'groups.update'], set_emoticon_group: ['images.view', 'groups.update'],
+  add_images_to_group: ['images.view', 'images.edit'], remove_images_from_group: ['images.view', 'images.edit'], move_images_between_groups: ['images.view', 'images.edit'],
+  set_emoticon_keywords: ['images.view', 'images.edit'], set_emoticon_group: ['images.view', 'images.edit'],
   get_generation_artifacts: 'images.view', get_generation_job: [], wait_generation_job: [],
   list_files: 'files.view', get_file_info: 'files.view', read_file_text: 'files.view',
-  create_file_folder: ['files.view', 'files.organize'], rename_file: ['files.view', 'files.organize'], move_files: ['files.view', 'files.organize'], delete_files: ['files.view', 'files.delete'],
+  create_file_folder: ['files.view', 'files.edit'], rename_file: ['files.view', 'files.edit'], move_files: ['files.view', 'files.edit'], delete_files: ['files.view', 'files.delete'],
   generate_nai: 'generation.execute', generate_comfyui: ['generation.execute', 'workflows.view'], generate_comfyui_all_servers: ['generation.execute', 'workflows.view'],
   submit_generation_job: 'generation.execute', cancel_generation_job: 'generation.execute', execute_graph_workflow: 'generation.execute',
   get_codex_generation_options: 'generation.execute', resolve_image_group_path: [],
@@ -91,10 +91,9 @@ export function requireMcpToolAccess(context: McpRequestContext, toolName: strin
     if (required === undefined) throw new Error('Unclassified account-bound tool.');
     for (const permission of typeof required === 'string' ? [required] : required) requireRequesterPermission(context.requester, permission);
     if (getMcpToolScope(toolName) === 'configure' && context.requester.accountType !== 'admin') throw new Error('Administrator access required.');
-    if (toolName === 'resolve_image_group_path') requireRequesterPermission(context.requester, params.create === false ? 'images.view' : 'groups.create');
+    if (toolName === 'resolve_image_group_path') requireRequesterPermission(context.requester, params.create === false ? 'images.view' : 'images.edit');
     if (toolName === 'add_images_to_group' || getMcpToolScope(toolName) === 'generate' || isChatGenerationTool(toolName)) {
-      if (params.group_id || params.group_path) requireRequesterPermission(context.requester, 'groups.update');
-      if (params.group_path) requireRequesterPermission(context.requester, 'groups.create');
+      if (params.group_id || params.group_path) requireRequesterPermission(context.requester, 'images.edit');
     }
   }
 }

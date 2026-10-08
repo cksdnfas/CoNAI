@@ -19,7 +19,7 @@ export function createGraphWorkflowFolderRoutes() {
     }
   }))
 
-  router.post('/folders', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/folders', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
     const name = typeof req.body?.name === 'string' ? req.body.name.trim() : ''
     const description = typeof req.body?.description === 'string' ? req.body.description.trim() : ''
     const parentId = typeof req.body?.parent_id === 'number' ? req.body.parent_id : null
@@ -41,7 +41,7 @@ export function createGraphWorkflowFolderRoutes() {
     }
   }))
 
-  router.put('/folders/:id', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
+  router.put('/folders/:id', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
     const id = parseRequiredGraphRouteId(res, req.params.id, 'Invalid folder ID')
     if (id === null) {
       return
@@ -86,7 +86,7 @@ export function createGraphWorkflowFolderRoutes() {
     }
   }))
 
-  router.delete('/folders/:id', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
+  router.delete('/folders/:id', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
     const id = parseRequiredGraphRouteId(res, req.params.id, 'Invalid folder ID')
     const deleteMode = req.query.mode === 'delete_tree' ? 'delete_tree' : 'move_children'
 

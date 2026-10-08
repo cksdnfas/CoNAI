@@ -431,7 +431,7 @@ export function SettingsPage() {
   }
 
   if (!canOpenSettings) {
-    // Accounts with page.settings.view but without admin rights get an explanation instead of a silent bounce.
+    // An account whose admin role was removed while the page was open gets an explanation instead of a silent bounce.
     return (
       <div className="space-y-4">
         <PageToolbar title={t('pageAccessCatalog.settings')} />

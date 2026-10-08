@@ -8,15 +8,15 @@ export function resolveFeaturePermissions(permissionKeys: string[] = [], authent
     isAdmin: authenticated && isAdmin,
     canExecuteGeneration: has('generation.execute'),
     canViewWorkflows: has('workflows.view'),
-    canUpdateWorkflows: has('workflows.update'),
+    canUpdateWorkflows: has('workflows.edit'),
     canViewPrompts: has('prompts.view'),
-    canCreatePrompts: has('prompts.create'),
-    canUpdatePrompts: has('prompts.update'),
-    canDeletePrompts: has('prompts.delete'),
+    canCreatePrompts: has('prompts.edit'),
+    canUpdatePrompts: has('prompts.edit'),
+    canDeletePrompts: has('prompts.edit'),
     canViewWildcards: has('wildcards.view'),
     canEditWildcards: has('wildcards.edit'),
-    canDeleteWildcards: has('wildcards.delete'),
-    canScanLora: has('wildcards.lora.scan'),
+    canDeleteWildcards: has('wildcards.edit'),
+    canScanLora: has('wildcards.edit'),
   }
 }
 

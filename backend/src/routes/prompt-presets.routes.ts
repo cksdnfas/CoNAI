@@ -90,7 +90,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   return res.json({ success: true, data: preset });
 }));
 
-router.post('/', requirePermission('prompts.create'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/', requirePermission('prompts.edit'), asyncHandler(async (req: Request, res: Response) => {
   const name = normalizePresetName(req.body?.name);
   if (!name) {
     return res.status(400).json({ success: false, error: 'Name is required' });
@@ -121,7 +121,7 @@ router.post('/', requirePermission('prompts.create'), asyncHandler(async (req: R
   return res.status(201).json({ success: true, data: PromptPresetModel.findByIdWithItems(preset.id) });
 }));
 
-router.put('/:id', requirePermission('prompts.update'), asyncHandler(async (req: Request, res: Response) => {
+router.put('/:id', requirePermission('prompts.edit'), asyncHandler(async (req: Request, res: Response) => {
   const id = parsePresetRouteId(routeParam(req.params.id));
   if (id === null) {
     return res.status(400).json({ success: false, error: 'Invalid prompt preset ID' });
@@ -164,7 +164,7 @@ router.put('/:id', requirePermission('prompts.update'), asyncHandler(async (req:
   return res.json({ success: true, data: PromptPresetModel.findByIdWithItems(preset.id) });
 }));
 
-router.delete('/:id', requirePermission('prompts.delete'), asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id', requirePermission('prompts.edit'), asyncHandler(async (req: Request, res: Response) => {
   const id = parsePresetRouteId(routeParam(req.params.id));
   if (id === null) {
     return res.status(400).json({ success: false, error: 'Invalid prompt preset ID' });

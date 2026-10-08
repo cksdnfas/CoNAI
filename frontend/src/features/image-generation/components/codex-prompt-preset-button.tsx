@@ -30,7 +30,7 @@ export function CodexPromptPresetButton({ prompt, negativePrompt }: { prompt: st
   const value = normalizeTextSegmentSpreadsheetText(kind === 'positive' ? prompt : negativePrompt).trim()
   const label = t({ ko: '프롬프트 프리셋 저장', en: 'Save prompt preset' })
 
-  if (!hasAuthPermission(permissions, 'prompts.create')) {
+  if (!hasAuthPermission(permissions, 'prompts.edit')) {
     return null
   }
 

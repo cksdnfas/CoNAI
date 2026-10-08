@@ -1,3 +1,4 @@
+import { PERMISSION_CATALOG } from '@conai/shared';
 import { Router, type Request, type RequestHandler, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import fs from 'fs';
@@ -97,41 +98,9 @@ function formatSqliteUtcTimestamp(value: string | null | undefined) {
     : value;
 }
 
-/** English fallback labels for action permissions; the settings UI names every known key itself. */
-const ACTION_PERMISSION_LABELS: Readonly<Record<string, string>> = {
-  'auth.guest.create': 'Guest Account Signup',
-  'upload.create': 'Upload Files',
-  'wildcards.edit': 'Wildcard Edit',
-  'wildcards.delete': 'Wildcard Delete',
-  'wildcards.lora.scan': 'LoRA Folder Scan',
-  'prompts.create': 'Preset Create',
-  'prompts.update': 'Preset Edit',
-  'prompts.delete': 'Preset Delete',
-  'workflows.update': 'Workflow Edit',
-  'chat.codex.use': 'Codex Chat',
-  'chat.llm.use': 'LLM Chat',
-  'chat.diagnostics.view': 'Chat Diagnostics: Composition',
-  'chat.diagnostics.content': 'Chat Diagnostics: Content',
-  'chat.diagnostics.prompts': 'Chat Diagnostics: Prompts',
-  'chat.tools.read': 'Chat Tools: Read',
-  'chat.tools.generate': 'Chat Tools: Generate',
-  'chat.tools.organize': 'Chat Tools: Organize',
-  'chat.tools.configure': 'Chat Tools: Configure',
-};
-
-/** Format one editable built-in permission into the current UI label shape. */
-function formatBuiltInPermissionLabel(permissionKey: string, resource: string): string {
-  const actionLabel = ACTION_PERMISSION_LABELS[permissionKey];
-  if (actionLabel) {
-    return actionLabel;
-  }
-
-  return resource
-    .replace(/^page\./, '')
-    .replace(/\.runtime$/, ' runtime')
-    .split('.')
-    .join(' ')
-    .replace(/(^|\s)\w/g, (character) => character.toUpperCase());
+/** English label from the shared catalog; the settings UI names every key itself. */
+function formatBuiltInPermissionLabel(permissionKey: string): string {
+  return PERMISSION_CATALOG.find((permission) => permission.key === permissionKey)?.label.en ?? permissionKey;
 }
 
 /** Handle auth status reads. */
@@ -548,7 +517,7 @@ const handlePageAccessList: RequestHandler = async (_req, res) => {
     data: {
       permissions: permissions.map((permission) => ({
         permissionKey: permission.permission_key,
-        label: formatBuiltInPermissionLabel(permission.permission_key, permission.resource),
+        label: formatBuiltInPermissionLabel(permission.permission_key),
         description: permission.description,
       })),
       groups: groups.map((group) => ({

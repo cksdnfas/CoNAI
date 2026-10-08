@@ -112,7 +112,7 @@ async function buildUploadResult(file: Express.Multer.File, imageSaveOptions: Re
 /**
  * 단일 파일 업로드 (단순화: 파일 저장만)
  */
-router.post('/upload', auditUploadRequest('library.single'), requirePermission('upload.create'), uploadSingle, asyncHandler(async (req: Request, res: Response) => {
+router.post('/upload', auditUploadRequest('library.single'), requirePermission('images.upload'), uploadSingle, asyncHandler(async (req: Request, res: Response) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
   const file = files?.['image']?.[0] || files?.['file']?.[0];
   setUploadAuditMetrics(res, file ? [file] : []);
@@ -159,7 +159,7 @@ router.post('/upload', auditUploadRequest('library.single'), requirePermission('
 /**
  * 다중 파일 업로드 (단순화: 파일 저장만)
  */
-router.post('/upload-multiple', auditUploadRequest('library.multiple'), requirePermission('upload.create'), rejectOversizedMultipleUploadRequest, uploadMultiple, enforceMultipleUploadLimits, asyncHandler(async (req: Request, res: Response) => {
+router.post('/upload-multiple', auditUploadRequest('library.multiple'), requirePermission('images.upload'), rejectOversizedMultipleUploadRequest, uploadMultiple, enforceMultipleUploadLimits, asyncHandler(async (req: Request, res: Response) => {
   const files = listRequestUploadFiles(req);
 
   if (!files || files.length === 0) {
@@ -220,7 +220,7 @@ router.post('/upload-multiple', auditUploadRequest('library.multiple'), requireP
  * 파일마다 서버 처리 결과를 SSE로 보낸다. `complete` 이벤트는 /upload-multiple 의 uploaded 항목과
  * 같은 `data` 를 싣고, 마지막에 `done` 요약을 보낸다. `index` 는 요청 안의 0-based 파일 순서.
  */
-router.post('/upload-multiple-stream', auditUploadRequest('library.multiple-stream'), requirePermission('upload.create'), rejectOversizedMultipleUploadRequest, uploadMultiple, enforceMultipleUploadLimits, async (req: Request, res: Response) => {
+router.post('/upload-multiple-stream', auditUploadRequest('library.multiple-stream'), requirePermission('images.upload'), rejectOversizedMultipleUploadRequest, uploadMultiple, enforceMultipleUploadLimits, async (req: Request, res: Response) => {
   const files = listRequestUploadFiles(req);
 
   if (!files || files.length === 0) {

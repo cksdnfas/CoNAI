@@ -9,6 +9,8 @@ import { CollapsibleRow } from './chat-profile-sections'
 
 interface SecurityPermissionChecklistProps {
   permissionCatalog: PageAccessPermissionItem[]
+  /** The group being edited; the anonymous group only lists what signed-out visitors can use. */
+  groupKey: string | null
   selectedKeys: string[]
   /** Permission key → ancestor group key it's inherited from; shown checked and locked. */
   inheritedSources: Record<string, string>
@@ -16,10 +18,10 @@ interface SecurityPermissionChecklistProps {
   onToggle: (permissionKey: string, enabled: boolean) => void
 }
 
-/** Page access and feature grants are independent; only inherited grants are locked. */
-export function SecurityPermissionChecklist({ permissionCatalog, selectedKeys, inheritedSources, disabled, onToggle }: SecurityPermissionChecklistProps) {
+/** Pages follow these features, so there is no separate page list; only inherited grants are locked. */
+export function SecurityPermissionChecklist({ permissionCatalog, groupKey, selectedKeys, inheritedSources, disabled, onToggle }: SecurityPermissionChecklistProps) {
   const { language, t } = useI18n()
-  const sections = useMemo(() => buildPermissionSections(permissionCatalog), [permissionCatalog])
+  const sections = useMemo(() => buildPermissionSections(permissionCatalog, groupKey), [permissionCatalog, groupKey])
   const selected = new Set(selectedKeys)
   const isOn = (permissionKey: string) => selected.has(permissionKey) || permissionKey in inheritedSources
   const renderRow = (row: PermissionSectionRow) => {
@@ -41,22 +43,12 @@ export function SecurityPermissionChecklist({ permissionCatalog, selectedKeys, i
   }
 
   return (
-    <div className="space-y-5">
-      {sections.filter((section) => section.kind === 'page').map((section) => (
-        <div key={section.id}>
-          <h3 className="pb-2 text-sm font-semibold">{t({ ko: '페이지 접근', en: 'Page access' })}</h3>
+    <div>
+      {sections.map((section) => (
+        <CollapsibleRow key={section.id} title={t(section.label)} meta={t({ ko: '{enabled}/{total} 허용', en: '{enabled}/{total} allowed' }, { enabled: section.rows.filter((row) => isOn(row.key)).length, total: section.rows.length })}>
           <div className="grid gap-x-6 sm:grid-cols-2">{section.rows.map(renderRow)}</div>
-        </div>
+        </CollapsibleRow>
       ))}
-      <div>
-        <h3 className="pb-1 text-sm font-semibold">{t({ ko: '기능 사용', en: 'Feature usage' })}</h3>
-        <p className="pb-2 text-xs text-muted-foreground">{t({ ko: '페이지 접근과 별개로 적용돼. 필요한 기능만 펼쳐서 설정해.', en: 'These apply independently of page access. Expand the features you need.' })}</p>
-        {sections.filter((section) => section.kind === 'feature').map((section) => (
-          <CollapsibleRow key={section.id} title={t(section.label)} meta={t({ ko: '{enabled}/{total} 허용', en: '{enabled}/{total} allowed' }, { enabled: section.rows.filter((row) => isOn(row.key)).length, total: section.rows.length })}>
-            <div className="grid gap-x-6 sm:grid-cols-2">{section.rows.map(renderRow)}</div>
-          </CollapsibleRow>
-        ))}
-      </div>
     </div>
   )
 }

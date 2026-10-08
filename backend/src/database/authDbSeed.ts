@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import { FEATURE_READ_PERMISSION_CATALOG, IMAGE_PERMISSION_CATALOG, IMAGE_VIEW_PERMISSION } from '@conai/shared';
+import { IMAGE_VIEW_PERMISSION, PERMISSION_CATALOG, PERMISSION_KEYS, type PermissionKey } from '@conai/shared';
 
 const ANONYMOUS_GUEST_SIGNUP_SEED_KEY = 'anonymous_guest_signup_enabled_v1';
 
@@ -30,261 +30,37 @@ const DEFAULT_PERMISSION_GROUPS = [
   },
 ] as const;
 
-const DEFAULT_PERMISSION_CATALOG = [
-  { permissionKey: 'chat.diagnostics.view', resource: 'chat.diagnostics', action: 'view', description: 'Inspect chat request composition without text.' },
-  { permissionKey: 'chat.diagnostics.content', resource: 'chat.diagnostics', action: 'content', description: 'Inspect already visible chat context text.' },
-  { permissionKey: 'chat.diagnostics.prompts', resource: 'chat.diagnostics', action: 'prompts', description: 'Inspect administrator prompts and captured request bodies.' },
-  ...IMAGE_PERMISSION_CATALOG,
-  ...FEATURE_READ_PERMISSION_CATALOG,
-  { permissionKey: 'page.chat.view', resource: 'page.chat', action: 'view', description: 'Open the full chat page independently of chat engine use.' },
-  { permissionKey: 'files.view', resource: 'files', action: 'view', description: 'Browse and read authorized private files independently of the Files page.' },
-  { permissionKey: 'page.files.view', resource: 'page.files', action: 'view', description: 'Open the private Files page.' },
-  { permissionKey: 'files.upload', resource: 'files', action: 'upload', description: 'Upload text, image, video, audio and document files into your private file store.' },
-  { permissionKey: 'files.organize', resource: 'files', action: 'organize', description: 'Create folders, rename and move your private files.' },
-  { permissionKey: 'files.delete', resource: 'files', action: 'delete', description: 'Delete your private files and folders.' },
-  { permissionKey: 'files.upload.any', resource: 'files', action: 'upload.any', description: 'Upload executables and other restricted file types.' },
-  { permissionKey: 'files.browse.all', resource: 'files', action: 'browse.all', description: 'Browse and manage every account\'s file store.' },
-  {
-    permissionKey: 'auth.guest.create',
-    resource: 'auth',
-    action: 'guest.create',
-    description: 'Create a guest account from the login page.',
-  },
-  {
-    permissionKey: 'auth.accounts.view',
-    resource: 'auth',
-    action: 'accounts.view',
-    description: 'Inspect the list of local accounts.',
-  },
-  {
-    permissionKey: 'auth.accounts.promote',
-    resource: 'auth',
-    action: 'accounts.promote',
-    description: 'Change account group memberships and promotions.',
-  },
-  {
-    permissionKey: 'page.home.view',
-    resource: 'page.home',
-    action: 'view',
-    description: 'Open the home page.',
-  },
-  {
-    permissionKey: 'page.groups.view',
-    resource: 'page.groups',
-    action: 'view',
-    description: 'Open group browsing pages.',
-  },
-  {
-    permissionKey: 'page.prompts.view',
-    resource: 'page.prompts',
-    action: 'view',
-    description: 'Open prompt pages.',
-  },
-  {
-    permissionKey: 'page.generation.view',
-    resource: 'page.generation',
-    action: 'view',
-    description: 'Open generation pages.',
-  },
-  {
-    permissionKey: 'page.wildcards.view',
-    resource: 'page.wildcards',
-    action: 'view',
-    description: 'Open the wildcard workspace page.',
-  },
-  {
-    permissionKey: 'page.image-detail.view',
-    resource: 'page.image-detail',
-    action: 'view',
-    description: 'Open image detail pages.',
-  },
-  {
-    permissionKey: 'page.metadata-editor.view',
-    resource: 'page.metadata-editor',
-    action: 'view',
-    description: 'Open the metadata editor page.',
-  },
-  {
-    permissionKey: 'page.upload.view',
-    resource: 'page.upload',
-    action: 'view',
-    description: 'Open the upload page.',
-  },
-  {
-    permissionKey: 'page.settings.view',
-    resource: 'page.settings',
-    action: 'view',
-    description: 'Open the settings page.',
-  },
-  {
-    permissionKey: 'page.wallpaper.view',
-    resource: 'page.wallpaper',
-    action: 'view',
-    description: 'Open the wallpaper editor page.',
-  },
-  {
-    permissionKey: 'page.wallpaper.runtime.view',
-    resource: 'page.wallpaper.runtime',
-    action: 'view',
-    description: 'Open the wallpaper runtime page.',
-  },
-  {
-    permissionKey: 'groups.create',
-    resource: 'groups',
-    action: 'create',
-    description: 'Create groups.',
-  },
-  {
-    permissionKey: 'groups.update',
-    resource: 'groups',
-    action: 'update',
-    description: 'Update groups.',
-  },
-  {
-    permissionKey: 'groups.delete',
-    resource: 'groups',
-    action: 'delete',
-    description: 'Delete groups.',
-  },
-  {
-    permissionKey: 'prompts.create',
-    resource: 'prompts',
-    action: 'create',
-    description: 'Create prompts.',
-  },
-  {
-    permissionKey: 'prompts.update',
-    resource: 'prompts',
-    action: 'update',
-    description: 'Update prompts.',
-  },
-  {
-    permissionKey: 'prompts.delete',
-    resource: 'prompts',
-    action: 'delete',
-    description: 'Delete prompts.',
-  },
-  {
-    permissionKey: 'images.copy',
-    resource: 'images',
-    action: 'copy',
-    description: 'Copy or export images.',
-  },
-  {
-    permissionKey: 'images.update',
-    resource: 'images',
-    action: 'update',
-    description: 'Update image records.',
-  },
-  {
-    permissionKey: 'images.delete',
-    resource: 'images',
-    action: 'delete',
-    description: 'Delete image records.',
-  },
-  {
-    permissionKey: 'images.metadata.edit',
-    resource: 'images.metadata',
-    action: 'edit',
-    description: 'Edit image metadata.',
-  },
-  {
-    permissionKey: 'upload.create',
-    resource: 'upload',
-    action: 'create',
-    description: 'Upload files into the system.',
-  },
-  {
-    permissionKey: 'generation.execute',
-    resource: 'generation',
-    action: 'execute',
-    description: 'Run image generation actions.',
-  },
-  {
-    permissionKey: 'wildcards.edit',
-    resource: 'wildcards',
-    action: 'edit',
-    description: 'Create or update wildcard and preprocess entries.',
-  },
-  {
-    permissionKey: 'wildcards.delete',
-    resource: 'wildcards',
-    action: 'delete',
-    description: 'Delete wildcard and preprocess entries.',
-  },
-  {
-    permissionKey: 'wildcards.lora.scan',
-    resource: 'wildcards.lora',
-    action: 'scan',
-    description: 'Run LoRA auto-collection scans.',
-  },
-  {
-    permissionKey: 'workflows.view',
-    resource: 'workflows',
-    action: 'view',
-    description: 'Read workflow, graph, module and dropdown data independently of navigation.',
-  },
-  {
-    permissionKey: 'workflows.update',
-    resource: 'workflows',
-    action: 'update',
-    description: 'Create or edit workflows.',
-  },
-  {
-    permissionKey: 'workflows.execute',
-    resource: 'workflows',
-    action: 'execute',
-    description: 'Run workflow execution actions.',
-  },
-  {
-    permissionKey: 'settings.security.manage',
-    resource: 'settings.security',
-    action: 'manage',
-    description: 'Manage security, accounts, and permissions.',
-  },
-  {
-    permissionKey: 'chat.codex.use',
-    resource: 'chat.codex',
-    action: 'use',
-    description: 'Chat with the server Codex agent (shares the server Codex account usage).',
-  },
-  {
-    permissionKey: 'chat.claude.use',
-    resource: 'chat.claude',
-    action: 'use',
-    description: 'Chat with server Claude Code profiles.',
-  },
-  {
-    permissionKey: 'chat.llm.use',
-    resource: 'chat.llm',
-    action: 'use',
-    description: 'Chat with configured LLM chat profiles.',
-  },
-  {
-    permissionKey: 'chat.tools.read',
-    resource: 'chat.tools',
-    action: 'read',
-    description: 'Let chat agents search and read images, prompts and workflows for this account.',
-  },
-  {
-    permissionKey: 'chat.tools.generate',
-    resource: 'chat.tools',
-    action: 'generate',
-    description: 'Let chat agents run generation jobs and workflows for this account.',
-  },
-  {
-    permissionKey: 'chat.tools.organize',
-    resource: 'chat.tools',
-    action: 'organize',
-    description: 'Let chat agents create groups and move images and prompts for this account.',
-  },
-  {
-    permissionKey: 'chat.tools.configure',
-    resource: 'chat.tools',
-    action: 'configure',
-    description: 'Let chat agents read chat setup and propose chat profiles and display blocks (a person saves them).',
-  },
-] as const;
+const DEFAULT_PERMISSION_CATALOG = PERMISSION_CATALOG.map((permission) => ({
+  permissionKey: permission.key,
+  resource: permission.key.slice(0, permission.key.lastIndexOf('.')),
+  action: permission.key.slice(permission.key.lastIndexOf('.') + 1),
+  description: permission.description,
+}));
+
+/**
+ * Old keys folded into each catalog key once (`permissions_v2`). A group keeps an ability when it held any of the old
+ * keys behind it; page keys are not listed because pages are now derived from these features.
+ */
+export const PERMISSIONS_V2_SOURCES: Record<PermissionKey, readonly string[]> = {
+  'images.view': ['images.view'],
+  'images.edit': ['images.update', 'images.metadata.edit', 'groups.create', 'groups.update'],
+  'images.delete': ['images.delete', 'groups.delete'],
+  'images.upload': ['upload.create'],
+  'prompts.view': ['prompts.view'],
+  'prompts.edit': ['prompts.create', 'prompts.update', 'prompts.delete'],
+  'wildcards.view': ['wildcards.view'],
+  'wildcards.edit': ['wildcards.edit', 'wildcards.delete', 'wildcards.lora.scan'],
+  'generation.execute': ['generation.execute'],
+  'workflows.view': ['workflows.view'],
+  'workflows.edit': ['workflows.update'],
+  'files.view': ['files.view'],
+  'files.edit': ['files.upload', 'files.organize'],
+  'files.delete': ['files.delete'],
+  'chat.use': ['chat.llm.use'],
+  'chat.agent.use': ['chat.codex.use', 'chat.claude.use'],
+  'chat.diagnostics.view': ['chat.diagnostics.view', 'chat.diagnostics.content'],
+  'auth.guest.create': ['auth.guest.create'],
+};
 
 /** Seed built-in permission groups and the initial permission catalog. */
 export function seedAccessControlDefaults(db: Database.Database): void {
@@ -337,14 +113,53 @@ export function seedAccessControlDefaults(db: Database.Database): void {
     );
   }
 
+  // Older one-time conversions still run first on databases that predate them; they read the old keys.
   splitLegacyFilesManagePermission(db);
   migrateImageViewPermission(db);
   migrateFilesViewPermission(db);
   migrateWorkflowViewPermission(db);
   migrateIndependentFeaturePermissions(db);
   migrateChatDiagnosticsPermissions(db);
+  migratePermissionsV2(db);
+  removeUncataloguedPermissions(db);
   grantAllCatalogPermissionsToAdminGroup(db);
   applyAnonymousGuestSignupDefault(db);
+}
+
+/** Fold the old fine-grained keys into the catalog keys once per auth database. */
+export function migratePermissionsV2(db: Database.Database): void {
+  db.transaction(() => {
+    const version = 'permissions_v2';
+    if (db.prepare('SELECT 1 FROM auth_seed_state WHERE seed_key = ?').get(version)) return;
+    const grant = db.prepare(`
+      INSERT OR IGNORE INTO auth_group_permissions (group_id, permission_id, allowed)
+      SELECT DISTINCT gp.group_id, target.id, 1 FROM auth_group_permissions gp
+      JOIN auth_permissions source ON source.id = gp.permission_id
+      JOIN auth_permissions target ON target.permission_key = ?
+      WHERE gp.allowed = 1 AND source.permission_key IN (SELECT value FROM json_each(?))
+    `);
+    for (const [key, sources] of Object.entries(PERMISSIONS_V2_SOURCES)) grant.run(key, JSON.stringify(sources));
+    // Signed-out visitors can only use anonymous keys; anything else on the anonymous group only reached signed-in
+    // accounts through inheritance, so it moves to the guest group that every account inherits.
+    const visitorKeys = JSON.stringify(PERMISSION_CATALOG.filter((permission) => 'anonymous' in permission).map((permission) => permission.key));
+    const memberOnly = `SELECT gp.permission_id FROM auth_group_permissions gp JOIN auth_permissions p ON p.id = gp.permission_id
+      WHERE gp.group_id = (SELECT id FROM auth_permission_groups WHERE group_key = 'anonymous') AND gp.allowed = 1
+        AND p.permission_key NOT IN (SELECT value FROM json_each(?))`;
+    db.prepare(`INSERT OR IGNORE INTO auth_group_permissions (group_id, permission_id, allowed)
+      SELECT (SELECT id FROM auth_permission_groups WHERE group_key = 'guest'), permission_id, 1 FROM (${memberOnly})`).run(visitorKeys);
+    db.prepare(`DELETE FROM auth_group_permissions WHERE group_id = (SELECT id FROM auth_permission_groups WHERE group_key = 'anonymous')
+      AND permission_id IN (${memberOnly})`).run(visitorKeys);
+    db.prepare('INSERT INTO auth_seed_state (seed_key) VALUES (?)').run(version);
+  }).immediate();
+}
+
+/** The catalog is the whole list: rows for removed keys, and denials (which never override a grant), are dropped. */
+function removeUncataloguedPermissions(db: Database.Database): void {
+  db.transaction(() => {
+    const keys = JSON.stringify(PERMISSION_KEYS);
+    db.prepare('DELETE FROM auth_group_permissions WHERE allowed = 0 OR permission_id IN (SELECT id FROM auth_permissions WHERE permission_key NOT IN (SELECT value FROM json_each(?)))').run(keys);
+    db.prepare('DELETE FROM auth_permissions WHERE permission_key NOT IN (SELECT value FROM json_each(?))').run(keys);
+  }).immediate();
 }
 
 /** Seed existing chat groups once; later permission edits stay in effect. */

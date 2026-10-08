@@ -258,7 +258,7 @@ export function createGraphWorkflowExecutionRoutes() {
     }
   }))
 
-  router.post('/executions/cleanup-empty', requirePermission('workflows.update'), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/executions/cleanup-empty', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
     const executionIds: number[] = Array.isArray(req.body?.execution_ids)
       ? Array.from(new Set<number>(req.body.execution_ids
         .map((value: unknown) => Number(value))

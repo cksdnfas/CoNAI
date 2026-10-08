@@ -254,7 +254,7 @@ async function processRecordTaggingItem(
   return await tagAndPersistTarget(resolved.target, logPrefix);
 }
 
-router.post('/:id/tag', requireImageAction('images.update'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/:id/tag', requireImageAction('images.edit'), asyncHandler(async (req: Request, res: Response) => {
   const compositeHash = getTaggingCompositeHash(req);
 
   console.log('[TagRoute] POST /:id/tag hit!');
@@ -337,7 +337,7 @@ router.post('/:id/tag', requireImageAction('images.update'), asyncHandler(async 
   }
 }));
 
-router.post('/batch-tag', requireImageAction('images.update'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/batch-tag', requireImageAction('images.edit'), asyncHandler(async (req: Request, res: Response) => {
   const { image_ids } = req.body;
 
   if (!validateBatchImageIds(res, image_ids)) {
@@ -392,7 +392,7 @@ router.post('/batch-tag', requireImageAction('images.update'), asyncHandler(asyn
   }
 }));
 
-router.post('/batch-tag-unprocessed', requireImageAction('images.update'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/batch-tag-unprocessed', requireImageAction('images.edit'), asyncHandler(async (req: Request, res: Response) => {
   const { limit } = req.body;
   const maxLimit = parseBatchLimit(limit);
 
@@ -460,7 +460,7 @@ router.post('/batch-tag-unprocessed', requireImageAction('images.update'), async
   }
 }));
 
-router.post('/batch-tag-all', requireImageAction('images.update'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/batch-tag-all', requireImageAction('images.edit'), asyncHandler(async (req: Request, res: Response) => {
   const { limit, force } = req.body;
   const maxLimit = parseBatchLimit(limit);
   const forceRetag = force !== undefined ? force : true;
@@ -536,7 +536,7 @@ router.post('/batch-tag-all', requireImageAction('images.update'), asyncHandler(
   }
 }));
 
-router.post('/reset-auto-tags', requireImageAction('images.update'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/reset-auto-tags', requireImageAction('images.edit'), asyncHandler(async (req: Request, res: Response) => {
   try {
     logger.info('[ResetAutoTags] Resetting all auto_tags to NULL');
 
@@ -566,7 +566,7 @@ router.post('/reset-auto-tags', requireImageAction('images.update'), asyncHandle
   }
 }));
 
-router.post('/recalculate-rating-scores', requireImageAction('images.update'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/recalculate-rating-scores', requireImageAction('images.edit'), asyncHandler(async (req: Request, res: Response) => {
   try {
     logger.info('[RecalculateRatingScores] Starting rating score recalculation for all images');
 

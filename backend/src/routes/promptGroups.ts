@@ -97,7 +97,7 @@ router.get('/', async (req: Request, res: Response) => {
  * 그룹 순서 일괄 업데이트
  * PUT /api/prompt-groups/reorder
  */
-router.put('/reorder', requirePermission('prompts.update'), async (req: Request, res: Response) => {
+router.put('/reorder', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
   try {
     const { group_orders, type = 'positive' } = req.body;
 
@@ -135,7 +135,7 @@ router.put('/reorder', requirePermission('prompts.update'), async (req: Request,
  * 프롬프트를 다른 그룹으로 이동
  * PUT /api/prompt-groups/move-prompt
  */
-router.put('/move-prompt', requirePermission('prompts.update'), async (req: Request, res: Response) => {
+router.put('/move-prompt', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
   try {
     const { prompt_id, target_group_id, type = 'positive' } = req.body;
 
@@ -280,7 +280,7 @@ router.get('/:id/prompts', async (req: Request, res: Response) => {
  * 새 그룹 생성
  * POST /api/prompt-groups
  */
-router.post('/', requirePermission('prompts.create'), async (req: Request, res: Response) => {
+router.post('/', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
   try {
     const { group_name, display_order, is_visible, parent_id, type = 'positive' } = req.body;
 
@@ -326,7 +326,7 @@ router.post('/', requirePermission('prompts.create'), async (req: Request, res: 
  * 그룹 정보 업데이트
  * PUT /api/prompt-groups/:id
  */
-router.put('/:id', requirePermission('prompts.update'), async (req: Request, res: Response) => {
+router.put('/:id', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
   try {
     const id = routeParam(req.params.id);
     const { group_name, display_order, is_visible, type = 'positive' } = req.body;
@@ -375,7 +375,7 @@ router.put('/:id', requirePermission('prompts.update'), async (req: Request, res
  * 그룹 삭제
  * DELETE /api/prompt-groups/:id
  */
-router.delete('/:id', requirePermission('prompts.delete'), async (req: Request, res: Response) => {
+router.delete('/:id', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
   try {
     const id = routeParam(req.params.id);
     const { type = 'positive' } = req.query;
@@ -416,7 +416,7 @@ router.delete('/:id', requirePermission('prompts.delete'), async (req: Request, 
  * JSON에서 그룹 설정 가져오기
  * POST /api/prompt-groups/import
  */
-router.post('/import', requirePermission('prompts.create'), requirePermission('prompts.update'), requirePermission('prompts.delete'), async (req: Request, res: Response) => {
+router.post('/import', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
   try {
     const { type = 'positive' } = req.query;
     const importData = req.body;

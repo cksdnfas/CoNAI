@@ -43,7 +43,7 @@ test('lore context: books per request, the index, always-on entries, linked file
   updateChatSettings({ enabled: true })
   // This fixture tests private lore ownership; the chat engine still needs an active authorized reader.
   t.mock.method(AuthAccount, 'findById', () => ({ id: 1, status: 'active' }))
-  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.llm.use'] }))
+  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use'] }))
 
   const me = fileOwnerKey(1)
   const other = fileOwnerKey(2)

@@ -317,7 +317,7 @@ export function applyChatAssetBatch(requester: McpRequester, id: number, value: 
   const row = authorize(requester, id)
   const parsed = z.object({ avatarCrop: z.unknown().optional() }).strict().safeParse(value)
   if (!parsed.success) throw new ChatAssetError('자산 적용 입력을 확인해줘.')
-  requireRequesterPermission(requester, 'groups.create'); requireRequesterPermission(requester, 'groups.update')
+  requireRequesterPermission(requester, 'images.edit')
   const crop = normalizeAvatarCrop(value.avatarCrop)
   const selected = slotRows(id).filter((slot) => slot.chosen_hash)
   if (!selected.length) throw new ChatAssetError('적용할 후보를 먼저 골라줘.')

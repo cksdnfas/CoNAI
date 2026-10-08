@@ -4,7 +4,7 @@ import { buildApiUrl } from './api-url'
 
 export const FILES_QUERY_KEY = ['file-store'] as const
 const headers = { 'Content-Type': 'application/json' }
-/** `owner` is another account's store key (admins with `files.browse.all`); null/undefined means the caller's own store. */
+/** `owner` is another account's store key (administrators); null/undefined means the caller's own store. */
 export type StoredFileOwnerKey = string | null | undefined
 const ownerQuery = (owner: StoredFileOwnerKey, first = false) => (owner ? `${first ? '?' : '&'}owner=${encodeURIComponent(owner)}` : '')
 
@@ -40,7 +40,7 @@ export async function uploadStoredFiles(parentId: string | null, files: File[], 
   if (files.some((file) => file.size > 500 * 1024 * 1024) || files.reduce((sum, file) => sum + file.size, 0) > 1024 ** 3) {
     throw new Error('파일당 500MB, 한 번에 총 1GB까지 가능해. / Limit: 500 MB per file, 1 GB total.')
   }
-  // Only a caller that knows the user lacks `files.upload.any` pre-checks; otherwise the server decides.
+  // Only a caller that knows the user is not an administrator pre-checks; otherwise the server decides.
   const restricted = options.allowAnyType === false ? files.find((file) => isRestrictedFileName(file.name)) : null
   if (restricted) throw new Error(`이 형식은 올릴 수 없어: ${restricted.name}. 텍스트·이미지·영상·오디오·문서만 가능해. / Restricted file type: ${restricted.name}.`)
   const body = new FormData()

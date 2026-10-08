@@ -42,7 +42,7 @@ test('chat review items: lore conditions, card import report, post sections, att
 
   updateChatSettings({ enabled: true })
   t.mock.method(AuthAccount, 'findById', () => ({ id: 1, status: 'active' }))
-  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.llm.use'] }))
+  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use'] }))
   t.mock.method(ExternalApiProvider, 'findByName', () => ({ provider_name: 'test', display_name: 'Test', is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid/v1', additional_config: '{}' }))
   t.mock.method(ExternalApiProvider, 'getDecryptedKey', () => null)
   const requester = { accountId: 1, accountType: 'admin' as const }

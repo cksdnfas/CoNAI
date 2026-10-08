@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { withPagePermissions } from '@conai/shared';
 import { getAuthDb } from '../database/authDb';
 
 export interface ResolvedAuthAccessRecord {
@@ -94,7 +95,7 @@ export class AuthAccessControlService {
 
       return {
         groupKeys: ['bootstrap'],
-        permissionKeys,
+        permissionKeys: withPagePermissions(permissionKeys, true),
       };
     });
   }
@@ -142,9 +143,11 @@ export class AuthAccessControlService {
           ORDER BY p.permission_key ASC
         `).all(...groupIds) as Array<{ permission_key: string }>).map((row) => row.permission_key);
 
+    const groupKeys = inheritedGroups.map((group) => group.group_key);
+    // Page keys are never stored; they follow from the features held (and settings from the admin group).
     return {
-      groupKeys: inheritedGroups.map((group) => group.group_key),
-      permissionKeys,
+      groupKeys,
+      permissionKeys: withPagePermissions(permissionKeys, groupKeys.includes('admin')),
     };
   }
 

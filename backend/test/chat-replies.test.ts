@@ -44,7 +44,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
   const { parseMentions, withChatGenerationProgress } = await import('@conai/shared')
   updateChatSettings({ enabled: true })
   t.mock.method(AuthAccount, 'findById', () => ({ id: 1, status: 'active' }))
-  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.llm.use', 'chat.codex.use'] }))
+  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use', 'chat.agent.use'] }))
   t.mock.method(ExternalApiProvider, 'findByName', () => ({ provider_name: 'test', display_name: 'Test', is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid/v1', additional_config: JSON.stringify({ max_concurrent_requests: 3 }) }))
   t.mock.method(ExternalApiProvider, 'getDecryptedKey', () => null)
   const requester = { accountId: 1, accountType: 'admin' as const }

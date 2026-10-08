@@ -9,14 +9,14 @@ import { groupReadRoutes } from './groups.read.routes';
 const router = Router();
 router.use((req, res, next) => {
   if (req.method === 'POST' && req.path === '/resolve-path') {
-    if (req.body?.create === true) requirePermission('groups.create')(req, res, next);
+    if (req.body?.create === true) requirePermission('images.edit')(req, res, next);
     else allowImagesView(req, res, next);
     return;
   }
   if (req.method === 'GET' || req.method === 'HEAD') {
     allowImagesView(req, res, next);
   } else {
-    const permission = req.method === 'DELETE' && /^\/[^/]+$/.test(req.path) ? 'groups.delete' : req.method === 'POST' && req.path === '/' ? 'groups.create' : 'groups.update';
+    const permission = req.method === 'DELETE' && /^\/[^/]+$/.test(req.path) ? 'images.delete' : 'images.edit';
     requirePermission(permission)(req, res, next);
   }
 });

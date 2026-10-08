@@ -239,9 +239,9 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
   const confirm = useConfirm()
   const authStatusQuery = useAuthStatusQuery()
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
-  const canCreatePresets = hasAuthPermission(permissionKeys, 'prompts.create')
-  const canUpdatePresets = hasAuthPermission(permissionKeys, 'prompts.update')
-  const canDeletePresets = hasAuthPermission(permissionKeys, 'prompts.delete')
+  const canCreatePresets = hasAuthPermission(permissionKeys, 'prompts.edit')
+  const canUpdatePresets = hasAuthPermission(permissionKeys, 'prompts.edit')
+  const canDeletePresets = hasAuthPermission(permissionKeys, 'prompts.edit')
   const [selectedPresetId, setSelectedPresetId] = useState<number | null>(null)
   const [editorState, setEditorState] = useState<PromptPresetEditorState>(null)
 

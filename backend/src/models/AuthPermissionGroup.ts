@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { IMAGE_VIEW_PERMISSION } from '@conai/shared';
+import { PERMISSION_CATALOG, PERMISSION_KEYS } from '@conai/shared';
 import { getAuthDb } from '../database/authDb';
 import { invalidateResolvedAuthAccessCache } from '../services/authAccessControlService';
 
@@ -12,61 +12,14 @@ export interface PagePermissionRecord {
   description: string | null;
 }
 
-/** Permissions the settings UI can grant; anything else stays admin-only through the seeded admin grant. */
-const BUILT_IN_EDITABLE_PERMISSION_KEYS = [
-  IMAGE_VIEW_PERMISSION,
-  'images.update',
-  'images.delete',
-  'images.metadata.edit',
-  'groups.create',
-  'groups.update',
-  'groups.delete',
-  'generation.execute',
-  'workflows.view',
-  'prompts.view',
-  'wildcards.view',
-  'page.chat.view',
-  'page.files.view',
-  'files.view',
-  'files.upload',
-  'files.organize',
-  'files.delete',
-  'files.upload.any',
-  'files.browse.all',
-  'auth.guest.create',
-  'page.home.view',
-  'page.groups.view',
-  'page.prompts.view',
-  'page.generation.view',
-  'page.wildcards.view',
-  'page.image-detail.view',
-  'page.metadata-editor.view',
-  'page.upload.view',
-  'page.settings.view',
-  'page.wallpaper.view',
-  'page.wallpaper.runtime.view',
-  'upload.create',
-  'wildcards.edit',
-  'wildcards.delete',
-  'wildcards.lora.scan',
-  'prompts.create',
-  'prompts.update',
-  'prompts.delete',
-  'workflows.update',
-  'chat.codex.use',
-  'chat.llm.use',
-  'chat.claude.use',
-  'chat.diagnostics.view',
-  'chat.diagnostics.content',
-  'chat.diagnostics.prompts',
-  'chat.tools.read',
-  'chat.tools.generate',
-  'chat.tools.organize',
-  'chat.tools.configure',
-] as const;
+/** Every catalog key can be granted; administration has no key. */
+const EDITABLE_PERMISSION_KEYS: readonly string[] = PERMISSION_KEYS;
 
-/** Public guest signup only makes sense on the built-in anonymous/guest groups. */
-const CUSTOM_GROUP_EXCLUDED_PERMISSION_KEYS: ReadonlySet<string> = new Set(['auth.guest.create']);
+/** Signed-out visitors can only use the anonymous keys. */
+const ANONYMOUS_EDITABLE_PERMISSION_KEYS: readonly string[] = PERMISSION_CATALOG.filter((permission) => 'anonymous' in permission).map((permission) => permission.key);
+
+/** Keys that only mean something to signed-out visitors (guest signup) stay off member groups. */
+const MEMBER_EDITABLE_PERMISSION_KEYS: readonly string[] = PERMISSION_CATALOG.filter((permission) => !('anonymousOnly' in permission)).map((permission) => permission.key);
 
 export interface PermissionGroupPageAccessRecord {
   group_key: BuiltInPermissionGroupKey;
@@ -104,7 +57,7 @@ interface PermissionIdRecord {
 export class AuthPermissionGroup {
   /** List the editable built-in permission catalog used by the anonymous/guest settings UI. */
   static listBuiltInEditablePermissions(): PagePermissionRecord[] {
-    return this.listPermissionsByKeys(BUILT_IN_EDITABLE_PERMISSION_KEYS);
+    return this.listPermissionsByKeys(EDITABLE_PERMISSION_KEYS);
   }
 
   /** List all permission groups for one group-centered management UI. */
@@ -126,11 +79,11 @@ export class AuthPermissionGroup {
       LEFT JOIN auth_permission_groups parent ON parent.id = g.parent_group_id
       LEFT JOIN auth_group_permissions gp ON gp.group_id = g.id AND gp.allowed = 1
       LEFT JOIN auth_permissions p ON p.id = gp.permission_id
-        AND p.permission_key IN (${BUILT_IN_EDITABLE_PERMISSION_KEYS.map(() => '?').join(', ')})
+        AND p.permission_key IN (${EDITABLE_PERMISSION_KEYS.map(() => '?').join(', ')})
       LEFT JOIN auth_account_group_memberships agm ON agm.group_id = g.id
       GROUP BY g.id
       ORDER BY g.priority ASC, g.id ASC
-    `).all(...BUILT_IN_EDITABLE_PERMISSION_KEYS) as Array<{
+    `).all(...EDITABLE_PERMISSION_KEYS) as Array<{
       id: number;
       group_key: string;
       name: string;
@@ -165,7 +118,7 @@ export class AuthPermissionGroup {
   /** List one or more built-in groups with their editable direct permissions. */
   static listBuiltInPageAccess(groupKeys: BuiltInPermissionGroupKey[]): PermissionGroupPageAccessRecord[] {
     const db = getAuthDb();
-    const editablePermissionKeys = this.getBuiltInEditablePermissionKeys();
+    const editablePermissionKeys = [...EDITABLE_PERMISSION_KEYS];
     const placeholders = groupKeys.map(() => '?').join(', ');
     const permissionPlaceholders = editablePermissionKeys.map(() => '?').join(', ');
     const rows = db.prepare(`
@@ -316,28 +269,32 @@ export class AuthPermissionGroup {
   private static normalizeCustomPermissionKeys(permissionKeys: string[]): string[] {
     return this.normalizePermissionKeys(
       permissionKeys,
-      this.getCustomEditablePermissionKeys(),
+      MEMBER_EDITABLE_PERMISSION_KEYS,
       'One or more permission keys are invalid',
     );
   }
 
   /** Replace the direct editable permission rows for one custom group. */
   private static syncDirectCustomPermissions(groupId: number, permissionKeys: string[]): void {
-    const editablePermissionIds = this.listPermissionIdsByKeys(this.getCustomEditablePermissionKeys());
+    const editablePermissionIds = this.listPermissionIdsByKeys(EDITABLE_PERMISSION_KEYS);
     this.syncDirectPermissions(groupId, editablePermissionIds, permissionKeys);
   }
 
   /** Replace the directly assigned editable permissions for one built-in group. */
   static replaceBuiltInPageAccess(groupKey: 'anonymous' | 'guest', permissionKeys: string[]): PermissionGroupPageAccessRecord {
     const db = getAuthDb();
-    const normalizedPermissionKeys = this.normalizeBuiltInPermissionKeys(permissionKeys);
+    const normalizedPermissionKeys = this.normalizePermissionKeys(
+      permissionKeys,
+      groupKey === 'anonymous' ? ANONYMOUS_EDITABLE_PERMISSION_KEYS : MEMBER_EDITABLE_PERMISSION_KEYS,
+      'One or more permission keys are invalid',
+    );
 
     const groupRow = db.prepare('SELECT id FROM auth_permission_groups WHERE group_key = ?').get(groupKey) as { id: number } | undefined;
     if (!groupRow) {
       throw new Error('Permission group not found');
     }
 
-    db.transaction(() => this.syncDirectBuiltInPermissions(groupRow.id, normalizedPermissionKeys)).immediate();
+    db.transaction(() => this.syncDirectPermissions(groupRow.id, this.listPermissionIdsByKeys(EDITABLE_PERMISSION_KEYS), normalizedPermissionKeys)).immediate();
     // The anonymous/guest rows back the memoized `group:*` resolutions, so drop them here
     // instead of at the call sites; a missed invalidation would keep revoked page access alive.
     invalidateResolvedAuthAccessCache();
@@ -348,21 +305,6 @@ export class AuthPermissionGroup {
     }
 
     return updatedGroup;
-  }
-
-  /** Normalize and validate one direct built-in permission list. */
-  private static normalizeBuiltInPermissionKeys(permissionKeys: string[]): string[] {
-    return this.normalizePermissionKeys(
-      permissionKeys,
-      this.getBuiltInEditablePermissionKeys(),
-      'One or more permission keys are invalid',
-    );
-  }
-
-  /** Replace the direct built-in permission rows for one group while preserving unrelated permissions. */
-  private static syncDirectBuiltInPermissions(groupId: number, permissionKeys: string[]): void {
-    const editablePermissionIds = this.listPermissionIdsByKeys(this.getBuiltInEditablePermissionKeys());
-    this.syncDirectPermissions(groupId, editablePermissionIds, permissionKeys);
   }
 
   /** Trim, dedupe, and verify permission keys against one allowed scope. */
@@ -407,16 +349,6 @@ export class AuthPermissionGroup {
         insertPermission.run(groupId, permissionId);
       }
     }
-  }
-
-  /** Resolve the editable built-in permission keys shared by anonymous and guest. */
-  private static getBuiltInEditablePermissionKeys(): string[] {
-    return [...BUILT_IN_EDITABLE_PERMISSION_KEYS];
-  }
-
-  /** Resolve custom-group permissions without exposing public guest signup control. */
-  private static getCustomEditablePermissionKeys(): string[] {
-    return BUILT_IN_EDITABLE_PERMISSION_KEYS.filter((permissionKey) => !CUSTOM_GROUP_EXCLUDED_PERMISSION_KEYS.has(permissionKey));
   }
 
   /** Load one or more permissions in stable caller-defined key order. */

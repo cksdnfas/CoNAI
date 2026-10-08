@@ -174,6 +174,7 @@ export function SecurityPermissionGroupEditorModal({
 
             <SecurityPermissionChecklist
               permissionCatalog={permissionCatalog}
+              groupKey={group?.groupKey ?? null}
               selectedKeys={draft.permissionKeys}
               inheritedSources={inheritedPermissionSources}
               disabled={!canEditPermissions || isBusy}

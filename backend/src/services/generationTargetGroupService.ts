@@ -20,7 +20,7 @@ export type GenerationTargetGroupResult =
   | { ok: true; groupId: number | null; path: string | null }
   | { ok: false; status: 400 | 403 | 404; error: string };
 
-const GROUP_PERMISSION_KEY = 'groups.update';
+const GROUP_PERMISSION_KEY = 'images.edit';
 
 function hasValue(value: unknown): boolean {
   return value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '');
@@ -110,7 +110,7 @@ export class GenerationTargetGroupService {
     if (!canAssignGenerationGroup(accountId)) {
       return { ok: false, status: 403, error: 'Group permission is required to assign generated images to a group' };
     }
-    if (hasValue(input.groupPath) && !hasGroupPermission(accountId, 'groups.create')) {
+    if (hasValue(input.groupPath) && !hasGroupPermission(accountId, 'images.edit')) {
       return { ok: false, status: 403, error: 'Group creation permission is required to resolve generated image group paths' };
     }
     return this.resolve(input);

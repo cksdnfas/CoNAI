@@ -224,7 +224,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.get('/api/runtime-settings/language', options.readOnlyLimiter, (_req, res) => {
     res.json({ success: true, data: { general: { language: settingsService.loadSettings().general.language } } });
   });
-  app.get('/api/runtime-settings/image-save', options.readOnlyLimiter, requireAuth, allowAnonymousAnyPermission(['images.view', 'generation.execute', 'workflows.view', 'upload.create']), (_req, res) => {
+  app.get('/api/runtime-settings/image-save', options.readOnlyLimiter, requireAuth, allowAnonymousAnyPermission(['images.view', 'generation.execute', 'workflows.view', 'images.upload']), (_req, res) => {
     res.json({ success: true, data: { imageSave: settingsService.loadSettings().imageSave } });
   });
   app.get('/api/runtime-settings/workflows', options.readOnlyLimiter, requirePermission('workflows.view'), (_req, res) => {

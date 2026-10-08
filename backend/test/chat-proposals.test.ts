@@ -347,7 +347,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
   await t.test('API LLM tools reject account permission revocation during a reply', async (sub) => {
     const { AuthAccount } = await import('../src/models/AuthAccount')
     const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
-    let permissions = ['chat.llm.use', 'chat.tools.read', 'page.generation.view', 'workflows.view']
+    let permissions = ['chat.use', 'page.generation.view', 'workflows.view']
     sub.mock.method(AuthAccount, 'findById', () => ({ status: 'active', account_type: 'guest' }))
     sub.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: permissions }))
     const ownedThread = CodexChatStore.createThread(7, 'owned page', 'llm', pageProfile.id)
@@ -356,7 +356,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const bridge = await openChatMcpBridge({ accountId: 7, accountType: 'guest' }, ['read'], ['get_current_page'], { chatContext: context })
     try {
       assert.ok(!(await bridge.call('get_current_page', {})).isError)
-      permissions = ['chat.llm.use']
+      permissions = ['chat.use']
       assert.ok((await bridge.call('get_current_page', {})).isError)
     } finally { unregister(); await bridge.close() }
   })
@@ -370,7 +370,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       db.prepare('INSERT INTO auth_permissions (permission_key, resource, action) VALUES (?, ?, ?)').run('workflows.view', 'workflows', 'view')
       sub.after(() => { db.prepare('DELETE FROM auth_permissions WHERE permission_key = ?').run('workflows.view') })
     }
-    let permissions = ['chat.llm.use', 'chat.tools.read', 'page.generation.view']
+    let permissions = ['chat.use', 'page.generation.view']
     sub.mock.method(AuthAccount, 'findById', () => ({ status: 'active', account_type: 'guest' }))
     sub.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: permissions }))
     const ownedThread = CodexChatStore.createThread(7, 'owned workflow', 'llm', workflowProfile.id)
@@ -398,7 +398,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const { AuthAccount } = await import('../src/models/AuthAccount')
     const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
     sub.mock.method(AuthAccount, 'findById', () => ({ status: 'active', account_type: 'guest' }))
-    sub.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.llm.use', 'chat.tools.generate', 'generation.execute', 'images.view'] }))
+    sub.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use', 'generation.execute', 'images.view'] }))
     const generator = ChatProfileStore.create({ name: 'Generator', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['generate'] })
     const callers = [7, 8].map((accountId) => {
       const chatContext: ChatExecutionContext = { threadId: CodexChatStore.createThread(accountId, 'generation', 'llm', generator.id), profileId: generator.id, kind: 'direct', replyId: `generation-${accountId}` }
@@ -435,14 +435,15 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     } finally { await without.close(); await withScope.close() }
   })
 
-  await t.test('the permission catalog reaches the admin group only', () => {
-    const db = authModule.getAuthDb()
-    const holders = db.prepare(`
-      SELECT g.group_key FROM auth_group_permissions gp
-      JOIN auth_permissions p ON p.id = gp.permission_id JOIN auth_permission_groups g ON g.id = gp.group_id
-      WHERE p.permission_key = 'chat.tools.configure' AND gp.allowed = 1
-    `).all() as Array<{ group_key: string }>
-    assert.deepEqual(holders.map((row) => row.group_key), ['admin'])
+  await t.test('chat setup proposals belong to administrators, not to a grantable key', async (sub) => {
+    const { AuthAccount } = await import('../src/models/AuthAccount')
+    const { resolveChatAccess } = await import('../src/services/codex-chat/codexChatAccess')
+    let accountType = 'guest'
+    sub.mock.method(AuthAccount, 'findById', () => ({ status: 'active', account_type: accountType }))
+    assert.ok(!resolveChatAccess(7).scopes.includes('configure'))
+    accountType = 'admin'
+    assert.ok(resolveChatAccess(7).scopes.includes('configure'))
+    assert.equal(authModule.getAuthDb().prepare("SELECT 1 FROM auth_permissions WHERE permission_key LIKE 'chat.tools.%'").get(), undefined)
   })
 
   await t.test('store: add keeps per-reply order, list merges, markSaved', () => {

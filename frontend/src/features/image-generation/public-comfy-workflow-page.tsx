@@ -166,8 +166,8 @@ export function PublicComfyWorkflowPage() {
     enabled: !!workflow && !isAuthoringOpen,
     loraOptions: findAutoCollectedPowerLoraOptions(authoringDropdowns.data ?? []),
     onRefresh: async () => { const result = await workflowQuery.refetch(); if (result.error) throw result.error },
-    onOpenCreate: authStatusQuery.data?.permissionKeys.includes('workflows.update') && authStatusQuery.data.permissionKeys.includes('workflows.view') ? () => { setAuthoringWorkflow(null); setIsAuthoringOpen(true) } : undefined,
-    onOpenEdit: authStatusQuery.data?.permissionKeys.includes('workflows.update') && authStatusQuery.data.permissionKeys.includes('workflows.view') ? async (id, assertCurrent) => { const detail = await getGenerationWorkflow(id); assertCurrent(); setAuthoringWorkflow(detail); setIsAuthoringOpen(true) } : undefined,
+    onOpenCreate: authStatusQuery.data?.permissionKeys.includes('workflows.edit') && authStatusQuery.data.permissionKeys.includes('workflows.view') ? () => { setAuthoringWorkflow(null); setIsAuthoringOpen(true) } : undefined,
+    onOpenEdit: authStatusQuery.data?.permissionKeys.includes('workflows.edit') && authStatusQuery.data.permissionKeys.includes('workflows.view') ? async (id, assertCurrent) => { const detail = await getGenerationWorkflow(id); assertCurrent(); setAuthoringWorkflow(detail); setIsAuthoringOpen(true) } : undefined,
   })
 
   const handleResetDraft = async () => {

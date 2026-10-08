@@ -1,15 +1,14 @@
 import fs from 'fs';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import multer from 'multer';
-import { requirePermission } from '../middleware/authMiddleware';
+import { requireAdmin, requirePermission } from '../middleware/authMiddleware';
 import { requireImagesView } from '../middleware/imageAccess';
 import { createUploadStorage, wrapUploadMiddleware, MAX_UPLOAD_FILE_SIZE_BYTES, MAX_MULTIPLE_UPLOAD_FILES, MAX_MULTIPLE_UPLOAD_TOTAL_BYTES } from '../middleware/upload';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { FileStoreError, FileStoreService, assertFileTypeAllowed, fileOwnerKey, parseFileId, parseOwnerKey } from '../services/fileStoreService';
 import { ensureFileStoreDirectories, fileStoreIncoming } from '../services/fileStorePaths';
 import { filePreviewMime, getFileThumbnail } from '../services/fileStorePreview';
-import { hasConfiguredAuth } from './auth-route-helpers';
-import { getRequesterAccountId } from './requester-session-helpers';
+import { getRequesterAccountId, isAdminRequest } from './requester-session-helpers';
 
 const router = Router();
 router.use(requirePermission('files.view'));
@@ -20,26 +19,26 @@ const has = (req: Request, permissionKey: string) => req.session?.permissionKeys
 const selfOwner = (req: Request) => fileOwnerKey(getRequesterAccountId(req));
 /**
  * The store being browsed. Every route defaults to the requester's own store; `?owner=` switches to
- * another account's store and is honored only with `files.browse.all`, which then covers every action there.
+ * another account's store and is honored only for administrators, who may then act on it.
  */
 const owner = (req: Request) => {
   const self = selfOwner(req);
   const requested = req.query.owner;
   if (requested === undefined || requested === '' || requested === self) return self;
   const key = parseOwnerKey(requested);
-  if (!has(req, 'files.browse.all')) throw new FileStoreError('다른 계정의 파일을 볼 권한이 없어.', 403);
+  if (!isAdminRequest(req)) throw new FileStoreError('다른 계정의 파일을 볼 권한이 없어.', 403);
   return key;
 };
 const id = (req: Request) => parseFileId(req.params.id) as string;
-/** Bootstrap (no credentials) is one local user and may store anything. */
-const allowAnyType = (req: Request) => (!hasConfiguredAuth() && getRequesterAccountId(req) === null) || has(req, 'files.upload.any');
+/** Restricted types (executables and the like) are for administrators; bootstrap is the local administrator. */
+const allowAnyType = (req: Request) => isAdminRequest(req);
 
 router.get('/', (req, res) => {
   res.json({ success: true, data: FileStoreService.list(owner(req), parseFileId(req.query.parentId, true), Number(req.query.offset ?? 0), Number(req.query.limit ?? 100)) });
 });
-router.get('/owners', requirePermission('files.browse.all'), (req, res) => res.json({ success: true, data: FileStoreService.owners(selfOwner(req)) }));
+router.get('/owners', requireAdmin, (req, res) => res.json({ success: true, data: FileStoreService.owners(selfOwner(req)) }));
 router.get('/folders', (req, res) => res.json({ success: true, data: FileStoreService.folders(owner(req)) }));
-router.post('/folders', requirePermission('files.organize'), (req, res) => {
+router.post('/folders', requirePermission('files.edit'), (req, res) => {
   res.status(201).json({ success: true, data: FileStoreService.createFolder(owner(req), parseFileId(req.body?.parentId, true), req.body?.name) });
 });
 
@@ -57,7 +56,7 @@ const upload = wrapUploadMiddleware(multer({
   },
 }).array('files', MAX_MULTIPLE_UPLOAD_FILES));
 
-router.post('/upload', requirePermission('files.upload'), (req, res, next) => {
+router.post('/upload', requirePermission('files.edit'), (req, res, next) => {
   // Validate the destination before receiving bytes, then recheck it inside the commit transaction.
   FileStoreService.list(owner(req), parseFileId(req.query.parentId, true), 0, 1);
   ensureFileStoreDirectories();
@@ -75,7 +74,7 @@ router.post('/upload', requirePermission('files.upload'), (req, res, next) => {
   }
 }));
 
-router.post('/move', requirePermission('files.organize'), (req, res) => {
+router.post('/move', requirePermission('files.edit'), (req, res) => {
   FileStoreService.move(owner(req), req.body?.ids, parseFileId(req.body?.parentId, true));
   res.json({ success: true });
 });
@@ -83,7 +82,7 @@ router.post('/delete', requirePermission('files.delete'), (req, res) => {
   FileStoreService.delete(owner(req), req.body?.ids);
   res.json({ success: true });
 });
-router.patch('/:id', requirePermission('files.organize'), (req, res) => {
+router.patch('/:id', requirePermission('files.edit'), (req, res) => {
   res.json({ success: true, data: FileStoreService.rename(owner(req), id(req), req.body?.name, allowAnyType(req)) });
 });
 router.get('/:id', (req, res) => res.json({ success: true, data: FileStoreService.get(owner(req), id(req)) }));

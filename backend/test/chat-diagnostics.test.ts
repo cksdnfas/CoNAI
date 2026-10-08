@@ -44,10 +44,12 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
   const { AuthAccount } = await import('../src/models/AuthAccount')
   const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
   const { diagnosticsScopeOf } = await import('../src/services/codex-chat/codexChatAccess')
-  const diagnosticKeys = ['chat.diagnostics.view', 'chat.diagnostics.content', 'chat.diagnostics.prompts']
+  const ADMIN_MARKER = 'test:admin'
+  const diagnosticKeys = ['chat.diagnostics.view', ADMIN_MARKER]
   let grants = [...diagnosticKeys]
-  t.mock.method(AuthAccount, 'findById', (id) => ({ id, status: 'active' }))
-  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.llm.use', 'chat.codex.use', 'chat.tools.read', ...grants] }))
+  // Raw prompts are an administrator view, so the test's account is an administrator while it holds that marker.
+  t.mock.method(AuthAccount, 'findById', (id) => ({ id, status: 'active', account_type: grants.includes(ADMIN_MARKER) ? 'admin' : 'guest' }))
+  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use', 'chat.agent.use', ...grants.filter((key) => key !== ADMIN_MARKER)] }))
   t.mock.method(AuthAccessControlService, 'hasPermission', () => true)
   t.mock.method(ExternalApiProvider, 'findByName', () => ({ provider_name: 'test', display_name: 'Test', is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid/v1', additional_config: JSON.stringify({ max_concurrent_requests: 3 }) }))
   t.mock.method(ExternalApiProvider, 'getDecryptedKey', () => 'fake-api-secret')
@@ -110,11 +112,12 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
   })
 
   await t.test('view/content/prompts are cumulative and rechecked on every historical read and export', async () => {
-    assert.equal(diagnosticsScopeOf(['chat.diagnostics.content', 'chat.diagnostics.prompts']), 'none')
-    assert.equal(diagnosticsScopeOf(['chat.diagnostics.view', 'chat.diagnostics.prompts']), 'view')
+    assert.equal(diagnosticsScopeOf([], false), 'none')
+    assert.equal(diagnosticsScopeOf(['chat.diagnostics.view'], false), 'content')
+    assert.equal(diagnosticsScopeOf([], true), 'prompts')
     updateChatSettings({ diagnostics: { captureRaw: true } })
     saveChatRequestCapture(answerId, '{"messages":[{"content":"ADMIN_RAW_PRIVATE"}]}')
-    for (const [keys, expected] of [[diagnosticKeys.slice(0, 1), 'view'], [diagnosticKeys.slice(0, 2), 'content'], [diagnosticKeys, 'prompts']] as const) {
+    for (const [keys, expected] of [[diagnosticKeys.slice(0, 1), 'content'], [diagnosticKeys, 'prompts']] as const) {
       grants = [...keys]
       const result = await getChatDiagnostics(requester, threadId, answerId)
       assert.equal(result.scope, expected)
@@ -177,7 +180,7 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
       assert.equal(contextHash(source.promptText!), source.hash)
       assert.equal(source.changedSince, false, `${kind} unchanged full prompt must not be marked changed`)
     }
-    grants = diagnosticKeys.slice(0, 2)
+    grants = diagnosticKeys.slice(0, 1)
     const content = await getChatDiagnostics(requester, threadId, answerId)
     for (const kind of ['state', 'lore-index']) {
       const source = content.texts?.find((entry) => entry.kind === kind)
@@ -472,35 +475,36 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
     assert.equal(result.meta.tokenUsage?.inputTokens, 20)
   })
 
-  await t.test('diagnostics permission seeding is once-only, preserves denials and leaves prompts to administrators', async () => {
+  await t.test('permissions v2 folds old chat keys once and leaves prompts to administrators', async () => {
     const Database = (await import('better-sqlite3')).default
     const auth = new Database(':memory:')
     try {
       auth.pragma('foreign_keys = ON')
       const { createAuthTables } = await import('../src/database/authDbSchema')
-      const { seedAccessControlDefaults, migrateChatDiagnosticsPermissions } = await import('../src/database/authDbSeed')
+      const { seedAccessControlDefaults } = await import('../src/database/authDbSeed')
       createAuthTables(auth)
-      seedAccessControlDefaults(auth)
+      // An auth database from before v2: the old keys exist and the conversion has not run.
+      for (const key of ['chat.llm.use', 'chat.codex.use', 'chat.diagnostics.content', 'chat.diagnostics.prompts', 'chat.tools.read']) {
+        auth.prepare('INSERT INTO auth_permissions (permission_key, resource, action) VALUES (?, ?, ?)').run(key, key, 'x')
+      }
       for (const name of ['llm-test', 'codex-test', 'no-chat-test']) auth.prepare('INSERT INTO auth_permission_groups (group_key, name) VALUES (?, ?)').run(name, name)
       const grant = (group: string, key: string, allowed = 1) => auth.prepare(`INSERT OR REPLACE INTO auth_group_permissions (group_id, permission_id, allowed)
         SELECT g.id, p.id, ? FROM auth_permission_groups g JOIN auth_permissions p ON p.permission_key = ? WHERE g.group_key = ?`).run(allowed, key, group)
       grant('llm-test', 'chat.llm.use')
+      grant('llm-test', 'chat.diagnostics.content')
+      grant('llm-test', 'chat.diagnostics.prompts')
       grant('codex-test', 'chat.codex.use')
-      grant('codex-test', 'chat.diagnostics.view', 0)
-      auth.prepare("DELETE FROM auth_seed_state WHERE seed_key = 'chat_diagnostics_v1'").run()
-      migrateChatDiagnosticsPermissions(auth)
+      grant('no-chat-test', 'chat.tools.read')
+      seedAccessControlDefaults(auth)
       const keys = (group: string) => (auth.prepare(`SELECT p.permission_key FROM auth_group_permissions gp JOIN auth_permissions p ON p.id = gp.permission_id
         JOIN auth_permission_groups g ON g.id = gp.group_id WHERE g.group_key = ? AND gp.allowed = 1 ORDER BY p.permission_key`).all(group) as Array<{ permission_key: string }>).map((row) => row.permission_key)
-      assert.ok(keys('llm-test').includes('chat.diagnostics.view'))
-      assert.ok(keys('llm-test').includes('chat.diagnostics.content'))
-      assert.ok(!keys('llm-test').includes('chat.diagnostics.prompts'))
-      assert.ok(!keys('codex-test').includes('chat.diagnostics.view'), 'an explicit denial stays denied')
-      assert.ok(keys('codex-test').includes('chat.diagnostics.content'))
-      assert.deepEqual(keys('no-chat-test'), [])
-      assert.ok(diagnosticKeys.every((key) => keys('admin').includes(key)))
-      grant('llm-test', 'chat.diagnostics.content', 0)
+      assert.deepEqual(keys('llm-test'), ['chat.diagnostics.view', 'chat.use', 'images.view'], 'raw prompts are no longer a grantable key')
+      assert.deepEqual(keys('codex-test'), ['chat.agent.use', 'chat.diagnostics.view', 'images.view'], 'older conversions still run first on an old database')
+      assert.deepEqual(keys('no-chat-test'), [], 'bot tool keys are gone; the account feature keys decide')
+      assert.equal(auth.prepare("SELECT COUNT(*) AS n FROM auth_permissions WHERE permission_key LIKE 'chat.tools.%' OR permission_key = 'chat.llm.use'").get().n, 0)
+      auth.prepare("DELETE FROM auth_group_permissions WHERE group_id = (SELECT id FROM auth_permission_groups WHERE group_key = 'llm-test') AND permission_id = (SELECT id FROM auth_permissions WHERE permission_key = 'chat.diagnostics.view')").run()
       seedAccessControlDefaults(auth)
-      assert.ok(!keys('llm-test').includes('chat.diagnostics.content'), 'restart must not undo a later revocation')
+      assert.ok(!keys('llm-test').includes('chat.diagnostics.view'), 'restart must not undo a later revocation')
     } finally { auth.close() }
   })
 })

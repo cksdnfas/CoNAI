@@ -14,7 +14,7 @@ export function buildGraphWorkflowTargetGroupKey(workflowId: number | string) {
   return `conai:module-graph:target-group-path:v1:${workflowId}`
 }
 
-const GROUP_PERMISSION_KEY = 'groups.update'
+const GROUP_PERMISSION_KEY = 'images.edit'
 const listeners = new Map<string, Set<() => void>>()
 const memoryFallback = new Map<string, string>()
 
@@ -74,7 +74,7 @@ export function normalizeGroupPathInput(value: string) {
 /** 그룹 지정 권한이 있을 때만 쓸 수 있는 대상 그룹 경로 상태. */
 export function useGenerationTargetGroupPath(storageKey: string) {
   const authStatusQuery = useAuthStatusQuery()
-  const canAssignGroup = hasAuthPermission(authStatusQuery.data?.permissionKeys ?? [], GROUP_PERMISSION_KEY) && hasAuthPermission(authStatusQuery.data?.permissionKeys, 'groups.create')
+  const canAssignGroup = hasAuthPermission(authStatusQuery.data?.permissionKeys ?? [], GROUP_PERMISSION_KEY) && hasAuthPermission(authStatusQuery.data?.permissionKeys, 'images.edit')
 
   const storedPath = useSyncExternalStore(
     useCallback((listener: () => void) => subscribe(storageKey, listener), [storageKey]),

@@ -17,7 +17,7 @@ const router = Router();
  */
 router.post(
   '/regenerate',
-  requireImageAction('images.update'),
+  requireImageAction('images.edit'),
   asyncHandler(async (req: Request, res: Response) => {
     try {
       const job = RuntimeJobRunner.start('thumbnail-regenerate', {}, {

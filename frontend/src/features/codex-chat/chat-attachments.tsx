@@ -25,7 +25,7 @@ export function ChatAttachButton({ chat, disabled }: { chat: CodexChatApi; disab
   const canPickFiles = permissions.includes('files.view')
   const canPickMedia = useImagePermissions().canViewImages
   if (!canPickFiles && !canPickMedia) return null
-  const canUpload = canPickFiles && permissions.includes('files.upload')
+  const canUpload = canPickFiles && permissions.includes('files.edit')
   const label = t({ ko: '파일 첨부', en: 'Attach files' })
   const isDisabled = disabled || chat.attachmentsUploading
 
