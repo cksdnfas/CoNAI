@@ -123,8 +123,8 @@ function extractEntries(compositeHash: string, autoTagsJson: string | null | und
   return entries;
 }
 
-/** Column that keys a media row in media_auto_tags (media_metadata's integer row id). */
-export const MEDIA_ROW_ID_COLUMN = 'rowid';
+/** Column that keys a media row in media_auto_tags (media_metadata's integer primary key, migration 041). */
+export const MEDIA_ROW_ID_COLUMN = 'media_id';
 
 export type IndexedMediaSubqueryOptions = {
   tagTypes: readonly string[];

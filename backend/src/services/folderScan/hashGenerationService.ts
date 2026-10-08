@@ -29,7 +29,7 @@ export class HashGenerationService {
   /**
    * 히스토그램 직렬화
    */
-  static serializeHistogram(colorHistogram: any): string {
+  static serializeHistogram(colorHistogram: any): Buffer {
     return ImageSimilarityService.serializeHistogram(colorHistogram);
   }
 }

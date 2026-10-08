@@ -19,6 +19,7 @@ const KEPT_MIGRATIONS = [
   '038_add_media_pixel_hash',
   '039_drop_civitai_temp_urls',
   '040_restructure_auto_tag_index',
+  '041_rebuild_media_metadata_with_id',
 ]
 
 let dbCounter = 0

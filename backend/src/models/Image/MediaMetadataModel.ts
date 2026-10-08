@@ -7,6 +7,7 @@ import { ImageMetadataRecord } from '../../types/image';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../../utils/dynamicUpdate';
 import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../../utils/sqlLike';
 import { ImageStatsModel } from './ImageStatsModel';
+import { MediaImageFeaturesModel } from './MediaImageFeaturesModel';
 import { MediaMetadataFileQueries } from './MediaMetadataFileQueries';
 
 function normalizeSuggestionLimit(limit: number, fallback = 16, max = 50): number {
@@ -119,7 +120,7 @@ export class MediaMetadataModel {
 
     db.prepare(`
       INSERT INTO media_metadata (
-        composite_hash, perceptual_hash, dhash, ahash, color_histogram,
+        composite_hash, perceptual_hash, dhash, ahash,
         width, height, thumbnail_path,
         ai_tool, model_name, lora_models, steps, cfg_scale, sampler, seed, scheduler,
         prompt, negative_prompt, denoise_strength, generation_time, batch_size, batch_index,
@@ -129,9 +130,9 @@ export class MediaMetadataModel {
         pos_prompt_normalized, neg_prompt_normalized, auto_prompt_normalized,
         pos_prompt_fingerprint, neg_prompt_fingerprint, auto_prompt_fingerprint,
         prompt_similarity_updated_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      data.composite_hash, data.perceptual_hash, data.dhash, data.ahash, data.color_histogram,
+      data.composite_hash, data.perceptual_hash, data.dhash, data.ahash,
       data.width, data.height, data.thumbnail_path,
       data.ai_tool, data.model_name, data.lora_models, data.steps, data.cfg_scale,
       data.sampler, data.seed, data.scheduler, data.prompt, data.negative_prompt,
@@ -145,6 +146,9 @@ export class MediaMetadataModel {
       promptSimilarityFields.prompt_similarity_updated_date
     );
 
+    if (data.color_histogram) {
+      MediaImageFeaturesModel.setHistogram(data.composite_hash, data.color_histogram);
+    }
     AutoTagIndexService.syncForHash(data.composite_hash, data.auto_tags);
     ImageStatsModel.invalidateAutoTagStatsCache();
 

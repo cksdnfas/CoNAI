@@ -7,6 +7,8 @@ import { getUserSettingsDb } from '../database/userSettingsDb';
 import { resolveUploadsPath } from '../config/runtimePaths';
 import { ImageSimilarityService } from './imageSimilarity';
 import { AutoTagIndexService, MEDIA_ROW_ID_COLUMN } from './autoTagIndexService';
+import { MediaImageFeaturesModel } from '../models/Image/MediaImageFeaturesModel';
+import type { ColorHistogram } from '../types/similarity';
 import { BackgroundQueueService } from './backgroundQueue';
 import { SystemMaintenanceLockService, SystemMaintenanceLockSnapshot } from './systemMaintenanceLockService';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
@@ -74,7 +76,7 @@ interface HashBuildPayload {
   perceptualHash: string | null;
   dHash: string | null;
   aHash: string | null;
-  colorHistogram: string | null;
+  colorHistogram: ColorHistogram | null;
   width: number | null;
   height: number | null;
   thumbnailPath: string | null;
@@ -575,7 +577,7 @@ export class DataRematchService {
       perceptualHash: hashes.perceptualHash,
       dHash: hashes.dHash,
       aHash: hashes.aHash,
-      colorHistogram: JSON.stringify(colorHistogram),
+      colorHistogram,
       width,
       height,
       thumbnailPath,
@@ -632,7 +634,8 @@ export class DataRematchService {
   }
 
   private static ensureMediaMetadataForHash(input: HashRemapInput): void {
-    const columns = getTableColumns('media_metadata');
+    // media_id is assigned by SQLite: copying the old row's id would collide with that row.
+    const columns = getTableColumns('media_metadata').filter((column) => column !== 'media_id');
     if (columns.length === 0) {
       throw new Error('media_metadata 테이블을 찾을 수 없습니다.');
     }
@@ -657,7 +660,6 @@ export class DataRematchService {
     row.perceptual_hash = input.payload.perceptualHash;
     row.dhash = input.payload.dHash;
     row.ahash = input.payload.aHash;
-    row.color_histogram = input.payload.colorHistogram;
     row.width = input.payload.width;
     row.height = input.payload.height;
     row.thumbnail_path = input.payload.thumbnailPath;
@@ -672,6 +674,7 @@ export class DataRematchService {
     const placeholders = columns.map(() => '?').join(', ');
     db.prepare(`INSERT INTO media_metadata (${columnSql}) VALUES (${placeholders})`)
       .run(...columns.map((column) => toSqlValue(row[column])));
+    MediaImageFeaturesModel.setHistogram(input.newHash, input.payload.colorHistogram);
   }
 
   private static updateMediaMetadataTechnicalFields(compositeHash: string, payload: HashBuildPayload): void {
@@ -680,7 +683,6 @@ export class DataRematchService {
       SET perceptual_hash = ?,
           dhash = ?,
           ahash = ?,
-          color_histogram = ?,
           width = COALESCE(?, width),
           height = COALESCE(?, height),
           thumbnail_path = COALESCE(?, thumbnail_path),
@@ -690,12 +692,12 @@ export class DataRematchService {
       payload.perceptualHash,
       payload.dHash,
       payload.aHash,
-      payload.colorHistogram,
       payload.width,
       payload.height,
       payload.thumbnailPath,
       compositeHash,
     );
+    MediaImageFeaturesModel.setHistogram(compositeHash, payload.colorHistogram);
   }
 
   private static remapHashReferenceTables(oldHash: string, newHash: string): void {

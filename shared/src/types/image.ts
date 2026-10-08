@@ -49,7 +49,7 @@ export interface ImageRecord {
   perceptual_hash: string | null;      // pHash algorithm based image hash
   dhash: string | null;                // dHash for difference hash
   ahash: string | null;                // aHash for average hash
-  color_histogram: string | null;      // RGB color distribution (JSON)
+  color_histogram?: string | null;     // No longer sent: kept server-side in media_image_features
 
   // Video-specific metadata fields
   duration: number | null;             // Video duration (seconds)

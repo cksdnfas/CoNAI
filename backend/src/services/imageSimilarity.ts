@@ -1,4 +1,5 @@
 import fs from 'fs';
+import zlib from 'zlib';
 import sharp, { type Sharp } from 'sharp';
 import { ColorDescriptor, ColorHistogram } from '../types/similarity';
 import { toWindowsLongPathIfNeeded } from '../utils/pathResolver';
@@ -19,6 +20,93 @@ const DCT_COEFFICIENTS = Array.from({ length: PHASH_LOW_FREQUENCY_SIZE }, (_unus
 // 파생 파이프라인이 공유할 입력을 메모리에 올릴 수 있는 상한.
 // 동시 처리 수만큼 곱해져 상주하므로 큰 파일은 경로 입력을 그대로 쓴다.
 const MAX_BUFFERED_SOURCE_BYTES = 64 * 1024 * 1024;
+
+// Colour histogram BLOB layout (see serializeHistogram). Migration 041 has a copy of the encoder.
+const HISTOGRAM_FORMAT_COUNTS = 1;
+const HISTOGRAM_FORMAT_JSON = 2;
+const HISTOGRAM_FLAG_DESCRIPTOR = 1;
+const HISTOGRAM_BINS = 256;
+const HISTOGRAM_CHANNELS = ['r', 'g', 'b'] as const;
+const HISTOGRAM_DENOMINATOR = 32 * 32;
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function descriptorValues(descriptor: ColorDescriptor): number[] | null {
+  const keys = Object.keys(descriptor).sort().join(',');
+  if (keys !== 'averageRgb,dominantRgb,luminance,saturation'
+    || !Array.isArray(descriptor.averageRgb) || descriptor.averageRgb.length !== 3
+    || !Array.isArray(descriptor.dominantRgb) || descriptor.dominantRgb.length !== 3) {
+    return null;
+  }
+  const values = [...descriptor.averageRgb, ...descriptor.dominantRgb, descriptor.luminance, descriptor.saturation];
+  return values.every(isFiniteNumber) ? values : null;
+}
+
+/** Counts layout when every bin is an exact count / 1024 and the object holds nothing else; null otherwise. */
+function encodeHistogramCounts(histogram: ColorHistogram): Buffer | null {
+  const keys = Object.keys(histogram).filter((key) => key !== 'descriptor').sort().join(',');
+  if (keys !== 'b,g,r') return null;
+  const descriptor = histogram.descriptor === undefined ? null : descriptorValues(histogram.descriptor);
+  if (histogram.descriptor !== undefined && !descriptor) return null;
+
+  const counts = Buffer.alloc(HISTOGRAM_BINS * HISTOGRAM_CHANNELS.length * 2);
+  for (let channel = 0; channel < HISTOGRAM_CHANNELS.length; channel += 1) {
+    const bins = histogram[HISTOGRAM_CHANNELS[channel]];
+    if (!Array.isArray(bins) || bins.length !== HISTOGRAM_BINS) return null;
+    for (let bin = 0; bin < HISTOGRAM_BINS; bin += 1) {
+      const value = bins[bin];
+      const count = Math.round(value * HISTOGRAM_DENOMINATOR);
+      if (!isFiniteNumber(value) || count < 0 || count > 0xffff || count / HISTOGRAM_DENOMINATOR !== value) return null;
+      counts.writeUInt16LE(count, (channel * HISTOGRAM_BINS + bin) * 2);
+    }
+  }
+
+  const header = Buffer.alloc(4 + (descriptor ? 8 * 8 : 0));
+  header[0] = HISTOGRAM_FORMAT_COUNTS;
+  header[1] = descriptor ? HISTOGRAM_FLAG_DESCRIPTOR : 0;
+  header.writeUInt16LE(HISTOGRAM_DENOMINATOR, 2);
+  descriptor?.forEach((value, index) => header.writeDoubleLE(value, 4 + index * 8));
+  return Buffer.concat([header, zlib.deflateRawSync(counts)]);
+}
+
+export function encodeColorHistogram(histogram: ColorHistogram): Buffer {
+  return encodeHistogramCounts(histogram)
+    ?? Buffer.concat([Buffer.from([HISTOGRAM_FORMAT_JSON]), zlib.deflateRawSync(Buffer.from(JSON.stringify(histogram), 'utf8'))]);
+}
+
+export function decodeColorHistogram(blob: Buffer): ColorHistogram {
+  if (blob[0] === HISTOGRAM_FORMAT_JSON) {
+    return JSON.parse(zlib.inflateRawSync(blob.subarray(1)).toString('utf8')) as ColorHistogram;
+  }
+  if (blob[0] !== HISTOGRAM_FORMAT_COUNTS) {
+    throw new Error(`Unknown histogram format ${blob[0]}`);
+  }
+
+  const hasDescriptor = (blob[1] & HISTOGRAM_FLAG_DESCRIPTOR) !== 0;
+  const denominator = blob.readUInt16LE(2);
+  const bodyOffset = 4 + (hasDescriptor ? 8 * 8 : 0);
+  const counts = zlib.inflateRawSync(blob.subarray(bodyOffset));
+  const histogram = {} as ColorHistogram;
+  HISTOGRAM_CHANNELS.forEach((channel, channelIndex) => {
+    const bins = new Array<number>(HISTOGRAM_BINS);
+    for (let bin = 0; bin < HISTOGRAM_BINS; bin += 1) {
+      bins[bin] = counts.readUInt16LE((channelIndex * HISTOGRAM_BINS + bin) * 2) / denominator;
+    }
+    histogram[channel] = bins;
+  });
+  if (hasDescriptor) {
+    const value = (index: number) => blob.readDoubleLE(4 + index * 8);
+    histogram.descriptor = {
+      averageRgb: [value(0), value(1), value(2)],
+      dominantRgb: [value(3), value(4), value(5)],
+      luminance: value(6),
+      saturation: value(7),
+    };
+  }
+  return histogram;
+}
 
 /**
  * 이미지 유사도 검색 서비스
@@ -356,20 +444,26 @@ export class ImageSimilarityService {
   }
 
   /**
-   * 색상 히스토그램 JSON 직렬화
+   * 색상 히스토그램 직렬화 (media_image_features.color_histogram BLOB)
+   *
+   * Bins are pixel counts over the 32x32 sample divided by 1024, so they are stored losslessly as deflated uint16
+   * counts plus the descriptor as float64 (~0.5KB instead of ~8KB of JSON). Anything that does not fit that shape
+   * is kept as deflated JSON. Migration 041 carries a copy of this encoder; keep the byte layout identical.
    */
-  static serializeHistogram(histogram: ColorHistogram): string {
-    return JSON.stringify(histogram);
+  static serializeHistogram(histogram: ColorHistogram): Buffer {
+    return encodeColorHistogram(histogram);
   }
 
   /**
-   * 색상 히스토그램 JSON 역직렬화
+   * 색상 히스토그램 역직렬화: the BLOB written by serializeHistogram, or a legacy JSON string.
    */
-  static deserializeHistogram(json: string): ColorHistogram {
+  static deserializeHistogram(value: Buffer | Uint8Array | string): ColorHistogram {
     try {
-      return JSON.parse(json) as ColorHistogram;
+      return typeof value === 'string'
+        ? JSON.parse(value) as ColorHistogram
+        : decodeColorHistogram(Buffer.from(value.buffer, value.byteOffset, value.byteLength));
     } catch (error) {
-      throw new Error('Invalid histogram JSON');
+      throw new Error('Invalid histogram data');
     }
   }
 
