@@ -15,10 +15,12 @@ import { DEFAULT_DATABASE_BACKUP_KEEP } from './databaseBackupService';
  *   `CONAI_DB_BACKUP_INTERVAL_HOURS` (keep `CONAI_DB_BACKUP_KEEP`, default 7) and
  *   `CONAI_ORPHAN_CLEANUP_INTERVAL_HOURS`. Backups of a large library are several GB each, so they never start
  *   filling the disk without the operator choosing a cadence.
+ * - Daily RecycleBin retention when the general setting `deleteProtection.recycleBinRetentionDays` is above 0.
  */
 
 const ONE_MINUTE_MS = 60 * 1000;
 const ONE_HOUR_MS = 60 * ONE_MINUTE_MS;
+const ONE_DAY_MS = 24 * ONE_HOUR_MS;
 const DEFAULT_OPTIMIZE_FIRST_DELAY_MS = 10 * ONE_MINUTE_MS;
 const DEFAULT_OPTIMIZE_INTERVAL_MS = 6 * ONE_HOUR_MS;
 /** First scheduled backup / cleanup also waits past the boot storm. */
@@ -77,6 +79,9 @@ export class DatabaseMaintenanceScheduler {
       this.schedule('orphan-cleanup', SCHEDULED_JOB_FIRST_DELAY_MS, cleanupHours * ONE_HOUR_MS, () => this.startScheduledJob('media-orphan-cleanup', { dryRun: false }));
     }
 
+    // Always scheduled; each run reads the setting, so turning retention on or off needs no restart.
+    this.schedule('recycle-bin-retention', SCHEDULED_JOB_FIRST_DELAY_MS, ONE_DAY_MS, () => this.runRecycleBinRetentionIfEnabled());
+
     console.log(
       `🛠️  Database maintenance scheduler ready (optimize every ${Math.round(optimizeIntervalMs / ONE_HOUR_MS)}h, ` +
         `backup ${backupHours > 0 ? `every ${backupHours}h` : 'manual'}, orphan cleanup ${cleanupHours > 0 ? `every ${cleanupHours}h` : 'manual'})`,
@@ -123,6 +128,15 @@ export class DatabaseMaintenanceScheduler {
     }
 
     console.log(`🛠️  PRAGMA optimize: images.db ${imagesMs}ms${userMs !== null ? `, user.db ${userMs}ms` : ''}`);
+  }
+
+  /** Daily RecycleBin retention, only while `deleteProtection.recycleBinRetentionDays` is above 0 (default off). */
+  static async runRecycleBinRetentionIfEnabled(): Promise<void> {
+    const { settingsService } = await import('../settingsService');
+    const retentionDays = settingsService.loadSettings().general.deleteProtection.recycleBinRetentionDays;
+    if (retentionDays > 0) {
+      this.startScheduledJob('recycle-bin-retention', { retentionDays });
+    }
   }
 
   private static startScheduledJob(kind: RuntimeJobKind, params: object): void {

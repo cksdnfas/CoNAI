@@ -162,7 +162,6 @@ export class DeletionService {
 
     console.log(`🗑️ Deleting image ${compositeHash}:`, {
       useRecycleBin,
-      recycleBinPath: settings.general.deleteProtection.recycleBinPath || runtimePaths.recycleBinDir,
       fileCount: files.length,
     });
 
@@ -233,13 +232,11 @@ export class DeletionService {
     // 2. RecycleBin 설정 확인
     const settings = settingsService.loadSettings();
     const useRecycleBin = settings.general.deleteProtection.enabled;
-    const recycleBinPath = settings.general.deleteProtection.recycleBinPath || runtimePaths.recycleBinDir;
 
     console.log(`🗑️ Deleting file_id ${fileId}: {
   path: ${original_file_path},
   composite_hash: ${composite_hash},
-  useRecycleBin: ${useRecycleBin},
-  recycleBinPath: ${recycleBinPath}
+  useRecycleBin: ${useRecycleBin}
 }`);
 
     // 3. 물리 파일 삭제 (RecycleBin 또는 완전 삭제)

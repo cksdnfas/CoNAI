@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import type { StoredFileEntry, SystemFolderBatchResult, SystemFolderEntry, SystemFolderListing, SystemFolderRoot, SystemFolderRootId } from '@conai/shared';
+import type { StoredFileEntry, SystemFolderBatchResult, SystemFolderEntry, SystemFolderFailureCode, SystemFolderListing, SystemFolderRoot, SystemFolderRootId } from '@conai/shared';
 import { runtimePaths } from '../config/runtimePaths';
 import {
   RECYCLE_BIN_PATH,
@@ -22,7 +22,7 @@ import { filePreviewMime, renderPreviewWebp } from './fileStorePreview';
  * its root, follow a link or junction, or reach the databases and the private file store.
  */
 export class SystemFolderError extends Error {
-  constructor(message: string, readonly status = 400) { super(message); }
+  constructor(message: string, readonly status = 400, readonly code?: SystemFolderFailureCode) { super(message); }
 }
 
 type RootDefinition = { directory: () => string; mode: SystemFolderRoot['mode'] };
@@ -269,7 +269,7 @@ export const SystemFolderService = {
       try {
         const { absolute } = resolveFile('recycle-bin', [name]);
         const origin = origins.get(name);
-        if (!origin) throw new SystemFolderError('원래 위치 기록이 없어서 복원할 수 없어.', 409);
+        if (!origin) throw new SystemFolderError('원래 위치 기록이 없어서 복원할 수 없어.', 409, 'no-origin');
         const original = path.resolve(origin.originalPath);
         const targetDirectory = realOrResolved(path.dirname(original));
         if (isDenied(targetDirectory, denied) || within(binRoot, targetDirectory)) throw new SystemFolderError('이 위치로는 복원할 수 없어.', 403);
@@ -279,7 +279,7 @@ export const SystemFolderService = {
         forgetRecycleBinOrigins([name]);
         result.done.push({ name, restoredTo });
       } catch (error) {
-        result.failed.push({ name, error: errorMessage(error) });
+        result.failed.push(failure(name, error));
       }
     }
     return result;
@@ -293,7 +293,7 @@ export const SystemFolderService = {
         await unlinkWithTransientLockRetry(absolute);
         result.done.push({ name });
       } catch (error) {
-        result.failed.push({ name, error: errorMessage(error) });
+        result.failed.push(failure(name, error));
       }
     }
     forgetRecycleBinOrigins(result.done.map((item) => item.name));
@@ -335,7 +335,7 @@ async function restoreWithoutReplacing(source: string, original: string, conflic
     return original;
   } catch (error) {
     if (!isTaken(error)) throw error;
-    if (conflict !== 'rename') throw new SystemFolderError('원래 위치에 같은 이름의 파일이 있어.', 409);
+    if (conflict !== 'rename') throw new SystemFolderError('원래 위치에 같은 이름의 파일이 있어.', 409, 'conflict');
   }
   const directory = path.dirname(original);
   const extension = path.extname(original);
@@ -350,6 +350,12 @@ async function restoreWithoutReplacing(source: string, original: string, conflic
     }
   }
   throw new SystemFolderError('복원할 이름을 정하지 못했어.', 409);
+}
+
+/** One failed item; `code` lets the client react (e.g. offer rename-on-restore for a conflict). */
+function failure(name: string, error: unknown): SystemFolderBatchResult['failed'][number] {
+  const code = error instanceof SystemFolderError ? error.code : undefined;
+  return code ? { name, error: errorMessage(error), code } : { name, error: errorMessage(error) };
 }
 
 function errorMessage(error: unknown): string {

@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import {
   HEADER_NAVIGATION_ITEM_KEYS,
+  MAX_RECYCLE_BIN_RETENTION_DAYS,
+  normalizeRecycleBinRetentionDays,
   type GeneralSettings,
   type ImageSimilarityCheckMode,
   type SupportedLanguage,
@@ -58,11 +60,13 @@ router.put(
         return;
       }
 
+      // The legacy `recycleBinPath` is accepted and dropped (see DeleteProtectionSettings).
+      const retentionDays = generalSettings.deleteProtection?.recycleBinRetentionDays;
       if (
-        generalSettings.deleteProtection?.recycleBinPath !== undefined
-        && (typeof generalSettings.deleteProtection.recycleBinPath !== 'string' || generalSettings.deleteProtection.recycleBinPath.trim().length === 0)
+        retentionDays !== undefined
+        && (typeof retentionDays !== 'number' || normalizeRecycleBinRetentionDays(retentionDays) !== retentionDays)
       ) {
-        sendRouteBadRequest(res, 'deleteProtection.recycleBinPath must be a non-empty string');
+        sendRouteBadRequest(res, `deleteProtection.recycleBinRetentionDays must be an integer between 0 and ${MAX_RECYCLE_BIN_RETENTION_DAYS}`);
         return;
       }
     }

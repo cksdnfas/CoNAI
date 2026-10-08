@@ -19,6 +19,7 @@ export type RuntimeJobKind =
   | 'folder-scan-all'
   | 'media-orphan-cleanup'
   | 'database-backup'
+  | 'recycle-bin-retention'
 
 export type RuntimeJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
@@ -33,6 +34,7 @@ export const RUNTIME_JOB_KINDS: readonly RuntimeJobKind[] = [
   'folder-scan-all',
   'media-orphan-cleanup',
   'database-backup',
+  'recycle-bin-retention',
 ]
 
 export const RUNTIME_JOB_TERMINAL_STATUSES: readonly RuntimeJobStatus[] = ['completed', 'failed', 'cancelled']

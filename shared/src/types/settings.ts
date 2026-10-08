@@ -4,7 +4,20 @@ export type SupportedLanguage = 'ko' | 'en';
 
 export interface DeleteProtectionSettings {
   enabled: boolean;
-  recycleBinPath: string;
+  /** Days a file stays in the RecycleBin before the daily cleanup deletes it; 0 keeps files until emptied by hand. */
+  recycleBinRetentionDays: number;
+  /**
+   * @deprecated Never read: the RecycleBin always lives at the runtime path (`RUNTIME_RECYCLE_BIN_DIR`). Old stored
+   * settings may still carry it; the server accepts and drops it.
+   */
+  recycleBinPath?: string;
+}
+
+export const MAX_RECYCLE_BIN_RETENTION_DAYS = 3650;
+
+/** Whole days within range; anything else (missing, negative, fractional, too large) turns the cleanup off. */
+export function normalizeRecycleBinRetentionDays(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= MAX_RECYCLE_BIN_RETENTION_DAYS ? value : 0;
 }
 
 export const HEADER_NAVIGATION_ITEM_KEYS = [

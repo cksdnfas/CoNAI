@@ -5,7 +5,9 @@ import {
   AppSettings,
   AppearancePresetSlot,
   AppearanceThemeSettings,
+  DeleteProtectionSettings,
   HEADER_NAVIGATION_ITEM_KEYS,
+  normalizeRecycleBinRetentionDays,
   HeaderNavigationSettings,
   LlmPresetRecord,
   TaggerModel,
@@ -29,6 +31,15 @@ export function getDefaultHeaderNavigationSettings(): HeaderNavigationSettings {
     settings[key] = true;
     return settings;
   }, {} as HeaderNavigationSettings);
+}
+
+/** Complete delete-protection settings; drops the never-used legacy `recycleBinPath`. */
+function normalizeDeleteProtectionSettings(raw: unknown, defaults: DeleteProtectionSettings): DeleteProtectionSettings {
+  const record = raw && typeof raw === 'object' ? raw as Partial<DeleteProtectionSettings> : {};
+  return {
+    enabled: typeof record.enabled === 'boolean' ? record.enabled : defaults.enabled,
+    recycleBinRetentionDays: normalizeRecycleBinRetentionDays(record.recycleBinRetentionDays ?? defaults.recycleBinRetentionDays),
+  };
 }
 
 /** Keep persisted partial/legacy navigation settings complete and boolean-only. */
@@ -415,7 +426,7 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
       promptForDownloadLocation: false,
       deleteProtection: {
         enabled: true,
-        recycleBinPath: 'RecycleBin'
+        recycleBinRetentionDays: 0,
       },
       headerNavigation: getDefaultHeaderNavigationSettings(),
       enableGallery: true,
@@ -577,6 +588,7 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
       ...defaults.general,
       ...loadedSettings.general,
       headerNavigation: normalizeHeaderNavigationSettings(loadedSettings.general?.headerNavigation),
+      deleteProtection: normalizeDeleteProtectionSettings(loadedSettings.general?.deleteProtection, defaults.general.deleteProtection),
     },
     tagger: {
       ...defaults.tagger,

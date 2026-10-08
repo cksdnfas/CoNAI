@@ -19,9 +19,10 @@ export function applyGeneralSettingsUpdate(currentSettings: AppSettings, general
     general: {
       ...currentSettings.general,
       ...generalSettings,
+      // Named keys only: an old client may still send the dropped `recycleBinPath`.
       deleteProtection: {
-        ...currentSettings.general.deleteProtection,
-        ...generalSettings.deleteProtection,
+        enabled: generalSettings.deleteProtection?.enabled ?? currentSettings.general.deleteProtection.enabled,
+        recycleBinRetentionDays: generalSettings.deleteProtection?.recycleBinRetentionDays ?? currentSettings.general.deleteProtection.recycleBinRetentionDays,
       },
       headerNavigation: {
         ...currentSettings.general.headerNavigation,
