@@ -179,6 +179,8 @@ export async function extractRawFrames(input: {
   source: string
   frameIndices: number[]
   crop: { x: number; y: number; width: number; height: number } | null
+  /** Filters between the crop and the scale (the single-colour `colorkey`). */
+  key?: string[]
   scale: string[]
   output: string
   signal?: AbortSignal
@@ -186,7 +188,7 @@ export async function extractRawFrames(input: {
   const selection = input.frameIndices.map((index) => `eq(n\\,${index})`).join('+')
   const filters = [`select=${selection}`, 'setpts=N/TB']
   if (input.crop) filters.push(`crop=${input.crop.width}:${input.crop.height}:${input.crop.x}:${input.crop.y}`)
-  filters.push(...input.scale, 'format=rgba')
+  filters.push(...(input.key ?? []), ...input.scale, 'format=rgba')
   const { stderr } = await runTool(ffmpegBinary(), [
     '-hide_banner', '-nostats', '-loglevel', 'info', '-y',
     '-i', input.source, '-an', '-vf', filters.join(','),
@@ -196,7 +198,16 @@ export async function extractRawFrames(input: {
   return rawFramesResult(input.output, stderr)
 }
 
-/** Scale already-keyed RGBA frames (the original keyed before scaling in colorkey mode). */
+/** The original's single-colour key filter, same number formatting. */
+export function colorKeyFilter(rgb: [number, number, number], tolerance: number, softness: number): string {
+  const hex = rgb.map((value) => value.toString(16).padStart(2, '0')).join('')
+  return `colorkey=0x${hex}:${tolerance.toFixed(6)}:${softness.toFixed(6)}`
+}
+
+/**
+ * Scale already-keyed RGBA frames (multi-colour keys are applied in TS before scaling). Fed back as raw video, the
+ * scaler's output differs from an in-graph scale by up to ±2 RGB, so single-colour keys stay inside ffmpeg instead.
+ */
 export async function scaleRawFrames(input: { file: string; width: number; height: number; scale: string[]; output: string; signal?: AbortSignal }): Promise<RawFramesFile> {
   const { stderr } = await runTool(ffmpegBinary(), [
     '-hide_banner', '-nostats', '-loglevel', 'info', '-y',

@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { ZipArchive } from 'archiver'
 import { SpriteError } from './spriteErrors'
-import { extractRawFrames, resizeFilters, scaleRawFrames } from './spriteFfmpeg'
+import { colorKeyFilter, extractRawFrames, resizeFilters, scaleRawFrames } from './spriteFfmpeg'
 import { encodeStill } from './spriteEncode'
 import {
   MAX_SHEET_DIMENSION,
@@ -113,6 +113,10 @@ export async function buildSpriteFrames(input: BuildInput): Promise<SpriteBuildM
   fs.mkdirSync(path.join(input.workDir, FRAMES_DIR), { recursive: true })
   const stagePath = (name: string) => path.join(input.workDir, name)
   const keyOnly = options.backgroundMode === 'key' && !options.despill
+  // One key colour: ffmpeg's own colorkey in the same graph as the scale, byte-identical to the original. Several
+  // colours: the TS key (D1, minimum alpha over all colours), then a separate scale pass.
+  const ffmpegKey = keyOnly && plan.keyRgb.length === 1
+  const tsKey = keyOnly && !ffmpegKey
   const scale = resizeFilters(options.resizeMode, options.outputWidth, options.outputHeight)
   const total = plan.frameIndices.length
   const report = (phase: BuildProgress['phase'], processed: number) => input.onProgress?.({ phase, processed, total })
@@ -128,7 +132,8 @@ export async function buildSpriteFrames(input: BuildInput): Promise<SpriteBuildM
     source: input.sourcePath,
     frameIndices: plan.frameIndices,
     crop,
-    scale: keyOnly ? [] : scale,
+    key: ffmpegKey ? [colorKeyFilter(plan.keyRgb[0], options.tolerance, options.softness)] : [],
+    scale: tsKey ? [] : scale,
     output: stagePath('stage-a.rgba'),
     signal: input.signal,
   })
@@ -136,7 +141,7 @@ export async function buildSpriteFrames(input: BuildInput): Promise<SpriteBuildM
     throw new SpriteError(`요청한 ${total}장 중 ${stage.count}장만 추출되었습니다. 범위를 확인하세요.`)
   }
 
-  if (keyOnly) {
+  if (tsKey) {
     const keyedPath = stagePath('stage-keyed.rgba')
     const fd = fs.openSync(stage.file, 'r')
     const out = fs.openSync(keyedPath, 'w')

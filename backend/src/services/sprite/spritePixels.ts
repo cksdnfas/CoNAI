@@ -105,17 +105,37 @@ export function outerBorderIndices(width: number, height: number): number[] {
   return indices
 }
 
-export type DespillKeyKind = 'hue' | 'distance'
+export type DespillKeyKind = 'hue' | 'difference' | 'distance'
+
+/** Channel pairs closer than this (64/255) are too noise-prone to measure the key amount by (see keyChannelPairs). */
+const MIN_PAIR_SPREAD = 64 / 255
 
 /**
- * Pure primaries and secondaries (every channel 0 or 255, not grey) use the colour-difference key, re-derived per hue:
- * raw alpha = 1 - max(min(on channels) - max(off channels), 0). For magenta (R,B on, G off) this is exactly the
- * original `1 - max(min(R,B) - G, 0)`. Any other colour keys by RGB distance (the D1 colorkey distance).
+ * The raw alpha is "1 - how much key colour the pixel holds", so ordinary foreground reaches 1 and the 0.08 / 0.92
+ * defaults make it opaque, as with the original.
+ * - hue: pure primaries and secondaries (every channel 0 or 255, not grey): 1 - max(min(on) - max(off), 0). For magenta
+ *   this is exactly the original `1 - max(min(R,B) - G, 0)`.
+ * - difference: other colours: the same colour difference written per channel pair, key amount =
+ *   min over pairs (i, j) with k_i > k_j of (p_i - p_j) / (k_i - k_j). For a pure hue it equals min(on) - max(off).
+ * - distance: near-grey keys with no usable channel spread: RGB distance to the key, saturating halfway to the
+ *   farthest colour.
  */
 export function despillKeyKind(key: readonly [number, number, number]): DespillKeyKind {
   const pure = key.every((channel) => channel === 0 || channel === 255)
   const grey = key[0] === key[1] && key[1] === key[2]
-  return pure && !grey ? 'hue' : 'distance'
+  if (pure && !grey) return 'hue'
+  return keyChannelPairs(key).length > 0 ? 'difference' : 'distance'
+}
+
+function keyChannelPairs(key: readonly [number, number, number]): Array<[number, number, number]> {
+  const pairs: Array<[number, number, number]> = []
+  for (let high = 0; high < 3; high += 1) {
+    for (let low = 0; low < 3; low += 1) {
+      const spread = (key[high] - key[low]) / 255
+      if (spread >= MIN_PAIR_SPREAD) pairs.push([high, low, spread])
+    }
+  }
+  return pairs
 }
 
 export interface DespillOptions {
@@ -169,13 +189,22 @@ export function despillFrame(frame: RgbaFrame, options: DespillOptions, trace?: 
       const contribution = Math.max(f32(low - high), 0)
       raw[index] = f32(1 - contribution)
     }
+  } else if (kind === 'difference') {
+    const pairs = keyChannelPairs(options.key)
+    for (let index = 0; index < pixelCount; index += 1) {
+      const base = index * 3
+      let amount = Infinity
+      for (const [high, low, spread] of pairs) amount = Math.min(amount, f32(f32(rgb[base + high] - rgb[base + low]) / f32(spread)))
+      raw[index] = f32(1 - Math.min(Math.max(amount, 0), 1))
+    }
   } else {
     const key = options.key
+    const farthest = Math.sqrt(key.reduce((sum, channel) => sum + Math.max(channel, 255 - channel) ** 2, 0))
     for (let index = 0; index < pixelCount; index += 1) {
       const dr = data[index * 4] - key[0]
       const dg = data[index * 4 + 1] - key[1]
       const db = data[index * 4 + 2] - key[2]
-      raw[index] = Math.sqrt((dr * dr + dg * dg + db * db) / (255.0 * 255.0 * 3.0))
+      raw[index] = f32(Math.min(1, (2 * Math.sqrt(dr * dr + dg * dg + db * db)) / farthest))
     }
   }
 
