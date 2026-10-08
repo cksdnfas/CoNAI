@@ -61,7 +61,7 @@ function registerWorkflowListTools(server: McpServer): void {
   // 워크플로우 목록 조회
   server.tool(
     'list_workflows',
-    'List the ComfyUI image workflows registered in the system. Audio workflows run only through audio orders (list_audio_workflows / order_audio); pass kind="audio" or "all" to see them here.',
+    'List the ComfyUI image workflows registered in the system. Audio workflows are ordered from the audio workspace (list_audio_workflows / order_audio); pass kind="audio" or "all" to see them here.',
     {
       active_only: z.boolean().default(false).describe('Show only active workflows'),
       kind: z.enum(['image', 'audio', 'all']).default('image').describe('Which workflows to list: image (default), audio, or all'),

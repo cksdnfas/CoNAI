@@ -135,7 +135,8 @@ function ComfyGenerationPanelContent({
 
   const workflowsQuery = useQuery({
     queryKey: ['image-generation-workflows'],
-    queryFn: () => getGenerationWorkflows(true),
+    // Every kind: audio workflows are edited, deleted and run here too (their sounds go to history and the 생성 탭 project).
+    queryFn: () => getGenerationWorkflows(true, 'all'),
   })
 
   const serversQuery = useQuery({

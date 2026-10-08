@@ -298,17 +298,6 @@ test('audio generation: workflows, orders, queue sink, REST, MCP and chat refere
     assert.ok(main.db.prepare('SELECT 1 FROM image_files WHERE composite_hash = ?').get(history.composite_hash))
   })
 
-  await t.test('an audio workflow outside an order is refused at run time', async () => {
-    const jobId = GenerationQueueModel.create({
-      service_type: 'comfyui', priority: 100, workflow_id: defaultWorkflow.id, workflow_name: defaultWorkflow.name,
-      request_payload: { prompt_data: { prompt: 'stray', seconds: 1, seed: 1 } }, request_summary: 'stray audio',
-    })
-    GenerationQueueService.requestDispatch()
-    const job = await GenerationQueueService.waitForTerminalJob(jobId, { timeoutMs: 30_000 })
-    assert.equal(job?.status, 'failed')
-    assert.match(String(job?.failure_message), /audio orders/)
-  })
-
   await t.test('crash recovery: rows without a queue job are queued once, existing keys are reused', async () => {
     // (a) A row whose job id was lost after queueing gets the same job back from its idempotency key.
     const firstRow = audioDb.prepare('SELECT job_id FROM audio_order_jobs WHERE order_id = ? AND idx = 0').get(firstOrderId) as { job_id: number }
@@ -551,6 +540,26 @@ test('audio generation: workflows, orders, queue sink, REST, MCP and chat refere
     assert.equal((await GenerationHistoryService.getAllHistory({ queue_job_id: jobId })).records[0].audio_results, undefined)
     assert.deepEqual(HistoryQueryRepository.findDisplayFailedIds({ queue_job_id: jobId }), [history.id], 'without its sound the row reads as failed again')
     assert.equal((await call(url, historyOwnerId)).status, 404)
+  })
+
+  await t.test('an audio workflow run from the generation tab keeps a history row that plays its sound', async () => {
+    const audioWorkflowId = WorkflowModel.create({
+      name: 'voice wf',
+      workflow_json: JSON.stringify({ 8: { class_type: 'SaveAudioAdvanced', inputs: { filename_prefix: 'voice', format: 'flac', audio: ['7', 0] } } }),
+      marked_fields: [],
+      kind: 'audio',
+    })
+    assert.equal(WorkflowModel.findById(audioWorkflowId)?.kind, 'audio')
+    const { jobId, history } = await runImageWorkflow(audioWorkflowId)
+    assert.equal(history.generation_status, 'completed')
+    const results = jobCandidates.audioResultsByQueueJob([jobId]).get(jobId) ?? []
+    assert.equal(results.length, 1)
+    const candidate = service.getAudioCandidate(results[0].id)
+    assert.equal(service.getAudioProject(service.getAudioGroup(candidate.group_id).project_id).name, AUDIO_GENERATION_TAB_PROJECT_NAME)
+    const byWorkflow = await GenerationHistoryService.getHistoryByWorkflow(audioWorkflowId, {})
+    assert.deepEqual(byWorkflow.records[0].audio_results?.map((entry) => entry.id), [candidate.id])
+    const played = await fetch(`${origin}/api/generation-history/${history.id}/audio/${candidate.id}`, { headers: { 'x-test-account': String(historyOwnerId) } })
+    assert.equal(played.status, 200)
   })
 
   await t.test('an image workflow that saves a picture and a sound keeps both', async () => {

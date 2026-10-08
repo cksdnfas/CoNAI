@@ -177,14 +177,11 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
     throw new Error(`Queue job ${job.id} references inactive workflow ${job.workflow_id}`)
   }
 
-  // Audio workflows run only as audio orders: their outputs go to the audio store, never the image library.
-  // Image workflows skip this entirely (no audio.db access on their path).
+  // Audio-tab orders store their sounds on the order. Every other run (image or audio kind, from the generation tab)
+  // keeps a history row and hands sounds to the 생성 탭 project. Image workflows skip the lookup (no audio.db access).
   const audioOrderJob = workflow.kind === 'audio'
     ? (await import('../audio/audioOrders')).findAudioOrderJobByQueueJob(job.id)
     : null
-  if (workflow.kind === 'audio' && !audioOrderJob) {
-    throw new Error(`Queue job ${job.id} uses audio workflow ${workflow.id}, which runs only through audio orders (오디오 탭의 생성 주문)`)
-  }
 
   const payload = parseComfyQueuePayload(job)
   const apiEndpoint = assignedServer?.endpoint ?? workflow.api_endpoint

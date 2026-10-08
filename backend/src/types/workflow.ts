@@ -3,7 +3,7 @@
  */
 export type WorkflowResultViewMode = 'history' | 'artifact_explorer';
 export type WorkflowArtifactDirectoryMode = 'shared' | 'per_run';
-/** What a workflow produces: image-library media, or sounds for the audio workspace (run only through audio orders). */
+/** What a workflow produces: image-library media, or sounds for the audio workspace (bound and ordered in the audio tab; generation-tab runs also work). */
 export type WorkflowKind = 'image' | 'audio';
 export const WORKFLOW_KINDS: readonly WorkflowKind[] = ['image', 'audio'];
 

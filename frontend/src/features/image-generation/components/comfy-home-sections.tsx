@@ -88,6 +88,7 @@ export function ComfyWorkflowListSection({
                   </Button>
 
                   <div className="flex shrink-0 items-start gap-2">
+                    {workflow.kind === 'audio' ? <Badge variant="secondary">{t({ ko: '오디오', en: 'Audio' })}</Badge> : null}
                     <Badge variant="outline">{t({ ko: '필드 {count}', en: '{count} fields' }, { count: formatNumber((workflow.marked_fields ?? []).length) })}</Badge>
                     <div className="flex gap-1">
                       <IconButton
