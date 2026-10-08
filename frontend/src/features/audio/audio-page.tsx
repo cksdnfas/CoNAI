@@ -1,13 +1,27 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
-import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { useInfiniteQuery, useQueries, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { Download, MessageSquare, Pencil, Sparkles, Trash2, Upload } from 'lucide-react'
+import { Download, FolderInput, FolderPlus, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
+import { SelectionActionBar, SelectionBarAction } from '@/components/common/selection-action-bar'
 import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { Button } from '@/components/ui/button'
+import { useConfirm } from '@/components/ui/confirm-dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -19,12 +33,16 @@ import {
   audioCandidateExportUrl,
   audioExportDownloadUrl,
   cancelAudioOrder,
+  createAudioGroup,
+  deleteAudioGroup,
+  deleteAudioProject,
   downloadAttachment,
   getAudioGroup,
   listAudioCandidates,
   listAudioGroups,
   listAudioOrders,
   listAudioProjects,
+  moveAudioCandidates,
   retryAudioOrderJob,
   saveBlob,
   setAudioReview,
@@ -33,6 +51,8 @@ import {
   type AudioCandidate,
   type AudioCandidatePage,
   type AudioExportResult,
+  type AudioGroup,
+  type AudioProject,
   type AudioReview,
 } from '@/lib/api-audio'
 import { getErrorMessage } from '@/lib/error-message'
@@ -40,60 +60,87 @@ import { runtimeJobQueryKey, useRuntimeJob } from '@/lib/use-runtime-job'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { AudioCandidateRow, AudioOrderRow, activeJobCount, arrangeCandidates } from './audio-candidate-list'
-import { AudioCleanupDialog, AudioCommentsDialog, AudioGroupDialog, AudioOrderDialog, AudioProjectDialog, TextTabs } from './audio-dialogs'
+import { AudioCleanupDialog, AudioCommentsDialog, AudioGroupDialog, AudioProjectDialog, TextTabs } from './audio-dialogs'
 import { AudioEditorPanel } from './audio-editor-panel'
+import { AudioGenerateBar } from './audio-generate-bar'
+import { autoAudioLabel } from './audio-naming'
 import { audioPlayer } from './audio-player'
 import { AUDIO_SHORTCUT_ACTIONS, normalizeShortcutKey, shouldIgnoreReviewKey, useAudioShortcuts } from './audio-shortcuts'
 import { AudioSettingsDialog } from './audio-settings-dialog'
 import { AudioSidebar, AudioSidebarFooter, type AudioSidebarFilter } from './audio-sidebar'
 
 const PROJECT_STORAGE_KEY = 'conai:audio:project'
+const EXPANDED_STORAGE_KEY = 'conai:audio:expanded'
 const PAGE_SIZE = 200
 /** Failed orders stay listed (with retry) for a day. */
 const FAILED_ORDER_WINDOW_MS = 24 * 60 * 60 * 1000
 
-type Dialog = 'project-new' | 'project-edit' | 'group-new' | 'group-edit' | 'comments' | 'cleanup' | 'order' | 'settings' | null
+type Dialog = 'project-new' | 'project-edit' | 'group-edit' | 'comments' | 'cleanup' | 'settings' | null
 type ReviewTab = 'all' | AudioReview
 
-function readStoredProject() {
+function readStored(key: string) {
   try {
-    return window.localStorage.getItem(PROJECT_STORAGE_KEY)
+    return window.localStorage.getItem(key)
   } catch {
     return null
   }
 }
 
-function storeProject(id: string) {
+function writeStored(key: string, value: string) {
   try {
-    window.localStorage.setItem(PROJECT_STORAGE_KEY, id)
+    window.localStorage.setItem(key, value)
   } catch {
     // Storage blocked: the choice still holds for this visit.
   }
 }
 
+function readExpanded(): Set<string> {
+  try {
+    const value = JSON.parse(readStored(EXPANDED_STORAGE_KEY) ?? '[]') as unknown
+    return new Set(Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
+/** Unfiltered group list of one project; the tree, the move targets and send-to-audio share this cache entry. */
+const projectGroupsKey = (projectId: string | null) => [AUDIO_QUERY_KEY, 'groups', projectId, '', null] as const
+
 function useAudioPermissions() {
   const auth = useAuthStatusQuery().data
   const has = (key: string) => !!auth?.authenticated && (auth.hasCredentials === false || hasAuthPermission(auth.permissionKeys, key))
-  return { canEdit: has('audio.edit'), canGenerate: has('audio.edit') && has('generation.execute'), canManageWorkflows: has('audio.edit') }
+  return {
+    canEdit: has('audio.edit'),
+    canGenerate: has('audio.edit') && has('generation.execute'),
+    canManageWorkflows: has('audio.edit'),
+    canAddWorkflow: has('audio.edit') && has('workflows.edit'),
+  }
 }
 
-/** /audio — the sound-effect workspace: projects, groups, takes, review, editing, generation orders and export. */
+/** /audio — the sound-effect workspace: projects ▸ effects (audio groups), takes, review, editing, generation and export. */
 export function AudioPage() {
   const { t } = useI18n()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
+  const confirm = useConfirm()
   const isDesktop = useDesktopPageLayout()
   const permissions = useAudioPermissions()
   const shortcuts = useAudioShortcuts()
   const [searchParams, setSearchParams] = useSearchParams()
   const groupId = searchParams.get('group')
-  const [projectId, setProjectIdState] = useState<string | null>(readStoredProject)
+  const [projectId, setProjectIdState] = useState<string | null>(() => readStored(PROJECT_STORAGE_KEY))
+  const [expanded, setExpanded] = useState<Set<string>>(readExpanded)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [filter, setFilter] = useState<AudioSidebarFilter>(null)
   const [reviewTab, setReviewTab] = useState<ReviewTab>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [checked, setChecked] = useState<Set<string>>(() => new Set())
+  const [moveTargetId, setMoveTargetId] = useState('')
   const [dialog, setDialog] = useState<Dialog>(null)
+  const [editingProject, setEditingProject] = useState<AudioProject | null>(null)
+  const [settingsWorkflowId, setSettingsWorkflowId] = useState<number | null>(null)
+  const [freshGroupId, setFreshGroupId] = useState<string | null>(null)
   const [dismissedOrders, setDismissedOrders] = useState<Set<string>>(() => new Set())
   const [exportJobId, setExportJobId] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -106,10 +153,11 @@ export function AudioPage() {
     const timer = window.setTimeout(() => setDebouncedSearch(search), 250)
     return () => window.clearTimeout(timer)
   }, [search])
+  const searching = Boolean(debouncedSearch.trim()) || filter !== null
 
   const setProjectId = useCallback((id: string) => {
     setProjectIdState(id)
-    storeProject(id)
+    writeStored(PROJECT_STORAGE_KEY, id)
   }, [])
   const setGroupId = useCallback((id: string | null, replace = false) => {
     setSearchParams((current) => {
@@ -119,6 +167,15 @@ export function AudioPage() {
       return next
     }, { replace })
   }, [setSearchParams])
+  const expand = useCallback((id: string, open?: boolean) => {
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (open ?? !next.has(id)) next.add(id)
+      else next.delete(id)
+      writeStored(EXPANDED_STORAGE_KEY, JSON.stringify([...next]))
+      return next
+    })
+  }, [])
 
   /* ---------------------------------------------------------------------------------------------- data */
 
@@ -127,38 +184,52 @@ export function AudioPage() {
   const groupQuery = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'group', groupId], queryFn: () => getAudioGroup(groupId!), enabled: Boolean(groupId), retry: false })
   const group = groupQuery.data && groupQuery.data.id === groupId ? groupQuery.data : null
 
-  // A group link (chat card, ?group=) wins over the remembered project.
+  // A group link (chat card, ?group=) wins over the remembered project, and opens that project in the tree.
   useEffect(() => {
-    if (group && group.project_id !== projectId) setProjectId(group.project_id)
-  }, [group, projectId, setProjectId])
+    if (!group) return
+    if (group.project_id !== projectId) setProjectId(group.project_id)
+    if (!expanded.has(group.project_id)) expand(group.project_id, true)
+  }, [group, projectId, setProjectId, expanded, expand])
   useEffect(() => {
     if (!projectsQuery.isSuccess) return
     if (projects.length === 0) return
     if (!projectId || !projects.some((project) => project.id === projectId)) {
-      if (!groupId || groupQuery.isError) setProjectId(projects[0].id)
+      if (!groupId || groupQuery.isError) {
+        setProjectId(projects[0].id)
+        expand(projects[0].id, true)
+      }
     }
-  }, [projectsQuery.isSuccess, projects, projectId, groupId, groupQuery.isError, setProjectId])
+  }, [projectsQuery.isSuccess, projects, projectId, groupId, groupQuery.isError, setProjectId, expand])
   const project = projects.find((entry) => entry.id === projectId) ?? null
 
-  const groupsQuery = useQuery({
-    queryKey: [AUDIO_QUERY_KEY, 'groups', projectId, debouncedSearch, filter],
-    queryFn: () => listAudioGroups(projectId!, { search: debouncedSearch, filter }),
-    enabled: Boolean(projectId),
-    placeholderData: (previous) => previous,
-  })
-  const groups = useMemo(() => {
-    const list = groupsQuery.data ?? []
-    return [...list.filter((entry) => entry.is_inbox), ...list.filter((entry) => !entry.is_inbox)]
-  }, [groupsQuery.data])
+  const projectGroupsQuery = useQuery({ queryKey: projectGroupsKey(projectId), queryFn: () => listAudioGroups(projectId!), enabled: Boolean(projectId) })
+  const projectGroups = useMemo(() => projectGroupsQuery.data ?? [], [projectGroupsQuery.data])
+  const effects = useMemo(() => projectGroups.filter((entry) => !entry.is_inbox), [projectGroups])
 
-  // Without a group in the URL (or after it was deleted), open the first group of the project.
+  // The tree loads the open projects; a search or filter looks through every project.
+  const treeProjectIds = searching ? projects.map((entry) => entry.id) : projects.map((entry) => entry.id).filter((id) => expanded.has(id) || id === projectId)
+  const treeQueries = useQueries({
+    queries: treeProjectIds.map((id) => ({
+      queryKey: searching ? [AUDIO_QUERY_KEY, 'groups', id, debouncedSearch, filter] : projectGroupsKey(id),
+      queryFn: () => listAudioGroups(id, searching ? { search: debouncedSearch, filter } : {}),
+      placeholderData: (previous: AudioGroup[] | undefined) => previous,
+    })),
+  })
+  const groupsByProject = useMemo(() => {
+    const map: Record<string, AudioGroup[] | undefined> = {}
+    treeProjectIds.forEach((id, index) => { map[id] = treeQueries[index]?.data })
+    return map
+  }, [treeProjectIds, treeQueries])
+
+  // Without a group in the URL (or after it was deleted), open the first effect of the project. 받은 파일 opens only
+  // when picked: a project without effects shows the "add an effect" state instead.
   useEffect(() => {
-    if (!projectId || !groupsQuery.isSuccess || debouncedSearch || filter) return
-    const missing = !groupId || (groupQuery.isError) || (group !== null && group.project_id !== projectId)
+    if (!projectId || !projectGroupsQuery.isSuccess || searching) return
+    const missing = !groupId || groupQuery.isError || (group !== null && group.project_id !== projectId)
     if (!missing) return
-    const first = groups.find((entry) => !entry.is_inbox) ?? groups[0]
-    setGroupId(first?.id ?? null, true)
-  }, [projectId, groupsQuery.isSuccess, groups, groupId, group, groupQuery.isError, debouncedSearch, filter, setGroupId])
+    const next = effects[0]?.id ?? null
+    if (next !== groupId) setGroupId(next, true)
+  }, [projectId, projectGroupsQuery.isSuccess, effects, groupId, group, groupQuery.isError, searching, setGroupId])
 
   const reviewFilter = reviewTab === 'all' ? null : reviewTab
   const candidatesKey = [AUDIO_QUERY_KEY, 'candidates', groupId, reviewFilter] as const
@@ -172,7 +243,10 @@ export function AudioPage() {
   const rows = useMemo(() => arrangeCandidates((candidatesQuery.data?.pages ?? []).flatMap((page) => page.items)), [candidatesQuery.data])
   const selected = rows.find((row) => row.candidate.id === selectedId)?.candidate ?? (lastSelectedRef.current?.id === selectedId ? lastSelectedRef.current : null)
   useEffect(() => { if (selected) lastSelectedRef.current = selected }, [selected])
-  useEffect(() => { setSelectedId(null) }, [groupId])
+  useEffect(() => {
+    setSelectedId(null)
+    setChecked(new Set())
+  }, [groupId])
 
   const fallbackInterval = useStreamFallbackInterval(5_000)
   const ordersQuery = useQuery({
@@ -242,7 +316,7 @@ export function AudioPage() {
   }, [rows, selectedId])
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
       if (shouldIgnoreReviewKey(event)) return
       const key = normalizeShortcutKey(event.key)
       const action = AUDIO_SHORTCUT_ACTIONS.find((entry) => shortcuts[entry] === key)
@@ -264,12 +338,77 @@ export function AudioPage() {
 
   useEffect(() => () => audioPlayer.stop(), [])
 
+  /* ---------------------------------------------------------------------------------------------- projects / effects */
+
+  const createEffect = async (targetProjectId: string, name: string) => {
+    const siblings = queryClient.getQueryData<AudioGroup[]>(projectGroupsKey(targetProjectId)) ?? groupsByProject[targetProjectId] ?? []
+    try {
+      const created = await createAudioGroup(targetProjectId, { name, label: autoAudioLabel(name, siblings.map((entry) => entry.label)), description: '' })
+      setProjectId(targetProjectId)
+      setFreshGroupId(created.id)
+      setGroupId(created.id)
+      refreshCounts()
+      return true
+    } catch (error) {
+      fail(error)
+      return false
+    }
+  }
+  const removeProject = async (target: AudioProject) => {
+    const ok = await confirm({
+      title: t({ ko: '프로젝트 삭제', en: 'Delete project' }),
+      description: t({ ko: '"{name}"의 효과음과 후보 {count}개가 모두 휴지통으로 가.', en: 'All effects and {count} takes of "{name}" go to the RecycleBin.' }, { name: target.name, count: target.candidate_count }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
+    if (!ok) return
+    try {
+      await deleteAudioProject(target.id)
+      if (target.id === projectId) {
+        setProjectIdState(null)
+        setGroupId(null)
+      }
+      refreshAll()
+    } catch (error) {
+      fail(error)
+    }
+  }
+  const removeGroup = async (target: AudioGroup) => {
+    const ok = await confirm({
+      title: t({ ko: '효과음 삭제', en: 'Delete effect' }),
+      description: t({ ko: '"{name}"의 후보 {count}개가 휴지통으로 가.', en: '{count} takes of "{name}" go to the RecycleBin.' }, { name: target.name, count: target.candidate_count }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
+    if (!ok) return
+    try {
+      await deleteAudioGroup(target.id)
+      setDialog(null)
+      setGroupId(null)
+      refreshAll()
+    } catch (error) {
+      fail(error)
+    }
+  }
+  const moveTakes = async (ids: string[], target: AudioGroup) => {
+    if (ids.length === 0) return
+    try {
+      await moveAudioCandidates(ids, target.id)
+      showSnackbar({ message: t({ ko: '{count}개를 "{name}"(으)로 옮겼어.', en: 'Moved {count} to "{name}".' }, { count: ids.length, name: target.is_inbox ? t({ ko: '받은 파일', en: 'Inbox' }) : target.name }) })
+      setChecked(new Set())
+      if (selectedId && ids.includes(selectedId)) setSelectedId(null)
+    } catch (error) {
+      fail(error)
+    }
+    refreshAll()
+  }
+
   /* ---------------------------------------------------------------------------------------------- upload / export */
 
-  const upload = async (files: File[]) => {
-    if (!group || files.length === 0) return
+  const upload = async (target: { groupId: string } | { projectId: string }, files: File[]) => {
+    if (files.length === 0) return
     try {
-      const result = await uploadAudioFiles({ groupId: group.id }, files)
+      const result = await uploadAudioFiles(target, files)
       showSnackbar({ message: t({ ko: '{count}개 올렸어.', en: 'Uploaded {count}.' }, { count: result.created.length }) })
       if (result.failed.length > 0) showSnackbar({ message: result.failed.map((entry) => `${entry.name}: ${entry.error}`).join('\n'), tone: 'error' })
     } catch (error) {
@@ -281,7 +420,7 @@ export function AudioPage() {
     if (!event.dataTransfer.types.includes('Files')) return
     event.preventDefault()
     setDragging(false)
-    if (permissions.canEdit) void upload(Array.from(event.dataTransfer.files))
+    if (permissions.canEdit && group) void upload({ groupId: group.id }, Array.from(event.dataTransfer.files))
   }
 
   const exportJob = useRuntimeJob<AudioExportResult>(exportJobId, {
@@ -335,7 +474,12 @@ export function AudioPage() {
     ['selected', t({ ko: '채택', en: 'Adopted' }), group.selected_count],
     ['rejected', t({ ko: '보류', en: 'Rejected' }), Math.max(0, group.candidate_count - group.selected_count - group.pending_review_count)],
   ] : []
-  const groupTitle = group ? (group.is_inbox ? t({ ko: '받은 파일', en: 'Inbox' }) : group.name) : t({ ko: '오디오', en: 'Audio' })
+  const inbox = group?.is_inbox === true
+  const groupTitle = group ? (inbox ? t({ ko: '받은 파일', en: 'Inbox' }) : group.name) : project?.name ?? t({ ko: '오디오', en: 'Audio' })
+  // Takes move within their project: to its effects, or back to its 받은 파일.
+  const moveTargets = group ? projectGroups.filter((entry) => entry.id !== group.id && (!entry.is_inbox || !inbox)) : []
+  const inboxEffects = moveTargets.filter((entry) => !entry.is_inbox)
+  const moveTarget = inboxEffects.find((entry) => entry.id === moveTargetId) ?? inboxEffects[0] ?? null
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = candidatesQuery
   useEffect(() => {
@@ -362,55 +506,101 @@ export function AudioPage() {
     />
   ) : null
 
+  const exportBusy = exporting || Boolean(exportJobId)
+  const toolbarActions = group ? (
+    <>
+      {!inbox ? (
+        <span className="relative inline-flex">
+          <IconButton variant="ghost" label={t({ ko: '코멘트', en: 'Comments' })} onClick={() => setDialog('comments')}><MessageSquare /></IconButton>
+          {group.pending_comment_count > 0 ? <span className="pointer-events-none absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-primary px-1 text-center text-2xs leading-4 font-semibold text-primary-foreground">{group.pending_comment_count}</span> : null}
+        </span>
+      ) : null}
+      {permissions.canEdit ? <IconButton variant="ghost" label={t({ ko: '업로드', en: 'Upload' })} onClick={() => uploadInputRef.current?.click()}><Upload /></IconButton> : null}
+      <IconButton variant="ghost" label={t({ ko: '채택본 내보내기', en: 'Export adopted takes' })} disabled={exportBusy} onClick={() => void runExport({ groupId: group.id })}><Download /></IconButton>
+      {permissions.canEdit ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <IconButton variant="ghost" label={t({ ko: '더 보기', en: 'More' })}><MoreHorizontal /></IconButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {!inbox ? <DropdownMenuItem onSelect={() => setDialog('group-edit')}><Pencil />{t({ ko: '효과음 수정', en: 'Edit effect' })}</DropdownMenuItem> : null}
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger disabled={!selected}><FolderInput />{t({ ko: '고른 후보 옮기기', en: 'Move the picked take' })}</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {moveTargets.length === 0 ? <DropdownMenuItem disabled>{t({ ko: '효과음 없음', en: 'No effects' })}</DropdownMenuItem> : null}
+                {moveTargets.map((entry) => (
+                  <DropdownMenuItem key={entry.id} onSelect={() => selected && void moveTakes([selected.id], entry)}>
+                    {entry.is_inbox ? t({ ko: '받은 파일', en: 'Inbox' }) : entry.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuItem onSelect={() => setDialog('cleanup')}><Trash2 />{t({ ko: '후보 정리', en: 'Clean up takes' })}</DropdownMenuItem>
+            {!inbox ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onSelect={() => void removeGroup(group)}><Trash2 />{t({ ko: '효과음 삭제', en: 'Delete effect' })}</DropdownMenuItem>
+              </>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+    </>
+  ) : null
+
   return (
     <PageWithSidebar
       storageKey="audio"
-      sidebarLabel={t({ ko: '프로젝트와 그룹', en: 'Projects and groups' })}
+      sidebarLabel={t({ ko: '프로젝트와 효과음', en: 'Projects and effects' })}
       sidebarWidth={256}
       sidebar={(
         <AudioSidebar
           projects={projects}
-          projectId={projectId}
-          onProjectChange={(id) => { setProjectId(id); setGroupId(null) }}
-          groups={groups}
-          groupId={groupId}
-          onGroupChange={(id) => setGroupId(id)}
+          groupsByProject={groupsByProject}
+          expanded={expanded}
+          onToggleProject={(id) => expand(id)}
+          activeGroupId={groupId}
+          onSelectGroup={(entry) => {
+            setProjectId(entry.project_id)
+            setGroupId(entry.id)
+          }}
           search={search}
           onSearchChange={setSearch}
           filter={filter}
           onFilterChange={setFilter}
           canEdit={permissions.canEdit}
-          onNewGroup={() => setDialog('group-new')}
-          onOpenSettings={() => setDialog('settings')}
+          exporting={exportBusy}
+          onEditProject={(entry) => { setEditingProject(entry); setDialog('project-edit') }}
+          onExportProject={(entry) => void runExport({ projectId: entry.id })}
+          onDeleteProject={(entry) => void removeProject(entry)}
+          onCreateGroup={createEffect}
+          onDropCandidates={(target, ids) => void moveTakes(ids, target)}
+          onDropFiles={(target, files) => void upload(target, files)}
         />
       )}
       sidebarFooter={(
         <AudioSidebarFooter
-          project={project}
           canEdit={permissions.canEdit}
-          exporting={exporting || Boolean(exportJobId)}
           onNewProject={() => setDialog('project-new')}
-          onEditProject={() => setDialog('project-edit')}
-          onExportProject={() => project && void runExport({ projectId: project.id })}
+          onOpenSettings={() => { setSettingsWorkflowId(null); setDialog('settings') }}
         />
       )}
       toolbar={(
         <PageToolbar
           title={groupTitle}
-          start={group?.label && !group.is_inbox ? <span className="truncate font-mono text-xs text-muted-foreground">{group.label}</span> : null}
-          actions={group ? (
-            <>
-              {permissions.canEdit ? <IconButton variant="ghost" label={t({ ko: '그룹 수정', en: 'Edit group' })} onClick={() => setDialog('group-edit')}><Pencil /></IconButton> : null}
-              <span className="relative inline-flex">
-                <IconButton variant="ghost" label={t({ ko: '코멘트', en: 'Comments' })} onClick={() => setDialog('comments')}><MessageSquare /></IconButton>
-                {group.pending_comment_count > 0 ? <span className="pointer-events-none absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-primary px-1 text-center text-2xs leading-4 font-semibold text-primary-foreground">{group.pending_comment_count}</span> : null}
-              </span>
-              {permissions.canEdit ? <IconButton variant="ghost" label={t({ ko: '업로드', en: 'Upload' })} onClick={() => uploadInputRef.current?.click()}><Upload /></IconButton> : null}
-              {permissions.canEdit ? <IconButton variant="ghost" label={t({ ko: '후보 정리', en: 'Clean up takes' })} onClick={() => setDialog('cleanup')}><Trash2 /></IconButton> : null}
-              <IconButton variant="ghost" label={t({ ko: '채택본 내보내기', en: 'Export selections' })} disabled={exporting || Boolean(exportJobId)} onClick={() => void runExport({ groupId: group.id })}><Download /></IconButton>
-              {permissions.canGenerate && !group.is_inbox ? <Button size="sm" className="ml-1" onClick={() => setDialog('order')}><Sparkles />{t({ ko: '생성 주문', en: 'Order' })}</Button> : null}
-            </>
+          start={group?.label && !inbox ? (
+            <Button
+              variant="subtle"
+              size="xs"
+              className="min-w-0 truncate font-mono font-normal"
+              disabled={!permissions.canEdit}
+              title={t({ ko: '내보낼 파일명', en: 'Export file name' })}
+              onClick={() => setDialog('group-edit')}
+            >
+              {group.label}
+            </Button>
           ) : null}
+          actions={toolbarActions}
         />
       )}
     >
@@ -423,14 +613,25 @@ export function AudioPage() {
         onChange={(event) => {
           const files = Array.from(event.target.files ?? [])
           event.target.value = ''
-          void upload(files)
+          if (group) void upload({ groupId: group.id }, files)
         }}
       />
       {exportJob.job ? <RuntimeJobProgress job={exportJob.job} cancel={exportJob.cancel} isCancelling={exportJob.isCancelling} className="mb-4" /> : null}
+
+      {projectsQuery.isSuccess && projects.length === 0 ? (
+        <EmptyAudio title={t({ ko: '프로젝트 없음', en: 'No projects' })}>
+          {permissions.canEdit ? <Button onClick={() => setDialog('project-new')}><FolderPlus />{t({ ko: '새 프로젝트', en: 'New project' })}</Button> : null}
+        </EmptyAudio>
+      ) : !group && project && projectGroupsQuery.isSuccess && effects.length === 0 && !groupId ? (
+        <EmptyAudio title={t({ ko: '효과음 없음', en: 'No effects' })}>
+          {permissions.canEdit ? <NewEffectInput key={project.id} onCreate={(name) => createEffect(project.id, name)} /> : null}
+        </EmptyAudio>
+      ) : null}
+
       {group ? (
-        <div className={cn('flex items-start gap-6', isDesktop && selected && 'pr-0')}>
+        <div className="flex items-start gap-6">
           <div
-            className={cn('relative min-w-0 flex-1', dragging && 'after:pointer-events-none after:absolute after:inset-0 after:rounded-md after:border-2 after:border-dashed after:border-primary')}
+            className={cn('relative min-w-0 flex-1 space-y-3', dragging && 'after:pointer-events-none after:absolute after:inset-0 after:rounded-md after:border-2 after:border-dashed after:border-primary')}
             onDragOver={(event) => {
               if (!permissions.canEdit || !event.dataTransfer.types.includes('Files')) return
               event.preventDefault()
@@ -439,31 +640,64 @@ export function AudioPage() {
             onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false) }}
             onDrop={onDrop}
           >
-            <TextTabs value={reviewTab} items={tabs} onChange={(value) => { setReviewTab(value); setSelectedId(null) }} />
-            <div role="listbox" aria-label={t({ ko: '후보', en: 'Takes' })} className="min-h-40">
-              {visibleOrders.map((order) => (
-                <AudioOrderRow
-                  key={order.id}
-                  order={order}
-                  canEdit={permissions.canGenerate}
-                  onCancel={() => void cancelAudioOrder(order.id).then(refreshAll, fail)}
-                  onRetry={() => void Promise.all(order.jobs.filter((job) => job.status === 'failed').map((job) => retryAudioOrderJob(order.id, job.idx))).then(refreshAll, fail)}
-                  onDismiss={() => setDismissedOrders((current) => new Set(current).add(order.id))}
-                />
-              ))}
-              {rows.map((row) => (
-                <AudioCandidateRow
-                  key={row.candidate.id}
-                  row={row}
-                  selected={row.candidate.id === selectedId}
-                  canEdit={permissions.canEdit}
-                  onSelect={() => setSelectedId(row.candidate.id)}
-                  onPlay={() => { setSelectedId(row.candidate.id); play(row.candidate) }}
-                  onReview={(next) => void review(row.candidate, next)}
-                  onDownload={() => void downloadAttachment(audioCandidateExportUrl(row.candidate.id), row.candidate.name).catch(fail)}
-                />
-              ))}
-              <div ref={loadMoreRef} className="h-px" />
+            {!inbox && permissions.canEdit ? (
+              <AudioGenerateBar
+                key={group.id}
+                group={group}
+                autoFocus={freshGroupId === group.id}
+                canGenerate={permissions.canGenerate}
+                canAddWorkflow={permissions.canAddWorkflow}
+                onPromptSaved={refreshCounts}
+                onOpenSettings={(workflowId) => { setSettingsWorkflowId(workflowId); setDialog('settings') }}
+                onOrdered={(order) => {
+                  queryClient.setQueryData([AUDIO_QUERY_KEY, 'orders', group.id], (current: { items: typeof order[]; total: number } | undefined) => ({
+                    items: [order, ...(current?.items ?? []).filter((entry) => entry.id !== order.id)],
+                    total: (current?.total ?? 0) + 1,
+                  }))
+                  void queryClient.invalidateQueries({ queryKey: [AUDIO_QUERY_KEY, 'orders', group.id] })
+                }}
+              />
+            ) : null}
+            <div>
+              <TextTabs value={reviewTab} items={tabs} onChange={(value) => { setReviewTab(value); setSelectedId(null) }} />
+              <div role="listbox" aria-label={t({ ko: '후보', en: 'Takes' })} className="min-h-40">
+                {visibleOrders.map((order) => (
+                  <AudioOrderRow
+                    key={order.id}
+                    order={order}
+                    canEdit={permissions.canGenerate}
+                    onCancel={() => void cancelAudioOrder(order.id).then(refreshAll, fail)}
+                    onRetry={() => void Promise.all(order.jobs.filter((job) => job.status === 'failed').map((job) => retryAudioOrderJob(order.id, job.idx))).then(refreshAll, fail)}
+                    onDismiss={() => setDismissedOrders((current) => new Set(current).add(order.id))}
+                  />
+                ))}
+                {rows.map((row) => (
+                  <AudioCandidateRow
+                    key={row.candidate.id}
+                    row={row}
+                    selected={row.candidate.id === selectedId}
+                    canEdit={permissions.canEdit}
+                    onSelect={() => setSelectedId(row.candidate.id)}
+                    onPlay={() => { setSelectedId(row.candidate.id); play(row.candidate) }}
+                    onReview={(next) => void review(row.candidate, next)}
+                    onDownload={() => void downloadAttachment(audioCandidateExportUrl(row.candidate.id), row.candidate.name).catch(fail)}
+                    checked={checked.has(row.candidate.id)}
+                    onCheck={inbox && permissions.canEdit ? (value) => setChecked((current) => {
+                      const next = new Set(current)
+                      if (value) next.add(row.candidate.id)
+                      else next.delete(row.candidate.id)
+                      return next
+                    }) : undefined}
+                    moveTargets={inboxEffects}
+                    onMove={inbox ? (target) => void moveTakes([row.candidate.id], target) : undefined}
+                    dragIds={() => (checked.has(row.candidate.id) ? [...checked] : [row.candidate.id])}
+                  />
+                ))}
+                {rows.length === 0 && candidatesQuery.isSuccess && visibleOrders.length === 0 ? (
+                  <p className="py-10 text-center text-sm text-muted-foreground">{t({ ko: '후보 없음', en: 'No takes' })}</p>
+                ) : null}
+                <div ref={loadMoreRef} className="h-px" />
+              </div>
             </div>
           </div>
           {isDesktop && editor ? (
@@ -480,63 +714,97 @@ export function AudioPage() {
         </BottomDrawerSheet>
       ) : null}
 
-      <AudioProjectDialog
-        open={dialog === 'project-new' || dialog === 'project-edit'}
-        project={dialog === 'project-edit' ? project : null}
-        onClose={() => setDialog(null)}
-        onSaved={(saved) => {
-          setDialog(null)
-          refreshCounts()
-          if (saved.id !== projectId) {
-            setProjectId(saved.id)
-            setGroupId(saved.inbox_group_id)
-          }
-        }}
-        onDeleted={() => {
-          setDialog(null)
-          setProjectIdState(null)
-          setGroupId(null)
-          refreshAll()
-        }}
-      />
-      {projectId ? (
-        <AudioGroupDialog
-          open={dialog === 'group-new' || dialog === 'group-edit'}
-          projectId={projectId}
-          group={dialog === 'group-edit' ? group : null}
-          onClose={() => setDialog(null)}
-          onSaved={(saved) => {
-            setDialog(null)
-            refreshCounts()
-            setGroupId(saved.id)
-          }}
-          onDeleted={() => {
-            setDialog(null)
-            setGroupId(null)
-            refreshAll()
-          }}
+      {inbox && checked.size > 0 ? (
+        <SelectionActionBar
+          selectedCount={checked.size}
+          onClear={() => setChecked(new Set())}
+          actions={(
+            <>
+              <Select className="h-8 w-44" aria-label={t({ ko: '옮길 효과음', en: 'Move to' })} value={moveTarget?.id ?? ''} disabled={inboxEffects.length === 0} onChange={(event) => setMoveTargetId(event.target.value)}>
+                {inboxEffects.length === 0 ? <option value="">{t({ ko: '효과음 없음', en: 'No effects' })}</option> : null}
+                {inboxEffects.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+              </Select>
+              <SelectionBarAction icon={FolderInput} label={t({ ko: '옮기기', en: 'Move' })} variant="default" disabled={!moveTarget} onClick={() => moveTarget && void moveTakes([...checked], moveTarget)} />
+            </>
+          )}
         />
       ) : null}
+
+      <AudioProjectDialog
+        open={dialog === 'project-new' || dialog === 'project-edit'}
+        project={dialog === 'project-edit' ? editingProject : null}
+        onClose={() => setDialog(null)}
+        onSaved={(saved) => {
+          const created = dialog === 'project-new'
+          setDialog(null)
+          refreshCounts()
+          if (created) {
+            setProjectId(saved.id)
+            expand(saved.id, true)
+            setGroupId(null)
+          }
+        }}
+      />
+      <AudioGroupDialog
+        open={dialog === 'group-edit'}
+        group={group}
+        takenLabels={projectGroups.filter((entry) => entry.id !== group?.id).map((entry) => entry.label)}
+        onClose={() => setDialog(null)}
+        onSaved={() => {
+          setDialog(null)
+          refreshCounts()
+        }}
+        onDelete={() => group && void removeGroup(group)}
+      />
       {group ? (
         <>
           <AudioCommentsDialog open={dialog === 'comments'} group={group} canEdit={permissions.canEdit} onClose={() => setDialog(null)} onChanged={refreshCounts} />
           <AudioCleanupDialog open={dialog === 'cleanup'} group={group} onClose={() => setDialog(null)} onDone={() => { setDialog(null); setSelectedId(null); refreshAll() }} />
-          <AudioOrderDialog
-            open={dialog === 'order'}
-            group={group}
-            onClose={() => setDialog(null)}
-            onOrdered={(order) => {
-              setDialog(null)
-              queryClient.setQueryData([AUDIO_QUERY_KEY, 'orders', group.id], (current: { items: typeof order[]; total: number } | undefined) => ({
-                items: [order, ...(current?.items ?? []).filter((entry) => entry.id !== order.id)],
-                total: (current?.total ?? 0) + 1,
-              }))
-              void queryClient.invalidateQueries({ queryKey: [AUDIO_QUERY_KEY, 'orders', group.id] })
-            }}
-          />
         </>
       ) : null}
-      <AudioSettingsDialog open={dialog === 'settings'} canManage={permissions.canManageWorkflows} onClose={() => setDialog(null)} />
+      <AudioSettingsDialog open={dialog === 'settings'} canManage={permissions.canManageWorkflows} focusWorkflowId={settingsWorkflowId} onClose={() => setDialog(null)} />
     </PageWithSidebar>
+  )
+}
+
+function EmptyAudio({ title, children }: { title: string; children?: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
+      <p className="text-sm text-muted-foreground">{title}</p>
+      {children}
+    </div>
+  )
+}
+
+/** "효과음 이름 + 추가" for a project without effects; the new effect opens with its prompt focused. */
+function NewEffectInput({ onCreate }: { onCreate: (name: string) => Promise<boolean> }) {
+  const { t } = useI18n()
+  const [name, setName] = useState('')
+  const [busy, setBusy] = useState(false)
+  const submit = async () => {
+    if (!name.trim() || busy) return
+    setBusy(true)
+    if (await onCreate(name.trim())) setName('')
+    setBusy(false)
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        autoFocus
+        className="w-56"
+        maxLength={120}
+        placeholder={t({ ko: '효과음 이름', en: 'Effect name' })}
+        aria-label={t({ ko: '새 효과음 이름', en: 'New effect name' })}
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+          if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+            event.preventDefault()
+            void submit()
+          }
+        }}
+      />
+      <Button disabled={!name.trim() || busy} onClick={() => void submit()}><Plus />{t({ ko: '추가', en: 'Add' })}</Button>
+    </div>
   )
 }

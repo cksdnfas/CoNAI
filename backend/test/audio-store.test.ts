@@ -110,7 +110,7 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
     const groups = service.listAudioGroups(project.id)
     assert.deepEqual(groups.map((group) => [group.name, group.is_inbox, group.label]), [[service.AUDIO_INBOX_GROUP_NAME, true, null]])
     await assert.rejects(service.deleteAudioGroup(project.inbox_group_id!), /지울 수 없어/)
-    assert.throws(() => service.updateAudioGroup(project.inbox_group_id!, { label: 'x_[00]' }), /파일명 규칙/)
+    assert.throws(() => service.updateAudioGroup(project.inbox_group_id!, { label: 'x_[00]' }), /파일명을 붙일 수 없어/)
     assert.throws(() => audioDb.prepare("INSERT INTO audio_groups (id, project_id, name, label, is_inbox, created_at, updated_at) VALUES ('x', ?, 'second', NULL, 1, 'a', 'a')").run(project.id), /UNIQUE/)
     assert.throws(() => service.createAudioProject({ name: '게임 a' }, null), /이미 있어/)
   })

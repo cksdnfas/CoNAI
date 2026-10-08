@@ -1,31 +1,24 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Check, Pencil, Sparkles, Trash2 } from 'lucide-react'
+import { Check, Link2, Link2Off, Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
-import { Select } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import {
   AUDIO_QUERY_KEY,
   audioDeletionPlan,
   createAudioComment,
-  createAudioGroup,
-  createAudioOrder,
   createAudioProject,
   deleteAudioComment,
-  deleteAudioGroup,
   deleteAudioGroupCandidates,
-  deleteAudioProject,
   listAudioComments,
-  listAudioWorkflows,
   setAudioCommentStatus,
   updateAudioComment,
   updateAudioGroup,
@@ -33,25 +26,21 @@ import {
   type AudioComment,
   type AudioCommentStatus,
   type AudioGroup,
-  type AudioOrder,
   type AudioProject,
 } from '@/lib/api-audio'
-import { getGenerationComfyUIServers } from '@/lib/api-image-generation-workflows'
 import { getErrorMessage } from '@/lib/error-message'
-import { createRandomUuid } from '@/lib/random-uuid'
 import { cn } from '@/lib/utils'
+import { autoAudioLabel, followsAudioName } from './audio-naming'
 
 /* ------------------------------------------------------------------------------------------------ project */
 
-export function AudioProjectDialog({ open, project, onClose, onSaved, onDeleted }: {
+export function AudioProjectDialog({ open, project, onClose, onSaved }: {
   open: boolean
   project: AudioProject | null
   onClose: () => void
   onSaved: (project: AudioProject) => void
-  onDeleted: () => void
 }) {
   const { t } = useI18n()
-  const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -73,26 +62,6 @@ export function AudioProjectDialog({ open, project, onClose, onSaved, onDeleted 
       setBusy(false)
     }
   }
-  const remove = async () => {
-    if (!project) return
-    const ok = await confirm({
-      title: t({ ko: '프로젝트 삭제', en: 'Delete project' }),
-      description: t({ ko: '"{name}"의 그룹과 후보 {count}개가 모두 휴지통으로 가.', en: 'All groups and {count} takes of "{name}" go to the RecycleBin.' }, { name: project.name, count: project.candidate_count }),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
-    if (!ok) return
-    setBusy(true)
-    try {
-      await deleteAudioProject(project.id)
-      onDeleted()
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t({ ko: '실패했어.', en: 'Failed.' })), tone: 'error' })
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
     <Modal open={open} title={project ? t({ ko: '프로젝트 수정', en: 'Edit project' }) : t({ ko: '새 프로젝트', en: 'New project' })} onClose={() => { if (!busy) onClose() }} widthClassName="max-w-md">
       <form onSubmit={(event) => void submit(event)}>
@@ -101,7 +70,6 @@ export function AudioProjectDialog({ open, project, onClose, onSaved, onDeleted 
           <Field label={t({ ko: '설명', en: 'Description' })}><Textarea rows={2} value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
         </ModalBody>
         <ModalFooter>
-          {project ? <IconButton variant="ghost" label={t({ ko: '프로젝트 삭제', en: 'Delete project' })} disabled={busy} onClick={() => void remove()}><Trash2 /></IconButton> : null}
           <span className="flex-1" />
           <Button type="submit" disabled={busy || !name.trim()}>{t({ ko: '저장', en: 'Save' })}</Button>
         </ModalFooter>
@@ -110,56 +78,44 @@ export function AudioProjectDialog({ open, project, onClose, onSaved, onDeleted 
   )
 }
 
-/* ------------------------------------------------------------------------------------------------ group */
+/* ------------------------------------------------------------------------------------------------ effect */
 
-export function AudioGroupDialog({ open, projectId, group, onClose, onSaved, onDeleted }: {
+/**
+ * Edit an effect (an audio group): name, prompt and file name. The file name follows the name (`이름_[00]`) until it
+ * is typed over; the link button ties it back. 받은 파일 only has a name.
+ */
+export function AudioGroupDialog({ open, group, takenLabels, onClose, onSaved, onDelete }: {
   open: boolean
-  projectId: string
   group: AudioGroup | null
+  /** File names of the other effects in the project, so a followed name stays unique. */
+  takenLabels: Array<string | null>
   onClose: () => void
   onSaved: (group: AudioGroup) => void
-  onDeleted: () => void
+  onDelete: () => void
 }) {
   const { t } = useI18n()
-  const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const [name, setName] = useState('')
   const [label, setLabel] = useState('')
+  const [follows, setFollows] = useState(true)
   const [description, setDescription] = useState('')
   const [busy, setBusy] = useState(false)
   useEffect(() => {
-    if (!open) return
-    setName(group?.name ?? '')
-    setLabel(group?.label ?? '')
-    setDescription(group?.description ?? '')
+    if (!open || !group) return
+    setName(group.name)
+    setLabel(group.label ?? '')
+    setFollows(group.label ? followsAudioName(group.label, group.name) : true)
+    setDescription(group.description)
   }, [open, group])
   const inbox = group?.is_inbox === true
+  const effectiveLabel = follows ? autoAudioLabel(name, takenLabels) : label
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    setBusy(true)
-    try {
-      const input = inbox ? { name, description } : { name, label, description }
-      onSaved(group ? await updateAudioGroup(group.id, input) : await createAudioGroup(projectId, { name, label, description }))
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t({ ko: '실패했어.', en: 'Failed.' })), tone: 'error' })
-    } finally {
-      setBusy(false)
-    }
-  }
-  const remove = async () => {
     if (!group) return
-    const ok = await confirm({
-      title: t({ ko: '그룹 삭제', en: 'Delete group' }),
-      description: t({ ko: '"{name}"의 후보 {count}개가 휴지통으로 가.', en: '{count} takes of "{name}" go to the RecycleBin.' }, { name: group.name, count: group.candidate_count }),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
-    if (!ok) return
     setBusy(true)
     try {
-      await deleteAudioGroup(group.id)
-      onDeleted()
+      onSaved(await updateAudioGroup(group.id, inbox ? { name } : { name, label: effectiveLabel, description }))
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '실패했어.', en: 'Failed.' })), tone: 'error' })
     } finally {
@@ -168,21 +124,46 @@ export function AudioGroupDialog({ open, projectId, group, onClose, onSaved, onD
   }
 
   return (
-    <Modal open={open} title={group ? t({ ko: '그룹 수정', en: 'Edit group' }) : t({ ko: '새 그룹', en: 'New group' })} onClose={() => { if (!busy) onClose() }} widthClassName="max-w-md">
+    <Modal open={open} title={inbox ? t({ ko: '받은 파일', en: 'Inbox' }) : t({ ko: '효과음 수정', en: 'Edit effect' })} onClose={() => { if (!busy) onClose() }} widthClassName="max-w-md">
       <form onSubmit={(event) => void submit(event)}>
         <ModalBody className="space-y-4">
           <Field label={t({ ko: '이름', en: 'Name' })}><Input autoFocus value={name} maxLength={120} onChange={(event) => setName(event.target.value)} /></Field>
           {!inbox ? (
-            <Field label={t({ ko: '파일명 규칙', en: 'File name rule' })} info={t({ ko: '채택본을 내보낼 때의 파일 이름. [00]은 번호 자리야. 예: footstep_snow_[00]', en: 'File name of exported takes. [00] is the number slot, e.g. footstep_snow_[00]' })}>
-              <Input className="font-mono" value={label} maxLength={120} onChange={(event) => setLabel(event.target.value)} />
-            </Field>
+            <>
+              <Field label={t({ ko: '프롬프트', en: 'Prompt' })}><Textarea rows={3} value={description} maxLength={4000} onChange={(event) => setDescription(event.target.value)} /></Field>
+              <Field label={t({ ko: '파일명', en: 'File name' })} info={t({ ko: '채택본을 내보낼 때의 파일 이름. [00]은 번호 자리야.', en: 'File name of exported takes. [00] is the number slot.' })}>
+                <div className="flex items-center gap-1">
+                  <Input
+                    className="font-mono"
+                    value={effectiveLabel}
+                    maxLength={120}
+                    onChange={(event) => {
+                      setFollows(false)
+                      setLabel(event.target.value)
+                    }}
+                  />
+                  <IconButton
+                    variant="ghost"
+                    size="icon-sm"
+                    active={follows}
+                    className={cn(follows && 'text-success')}
+                    label={follows ? t({ ko: '이름을 따라가는 중', en: 'Following the name' }) : t({ ko: '이름 따라가기', en: 'Follow the name' })}
+                    onClick={() => {
+                      if (follows) setLabel(effectiveLabel)
+                      setFollows(!follows)
+                    }}
+                  >
+                    {follows ? <Link2 /> : <Link2Off />}
+                  </IconButton>
+                </div>
+              </Field>
+            </>
           ) : null}
-          <Field label={t({ ko: '설명 (생성 프롬프트 기본값)', en: 'Description (default prompt)' })}><Textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
         </ModalBody>
         <ModalFooter>
-          {group && !inbox ? <IconButton variant="ghost" label={t({ ko: '그룹 삭제', en: 'Delete group' })} disabled={busy} onClick={() => void remove()}><Trash2 /></IconButton> : null}
+          {group && !inbox ? <IconButton variant="ghost" label={t({ ko: '효과음 삭제', en: 'Delete effect' })} disabled={busy} onClick={onDelete}><Trash2 /></IconButton> : null}
           <span className="flex-1" />
-          <Button type="submit" disabled={busy || !name.trim() || (!inbox && !label.trim())}>{t({ ko: '저장', en: 'Save' })}</Button>
+          <Button type="submit" disabled={busy || !name.trim() || (!inbox && !effectiveLabel.trim())}>{t({ ko: '저장', en: 'Save' })}</Button>
         </ModalFooter>
       </form>
     </Modal>
@@ -377,100 +358,6 @@ export function AudioCleanupDialog({ open, group, onClose, onDone }: { open: boo
         <span className="flex-1" />
         <Button variant="destructive" disabled={busy || !plan.data || plan.data.count === 0} onClick={() => void run()}><Trash2 />{t({ ko: '정리', en: 'Clean up' })}</Button>
       </ModalFooter>
-    </Modal>
-  )
-}
-
-/* ------------------------------------------------------------------------------------------------ order */
-
-export function AudioOrderDialog({ open, group, onClose, onOrdered }: { open: boolean; group: AudioGroup; onClose: () => void; onOrdered: (order: AudioOrder) => void }) {
-  const { t } = useI18n()
-  const { showSnackbar } = useSnackbar()
-  const workflows = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'workflows'], queryFn: listAudioWorkflows, enabled: open })
-  const servers = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'servers'], queryFn: () => getGenerationComfyUIServers(true), enabled: open, retry: false })
-  const bound = useMemo(() => (workflows.data ?? []).filter((workflow) => workflow.binding && workflow.is_active), [workflows.data])
-  const [workflowId, setWorkflowId] = useState<number | null>(null)
-  const [text, setText] = useState('')
-  const [seconds, setSeconds] = useState('3')
-  const [count, setCount] = useState('4')
-  const [seed, setSeed] = useState('')
-  const [route, setRoute] = useState('')
-  const [requestKey, setRequestKey] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    if (!open) return
-    setText(group.description)
-    setRequestKey(createRandomUuid())
-  }, [open, group.id, group.description])
-  useEffect(() => {
-    if (!open || bound.length === 0) return
-    setWorkflowId((current) => (current !== null && bound.some((workflow) => workflow.id === current) ? current : (bound.find((workflow) => workflow.binding?.is_default) ?? bound[0]).id))
-  }, [open, bound])
-
-  const workflow = bound.find((entry) => entry.id === workflowId) ?? null
-  const secondsMax = workflow?.binding?.compat?.seconds_max ?? null
-  const tags = [...new Set((servers.data ?? []).flatMap((server) => server.routing_tags ?? []))]
-  const countValue = Number(count)
-  const valid = Boolean(workflow) && text.trim().length > 0 && Number(seconds) > 0 && (secondsMax === null || Number(seconds) <= secondsMax)
-    && Number.isInteger(countValue) && countValue >= 1 && countValue <= 50 && (seed.trim() === '' || /^\d+$/.test(seed.trim()))
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!valid || !workflow) return
-    setBusy(true)
-    try {
-      const order = await createAudioOrder({
-        group_id: group.id,
-        workflow_id: workflow.id,
-        text: text.trim(),
-        seconds: Number(seconds),
-        count: countValue,
-        seed: seed.trim() === '' ? null : Number(seed.trim()),
-        request_key: requestKey,
-        server_id: route.startsWith('server:') ? Number(route.slice(7)) : null,
-        server_tag: route.startsWith('tag:') ? route.slice(4) : null,
-      })
-      onOrdered(order)
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t({ ko: '실패했어.', en: 'Failed.' })), tone: 'error' })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Modal open={open} title={t({ ko: '생성 주문 · {name}', en: 'Order · {name}' }, { name: group.name })} onClose={() => { if (!busy) onClose() }} widthClassName="max-w-md">
-      <form onSubmit={(event) => void submit(event)}>
-        <ModalBody className="space-y-4">
-          <Field label={t({ ko: '워크플로', en: 'Workflow' })}>
-            <Select value={workflowId ?? ''} onChange={(event) => setWorkflowId(Number(event.target.value))} disabled={bound.length === 0}>
-              {bound.length === 0 ? <option value="">{t({ ko: '연결된 오디오 워크플로 없음', en: 'No linked audio workflow' })}</option> : null}
-              {bound.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
-            </Select>
-          </Field>
-          {workflows.isSuccess && bound.length === 0 ? <p className="text-xs text-destructive">{t({ ko: '오디오 설정 › 워크플로에서 먼저 연결해줘.', en: 'Link one under Audio settings › Workflows first.' })}</p> : null}
-          <Field label={t({ ko: '프롬프트', en: 'Prompt' })}><Textarea rows={3} value={text} maxLength={8000} onChange={(event) => setText(event.target.value)} /></Field>
-          <div className="grid grid-cols-3 gap-3">
-            <Field label={t({ ko: '길이(초)', en: 'Seconds' })}><Input className="font-mono" type="number" step="0.1" min={0.1} max={secondsMax ?? undefined} value={seconds} onChange={(event) => setSeconds(event.target.value)} aria-invalid={secondsMax !== null && Number(seconds) > secondsMax} /></Field>
-            <Field label={t({ ko: '개수', en: 'Count' })}><Input className="font-mono" type="number" step="1" min={1} max={50} value={count} onChange={(event) => setCount(event.target.value)} /></Field>
-            <Field label="seed"><Input className="font-mono" inputMode="numeric" placeholder={t({ ko: '랜덤', en: 'Random' })} value={seed} onChange={(event) => setSeed(event.target.value)} /></Field>
-          </div>
-          {secondsMax !== null && Number(seconds) > secondsMax ? <p className="text-xs text-destructive">{t({ ko: '이 워크플로는 {max}초까지야.', en: 'This workflow allows up to {max} s.' }, { max: secondsMax })}</p> : null}
-          <Field label={t({ ko: '서버', en: 'Server' })}>
-            <Select value={route} onChange={(event) => setRoute(event.target.value)}>
-              <option value="">{t({ ko: '자동', en: 'Auto' })}</option>
-              {tags.map((tag) => <option key={`tag:${tag}`} value={`tag:${tag}`}>{t({ ko: '자동 · {tag}', en: 'Auto · {tag}' }, { tag })}</option>)}
-              {(servers.data ?? []).filter((server) => server.backend_type !== 'modal').map((server) => <option key={server.id} value={`server:${server.id}`}>{server.name}</option>)}
-            </Select>
-          </Field>
-        </ModalBody>
-        <ModalFooter>
-          <span className="flex-1" />
-          <Button variant="ghost" onClick={onClose} disabled={busy}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-          <Button type="submit" disabled={busy || !valid}><Sparkles />{t({ ko: '{count}개 생성', en: 'Generate {count}' }, { count: Number.isInteger(countValue) ? countValue : 0 })}</Button>
-        </ModalFooter>
-      </form>
     </Modal>
   )
 }

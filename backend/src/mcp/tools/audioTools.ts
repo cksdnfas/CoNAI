@@ -72,7 +72,7 @@ export function registerAudioTools(server: McpServer, context: McpRequestContext
   server.tool('list_audio_projects', 'List sound-effect projects in the audio workspace with their group and candidate counts and the id of each project\'s 받은 파일 (inbox) group.', {},
     () => run(() => listAudioProjects()));
 
-  server.tool('list_audio_groups', 'List the sound groups of one audio project. Each group\'s label is its export file-name rule (e.g. footstep_snow_[00]); counts include candidates, selected takes and pending/completed comments.', {
+  server.tool('list_audio_groups', 'List the sound groups of one audio project (the 오디오 tab calls a group a 효과음, "effect": one sound with one prompt and one file name). Each group\'s label is its export file-name rule (e.g. footstep_snow_[00]); counts include candidates, selected takes and pending/completed comments.', {
     project_id: id,
     search: z.string().max(120).optional().describe('Match group name or label'),
     filter: z.enum(['unselected', 'has_comments', 'pending_comments', 'completed_comments']).optional(),
@@ -111,11 +111,11 @@ export function registerAudioTools(server: McpServer, context: McpRequestContext
     description: z.string().max(4000).optional(),
   }, ({ project_id, name, description }) => run(() => updateAudioProject(project_id, { name, description })));
 
-  server.tool('create_audio_group', 'Create a sound group in an audio project. `label` is the export file-name rule: one [00]…[00000000] slot numbers files; without it one file keeps the label and several get _01, _02. No extension, no reserved names.', {
+  server.tool('create_audio_group', 'Create a sound group (효과음 in the UI) in an audio project. `label` is the export file-name rule (the UI defaults it to `<name>_[00]`): one [00]…[00000000] slot numbers files; without it one file keeps the label and several get _01, _02. No extension, no reserved names.', {
     project_id: id,
     name: z.string().trim().min(1).max(120),
     label: z.string().trim().min(1).max(120),
-    description: z.string().max(4000).optional().describe('Also the default generation prompt for this group'),
+    description: z.string().max(4000).optional().describe('The group\'s generation prompt; the 오디오 tab shows and edits it in the generate bar'),
   }, ({ project_id, name, label, description }) => run(() => createAudioGroup(project_id, { name, label, description })));
 
   server.tool('update_audio_group', 'Change an audio group\'s name, label (file-name rule) or description. The 받은 파일 inbox group has no label.', {

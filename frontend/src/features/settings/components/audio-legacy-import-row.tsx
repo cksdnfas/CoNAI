@@ -171,7 +171,7 @@ export function LegacyAudioImportRow() {
             />
             <Count
               done={!result.dry_run}
-              label={t({ ko: '그룹', en: 'Groups' })}
+              label={t({ ko: '효과음', en: 'Effects' })}
               value={formatNumber(result.groups.created)}
               extra={result.groups.failed > 0 ? t({ ko: '실패 {count}', en: '{count} failed' }, { count: formatNumber(result.groups.failed) }) : undefined}
             />

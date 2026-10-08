@@ -36,20 +36,24 @@ import {
 } from './audio-shortcuts'
 import { TextTabs } from './audio-dialogs'
 
-type SettingsTab = 'workflows' | 'export' | 'shortcuts'
+export type AudioSettingsTab = 'workflows' | 'export' | 'shortcuts'
 
-export function AudioSettingsDialog({ open, onClose, canManage }: { open: boolean; onClose: () => void; canManage: boolean }) {
+/** `focusWorkflowId` opens the workflow tab on that workflow (the generate bar's "연결" when fields need picking). */
+export function AudioSettingsDialog({ open, onClose, canManage, focusWorkflowId = null }: { open: boolean; onClose: () => void; canManage: boolean; focusWorkflowId?: number | null }) {
   const { t } = useI18n()
-  const [tab, setTab] = useState<SettingsTab>(canManage ? 'workflows' : 'shortcuts')
-  const tabs: Array<[SettingsTab, string]> = [
-    ...(canManage ? [['workflows', t({ ko: '워크플로', en: 'Workflows' })], ['export', t({ ko: '내보내기', en: 'Export' })]] as Array<[SettingsTab, string]> : []),
+  const [tab, setTab] = useState<AudioSettingsTab>(canManage ? 'workflows' : 'shortcuts')
+  useEffect(() => {
+    if (open && focusWorkflowId !== null && canManage) setTab('workflows')
+  }, [open, focusWorkflowId, canManage])
+  const tabs: Array<[AudioSettingsTab, string]> = [
+    ...(canManage ? [['workflows', t({ ko: '워크플로', en: 'Workflows' })], ['export', t({ ko: '내보내기', en: 'Export' })]] as Array<[AudioSettingsTab, string]> : []),
     ['shortcuts', t({ ko: '단축키', en: 'Shortcuts' })],
   ]
   return (
     <Modal open={open} title={t({ ko: '오디오 설정', en: 'Audio settings' })} onClose={onClose} widthClassName="max-w-lg">
       <ModalBody className="space-y-4">
         <TextTabs value={tab} items={tabs} onChange={setTab} />
-        {tab === 'workflows' ? <WorkflowTab /> : tab === 'export' ? <ExportTab /> : <ShortcutTab />}
+        {tab === 'workflows' ? <WorkflowTab key={focusWorkflowId ?? 'all'} focusWorkflowId={focusWorkflowId} /> : tab === 'export' ? <ExportTab /> : <ShortcutTab />}
       </ModalBody>
     </Modal>
   )
@@ -59,13 +63,13 @@ export function AudioSettingsDialog({ open, onClose, canManage }: { open: boolea
 
 const ROLES: Array<[AudioWorkflowRole, 'prompt_field_id' | 'seconds_field_id' | 'seed_field_id']> = [['prompt', 'prompt_field_id'], ['seconds', 'seconds_field_id'], ['seed', 'seed_field_id']]
 
-function WorkflowTab() {
+function WorkflowTab({ focusWorkflowId }: { focusWorkflowId: number | null }) {
   const { t } = useI18n()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const workflows = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'workflows'], queryFn: listAudioWorkflows })
-  const [workflowId, setWorkflowId] = useState<number | null>(null)
+  const [workflowId, setWorkflowId] = useState<number | null>(focusWorkflowId)
   const [roles, setRoles] = useState<Record<AudioWorkflowRole, string>>({ prompt: '', seconds: '', seed: '' })
   const [isDefault, setIsDefault] = useState(false)
   const [compat, setCompat] = useState<AudioWorkflowCompat | null>(null)
@@ -156,7 +160,7 @@ function WorkflowTab() {
   )
 }
 
-function CompatLine({ compat }: { compat: AudioWorkflowCompat | null }) {
+export function CompatLine({ compat }: { compat: AudioWorkflowCompat | null }) {
   const { t } = useI18n()
   if (!compat) return null
   const ok = compat.servers.filter((server) => server.status === 'ok').map((server) => server.server_name)

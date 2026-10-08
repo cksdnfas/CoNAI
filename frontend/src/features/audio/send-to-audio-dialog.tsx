@@ -64,7 +64,7 @@ export function SendToAudioDialog({ files, onClose }: { files: Array<{ id: strin
             {(projects.data ?? []).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
           </Select>
         </Field>
-        <Field label={t({ ko: '그룹', en: 'Group' })}>
+        <Field label={t({ ko: '효과음', en: 'Effect' })}>
           <Select value={groupId} disabled={!projectId} onChange={(event) => setGroupId(event.target.value)}>
             <option value="">{t({ ko: '받은 파일', en: 'Inbox' })}</option>
             {(groups.data ?? []).filter((group) => !group.is_inbox).map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}

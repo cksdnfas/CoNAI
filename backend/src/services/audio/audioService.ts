@@ -242,7 +242,7 @@ export function listAudioGroups(projectId: string, options: { search?: unknown; 
 
 export function getAudioGroup(id: string): AudioGroup {
   const row = db().prepare(`${GROUP_SELECT} WHERE g.id = ?`).get(String(id)) as GroupRow | undefined;
-  if (!row) throw new AudioServiceError('그룹을 찾을 수 없어.', 404);
+  if (!row) throw new AudioServiceError('효과음을 찾을 수 없어.', 404);
   return toGroup(row);
 }
 
@@ -262,7 +262,7 @@ export function getAudioInboxGroup(projectId: string): AudioGroup {
 
 export function createAudioGroup(projectId: string, input: { name?: unknown; label?: unknown; description?: unknown }): AudioGroup {
   const project = getAudioProject(projectId);
-  const name = text(input.name, '그룹 이름', 120);
+  const name = text(input.name, '효과음 이름', 120);
   const label = validateAudioLabel(text(input.label, '파일명 규칙', 120));
   const description = text(input.description, '설명', 4000, false);
   const id = newId();
@@ -271,7 +271,7 @@ export function createAudioGroup(projectId: string, input: { name?: unknown; lab
     db().prepare(`INSERT INTO audio_groups (id, project_id, name, label, description, is_inbox, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)`)
       .run(id, project.id, name, label, description, at, at);
   } catch (error) {
-    if (isUniqueViolation(error)) throw new AudioServiceError('이 프로젝트에 같은 파일명 규칙의 그룹이 이미 있어.', 409);
+    if (isUniqueViolation(error)) throw new AudioServiceError('이 프로젝트에 같은 파일명의 효과음이 이미 있어.', 409);
     throw error;
   }
   return getAudioGroup(id);
@@ -280,15 +280,15 @@ export function createAudioGroup(projectId: string, input: { name?: unknown; lab
 export function updateAudioGroup(id: string, input: { name?: unknown; label?: unknown; description?: unknown }): AudioGroup {
   const current = getAudioGroup(id);
   if (current.is_inbox && input.label !== undefined && input.label !== null) {
-    throw new AudioServiceError('받은 파일 그룹에는 파일명 규칙을 붙일 수 없어.');
+    throw new AudioServiceError('받은 파일에는 파일명을 붙일 수 없어.');
   }
-  const name = input.name === undefined ? current.name : text(input.name, '그룹 이름', 120);
+  const name = input.name === undefined ? current.name : text(input.name, '효과음 이름', 120);
   const label = current.is_inbox ? null : input.label === undefined ? current.label : validateAudioLabel(text(input.label, '파일명 규칙', 120));
   const description = input.description === undefined ? current.description : text(input.description, '설명', 4000, false);
   try {
     db().prepare('UPDATE audio_groups SET name = ?, label = ?, description = ?, updated_at = ? WHERE id = ?').run(name, label, description, now(), current.id);
   } catch (error) {
-    if (isUniqueViolation(error)) throw new AudioServiceError('이 프로젝트에 같은 파일명 규칙의 그룹이 이미 있어.', 409);
+    if (isUniqueViolation(error)) throw new AudioServiceError('이 프로젝트에 같은 파일명의 효과음이 이미 있어.', 409);
     throw error;
   }
   return getAudioGroup(current.id);
@@ -303,7 +303,7 @@ async function cancelOrdersOf(groupIds: string[]): Promise<void> {
 /** Delete a group with its candidates and comments (never the inbox); unused blobs go to the RecycleBin. */
 export async function deleteAudioGroup(id: string): Promise<{ deleted: true; released: number }> {
   const group = getAudioGroup(id);
-  if (group.is_inbox) throw new AudioServiceError('받은 파일 그룹은 지울 수 없어.');
+  if (group.is_inbox) throw new AudioServiceError('받은 파일은 지울 수 없어.');
   const hashes = (db().prepare('SELECT DISTINCT file_hash FROM audio_candidates WHERE group_id = ?').all(group.id) as Array<{ file_hash: string }>)
     .map((row) => row.file_hash);
   const snapshot = snapshotCandidatesForRelease(hashes);
@@ -394,7 +394,7 @@ export function moveAudioCandidates(ids: unknown, targetGroupId: string): { move
   const target = getAudioGroup(targetGroupId);
   const rows = requireCandidates(list);
   if (rows.some((row) => row.project_id !== target.project_id)) {
-    throw new AudioServiceError('다른 프로젝트의 그룹으로는 옮길 수 없어.');
+    throw new AudioServiceError('다른 프로젝트의 효과음으로는 옮길 수 없어.');
   }
   const at = now();
   const moved = db().transaction(() => rows.reduce((sum, row) => sum + db().prepare(
@@ -437,7 +437,7 @@ export function setAudioCandidateReview(id: string, input: { review?: unknown; n
 function resolveImportGroup(target: AudioImportTarget): AudioGroup {
   if ('groupId' in target && target.groupId) return getAudioGroup(target.groupId);
   if ('projectId' in target && target.projectId) return getAudioInboxGroup(target.projectId);
-  throw new AudioServiceError('넣을 그룹이나 프로젝트를 골라줘.');
+  throw new AudioServiceError('넣을 효과음이나 프로젝트를 골라줘.');
 }
 
 function candidateNameFrom(fileName: string): string {
@@ -592,7 +592,7 @@ export function deleteAudioGroupCandidates(groupId: string, ids: unknown, includ
     const rows = db().prepare(`SELECT id, group_id, review, deleted_at FROM audio_candidates WHERE id IN (SELECT value FROM json_each(?))`)
       .all(JSON.stringify(list)) as Array<{ id: string; group_id: string; review: string; deleted_at: string | null }>;
     if (rows.length !== list.length || rows.some((row) => row.group_id !== group.id)) {
-      throw new AudioServiceError('이 그룹에 속하지 않는 후보가 있어.', 404);
+      throw new AudioServiceError('이 효과음에 속하지 않는 후보가 있어.', 404);
     }
     if (!includeSelected && rows.some((row) => row.review === 'selected' && !row.deleted_at)) {
       throw new AudioServiceError('채택 상태가 바뀌었어. 삭제 대상을 다시 확인해줘.', 409);

@@ -1,8 +1,10 @@
-import { useEffect, useRef } from 'react'
-import { Check, CirclePause, Download, LoaderCircle, Pause, Play, RotateCcw, TriangleAlert, X } from 'lucide-react'
+import { useEffect, useRef, type DragEvent } from 'react'
+import { Check, CirclePause, Download, FolderInput, LoaderCircle, Pause, Play, RotateCcw, TriangleAlert, X } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
-import type { AudioCandidate, AudioOrder, AudioReview } from '@/lib/api-audio'
+import type { AudioCandidate, AudioGroup, AudioOrder, AudioReview } from '@/lib/api-audio'
 import { cn } from '@/lib/utils'
 import { useAudioPlayer } from './audio-player'
 import { shortcutLabel, useAudioShortcuts } from './audio-shortcuts'
@@ -34,6 +36,21 @@ export function arrangeCandidates(items: AudioCandidate[]): AudioListRow[] {
   }
   roots.forEach((root) => visit(root, 0))
   return rows
+}
+
+/** Drag payload type of takes; it names the project because takes only move within one (readable during dragover). */
+export function audioDragType(projectId: string) {
+  return `application/x-conai-audio-${projectId.toLowerCase()}`
+}
+
+/** Candidate ids of a take drag from this project, or none. */
+export function readAudioDrag(event: DragEvent, projectId: string): string[] {
+  try {
+    const value = JSON.parse(event.dataTransfer.getData(audioDragType(projectId)) || '[]') as unknown
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []
+  } catch {
+    return []
+  }
 }
 
 const ACTIVE_JOB = new Set(['pending', 'queued', 'dispatching', 'running'])
@@ -86,8 +103,9 @@ export function ReviewPill({ review }: { review: AudioReview }) {
 }
 
 const ROW_GRID = 'grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 sm:grid-cols-[2rem_10rem_minmax(0,1fr)_3.5rem_4.5rem_auto]'
+const CHECK_ROW_GRID = 'grid grid-cols-[1.25rem_2rem_minmax(0,1fr)_auto] items-center gap-x-3 sm:grid-cols-[1.25rem_2rem_10rem_minmax(0,1fr)_3.5rem_4.5rem_auto]'
 
-export function AudioCandidateRow({ row, selected, canEdit, onSelect, onPlay, onReview, onDownload }: {
+export function AudioCandidateRow({ row, selected, canEdit, onSelect, onPlay, onReview, onDownload, checked, onCheck, moveTargets, onMove, dragIds }: {
   row: AudioListRow
   selected: boolean
   canEdit: boolean
@@ -95,6 +113,14 @@ export function AudioCandidateRow({ row, selected, canEdit, onSelect, onPlay, on
   onPlay: () => void
   onReview: (review: AudioReview) => void
   onDownload: () => void
+  /** With onCheck the row gets a checkbox (받은 파일 sorting). */
+  checked?: boolean
+  onCheck?: (checked: boolean) => void
+  /** With onMove the row offers "move to effect" in place of the review buttons. */
+  moveTargets?: AudioGroup[]
+  onMove?: (group: AudioGroup) => void
+  /** Ids a drag from this row carries (the checked takes when this one is among them). */
+  dragIds?: () => string[]
 }) {
   const { t } = useI18n()
   const shortcuts = useAudioShortcuts()
@@ -115,13 +141,27 @@ export function AudioCandidateRow({ row, selected, canEdit, onSelect, onPlay, on
       aria-selected={selected}
       data-candidate-id={candidate.id}
       onClick={onSelect}
+      draggable={canEdit && Boolean(dragIds)}
+      onDragStart={(event) => {
+        if (!dragIds) return
+        event.dataTransfer.setData(audioDragType(candidate.project_id), JSON.stringify(dragIds()))
+        event.dataTransfer.effectAllowed = 'move'
+      }}
       className={cn(
-        ROW_GRID,
+        onCheck ? CHECK_ROW_GRID : ROW_GRID,
         'group min-h-14 cursor-pointer border-b border-line py-2 pr-1 transition-colors hover:bg-fill/60',
         selected && 'bg-fill shadow-[inset_2px_0_0_var(--primary)] hover:bg-fill',
       )}
       style={depth > 0 ? { paddingLeft: `${depth * 1.5}rem` } : undefined}
     >
+      {onCheck ? (
+        <Checkbox
+          aria-label={t({ ko: '고르기', en: 'Pick' })}
+          checked={checked === true}
+          onClick={(event) => event.stopPropagation()}
+          onCheckedChange={(value) => onCheck(value === true)}
+        />
+      ) : null}
       <IconButton
         variant={playing ? 'secondary' : 'ghost'}
         size="icon-sm"
@@ -140,7 +180,18 @@ export function AudioCandidateRow({ row, selected, canEdit, onSelect, onPlay, on
       <span className="hidden sm:block"><ReviewPill review={candidate.review} /></span>
       <div className="flex items-center gap-0.5">
         <span className="sm:hidden"><ReviewPill review={candidate.review} /></span>
-        {canEdit ? (
+        {canEdit && onMove ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <IconButton variant="ghost" size="icon-sm" label={t({ ko: '효과음으로 옮기기', en: 'Move to an effect' })} onClick={(event) => event.stopPropagation()}><FolderInput /></IconButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+              <DropdownMenuLabel>{t({ ko: '옮길 효과음', en: 'Move to' })}</DropdownMenuLabel>
+              {(moveTargets ?? []).length === 0 ? <DropdownMenuItem disabled>{t({ ko: '효과음 없음', en: 'No effects' })}</DropdownMenuItem> : null}
+              {(moveTargets ?? []).map((group) => <DropdownMenuItem key={group.id} onSelect={() => onMove(group)}>{group.name}</DropdownMenuItem>)}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : canEdit ? (
           <>
             <IconButton
               variant="ghost"
