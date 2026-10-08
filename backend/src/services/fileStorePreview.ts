@@ -50,6 +50,17 @@ async function acquireDecoder() {
   }
 }
 
+/** Render a bounded WebP preview of an image or video under the shared decoder limit (system folders). */
+export async function renderPreviewWebp(filePath: string, mime: string, output: string): Promise<void> {
+  const release = await acquireDecoder()
+  try {
+    if (mime.startsWith('video/')) await VideoFrameExtractor.extractPreviewFrame(filePath, output)
+    else await sharp(filePath, { animated: false, limitInputPixels: 50_000_000 }).rotate().resize(320, 320, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 78 }).toFile(output)
+  } finally {
+    release()
+  }
+}
+
 /** Deduplicate concurrent requests; publish atomically and recheck ownership/existence after slow decoding. */
 export function getFileThumbnail(owner: string, entry: StoredFileEntry, filePath: string): Promise<string> {
   const pending = thumbnails.get(entry.id)

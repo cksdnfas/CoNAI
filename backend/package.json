@@ -11,7 +11,7 @@
     "test:queue": "tsx --test test/queueInputBackfill.test.ts",
     "test:migrations": "tsx --test test/migration-baseline.test.ts",
     "test:image-permissions": "tsx --test test/image-permissions.test.ts",
-    "test:permissions": "tsx --test test/image-permissions.test.ts test/admin-route-guards.test.ts test/route-guard-sweep.test.ts",
+    "test:permissions": "tsx --test test/image-permissions.test.ts test/admin-route-guards.test.ts test/route-guard-sweep.test.ts test/system-folders.test.ts",
     "copy:migrations": "copyfiles -u 1 \"src/database/migrations/**/*.sql\" dist/",
     "start": "node dist/backend/src/index.js",
     "db:migrate": "tsx src/database/migrate.ts"

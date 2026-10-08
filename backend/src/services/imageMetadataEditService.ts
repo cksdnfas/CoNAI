@@ -360,7 +360,7 @@ export class ImageMetadataEditService {
       await fs.promises.rename(stagedFilePath, nextFilePath);
       stagedFilePath = null;
 
-      recycleBinPath = await copyToRecycleBin(target.originalPath);
+      recycleBinPath = await copyToRecycleBin(target.originalPath, 'metadata-edit');
 
       if (!nextFilePath || !recycleBinPath) {
         throw new Error('Replacement paths were not prepared');

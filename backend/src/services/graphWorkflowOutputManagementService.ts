@@ -251,7 +251,7 @@ export async function deleteGraphExecutionArtifacts(artifactIds: number[]) {
     }
 
     try {
-      await recycleBinDeleteFile(resolvedPath, useRecycleBin)
+      await recycleBinDeleteFile(resolvedPath, useRecycleBin, 'workflow-output')
       deletedFiles.push(resolvedPath)
     } catch (error) {
       if ((error as NodeJS.ErrnoException | undefined)?.code !== 'ENOENT') {

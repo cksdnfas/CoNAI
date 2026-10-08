@@ -195,7 +195,7 @@ export async function compactCompletedGraphExecutionArtifacts(context: Execution
 
     try {
       await fs.promises.access(resolvedPath, fs.constants.F_OK)
-      await recycleBinDeleteFile(resolvedPath, useRecycleBin)
+      await recycleBinDeleteFile(resolvedPath, useRecycleBin, 'workflow-compaction')
       deletedFileCount += 1
     } catch (error) {
       if ((error as NodeJS.ErrnoException | undefined)?.code !== 'ENOENT') {
