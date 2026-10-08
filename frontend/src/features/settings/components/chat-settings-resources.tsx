@@ -1,9 +1,9 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useRef, useState, type ComponentProps } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookOpen, BookUser, FileUp, ImagePlus, LayoutTemplate, Plus, Wrench } from 'lucide-react'
+import { BookOpen, BookUser, FileUp, ImagePlus, LayoutTemplate, Link2, List, Plus, Rows3, Wrench } from 'lucide-react'
 import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
-import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
+import { ResourceRow, ResourceRowStat, ResourceRowStatus } from '@/components/ui/resource-row'
 import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
@@ -52,25 +52,20 @@ const KIND_CLASS = {
   lorebook: 'text-resource-lorebook',
 } as const
 
-/** The profiles that use a resource, or the warning that none does. */
-function LinkedProfiles({ profiles }: { profiles: Array<{ id: number; name: string }> }) {
+type Profiles = Array<{ id: number; name: string }>
+
+/** Beside the name: the warning that no profile uses the resource. */
+function NotLinked({ profiles }: { profiles: Profiles }) {
   const { t } = useI18n()
-  if (profiles.length === 0) return <ResourceRowStatus>{t({ ko: '연결 없음', en: 'Not linked' })}</ResourceRowStatus>
-  return (
-    <Tip content={profiles.map((profile) => profile.name).join(', ')}>
-      <span>{t({ ko: '프로필 {count}', en: '{count} profiles' }, { count: profiles.length })}</span>
-    </Tip>
-  )
+  return profiles.length === 0 ? <ResourceRowStatus>{t({ ko: '미연결', en: 'Not linked' })}</ResourceRowStatus> : null
 }
 
-/** Meta line of a resource row: one fact about it, then who uses it. */
-function resourceMeta(fact: ReactNode, profiles?: Array<{ id: number; name: string }>) {
-  if (!profiles) return fact
+/** Row end: one count about the resource, then how many profiles use it (names in the tooltip). */
+function ResourceAside({ icon, value, tip, profiles }: { icon: ComponentProps<typeof ResourceRowStat>['icon']; value: ComponentProps<typeof ResourceRowStat>['children']; tip: string; profiles?: Profiles }) {
   return (
     <>
-      {fact}
-      {' · '}
-      <LinkedProfiles profiles={profiles} />
+      <ResourceRowStat icon={icon} tip={tip}>{value}</ResourceRowStat>
+      {profiles && profiles.length > 0 ? <ResourceRowStat icon={Link2} tip={profiles.map((profile) => profile.name).join(', ')}>{profiles.length}</ResourceRowStat> : null}
     </>
   )
 }
@@ -223,7 +218,9 @@ export function ChatSettingsResources() {
             key={preset.id}
             leading={<Wrench className={KIND_CLASS.tool} />}
             name={preset.name}
-            meta={resourceMeta(preset.toolAllowlist === null ? t({ ko: '모든 도구', en: 'Every tool' }) : t({ ko: '도구 {count}', en: '{count} tools' }, { count: preset.toolAllowlist.length }))}
+            aside={preset.toolAllowlist === null
+              ? <ResourceAside icon={Wrench} value={t({ ko: '전체', en: 'All' })} tip={t({ ko: '모든 도구', en: 'Every tool' })} />
+              : <ResourceAside icon={Wrench} value={preset.toolAllowlist.length} tip={t({ ko: '도구 {count}', en: '{count} tools' }, { count: preset.toolAllowlist.length })} />}
             onOpen={() => setPresetEditor({ preset })}
           />
         ))}
@@ -247,14 +244,19 @@ export function ChatSettingsResources() {
         )}
       >
         {generationPresetsQuery.isLoading ? <SettingsRowsSkeleton rows={1} /> : null}
-        {generationPresetsQuery.isSuccess && generationPresets.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 생성 프리셋이 없어. NAI나 ComfyUI 생성 패널에서 현재 설정을 저장해.', en: 'No generation presets yet. Save the current setup from the NAI or ComfyUI panel.' })}</SettingsEmptyRow> : null}
+        {generationPresetsQuery.isSuccess && generationPresets.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 생성 프리셋이 없어.', en: 'No generation presets yet.' })}</SettingsEmptyRow> : null}
         {generationPresets.map((preset) => (
           <ResourceRow
             key={preset.id}
             leading={<ImagePlus className={KIND_CLASS.generation} />}
             name={preset.name}
-            extra={<Chip size="sm" tone="muted">{preset.kind === 'nai' ? 'NAI' : 'Comfy'}</Chip>}
-            meta={resourceMeta(preset.kind === 'nai' ? (preset.nai?.model ?? '') : t({ ko: '워크플로 {id}', en: 'Workflow {id}' }, { id: preset.comfyui?.workflowId ?? 0 }), preset.profiles)}
+            extra={(
+              <>
+                <Tip content={preset.kind === 'nai' ? preset.nai?.model : null}><span><Chip size="sm" tone="muted">{preset.kind === 'nai' ? 'NAI' : 'Comfy'}</Chip></span></Tip>
+                <NotLinked profiles={preset.profiles} />
+              </>
+            )}
+            aside={preset.profiles.length > 0 ? <ResourceRowStat icon={Link2} tip={preset.profiles.map((profile) => profile.name).join(', ')}>{preset.profiles.length}</ResourceRowStat> : null}
             onOpen={() => setGenerationEditor({ preset })}
           />
         ))}
@@ -286,8 +288,13 @@ export function ChatSettingsResources() {
             key={shared.id}
             leading={<LayoutTemplate className={KIND_CLASS.block} />}
             name={shared.name}
-            extra={<span className="truncate font-mono text-xs text-muted-foreground">{shared.block.key}</span>}
-            meta={resourceMeta(t({ ko: '필드 {count}', en: '{count} fields' }, { count: shared.block.fields.length }), shared.profiles)}
+            extra={(
+              <>
+                <span className="truncate font-mono text-xs text-muted-foreground">{shared.block.key}</span>
+                <NotLinked profiles={shared.profiles} />
+              </>
+            )}
+            aside={<ResourceAside icon={Rows3} value={shared.block.fields.length} tip={t({ ko: '필드 {count}', en: '{count} fields' }, { count: shared.block.fields.length })} profiles={shared.profiles} />}
             onOpen={() => setBlockEditor({ shared })}
           />
         ))}
@@ -318,8 +325,13 @@ export function ChatSettingsResources() {
             key={lorebook.id}
             leading={<BookOpen className={KIND_CLASS.lorebook} />}
             name={lorebook.name}
-            extra={<Chip size="sm" tone="muted">{t({ ko: '글로벌', en: 'Global' })}</Chip>}
-            meta={resourceMeta(t({ ko: '항목 {count}', en: '{count} entries' }, { count: lorebook.entries.length }), lorebook.profiles)}
+            extra={(
+              <>
+                <Chip size="sm" tone="muted">{t({ ko: '글로벌', en: 'Global' })}</Chip>
+                <NotLinked profiles={lorebook.profiles} />
+              </>
+            )}
+            aside={<ResourceAside icon={List} value={lorebook.entries.length} tip={t({ ko: '항목 {count}', en: '{count} entries' }, { count: lorebook.entries.length })} profiles={lorebook.profiles} />}
             onOpen={() => setLorebookEditor({ lorebook })}
           />
         ))}
@@ -328,8 +340,13 @@ export function ChatSettingsResources() {
             key={lorebook.id}
             leading={<BookUser className={KIND_CLASS.lorebook} />}
             name={lorebook.name}
-            extra={<Chip size="sm" tone="muted">{t({ ko: '계정', en: 'Account' })}</Chip>}
-            meta={resourceMeta(t({ ko: '항목 {count}', en: '{count} entries' }, { count: lorebook.entries.length }), lorebook.profiles)}
+            extra={(
+              <>
+                <Chip size="sm" tone="muted">{t({ ko: '계정', en: 'Account' })}</Chip>
+                <NotLinked profiles={lorebook.profiles} />
+              </>
+            )}
+            aside={<ResourceAside icon={List} value={lorebook.entries.length} tip={t({ ko: '항목 {count}', en: '{count} entries' }, { count: lorebook.entries.length })} profiles={lorebook.profiles} />}
             onOpen={() => setLorebookEditor({ lorebook })}
           />
         ))}

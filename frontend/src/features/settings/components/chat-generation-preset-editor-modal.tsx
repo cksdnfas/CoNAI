@@ -4,7 +4,7 @@ import { Copy, Download, Save, Trash2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ToggleChip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { Field } from '@/components/ui/field'
+import { Field, FieldInfo } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
@@ -177,7 +177,7 @@ function ComfyPresetFields({ config, onChange }: { config: ChatComfyPresetConfig
           <div className="grid grid-cols-[auto_1fr_minmax(0,1.2fr)] items-center gap-x-3 gap-y-2 text-sm">
             <span className="text-2xs font-semibold tracking-overline text-muted-foreground uppercase">{t({ ko: '모델이 작성', en: 'Model fills' })}</span>
             <span className="text-2xs font-semibold tracking-overline text-muted-foreground uppercase">{t({ ko: '필드', en: 'Field' })}</span>
-            <span className="text-2xs font-semibold tracking-overline text-muted-foreground uppercase">{t({ ko: '고정 값 (비우면 워크플로 기본값)', en: 'Fixed value (empty: workflow default)' })}</span>
+            <span className="flex items-center gap-1 text-2xs font-semibold tracking-overline text-muted-foreground uppercase">{t({ ko: '고정 값', en: 'Fixed value' })}<FieldInfo>{t({ ko: '비우면 워크플로 기본값', en: 'Empty: the workflow default' })}</FieldInfo></span>
             {fields.map((field) => {
               const exposed = config.exposedFieldIds.includes(field.id)
               const fixed = config.fixedInputs[field.id]
@@ -199,7 +199,7 @@ function ComfyPresetFields({ config, onChange }: { config: ChatComfyPresetConfig
                   ) : editable ? (
                     <Input variant="settings" className="h-9" type={field.type === 'number' ? 'number' : 'text'} value={fixed === undefined || fixed === null ? '' : String(fixed)} placeholder={field.default_value === undefined || field.default_value === null || typeof field.default_value === 'object' ? '' : String(field.default_value)} onChange={(event) => setFixed(field, event.target.value)} />
                   ) : (
-                    <span className="text-xs text-muted-foreground">{fixed !== undefined ? t({ ko: '패널에서 저장한 값', en: 'Value saved from the panel' }) : t({ ko: '워크플로 기본값', en: 'Workflow default' })}</span>
+                    <span className="text-xs text-muted-foreground">{fixed !== undefined ? t({ ko: '저장값', en: 'Saved' }) : t({ ko: '기본값', en: 'Default' })}</span>
                   )}
                 </div>,
               ]

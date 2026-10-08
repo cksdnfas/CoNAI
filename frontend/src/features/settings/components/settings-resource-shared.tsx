@@ -56,8 +56,8 @@ export function getWatcherStateLabel(watcherState: string | null | undefined, t:
 }
 
 /**
- * Meta-line head of a watched folder / backup source row: the one state that needs attention (switched off, watcher
- * error, watcher expected but not running), then a separator. It leads so a long path cannot truncate it away.
+ * Status chip of a watched folder / backup source row: the one state that needs attention (switched off, watcher
+ * error, watcher expected but not running). It sits before the path so a long path cannot truncate it away.
  * Nothing while it runs as set up.
  */
 export function WatchProblem({ isActive, watcherEnabled, watcherState }: { isActive: boolean; watcherEnabled: boolean; watcherState?: string | null }) {
@@ -67,7 +67,7 @@ export function WatchProblem({ isActive, watcherEnabled, watcherState }: { isAct
   if (!isActive) problem = <ResourceRowStatus>{t({ ko: '비활성', en: 'Inactive' })}</ResourceRowStatus>
   else if (state === 'error') problem = <ResourceRowStatus tone="destructive">{getWatcherStateLabel(watcherState, t)}</ResourceRowStatus>
   else if (watcherEnabled && state !== 'watching' && state !== 'initializing') problem = <ResourceRowStatus>{getWatcherStateLabel(watcherState, t)}</ResourceRowStatus>
-  return problem ? <>{problem}{' · '}</> : null
+  return problem
 }
 
 /** Turn a raw scan log status into a user-facing label. */

@@ -1,10 +1,10 @@
-import { Palette, Shield, UserPlus } from 'lucide-react'
+import { KeyRound, Palette, Shield, UserPlus, Users } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import type { AuthPermissionGroupSummaryItem } from '@/lib/api-auth'
-import { ResourceRow } from '@/components/ui/resource-row'
+import { ResourceRow, ResourceRowStat } from '@/components/ui/resource-row'
 import { RowGroup } from '@/components/ui/row-group'
 import { SettingsRowsSkeleton } from './settings-rows'
 import { getPermissionGroupDisplayName, getPermissionGroupKindLabel } from './security-ui-text'
@@ -62,7 +62,12 @@ export function SecurityPermissionGroupListCard({
                 </Badge>
               )}
               extra={<Chip size="sm" tone="muted">{getPermissionGroupKindLabel(language, group.systemGroup)}</Chip>}
-              meta={t({ ko: '권한 {permissions} · 멤버 {members}', en: '{permissions} permissions · {members} members' }, { permissions: group.directPermissionKeys.length, members: group.memberCount })}
+              aside={(
+                <>
+                  <ResourceRowStat icon={KeyRound} tip={t({ ko: '권한 {count}', en: '{count} permissions' }, { count: group.directPermissionKeys.length })}>{group.directPermissionKeys.length}</ResourceRowStat>
+                  <ResourceRowStat icon={Users} tip={t({ ko: '멤버 {count}', en: '{count} members' }, { count: group.memberCount })}>{group.memberCount}</ResourceRowStat>
+                </>
+              )}
               onOpen={() => onEdit(group)}
             />
           ))}

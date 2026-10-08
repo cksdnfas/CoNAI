@@ -1,12 +1,11 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileUp, Plus, Scale } from 'lucide-react'
+import { FileUp, Link2, ListChecks, Plus, Scale } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
-import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
+import { ResourceRow, ResourceRowStat, ResourceRowStatus } from '@/components/ui/resource-row'
 import { RowGroup } from '@/components/ui/row-group'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { CHAT_JUDGE_PRESETS_QUERY_KEY, createChatJudgePreset, importChatJudgePresets, listChatJudgePresets, type ChatJudgePreset } from '@/lib/api-chat-judge'
 import { CHAT_ADMIN_PROFILES_QUERY_KEY } from '@/lib/api-codex-chat'
@@ -74,18 +73,21 @@ export function ChatJudgePresetGroup() {
             key={preset.id}
             leading={<Scale className="text-resource-judge" />}
             name={preset.name}
-            meta={(
+            extra={(() => {
+              const missing = [
+                preset.providerName ? null : t({ ko: '판단 연결 없음', en: 'No judge connection' }),
+                preset.profiles.length === 0 && preset.rooms.length === 0 ? t({ ko: '쓰는 프로필·방 없음', en: 'No profile or room uses it' }) : null,
+              ].filter(Boolean)
+              return missing.length > 0 ? <ResourceRowStatus tip={missing.join(' · ')}>{t({ ko: '미연결', en: 'Not linked' })}</ResourceRowStatus> : null
+            })()}
+            aside={(
               <>
-                {t({ ko: '항목 {count}', en: '{count} items' }, { count: preset.items.length })}
-                {' · '}
-                {preset.providerName ? <span className="font-mono">{preset.providerName}{preset.model ? ` · ${preset.model}` : ''}</span> : <ResourceRowStatus>{t({ ko: '판단 연결 없음', en: 'No judge connection' })}</ResourceRowStatus>}
-                {' · '}
-                {preset.profiles.length === 0 && preset.rooms.length === 0
-                  ? <ResourceRowStatus>{t({ ko: '연결 없음', en: 'Not linked' })}</ResourceRowStatus>
-                  : <Tip content={[...preset.profiles.map((profile) => profile.name), ...preset.rooms.map((room) => room.title || `#${room.id}`)].join(', ')}><span>{[
-                    preset.profiles.length ? t({ ko: '프로필 {count}', en: '{count} profiles' }, { count: preset.profiles.length }) : '',
-                    preset.rooms.length ? t({ ko: '그룹 방 {count}', en: '{count} rooms' }, { count: preset.rooms.length }) : '',
-                  ].filter(Boolean).join(' · ')}</span></Tip>}
+                <ResourceRowStat icon={ListChecks} tip={t({ ko: '항목 {count}', en: '{count} items' }, { count: preset.items.length })}>{preset.items.length}</ResourceRowStat>
+                {preset.profiles.length + preset.rooms.length > 0 ? (
+                  <ResourceRowStat icon={Link2} tip={[...preset.profiles.map((profile) => profile.name), ...preset.rooms.map((room) => room.title || `#${room.id}`)].join(', ')}>
+                    {preset.profiles.length + preset.rooms.length}
+                  </ResourceRowStat>
+                ) : null}
               </>
             )}
             onOpen={() => setEditor({ preset })}

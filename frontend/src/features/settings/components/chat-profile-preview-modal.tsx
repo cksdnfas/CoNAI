@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { FieldInfo } from '@/components/ui/field'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
@@ -37,15 +38,18 @@ export function ChatProfilePreviewModal({ open, draft, onClose }: { open: boolea
             <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-4">
               <div><dt className="text-xs text-muted-foreground">{t({ ko: '프롬프트', en: 'Prompt' })}</dt><dd className="tabular-nums">≈ {formatNumber(preview.tokens.prompt)}</dd></div>
               <div><dt className="text-xs text-muted-foreground">{t({ ko: '도구 설명 ({count}개)', en: 'Tool schemas ({count})' }, { count: preview.tools.length })}</dt><dd className="tabular-nums">≈ {formatNumber(preview.tokens.tools)}</dd></div>
-              <div><dt className="text-xs text-muted-foreground">{t({ ko: '합계', en: 'Total' })}</dt><dd className={cn('tabular-nums font-semibold', overBudget && 'text-destructive')}>≈ {formatNumber(preview.tokens.total)}</dd></div>
+              <div>
+                <dt className="flex items-center gap-1 text-xs text-muted-foreground">
+                  {t({ ko: '합계', en: 'Total' })}
+                  <FieldInfo>
+                    {preview.engine === 'codex'
+                      ? t({ ko: 'Codex에는 이 지시문이 넘어가고, 대화 기억은 Codex가 직접 관리해. 토큰 수는 추정치야.', en: 'Codex receives these instructions and manages the conversation itself. Token counts are estimates.' })
+                      : t({ ko: '실제 요청에서는 이 뒤에 요약(켜져 있으면)과 최근 대화가 붙고, 키워드로 걸린 로어는 끝에서 {depth}턴 앞의 메시지에 들어가. 토큰 수는 추정치이고, 대화를 하면 서버가 알려준 사용량으로 보정돼.', en: 'Real requests add the summary (when on) and recent turns after this; keyword lore goes into the message {depth} turns before the end. Counts are estimates, calibrated from real usage once you chat.' }, { depth: draft.loreDepth ?? 4 })}
+                  </FieldInfo>
+                </dt><dd className={cn('tabular-nums font-semibold', overBudget && 'text-destructive')}>≈ {formatNumber(preview.tokens.total)}</dd></div>
               <div><dt className="text-xs text-muted-foreground">{t({ ko: '컨텍스트 길이', en: 'Context length' })}</dt><dd className="tabular-nums">{budget !== null ? formatNumber(budget) : t({ ko: '제한 없음', en: 'No limit' })}</dd></div>
             </dl>
             {overBudget ? <p className="text-xs text-destructive">{t({ ko: '대화 전에 이미 컨텍스트 길이를 넘어. 섹션을 줄이거나 도구를 덜 고르거나 길이를 늘려줘.', en: 'This already exceeds the context length before any conversation.' })}</p> : null}
-            <p className="text-xs text-muted-foreground">
-              {preview.engine === 'codex'
-                ? t({ ko: 'Codex에는 이 지시문이 넘어가고, 대화 기억은 Codex가 직접 관리해. 토큰 수는 추정치야.', en: 'Codex receives these instructions and manages the conversation itself. Token counts are estimates.' })
-                : t({ ko: '실제 요청에서는 이 뒤에 요약(켜져 있으면)과 최근 대화가 붙고, 키워드로 걸린 로어는 끝에서 {depth}턴 앞의 메시지에 들어가. 토큰 수는 추정치이고, 대화를 하면 서버가 알려준 사용량으로 보정돼.', en: 'Real requests add the summary (when on) and recent turns after this; keyword lore goes into the message {depth} turns before the end. Counts are estimates, calibrated from real usage once you chat.' }, { depth: draft.loreDepth ?? 4 })}
-            </p>
             <div className="space-y-3">
               {preview.messages.map((message, index) => (
                 <section key={index} className="space-y-1">

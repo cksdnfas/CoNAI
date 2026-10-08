@@ -96,7 +96,7 @@ export const LLM_PRESET_SECTIONS: Array<{
     heading: { ko: '시스템 프롬프트 프리셋', en: 'System prompt presets' },
     addLabel: { ko: '시스템 프롬프트 추가', en: 'Add system prompt' },
     fieldLabel: { ko: '시스템 프롬프트', en: 'System prompt' },
-    placeholder: { ko: '역할, 규칙, 말투 같은 기본 지시를 저장해 둬.', en: 'Save default instructions such as role, rules, and tone.' },
+    placeholder: { ko: '역할 · 규칙 · 말투', en: 'Role · rules · tone' },
     emptyMessage: { ko: '저장된 시스템 프롬프트 프리셋이 아직 없어.', en: 'No saved system prompt presets yet.' },
   },
   {
@@ -104,7 +104,7 @@ export const LLM_PRESET_SECTIONS: Array<{
     heading: { ko: '프롬프트 프리셋', en: 'Prompt presets' },
     addLabel: { ko: '프롬프트 추가', en: 'Add prompt' },
     fieldLabel: { ko: '프롬프트', en: 'Prompt' },
-    placeholder: { ko: '재사용할 기본 요청 본문을 저장해 둬.', en: 'Save a reusable default request body.' },
+    placeholder: { ko: '요청 본문', en: 'Request body' },
     emptyMessage: { ko: '저장된 프롬프트 프리셋이 아직 없어.', en: 'No saved prompt presets yet.' },
   },
   {
@@ -244,27 +244,4 @@ export function normalizePresetJson(value: string) {
   }
 
   return JSON.stringify(JSON.parse(trimmed), null, 2)
-}
-
-export function summarizePresetValue(value: string, emptyLabel = '비어 있음') {
-  const normalized = value.replace(/\s+/g, ' ').trim()
-  if (!normalized) {
-    return emptyLabel
-  }
-
-  return normalized.length > 72 ? `${normalized.slice(0, 72)}…` : normalized
-}
-
-export function formatPresetUpdatedAt(value: string, locale?: string) {
-  const parsed = Date.parse(value)
-  if (!Number.isFinite(parsed)) {
-    return '—'
-  }
-
-  return new Date(parsed).toLocaleString(locale, {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }

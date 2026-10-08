@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { JUDGE_OPTION_DEFAULTS, type ChatJudgeFollowUp, type ChatJudgeItem, type ChatJudgeTestTurn } from '@conai/shared'
 import { Copy, Download, FlaskConical, MessageSquarePlus, Play, Plus, Save, Square, Trash2 } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { Field } from '@/components/ui/field'
+import { Field, FieldInfo } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
@@ -183,16 +183,17 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
         </div>
 
         <section className="space-y-3 border-t border-line pt-4">
-          <h3 className="flex items-center gap-1.5 text-sm font-medium"><MessageSquarePlus className="size-4 text-muted-foreground" aria-hidden="true" />{t({ ko: '후속 메시지', en: 'Follow-up messages' })}</h3>
+          <h3 className="flex items-center gap-1.5 text-sm font-medium">
+            <MessageSquarePlus className="size-4 text-muted-foreground" aria-hidden="true" />
+            {t({ ko: '후속 메시지', en: 'Follow-up messages' })}
+            <FieldInfo>{t({ ko: '1:1 대화에만 적용돼.', en: 'Direct chats only.' })}</FieldInfo>
+          </h3>
           <div className="grid gap-3 md:grid-cols-3">
             <Field label={t({ ko: '연속 최대', en: 'At most in a row' })}>
               <NumberStepperInput variant="settings" min={0} max={3} step={1} value={draft.followUp.maxConsecutive} onValueCommit={(value) => patchFollowUp({ maxConsecutive: Number(value) || 0 })} aria-label={t({ ko: '연속 최대', en: 'At most in a row' })} />
             </Field>
             <Field label={t({ ko: '보내기 전 대기 (초)', en: 'Wait before sending (s)' })}>
               <NumberStepperInput variant="settings" min={0} max={600} step={1} value={draft.followUp.delaySeconds} onValueCommit={(value) => patchFollowUp({ delaySeconds: Number(value) || 0 })} aria-label={t({ ko: '보내기 전 대기 (초)', en: 'Wait before sending (s)' })} />
-            </Field>
-            <Field label={t({ ko: '적용', en: 'Applies to' })}>
-              <div className="flex min-h-10 items-center text-sm text-muted-foreground">{t({ ko: '1:1 대화만', en: 'Direct chats only' })}</div>
             </Field>
           </div>
           {hasAfterItems ? (
@@ -226,7 +227,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
         <div className="border-t border-line">
           <CollapsibleRow
             title={t({ ko: '고급', en: 'Advanced' })}
-            meta={draft.escalationProviderName ?? t({ ko: '재판단: 대화 모델', en: 'Re-judge: chat model' })}
+            meta={draft.escalationProviderName ?? undefined}
           >
             <Field label={t({ ko: '애매할 때 다시 물을 LLM', en: 'LLM asked again when unsure' })}>
               <JudgeConnectionSelect

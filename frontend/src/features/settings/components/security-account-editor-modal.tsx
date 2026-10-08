@@ -220,7 +220,7 @@ export function SecurityAccountEditorModal({
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
-                {t({ ko: '이 계정은 레거시 관리자 자격과 동기화돼 있어서 여기서 비밀번호를 직접 바꾸지 않아. 위쪽 관리자 계정 카드에서 변경해.', en: 'This account is synced with legacy admin credentials, so do not change its password here. Use the admin account card above instead.' })}
+                {t({ ko: '레거시 관리자 계정이라 비밀번호는 관리자 계정 카드에서 바꿔.', en: 'Legacy admin account: change its password in the admin account card.' })}
               </p>
             )}
           </div>
@@ -235,7 +235,7 @@ export function SecurityAccountEditorModal({
                 <div className="text-muted-foreground">
                   {canDeleteAccount
                     ? t({ ko: '정말 지우려면 아래에 {username} 를 그대로 입력해.', en: 'To confirm deletion, type {username} exactly below.' }, { username: account.username })
-                    : t({ ko: '레거시 관리자 계정은 여기서 삭제하지 않는 게 맞아.', en: 'Legacy admin accounts should not be deleted here.' })}
+                    : t({ ko: '레거시 관리자 계정은 여기서 못 지워.', en: 'Legacy admin accounts cannot be deleted here.' })}
                 </div>
               </div>
             </div>

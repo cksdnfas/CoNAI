@@ -23,10 +23,11 @@ import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Tip } from '@/components/ui/tooltip'
 import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
 import { SettingsSwitchRow } from './settings-switch-row'
 import { ConnectionModelSelect } from './chat-profile-editor-fields'
-import { ConnectionUsage } from './llm-model-slots'
+import { ConnectionUsage, isConnectionUsed } from './llm-model-slots'
 import {
   LLM_PRESET_SECTIONS,
   LLM_PROVIDER_OPTIONS,
@@ -37,9 +38,7 @@ import {
   buildPresetDraft,
   buildProviderDraft,
   buildProviderPlaceholder,
-  formatPresetUpdatedAt,
   getBaseUrlSummary,
-  summarizePresetValue,
   type LlmConnectionDraft,
   type LlmConnectionModalState,
   type LlmPresetDraft,
@@ -60,22 +59,21 @@ export function LlmConnectionListItem({
   const notSetLabel = t('llmConnectionsTab.notSet')
   const baseUrlSummary = getBaseUrlSummary(provider, notSetLabel)
   const kind = LLM_PROVIDER_OPTIONS.find((option) => option.value === provider.provider_type)
+  const used = isConnectionUsed(usage)
 
   return (
     <ResourceRow
       leading={<Plug />}
       name={provider.display_name || provider.provider_name}
-      extra={kind ? <Chip size="sm" tone="muted">{t(kind.shortLabel)}</Chip> : null}
-      meta={(
+      extra={(
         <>
-          {baseUrlSummary === notSetLabel
-            ? <ResourceRowStatus>{notSetLabel}</ResourceRowStatus>
-            : <span className="font-mono" title={baseUrlSummary}>{baseUrlSummary}</span>}
-          {' · '}
-          <ConnectionUsage usage={usage} />
-          {provider.is_enabled ? null : <>{' · '}<ResourceRowStatus>{t({ ko: '비활성', en: 'Inactive' })}</ResourceRowStatus></>}
+          {kind ? <Tip content={baseUrlSummary === notSetLabel ? null : baseUrlSummary}><span><Chip size="sm" tone="muted">{t(kind.shortLabel)}</Chip></span></Tip> : null}
+          {baseUrlSummary === notSetLabel ? <ResourceRowStatus>{notSetLabel}</ResourceRowStatus> : null}
+          {provider.is_enabled ? null : <ResourceRowStatus>{t({ ko: '비활성', en: 'Inactive' })}</ResourceRowStatus>}
+          {used ? null : <ConnectionUsage usage={usage} />}
         </>
       )}
+      aside={used ? <ConnectionUsage usage={usage} /> : null}
       onOpen={() => onOpenOptions(provider)}
     />
   )
@@ -88,19 +86,10 @@ export function LlmPresetListItem({
   preset: LlmPresetRecord
   onOpenOptions: (preset: LlmPresetRecord) => void
 }) {
-  const { locale, t } = useI18n()
-
   return (
     <ResourceRow
       leading={<FileText />}
       name={preset.name}
-      meta={(
-        <>
-          <span title={preset.content || undefined}>{summarizePresetValue(preset.content, t({ ko: '비어 있음', en: 'Empty' }))}</span>
-          {' · '}
-          {formatPresetUpdatedAt(preset.updatedAt, locale)}
-        </>
-      )}
       onOpen={() => onOpenOptions(preset)}
     />
   )
@@ -265,16 +254,14 @@ function LlmConnectionFormFields({
 
 function LlmPresetFormFields({
   draft,
-  mode,
   section,
   onChange,
 }: {
   draft: LlmPresetDraft
-  mode: 'create' | 'edit'
   section: (typeof LLM_PRESET_SECTIONS)[number]
   onChange: (patch: Partial<LlmPresetDraft>) => void
 }) {
-  const { locale, t } = useI18n()
+  const { t } = useI18n()
 
   return (
     <div className="grid gap-4">
@@ -297,10 +284,6 @@ function LlmPresetFormFields({
           className={section.mono ? 'font-mono text-xs' : undefined}
         />
       </Field>
-
-      {mode === 'edit' && draft.createdAt ? (
-        <p className="text-xs text-muted-foreground">{t({ ko: '생성: {value}', en: 'Created: {value}' }, { value: formatPresetUpdatedAt(draft.createdAt, locale) })}</p>
-      ) : null}
     </div>
   )
 }
@@ -564,7 +547,6 @@ export function LlmPresetEditorModal({
       <ModalBody>
         <LlmPresetFormFields
           draft={draft}
-          mode={isEditMode ? 'edit' : 'create'}
           section={section}
           onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
         />

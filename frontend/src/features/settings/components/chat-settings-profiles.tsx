@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FileUp, Plus } from 'lucide-react'
+import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { ResourceRow } from '@/components/ui/resource-row'
@@ -45,6 +46,14 @@ function profileModelLine(profile: ChatProfile, slots: ModelSlot[], t: ReturnTyp
   const model = profile.model || t({ ko: '기본 모델', en: 'default model' })
   if (profile.engine === 'claude') return `Claude Code · ${profile.model || 'sonnet'}`
   return profile.engine === 'codex' ? `Codex · ${model}` : `${profile.providerName} · ${model}`
+}
+
+/** Short chip text for the row: the model's name, else the engine or connection. The full line is its tooltip. */
+function profileModelChip(profile: ChatProfile, slots: ModelSlot[]) {
+  const slot = profile.modelSlotId ? slots.find((item) => item.id === profile.modelSlotId) : undefined
+  if (slot) return `${slot.isDefault ? '★ ' : ''}${slot.name}`
+  if (profile.engine === 'claude') return 'Claude Code'
+  return profile.engine === 'codex' ? 'Codex' : profile.providerName
 }
 
 /** The one tool chip of a profile: the allowed-tool count, else just "tools". */
@@ -160,10 +169,14 @@ export function ChatSettingsProfiles() {
         {profiles.map((profile) => (
           <ResourceRow
             key={profile.id}
-            className="min-h-16"
+            className="min-h-14"
             leading={<ChatProfileAvatar name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size="lg" />}
             name={profile.name}
-            meta={<span className="font-mono">{profileModelLine(profile, slots, t)}</span>}
+            extra={(
+              <Tip content={profileModelLine(profile, slots, t)}>
+                <span className="min-w-0"><Chip size="sm" tone="muted" className="max-w-48"><span className="truncate">{profileModelChip(profile, slots)}</span></Chip></span>
+              </Tip>
+            )}
             trailing={(
               <>
                 {profile.mcpEnabled ? (
