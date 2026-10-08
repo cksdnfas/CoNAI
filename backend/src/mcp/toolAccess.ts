@@ -42,6 +42,8 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   create_audio_group: ['audio.view', 'audio.edit'], update_audio_group: ['audio.view', 'audio.edit'],
   move_audio_candidates: ['audio.view', 'audio.edit'], import_audio: ['audio.view', 'audio.edit'],
   set_audio_group_comment_status: ['audio.view', 'audio.edit'],
+  edit_audio_candidate: ['audio.view', 'audio.edit'], delete_unselected_audio_candidates: ['audio.view', 'audio.edit'],
+  export_audio_selected: 'audio.view', get_audio_download: 'audio.view',
   list_audio_workflows: 'audio.view', get_audio_order: 'audio.view',
   order_audio: ['audio.view', 'audio.edit', 'generation.execute'], wait_audio_order: 'audio.view',
   cancel_audio_order: ['audio.view', 'audio.edit'], retry_audio_order_job: ['audio.view', 'audio.edit', 'generation.execute'],

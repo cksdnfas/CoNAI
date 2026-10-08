@@ -39,7 +39,7 @@ async function run(action: () => unknown) {
 }
 
 /** The fields an agent needs to act on a candidate; ids are audio ids, not image hashes. */
-function candidateSummary(candidate: AudioCandidate) {
+export function candidateSummary(candidate: AudioCandidate) {
   return {
     candidate_id: candidate.id,
     group_id: candidate.group_id,
