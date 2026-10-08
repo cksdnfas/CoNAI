@@ -1,8 +1,10 @@
 import { ensureChatAssetSchema } from './chatAssetSchema';
 import Database from 'better-sqlite3';
-import { applyGenerationQueueDebugColumns } from './migrations/029_add_generation_queue_debug_columns';
-import { applyGenerationQueueInputRefs } from './migrations/032_add_generation_queue_input_refs';
-import { applyGenerationQueueIdempotency } from './migrations/035_add_generation_queue_idempotency';
+import {
+  applyGenerationQueueDebugColumns,
+  applyGenerationQueueIdempotency,
+  applyGenerationQueueInputRefs,
+} from './generationQueueSchema';
 import { migrateLlmConnectionGenerationDefaults } from './llmConnectionDefaultsMigration';
 
 /** Bootstrap core user-settings tables, indexes, and simple column backfills. */
@@ -1247,13 +1249,13 @@ export function createUserSettingsSchema(db: Database.Database): void {
     }
   }
 
-  // PAYLOAD-2 (migration 029): debug flag/metadata columns.
+  // PAYLOAD-2: debug flag/metadata columns.
   // Deliberately added *after* the CHECK rebuild so the three CREATE TABLE copies
   // and the rebuild's INSERT/SELECT column lists stay identical (R-b contract),
   // and so a legacy rebuild can never drop freshly written debug metadata.
   applyGenerationQueueDebugColumns(db);
 
-  // PAYLOAD-3 (migration 032): refcount for content-addressed queue image inputs.
+  // PAYLOAD-3: refcount for content-addressed queue image inputs.
   applyGenerationQueueInputRefs(db);
 
   // MCP queue submissions retain one durable job per API-key-scoped idempotency key.

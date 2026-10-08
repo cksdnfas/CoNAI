@@ -12,7 +12,64 @@ export interface MigrationOptions {
   requireBaseline?: boolean;
 }
 
-const BASELINE_MIGRATION_VERSION = '000_create_all_tables';
+export const BASELINE_MIGRATION_VERSION = '000_create_all_tables';
+
+/**
+ * Migrations folded into the 000 baseline. Their files are gone; a DB that has 000 must have run every one of them.
+ * A fresh DB gets them recorded together with 000, so the history looks the same either way.
+ */
+export const SQUASHED_MIGRATION_VERSIONS: readonly string[] = [
+  '001_create_auto_folder_groups',
+  '002_add_watcher_polling_interval',
+  '003_create_civitai_tables',
+  '004_add_model_references_column',
+  '006_create_auto_prompt_tables',
+  '007_add_parent_id_to_groups',
+  '008_add_performance_indexes',
+  '009_add_raw_nai_parameters',
+  '010_add_character_prompt_text',
+  '011_add_prompt_similarity_fields',
+  '012_add_prompt_term_relations',
+  '012_create_backup_sources',
+  '013_add_prompt_taxonomy_tables',
+  '013_create_image_metadata_edit_revisions',
+  '014_add_rating_tier_feed_visibility',
+  '015_drop_prompt_usage_taxonomy_tables',
+  '016_add_comfyui_server_backend_capacity',
+  '017_add_image_detail_lookup_index',
+  '018_add_media_postprocess_visibility',
+  '019_add_home_feed_cursor_index',
+  '020_add_group_rematch_index',
+  '021_add_graph_execution_node_io',
+  '022_add_media_auto_tag_index',
+  '023_prune_media_auto_tag_index_variants',
+  '024_add_prompt_similarity_candidate_indexes',
+  '025_add_auto_tag_stats_indexes',
+  '026_prune_redundant_indexes',
+  '027_add_media_visibility_index',
+  '028_add_media_auto_tag_state',
+  '029_add_generation_queue_debug_columns',
+  '031_add_media_prompt_search_index',
+  '032_add_generation_queue_input_refs',
+  '033_reset_prefilled_watcher_polling',
+  '034_add_background_media_retry_state',
+  '035_add_generation_queue_idempotency',
+];
+
+/**
+ * Squashed versions that never changed images.db: their table (generation_queue_jobs) lives in user.db, where
+ * generationQueueSchema.ts applies them. A DB missing only these is complete; the record is filled in.
+ */
+const IMAGES_DB_NOOP_SQUASHED_VERSIONS: ReadonlySet<string> = new Set([
+  '029_add_generation_queue_debug_columns',
+  '032_add_generation_queue_input_refs',
+  '035_add_generation_queue_idempotency',
+]);
+
+const SQUASHED_VERSION_SET: ReadonlySet<string> = new Set(SQUASHED_MIGRATION_VERSIONS);
+
+/** Tables only an already initialised (or pre-migration legacy) images.db has. */
+const EXISTING_LIBRARY_TABLES = ['media_metadata', 'image_files', 'images'];
 
 function escapeSavepointName(value: string): string {
   return value.replace(/[^a-zA-Z0-9_]/g, '_');
@@ -49,6 +106,9 @@ export class MigrationManager {
 
   // 적용된 마이그레이션 목록 조회
   private getAppliedMigrations(): string[] {
+    if (!this.hasMigrationsTable()) {
+      return [];
+    }
     const rows = this.db.prepare('SELECT version FROM migrations ORDER BY version').all() as any[];
     return rows.map(row => row.version);
   }
@@ -61,6 +121,49 @@ export class MigrationManager {
   // 마이그레이션 적용 기록 삭제
   private removeMigrationRecord(version: string): void {
     this.db.prepare('DELETE FROM migrations WHERE version = ?').run(version);
+  }
+
+  private hasExistingLibraryTables(): boolean {
+    const placeholders = EXISTING_LIBRARY_TABLES.map(() => '?').join(', ');
+    return !!this.db.prepare(`
+      SELECT 1 FROM sqlite_master
+      WHERE type = 'table' AND name IN (${placeholders})
+      LIMIT 1
+    `).get(...EXISTING_LIBRARY_TABLES);
+  }
+
+  /**
+   * baseline 이 합쳐 버린 마이그레이션을 이 DB 가 전부 거쳤는지 확인한다. 고칠 수 없는 상태면
+   * 아무것도 바꾸기 전에 던진다. images.db 와 무관한 버전만 빠졌으면 기록해야 할 목록을 돌려준다.
+   */
+  private checkSquashedHistory(applied: readonly string[], baselinePending: boolean): string[] {
+    if (baselinePending) {
+      // 000 은 빈 DB 에서만 돈다. 기록 없이 테이블만 있는 DB 에 돌리면 합쳐진 001~035 의 ALTER 가
+      // 빠진 채로 "최신" 으로 기록된다.
+      if (this.hasExistingLibraryTables()) {
+        throw new Error(
+          '마이그레이션 기록이 없는데 미디어 테이블이 이미 있는 데이터베이스입니다. '
+          + `baseline(${BASELINE_MIGRATION_VERSION})은 빈 데이터베이스에만 적용할 수 있습니다. `
+          + 'migrations 테이블을 복구하거나 새 데이터베이스로 시작해 주세요.',
+        );
+      }
+      return [];
+    }
+
+    if (!applied.includes(BASELINE_MIGRATION_VERSION)) {
+      return [];
+    }
+
+    const missing = SQUASHED_MIGRATION_VERSIONS.filter((version) => !applied.includes(version));
+    const blocking = missing.filter((version) => !IMAGES_DB_NOOP_SQUASHED_VERSIONS.has(version));
+    if (blocking.length > 0) {
+      throw new Error(
+        '이 데이터베이스는 너무 오래돼서 이번 버전으로 바로 올릴 수 없습니다. '
+        + `baseline(${BASELINE_MIGRATION_VERSION})에 합쳐진 마이그레이션 기록이 빠져 있습니다: ${blocking.join(', ')}. `
+        + '마이그레이션 035 까지 들어 있는 이전 릴리스(26.9.29 이후)로 먼저 한 번 실행해 DB 를 올린 뒤 다시 시도해 주세요.',
+      );
+    }
+    return missing;
   }
 
   // 사용 가능한 마이그레이션 파일 목록 조회
@@ -94,6 +197,11 @@ export class MigrationManager {
     for (const file of files) {
       const filePath = path.join(migrationsPath, file);
       const version = file.replace(/\.(ts|js)$/, '');
+
+      // A build folder that was never cleaned can still hold compiled copies of the squashed files.
+      if (SQUASHED_VERSION_SET.has(version)) {
+        continue;
+      }
 
       try {
         const migrationModule = require(filePath);
@@ -129,16 +237,18 @@ export class MigrationManager {
         );
       }
 
-      if (!this.hasMigrationsTable()) {
-        this.createMigrationsTable();
-      }
+      const readState = () => {
+        const applied = this.getAppliedMigrations();
+        const pending = availableMigrations.filter(
+          migration => !applied.includes(migration.version)
+        );
+        const baselinePending = pending.some((migration) => migration.version === BASELINE_MIGRATION_VERSION);
+        return { applied, pending, unrecordedSquashed: this.checkSquashedHistory(applied, baselinePending) };
+      };
 
-      let appliedMigrations = this.getAppliedMigrations();
-      let pendingMigrations = availableMigrations.filter(
-        migration => !appliedMigrations.includes(migration.version)
-      );
+      let state = readState();
 
-      if (pendingMigrations.length === 0) {
+      if (state.pending.length === 0 && state.unrecordedSquashed.length === 0) {
         console.log('✅ 모든 마이그레이션이 이미 적용되었습니다.');
         return;
       }
@@ -149,16 +259,20 @@ export class MigrationManager {
 
       // Another split runtime process may have applied the same migrations while
       // this process waited for the startup write lock.
-      appliedMigrations = this.getAppliedMigrations();
-      pendingMigrations = availableMigrations.filter(
-        migration => !appliedMigrations.includes(migration.version)
-      );
+      state = readState();
+      const appliedMigrations = state.applied;
+      const pendingMigrations = state.pending;
 
-      if (pendingMigrations.length === 0) {
+      if (pendingMigrations.length === 0 && state.unrecordedSquashed.length === 0) {
         console.log('✅ 모든 마이그레이션이 이미 적용되었습니다.');
         this.db.exec('COMMIT');
         transactionStarted = false;
         return;
+      }
+
+      for (const version of state.unrecordedSquashed) {
+        this.recordMigration(version);
+        console.log(`📝 images.db 와 무관한 통합 마이그레이션 기록 보충: ${version}`);
       }
 
       console.log(`🔄 ${pendingMigrations.length}개의 마이그레이션을 적용합니다...`);
@@ -170,6 +284,12 @@ export class MigrationManager {
           this.db.exec(`SAVEPOINT ${savepointName}`);
           await migration.up(this.db);
           this.recordMigration(migration.version);
+          if (migration.version === BASELINE_MIGRATION_VERSION) {
+            // The baseline already holds what these did; record them so every DB with 000 has the same history.
+            SQUASHED_MIGRATION_VERSIONS
+              .filter((version) => !appliedMigrations.includes(version))
+              .forEach((version) => this.recordMigration(version));
+          }
           this.db.exec(`RELEASE SAVEPOINT ${savepointName}`);
           console.log(`✅ 마이그레이션 완료: ${migration.version}`);
         } catch (error) {
@@ -225,6 +345,13 @@ export class MigrationManager {
       } else {
         // 마지막 마이그레이션만 롤백
         migrationsToRollback = [appliedMigrations[appliedMigrations.length - 1]];
+      }
+
+      const squashedTargets = migrationsToRollback.filter((version) => SQUASHED_VERSION_SET.has(version));
+      if (squashedTargets.length > 0) {
+        throw new Error(
+          `baseline(${BASELINE_MIGRATION_VERSION})에 합쳐진 마이그레이션은 따로 롤백할 수 없습니다: ${squashedTargets.join(', ')}`,
+        );
       }
 
       console.log(`🔄 ${migrationsToRollback.length}개의 마이그레이션을 롤백합니다...`);
@@ -285,8 +412,11 @@ export class MigrationManager {
         console.log(`${status} ${migration.version}`);
       }
 
+      const appliedSquashed = SQUASHED_MIGRATION_VERSIONS.filter((version) => appliedMigrations.includes(version)).length;
+      console.log(`🗜️ baseline 에 통합된 이전 마이그레이션 ${appliedSquashed}/${SQUASHED_MIGRATION_VERSIONS.length}개 기록됨`);
       console.log('='.repeat(50));
-      console.log(`총 ${availableMigrations.length}개 중 ${appliedMigrations.length}개 적용됨\n`);
+      const appliedAvailable = availableMigrations.filter((migration) => appliedMigrations.includes(migration.version)).length;
+      console.log(`총 ${availableMigrations.length}개 중 ${appliedAvailable}개 적용됨\n`);
     } catch (error) {
       console.error('❌ 마이그레이션 상태 확인 중 오류 발생:', error);
       throw error;
