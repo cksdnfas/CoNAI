@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query'
 import { ImageOff, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { FieldInfo } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
@@ -132,10 +133,12 @@ export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, app
         <Button variant="ghost" onClick={() => void (query.isFetchNextPageError ? query.fetchNextPage() : query.refetch())}>{t({ ko: '다시 시도', en: 'Retry' })}</Button>
       </div> : null}
       {query.hasNextPage ? <Button variant="secondary" disabled={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>{t({ ko: '더 보기', en: 'Load more' })}</Button> : null}
-      {note === null ? null : <p className="text-xs text-muted-foreground">{note ?? t({ ko: '원본을 참조해 첨부해. 이미지 이해에는 이미지 보기 도구와 비전 모델이 필요하고, 영상·오디오 내용 분석은 지원하지 않아.', en: 'Attachments reference the originals. Image understanding requires the image tool and a vision model; video/audio analysis is not supported.' })}</p>}
     </ModalBody>
     <ModalFooter>
-      <span className="mr-auto text-sm text-muted-foreground">{t({ ko: '{count}개 선택', en: '{count} selected' }, { count: selected.size })}</span>
+      <span className="mr-auto flex items-center gap-1 text-sm text-muted-foreground">
+        {t({ ko: '{count}개 선택', en: '{count} selected' }, { count: selected.size })}
+        {note === null ? null : <FieldInfo>{note ?? t({ ko: '원본을 참조해 첨부해. 이미지 이해에는 이미지 보기 도구와 비전 모델이 필요하고, 영상·오디오 내용 분석은 지원하지 않아.', en: 'Attachments reference the originals. Image understanding requires the image tool and a vision model; video/audio analysis is not supported.' })}</FieldInfo>}
+      </span>
       <Button variant="ghost" disabled={!selected.size} onClick={() => setSelected(new Map())}>{t({ ko: '선택 해제', en: 'Clear selection' })}</Button>
       <Button variant="secondary" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
       <Button disabled={selected.size > maxCount || (kindOnly && !selected.size)} onClick={() => onPick([...selected.values()])}>{applyLabel ?? t({ ko: '첨부 적용', en: 'Apply attachments' })}</Button>

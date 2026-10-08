@@ -276,19 +276,18 @@ function EntryRow({ entry, onOpen }: { entry: ChatLoreEntry; onOpen?: () => void
   const fileName = entry.file ? entry.file.split('/').pop() : null
   const body = (
     <>
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className={cn('truncate text-xs font-semibold', !entry.enabled && 'text-muted-foreground line-through')}>{loreEntryTitle(entry) || t({ ko: '새 항목', en: 'New entry' })}</span>
-        {entry.content ? <span className="truncate text-xs text-muted-foreground">{entry.content}</span> : null}
-      </span>
-      {fileName ? <span className="mt-0.5 inline-flex shrink-0 items-center gap-1 font-mono text-2xs text-muted-foreground"><FileText className="size-3" aria-hidden />{fileName}</span> : null}
-      {entry.constant ? <span className="mt-0.5 shrink-0 text-2xs font-bold text-primary">{t({ ko: '상시', en: 'Always' })}</span> : null}
+      <span className={cn('min-w-0 flex-1 truncate text-xs font-semibold', !entry.enabled && 'text-muted-foreground line-through')}>{loreEntryTitle(entry) || t({ ko: '새 항목', en: 'New entry' })}</span>
+      {fileName ? <span className="inline-flex shrink-0 items-center gap-1 font-mono text-2xs text-muted-foreground"><FileText className="size-3" aria-hidden />{fileName}</span> : null}
+      {entry.constant ? <span className="shrink-0 text-2xs font-bold text-primary">{t({ ko: '상시', en: 'Always' })}</span> : null}
     </>
   )
-  const className = 'flex items-start gap-2 border-t border-line py-1.5 pl-5 text-left'
+  const className = 'flex items-center gap-2 border-t border-line py-1.5 pl-5 text-left'
+  // The entry's text shows in a tooltip, not as a second line.
+  const preview = entry.content ? (entry.content.length > 240 ? `${entry.content.slice(0, 240)}…` : entry.content) : null
   return onOpen
-    // eslint-disable-next-line no-restricted-syntax -- a two-line entry row; Button would pad and centre it
-    ? <button type="button" onClick={onOpen} className={cn(className, 'w-full hover:bg-fill outline-none focus-visible:ring-2 focus-visible:ring-ring/40')}>{body}</button>
-    : <div className={className}>{body}</div>
+    // eslint-disable-next-line no-restricted-syntax -- a full-width entry row; Button would pad and centre it
+    ? <Tip content={preview} side="left"><button type="button" onClick={onOpen} className={cn(className, 'w-full hover:bg-fill outline-none focus-visible:ring-2 focus-visible:ring-ring/40')}>{body}</button></Tip>
+    : <Tip content={preview} side="left"><div className={className}>{body}</div></Tip>
 }
 
 /** B: one entry in the shared entry editor, as a modal (지우기 · 승격 · 저장). */

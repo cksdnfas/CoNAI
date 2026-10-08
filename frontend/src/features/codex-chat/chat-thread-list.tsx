@@ -24,8 +24,8 @@ export type ChatBulkAction = 'archive' | 'unarchive' | 'delete'
  * fold under the chat they came from; archived chats wait behind the archive row at the end.
  * `dense` is the page's side column; the panel's list screen uses roomier rows.
  *
- * Several chats are picked by the check that replaces a row's face on hover (or "Select" in the row menu, the way on
- * touch); while any is picked a row click ticks it, and a floating bar archives or deletes them (Esc lets go).
+ * Several chats are picked with "Select" in the row menu; while any is picked the faces turn into checks, a row click
+ * ticks it, and a floating bar archives or deletes them (Esc lets go).
  */
 export function ChatThreadList({ threads, profilesById, activeThreadId, runningThreadIds, drafts, dense = false, onSelect, onUpdate, onBulk }: {
   threads: CodexChatThread[]
@@ -101,28 +101,25 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
     const preview = dense ? null : previewOf(entry)
     const checked = picked.has(entry.id)
     return (
-      <div key={entry.id} className={cn('group/row relative', nested && (dense ? 'pl-5' : 'pl-8'))}>
+      <div key={entry.id} className={cn('relative', nested && (dense ? 'pl-5' : 'pl-8'))}>
         <ListRow asChild interactive size={dense ? 'sm' : 'lg'} selected={selecting ? checked : entry.id === activeThreadId}>
           <button
             type="button"
             aria-pressed={selecting ? checked : undefined}
-            // While picking, a row click ticks it; otherwise the check over the face (hover) starts picking.
-            onClick={(event) => (selecting || (event.target as HTMLElement).closest('[data-row-check]') ? togglePick(entry.id) : onSelect(entry.id))}
-            className={cn('w-full', dense ? 'gap-2 pointer-coarse:pr-9' : 'gap-3 px-3 pointer-coarse:pr-11')}
+            // While picking, a row click ticks it.
+            onClick={() => (selecting ? togglePick(entry.id) : onSelect(entry.id))}
+            // Room for the row menu, which sits on the row's end.
+            className={cn('w-full', dense ? 'gap-2' : 'gap-3 px-3', !selecting && (dense ? 'pr-9' : 'pr-11'))}
           >
             <span className="relative flex shrink-0">
-              <span className={cn('flex transition-opacity', selecting ? 'opacity-0' : 'group-hover/row:opacity-0')}>
+              <span className={cn('flex', selecting && 'opacity-0')}>
               {entry.kind === 'group'
                 ? <GroupAvatarStack profiles={(entry.member_profile_ids ?? []).flatMap((id) => profilesById.get(id) ?? [])} size={dense ? 'xs' : 'sm'} ringClassName="ring-background" />
                 : entryProfile ? <ChatProfileAvatar name={entryProfile.name} avatar={entryProfile.avatar} profile={entryProfile} engine={entryProfile.engine} size={dense ? 'xs' : 'md'} /> : <span className={dense ? 'size-5' : 'size-8'} />}
               </span>
               <span
-                data-row-check
                 aria-hidden
-                className={cn(
-                  'absolute inset-0 grid place-items-center transition-opacity',
-                  selecting ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100 pointer-coarse:hidden',
-                )}
+                className={cn('absolute inset-0 grid place-items-center', !selecting && 'hidden')}
               >
                 <span className={cn('grid size-4 place-items-center rounded-[5px] border-[1.5px]', checked ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/70')}>
                   {checked ? <Check className="size-3" strokeWidth={3} /> : null}
@@ -137,7 +134,7 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
               {preview ? <span className="block truncate text-xs text-muted-foreground">{preview}</span> : null}
             </span>
             {/* Time on top, the unread count under it (side by side in the dense list). */}
-            <span className={cn('flex shrink-0 group-hover/row:invisible', dense ? 'items-center gap-2' : 'flex-col items-end gap-1')}>
+            <span className={cn('flex shrink-0', dense ? 'items-center gap-2' : 'flex-col items-end gap-1')}>
               <span className="flex items-center gap-2">
                 {runningThreadIds.has(entry.id) ? <span role="img" aria-label={t({ ko: '답변 중', en: 'Replying' })} className="size-1.5 rounded-full bg-success motion-safe:animate-pulse" /> : null}
                 {Number.isNaN(movedAt.getTime()) ? null : <time className="text-2xs tabular-nums text-muted-foreground" dateTime={movedAt.toISOString()}>{whenLabel(movedAt)}</time>}
@@ -154,7 +151,7 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
                 size="icon-xs"
                 tooltip={false}
                 label={t({ ko: '채팅 관리', en: 'Manage chat' })}
-                className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100"
+                className="absolute right-2 top-1/2 -translate-y-1/2"
               >
                 <MoreHorizontal />
               </IconButton>

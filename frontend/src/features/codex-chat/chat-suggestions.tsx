@@ -169,8 +169,7 @@ export function ChatSuggestTray({ suggestions, buttonRef, onPick }: {
           </button>
         ))}
       </div>
-      <div className="flex items-center justify-between border-t border-line py-1 pl-3 pr-1 text-2xs text-muted-foreground">
-        <span>{t({ ko: '누르면 입력창에 채움', en: 'Tap to fill the composer' })}</span>
+      <div className="flex items-center justify-end border-t border-line py-1 pr-1">
         <IconButton variant="ghost" size="icon-xs" disabled={loading} onClick={refresh} label={t({ ko: '다시 뽑기', en: 'Suggest again' })}>
           <RefreshCw className={cn(loading && 'animate-spin')} />
         </IconButton>

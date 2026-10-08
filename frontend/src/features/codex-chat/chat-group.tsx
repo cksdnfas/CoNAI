@@ -131,7 +131,7 @@ export function GroupMembersPopover({ threadId, group, profilesById, disabled, o
                 {profile.tagline ? <div className="truncate text-xs text-muted-foreground">{profile.tagline}</div> : null}
               </div>
               {representative ? null : (
-                <div className="flex opacity-0 transition-opacity focus-within:opacity-100 group-hover/member:opacity-100">
+                <div className="flex">
                   <IconButton size="icon-xs" variant="ghost" disabled={busy} label={t({ ko: '대표로 지정', en: 'Make representative' })} onClick={() => updateMutation.mutate({ representativeId: profile.id })}><Crown /></IconButton>
                   <IconButton size="icon-xs" variant="ghost" disabled={busy || members.length <= 1} label={t({ ko: '방에서 내보내기', en: 'Remove from room' })} onClick={() => void remove(profile)}><UserMinus /></IconButton>
                 </div>

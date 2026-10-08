@@ -82,8 +82,8 @@ export function ChatDeleteDialog({ open, count = 1, book, pending, onConfirm, on
         {withBook ? <>
         <p className="text-sm text-muted-foreground">
           {files > 0
-            ? t({ ko: '이 채팅의 로어북에 항목 {entries}개와 자료 {files}개가 있어.', en: 'This chat’s lorebook has {entries} entries and {files} files.' }, { entries, files })
-            : t({ ko: '이 채팅의 로어북에 항목 {entries}개가 있어.', en: 'This chat’s lorebook has {entries} entries.' }, { entries })}
+            ? t({ ko: '로어북 항목 {entries} · 자료 {files}', en: 'Lorebook: {entries} entries · {files} files' }, { entries, files })
+            : t({ ko: '로어북 항목 {entries}', en: 'Lorebook: {entries} entries' }, { entries })}
         </p>
         <div role="radiogroup" aria-label={t({ ko: '채팅 로어북', en: 'Chat lorebook' })} className="flex flex-col gap-1.5">
           {choice('delete', t({ ko: '같이 지우기', en: 'Delete it too' }))}
