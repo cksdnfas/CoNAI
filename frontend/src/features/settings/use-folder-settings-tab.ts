@@ -157,6 +157,7 @@ export function useFolderSettingsTab({ isActive, notifyInfo, notifyError }: UseF
 
   /** 전체 파일 검증도 잡이다. 완료 요약 토스트는 잡이 끝날 때 뜬다. */
   const verifyAllFilesJob = useRuntimeJobAction<FileVerificationRunResult>(runFileVerification, {
+    resumeKind: 'file-verification',
     onCompleted: (job) => {
       const result = job.result
       notifyInfo(t({ ko: '파일 검증 완료: 검사 {checked}개, 이슈 {missing}개, 정리 {deleted}개', en: 'File verification complete: checked {checked}, issues {missing}, cleaned {deleted}' }, { checked: formatNumber(result?.totalChecked ?? 0), missing: formatNumber(result?.missingFound ?? 0), deleted: formatNumber(result?.deletedRecords ?? 0) }))
@@ -180,6 +181,7 @@ export function useFolderSettingsTab({ isActive, notifyInfo, notifyError }: UseF
    * 시작 응답은 202 + 잡 레코드이고, 완료 요약 토스트는 잡이 종료될 때 그대로 뜬다.
    */
   const scanAllJob = useRuntimeJobAction<ScanAllSummary>(scanAllWatchedFolders, {
+    resumeKind: 'folder-scan-all',
     onCompleted: (job) => {
       const summary = job.result
       notifyInfo(t({ ko: '전체 스캔 완료: 폴더 {folders}개, 신규 {newCount}개, 기존 {existing}개', en: 'Full scan complete: {folders} folders, {newCount} new, {existing} existing' }, { folders: formatNumber(summary?.totalFolders ?? 0), newCount: formatNumber(summary?.totalNew ?? 0), existing: formatNumber(summary?.totalExisting ?? 0) }))

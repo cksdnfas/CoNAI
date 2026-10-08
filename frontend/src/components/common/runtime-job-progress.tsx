@@ -66,7 +66,7 @@ export function RuntimeJobProgress({ job, cancel, isCancelling = false, classNam
         <div className="text-xs text-muted-foreground">
           {t(
             { ko: '{processed}개 처리 후 중단됨 (이미 처리된 항목은 되돌리지 않아).', en: 'Stopped after {processed} items (already processed items are not reverted).' },
-            { processed: String(job.progress.processed) },
+            { processed: formatNumber(job.progress.processed) },
           )}
         </div>
       ) : null}
