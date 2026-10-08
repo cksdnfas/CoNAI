@@ -15,6 +15,13 @@ export function listChatJudgePresets() {
   return requestApiData<ChatJudgePreset[]>(`${BASE}/judge-presets`)
 }
 
+export const CHAT_JUDGE_PRESET_NAMES_QUERY_KEY = ['codex-chat-judge-preset-names'] as const
+
+/** The presets by name, for any chat user (a room owner picking one for a group room). */
+export function listChatJudgePresetNames() {
+  return requestApiData<Array<{ id: number; name: string }>>('/api/codex-chat/judge-presets')
+}
+
 export function createChatJudgePreset(input: ChatJudgePresetInput) {
   return requestApiData<ChatJudgePreset>(`${BASE}/judge-presets`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
 }
@@ -32,7 +39,7 @@ export function deleteChatJudgePreset(presetId: number) {
   return requestApiData<{ deleted: boolean }>(`${BASE}/judge-presets/${presetId}`, { method: 'DELETE' })
 }
 
-/** Runs a preset draft over the last `turns` messages of one of the requester's own API chats; nothing is logged. */
+/** Runs a preset draft over the last `turns` messages of one of the requester's own direct chats; nothing is logged. */
 export function testChatJudgePreset(input: { preset: ChatJudgePresetInput; threadId: number; turns: number }, signal?: AbortSignal) {
   return requestApiData<ChatJudgeTestTurn[]>(`${BASE}/judge-presets/test`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input), signal })
 }
@@ -56,10 +63,10 @@ export function getChatJudgeStats(filter: ChatJudgeLogFilter = {}) {
 
 export const CHAT_JUDGE_PRESET_FILE_MARK = 'conai_judge_preset'
 
-/** One preset as a JSON file: its questions and follow-up settings (connections are each server's own). */
+/** One preset as a JSON file: its questions, follow-up settings and other sections (connections are each server's own). */
 export function downloadChatJudgePresetFile(preset: ChatJudgePresetInput) {
   const name = preset.name || 'judge'
-  const contents = { [CHAT_JUDGE_PRESET_FILE_MARK]: 1, name, preset: { name, items: preset.items ?? [], followUp: preset.followUp } }
+  const contents = { [CHAT_JUDGE_PRESET_FILE_MARK]: 1, name, preset: { name, items: preset.items ?? [], followUp: preset.followUp, room: preset.room, context: preset.context, fields: preset.fields, assets: preset.assets } }
   const safeName = name.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'judge'
   triggerBlobDownload(new Blob([JSON.stringify(contents, null, 2)], { type: 'application/json' }), `${safeName}.judge.json`)
 }

@@ -19,7 +19,7 @@ import {
 import { CHAT_ADMIN_PROFILES_QUERY_KEY, listChatAdminProfiles } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
-import { formatProbability, judgeActionLabel, judgeDecidedByLabel, judgeOutcomeLabel, JudgeVerdictChip } from './chat-judge-parts'
+import { formatProbability, judgeActionLabel, judgeDecidedByLabel, judgeOutcomeLabel, judgeStageLabel, JudgeVerdictChip } from './chat-judge-parts'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 
 const PAGE_SIZE = 50
@@ -66,10 +66,11 @@ function StatsTable({ stats, presetNames }: { stats: ChatJudgeItemStats[]; prese
           {stats.map((entry) => {
             const unsure = entry.runs > 0 ? entry.uncertain / entry.runs : 0
             return (
-              <tr key={`${entry.presetId}:${entry.itemId}`} className="border-b border-line last:border-b-0">
+              <tr key={`${entry.presetId}:${entry.stage}:${entry.itemId}`} className="border-b border-line last:border-b-0">
                 <td className="py-2 pr-3">
                   <span className="font-medium">{entry.name}</span>
-                  <span className="ml-1.5 text-xs text-muted-foreground">{entry.stage === 'before' ? t({ ko: '답변 전', en: 'before' }) : t({ ko: '답변 후', en: 'after' })}{multiplePresets ? ` · ${presetNames.get(entry.presetId) ?? `#${entry.presetId}`}` : ''}</span>
+                  {/* A turn item says when it is asked; the other kinds are named by what they judge already. */}
+                  <span className="ml-1.5 text-xs text-muted-foreground">{[entry.stage === 'before' || entry.stage === 'after' ? judgeStageLabel(entry.stage, t) : '', multiplePresets ? presetNames.get(entry.presetId) ?? `#${entry.presetId}` : ''].filter(Boolean).join(' · ')}</span>
                 </td>
                 <td className="py-2 pr-3 text-right tabular-nums">{formatNumber(entry.runs)}</td>
                 <td className="py-2 pr-3 text-right tabular-nums">{percent(entry.runs > 0 ? entry.yes / entry.runs : null)}</td>
@@ -97,8 +98,8 @@ function LogRow({ run }: { run: ChatJudgeLogRun }) {
         <ChevronRight className={cn('size-4 text-muted-foreground transition-transform', open && 'rotate-90')} />
         <span className="tabular-nums text-xs text-muted-foreground">{formatDateTime(parseUtc(run.createdAt), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
         <span className="min-w-0">
-          <span className="block truncate font-medium">{run.profileName || `#${run.profileId}`}</span>
-          <span className="block truncate text-xs text-muted-foreground">{run.threadTitle || `#${run.threadId}`} · {run.stage === 'before' ? t({ ko: '답변 전', en: 'before' }) : t({ ko: '답변 후', en: 'after' })}</span>
+          <span className="block truncate font-medium">{run.profileName || (run.profileId === null ? t({ ko: '그룹 방', en: 'Group room' }) : `#${run.profileId}`)}</span>
+          <span className="block truncate text-xs text-muted-foreground">{run.threadTitle || (run.threadId === null ? t({ ko: '자산 묶음', en: 'Asset batch' }) : `#${run.threadId}`)} · {judgeStageLabel(run.stage, t)}</span>
         </span>
         <span className="flex min-w-0 flex-wrap items-center gap-1.5">
           {run.items.map((item) => (
@@ -158,7 +159,7 @@ export function ChatSettingsJudge() {
   const presetsQuery = useQuery({ queryKey: CHAT_JUDGE_PRESETS_QUERY_KEY, queryFn: listChatJudgePresets })
   const profilesQuery = useQuery({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, queryFn: listChatAdminProfiles })
   const presets = presetsQuery.data ?? []
-  const profiles = (profilesQuery.data ?? []).filter((profile) => profile.engine === 'llm')
+  const profiles = profilesQuery.data ?? []
   const statsQuery = useQuery({ queryKey: [...CHAT_JUDGE_STATS_QUERY_KEY, filter.profileId, filter.presetId, filter.days], queryFn: () => getChatJudgeStats({ profileId: filter.profileId, presetId: filter.presetId, days: filter.days }) })
   const logsQuery = useInfiniteQuery({
     queryKey: [...CHAT_JUDGE_LOGS_QUERY_KEY, filter],

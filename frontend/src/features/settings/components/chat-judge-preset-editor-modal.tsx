@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { ChatJudgeFollowUp, ChatJudgeItem, ChatJudgeTestTurn } from '@conai/shared'
+import { JUDGE_OPTION_DEFAULTS, type ChatJudgeFollowUp, type ChatJudgeItem, type ChatJudgeTestTurn } from '@conai/shared'
 import { Copy, Download, FlaskConical, MessageSquarePlus, Play, Plus, Save, Square, Trash2 } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
@@ -28,15 +28,19 @@ import { GROW_TEXTAREA } from './chat-profile-editor-fields'
 import { CollapsibleRow } from './chat-profile-sections'
 import { JudgeConnectionSelect } from './chat-judge-connection-select'
 import { ChatJudgeItemRow } from './chat-judge-item-editor'
+import { ChatJudgeScopeSections } from './chat-judge-scope-sections'
 
 type PresetDraft = Required<ChatJudgePresetInput>
 
 const FOLLOW_UP_DEFAULTS: ChatJudgeFollowUp = { maxConsecutive: 1, delaySeconds: 8, directive: '' }
-const EMPTY: PresetDraft = { name: '', providerName: null, model: '', escalationProviderName: null, escalationModel: '', items: [], followUp: FOLLOW_UP_DEFAULTS }
+const EMPTY: PresetDraft = { name: '', providerName: null, model: '', escalationProviderName: null, escalationModel: '', items: [], followUp: FOLLOW_UP_DEFAULTS, ...JUDGE_OPTION_DEFAULTS }
 const TEST_TURNS = [4, 6, 10, 20]
 
 function draftOf(preset: ChatJudgePreset): PresetDraft {
-  return { name: preset.name, providerName: preset.providerName, model: preset.model, escalationProviderName: preset.escalationProviderName, escalationModel: preset.escalationModel, items: preset.items, followUp: preset.followUp }
+  return {
+    name: preset.name, providerName: preset.providerName, model: preset.model, escalationProviderName: preset.escalationProviderName, escalationModel: preset.escalationModel,
+    items: preset.items, followUp: preset.followUp, room: preset.room, context: preset.context, fields: preset.fields, assets: preset.assets,
+  }
 }
 
 /** A free item id for a new item (the server keeps ids stable; logs and stats key on them). */
@@ -80,7 +84,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
   }, [initial, open, preset])
 
   const threadsQuery = useQuery({ queryKey: ['codex-chat-judge-test-threads'], queryFn: listCodexChatThreads, enabled: open })
-  const threads = (threadsQuery.data ?? []).filter((thread) => thread.engine === 'llm' && thread.kind !== 'group')
+  const threads = (threadsQuery.data ?? []).filter((thread) => thread.kind !== 'group')
 
   const refresh = () => Promise.all([
     queryClient.invalidateQueries({ queryKey: CHAT_JUDGE_PRESETS_QUERY_KEY }),
@@ -120,11 +124,11 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
   })
 
   const handleDelete = async () => {
-    const using = preset?.profiles.length ?? 0
+    const using = (preset?.profiles.length ?? 0) + (preset?.rooms.length ?? 0)
     const confirmed = await confirm({
       title: t({ ko: '판단 프리셋 삭제', en: 'Delete judge preset' }),
       description: using > 0
-        ? t({ ko: '프로필 {count}개가 이 프리셋을 써. 지우면 그 프로필들은 판단 없이 동작해.', en: '{count} profiles use it. They will chat without a judge.' }, { count: using })
+        ? t({ ko: '프로필·그룹 방 {count}개가 이 프리셋을 써. 지우면 판단 없이 동작해.', en: '{count} profiles and rooms use it. They will chat without a judge.' }, { count: using })
         : t({ ko: '이 판단 프리셋을 지울까?', en: 'Delete this judge preset?' }),
       confirmLabel: t({ ko: '삭제', en: 'Delete' }),
       tone: 'destructive',
@@ -147,7 +151,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
       <FlaskConical className="size-4 text-muted-foreground" aria-hidden="true" />
       <span className="font-medium">{t({ ko: '테스트', en: 'Test' })}</span>
       <Select variant="settings" className="h-8 w-56 min-w-0 flex-1 text-xs" aria-label={t({ ko: '테스트할 대화', en: 'Chat to test on' })} value={testThreadId ?? ''} onChange={(event) => setTestThreadId(event.target.value ? Number(event.target.value) : null)}>
-        <option value="">{threads.length === 0 ? t({ ko: '1:1 API 채팅이 없어', en: 'No direct API chats' }) : t({ ko: '대화 고르기', en: 'Pick a chat' })}</option>
+        <option value="">{threads.length === 0 ? t({ ko: '1:1 채팅이 없어', en: 'No direct chats' }) : t({ ko: '대화 고르기', en: 'Pick a chat' })}</option>
         {threads.map((thread) => <option key={thread.id} value={thread.id}>{thread.title || t({ ko: '제목 없음 #{id}', en: 'Untitled #{id}' }, { id: thread.id })}</option>)}
       </Select>
       <Select variant="settings" className="h-8 w-24 text-xs" aria-label={t({ ko: '최근 메시지 수', en: 'Recent messages' })} value={testTurnCount} onChange={(event) => setTestTurnCount(Number(event.target.value))}>
@@ -216,6 +220,8 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
             ))}
           </div>
         </section>
+
+        <ChatJudgeScopeSections value={draft} onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))} />
 
         <div className="border-t border-line">
           <CollapsibleRow

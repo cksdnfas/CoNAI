@@ -811,6 +811,8 @@ export interface ChatGroupInfo {
   /** Reply token cap of the room (null: each profile's own) and each member's override of it, by profile id. */
   maxTokens: number | null
   memberMaxTokens: Record<string, number | null>
+  /** The judge preset that picks who answers unaddressed messages and whether the room goes on (null: none). */
+  judgePresetId: number | null
 }
 
 /** One image a chat brought in: `generated` by its jobs, or `found` through searches and lookups. */
@@ -1290,7 +1292,7 @@ export function createGroupChat(input: { profileIds: number[]; representativeId:
 }
 
 /** `null` limits restore the defaults; a `null` maxTokens lets each profile's own cap apply. */
-export function updateGroupChat(threadId: number, patch: { representativeId?: number; title?: string; chainLimit?: number | null; windowLimit?: number | null; maxTokens?: number | null }) {
+export function updateGroupChat(threadId: number, patch: { representativeId?: number; title?: string; chainLimit?: number | null; windowLimit?: number | null; maxTokens?: number | null; judgePresetId?: number | null }) {
   return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/group`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 

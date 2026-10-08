@@ -14,7 +14,7 @@ import { getErrorMessage } from '@/lib/error-message'
 import { ChatJudgePresetEditorModal } from './chat-judge-preset-editor-modal'
 import { readChatToolPresetFile } from './chat-tool-preset-file'
 
-/** Settings › Chat › 자원: the judge presets (questions a decision model answers about each API LLM turn). */
+/** Settings › Chat › 자원: the judge presets (questions a decision model answers about chat turns, group rooms, status fields and assets). */
 export function ChatJudgePresetGroup() {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -80,9 +80,12 @@ export function ChatJudgePresetGroup() {
                 {' · '}
                 {preset.providerName ? <span className="font-mono">{preset.providerName}{preset.model ? ` · ${preset.model}` : ''}</span> : <ResourceRowStatus>{t({ ko: '판단 연결 없음', en: 'No judge connection' })}</ResourceRowStatus>}
                 {' · '}
-                {preset.profiles.length === 0
+                {preset.profiles.length === 0 && preset.rooms.length === 0
                   ? <ResourceRowStatus>{t({ ko: '연결 없음', en: 'Not linked' })}</ResourceRowStatus>
-                  : <Tip content={preset.profiles.map((profile) => profile.name).join(', ')}><span>{t({ ko: '프로필 {count}', en: '{count} profiles' }, { count: preset.profiles.length })}</span></Tip>}
+                  : <Tip content={[...preset.profiles.map((profile) => profile.name), ...preset.rooms.map((room) => room.title || `#${room.id}`)].join(', ')}><span>{[
+                    preset.profiles.length ? t({ ko: '프로필 {count}', en: '{count} profiles' }, { count: preset.profiles.length }) : '',
+                    preset.rooms.length ? t({ ko: '그룹 방 {count}', en: '{count} rooms' }, { count: preset.rooms.length }) : '',
+                  ].filter(Boolean).join(' · ')}</span></Tip>}
               </>
             )}
             onOpen={() => setEditor({ preset })}

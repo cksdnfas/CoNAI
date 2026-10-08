@@ -1,4 +1,4 @@
-import type { ChatJudgeItemResult, ChatJudgeOutcome } from '@conai/shared'
+import type { ChatJudgeItemResult, ChatJudgeOutcome, ChatJudgeRunStage } from '@conai/shared'
 import { Chip } from '@/components/ui/chip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -41,7 +41,26 @@ export function judgeActionLabel(result: Pick<ChatJudgeItemResult, 'action' | 'd
     case 'offered': return t({ ko: '도구·지시문 붙임', en: 'Tools kept, directive added' })
     case 'withheld': return t({ ko: '도구 뺌', en: 'Tools withheld' })
     case 'follow-up': return t({ ko: '후속 메시지', en: 'Follow-up' })
+    case 'route': return t({ ko: '답할 사람 정함', en: 'Picked who answers' })
+    case 'next': return t({ ko: '이어 말하게 함', en: 'Spoke on' })
+    case 'wait': return t({ ko: '사용자 차례', en: 'Waited for the user' })
+    case 'set': return t({ ko: '필드 바꿈', en: 'Field set' })
+    case 'lore': return t({ ko: '로어 넣음', en: 'Lore added' })
+    case 'recall': return t({ ko: '회상 남김', en: 'Recall kept' })
+    case 'drop': return t({ ko: '회상 뺌', en: 'Recall dropped' })
     default: return result.verdict === 'uncertain' ? t({ ko: '지금 방식', en: 'As usual' }) : t({ ko: '동작 없음', en: 'No action' })
+  }
+}
+
+/** What a run judged, in a word or two. */
+export function judgeStageLabel(stage: ChatJudgeRunStage, t: T) {
+  switch (stage) {
+    case 'before': return t({ ko: '답변 전', en: 'before' })
+    case 'after': return t({ ko: '답변 후', en: 'after' })
+    case 'route': return t({ ko: '답할 사람', en: 'who answers' })
+    case 'next': return t({ ko: '이어 말하기', en: 'speaking on' })
+    case 'fields': return t({ ko: '상태 필드', en: 'status fields' })
+    case 'asset': return t({ ko: '표정 검수', en: 'expression' })
   }
 }
 

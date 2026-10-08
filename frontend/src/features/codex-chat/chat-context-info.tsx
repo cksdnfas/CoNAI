@@ -109,6 +109,7 @@ function loreReason(reason: string, matched: string[], t: T, remaining?: number)
   if (reason === 'constant') return t({ ko: '상시', en: 'Constant' })
   if (reason === 'regex') return t({ ko: '정규식', en: 'Regex' })
   if (reason === 'sticky') return `${t({ ko: '유지', en: 'Sticky' })} · ${remaining ?? 0}`
+  if (reason === 'judge') return t({ ko: '판단', en: 'Judge' })
   const labels: Record<string, { ko: string; en: string }> = {
     cooldown: { ko: '쿨다운', en: 'Cooldown' }, delay: { ko: '지연', en: 'Delay' }, group: { ko: '그룹', en: 'Group' },
     budget: { ko: '예산 초과', en: 'Over budget' }, 'secondary-failed': { ko: '보조 키 불충족', en: 'Secondary key unmet' }, 'codex-sent': { ko: '이미 보냄', en: 'Already sent' },

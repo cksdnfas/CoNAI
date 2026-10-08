@@ -11,7 +11,7 @@ import { useI18n } from '@/i18n'
 import { buildApiUrl } from '@/lib/api-client'
 import type { CodexChatThread } from '@/lib/api-codex-chat'
 import { createRuntimeEventStream } from '@/lib/runtime-event-stream'
-import type { ChatGenerationFinishedEventPayload, ChatMessageCreatedEventPayload, ChatReactionCreatedEventPayload, RuntimeEventEnvelope } from '@/lib/runtime-events-types'
+import type { ChatGenerationFinishedEventPayload, ChatMessageCreatedEventPayload, ChatMessageUpdatedEventPayload, ChatReactionCreatedEventPayload, RuntimeEventEnvelope } from '@/lib/runtime-events-types'
 
 /** A short retry covers the gap between queue completion and thumbnail post-processing. */
 function GenerationThumbnail({ historyId }: { historyId: number }) {
@@ -80,6 +80,13 @@ export function useChatGenerationNotifications() {
       if (!chat?.canUse || !auth || (auth.hasCredentials && !auth.authenticated) || payload.requestedByAccountId !== accountId) return
       void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(payload.threadId) })
       void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+      return
+    }
+    if (envelope.name === 'chat.message.updated') {
+      const payload = envelope.payload as ChatMessageUpdatedEventPayload
+      if (!chat?.canUse || !auth || (auth.hasCredentials && !auth.authenticated) || payload.requestedByAccountId !== accountId) return
+      // The judge settled a reply's status fields after the turn ended: the chat shows the new chips and state.
+      void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(payload.threadId) })
       return
     }
     if (envelope.name === 'chat.message.created') {
