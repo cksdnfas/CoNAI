@@ -17,6 +17,8 @@ import { ComplexFilterService } from '../complexFilterService';
 import { checkImageMatchesConditions } from './conditionEvaluator';
 import { EvaluableImage } from './types';
 import { maybeTruncateImagesWal } from '../../database/walMaintenance';
+import { db } from '../../database/init';
+import { LIBRARY_BATCH_SIZE, pageBoundary } from '../maintenance/libraryBatch';
 
 /**
  * Auto Collection Orchestrator Class
@@ -89,33 +91,39 @@ export class AutoCollectionOrchestrator {
     conditions: AutoCollectCondition[],
     startTime: number
   ): Promise<AutoCollectResult> {
-    // Process all images in batches
-    const matchingHashes: string[] = [];
-    let page = 1;
-    const limit = 100;
-    let hasMore = true;
+    // Conditions are OR-ed, so the order only decides how soon a row is accepted. Duplicate conditions each run a
+    // similarity search, so they go last and only see rows no cheaper condition already matched.
+    const orderedConditions = [
+      ...conditions.filter((condition) => !condition.type.startsWith('duplicate_')),
+      ...conditions.filter((condition) => condition.type.startsWith('duplicate_')),
+    ];
 
-    while (hasMore) {
-      const result = await MediaMetadataModel.findAll({ page, limit });
-      const images = result.items;
+    // Walk the ready rows by rowid (no COUNT, no OFFSET) and stage matches in a TEMP table, so neither the rows nor
+    // the matching hashes are ever all in memory and the images.db write lock is only taken by the diff pages.
+    const { removedCount, addedCount } = await ImageGroupModel.replaceAutoCollectedImagesStaged(groupId, async (tempTable) => {
+      const stageHash = db.prepare(`INSERT OR IGNORE INTO ${tempTable} (composite_hash) VALUES (?)`);
+      const stagePage = db.transaction((hashes: string[]) => {
+        for (const hash of hashes) stageHash.run(hash);
+      });
 
-      if (images.length === 0) {
-        hasMore = false;
-        break;
-      }
-
-      for (const image of images) {
-        const matches = await checkImageMatchesConditions(image, conditions);
-        if (matches) {
-          matchingHashes.push(image.composite_hash);
+      let cursor = 0;
+      for (;;) {
+        const images = MediaMetadataModel.findReadyPageAfterRowid(cursor, LIBRARY_BATCH_SIZE);
+        if (images.length === 0) {
+          break;
         }
+        cursor = images[images.length - 1].row_id;
+
+        const matches: string[] = [];
+        for (const image of images) {
+          if (await checkImageMatchesConditions(image, orderedConditions)) {
+            matches.push(image.composite_hash);
+          }
+        }
+        stagePage(matches);
+        await pageBoundary({});
       }
-
-      page++;
-      hasMore = images.length === limit;
-    }
-
-    const { removedCount, addedCount } = ImageGroupModel.replaceAutoCollectedImages(groupId, matchingHashes);
+    });
     maybeTruncateImagesWal('auto-collection-group-legacy');
 
     // Update last run time
@@ -142,16 +150,20 @@ export class AutoCollectionOrchestrator {
     startTime: number
   ): Promise<AutoCollectResult> {
     try {
-      // Feed the hash search directly into set-based diff writes.
+      // The hash search runs once, straight into the TEMP stage: it only reads images.db, so it no longer holds the
+      // write lock (it used to run inside the BEGIN IMMEDIATE that applied the diff).
       const matchingHashesQuery = await ComplexFilterService.buildComplexSearchHashesQuery(
         complexFilter,
         undefined
       );
-      const { removedCount, addedCount } = ImageGroupModel.replaceAutoCollectedImagesFromQuery(
-        groupId,
-        matchingHashesQuery.query,
-        matchingHashesQuery.params
-      );
+      const { removedCount, addedCount } = await ImageGroupModel.replaceAutoCollectedImagesStaged(groupId, (tempTable) => {
+        db.prepare(`
+          INSERT OR IGNORE INTO ${tempTable} (composite_hash)
+          SELECT composite_hash
+          FROM (${matchingHashesQuery.query}) AS desired_hashes
+          WHERE composite_hash IS NOT NULL
+        `).run(...matchingHashesQuery.params);
+      });
       maybeTruncateImagesWal('auto-collection-group-complex');
 
       // Update last run time

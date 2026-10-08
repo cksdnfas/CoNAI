@@ -84,6 +84,20 @@ export class MediaMetadataModel {
   }
 
   /**
+   * Ready (visible) rows after one rowid, in rowid order. Keyset paging for whole-library passes: unlike
+   * findAll there is no COUNT and no OFFSET, so every page costs the same however deep the pass is.
+   */
+  static findReadyPageAfterRowid(rowidCursor: number, limit: number): Array<ImageMetadataRecord & { row_id: number }> {
+    const readyCondition = getReadyMediaMetadataCondition();
+    return db.prepare(`
+      SELECT rowid AS row_id, * FROM media_metadata
+      WHERE rowid > ? AND ${readyCondition}
+      ORDER BY rowid
+      LIMIT ?
+    `).all(rowidCursor, limit) as Array<ImageMetadataRecord & { row_id: number }>;
+  }
+
+  /**
    * 모든 메타데이터 조회 (페이지네이션)
    * 브라우징, 검색, 필터링의 기본
    */

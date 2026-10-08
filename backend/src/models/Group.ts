@@ -15,6 +15,22 @@ import {
   getImageFileIdsForGroupQuery,
   countVisibleImagesByGroupQuery,
 } from './GroupImageQueries';
+import { LIBRARY_BATCH_SIZE, chunkArray, pageBoundary, type LibraryBatchHooks } from '../services/maintenance/libraryBatch';
+
+let autoCollectStageCounter = 0;
+
+export interface GroupBulkAddCounts {
+  addedCount: number;
+  convertedCount: number;
+  skippedCount: number;
+  errors: string[];
+}
+
+export interface GroupBulkRemoveCounts {
+  removedCount: number;
+  skippedCount: number;
+  errors: string[];
+}
 
 /**
  * Group lists with membership counts are read on every group tree / page load and only change when a group row or
@@ -327,6 +343,75 @@ export class ImageGroupModel {
   }
 
   /**
+   * Bulk add from the group routes: each hash is skipped if already manual, converted if auto, inserted otherwise.
+   * One prepared statement set and one transaction per page of hashes (it used to be 2–3 autocommits per hash).
+   * Duplicates in the request count as skipped, as before. A hash that is not in the library is reported in
+   * `errors` instead of being counted as added.
+   */
+  static async addImagesManuallyInPages(groupId: number, compositeHashes: string[]): Promise<GroupBulkAddCounts> {
+    const selectType = db.prepare('SELECT collection_type FROM image_groups WHERE group_id = ? AND composite_hash = ?');
+    const convert = db.prepare(`
+      UPDATE image_groups SET collection_type = 'manual'
+      WHERE group_id = ? AND composite_hash = ? AND collection_type = 'auto'
+    `);
+    const insert = db.prepare(`
+      INSERT INTO image_groups (group_id, composite_hash, order_index, collection_type)
+      VALUES (?, ?, 0, 'manual')
+    `);
+    const counts: GroupBulkAddCounts = { addedCount: 0, convertedCount: 0, skippedCount: 0, errors: [] };
+    const applyPage = db.transaction((hashes: string[]) => {
+      for (const compositeHash of hashes) {
+        try {
+          const row = selectType.get(groupId, compositeHash) as { collection_type: string } | undefined;
+          if (row?.collection_type === 'manual') {
+            counts.skippedCount++;
+          } else if (row?.collection_type === 'auto') {
+            if (convert.run(groupId, compositeHash).changes > 0) {
+              counts.convertedCount++;
+            }
+          } else {
+            insert.run(groupId, compositeHash);
+            counts.addedCount++;
+          }
+        } catch (error) {
+          counts.errors.push(`Image ${compositeHash}: ${(error as Error).message}`);
+        }
+      }
+    });
+
+    for (const page of chunkArray(compositeHashes)) {
+      applyPage(page);
+      await pageBoundary({});
+    }
+    return counts;
+  }
+
+  /** Bulk remove from the group routes, one transaction per page of hashes. */
+  static async removeImagesInPages(groupId: number, compositeHashes: string[]): Promise<GroupBulkRemoveCounts> {
+    const remove = db.prepare('DELETE FROM image_groups WHERE group_id = ? AND composite_hash = ?');
+    const counts: GroupBulkRemoveCounts = { removedCount: 0, skippedCount: 0, errors: [] };
+    const applyPage = db.transaction((hashes: string[]) => {
+      for (const compositeHash of hashes) {
+        try {
+          if (remove.run(groupId, compositeHash).changes > 0) {
+            counts.removedCount++;
+          } else {
+            counts.skippedCount++;
+          }
+        } catch (error) {
+          counts.errors.push(`Image ${compositeHash}: ${(error as Error).message}`);
+        }
+      }
+    });
+
+    for (const page of chunkArray(compositeHashes)) {
+      applyPage(page);
+      await pageBoundary({});
+    }
+    return counts;
+  }
+
+  /**
    * 이미지를 그룹에 추가 (composite_hash 기반)
    */
   static addImageToGroup(
@@ -371,95 +456,83 @@ export class ImageGroupModel {
   }
 
   /**
-   * Diff one group's auto-collected memberships in a single transaction.
+   * Diff one group's auto-collected memberships against a desired hash set.
+   *
+   * `stage` fills a per-call TEMP table with the desired hashes (TEMP writes never take the images.db write lock, so
+   * a slow search or a JS evaluation pass can run there freely). The diff is then applied one page at a time: stale
+   * auto rows are removed, then missing ones added, each page its own short transaction. Manual memberships are
+   * never touched, and every write re-checks its row, so writes from elsewhere in between are safe.
    */
-  static replaceAutoCollectedImages(groupId: number, compositeHashes: string[]): { removedCount: number; addedCount: number } {
-    const uniqueHashes = Array.from(new Set(compositeHashes.filter(Boolean)));
-    this.ensureAutoCollectTempTable();
-    const stageDesiredHash = db.prepare('INSERT OR IGNORE INTO temp_auto_collect_hashes (composite_hash) VALUES (?)');
-    return this.replaceAutoCollectedImagesFromStagedQuery(
-      groupId,
-      () => uniqueHashes.forEach((compositeHash) => {
-        stageDesiredHash.run(compositeHash);
-      }),
-      uniqueHashes.length > 0
-    );
-  }
-
-  /**
-   * Diff one group's auto-collected memberships from a SQL hash result.
-   */
-  static replaceAutoCollectedImagesFromQuery(
+  static async replaceAutoCollectedImagesStaged(
     groupId: number,
-    desiredHashesQuery: string,
-    desiredHashesParams: unknown[] = []
-  ): { removedCount: number; addedCount: number } {
-    this.ensureAutoCollectTempTable();
-    const stageFromQuery = db.prepare(`
-      INSERT OR IGNORE INTO temp_auto_collect_hashes (composite_hash)
-      SELECT composite_hash
-      FROM (${desiredHashesQuery}) AS desired_hashes
-      WHERE composite_hash IS NOT NULL
-    `);
-    return this.replaceAutoCollectedImagesFromStagedQuery(
-      groupId,
-      () => {
-        stageFromQuery.run(...desiredHashesParams);
-      },
-      true
-    );
-  }
+    stage: (tempTable: string) => void | Promise<void>,
+    hooks: LibraryBatchHooks = {},
+  ): Promise<{ removedCount: number; addedCount: number }> {
+    const tempTable = `temp_auto_collect_${process.pid}_${++autoCollectStageCounter}`;
+    db.exec(`CREATE TEMP TABLE ${tempTable} (composite_hash TEXT PRIMARY KEY) WITHOUT ROWID`);
+    try {
+      await stage(tempTable);
 
-  private static replaceAutoCollectedImagesFromStagedQuery(
-    groupId: number,
-    stageDesiredHashes: () => void,
-    hasDesiredHashes: boolean
-  ): { removedCount: number; addedCount: number } {
-    this.ensureAutoCollectTempTable();
-    const clearDesiredHashes = db.prepare('DELETE FROM temp_auto_collect_hashes');
-    const deleteStaleAuto = db.prepare(`
-      DELETE FROM image_groups
-      WHERE group_id = ?
-        AND collection_type = 'auto'
-        AND composite_hash NOT IN (SELECT composite_hash FROM temp_auto_collect_hashes)
-    `);
-    const deleteAllAuto = db.prepare(`
-      DELETE FROM image_groups
-      WHERE group_id = ?
-        AND collection_type = 'auto'
-    `);
-    const insertMissingAuto = db.prepare(`
-      INSERT OR IGNORE INTO image_groups (
-        group_id, composite_hash, order_index, collection_type
-      )
-      SELECT ?, composite_hash, 0, 'auto'
-      FROM temp_auto_collect_hashes
-    `);
+      const staleHashes = db.prepare(`
+        SELECT ig.composite_hash
+        FROM image_groups ig
+        WHERE ig.group_id = ?
+          AND ig.collection_type = 'auto'
+          AND ig.composite_hash > ?
+          AND NOT EXISTS (SELECT 1 FROM ${tempTable} t WHERE t.composite_hash = ig.composite_hash)
+        ORDER BY ig.composite_hash
+        LIMIT ${LIBRARY_BATCH_SIZE}
+      `);
+      const deleteAuto = db.prepare(`
+        DELETE FROM image_groups WHERE group_id = ? AND composite_hash = ? AND collection_type = 'auto'
+      `);
+      const removePage = db.transaction((hashes: string[]) => hashes.reduce((count, hash) => count + deleteAuto.run(groupId, hash).changes, 0));
 
-    const replace = db.transaction(() => {
-      clearDesiredHashes.run();
-      stageDesiredHashes();
+      const missingHashes = db.prepare(`
+        SELECT t.composite_hash
+        FROM ${tempTable} t
+        WHERE t.composite_hash > ?
+          AND NOT EXISTS (SELECT 1 FROM image_groups ig WHERE ig.group_id = ? AND ig.composite_hash = t.composite_hash)
+        ORDER BY t.composite_hash
+        LIMIT ${LIBRARY_BATCH_SIZE}
+      `);
+      const insertAuto = db.prepare(`
+        INSERT OR IGNORE INTO image_groups (group_id, composite_hash, order_index, collection_type)
+        SELECT ?, ?, 0, 'auto'
+        WHERE EXISTS (SELECT 1 FROM media_metadata WHERE composite_hash = ?)
+      `);
+      const addPage = db.transaction((hashes: string[]) => hashes.reduce((count, hash) => count + insertAuto.run(groupId, hash, hash).changes, 0));
 
-      const removedCount = hasDesiredHashes
-        ? deleteStaleAuto.run(groupId).changes
-        : deleteAllAuto.run(groupId).changes;
-      const addedCount = hasDesiredHashes
-        ? insertMissingAuto.run(groupId).changes
-        : 0;
+      let removedCount = 0;
+      let cursor = '';
+      for (;;) {
+        hooks.throwIfCancelled?.();
+        const hashes = (staleHashes.all(groupId, cursor) as Array<{ composite_hash: string }>).map((row) => row.composite_hash);
+        if (hashes.length === 0) {
+          break;
+        }
+        cursor = hashes[hashes.length - 1];
+        removedCount += removePage(hashes);
+        await pageBoundary(hooks);
+      }
 
-      clearDesiredHashes.run();
+      let addedCount = 0;
+      cursor = '';
+      for (;;) {
+        hooks.throwIfCancelled?.();
+        const hashes = (missingHashes.all(cursor, groupId) as Array<{ composite_hash: string }>).map((row) => row.composite_hash);
+        if (hashes.length === 0) {
+          break;
+        }
+        cursor = hashes[hashes.length - 1];
+        addedCount += addPage(hashes);
+        await pageBoundary(hooks);
+      }
+
       return { removedCount, addedCount };
-    });
-
-    return replace.immediate();
-  }
-
-  private static ensureAutoCollectTempTable(): void {
-    db.exec(`
-      CREATE TEMP TABLE IF NOT EXISTS temp_auto_collect_hashes (
-        composite_hash TEXT PRIMARY KEY
-      ) WITHOUT ROWID
-    `);
+    } finally {
+      db.exec(`DROP TABLE IF EXISTS ${tempTable}`);
+    }
   }
 
   /**

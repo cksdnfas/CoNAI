@@ -112,12 +112,15 @@ async function runAllAutoCollect(ctx: RuntimeJobContext<AllAutoCollectJobParams>
   }
 }
 
-/** Rebuild every auto-folder group. 단일 서비스 호출이라 진행률은 0% 또는 100% 다. */
+/** Rebuild every auto-folder group. 단일 서비스 호출이라 진행률은 0% 또는 100% 다(취소는 페이지 경계에서 받는다). */
 async function runAutoFolderRebuild(ctx: RuntimeJobContext<AutoFolderRebuildJobParams>) {
   ctx.flush({ total: 1, processed: 0, currentLabel: 'auto-folder-rebuild' })
   ctx.throwIfCancelled()
 
-  const result = await AutoFolderGroupService.rebuildAllFolderGroups()
+  const result = await AutoFolderGroupService.rebuildAllFolderGroups({
+    yield: () => ctx.yield(),
+    throwIfCancelled: () => ctx.throwIfCancelled(),
+  })
   if (!result.success) {
     throw new Error(result.error || 'Failed to rebuild auto-folder groups')
   }
