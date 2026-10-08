@@ -24,7 +24,7 @@ export type ChatPageSnapshot = {
   connectionId: string
   path: string
   title: string
-  kind: 'page' | 'nai' | 'codex' | 'comfyui' | 'comfy_author' | 'library' | 'prompt_search' | 'presets' | 'wildcards' | 'metadata' | 'workflow' | 'workflow_runner' | 'groups' | 'files' | 'upload' | 'settings' | 'wallpaper' | 'image_detail'
+  kind: 'page' | 'nai' | 'codex' | 'comfyui' | 'comfy_author' | 'library' | 'prompt_search' | 'presets' | 'wildcards' | 'metadata' | 'workflow' | 'workflow_runner' | 'groups' | 'files' | 'upload' | 'settings' | 'wallpaper' | 'image_detail' | 'sprite'
   resourceId: string | null
   fields: ChatPageField[]
   workflow?: ChatWorkflowSnapshot

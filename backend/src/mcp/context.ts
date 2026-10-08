@@ -55,9 +55,19 @@ export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'execute_graph
 /** A page grants a bounded input task; explicitly linked generation presets keep their independent grant. */
 export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'propose_page_changes', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes', 'read_page_data', 'propose_page_action']);
 
+/**
+ * Tools a connected page of one kind adds to the page tools: the sprite page works through its own engine tools, so
+ * connecting it must not hide them. The account's feature keys still apply to each call.
+ */
+export const CHAT_PAGE_KIND_TOOLS: Partial<Record<string, ReadonlySet<string>>> = {
+  sprite: new Set(['get_video_info', 'get_sprite_job', 'extract_sprite_sheet', 'extract_sprite_sheets_batch', 'normalize_sprite_sheets', 'create_sprite_animation', 'download_sprite_frames']),
+};
+
 /** Page tools are enabled by the user's explicit connection, independently of general profile tools. */
 export function isConnectedChatPageTool(context: McpRequestContext, toolName: string) {
-  return isChatMcpSource(context.source) && context.chatContext?.kind === 'direct' && !!context.chatContext.page && CHAT_PAGE_TOOLS.has(toolName);
+  const page = context.chatContext?.page;
+  return isChatMcpSource(context.source) && context.chatContext?.kind === 'direct' && !!page
+    && (CHAT_PAGE_TOOLS.has(toolName) || Boolean(CHAT_PAGE_KIND_TOOLS[page.kind]?.has(toolName)));
 }
 
 /** Chat agents must not spend paid NovelAI multi-sample generations on their own; one image per request is free. */

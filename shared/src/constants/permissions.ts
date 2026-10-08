@@ -54,6 +54,7 @@ export const PAGE_PERMISSION_RULES = {
   'page.prompts.view': { all: ['prompts.view'] },
   'page.wildcards.view': { all: ['wildcards.view'] },
   'page.generation.view': { any: ['generation.execute', 'workflows.view'] },
+  'page.sprite.view': { all: ['images.view', 'images.edit'] },
   'page.files.view': { all: ['files.view'] },
   'page.chat.view': { any: ['chat.use', 'chat.agent.use'] },
   'page.settings.view': { admin: true },
