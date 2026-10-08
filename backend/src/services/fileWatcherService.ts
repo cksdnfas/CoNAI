@@ -14,6 +14,7 @@ import fs from 'fs';
 import pLimit from 'p-limit';
 import { FolderScanService } from './folderScan';
 import { isFileStorePath } from './fileStorePaths';
+import { isAudioStorePath } from './audio/audioStore';
 import { shouldProcessFileExtension } from '../constants/supportedExtensions';
 import {
   disableWatcherInDatabase,
@@ -781,7 +782,7 @@ export class FileWatcherService {
    * unlink 이벤트처럼 경로가 이미 사라진 경우에도 판정 가능해야 한다.
    */
   private static shouldProcessFile(filePath: string, excludeExtensions: string[]): boolean {
-    if (isFileStorePath(filePath)) return false;
+    if (isFileStorePath(filePath) || isAudioStorePath(filePath)) return false;
     const ext = path.extname(filePath).toLowerCase();
     return shouldProcessFileExtension(ext, excludeExtensions);
   }

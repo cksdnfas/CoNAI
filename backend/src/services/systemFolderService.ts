@@ -277,6 +277,7 @@ export const SystemFolderService = {
         // The move itself refuses an occupied name (EEXIST), so a file created after any check is never replaced.
         const restoredTo = await restoreWithoutReplacing(absolute, original, conflict);
         forgetRecycleBinOrigins([name]);
+        if (origin.source === 'audio') await reattachRestoredAudio(restoredTo);
         result.done.push({ name, restoredTo });
       } catch (error) {
         result.failed.push(failure(name, error));
@@ -327,6 +328,16 @@ export const SystemFolderService = {
 };
 
 const isTaken = (error: unknown) => (error as NodeJS.ErrnoException | undefined)?.code === 'EEXIST';
+
+/** An audio blob back in the audio store gets its rows again; a failure leaves the file for the orphan sweep. */
+async function reattachRestoredAudio(restoredTo: string): Promise<void> {
+  try {
+    const { reattachAudioFile } = await import('./audio/audioMaintenance');
+    await reattachAudioFile(restoredTo);
+  } catch (error) {
+    console.warn('⚠️ Restored audio file could not be re-attached:', error);
+  }
+}
 
 /** Restore to the original name, or with `rename` to the first free ` (복원 N)` sibling; never over an existing file. */
 async function restoreWithoutReplacing(source: string, original: string, conflict: 'fail' | 'rename'): Promise<string> {

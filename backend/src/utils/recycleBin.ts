@@ -28,7 +28,8 @@ export type RecycleBinSource =
   | 'metadata-edit'
   | 'workflow-output'
   | 'workflow-compaction'
-  | 'workflow-retention';
+  | 'workflow-retention'
+  | 'audio';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
