@@ -7,6 +7,10 @@ import type { RuntimeJobKind } from '../types/runtimeJob';
 import { listDatabaseBackups } from '../services/maintenance/databaseBackupService';
 import { normalizeMediaOrphanCleanupOptions } from '../services/maintenance/mediaOrphanCleanupService';
 import { readDatabaseBackupKeep } from '../services/maintenance/databaseMaintenanceScheduler';
+import {
+  assertDatabaseCompactionAllowed,
+  DatabaseCompactionRefusedError,
+} from '../services/maintenance/databaseCompactionService';
 
 /**
  * Admin maintenance: library orphan cleanup and database backups. Mounted under `/api/system` (requireAdmin).
@@ -52,6 +56,24 @@ router.post('/maintenance/orphan-cleanup', asyncHandler(async (req: Request, res
   });
 
   return startJob(req, res, 'media-orphan-cleanup', options, 'Orphan cleanup is already running');
+}));
+
+/**
+ * POST /api/system/maintenance/compact-database
+ * VACUUM images.db. Refused (409) while any other runtime job or the maintenance lock is active; it blocks the
+ * server for its duration, so it only ever runs on request.
+ */
+router.post('/maintenance/compact-database', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    assertDatabaseCompactionAllowed(null);
+  } catch (error) {
+    if (error instanceof DatabaseCompactionRefusedError) {
+      return res.status(409).json({ ...errorResponse(error.message), code: 'MAINTENANCE_BUSY' });
+    }
+    throw error;
+  }
+
+  return startJob(req, res, 'database-compaction', {}, 'Database compaction is already running');
 }));
 
 /**

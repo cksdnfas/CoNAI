@@ -16,6 +16,7 @@ export type RuntimeJobKind =
   | 'media-orphan-cleanup'
   | 'database-backup'
   | 'recycle-bin-retention'
+  | 'database-compaction'
 
 export type RuntimeJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 

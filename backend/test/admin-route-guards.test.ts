@@ -70,6 +70,7 @@ test('maintenance routes are admin-only and search history is per account', { ti
     const maintenance: Array<[string, string]> = [
       ['/api/system/cache-stats', 'GET'], ['/api/system/cache-stats/reset', 'POST'], ['/api/system/cache/invalidate', 'POST'],
       ['/api/system/maintenance/orphan-cleanup', 'POST'], ['/api/system/database-backups', 'GET'], ['/api/system/database-backups', 'POST'],
+      ['/api/system/maintenance/compact-database', 'POST'],
       ['/api/file-verification/stats', 'GET'], ['/api/file-verification/verify', 'POST'], ['/api/file-verification/settings', 'PUT'],
       ['/api/civitai/settings', 'PUT'], ['/api/civitai/stats/reset', 'POST'], ['/api/civitai/models', 'DELETE'],
       ['/api/civitai/rescan-all', 'POST'], ['/api/civitai/reset-failed', 'POST'], ['/api/civitai/lookup/abc', 'POST'],
@@ -90,6 +91,16 @@ test('maintenance routes are admin-only and search history is per account', { ti
     }
     assert.equal(job.status, 'completed', `orphan cleanup dry run finished: ${job.failureMessage ?? ''}`)
     assert.equal(job.result.dryRun, true, 'an empty body is a dry run')
+
+    const compact = await call('/api/system/maintenance/compact-database', adminId, 'POST', {})
+    assert.equal(compact.status, 202, JSON.stringify(compact.body))
+    job = compact.body.data
+    for (let i = 0; i < 100 && (job.status === 'queued' || job.status === 'running'); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      job = (await call(`/api/jobs/${job.jobId}`, adminId)).body.data
+    }
+    assert.equal(job.status, 'completed', `VACUUM finished: ${job.failureMessage ?? ''}`)
+    assert.ok(job.result.bytesAfter <= job.result.bytesBefore)
   })
 
   await t.test('search history belongs to the account that saved it', async () => {
