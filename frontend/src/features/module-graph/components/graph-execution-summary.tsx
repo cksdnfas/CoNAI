@@ -127,20 +127,20 @@ export function SelectedExecutionSummary({
             {finalResultLifecycleWarning.kind === 'source_artifact_missing'
               ? finalResultLifecycleWarningSourceLabel
                 ? t({
-                  ko: '최종 결과 노드는 실행됐지만 {source} 출력이 저장된 결과물을 만들지 못했어. 연결한 출력 포트를 확인해줘.',
-                  en: 'The final result node ran, but the {source} output did not create a saved result. Check the connected output port.',
+                  ko: '최종 결과 노드는 실행됐지만 {source} 출력이 저장된 결과물을 만들지 못했어.',
+                  en: 'The final result node ran, but the {source} output did not create a saved result.',
                 }, { source: finalResultLifecycleWarningSourceLabel })
-                : t({ ko: '최종 결과 노드는 실행됐지만 연결된 출력이 저장된 결과물을 만들지 못했어. 연결한 출력 포트를 확인해줘.', en: 'The final result node ran, but the connected output did not create a saved result. Check the connected output port.' })
+                : t({ ko: '최종 결과 노드는 실행됐지만 연결된 출력이 저장된 결과물을 만들지 못했어.', en: 'The final result node ran, but the connected output did not create a saved result.' })
               : finalResultLifecycleWarningSourceLabel
                 ? t({
-                  ko: '최종 결과는 저장됐지만 {source} 출력의 생성 기록 연결은 실패했어. 상세 로그에서 원인을 확인해줘.',
-                  en: 'The final result was saved, but linking the {source} output into generation history failed. Check the detailed logs for the cause.',
+                  ko: '최종 결과는 저장됐지만 {source} 출력의 생성 기록 연결은 실패했어.',
+                  en: 'The final result was saved, but linking the {source} output into generation history failed.',
                 }, { source: finalResultLifecycleWarningSourceLabel })
-                : t({ ko: '최종 결과는 저장됐지만 생성 기록 연결은 실패했어. 상세 로그에서 원인을 확인해줘.', en: 'The final result was saved, but linking it into generation history failed. Check the detailed logs for the cause.' })}
+                : t({ ko: '최종 결과는 저장됐지만 생성 기록 연결은 실패했어.', en: 'The final result was saved, but linking it into generation history failed.' })}
           </div>
           {additionalFinalResultWarningCount > 0 ? (
             <div className="mt-1 text-xs text-warning-soft-foreground/80">
-              {t({ ko: '추가 최종 결과 경고 {count}개가 더 있어. 상세 로그에서 함께 확인해줘.', en: '{count} more final-result warnings are available in the detailed logs.' }, { count: formatNumber(additionalFinalResultWarningCount) })}
+              {t({ ko: '경고 {count}개 더', en: '{count} more warnings' }, { count: formatNumber(additionalFinalResultWarningCount) })}
             </div>
           ) : null}
         </div>

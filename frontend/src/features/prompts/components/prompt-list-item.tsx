@@ -47,7 +47,7 @@ export function PromptListItem({ item, groupName, selected = false, active = fal
       trailing={(
         <>
           <span
-            className="flex items-center gap-0.5 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:hover)]:opacity-0"
+            className="flex items-center gap-0.5"
             data-no-select-drag="true"
             onClick={stopAction}
           >

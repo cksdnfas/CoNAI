@@ -138,7 +138,7 @@ export function AudioCandidateRow({ row, selected, canEdit, onSelect, onPlay, on
       </div>
       <span className="hidden text-right font-mono text-xs text-muted-foreground tabular-nums sm:block">{formatSeconds(candidate.file.duration)}</span>
       <span className="hidden sm:block"><ReviewPill review={candidate.review} /></span>
-      <div className={cn('flex items-center gap-0.5 transition-opacity sm:opacity-35 sm:group-hover:opacity-100', selected && 'sm:opacity-100')}>
+      <div className="flex items-center gap-0.5">
         <span className="sm:hidden"><ReviewPill review={candidate.review} /></span>
         {canEdit ? (
           <>

@@ -186,8 +186,8 @@ export function ImageEditorCanvas({
       </div>
       {isMaskTool ? (
         <div className="pointer-events-none absolute right-3 top-3 z-20 max-w-[280px] rounded-sm bg-destructive-soft/92 px-3 py-2 text-2xs text-destructive-soft-foreground backdrop-blur-sm">
-          <div className="font-medium">{t({ ko: '마스크 모드 활성화', en: 'Mask mode active' })}</div>
-          <div className="mt-1 opacity-85">{t({ ko: '흰색 영역은 편집 가능한 인필 마스크 영역으로 내보내져. 마스크 브러시는 ', en: 'White regions are exported as editable infill mask areas. Use ' })}<span className="font-medium">M</span>{t({ ko: ', 마스크 지우개는 ', en: ' for mask brush and ' })}<span className="font-medium">Shift+M</span>{t({ ko: ' 를 써.', en: ' for mask eraser.' })}</div>
+          <div className="font-medium">{t({ ko: '마스크 모드', en: 'Mask mode' })}</div>
+          <div className="mt-1 opacity-85"><span className="font-medium">M</span> {t({ ko: '브러시', en: 'brush' })} · <span className="font-medium">Shift+M</span> {t({ ko: '지우개', en: 'eraser' })}</div>
         </div>
       ) : null}
       {baseImage ? (

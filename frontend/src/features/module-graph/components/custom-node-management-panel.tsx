@@ -452,7 +452,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                     </IconButton>
                   </div>
                   {selectedNodeSourceQuery.data.packageJsonPath ? (
-                    <Textarea variant="settings" rows={8} value={installResultText} placeholder={t({ ko: 'npm install 결과가 여기에 보여.', en: 'The npm install result appears here.' })} readOnly />
+                    <Textarea variant="settings" rows={8} value={installResultText} readOnly />
                   ) : null}
                   <Textarea variant="settings" rows={8} value={stringifyPrettyJson(selectedNodeSourceQuery.data.manifest)} readOnly />
                 </Inset>
@@ -514,7 +514,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
               ) : null}
 
               <Field label={t({ ko: '테스트 결과', en: 'Test result' })}>
-                <Textarea variant="settings" rows={14} value={testResultText} placeholder={t({ ko: '테스트 결과가 여기에 보여.', en: 'The test result appears here.' })} readOnly />
+                <Textarea variant="settings" rows={14} value={testResultText} readOnly />
               </Field>
           </Section>
         </div>

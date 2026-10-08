@@ -151,7 +151,7 @@ function ModuleWorkflowResultsPagination({
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs text-muted-foreground">
-      <span>{t({ ko: '페이지 {page} / {totalPages} · {progress} · 페이지당 50개', en: 'page {page} / {totalPages} · {progress} · 50 per page' }, { page: formatNumber(page), totalPages: formatNumber(totalPages), progress: progressLabel })}</span>
+      <span>{t({ ko: '페이지 {page} / {totalPages} · {progress}', en: 'page {page} / {totalPages} · {progress}' }, { page: formatNumber(page), totalPages: formatNumber(totalPages), progress: progressLabel })}</span>
       <div className="flex items-center gap-2">
         <IconButton size="icon-sm" variant="ghost" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))} label={t({ ko: '이전', en: 'Previous' })}>
           <ChevronLeft />
