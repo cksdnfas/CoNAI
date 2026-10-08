@@ -4,6 +4,7 @@ import { isCodexChatCreationTool } from '@conai/shared'
 import { beginDirectReply, userReplyRouting, requireReplyTarget, REPLY_GUIDANCE } from './chatReplies'
 import { buildReplyContext } from './chatReplyContext'
 import { createHash } from 'crypto'
+import { isRequesterAdmin, requesterPermissionKeys } from '../../middleware/featureAccess'
 import { chatContentWithAttachments, inlineTextsForChat, validateChatAttachments } from './chatAttachments'
 import { spawn } from 'child_process'
 import { PORTS, isCodexReasoningEffort, type CodexReasoningEffort } from '@conai/shared'
@@ -139,14 +140,16 @@ const startingSessions = new Map<string, Promise<Session>>()
 const startingThreads = new Set<number>()
 
 /**
- * MCP grants are per process (token), so processes are keyed by account + scopes + tool allowlist (+ room tools) and
+ * MCP grants are per process (token), so processes are keyed by account + its grants + scopes + tool allowlist and
  * by the generation presets with their edit time: Codex reads tool schemas once, so an edited preset gets a new process.
  */
-function sessionKey(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, roomTools: boolean, generationPresetIds: number[], chatContext?: ChatExecutionContext) {
+function sessionKey(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, generationPresetIds: number[], chatContext?: ChatExecutionContext) {
   const tools = toolAllowlist ? [...toolAllowlist].sort().join(',') : '*'
   const presets = ChatGenerationPresetStore.signature(generationPresetIds)
+  // Tools are offered from the account's grants, so a changed grant or role needs a process with a fresh tool list.
+  const grants = createHash('sha1').update(JSON.stringify([isRequesterAdmin(requester), [...requesterPermissionKeys(requester)].sort()])).digest('hex').slice(0, 12)
   const pageTools = chatContext?.page ? `|page:${createHash('sha1').update(JSON.stringify({ kind: chatContext.page.kind, resourceId: chatContext.page.resourceId, fields: chatContext.page.fields.filter((field) => field.editable !== false).map((field) => ({ id: field.id, type: field.type, options: field.options })), actions: chatContext.page.actions, dataKeys: Object.keys(chatContext.page.data ?? {}) })).digest('hex').slice(0, 12)}` : ''
-  return `${requester.accountId === null ? 'bootstrap' : `account:${requester.accountId}`}|${[...scopes].sort().join(',')}|${tools}${roomTools ? '|room' : ''}${presets ? `|gen:${presets}` : ''}${chatContext ? `|chat:${chatContext.threadId}:${chatContext.profileId}` : ''}${pageTools}`
+  return `${requester.accountId === null ? 'bootstrap' : `account:${requester.accountId}`}|${[...scopes].sort().join(',')}|${tools}${presets ? `|gen:${presets}` : ''}${chatContext ? `|chat:${chatContext.threadId}:${chatContext.profileId}` : ''}${pageTools}|grants:${grants}`
 }
 
 /** The profile's model and reasoning effort, falling back to the CLI config and then the model's default effort. */
@@ -436,11 +439,11 @@ function handleNotification(session: Session, notification: CodexAppServerNotifi
   }
 }
 
-async function startSession(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, roomTools: boolean, generationPresetIds: number[], chatContext?: ChatExecutionContext): Promise<Session> {
+async function startSession(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, generationPresetIds: number[], chatContext?: ChatExecutionContext): Promise<Session> {
   const runtime = prepareChatRuntime(requester)
   const features = await probeCodexCli(runtime)
   const args = chatRuntimeArgs(features, runtime.cwd, process.env.PORT || String(PORTS.BACKEND_DEFAULT))
-  const token = issueCodexChatMcpToken(requester, scopes, toolAllowlist, roomTools || Boolean(chatContext), generationPresetIds, chatContext)
+  const token = issueCodexChatMcpToken(requester, scopes, toolAllowlist, generationPresetIds, chatContext)
   let client: CodexAppServerClient | undefined
   let configModel: string | null = null
   let configEffort: CodexReasoningEffort | null = null
@@ -465,7 +468,7 @@ async function startSession(requester: McpRequester, scopes: ChatScope[], toolAl
   }
 
   const session: Session = {
-    key: sessionKey(requester, scopes, toolAllowlist, roomTools, generationPresetIds, chatContext),
+    key: sessionKey(requester, scopes, toolAllowlist, generationPresetIds, chatContext),
     requester,
     client,
     token,
@@ -486,8 +489,8 @@ async function startSession(requester: McpRequester, scopes: ChatScope[], toolAl
   return session
 }
 
-async function ensureSession(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, roomTools = false, generationPresetIds: number[] = [], chatContext?: ChatExecutionContext) {
-  const key = sessionKey(requester, scopes, toolAllowlist, roomTools, generationPresetIds, chatContext)
+async function ensureSession(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, generationPresetIds: number[] = [], chatContext?: ChatExecutionContext) {
+  const key = sessionKey(requester, scopes, toolAllowlist, generationPresetIds, chatContext)
   const existing = sessions.get(key)
   if (existing?.client.isAlive) {
     clearIdleTimer(existing)
@@ -496,7 +499,7 @@ async function ensureSession(requester: McpRequester, scopes: ChatScope[], toolA
 
   let starting = startingSessions.get(key)
   if (!starting) {
-    starting = startSession(requester, scopes, toolAllowlist, roomTools, generationPresetIds, chatContext).finally(() => startingSessions.delete(key))
+    starting = startSession(requester, scopes, toolAllowlist, generationPresetIds, chatContext).finally(() => startingSessions.delete(key))
     startingSessions.set(key, starting)
   }
   return starting
@@ -751,7 +754,7 @@ export async function runCodexGroupReply(params: {
   const { requester, threadId, profile } = params
   assertChatAvailable(requester)
   const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
-  const session = await ensureSession(requester, scopes, toolAllowlist, true, profile.generationPresetIds, params.chatContext)
+  const session = await ensureSession(requester, scopes, toolAllowlist, profile.generationPresetIds, params.chatContext)
   setCodexChatExecution(session.token, params.chatContext)
   const run = resolveCodexRun(session, profile)
   const codexThreadId = await ensureCodexThread(session, ChatGroupStore.member(threadId, profile.id)?.codex_thread_id ?? null, profile,
@@ -860,7 +863,7 @@ export const CodexChatService = {
     try {
       const profile = requireCodexProfile(thread.profile_id)
       const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
-      session = await ensureSession(requester, scopes, toolAllowlist, false, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct' })
+      session = await ensureSession(requester, scopes, toolAllowlist, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct' })
       codexThreadId = await ensureCodexThread(session, thread.codex_thread_id, profile, (id) => CodexChatStore.setCodexThreadId(threadId, id))
       // The rollout was gone and a fresh thread started: nothing left to fold.
       if (codexThreadId !== thread.codex_thread_id) return CodexChatService.getThread(requester, threadId).thread
@@ -1101,7 +1104,7 @@ export const CodexChatService = {
       const page = parseChatPageContext(pageContext, requester)
       const routing = userReplyRouting(thread, replyToMessageId)
       const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
-      const session = await ensureSession(requester, scopes, toolAllowlist, false, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct', page })
+      const session = await ensureSession(requester, scopes, toolAllowlist, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct', page })
       const run = resolveCodexRun(session, profile)
       const codexThreadId = await ensureCodexThread(session, thread.codex_thread_id, profile, (id) => CodexChatStore.setCodexThreadId(threadId, id))
       // A new Codex thread for a chat that already has a past (branched, imported, or its memory was reset).

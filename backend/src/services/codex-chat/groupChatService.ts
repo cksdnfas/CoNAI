@@ -22,7 +22,7 @@ import { CodexChatStore, type ChatBranchPurpose, type CodexChatMessageRecord, ty
 import { withGenerationOutcomes } from './codexChatMedia'
 import { buildGroupCodexInput, buildGroupLlmMessages, groupSummaryOn, parseMentions, resolveMemberName, trimForeignSpeakerLines } from './groupChatContext'
 import { CHAT_ROOM_TOOLS } from '../../mcp/context'
-import { flagDirectiveFor, postHistoryText, groupSummarizer, sendableMessages, summarizeGroupAhead, summarizeGroupAll } from './llmChatContext'
+import { flagDirectiveFor, postHistoryText, groupSummarizer, summarizeGroupAhead, summarizeGroupAll } from './llmChatContext'
 import { ChatSummaryStore } from './chatMemory'
 import { branchChatThread } from './chatBranch'
 import { LlmChatService, generateLlmGroupReply, type GroupReplyResult } from './llmChatService'
@@ -264,7 +264,6 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         // The CoNAI tool guidance is for the profile's own tools, not the room tools every member gets.
         chatContext: context,
         buildMessages: (tools, onMeta) => buildGroupLlmMessages({ profile, thread, members, messages, routing: active.routing, windowLimit: limits.window, tools, maxTokens, withTools: tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)), segments: groupSummaryOn(thread) ? ChatSummaryStore.list(run.threadId) : undefined , attachmentTexts, onMeta }),
-        roomTools: sendableMessages(messages).length > limits.window || profile.contextTokens !== null ? 'all' : 'call',
         // The member's own cap, else the room's, else the profile's (a Codex member has no hard cap).
         generation: { maxTokens },
         signal: controller.signal,

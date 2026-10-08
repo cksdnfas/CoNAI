@@ -150,6 +150,8 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     const chatContext = { threadId: CodexChatStore.createThread(accountId, 'Claude permissions', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: 'claude-permission-reply' }
     const endReply = registerChatReply(chatContext, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
     const requester = { accountId, accountType: 'guest' as const }
+    // Tools are offered from the account's grants when the reply starts; each call rechecks them.
+    AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.agent.use', 'prompts.view'] })
     const bridge = await openChatMcpBridge(requester, ['read'], null, { chatContext })
     try {
       AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.use', 'prompts.view'] })
@@ -241,14 +243,20 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     const { createMcpServer } = await import('../src/mcp/server')
     const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
     const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
-    const mcp = createMcpServer({ scopes: ['read', 'organize', 'generate'], source: 'http', requester: { accountId, accountType: 'admin' } })
-    const client = new Client({ name: 'permission-regression', version: '1' })
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
-    await Promise.all([mcp.connect(serverTransport), client.connect(clientTransport)])
+    const connect = async () => {
+      const server = createMcpServer({ scopes: ['read', 'organize', 'generate'], source: 'http', requester: { accountId, accountType: 'admin' } })
+      const connected = new Client({ name: 'permission-regression', version: '1' })
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+      await Promise.all([server.connect(serverTransport), connected.connect(clientTransport)])
+      return { server, connected }
+    }
+    let { server: mcp, connected: client } = await connect()
     try {
       assert.equal((await client.callTool({ name: 'list_prompt_presets', arguments: {} })).isError, true)
       assert.equal((await client.callTool({ name: 'submit_generation_job', arguments: { service_type: 'codex', request_payload: { prompt: 'must not execute' } } })).isError, true)
       AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view', 'prompts.view'] })
+      await client.close(); await mcp.close()
+      ;({ server: mcp, connected: client } = await connect())
       assert.notEqual((await client.callTool({ name: 'list_prompt_presets', arguments: {} })).isError, true)
       assert.equal((await client.callTool({ name: 'create_prompt_preset', arguments: { name: 'denied', items: [{ description: 'denied', value: 'denied' }] } })).isError, true)
       const { PromptPresetModel } = await import('../src/models/PromptPreset')
@@ -325,7 +333,7 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
       const codexProfile = ChatProfileStore.create({ name: 'Codex page only', engine: 'codex', mcpEnabled: false, toolAllowlist: [] })
       const context = { threadId: CodexChatStore.createThread(accountId, 'codex connected page', 'codex', codexProfile.id), profileId: codexProfile.id, kind: 'direct' as const, replyId: 'codex-page-only', page: parseChatPageContext(visible, { accountId, accountType: 'guest' })! }
       const stop = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
-      const token = issueCodexChatMcpToken({ accountId, accountType: 'guest' }, [], [], false, [], context)
+      const token = issueCodexChatMcpToken({ accountId, accountType: 'guest' }, [], [], [], context)
       try {
         const authority = authenticateCodexChatMcpRequest({ headers: {}, socket: { remoteAddress: '127.0.0.1' } } as never, token)
         assert.ok(authority, 'Codex page connection needs no extra MCP read scope')

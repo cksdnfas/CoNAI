@@ -119,7 +119,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
     const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'generate', 'organize', 'configure'], null, { chatContext: context })
     try {
-      assert.deepEqual(bridge.tools.map((tool) => tool.function.name).sort(), ['get_current_page', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes'].sort())
+      assert.deepEqual(bridge.tools.map((tool) => tool.function.name).sort(), ['get_current_page', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes', 'save_lore'].sort(), 'page tools plus the chat own tools')
       const read = await bridge.call('get_workflow_editor', {})
       assert.ok(!read.isError)
       const catalog = await bridge.call('list_workflow_modules', { moduleIds: [textModule.id] })
@@ -188,7 +188,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
     const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'generate', 'organize', 'configure'], null, { chatContext: context })
     try {
-      assert.deepEqual(bridge.tools.map((tool) => tool.function.name).sort(), ['get_current_page', 'read_page_data', 'propose_page_action'].sort())
+      assert.deepEqual(bridge.tools.map((tool) => tool.function.name).sort(), ['get_current_page', 'read_page_data', 'propose_page_action', 'save_lore'].sort())
       assert.ok(!(await bridge.call('read_page_data', { key: 'presets', limit: 1 })).isError)
       const args = { id: preset.id, name: 'Edited fixture', items: [{ description: 'Style', value: 'new' }] }
       assert.ok((await bridge.call('propose_page_action', { actionId: 'preset.update', arguments: { ...args, id: preset.id + 1 } })).isError)
@@ -314,7 +314,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
     const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read'], ['get_current_page', 'propose_page_changes'], { chatContext: context })
     try {
-      assert.deepEqual(bridge.tools.map((tool) => tool.function.name), ['get_current_page'])
+      assert.deepEqual(bridge.tools.map((tool) => tool.function.name).sort(), ['get_current_page', 'save_lore'])
       const read = await bridge.call('get_current_page', {})
       assert.ok(!read.isError)
       assert.match(JSON.stringify(read.content), /editable/)
@@ -331,7 +331,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     try {
       assert.ok(!unbound.tools.some((tool) => tool.function.name === 'get_current_page'))
       assert.ok(!broad.tools.some((tool) => ['submit_generation_job', 'generate_nai', 'delete_files', 'propose_profile_update'].includes(tool.function.name)), 'page mode withholds side-effect tools even for broad profiles')
-      assert.ok(broad.tools.every((tool) => ['get_current_page', 'propose_page_changes'].includes(tool.function.name)), 'page text cannot request unrelated private files or library data')
+      assert.ok(broad.tools.every((tool) => ['get_current_page', 'propose_page_changes', 'save_lore'].includes(tool.function.name)), 'page text cannot request unrelated private files or library data')
       assert.ok(!(await bridge.call('get_current_page', {})).isError)
       const created = await bridge.call('propose_page_changes', { changes: [{ fieldId: 'steps', value: 30 }] })
       assert.ok(!created.isError)
@@ -381,10 +381,14 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.ok(!(await bridge.call('get_current_page', {})).isError, 'current page reading follows page access')
       assert.ok((await bridge.call('get_workflow_editor', {})).isError)
       assert.ok((await bridge.call('list_workflow_modules', {})).isError)
+      assert.ok(!bridge.tools.some((tool) => tool.function.name === 'get_workflow_editor'), 'a tool the account cannot use is not offered')
       permissions.push('workflows.view')
-      assert.ok(!(await bridge.call('get_workflow_editor', {})).isError)
-      permissions = permissions.filter((permission) => permission !== 'workflows.view')
-      assert.ok((await bridge.call('propose_workflow_changes', { operations: createGraph })).isError, 'revocation is checked during the same reply')
+      const granted = await openChatMcpBridge({ accountId: 7, accountType: 'guest' }, ['read'], null, { chatContext: context })
+      try {
+        assert.ok(!(await granted.call('get_workflow_editor', {})).isError, 'a grant shows up in the next reply')
+        permissions = permissions.filter((permission) => permission !== 'workflows.view')
+        assert.ok((await granted.call('propose_workflow_changes', { operations: createGraph })).isError, 'revocation is checked during the same reply')
+      } finally { await granted.close() }
     } finally { unregister(); await bridge.close() }
   })
 

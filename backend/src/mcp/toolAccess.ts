@@ -1,10 +1,11 @@
 import { AuthAccount } from '../models/AuthAccount';
 import { hasConfiguredAuth } from '../routes/auth-route-helpers';
-import { requireRequesterPermission } from '../middleware/featureAccess';
+import { isRequesterAdmin, requesterPermissionKeys, requireRequesterPermission } from '../middleware/featureAccess';
+import { ChatProfileStore } from '../services/codex-chat/chatProfiles';
 import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess';
 import { requireActiveChatReply } from '../services/codex-chat/chatReplyRegistry';
 import { validateMcpToolArguments } from './requestSecurity';
-import { CHAT_BLOCKED_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
+import { CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
 
 export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]> = {
   search_prompts: 'prompts.view', get_most_used_prompts: 'prompts.view', list_prompt_groups: 'prompts.view',
@@ -24,12 +25,12 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   search_images: 'images.view', get_image_metadata: 'images.view', get_generation_history: 'images.view',
   search_images_by_tags: 'images.view', view_images: 'images.view', list_emoticons: 'images.view',
   list_emoticon_groups: 'images.view', list_image_groups: 'images.view', get_image_groups: 'images.view',
-  add_images_to_group: ['images.view', 'images.edit'], remove_images_from_group: ['images.view', 'images.edit'], move_images_between_groups: ['images.view', 'images.edit'],
-  set_emoticon_keywords: ['images.view', 'images.edit'], set_emoticon_group: ['images.view', 'images.edit'],
+  add_images_to_group: 'images.edit', remove_images_from_group: 'images.edit', move_images_between_groups: 'images.edit',
+  set_emoticon_keywords: 'images.edit', set_emoticon_group: 'images.edit',
   get_generation_artifacts: 'images.view', get_generation_job: [], wait_generation_job: [],
   list_files: 'files.view', get_file_info: 'files.view', read_file_text: 'files.view',
   create_file_folder: ['files.view', 'files.edit'], rename_file: ['files.view', 'files.edit'], move_files: ['files.view', 'files.edit'], delete_files: ['files.view', 'files.delete'],
-  generate_nai: 'generation.execute', generate_comfyui: ['generation.execute', 'workflows.view'], generate_comfyui_all_servers: ['generation.execute', 'workflows.view'],
+  generate_nai: 'generation.execute', generate_comfyui: 'generation.execute', generate_comfyui_all_servers: 'generation.execute',
   submit_generation_job: 'generation.execute', cancel_generation_job: 'generation.execute', execute_graph_workflow: 'generation.execute',
   get_codex_generation_options: 'generation.execute', resolve_image_group_path: [],
   chat_reply_to: [], room_call_member: [], room_history_search: [], room_history_read: [], read_lore_file: [], save_lore: [],
@@ -38,17 +39,39 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   propose_display_block: [], propose_chat_profile: [], propose_profile_update: [], propose_profile_assets: [],
 };
 
-/** General tools use the profile grant; connected page tools use explicit page access and binding. */
-export function isContextToolAllowed(context: McpRequestContext, toolName: string): boolean {
+function requiredToolKeys(toolName: string): readonly string[] {
+  const required = isChatGenerationTool(toolName) ? 'generation.execute' : TOOL_FEATURE_PERMISSIONS[toolName] ?? [];
+  return typeof required === 'string' ? [required] : required;
+}
+
+/** What the account itself must hold: the same key the web needs for that action, and the admin role for chat setup. */
+function accountHoldsTool(context: McpRequestContext, toolName: string): boolean {
+  const requester = context.requester!;
+  const keys = requesterPermissionKeys(requester);
+  if (!requiredToolKeys(toolName).every((key) => keys.includes(key))) return false;
+  if (getMcpToolScope(toolName) === 'configure' && !isRequesterAdmin(requester)) return false;
+  const profile = context.chatContext ? ChatProfileStore.find(context.chatContext.profileId) : null;
+  if (profile && toolName === 'view_images' && !profile.visionEnabled) return false;
+  if (profile && toolName === 'save_lore' && !profile.allowLoreProposals) return false;
+  return true;
+}
+
+/**
+ * The one decision on whether a tool is offered and may run: the account holds what the web would require, the chat's
+ * own tools are always there, and everything else follows the profile's scopes and tool list. A connected page narrows
+ * the reply to its own tools (and linked generation presets), because page text is untrusted input that must not steer
+ * the bot into unrelated actions. `requireMcpToolAccess` re-runs this before each call, then rechecks the account with
+ * explicit errors.
+ */
+export function isContextToolAllowed(context: McpRequestContext, toolName: string, accountChecks = true): boolean {
   if (context.requester && !isChatGenerationTool(toolName) && TOOL_FEATURE_PERMISSIONS[toolName] === undefined) return false;
-  if (isConnectedChatPageTool(context, toolName)) return true;
-  if (context.toolAllowlist && !context.toolAllowlist.includes(toolName)) return false;
-  if (context.chatContext?.page && !CHAT_PAGE_TOOLS.has(toolName) && !isChatGenerationTool(toolName)) return false;
   if (isChatMcpSource(context.source) && CHAT_BLOCKED_TOOLS.has(toolName)) return false;
+  if (accountChecks && context.requester && !accountHoldsTool(context, toolName)) return false;
+  if (CHAT_ROOM_TOOLS.has(toolName)) return Boolean(context.chatContext) && (!GROUP_ONLY_CHAT_TOOLS.has(toolName) || context.chatContext?.kind === 'group');
+  if (isConnectedChatPageTool(context, toolName)) return true;
+  if (context.chatContext?.page && !isChatGenerationTool(toolName)) return false;
+  if (context.toolAllowlist && !context.toolAllowlist.includes(toolName)) return false;
   const presetMode = (context.generationPresetIds?.length ?? 0) > 0;
-  if (CHAT_ROOM_TOOLS.has(toolName)) return Boolean(context.chatContext)
-    && (context.chatRoomTools === 'all' || (context.chatRoomTools === 'call' && ['room_call_member', 'chat_reply_to'].includes(toolName)))
-    && (!GROUP_ONLY_CHAT_TOOLS.has(toolName) || context.chatContext?.kind === 'group');
   if (isChatGenerationTool(toolName)) return presetMode && context.scopes.includes('generate');
   return isMcpToolAllowed(toolName, context.scopes) && !(presetMode && GENERATION_PRESET_BLOCKED_TOOLS.has(toolName));
 }
@@ -77,7 +100,7 @@ export function requireMcpResourceOwner(context: McpRequestContext, record: { re
 
 /** One decision point for both in-process LLM and HTTP Codex tools, immediately before their handlers. */
 export function requireMcpToolAccess(context: McpRequestContext, toolName: string, params: Record<string, unknown> = {}, execution: 'reply' | 'queued' = 'reply'): void {
-  if (!isContextToolAllowed(context, toolName)) throw new Error('Unknown or not permitted tool.');
+  if (!isContextToolAllowed(context, toolName, false)) throw new Error('Unknown or not permitted tool.');
   refreshMcpRequester(context.requester);
   if (isChatMcpSource(context.source)) {
     requireChatMcpAccountAccess(context, toolName);
@@ -87,9 +110,8 @@ export function requireMcpToolAccess(context: McpRequestContext, toolName: strin
     }
   }
   if (context.requester) {
-    const required = isChatGenerationTool(toolName) ? ['generation.execute'] : TOOL_FEATURE_PERMISSIONS[toolName];
-    if (required === undefined) throw new Error('Unclassified account-bound tool.');
-    for (const permission of typeof required === 'string' ? [required] : required) requireRequesterPermission(context.requester, permission);
+    if (!isChatGenerationTool(toolName) && TOOL_FEATURE_PERMISSIONS[toolName] === undefined) throw new Error('Unclassified account-bound tool.');
+    for (const permission of requiredToolKeys(toolName)) requireRequesterPermission(context.requester, permission);
     if (getMcpToolScope(toolName) === 'configure' && context.requester.accountType !== 'admin') throw new Error('Administrator access required.');
     if (toolName === 'resolve_image_group_path') requireRequesterPermission(context.requester, params.create === false ? 'images.view' : 'images.edit');
     if (toolName === 'add_images_to_group' || getMcpToolScope(toolName) === 'generate' || isChatGenerationTool(toolName)) {

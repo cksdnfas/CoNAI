@@ -106,10 +106,11 @@ export function requireChatMcpAccountAccess(context: McpRequestContext, toolName
   }
   if (pageTool) {
     requireChatPageAccess(context.requester, chat.page!)
-  } else {
+  } else if (!CHAT_ROOM_TOOLS.has(toolName)) {
+    // The chat's own tools (reply, room, lorebook) are always there; everything else follows the profile.
     const grant = resolveChatProfileToolGrant(profile, access)
     if (grant.toolAllowlist && !grant.toolAllowlist.includes(toolName)) throw new Error('프로필에서 이 도구를 더 이상 허용하지 않아.')
-    if (!CHAT_ROOM_TOOLS.has(toolName) && !grant.scopes.includes(scope as ChatScope)) throw new Error('프로필의 도구 사용 설정이 변경됐어.')
+    if (!grant.scopes.includes(scope as ChatScope)) throw new Error('프로필의 도구 사용 설정이 변경됐어.')
   }
   if (toolName === 'view_images' && !profile.visionEnabled) throw new Error('프로필의 이미지 조회가 꺼져 있어.')
   if (toolName === 'save_lore' && !profile.allowLoreProposals) throw new Error('프로필의 로어 제안이 꺼져 있어.')
@@ -123,15 +124,15 @@ export function requireChatMcpAccountAccess(context: McpRequestContext, toolName
   }
 }
 
-const tokens = new Map<string, { requester: McpRequester; scopes: ChatScope[]; toolAllowlist: string[] | null; roomTools: boolean; generationPresetIds: number[]; generationPresetSnapshot: string; chatContext?: ChatExecutionContext }>()
+const tokens = new Map<string, { requester: McpRequester; scopes: ChatScope[]; toolAllowlist: string[] | null; generationPresetIds: number[]; generationPresetSnapshot: string; chatContext?: ChatExecutionContext }>()
 
 /**
  * One token per chat app-server process; it lets that process reach `/mcp` as the chatting account with the
  * scopes its profiles were given (processes are keyed by account + scopes).
  */
-export function issueCodexChatMcpToken(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, roomTools = false, generationPresetIds: number[] = [], chatContext?: ChatExecutionContext) {
+export function issueCodexChatMcpToken(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, generationPresetIds: number[] = [], chatContext?: ChatExecutionContext) {
   const token = `${CHAT_MCP_TOKEN_PREFIX}${crypto.randomBytes(32).toString('base64url')}`
-  tokens.set(token, { requester: { ...requester }, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null, roomTools, generationPresetIds: [...generationPresetIds], generationPresetSnapshot: JSON.stringify(ChatGenerationPresetStore.resolve(generationPresetIds)), chatContext })
+  tokens.set(token, { requester: { ...requester }, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null, generationPresetIds: [...generationPresetIds], generationPresetSnapshot: JSON.stringify(ChatGenerationPresetStore.resolve(generationPresetIds)), chatContext })
   return token
 }
 
@@ -163,7 +164,8 @@ export function authenticateCodexChatMcpRequest(req: Request, candidate: string 
   const { requester } = grant
   const access = resolveChatAccess(requester.accountId)
   const scopes = intersectChatScopes(grant.scopes, access)
-  if (!access.codex || (scopes.length === 0 && !grant.roomTools && !(grant.chatContext?.kind === 'direct' && grant.chatContext.page))) {
+  // A chat always has its own conversation tools, so only a session outside any chat needs scopes.
+  if (!access.codex || (scopes.length === 0 && !grant.chatContext)) {
     return null
   }
 
@@ -174,7 +176,6 @@ export function authenticateCodexChatMcpRequest(req: Request, candidate: string 
     requester,
     source: 'codex-chat',
     toolAllowlist: grant.toolAllowlist,
-    chatRoomTools: grant.roomTools,
     generationPresetIds: grant.generationPresetIds,
     generationPresetSnapshot: grant.generationPresetSnapshot,
     chatContext: grant.chatContext ? { ...grant.chatContext } : undefined,

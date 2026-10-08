@@ -245,7 +245,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
       turn.contextMeta = limitContextMeta({ ...turn.contextMeta, sections: contextSections(final, tools, (text) => estimateTokens(profile.id, text)), estimatedTokens: estimateMessagesTokens(profile.id, final, tools) })
     }
     return final
-  }, false, { maxTokens: config.maxTokens })
+  }, { maxTokens: config.maxTokens })
 }
 
 /** `work`, with a `waiting` event every WAITING_EVENT_MS while it runs: the stream carries bytes and says why it is quiet. */
@@ -283,19 +283,18 @@ function settleRestatement(turn: LlmTurn, previous: TextSpan | null, roundStart:
 
 /**
  * Model ↔ tool rounds until the model answers in text; the last round withholds tools so it must answer.
- * `roomTools` adds the group room history tools (offered even when the profile has no MCP scopes).
  * `generation` overrides the profile's generation options (a direct chat's own reply cap).
  *
  * Fails the reply (LlmChatError) when the output cap cut tool calls (their arguments are broken: never run, never
  * stored) or when the model answered nothing at all.
  */
-async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>, roomTools: 'call' | 'all' | false = false, generation: Partial<LlmGenerationOptions> = {}) {
+async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>, generation: Partial<LlmGenerationOptions> = {}) {
   requireProfileAccess(requester, profile)
   const target = resolveChatCompletionTarget(chatConnectionOf(profile), { model: resolveProfileModel(profile, 'chat')?.model ?? null, generation: { ...profileGenerationOptions(profile), ...generation } })
   if (target.transport === 'claude-code' && !resolveChatAccess(requester.accountId).claude) throw new LlmChatError('Claude Code를 사용할 권한이 없어.', 403)
   const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
   const chatContext = turn.chatContext ?? turn.delivery?.context
-  const bridge = !turn.reaction && (scopes.length > 0 || roomTools || chatContext) ? await openChatMcpBridge(requester, scopes, toolAllowlist, { roomTools, generationPresetIds: profile.generationPresetIds, chatContext }) : null
+  const bridge = !turn.reaction && (scopes.length > 0 || chatContext) ? await openChatMcpBridge(requester, scopes, toolAllowlist, { generationPresetIds: profile.generationPresetIds, chatContext }) : null
 
   try {
     // Image viewing is only offered to models the profile says can see images.
@@ -532,8 +531,6 @@ export async function generateLlmGroupReply(params: {
   threadId: number
   profile: ChatProfile
   buildMessages: (tools: ChatCompletionTool[], onMeta: (meta: ChatContextMeta) => void) => ChatCompletionMessage[]
-  /** Room tools offered: `call` (room_call_member), `all` adding history search when part of the room is not shown. */
-  roomTools: 'call' | 'all'
   /** Overrides of the profile's generation options (the member's or room's reply cap). */
   generation?: Partial<LlmGenerationOptions>
   signal: AbortSignal
@@ -552,7 +549,7 @@ export async function generateLlmGroupReply(params: {
   let status: CodexChatMessageRecord['status'] = 'completed'
   let error: string | null = null
   try {
-    await streamReply(turn, params.requester, params.profile, (tools) => params.buildMessages(tools, (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(params.profile, 'chat')?.model ?? null } }), params.roomTools, params.generation ?? {})
+    await streamReply(turn, params.requester, params.profile, (tools) => params.buildMessages(tools, (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(params.profile, 'chat')?.model ?? null } }), params.generation ?? {})
     if (controller.signal.aborted) status = 'interrupted'
   } catch (caught) {
     status = controller.signal.aborted ? 'interrupted' : 'failed'

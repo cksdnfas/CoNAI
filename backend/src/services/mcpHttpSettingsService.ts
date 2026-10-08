@@ -22,8 +22,6 @@ export interface McpHttpAuthentication {
   requester?: McpRequester;
   source?: 'http' | 'codex-chat';
   toolAllowlist?: string[] | null;
-  /** Codex chat sessions of group rooms: the room history tools. */
-  chatRoomTools?: boolean;
   /** Codex chat sessions: the profile's generation presets (each a generate_image tool; free-form generation withheld). */
   generationPresetIds?: number[];
   generationPresetSnapshot?: string;

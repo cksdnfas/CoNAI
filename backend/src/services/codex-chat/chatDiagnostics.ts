@@ -92,7 +92,7 @@ export async function getChatDiagnostics(requester: McpRequester, threadId: numb
     if (scope === 'prompts' && meta.sources?.some((source) => source.kind === 'tool-definition')) {
       const grant = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
       const bridge = await openChatMcpBridge(requester, grant.scopes, grant.toolAllowlist, {
-        roomTools: thread.kind === 'group' ? 'all' : false, generationPresetIds: profile.generationPresetIds, allowEmpty: true,
+        generationPresetIds: profile.generationPresetIds, allowEmpty: true,
         chatContext: { threadId, profileId: profile.id, kind: thread.kind },
       })
       try { definitions = new Map(bridge.tools.map((tool) => [tool.function.name, JSON.stringify(tool)])) }

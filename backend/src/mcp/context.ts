@@ -18,8 +18,6 @@ export interface McpRequestContext {
   source?: 'http' | 'codex-chat' | 'llm-chat';
   /** Chat profiles can narrow the tools further than the scopes (null/undefined: every tool the scopes allow). */
   toolAllowlist?: string[] | null;
-  /** Chat agents in group rooms: `call` offers room_call_member, `all` adds the history tools (room ownership is checked per call). */
-  chatRoomTools?: 'call' | 'all' | false;
   /**
    * Chat profiles with generation presets: each becomes a `generate_image` tool, and the free-form generation and
    * workflow discovery tools are withheld so the model draws only through the presets.
