@@ -111,7 +111,7 @@ export function LegacyAudioImportRow() {
       <div className="flex min-h-8 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <span className="shrink-0 text-muted-foreground"><AudioLines className="h-4 w-4" /></span>
-          <div className="shrink-0 text-sm text-foreground">{t({ ko: '이전 음향 앱 가져오기', en: 'Import the old SFX app' })}</div>
+          <div className="shrink-0 text-sm text-foreground">{t({ ko: '이전 오디오 앱 가져오기', en: 'Import the old SFX app' })}</div>
           {meta ? <div className="hidden min-w-0 truncate text-xs text-muted-foreground sm:block">{meta}</div> : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -201,7 +201,7 @@ export function LegacyAudioImportRow() {
                 {workflow.registered_workflow_id ? (
                   <span className="flex size-8 items-center justify-center text-success" aria-label={t({ ko: '등록됨', en: 'Registered' })}><Check className="h-4 w-4" /></span>
                 ) : (
-                  <IconButton size="icon-sm" variant="ghost" label={t({ ko: '음향 워크플로로 등록', en: 'Register as audio workflow' })} disabled={register.isPending} onClick={() => register.mutate(workflow.legacy_id)}>
+                  <IconButton size="icon-sm" variant="ghost" label={t({ ko: '오디오 워크플로로 등록', en: 'Register as audio workflow' })} disabled={register.isPending} onClick={() => register.mutate(workflow.legacy_id)}>
                     <Link2 className="h-4 w-4" />
                   </IconButton>
                 )}

@@ -1,5 +1,6 @@
 import { apiGenDb } from '../../database/apiGenerationDb';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
+import { audioCandidatesByQueueJob } from '../../services/audio/audioJobCandidates';
 import type {
   GenerationHistoryDetailRecord,
   GenerationHistoryFilterOptions,
@@ -440,6 +441,7 @@ export class HistoryQueryRepository {
    * - generation_status = 'failed'
    * - linked queue job failed/cancelled and no ready active result media
    * - completed but the result file is missing (no hash or no active file)
+   * A row whose run saved sounds (audio store, by queue job) is not failed unless its own status says so.
    */
   static findDisplayFailedIds(filters: Omit<GenerationHistoryFilterOptions, 'limit' | 'offset'>): number[] {
     const hasActiveResultFile = `(
@@ -460,7 +462,7 @@ export class HistoryQueryRepository {
     )`;
 
     let sql = `
-      SELECT gh.id
+      SELECT gh.id, gh.queue_job_id, gh.generation_status
       FROM api_generation_history gh
       LEFT JOIN generation_queue_jobs qj ON qj.id = gh.queue_job_id
       LEFT JOIN workflows workflow ON workflow.id = gh.workflow_id
@@ -476,8 +478,9 @@ export class HistoryQueryRepository {
         OR (gh.generation_status = 'completed' AND NOT ${hasActiveResultFile})
       )`;
 
-    const rows = apiGenDb.prepare(sql).all(...params) as Array<{ id: number }>;
-    return rows.map((row) => row.id);
+    const rows = apiGenDb.prepare(sql).all(...params) as Array<{ id: number; queue_job_id: number | null; generation_status: GenerationStatus }>;
+    const soundJobs = audioCandidatesByQueueJob(rows.flatMap((row) => (row.generation_status !== 'failed' && row.queue_job_id !== null ? [row.queue_job_id] : [])));
+    return rows.filter((row) => row.generation_status === 'failed' || row.queue_job_id === null || !soundJobs.has(row.queue_job_id)).map((row) => row.id);
   }
 
   static findByStatus(status: GenerationStatus, olderThan?: string): GenerationHistoryRecord[] {

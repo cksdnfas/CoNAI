@@ -197,11 +197,11 @@ function summarize(workflow: WorkflowRecord): AudioWorkflowSummary {
 export function requireBoundAudioWorkflow(workflowId?: number | null): { workflow: WorkflowRecord; binding: AudioWorkflowBinding; fields: MarkedField[] } {
   const binding = workflowId ? getAudioWorkflowBinding(workflowId) : getDefaultAudioWorkflowBinding();
   if (!binding) {
-    throw new AudioServiceError(workflowId ? '이 워크플로는 음향 설정에서 연결되지 않았어.' : '기본 음향 워크플로가 없어. 음향 설정에서 워크플로를 연결해줘.', workflowId ? 400 : 409);
+    throw new AudioServiceError(workflowId ? '이 워크플로는 오디오 설정에서 연결되지 않았어.' : '기본 오디오 워크플로가 없어. 오디오 설정에서 워크플로를 연결해줘.', workflowId ? 400 : 409);
   }
   const workflow = WorkflowModel.findById(binding.workflow_id);
   if (!workflow) throw new AudioServiceError('연결된 워크플로가 삭제됐어.', 404);
-  if (workflow.kind !== 'audio') throw new AudioServiceError('음향 종류 워크플로가 아니야.');
+  if (workflow.kind !== 'audio') throw new AudioServiceError('오디오 종류 워크플로가 아니야.');
   if (!workflow.is_active) throw new AudioServiceError('비활성 워크플로야.');
   return { workflow, binding, fields: parseFields(workflow) };
 }
@@ -228,7 +228,7 @@ function validateRoleField(fields: MarkedField[], value: unknown, role: AudioWor
 export async function saveAudioWorkflowBinding(workflowId: number, input: AudioWorkflowBindingInput): Promise<AudioWorkflowBinding> {
   const workflow = WorkflowModel.findById(workflowId);
   if (!workflow) throw new AudioServiceError('워크플로를 찾을 수 없어.', 404);
-  if (workflow.kind !== 'audio') throw new AudioServiceError('음향 종류 워크플로만 연결할 수 있어. 워크플로 편집에서 종류를 음향으로 바꿔줘.');
+  if (workflow.kind !== 'audio') throw new AudioServiceError('오디오 종류 워크플로만 연결할 수 있어. 워크플로 편집에서 종류를 오디오로 바꿔줘.');
   const fields = parseFields(workflow);
   const prompt = validateRoleField(fields, input.prompt_field_id, 'prompt');
   const seconds = validateRoleField(fields, input.seconds_field_id, 'seconds');

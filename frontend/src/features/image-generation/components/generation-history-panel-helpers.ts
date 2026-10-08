@@ -173,17 +173,26 @@ export function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse[
   const hasLinkedImage = Boolean(record.actual_composite_hash)
   const historyMediaBaseUrl = `/api/generation-history/${record.id}`
   const historyMediaVersion = encodeURIComponent(getHistoryMediaVersion(record))
+  const audio = (record.audio_results ?? []).map((result) => ({
+    id: result.id,
+    name: result.name,
+    fileHash: result.file_hash,
+    duration: result.duration,
+    groupId: result.group_id,
+    src: `${historyMediaBaseUrl}/audio/${encodeURIComponent(result.id)}`,
+  }))
 
   return {
     id: `generation-history-${record.id}`,
     composite_hash: hasLinkedImage ? imageSource.compositeHash : null,
-    original_file_path: record.actual_file_name ?? null,
+    original_file_path: record.actual_file_name ?? (hasLinkedImage ? null : audio[0]?.name ?? null),
     thumbnail_url: hasLinkedImage ? `${historyMediaBaseUrl}/thumbnail?v=${historyMediaVersion}` : null,
     image_url: hasLinkedImage ? `${historyMediaBaseUrl}/file?v=${historyMediaVersion}` : null,
     detail_url: hasLinkedImage ? `${historyMediaBaseUrl}/image` : null,
     detail_scope_key: `generation-history:${record.id}`,
     generation_history_id: record.id,
-    mime_type: record.actual_mime_type ?? null,
+    mime_type: record.actual_mime_type ?? (!hasLinkedImage && audio.length ? record.audio_results?.[0]?.mime_type ?? 'audio/*' : null),
+    audio: audio.length ? audio : null,
     width: record.actual_width ?? null,
     height: record.actual_height ?? null,
     rating_score: record.rating_score ?? null,

@@ -40,6 +40,11 @@ export interface ExecuteComfyGenerationInput {
    * artifacts. Temp files the sink leaves behind are removed afterwards.
    */
   outputSink?: (outputs: ComfyCollectedOutputFile[], promptId: string) => Promise<unknown>
+  /**
+   * Library runs: sounds the graph saved besides (or instead of) images, handed over after the images are saved.
+   * Returns the audio candidate ids it registered. Without it the sounds are dropped. Temp files it leaves are removed.
+   */
+  onAudioOutputs?: (outputs: ComfyCollectedOutputFile[], promptId: string) => Promise<string[]>
 }
 
 export interface ComfyGenerationSavedArtifact {
@@ -59,6 +64,8 @@ export interface ExecuteComfyGenerationResult {
   representativeImage: ComfyGenerationRepresentativeImage | null
   /** 저장된 모든 이미지 출력의 composite hash (대표 이미지 포함, 저장 순서) */
   savedImageHashes: string[]
+  /** Audio candidates registered from the run's sounds (library runs with `onAudioOutputs`). */
+  savedAudioCandidateIds: string[]
   /** What the output sink returned (audio orders only). */
   sinkResult?: unknown
 }
@@ -138,6 +145,7 @@ export async function executeComfyGeneration(
     queueJobId,
     signal,
     outputSink,
+    onAudioOutputs,
   } = input
   const normalizedWorkflow = normalizeCoNaiArtifactFileOutputNodes(workflow)
   if (outputSink && comfyService.isModalBackend()) {
@@ -210,6 +218,7 @@ export async function executeComfyGeneration(
         savedArtifacts: [],
         representativeImage: null,
         savedImageHashes: [],
+        savedAudioCandidateIds: [],
         sinkResult,
       }
     } finally {
@@ -230,11 +239,18 @@ export async function executeComfyGeneration(
   const savedImageHashes: string[] = []
   const pendingTempPaths = new Set(collectedOutputs.map((output) => output.tempPath))
   const savedArtifactOutputs: SavedArtifactOutput[] = []
+  // Library runs hand sounds to the audio store instead of the image pipeline; artifact runs keep every file.
+  const audioOutputs: ComfyCollectedOutputFile[] = []
+  let savedAudioCandidateIds: string[] = []
 
   try {
     for (const [index, output] of collectedOutputs.entries()) {
       if (await shouldCancel?.()) {
         throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)
+      }
+      if (!isArtifactWorkflow && output.kind === 'audio') {
+        audioOutputs.push(output)
+        continue
       }
       try {
         if (isArtifactWorkflow) {
@@ -288,6 +304,17 @@ export async function executeComfyGeneration(
         }
       }
     }
+
+    if (audioOutputs.length > 0 && onAudioOutputs) {
+      if (await shouldCancel?.()) {
+        throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)
+      }
+      try {
+        savedAudioCandidateIds = await onAudioOutputs(audioOutputs, promptId)
+      } catch (error) {
+        console.error(`❌ Failed to store ${audioOutputs.length} ComfyUI audio output(s):`, error)
+      }
+    }
   } finally {
     for (const tempPath of pendingTempPaths) {
       try {
@@ -317,12 +344,13 @@ export async function executeComfyGeneration(
 
   return {
     promptId,
-    attemptedImageCount: isArtifactWorkflow ? 0 : collectedOutputs.length,
+    attemptedImageCount: isArtifactWorkflow ? 0 : collectedOutputs.length - audioOutputs.length,
     savedImageCount,
     attemptedArtifactCount: isArtifactWorkflow ? collectedOutputs.length : 0,
     savedArtifactCount: savedArtifacts.length,
     savedArtifacts,
     representativeImage,
     savedImageHashes,
+    savedAudioCandidateIds,
   }
 }

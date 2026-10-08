@@ -470,7 +470,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
                   {isPicker ? null : (
                     <td>
                       {entry.kind === 'file' && canSendAudio && mediaKind(entry) === 'audio' ? (
-                        <IconButton variant="ghost" size="icon-sm" label={t({ ko: '음향으로 보내기', en: 'Send to Audio' })} onClick={() => setAudioSend([entry])}><AudioLines /></IconButton>
+                        <IconButton variant="ghost" size="icon-sm" label={t({ ko: '오디오로 보내기', en: 'Send to Audio' })} onClick={() => setAudioSend([entry])}><AudioLines /></IconButton>
                       ) : null}
                       {entry.kind === 'file' ? (
                         <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '다운로드', en: 'Download' })}>
@@ -545,7 +545,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
           responsiveActions
           actions={canOrganize || canDelete || (canSendAudio && audioSelection) ? (
             <>
-              {canSendAudio && audioSelection ? <SelectionBarAction icon={AudioLines} label={t({ ko: '음향으로 보내기', en: 'Send to Audio' })} disabled={busy} onClick={() => setAudioSend(selection)} /> : null}
+              {canSendAudio && audioSelection ? <SelectionBarAction icon={AudioLines} label={t({ ko: '오디오로 보내기', en: 'Send to Audio' })} disabled={busy} onClick={() => setAudioSend(selection)} /> : null}
               {canOrganize ? <SelectionBarAction icon={Pencil} label={t({ ko: '이름 변경', en: 'Rename' })} disabled={selection.length !== 1 || busy} onClick={() => setNameDialog({ id: selection[0].id, name: selection[0].name })} /> : null}
               {canOrganize ? <SelectionBarAction icon={FolderInput} label={t({ ko: '이동', en: 'Move' })} disabled={busy} onClick={() => { setMoveTarget(parentId ?? ''); setMoveOpen(true) }} /> : null}
               {canDelete ? <SelectionBarAction icon={Trash2} label={t({ ko: '삭제', en: 'Delete' })} variant="destructive" disabled={busy} onClick={() => void remove()} /> : null}

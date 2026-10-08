@@ -160,7 +160,7 @@ export async function createAudioOrder(input: AudioOrderInput, actor: AudioOrder
   // Routing first (a bad server_id/tag must fail before anything is stored); modal servers cannot return audio.
   const routing = resolveMcpGenerationRoutingInput({ serviceType: 'comfyui', workflowId: workflow.id, serverId, serverTag });
   if (routing.eligibleServers.length > 0 && routing.eligibleServers.every((server) => server.backend_type === 'modal')) {
-    throw new AudioServiceError('음향 생성은 Modal 서버에서 돌릴 수 없어. 일반 ComfyUI 서버를 골라줘.');
+    throw new AudioServiceError('오디오 생성은 Modal 서버에서 돌릴 수 없어. 일반 ComfyUI 서버를 골라줘.');
   }
 
   const compat = await freshAudioWorkflowCompatibility(workflow.id);
@@ -254,7 +254,7 @@ function queuePendingRows(orderId: string, options: { binding?: ReturnType<typeo
       requested_server_id: routing.requestedServerId,
       requested_server_tag: routing.requestedServerTag,
       request_payload: payload,
-      request_summary: `음향 · ${group.name} · seed ${row.seed}`,
+      request_summary: `오디오 · ${group.name} · seed ${row.seed}`,
       requested_by_account_id: order.created_by_account_id,
       requested_by_account_type: (order.created_by_account_type ?? null) as GenerationQueueJobRecord['requested_by_account_type'],
     }, { scope: AUDIO_ORDER_QUEUE_SCOPE, key, requestHash: sha256(stableJson({ order: orderId, idx: row.idx, attempt: row.attempt, seed: row.seed })) })).immediate();

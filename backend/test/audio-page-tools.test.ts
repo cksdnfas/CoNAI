@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import type { ChatPageSnapshot } from '@conai/shared'
 import type { McpRequestContext } from '../src/mcp/context'
 
-/** A chat connected to the 음향 page keeps the audio workspace tools; any other connected page narrows them away. */
+/** A chat connected to the 오디오 page keeps the audio workspace tools; any other connected page narrows them away. */
 test('audio page: connected /audio offers the audio tools, other pages do not', { timeout: 60000 }, async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-audio-page-tools-'))
   process.env.RUNTIME_BASE_PATH = root
@@ -55,7 +55,7 @@ test('audio page: connected /audio offers the audio tools, other pages do not', 
   // A profile without any general tool scope: only a connected page can bring tools in.
   const profile = ChatProfileStore.create({ name: 'Sound', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: [] })
   const threadId = CodexChatStore.createThread(null, 'audio page chat', 'llm', profile.id)
-  const base = { instanceId: 'page-audio', connectionId: 'connection-audio', title: '음향', fields: [] }
+  const base = { instanceId: 'page-audio', connectionId: 'connection-audio', title: '오디오', fields: [] }
   const audioPage = normalizeChatPageSnapshot({ ...base, path: '/audio', kind: 'audio', resourceId: 'project:p1' })
   const filesPage = normalizeChatPageSnapshot({ ...base, path: '/files', kind: 'files', resourceId: 'self:root' })
   assert.throws(() => normalizeChatPageSnapshot({ ...base, path: '/files', kind: 'audio', resourceId: null }), /맞지 않아/)
@@ -89,5 +89,5 @@ test('audio page: connected /audio offers the audio tools, other pages do not', 
   assert.ok(!onFiles.has('order_audio') && !onFiles.has('list_audio_candidates'), 'another page does not bring the audio tools')
   assert.ok(onFiles.has('get_current_page'))
 
-  assert.match(chatPageReference(audioPage), /음향/)
+  assert.match(chatPageReference(audioPage), /오디오/)
 })

@@ -9,9 +9,7 @@ import { createUploadStorage, wrapUploadMiddleware, MAX_MULTIPLE_UPLOAD_FILES } 
 import { AudioLabelError } from '../services/audio/audioNaming';
 import {
   AUDIO_MAX_FILE_BYTES,
-  AUDIO_MIME_BY_EXTENSION,
   AudioStoreError,
-  audioBlobPath,
   isAllowedAudioExtension,
   normalizeAudioExtension,
 } from '../services/audio/audioStore';
@@ -67,6 +65,7 @@ import { startAudioExportJob } from '../services/audio/audioExportJob';
 import { FileStoreError, parseFileId } from '../services/fileStoreService';
 import { requireFileStoreOwner } from '../services/fileStoreAccess';
 import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers';
+import { sendAudioCandidateFile } from './audioCandidateFileResponse';
 import {
   addDefaultStableAudioWorkflow,
   checkAudioWorkflowCompatibility,
@@ -217,22 +216,7 @@ router.patch('/candidates/:candidateId/review', edit, (req, res) => {
 /** The candidate's audio; sendFile answers single byte ranges (206/416) and HEAD for seeking players. */
 router.get('/candidates/:candidateId/file', (req, res, next) => {
   const { candidate, file } = audioCandidateFile(param(req, 'candidateId'));
-  const filePath = audioBlobPath(file.hash, file.ext);
-  const safeName = `${candidate.name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_')}.${file.ext}`;
-  res.setHeader('Content-Type', AUDIO_MIME_BY_EXTENSION[file.ext] ?? 'application/octet-stream');
-  res.setHeader('Content-Disposition', `${req.query.download === '1' ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(safeName)}`);
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Content-Security-Policy', 'sandbox');
-  res.sendFile(filePath, { dotfiles: 'allow' }, (error) => {
-    if (!error || res.headersSent) return;
-    const status = (error as { status?: number }).status;
-    if (status === 416) {
-      res.setHeader('Content-Range', `bytes */${file.size}`);
-      res.status(416).end();
-    } else if (status === 404 || (error as NodeJS.ErrnoException).code === 'ENOENT') {
-      res.status(404).json({ success: false, error: '파일이 없어.' });
-    } else next(error);
-  });
+  sendAudioCandidateFile(req, res, next, candidate, file);
 });
 
 /* ------------------------------------------------------------------ generation */

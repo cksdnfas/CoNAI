@@ -104,6 +104,19 @@ export interface ImageRecord {
   ai_metadata?: ImageAiMetadata | null
   auto_tags?: ImageAutoTags | null
   groups?: ImageGroupMembership[] | null
+  /** Sounds of the run behind this tile (generation history): instead of a picture when there is none, else beside it. */
+  audio?: ImageRecordAudio[] | null
+}
+
+export interface ImageRecordAudio {
+  /** Audio candidate id (player key). */
+  id: string
+  name: string
+  fileHash: string
+  duration: number | null
+  groupId: string
+  /** Owner-scoped stream URL. */
+  src: string
 }
 
 export interface ImageListPayload {

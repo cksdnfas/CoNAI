@@ -315,7 +315,7 @@ export function AudioPage() {
 
   useChatPageRegistration({
     kind: 'audio',
-    title: t({ ko: '음향', en: 'Audio' }),
+    title: t({ ko: '오디오', en: 'Audio' }),
     resourceId: group?.id ?? null,
     fields: [],
     data: {
@@ -335,7 +335,7 @@ export function AudioPage() {
     ['selected', t({ ko: '채택', en: 'Adopted' }), group.selected_count],
     ['rejected', t({ ko: '보류', en: 'Rejected' }), Math.max(0, group.candidate_count - group.selected_count - group.pending_review_count)],
   ] : []
-  const groupTitle = group ? (group.is_inbox ? t({ ko: '받은 파일', en: 'Inbox' }) : group.name) : t({ ko: '음향', en: 'Audio' })
+  const groupTitle = group ? (group.is_inbox ? t({ ko: '받은 파일', en: 'Inbox' }) : group.name) : t({ ko: '오디오', en: 'Audio' })
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = candidatesQuery
   useEffect(() => {

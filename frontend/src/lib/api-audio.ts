@@ -2,7 +2,7 @@ import { requestApiData, type ApiEnvelope } from './api-request'
 import { buildApiUrl } from './api-url'
 import type { RuntimeJobRecord } from '@/types/runtime-job'
 
-/** Query-key prefix of everything on the 음향 page; queue events invalidate it (see the runtime event bridge). */
+/** Query-key prefix of everything on the 오디오 page; queue events invalidate it (see the runtime event bridge). */
 export const AUDIO_QUERY_KEY = 'audio'
 
 export type AudioReview = 'pending' | 'selected' | 'rejected'

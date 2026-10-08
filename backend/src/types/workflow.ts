@@ -153,7 +153,7 @@ export interface ComfyUIHistoryItem {
     gifs?: ComfyUIOutputFile[];
     videos?: ComfyUIOutputFile[];
     files?: ComfyUIOutputFile[];
-    /** SaveAudio / SaveAudioAdvanced outputs; collected only for audio orders. */
+    /** SaveAudio / SaveAudioAdvanced outputs (audio orders, and generation-tab runs that also make a sound). */
     audio?: ComfyUIOutputFile[];
   }>;
   status: {

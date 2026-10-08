@@ -104,6 +104,10 @@ test('audio generation: workflows, orders, queue sink, REST, MCP and chat refere
         const text = JSON.stringify(prompt.graph)
         const isAudio = Object.values(prompt.graph).some((node) => node.class_type === 'SaveAudioAdvanced')
         const outputs = text.includes('NOAUDIO') ? { 6: { images: [] } }
+          : text.includes('MIXED') ? {
+            1: { images: [{ filename: `img_${prompt.id.slice(0, 6)}.png`, subfolder: '', type: 'output' }] },
+            8: { audio: [{ filename: `mix_${prompt.id.slice(0, 6)}.flac`, subfolder: 'audio', type: 'output' }] },
+          }
           : isAudio ? { 8: { audio: [{ filename: `sfx_${prompt.id.slice(0, 6)}.flac`, subfolder: 'audio/conai_sfx', type: 'output' }] } }
             : { 1: { images: [{ filename: `img_${prompt.id.slice(0, 6)}.png`, subfolder: '', type: 'output' }] } }
         return json(200, { [prompt.id]: { prompt: [], outputs, status: { status_str: 'success', completed: true, messages: [] } } })
@@ -177,7 +181,7 @@ test('audio generation: workflows, orders, queue sink, REST, MCP and chat refere
     await assert.rejects(workflows.saveAudioWorkflowBinding(defaultWorkflow.id, { prompt_field_id: 'seconds', seconds_field_id: 'seconds', seed_field_id: 'seed' }), /prompt/)
     await assert.rejects(workflows.saveAudioWorkflowBinding(defaultWorkflow.id, { prompt_field_id: 'prompt', seconds_field_id: 'missing', seed_field_id: 'seed' }), /없어/)
     await assert.rejects(workflows.saveAudioWorkflowBinding(defaultWorkflow.id, { prompt_field_id: 'prompt', seconds_field_id: 'seed', seed_field_id: 'seed' }), /서로 다른/)
-    await assert.rejects(workflows.saveAudioWorkflowBinding(imageWorkflowId, { prompt_field_id: 'a', seconds_field_id: 'b', seed_field_id: 'c' }), /음향 종류/)
+    await assert.rejects(workflows.saveAudioWorkflowBinding(imageWorkflowId, { prompt_field_id: 'a', seconds_field_id: 'b', seed_field_id: 'c' }), /오디오 종류/)
   })
 
   await t.test('compatibility: ok, incompatible model list and unreachable server are told apart', async () => {
@@ -462,5 +466,153 @@ test('audio generation: workflows, orders, queue sink, REST, MCP and chat refere
     assert.deepEqual(call0.pendingJobIds, [])
     assert.equal(call0.generated, true)
     assert.match(generationOutcomeNote(summary.job_ids[0], { status: 'completed', images: 0, sounds: 1 }), /1 sound candidate attached/)
+
+    // Audio jobs never read as images in chat: failure text, outcome notes, and the dispatch grant check.
+    const { failureMessageOf } = await import('../src/services/codex-chat/codexChatMedia')
+    const jobCandidates = await import('../src/services/audio/audioJobCandidates')
+    assert.equal(failureMessageOf('failed', null, 'audio'), '오디오 생성에 실패했어')
+    assert.equal(failureMessageOf('completed', 'no_image', 'audio'), '완료된 오디오가 없어')
+    assert.equal(failureMessageOf('failed', null), '이미지 생성에 실패했어')
+    assert.match(generationOutcomeNote(summary.job_ids[0], { status: 'failed', images: 0, audio: true }), /Audio job .* failed: no sound/)
+    assert.match(generationOutcomeNote(summary.job_ids[0], { status: 'running', images: 0, audio: true }), /its sound attaches/)
+    assert.deepEqual(jobCandidates.audioOrderGroupsByQueueJob(summary.job_ids), new Map(summary.job_ids.map((id: number) => [id, snow.id])))
+
+    const { isAudioOrderChatJob } = await import('../src/services/generation-queue/queueJobExecutors')
+    assert.equal(isAudioOrderChatJob(summary.job_ids[0], 'order_audio'), true, 'an audio order job needs no workflows.view')
+    assert.equal(isAudioOrderChatJob(summary.job_ids[0], 'generate_comfyui'), false)
+    assert.equal(isAudioOrderChatJob(999_999, 'order_audio'), false, 'an audio tool name alone is not enough')
+  })
+
+  // ---------------------------------------------------------------- generation tab: image workflows that save sounds
+  const { GenerationHistoryService } = await import('../src/services/generationHistoryService')
+  const { AUDIO_GENERATION_TAB_PROJECT_NAME } = await import('../src/services/audio/audioGenerationOutputs')
+  const jobCandidates = await import('../src/services/audio/audioJobCandidates')
+  const historyOwnerId = account('history-owner', ['images.view', 'generation.execute', 'workflows.view'])
+  const historyStrangerId = account('history-stranger', ['images.view'])
+  invalidateConfiguredAuthCache()
+  const runImageWorkflow = async (workflowId: number) => {
+    const jobId = GenerationQueueModel.create({
+      service_type: 'comfyui', priority: 100, workflow_id: workflowId, workflow_name: 'sound wf',
+      request_payload: { prompt_data: {} }, request_summary: 'generation tab sound',
+      requested_by_account_id: historyOwnerId, requested_by_account_type: 'guest',
+    })
+    GenerationQueueService.requestDispatch()
+    const job = await GenerationQueueService.waitForTerminalJob(jobId, { timeoutMs: 60_000 })
+    assert.equal(job?.status, 'completed', JSON.stringify(job))
+    const history = user.getUserSettingsDb().prepare('SELECT id, composite_hash, generation_status FROM api_generation_history WHERE queue_job_id = ?').get(jobId) as { id: number; composite_hash: string | null; generation_status: string }
+    return { jobId, history }
+  }
+
+  await t.test('an image workflow that only saves a sound completes, and its history row plays it', async () => {
+    const soundWorkflowId = WorkflowModel.create({
+      name: 'tts wf',
+      workflow_json: JSON.stringify({ 8: { class_type: 'SaveAudioAdvanced', inputs: { filename_prefix: 'speech', format: 'flac', audio: ['7', 0] } } }),
+      marked_fields: [],
+    })
+    assert.equal(WorkflowModel.findById(soundWorkflowId)?.kind, 'image')
+    const { jobId, history } = await runImageWorkflow(soundWorkflowId)
+    assert.equal(history.generation_status, 'completed')
+    assert.equal(history.composite_hash, null)
+
+    const results = jobCandidates.audioResultsByQueueJob([jobId]).get(jobId) ?? []
+    assert.equal(results.length, 1)
+    const candidate = service.getAudioCandidate(results[0].id)
+    assert.equal(candidate.origin, 'generated')
+    assert.equal(candidate.name, 'tts wf')
+    assert.equal(candidate.job_id, String(jobId))
+    assert.equal((candidate.provenance as { history_id: number }).history_id, history.id)
+    const inbox = service.getAudioGroup(candidate.group_id)
+    assert.equal(inbox.is_inbox, true)
+    assert.equal(service.getAudioProject(inbox.project_id).name, AUDIO_GENERATION_TAB_PROJECT_NAME)
+
+    const listed = await GenerationHistoryService.getAllHistory({ queue_job_id: jobId })
+    assert.deepEqual(listed.records[0].audio_results?.map((entry) => entry.id), [candidate.id])
+    assert.equal(listed.records[0].audio_results?.[0].mime_type, 'audio/flac')
+    const byWorkflow = await GenerationHistoryService.getHistoryByWorkflow(soundWorkflowId, {})
+    assert.deepEqual(byWorkflow.records[0].audio_results?.map((entry) => entry.id), [candidate.id], 'the workflow-scoped history (generation page) lists the sound too')
+    const { HistoryQueryRepository } = await import('../src/repositories/history/HistoryQueryRepository')
+    assert.deepEqual(HistoryQueryRepository.findDisplayFailedIds({ queue_job_id: jobId }), [], 'failed-row cleanup leaves a sound-only run alone')
+
+    const url = `/api/generation-history/${history.id}/audio/${candidate.id}`
+    const played = await fetch(origin + url, { headers: { 'x-test-account': String(historyOwnerId) } })
+    assert.equal(played.status, 200)
+    assert.equal(played.headers.get('content-type'), 'audio/flac')
+    assert.ok((await played.arrayBuffer()).byteLength > 0)
+    const ranged = await fetch(origin + url, { headers: { 'x-test-account': String(historyOwnerId), Range: 'bytes=0-9' } })
+    assert.equal(ranged.status, 206)
+    assert.equal((await ranged.arrayBuffer()).byteLength, 10)
+    assert.equal((await call(url, adminId)).status, 200, 'admins see every history row')
+    assert.equal((await call(url, historyStrangerId)).status, 403, 'another account cannot play it')
+    assert.equal((await call(url)).status, 401)
+    assert.equal((await call(`/api/generation-history/${history.id}/audio/${crypto.randomUUID()}`, historyOwnerId)).status, 404, 'only the sounds of this run')
+
+    // A deleted take leaves the history row.
+    service.deleteAudioCandidates([candidate.id])
+    assert.equal((await GenerationHistoryService.getAllHistory({ queue_job_id: jobId })).records[0].audio_results, undefined)
+    assert.deepEqual(HistoryQueryRepository.findDisplayFailedIds({ queue_job_id: jobId }), [history.id], 'without its sound the row reads as failed again')
+    assert.equal((await call(url, historyOwnerId)).status, 404)
+  })
+
+  await t.test('an image workflow that saves a picture and a sound keeps both', async () => {
+    const mixedWorkflowId = WorkflowModel.create({
+      name: 'mixed wf',
+      workflow_json: JSON.stringify({
+        1: { class_type: 'SaveImage', inputs: { filename_prefix: 'MIXED', images: ['2', 0] } },
+        2: { class_type: 'EmptyImage', inputs: { width: 16, height: 12 } },
+      }),
+      marked_fields: [],
+    })
+    const { jobId, history } = await runImageWorkflow(mixedWorkflowId)
+    assert.ok(history.composite_hash, 'the picture still lands in the image library')
+    assert.equal(jobCandidates.audioResultsByQueueJob([jobId]).get(jobId)?.length, 1, 'the sound lands in the audio store')
+    const debug = JSON.parse(String(GenerationQueueModel.findById(jobId)?.debug_meta ?? '{}'))
+    assert.equal(debug.audio_candidate_ids?.length, 1)
+    const listed = await GenerationHistoryService.getAllHistory({ queue_job_id: jobId })
+    assert.ok(listed.records[0].actual_composite_hash, 'the row keeps its picture')
+    assert.equal(listed.records[0].audio_results?.length, 1, 'and lists the sound beside it')
+
+    // Codex chats are told a finished job once, in the next turn's input (images and sounds alike).
+    const { pendingGenerationOutcomes, generationOutcomeNote } = await import('../src/services/codex-chat/codexChatMedia')
+    assert.match(generationOutcomeNote(jobId, { status: 'completed', images: 1, sounds: 1 }), /1 image and 1 sound candidate attached/)
+    const reply = { id: 1, thread_id: 999, role: 'assistant', content: '', routing: { replyId: 'r-mixed' }, tool_calls: [{ id: 'c1', tool: 'generate_comfyui', status: 'completed', arguments: null, summary: null, historyIds: [], compositeHashes: [], jobIds: [jobId] }] }
+    const first = pendingGenerationOutcomes(999, [reply as never], new Set())
+    assert.deepEqual(first.keys, [`outcome:${jobId}`])
+    assert.match(first.text, new RegExp(`Generation job #${jobId} finished: 1 image and 1 sound`))
+    assert.deepEqual(pendingGenerationOutcomes(999, [reply as never], new Set(first.keys)), { text: '', keys: [] }, 'told once')
+    const unknown = { ...reply, tool_calls: [{ ...reply.tool_calls[0], jobIds: [987_654] }] }
+    assert.deepEqual(pendingGenerationOutcomes(999, [unknown as never], new Set()), { text: '', keys: [] }, 'a job that has not finished waits')
+
+    // A bot polling the job sees its sounds too.
+    const { createMcpServer } = await import('../src/mcp/server')
+    const { ALL_MCP_HTTP_SCOPES } = await import('../src/mcp/context')
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
+    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
+    const mcp = createMcpServer({ scopes: [...ALL_MCP_HTTP_SCOPES], source: 'http', requester: { accountId: historyOwnerId, accountType: 'guest' } })
+    const client = new Client({ name: 'mixed-job-test', version: '1' })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    await Promise.all([mcp.connect(serverTransport), client.connect(clientTransport)])
+    const described = await client.callTool({ name: 'get_generation_job', arguments: { job_id: jobId } }) as { isError?: boolean; content: Array<{ text: string }> }
+    await client.close()
+    await mcp.close()
+    assert.notEqual(described.isError, true, described.content[0]?.text)
+    assert.deepEqual(JSON.parse(described.content[0].text).audio_candidate_ids, jobCandidates.audioResultsByQueueJob([jobId]).get(jobId)?.map((entry) => entry.id))
+    // Let the saved picture's background metadata pass finish before teardown removes the runtime folders.
+    const { BackgroundQueueService } = await import('../src/services/backgroundQueue')
+    const deadline = Date.now() + 20_000
+    while (Date.now() < deadline && (BackgroundQueueService.getQueueStatus().processing || BackgroundQueueService.getQueueStatus().queueLength > 0)) {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    }
+  })
+
+  await t.test('output collection: sounds skip the final-node pick and audio files in `files` are sounds', async () => {
+    const { extractComfyOutputInfo } = await import('../src/services/comfyui/outputCollector')
+    const history = { p: { prompt: [], status: { status_str: 'success', completed: true, messages: [] }, outputs: {
+      3: { images: [{ filename: 'early.png', subfolder: '', type: 'output' }] },
+      9: { images: [{ filename: 'final.png', subfolder: '', type: 'output' }] },
+      12: { audio: [{ filename: 'voice.flac', subfolder: '', type: 'output' }] },
+      14: { files: [{ filename: 'extra.wav', subfolder: '', type: 'output' }] },
+    } } } as never
+    assert.deepEqual(extractComfyOutputInfo(history, 'p', true).map((output) => [output.filename, output.kind]), [['final.png', 'image'], ['voice.flac', 'audio'], ['extra.wav', 'audio']])
+    assert.deepEqual(extractComfyOutputInfo(history, 'p', false).map((output) => output.filename), ['early.png', 'final.png', 'voice.flac', 'extra.wav'])
   })
 })

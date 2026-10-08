@@ -2,7 +2,7 @@ import { isCodexChatGenerationTool, isCodexChatCreationTool, type ChatProposal }
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { ChatProposalStore } from './chatProposals'
 import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibilityService'
-import { audioCandidatesByQueueJob } from '../audio/audioJobCandidates'
+import { audioCandidatesByQueueJob, audioOrderGroupsByQueueJob } from '../audio/audioJobCandidates'
 import type { CodexChatMessageRecord } from './codexChatStore'
 
 export type CodexChatMediaSource = 'generated' | 'found'
@@ -37,15 +37,19 @@ const FINISHED_JOB_STATUSES = new Set(['completed', 'failed', 'cancelled'])
 const FAILURE_MESSAGE_MAX_LENGTH = 300
 type FailedJob = NonNullable<CodexChatMessageRecord['tool_calls'][number]['failedJobs']>[number]
 
-/** Queue errors can contain paths or provider details; expose only fixed code-based messages. */
-export function failureMessageOf(status: FailedJob['status'], code: string | null) {
+/**
+ * Queue errors can contain paths or provider details; expose only fixed code-based messages. `media` names what the
+ * job makes: audio-order jobs make sounds.
+ */
+export function failureMessageOf(status: FailedJob['status'], code: string | null, media: 'image' | 'audio' = 'image') {
   const messages = new Map([
-    ['no_image', '완료된 이미지가 없어'],
+    ['no_image', media === 'audio' ? '완료된 오디오가 없어' : '완료된 이미지가 없어'],
     ['process_restarted', '서버가 다시 시작돼 작업이 끝났어'],
     ['process_restarted_orphan', '서버가 다시 시작돼 작업을 복구하지 못했어'],
     ['nai_submit_ambiguous', '생성 요청의 접수 여부를 확인하지 못했어'],
   ])
-  return (status === 'cancelled' ? '작업이 취소됐어' : messages.get(code ?? '') ?? '이미지 생성에 실패했어').slice(0, FAILURE_MESSAGE_MAX_LENGTH)
+  const fallback = media === 'audio' ? '오디오 생성에 실패했어' : '이미지 생성에 실패했어'
+  return (status === 'cancelled' ? '작업이 취소됐어' : messages.get(code ?? '') ?? fallback).slice(0, FAILURE_MESSAGE_MAX_LENGTH)
 }
 const JOB_TOOLS = new Set(['submit_generation_job', 'get_generation_job', 'wait_generation_job', 'get_generation_artifacts'])
 
@@ -116,22 +120,28 @@ export function attachJobResults(messages: CodexChatMessageRecord[]) {
     links.push(...db.prepare('SELECT job_id, reply_id FROM chat_generation_links WHERE thread_id = ?').all(threadId) as Array<{ job_id: number; reply_id: string }>)
   }
   links.forEach((link) => owners.set(link.job_id, link.reply_id))
+  // Audio-order jobs make sound candidates (audio.db), not image history rows.
+  const audioOrderGroups = audioOrderGroupsByQueueJob(links.map((link) => link.job_id))
   messages = messages.map((message) => {
     const ownJobs = links.filter((link) => link.reply_id === message.routing?.replyId)
     const recorded = new Set(message.tool_calls.filter((call) => isCodexChatCreationTool(call.tool)).flatMap(jobIdsOf))
     const missing = ownJobs.filter((link) => !recorded.has(link.job_id))
-    return missing.length ? { ...message, tool_calls: [...message.tool_calls, ...missing.map((link) => ({ id: `generation-${link.job_id}`, tool: 'generation_result', status: 'completed' as const, arguments: null, summary: null, historyIds: [], compositeHashes: [], jobIds: [link.job_id], generated: true }))] } : message
+    return missing.length ? { ...message, tool_calls: [...message.tool_calls, ...missing.map((link) => {
+      // An unrecorded audio-order job reads as an audio call, so its placeholder and takes land on the audio card.
+      const audioGroupId = audioOrderGroups.get(link.job_id)
+      return { id: `generation-${link.job_id}`, tool: audioGroupId ? 'audio_generation_result' : 'generation_result', status: 'completed' as const, arguments: audioGroupId ? { audio_group_id: audioGroupId } : null, summary: null, historyIds: [], compositeHashes: [], jobIds: [link.job_id], generated: true }
+    })] } : message
   })
   const jobIds = [...new Set(messages.flatMap((message) => message.tool_calls.flatMap(jobIdsOf)))]
   if (jobIds.length === 0) {
     return { messages, pendingJobs: 0 }
   }
+  for (const [jobId, groupId] of audioOrderGroupsByQueueJob(jobIds.filter((id) => !audioOrderGroups.has(id)))) audioOrderGroups.set(jobId, groupId)
 
   const historiesByJob = new Map<number, number[]>()
   const pendingJobIds = new Set<number>()
   const failedJobsByJob = new Map<number, FailedJob>()
   const failedHistoryIds = new Set<number>()
-  // Audio-order jobs make sound candidates (audio.db), not image history rows.
   const audioByJob = audioCandidatesByQueueJob(jobIds)
   for (const chunk of chunked(jobIds)) {
     const placeholders = chunk.map(() => '?').join(',')
@@ -145,7 +155,7 @@ export function attachJobResults(messages: CodexChatMessageRecord[]) {
       if (!owners.has(job.id) || historiesByJob.get(job.id)?.length || audioByJob.get(job.id)?.length) continue
       if (job.status !== 'failed' && job.status !== 'cancelled' && job.status !== 'completed') continue
       const failureCode = job.status === 'completed' ? 'no_image' : job.failure_code
-      failedJobsByJob.set(job.id, { jobId: job.id, status: job.status, failureCode, failureMessage: failureMessageOf(job.status, failureCode) })
+      failedJobsByJob.set(job.id, { jobId: job.id, status: job.status, failureCode, failureMessage: failureMessageOf(job.status, failureCode, audioOrderGroups.has(job.id) ? 'audio' : 'image') })
     }
     histories.filter((row) => failedJobsByJob.has(row.queue_job_id)).forEach((row) => failedHistoryIds.add(row.id))
   }
@@ -155,8 +165,8 @@ export function attachJobResults(messages: CodexChatMessageRecord[]) {
   return { pendingJobs: pendingJobIds.size, messages: attachResolvedJobResults(messages, historiesByJob, pendingJobIds, owners, failedJobsByJob, audioByJob) }
 }
 
-/** What became of a generation job, as a later request should read it. `sounds`: audio-order candidates. */
-export type GenerationOutcome = { status: string; images: number; sounds?: number }
+/** What became of a generation job, as a later request should read it. `sounds`: its audio candidates; `audio`: an audio-order job. */
+export type GenerationOutcome = { status: string; images: number; sounds?: number; audio?: boolean }
 
 /**
  * One line in place of the job JSON a creation call stored at submission (always "queued" there): whether the image
@@ -165,8 +175,15 @@ export type GenerationOutcome = { status: string; images: number; sounds?: numbe
  */
 export function generationOutcomeNote(jobId: number, outcome: GenerationOutcome | undefined): string {
   if (!outcome) return `Generation job #${jobId}: no longer in the queue (its result, if any, is attached to this reply).`
+  if (outcome.images > 0 && (outcome.sounds ?? 0) > 0) return `Generation job #${jobId} finished: ${outcome.images} image${outcome.images === 1 ? '' : 's'} and ${outcome.sounds} sound candidate${outcome.sounds === 1 ? '' : 's'} attached to this reply, visible and playable by the reader. Do not describe or re-announce them.`
   if (outcome.images > 0) return `Generation job #${jobId} finished: ${outcome.images} image${outcome.images === 1 ? '' : 's'} attached to this reply, visible to the reader. Do not describe or re-announce it.`
   if ((outcome.sounds ?? 0) > 0) return `Audio job #${jobId} finished: ${outcome.sounds} sound candidate${outcome.sounds === 1 ? '' : 's'} attached to this reply, playable by the reader. A person reviews them in the audio workspace.`
+  if (outcome.audio) {
+    if (outcome.status === 'completed') return `Audio job #${jobId} finished but produced no sound.`
+    if (outcome.status === 'failed') return `Audio job #${jobId} failed: no sound was attached to this reply.`
+    if (outcome.status === 'cancelled') return `Audio job #${jobId} was cancelled: no sound was attached to this reply.`
+    return `Audio job #${jobId} is still running; its sound attaches to this reply when it finishes.`
+  }
   if (outcome.status === 'completed') return `Generation job #${jobId} finished but produced no image.`
   if (outcome.status === 'failed') return `Generation job #${jobId} failed: no image was attached to this reply.`
   if (outcome.status === 'cancelled') return `Generation job #${jobId} was cancelled: no image was attached to this reply.`
@@ -194,6 +211,11 @@ export function applyGenerationOutcomes(messages: CodexChatMessageRecord[], outc
 export function withGenerationOutcomes(messages: CodexChatMessageRecord[]) {
   const jobIds = [...new Set(messages.flatMap((message) => message.tool_calls.filter((call) => isCodexChatCreationTool(call.tool)).flatMap(jobIdsOf)))]
   if (jobIds.length === 0) return messages
+  return applyGenerationOutcomes(messages, readGenerationOutcomes(jobIds))
+}
+
+/** What became of each job now: queue status, images in its history, sounds in the audio store. */
+function readGenerationOutcomes(jobIds: number[]) {
   const db = getUserSettingsDb()
   const outcomes = new Map<number, GenerationOutcome>()
   for (const chunk of chunked(jobIds)) {
@@ -203,10 +225,42 @@ export function withGenerationOutcomes(messages: CodexChatMessageRecord[]) {
     const histories = db.prepare(`SELECT queue_job_id, COUNT(*) AS images FROM api_generation_history WHERE generation_status = 'completed' AND composite_hash IS NOT NULL AND queue_job_id IN (${placeholders}) GROUP BY queue_job_id`).all(...chunk) as Array<{ queue_job_id: number; images: number }>
     histories.forEach((row) => outcomes.set(row.queue_job_id, { status: outcomes.get(row.queue_job_id)?.status ?? 'completed', images: row.images }))
   }
-  for (const [jobId, candidateIds] of audioCandidatesByQueueJob(jobIds)) {
-    outcomes.set(jobId, { status: outcomes.get(jobId)?.status ?? 'completed', images: outcomes.get(jobId)?.images ?? 0, sounds: candidateIds.length })
+  for (const jobId of audioOrderGroupsByQueueJob(jobIds).keys()) {
+    const outcome = outcomes.get(jobId)
+    if (outcome) outcomes.set(jobId, { ...outcome, audio: true })
   }
-  return applyGenerationOutcomes(messages, outcomes)
+  for (const [jobId, candidateIds] of audioCandidatesByQueueJob(jobIds)) {
+    outcomes.set(jobId, { ...outcomes.get(jobId), status: outcomes.get(jobId)?.status ?? 'completed', images: outcomes.get(jobId)?.images ?? 0, sounds: candidateIds.length })
+  }
+  return outcomes
+}
+
+const OUTCOME_SENT_PREFIX = 'outcome:'
+const OUTCOME_LOOKBACK_MESSAGES = 40
+
+/**
+ * Codex keeps its own memory of a chat, so the stored job JSON of an earlier reply (always "queued" at submission) can
+ * never be replaced the way withGenerationOutcomes does for API chats. Instead each job that has finished since is
+ * told once in the next turn's input, tracked in the sent keys as `outcome:<job id>`. Jobs of the recent replies only;
+ * running jobs wait for a later turn.
+ */
+export function pendingGenerationOutcomes(threadId: number, messages: CodexChatMessageRecord[], sent: ReadonlySet<string>) {
+  const recent = messages.filter((message) => message.role === 'assistant').slice(-OUTCOME_LOOKBACK_MESSAGES)
+  const replyIds = new Set(recent.map((message) => message.routing?.replyId).filter((id): id is string => Boolean(id)))
+  const linked = replyIds.size
+    ? (getUserSettingsDb().prepare('SELECT job_id, reply_id FROM chat_generation_links WHERE thread_id = ?').all(threadId) as Array<{ job_id: number; reply_id: string }>)
+      .filter((link) => replyIds.has(link.reply_id)).map((link) => link.job_id)
+    : []
+  const recorded = recent.flatMap((message) => message.tool_calls.filter((call) => isCodexChatCreationTool(call.tool)).flatMap(jobIdsOf))
+  const jobIds = [...new Set([...recorded, ...linked])].filter((jobId) => !sent.has(`${OUTCOME_SENT_PREFIX}${jobId}`))
+  if (jobIds.length === 0) return { text: '', keys: [] as string[] }
+  const outcomes = readGenerationOutcomes(jobIds)
+  const finished = jobIds.filter((jobId) => FINISHED_JOB_STATUSES.has(outcomes.get(jobId)?.status ?? '')).sort((left, right) => left - right)
+  if (finished.length === 0) return { text: '', keys: [] as string[] }
+  return {
+    text: ['## 생성 작업 결과 (지난 답장)', ...finished.map((jobId) => `- ${generationOutcomeNote(jobId, outcomes.get(jobId))}`)].join('\n'),
+    keys: finished.map((jobId) => `${OUTCOME_SENT_PREFIX}${jobId}`),
+  }
 }
 
 /** Pure ownership resolution, also used by regression coverage. Old records prefer an actual submission. */

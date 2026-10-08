@@ -18,7 +18,7 @@ export function useCanSendToAudio() {
   return !!auth?.authenticated && (auth.hasCredentials === false || hasAuthPermission(auth.permissionKeys, 'audio.edit'))
 }
 
-/** "음향으로 보내기": copy audio files from your file store into a project's 받은 파일 or a group. */
+/** "오디오로 보내기": copy audio files from your file store into a project's 받은 파일 or a group. */
 export function SendToAudioDialog({ files, onClose }: { files: Array<{ id: string; name: string }> | null; onClose: () => void }) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
@@ -45,7 +45,7 @@ export function SendToAudioDialog({ files, onClose }: { files: Array<{ id: strin
         await importAudioFromFileStore(file.id, groupId ? { groupId } : { projectId })
         done += 1
       }
-      showSnackbar({ message: t({ ko: '음향으로 {count}개 보냈어.', en: 'Sent {count} to Audio.' }, { count: done }) })
+      showSnackbar({ message: t({ ko: '오디오로 {count}개 보냈어.', en: 'Sent {count} to Audio.' }, { count: done }) })
       void queryClient.invalidateQueries({ queryKey: [AUDIO_QUERY_KEY] })
       onClose()
     } catch (error) {
@@ -56,7 +56,7 @@ export function SendToAudioDialog({ files, onClose }: { files: Array<{ id: strin
   }
 
   return (
-    <Modal open={open} title={t({ ko: '음향으로 보내기', en: 'Send to Audio' })} onClose={() => { if (!busy) onClose() }} widthClassName="max-w-md">
+    <Modal open={open} title={t({ ko: '오디오로 보내기', en: 'Send to Audio' })} onClose={() => { if (!busy) onClose() }} widthClassName="max-w-md">
       <ModalBody className="space-y-4">
         <Field label={t({ ko: '프로젝트', en: 'Project' })}>
           <Select value={projectId} disabled={!projects.data?.length} onChange={(event) => setProjectId(event.target.value)}>
@@ -70,7 +70,7 @@ export function SendToAudioDialog({ files, onClose }: { files: Array<{ id: strin
             {(groups.data ?? []).filter((group) => !group.is_inbox).map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
           </Select>
         </Field>
-        {projects.isSuccess && projects.data.length === 0 ? <p className="text-xs text-destructive">{t({ ko: '음향 탭에서 프로젝트를 먼저 만들어줘.', en: 'Create a project in the Audio tab first.' })}</p> : null}
+        {projects.isSuccess && projects.data.length === 0 ? <p className="text-xs text-destructive">{t({ ko: '오디오 탭에서 프로젝트를 먼저 만들어줘.', en: 'Create a project in the Audio tab first.' })}</p> : null}
       </ModalBody>
       <ModalFooter>
         <span className="flex-1" />

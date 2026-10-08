@@ -227,7 +227,7 @@ function readLegacy(dataRoot: string, workDir: string): LegacyData {
   const legacy = new Database(copy, { fileMustExist: true });
   try {
     for (const table of ['projects', 'groups', 'candidates']) {
-      if (!hasTable(legacy, table)) throw new LegacyImportError(`이전 음향 앱 DB가 아니야 (${table} 테이블 없음).`);
+      if (!hasTable(legacy, table)) throw new LegacyImportError(`이전 오디오 앱 DB가 아니야 (${table} 테이블 없음).`);
     }
     const groupColumns = columns(legacy, 'groups');
     const candidateColumns = columns(legacy, 'candidates');
@@ -678,7 +678,7 @@ export async function registerLegacyAudioWorkflow(legacyId: unknown): Promise<Au
   for (let suffix = 2; WorkflowModel.existsByName(name); suffix += 1) name = `${base} (${suffix})`;
   const id = WorkflowModel.create({
     name,
-    description: '이전 음향 앱에서 가져온 워크플로',
+    description: '이전 오디오 앱에서 가져온 워크플로',
     workflow_json: JSON.stringify(graph, null, 2),
     marked_fields: fields,
     is_active: true,

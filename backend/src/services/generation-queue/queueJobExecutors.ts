@@ -36,6 +36,7 @@ import { isChatMcpSource, type McpRequestContext } from '../../mcp/context'
 import { parseStoredRequestPayload } from './queuePayloads'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { requireChatAssetGeneration } from '../codex-chat/chatAssetAccess'
+import { audioOrderGroupsByQueueJob } from '../audio/audioJobCandidates'
 import {
   handleComfySubmitFailure,
   markNaiSubmitAmbiguous,
@@ -107,6 +108,17 @@ function isQueueCancelRequested(jobId: number) {
   return GenerationQueueModel.readCancelState(jobId)?.cancelRequested === true
 }
 
+/** Chat tools that queue audio-order jobs (see audioOrders `__conaiChatGrant`). */
+const AUDIO_ORDER_CHAT_TOOLS = new Set(['order_audio', 'retry_audio_order_job'])
+
+/**
+ * A chat-granted job queued by an audio order tool for a real audio order. Such jobs run the workflow bound in the
+ * audio settings, and their tools already need audio.edit + generation.execute, so they skip the workflows.view check.
+ */
+export function isAudioOrderChatJob(jobId: number, toolName: string) {
+  return AUDIO_ORDER_CHAT_TOOLS.has(toolName) && audioOrderGroupsByQueueJob([jobId]).has(jobId)
+}
+
 export function requireQueuedChatGenerationAccess(job: GenerationQueueJobRecord) {
   const assetGrant = parseStoredRequestPayload(job).__conaiAssetGrant as { profileId?: number } | undefined
   if (assetGrant) {
@@ -122,7 +134,7 @@ export function requireQueuedChatGenerationAccess(job: GenerationQueueJobRecord)
     if (!grant.context || !isChatMcpSource(grant.context.source) || !grant.toolName || job.service_type === 'codex') throw new Error('Invalid or unsafe chat generation grant.')
     const authority = { ...grant.context, requester: { accountId: job.requested_by_account_id ?? null, accountType: null } }
     requireMcpToolAccess(authority, grant.toolName, { group_id: job.requested_group_id }, 'queued')
-    if (job.service_type === 'comfyui') requireRequesterPermission(authority.requester, 'workflows.view')
+    if (job.service_type === 'comfyui' && !isAudioOrderChatJob(job.id, grant.toolName)) requireRequesterPermission(authority.requester, 'workflows.view')
     if (grant.usesImages) requireRequesterPermission(authority.requester, 'images.view')
   }
 }
@@ -171,7 +183,7 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
     ? (await import('../audio/audioOrders')).findAudioOrderJobByQueueJob(job.id)
     : null
   if (workflow.kind === 'audio' && !audioOrderJob) {
-    throw new Error(`Queue job ${job.id} uses audio workflow ${workflow.id}, which runs only through audio orders (음향 탭의 생성 주문)`)
+    throw new Error(`Queue job ${job.id} uses audio workflow ${workflow.id}, which runs only through audio orders (오디오 탭의 생성 주문)`)
   }
 
   const payload = parseComfyQueuePayload(job)
@@ -257,6 +269,18 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
           workflow: { id: workflow.id, name: workflow.name, updated_date: workflow.updated_date },
         })
         : undefined,
+      // Image workflows that also (or only) save a sound: it goes to the audio store, tied to this queue job.
+      onAudioOutputs: audioOrderJob
+        ? undefined
+        : async (outputs, promptId) => (await import('../audio/audioGenerationOutputs')).storeGenerationTabAudioOutputs(outputs, {
+          queueJobId: job.id,
+          promptId,
+          historyId: historyId ?? null,
+          accountId: job.requested_by_account_id ?? null,
+          serverId: assignedServer?.id ?? job.assigned_server_id ?? null,
+          serverName: assignedServer?.name ?? null,
+          workflow: { id: workflow.id, name: workflow.name, updated_date: workflow.updated_date },
+        }),
       artifactWorkflow: workflow.result_view_mode === 'artifact_explorer' ? workflow : null,
       queueJobId: job.id,
       signal: context.signal,
@@ -334,6 +358,17 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
         saved_artifact_count: result.savedArtifactCount,
         artifact_directory: result.savedArtifacts[0]?.directoryRelativePath ?? '',
       })
+    } else if (!result.representativeImage && result.savedAudioCandidateIds.length > 0) {
+      // Sound-only run: the history row has no picture; its sounds are found through the queue job id.
+      if (historyId) {
+        HistoryCommandService.updateStatus(historyId, 'completed')
+      }
+
+      updateQueueRequestDebugMeta(job, {
+        history_id: historyId ?? null,
+        result_prompt_id: result.promptId,
+        audio_candidate_ids: result.savedAudioCandidateIds,
+      })
     } else {
       if (!result.representativeImage) {
         throw new Error(`Queue job ${job.id} finished ComfyUI execution but no representative output was saved`)
@@ -359,6 +394,7 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
         result_mime_type: FileDiscoveryService.getMimeType(result.representativeImage.originalPath),
         attempted_image_count: result.attemptedImageCount,
         saved_image_count: result.savedImageCount,
+        ...(result.savedAudioCandidateIds.length > 0 ? { audio_candidate_ids: result.savedAudioCandidateIds } : {}),
       })
     }
 

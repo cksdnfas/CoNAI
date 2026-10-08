@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { GenerationHistoryService } from '../services/generationHistoryService';
 import { HistoryCommandService } from '../services/historyCommandService';
@@ -17,6 +17,7 @@ import {
   handleGenerationHistoryCleanup,
 } from './generation-history/cleanupRouteHandlers';
 import {
+  handleHistoryAudio,
   handleHistoryBatchDownload,
   handleHistoryFile,
   handleHistoryImageDetail,
@@ -153,6 +154,17 @@ router.get(
   '/:id/file',
   asyncHandler(async (req: Request, res: Response) => {
     await handleHistoryFile(req, res, routeParam(req.params.id));
+  })
+);
+
+/**
+ * GET /api/generation-history/:id/audio/:candidateId
+ * Play one sound a history row's run made (owner-scoped like the file route; supports byte ranges).
+ */
+router.get(
+  '/:id/audio/:candidateId',
+  asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    await handleHistoryAudio(req, res, next, routeParam(req.params.id), routeParam(req.params.candidateId));
   })
 );
 

@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { audioCandidateFileUrl } from '@/lib/api-audio'
 
 /**
- * One audio element for the whole app (음향 page, chat cards): starting a take stops whatever played before, like the
+ * One audio element for the whole app (오디오 page, chat cards): starting a take stops whatever played before, like the
  * original SFX manager. Components read the state through `useAudioPlayer`.
  */
 export interface AudioPlayerState {

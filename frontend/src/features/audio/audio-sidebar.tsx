@@ -49,7 +49,7 @@ export function AudioSidebar({
           {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
         </Select>
         {canEdit ? <IconButton variant="ghost" size="icon-sm" label={t({ ko: '새 그룹', en: 'New group' })} disabled={!projectId} onClick={onNewGroup}><Plus /></IconButton> : null}
-        <IconButton variant="ghost" size="icon-sm" label={t({ ko: '음향 설정', en: 'Audio settings' })} onClick={onOpenSettings}><SlidersHorizontal /></IconButton>
+        <IconButton variant="ghost" size="icon-sm" label={t({ ko: '오디오 설정', en: 'Audio settings' })} onClick={onOpenSettings}><SlidersHorizontal /></IconButton>
       </div>
       <div className="relative">
         <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />

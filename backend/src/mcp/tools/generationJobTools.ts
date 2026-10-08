@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { getUserSettingsDb } from '../../database/userSettingsDb';
 import { linkChatGeneration, requireActiveChatReply } from '../../services/codex-chat/chatReplyRegistry';
+import { audioCandidatesByQueueJob } from '../../services/audio/audioJobCandidates';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { GenerationQueueModel } from '../../models/GenerationQueue';
@@ -69,6 +70,7 @@ async function describeJob(jobId: number, context: McpRequestContext) {
         ? McpArtifactService.createHistoryDescriptor(history.id, context.baseUrl as string, context.requester)
         : null))).filter(Boolean)
     : [];
+  const audioIds = audioCandidatesByQueueJob([jobId]).get(jobId) ?? [];
   const workflow = job.workflow_id ? WorkflowModel.findByIdIncludingDeleted(job.workflow_id) : null;
   const workflowDeleted = Boolean(job.workflow_id && (!workflow || workflow.deleted_at));
   return {
@@ -78,6 +80,8 @@ async function describeJob(jobId: number, context: McpRequestContext) {
     workflow_availability: workflowDeleted ? '삭제된 워크플로우(사용 불가)' : 'available',
     history_ids: histories.map((history) => history.id),
     artifacts,
+    // Sounds the run saved (audio workspace, 생성 탭 project): playable in the reply and the generation history.
+    ...(audioIds.length ? { audio_candidate_ids: audioIds } : {}),
   };
 }
 

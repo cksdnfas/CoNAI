@@ -18,7 +18,7 @@ import { ChatProfileStore, chatGreetings, pickChatGreeting, type ChatProfile } f
 import { loadChatSettings, type ChatScope } from './chatSettings'
 import { canUseChatProfile, resolveChatProfileToolGrant, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken, setCodexChatExecution } from './codexChatAccess'
 import { chatPageReference, parseChatPageContext } from './chatPageContext'
-import { attachJobResults, collectCodexChatMedia } from './codexChatMedia'
+import { attachJobResults, collectCodexChatMedia, pendingGenerationOutcomes } from './codexChatMedia'
 import { canRequesterViewImages } from '../../middleware/imageAccess'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
@@ -800,8 +800,9 @@ export async function runCodexGroupReply(params: {
         const note = pendingAuthorNote(room, profile, sent, user)
         const state = pendingBlockState(room, profile, params.messages, sent, profile.id)
         const rejected = pendingRejectedLore(threadId, profile, sent)
-        const input = params.buildInput([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text].filter(Boolean).join('\n\n'))
-        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys]
+        const outcomes = pendingGenerationOutcomes(threadId, params.messages.filter((message) => message.speaker_profile_id === profile.id), sent)
+        const input = params.buildInput([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text].filter(Boolean).join('\n\n'))
+        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys]
         const lastSeen = ChatGroupStore.member(threadId, profile.id)?.last_seen_message_id ?? null
         const missed = sendableMessages(params.messages).filter((message) => message.id > (lastSeen ?? 0) && !(lastSeen !== null && message.role === 'assistant' && message.speaker_profile_id === profile.id))
         const shown = missed.slice(-params.windowLimit)
@@ -1163,11 +1164,12 @@ export const CodexChatService = {
         const note = pendingAuthorNote(current, profile, sent, user)
         const state = pendingBlockState(current, profile, history, sent)
         const rejected = pendingRejectedLore(threadId, profile, sent)
+        const outcomes = pendingGenerationOutcomes(threadId, history.filter((entry) => entry.id < userMessageId), sent)
         const directive = [buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile, user)), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
-        const reference = referenceBlock([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text])
+        const reference = referenceBlock([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text])
         const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user) : ''
         const input = [recap, reference, REPLY_GUIDANCE, buildReplyContext(history, routing), chatPageReference(page), chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }])), directive].filter(Boolean).join('\n\n')
-        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys]
+        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys]
         turn.contextMeta = codexInputMeta(profile, [userMessage], lore, input, keys, [
           ...contextSource('user-persona', persona.text), ...contextSource('lore-index', lore.index.keys.length ? lore.selected.index : ''), ...contextSource('constant-lore', lore.index.keys.length ? lore.selected.constant : ''),
           ...contextSource('author-note', note.text ? resolveAuthorNote(current, profile, user).text : ''), ...contextSource('state', state.text),

@@ -32,7 +32,7 @@ const HEADER_NAVIGATION_OPTIONS: Array<{ key: HeaderNavigationItemKey; icon: Luc
   { key: 'groups', icon: FolderTree, label: { ko: '그룹', en: 'Groups' } },
   { key: 'prompts', icon: MessageSquareText, label: { ko: '프롬프트', en: 'Prompts' } },
   { key: 'generation', icon: Sparkles, label: { ko: '생성', en: 'Generation' } },
-  { key: 'audio', icon: AudioLines, label: { ko: '음향', en: 'Audio' } },
+  { key: 'audio', icon: AudioLines, label: { ko: '오디오', en: 'Audio' } },
   { key: 'sprite', icon: Film, label: { ko: '스프라이트', en: 'Sprites' } },
   { key: 'chat', icon: MessageSquare, label: { ko: '채팅', en: 'Chat' } },
   { key: 'upload', icon: Upload, label: { ko: '업로드', en: 'Upload' } },

@@ -1,6 +1,6 @@
 import type { ImageRecord } from '@/types/image'
 
-export type ImageListMediaKind = 'image' | 'gif' | 'video'
+export type ImageListMediaKind = 'image' | 'gif' | 'video' | 'audio'
 
 /** Return a stable image list identity for rendering and selection state. */
 export function getImageListItemId(image: ImageRecord): string {
@@ -16,6 +16,11 @@ export function getImageListDisplayName(image: ImageRecord): string {
 
 /** Classify the image-list media type from backend metadata. */
 export function getImageListMediaKind(image: ImageRecord): ImageListMediaKind {
+  // Sounds without a picture; a run with both stays an image tile that also plays its sounds.
+  if (image.audio?.length && !image.composite_hash) {
+    return 'audio'
+  }
+
   const mimeType = image.mime_type?.toLowerCase() || ''
 
   if (mimeType.startsWith('video/')) {

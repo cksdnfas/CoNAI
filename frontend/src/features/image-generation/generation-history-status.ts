@@ -19,9 +19,15 @@ export function isHistoryPostprocessPending(record: GenerationHistoryRecord) {
     && !record.actual_composite_hash
 }
 
+/** A run that saved sounds and no picture: its result is the sounds. */
+export function hasHistoryAudioResult(record: GenerationHistoryRecord) {
+  return !record.actual_composite_hash && (record.audio_results?.length ?? 0) > 0
+}
+
 export function isHistoryMissingLinkedResult(record: GenerationHistoryRecord) {
   return record.generation_status === 'completed'
     && !record.actual_composite_hash
+    && !hasHistoryAudioResult(record)
     && (!record.composite_hash || record.result_file_status !== 'active')
 }
 
@@ -35,7 +41,7 @@ export function resolveHistoryDisplayStatus(record: GenerationHistoryRecord): Ge
     return 'failed'
   }
 
-  if ((record.queue_status === 'failed' || record.queue_status === 'cancelled') && !record.actual_composite_hash) {
+  if ((record.queue_status === 'failed' || record.queue_status === 'cancelled') && !record.actual_composite_hash && !hasHistoryAudioResult(record)) {
     return 'failed'
   }
 

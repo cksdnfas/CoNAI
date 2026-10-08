@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { MediaLightbox } from '@/features/images/components/media-lightbox'
 import { useI18n } from '@/i18n'
-import { ChatAudioCards, isChatAudioCall } from '@/features/audio/chat-audio-cards'
+import { ChatAudioCards, isAudioWorkspaceCall } from '@/features/audio/chat-audio-cards'
 import type { ChatProfileAssetFields, ChatDisplayBlock, ChatEngine, CodexChatMediaInfo, CodexChatMessage, CodexChatToolCall } from '@/lib/api-codex-chat'
 import { requestJson } from '@/lib/api-request'
 import { cn } from '@/lib/utils'
@@ -679,7 +679,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
     <div className="space-y-2">
       <ChatMessageReply routing={routing} recipientLabel={recipientLabel} />
       {showReasoning ? <ReasoningBlock text={reasoning as string} active={streaming && !content} /> : null}
-      {canViewImages ? <CodexChatToolMedia calls={toolCalls.filter((call) => !isChatAudioCall(call))} size={appearance.imageSize} layout={appearance.imageLayout} media={media} /> : null}
+      {canViewImages ? <CodexChatToolMedia calls={toolCalls.filter((call) => !isAudioWorkspaceCall(call))} size={appearance.imageSize} layout={appearance.imageLayout} media={media} /> : null}
       <ChatAudioCards calls={toolCalls} />
       <ChatProposalCards calls={toolCalls} threadId={threadId} />
       {ownText ? markdown(ownText) : null}

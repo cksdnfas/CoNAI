@@ -1,4 +1,5 @@
 import type { AuthAccountType } from './authAccount';
+import type { GenerationAudioResult } from '../services/audio/audioJobCandidates';
 
 /** Services that can create generation-history rows. */
 export type ServiceType = 'comfyui' | 'novelai' | 'codex';
@@ -61,6 +62,8 @@ export interface GenerationHistoryListRecord extends GenerationHistoryRecord {
   queue_status?: 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled' | null;
   queue_cancel_requested?: number | null;
   provider_job_id?: string | null;
+  /** Sounds a ComfyUI run saved, with or without a picture (audio store candidates of its queue job). */
+  audio_results?: GenerationAudioResult[];
 }
 
 export interface GenerationHistoryDetailRecord extends GenerationHistoryRecord {

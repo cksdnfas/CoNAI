@@ -49,7 +49,7 @@ export function GenerationResultArea({
   })
   const applyRatingSafety = historySafetySettingsQuery.data?.applyRatingSafetyToGenerationHistory === true
   const resultImages = useMemo(
-    () => feed.historyRecords.map(mapHistoryRecordToImageRecord).filter((image) => Boolean(image.thumbnail_url)),
+    () => feed.historyRecords.map(mapHistoryRecordToImageRecord).filter((image) => Boolean(image.thumbnail_url || image.audio?.length)),
     [feed.historyRecords],
   )
   const { visibleItems, shouldBlurItemPreview } = useImageFeedSafety({

@@ -35,7 +35,7 @@ export const authResources = {
     "pageAccessCatalog.groups": "그룹",
     "pageAccessCatalog.prompts": "프롬프트",
     "pageAccessCatalog.generation": "생성",
-    "pageAccessCatalog.audio": "음향",
+    "pageAccessCatalog.audio": "오디오",
     "pageAccessCatalog.sprite": "스프라이트",
     "pageAccessCatalog.wildcards": "와일드카드",
     "pageAccessCatalog.wallpaper": "월페이퍼",

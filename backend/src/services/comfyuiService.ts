@@ -453,7 +453,7 @@ export class ComfyUIService {
    */
   async collectGeneratedOutputs(promptId: string, options?: WaitForCompletionOptions & { onlyFinalOutput?: boolean; audioOutputs?: boolean }): Promise<Array<CollectedComfyOutput & { tempPath: string }>> {
     const history = await this.waitForCompletion(promptId, 1800, 2000, options);
-    // Audio orders read the audio outputs only; every other job keeps the image/video collection as it was.
+    // Audio orders read the audio outputs only; every other job collects image/video outputs plus any sounds.
     const outputInfos = options?.audioOutputs
       ? extractComfyAudioOutputs(history, promptId)
       : extractComfyOutputInfo(history, promptId, options?.onlyFinalOutput ?? true);

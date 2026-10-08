@@ -46,7 +46,7 @@ export function AudioSettingsDialog({ open, onClose, canManage }: { open: boolea
     ['shortcuts', t({ ko: '단축키', en: 'Shortcuts' })],
   ]
   return (
-    <Modal open={open} title={t({ ko: '음향 설정', en: 'Audio settings' })} onClose={onClose} widthClassName="max-w-lg">
+    <Modal open={open} title={t({ ko: '오디오 설정', en: 'Audio settings' })} onClose={onClose} widthClassName="max-w-lg">
       <ModalBody className="space-y-4">
         <TextTabs value={tab} items={tabs} onChange={setTab} />
         {tab === 'workflows' ? <WorkflowTab /> : tab === 'export' ? <ExportTab /> : <ShortcutTab />}

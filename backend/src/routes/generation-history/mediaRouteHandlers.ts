@@ -1,5 +1,8 @@
-import type { Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
+import { GenerationHistoryService } from '../../services/generationHistoryService';
+import { audioResultsByQueueJob } from '../../services/audio/audioJobCandidates';
+import { sendAudioCandidateFile } from '../audioCandidateFileResponse';
 import { MediaMetadataFileQueries } from '../../models/Image/MediaMetadataFileQueries';
 import {
   getExistingActiveFilePathOrBlock,
@@ -70,6 +73,40 @@ export async function handleHistoryFile(req: Request, res: Response, id: string)
   }
 
   await streamCacheableFile(req, res, originalPath, mimeType);
+}
+
+/**
+ * Stream one sound of a history row's run through the history scope (owner check), so the generation page plays it
+ * without the audio workspace permission. The candidate must belong to the row's queue job.
+ */
+export async function handleHistoryAudio(req: Request, res: Response, next: NextFunction, id: string, candidateId: string) {
+  const historyId = parseInt(id, 10);
+  if (!Number.isInteger(historyId) || historyId <= 0) {
+    res.status(400).json({ success: false, error: 'Invalid generation history id' });
+    return;
+  }
+
+  const record = await GenerationHistoryService.getHistoryDetail(historyId);
+  if (!record) {
+    res.status(404).json({ success: false, error: 'Generation history not found' });
+    return;
+  }
+
+  if (!canAccessHistoryRecord(req, record)) {
+    res.status(403).json({ success: false, error: 'Not allowed to access this generation history item' });
+    return;
+  }
+
+  const queueJobId = record.queue_job_id;
+  const result = typeof queueJobId === 'number' ? audioResultsByQueueJob([queueJobId]).get(queueJobId)?.find((entry) => entry.id === candidateId) : undefined;
+  if (!result) {
+    res.status(404).json({ success: false, error: 'Generation history audio not found' });
+    return;
+  }
+
+  const { audioCandidateFile } = await import('../../services/audio/audioService');
+  const { candidate, file } = audioCandidateFile(result.id);
+  sendAudioCandidateFile(req, res, next, candidate, file);
 }
 
 export async function handleHistoryThumbnail(req: Request, res: Response, id: string) {

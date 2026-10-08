@@ -161,6 +161,18 @@ export interface GenerationHistoryRecord {
   positive_prompt?: string | null
   negative_prompt?: string | null
   actual_thumbnail_path?: string | null
+
+  /** Sounds a ComfyUI run saved, with or without a picture (audio workspace candidates of its queue job). */
+  audio_results?: GenerationHistoryAudioResult[]
+}
+
+export interface GenerationHistoryAudioResult {
+  id: string
+  name: string
+  file_hash: string
+  mime_type: string
+  duration: number | null
+  group_id: string
 }
 
 export interface WorkflowMarkedField {

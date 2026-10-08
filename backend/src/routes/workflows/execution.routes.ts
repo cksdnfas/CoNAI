@@ -9,7 +9,7 @@ import { asyncHandler } from '../../middleware/asyncHandler';
 import { runtimePaths, publicUrls } from '../../config/runtimePaths';
 import path from 'path';
 import fs from 'fs';
-import { GenerationHistoryService } from '../../services/generationHistoryService';
+import { GenerationHistoryService, attachHistoryAudioResults } from '../../services/generationHistoryService';
 import { BackgroundProcessorService } from '../../services/backgroundProcessorService';
 import type { GeneratedImageSaveOptions } from '../../utils/fileSaver';
 import { ComfyUIWorkflowParser } from '../../utils/comfyuiWorkflowParser';
@@ -270,7 +270,7 @@ router.get('/:id/history', asyncHandler(async (req: Request, res: Response) => {
   try {
     // API Generation History에서 조회
     const offset = (page - 1) * limit;
-    const histories = HistoryQueryRepository.findAllWithMetadata({ workflow_id: id, limit, offset });
+    const histories = attachHistoryAudioResults(HistoryQueryRepository.findAllWithMetadata({ workflow_id: id, limit, offset }));
     const total = HistoryQueryRepository.countListRecords({ workflow_id: id });
     const stats = HistoryQueryRepository.getWorkflowListStatistics(id);
 

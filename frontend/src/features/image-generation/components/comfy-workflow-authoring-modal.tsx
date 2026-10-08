@@ -219,7 +219,7 @@ export function ComfyWorkflowAuthoringModal({
                 onChange={(event) => setWorkflowKind(event.target.value === 'audio' ? 'audio' : 'image')}
               >
                 <option value="image">{t({ ko: '이미지', en: 'Image' })}</option>
-                <option value="audio">{t({ ko: '음향', en: 'Audio' })}</option>
+                <option value="audio">{t({ ko: '오디오', en: 'Audio' })}</option>
               </Select>
             </Field>
 

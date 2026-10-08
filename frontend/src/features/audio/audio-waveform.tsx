@@ -49,12 +49,12 @@ export function computePeaks(buffer: AudioBuffer, count = PEAK_COUNT): Float32Ar
   return peaks
 }
 
-/** Decode a take once per file hash. */
-export function loadPeaks(candidateId: string, fileHash: string): Promise<Float32Array> {
+/** Decode a take once per file hash. `src` overrides where the bytes come from (e.g. the owner-scoped history route). */
+export function loadPeaks(candidateId: string, fileHash: string, src?: string): Promise<Float32Array> {
   const cached = peakCache.get(fileHash)
   if (cached) return cached
   const promise = slot(async () => {
-    const response = await fetch(audioCandidateFileUrl(candidateId), { credentials: 'include' })
+    const response = await fetch(src ?? audioCandidateFileUrl(candidateId), { credentials: 'include' })
     if (!response.ok) throw new Error(`waveform ${response.status}`)
     const buffer = await context().decodeAudioData(await response.arrayBuffer())
     return computePeaks(buffer)
@@ -109,7 +109,7 @@ export function drawPeaks(canvas: HTMLCanvasElement, peaks: Float32Array | null,
 }
 
 /** Small waveform for list rows and chat cards; decodes when it scrolls into view. */
-export function WaveformThumb({ candidateId, fileHash, progress, ghost = false, className }: { candidateId: string; fileHash: string; progress?: number; ghost?: boolean; className?: string }) {
+export function WaveformThumb({ candidateId, fileHash, src, progress, ghost = false, className }: { candidateId: string; fileHash: string; src?: string; progress?: number; ghost?: boolean; className?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [peaks, setPeaks] = useState<Float32Array | null>(null)
   const [visible, setVisible] = useState(false)
@@ -130,9 +130,9 @@ export function WaveformThumb({ candidateId, fileHash, progress, ghost = false, 
   useEffect(() => {
     if (!visible || ghost) return
     let cancelled = false
-    loadPeaks(candidateId, fileHash).then((value) => { if (!cancelled) setPeaks(value) }).catch(() => undefined)
+    loadPeaks(candidateId, fileHash, src).then((value) => { if (!cancelled) setPeaks(value) }).catch(() => undefined)
     return () => { cancelled = true }
-  }, [visible, ghost, candidateId, fileHash])
+  }, [visible, ghost, candidateId, fileHash, src])
 
   useEffect(() => {
     const canvas = canvasRef.current

@@ -1,12 +1,13 @@
 import { useEffect, type KeyboardEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, History, ImageIcon, Maximize2 } from 'lucide-react'
+import { AudioLines, ChevronLeft, ChevronRight, History, ImageIcon, Maximize2 } from 'lucide-react'
 import { useHorizontalDragScroll } from '@/components/common/use-horizontal-drag-scroll'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Progress } from '@/components/ui/progress'
+import { DownloadSoundButton, HistoryAudioResult, HistorySoundBar, OpenSoundsInAudioTab } from '@/features/audio/history-audio-result'
 import { ImageDeleteAction } from '@/features/images/components/detail/image-delete-action'
 import { ImageGroupAssignAction } from '@/features/images/components/detail/image-group-assign-action'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
@@ -138,6 +139,9 @@ export function GenerationResultStage({
   const selectedId = selected ? String(selected.id) : null
   const isBlurred = selected ? shouldBlur?.(selected) ?? false : false
   const isVideo = selected ? getImageListMediaKind(selected) === 'video' : false
+  // Sounds instead of a picture take the stage; sounds beside a picture play from a row under it.
+  const sounds = selected?.audio?.length && !selected.composite_hash ? selected.audio : null
+  const extraSounds = selected?.audio?.length && selected.composite_hash ? selected.audio : null
 
   useEffect(() => {
     if (!selectedId || !stripRef.current) {
@@ -189,7 +193,14 @@ export function GenerationResultStage({
   }
 
   const historyId = typeof selected?.generation_history_id === 'number' ? selected.generation_history_id : null
-  const actions = selected ? (
+  // A sound-only run has no picture: the image actions (group, viewer, delete) do not apply.
+  const actions = selected && sounds ? (
+    <div className={cn('flex shrink-0 gap-1.5', compact ? 'flex-row flex-wrap justify-end' : 'flex-col')}>
+      {allowReuse && historyId !== null ? <GenerationHistoryReuseActions key={historyId} historyId={historyId} /> : null}
+      <DownloadSoundButton sound={sounds[0]} />
+      <OpenSoundsInAudioTab sounds={sounds} />
+    </div>
+  ) : selected ? (
     <div className={cn('flex shrink-0 gap-1.5', compact ? 'flex-row flex-wrap justify-end' : 'flex-col')}>
       {allowReuse ? <ImageGroupAssignAction key={`group-${selectedId}`} image={selected} /> : null}
       {allowReuse && historyId !== null ? <GenerationHistoryReuseActions key={historyId} historyId={historyId} /> : null}
@@ -212,7 +223,9 @@ export function GenerationResultStage({
           )}
         >
           {selected ? (
-            isVideo ? (
+            sounds ? (
+              <HistoryAudioResult key={selectedId} sounds={sounds} size="stage" />
+            ) : isVideo ? (
               <video
                 key={selectedId}
                 src={selected.image_url ?? undefined}
@@ -251,7 +264,13 @@ export function GenerationResultStage({
           {activeJob ? <StageJobProgress job={activeJob} jobCount={activeJobCount} nowMs={nowMs} inline /> : null}
         </div>
       ) : null}
-      {selected ? <StageMetaLine key={selectedId} image={selected} /> : null}
+      {extraSounds ? (
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="min-w-0 flex-1"><HistorySoundBar key={selectedId} sounds={extraSounds} /></div>
+          <OpenSoundsInAudioTab sounds={extraSounds} />
+        </div>
+      ) : null}
+      {selected && !sounds ? <StageMetaLine key={selectedId} image={selected} /> : null}
 
       {items.length > 0 ? (
         <div className="flex shrink-0 items-center gap-2">
@@ -292,14 +311,25 @@ export function GenerationResultStage({
                     isActive && 'opacity-100 ring-2 ring-primary ring-offset-2 ring-offset-background',
                   )}
                 >
-                  <img
-                    src={item.thumbnail_url ?? undefined}
-                    alt=""
-                    loading="lazy"
-                    draggable={false}
-                    className={cn('h-full w-auto max-w-none object-contain', shouldBlur?.(item) && 'blur-md')}
-                    style={item.width && item.height ? { aspectRatio: `${item.width} / ${item.height}` } : undefined}
-                  />
+                  {item.audio?.length && !item.composite_hash ? (
+                    <span className="flex aspect-square h-full items-center justify-center bg-surface-low text-muted-foreground">
+                      <AudioLines className="size-6" />
+                    </span>
+                  ) : (
+                    <img
+                      src={item.thumbnail_url ?? undefined}
+                      alt=""
+                      loading="lazy"
+                      draggable={false}
+                      className={cn('h-full w-auto max-w-none object-contain', shouldBlur?.(item) && 'blur-md')}
+                      style={item.width && item.height ? { aspectRatio: `${item.width} / ${item.height}` } : undefined}
+                    />
+                  )}
+                  {item.audio?.length && item.composite_hash ? (
+                    <span className="absolute right-1 bottom-1 rounded-sm bg-backdrop/70 p-0.5 text-white">
+                      <AudioLines className="size-3" />
+                    </span>
+                  ) : null}
                 </Button>
               )
             })}

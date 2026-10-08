@@ -24,7 +24,7 @@ export const CODEX_CHAT_GENERATION_TOOLS: readonly string[] = [
 const GENERATION_TOOL_SET = new Set(CODEX_CHAT_GENERATION_TOOLS);
 
 export function isCodexChatGenerationTool(tool: string): boolean {
-  return GENERATION_TOOL_SET.has(tool) || /^generate_image(_\d+)?$/.test(tool) || tool === 'generation_result';
+  return GENERATION_TOOL_SET.has(tool) || /^generate_image(_\d+)?$/.test(tool) || tool === 'generation_result' || tool === 'audio_generation_result';
 }
 
 /** Creation is distinct from reading another member's generation job. */

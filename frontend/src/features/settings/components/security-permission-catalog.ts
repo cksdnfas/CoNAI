@@ -18,7 +18,7 @@ const SECTION_LABELS: Record<CatalogSection, TranslationInput> = {
   prompts: { ko: '프롬프트', en: 'Prompts' },
   generation: { ko: '생성', en: 'Generation' },
   files: { ko: '파일 보관함', en: 'Files' },
-  audio: { ko: '음향', en: 'Audio' },
+  audio: { ko: '오디오', en: 'Audio' },
   chat: { ko: '채팅', en: 'Chat' },
   account: { ko: '계정', en: 'Account' },
 }

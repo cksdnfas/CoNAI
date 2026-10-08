@@ -59,7 +59,7 @@ router.post('/', (req, res) => {
     ? { uploadId: resolveLegacyUpload(uploadId).id }
     : { path: resolveLegacyPath(body.path) };
   const params: LegacyImportParams = { source, dryRun: body.dryRun !== false && body.dry_run !== false, accountId: getRequesterAccountId(req) };
-  return respondWithStartedJob(req, res, 'audio-legacy-import', params, '이전 음향 앱 가져오기가 이미 진행 중이야.');
+  return respondWithStartedJob(req, res, 'audio-legacy-import', params, '이전 오디오 앱 가져오기가 이미 진행 중이야.');
 });
 
 /** GET /workflows — workflows brought over by an import, with the generation-side workflow each was registered as. */

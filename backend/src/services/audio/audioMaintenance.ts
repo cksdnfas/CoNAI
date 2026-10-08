@@ -167,16 +167,17 @@ export async function purgeAudioTombstones(options: { retentionDays: number; now
 
 /* ------------------------------------------------------------------------------------------------ re-attach */
 
-function ensureRecoveredInbox(): string {
+/** The 받은 파일 group of the project called `name`, creating the project and/or its inbox when missing. */
+export function ensureNamedAudioProjectInbox(name: string): string {
   const existing = db().prepare(`SELECT g.id FROM audio_groups g JOIN audio_projects p ON p.id = g.project_id WHERE p.name = ? AND g.is_inbox = 1`)
-    .get(AUDIO_RECOVERED_PROJECT_NAME) as { id: string } | undefined;
+    .get(name) as { id: string } | undefined;
   if (existing) return existing.id;
   const at = new Date().toISOString();
-  const projectRow = db().prepare('SELECT id FROM audio_projects WHERE name = ?').get(AUDIO_RECOVERED_PROJECT_NAME) as { id: string } | undefined;
+  const projectRow = db().prepare('SELECT id FROM audio_projects WHERE name = ?').get(name) as { id: string } | undefined;
   const projectId = projectRow?.id ?? crypto.randomUUID();
   if (!projectRow) {
     db().prepare(`INSERT INTO audio_projects (id, name, description, created_by_account_id, created_at, updated_at) VALUES (?, ?, '', NULL, ?, ?)`)
-      .run(projectId, AUDIO_RECOVERED_PROJECT_NAME, at, at);
+      .run(projectId, name, at, at);
   }
   const groupId = crypto.randomUUID();
   db().prepare(`INSERT INTO audio_groups (id, project_id, name, label, description, is_inbox, created_at, updated_at) VALUES (?, ?, '받은 파일', NULL, '', 1, ?, ?)`)
@@ -191,7 +192,7 @@ function recoveryGroup(row: { group_id?: unknown; project_id?: unknown }): strin
     const inbox = db().prepare('SELECT id FROM audio_groups WHERE project_id = ? AND is_inbox = 1').get(row.project_id) as { id: string } | undefined;
     if (inbox) return inbox.id;
   }
-  return ensureRecoveredInbox();
+  return ensureNamedAudioProjectInbox(AUDIO_RECOVERED_PROJECT_NAME);
 }
 
 export interface AudioReattachResult {
@@ -256,7 +257,7 @@ export async function reattachAudioFile(filePath: string): Promise<AudioReattach
         row.job_id ?? null, sourceKey, row.created_by_account_id ?? null, row.created_at ?? at, at).changes;
     }
     if (rows.length === 0 && referenceCount(hash) === 0) {
-      created += insert.run(crypto.randomUUID(), ensureRecoveredInbox(), hash, null, 'imported', `복구 ${hash.slice(0, 12)}`, 'pending', '', null,
+      created += insert.run(crypto.randomUUID(), ensureNamedAudioProjectInbox(AUDIO_RECOVERED_PROJECT_NAME), hash, null, 'imported', `복구 ${hash.slice(0, 12)}`, 'pending', '', null,
         JSON.stringify({ source: 'recovered' }), null, null, null, null, at, at).changes;
     }
     db().prepare('DELETE FROM audio_purged_files WHERE hash = ?').run(hash);

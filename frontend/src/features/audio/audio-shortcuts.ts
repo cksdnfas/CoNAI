@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
-/** Review keys of the 음향 page (original SFX manager defaults). Stored per browser, like the original. */
+/** Review keys of the 오디오 page (original SFX manager defaults). Stored per browser, like the original. */
 export type AudioShortcutAction = 'next' | 'previous' | 'play' | 'select' | 'reject' | 'pending'
 
 export const AUDIO_SHORTCUT_ACTIONS: readonly AudioShortcutAction[] = ['next', 'previous', 'play', 'select', 'reject', 'pending']

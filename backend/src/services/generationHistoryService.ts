@@ -10,9 +10,24 @@ import type { AuthAccountType } from '../types/authAccount';
 import { APIImageProcessor } from './APIImageProcessor';
 import { BackgroundProcessorService } from './backgroundProcessorService';
 import { HistoryCommandService } from './historyCommandService';
+import { audioResultsByQueueJob } from './audio/audioJobCandidates';
 import type { GeneratedImageSaveOptions } from '../utils/fileSaver';
 
 const SLOW_GENERATION_POSTPROCESS_MS = 3000;
+
+/** ComfyUI runs may also (or only) have made sounds (audio store, keyed by the queue job): list them to play. */
+export function attachHistoryAudioResults(records: GenerationHistoryListRecord[]): GenerationHistoryListRecord[] {
+  const jobIds = records
+    .filter((record) => record.service_type === 'comfyui' && typeof record.queue_job_id === 'number')
+    .map((record) => record.queue_job_id as number);
+  if (jobIds.length === 0) return records;
+  const byJob = audioResultsByQueueJob(jobIds);
+  if (byJob.size === 0) return records;
+  return records.map((record) => {
+    const audio = record.queue_job_id != null ? byJob.get(record.queue_job_id) : undefined;
+    return audio?.length ? { ...record, audio_results: audio } : record;
+  });
+}
 
 function logSlowGenerationPostprocessStep(params: {
   stage: string;
@@ -269,7 +284,7 @@ export class GenerationHistoryService {
     offset?: number;
   }): Promise<{ records: GenerationHistoryListRecord[]; total: number }> {
     // Use JOIN query to get actual thumbnails and metadata
-    const records = HistoryQueryRepository.findAllWithMetadata(filters);
+    const records = attachHistoryAudioResults(HistoryQueryRepository.findAllWithMetadata(filters));
     const total = HistoryQueryRepository.countListRecords({
       service_type: filters?.service_type,
       generation_status: filters?.generation_status,
@@ -333,7 +348,7 @@ export class GenerationHistoryService {
     }
   ): Promise<{ records: GenerationHistoryListRecord[]; total: number }> {
     // Use JOIN query to get actual thumbnails and metadata
-    const records = HistoryQueryRepository.findAllWithMetadata({ ...filters, workflow_id: workflowId });
+    const records = attachHistoryAudioResults(HistoryQueryRepository.findAllWithMetadata({ ...filters, workflow_id: workflowId }));
     const total = HistoryQueryRepository.countListRecords({
       workflow_id: workflowId,
       generation_status: filters?.generation_status,

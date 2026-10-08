@@ -87,6 +87,10 @@ export function extractComfyOutputInfo(
       }
 
       files.forEach((file) => {
+        // Audio files in `files` (CoNAIArtifactFileOutput) are collected with the audio outputs below.
+        if (bucket === 'files' && isAudioFile(file)) {
+          return;
+        }
         allOutputs.push({
           ...file,
           nodeId,
@@ -96,18 +100,21 @@ export function extractComfyOutputInfo(
     }
   }
 
+  // Sounds never take part in the final-node pick: a graph saving an image and a sound keeps both.
+  const audioOutputs = extractComfyAudioOutputs(history, promptId);
+
   if (onlyFinalOutput && allOutputs.length > 0) {
     const maxNodeOrder = Math.max(...allOutputs.map((file) => parseNodeOrder(file.nodeId)));
     const finalOutputs = allOutputs.filter((file) => parseNodeOrder(file.nodeId) === maxNodeOrder);
     const uniqueFinalOutputs = deduplicateComfyOutputs(finalOutputs);
 
-    console.log(`📦 Found ${allOutputs.length} outputs, returning ${uniqueFinalOutputs.length} unique final output(s) from node #${maxNodeOrder}`);
-    return uniqueFinalOutputs;
+    console.log(`📦 Found ${allOutputs.length} outputs, returning ${uniqueFinalOutputs.length} unique final output(s) from node #${maxNodeOrder}${audioOutputs.length ? ` + ${audioOutputs.length} audio` : ''}`);
+    return [...uniqueFinalOutputs, ...audioOutputs];
   }
 
   const uniqueOutputs = deduplicateComfyOutputs(allOutputs);
-  console.log(`📦 Found ${allOutputs.length} outputs, returning ${uniqueOutputs.length} unique output(s)`);
-  return uniqueOutputs;
+  console.log(`📦 Found ${allOutputs.length} outputs, returning ${uniqueOutputs.length} unique output(s)${audioOutputs.length ? ` + ${audioOutputs.length} audio` : ''}`);
+  return [...uniqueOutputs, ...audioOutputs];
 }
 
 const AUDIO_OUTPUT_EXTENSIONS = new Set(['.flac', '.wav', '.mp3', '.ogg', '.opus', '.m4a', '.aac', '.weba']);
@@ -118,10 +125,10 @@ function isAudioFile(file: ComfyUIOutputFile): boolean {
 }
 
 /**
- * Audio outputs of one prompt, for audio orders only: SaveAudio* nodes report them in an `audio` bucket, and
- * CoNAIArtifactFileOutput in `files`. Every audio output of every node is returned (an audio graph rarely has more
- * than one save node); image/video outputs are ignored. Image workflows never call this, so their collection
- * (`extractComfyOutputInfo`) is unchanged.
+ * Audio outputs of one prompt: SaveAudio* nodes report them in an `audio` bucket, and CoNAIArtifactFileOutput in
+ * `files`. Every audio output of every node is returned (an audio graph rarely has more than one save node);
+ * image/video outputs are ignored. Audio orders read only these; `extractComfyOutputInfo` appends them after the
+ * image/video outputs.
  */
 export function extractComfyAudioOutputs(history: ComfyUIHistoryResponse, promptId: string): CollectedComfyOutput[] {
   const item = history[promptId];

@@ -55,7 +55,7 @@ const rootLabel = (root: SystemFolderRootId, t: Translate) => t(ROOTS.find((item
 function sourceLabel(source: string | null, t: Translate) {
   if (source === 'library') return t({ ko: '라이브러리', en: 'Library' })
   if (source === 'metadata-edit') return t({ ko: '메타데이터 편집', en: 'Metadata edit' })
-  if (source === 'audio') return t({ ko: '음향', en: 'Audio' })
+  if (source === 'audio') return t({ ko: '오디오', en: 'Audio' })
   if (source?.startsWith('workflow-')) return t({ ko: '워크플로 정리', en: 'Workflow cleanup' })
   return null
 }

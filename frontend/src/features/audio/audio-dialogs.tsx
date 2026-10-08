@@ -445,11 +445,11 @@ export function AudioOrderDialog({ open, group, onClose, onOrdered }: { open: bo
         <ModalBody className="space-y-4">
           <Field label={t({ ko: '워크플로', en: 'Workflow' })}>
             <Select value={workflowId ?? ''} onChange={(event) => setWorkflowId(Number(event.target.value))} disabled={bound.length === 0}>
-              {bound.length === 0 ? <option value="">{t({ ko: '연결된 음향 워크플로 없음', en: 'No linked audio workflow' })}</option> : null}
+              {bound.length === 0 ? <option value="">{t({ ko: '연결된 오디오 워크플로 없음', en: 'No linked audio workflow' })}</option> : null}
               {bound.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
             </Select>
           </Field>
-          {workflows.isSuccess && bound.length === 0 ? <p className="text-xs text-destructive">{t({ ko: '음향 설정 › 워크플로에서 먼저 연결해줘.', en: 'Link one under Audio settings › Workflows first.' })}</p> : null}
+          {workflows.isSuccess && bound.length === 0 ? <p className="text-xs text-destructive">{t({ ko: '오디오 설정 › 워크플로에서 먼저 연결해줘.', en: 'Link one under Audio settings › Workflows first.' })}</p> : null}
           <Field label={t({ ko: '프롬프트', en: 'Prompt' })}><Textarea rows={3} value={text} maxLength={8000} onChange={(event) => setText(event.target.value)} /></Field>
           <div className="grid grid-cols-3 gap-3">
             <Field label={t({ ko: '길이(초)', en: 'Seconds' })}><Input className="font-mono" type="number" step="0.1" min={0.1} max={secondsMax ?? undefined} value={seconds} onChange={(event) => setSeconds(event.target.value)} aria-invalid={secondsMax !== null && Number(seconds) > secondsMax} /></Field>

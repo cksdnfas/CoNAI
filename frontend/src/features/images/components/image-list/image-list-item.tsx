@@ -1,5 +1,6 @@
 import { memo, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useState } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
+import { HistoryAudioResult, HistorySoundBar } from '@/features/audio/history-audio-result'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
 import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/images/components/image-preview-state'
@@ -104,7 +105,10 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
     unavailable: t('images.components.image.preview.state.unavailable'),
   })
 
-  const content = previewUrl && !hasPreviewError ? (
+  const content = mediaKind === 'audio' && image.audio ? (
+    // A run that made sounds instead of a picture: play them in place.
+    <HistoryAudioResult sounds={image.audio} style={gridItemHeight || gridItemAspectRatio ? mediaFrameStyle : undefined} className="h-full" />
+  ) : previewUrl && !hasPreviewError ? (
     mediaKind === 'video' ? (
       // key: 가상화 레이아웃이 컴포넌트 인스턴스를 다른 미디어에 재활용해도 <video> DOM 이
       // 함께 재활용되어 이전 프레임이 남는 일이 없도록, 미디어 identity 로 서브트리를 교체한다.
@@ -139,6 +143,9 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       style={mediaFrameStyle}
     />
   )
+
+  // A run that made a picture and sounds: the sounds play from a bar over the picture.
+  const soundBar = mediaKind !== 'audio' && image.audio?.length ? <HistorySoundBar sounds={image.audio} floating /> : null
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!interactive) {
@@ -234,7 +241,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
         </div>
         {blurPreview ? <div className="pointer-events-none absolute inset-0 z-10 bg-backdrop/25" /> : null}
       </div>
-      {renderPersistentOverlay ? <div className="image-list-persistent-overlay absolute inset-x-0 bottom-0 z-30 p-2">{renderPersistentOverlay}</div> : null}
+      {renderPersistentOverlay || soundBar ? <div className="image-list-persistent-overlay absolute inset-x-0 bottom-0 z-30 space-y-1 p-2">{soundBar}{renderPersistentOverlay}</div> : null}
       {quickActions}
       {selectionControl}
       <div className="image-list-selection-frame pointer-events-none absolute inset-0 z-20 rounded-sm" />
