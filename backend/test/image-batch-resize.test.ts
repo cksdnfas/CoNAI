@@ -34,6 +34,10 @@ test('image batch resize: parity, job, permissions and MCP', { timeout: 240000 }
   const { shutdownSpriteWorker } = await import('../src/services/sprite/spriteWorkerClient')
   const { saveSpriteOutputToLibrary, findLibraryMedia } = await import('../src/services/sprite/spriteLibrary')
   const { GroupPathService } = await import('../src/services/groupPathService')
+  const { BackgroundQueueService } = await import('../src/services/backgroundQueue')
+  // Background metadata reads of the saved outputs would still hold them open at teardown on a loaded machine.
+  t.mock.method(BackgroundQueueService, 'addMetadataExtractionTask', () => {})
+  t.mock.method(BackgroundQueueService, 'addPromptCollectionTask', () => {})
   registerImageBatchResizeJobHandlers()
   t.after(async () => {
     await shutdownSpriteWorker()
@@ -87,7 +91,7 @@ test('image batch resize: parity, job, permissions and MCP', { timeout: 240000 }
   registerAppRoutes(app, { uploadsDir: path.join(root, 'uploads'), tempDir: path.join(root, 'temp'), saveDir: path.join(root, 'save'), mcpLimiter: pass, readOnlyLimiter: pass, uploadLimiter: pass })
   const server = http.createServer(app)
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-  t.after(() => new Promise<void>((resolve) => server.close(() => resolve())))
+  t.after(() => new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()) }))
   const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`
   const call = async (method: string, url: string, accountId: number | undefined, body?: unknown) => {
     const response = await fetch(origin + url, {
