@@ -51,7 +51,7 @@ export function isChatMcpSource(source: McpRequestContext['source']) {
  * Withheld from chat agents: a chat reply must not block on a generation job (Codex jobs can run for minutes).
  * The job is linked to the reply at submission and the app attaches the result when it lands.
  */
-export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'execute_graph_workflow', 'get_codex_generation_options', 'import_workflow_definition']);
+export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'wait_audio_order', 'execute_graph_workflow', 'get_codex_generation_options', 'import_workflow_definition']);
 /** A page grants a bounded input task; explicitly linked generation presets keep their independent grant. */
 export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'propose_page_changes', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes', 'read_page_data', 'propose_page_action']);
 
@@ -152,6 +152,12 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   move_audio_candidates: 'organize',
   import_audio: 'organize',
   set_audio_group_comment_status: 'organize',
+  list_audio_workflows: 'read',
+  get_audio_order: 'read',
+  order_audio: 'generate',
+  wait_audio_order: 'generate',
+  cancel_audio_order: 'generate',
+  retry_audio_order_job: 'generate',
   // Chat-only: HTTP keys never hold `configure` (admin chat accounts only), and propose_* only shows a card a person saves.
   get_chat_setup_guide: 'configure',
   list_chat_profiles: 'configure',

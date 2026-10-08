@@ -398,7 +398,7 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
     const audioTools = async (client: Awaited<ReturnType<typeof connect>>) => (await client.listTools()).tools.map((tool) => tool.name).filter((name) => name.includes('audio')).sort()
 
     const listener = await connect({ accountId: listenerId, accountType: 'guest' })
-    assert.deepEqual(await audioTools(listener), ['get_audio_candidate', 'list_audio_candidates', 'list_audio_group_comments', 'list_audio_groups', 'list_audio_projects'])
+    assert.deepEqual(await audioTools(listener), ['get_audio_candidate', 'get_audio_order', 'list_audio_candidates', 'list_audio_group_comments', 'list_audio_groups', 'list_audio_projects', 'list_audio_workflows', 'wait_audio_order'])
     assert.deepEqual(await audioTools(await connect({ accountId: imageOnlyId, accountType: 'guest' })), [])
     const admin = await connect({ accountId: adminId, accountType: 'admin' })
     const adminTools = await audioTools(admin)
