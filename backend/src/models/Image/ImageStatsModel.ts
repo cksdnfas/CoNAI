@@ -1,5 +1,11 @@
 import { db } from '../../database/init';
 import { AutoTagStats } from '../../types/autoTag';
+import {
+  AUTO_TAG_CHARACTER_JSON_PATHS,
+  buildAutoTagExistsForPaths,
+  buildAutoTagModelExpr,
+  buildAutoTagRatingExpr,
+} from '../../services/autoTagSqlShared';
 
 /**
  * 통계 관련 작업을 담당하는 이미지 모델 (새 구조 기반)
@@ -92,31 +98,35 @@ export class ImageStatsModel {
           THEN 1 ELSE 0 END), 0) as explicit
       FROM (
         SELECT
-          json_extract(auto_tags, '$.rating.general') as general,
-          json_extract(auto_tags, '$.rating.sensitive') as sensitive,
-          json_extract(auto_tags, '$.rating.questionable') as questionable,
-          json_extract(auto_tags, '$.rating.explicit') as explicit
-        FROM media_metadata
-        WHERE json_type(auto_tags, '$.rating') = 'object'
+          ${buildAutoTagRatingExpr('mm', 'general')} as general,
+          ${buildAutoTagRatingExpr('mm', 'sensitive')} as sensitive,
+          ${buildAutoTagRatingExpr('mm', 'questionable')} as questionable,
+          ${buildAutoTagRatingExpr('mm', 'explicit')} as explicit
+        FROM media_metadata mm
+        WHERE mm.auto_tags IS NOT NULL
       )
+      WHERE general IS NOT NULL
     `;
     const ratingRow = db.prepare(ratingQuery).get() as any;
 
-    // 3. Character 개수 조회
+    // 3. Character 개수 조회 (캐릭터가 하나라도 태깅된 이미지 수)
     const characterQuery = `
       SELECT COUNT(*) as character_count
-      FROM media_metadata
-      WHERE json_type(auto_tags, '$.character') = 'object'
+      FROM media_metadata mm
+      WHERE mm.auto_tags IS NOT NULL
+        AND ${buildAutoTagExistsForPaths('mm', AUTO_TAG_CHARACTER_JSON_PATHS, '1 = 1')}
     `;
     const characterRow = db.prepare(characterQuery).get() as any;
 
     // 4. Model 분포 조회
     const modelQuery = `
-      SELECT
-        json_extract(auto_tags, '$.model') as model,
-        COUNT(*) as count
-      FROM media_metadata
-      WHERE json_extract(auto_tags, '$.model') IS NOT NULL
+      SELECT model, COUNT(*) as count
+      FROM (
+        SELECT ${buildAutoTagModelExpr('mm')} as model
+        FROM media_metadata mm
+        WHERE mm.auto_tags IS NOT NULL
+      )
+      WHERE model IS NOT NULL
       GROUP BY model
       ORDER BY count DESC
     `;
