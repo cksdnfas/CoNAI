@@ -18,11 +18,11 @@ export function WatchedFolderListItem({ folder, watcherState, onOpenOptions }: W
     <ResourceRow
       leading={<Folder />}
       name={folder.folder_name || t('watchedFolderListItem.unnamedFolder')}
-      extra={folder.is_default === 1 ? <Chip size="sm" tone="muted">{t({ ko: '기본', en: 'Default' })}</Chip> : null}
-      meta={(
+      extra={(
         <>
+          {folder.is_default === 1 ? <Chip size="sm" tone="muted">{t({ ko: '기본', en: 'Default' })}</Chip> : null}
           <WatchProblem isActive={folder.is_active === 1} watcherEnabled={folder.watcher_enabled === 1} watcherState={watcherState} />
-          <span className="font-mono" title={folder.folder_path}>{folder.folder_path}</span>
+          <span className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={folder.folder_path}>{folder.folder_path}</span>
         </>
       )}
       onOpen={() => onOpenOptions(folder.id)}

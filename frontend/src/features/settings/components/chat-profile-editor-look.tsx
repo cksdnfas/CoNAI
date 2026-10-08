@@ -71,7 +71,7 @@ export function ChatProfileLookPanel({ draft, patch, defaults, backgroundUrl, bl
                 </ToggleChip>
               )
             })}
-            {blocks && blocks.length === 0 ? <span className="text-sm text-muted-foreground">{t({ ko: '설정 › 채팅에서 표시 블록을 먼저 만들어.', en: 'Make display blocks in settings › chat first.' })}</span> : null}
+            {blocks && blocks.length === 0 ? <span className="text-sm text-muted-foreground">{t({ ko: '아직 없어.', en: 'None yet.' })}</span> : null}
           </div>
         </CollapsibleRow>
       </div>

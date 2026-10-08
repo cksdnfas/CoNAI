@@ -39,7 +39,7 @@ function AccessEntryCard({ label, description, href, icon: Icon }: AccessEntryCa
         {description ? <Text as="div" variant="caption" className="truncate">{description}</Text> : null}
       </div>
 
-      <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden />
+      <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
     </Link>
   )
 }

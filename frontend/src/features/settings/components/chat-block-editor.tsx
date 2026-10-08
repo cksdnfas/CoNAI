@@ -172,10 +172,10 @@ function BlockPreview({ block }: { block: ChatDisplayBlock }) {
   return (
     <div className="space-y-2">
       <div className="rounded-md border border-dashed border-line px-3 py-1"><ChatDisplayBlockView block={block} data={data} /></div>
-      <div className="space-y-1 text-xs text-muted-foreground">
-        <span>{t({ ko: '모델에 가는 모양', en: 'Sent to the model' })}</span>
-        <pre className="whitespace-pre-wrap break-words font-mono">{`${block.key}: ${JSON.stringify(data)}\n말투: ${chatBlockToneText(block.fields, data) || '—'}`}</pre>
-      </div>
+      <details className="text-xs text-muted-foreground">
+        <summary className="cursor-pointer select-none">{t({ ko: '모델에 가는 모양', en: 'Sent to the model' })}</summary>
+        <pre className="mt-1 whitespace-pre-wrap break-words font-mono">{`${block.key}: ${JSON.stringify(data)}\n말투: ${chatBlockToneText(block.fields, data) || '—'}`}</pre>
+      </details>
     </div>
   )
 }
@@ -231,7 +231,7 @@ export function ChatBlockEditor({ block, onChange }: { block: ChatDisplayBlock; 
         <Input variant="settings" value={block.rules} maxLength={2000} onChange={(event) => update({ rules: event.target.value })} />
       </Field>
       <div className="border-t border-line">
-        <CollapsibleRow title={t({ ko: '디자인', en: 'Design' })} meta={designed ? null : t({ ko: '비우면 필드 목록으로 보여', en: 'Empty shows the fields as a list' })} defaultOpen={designed}>
+        <CollapsibleRow title={t({ ko: '디자인', en: 'Design' })} info={t({ ko: '비우면 필드 목록으로 보여.', en: 'Empty shows the fields as a list.' })} defaultOpen={designed}>
           <Field label={t({ ko: '한 줄 요약 (접힌 상태창)', en: 'One-line summary (folded panel)' })}>
             <Input variant="settings" value={block.summary} maxLength={300} className="font-mono" onChange={(event) => update({ summary: event.target.value })} />
           </Field>

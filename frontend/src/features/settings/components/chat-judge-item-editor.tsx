@@ -144,10 +144,8 @@ export function ChatJudgeItemRow({ item, open, onToggle, onChange, onRemove, tes
         {/* eslint-disable-next-line no-restricted-syntax -- a full-width disclosure row; Button would pad and centre it */}
         <button type="button" aria-expanded={open} onClick={onToggle} className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-sm py-2 text-left text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40">
           <ChevronRight className={cn('size-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
-          <span className={cn('shrink-0 font-medium', !item.enabled && 'text-muted-foreground')}>{item.name || t({ ko: '이름 없음', en: 'Untitled' })}</span>
-          <span className="min-w-0 truncate text-xs text-muted-foreground">{item.instructions}</span>
+          <span className={cn('min-w-0 truncate font-medium', !item.enabled && 'text-muted-foreground')}>{item.name || t({ ko: '이름 없음', en: 'Untitled' })}</span>
         </button>
-        <span className="shrink-0 text-xs text-muted-foreground">{before ? t({ ko: '답변 전', en: 'Before' }) : t({ ko: '답변 후', en: 'After' })}</span>
         {before ? (item.tools[0] ? <Chip size="sm" tone="muted" className="font-mono">{item.tools.length > 1 ? `${item.tools[0]} +${item.tools.length - 1}` : item.tools[0]}</Chip> : item.directive ? <Chip size="sm" tone="muted">{t({ ko: '지시문', en: 'Directive' })}</Chip> : null)
           : <Chip size="sm" tone="muted">{t({ ko: '후속', en: 'Follow-up' })}</Chip>}
         <Switch checked={item.enabled} onCheckedChange={(enabled) => onChange({ enabled })} aria-label={t({ ko: '켜기', en: 'Enabled' })} />

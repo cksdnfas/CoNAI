@@ -8,13 +8,13 @@ export function InstantApplyHint({ className }: { className?: string }) {
   const { t } = useI18n()
 
   return (
-    <Tip content={t({ ko: '여기서 바꾼 건 저장 버튼 없이 바로 반영돼.', en: 'Changes here take effect right away, without the save bar.' })}>
+    <Tip content={t({ ko: '즉시 적용: 저장 버튼 없이 바로 반영돼.', en: 'Applies instantly, without the save bar.' })}>
       <span
         tabIndex={0}
-        className={cn('inline-flex items-center gap-1 rounded-sm bg-surface-high px-2 py-0.5 text-2xs font-medium whitespace-nowrap text-muted-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40', className)}
+        aria-label={t({ ko: '즉시 적용', en: 'Applies instantly' })}
+        className={cn('inline-flex items-center rounded-sm p-0.5 text-muted-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40', className)}
       >
-        <Zap className="h-3 w-3" />
-        {t({ ko: '즉시 적용', en: 'Applies instantly' })}
+        <Zap className="h-3.5 w-3.5" />
       </span>
     </Tip>
   )

@@ -119,7 +119,7 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
                     </ToggleChip>
                   )
                 })}
-                {generationPresetsQuery.isSuccess && generationPresets.length === 0 ? <span className="text-sm text-muted-foreground">{t({ ko: 'NAI나 ComfyUI 생성 패널에서 "채팅 프리셋으로 저장"을 눌러 먼저 만들어.', en: 'Make one first with "Save as chat preset" in the NAI or ComfyUI panel.' })}</span> : null}
+                {generationPresetsQuery.isSuccess && generationPresets.length === 0 ? <span className="text-sm text-muted-foreground">{t({ ko: '아직 없어.', en: 'None yet.' })}</span> : null}
               </div>
               {presetGenerates ? (
                 <div className="flex flex-wrap gap-1.5 pt-2">

@@ -448,7 +448,6 @@ export function ChatFlagRows({ flags: allFlags, onEdit }: { flags: ChatFlag[]; o
           )}
           name={flag.name}
           extra={sharedMark(flag)}
-          meta={flag.content}
           onOpen={() => onEdit(flag)}
         />
       ))}
@@ -463,7 +462,6 @@ export function ChatFlagRows({ flags: allFlags, onEdit }: { flags: ChatFlag[]; o
           )}
           name={flag.name}
           extra={sharedMark(flag)}
-          meta={flag.content}
           trailing={<IconButton size="icon-sm" variant="ghost" disabled={restoreMutation.isPending} onClick={() => restoreMutation.mutate(flag.id)} label={t({ ko: '다시 보이기', en: 'Show again' })}><Eye /></IconButton>}
         />
       ))}

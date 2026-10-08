@@ -1,6 +1,7 @@
 import { RefreshCcw } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { FieldInfo } from '@/components/ui/field'
 import { useI18n } from '@/i18n'
 import type { AuthDatabaseInfoRecord } from '@/lib/api-auth'
 import { RowGroup } from '@/components/ui/row-group'
@@ -37,9 +38,7 @@ export function SecurityRecoveryCard({ databaseInfo, isError, isRetrying, onRetr
           <SettingRow label={t({ ko: '인증 DB', en: 'Auth DB' })} controlClassName="min-w-0 sm:max-w-md">
             <span className="break-all font-mono text-xs text-muted-foreground">{databaseInfo?.authDbPath ?? t({ ko: '불러오는 중…', en: 'Loading…' })}</span>
           </SettingRow>
-          <SettingRow label={t({ ko: '방법', en: 'Method' })} stacked>
-            <p className="text-xs leading-6 text-muted-foreground">{recoveryInstruction ?? t({ ko: '불러오는 중…', en: 'Loading…' })}</p>
-          </SettingRow>
+          <SettingRow label={<span className="flex items-center gap-1">{t({ ko: '방법', en: 'Method' })}{recoveryInstruction ? <FieldInfo>{recoveryInstruction}</FieldInfo> : null}</span>} />
         </>
       )}
     </RowGroup>

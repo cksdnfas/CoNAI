@@ -1,13 +1,14 @@
 import { useEffect, useId, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Box, LoaderCircle, Save, Star, Trash2, X } from 'lucide-react'
+import { Box, Link2, LoaderCircle, Save, Star, Trash2, X } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Chip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
-import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
+import { ResourceRow, ResourceRowStat, ResourceRowStatus } from '@/components/ui/resource-row'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
@@ -67,6 +68,7 @@ function describeProfiles(profiles: UsageProfile[], roleLabels: Record<ModelRole
 }
 
 /** Who uses a connection (models, profiles set on it directly) for its row's meta line; names in the tooltip. */
+/** Who uses a connection (models, profiles set on it directly): a link count with the names in its tooltip, or a "not used" status. */
 export function ConnectionUsage({ usage }: { usage?: ModelUsage['connections'][number] }) {
   const { t } = useI18n()
   const roleLabels = useRoleLabels()
@@ -76,39 +78,28 @@ export function ConnectionUsage({ usage }: { usage?: ModelUsage['connections'][n
     return <ResourceRowStatus>{t({ ko: '사용처 없음', en: 'Not used' })}</ResourceRowStatus>
   }
 
-  const label = [
-    slots.length > 0 ? t({ ko: '모델 {count}', en: 'Models {count}' }, { count: slots.length }) : null,
-    profiles.length > 0 ? t({ ko: '직접 {count}', en: 'Direct {count}' }, { count: profiles.length }) : null,
-  ].filter(Boolean).join(' · ')
   const tip = [
     slots.length > 0 ? `${t({ ko: '모델', en: 'Models' })}: ${slots.map((slot) => slot.name).join(', ')}` : null,
     profiles.length > 0 ? `${t({ ko: '직접', en: 'Direct' })}: ${describeProfiles(profiles, roleLabels, true)}` : null,
   ].filter(Boolean).join('\n')
 
-  return (
-    <Tip content={<span className="whitespace-pre-line">{tip}</span>}>
-      <span>{label}</span>
-    </Tip>
-  )
+  return <ResourceRowStat icon={Link2} tip={<span className="whitespace-pre-line">{tip}</span>}>{slots.length + profiles.length}</ResourceRowStat>
 }
 
+export function isConnectionUsed(usage?: ModelUsage['connections'][number]) {
+  return (usage?.slots ?? []).length + (usage?.directProfiles ?? []).length > 0
+}
+
+/** Who uses a model slot (profiles, workflow nodes), with the names in the tooltip. */
 function SlotUsage({ slot, workflowNodes }: { slot: ModelSlot; workflowNodes: number }) {
   const { t } = useI18n()
   const roleLabels = useRoleLabels()
-  if (slot.profiles.length === 0 && workflowNodes === 0) {
-    return <ResourceRowStatus>{t({ ko: '사용처 없음', en: 'Not used' })}</ResourceRowStatus>
-  }
+  const tip = [
+    slot.profiles.length > 0 ? describeProfiles(slot.profiles, roleLabels, true) : null,
+    workflowNodes > 0 ? t({ ko: '워크플로 노드 {count}', en: '{count} workflow nodes' }, { count: workflowNodes }) : null,
+  ].filter(Boolean).join('\n')
 
-  const label = [
-    t({ ko: '프로필 {count}', en: 'Profiles {count}' }, { count: slot.profiles.length }),
-    workflowNodes > 0 ? t({ ko: '워크플로 {count}', en: 'Workflows {count}' }, { count: workflowNodes }) : null,
-  ].filter(Boolean).join(' · ')
-
-  return (
-    <Tip content={slot.profiles.length > 0 ? describeProfiles(slot.profiles, roleLabels, true) : null}>
-      <span>{label}</span>
-    </Tip>
-  )
+  return <ResourceRowStat icon={Link2} tip={<span className="whitespace-pre-line">{tip}</span>}>{slot.profiles.length + workflowNodes}</ResourceRowStat>
 }
 
 export function ModelSlotListItem({
@@ -128,20 +119,21 @@ export function ModelSlotListItem({
 }) {
   const { t } = useI18n()
   const providerLabel = providers.find((provider) => provider.provider_name === slot.providerName)?.display_name || slot.providerName
+  const used = slot.profiles.length > 0 || workflowNodes > 0
 
   return (
     <ResourceRow
       leading={<Box />}
       name={slot.name}
-      meta={(
+      extra={(
         <>
-          {providerLabel}
-          {' · '}
-          <span className="font-mono" title={slot.model}>{slot.model}</span>
-          {' · '}
-          <SlotUsage slot={slot} workflowNodes={workflowNodes} />
+          <Tip content={providerLabel}>
+            <span className="min-w-0"><Chip size="sm" tone="muted" className="max-w-56 font-mono"><span className="truncate">{slot.model}</span></Chip></span>
+          </Tip>
+          {used ? null : <ResourceRowStatus>{t({ ko: '사용처 없음', en: 'Not used' })}</ResourceRowStatus>}
         </>
       )}
+      aside={used ? <SlotUsage slot={slot} workflowNodes={workflowNodes} /> : null}
       trailing={(
         <IconButton
           size="icon-sm"

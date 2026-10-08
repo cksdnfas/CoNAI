@@ -348,11 +348,10 @@ export function ChatProfileMediaRow({ draft, patch, localize, lastTextarea, open
             : <img src={thumbOf(current)} alt="" referrerPolicy="no-referrer" className="size-full object-cover" />}
         </div>
         <div className="min-w-0">
-          <div className="truncate font-mono text-xs" title={source ?? current.link}>{shownLink}</div>
+          <div className="truncate font-mono text-xs" title={[source ?? current.link, info?.finalUrl ? `→ ${info.finalUrl}` : null].filter(Boolean).join('\n')}>{shownLink}</div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
             {status}
             {facts && state !== 'fail' ? <span className="tabular-nums">{facts}</span> : null}
-            {info?.finalUrl ? <span className="truncate font-mono" title={info.finalUrl}>→ {info.finalUrl}</span> : null}
             {current.usedIn.map((label) => <span key={label} className="rounded-xs bg-fill px-1.5 text-2xs">{label}</span>)}
           </div>
         </div>

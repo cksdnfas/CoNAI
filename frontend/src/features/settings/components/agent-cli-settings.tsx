@@ -11,6 +11,7 @@ import { RowGroup } from '@/components/ui/row-group'
 import { SettingRow } from '@/components/ui/setting-row'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { CodexDeviceLoginDialog } from '@/features/image-generation/components/codex-device-login-dialog'
 import { getCodexCliVersion, updateCodexCli } from '@/lib/api-image-generation-queue'
@@ -43,7 +44,7 @@ function ClaudeLoginDialog({ open, onClose, onSucceeded }: { open: boolean; onCl
     <ModalBody>
       <div className="space-y-4">
         {state?.status === 'pending' && state.verificationUrl ? <>
-          <p className="text-sm text-muted-foreground">{t({ ko: '인증 페이지에서 로그인해줘. 인증 코드가 표시되면 아래에 붙여넣어줘.', en: 'Sign in on the authentication page. If it shows an authorization code, paste it below.' })}</p>
+          <p className="text-sm text-muted-foreground">{t({ ko: '로그인하고 코드가 나오면 붙여넣어.', en: 'Sign in, then paste the code if one shows.' })}</p>
           <Button asChild><a href={state.verificationUrl} target="_blank" rel="noopener noreferrer">{t({ ko: '인증 페이지 열기', en: 'Open authentication page' })}</a></Button>
           <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); if (code.trim()) submit.mutate(code.trim()) }}>
             <Input type="password" value={code} onChange={(event) => setCode(event.target.value)} autoComplete="off" aria-label={t({ ko: '인증 코드', en: 'Authorization code' })} placeholder={t({ ko: '인증 코드', en: 'Authorization code' })} />
@@ -95,8 +96,9 @@ function AgentCliRow({ agent }: { agent: AgentCliName }) {
   const stateLabel = status.isPending ? t({ ko: '확인 중', en: 'Checking' }) : status.isError ? t({ ko: '확인 실패', en: 'Check failed' }) : !status.data?.installed ? t({ ko: '미설치', en: 'Not installed' }) : status.data.authenticated ? t({ ko: '인증됨', en: 'Authenticated' }) : t({ ko: '로그인 필요', en: 'Sign-in required' })
   return <>
     <SettingRow label={name} description={<>
-      <span>{stateLabel}{info?.current ? ` · v${info.current}` : ''}{status.data?.authMethod ? ` · ${status.data.authMethod}` : ''}</span>
-      {info?.latest ? <span>{t({ ko: ' · 최신 {version}', en: ' · latest {version}' }, { version: info.latest })}</span> : null}
+      <Tip content={[info?.current ? `v${info.current}` : null, status.data?.authMethod ?? null, info?.latest ? t({ ko: '최신 {version}', en: 'latest {version}' }, { version: info.latest }) : null].filter(Boolean).join(' · ')}>
+        <span>{stateLabel}</span>
+      </Tip>
       {(status.error || version.error || status.data?.message || info?.message) ? <p className="text-destructive">{status.error instanceof Error ? status.error.message : version.error instanceof Error ? version.error.message : status.data?.message ?? info?.message}</p> : null}
     </>}>
       <IconButton variant="ghost" size="icon-sm" disabled={busy || refresh.isPending} label={t({ ko: '{name} 상태 새로고침', en: 'Refresh {name} status' }, { name })} onClick={() => refresh.mutate()}><RefreshCw className={refresh.isPending ? 'animate-spin' : undefined} /></IconButton>

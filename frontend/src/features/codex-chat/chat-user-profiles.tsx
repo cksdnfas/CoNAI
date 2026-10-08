@@ -176,7 +176,6 @@ export function ChatUserProfileRows({ profiles, onEdit }: { profiles: ChatUserPr
           key={profile.id}
           leading={<ChatUserProfileAvatar profile={profile} size="md" />}
           name={profile.name}
-          meta={profile.persona || undefined}
           trailing={(
             <IconButton size="icon-sm" variant="ghost" active={profile.isDefault} disabled={defaultMutation.isPending} onClick={() => defaultMutation.mutate(profile)} label={t({ ko: '새 채팅 기본', en: 'Default for new chats' })}>
               <Star className={cn(profile.isDefault && 'fill-current')} />
@@ -239,7 +238,6 @@ export function ChatUserProfilePickModal({ open, profiles, onPick, onClose }: {
               <ChatUserProfileAvatar profile={profile} size="md" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold">{profile.name}</span>
-                {profile.persona ? <span className="block truncate text-xs text-muted-foreground">{profile.persona}</span> : null}
               </span>
             </button>
           </ListRow>

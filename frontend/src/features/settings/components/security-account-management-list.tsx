@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { User } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Chip } from '@/components/ui/chip'
-import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
+import { ResourceRow, ResourceRowStat, ResourceRowStatus } from '@/components/ui/resource-row'
 import { useI18n } from '@/i18n'
 import type { AuthAccountListItem, PermissionGroupListItem } from '@/lib/api-auth'
 import { SecurityAccountEditorModal } from './security-account-editor-modal'
@@ -27,6 +27,13 @@ interface SecurityAccountManagementListProps {
   onAccountGroupChange: (accountId: number, groupKey: 'admin' | 'guest') => Promise<boolean>
   onAccountPasswordChange: (accountId: number, password: string) => Promise<boolean>
   onAccountDelete: (accountId: number) => Promise<boolean>
+}
+
+/** MM.DD of a timestamp, for the row's last-login stat. */
+function shortDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return `${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`
 }
 
 /** Shared searchable account list; a row opens the account editor (group, password, delete). */
@@ -89,16 +96,14 @@ export function SecurityAccountManagementList({
                   </Badge>
                 ))}
                 {account.syncedLegacyAdmin ? <Chip size="sm" tone="muted">{t({ ko: '레거시', en: 'Legacy' })}</Chip> : null}
+                {account.status !== 'active' ? <ResourceRowStatus>{getAccountStatusLabel(language, account.status)}</ResourceRowStatus> : null}
               </>
             )}
-            meta={(
-              <>
-                {account.status !== 'active' ? <><ResourceRowStatus>{getAccountStatusLabel(language, account.status)}</ResourceRowStatus>{' · '}</> : null}
-                {account.lastLoginAt
-                  ? t({ ko: '최근 로그인 {value}', en: 'Last login {value}' }, { value: formatDateTime(account.lastLoginAt) })
-                  : t({ ko: '로그인 기록 없음', en: 'No login history' })}
-              </>
-            )}
+            aside={account.lastLoginAt ? (
+              <ResourceRowStat tip={t({ ko: '최근 로그인 {value}', en: 'Last login {value}' }, { value: formatDateTime(account.lastLoginAt) })}>
+                {shortDate(account.lastLoginAt)}
+              </ResourceRowStat>
+            ) : null}
             trailing={renderExtraActions?.(account)}
             onOpen={() => setSelectedAccountId(account.id)}
           />

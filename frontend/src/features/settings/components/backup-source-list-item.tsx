@@ -19,14 +19,12 @@ export function BackupSourceListItem({ source, onOpenOptions }: BackupSourceList
       leading={<Archive />}
       name={source.display_name || t('backupSourceListItem.unnamedBackupSource')}
       extra={(
-        <Chip size="sm" tone="muted">
-          {source.import_mode === 'convert_webp' ? t({ ko: 'WebP 변환', en: 'WebP' }) : t({ ko: '원본 복사', en: 'Original' })}
-        </Chip>
-      )}
-      meta={(
         <>
+          <Chip size="sm" tone="muted">
+            {source.import_mode === 'convert_webp' ? t({ ko: 'WebP 변환', en: 'WebP' }) : t({ ko: '원본 복사', en: 'Original' })}
+          </Chip>
           <WatchProblem isActive={source.is_active === 1} watcherEnabled={source.watcher_enabled === 1} watcherState={source.watcher_status} />
-          <span className="font-mono" title={route}>{route}</span>
+          <span className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={route}>{route}</span>
         </>
       )}
       onOpen={() => onOpenOptions(source.id)}

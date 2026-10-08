@@ -160,7 +160,6 @@ export function SecurityPermissionGroupEditorModal({
                   value={draft.description}
                   disabled={isBusy}
                   onChange={(event) => onDraftChange({ description: event.target.value })}
-                  placeholder={t({ ko: '필요하면만 적어', en: 'Add this only if needed' })}
                 />
               </Field>
             </>

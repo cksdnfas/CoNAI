@@ -58,8 +58,8 @@ export function ChatGenerationPresetSaveModal({ open, build, summary, onClose }:
         <Field label={t({ ko: '이름', en: 'Name' })}>
           <Input variant="settings" value={name} maxLength={80} autoFocus onChange={(event) => setName(event.target.value)} />
         </Field>
-        <Field label={t({ ko: '용도 (모델에게 보여줌)', en: 'Purpose (shown to the model)' })} info={t({ ko: '예: 캐릭터 전신 일러스트', en: 'e.g. full-body character art' })}>
-          <Input variant="settings" value={instruction} maxLength={400} onChange={(event) => setInstruction(event.target.value)} />
+        <Field label={t({ ko: '용도 (모델에게 보여줌)', en: 'Purpose (shown to the model)' })}>
+          <Input variant="settings" value={instruction} maxLength={400} placeholder={t({ ko: '캐릭터 전신 일러스트', en: 'Full-body character art' })} onChange={(event) => setInstruction(event.target.value)} />
         </Field>
       </ModalBody>
       <ModalFooter>
