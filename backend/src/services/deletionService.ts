@@ -49,7 +49,7 @@ export class DeletionService {
     }
 
     try {
-      return await recycleBinDeleteFile(absolutePath, useRecycleBin);
+      return await recycleBinDeleteFile(absolutePath, useRecycleBin, 'library');
     } catch (error) {
       console.error(`❌ Failed to delete file: ${absolutePath}`, error);
       throw error;
