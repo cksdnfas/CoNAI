@@ -3,7 +3,7 @@ import { CHAT_ROOM_TOOLS } from '../../mcp/context'
 import { FileStoreService, fileOwnerKey } from '../fileStoreService'
 import { backupDateOf, backupFileName } from './chatBackup'
 import { contextHash, legacyContextMeta, limitContextMeta, metadataOnly, type ContextSource } from './chatContextDiagnostics'
-import { narrowDiagnosticsScope, resolveChatAccess, resolveChatProfileToolGrant, type ChatDiagnosticsScope } from './codexChatAccess'
+import { diagnosticsScopeForProfile, resolveChatAccess, resolveChatProfileToolGrant, type ChatDiagnosticsScope } from './codexChatAccess'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
 import { ChatSummaryStore } from './chatMemory'
@@ -28,7 +28,7 @@ function profileOf(thread: CodexChatThreadRecord, message: CodexChatMessageRecor
 }
 
 function scopeFor(accountId: number | null, profile: ChatProfile | null): ChatDiagnosticsScope {
-  return narrowDiagnosticsScope(resolveChatAccess(accountId).diagnostics, profile ? profile.diagnosticsScope : 'view')
+  return diagnosticsScopeForProfile(resolveChatAccess(accountId).diagnostics, profile !== null)
 }
 
 function parseMeta(value: string | null | undefined): ChatContextMeta | null {
@@ -47,7 +47,7 @@ export function visibleContextMessages(thread: CodexChatThreadRecord, messages: 
     let scope = scopes.get(profileId)
     if (scope === undefined) {
       const profile = profileId ? ChatProfileStore.find(profileId) : null
-      scope = narrowDiagnosticsScope(accessScope, profile ? profile.diagnosticsScope : 'view')
+      scope = diagnosticsScopeForProfile(accessScope, profile !== null)
       scopes.set(profileId, scope)
     }
     const filter = (value: string | null | undefined) => {

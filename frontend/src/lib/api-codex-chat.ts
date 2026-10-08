@@ -546,7 +546,6 @@ export interface ChatProfile extends ChatProfileAssetFields {
   loreDepth: number
   /** Default author's note for the profile's chats (a chat can set its own). */
   authorNote: string
-  diagnosticsScope: 'view' | 'content' | null
   tagline: string
   id: number
   name: string

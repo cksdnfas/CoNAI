@@ -43,7 +43,7 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
   const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
   const { AuthAccount } = await import('../src/models/AuthAccount')
   const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
-  const { diagnosticsScopeOf } = await import('../src/services/codex-chat/codexChatAccess')
+  const { diagnosticsScopeOf, diagnosticsScopeForProfile } = await import('../src/services/codex-chat/codexChatAccess')
   const ADMIN_MARKER = 'test:admin'
   const diagnosticKeys = ['chat.diagnostics.view', ADMIN_MARKER]
   let grants = [...diagnosticKeys]
@@ -115,6 +115,8 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
     assert.equal(diagnosticsScopeOf([], false), 'none')
     assert.equal(diagnosticsScopeOf(['chat.diagnostics.view'], false), 'content')
     assert.equal(diagnosticsScopeOf([], true), 'prompts')
+    assert.equal(diagnosticsScopeForProfile('prompts', false), 'view', 'a deleted profile shows composition only')
+    assert.equal(diagnosticsScopeForProfile('none', false), 'none')
     updateChatSettings({ diagnostics: { captureRaw: true } })
     saveChatRequestCapture(answerId, '{"messages":[{"content":"ADMIN_RAW_PRIVATE"}]}')
     for (const [keys, expected] of [[diagnosticKeys.slice(0, 1), 'content'], [diagnosticKeys, 'prompts']] as const) {
@@ -192,7 +194,7 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
   })
 
   await t.test('thread metadata resolves account grants once and each profile once per batch', async (s) => {
-    const other = ChatProfileStore.create({ name: '범위 캐시', engine: 'llm', providerName: 'test', model: 'm', diagnosticsScope: 'view' })
+    const other = ChatProfileStore.create({ name: '범위 캐시', engine: 'llm', providerName: 'test', model: 'm' })
     const accountLookup = AuthAccount.findById
     const permissionLookup = AuthAccessControlService.resolveForAccountId
     const profileLookup = ChatProfileStore.find
@@ -213,8 +215,8 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
     assert.equal(JSON.parse(visible[0].context_meta!).version, 2)
     assert.equal(JSON.parse(visible.at(-1)!.context_meta!).version, 2)
     assert.equal(JSON.parse(visible[0].context_meta!).scope, 'prompts')
-    assert.equal(JSON.parse(visible[1].context_meta!).scope, 'view')
-    assert.ok(visible[1].alternatives.every((variant) => !variant.context_meta || JSON.parse(variant.context_meta).scope === 'view'))
+    assert.equal(JSON.parse(visible[1].context_meta!).scope, 'prompts', 'every profile follows the account grant')
+    assert.ok(visible[1].alternatives.every((variant) => !variant.context_meta || JSON.parse(variant.context_meta).scope === 'prompts'))
     assert.equal(JSON.parse(original.context_meta!).scope, undefined, 'scope belongs to the response, not stored history')
     grants = []
     const revoked = visibleContextMessages(grouped, messages, requester.accountId)
@@ -270,16 +272,8 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
     }
   })
 
-  await t.test('profile restrictions narrow grants; edited current sources are marked and deleted ones unavailable', async () => {
+  await t.test('edited current sources are marked and deleted ones unavailable', async () => {
     grants = [...diagnosticKeys]
-    assert.throws(() => ChatProfileStore.update(profile.id, { diagnosticsScope: 'prompts' as never }), /범위/)
-    for (const scope of ['view', 'content'] as const) {
-      ChatProfileStore.update(profile.id, { diagnosticsScope: scope })
-      const result = await getChatDiagnostics(requester, threadId, answerId)
-      assert.equal(result.scope, scope)
-      assert.ok(!JSON.stringify(result).includes('ADMIN_SYSTEM_PRIVATE'))
-    }
-    ChatProfileStore.update(profile.id, { diagnosticsScope: null })
     ChatLorebookStore.update(global.id, { entries: [{ id: 'world', title: '바다', keys: ['바다'], content: '고친 글로벌 본문' }] })
     let result = await getChatDiagnostics(requester, threadId, answerId)
     assert.equal(result.texts?.find((source) => source.kind === 'lore' && source.entryId === 'world')?.changedSince, true)

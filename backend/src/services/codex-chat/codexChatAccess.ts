@@ -24,9 +24,9 @@ export function diagnosticsScopeOf(permissionKeys: readonly string[], isAdmin: b
   return permissionKeys.includes('chat.diagnostics.view') ? 'content' : 'none'
 }
 
-export function narrowDiagnosticsScope(scope: ChatDiagnosticsScope, profileScope: 'view' | 'content' | null | undefined): ChatDiagnosticsScope {
-  if (scope === 'none' || scope === 'view' || !profileScope) return scope
-  return profileScope === 'view' ? 'view' : 'content'
+/** A reply whose profile was deleted shows only its composition: its texts can no longer be traced to a source. */
+export function diagnosticsScopeForProfile(scope: ChatDiagnosticsScope, profileExists: boolean): ChatDiagnosticsScope {
+  return profileExists || scope === 'none' ? scope : 'view'
 }
 
 export const CHAT_PERMISSION_KEYS = {

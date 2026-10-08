@@ -84,7 +84,6 @@ export type ChatProfile = {
   loreDepth: number
   /** Default author's note: scene direction every chat of this profile gets at `loreDepth` unless the chat sets its own. */
   authorNote: string
-  diagnosticsScope: 'view' | 'content' | null
   /** Small data URL (resized in the browser). */
   avatar: string | null
   appearance: string
@@ -196,7 +195,6 @@ type ProfileRow = {
   lore_token_budget: number
   lore_depth: number | null
   author_note: string | null
-  diagnostics_scope: 'view' | 'content' | null
   avatar: string | null
   appearance: string | null
   reference_hash: string | null
@@ -345,7 +343,6 @@ function toProfile(row: ProfileRow): ChatProfile {
     loreTokenBudget: row.lore_token_budget ?? CHAT_PROFILE_DEFAULTS.loreTokenBudget,
     loreDepth: row.lore_depth ?? CHAT_PROFILE_DEFAULTS.loreDepth,
     authorNote: row.author_note ?? '',
-    diagnosticsScope: row.diagnostics_scope ?? null,
     avatar: row.avatar,
     appearance: row.appearance ?? '',
     referenceHash: row.reference_hash ?? null,
@@ -450,9 +447,6 @@ function normalizeAllowedGroupKeys(value: unknown): string[] {
 }
 
 function toColumns(input: ChatProfileInput) {
-  if (input.diagnosticsScope != null && input.diagnosticsScope !== 'view' && input.diagnosticsScope !== 'content') {
-    throw new ChatProfileError('진단 범위가 올바르지 않아.')
-  }
   const name = text(input.name, NAME_MAX_LENGTH)
   if (!name) {
     throw new ChatProfileError('프로필 이름이 필요해.')
@@ -493,7 +487,6 @@ function toColumns(input: ChatProfileInput) {
 
   return {
     name,
-    diagnostics_scope: input.diagnosticsScope ?? null,
     tagline: text(input.tagline, 200),
     lorebook_ids: JSON.stringify(ChatLorebookStore.existing(normalizeLorebookIds(input.lorebookIds))),
     block_ids: JSON.stringify(ChatSharedBlockStore.existing(normalizeBlockIds(input.blockIds))),
