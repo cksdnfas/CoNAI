@@ -19,7 +19,6 @@ import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
 import { pageAction } from '@/features/codex-chat/page-action-helpers'
 import { wildcardChatInput, wildcardChatSchema } from './use-wildcard-chat-page'
-import { CodexChatHeaderButton } from '@/features/codex-chat/codex-chat-shell'
 
 export interface WildcardEditorModalInput {
   name: string
@@ -678,7 +677,6 @@ export function WildcardEditorModal({
   return (
     <Modal
       sidePanelInset="var(--chat-dock-width, 0px)"
-      headerContent={<CodexChatHeaderButton />}
       open={open}
       onClose={onClose}
       title={mode === 'create'

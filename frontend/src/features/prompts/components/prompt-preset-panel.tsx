@@ -4,7 +4,6 @@ import { usePresetChatPage, presetChatInput, presetChatSchema } from '../use-pre
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction } from '@/features/codex-chat/page-action-helpers'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
-import { CodexChatHeaderButton } from '@/features/codex-chat/codex-chat-shell'
 import { Copy, Pencil, Plus, Trash2 } from 'lucide-react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
@@ -161,7 +160,7 @@ function PromptPresetEditorModal({
   }
 
   return (
-    <Modal open={open} sidePanelInset="var(--chat-dock-width, 0px)" headerContent={<CodexChatHeaderButton />} title={mode === 'create' ? t('prompts.components.prompt.preset.panel.add.preset') : t('prompts.components.prompt.preset.panel.edit.preset')} widthClassName="max-w-5xl" onClose={onClose}>
+    <Modal open={open} sidePanelInset="var(--chat-dock-width, 0px)" title={mode === 'create' ? t('prompts.components.prompt.preset.panel.add.preset') : t('prompts.components.prompt.preset.panel.edit.preset')} widthClassName="max-w-5xl" onClose={onClose}>
       <form onSubmit={(event) => void handleSubmit(event)}>
         <ModalBody className="space-y-5">
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_18rem]">
