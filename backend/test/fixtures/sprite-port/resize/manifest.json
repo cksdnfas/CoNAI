@@ -1,0 +1,41 @@
+{
+  "pillow": "12.3.0",
+  "cases": [
+    {
+      "case": "gradient_rgba",
+      "input": "inputs/gradient_rgba.png",
+      "input_size": [
+        40,
+        30
+      ],
+      "width": 20,
+      "height": 15,
+      "expected": "expected/gradient_rgba_20x15.png",
+      "expected_rgba_sha256": "24555624237d5a74fa4540c168398eb4c35b7bd0af51e9df919dcbf550ac084b"
+    },
+    {
+      "case": "checker_opaque",
+      "input": "inputs/checker_opaque.png",
+      "input_size": [
+        33,
+        21
+      ],
+      "width": 50,
+      "height": 50,
+      "expected": "expected/checker_opaque_50x50.png",
+      "expected_rgba_sha256": "f866fc3064b7f994bae795d9957d93e0ac25e50b118afa1e646cd70372b71735"
+    },
+    {
+      "case": "sprite_alpha",
+      "input": "inputs/sprite_alpha.png",
+      "input_size": [
+        48,
+        48
+      ],
+      "width": 24,
+      "height": 36,
+      "expected": "expected/sprite_alpha_24x36.png",
+      "expected_rgba_sha256": "b612aaac70e71df2fbc589e1dae355a40aeac7df998188051774f21d5ff56e72"
+    }
+  ]
+}

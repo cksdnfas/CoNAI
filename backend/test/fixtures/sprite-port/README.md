@@ -42,3 +42,16 @@ npx tsx test/fixtures/sprite-port/generate.ts --inputs  # also re-encode orange.
 ```
 
 Re-inspect the sheets before committing regenerated files.
+
+## `resize/`: batch resize parity (from the ORIGINAL app)
+
+Unlike the despill sheets above, these ARE original outputs. `resize/generate_resize.py`, run with the original
+`video-sprite-extractor` venv (Pillow 12.3.0), writes three synthetic inputs and resizes them with the original
+`app.image_resize._resize_image_bytes` (LANCZOS, PNG): a downscale with a colour + alpha gradient, a non-uniform
+upscale of an opaque checker, and a non-uniform resize of an anti-aliased disc on full transparency.
+`resize/manifest.json` stores each case and the SHA-256 of the decoded straight RGBA output.
+
+The port (`services/imageBatchResize/pillowResample.ts`) reproduces Pillow's resampler, so the test requires an
+exact match (difference 0). For reference, sharp's `resize(kernel: 'lanczos3')` was measured against the same cases:
+downscales stayed within 5/255 premultiplied, but the upscale differed by up to 119/255 (mean 26), because sharp
+upsamples with an interpolator and different pixel alignment. That is why the resampler was ported.
