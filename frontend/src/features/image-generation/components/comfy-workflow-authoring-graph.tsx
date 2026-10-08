@@ -43,9 +43,13 @@ export type AuthoringNodeData = {
   classType: string
   editableInputs: EditableWorkflowInput[]
   markedJsonPaths: string[]
+  /** JSON path of the field selected in the field panel, when it belongs to this node. */
+  selectedJsonPath?: string | null
+  /** Current search text, so matching inputs are marked too. */
+  searchQuery?: string
   searchMatched?: boolean
   searchCurrent?: boolean
-  onAddField: (nodeId: string, nodeTitle: string, classType: string, input: EditableWorkflowInput) => void
+  onInputSelect: (nodeId: string, nodeTitle: string, classType: string, input: EditableWorkflowInput) => void
 }
 
 export type AuthoringNode = Node<AuthoringNodeData, 'comfyAuthoring'>
@@ -271,7 +275,7 @@ function layoutAuthoringGraph(
 /** Convert the raw Comfy workflow JSON into authoring graph nodes and edges. */
 export function parseWorkflowGraph(params: {
   workflowJson: string
-  onAddField: (nodeId: string, nodeTitle: string, classType: string, input: EditableWorkflowInput) => void
+  onInputSelect: (nodeId: string, nodeTitle: string, classType: string, input: EditableWorkflowInput) => void
 }): ParsedWorkflowGraph {
   const workflow = parseWorkflowDefinition(params.workflowJson)
 
@@ -354,7 +358,7 @@ export function parseWorkflowGraph(params: {
         classType,
         editableInputs,
         markedJsonPaths: [],
-        onAddField: params.onAddField,
+        onInputSelect: params.onInputSelect,
       },
     })
   }
@@ -401,7 +405,17 @@ export function buildWorkflowMarkedFieldFromInput(
   }
 }
 
-/** Find graph nodes matching the current search query. */
+/** Whether one node input matches the search text (input key or its readable label). */
+export function authoringInputMatchesQuery(input: EditableWorkflowInput, query: string) {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) {
+    return false
+  }
+
+  return `${input.key} ${input.label}`.toLowerCase().includes(normalizedQuery)
+}
+
+/** Find graph nodes matching the current search query by title, class type, id or one of their inputs. */
 export function findAuthoringGraphMatches(nodes: AuthoringNode[], query: string) {
   const normalizedQuery = query.trim().toLowerCase()
   if (!normalizedQuery) {
@@ -413,7 +427,7 @@ export function findAuthoringGraphMatches(nodes: AuthoringNode[], query: string)
       const haystack = [node.data.title, node.data.classType, node.id]
         .join(' ')
         .toLowerCase()
-      return haystack.includes(normalizedQuery)
+      return haystack.includes(normalizedQuery) || node.data.editableInputs.some((input) => authoringInputMatchesQuery(input, normalizedQuery))
     })
     .map((node) => node.id)
 }
@@ -422,13 +436,14 @@ export function findAuthoringGraphMatches(nodes: AuthoringNode[], query: string)
 function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
   const { t } = useI18n()
   const markedJsonPathSet = useMemo(() => new Set(data.markedJsonPaths), [data.markedJsonPaths])
+  const hasSelectedInput = Boolean(data.selectedJsonPath)
 
   return (
     <div
-      // Floating card on the graph canvas: tone + elevation, search hits marked with a primary ring.
+      // Floating card on the graph canvas: tone + elevation; the selected field's node and search hits get a primary ring.
       className={cn(
-        'min-w-[240px] rounded-sm bg-surface-container p-3 shadow-elevation-1',
-        data.searchCurrent ? 'ring-2 ring-primary/60' : data.searchMatched ? 'ring-1 ring-primary/40' : undefined,
+        'w-[260px] rounded-sm bg-surface-container p-3 shadow-elevation-1',
+        hasSelectedInput || data.searchCurrent ? 'ring-2 ring-primary/60' : data.searchMatched ? 'ring-1 ring-primary/40' : undefined,
       )}
     >
       <div className="flex items-start gap-2">
@@ -449,20 +464,27 @@ function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
         <div className="mt-3 space-y-0.5">
           {data.editableInputs.map((input) => {
             const path = input.jsonPath ?? `${id}.inputs.${input.key}`
-            const selected = markedJsonPathSet.has(path)
+            const marked = markedJsonPathSet.has(path)
+            const current = data.selectedJsonPath === path
+            const searchHit = data.searchQuery ? authoringInputMatchesQuery(input, data.searchQuery) : false
             return (
               <Button
                 key={path}
                 type="button"
                 variant="nav"
                 size="xs"
-                data-active={selected || undefined}
-                aria-pressed={selected}
-                onClick={() => data.onAddField(id, data.title, data.classType, input)}
-                className="nodrag nopan h-7 justify-between"
+                data-active={marked || undefined}
+                aria-pressed={marked}
+                aria-current={current || undefined}
+                onClick={() => data.onInputSelect(id, data.title, data.classType, input)}
+                className={cn(
+                  'nodrag nopan h-7 justify-between',
+                  current && 'bg-primary/15 text-secondary-text hover:bg-primary/20 data-[active=true]:bg-primary/15 data-[active=true]:text-secondary-text',
+                  !current && searchHit && 'ring-1 ring-inset ring-primary/45',
+                )}
               >
                 <span className="truncate">{input.label}</span>
-                {selected ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
+                {marked ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
               </Button>
             )
           })}

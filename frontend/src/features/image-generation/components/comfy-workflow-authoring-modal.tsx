@@ -1,3 +1,6 @@
+import { useCallback, useEffect, useRef, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
+import { useBlocker } from 'react-router-dom'
 import {
   Background,
   Controls,
@@ -6,32 +9,30 @@ import {
   ReactFlowProvider,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ChevronDown, ChevronUp, Search, Upload } from 'lucide-react'
-import { SegmentedControl } from '@/components/common/segmented-control'
+import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Save, Search, Upload } from 'lucide-react'
+import { TextTabs } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { Field, FieldInfo } from '@/components/ui/field'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
-import { Switch } from '@/components/ui/switch'
-import { Text } from '@/components/ui/text'
-import { ToggleRow } from '@/components/ui/toggle-row'
-import { Section } from '@/components/ui/section'
-import { getPermissionGroupDisplayName } from '@/features/settings/components/security-ui-text'
+import { Textarea } from '@/components/ui/textarea'
+import { useBlockerConfirm } from '@/components/ui/use-blocker-confirm'
+import { shouldBypassOverlayHistoryBackNavigation, useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useI18n } from '@/i18n'
 import type { CustomDropdownList } from '@/lib/api-image-generation-types'
+import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
+import { cn } from '@/lib/utils'
 import { nodeTypes, type AuthoringEdge, type AuthoringNode } from './comfy-workflow-authoring-graph'
-import { ComfyWorkflowMarkedFieldsEditor } from './comfy-workflow-marked-fields-editor'
+import { ComfyWorkflowAuthoringSettings } from './comfy-workflow-authoring-settings'
+import { ComfyWorkflowMarkedFieldEditor } from './comfy-workflow-marked-field-editor'
+import { ComfyWorkflowMarkedFieldList } from './comfy-workflow-marked-field-list'
 import {
   INITIAL_AUTHORING_FIT_VIEW_OPTIONS,
   INITIAL_AUTHORING_VIEWPORT,
   useComfyWorkflowAuthoringController,
   type ComfyWorkflowAuthoringModalInitialData,
+  type ComfyWorkflowEditorTab,
 } from './use-comfy-workflow-authoring-controller'
-import { clampPublicQueueMaxCount, slugifyPublicWorkflow } from './comfy-workflow-public-settings'
-import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { resolveWorkflowMarkedFieldNodeSource } from '../workflow-marked-field-groups'
 
 type ComfyWorkflowAuthoringModalProps = {
   open: boolean
@@ -42,6 +43,54 @@ type ComfyWorkflowAuthoringModalProps = {
   onSaved?: (workflowId: number) => void
 }
 
+/** Search text with match count and previous/next, shared by the graph canvas and the JSON tab. */
+function AuthoringSearchBox({ query, count, index, placeholder, onQueryChange, onStep, className }: {
+  query: string
+  count: number
+  index: number
+  placeholder: string
+  onQueryChange: (value: string) => void
+  onStep: (direction: 1 | -1) => void
+  className?: string
+}) {
+  const { t, formatNumber } = useI18n()
+  const hasQuery = query.trim().length > 0
+
+  return (
+    <div className={cn('flex h-10 items-center gap-0.5 rounded-md bg-surface-container pr-1 pl-3', className)}>
+      <Search className="size-4 shrink-0 text-muted-foreground" />
+      <input
+        value={query}
+        onChange={(event) => onQueryChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+          event.preventDefault()
+          onStep(event.shiftKey ? -1 : 1)
+        }}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        className="h-8 w-44 min-w-0 bg-transparent px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground sm:w-52"
+      />
+      {hasQuery ? (
+        <span className="shrink-0 px-1 font-mono text-2xs text-muted-foreground tabular-nums">
+          {count === 0 ? '0' : `${formatNumber(Math.min(index, count - 1) + 1)}/${formatNumber(count)}`}
+        </span>
+      ) : null}
+      <IconButton size="icon-sm" variant="ghost" disabled={count === 0} onClick={() => onStep(-1)} label={t({ ko: '이전 결과', en: 'Previous result' })}>
+        <ChevronUp />
+      </IconButton>
+      <IconButton size="icon-sm" variant="ghost" disabled={count === 0} onClick={() => onStep(1)} label={t({ ko: '다음 결과', en: 'Next result' })}>
+        <ChevronDown />
+      </IconButton>
+    </div>
+  )
+}
+
+/**
+ * Full-screen ComfyUI workflow editor (create and edit), under the app header and beside a docked chat panel.
+ * Top bar: name, graph / JSON / settings tabs, upload and save. The graph tab pairs the canvas with a field panel:
+ * picking an input on the canvas selects its field, and the selected field's node is ringed on the canvas.
+ */
 export function ComfyWorkflowAuthoringModal({
   open,
   mode = 'create',
@@ -50,60 +99,46 @@ export function ComfyWorkflowAuthoringModal({
   onClose,
   onSaved,
 }: ComfyWorkflowAuthoringModalProps) {
-  const { t, language } = useI18n()
+  const { t } = useI18n()
+  const confirm = useConfirm()
+  const isWideLayout = useDesktopPageLayout()
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const {
     activeSearchCount,
-    artifactDirectoryMode,
-    artifactRootPath,
     authoringMiniMapBgColor,
     authoringMiniMapMaskColor,
     authoringMiniMapNodeColor,
+    draft,
     dropdownListNames,
-    expandedFieldIds,
-    formatNumber,
+    editorTab,
     graphNodes,
-    graphSearchQuery,
-    handleFieldExpandToggle,
+    handleFieldLocate,
     handleFieldPatch,
     handleFieldRemove,
+    handleFieldSelect,
     handleFileUpload,
     handleReorderMarkedField,
     handleReorderMarkedFieldGroup,
     handleSave,
     handleWorkflowJsonChange,
     isCoarsePointer,
-    isPublicPage,
+    isDirty,
     isSaving,
     jsonError,
     jsonTextareaRef,
     markedFieldsWithNodeSources,
     parsedGraph,
-    publicQueueMaxCount,
-    publicQueueRoleLimits,
-    publicSlug,
+    patchDraft,
     reactFlowColorMode,
-    resultViewMode,
     roleLimitGroups,
-    searchPlaceholder,
-    setArtifactDirectoryMode,
-    setArtifactRootPath,
+    searchIndex,
+    searchQuery,
+    selectedField,
     setAuthoringFlowInstance,
-    setGraphSearchIndex,
-    setGraphSearchQuery,
-    setIsPublicPage,
-    setPublicQueueMaxCount,
-    setPublicQueueRoleLimits,
-    setPublicSlug,
-    setResultViewMode,
-    setWorkflowDescription,
-    setWorkflowEditorTab,
-    setWorkflowKind,
-    setWorkflowName,
-    workflowDescription,
-    workflowEditorTab,
-    workflowJson,
-    workflowKind,
-    workflowName,
+    setEditorTab,
+    setSearchQuery,
+    stepSearch,
   } = useComfyWorkflowAuthoringController({
     dropdownLists,
     initialData,
@@ -113,297 +148,244 @@ export function ComfyWorkflowAuthoringModal({
     open,
   })
 
-  const modalTitle = mode === 'edit' ? t({ ko: 'ComfyUI Workflow 수정', en: 'Edit ComfyUI Workflow' }) : t({ ko: 'ComfyUI Workflow 등록', en: 'Register ComfyUI Workflow' })
-  const submitLabel = mode === 'edit' ? t({ ko: '워크플로우 저장', en: 'Save workflow' }) : t({ ko: '워크플로우 등록', en: 'Register workflow' })
+  const unsavedMessage = t({ ko: '저장하지 않은 변경이 사라져.', en: 'Unsaved changes will be lost.' })
+  const shouldGuard = open && isDirty && !isSaving
 
-  return (
-    <Modal
-      sidePanelInset="var(--chat-dock-width, 0px)"
-      open={open}
-      onClose={onClose}
-      title={modalTitle}
-      widthClassName="max-w-[1180px]"
-    >
-      <ModalBody className="space-y-5">
-        <Section variant="settings" heading={t({ ko: '기본 정보', en: 'Basic information' })}>
-          <div className="grid gap-4">
-            <Field label={t({ ko: '이름', en: 'Name' })}>
-              <Input
-                variant="settings"
-                value={workflowName}
-                onChange={(event) => setWorkflowName(event.target.value)}
-                placeholder="ComfyUI Workflow"
-              />
-            </Field>
+  // Leaving with unsaved changes asks first: the back arrow, browser back, and app navigation.
+  const requestClose = useCallback(async () => {
+    if (isSaving) return
+    if (isDirty) {
+      const confirmed = await confirm({
+        title: t({ ko: '저장하지 않은 변경', en: 'Unsaved changes' }),
+        description: unsavedMessage,
+        confirmLabel: t({ ko: '나가기', en: 'Leave' }),
+        cancelLabel: t({ ko: '머무르기', en: 'Stay' }),
+        tone: 'destructive',
+      })
+      if (!confirmed) return
+    }
+    onClose()
+  }, [confirm, isDirty, isSaving, onClose, t, unsavedMessage])
+  useOverlayBackClose({ open, onClose: () => { void requestClose() } })
+  const navigationBlocker = useBlocker(useCallback(({ currentLocation, nextLocation }: { currentLocation: { pathname: string, search: string }, nextLocation: { pathname: string, search: string } }) => (
+    shouldGuard
+    && !shouldBypassOverlayHistoryBackNavigation()
+    && (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search)
+  ), [shouldGuard]))
+  useBlockerConfirm(navigationBlocker, unsavedMessage)
+  useEffect(() => {
+    if (!shouldGuard) return
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [shouldGuard])
 
-            <Field label={t({ ko: '설명', en: 'Description' })}>
-              <Textarea
-                variant="settings"
-                rows={4}
-                value={workflowDescription}
-                onChange={(event) => setWorkflowDescription(event.target.value)}
-                placeholder={t({ ko: '선택', en: 'Optional' })}
-              />
-            </Field>
+  // The editor covers the page: lock its scroll and move focus in, so keyboard users start inside the editor.
+  useEffect(() => {
+    if (!open) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    containerRef.current?.focus({ preventScroll: true })
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [open])
 
-            <ToggleRow className="justify-between">
-              <Text as="span" variant="label" className="min-w-0">{t({ ko: '공용 페이지 사용', en: 'Use public page' })}</Text>
-              <Switch checked={isPublicPage} onCheckedChange={setIsPublicPage} />
-            </ToggleRow>
+  if (!open || typeof document === 'undefined') return null
 
-            {isPublicPage ? (
-              <>
-                <Field label={t({ ko: '공용 slug', en: 'Public slug' })}>
-                  <Input
-                    variant="settings"
-                    value={publicSlug}
-                    onChange={(event) => setPublicSlug(slugifyPublicWorkflow(event.target.value))}
-                    placeholder="character-poster-generator"
-                  />
-                </Field>
+  const title = mode === 'edit' ? t({ ko: 'ComfyUI 워크플로우 수정', en: 'Edit ComfyUI workflow' }) : t({ ko: 'ComfyUI 워크플로우 등록', en: 'Register ComfyUI workflow' })
+  const saveLabel = mode === 'edit' ? t({ ko: '저장', en: 'Save' }) : t({ ko: '등록', en: 'Register' })
+  const selectedFieldNodeId = selectedField ? resolveWorkflowMarkedFieldNodeSource(selectedField).nodeId : null
+  const openFilePicker = () => fileInputRef.current?.click()
 
-                <Field label={t({ ko: '공용 1회 요청 상한', en: 'Public per-request limit' })}>
-                  <NumberStepperInput
-                    variant="settings"
-
-                    min={1}
-                    max={32}
-                    value={publicQueueMaxCount}
-                    onValueCommit={(nextValue) => setPublicQueueMaxCount(nextValue)}
-                    onBlur={() => setPublicQueueMaxCount(String(clampPublicQueueMaxCount(publicQueueMaxCount)))}
-                  />
-                </Field>
-
-                <div className="grid gap-2.5">
-                  <Text as="div" variant="overline" className="flex items-center gap-1 font-semibold">
-                    {t({ ko: '등급별 동시 대기열 제한', en: 'Per-role active queue limit' })}
-                    <FieldInfo>
-                      {t({
-                        ko: '회원 한 명이 동시에 둘 수 있는 대기열 개수야. 비우면 무제한, 0은 등록 금지.',
-                        en: 'Active queue jobs one member of the role can keep. Empty: unlimited; 0 blocks the role.',
-                      })}
-                    </FieldInfo>
-                  </Text>
-                  {roleLimitGroups.map((group) => (
-                    <div key={group.groupKey} className="flex items-center justify-between gap-3">
-                      <span className="min-w-0 truncate text-sm text-foreground">
-                        {getPermissionGroupDisplayName(language, group.groupKey, group.name)}
-                      </span>
-                      <NumberStepperInput
-                        variant="settings"
-                        min={0}
-                        max={999}
-                        allowEmpty
-                        className="w-44 shrink-0"
-                        value={publicQueueRoleLimits[group.groupKey] ?? ''}
-                        placeholder={t({ ko: '무제한', en: 'Unlimited' })}
-                        aria-label={t(
-                          { ko: '{name} 동시 대기열 제한', en: '{name} active queue limit' },
-                          { name: getPermissionGroupDisplayName(language, group.groupKey, group.name) },
-                        )}
-                        onValueCommit={(nextValue) => setPublicQueueRoleLimits((current) => ({ ...current, [group.groupKey]: nextValue }))}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : null}
-
-            <Field label={t({ ko: '종류', en: 'Kind' })}>
-              <Select
-                variant="settings"
-                value={workflowKind}
-                onChange={(event) => setWorkflowKind(event.target.value === 'audio' ? 'audio' : 'image')}
-              >
-                <option value="image">{t({ ko: '이미지', en: 'Image' })}</option>
-                <option value="audio">{t({ ko: '오디오', en: 'Audio' })}</option>
-              </Select>
-            </Field>
-
-            <Field label={t({ ko: '결과 표시 방식', en: 'Result view' })}>
-              <Select
-                variant="settings"
-                value={resultViewMode}
-                onChange={(event) => setResultViewMode(event.target.value as 'history' | 'artifact_explorer')}
-              >
-                <option value="history">{t({ ko: '히스토리 뷰어', en: 'History viewer' })}</option>
-                <option value="artifact_explorer">{t({ ko: '탐색형 뷰어', en: 'Explorer viewer' })}</option>
-              </Select>
-            </Field>
-
-            {resultViewMode === 'artifact_explorer' ? (
-              <>
-                <Field label={t({ ko: '결과 저장 방식', en: 'Result storage mode' })}>
-                  <Select
-                    variant="settings"
-                    value={artifactDirectoryMode}
-                    onChange={(event) => setArtifactDirectoryMode(event.target.value as 'shared' | 'per_run')}
-                  >
-                    <option value="shared">{t({ ko: '공유 폴더', en: 'Shared folder' })}</option>
-                    <option value="per_run">{t({ ko: '실행별 폴더', en: 'Folder per run' })}</option>
-                  </Select>
-                </Field>
-
-                <Field label={t({ ko: '결과 저장 루트 경로', en: 'Result storage root path' })}>
-                  <Input
-                    variant="settings"
-                    value={artifactRootPath}
-                    onChange={(event) => setArtifactRootPath(event.target.value)}
-                    placeholder={t({ ko: '기본값: runtime/artifacts/comfy-workflows/<workflow>', en: 'Default: runtime/artifacts/comfy-workflows/<workflow>' })}
-                  />
-                </Field>
-              </>
-            ) : null}
-          </div>
-        </Section>
-
-        <Section
-          variant="settings"
-          heading={
-            <SegmentedControl
-              value={workflowEditorTab}
-              items={[
-                { value: 'graph', label: t({ ko: '그래프 보기', en: 'Graph View' }) },
-                { value: 'json', label: 'Workflow JSON' },
-              ]}
-              onChange={(nextTab) => setWorkflowEditorTab(nextTab as 'json' | 'graph')}
-              size="sm"
-            />
-          }
-          bodyClassName="space-y-0 px-0 py-0"
-          headerClassName="flex-col items-stretch lg:flex-row lg:items-center"
-          actions={
-            <div className="flex w-full flex-wrap items-center justify-start gap-2 lg:w-auto lg:justify-end">
-              <div className="relative min-w-0 basis-full flex-1 sm:basis-auto sm:min-w-[280px]">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  variant="settings"
-                  value={graphSearchQuery}
-                  onChange={(event) => setGraphSearchQuery(event.target.value)}
-                  placeholder={searchPlaceholder}
-                  className="pl-8"
-                />
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {graphSearchQuery.trim().length > 0 ? t({ ko: '{count}개', en: '{count}' }, { count: formatNumber(activeSearchCount) }) : t({ ko: '검색 없음', en: 'No search' })}
-              </div>
-              <IconButton
-                size="icon-sm"
-                variant="secondary"
-                disabled={activeSearchCount === 0}
-                onClick={() => setGraphSearchIndex((current) => (
-                  activeSearchCount === 0
-                    ? 0
-                    : (current - 1 + activeSearchCount) % activeSearchCount
-                ))}
-                label={t({ ko: '이전 검색 결과', en: 'Previous search result' })}
-              >
-                <ChevronUp />
-              </IconButton>
-              <IconButton
-                size="icon-sm"
-                variant="secondary"
-                disabled={activeSearchCount === 0}
-                onClick={() => setGraphSearchIndex((current) => (
-                  activeSearchCount === 0
-                    ? 0
-                    : (current + 1) % activeSearchCount
-                ))}
-                label={t({ ko: '다음 검색 결과', en: 'Next search result' })}
-              >
-                <ChevronDown />
-              </IconButton>
-              <Button type="button" size="sm" variant="secondary" asChild>
-                <label className="cursor-pointer">
-                  <Upload className="h-4 w-4" />
-                  {t({ ko: '업로드', en: 'Upload' })}
-                  <input type="file" accept=".json,application/json" hidden onChange={(event) => void handleFileUpload(event.target.files?.[0])} />
-                </label>
-              </Button>
-            </div>
-          }
-        >
-          {workflowEditorTab === 'json' ? (
-            <div className="space-y-0">
-              <Textarea
-                ref={jsonTextareaRef}
-                variant="settings"
-                rows={12}
-                value={workflowJson}
-                onChange={(event) => handleWorkflowJsonChange(event.target.value)}
-                placeholder="ComfyUI API workflow JSON"
-                className="min-h-[520px] rounded-none border-0 bg-transparent px-4 py-4 font-mono text-xs focus:ring-0"
-              />
-
-              {jsonError ? <div role="alert" className="bg-destructive-soft/40 px-4 py-3 text-xs text-destructive-soft-foreground">{jsonError}</div> : null}
-            </div>
-          ) : (
-            <div className="px-4 py-4">
-              <div className="mx-auto w-full max-w-[980px]">
-                <div className="h-[620px] overflow-hidden rounded-sm bg-surface-lowest">
-                  {parsedGraph ? (
-                    <ReactFlowProvider>
-                      <ReactFlow<AuthoringNode, AuthoringEdge>
-                        className={isCoarsePointer ? 'theme-graph-flow touch-scroll-safe' : 'theme-graph-flow'}
-                        nodes={graphNodes}
-                        edges={parsedGraph.edges}
-                        nodeTypes={nodeTypes}
-                        onInit={setAuthoringFlowInstance}
-                        fitViewOptions={INITIAL_AUTHORING_FIT_VIEW_OPTIONS}
-                        defaultViewport={INITIAL_AUTHORING_VIEWPORT}
-                        colorMode={reactFlowColorMode}
-                        proOptions={{ hideAttribution: true }}
-                        defaultMarkerColor="var(--foreground)"
-                        defaultEdgeOptions={{ animated: false }}
-                        nodesDraggable
-                        nodesConnectable={false}
-                        elementsSelectable
-                        panOnDrag={!isCoarsePointer}
-                      >
-                        <MiniMap
-                          pannable
-                          zoomable
-                          nodeColor={authoringMiniMapNodeColor}
-                          nodeStrokeColor={authoringMiniMapNodeColor}
-                          nodeStrokeWidth={3}
-                          maskColor={authoringMiniMapMaskColor}
-                          bgColor={authoringMiniMapBgColor}
-                          className="!bg-surface-lowest"
-                        />
-                        <Controls />
-                        <Background color="color-mix(in srgb, var(--foreground) 10%, transparent)" />
-                      </ReactFlow>
-                    </ReactFlowProvider>
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                      {t({ ko: '유효한 workflow JSON을 넣으면 그래프가 보여.', en: 'Enter a valid workflow JSON to show the graph.' })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+  const bar = (
+    <div className={cn('flex h-11 shrink-0 items-center gap-1 border-b border-line', isWideLayout ? 'px-2' : 'px-1')}>
+      <IconButton size="icon-sm" variant="ghost" onClick={() => void requestClose()} label={t({ ko: '편집 끝내기', en: 'Leave editor' })}>
+        <ArrowLeft />
+      </IconButton>
+      <div className="relative flex min-w-0 items-center">
+        <input
+          value={draft.name}
+          onChange={(event) => patchDraft({ name: event.target.value })}
+          aria-label={t({ ko: '워크플로우 이름', en: 'Workflow name' })}
+          placeholder={t({ ko: '이름 없음', en: 'Untitled' })}
+          className={cn(
+            'h-8 min-w-20 rounded-sm bg-transparent px-1.5 text-sm font-bold text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground hover:bg-fill focus:bg-field',
+            isWideLayout ? 'max-w-72' : 'max-w-28',
           )}
-        </Section>
-
-        <ComfyWorkflowMarkedFieldsEditor
-          markedFields={markedFieldsWithNodeSources}
-          expandedFieldIds={expandedFieldIds}
-          dropdownListNames={dropdownListNames}
-          listClassName="max-h-[520px]"
-          onFieldPatch={handleFieldPatch}
-          onFieldRemove={handleFieldRemove}
-          onFieldExpandToggle={handleFieldExpandToggle}
-          onReorderMarkedField={handleReorderMarkedField}
-          onReorderMarkedFieldGroup={handleReorderMarkedFieldGroup}
         />
+        {isDirty ? <span className="size-1.5 shrink-0 rounded-full bg-warning" title={t({ ko: '저장 안 함', en: 'Unsaved' })} /> : null}
+      </div>
+      <span className="mx-1 h-4 w-px shrink-0 bg-line" />
+      <div className="flex h-full min-w-0 shrink items-end overflow-hidden">
+        <TextTabs<ComfyWorkflowEditorTab>
+          value={editorTab}
+          onChange={setEditorTab}
+          ariaLabel={t({ ko: '편집 화면', en: 'Editor view' })}
+          className="border-b-0"
+          items={[
+            { value: 'graph', label: t({ ko: '그래프', en: 'Graph' }) },
+            { value: 'json', label: 'JSON' },
+            { value: 'settings', label: t({ ko: '설정', en: 'Settings' }) },
+          ]}
+        />
+      </div>
+      <span className="min-w-1 flex-1" />
+      <input ref={fileInputRef} type="file" accept=".json,application/json" hidden onChange={(event) => { void handleFileUpload(event.target.files?.[0]); event.target.value = '' }} />
+      <IconButton size="icon-sm" variant="ghost" className="shrink-0" onClick={openFilePicker} label={t({ ko: 'JSON 파일 불러오기', en: 'Load JSON file' })}>
+        <Upload />
+      </IconButton>
+      {isWideLayout ? (
+        <Button type="button" size="sm" onClick={() => void handleSave()} disabled={isSaving}>
+          {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+          {saveLabel}
+        </Button>
+      ) : (
+        <IconButton size="icon-sm" variant="ghost" onClick={() => void handleSave()} disabled={isSaving} label={saveLabel} className="shrink-0 text-primary hover:text-primary">
+          {isSaving ? <Loader2 className="animate-spin" /> : <Save />}
+        </IconButton>
+      )}
+    </div>
+  )
 
-        <ModalFooter>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isSaving}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-          <Button type="button" onClick={() => void handleSave()} disabled={isSaving || workflowName.trim().length === 0 || workflowJson.trim().length === 0 || jsonError !== null}>
-            {isSaving ? t({ ko: '저장 중…', en: 'Saving…' }) : submitLabel}
-          </Button>
-        </ModalFooter>
-      </ModalBody>
-    </Modal>
+  const graphCanvas = parsedGraph ? (
+    <ReactFlowProvider>
+      <ReactFlow<AuthoringNode, AuthoringEdge>
+        className={isCoarsePointer ? 'theme-graph-flow touch-scroll-safe' : 'theme-graph-flow'}
+        nodes={graphNodes}
+        edges={parsedGraph.edges}
+        nodeTypes={nodeTypes}
+        onInit={setAuthoringFlowInstance}
+        fitViewOptions={INITIAL_AUTHORING_FIT_VIEW_OPTIONS}
+        defaultViewport={INITIAL_AUTHORING_VIEWPORT}
+        colorMode={reactFlowColorMode}
+        proOptions={{ hideAttribution: true }}
+        defaultMarkerColor="var(--foreground)"
+        defaultEdgeOptions={{ animated: false }}
+        nodesDraggable
+        nodesConnectable={false}
+        elementsSelectable
+        panOnDrag={!isCoarsePointer}
+      >
+        {isWideLayout ? (
+          <MiniMap
+            pannable
+            zoomable
+            nodeColor={authoringMiniMapNodeColor}
+            nodeStrokeColor={authoringMiniMapNodeColor}
+            nodeStrokeWidth={3}
+            maskColor={authoringMiniMapMaskColor}
+            bgColor={authoringMiniMapBgColor}
+            className="!bg-surface-lowest"
+          />
+        ) : null}
+        <Controls />
+        <Background color="color-mix(in srgb, var(--foreground) 10%, transparent)" />
+      </ReactFlow>
+    </ReactFlowProvider>
+  ) : (
+    <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+      <div className="text-sm text-muted-foreground">
+        {jsonError ? jsonError : t({ ko: 'workflow JSON을 불러오면 그래프가 보여.', en: 'Load a workflow JSON to see the graph.' })}
+      </div>
+      <Button type="button" size="sm" variant="secondary" onClick={openFilePicker}>
+        <Upload className="size-4" />
+        {t({ ko: 'JSON 불러오기', en: 'Load JSON' })}
+      </Button>
+    </div>
+  )
+
+  const fieldPanel = (
+    <aside
+      aria-label={t({ ko: '필드', en: 'Fields' })}
+      className={cn('flex min-h-0 flex-col', isWideLayout ? 'border-l border-line' : 'border-t border-line')}
+    >
+      <ComfyWorkflowMarkedFieldList
+        markedFields={markedFieldsWithNodeSources}
+        selectedFieldId={selectedField?.id ?? null}
+        onFieldSelect={handleFieldSelect}
+        onReorderMarkedField={handleReorderMarkedField}
+        onReorderMarkedFieldGroup={handleReorderMarkedFieldGroup}
+      />
+      {selectedField ? (
+        <div className="max-h-[62%] shrink-0 overflow-y-auto overscroll-contain border-t border-line px-4 py-3">
+          <ComfyWorkflowMarkedFieldEditor
+            key={selectedField.id}
+            field={selectedField}
+            dropdownListNames={dropdownListNames}
+            canLocate={Boolean(parsedGraph && selectedFieldNodeId)}
+            onPatch={(patch) => handleFieldPatch(selectedField.id, patch)}
+            onRemove={() => handleFieldRemove(selectedField.id)}
+            onLocate={() => handleFieldLocate(selectedField.id)}
+          />
+        </div>
+      ) : null}
+    </aside>
+  )
+
+  return createPortal(
+    <div
+      ref={containerRef}
+      role="dialog"
+      aria-label={title}
+      tabIndex={-1}
+      data-slot="comfy-workflow-editor"
+      style={{ '--editor-side-inset': 'var(--chat-dock-width, 0px)' } as CSSProperties}
+      className="fixed inset-x-0 bottom-0 top-(--theme-shell-header-height) z-modal flex flex-col bg-background outline-none lg:right-(--editor-side-inset)"
+    >
+      {bar}
+      <div className="relative min-h-0 flex-1">
+        {editorTab === 'graph' ? (
+          <div className={cn('grid h-full min-h-0', isWideLayout ? 'grid-cols-[minmax(0,1fr)_minmax(320px,380px)]' : 'grid-rows-[minmax(0,1fr)_minmax(0,1fr)]')}>
+            <div className="relative min-h-0 min-w-0 bg-surface-lowest">
+              {graphCanvas}
+              {parsedGraph ? (
+                <AuthoringSearchBox
+                  className="absolute top-3 left-3 z-10 shadow-elevation-2"
+                  query={searchQuery}
+                  count={activeSearchCount}
+                  index={searchIndex}
+                  placeholder={t({ ko: '노드·입력 검색', en: 'Search nodes and inputs' })}
+                  onQueryChange={setSearchQuery}
+                  onStep={stepSearch}
+                />
+              ) : null}
+            </div>
+            {fieldPanel}
+          </div>
+        ) : editorTab === 'json' ? (
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="flex shrink-0 items-center justify-end border-b border-line px-2 py-1.5">
+              <AuthoringSearchBox
+                className="h-9 bg-transparent"
+                query={searchQuery}
+                count={activeSearchCount}
+                index={searchIndex}
+                placeholder={t({ ko: 'JSON 검색', en: 'Search JSON' })}
+                onQueryChange={setSearchQuery}
+                onStep={stepSearch}
+              />
+            </div>
+            <Textarea
+              ref={jsonTextareaRef}
+              variant="settings"
+              value={draft.workflowJson}
+              onChange={(event) => handleWorkflowJsonChange(event.target.value)}
+              placeholder="ComfyUI API workflow JSON"
+              aria-label="Workflow JSON"
+              spellCheck={false}
+              className="min-h-0 flex-1 resize-none rounded-none border-0 bg-transparent px-4 py-4 font-mono text-xs focus:ring-0"
+            />
+            {jsonError ? <div role="alert" className="shrink-0 bg-destructive-soft/40 px-4 py-3 text-xs text-destructive-soft-foreground">{jsonError}</div> : null}
+          </div>
+        ) : (
+          <ComfyWorkflowAuthoringSettings draft={draft} roleLimitGroups={roleLimitGroups} onPatch={patchDraft} />
+        )}
+      </div>
+    </div>,
+    document.body,
   )
 }
