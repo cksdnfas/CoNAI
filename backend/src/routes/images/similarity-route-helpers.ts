@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { errorResponse } from '@conai/shared';
 import { db } from '../../database/init';
+import { MediaImageFeaturesModel } from '../../models/Image/MediaImageFeaturesModel';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import type { DuplicateGroup, SimilarImage } from '../../types/similarity';
@@ -74,7 +75,11 @@ export function ensureImageFieldOrBlock(
       return false;
     }
 
-    if (!image[options.field]) {
+    // The histogram lives in media_image_features, not on the metadata row.
+    const hasField = options.field === 'color_histogram'
+      ? MediaImageFeaturesModel.getHistogram(identifier.value) !== null
+      : Boolean(image[options.field]);
+    if (!hasField) {
       sendRouteBadRequest(res, options.missingFieldMessage);
       return false;
     }

@@ -8,11 +8,8 @@ import {
   buildAutoTagRatingExpr,
   pushAutoTagPathMatchParams,
 } from '../autoTagSqlShared';
-import {
-  normalizeAutoTagIndexSearchKeys,
-  normalizeAutoTagSearchTerm,
-} from '../autoTagSearch/autoTagSearchTerms';
-import { AutoTagIndexService } from '../autoTagIndexService';
+import { normalizeAutoTagSearchTerm } from '../autoTagSearch/autoTagSearchTerms';
+import { AutoTagIndexService, MEDIA_ROW_ID_COLUMN, buildIndexedMediaSubquery } from '../autoTagIndexService';
 
 /** Build the complex-filter SQL fragment for one auto-tag condition. */
 export function buildComplexFilterAutoTagCondition(
@@ -177,30 +174,24 @@ export function buildComplexFilterAutoTagCondition(
   return null;
 }
 
-function buildIndexedHasTypeCondition(params: any[], tagTypes: readonly string[], negate: boolean): string {
-  const typePlaceholders = tagTypes.map(() => '?').join(', ');
-  params.push(...tagTypes);
+function wrapIndexedSubquery(
+  params: any[],
+  subquery: ReturnType<typeof buildIndexedMediaSubquery>,
+  negate = false,
+): string | null {
+  if (!subquery) {
+    return null;
+  }
+  params.push(...subquery.params);
+  return `im.${MEDIA_ROW_ID_COLUMN} ${negate ? 'NOT ' : ''}IN (${subquery.sql})`;
+}
 
-  return `im.composite_hash ${negate ? 'NOT ' : ''}IN (
-    SELECT composite_hash
-    FROM media_auto_tag_index
-    WHERE tag_type IN (${typePlaceholders})
-  )`;
+function buildIndexedHasTypeCondition(params: any[], tagTypes: readonly string[], negate: boolean): string {
+  return wrapIndexedSubquery(params, buildIndexedMediaSubquery({ tagTypes }), negate) as string;
 }
 
 function buildIndexedModelCondition(condition: FilterCondition, params: any[]): string | null {
-  const variants = normalizeAutoTagIndexSearchKeys(String(condition.value));
-  if (variants.length === 0) {
-    return null;
-  }
-
-  params.push('model', ...variants);
-  return `im.composite_hash IN (
-    SELECT composite_hash
-    FROM media_auto_tag_index
-    WHERE tag_type = ?
-      AND search_key IN (${variants.map(() => '?').join(', ')})
-  )`;
+  return wrapIndexedSubquery(params, buildIndexedMediaSubquery({ tagTypes: ['model'], tag: String(condition.value) }));
 }
 
 function buildIndexedTagMatchCondition(
@@ -208,33 +199,12 @@ function buildIndexedTagMatchCondition(
   params: any[],
   tagTypes: readonly string[],
 ): string | null {
-  const variants = normalizeAutoTagIndexSearchKeys(String(condition.value));
-  if (variants.length === 0) {
-    return null;
-  }
-
-  const typePlaceholders = tagTypes.map(() => '?').join(', ');
-  const variantPlaceholders = variants.map(() => '?').join(', ');
-  const scoreConditions: string[] = [];
-
-  params.push(...tagTypes, ...variants);
-
-  if (condition.min_score !== undefined) {
-    params.push(condition.min_score);
-    scoreConditions.push('score >= ?');
-  }
-  if (condition.max_score !== undefined) {
-    params.push(condition.max_score);
-    scoreConditions.push('score <= ?');
-  }
-
-  return `im.composite_hash IN (
-    SELECT composite_hash
-    FROM media_auto_tag_index
-    WHERE tag_type IN (${typePlaceholders})
-      AND search_key IN (${variantPlaceholders})
-      ${scoreConditions.length > 0 ? `AND ${scoreConditions.join(' AND ')}` : ''}
-  )`;
+  return wrapIndexedSubquery(params, buildIndexedMediaSubquery({
+    tagTypes,
+    tag: String(condition.value),
+    minScore: condition.min_score,
+    maxScore: condition.max_score,
+  }));
 }
 
 /** Build a repeated EXISTS condition for general/character auto-tag filters. */

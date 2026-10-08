@@ -1,6 +1,7 @@
 import { ImageMetadataRecord } from '../../types/image'
 import { ImageSafetyService } from '../../services/imageSafetyService'
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService'
+import { MediaImageFeaturesModel } from './MediaImageFeaturesModel'
 
 export type SimilarityCandidateRecord = ImageMetadataRecord & {
   file_id?: number;
@@ -37,7 +38,7 @@ function getReadySimilarityCondition(alias: string) {
 /** Select only fields needed for scoring/sorting; hydrate final rows after pruning. */
 function buildCandidateSelect(includeColorHistogram: boolean) {
   const columns = includeColorHistogram
-    ? [...BASE_CANDIDATE_COLUMNS, 'im.color_histogram']
+    ? [...BASE_CANDIDATE_COLUMNS, 'mf.color_histogram']
     : BASE_CANDIDATE_COLUMNS
 
   return columns.map((column) => `      ${column}`).join(',\n')
@@ -92,6 +93,7 @@ export function buildSimilarCandidateQuery(targetImage: ImageMetadataRecord, use
 ${buildCandidateSelect(includeColorHistogram)}
     FROM media_metadata im
     LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
+    ${includeColorHistogram ? MediaImageFeaturesModel.join('im') : ''}
     WHERE im.composite_hash != ?
       AND im.perceptual_hash IS NOT NULL
       AND ${ImageSafetyService.buildVisibleScoreCondition('im.rating_score')}
@@ -120,9 +122,9 @@ export function buildColorCandidateQuery(compositeHash: string) {
       SELECT
 ${buildCandidateSelect(true)}
       FROM media_metadata im
+      JOIN media_image_features mf ON mf.media_id = im.media_id
       LEFT JOIN image_files if ON im.composite_hash = if.composite_hash
       WHERE im.composite_hash != ?
-        AND im.color_histogram IS NOT NULL
         AND ${ImageSafetyService.buildVisibleScoreCondition('im.rating_score')}
         AND ${getReadySimilarityCondition('im')}
     `,

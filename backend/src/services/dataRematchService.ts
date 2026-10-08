@@ -6,6 +6,9 @@ import { db } from '../database/init';
 import { getUserSettingsDb } from '../database/userSettingsDb';
 import { resolveUploadsPath } from '../config/runtimePaths';
 import { ImageSimilarityService } from './imageSimilarity';
+import { AutoTagIndexService, MEDIA_ROW_ID_COLUMN } from './autoTagIndexService';
+import { MediaImageFeaturesModel } from '../models/Image/MediaImageFeaturesModel';
+import type { ColorHistogram } from '../types/similarity';
 import { BackgroundQueueService } from './backgroundQueue';
 import { SystemMaintenanceLockService, SystemMaintenanceLockSnapshot } from './systemMaintenanceLockService';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
@@ -73,7 +76,7 @@ interface HashBuildPayload {
   perceptualHash: string | null;
   dHash: string | null;
   aHash: string | null;
-  colorHistogram: string | null;
+  colorHistogram: ColorHistogram | null;
   width: number | null;
   height: number | null;
   thumbnailPath: string | null;
@@ -99,7 +102,7 @@ export const DATA_REMATCH_EXCLUDED_FILE_TYPES = ['video'] as const;
 export const HASH_REGENERATION_BLOCKED_PIPELINES = ['auto-tag-extraction', 'artist-extraction'] as const;
 export const DATA_REMATCH_HASH_REFERENCE_TABLES = [
   'media_metadata',
-  'media_auto_tag_index',
+  'media_auto_tags',
   'image_files',
   'image_groups',
   'auto_folder_group_images',
@@ -574,7 +577,7 @@ export class DataRematchService {
       perceptualHash: hashes.perceptualHash,
       dHash: hashes.dHash,
       aHash: hashes.aHash,
-      colorHistogram: JSON.stringify(colorHistogram),
+      colorHistogram,
       width,
       height,
       thumbnailPath,
@@ -631,7 +634,8 @@ export class DataRematchService {
   }
 
   private static ensureMediaMetadataForHash(input: HashRemapInput): void {
-    const columns = getTableColumns('media_metadata');
+    // media_id is assigned by SQLite: copying the old row's id would collide with that row.
+    const columns = getTableColumns('media_metadata').filter((column) => column !== 'media_id');
     if (columns.length === 0) {
       throw new Error('media_metadata 테이블을 찾을 수 없습니다.');
     }
@@ -656,7 +660,6 @@ export class DataRematchService {
     row.perceptual_hash = input.payload.perceptualHash;
     row.dhash = input.payload.dHash;
     row.ahash = input.payload.aHash;
-    row.color_histogram = input.payload.colorHistogram;
     row.width = input.payload.width;
     row.height = input.payload.height;
     row.thumbnail_path = input.payload.thumbnailPath;
@@ -671,6 +674,7 @@ export class DataRematchService {
     const placeholders = columns.map(() => '?').join(', ');
     db.prepare(`INSERT INTO media_metadata (${columnSql}) VALUES (${placeholders})`)
       .run(...columns.map((column) => toSqlValue(row[column])));
+    MediaImageFeaturesModel.setHistogram(input.newHash, input.payload.colorHistogram);
   }
 
   private static updateMediaMetadataTechnicalFields(compositeHash: string, payload: HashBuildPayload): void {
@@ -679,7 +683,6 @@ export class DataRematchService {
       SET perceptual_hash = ?,
           dhash = ?,
           ahash = ?,
-          color_histogram = ?,
           width = COALESCE(?, width),
           height = COALESCE(?, height),
           thumbnail_path = COALESCE(?, thumbnail_path),
@@ -689,22 +692,32 @@ export class DataRematchService {
       payload.perceptualHash,
       payload.dHash,
       payload.aHash,
-      payload.colorHistogram,
       payload.width,
       payload.height,
       payload.thumbnailPath,
       compositeHash,
     );
+    MediaImageFeaturesModel.setHistogram(compositeHash, payload.colorHistogram);
   }
 
   private static remapHashReferenceTables(oldHash: string, newHash: string): void {
     if (oldHash === newHash) return;
 
     this.remapHashRefTableRows('image_groups', oldHash, newHash);
-    this.remapHashRefTableRows('media_auto_tag_index', oldHash, newHash);
+    this.remapAutoTagRows(oldHash, newHash);
     this.remapHashRefTableRows('auto_folder_group_images', oldHash, newHash);
     this.remapHashRefTableRows('image_models', oldHash, newHash);
     this.remapHashRefTableRows('image_metadata_edit_revisions', oldHash, newHash);
+  }
+
+  /** media_auto_tags is keyed by media row id, not by hash: move the old row's tags onto the new row. */
+  private static remapAutoTagRows(oldHash: string, newHash: string): void {
+    const findMediaId = db.prepare(`SELECT ${MEDIA_ROW_ID_COLUMN} AS media_id FROM media_metadata WHERE composite_hash = ?`);
+    const from = findMediaId.get(oldHash) as { media_id: number } | undefined;
+    const to = findMediaId.get(newHash) as { media_id: number } | undefined;
+    if (from && to) {
+      AutoTagIndexService.remapMedia(from.media_id, to.media_id);
+    }
   }
 
   private static remapHashRefTableRows(tableName: string, oldHash: string, newHash: string): void {

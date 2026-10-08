@@ -14,7 +14,13 @@ export interface ImageMetadataRecord {
   perceptual_hash: string;
   dhash: string;
   ahash: string;
-  color_histogram: string | null;
+  /** Integer row id (migration 041); absent on records built in code before insert. */
+  media_id?: number;
+  /**
+   * Lives in media_image_features: present only when a query joins it (similarity) or on insert input. BLOB from
+   * the DB, legacy JSON text accepted on input.
+   */
+  color_histogram?: Buffer | string | null;
 
   // 이미지 기본 정보
   width: number | null;
@@ -169,7 +175,7 @@ export interface ImageRecord {
 
   // 이미지 유사도 검색 필드들
   perceptual_hash: string | null;      // pHash 알고리즘 기반 이미지 해시
-  color_histogram: string | null;      // RGB 색상 분포 (JSON)
+  color_histogram?: string | null;     // 더 이상 API 로 보내지 않음 (media_image_features)
 
   // 동영상 전용 메타데이터 필드들
   duration: number | null;             // 동영상 재생 시간(초)

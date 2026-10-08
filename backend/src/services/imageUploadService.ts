@@ -55,10 +55,10 @@ export class ImageUploadService {
     const { compositeHash, pixelHash } = await resolveImageIdentity({ filePath: imagePath, perceptualCompositeHash: hashes.compositeHash });
 
     // 2. 색상 히스토그램 생성
-    let colorHistogramJson: string | null = null;
+    let colorHistogramBlob: Buffer | null = null;
     try {
       const histogram = await ImageSimilarityService.generateColorHistogram(imagePath);
-      colorHistogramJson = ImageSimilarityService.serializeHistogram(histogram);
+      colorHistogramBlob = ImageSimilarityService.serializeHistogram(histogram);
     } catch (error) {
       console.warn('색상 히스토그램 생성 실패:', error);
     }
@@ -73,7 +73,7 @@ export class ImageUploadService {
         perceptual_hash: perceptualHash,
         dhash: dHash,
         ahash: aHash,
-        color_histogram: colorHistogramJson,
+        color_histogram: colorHistogramBlob,
         width: imageData.width,
         height: imageData.height,
         thumbnail_path: imageData.thumbnailPath,

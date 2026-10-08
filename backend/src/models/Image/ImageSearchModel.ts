@@ -366,7 +366,8 @@ export class ImageSearchModel {
         .replace(/\bi\.model_name\b/g, 'im.model_name')
         .replace(/\bi\.auto_tags\b/g, 'im.auto_tags')
         .replace(/\bi\.rating_score\b/g, 'im.rating_score')
-        .replace(/\bi\.composite_hash\b/g, 'im.composite_hash');
+        .replace(/\bi\.composite_hash\b/g, 'im.composite_hash')
+        .replace(/\bi\.(rowid|media_id)\b/g, 'im.$1');
 
     // 조건을 media_metadata 테이블 기준으로 변경
     const conditions = queryBuilder.conditions.map(mapAutoTagConditionAliases);

@@ -4,6 +4,7 @@ import { db } from '../../database/init';
 import { ThumbnailGenerator } from '../../utils/thumbnailGenerator';
 import { AutoCollectionService } from '../autoCollectionService';
 import { ImageSimilarityService } from '../imageSimilarity';
+import { MediaImageFeaturesModel } from '../../models/Image/MediaImageFeaturesModel';
 import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibilityService';
 import { MediaPostprocessCoordinator } from './mediaPostprocessCoordinator';
 import {
@@ -142,22 +143,24 @@ export class ImageMediaProcessor {
     }
 
     try {
-      db.prepare(`
-        INSERT INTO media_metadata (
-          composite_hash, perceptual_hash, dhash, ahash,
-          color_histogram, width, height, thumbnail_path,
-          postprocess_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-      `).run(
-        hashes.compositeHash,
-        hashes.perceptualHash,
-        hashes.dHash,
-        hashes.aHash,
-        JSON.stringify(colorHistogram),
-        imageInfo.width,
-        imageInfo.height,
-        thumbnailPath,
-      );
+      db.transaction(() => {
+        db.prepare(`
+          INSERT INTO media_metadata (
+            composite_hash, perceptual_hash, dhash, ahash,
+            width, height, thumbnail_path,
+            postprocess_status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+        `).run(
+          hashes.compositeHash,
+          hashes.perceptualHash,
+          hashes.dHash,
+          hashes.aHash,
+          imageInfo.width,
+          imageInfo.height,
+          thumbnailPath,
+        );
+        MediaImageFeaturesModel.setHistogram(hashes.compositeHash, colorHistogram);
+      })();
       recordPixelHash(hashes.compositeHash, identity.pixelHash);
       stages.push(completedStage('metadata-row'));
     } catch (error) {

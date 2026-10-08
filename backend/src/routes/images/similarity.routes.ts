@@ -238,7 +238,7 @@ router.post('/similarity/rebuild', asyncHandler(async (req: Request, res: Respon
       FROM media_metadata im
       JOIN image_files if ON im.composite_hash = if.composite_hash
       WHERE if.file_type = 'original'
-        AND (im.perceptual_hash IS NULL OR im.color_histogram IS NULL)
+        AND (im.perceptual_hash IS NULL OR NOT EXISTS (SELECT 1 FROM media_image_features mf WHERE mf.media_id = im.media_id))
       LIMIT ?
     `).all(limit) as Array<{ composite_hash: string; file_path: string }>;
 

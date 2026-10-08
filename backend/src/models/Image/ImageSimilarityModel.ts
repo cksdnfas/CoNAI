@@ -10,6 +10,7 @@ import {
 } from '../../types/similarity';
 import { ImageSimilarityService } from '../../services/imageSimilarity';
 import { ImageSafetyService } from '../../services/imageSafetyService';
+import { MediaImageFeaturesModel, type ColorHistogramInput } from './MediaImageFeaturesModel';
 import {
   buildColorCandidateQuery,
   buildDuplicateCandidateQuery,
@@ -72,9 +73,12 @@ export class ImageSimilarityModel {
 
   /** Load media metadata by composite_hash for similarity workflows. */
   private static loadImageMetadata(compositeHash: string) {
-    return db.prepare(
-      'SELECT * FROM media_metadata WHERE composite_hash = ?'
-    ).get(compositeHash) as ImageMetadataRecord | undefined;
+    return db.prepare(`
+      SELECT mm.*, mf.color_histogram
+      FROM media_metadata mm
+      ${MediaImageFeaturesModel.join('mm')}
+      WHERE mm.composite_hash = ?
+    `).get(compositeHash) as ImageMetadataRecord | undefined;
   }
 
   static countDuplicateGroupCandidates(): number {
@@ -216,15 +220,17 @@ export class ImageSimilarityModel {
     perceptualHash: string,
     dHash: string,
     aHash: string,
-    colorHistogram: string
+    colorHistogram: ColorHistogramInput
   ): Promise<boolean> {
-    const info = db.prepare(`
-      UPDATE media_metadata
-      SET perceptual_hash = ?, dhash = ?, ahash = ?, color_histogram = ?, metadata_updated_date = CURRENT_TIMESTAMP
-      WHERE composite_hash = ?
-    `).run(perceptualHash, dHash, aHash, colorHistogram, compositeHash);
-
-    return info.changes > 0;
+    return db.transaction(() => {
+      const info = db.prepare(`
+        UPDATE media_metadata
+        SET perceptual_hash = ?, dhash = ?, ahash = ?, metadata_updated_date = CURRENT_TIMESTAMP
+        WHERE composite_hash = ?
+      `).run(perceptualHash, dHash, aHash, compositeHash);
+      MediaImageFeaturesModel.setHistogram(compositeHash, colorHistogram);
+      return info.changes > 0;
+    })();
   }
 
   /** Normalize search weights without widening the public options contract. */
