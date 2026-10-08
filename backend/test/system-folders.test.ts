@@ -212,4 +212,68 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
     const orphanOrigins = user.getUserSettingsDb().prepare('SELECT COUNT(*) AS count FROM recycle_bin_entries').get() as { count: number }
     assert.equal(orphanOrigins.count, 0)
   })
+
+  await t.test('a file deleted into the bin while it is being emptied stays, with its origin', async () => {
+    for (let index = 0; index < 5; index += 1) fs.writeFileSync(path.join(bin, `2026-02-01T00-00-00-00${index}Z_old.txt`), 'old')
+    const lateName = '2026-10-08T09-00-00-000Z-late01_late.png'
+    const originalUnlink = fs.promises.unlink
+    let injected = false
+    fs.promises.unlink = (async (target: fs.PathLike) => {
+      if (!injected) {
+        // Another delete lands in the bin after emptying read the directory.
+        injected = true
+        fs.writeFileSync(path.join(bin, lateName), 'late')
+        user.getUserSettingsDb().prepare("INSERT INTO recycle_bin_entries (bin_name, original_path, size, source) VALUES (?, ?, 4, 'library')").run(lateName, path.join(uploads, 'late.png'))
+      }
+      return originalUnlink(target)
+    }) as typeof fs.promises.unlink
+    try {
+      const emptied = await call('/api/system-folders/recycle-bin/empty', adminId, 'POST')
+      assert.equal(emptied.body.data.deleted, 5)
+    } finally {
+      fs.promises.unlink = originalUnlink
+    }
+    assert.ok(fs.existsSync(path.join(bin, lateName)))
+    const listing = await call('/api/system-folders/recycle-bin', adminId)
+    const late = listing.body.data.entries.find((item: { name: string }) => item.name === lateName)
+    assert.equal(late.recycle.restorable, true)
+    assert.equal(late.recycle.originalPath, path.join(uploads, 'late.png'))
+  })
+
+  await t.test('moving a file back never replaces a file that appeared at the target', async () => {
+    const dir = fs.mkdtempSync(path.join(root, 'move-'))
+    const source = path.join(dir, 'source.png'); const target = path.join(dir, 'target.png')
+    fs.writeFileSync(source, 'from-bin'); fs.writeFileSync(target, 'created-meanwhile')
+    await assert.rejects(recycle.moveFileWithoutReplacing(source, target), { code: 'EEXIST' })
+    assert.equal(fs.readFileSync(target, 'utf8'), 'created-meanwhile')
+    assert.equal(fs.readFileSync(source, 'utf8'), 'from-bin')
+
+    // Without hard links (another volume, FAT, some shares) the exclusive copy refuses the same way.
+    const originalLink = fs.promises.link
+    fs.promises.link = (async () => { throw Object.assign(new Error('cross-device'), { code: 'EXDEV' }) }) as typeof fs.promises.link
+    try {
+      await assert.rejects(recycle.moveFileWithoutReplacing(source, target), { code: 'EEXIST' })
+      assert.equal(fs.readFileSync(target, 'utf8'), 'created-meanwhile')
+      assert.equal(fs.readFileSync(source, 'utf8'), 'from-bin')
+      await recycle.moveFileWithoutReplacing(source, path.join(dir, 'free.png'))
+      assert.equal(fs.readFileSync(path.join(dir, 'free.png'), 'utf8'), 'from-bin')
+      assert.ok(!fs.existsSync(source))
+    } finally {
+      fs.promises.link = originalLink
+    }
+
+    // Through the route: the original spot is taken only after the bin entry was recorded.
+    const original = path.join(uploads, 'race.png')
+    fs.writeFileSync(original, 'v1')
+    const binName = path.basename(await recycle.deleteFile(original, true, 'library') as string)
+    fs.writeFileSync(original, 'newer')
+    const refused = await call('/api/system-folders/recycle-bin/restore', adminId, 'POST', { names: [binName] })
+    assert.equal(refused.body.data.failed[0].name, binName)
+    assert.equal(fs.readFileSync(original, 'utf8'), 'newer')
+    assert.ok(fs.existsSync(path.join(bin, binName)))
+    const renamed = await call('/api/system-folders/recycle-bin/restore', adminId, 'POST', { names: [binName], conflict: 'rename' })
+    assert.equal(renamed.body.data.done[0].restoredTo, path.join(uploads, 'race (복원 1).png'))
+    assert.equal(fs.readFileSync(path.join(uploads, 'race (복원 1).png'), 'utf8'), 'v1')
+    assert.equal(fs.readFileSync(original, 'utf8'), 'newer')
+  })
 })

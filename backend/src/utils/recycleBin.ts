@@ -146,11 +146,14 @@ export function forgetRecycleBinOrigins(binNames: readonly string[]): void {
   db.transaction(() => { for (const name of binNames) remove.run(name); })();
 }
 
-/** Drop every recorded origin whose file is no longer in the RecycleBin (after emptying it). */
-export function forgetAllRecycleBinOrigins(keep: ReadonlySet<string>): void {
+/**
+ * Drop recorded origins whose file is gone from the RecycleBin. Checked per record against the directory as it is
+ * now, so a file moved in while the bin was being emptied keeps its origin.
+ */
+export function forgetMissingRecycleBinOrigins(directory: string): void {
   const db = recycleBinDb();
   const names = (db.prepare('SELECT bin_name FROM recycle_bin_entries').all() as Array<{ bin_name: string }>).map((row) => row.bin_name);
-  forgetRecycleBinOrigins(names.filter((name) => !keep.has(name)));
+  forgetRecycleBinOrigins(names.filter((name) => !fs.existsSync(path.join(directory, name))));
 }
 
 /**
@@ -184,6 +187,32 @@ export async function relocateFile(source: string, target: string): Promise<void
       }
     }
 
+    throw error;
+  }
+}
+
+/** Hard links are not available here (another volume, FAT/exFAT, some network shares): copy instead. */
+const LINK_FALLBACK_ERROR_CODES = new Set(['EXDEV', 'EPERM', 'EACCES', 'ENOTSUP', 'EOPNOTSUPP', 'ENOSYS', 'EMLINK']);
+
+/**
+ * Move one file without ever replacing `target`: rename would overwrite a file created there in the meantime, so the
+ * file is hard-linked (or exclusively copied) to `target` first, which fails with EEXIST when the name is taken, and
+ * only then removed from `source`. On failure `source` is left in place.
+ */
+export async function moveFileWithoutReplacing(source: string, target: string): Promise<void> {
+  try {
+    await fs.promises.link(source, target);
+  } catch (linkError) {
+    if (!LINK_FALLBACK_ERROR_CODES.has(String((linkError as NodeJS.ErrnoException).code))) throw linkError;
+    await fs.promises.copyFile(source, target, fs.constants.COPYFILE_EXCL);
+  }
+
+  try {
+    await unlinkWithTransientLockRetry(source);
+  } catch (error) {
+    await fs.promises.unlink(target).catch((cleanupError) => {
+      console.error(`⚠️ Failed to remove the restored copy after the move failed:`, cleanupError);
+    });
     throw error;
   }
 }

@@ -5,11 +5,11 @@ import type { StoredFileEntry, SystemFolderBatchResult, SystemFolderEntry, Syste
 import { runtimePaths } from '../config/runtimePaths';
 import {
   RECYCLE_BIN_PATH,
-  forgetAllRecycleBinOrigins,
+  forgetMissingRecycleBinOrigins,
   forgetRecycleBinOrigins,
+  moveFileWithoutReplacing,
   parseRecycleBinFileName,
   readRecycleBinOrigins,
-  relocateFile,
   unlinkWithTransientLockRetry,
   type RecycleBinOrigin,
 } from '../utils/recycleBin';
@@ -270,17 +270,14 @@ export const SystemFolderService = {
         const { absolute } = resolveFile('recycle-bin', [name]);
         const origin = origins.get(name);
         if (!origin) throw new SystemFolderError('원래 위치 기록이 없어서 복원할 수 없어.', 409);
-        let target = path.resolve(origin.originalPath);
-        const targetDirectory = realOrResolved(path.dirname(target));
+        const original = path.resolve(origin.originalPath);
+        const targetDirectory = realOrResolved(path.dirname(original));
         if (isDenied(targetDirectory, denied) || within(binRoot, targetDirectory)) throw new SystemFolderError('이 위치로는 복원할 수 없어.', 403);
-        if (fs.existsSync(target)) {
-          if (conflict !== 'rename') throw new SystemFolderError('원래 위치에 같은 이름의 파일이 있어.', 409);
-          target = freeSiblingName(target);
-        }
-        await fs.promises.mkdir(path.dirname(target), { recursive: true });
-        await relocateFile(absolute, target);
+        await fs.promises.mkdir(path.dirname(original), { recursive: true });
+        // The move itself refuses an occupied name (EEXIST), so a file created after any check is never replaced.
+        const restoredTo = await restoreWithoutReplacing(absolute, original, conflict);
         forgetRecycleBinOrigins([name]);
-        result.done.push({ name, restoredTo: target });
+        result.done.push({ name, restoredTo });
       } catch (error) {
         result.failed.push({ name, error: errorMessage(error) });
       }
@@ -303,37 +300,54 @@ export const SystemFolderService = {
     return result;
   },
 
-  /** Delete every file at the top of the RecycleBin (folders and links are left alone), yielding between chunks. */
+  /**
+   * Delete every file at the top of the RecycleBin as it was when emptying started (folders and links are left
+   * alone), yielding between chunks. Files deleted into the bin meanwhile stay, with their origins.
+   */
   async empty(): Promise<{ deleted: number; failed: number }> {
     const directory = rootDirectory('recycle-bin');
-    let deleted = 0;
+    const deletedNames: string[] = [];
     let failed = 0;
-    const remaining = new Set<string>();
     const dirents = await fs.promises.readdir(directory, { withFileTypes: true });
     for (let index = 0; index < dirents.length; index += 1) {
       const dirent = dirents[index];
       if (!dirent.isFile()) continue;
       try {
         await fs.promises.unlink(path.join(directory, dirent.name));
-        deleted += 1;
+        deletedNames.push(dirent.name);
       } catch {
         failed += 1;
-        remaining.add(dirent.name);
       }
       if (index % 200 === 199) await new Promise<void>((resolve) => setImmediate(resolve));
     }
-    forgetAllRecycleBinOrigins(remaining);
-    return { deleted, failed };
+    forgetRecycleBinOrigins(deletedNames);
+    forgetMissingRecycleBinOrigins(directory);
+    return { deleted: deletedNames.length, failed };
   },
 };
 
-function freeSiblingName(target: string): string {
-  const directory = path.dirname(target);
-  const extension = path.extname(target);
-  const stem = path.basename(target, extension);
+const isTaken = (error: unknown) => (error as NodeJS.ErrnoException | undefined)?.code === 'EEXIST';
+
+/** Restore to the original name, or with `rename` to the first free ` (복원 N)` sibling; never over an existing file. */
+async function restoreWithoutReplacing(source: string, original: string, conflict: 'fail' | 'rename'): Promise<string> {
+  try {
+    await moveFileWithoutReplacing(source, original);
+    return original;
+  } catch (error) {
+    if (!isTaken(error)) throw error;
+    if (conflict !== 'rename') throw new SystemFolderError('원래 위치에 같은 이름의 파일이 있어.', 409);
+  }
+  const directory = path.dirname(original);
+  const extension = path.extname(original);
+  const stem = path.basename(original, extension);
   for (let index = 1; index < 1000; index += 1) {
     const candidate = path.join(directory, `${stem} (복원 ${index})${extension}`);
-    if (!fs.existsSync(candidate)) return candidate;
+    try {
+      await moveFileWithoutReplacing(source, candidate);
+      return candidate;
+    } catch (error) {
+      if (!isTaken(error)) throw error;
+    }
   }
   throw new SystemFolderError('복원할 이름을 정하지 못했어.', 409);
 }
