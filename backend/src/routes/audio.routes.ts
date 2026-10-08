@@ -44,6 +44,26 @@ import {
   type AudioCandidate,
   type AudioImportTarget,
 } from '../services/audio/audioService';
+import { audioDeletionPlan, deleteAudioGroupCandidates } from '../services/audio/audioService';
+import { renderAudioEditPreview, saveAudioEdit } from '../services/audio/audioEdit';
+import {
+  AUDIO_EXPORT_INLINE_MAX_FILES,
+  audioCandidateExportName,
+  audioExportMimeType,
+  audioExportPlan,
+  audioExportResultFile,
+  buildAudioExport,
+  canAccessAudioExport,
+  createAudioExportWorkspace,
+  exportAudioCandidateFile,
+  getAudioExportWorkspace,
+  getSavedAudioExportOptions,
+  removeAudioExportWorkspace,
+  resolveAudioExportOptions,
+  saveAudioExportOptions,
+  type AudioExportOwner,
+} from '../services/audio/audioExport';
+import { startAudioExportJob } from '../services/audio/audioExportJob';
 import { FileStoreError, parseFileId } from '../services/fileStoreService';
 import { requireFileStoreOwner } from '../services/fileStoreAccess';
 import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers';
@@ -257,6 +277,112 @@ router.post('/orders/:orderId/jobs/:idx/retry', edit, generate, (req, res) => {
   const idx = Number(req.params.idx);
   if (!Number.isSafeInteger(idx) || idx < 0) throw new AudioServiceError('잘못된 순번이야.');
   res.json({ success: true, data: retryAudioOrderJob(param(req, 'orderId'), idx) });
+});
+
+/* ------------------------------------------------------------------ editing */
+
+/** POST /api/audio/candidates/:id/preview — renders the edit to a temp WAV, streams it and removes it. */
+router.post('/candidates/:candidateId/preview', edit, asyncHandler(async (req, res, next) => {
+  const preview = await renderAudioEditPreview(param(req, 'candidateId'), req.body ?? {});
+  const cleanup = () => { void fs.promises.rm(preview.path, { force: true }).catch(() => undefined); };
+  res.setHeader('Content-Type', 'audio/wav');
+  res.setHeader('Content-Disposition', 'inline; filename="preview.wav"');
+  res.sendFile(preview.path, { dotfiles: 'allow' }, (error) => {
+    cleanup();
+    if (error && !res.headersSent) next(error);
+  });
+}));
+
+/** POST /api/audio/candidates/:id/edit { start, end, gain_db, pitch_semitones, speed, fade_in, fade_out, request_key? } */
+router.post('/candidates/:candidateId/edit', edit, asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const candidate = await saveAudioEdit(param(req, 'candidateId'), body, { accountId: accountId(req), requestKey: body.request_key ?? body.requestKey });
+  res.status(201).json({ success: true, data: candidate });
+}));
+
+/* ------------------------------------------------------------------ deletion plan */
+
+/** GET /api/audio/groups/:id/candidates/deletion?scope=all|unselected&candidate_id= — the frozen id list to confirm. */
+router.get('/groups/:groupId/candidates/deletion', (req, res) => {
+  res.json({ success: true, data: audioDeletionPlan(param(req, 'groupId'), req.query.scope, req.query.candidate_id ?? req.query.candidateId) });
+});
+/** POST /api/audio/groups/:id/candidates/delete { candidate_ids, include_selected } — soft delete of a frozen list. */
+router.post('/groups/:groupId/candidates/delete', edit, (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  res.json({ success: true, data: deleteAudioGroupCandidates(param(req, 'groupId'), body.candidate_ids ?? body.candidateIds, body.include_selected === true || body.includeSelected === true) });
+});
+
+/* ------------------------------------------------------------------ export */
+
+const exportOwner = (req: Request): AudioExportOwner => ({ accountId: accountId(req), accountType: getRequesterAccountType(req) ?? null });
+
+function sendExportFile(res: Response, next: NextFunction, filePath: string, fileName: string, after?: () => void) {
+  res.setHeader('Content-Type', audioExportMimeType(fileName));
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.sendFile(filePath, { dotfiles: 'allow' }, (error) => {
+    after?.();
+    if (error && !res.headersSent) next(error);
+  });
+}
+
+router.get('/settings/export', (_req, res) => res.json({ success: true, data: getSavedAudioExportOptions() }));
+router.put('/settings/export', edit, (req, res) => res.json({ success: true, data: saveAudioExportOptions(req.body ?? {}) }));
+
+/** GET /api/audio/candidates/:id/export?format&quality&normalize&… — one candidate, label name when it is a selected take. */
+router.get('/candidates/:candidateId/export', asyncHandler(async (req, res, next) => {
+  const options = resolveAudioExportOptions(req.query);
+  const id = param(req, 'candidateId');
+  const fileName = audioCandidateExportName(id, options);
+  const workspace = createAudioExportWorkspace(exportOwner(req));
+  try {
+    const result = await exportAudioCandidateFile(id, options, workspace.dir, fileName);
+    sendExportFile(res, next, result.path, fileName, () => removeAudioExportWorkspace(workspace.id));
+  } catch (error) {
+    removeAudioExportWorkspace(workspace.id);
+    throw error;
+  }
+}));
+
+/**
+ * Selected takes of a group or a project: one file → that file; up to AUDIO_EXPORT_INLINE_MAX_FILES → a ZIP built in
+ * the request; more → 202 with an 'audio-export' runtime job, downloaded later from /exports/:id/download.
+ */
+async function exportSelected(req: Request, res: Response, next: NextFunction, projectId: string, groupId: string | null) {
+  const options = resolveAudioExportOptions(req.query);
+  const plan = audioExportPlan(projectId, groupId, options);
+  if (plan.count > AUDIO_EXPORT_INLINE_MAX_FILES) {
+    const job = startAudioExportJob({ projectId, groupId, options, owner: exportOwner(req) }, plan.count);
+    res.status(202).json({ success: true, data: { job, count: plan.count, files: plan.files } });
+    return;
+  }
+  const result = await buildAudioExport(projectId, groupId, options, exportOwner(req));
+  const workspace = getAudioExportWorkspace(result.export_id);
+  const file = workspace ? audioExportResultFile(workspace) : null;
+  if (!file) throw new AudioServiceError('내보낸 파일을 찾을 수 없어.', 500);
+  sendExportFile(res, next, file.path, file.fileName, () => removeAudioExportWorkspace(result.export_id));
+}
+
+router.get('/groups/:groupId/export', asyncHandler(async (req, res, next) => {
+  const group = getAudioGroup(param(req, 'groupId'));
+  await exportSelected(req, res, next, group.project_id, group.id);
+}));
+router.get('/projects/:projectId/export', asyncHandler(async (req, res, next) => {
+  const groupId = typeof req.query.group_id === 'string' && req.query.group_id ? req.query.group_id : null;
+  await exportSelected(req, res, next, param(req, 'projectId'), groupId);
+}));
+/** GET /api/audio/projects/:id/export/manifest?group_id&… — the files, their names and a download_url with the options. */
+router.get('/projects/:projectId/export/manifest', (req, res) => {
+  const groupId = typeof req.query.group_id === 'string' && req.query.group_id ? req.query.group_id : null;
+  res.json({ success: true, data: audioExportPlan(param(req, 'projectId'), groupId, resolveAudioExportOptions(req.query)) });
+});
+/** GET /api/audio/exports/:exportId/download — the result of a background export (starter or admin). */
+router.get('/exports/:exportId/download', (req, res, next) => {
+  const workspace = getAudioExportWorkspace(param(req, 'exportId'));
+  if (!workspace || !canAccessAudioExport(workspace.owner, exportOwner(req))) throw new AudioServiceError('내보내기 결과를 찾을 수 없어.', 404);
+  const file = audioExportResultFile(workspace);
+  if (!file) throw new AudioServiceError('내보내기가 아직 끝나지 않았거나 만료됐어.', 404);
+  sendExportFile(res, next, file.path, file.fileName);
 });
 
 router.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
