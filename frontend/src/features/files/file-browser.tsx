@@ -27,6 +27,8 @@ import { FILES_QUERY_KEY, createStoredFolder, deleteStoredFiles, formatFileSize,
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { FilePreview } from './file-preview'
+import { useFileViewMode, type FileViewMode } from './file-view-mode'
+import { SystemFolderBrowser, SystemFolderSidebarGroup, type SystemFolderLocation } from './system-folder-browser'
 
 const FILE_DRAG_TYPE = 'application/x-conai-file-ids'
 const PAGE_SIZE = 100
@@ -63,17 +65,6 @@ function EntryIcon({ entry, className = 'size-4' }: { entry: StoredFileEntry; cl
   const kind = mediaKind(entry)
   const Icon = kind === 'image' ? ImageIcon : kind === 'video' ? Film : kind === 'audio' ? Music : (entry.mimeType ?? '').startsWith('text/') ? FileText : File
   return <Icon className={cn('shrink-0 text-muted-foreground', className)} />
-}
-
-type FileViewMode = 'grid' | 'list'
-const VIEW_MODE_STORAGE_KEY = 'conai.files.view'
-
-function readViewMode(): FileViewMode {
-  try {
-    return window.localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'grid'
-  } catch {
-    return 'grid'
-  }
 }
 
 /** Extension in capitals under the icon, so PDF / ZIP / TXT read at a glance. */
@@ -184,7 +175,7 @@ function OwnerList({ owners, onOpen }: { owners: StoredFileOwner[]; onOpen: (own
  * With `onPick` it becomes a picker (inside a modal): only files can be chosen and nothing is changed but uploads.
  * With `owner` + `onOwnerChange`, administrators can switch to any account's store (`ALL_OWNERS` lists them).
  */
-export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, owner = null, onOwnerChange }: {
+export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, owner = null, onOwnerChange, system = null, onSystemNavigate }: {
   parentId: string | null
   onNavigate: (id: string | null) => void
   onPick?: (files: StoredFileEntry[]) => void
@@ -194,6 +185,10 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
   accept?: readonly string[]
   owner?: string | null
   onOwnerChange?: (owner: string | null) => void
+  /** Server folder shown instead of the store (administrators); null shows the store. */
+  system?: SystemFolderLocation | null
+  /** With it, administrators get the "서버 폴더" sidebar group. */
+  onSystemNavigate?: (location: SystemFolderLocation) => void
 }) {
   const { t, formatDateTime } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -210,7 +205,9 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
   // Restricted file types and other accounts' stores are for administrators (the local owner before accounts exist).
   const canUploadAny = auth.data?.isAdmin === true || auth.data?.hasCredentials === false
   const canBrowseAll = !isPicker && onOwnerChange !== undefined && auth.data?.isAdmin === true
-  const browsingAll = canBrowseAll && owner === ALL_OWNERS
+  const canBrowseSystem = !isPicker && onSystemNavigate !== undefined && auth.data?.isAdmin === true
+  const browsingSystem = canBrowseSystem && system !== null
+  const browsingAll = canBrowseAll && owner === ALL_OWNERS && !browsingSystem
   /** Store sent to the API: null for the requester's own store. */
   const storeOwner = canBrowseAll && owner && owner !== ALL_OWNERS ? owner : null
   const accountKey = auth.data?.accountId ?? (auth.data?.hasCredentials ? 'anonymous' : 'bootstrap')
@@ -220,17 +217,9 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
   const [moveOpen, setMoveOpen] = useState(false)
   const [moveTarget, setMoveTarget] = useState('')
   const [preview, setPreview] = useState<StoredFileEntry | null>(null)
-  const [viewMode, setViewMode] = useState<FileViewMode>(readViewMode)
-  const changeViewMode = (mode: FileViewMode) => {
-    setViewMode(mode)
-    try {
-      window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode)
-    } catch {
-      // Storage blocked: the choice lasts for this page only.
-    }
-  }
+  const [viewMode, changeViewMode] = useFileViewMode()
   const uploadInput = useRef<HTMLInputElement>(null)
-  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'list', parentId, offset], queryFn: () => listStoredFiles(parentId, offset, storeOwner), enabled: canViewFiles && !browsingAll })
+  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'list', parentId, offset], queryFn: () => listStoredFiles(parentId, offset, storeOwner), enabled: canViewFiles && !browsingAll && !browsingSystem })
   const foldersQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'folders'], queryFn: () => listStoredFolders(storeOwner), enabled: canViewFiles && !browsingAll })
   const ownersQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'owners'], queryFn: listStoredFileOwners, enabled: canBrowseAll })
   const folders = useMemo(() => folderTree(foldersQuery.data ?? []), [foldersQuery.data])
@@ -253,7 +242,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
   })
   const busy = mutation.isPending
 
-  useChatPageRegistration(!isPicker && chatCanReadFiles && !browsingAll ? {
+  useChatPageRegistration(!isPicker && chatCanReadFiles && !browsingAll && !browsingSystem ? {
     kind: 'files', title: t({ ko: '파일 보관함', en: 'File store' }), resourceId: `${storeOwner ?? 'self'}:${parentId ?? 'root'}`, localRevision: JSON.stringify([selected, preview?.id, nameDialog, moveOpen]),
     fields: [
       { id: 'viewMode', label: t({ ko: '목록 표시', en: 'List view' }), type: 'select', value: viewMode, options: ['grid', 'list'] },
@@ -363,14 +352,19 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
       {canBrowseAll ? <SidebarItem icon={Users} label={t({ ko: '전체 계정', en: 'All accounts' })} active={browsingAll} onClick={() => openOwner(null)} /> : null}
       {browsingAll ? null : (
         <>
-          <SidebarItem icon={Folder} label={rootLabel} active={parentId === null} onClick={() => navigate(null)} onDragOver={dragOver} onDrop={(event) => drop(event, null)} />
+          <SidebarItem icon={Folder} label={rootLabel} active={!browsingSystem && parentId === null} onClick={() => navigate(null)} onDragOver={dragOver} onDrop={(event) => drop(event, null)} />
           {folders.map(({ folder, depth }) => (
-            <SidebarItem key={folder.id} icon={Folder} depth={depth + 1} label={folder.name} active={folder.id === parentId} onClick={() => navigate(folder.id)} onDragOver={dragOver} onDrop={(event) => drop(event, folder.id)} />
+            <SidebarItem key={folder.id} icon={Folder} depth={depth + 1} label={folder.name} active={!browsingSystem && folder.id === parentId} onClick={() => navigate(folder.id)} onDragOver={dragOver} onDrop={(event) => drop(event, folder.id)} />
           ))}
         </>
       )}
+      {canBrowseSystem ? <SystemFolderSidebarGroup active={browsingSystem ? system.root : null} onOpen={(root) => onSystemNavigate({ root, path: '' })} /> : null}
     </SidebarNav>
   )
+
+  if (browsingSystem) {
+    return <SystemFolderBrowser key={`${system.root}:${system.path}`} location={system} onNavigate={onSystemNavigate} sidebar={sidebar} />
+  }
 
   let list
   if (browsingAll) {

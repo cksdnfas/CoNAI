@@ -78,7 +78,10 @@ export interface SystemFolderListing {
   limit: number;
 }
 
+/** Why one RecycleBin item failed: the original spot is taken, or no origin was recorded. */
+export type SystemFolderFailureCode = 'conflict' | 'no-origin';
+
 export interface SystemFolderBatchResult {
   done: Array<{ name: string; restoredTo?: string }>;
-  failed: Array<{ name: string; error: string }>;
+  failed: Array<{ name: string; error: string; code?: SystemFolderFailureCode }>;
 }

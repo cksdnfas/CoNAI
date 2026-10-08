@@ -1,19 +1,21 @@
 import { Archive, CircleUserRound, FolderTree, Images, LayoutGrid, ListTodo, Map as MapIcon, MessageSquare, MessageSquareText, Search, Settings2, Sparkles, Upload, type LucideIcon } from 'lucide-react'
-import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
 import { RowGroup } from '@/components/ui/row-group'
 import { ToggleChip } from '@/components/ui/chip'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useI18n } from '@/i18n'
-import type { GeneralSettings, HeaderNavigationItemKey } from '@conai/shared'
+import { MAX_RECYCLE_BIN_RETENTION_DAYS, type GeneralSettings, type HeaderNavigationItemKey } from '@conai/shared'
 import { DEFAULT_HEADER_NAVIGATION_SETTINGS } from '@/lib/settings-defaults'
 import { SettingsSwitchRow } from './settings-switch-row'
 import { SectionDirtyBadge } from './settings-section-status'
 import { SettingsLabelTip } from './settings-label-tip'
-import { SETTINGS_CONTROL_CLASS, SETTINGS_WIDE_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
+import { SETTINGS_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
 
 export type GeneralPreferenceSection = 'basic' | 'appearance' | 'library' | 'safety'
+
+/** Days offered when the automatic RecycleBin cleanup is switched on. */
+const DEFAULT_RECYCLE_BIN_RETENTION_DAYS = 30
 
 interface GeneralPreferencesSectionsProps {
   sections: GeneralPreferenceSection[]
@@ -69,7 +71,8 @@ export function GeneralPreferencesSections({
   const headerNavigation = generalDraft.headerNavigation ?? DEFAULT_HEADER_NAVIGATION_SETTINGS
   const languageLabel = t({ ko: '언어', en: 'Language' })
   const similarityLabel = t({ ko: '유사/중복 검사', en: 'Similar/duplicate check' })
-  const recycleBinLabel = t({ ko: '휴지통 경로', en: 'Recycle bin path' })
+  const retentionLabel = t({ ko: '휴지통 보관 기간 (일)', en: 'Keep in recycle bin (days)' })
+  const retentionDays = generalDraft.deleteProtection.recycleBinRetentionDays ?? 0
   const historyMaxLabel = t({ ko: '생성 히스토리 최대 항목 수', en: 'Generation history maximum items' })
 
   return (
@@ -150,15 +153,29 @@ export function GeneralPreferencesSections({
             onCheckedChange={(checked) => onPatchDeleteProtection({ enabled: checked })}
             label={t({ ko: '삭제할 때 휴지통으로 보호', en: 'Protect deleted files with the recycle bin' })}
           />
-          <SettingRow label={recycleBinLabel} controlClassName={SETTINGS_WIDE_CONTROL_CLASS}>
-            <Input
-              variant="settings"
-              aria-label={recycleBinLabel}
-              value={generalDraft.deleteProtection.recycleBinPath}
-              onChange={(event) => onPatchDeleteProtection({ recycleBinPath: event.target.value })}
-              placeholder="RecycleBin"
-            />
-          </SettingRow>
+          <SettingsSwitchRow
+            checked={retentionDays > 0}
+            onCheckedChange={(checked) => onPatchDeleteProtection({ recycleBinRetentionDays: checked ? DEFAULT_RECYCLE_BIN_RETENTION_DAYS : 0 })}
+            label={t({ ko: '휴지통 자동 비우기', en: 'Empty the recycle bin automatically' })}
+          />
+          {retentionDays > 0 ? (
+            <SettingRow label={retentionLabel} controlClassName={SETTINGS_CONTROL_CLASS}>
+              <NumberStepperInput
+                variant="settings"
+                aria-label={retentionLabel}
+                min={1}
+                max={MAX_RECYCLE_BIN_RETENTION_DAYS}
+                step={1}
+                value={retentionDays}
+                onValueCommit={(nextValue) => {
+                  const parsedValue = Number.parseInt(nextValue, 10)
+                  if (Number.isFinite(parsedValue)) {
+                    onPatchDeleteProtection({ recycleBinRetentionDays: Math.min(MAX_RECYCLE_BIN_RETENTION_DAYS, Math.max(1, parsedValue)) })
+                  }
+                }}
+              />
+            </SettingRow>
+          ) : null}
           <SettingRow label={historyMaxLabel} controlClassName={SETTINGS_CONTROL_CLASS}>
             <NumberStepperInput
               variant="settings"
