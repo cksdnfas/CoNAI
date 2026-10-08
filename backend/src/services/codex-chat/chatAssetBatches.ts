@@ -18,6 +18,7 @@ import { chatCharacterGroupPath, normalizeAvatarCrop, normalizeProfileAssetHash,
 import { activeMediaFile } from './chatCardAssets'
 import { ChatAssetError, requireChatAssetAdmin, requireChatAssetGeneration } from './chatAssetAccess'
 import { assetTaggerEnabled, tagAsset, reviewAsset, type AssetTagCache } from './chatAssetReview'
+import { assetJudgeSetup, judgeExpression, type ExpressionJudgement } from './chatJudgeAssets'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
 import { normalizeChatStyle } from './chatStyle'
 
@@ -33,7 +34,7 @@ export const chatAssetBatchInputSchema = z.object({
 type SlotRecipe = { slotKey: string; kind: ChatAssetKind; prompt: string; size?: string; inputs?: Record<string, unknown> }
 type Snapshot = { requestKey: string; request: string; preset: ChatGenerationPreset; appearance: string; referenceHash: string | null; slots: SlotRecipe[]; promptField?: string; groupPath: string }
 type BatchRow = { id: number; account_id: number | null; profile_id: number; preset_id: number; snapshot: string; created_at: string }
-type StoredAttempt = { jobId: number; createdAt: string; useCurrentPreset: boolean; referenceHash: string | null; tags?: Record<string, AssetTagCache>; tagCheckedAt?: Record<string, number> }
+type StoredAttempt = { jobId: number; createdAt: string; useCurrentPreset: boolean; referenceHash: string | null; tags?: Record<string, AssetTagCache>; tagCheckedAt?: Record<string, number>; judged?: Record<string, ExpressionJudgement> }
 type SlotRow = { batch_id: number; slot_key: string; kind: ChatAssetKind; prompt: string; attempts: string; chosen_hash: string | null }
 
 function parseInput(value: unknown): ChatAssetBatchInput {
@@ -227,7 +228,7 @@ export function getChatAssetBatch(requester: McpRequester, id: number, profileId
   const slots = rows.map((slot) => {
     const attempts: ChatAssetAttempt[] = attemptsOf(slot).map((attempt) => {
       const job = getUserSettingsDb().prepare('SELECT status, failure_code, cancel_requested FROM generation_queue_jobs WHERE id = ?').get(attempt.jobId) as { status: string; failure_code: string | null; cancel_requested: number } | undefined
-      const candidates = candidatesOf(attempt.jobId).map((candidate) => ({ ...candidate, ...(enabled && tagCache[candidate.compositeHash] ? { review: reviewAsset(slot.kind, slot.slot_key, candidate.compositeHash, tagCache[candidate.compositeHash], attempt.referenceHash ? tagCache[attempt.referenceHash] : undefined, allCandidates.filter((entry) => entry.slotKey !== slot.slot_key)) } : {}) }))
+      const candidates = candidatesOf(attempt.jobId).map((candidate) => ({ ...candidate, ...(enabled && tagCache[candidate.compositeHash] ? { review: reviewAsset(slot.kind, slot.slot_key, candidate.compositeHash, tagCache[candidate.compositeHash], attempt.referenceHash ? tagCache[attempt.referenceHash] : undefined, allCandidates.filter((entry) => entry.slotKey !== slot.slot_key), attempt.judged?.[candidate.compositeHash]) } : {}) }))
       return { jobId: attempt.jobId, createdAt: attempt.createdAt, useCurrentPreset: attempt.useCurrentPreset, referenceHash: attempt.referenceHash, status: job?.status ?? 'failed', failureCode: job?.failure_code ?? (!job ? 'job_missing' : job.status === 'completed' && !candidates.length ? 'no_image' : null), cancelRequested: job?.cancel_requested === 1, candidates }
     })
     const latest = attempts[attempts.length - 1]
@@ -308,6 +309,44 @@ export async function cacheChatAssetReviews(id: number) {
       target.tagCheckedAt = { ...target.tagCheckedAt, [hash]: Date.now() }
       target.tags = { ...target.tags, ...tags }
       getUserSettingsDb().prepare('UPDATE chat_asset_slots SET attempts = ? WHERE batch_id = ? AND slot_key = ?').run(JSON.stringify(current), id, slot.slot_key)
+    }
+  }
+  await judgeExpressionCandidates(id, tags)
+}
+
+/** When the judge last failed on a candidate: a batch view polls, and a judge that is down is not asked every poll. */
+const judgeFailedAt = new Map<string, number>()
+const JUDGE_RETRY_MS = 5 * 60_000
+
+/** Expression candidates with tags and no reading yet: the profile's judge says which emotion they show (cached on the attempt). */
+async function judgeExpressionCandidates(id: number, tags: Record<string, AssetTagCache>) {
+  const batch = getUserSettingsDb().prepare('SELECT profile_id FROM chat_asset_batches WHERE id = ?').get(id) as { profile_id: number } | undefined
+  const profile = batch ? ChatProfileStore.find(batch.profile_id) : null
+  if (!profile || !assetJudgeSetup(profile)) return
+  const rows = slotRows(id)
+  const emotions = rows.filter((slot) => slot.kind === 'expression').map((slot) => slot.slot_key)
+  if (emotions.length < 2) return
+  for (const slot of rows) {
+    if (slot.kind !== 'expression') continue
+    for (const attempt of attemptsOf(slot)) {
+      for (const { compositeHash: hash } of candidatesOf(attempt.jobId)) {
+        const failedKey = `${slot.slot_key}:${hash}`
+        if (!tags[hash] || attempt.judged?.[hash] || Date.now() - (judgeFailedAt.get(failedKey) ?? 0) < JUDGE_RETRY_MS) continue
+        const judged = await judgeExpression({ profile, emotions, emotion: slot.slot_key, tags: tags[hash] })
+        if (!judged) {
+          if (judgeFailedAt.size > 1000) judgeFailedAt.clear()
+          judgeFailedAt.set(failedKey, Date.now())
+          continue
+        }
+        // Re-read after the await, preserving a simultaneous choice/regeneration and another cache writer.
+        const live = getUserSettingsDb().prepare('SELECT * FROM chat_asset_slots WHERE batch_id = ? AND slot_key = ?').get(id, slot.slot_key) as SlotRow | undefined
+        if (!live) return
+        const current = attemptsOf(live)
+        const target = current.find((entry) => entry.jobId === attempt.jobId)
+        if (!target) continue
+        target.judged = { ...target.judged, [hash]: judged }
+        getUserSettingsDb().prepare('UPDATE chat_asset_slots SET attempts = ? WHERE batch_id = ? AND slot_key = ?').run(JSON.stringify(current), id, slot.slot_key)
+      }
     }
   }
 }

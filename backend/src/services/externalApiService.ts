@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import type { ProviderType } from '../types/externalApi';
-import { listTypesafeModels } from './typesafeClient';
+import { listTypesafeModels } from './judge/typesafeClient';
 
 /**
  * External API Service

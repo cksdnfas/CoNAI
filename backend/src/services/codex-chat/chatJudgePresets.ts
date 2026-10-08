@@ -2,11 +2,12 @@ import type { ChatJudgeChoiceOption, ChatJudgeFollowUp, ChatJudgeItem, ChatJudge
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { ChatProfileError } from './chatProfileError'
-import { JUDGE_FOLLOW_UP_DEFAULTS, JUDGE_ITEM_DEFAULTS } from './chatJudgeDefaults'
+import { JUDGE_FOLLOW_UP_DEFAULTS, JUDGE_ITEM_DEFAULTS, JUDGE_OPTION_DEFAULTS, type JudgeOptions } from './chatJudgeDefaults'
 
 /**
- * Judge presets (see @conai/shared chatJudge): profiles reference one by id, so tuning a preset reaches every profile
- * that uses it. Items and follow-up settings are stored as JSON and normalized on every read and write.
+ * Judge presets (see @conai/shared chatJudge): profiles and group rooms reference one by id, so tuning a preset reaches
+ * everything that uses it. Items, follow-up settings and the other sections are stored as JSON and normalized on every
+ * read and write.
  */
 
 export const JUDGE_LIMITS = {
@@ -22,6 +23,7 @@ export const JUDGE_LIMITS = {
   window: { min: 1, max: 30 },
   maxConsecutive: { min: 0, max: 3 },
   delaySeconds: { min: 0, max: 600 },
+  loreCandidates: { min: 1, max: 12 },
 } as const
 
 /** Connection types a judge preset can ask: the decision model, or an LLM answering in JSON. */
@@ -40,6 +42,7 @@ type PresetRow = {
   escalation_model: string
   items: string
   follow_up: string
+  options: string | null
   created_date: string
   updated_date: string
 }
@@ -136,6 +139,39 @@ export function normalizeFollowUp(value: unknown): ChatJudgeFollowUp {
   }
 }
 
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+/** The preset's sections beyond its items, each field falling back to its default. */
+export function normalizeJudgeOptions(value: unknown): JudgeOptions {
+  const options = record(value)
+  const defaults = JUDGE_OPTION_DEFAULTS
+  const room = record(options.room)
+  const route = record(room.route)
+  const next = record(room.next)
+  const context = record(options.context)
+  const lore = record(context.lore)
+  const recall = record(context.recall)
+  const fields = record(options.fields)
+  const assets = record(options.assets)
+  const enabled = (value: unknown, fallback: boolean) => (typeof value === 'boolean' ? value : fallback)
+  return {
+    room: {
+      window: clamp(room.window, JUDGE_LIMITS.window, defaults.room.window),
+      route: { enabled: enabled(route.enabled, defaults.room.route.enabled), instructions: text(route.instructions, JUDGE_LIMITS.instructions), minProbability: threshold(route.minProbability, defaults.room.route.minProbability) },
+      next: { enabled: enabled(next.enabled, defaults.room.next.enabled), instructions: text(next.instructions, JUDGE_LIMITS.instructions), continueThreshold: threshold(next.continueThreshold, defaults.room.next.continueThreshold) },
+    },
+    context: {
+      window: clamp(context.window, JUDGE_LIMITS.window, defaults.context.window),
+      lore: { enabled: enabled(lore.enabled, defaults.context.lore.enabled), candidates: clamp(lore.candidates, JUDGE_LIMITS.loreCandidates, defaults.context.lore.candidates), threshold: threshold(lore.threshold, defaults.context.lore.threshold) },
+      recall: { enabled: enabled(recall.enabled, defaults.context.recall.enabled), threshold: threshold(recall.threshold, defaults.context.recall.threshold) },
+    },
+    fields: { enabled: enabled(fields.enabled, defaults.fields.enabled), window: clamp(fields.window, JUDGE_LIMITS.window, defaults.fields.window), threshold: threshold(fields.threshold, defaults.fields.threshold) },
+    assets: { enabled: enabled(assets.enabled, defaults.assets.enabled) },
+  }
+}
+
 /** A judge connection name, checked: unknown or not a decision / LLM connection is refused. Empty: none. */
 export function judgeConnectionName(value: unknown, kinds: readonly string[] = JUDGE_PROVIDER_TYPES) {
   const name = text(value, 200)
@@ -160,6 +196,10 @@ function profilesUsing(presetId: number) {
   return getUserSettingsDb().prepare('SELECT id, name FROM llm_chat_profiles WHERE judge_preset_id = ? ORDER BY sort_order ASC, id ASC').all(presetId) as Array<{ id: number; name: string }>
 }
 
+function roomsUsing(presetId: number) {
+  return getUserSettingsDb().prepare("SELECT id, COALESCE(title, '') AS title FROM codex_chat_threads WHERE judge_preset_id = ? AND kind = 'group' ORDER BY id ASC").all(presetId) as Array<{ id: number; title: string }>
+}
+
 function toPreset(row: PresetRow): ChatJudgePreset {
   return {
     id: row.id,
@@ -170,7 +210,9 @@ function toPreset(row: PresetRow): ChatJudgePreset {
     escalationModel: row.escalation_model ?? '',
     items: normalizeJudgeItems(parseJson(row.items)),
     followUp: normalizeFollowUp(parseJson(row.follow_up)),
+    ...normalizeJudgeOptions(parseJson(row.options)),
     profiles: profilesUsing(row.id),
+    rooms: row.id ? roomsUsing(row.id) : [],
     createdDate: row.created_date,
     updatedDate: row.updated_date,
   }
@@ -185,6 +227,7 @@ function toColumns(input: ChatJudgePresetInput) {
     escalation_model: text(input.escalationModel, 200),
     items: JSON.stringify(normalizeJudgeItems(input.items)),
     follow_up: JSON.stringify(normalizeFollowUp(input.followUp)),
+    options: JSON.stringify(normalizeJudgeOptions({ room: input.room, context: input.context, fields: input.fields, assets: input.assets })),
   }
 }
 
@@ -228,11 +271,12 @@ export const ChatJudgePresetStore = {
     return ChatJudgePresetStore.find(presetId)
   },
 
-  /** Profiles that referenced it go back to judging nothing (exactly as without a judge). */
+  /** Profiles and rooms that referenced it go back to judging nothing (exactly as without a judge). */
   delete(presetId: number) {
     const db = getUserSettingsDb()
     return db.transaction(() => {
       db.prepare('UPDATE llm_chat_profiles SET judge_preset_id = NULL WHERE judge_preset_id = ?').run(presetId)
+      db.prepare('UPDATE codex_chat_threads SET judge_preset_id = NULL WHERE judge_preset_id = ?').run(presetId)
       return db.prepare('DELETE FROM chat_judge_presets WHERE id = ?').run(presetId).changes > 0
     })()
   },
@@ -247,7 +291,7 @@ export function readJudgePresetFile(value: unknown): ChatJudgePresetInput[] {
     const inner = record.preset && typeof record.preset === 'object' ? record.preset as Record<string, unknown> : record
     if (!Array.isArray(inner.items)) return []
     // Connections are this server's own; an imported preset picks its judge connection here.
-    return [{ name: text(inner.name, JUDGE_LIMITS.name) || '판단 프리셋', items: normalizeJudgeItems(inner.items), followUp: normalizeFollowUp(inner.followUp) }]
+    return [{ name: text(inner.name, JUDGE_LIMITS.name) || '판단 프리셋', items: normalizeJudgeItems(inner.items), followUp: normalizeFollowUp(inner.followUp), ...normalizeJudgeOptions(inner) }]
   })
   if (read.length === 0) throw new ChatProfileError('가져올 판단 프리셋이 없어. 내보낸 프리셋 JSON을 골라줘.')
   return read.slice(0, 50)

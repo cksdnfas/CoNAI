@@ -18,6 +18,11 @@ export type ChatAssetReview = {
   eyes: { reference: string[]; candidate: string[]; matches: boolean | null }
   rating: Record<string, number>
   similarSlots: Array<{ slotKey: string; compositeHash: string; confidence: number }>
+  /**
+   * The judge's reading of the image tags (profiles whose judge preset reviews assets): the emotion it picked among
+   * the batch's expressions and the probability it gave this slot's own emotion.
+   */
+  judge?: { picked: string; probability: number } | null
 }
 export type ChatAssetVisionReview = { compositeHash: string; referenceHash: string; modelSlotId: number; samePerson: boolean; expression: string; flaw: string | null }
 export type ChatAssetCandidate = { compositeHash: string; historyId: number; review?: ChatAssetReview }

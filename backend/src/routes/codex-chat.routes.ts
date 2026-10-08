@@ -30,7 +30,7 @@ import { ChatSharedBlockStore, readBlockFile } from '../services/codex-chat/chat
 import { ChatToolPresetStore, readToolPresetFile } from '../services/codex-chat/chatToolPresets'
 import { ChatJudgePresetStore, readJudgePresetFile } from '../services/codex-chat/chatJudgePresets'
 import { ChatJudgeLogStore } from '../services/codex-chat/chatJudgeLogs'
-import { JudgeError } from '../services/codex-chat/chatJudgeEngine'
+import { JudgeError } from '../services/judge/judgeEngine'
 import { testJudgePreset } from '../services/codex-chat/chatJudge'
 import type { ChatJudgePresetInput } from '@conai/shared'
 import { ModelSlotStore } from '../services/codex-chat/modelSlots'
@@ -378,7 +378,7 @@ router.patch('/threads/:threadId/group', requireChatAccess, (req: Request, res: 
   if (threadId === null) return
   try {
     const body = (req.body ?? {}) as Record<string, unknown>
-    res.json({ success: true, data: GroupChatService.updateRoom(requesterFrom(req), threadId, { representativeId: body.representativeId, title: body.title, chainLimit: body.chainLimit, windowLimit: body.windowLimit, maxTokens: body.maxTokens }) })
+    res.json({ success: true, data: GroupChatService.updateRoom(requesterFrom(req), threadId, { representativeId: body.representativeId, title: body.title, chainLimit: body.chainLimit, windowLimit: body.windowLimit, maxTokens: body.maxTokens, judgePresetId: body.judgePresetId }) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -1150,7 +1150,12 @@ router.delete('/admin/tool-presets/:presetId', requireAdmin, (req: Request, res:
   } catch (error) { sendChatError(res, error) }
 })
 
-/** Judge presets (a decision model's questions steering API LLM turns). Profiles reference one, so an edit reaches them all. */
+/** GET /judge-presets — the judge presets by name, for a room owner picking one for a group room (the rest is admin only). */
+router.get('/judge-presets', requireChatAccess, (_req: Request, res: Response) => {
+  res.json({ success: true, data: ChatJudgePresetStore.list().map((preset) => ({ id: preset.id, name: preset.name })) })
+})
+
+/** Judge presets (a decision model's questions about chat turns, group rooms, status fields and assets). Profiles and rooms reference one, so an edit reaches them all. */
 router.get('/admin/judge-presets', requireAdmin, (_req: Request, res: Response) => {
   res.json({ success: true, data: ChatJudgePresetStore.list() })
 })
@@ -1177,8 +1182,8 @@ router.post('/admin/judge-presets/test', requireAdmin, asyncHandler(async (req: 
   const body = (req.body ?? {}) as { presetId?: unknown; preset?: ChatJudgePresetInput; threadId?: unknown; turns?: unknown; providerName?: unknown; model?: unknown }
   const threadId = parseId(body.threadId)
   const thread = threadId === null ? undefined : CodexChatStore.findThreadById(threadId)
-  if (!thread || thread.account_id !== getRequesterAccountId(req) || thread.engine !== 'llm' || thread.kind === 'group' || thread.profile_id === null) {
-    res.status(404).json({ success: false, error: '테스트할 대화를 찾을 수 없어. 내 1:1 API 채팅만 고를 수 있어.' })
+  if (!thread || thread.account_id !== getRequesterAccountId(req) || thread.kind === 'group' || thread.profile_id === null) {
+    res.status(404).json({ success: false, error: '테스트할 대화를 찾을 수 없어. 내 1:1 채팅만 고를 수 있어.' })
     return
   }
   const profile = ChatProfileStore.find(thread.profile_id)

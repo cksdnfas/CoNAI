@@ -177,8 +177,8 @@ export type ChatProfile = {
   /** The model may propose chat lorebook entries (save_lore) for the user to save. */
   allowLoreProposals: boolean
   /**
-   * API LLM: the judge preset (chat_judge_presets) that steers each turn; null judges nothing (the chat behaves as
-   * without a judge). A preset that went missing reads as null.
+   * The judge preset (chat_judge_presets) that steers each turn; null judges nothing (the chat behaves as without a
+   * judge). A preset that went missing reads as null.
    */
   judgePresetId: number | null
   /** The judge connection instead of the preset's own; null keeps the preset's. Empty model: the connection's default. */
@@ -573,10 +573,10 @@ function toColumns(input: ChatProfileInput) {
     vision_enabled: input.visionEnabled ? 1 : 0,
     page_assist: input.pageAssist ? 1 : 0,
     allow_lore_proposals: input.allowLoreProposals === false ? 0 : 1,
-    // Only API LLM chats are judged; other engines keep no judge settings.
-    judge_preset_id: engine === 'llm' ? judgePresetId(input.judgePresetId) : null,
-    judge_provider_name: engine === 'llm' ? judgeConnectionName(input.judgeProviderName) : null,
-    judge_model: engine === 'llm' ? text(input.judgeModel, MODEL_MAX_LENGTH) || null : null,
+    // Every engine can be judged (a Codex chat gets the directives and status fields only, see chatJudge).
+    judge_preset_id: judgePresetId(input.judgePresetId),
+    judge_provider_name: judgeConnectionName(input.judgeProviderName),
+    judge_model: text(input.judgeModel, MODEL_MAX_LENGTH) || null,
     chat_style: JSON.stringify({ ...normalizeChatStyle(input.style), blocks: [] }),
     background_image: background,
     is_enabled: input.isEnabled === false ? 0 : 1,

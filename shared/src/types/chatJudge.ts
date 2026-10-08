@@ -1,8 +1,10 @@
 /**
  * Judge presets: a small decision model (TypeSafe Jev, or any LLM connection asked for JSON) reads the recent
- * conversation in its original words and answers fixed questions; each answer steers the API LLM chat turn
- * (tools offered or withheld, a directive added) or decides whether the character sends a follow-up message.
- * Profiles reference a preset; a profile without one behaves exactly as before.
+ * conversation in its original words and answers questions about it. The preset's items steer a chat turn (tools
+ * offered or withheld, a directive added) or decide whether the character sends a follow-up message; its other
+ * sections decide who speaks in a group room and whether the room goes on, which status fields changed, which lore
+ * and past episodes the reply needs, and whether a generated expression image shows its emotion.
+ * Profiles and group rooms reference a preset; without one everything behaves exactly as before.
  */
 
 /** Before the reply: steers its tools and directive. After the reply: may trigger a follow-up message. */
@@ -15,6 +17,13 @@ export type ChatJudgeKind = 'noul' | 'choice'
 export type ChatJudgeUncertain = 'default' | 'yes' | 'no' | 'llm'
 
 export type ChatJudgeVerdict = 'yes' | 'no' | 'uncertain'
+
+/**
+ * What a logged run judged: a turn's items (`before` / `after`), who answers an unaddressed message in a group room
+ * (`route`), whether the room goes on after a reply (`next`), status fields after a reply (`fields`), or an expression
+ * image (`asset`).
+ */
+export type ChatJudgeRunStage = ChatJudgeStage | 'route' | 'next' | 'fields' | 'asset'
 
 export type ChatJudgeChoiceOption = { label: string; description: string; yes: boolean }
 
@@ -54,6 +63,34 @@ export type ChatJudgeFollowUp = {
   directive: string
 }
 
+/** Group rooms that use the preset: who speaks, and when the room goes quiet. */
+export type ChatJudgeRoomSettings = {
+  /** Recent messages the judge reads. */
+  window: number
+  /** A user message that names no one: the member the judge picks answers (below `minProbability`: the representative). */
+  route: { enabled: boolean; instructions: string; minProbability: number }
+  /**
+   * The room fell quiet with no one called: another member speaks when the judge's probability that the exchange goes
+   * on reaches `continueThreshold` (within the room's chain limit); otherwise the room waits for the user.
+   */
+  next: { enabled: boolean; instructions: string; continueThreshold: number }
+}
+
+/** What a reply is given beyond keywords (API LLM and Claude chats). */
+export type ChatJudgeContextSettings = {
+  window: number
+  /** Keyword lore entries no keyword named: up to `candidates` closest ones are asked about; a yes puts one in. */
+  lore: { enabled: boolean; candidates: number; threshold: number }
+  /** Recalled past episodes: each candidate is asked about; a no leaves it out. */
+  recall: { enabled: boolean; threshold: number }
+}
+
+/** Status block fields with a fixed list of values, settled after each reply when the reply left them alone. */
+export type ChatJudgeFieldSettings = { enabled: boolean; window: number; threshold: number }
+
+/** Character asset batches: each expression candidate's image tags are asked which emotion they show. */
+export type ChatJudgeAssetSettings = { enabled: boolean }
+
 export type ChatJudgePreset = {
   id: number
   name: string
@@ -66,19 +103,25 @@ export type ChatJudgePreset = {
   escalationModel: string
   items: ChatJudgeItem[]
   followUp: ChatJudgeFollowUp
+  room: ChatJudgeRoomSettings
+  context: ChatJudgeContextSettings
+  fields: ChatJudgeFieldSettings
+  assets: ChatJudgeAssetSettings
   /** Profiles that reference this preset. */
   profiles: Array<{ id: number; name: string }>
+  /** Group rooms that reference this preset. */
+  rooms: Array<{ id: number; title: string }>
   createdDate: string
   updatedDate: string
 }
 
-export type ChatJudgePresetInput = Partial<Omit<ChatJudgePreset, 'id' | 'profiles' | 'createdDate' | 'updatedDate'>>
+export type ChatJudgePresetInput = Partial<Omit<ChatJudgePreset, 'id' | 'profiles' | 'rooms' | 'createdDate' | 'updatedDate'>>
 
 /** One item's answer in a run. */
 export type ChatJudgeItemResult = {
   itemId: string
   name: string
-  stage: ChatJudgeStage
+  stage: ChatJudgeRunStage
   /** Probability of yes (choice: the summed probability of the yes options); null when the judge failed. */
   probability: number | null
   confidence: number | null
@@ -87,8 +130,12 @@ export type ChatJudgeItemResult = {
   verdict: ChatJudgeVerdict
   /** Who settled it: the judge, the escalation LLM, the uncertain setting, or nothing (judge failed). */
   decidedBy: 'judge' | 'llm' | 'setting' | 'fallback'
-  /** What the turn did with it. */
-  action: 'offered' | 'withheld' | 'none' | 'follow-up'
+  /**
+   * What came of it: tools offered / withheld, a follow-up, the member picked to answer (`route`) or to speak next
+   * (`next`), the room waiting for the user (`wait`), a status field set (`set`), a lore entry put in (`lore`), a past
+   * episode kept or dropped (`recall` / `drop`).
+   */
+  action: 'offered' | 'withheld' | 'none' | 'follow-up' | 'route' | 'next' | 'wait' | 'set' | 'lore' | 'recall' | 'drop'
 }
 
 /** The per-reply diagnostics record of a judge run (metadata only, never conversation text). */
@@ -115,13 +162,15 @@ export type ChatJudgeLogItem = ChatJudgeItemResult & { outcome: ChatJudgeOutcome
 export type ChatJudgeLogRun = {
   id: number
   createdAt: string
-  threadId: number
+  /** Null for a run outside a chat (an asset review). */
+  threadId: number | null
   threadTitle: string
-  profileId: number
+  /** Null for a group room's own runs (route / next). */
+  profileId: number | null
   profileName: string
   presetId: number
   presetName: string
-  stage: ChatJudgeStage
+  stage: ChatJudgeRunStage
   engine: 'typesafe' | 'llm'
   providerName: string
   model: string
@@ -136,7 +185,7 @@ export type ChatJudgeItemStats = {
   presetId: number
   itemId: string
   name: string
-  stage: ChatJudgeStage
+  stage: ChatJudgeRunStage
   runs: number
   yes: number
   no: number

@@ -22,6 +22,7 @@ import { buildFlagDirective } from './chatFlags'
 import { generationPromptOf } from './chatToolReferences'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import { ChatSummaryStore, recallText, selectRecall, splitSegments, type ChatSummarySegment } from './chatMemory'
+import type { JudgedContext } from './chatJudgeContext'
 import { REFERENCE_BLOCK_START, resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool, type ChatContentPart } from './llmChatCompletion'
 
 /** Tool output replayed to the model for turns still in the window. */
@@ -285,10 +286,11 @@ function selectWindow(profile: Pick<ChatProfile, 'id' | 'style'>, turns: CodexCh
  * no chat and gets the global books only), unless the caller resolved `books` already. Without messages only the
  * "always on" entries are chosen. `toolOffered`: read_lore_file is among the request's tools.
  */
-export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<LoreHistoryMessage>, user?: ChatUserPersona | null, options: { thread?: Pick<CodexChatThreadRecord, 'id' | 'account_id'> | null; books?: AttachedLoreBook[]; toolOffered?: boolean; history?: ReadonlyArray<LoreHistoryMessage>; speakerProfileId?: number } = {}): ChatLore {
+export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<LoreHistoryMessage>, user?: ChatUserPersona | null, options: { thread?: Pick<CodexChatThreadRecord, 'id' | 'account_id'> | null; books?: AttachedLoreBook[]; toolOffered?: boolean; history?: ReadonlyArray<LoreHistoryMessage>; speakerProfileId?: number; judged?: ReadonlySet<string> } = {}): ChatLore {
   const books = options.books ?? booksForRequest({ thread: options.thread ?? null, profile })
   return selectRequestLore(profile, books, messages, (text) => estimateTokens(profile.id, text), (text) => fillCharacterPlaceholders(text, profile, user), {
     toolOffered: options.toolOffered ?? false,
+    judged: options.judged,
     ...(profile.engine !== 'codex' && messages !== undefined ? { timing: { messages: options.history ?? messages, speakerProfileId: options.speakerProfileId } } : {}),
   })
 }
@@ -504,12 +506,16 @@ export function recallFor(profile: ChatProfile, segments: ChatSummarySegment[], 
   return recallText(recalledSegments(profile, segments, messages, config))
 }
 
-/** The segments `recallFor` puts in, themselves. */
-export function recalledSegments(profile: ChatProfile, segments: ChatSummarySegment[], messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'contextTokens'>) {
+/**
+ * The segments `recallFor` puts in, themselves. `keep`: the episodes the judge kept (see chatJudgeContext); only
+ * those come back, ranked as usual (one word in common is enough: the judge read them).
+ */
+export function recalledSegments(profile: ChatProfile, segments: ChatSummarySegment[], messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'contextTokens'>, keep?: ReadonlySet<number> | null) {
   const { folded } = splitSegments(segments)
   if (folded.length === 0) return []
   const query = sendableMessages(messages).slice(-RECALL_QUERY_MESSAGES).map((message) => message.content).join('\n')
   const budget = config.contextTokens ? Math.min(RECALL_MAX_TOKENS, Math.floor(config.contextTokens / 12)) : RECALL_MAX_TOKENS
+  if (keep) return selectRecall(folded.filter((segment) => keep.has(segment.id)), query, budget, (text) => estimateTokens(profile.id, text), 3, 1)
   return selectRecall(folded, query, budget, (text) => estimateTokens(profile.id, text))
 }
 
@@ -600,11 +606,11 @@ export function buildContextMeta(profile: ChatProfile, thread: CodexChatThreadRe
  * Shared by summary planning, the actual request and the profile preview. `segments`: the thread's summary segments,
  * read by the caller (recall comes from them; none without). `books`: the lore books, when the caller resolved them.
  */
-function buildRequestContext(profile: ChatProfile, thread: CodexChatThreadRecord | null, messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'summaryEnabled'> & Partial<Pick<LlmChatContextConfig, 'contextTokens'>>, tools: ChatCompletionTool[], segments: ChatSummarySegment[] = [], books?: AttachedLoreBook[]) {
+function buildRequestContext(profile: ChatProfile, thread: CodexChatThreadRecord | null, messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'summaryEnabled'> & Partial<Pick<LlmChatContextConfig, 'contextTokens'>>, tools: ChatCompletionTool[], segments: ChatSummarySegment[] = [], books?: AttachedLoreBook[], judged?: JudgedContext | null) {
   const user = userPersonaForThread(thread)
-  const lore = selectChatLore(profile, messages, user, { thread, books, toolOffered: offersLoreFileTool(tools) })
+  const lore = selectChatLore(profile, messages, user, { thread, books, toolOffered: offersLoreFileTool(tools), judged: judged?.loreKeys })
   const system = buildLeadingMessages(profile, thread, config, tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)), lore, user)
-  const recalled = config.summaryEnabled ? recalledSegments(profile, segments, messages, { contextTokens: config.contextTokens ?? null }) : []
+  const recalled = config.summaryEnabled ? recalledSegments(profile, segments, messages, { contextTokens: config.contextTokens ?? null }, judged?.recallKeep) : []
   const recall = recallText(recalled)
   const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread ?? { block_edits: null }, messages), recall, rejectedLoreFor(thread?.id, tools))
   const directive = [flagDirectiveFor(messages, profile, user), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
@@ -688,9 +694,11 @@ export function buildChatMessages(params: {
   extraTokens?: number
   /** The lore books, already resolved (default: booksForRequest for this chat and profile). */
   books?: AttachedLoreBook[]
+  /** Lore entries and past episodes the judge chose for this reply (see chatJudgeContext). */
+  judged?: JudgedContext | null
 }): ChatCompletionMessage[] {
   const { profile, thread, config, tools } = params
-  const { system, blocks, directive, fixedTokens, lore, recalled } = buildRequestContext(profile, thread, params.messages, config, tools, params.segments, params.books)
+  const { system, blocks, directive, fixedTokens, lore, recalled } = buildRequestContext(profile, thread, params.messages, config, tools, params.segments, params.books, params.judged)
   const routing = [...params.messages].reverse().find((message) => message.role === 'user')?.routing
   const maxChars = Math.max(256, Math.min(6000, Math.floor((config.contextTokens ?? 24000) / 4)))
   const replyContext = buildReplyContext(params.messages, routing, { maxChars })

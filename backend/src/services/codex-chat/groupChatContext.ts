@@ -13,6 +13,7 @@ import { contextSource, limitContextMeta, contextPartsOf, markContextParts } fro
 import { anchoredWindowFor, appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, offersLoreFileTool, recallFor, rejectedLoreFor, resolveAuthorNote, selectChatLore, sendableMessages, threadBlockStateText, toCompletionMessages, unsummarizedMessages } from './llmChatContext'
 import { booksForRequest, type AttachedLoreBook, type ChatLore } from './chatLoreContext'
 import type { ChatSummarySegment } from './chatMemory'
+import type { JudgedContext } from './chatJudgeContext'
 import { usableBlockKeys } from './chatBlockState'
 import { DEFAULT_USER_NAME, userPersonaForThread, type ChatUserPersona } from './chatUserProfiles'
 
@@ -131,6 +132,8 @@ type GroupLlmContext = {
   attachmentTexts?: ReadonlyMap<string, string>
   /** The member's lore books, already resolved (default: booksForRequest for the room and the member). */
   books?: AttachedLoreBook[]
+  /** Lore entries and past episodes the judge chose for this reply (see chatJudgeContext). */
+  judged?: JudgedContext | null
 }
 
 /** A room's summary is its own switch on the thread: off unless set (members' profiles do not decide for the room). */
@@ -143,7 +146,7 @@ export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMe
   const sendable = sendableMessages(unsummarizedMessages(params.messages, params.thread, { summaryEnabled: groupSummaryOn(params.thread) }))
   let window = anchoredWindowFor(params.thread.id, sendable, params.windowLimit, (message) => message.id)
   params = { ...params, books: params.books ?? booksForRequest({ thread: params.thread, profile: params.profile }) }
-  const lore = selectChatLore(params.profile, window, userPersonaForThread(params.thread), { books: params.books, toolOffered: offersLoreFileTool(params.tools), history: params.messages, speakerProfileId: params.profile.id })
+  const lore = selectChatLore(params.profile, window, userPersonaForThread(params.thread), { books: params.books, toolOffered: offersLoreFileTool(params.tools), history: params.messages, speakerProfileId: params.profile.id, judged: params.judged?.loreKeys })
   let context = buildGroupWindowMessages(params, window, sendable.length, lore)
   const budget = params.profile.contextTokens
   const reserve = (params.maxTokens ?? DEFAULT_REPLY_RESERVE_TOKENS) + (params.extraTokens ?? 0)
@@ -190,7 +193,7 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
   // The flags the user had on for the message this run answers reach every member answering it; the request ends
   // with the exact handles, where small models actually look before writing a mention.
   // Summaries the room's plot already took in come back when the latest exchange touches them, like in a direct chat.
-  const recalled = summaryOn && params.segments ? recalledSegments(profile, params.segments, params.messages, { contextTokens: profile.contextTokens }) : []
+  const recalled = summaryOn && params.segments ? recalledSegments(profile, params.segments, params.messages, { contextTokens: profile.contextTokens }, params.judged?.recallKeep) : []
   const recall = recallText(recalled)
   const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread, params.messages, profile.id), recall, rejectedLoreFor(thread.id, params.tools))
   const reference = buildReplyContext(params.messages, params.routing, { group: true, maxChars: Math.max(256, Math.min(6000, Math.floor((profile.contextTokens ?? 24000) / 4))), visibleIds: new Set(window.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) })

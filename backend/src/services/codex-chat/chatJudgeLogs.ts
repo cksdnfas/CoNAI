@@ -1,11 +1,12 @@
-import type { ChatJudgeItemResult, ChatJudgeItemStats, ChatJudgeLogItem, ChatJudgeLogRun, ChatJudgeOutcome, ChatJudgeStage } from '@conai/shared'
+import type { ChatJudgeItemResult, ChatJudgeItemStats, ChatJudgeLogItem, ChatJudgeLogRun, ChatJudgeOutcome, ChatJudgeRunStage } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { ensureProposalTable } from './chatProposals'
 
 /**
- * The judge log: every judge call on a chat turn (chat_judge_runs) with its items' answers (chat_judge_items), kept
- * JUDGE_LOG_RETENTION_DAYS. What came of an answer is read back when the log is viewed: whether the reply used the
- * tools a yes kept, what the user did with its lore proposal, whether a follow-up was answered.
+ * The judge log: every judge call (chat_judge_runs: a chat turn's items, a group room's speaker, status fields, an
+ * asset) with its answers (chat_judge_items), kept JUDGE_LOG_RETENTION_DAYS. What came of an answer is read back when
+ * the log is viewed: whether the reply used the tools a yes kept, what the user did with its lore proposal, whether a
+ * follow-up was answered.
  */
 
 export const JUDGE_LOG_RETENTION_DAYS = 30
@@ -16,10 +17,10 @@ const STATS_RUNS_MAX = 20_000
 type RunRow = {
   id: number
   created_at: string
-  thread_id: number
-  profile_id: number
+  thread_id: number | null
+  profile_id: number | null
   preset_id: number
-  stage: ChatJudgeStage
+  stage: ChatJudgeRunStage
   message_id: number | null
   reply_id: string | null
   engine: 'typesafe' | 'llm'
@@ -69,11 +70,25 @@ export function judgeToolMatches(pattern: string, name: string) {
   return pattern.endsWith('*') ? name.startsWith(pattern.slice(0, -1)) : pattern === name
 }
 
+/** One answer as logged: the result plus the tools its item steers. */
+export type JudgeLogItem = ChatJudgeItemResult & { tools: string[] }
+
+/**
+ * Answers about many things of one kind (each lore entry, past episode, status field) are logged one per thing; the
+ * stats count them together under the kind.
+ */
+const GROUPED_ITEMS: Record<string, string> = { lore: '로어 판단', recall: '회상 판단', field: '상태 필드' }
+
+function statsItemOf(itemId: string, name: string) {
+  const kind = /^([a-z]+):/.exec(itemId)?.[1]
+  return kind && GROUPED_ITEMS[kind] ? { itemId: kind, name: GROUPED_ITEMS[kind] } : { itemId, name }
+}
+
 export type NewJudgeRun = {
-  threadId: number
-  profileId: number
+  threadId: number | null
+  profileId: number | null
   presetId: number
-  stage: ChatJudgeStage
+  stage: ChatJudgeRunStage
   messageId: number | null
   replyId: string | null
   engine: 'typesafe' | 'llm'
@@ -82,7 +97,7 @@ export type NewJudgeRun = {
   latencyMs: number
   error: string | null
   request: unknown
-  items: Array<ChatJudgeItemResult & { tools: string[] }>
+  items: JudgeLogItem[]
 }
 
 export const ChatJudgeLogStore = {
@@ -117,11 +132,13 @@ export const ChatJudgeLogStore = {
     if (filter.profileId) { where.push('r.profile_id = ?'); values.push(filter.profileId) }
     if (filter.presetId) { where.push('r.preset_id = ?'); values.push(filter.presetId) }
     if (filter.threadId) { where.push('r.thread_id = ?'); values.push(filter.threadId) }
-    if (filter.stage === 'before' || filter.stage === 'after') { where.push('r.stage = ?'); values.push(filter.stage) }
+    if (filter.stage && /^[a-z]+$/.test(filter.stage)) { where.push('r.stage = ?'); values.push(filter.stage) }
     if (filter.beforeId) { where.push('r.id < ?'); values.push(filter.beforeId) }
     if (filter.itemId || filter.verdict) {
       const conditions = ['i.run_id = r.id']
-      if (filter.itemId) { conditions.push('i.item_id = ?'); values.push(filter.itemId) }
+      // A kind counted together in the stats (lore, recall, field) filters all its answers.
+      if (filter.itemId && GROUPED_ITEMS[filter.itemId]) { conditions.push('i.item_id LIKE ?'); values.push(`${filter.itemId}:%`) }
+      else if (filter.itemId) { conditions.push('i.item_id = ?'); values.push(filter.itemId) }
       if (filter.verdict === 'failed') conditions.push("i.decided_by = 'fallback'")
       else if (filter.verdict) { conditions.push('i.verdict = ?'); values.push(filter.verdict) }
       where.push(`EXISTS (SELECT 1 FROM chat_judge_items i WHERE ${conditions.join(' AND ')})`)
@@ -179,10 +196,11 @@ export const ChatJudgeLogStore = {
     for (const item of items) {
       const run = byId.get(item.run_id)
       if (!run) continue
-      const key = `${run.preset_id}:${item.item_id}`
+      const counted = statsItemOf(item.item_id, item.name)
+      const key = `${run.preset_id}:${run.stage}:${counted.itemId}`
       let tally = tallies.get(key)
       if (!tally) {
-        tally = { presetId: run.preset_id, itemId: item.item_id, name: item.name, stage: run.stage, runs: 0, yes: 0, no: 0, uncertain: 0, failed: 0, averageProbability: null, toolUseRate: null, loreSaveRate: null, followUpAnswerRate: null, averageLatencyMs: null,
+        tally = { presetId: run.preset_id, itemId: counted.itemId, name: counted.name, stage: run.stage, runs: 0, yes: 0, no: 0, uncertain: 0, failed: 0, averageProbability: null, toolUseRate: null, loreSaveRate: null, followUpAnswerRate: null, averageLatencyMs: null,
           probabilitySum: 0, probabilityCount: 0, latencySum: 0, toolOffered: 0, toolUsed: 0, loreProposed: 0, loreSaved: 0, followUps: 0, answered: 0 }
         tallies.set(key, tally)
       }
@@ -208,7 +226,7 @@ export const ChatJudgeLogStore = {
   },
 }
 
-function resultOf(item: ItemRow, stage: ChatJudgeStage): ChatJudgeItemResult {
+function resultOf(item: ItemRow, stage: ChatJudgeRunStage): ChatJudgeItemResult {
   return { itemId: item.item_id, name: item.name, stage, probability: item.probability, confidence: item.confidence, choice: item.choice, verdict: item.verdict, decidedBy: item.decided_by, action: item.action }
 }
 

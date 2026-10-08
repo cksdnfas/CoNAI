@@ -91,6 +91,11 @@ export const ChatGroupStore = {
     getUserSettingsDb().prepare('UPDATE codex_chat_threads SET profile_id = ? WHERE id = ?').run(profileId, threadId)
   },
 
+  /** The room's judge preset (null: none). */
+  setJudgePreset(threadId: number, presetId: number | null) {
+    getUserSettingsDb().prepare("UPDATE codex_chat_threads SET judge_preset_id = ? WHERE id = ? AND kind = 'group'").run(presetId, threadId)
+  },
+
   setLimits(threadId: number, limits: { chain?: number | null; window?: number | null }) {
     const db = getUserSettingsDb()
     if (limits.chain !== undefined) db.prepare('UPDATE codex_chat_threads SET group_chain_limit = ? WHERE id = ?').run(limits.chain, threadId)

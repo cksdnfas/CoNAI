@@ -520,8 +520,10 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
-  // Judge presets: a decision model's connection plus the questions it answers about each API LLM chat turn
-  // (items, JSON) and the follow-up message settings (JSON); chat profiles reference one (llm_chat_profiles.judge_preset_id).
+  // Judge presets: a decision model's connection plus the questions it answers about each chat turn (items, JSON),
+  // the follow-up message settings (JSON) and the other sections (options, JSON: group rooms, context, status fields,
+  // asset review); chat profiles (llm_chat_profiles.judge_preset_id) and group rooms (codex_chat_threads.judge_preset_id)
+  // reference one.
   // The built-in presets are written once, when the table is new; deleting them later keeps them deleted.
   const judgePresetsExisted = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chat_judge_presets'").get());
   db.exec(`
@@ -534,13 +536,17 @@ export function createUserSettingsSchema(db: Database.Database): void {
       escalation_model TEXT NOT NULL DEFAULT '',
       items TEXT NOT NULL DEFAULT '[]',
       follow_up TEXT NOT NULL DEFAULT '{}',
+      options TEXT NOT NULL DEFAULT '{}',
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  if (judgePresetsExisted && !(db.prepare('PRAGMA table_info(chat_judge_presets)').all() as Array<{ name: string }>).some((column) => column.name === 'options')) {
+    db.exec("ALTER TABLE chat_judge_presets ADD COLUMN options TEXT NOT NULL DEFAULT '{}'");
+  }
   if (!judgePresetsExisted) {
-    const insertJudgePreset = db.prepare('INSERT INTO chat_judge_presets (name, items, follow_up) VALUES (?, ?, ?)');
-    for (const preset of DEFAULT_JUDGE_PRESETS) insertJudgePreset.run(preset.name, JSON.stringify(preset.items), JSON.stringify(preset.followUp));
+    const insertJudgePreset = db.prepare('INSERT INTO chat_judge_presets (name, items, follow_up, options) VALUES (?, ?, ?, ?)');
+    for (const preset of DEFAULT_JUDGE_PRESETS) insertJudgePreset.run(preset.name, JSON.stringify(preset.items), JSON.stringify(preset.followUp), JSON.stringify(preset.options));
   }
 
   // Model slots: a named LLM connection + model; chat profiles and workflow nodes reference them by id per role.
@@ -703,6 +709,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     // A branch: the chat and message it was copied from, and why ('preserve': kept before an edit rewrote the
     // original; 'continue': branched to go on from there). Null on chats that are no branch, or older branches.
     ['branched_from_thread_id', 'INTEGER'],
+    // Group rooms: the judge preset (chat_judge_presets; no foreign key) that picks who answers and whether the room goes on.
+    ['judge_preset_id', 'INTEGER'],
     ['branched_at_message_id', 'INTEGER'],
     ['branch_purpose', 'TEXT'],
   ];
@@ -779,16 +787,24 @@ export function createUserSettingsSchema(db: Database.Database): void {
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (message_id, alternative)
   )`);
-  // Judge log: one run per judge call on a chat turn (the request as sent, timing, error) and its items' answers.
-  // `reply_id` ties a before-reply run to the reply it steered (tool use, lore proposals); `follow_up_message_id` is
-  // the follow-up an after-reply run sent. No foreign keys to presets/profiles: a log outlives their edits.
+  // Judge log: one run per judge call (the request as sent, timing, error) and its items' answers. `stage` says what
+  // was judged (a turn's items, a group room's speaker, status fields, an asset); a run outside a chat (asset review)
+  // has no thread, a room's own run no profile. `reply_id` ties a before-reply run to the reply it steered (tool use,
+  // lore proposals); `follow_up_message_id` is the follow-up an after-reply run sent. No foreign keys to
+  // presets/profiles: a log outlives their edits. The first version only knew turns (NOT NULL thread and profile, a
+  // stage CHECK); its rows are logs only, so the tables are simply made again.
+  const judgeRunsSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'chat_judge_runs'").get() as { sql?: string } | undefined)?.sql ?? '';
+  if (judgeRunsSql.includes("CHECK (stage IN ('before', 'after'))")) {
+    db.exec('DROP TABLE IF EXISTS chat_judge_items');
+    db.exec('DROP TABLE IF EXISTS chat_judge_runs');
+  }
   db.exec(`CREATE TABLE IF NOT EXISTS chat_judge_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    thread_id INTEGER NOT NULL REFERENCES codex_chat_threads(id) ON DELETE CASCADE,
-    profile_id INTEGER NOT NULL,
+    thread_id INTEGER REFERENCES codex_chat_threads(id) ON DELETE CASCADE,
+    profile_id INTEGER,
     preset_id INTEGER NOT NULL,
-    stage TEXT NOT NULL CHECK (stage IN ('before', 'after')),
+    stage TEXT NOT NULL,
     message_id INTEGER,
     reply_id TEXT,
     engine TEXT NOT NULL,

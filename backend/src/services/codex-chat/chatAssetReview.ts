@@ -36,8 +36,11 @@ function colorCheck(reference: AssetTagCache | undefined, candidate: AssetTagCac
   return { reference: before, candidate: after, matches: before.length && after.length ? before.length === after.length && before.every((tag) => after.includes(tag)) : null }
 }
 
-/** Uses the library's already computed hashes, never runs another image analysis on reads. */
-export function reviewAsset(kind: string, emotion: string, hash: string, tags: AssetTagCache, reference: AssetTagCache | undefined, others: Array<{ slotKey: string; compositeHash: string }>): ChatAssetReview {
+/**
+ * Uses the library's already computed hashes, never runs another image analysis on reads. `judged`: the judge's
+ * cached reading of an expression candidate (see chatJudgeAssets), when there is one.
+ */
+export function reviewAsset(kind: string, emotion: string, hash: string, tags: AssetTagCache, reference: AssetTagCache | undefined, others: Array<{ slotKey: string; compositeHash: string }>, judged?: { picked: string; probability: number } | null): ChatAssetReview {
   const expected = kind === 'expression' ? EXPRESSION_EXPECTED_TAGS[emotion] ?? [] : []
   const matched = expected.filter((tag) => tags.general.includes(tag))
   type Hashes = { perceptual_hash: string | null; dhash: string | null; ahash: string | null }
@@ -57,5 +60,6 @@ export function reviewAsset(kind: string, emotion: string, hash: string, tags: A
     expression: kind === 'expression' ? { expected, matched, matches: expected.length ? matched.length > 0 : null } : null,
     hair: colorCheck(reference, tags, HAIR), eyes: colorCheck(reference, tags, EYES), rating: tags.rating,
     similarSlots,
+    judge: kind === 'expression' ? judged ?? null : null,
   }
 }

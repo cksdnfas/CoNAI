@@ -7,7 +7,7 @@ import { ChatProfileStore } from '../services/codex-chat/chatProfiles';
 import { resolveProfileModel } from '../services/codex-chat/chatModelRoles';
 import { modelReferencesOfConnection } from '../services/codex-chat/modelSlots';
 import { fetchOpenAiCompatibleModels, toOpenAiApiBase } from '../services/codex-chat/llmChatCompletion';
-import { listTypesafeModels } from '../services/typesafeClient';
+import { listTypesafeModels } from '../services/judge/typesafeClient';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { optionalAuth, requireAdmin, requirePermission } from '../middleware/authMiddleware';
 import { hasConfiguredAuth } from './auth-route-helpers';

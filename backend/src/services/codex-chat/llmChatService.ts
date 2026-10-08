@@ -32,6 +32,8 @@ import { ChatGroupStore, groupLimitsOf } from './chatGroupStore'
 import { buildGroupLlmMessages } from './groupChatContext'
 import { skipThreadGenerationReactions } from './chatReplyRegistry'
 import { cancelJudgeFollowUp, endJudgedTurn, judgeAfterReply, judgeBeforeReply, type JudgedTurn } from './chatJudge'
+import type { JudgedContext } from './chatJudgeContext'
+import { judgeStatusFields } from './chatJudgeFields'
 
 type GenerationReaction = {
   result: ChatCompletionMessage
@@ -218,7 +220,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
   const listMessages = () => withGenerationOutcomes(CodexChatStore.listMessages(thread.id).filter((message) => message.id !== turn.replacingMessageId))
   const config = resolveContextConfig(thread, profile)
   if (turn.reaction && thread.kind === 'group') config.maxTokens = ChatGroupStore.member(thread.id, profile.id)?.max_tokens ?? config.maxTokens
-  return streamReply(turn, requester, profile, async (tools) => {
+  return streamReply(turn, requester, profile, async (tools, judged) => {
     const attachmentTexts = await inlineTextsForChat(turn.reaction ? { ...profile, mcpEnabled: false } : profile, requester.accountId, listMessages())
     if (turn.reaction && thread.kind === 'group') {
       const members = ChatGroupStore.members(thread.id).flatMap((member) => ChatProfileStore.find(member.profile_id) ?? [])
@@ -240,7 +242,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     }
     const current = CodexChatStore.findThreadById(thread.id) ?? thread
     const request = buildChatMessages({
-      profile, thread: current, messages: listMessages(), config, tools, segments: config.summaryEnabled ? ChatSummaryStore.list(thread.id) : [], attachmentTexts, extraTokens,
+      profile, thread: current, messages: listMessages(), config, tools, segments: config.summaryEnabled ? ChatSummaryStore.list(thread.id) : [], attachmentTexts, extraTokens, judged,
       onMeta: (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(profile, 'chat')?.model ?? null } },
     })
     const latestUser = request.map((message) => message.role).lastIndexOf('user')
@@ -292,7 +294,7 @@ function settleRestatement(turn: LlmTurn, previous: TextSpan | null, roundStart:
  * Fails the reply (LlmChatError) when the output cap cut tool calls (their arguments are broken: never run, never
  * stored) or when the model answered nothing at all.
  */
-async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>, generation: Partial<LlmGenerationOptions> = {}) {
+async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[], judged: JudgedContext | null) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>, generation: Partial<LlmGenerationOptions> = {}) {
   requireProfileAccess(requester, profile)
   const target = resolveChatCompletionTarget(chatConnectionOf(profile), { model: resolveProfileModel(profile, 'chat')?.model ?? null, generation: { ...profileGenerationOptions(profile), ...generation } })
   if (target.transport === 'claude-code' && !resolveChatAccess(requester.accountId).claude) throw new LlmChatError('Claude Code를 사용할 권한이 없어.', 403)
@@ -300,18 +302,18 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
   const chatContext = turn.chatContext ?? turn.delivery?.context
   const bridge = !turn.reaction && (scopes.length > 0 || chatContext) ? await openChatMcpBridge(requester, scopes, toolAllowlist, { generationPresetIds: profile.generationPresetIds, chatContext }) : null
 
-  // The judge reads the conversation before the request is built: its answers decide the tools and the directive.
-  // A reply carried on or a headless reaction is not judged again.
+  // The judge reads the conversation before the request is built: its answers decide the tools, the directive, and
+  // the lore and past episodes beyond keywords. A reply carried on or a headless reaction is not judged again.
   let judged: JudgedTurn | null = null
   try {
     // Image viewing is only offered to models the profile says can see images.
     const visible = (bridge?.tools ?? []).filter((tool) => profile.visionEnabled || tool.function.name !== 'view_images')
-    if (!turn.reaction && turn.continuing === undefined && profile.engine === 'llm' && target.transport !== 'claude-code') {
-      judged = await judgeBeforeReply({ profile, threadId: turn.threadId, replyId: chatContext?.replyId ?? null, availableTools: visible.map((tool) => tool.function.name), excludeMessageId: turn.replacingMessageId, signal: turn.controller.signal })
+    if (!turn.reaction && turn.continuing === undefined) {
+      judged = await judgeBeforeReply({ profile, threadId: turn.threadId, replyId: chatContext?.replyId ?? null, availableTools: visible.map((tool) => tool.function.name), excludeMessageId: turn.replacingMessageId, context: true, signal: turn.controller.signal })
     }
     const offeredTools = judged ? judged.filterTools(visible) : visible
     turn.offeredTools = offeredTools
-    const built = await buildMessages(offeredTools)
+    const built = await buildMessages(offeredTools, judged?.context ?? null)
     const messages = judged?.directive ? appendUserDirective(built, judged.directive, 'judge') : built
     if (judged && turn.contextMeta) turn.contextMeta.judge = judged.diagnostics
     let previousRound: TextSpan | null = null
@@ -515,17 +517,20 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
   turn.delivery = beginDirectReply(updatedThread, profile.id, history, [...history].reverse().find((entry) => entry.role === 'user') ?? null, turn.controller.signal, (routing) => emit(turn, { type: 'routing', routing }))
   if (reaction) turn.delivery.routing = { ...turn.delivery.routing, replyTo: null, recipients: ['user'] }
   if (page) turn.chatContext = { ...turn.delivery.context, page }
+  let stored: CodexChatMessageRecord | null = null
   void runReply(turn, requester, updatedThread, profile)
     .then(() => finishTurn(turn, profile, turn.controller.signal.aborted ? 'interrupted' : 'completed', null), (error: unknown) => {
       const aborted = turn.controller.signal.aborted
       return finishTurn(turn, profile, aborted ? 'interrupted' : 'failed', aborted ? null : error instanceof Error ? error.message : String(error))
     })
-    .then(resolveFinished, rejectFinished)
+    .then((message) => { stored = message ?? null; resolveFinished(message) }, rejectFinished)
     .finally(() => {
       turn.delivery?.close()
       if (activeTurns.get(thread.id) === turn) activeTurns.delete(thread.id)
       turn.listeners.clear()
       if (turn.controller.signal.aborted) return
+      // The status fields the reply left alone are settled by the judge (in the background).
+      if (stored) judgeStatusFields({ profile, threadId: thread.id, messageId: stored.id, speakerId: thread.kind === 'group' ? profile.id : undefined })
       // A direct chat's finished reply (or follow-up) may get a follow-up message from the judge.
       if ((!reaction || reaction.followUp) && thread.kind !== 'group') {
         const last = CodexChatStore.listMessages(thread.id).at(-1)
@@ -546,7 +551,7 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
 function writeFollowUp(requester: McpRequester, threadId: number, profileId: number, directive: string, signal: AbortSignal) {
   const thread = CodexChatStore.findThreadById(threadId)
   const profile = ChatProfileStore.find(profileId)
-  if (!thread || thread.profile_id !== profileId || !profile?.isEnabled || profile.engine !== 'llm' || activeTurns.has(threadId) || signal.aborted) return Promise.resolve(null)
+  if (!thread || thread.profile_id !== profileId || !profile?.isEnabled || (profile.engine !== 'llm' && profile.engine !== 'claude') || activeTurns.has(threadId) || signal.aborted) return Promise.resolve(null)
   const onAbort = () => LlmChatService.skipReaction(threadId)
   signal.addEventListener('abort', onAbort, { once: true })
   return LlmChatService.react(requester, thread, profile, {
@@ -568,7 +573,7 @@ export async function generateLlmGroupReply(params: {
   requester: McpRequester
   threadId: number
   profile: ChatProfile
-  buildMessages: (tools: ChatCompletionTool[], onMeta: (meta: ChatContextMeta) => void) => ChatCompletionMessage[]
+  buildMessages: (tools: ChatCompletionTool[], onMeta: (meta: ChatContextMeta) => void, judged: JudgedContext | null) => ChatCompletionMessage[]
   /** Overrides of the profile's generation options (the member's or room's reply cap). */
   generation?: Partial<LlmGenerationOptions>
   signal: AbortSignal
@@ -587,7 +592,7 @@ export async function generateLlmGroupReply(params: {
   let status: CodexChatMessageRecord['status'] = 'completed'
   let error: string | null = null
   try {
-    await streamReply(turn, params.requester, params.profile, (tools) => params.buildMessages(tools, (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(params.profile, 'chat')?.model ?? null } }), params.generation ?? {})
+    await streamReply(turn, params.requester, params.profile, (tools, judged) => params.buildMessages(tools, (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(params.profile, 'chat')?.model ?? null } }, judged), params.generation ?? {})
     if (controller.signal.aborted) status = 'interrupted'
   } catch (caught) {
     status = controller.signal.aborted ? 'interrupted' : 'failed'

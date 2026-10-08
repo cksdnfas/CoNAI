@@ -30,6 +30,8 @@ import { redactChatRequestBody, saveChatRequestCapture } from './chatRequestCapt
 import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { translateReply, translateUserInput } from './chatTranslation'
 import { hasTranslation } from './chatModelRoles'
+import { endJudgedTurn, judgeBeforeReply, type JudgedTurn } from './chatJudge'
+import { judgeStatusFields } from './chatJudgeFields'
 import { stripEchoedAddresses } from '@conai/shared'
 import { booksForRequest, hasLoreFiles, loreIndexText, selectRequestLore } from './chatLoreContext'
 import { rejectedLoreLine } from './chatLoreProposals'
@@ -82,6 +84,10 @@ function developerInstructions(presetMode: boolean) {
 export type CodexChatStreamEvent = ChatStreamEvent<CodexChatMessageRecord>
 
 type TurnState = {
+  /** Direct chats with a judge preset: the judge's run for this turn (its directive went into the input). */
+  judged?: JudgedTurn | null
+  /** Direct chats: the profile answering (its judge settles the reply's status fields). */
+  profile?: ChatProfile
   contextMeta?: ChatContextMeta
   requestCapture?: string
   requestSent?: boolean
@@ -323,7 +329,9 @@ async function finishTurn(session: Session, turn: TurnState, status: CodexChatMe
       saveChatRequestCapture(messageId, turn.requestCapture)
     }
     message = CodexChatStore.listMessages(turn.chatThreadId).find((entry) => entry.id === messageId) as CodexChatMessageRecord
+    if (turn.profile && status === 'completed') judgeStatusFields({ profile: turn.profile, threadId: turn.chatThreadId, messageId })
   }
+  endJudgedTurn(turn.judged, toolCalls.map((call) => call.tool))
   session.activeTurns.delete(turn.codexThreadId)
   turn.delivery?.close()
   turn.controller?.abort()
@@ -1131,6 +1139,7 @@ export const CodexChatService = {
         lastError: null,
         finished,
         resolveFinished,
+        profile,
       }
       if (routing.replyTo) requireReplyTarget(threadId, routing.replyTo.messageId)
       // The model reads the message in English; the reader keeps their own words.
@@ -1163,7 +1172,13 @@ export const CodexChatService = {
         const note = pendingAuthorNote(current, profile, sent, user)
         const state = pendingBlockState(current, profile, history, sent)
         const rejected = pendingRejectedLore(threadId, profile, sent)
-        const directive = [buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile, user)), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
+        // The judge's yes items add their directives (Codex keeps its tools for the whole thread, so none are steered).
+        turn.judged = await judgeBeforeReply({ profile, threadId, replyId: turn.delivery.context.replyId ?? null, availableTools: null, signal: turn.controller.signal }).catch((error: unknown) => {
+          turn.controller?.signal.throwIfAborted()
+          console.warn('[codex-chat] judge failed:', error instanceof Error ? error.message : error)
+          return null
+        })
+        const directive = [buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile, user)), postHistoryText(profile, user), turn.judged?.directive ?? ''].filter(Boolean).join('\n\n')
         const reference = referenceBlock([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text])
         const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user) : ''
         const input = [recap, reference, REPLY_GUIDANCE, buildReplyContext(history, routing), chatPageReference(page), chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }])), directive].filter(Boolean).join('\n\n')
@@ -1190,6 +1205,7 @@ export const CodexChatService = {
         turn.requestSent = true
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', body, THREAD_REQUEST_TIMEOUT_MS)
         turn.turnId = response.turn.id
+        if (turn.judged && turn.contextMeta) turn.contextMeta.judge = turn.judged.diagnostics
         if (keys.length > 0) CodexChatStore.setCodexLoreSent(threadId, nextLoreSent(sent, keys))
       } catch (error) {
         void finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')

@@ -1,20 +1,25 @@
-import type { ChatJudgeDiagnostics, ChatJudgeItem, ChatJudgeItemResult, ChatJudgePreset, ChatJudgeStage, ChatJudgeTestTurn, ChatJudgeVerdict } from '@conai/shared'
+import type { ChatJudgeDiagnostics, ChatJudgeItem, ChatJudgeItemResult, ChatJudgePreset, ChatJudgeRunStage, ChatJudgeStage, ChatJudgeTestTurn, ChatJudgeVerdict } from '@conai/shared'
 import { resolveProfileModel } from './chatModelRoles'
 import { askableJudgeItems, ChatJudgePresetStore } from './chatJudgePresets'
-import { askJudge, JudgeError, resolveJudgeConnection, type JudgeAnswer, type JudgeConnection } from './chatJudgeEngine'
-import { ChatJudgeLogStore, judgeToolMatches } from './chatJudgeLogs'
+import { askJudge, JudgeError, resolveJudgeConnection, type JudgeAnswer, type JudgeConnection, type JudgeQuestion } from '../judge/judgeEngine'
+import { ChatJudgeLogStore, judgeToolMatches, type JudgeLogItem } from './chatJudgeLogs'
 import { DEFAULT_FOLLOW_UP_DIRECTIVE } from './chatJudgeDefaults'
+import { contextQuestions, type JudgedContext } from './chatJudgeContext'
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
 import { userPersonaForThread } from './chatUserProfiles'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import type { ChatCompletionTool } from './llmChatCompletion'
 
 /**
- * The judge step of an API LLM chat turn (profiles with a judge preset only; Claude and Codex never). Before the
- * reply, the preset's questions about the latest exchange decide which steered tools the reply is offered and what it
- * is told; after a direct chat's reply, they decide whether the character sends a follow-up message. The judge reads
- * the conversation in its original words (the user's own text, the model's own reply), never a translation. When the
- * judge cannot be reached the turn goes on exactly as without one.
+ * The judge step of a chat turn (profiles with a judge preset only). Before the reply, the preset's questions about the
+ * latest exchange decide which steered tools the reply is offered and what it is told, and which lore entries and past
+ * episodes it gets beyond keywords; after a direct chat's reply, they decide whether the character sends a follow-up
+ * message. The judge reads the conversation in its original words (the user's own text, the model's own reply), never
+ * a translation. When the judge cannot be reached the turn goes on exactly as without one.
+ *
+ * API LLM and Claude chats get all of it; a Codex chat (its tools fixed for the whole Codex thread) gets the directives
+ * of the yes items only. Group rooms, status fields and asset reviews ask through the same pieces (chatJudgeRoom,
+ * chatJudgeFields, chatAssetReview).
  */
 
 /** Characters of one message the judge reads. */
@@ -22,9 +27,9 @@ const MESSAGE_CHARS = 1500
 
 export type JudgeSetup = { preset: ChatJudgePreset; providerName: string; model: string }
 
-/** The preset and connection that judge this profile's turns, or null (no preset, no connection, not an API LLM). */
+/** The preset and connection that judge this profile's turns, or null (no preset, or no connection). */
 export function judgeSetupOf(profile: ChatProfile): JudgeSetup | null {
-  if (profile.engine !== 'llm' || !profile.judgePresetId) return null
+  if (!profile.judgePresetId) return null
   const preset = ChatJudgePresetStore.find(profile.judgePresetId)
   if (!preset) return null
   const providerName = profile.judgeProviderName ?? preset.providerName
@@ -37,9 +42,25 @@ export function originalTextOf(message: Pick<CodexChatMessageRecord, 'role' | 'c
   return message.role === 'user' ? (message.display_content ?? message.content) : message.content
 }
 
-function cut(text: string) {
+export function cutForJudge(text: string, max = MESSAGE_CHARS) {
   const trimmed = text.trim()
-  return trimmed.length > MESSAGE_CHARS ? `${trimmed.slice(0, MESSAGE_CHARS)}…` : trimmed
+  return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed
+}
+
+/** The last `window` messages with text, each with who sent it (a group room names the member who wrote a reply). */
+export function judgeConversationOf(thread: Pick<CodexChatThreadRecord, 'account_id' | 'user_profile_id'> | null | undefined, messages: CodexChatMessageRecord[], window: number, fallbackName = '') {
+  const user = userPersonaForThread(thread).name
+  const names = new Map<number, string>()
+  const speaker = (id: number | null) => {
+    if (id === null) return fallbackName
+    if (!names.has(id)) names.set(id, ChatProfileStore.find(id)?.name ?? fallbackName)
+    return names.get(id) as string
+  }
+  const conversation = messages
+    .filter((message) => originalTextOf(message).trim())
+    .slice(-window)
+    .map((message) => (message.role === 'user' ? { from: 'user', name: user, text: cutForJudge(originalTextOf(message)) } : { from: 'character', name: speaker(message.speaker_profile_id), text: cutForJudge(originalTextOf(message)) }))
+  return { user, conversation }
 }
 
 /**
@@ -47,21 +68,11 @@ function cut(text: string) {
  * who sent it. In a group room a reply names the member who wrote it.
  */
 export function judgeStateOf(profile: Pick<ChatProfile, 'name'>, thread: Pick<CodexChatThreadRecord, 'account_id' | 'user_profile_id'> | null | undefined, messages: CodexChatMessageRecord[], window: number) {
-  const user = userPersonaForThread(thread).name
-  const names = new Map<number, string>()
-  const speaker = (id: number | null) => {
-    if (id === null) return profile.name
-    if (!names.has(id)) names.set(id, ChatProfileStore.find(id)?.name ?? profile.name)
-    return names.get(id) as string
-  }
-  const conversation = messages
-    .filter((message) => originalTextOf(message).trim())
-    .slice(-window)
-    .map((message) => (message.role === 'user' ? { from: 'user', name: user, text: cut(originalTextOf(message)) } : { from: 'character', name: speaker(message.speaker_profile_id), text: cut(originalTextOf(message)) }))
+  const { user, conversation } = judgeConversationOf(thread, messages, window, profile.name)
   return { character: profile.name, user, conversation }
 }
 
-function verdictOf(item: ChatJudgeItem, probability: number): ChatJudgeVerdict {
+function verdictOf(item: Pick<ChatJudgeItem, 'yesThreshold' | 'noThreshold'>, probability: number): ChatJudgeVerdict {
   if (probability >= item.yesThreshold) return 'yes'
   if (probability <= item.noThreshold) return 'no'
   return 'uncertain'
@@ -87,14 +98,47 @@ function escalationConnectionOf(preset: ChatJudgePreset, profile: ChatProfile): 
   }
 }
 
-type ItemRun = ChatJudgeItemResult & { tools: string[] }
+function messageOf(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+/** The judge connection, or null with the reason in `errors`. */
+function connectionOf(setup: Pick<JudgeSetup, 'providerName' | 'model'>, errors: string[]) {
+  try {
+    return resolveJudgeConnection(setup.providerName, setup.model)
+  } catch (error) {
+    errors.push(messageOf(error))
+    return null
+  }
+}
 
 export type JudgeRun = {
   connection: JudgeConnection | null
-  results: ItemRun[]
+  results: JudgeLogItem[]
   request: unknown
   latencyMs: number
   error: string | null
+}
+
+/** Questions built in code (not preset items) in one call: their answers by id, the request as sent, and any error. */
+export async function askBuiltQuestions(setup: Pick<JudgeSetup, 'providerName' | 'model'>, state: unknown, questions: JudgeQuestion[], signal?: AbortSignal) {
+  const started = Date.now()
+  const errors: string[] = []
+  const answers = new Map<string, JudgeAnswer>()
+  const connection = questions.length > 0 ? connectionOf(setup, errors) : null
+  let request: unknown = { state, questions: questions.map((question) => question.id) }
+  if (connection) {
+    try {
+      const result = await askJudge(connection, state, questions, signal)
+      request = result.request
+      for (const [id, answer] of result.answers) answers.set(id, answer)
+      if (result.answers.size < questions.length) errors.push('판단 모델이 일부 질문에 답하지 않았어.')
+    } catch (error) {
+      signal?.throwIfAborted()
+      errors.push(messageOf(error))
+    }
+  }
+  return { connection, answers, request, latencyMs: Date.now() - started, error: errors.length ? [...new Set(errors)].join(' / ') : null }
 }
 
 /**
@@ -106,31 +150,26 @@ export async function runJudgeItems(setup: JudgeSetup, profile: ChatProfile, ite
   const answers = new Map<string, JudgeAnswer>()
   const requests: unknown[] = []
   const errors: string[] = []
-  let connection: JudgeConnection | null = null
-  try {
-    connection = resolveJudgeConnection(setup.providerName, setup.model)
-  } catch (error) {
-    errors.push(error instanceof Error ? error.message : String(error))
-  }
+  const connection = items.length > 0 ? connectionOf(setup, errors) : null
   if (connection) {
     const windows = [...new Set(items.map((item) => item.window))]
     await Promise.all(windows.map(async (window) => {
       const group = items.filter((item) => item.window === window)
       const state = stateFor(window)
       try {
-        const result = await askJudge(connection as JudgeConnection, state, group, signal)
+        const result = await askJudge(connection, state, group, signal)
         requests.push(result.request)
         for (const [id, answer] of result.answers) answers.set(id, answer)
         if (result.answers.size < group.length) errors.push('판단 모델이 일부 질문에 답하지 않았어.')
       } catch (error) {
         signal?.throwIfAborted()
         requests.push({ state, items: group.map((item) => item.id) })
-        errors.push(error instanceof Error ? error.message : String(error))
+        errors.push(messageOf(error))
       }
     }))
   }
 
-  const results: ItemRun[] = items.map((item) => {
+  const results: JudgeLogItem[] = items.map((item) => {
     const answer = answers.get(item.id)
     const base = { itemId: item.id, name: item.name, stage: item.stage, tools: item.tools }
     if (!answer) return { ...base, probability: null, confidence: null, choice: null, verdict: 'uncertain', decidedBy: 'fallback', action: 'none' }
@@ -144,7 +183,10 @@ export async function runJudgeItems(setup: JudgeSetup, profile: ChatProfile, ite
   })
 
   // Uncertain items set to ask an LLM: one more call with the same state, read at 0.5.
-  const escalate = items.filter((item) => item.uncertain === 'llm' && results.find((result) => result.itemId === item.id)?.decidedBy === 'judge' && results.find((result) => result.itemId === item.id)?.verdict === 'uncertain')
+  const escalate = items.filter((item) => {
+    const result = results.find((entry) => entry.itemId === item.id)
+    return item.uncertain === 'llm' && result?.decidedBy === 'judge' && result.verdict === 'uncertain'
+  })
   if (escalate.length > 0) {
     const llm = escalationConnectionOf(setup.preset, profile)
     if (llm) {
@@ -162,7 +204,7 @@ export async function runJudgeItems(setup: JudgeSetup, profile: ChatProfile, ite
           }
         } catch (error) {
           signal?.throwIfAborted()
-          errors.push(`LLM 재판단 실패: ${error instanceof Error ? error.message : String(error)}`)
+          errors.push(`LLM 재판단 실패: ${messageOf(error)}`)
         }
       }))
     }
@@ -175,15 +217,17 @@ export async function runJudgeItems(setup: JudgeSetup, profile: ChatProfile, ite
   return { connection, results, request: requests.length === 1 ? requests[0] : requests, latencyMs: Date.now() - started, error: errors.length ? [...new Set(errors)].join(' / ') : null }
 }
 
-function logRun(setup: JudgeSetup, profile: ChatProfile, threadId: number, stage: ChatJudgeStage, messageId: number | null, replyId: string | null, run: JudgeRun) {
+/** One run in the judge log (best effort: a failed write never fails the turn). Returns its id, 0 when not written. */
+export function logJudgeRun(params: { setup: Pick<JudgeSetup, 'preset' | 'providerName' | 'model'>; threadId: number | null; profileId: number | null; stage: ChatJudgeRunStage; messageId: number | null; replyId: string | null; run: JudgeRun }) {
+  const { setup, run } = params
   try {
     return ChatJudgeLogStore.add({
-      threadId, profileId: profile.id, presetId: setup.preset.id, stage, messageId, replyId,
+      threadId: params.threadId, profileId: params.profileId, presetId: setup.preset.id, stage: params.stage, messageId: params.messageId, replyId: params.replyId,
       engine: run.connection?.engine ?? 'typesafe', providerName: setup.providerName, model: run.connection?.model ?? setup.model,
       latencyMs: run.latencyMs, error: run.error, request: run.request, items: run.results,
     })
   } catch (error) {
-    console.warn('[chat-judge] log failed:', error instanceof Error ? error.message : error)
+    console.warn('[chat-judge] log failed:', messageOf(error))
     return 0
   }
 }
@@ -215,28 +259,50 @@ export type JudgedTurn = {
   filterTools: (tools: ChatCompletionTool[]) => ChatCompletionTool[]
   /** Added after the user's message; empty for none. */
   directive: string
+  /** Lore entries and past episodes the judge chose beyond keywords; null when it was not asked. */
+  context: JudgedContext | null
   diagnostics: ChatJudgeDiagnostics
 }
 
 /**
  * Judges the conversation up to its latest message (without `excludeMessageId`, a reply being regenerated) for the
- * preset's before-reply items. Null when the profile has no judge or nothing to ask; the turn then goes on as usual.
+ * preset's before-reply items and, with `context`, the lore entries and past episodes the reply could use. Null when
+ * the profile has no judge or nothing to ask; the turn then goes on as usual.
+ *
+ * `availableTools`: the tools this turn offers; null when they cannot be steered per turn (Codex), where an item that
+ * steers tools does nothing and only the directives of tool-less yes items go through.
  */
-export async function judgeBeforeReply(params: { profile: ChatProfile; threadId: number; replyId: string | null; availableTools: string[]; excludeMessageId?: number; signal?: AbortSignal }): Promise<JudgedTurn | null> {
+export async function judgeBeforeReply(params: { profile: ChatProfile; threadId: number; replyId: string | null; availableTools: string[] | null; excludeMessageId?: number; context?: boolean; signal?: AbortSignal }): Promise<JudgedTurn | null> {
   const setup = judgeSetupOf(params.profile)
   if (!setup) return null
   const items = askableJudgeItems(setup.preset.items).filter((item) => item.stage === 'before')
-  if (items.length === 0) return null
   const thread = CodexChatStore.findThreadById(params.threadId)
   const messages = CodexChatStore.listMessages(params.threadId).filter((message) => message.id !== params.excludeMessageId)
-  const run = await runJudgeItems(setup, params.profile, items, (window) => judgeStateOf(params.profile, thread, messages, window), params.signal)
+  const extra = params.context && thread ? contextQuestions(setup.preset.context, params.profile, thread, messages) : null
+  if (items.length === 0 && !extra?.questions.length) return null
+
+  const [run, asked] = await Promise.all([
+    runJudgeItems(setup, params.profile, items, (window) => judgeStateOf(params.profile, thread, messages, window), params.signal),
+    extra?.questions.length ? askBuiltQuestions(setup, judgeStateOf(params.profile, thread, messages, setup.preset.context.window), extra.questions, params.signal) : Promise.resolve(null),
+  ])
   // An item steering tools this turn does not offer at all does nothing: its directive would name a missing tool.
+  const available = params.availableTools
   for (const result of run.results) {
     if ((result.action === 'offered' || result.action === 'withheld') && result.tools.length > 0
-      && !result.tools.some((pattern) => params.availableTools.some((name) => judgeToolMatches(pattern, name)))) result.action = 'none'
+      && (available === null || !result.tools.some((pattern) => available.some((name) => judgeToolMatches(pattern, name))))) result.action = 'none'
   }
+  const settled = extra && asked ? extra.settle(asked.answers) : null
+  const combined: JudgeRun = asked
+    ? {
+        connection: run.connection ?? asked.connection,
+        results: [...run.results, ...(settled?.results ?? [])],
+        request: items.length ? [run.request, asked.request].flat() : asked.request,
+        latencyMs: Math.max(run.latencyMs, asked.latencyMs),
+        error: [run.error, asked.error].filter(Boolean).join(' / ') || null,
+      }
+    : run
   const latestUser = [...messages].reverse().find((message) => message.role === 'user')
-  const runId = logRun(setup, params.profile, params.threadId, 'before', latestUser?.id ?? null, params.replyId, run)
+  const runId = logJudgeRun({ setup, threadId: params.threadId, profileId: params.profile.id, stage: 'before', messageId: latestUser?.id ?? null, replyId: params.replyId, run: combined })
 
   const kept = run.results.filter((result) => result.action === 'offered').flatMap((result) => result.tools)
   const withheld = run.results.filter((result) => result.action === 'withheld').flatMap((result) => result.tools)
@@ -251,7 +317,8 @@ export async function judgeBeforeReply(params: { profile: ChatProfile; threadId:
       return !withheld.some((pattern) => judgeToolMatches(pattern, name)) || kept.some((pattern) => judgeToolMatches(pattern, name))
     }),
     directive,
-    diagnostics: diagnosticsOf(setup, runId, run),
+    context: settled?.context ?? null,
+    diagnostics: diagnosticsOf(setup, runId, combined),
   }
 }
 
@@ -310,7 +377,7 @@ export function judgeAfterReply(params: { profile: ChatProfile; threadId: number
   void (async () => {
     const run = await runJudgeItems(setup, params.profile, items, (window) => judgeStateOf(params.profile, thread, messages, window), pending.controller.signal)
     if (pending.controller.signal.aborted) return
-    const runId = logRun(setup, params.profile, params.threadId, 'after', params.message.id, params.message.routing?.replyId ?? null, run)
+    const runId = logJudgeRun({ setup, threadId: params.threadId, profileId: params.profile.id, stage: 'after', messageId: params.message.id, replyId: params.message.routing?.replyId ?? null, run })
     if (!run.results.some((result) => result.action === 'follow-up') || !stillLatest()) {
       if (pendingFollowUps.get(params.threadId) === pending) pendingFollowUps.delete(params.threadId)
       return
@@ -323,12 +390,12 @@ export function judgeAfterReply(params: { profile: ChatProfile; threadId: number
       params.write(directive, pending.controller.signal).then((message) => {
         if (message && runId) ChatJudgeLogStore.setFollowUpMessage(runId, message.id)
       }, (error: unknown) => {
-        console.warn('[chat-judge] follow-up failed:', error instanceof Error ? error.message : error)
+        console.warn('[chat-judge] follow-up failed:', messageOf(error))
       })
     }, setup.preset.followUp.delaySeconds * 1000)
   })().catch((error: unknown) => {
     if (pendingFollowUps.get(params.threadId) === pending) pendingFollowUps.delete(params.threadId)
-    if (!pending.controller.signal.aborted) console.warn('[chat-judge] after-reply judge failed:', error instanceof Error ? error.message : error)
+    if (!pending.controller.signal.aborted) console.warn('[chat-judge] after-reply judge failed:', messageOf(error))
   })
 }
 
@@ -349,7 +416,7 @@ export async function testJudgePreset(params: { preset: ChatJudgePreset; provide
     params.signal?.throwIfAborted()
     const stage: ChatJudgeStage = target.role === 'user' ? 'before' : 'after'
     const stageItems = items.filter((item) => item.stage === stage)
-    const excerpt = cut(originalTextOf(target)).slice(0, 160)
+    const excerpt = cutForJudge(originalTextOf(target)).slice(0, 160)
     if (stageItems.length === 0) {
       results.push({ messageId: target.id, role: target.role, excerpt, error: null, items: [] })
       continue

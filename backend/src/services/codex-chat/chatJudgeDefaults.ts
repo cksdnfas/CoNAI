@@ -1,4 +1,4 @@
-import type { ChatJudgeFollowUp, ChatJudgeItem } from '@conai/shared'
+import { JUDGE_OPTION_DEFAULTS, type ChatJudgeFollowUp, type ChatJudgeItem, type ChatJudgeOptions } from '@conai/shared'
 
 /**
  * The built-in judge presets, seeded once when the presets table is first made. Questions are in English (the
@@ -22,6 +22,10 @@ export const JUDGE_ITEM_DEFAULTS: Omit<ChatJudgeItem, 'id' | 'name' | 'stage' | 
 export const DEFAULT_FOLLOW_UP_DIRECTIVE = '[후속] 사용자는 아직 답하지 않았어. 방금 네 메시지에 자연스럽게 이어지는 짧은 메시지를 하나 더 보내. 덧붙이고 싶은 생각, 행동, 질문 같은 거야. 방금 한 말을 되풀이하지 마.'
 
 export const JUDGE_FOLLOW_UP_DEFAULTS: ChatJudgeFollowUp = { maxConsecutive: 1, delaySeconds: 8, directive: '' }
+
+/** The preset sections beyond items and their default questions live in @conai/shared (the editor shows them too). */
+export { DEFAULT_NEXT_INSTRUCTIONS, DEFAULT_ROUTE_INSTRUCTIONS, JUDGE_OPTION_DEFAULTS } from '@conai/shared'
+export type JudgeOptions = ChatJudgeOptions
 
 const LORE_TOOLS = ['save_lore']
 const IMAGE_TOOLS = ['generate_image*', 'generate_nai', 'generate_comfyui*', 'submit_generation_job']
@@ -105,7 +109,13 @@ const assistantLoreItem: ChatJudgeItem = {
   directive: '[판단] 사용자가 앞으로도 기억할 선호나 사실을 말했어. 이번 답변에서 save_lore로 기록을 제안해.',
 }
 
-export const DEFAULT_JUDGE_PRESETS: Array<{ name: string; items: ChatJudgeItem[]; followUp: ChatJudgeFollowUp }> = [
-  { name: '캐릭터 롤플레이', items: [loreItem, imageItem, followUpItem], followUp: JUDGE_FOLLOW_UP_DEFAULTS },
-  { name: '어시스턴트', items: [assistantLoreItem, clarifyItem], followUp: { ...JUDGE_FOLLOW_UP_DEFAULTS, maxConsecutive: 0 } },
+export const DEFAULT_JUDGE_PRESETS: Array<{ name: string; items: ChatJudgeItem[]; followUp: ChatJudgeFollowUp; options: JudgeOptions }> = [
+  { name: '캐릭터 롤플레이', items: [loreItem, imageItem, followUpItem], followUp: JUDGE_FOLLOW_UP_DEFAULTS, options: JUDGE_OPTION_DEFAULTS },
+  {
+    name: '어시스턴트',
+    items: [assistantLoreItem, clarifyItem],
+    followUp: { ...JUDGE_FOLLOW_UP_DEFAULTS, maxConsecutive: 0 },
+    // Assistants answer what they are asked: the room does not go on by itself, and they keep no status fields.
+    options: { ...JUDGE_OPTION_DEFAULTS, room: { ...JUDGE_OPTION_DEFAULTS.room, next: { ...JUDGE_OPTION_DEFAULTS.room.next, enabled: false } }, fields: { ...JUDGE_OPTION_DEFAULTS.fields, enabled: false } },
+  },
 ]
