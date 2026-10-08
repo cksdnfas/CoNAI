@@ -31,6 +31,7 @@ export interface GracefulShutdownDependencies {
   closeMainDatabase(): void | Promise<void>;
   closeUserSettingsDatabase(): void | Promise<void>;
   closeApiGenerationDatabase(): void | Promise<void>;
+  closeAudioDatabase?(): void | Promise<void>;
   scheduleTimeout(callback: () => void, delayMs: number): ShutdownTimerHandle;
   processExit(code: number): void;
 }
@@ -141,6 +142,10 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
     closeApiGenerationDatabase: async () => {
       const { closeApiGenerationDb } = await import('../database/apiGenerationDb');
       closeApiGenerationDb();
+    },
+    closeAudioDatabase: async () => {
+      const { closeAudioDb } = await import('../database/audioDb');
+      closeAudioDb();
     },
     scheduleTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
     processExit: (code) => process.exit(code),
@@ -369,6 +374,14 @@ export function createGracefulShutdownCoordinator(options: GracefulShutdownOptio
       '⚠️  Error closing API generation database:',
       logger,
     );
+    if (dependencies.closeAudioDatabase) {
+      await runCleanupStep(
+        dependencies.closeAudioDatabase,
+        () => logger.log('✅ Audio database connection closed'),
+        '⚠️  Error closing audio database:',
+        logger,
+      );
+    }
 
     dependencies.processExit(0);
   };

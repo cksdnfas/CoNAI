@@ -51,7 +51,7 @@ function startJob(req: Request, res: Response, kind: RuntimeJobKind, params: obj
 /**
  * POST /api/system/maintenance/orphan-cleanup
  * body: { dryRun?: boolean (default true), missingOlderThanDays?: number, orphanOlderThanDays?: number,
- *         sweepThumbnails?: boolean, sweepTemp?: boolean }
+ *         sweepThumbnails?: boolean, sweepTemp?: boolean, sweepAudio?: boolean }
  * Dry run is the default: only an explicit `dryRun: false` deletes anything.
  */
 router.post('/maintenance/orphan-cleanup', asyncHandler(async (req: Request, res: Response) => {
@@ -62,6 +62,7 @@ router.post('/maintenance/orphan-cleanup', asyncHandler(async (req: Request, res
     orphanOlderThanDays: body.orphanOlderThanDays as number | undefined,
     sweepThumbnails: body.sweepThumbnails as boolean | undefined,
     sweepTemp: body.sweepTemp as boolean | undefined,
+    sweepAudio: body.sweepAudio as boolean | undefined,
   });
 
   return startJob(req, res, 'media-orphan-cleanup', options, 'Orphan cleanup is already running');

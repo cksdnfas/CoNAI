@@ -1,5 +1,6 @@
 import os from 'os';
 import { isFileStorePath } from './fileStorePaths';
+import { isAudioStorePath } from './audio/audioStore';
 import path from 'path';
 import pLimit from 'p-limit';
 import { db } from '../database/init';
@@ -76,6 +77,7 @@ export class BackgroundProcessorService {
     options: SavedMediaProcessingOptions = {},
   ): Promise<SavedMediaProcessingResult> {
     if (isFileStorePath(filePath)) throw new Error('Private stored files cannot be registered in the image library');
+    if (isAudioStorePath(filePath)) throw new Error('Audio workspace files cannot be registered in the image library');
     return SavedMediaOrchestrator.process(filePath, options);
   }
 

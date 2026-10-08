@@ -17,13 +17,15 @@ export const PERMISSION_CATALOG = [
   { key: 'files.view', section: 'files', label: { ko: '내 파일 보기', en: 'View my files' }, description: 'Browse and download files in your own file store.' },
   { key: 'files.edit', section: 'files', label: { ko: '내 파일 올리기·정리', en: 'Upload and organize my files' }, description: 'Upload files, create folders, rename and move in your own file store.' },
   { key: 'files.delete', section: 'files', label: { ko: '내 파일 삭제', en: 'Delete my files' }, description: 'Delete files and folders in your own file store.' },
+  { key: 'audio.view', section: 'audio', label: { ko: '음향 보기', en: 'View audio' }, description: 'Browse sound projects, groups and candidates, play and download them, read group comments.' },
+  { key: 'audio.edit', section: 'audio', label: { ko: '음향 편집·검수', en: 'Edit and review audio' }, description: 'Create and organize sound projects and groups, upload and import sounds, review candidates and manage comments.' },
   { key: 'chat.use', section: 'chat', label: { ko: '채팅', en: 'Chat' }, description: 'Chat with API model profiles.' },
   { key: 'chat.agent.use', section: 'chat', label: { ko: '서버 에이전트 채팅 (Codex·Claude Code, 서버 계정 사용량 공유)', en: 'Server agent chat (Codex, Claude Code; shares server account usage)' }, description: 'Chat with profiles that run on the server Codex or Claude Code account.' },
   { key: 'chat.diagnostics.view', section: 'chat', label: { ko: '채팅 진단 보기', en: 'View chat diagnostics' }, description: 'Inspect how your own replies were composed.' },
   { key: 'auth.guest.create', section: 'account', anonymousOnly: true, anonymous: true, label: { ko: '게스트 가입', en: 'Guest signup' }, description: 'Create a guest account from the login page.' },
 ] as const satisfies ReadonlyArray<{
   key: string
-  section: 'images' | 'prompts' | 'generation' | 'files' | 'chat' | 'account'
+  section: 'images' | 'prompts' | 'generation' | 'files' | 'audio' | 'chat' | 'account'
   label: { ko: string; en: string }
   description: string
   /** Visitors who are not signed in can use it. */

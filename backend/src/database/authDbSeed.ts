@@ -56,6 +56,9 @@ export const PERMISSIONS_V2_SOURCES: Record<PermissionKey, readonly string[]> = 
   'files.view': ['files.view'],
   'files.edit': ['files.upload', 'files.organize'],
   'files.delete': ['files.delete'],
+  // New in the audio workspace: no older key to fold in; administrators get them like every catalog key.
+  'audio.view': [],
+  'audio.edit': [],
   'chat.use': ['chat.llm.use'],
   'chat.agent.use': ['chat.codex.use', 'chat.claude.use'],
   'chat.diagnostics.view': ['chat.diagnostics.view', 'chat.diagnostics.content'],

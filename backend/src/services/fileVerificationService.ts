@@ -8,6 +8,7 @@ import { checkFileAccess } from '../utils/fileAccess';
 import { ThumbnailGenerator } from '../utils/thumbnailGenerator';
 import { maybeTruncateImagesWal } from '../database/walMaintenance';
 import { LIBRARY_BATCH_SIZE, chunkArray, pageBoundary, type LibraryBatchHooks } from './maintenance/libraryBatch';
+import { verifyAudioFiles, type AudioVerificationResult } from './audio/audioMaintenance';
 
 /**
  * 파일 검증 결과
@@ -22,6 +23,8 @@ export interface VerificationResult {
     filePath: string;
     error: string;
   }>;
+  /** Audio workspace blobs whose file is missing or has another size; reported only, rows are kept. */
+  audio?: AudioVerificationResult;
 }
 
 /**
@@ -224,6 +227,15 @@ export class FileVerificationService {
         duration,
         errors,
       };
+      try {
+        result.audio = await verifyAudioFiles({ throwIfCancelled: hooks.throwIfCancelled });
+        if (result.audio.missing + result.audio.sizeMismatch > 0) {
+          console.log(`  🔊 오디오 파일 이슈: 없음 ${result.audio.missing}개, 크기 다름 ${result.audio.sizeMismatch}개`);
+        }
+      } catch (audioError) {
+        if ((audioError as Error)?.name === 'RuntimeJobCancelledError') throw audioError;
+        console.warn('  ⚠️ 오디오 파일 검증 실패:', audioError);
+      }
 
       this.saveVerificationLog(result, options.verificationType ?? 'manual', errorCount);
       this.cleanupOldLogs();

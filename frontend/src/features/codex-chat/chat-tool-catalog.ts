@@ -10,10 +10,10 @@ type Copy = { ko: string; en: string }
  * description, so nothing is hidden by an outdated catalog.
  */
 export type ChatToolGroupId =
-  | 'images' | 'history' | 'prompts' | 'workflows' | 'files' | 'emoticons' | 'backups' | 'pages'
+  | 'images' | 'history' | 'prompts' | 'workflows' | 'files' | 'emoticons' | 'audio' | 'backups' | 'pages'
   | 'image-gen' | 'workflow-run'
   | 'configure'
-  | 'image-groups' | 'prompt-groups' | 'file-ops' | 'emoticon-ops'
+  | 'image-groups' | 'prompt-groups' | 'file-ops' | 'emoticon-ops' | 'audio-ops'
   | 'other'
 
 const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
@@ -24,6 +24,7 @@ const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
   { id: 'workflows', scope: 'read', label: { ko: '워크플로·서버', en: 'Workflows and servers' } },
   { id: 'files', scope: 'read', label: { ko: '파일 보관함', en: 'File store' } },
   { id: 'emoticons', scope: 'read', label: { ko: '이모티콘', en: 'Emoticons' } },
+  { id: 'audio', scope: 'read', label: { ko: '음향', en: 'Audio' } },
   { id: 'backups', scope: 'read', label: { ko: '백업', en: 'Backups' } },
   { id: 'image-gen', scope: 'generate', label: { ko: '이미지 생성', en: 'Image generation' } },
   { id: 'workflow-run', scope: 'generate', label: { ko: '워크플로 실행', en: 'Workflow runs' } },
@@ -31,6 +32,7 @@ const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
   { id: 'prompt-groups', scope: 'organize', label: { ko: '프롬프트 정리', en: 'Prompt organizing' } },
   { id: 'file-ops', scope: 'organize', label: { ko: '파일 변경', en: 'File changes' } },
   { id: 'emoticon-ops', scope: 'organize', label: { ko: '이모티콘 설정', en: 'Emoticon setup' } },
+  { id: 'audio-ops', scope: 'organize', label: { ko: '음향 정리', en: 'Audio organizing' } },
   { id: 'configure', scope: 'configure', label: { ko: '설정', en: 'Setup' } },
 ]
 
@@ -99,6 +101,18 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   delete_files: { group: 'file-ops', label: { ko: '파일 삭제', en: 'Delete files' }, ko: '보관함의 파일이나 빈 폴더를 영구히 지워. 채팅에 붙은 파일은 보호돼.' },
   set_emoticon_keywords: { group: 'emoticon-ops', label: { ko: '이모티콘 키워드 설정', en: 'Set emoticon keywords' }, ko: '그룹 안 이미지의 이모티콘 키워드를 정해.' },
   set_emoticon_group: { group: 'emoticon-ops', label: { ko: '이모티콘 그룹 지정', en: 'Set emoticon group' }, ko: '그룹을 이모티콘 그룹으로 만들거나 되돌려.' },
+  list_audio_projects: { group: 'audio', label: { ko: '음향 프로젝트 목록', en: 'List audio projects' }, ko: '음향 프로젝트와 그룹·후보 수, 받은 파일 그룹을 나열해.' },
+  list_audio_groups: { group: 'audio', label: { ko: '음향 그룹 목록', en: 'List audio groups' }, ko: '프로젝트의 효과음 그룹과 파일명 규칙, 채택·코멘트 수를 나열해.' },
+  list_audio_candidates: { group: 'audio', label: { ko: '후보 목록', en: 'List candidates' }, ko: '그룹의 생성 후보·업로드·편집본을 검수 상태와 함께 나열해.' },
+  get_audio_candidate: { group: 'audio', label: { ko: '후보 읽기', en: 'Read candidate' }, ko: '후보 하나의 출처(프롬프트, seed, 워크플로)와 검수 메모를 읽어.' },
+  list_audio_group_comments: { group: 'audio', label: { ko: '그룹 코멘트 읽기', en: 'Read group comments' }, ko: '그룹에 남긴 작업 요청 코멘트를 읽어.' },
+  create_audio_project: { group: 'audio-ops', label: { ko: '프로젝트 만들기', en: 'Create audio project' }, ko: '음향 프로젝트를 만들어. 받은 파일 그룹이 같이 생겨.' },
+  update_audio_project: { group: 'audio-ops', label: { ko: '프로젝트 수정', en: 'Update audio project' }, ko: '음향 프로젝트 이름이나 설명을 바꿔.' },
+  create_audio_group: { group: 'audio-ops', label: { ko: '그룹 만들기', en: 'Create audio group' }, ko: '효과음 그룹을 만들어. 라벨이 내보내기 파일명 규칙이야.' },
+  update_audio_group: { group: 'audio-ops', label: { ko: '그룹 수정', en: 'Update audio group' }, ko: '그룹 이름·라벨·설명을 바꿔.' },
+  move_audio_candidates: { group: 'audio-ops', label: { ko: '후보 옮기기', en: 'Move candidates' }, ko: '후보를 같은 프로젝트의 다른 그룹으로 옮겨.' },
+  import_audio: { group: 'audio-ops', label: { ko: '오디오 가져오기', en: 'Import audio' }, ko: '오디오 파일(data URL 또는 보관함 파일)을 후보로 넣어.' },
+  set_audio_group_comment_status: { group: 'audio-ops', label: { ko: '코멘트 완료 처리', en: 'Complete comment' }, ko: '작업 요청 코멘트를 완료로 표시하거나 다시 열어.' },
   get_chat_setup_guide: { group: 'configure', label: { ko: '설정 안내 읽기', en: 'Read setup guide' }, ko: '프로필·표시 블록을 어떻게 짜는지 안내를 읽어.' },
   list_chat_profiles: { group: 'configure', label: { ko: '프로필 목록', en: 'List profiles' }, ko: '채팅 프로필을 나열해.' },
   get_chat_profile: { group: 'configure', label: { ko: '프로필 읽기', en: 'Read profile' }, ko: '프로필 하나의 설정을 읽어.' },
