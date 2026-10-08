@@ -16,6 +16,7 @@ import { AuthStatusErrorState } from '@/features/auth/require-auth-permission'
 import { useAuthPermissionRedirect } from '@/features/auth/use-auth-permission-redirect'
 import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
+import { ImageBatchResizeAction } from '@/features/images/components/image-batch-resize-action'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { ImageListFeedFooter } from '@/features/images/components/image-list/image-list-feed-footer'
 import { ImageListColumnFloatingControl } from '@/features/images/components/image-list/image-list-column-floating-control'
@@ -101,7 +102,10 @@ export function HomePage() {
   })
 
   const isAuthStatusUnavailable = authStatusQuery.isError && !canViewHome
-  const canOpenImages = useImagePermissions().canViewImages
+  const { canViewImages: canOpenImages, canCreateImageCopies } = useImagePermissions()
+  const firstSelectedImage = selectedCompositeHashes.length > 0
+    ? visibleImages.find((image) => image.composite_hash === selectedCompositeHashes[0]) ?? null
+    : null
   // A failed next page or background refetch keeps the loaded images on screen; only a failed first load replaces them.
   const hasFeedData = (imagesQuery.data?.pages.length ?? 0) > 0
   const isInitialLoadError = imagesQuery.isError && !hasFeedData
@@ -277,13 +281,20 @@ export function HomePage() {
             selectedCount={selectedIds.length}
             downloadableCount={selectedCompositeHashes.length}
             isDownloading={isDownloading}
-            extraActions={canAssignGroups ? (
-              <SelectionBarAction
-                icon={FolderPlus}
-                label={assignToGroupMutation.isPending ? t('homePage.addingToGroup') : t('homePage.addToGroup')}
-                onClick={handleOpenAssignModal}
-                disabled={assignToGroupMutation.isPending || groupsQuery.isPending}
-              />
+            extraActions={canAssignGroups || canCreateImageCopies ? (
+              <>
+                {canAssignGroups ? (
+                  <SelectionBarAction
+                    icon={FolderPlus}
+                    label={assignToGroupMutation.isPending ? t('homePage.addingToGroup') : t('homePage.addToGroup')}
+                    onClick={handleOpenAssignModal}
+                    disabled={assignToGroupMutation.isPending || groupsQuery.isPending}
+                  />
+                ) : null}
+                {canCreateImageCopies ? (
+                  <ImageBatchResizeAction compositeHashes={selectedCompositeHashes} referenceSize={firstSelectedImage} />
+                ) : null}
+              </>
             ) : null}
             trailingActions={canDeleteImages ? (
               <SelectionBarAction

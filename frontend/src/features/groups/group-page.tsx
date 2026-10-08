@@ -25,6 +25,7 @@ import { SegmentedControl } from '@/components/common/segmented-control'
 import { GroupDownloadModal } from './components/group-download-modal'
 import { SelectionBarAction } from '@/components/common/selection-action-bar'
 import { ImageSelectionBar } from '@/features/images/components/image-selection-bar'
+import { ImageBatchResizeAction } from '@/features/images/components/image-batch-resize-action'
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import { buildGroupCountMaps } from './group-count-utils'
 import { writeGroupImageDrag } from './group-image-drag'
@@ -36,7 +37,7 @@ import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context
 import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 
 export function GroupPage() {
-  const { canViewImages } = useImagePermissions()
+  const { canViewImages, canCreateImageCopies } = useImagePermissions()
   const navigate = useNavigate()
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
@@ -409,6 +410,12 @@ export function GroupPage() {
                 label={removeGroupImagesMutation.isPending ? t('groups.group.page.removing') : t('groups.group.page.remove.from.current.group')}
                 onClick={() => void handleRemoveSelectedImages()}
                 disabled={removeGroupImagesMutation.isPending}
+              />
+            ) : null}
+            {canCreateImageCopies ? (
+              <ImageBatchResizeAction
+                compositeHashes={selectedGroupCompositeHashes}
+                referenceSize={groupImages.find((image) => image.composite_hash === selectedGroupCompositeHashes[0]) ?? null}
               />
             ) : null}
           </>

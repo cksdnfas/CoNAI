@@ -93,6 +93,7 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   generate_comfyui: { group: 'image-gen', label: { ko: 'ComfyUI 바로 생성', en: 'Generate with ComfyUI' }, ko: 'ComfyUI 워크플로로 바로 생성하고 끝날 때까지 기다려.' },
   generate_comfyui_all_servers: { group: 'image-gen', label: { ko: '모든 서버에서 생성', en: 'Generate on all servers' }, ko: '활성 ComfyUI 서버 전부에서 한 번씩 생성해.' },
   cancel_generation_job: { group: 'image-gen', label: { ko: '생성 작업 취소', en: 'Cancel generation job' }, ko: '진행 중인 생성 작업을 취소해.' },
+  resize_images: { group: 'image-gen', label: { ko: '이미지 크기 변경', en: 'Resize images' }, ko: '라이브러리 이미지를 정한 크기로 바꿔 새 이미지로 저장해. 원본은 그대로 둬.' },
   execute_graph_workflow: { group: 'workflow-run', label: { ko: '그래프 워크플로 실행', en: 'Run graph workflow' }, ko: '직접 만든 워크플로를 실행하고 결과를 기다려.' },
   extract_sprite_sheet: { group: 'sprite-ops', label: { ko: '스프라이트 시트 추출', en: 'Extract sprite sheet' }, ko: '영상에서 프레임을 뽑아 배경색을 빼고 시트로 만들어 라이브러리에 저장해.' },
   extract_sprite_sheets_batch: { group: 'sprite-ops', label: { ko: '스프라이트 일괄 추출', en: 'Batch extract sprites' }, ko: '여러 영상을 같은 설정으로 시트로 만들어 저장해.' },

@@ -30,6 +30,7 @@ export type RuntimeJobKind =
   | 'sprite-animation'
   | 'audio-export'
   | 'audio-legacy-import'
+  | 'image-batch-resize'
 
 export type RuntimeJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 

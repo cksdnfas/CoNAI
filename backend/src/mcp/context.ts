@@ -144,6 +144,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   extract_sprite_sheets_batch: 'generate',
   normalize_sprite_sheets: 'generate',
   create_sprite_animation: 'generate',
+  resize_images: 'generate',
   generate_comfyui: 'generate',
   generate_comfyui_all_servers: 'generate',
   generate_nai: 'generate',
