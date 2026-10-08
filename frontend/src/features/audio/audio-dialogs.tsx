@@ -8,6 +8,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -309,30 +310,24 @@ export function AudioCommentsDialog({ open, group, canEdit, onClose, onChanged }
   )
 }
 
-/** Underlined text tabs (the app's in-place tab style). */
+/** Underlined text tabs (the app's in-place tab style); content is rendered by the caller. */
 export function TextTabs<T extends string>({ value, items, onChange, className }: { value: T; items: Array<[T, string, number?]>; onChange: (value: T) => void; className?: string }) {
   return (
-    <div role="tablist" className={cn('flex gap-5 overflow-x-auto border-b border-line', className)}>
-      {items.map(([id, label, count]) => (
-        <button
-          key={id}
-          type="button"
-          role="tab"
-          aria-selected={value === id}
-          onClick={() => onChange(id)}
-          className={cn(
-            'relative shrink-0 cursor-pointer pb-2 text-sm font-semibold whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground',
-            'after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-primary after:opacity-0',
-            value === id && 'text-foreground after:opacity-100',
-          )}
-        >
-          {label}
-          {count !== undefined ? <span className="ml-1 font-mono text-2xs font-normal text-muted-foreground">{count}</span> : null}
-        </button>
-      ))}
-    </div>
+    <Tabs value={value} onValueChange={(next) => onChange(next as T)}>
+      <TabsList className={cn(TEXT_TAB_LIST_CLASS, 'overflow-x-auto', className)}>
+        {items.map(([id, label, count]) => (
+          <TabsTrigger key={id} value={id} className={cn(TEXT_TAB_TRIGGER_CLASS, 'shrink-0')}>
+            {label}
+            {count !== undefined ? <span className="ml-1 font-mono text-2xs font-normal text-muted-foreground">{count}</span> : null}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   )
 }
+
+const TEXT_TAB_LIST_CLASS = 'flex w-full flex-nowrap gap-5 rounded-none border-b border-line bg-transparent p-0'
+const TEXT_TAB_TRIGGER_CLASS = 'relative rounded-none px-0 pb-2 pt-0 text-sm font-semibold text-muted-foreground hover:bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-primary after:opacity-0 data-[state=active]:after:opacity-100'
 
 /* ------------------------------------------------------------------------------------------------ cleanup */
 
@@ -344,7 +339,8 @@ export function AudioCleanupDialog({ open, group, onClose, onDone }: { open: boo
   useEffect(() => { if (open) setScope('unselected') }, [open])
   // The plan is the frozen list the confirmation shows; the delete uses exactly these ids.
   const plan = useQuery({
-    queryKey: [AUDIO_QUERY_KEY, 'deletion-plan', group.id, scope],
+    // Outside the 'audio' prefix: queue events must not refresh a plan the user is confirming.
+    queryKey: ['audio-deletion-plan', group.id, scope],
     queryFn: () => audioDeletionPlan(group.id, scope),
     enabled: open,
     staleTime: Infinity,

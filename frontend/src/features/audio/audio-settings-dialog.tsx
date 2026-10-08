@@ -283,19 +283,17 @@ function ShortcutTab() {
         {AUDIO_SHORTCUT_ACTIONS.map((action) => (
           <li key={action} className="flex items-center gap-3 py-2">
             <span className="flex-1 text-sm">{labels[action]}</span>
-            <button
-              type="button"
+            <Button
+              variant={capturing === action ? 'secondary' : 'ghost'}
+              size="xs"
               aria-label={t({ ko: '{action} 키 바꾸기', en: 'Change key for {action}' }, { action: labels[action] })}
               onClick={() => { setError(null); setCapturing(action) }}
               onBlur={() => setCapturing((current) => (current === action ? null : current))}
               onKeyDown={(event) => { if (capturing === action) capture(action, event) }}
-              className={cn(
-                'min-w-16 cursor-pointer rounded-sm border border-line px-2 py-1 text-center font-mono text-xs transition-colors hover:border-foreground/40',
-                capturing === action && 'border-primary text-primary',
-              )}
+              className={cn('min-w-16 font-mono', capturing === action && 'text-primary')}
             >
               {capturing === action ? '…' : shortcutLabel(shortcuts[action])}
-            </button>
+            </Button>
           </li>
         ))}
       </ul>
