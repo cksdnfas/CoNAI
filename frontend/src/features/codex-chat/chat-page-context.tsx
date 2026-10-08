@@ -59,7 +59,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
   const actionUndos = useRef(new Map<number, WorkflowUndo>())
   const instanceId = useMemo(() => ({ key: `${location.key}:${location.pathname}:${accountKey}`, id: createRandomUuid() }), [location.key, location.pathname, accountKey]).id
   const permission = chatPagePermission(location.pathname)
-  const available = !!auth?.authenticated && !!permission && auth.permissionKeys.includes(permission) && auth.permissionKeys.includes('chat.tools.read')
+  const available = !!auth?.authenticated && permission !== null && (permission === '' || auth.permissionKeys.includes(permission))
   const enabled = available && connection?.accountKey === accountKey
   const primaryEditor = editors.filter((item) => item.path === location.pathname).sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))[0] ?? null
   const workflowBrowser = editors.find((item) => item.path === location.pathname && item.kind === 'workflow_runner' && item.resourceId === 'workflow-browser')
@@ -224,19 +224,19 @@ export function useChatPageRegistration(input: (Omit<Editor, 'instanceId' | 'pat
   }, [register, description, revision, instanceId, location.pathname])
 }
 
-export function ChatPageConnectButton({ disabled, allowed }: { disabled: boolean; allowed: boolean }) {
+export function ChatPageConnectButton({ disabled }: { disabled: boolean }) {
   const page = useChatPage()
   const { t } = useI18n()
   if (!page?.available) return null
   const label = t(page.enabled ? { ko: '현재 페이지 연결 해제', en: 'Disconnect current page' } : { ko: '현재 페이지 연결', en: 'Connect current page' })
-  const hint = t(allowed ? { ko: '현재 페이지의 등록된 입력과 워크플로 편집 정보를 전달해. 채팅이 만든 변경안을 검토하고 직접 적용해.', en: 'Share registered page inputs and workflow editor state. Review and apply the changes proposed by chat.' } : { ko: '프로필 도구에서 현재 페이지 읽기를 허용해줘.', en: 'Allow Read current page in the profile tools.' })
-  return <Tip content={hint}><IconButton variant="ghost" size="icon-sm" active={page.enabled && allowed} disabled={disabled || !allowed} onClick={page.toggle} label={label} tooltip={false}><Monitor /></IconButton></Tip>
+  const hint = t({ ko: '현재 페이지의 등록된 입력과 워크플로 편집 정보를 전달해. 채팅이 만든 변경안을 검토하고 직접 적용해.', en: 'Share registered page inputs and workflow editor state. Review and apply the changes proposed by chat.' })
+  return <Tip content={hint}><IconButton variant="ghost" size="icon-sm" active={page.enabled} disabled={disabled} onClick={page.toggle} label={label} tooltip={false}><Monitor /></IconButton></Tip>
 }
 
-export function ChatPageConnectionNotice({ allowed }: { allowed: boolean }) {
+export function ChatPageConnectionNotice() {
   const page = useChatPage()
   const { t } = useI18n()
-  if (!page?.snapshot || !allowed) return null
+  if (!page?.snapshot) return null
   const inputCount = page.snapshot.fields.filter((field) => field.editable !== false).length
   const workflow = page.snapshot.workflow
   const actionCount = page.snapshot.actions?.length ?? 0

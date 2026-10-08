@@ -57,6 +57,11 @@ export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'execute_graph
 /** A page grants a bounded input task; explicitly linked generation presets keep their independent grant. */
 export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'propose_page_changes', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes', 'read_page_data', 'propose_page_action']);
 
+/** Page tools are enabled by the user's explicit connection, independently of general profile tools. */
+export function isConnectedChatPageTool(context: McpRequestContext, toolName: string) {
+  return isChatMcpSource(context.source) && context.chatContext?.kind === 'direct' && !!context.chatContext.page && CHAT_PAGE_TOOLS.has(toolName);
+}
+
 /** Chat agents must not spend paid NovelAI multi-sample generations on their own; one image per request is free. */
 export function assertChatNaiSampleCount(context: McpRequestContext, nSamples: unknown) {
   if (isChatMcpSource(context.source) && typeof nSamples === 'number' && nSamples > 1) {

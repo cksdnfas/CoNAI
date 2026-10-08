@@ -219,7 +219,7 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
   const summaryModelsQuery = useQuery({
     queryKey: ['codex-chat-connection-models', summaryDirect.provider],
     queryFn: () => listChatConnectionModels(summaryDirect.provider),
-    enabled: open && isLlm && roleChoice(draft, 'summary', slots, true, slotsSettled) === 'direct' && Boolean(summaryDirect.provider),
+    enabled: open && draft.engine !== 'codex' && roleChoice(draft, 'summary', slots, true, slotsSettled) === 'direct' && Boolean(summaryDirect.provider),
     retry: false,
     staleTime: 60_000,
   })
@@ -252,7 +252,7 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
   const ownLorebooksQuery = useQuery({ queryKey: OWN_LOREBOOKS_QUERY_KEY, queryFn: listOwnLorebooks, enabled: open })
   const linkableLorebooks = useMemo(() => lorebooksQuery.data ? [...lorebooksQuery.data, ...(ownLorebooksQuery.data ?? []).filter((book) => book.kind === 'account')] : undefined, [lorebooksQuery.data, ownLorebooksQuery.data])
   const blocksQuery = useQuery({ queryKey: CHAT_BLOCKS_QUERY_KEY, queryFn: listChatBlocks, enabled: open })
-  const codexModelsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 5 * 60 * 1000, enabled: open && !isLlm })
+  const codexModelsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 5 * 60 * 1000, enabled: open && draft.engine === 'codex' })
 
   // Fields start on real values, not on a "choose" or "connection default" entry: the first connection, then the
   // connection's default model (or its first listed one). Declared after the draft reset so they apply on top of it.

@@ -6,6 +6,7 @@ import {
   CONAI_HELPER_CUSTOM_NODE_PACKAGE_FILENAME,
 } from '../services/conaiHelperCustomNodePackageService';
 import { llmSettingsRoutes } from './settings/llm-settings.routes';
+import { agentCliRoutes } from './settings/agent-cli.routes';
 import { generalSettingsRoutes } from './settings/general-settings.routes';
 import { taggerSettingsRoutes } from './settings/tagger-settings.routes';
 import { kaloscopeSettingsRoutes } from './settings/kaloscope-settings.routes';
@@ -46,6 +47,7 @@ router.get(
 // Keep domain mounts explicit so route ownership remains visible without
 // changing the externally mounted /api/settings boundary.
 router.use('/', llmSettingsRoutes);
+router.use('/', agentCliRoutes);
 router.use('/', generalSettingsRoutes);
 router.use('/', taggerSettingsRoutes);
 router.use('/', kaloscopeSettingsRoutes);

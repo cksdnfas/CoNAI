@@ -11,6 +11,7 @@ import type { LlmPresetRecord, LlmSettings } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { RowGroup } from '@/components/ui/row-group'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
+import { AgentCliSettings } from './agent-cli-settings'
 import {
   LlmConnectionEditorModal,
   LlmConnectionListItem,
@@ -171,6 +172,7 @@ export function LlmConnectionsTab() {
 
   return (
     <div className="space-y-8">
+      <AgentCliSettings />
       <RowGroup
         heading={t({ ko: '모델', en: 'Models' })}
         count={slotsQuery.isSuccess ? slotsQuery.data.length : undefined}

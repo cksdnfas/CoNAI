@@ -55,6 +55,7 @@ const BUILT_IN_EDITABLE_PERMISSION_KEYS = [
   'workflows.update',
   'chat.codex.use',
   'chat.llm.use',
+  'chat.claude.use',
   'chat.diagnostics.view',
   'chat.diagnostics.content',
   'chat.diagnostics.prompts',

@@ -65,10 +65,12 @@ export function CodexDeviceLoginDialog({ open, onClose, onSucceeded }: CodexDevi
     }
 
     succeededRef.current = true
+    void queryClient.invalidateQueries({ queryKey: ['agent-cli-status', 'codex'] })
+    void queryClient.invalidateQueries({ queryKey: ['codex-generation-status'] })
     showSnackbar({ message: t({ ko: 'Codex 로그인 완료', en: 'Signed in to Codex' }), tone: 'info' })
     onSucceeded()
     onClose()
-  }, [loginStatus, onClose, onSucceeded, open, showSnackbar, t])
+  }, [loginStatus, onClose, onSucceeded, open, queryClient, showSnackbar, t])
 
   const handleClose = () => {
     if (isPending || startMutation.isPending) {

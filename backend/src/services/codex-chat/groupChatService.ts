@@ -76,7 +76,7 @@ function emit(run: GroupRun, event: CodexChatStreamEvent) {
 function assertGroupChatAvailable(requester: McpRequester) {
   if (!loadChatSettings().enabled) throw new CodexChatError('채팅이 꺼져 있어.', 403)
   const access = resolveChatAccess(requester.accountId)
-  if (!access.llm && !access.codex) throw new CodexChatError('채팅 권한이 없어.', 403)
+  if (!access.llm && !access.codex && !access.claude) throw new CodexChatError('채팅 권한이 없어.', 403)
   return access
 }
 
@@ -107,7 +107,7 @@ function memberProfiles(threadId: number) {
 function assertJoinable(requester: McpRequester, profiles: ChatProfile[], existing: ChatProfile[] = []) {
   const access = assertGroupChatAvailable(requester)
   for (const profile of profiles) {
-    if (!profile.isEnabled || !(profile.engine === 'codex' ? access.codex : access.llm)) throw new CodexChatError(`${profile.name} 프로필은 지금 쓸 수 없어.`, 409)
+    if (!profile.isEnabled || !(profile.engine === 'codex' ? access.codex : profile.engine === 'claude' ? access.claude : access.llm)) throw new CodexChatError(`${profile.name} 프로필은 지금 쓸 수 없어.`, 409)
   }
   const all = [...existing, ...profiles]
   if (all.length > GROUP_MEMBER_MAX) throw new CodexChatError(`참가자는 ${GROUP_MEMBER_MAX}명까지야.`)
@@ -133,7 +133,7 @@ function userRecipients(requester: McpRequester, thread: CodexChatThreadRecord, 
   const access = assertGroupChatAvailable(requester)
   for (const id of ids) {
     const member = members.find((entry) => entry.id === id)
-    if (!member?.isEnabled || !(member.engine === 'codex' ? access.codex : access.llm)) throw new CodexChatError('답장 받을 참가자가 없거나 지금 응답할 수 없어. 수신자를 다시 지정해줘.', 409)
+    if (!member?.isEnabled || !(member.engine === 'codex' ? access.codex : member.engine === 'claude' ? access.claude : access.llm)) throw new CodexChatError('답장 받을 참가자가 없거나 지금 응답할 수 없어. 수신자를 다시 지정해줘.', 409)
   }
   return ids as number[]
 }
@@ -169,7 +169,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     for (const id of next) {
       const member = memberProfiles(run.threadId).find((entry) => entry.id === id)
       if (id === profile.id) throw new CodexChatError('자기 자신에게는 자동 답장을 보낼 수 없어.')
-      if (!member?.isEnabled || !(member.engine === 'codex' ? access.codex : access.llm)) throw new CodexChatError('답장 받을 참가자가 없거나 지금 응답할 수 없어.', 409)
+      if (!member?.isEnabled || !(member.engine === 'codex' ? access.codex : member.engine === 'claude' ? access.claude : access.llm)) throw new CodexChatError('답장 받을 참가자가 없거나 지금 응답할 수 없어.', 409)
     }
     const others = [...run.reserved].reduce((sum, [id, targets]) => sum + (id === replyId ? 0 : targets.length), 0)
     if (next.length && (!run.chain || run.chainUsed + others + next.length > run.chainLimit)) throw new CodexChatError('이어 말하기 한도에 도달해서 참가자를 부르지 못했어. 사용자 차례로 돌아갈게.', 409)
@@ -284,6 +284,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
 
 /** Members sharing a key share its slots: one LLM connection, or Codex. */
 function concurrencyOf(profile: ChatProfile) {
+  if (profile.engine === 'claude') return { key: 'claude', limit: 1 }
   if (profile.engine === 'codex') return { key: 'codex', limit: 1 }
   const providerName = resolveProfileModel(profile, 'chat')?.providerName ?? ''
   const provider = ExternalApiProvider.findByName(providerName)
@@ -500,7 +501,7 @@ export const GroupChatService = {
       const speaker = message.speaker_profile_id ? ChatProfileStore.find(message.speaker_profile_id) : null
       if (message.role !== 'assistant' || messages[messages.length - 1].id !== messageId) throw new CodexChatError('마지막 답변만 다시 생성할 수 있어.', 409)
       if (!speaker || !memberProfiles(threadId).some((member) => member.id === speaker.id)) throw new CodexChatError('이 답변을 쓴 참가자가 방에 없어.', 409)
-      if (speaker.engine !== 'llm') throw new CodexChatError('Codex 참가자의 답변은 다시 생성할 수 없어.', 409)
+      if (speaker.engine === 'codex') throw new CodexChatError('Codex 참가자의 답변은 다시 생성할 수 없어.', 409)
       await startRun(threadId, listener, async (run) => {
         run.chain = false
         CodexChatStore.prepareRegeneration(threadId, messageId)
@@ -550,7 +551,7 @@ export const GroupChatService = {
     const message = CodexChatStore.listMessages(threadId).find((entry) => entry.id === messageId)
     if (!message || message.role !== 'assistant') throw new CodexChatError('답변을 찾을 수 없어.', 404)
     const speaker = message.speaker_profile_id ? ChatProfileStore.find(message.speaker_profile_id) : null
-    if (speaker?.engine !== 'llm') throw new CodexChatError('Codex 참가자의 답변은 고칠 수 없어.', 409)
+    if (!speaker || speaker.engine === 'codex') throw new CodexChatError('Codex 참가자의 답변은 고칠 수 없어.', 409)
     if (!content.trim()) throw new CodexChatError('답변 내용을 입력해줘.')
     CodexChatStore.editAssistantMessage(threadId, messageId, content.trim())
     resetCodexMemory(requester, threadId)

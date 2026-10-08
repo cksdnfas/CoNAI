@@ -274,7 +274,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const pendingUserProfileId = pendingChat?.userProfileId ?? null
   const userSpeaker = useMemo(() => userSpeakerOf(thread ?? { user_profile_id: pendingUserProfileId }, userProfiles), [thread, pendingUserProfileId, userProfiles])
   const profile = thread?.profile_id ? profilesById.get(thread.profile_id) ?? null : pendingProfile
-  const isCodexThread = (thread?.engine ?? pendingProfile?.engine) !== 'llm'
+  const isCodexThread = (thread?.engine ?? pendingProfile?.engine) === 'codex'
   const { appearance, update: updateAppearance } = useChatAppearance(activeThreadId, chat.canUse)
   // Chat flags: the account's own; which are on is kept per chat (on the thread).
   const flagsQuery = useChatFlags(chat.canUse)
@@ -421,7 +421,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   }, [setDraftReply, userSpeaker, profilesById, profile, t])
   const lastMessage = messages[messages.length - 1]
   // Group rooms: only API LLM members' replies can be regenerated.
-  const lastReplyByCodex = isGroup && lastMessage?.speaker_profile_id != null && profilesById.get(lastMessage.speaker_profile_id)?.engine !== 'llm'
+  const lastReplyByCodex = isGroup && lastMessage?.speaker_profile_id != null && profilesById.get(lastMessage.speaker_profile_id)?.engine === 'codex'
   const lastReplyId = lastMessage?.role === 'assistant' && messages.some((message) => message.role === 'user') && !lastReplyByCodex ? lastMessage.id : null
   // Hand edits of replies (API LLM: the chat's own, or an API LLM member's in a room) and continuing a cut reply
   // (API LLM direct chats); any chat can branch.
@@ -429,7 +429,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const canEditReply = useCallback((message: CodexChatMessage) => {
     if (!isGroup) return directLlm
     const speaker = message.speaker_profile_id != null ? profilesById.get(message.speaker_profile_id) : undefined
-    return speaker?.engine === 'llm'
+    return speaker?.engine === 'llm' || speaker?.engine === 'claude'
   }, [isGroup, directLlm, profilesById])
   const handleEditReply = useCallback(async (id: number, content: string) => {
     if (activeThreadId === null || isBusy) return false
@@ -1073,7 +1073,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         </Tip>
       ) : null}
       <ChatDraftAttachments chat={chat} disabled={isBusy} canReadText={profile?.canReadFileText === true} />
-      <ChatPageConnectionNotice allowed={!isGroup && profile?.canUsePageContext === true} />
+      {!isGroup ? <ChatPageConnectionNotice /> : null}
       {picks.length > 0 ? (
         <div className="mb-2 flex flex-wrap gap-1.5">
           {picks.map((label) => (
@@ -1101,7 +1101,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       ) : null}
       <div className={cn('flex items-end gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-primary/55', backgroundUrl && 'bg-background/85 backdrop-blur-sm')}>
         <ChatAttachButton chat={chat} disabled={isBusy || activeThreadId === null} />
-        <ChatPageConnectButton disabled={isBusy || isGroup} allowed={!isGroup && profile?.canUsePageContext === true} />
+        <ChatPageConnectButton disabled={isBusy || isGroup} />
         {flags.length > 0 ? <ChatFlagButton buttonRef={flagButtonRef} count={activeFlagIds.length} open={flagTrayOpen} disabled={activeThreadId === null} onToggle={() => setFlagTrayOpen((open) => !open)} /> : null}
         {profile?.suggestEnabled ? <ChatSuggestButton buttonRef={suggestButtonRef} open={suggestions.open} loading={suggestions.loading} disabled={isBusy || activeThreadId === null} onToggle={suggestions.toggle} /> : null}
         <textarea

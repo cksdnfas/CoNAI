@@ -3,6 +3,8 @@ import { acquireLlmRequestSlot } from '../llmRequestScheduler'
 import { buildOpenAiGenerationFields, readLlmConnectionConfig, type LlmGenerationOptions, type LlmThinkingSwitch } from '../llmGenerationOptions'
 import { normalizeOptionalString } from '../../utils/valueNormalization'
 import { LlmRequestError } from '../llmRequestRetry'
+import { CLAUDE_CHAT_PROVIDER, streamClaudeChatCompletion } from './claudeChatCompletion'
+import type { ChatMcpToolResult } from './chatMcpBridge'
 
 export type ChatCompletionToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } }
 
@@ -30,6 +32,7 @@ export type ChatCompletionTarget = {
   generation: LlmGenerationOptions
   /** Put `cache_control` breakpoints on the stable parts of the request (Anthropic through LiteLLM; off by default). */
   promptCacheMarks: boolean
+  transport?: 'claude-code'
   /** How `reasoningEffort: 'none'` reaches the server (the connection's setting; default `reasoning_effort`). */
   thinkingSwitch?: LlmThinkingSwitch
 }
@@ -105,6 +108,7 @@ export function toOpenAiApiBase(providerType: string, baseUrl: string) {
  * Ollama connections use Ollama's OpenAI-compatible `/v1` API so both types speak one protocol.
  */
 export function resolveChatCompletionTarget(providerName: string, overrides: { model?: string | null; generation?: LlmGenerationOptions } = {}): ChatCompletionTarget {
+  if (providerName === CLAUDE_CHAT_PROVIDER) return { providerName, displayName: 'Claude Code', endpoint: 'claude-code://local', apiKey: null, model: overrides.model?.trim() || 'sonnet', generation: overrides.generation ?? {}, promptCacheMarks: false, transport: 'claude-code', maxConcurrentRequests: 1 }
   const { provider, config, apiBase, apiKey } = resolveConnection(providerName)
   const connectionConfig = readLlmConnectionConfig(config)
   const model = normalizeOptionalString(overrides.model) ?? connectionConfig.defaultModel
@@ -273,6 +277,8 @@ export async function streamChatCompletion(params: {
   onRequestBody?: (body: Record<string, unknown>, target: ChatCompletionTarget) => void
   /** One-shot background reactions fail without resending compatibility fallbacks. */
   allowCompatibilityFallback?: boolean
+  callTool?: (name: string, args: Record<string, unknown>, id: string) => Promise<ChatMcpToolResult>
+  maxToolRounds?: number
 }): Promise<ChatCompletionResult> {
   const release = await acquireLlmRequestSlot(params.target.providerName, params.target.maxConcurrentRequests ?? 1, params.signal)
   const controller = new AbortController()
@@ -292,6 +298,10 @@ export async function streamChatCompletion(params: {
   touch()
 
   try {
+    if (params.target.transport === 'claude-code') {
+      params.onRequestBody?.({ model: params.target.model, messages: params.messages, tools: params.tools ?? [], transport: 'claude-code' }, params.target)
+      return await streamClaudeChatCompletion({ ...params, signal, onContent: (text) => { touch(); params.onContent?.(text) }, onReasoning: (text) => { touch(); params.onReasoning?.(text) } })
+    }
     let streamUsage = true
     const request = (target: ChatCompletionTarget) => {
       const body = buildBody(target, params.messages, params.tools ?? [], true, streamUsage)

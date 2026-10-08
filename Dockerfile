@@ -43,10 +43,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     /app/data/user/models \
     /app/data/user/config \
     /app/data/user/codex \
+    /app/data/user/claude \
     /app/data/user/RecycleBin
 
 # Codex CLI for the Codex generation tab. Sign in from the app (admin) or `docker exec -it <container> codex login --device-auth`.
 RUN npm install -g --no-audit --no-fund @openai/codex
+RUN npm install -g --no-audit --no-fund @anthropic-ai/claude-code
 
 COPY --from=build /app/package*.json /app/
 COPY --from=build /app/node_modules /app/node_modules
@@ -65,6 +67,8 @@ ENV NODE_ENV=production \
     PYTHONUNBUFFERED=1 \
     CODEX_HOME=/app/data/user/codex \
     CODEX_NPM_PREFIX=/app/data/user/codex-cli \
+    CLAUDE_CONFIG_DIR=/app/data/user/claude \
+    CLAUDE_NPM_PREFIX=/app/data/user/claude-cli \
     CODEX_SANDBOX_MODE=danger-full-access
 
 EXPOSE 1666

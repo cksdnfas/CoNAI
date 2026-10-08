@@ -28,6 +28,7 @@ export function CodexCliUpdateButton({ onUpdated }: { onUpdated: () => void }) {
     mutationFn: updateCodexCli,
     onSuccess: (result) => {
       queryClient.setQueryData(CODEX_CLI_VERSION_QUERY_KEY, result)
+      void queryClient.invalidateQueries({ queryKey: ['agent-cli-status', 'codex'] })
       showSnackbar({ message: t({ ko: `Codex ${result.data.current ?? ''} 로 업데이트했어`, en: `Updated Codex to ${result.data.current ?? ''}` }), tone: 'info' })
       onUpdated()
     },

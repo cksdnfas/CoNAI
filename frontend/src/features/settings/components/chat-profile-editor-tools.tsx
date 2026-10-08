@@ -49,6 +49,7 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
     <div className="space-y-4">
       <EditorGroup>
         <SwitchLine label={t({ ko: 'CoNAI 도구(MCP) 사용', en: 'Use CoNAI tools (MCP)' })} checked={draft.mcpEnabled} onCheckedChange={(mcpEnabled) => patch({ mcpEnabled })} />
+        <p className="text-xs text-muted-foreground">{t({ ko: '현재 페이지 연결은 페이지 접근 권한으로 사용할 수 있어. 아래 설정은 다른 채팅 도구에 적용돼.', en: 'Current page connection uses your page access permission. The settings below apply to other chat tools.' })}</p>
         {draft.mcpEnabled ? (
           <div className="flex min-h-10 items-center justify-between gap-3 text-sm">
             <span className="shrink-0">{t({ ko: '도구 프리셋', en: 'Tool preset' })}</span>
@@ -141,7 +142,7 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
             </CollapsibleRow>
           </div>
         ) : null}
-        {draft.mcpEnabled && draft.engine === 'llm' ? (
+        {draft.mcpEnabled && draft.engine !== 'codex' ? (
           <div className="border-t border-line">
             <CollapsibleRow
               title={t({ ko: '고급', en: 'Advanced' })}

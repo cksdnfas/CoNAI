@@ -2,6 +2,7 @@ import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../llmGenerationOptions'
 import type { ChatProfileEngine } from './chatProfiles'
 import { ModelSlotStore, type ModelRole } from './modelSlots'
+import { CLAUDE_CHAT_PROVIDER } from './claudeChatCompletion'
 
 /**
  * Where a role's model comes from: `slot` (the role's model slot), `direct` (the role's own connection + model),
@@ -43,6 +44,7 @@ function directPairOf(profile: ModelRoleProfile, role: ModelRole): { slotId: num
 }
 
 function resolveChat(profile: ModelRoleProfile): ResolvedModel | null {
+  if (profile.engine === 'claude') return { providerName: CLAUDE_CHAT_PROVIDER, model: profile.model || 'sonnet', via: 'direct', slotId: null, slotName: null }
   if (profile.engine === 'codex') return null
   const direct = directPairOf(profile, 'chat')
   const slot = ModelSlotStore.target(direct.slotId)
@@ -84,6 +86,7 @@ export function effectiveModelOf(profile: ModelRoleProfile): string {
 
 /** The line the chat UI shows for a profile's model: `slot · model`, `connection · model`, or `Codex · model`. */
 export function modelLabelOf(profile: ModelRoleProfile): string {
+  if (profile.engine === 'claude') return `Claude Code · ${profile.model || 'sonnet'}`
   if (profile.engine === 'codex') return `Codex · ${profile.model || '기본 모델'}`
   const resolved = resolveProfileModel(profile, 'chat')
   if (!resolved) return ''

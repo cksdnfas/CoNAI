@@ -249,6 +249,12 @@ const DEFAULT_PERMISSION_CATALOG = [
     description: 'Chat with the server Codex agent (shares the server Codex account usage).',
   },
   {
+    permissionKey: 'chat.claude.use',
+    resource: 'chat.claude',
+    action: 'use',
+    description: 'Chat with server Claude Code profiles.',
+  },
+  {
     permissionKey: 'chat.llm.use',
     resource: 'chat.llm',
     action: 'use',

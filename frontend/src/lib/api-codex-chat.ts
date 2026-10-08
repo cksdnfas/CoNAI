@@ -47,7 +47,7 @@ export function applyChatAssetBatch(profileId: number, batchId: number, input: C
 export function applyChatProfileAssetsProposal(proposalId: number) {
   return requestApiData<{ proposal: ChatProposal; batch?: ChatAssetBatch; result?: ChatAssetApplyResult }>(`/api/chat-proposals/${proposalId}/apply`, { method: 'POST' })
 }
-export type ChatEngine = 'llm' | 'codex'
+export type ChatEngine = 'llm' | 'codex' | 'claude'
 export type ChatDiagnosticsScope = 'none' | 'view' | 'content' | 'prompts'
 
 export type ChatContextKind = 'persona' | 'system-prompt' | 'prompt-section' | 'guidance' | 'lore-index' | 'constant-lore' | 'lore' | 'summary' | 'example' | 'window' | 'reference' | 'author-note' | 'state' | 'flags' | 'user-persona' | 'recall' | 'page' | 'continuation' | 'last-instruction' | 'tool-definition' | 'tool-result' | 'group-header' | 'summary-instruction' | 'translation-instruction'
@@ -112,6 +112,7 @@ export interface CodexChatStatus {
   canUse: boolean
   codex: { canUse: boolean }
   llm: { canUse: boolean }
+  claude: { canUse: boolean }
   scopes: ChatScope[]
 }
 
@@ -223,7 +224,6 @@ export interface ChatProfileAssetFields {
 
 export interface ChatProfileSummary extends ChatProfileAssetFields {
   expressionGroupId?: number | null
-  canUsePageContext: boolean
   tagline: string
   model: string
   /** The line the chat UI shows for the model: `slot · model`, `connection · model` or `Codex · model`. */

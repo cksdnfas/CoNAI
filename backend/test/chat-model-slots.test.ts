@@ -34,6 +34,16 @@ test('model slots: store, per-role resolution, adoption, deletion, usage', { tim
   const llmProfile = (name: string, extra: Record<string, unknown> = {}) => ChatProfileStore.create({ name, engine: 'llm', providerName: 'conn-a', ...extra })
   const asLegacy = (profile: ReturnType<typeof ChatProfileStore.create>) => ({ ...profile, modelSlotId: null, summarySlotId: null, translationSlotId: null, suggestSlotId: null })
 
+  await t.test('Claude profiles persist their engine without an API connection and use the Claude transport', () => {
+    const profile = ChatProfileStore.create({ name: 'Claude', engine: 'claude', model: 'sonnet', providerName: 'conn-a' })
+    assert.equal(ChatProfileStore.find(profile.id)?.engine, 'claude')
+    assert.equal(profile.providerName, '')
+    assert.equal(profile.modelSlotId, null)
+    assert.equal(resolveProfileModel(profile, 'chat')?.providerName, '__conai_claude_code__')
+    assert.equal(modelLabelOf(profile), 'Claude Code · sonnet')
+    ChatProfileStore.delete(profile.id)
+  })
+
   await t.test('profiles with no slot ids resolve exactly like the old direct expressions', () => {
     assert.equal(ModelSlotStore.list().length, 0)
     const legacy = {

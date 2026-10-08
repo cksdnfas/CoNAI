@@ -4,6 +4,7 @@ import { SegmentedControl } from '@/components/common/segmented-control'
 import { Field } from '@/components/ui/field'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { CodexModelSelect } from '@/features/image-generation/components/codex-model-select'
@@ -52,10 +53,11 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
 }) {
   const { t } = useI18n()
   const isLlm = draft.engine === 'llm'
+  const hasLlmContext = draft.engine !== 'codex'
   const serverDefault = t({ ko: '서버 기본값', en: 'Server default' })
   const firstProvider = llmProviders[0]?.provider_name ?? ''
   const modelsByRole: Record<ModelRole, ConnectionModels | undefined> = { chat: connectionModels, summary: summaryModels, translation: translationModels, suggest: suggestModels }
-  const summaryChoice = roleChoice(draft, 'summary', slots, isLlm, slotsReady)
+  const summaryChoice = roleChoice(draft, 'summary', slots, hasLlmContext, slotsReady)
   const summaryOn = summaryChoice !== 'off'
   const extraParamsError = (() => {
     if (!isLlm || !draft.extraParams.trim()) return null
@@ -71,10 +73,10 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
   const roleSelect = (role: ModelRole, ariaLabel: string) => (
     <ModelRoleSelect
       role={role}
-      value={roleChoice(draft, role, slots, isLlm, slotsReady)}
+      value={roleChoice(draft, role, slots, hasLlmContext, slotsReady)}
       slots={slots}
       slotsReady={slotsReady}
-      canInherit={isLlm}
+      canInherit={hasLlmContext}
       writers={role === 'suggest' ? suggestWriters : undefined}
       ariaLabel={ariaLabel}
       onChange={(choice) => patch(applyRoleChoice(draft, role, choice, firstProvider))}
@@ -83,7 +85,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
 
   /** A role's own connection + model, shown only while that role is "direct". */
   const directFields = (role: ModelRole, indent: boolean) => {
-    if (!slotsReady || roleChoice(draft, role, slots, isLlm, slotsReady) !== 'direct') return null
+    if (!slotsReady || roleChoice(draft, role, slots, hasLlmContext, slotsReady) !== 'direct') return null
     const direct = roleDirect(draft, role)
     const models = modelsByRole[role]
     return (
@@ -139,12 +141,13 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
         <SegmentedControl
           size="sm"
           value={draft.engine}
-          onChange={(engine) => patch(engine === 'codex'
-            ? { engine: 'codex', modelSlotId: null, model: '', reasoningEffort: '', reasoningBudgetTokens: null }
+          onChange={(engine) => patch(engine === 'codex' || engine === 'claude'
+            ? { engine, modelSlotId: null, model: engine === 'claude' ? 'sonnet' : '', reasoningEffort: '', reasoningBudgetTokens: null, visionEnabled: engine === 'claude' || draft.visionEnabled }
             : { engine: 'llm', model: '', reasoningEffort: '', reasoningBudgetTokens: null })}
           items={[
             { value: 'llm', label: t({ ko: 'API LLM', en: 'API LLM' }) },
             { value: 'codex', label: 'Codex' },
+            { value: 'claude', label: 'Claude Code' },
           ]}
           ariaLabel={t({ ko: '엔진', en: 'Engine' })}
         />
@@ -202,6 +205,23 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
               </CollapsibleRow>
             </div>
           </>
+        ) : draft.engine === 'claude' ? (<>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label={t({ ko: 'Claude 모델', en: 'Claude model' })}>
+              <Input variant="settings" value={draft.model} placeholder="sonnet" onChange={(event) => patch({ model: event.target.value })} />
+            </Field>
+            <Field label={t({ ko: '추론 강도', en: 'Reasoning effort' })}>
+              <Select variant="settings" value={draft.reasoningEffort} onChange={(event) => patch({ reasoningEffort: event.target.value as ChatProfileInput['reasoningEffort'] })}>
+                <option value="">{serverDefault}</option>
+                <option value="low">low</option><option value="medium">medium</option><option value="high">high</option>
+              </Select>
+            </Field>
+            <Field label={t({ ko: '최대 출력 토큰', en: 'Max output tokens' })}>
+              <NumberStepperInput variant="settings" allowEmpty step={1024} min={1} value={draft.maxTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />
+            </Field>
+          </div>
+          <SwitchLine label={t({ ko: '이미지 첨부와 조회', en: 'Image attachments and viewing' })} checked={draft.visionEnabled} onCheckedChange={(visionEnabled) => patch({ visionEnabled })} />
+        </>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             <Field label={t({ ko: 'Codex 모델', en: 'Codex model' })}>
@@ -216,7 +236,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
 
       <EditorGroup label={t({ ko: '보조 모델', en: 'Helper models' })}>
         <div>
-          {isLlm ? (
+          {draft.engine !== 'codex' ? (
             <AuxModelRow label={t({ ko: '요약', en: 'Summary' })} select={roleSelect('summary', t({ ko: '요약 모델', en: 'Summary model' }))}>
               {directFields('summary', true)}
             </AuxModelRow>
@@ -240,7 +260,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
       </EditorGroup>
 
       <EditorGroup label={t({ ko: '컨텍스트', en: 'Context' })}>
-        {isLlm ? (
+        {draft.engine !== 'codex' ? (
           <>
             <div className="grid gap-3 md:grid-cols-2">
               <Field label={t({ ko: '최근 턴 수', en: 'Recent turns' })} info={t({ ko: '요청마다 보내는 최근 대화. 사용자 메시지 하나와 그 답변이 한 턴.', en: 'The recent conversation sent with each request. One user message and its reply make a turn.' })}>

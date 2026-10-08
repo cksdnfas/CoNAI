@@ -19,6 +19,27 @@ import { declineServerRequest } from '../src/services/codex-chat/codexAppServerC
 import { isolatedChatPreview } from '../../frontend/src/features/codex-chat/chat-preview'
 import { describeChatWorkflowModule } from '../../shared/src/utils/chatWorkflow'
 import { requireChatWorkflowInputs } from '../src/mcp/tools/mcpComfyWorkflowService'
+import { claudeChatArgs, claudeChatInput, verifyClaudeTools } from '../src/services/codex-chat/claudeChatCompletion'
+import { claudeLoginUrl } from '../src/services/claudeCli'
+
+test('Claude chat rejects unexpected host tools, keeps vision data and restricts OAuth links', () => {
+  const tools = [{ type: 'function' as const, function: { name: 'search_images', parameters: { type: 'object' } } }]
+  assert.doesNotThrow(() => verifyClaudeTools(['mcp__conai__search_images', 'EndConversation'], tools))
+  for (const inventory of [null, ['Bash'], ['Read'], ['Agent'], ['mcp__external__search'], ['mcp__conai__delete_images']]) assert.throws(() => verifyClaudeTools(inventory, tools), /격리/)
+  const args = claudeChatArgs('sonnet', 'system.txt', 'mcp.json', 4)
+  assert.equal(args[args.indexOf('--tools') + 1], '')
+  assert.equal(args[args.indexOf('--setting-sources') + 1], '')
+  assert.ok(args.includes('--restricted') && args.includes('--strict-mcp-config') && args.includes('--disable-slash-commands'))
+  assert.ok(!args.includes('--bare') && !args.includes('--dangerously-skip-permissions'))
+  const input = JSON.parse(claudeChatInput([{ role: 'system', content: 'private instructions' }, { role: 'user', content: [{ type: 'text', text: 'look' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,YQ==' } }] }]))
+  assert.equal(input.message.content[1].source.data, 'YQ==')
+  assert.ok(!input.message.content[0].text.includes('private instructions'))
+  assert.throws(() => claudeChatInput([{ role: 'user', content: [{ type: 'image_url', image_url: { url: 'http://127.0.0.1/private' } }] }]), /인라인/)
+  assert.equal(claudeLoginUrl('Open https://claude.ai/oauth/authorize?state=abc'), 'https://claude.ai/oauth/authorize?state=abc')
+  assert.equal(claudeLoginUrl('Open https://claude.com/cai/oauth/authorize?state=abc'), 'https://claude.com/cai/oauth/authorize?state=abc')
+  assert.equal(claudeLoginUrl('https://claude.ai.attacker.test/oauth/authorize'), null)
+  assert.equal(claudeLoginUrl('https://attacker.test/oauth/authorize'), null)
+})
 
 // These requests run without a settings database: their chats have no lorebooks of their own.
 mock.method(OwnedLorebookStore, 'chatBookOf', () => null)

@@ -68,7 +68,7 @@ export const DEFAULT_CHAT_SUMMARY_PROMPT = [
 ].join('\n')
 
 /** `llm`: an API LLM connection driven by CoNAI. `codex`: the server Codex CLI, which keeps its own context. */
-export type ChatProfileEngine = 'llm' | 'codex'
+export type ChatProfileEngine = 'llm' | 'codex' | 'claude'
 
 export type ChatProfile = {
   id: number
@@ -356,7 +356,7 @@ function toProfile(row: ProfileRow): ChatProfile {
     avatarHash: row.avatar_hash ?? null,
     avatarCrop,
     backgroundHash: row.background_hash ?? null,
-    engine: row.engine === 'codex' ? 'codex' : 'llm',
+    engine: row.engine === 'codex' ? 'codex' : row.engine === 'claude' ? 'claude' : 'llm',
     providerName: row.provider_name,
     model: row.model ?? '',
     reasoningEffort: isCodexReasoningEffort(row.reasoning_effort) ? row.reasoning_effort : '',
@@ -455,7 +455,7 @@ function toColumns(input: ChatProfileInput) {
   if (!name) {
     throw new ChatProfileError('프로필 이름이 필요해.')
   }
-  const engine: ChatProfileEngine = input.engine === 'codex' ? 'codex' : 'llm'
+  const engine: ChatProfileEngine = input.engine === 'codex' ? 'codex' : input.engine === 'claude' ? 'claude' : 'llm'
   const providerName = engine === 'llm' ? text(input.providerName, 200) : ''
   const slotId = (value: unknown) => {
     if (value === null || value === undefined || value === '') return null

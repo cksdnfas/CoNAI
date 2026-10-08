@@ -36,3 +36,4 @@ export * from './utils/minimaxDirectorResolution';
 export * from './types/fileStore';
 export * from './types/chatAssets'
 export * from './utils/chatPortrait'
+export * from './types/agentCli'

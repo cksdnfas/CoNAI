@@ -19,10 +19,13 @@ export async function openChatMcpBridge(requester: McpRequester, scopes: ChatSco
   const client = new Client({ name: 'conai-llm-chat', version: '1.0.0' })
   await client.connect(clientTransport)
 
-  const { tools } = await client.listTools().catch((error: unknown) => {
-    if (options.allowEmpty && (error as { code?: number }).code === -32601) return { tools: [] }
-    throw error
-  })
+  // A profile with no general tools and no connected page advertises no tools capability.
+  const { tools } = client.getServerCapabilities()?.tools
+    ? await client.listTools().catch((error: unknown) => {
+      if (options.allowEmpty && (error as { code?: number }).code === -32601) return { tools: [] }
+      throw error
+    })
+    : { tools: [] }
   const chatTools: ChatCompletionTool[] = tools.map((tool) => ({
     type: 'function',
     function: { name: tool.name, description: tool.description, parameters: tool.inputSchema },

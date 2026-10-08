@@ -97,6 +97,7 @@ const PERMISSION_CATALOG: PermissionCatalogSection[] = [
       { key: 'page.chat.view', label: { ko: '채팅 페이지', en: 'Chat page' } },
       { key: 'chat.codex.use', label: { ko: 'Codex 프로필로 채팅 (서버 Codex 사용량 공유)', en: 'Chat with Codex profiles (shares server Codex usage)' } },
       { key: 'chat.llm.use', label: { ko: 'API LLM 프로필로 채팅', en: 'Chat with API LLM profiles' } },
+      { key: 'chat.claude.use', label: { ko: 'Claude Code 프로필로 채팅 (서버 계정 사용량 공유)', en: 'Chat with Claude Code profiles (shares server account usage)' } },
       { key: 'chat.diagnostics.view', label: { ko: '채팅 진단: 구성', en: 'Chat diagnostics: composition' } },
       { key: 'chat.diagnostics.content', label: { ko: '채팅 진단: 본문', en: 'Chat diagnostics: content' } },
       { key: 'chat.diagnostics.prompts', label: { ko: '채팅 진단: 원문', en: 'Chat diagnostics: prompts' } },

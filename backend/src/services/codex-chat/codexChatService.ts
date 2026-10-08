@@ -1098,7 +1098,7 @@ export const CodexChatService = {
     startingThreads.add(threadId)
     try {
       const profile = requireCodexProfile(thread.profile_id)
-      const page = parseChatPageContext(pageContext, requester, profile)
+      const page = parseChatPageContext(pageContext, requester)
       const routing = userReplyRouting(thread, replyToMessageId)
       const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
       const session = await ensureSession(requester, scopes, toolAllowlist, false, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct', page })

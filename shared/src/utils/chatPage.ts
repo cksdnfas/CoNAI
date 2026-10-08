@@ -14,11 +14,11 @@ function text(value: unknown, max: number, empty = false): string {
   return value
 }
 
-/** The permission is derived from an app route, never accepted from the browser. */
+/** Route access follows the app: an empty key means an authenticated page with no separate page grant. */
 export function chatPagePermission(path: string): string | null {
   if (path === '/') return 'page.home.view'
   if (path === '/chat') return 'page.chat.view'
-  if (path === '/access' || /^\/public\/workflows\/[\w-]+$/.test(path)) return 'chat.tools.read'
+  if (path === '/access' || /^\/public\/workflows\/[\w-]+$/.test(path)) return ''
   if (path === '/generation') return 'page.generation.view'
   if (path === '/prompts') return 'page.prompts.view'
   if (path === '/groups' || /^\/groups\/[\w-]+$/.test(path)) return 'page.groups.view'
@@ -37,7 +37,7 @@ export function chatPagePermission(path: string): string | null {
 export function normalizeChatPageSnapshot(value: unknown): ChatPageSnapshot {
   const raw = record(value)
   const path = text(raw.path, 240)
-  if (!chatPagePermission(path)) throw new Error('이 페이지는 채팅에 연결할 수 없어.')
+  if (chatPagePermission(path) === null) throw new Error('이 페이지는 채팅에 연결할 수 없어.')
   const kind = raw.kind
   if (!['page', 'nai', 'codex', 'comfyui', 'comfy_author', 'library', 'prompt_search', 'presets', 'wildcards', 'metadata', 'workflow', 'workflow_runner', 'groups', 'files', 'upload', 'settings', 'wallpaper', 'image_detail'].includes(kind as string)) throw new Error('페이지 종류가 올바르지 않아.')
   const metadataHash = /^\/images\/([\w.-]+)\/metadata$/.exec(path)?.[1]

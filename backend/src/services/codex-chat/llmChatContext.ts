@@ -1,5 +1,6 @@
 import { summaryGenerationOptions, thinkingIsOff } from '../llmGenerationOptions'
 import { loadChatSettings } from './chatSettings'
+import { resolveChatAccess } from './codexChatAccess'
 import { replyTranslationPrompt, userTranslationPrompt } from './chatTranslation'
 import { contextHash, contextSections, contextSource, limitContextMeta, loreDiagnostics, markContextMessage, markContextParts, contextPartsOf, type ChatDiagnosticsFields, type ChatContextSectionKind, type ContextSource } from './chatContextDiagnostics'
 import { buildReplyContext } from './chatReplyContext'
@@ -288,7 +289,7 @@ export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<Lo
   const books = options.books ?? booksForRequest({ thread: options.thread ?? null, profile })
   return selectRequestLore(profile, books, messages, (text) => estimateTokens(profile.id, text), (text) => fillCharacterPlaceholders(text, profile, user), {
     toolOffered: options.toolOffered ?? false,
-    ...(profile.engine === 'llm' && messages !== undefined ? { timing: { messages: options.history ?? messages, speakerProfileId: options.speakerProfileId } } : {}),
+    ...(profile.engine !== 'codex' && messages !== undefined ? { timing: { messages: options.history ?? messages, speakerProfileId: options.speakerProfileId } } : {}),
   })
 }
 
@@ -932,6 +933,7 @@ type FoldPlanner = (thread: CodexChatThreadRecord, segments: ChatSummarySegment[
 
 function directPlanner(profile: ChatProfile, mode: FoldMode, options: { messages?: CodexChatMessageRecord[]; tools?: ChatCompletionTool[]; extras?: RequestExtras }): FoldPlanner {
   return (thread, segments) => {
+    if (profile.engine === 'claude' && !resolveChatAccess(thread.account_id).claude) throw new Error('Claude Code 요약 모델을 사용할 권한이 없어.')
     const config = resolveContextConfig(thread, profile)
     if (mode !== 'all' && !config.summaryEnabled) return null
     const messages = options.messages ?? CodexChatStore.listMessages(thread.id)
@@ -949,7 +951,7 @@ function groupFoldBatch(window: number) {
 
 /** The member whose summary model a room uses: the representative when it is an API LLM, else the first such member. */
 export function groupSummarizer(thread: Pick<CodexChatThreadRecord, 'profile_id'>, members: ChatProfile[]) {
-  return members.find((member) => member.id === thread.profile_id && member.engine === 'llm') ?? members.find((member) => member.engine === 'llm') ?? null
+  return members.find((member) => member.id === thread.profile_id && member.engine !== 'codex') ?? members.find((member) => member.engine !== 'codex') ?? null
 }
 
 /**
@@ -962,6 +964,7 @@ function groupPlanner(members: ChatProfile[], window: number, mode: 'ahead' | 'a
     if (mode !== 'all' && thread.summary_enabled !== 1) return null
     const profile = groupSummarizer(thread, members)
     if (!profile) throw new Error('요약할 수 있는 LLM 참가자가 없어.')
+    if (profile.engine === 'claude' && !resolveChatAccess(thread.account_id).claude) throw new Error('Claude Code 요약 모델을 사용할 권한이 없어.')
     const config = { ...resolveContextConfig(thread, profile), summaryEnabled: true }
     const pending = sendableMessages(unsummarizedMessages(CodexChatStore.listMessages(thread.id), thread, config))
     const count = mode === 'all' ? pending.length : turnsToFold(pending.length, window, groupFoldBatch(window))

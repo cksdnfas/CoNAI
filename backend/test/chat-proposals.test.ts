@@ -168,7 +168,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     assert.throws(() => requireChatPageActionState({ ...current, revision: 'different-revision' }, proposal), /입력이나 선택/)
     assert.throws(() => requireChatPageActionState(current, { ...proposal, expiresAt: 0 }), /만료/)
     assert.equal(chatPagePermission('/chat'), 'page.chat.view')
-    assert.equal(chatPagePermission('/public/workflows/example'), 'chat.tools.read')
+    assert.equal(chatPagePermission('/public/workflows/example'), '')
     assert.equal(normalizeChatPageSnapshot({ ...page, path: '/public/workflows/example' }).kind, 'comfyui')
     assert.equal(normalizeChatPageSnapshot({ ...page, path: '/public/workflows/example', revision: 'shared-create', actions: [{ id: 'comfy.open_create', label: 'Open', description: 'Open native editor', effect: 'draft', schema: { type: 'object', properties: {} } }] }).actions?.[0].id, 'comfy.open_create')
     assert.deepEqual(buildChatPageChanges(page, [{ fieldId: 'prompt', value: ['first', 'second edited'] }])[0].value, ['first', 'second edited'])
@@ -361,7 +361,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     } finally { unregister(); await bridge.close() }
   })
 
-  await t.test('workflow feature permission: page access alone cannot read or propose graph changes', async (sub) => {
+  await t.test('workflow feature permission protects graph tools independently of current page reading', async (sub) => {
     const { AuthAccount } = await import('../src/models/AuthAccount')
     const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
     const db = authModule.getAuthDb()
@@ -378,7 +378,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
     const bridge = await openChatMcpBridge({ accountId: 7, accountType: 'guest' }, ['read'], null, { chatContext: context })
     try {
-      assert.ok((await bridge.call('get_current_page', {})).isError)
+      assert.ok(!(await bridge.call('get_current_page', {})).isError, 'current page reading follows page access')
       assert.ok((await bridge.call('get_workflow_editor', {})).isError)
       assert.ok((await bridge.call('list_workflow_modules', {})).isError)
       permissions.push('workflows.view')

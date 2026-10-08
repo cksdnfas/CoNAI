@@ -148,6 +148,38 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
   const group = AuthPermissionGroup.createCustomGroup({ name: 'image-reader', permissionKeys: ['images.view'] })
   const accountId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('reader', 'unused', 'guest')").run().lastInsertRowid)
   AuthPermissionGroup.addAccountMembership(group.id, accountId)
+  await t.test('CLI sign-in management is admin-only and Claude tool grants are independent and revocable', async () => {
+    for (const agent of ['codex', 'claude']) {
+      assert.equal(await status(`/api/settings/agent-cli/${agent}/login`), 403)
+      assert.equal(await status(`/api/settings/agent-cli/${agent}/login`, accountId), 403)
+      assert.equal(await status(`/api/settings/agent-cli/${agent}/update`, accountId, 'POST'), 403)
+      assert.equal(await status(`/api/settings/agent-cli/${agent}/login`, adminId), 200)
+    }
+    assert.equal(await status('/api/settings/agent-cli/unknown/login', adminId), 400)
+    const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+    const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
+    const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
+    const { openChatMcpBridge } = await import('../src/services/codex-chat/chatMcpBridge')
+    const { LlmChatService } = await import('../src/services/codex-chat/llmChatService')
+    const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
+    updateChatSettings({ enabled: true })
+    const profile = ChatProfileStore.create({ name: 'Claude permission fixture', engine: 'claude', mcpEnabled: true, mcpScopes: ['read'] })
+    const chatContext = { threadId: CodexChatStore.createThread(accountId, 'Claude permissions', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: 'claude-permission-reply' }
+    const endReply = registerChatReply(chatContext, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const requester = { accountId, accountType: 'guest' as const }
+    const bridge = await openChatMcpBridge(requester, ['read'], null, { chatContext })
+    try {
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.llm.use', 'chat.tools.read', 'prompts.view'] })
+      assert.throws(() => LlmChatService.requireStartableProfile(requester, profile.id), /권한/)
+      assert.equal((await bridge.call('list_prompt_presets', {})).isError, true)
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.claude.use', 'chat.tools.read', 'prompts.view'] })
+      assert.equal(LlmChatService.requireStartableProfile(requester, profile.id).engine, 'claude')
+      const permitted = await bridge.call('list_prompt_presets', {})
+      assert.notEqual(permitted.isError, true, JSON.stringify(permitted))
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.tools.read', 'prompts.view'] })
+      assert.equal((await bridge.call('list_prompt_presets', {})).isError, true)
+    } finally { endReply(); await bridge.close(); AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] }) }
+  })
   for (const directory of ['uploads', 'temp', 'save']) {
     fs.mkdirSync(path.join(root, directory), { recursive: true })
     fs.writeFileSync(path.join(root, directory, 'permission.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7WQAAAAASUVORK5CYII=', 'base64'))
@@ -258,6 +290,67 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     assert.equal(await status('/api/generation-history/clear?service_type=novelai', accountId, 'POST'), 200)
     assert.ok(db.prepare('SELECT 1 FROM api_generation_history WHERE id = ?').get(other))
   })
+  await t.test('current page connection follows page access without additional profile or chat read grants', async () => {
+    const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
+    const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
+    const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
+    const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+    const { openChatMcpBridge } = await import('../src/services/codex-chat/chatMcpBridge')
+    const { parseChatPageContext } = await import('../src/services/codex-chat/chatPageContext')
+    const { issueCodexChatMcpToken, authenticateCodexChatMcpRequest, revokeCodexChatMcpToken } = await import('../src/services/codex-chat/codexChatAccess')
+    const { requireMcpToolAccess } = await import('../src/mcp/toolAccess')
+    const { WorkflowModel } = await import('../src/models/Workflow')
+    updateChatSettings({ enabled: true })
+    const profile = ChatProfileStore.create({ name: 'Page connection only', engine: 'llm', providerName: 'fixture', mcpEnabled: false, mcpScopes: [], toolAllowlist: [] })
+    const visible = { instanceId: 'visible-page', connectionId: 'visible-connection', path: '/generation', title: 'Generation', kind: 'nai', resourceId: null, fields: [{ id: 'prompt', label: 'Prompt', type: 'text', value: 'visible draft', editable: false }], data: { files: [{ id: 'private-file' }] } }
+    const keys = ['chat.llm.use', 'chat.codex.use', 'page.generation.view']
+    AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: keys })
+    const controller = new AbortController()
+    try {
+      for (const callerId of [adminId, accountId]) {
+        const requester = { accountId: callerId, accountType: callerId === adminId ? 'admin' as const : 'guest' as const }
+        const page = parseChatPageContext(visible, requester)!
+        const context = { threadId: CodexChatStore.createThread(callerId, 'connected page', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: `page-only-${callerId}`, page }
+        const stop = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+        const bridge = await openChatMcpBridge(requester, [], [], { chatContext: context })
+        const unbound = await openChatMcpBridge(requester, [], [], { chatContext: { ...context, page: undefined } })
+        try {
+          assert.equal(unbound.tools.some((tool) => tool.function.name === 'get_current_page'), false, 'page access never connects a page without user opt-in')
+          const read = await bridge.call('get_current_page', {})
+          assert.notEqual(read.isError, true, JSON.stringify(read))
+          assert.match(JSON.stringify(read.content), /visible draft/)
+          for (const tool of ['submit_generation_job', 'generate_nai', 'list_files', 'delete_files', 'propose_page_changes']) assert.equal(bridge.tools.some((entry) => entry.function.name === tool), false)
+          if (callerId === accountId) {
+            assert.equal((await bridge.call('read_page_data', { key: 'files' })).isError, true, 'current page access does not grant private file access')
+            assert.doesNotMatch(JSON.stringify(read.content), /private-file/)
+            const overview = parseChatPageContext({ ...visible, path: '/access', kind: 'page', fields: [] }, requester)
+            assert.ok(overview, 'accessible overview requires no chat.tools.read grant')
+            const workflowId = WorkflowModel.create({ name: 'Public page fixture', workflow_json: '{}', is_public_page: true, public_slug: 'page-access-fixture' })
+            const published = { ...visible, path: '/public/workflows/page-access-fixture', kind: 'comfyui', resourceId: String(workflowId), fields: [] }
+            assert.ok(parseChatPageContext(published, requester), 'published page follows native page access')
+            WorkflowModel.update(workflowId, { is_public_page: false })
+            assert.throws(() => parseChatPageContext(published, requester), /공개/)
+            AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: keys.filter((key) => !key.startsWith('page.')) })
+            assert.throws(() => parseChatPageContext(visible, requester), /페이지/)
+            assert.equal((await bridge.call('get_current_page', {})).isError, true, 'page revocation applies to an open reply')
+            AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['page.generation.view'] })
+            assert.equal((await bridge.call('get_current_page', {})).isError, true, 'page access does not grant chat use')
+            AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: keys })
+          }
+        } finally { stop(); await bridge.close(); await unbound.close() }
+      }
+      const codexProfile = ChatProfileStore.create({ name: 'Codex page only', engine: 'codex', mcpEnabled: false, toolAllowlist: [] })
+      const context = { threadId: CodexChatStore.createThread(accountId, 'codex connected page', 'codex', codexProfile.id), profileId: codexProfile.id, kind: 'direct' as const, replyId: 'codex-page-only', page: parseChatPageContext(visible, { accountId, accountType: 'guest' })! }
+      const stop = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+      const token = issueCodexChatMcpToken({ accountId, accountType: 'guest' }, [], [], false, [], context)
+      try {
+        const authority = authenticateCodexChatMcpRequest({ headers: {}, socket: { remoteAddress: '127.0.0.1' } } as never, token)
+        assert.ok(authority, 'Codex page connection needs no extra MCP read scope')
+        assert.doesNotThrow(() => requireMcpToolAccess(authority, 'get_current_page'))
+        assert.throws(() => requireMcpToolAccess(authority, 'submit_generation_job'), /Unknown|permitted/)
+      } finally { stop(); revokeCodexChatMcpToken(token) }
+    } finally { AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] }) }
+  })
   await t.test('linked NAI and Comfy presets generate independently of page binding and general tool selection', async (sub) => {
     const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
     const { ChatToolPresetStore } = await import('../src/services/codex-chat/chatToolPresets')
@@ -291,7 +384,7 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
       AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: connected ? [...permittedGuestKeys, 'page.generation.view'] : permittedGuestKeys })
       const requester = { accountId: callerId, accountType }
       const current = ChatProfileStore.find(profile.id)!
-      const connectedPage = parseChatPageContext(connected ? page : undefined, requester, current)
+      const connectedPage = parseChatPageContext(connected ? page : undefined, requester)
       if (accountType === 'guest' && !connected) assert.equal(AuthAccessControlService.hasPermission(callerId, 'page.generation.view'), false, 'generation remains available with its page disabled')
       const context = { threadId: CodexChatStore.createThread(callerId, 'linked presets', 'llm', profile.id), profileId: profile.id, kind: 'direct' as const, replyId: `linked-${callerId}-${connected}`, ...(connectedPage ? { page: connectedPage } : {}) }
       const stop = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))

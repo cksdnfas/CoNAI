@@ -4,7 +4,7 @@ import { requireRequesterPermission } from '../middleware/featureAccess';
 import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess';
 import { requireActiveChatReply } from '../services/codex-chat/chatReplyRegistry';
 import { validateMcpToolArguments } from './requestSecurity';
-import { CHAT_BLOCKED_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
+import { CHAT_BLOCKED_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
 
 export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]> = {
   search_prompts: 'prompts.view', get_most_used_prompts: 'prompts.view', list_prompt_groups: 'prompts.view',
@@ -38,9 +38,10 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   propose_display_block: [], propose_chat_profile: [], propose_profile_update: [], propose_profile_assets: [],
 };
 
-/** Initial server-issued grant. No branch bypasses the allowlist or page boundary. */
+/** General tools use the profile grant; connected page tools use explicit page access and binding. */
 export function isContextToolAllowed(context: McpRequestContext, toolName: string): boolean {
   if (context.requester && !isChatGenerationTool(toolName) && TOOL_FEATURE_PERMISSIONS[toolName] === undefined) return false;
+  if (isConnectedChatPageTool(context, toolName)) return true;
   if (context.toolAllowlist && !context.toolAllowlist.includes(toolName)) return false;
   if (context.chatContext?.page && !CHAT_PAGE_TOOLS.has(toolName) && !isChatGenerationTool(toolName)) return false;
   if (isChatMcpSource(context.source) && CHAT_BLOCKED_TOOLS.has(toolName)) return false;

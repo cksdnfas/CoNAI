@@ -43,6 +43,7 @@ function profileModelLine(profile: ChatProfile, slots: ModelSlot[], t: ReturnTyp
   const slot = profile.modelSlotId ? slots.find((item) => item.id === profile.modelSlotId) : undefined
   if (slot) return `${slot.isDefault ? '★ ' : ''}${slot.name} · ${slot.model}`
   const model = profile.model || t({ ko: '기본 모델', en: 'default model' })
+  if (profile.engine === 'claude') return `Claude Code · ${profile.model || 'sonnet'}`
   return profile.engine === 'codex' ? `Codex · ${model}` : `${profile.providerName} · ${model}`
 }
 

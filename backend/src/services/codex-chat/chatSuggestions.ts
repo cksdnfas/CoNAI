@@ -6,6 +6,7 @@ import { completeChat, isChatTargetReady, resolveChatCompletionTarget, type Chat
 import { ChatUserProfileStore, userPersonaForThread, userPersonaPrompt, type ChatUserPersona, type ChatUserProfile } from './chatUserProfiles'
 import { ModelSlotStore } from './modelSlots'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
+import { resolveChatAccess } from './codexChatAccess'
 
 /**
  * Reply suggestions: the composer's sparkle button asks a model for a few things the user might say next. Nothing
@@ -100,7 +101,8 @@ export function suggestionRunnerOf(profile: ChatProfile, accountId?: number | nu
 /** Whether the composer's suggestion button has someone to ask (a connection that cannot be used counts as none). */
 export function canSuggest(profile: ChatProfile, accountId?: number | null) {
   try {
-    return suggestionRunnerOf(profile, accountId)?.kind === 'llm'
+    const runner = suggestionRunnerOf(profile, accountId)
+    return runner?.kind === 'llm' && (runner.target.transport !== 'claude-code' || accountId === undefined || resolveChatAccess(accountId).claude)
   } catch {
     return false
   }
@@ -205,6 +207,7 @@ export async function suggestReplies(profile: ChatProfile, thread: CodexChatThre
   }
   if (!runner) throw new ChatSuggestError(profile.suggestEnabled ? '이 프로필에는 추천에 쓸 연결이 없어. 프로필 설정에서 추천 연결을 골라줘.' : '이 프로필은 답장 추천을 안 써.', 409)
   if (runner.kind === 'codex') throw new ChatSuggestError('Codex 단독 실행은 채팅에서 사용할 수 없어. 답장 추천에는 API LLM 연결을 골라줘.', 409)
+  if (runner.target.transport === 'claude-code' && !resolveChatAccess(thread.account_id).claude) throw new ChatSuggestError('Claude Code를 사용할 권한이 없어.', 403)
 
   const user = userPersonaForThread(thread)
   const transcript = buildSuggestionTranscript(messages, user.name, nameOf, usableBlockKeys(profile.style.blocks))

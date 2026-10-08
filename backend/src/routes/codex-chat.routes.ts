@@ -4,7 +4,6 @@ import { getUserSettingsDb } from '../database/userSettingsDb'
 import multer from 'multer'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import { ChatPageContextError } from '../services/codex-chat/chatPageContext'
-import { CHAT_PAGE_TOOL_INFO } from '../mcp/tools/chatPageTools'
 import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
@@ -116,12 +115,12 @@ function sendChatError(res: Response, error: unknown) {
 function chatAccessOf(req: Request) {
   const access = resolveChatAccess(getRequesterAccountId(req))
   const enabled = loadChatSettings().enabled
-  return { codex: enabled && access.codex, llm: enabled && access.llm, scopes: access.scopes }
+  return { codex: enabled && access.codex, llm: enabled && access.llm, claude: enabled && access.claude, scopes: access.scopes }
 }
 
 function requireChatAccess(req: Request, res: Response, next: NextFunction) {
   const access = chatAccessOf(req)
-  if (!access.codex && !access.llm) {
+  if (!access.codex && !access.llm && !access.claude) {
     res.status(403).json({ success: false, error: '채팅 권한이 없어.' })
     return
   }
@@ -156,7 +155,6 @@ function toPublicProfile(profile: ChatProfile, accountId: number | null) {
     expressionGroupId: canViewImages ? chatExpressionGroupId(profile) : null,
     backgroundVersion: canViewImages ? backgroundVersionOf(profile) : null,
     // The composer shows the suggestion button only when someone can answer it.
-    canUsePageContext: profile.mcpEnabled && profile.mcpScopes.includes('read') && resolveChatAccess(accountId).scopes.includes('read') && (!profile.toolAllowlist || profile.toolAllowlist.includes('get_current_page')),
     suggestEnabled: canSuggest(profile, accountId),
   }
 }
@@ -176,9 +174,10 @@ router.get('/status', (req: Request, res: Response) => {
     success: true,
     data: {
       enabled: loadChatSettings().enabled,
-      canUse: access.codex || access.llm,
+      canUse: access.codex || access.llm || access.claude,
       codex: { canUse: access.codex },
       llm: { canUse: access.llm },
+      claude: { canUse: access.claude },
       scopes: access.scopes,
     },
   })
@@ -195,7 +194,7 @@ router.get('/profiles', requireChatAccess, (req: Request, res: Response) => {
     success: true,
     data: ChatProfileStore.list().map((profile) => ({
       ...toPublicProfile(profile, accountId),
-      usable: profile.isEnabled && (profile.engine === 'codex' ? access.codex : access.llm),
+      usable: profile.isEnabled && (profile.engine === 'codex' ? access.codex : profile.engine === 'claude' ? access.claude : access.llm),
       canReadFileText: profile.mcpEnabled && profile.mcpScopes.includes('read') && access.scopes.includes('read') && (!profile.toolAllowlist || profile.toolAllowlist.includes('read_file_text')),
     })),
   })
@@ -744,7 +743,7 @@ router.post('/admin/profiles', requireAdmin, asyncHandler(async (req: Request, r
   try {
     const input = (req.body ?? {}) as ChatProfileInput
     // An API LLM profile with no model of its own starts on the default slot, when there is one.
-    if (input.engine !== 'codex' && !input.providerName && (input.modelSlotId === null || input.modelSlotId === undefined)) {
+    if (input.engine !== 'codex' && input.engine !== 'claude' && !input.providerName && (input.modelSlotId === null || input.modelSlotId === undefined)) {
       const defaultSlot = ModelSlotStore.findDefault()
       if (defaultSlot) input.modelSlotId = defaultSlot.id
     }
@@ -1221,7 +1220,7 @@ router.get('/admin/tools', requireAdmin, asyncHandler(async (req: Request, res: 
   try {
     res.json({
       success: true,
-      data: [...bridge.tools.map((tool) => ({ name: tool.function.name, description: tool.function.description ?? '', scope: getMcpToolScope(tool.function.name) })), ...CHAT_PAGE_TOOL_INFO],
+      data: bridge.tools.map((tool) => ({ name: tool.function.name, description: tool.function.description ?? '', scope: getMcpToolScope(tool.function.name) })),
     })
   } finally {
     await bridge.close()
@@ -1262,7 +1261,7 @@ router.post('/admin/profiles/preview', requireAdmin, asyncHandler(async (req: Re
           messages,
           tools: tools.map((tool) => tool.function.name),
           tokens: { prompt: promptTokens, tools: toolTokens, total: promptTokens + toolTokens },
-          contextTokens: profile.engine === 'llm' ? profile.contextTokens : null,
+          contextTokens: profile.engine !== 'codex' ? profile.contextTokens : null,
         },
       })
     } finally {

@@ -4,8 +4,6 @@ import type { McpRequester } from '../../mcp/context'
 import { AuthAccount } from '../../models/AuthAccount'
 import { AuthAccessControlService } from '../authAccessControlService'
 import { hasConfiguredAuth } from '../../routes/auth-route-helpers'
-import { intersectChatScopes, resolveChatAccess } from './codexChatAccess'
-import type { ChatProfile } from './chatProfiles'
 import { WorkflowModel } from '../../models/Workflow'
 
 export class ChatPageContextError extends Error {
@@ -17,14 +15,8 @@ export function requireChatPageAccess(requester: McpRequester, page: Pick<ChatPa
   const id = requester.accountId
   const permitted = id === null
     ? !hasConfiguredAuth()
-    : AuthAccount.findById(id)?.status === 'active' && permission !== null && AuthAccessControlService.hasPermission(id, permission)
-  const domain = page.kind === 'prompt_search' || page.kind === 'presets' ? 'prompts.view'
-    : page.kind === 'wildcards' ? 'wildcards.view'
-      : ['workflow', 'workflow_runner', 'comfy_author', 'comfyui'].includes(page.kind ?? '') ? 'workflows.view'
-        : page.kind === 'metadata' || page.kind === 'library' || page.kind === 'image_detail' ? 'images.view' : page.kind === 'files' ? 'files.view' : null
-  const publicInputs = /^\/public\/workflows\//.test(page.path) && page.kind === 'comfyui'
-  const domainDenied = id !== null && domain && !publicInputs && !AuthAccessControlService.hasPermission(id, domain)
-  if (!permission || !permitted || domainDenied) throw new ChatPageContextError('이 페이지를 채팅에서 사용할 권한이 없어.', 403)
+    : AuthAccount.findById(id)?.status === 'active' && permission !== null && (permission === '' || AuthAccessControlService.hasPermission(id, permission))
+  if (permission === null || !permitted) throw new ChatPageContextError('이 페이지에 접근할 권한이 없어.', 403)
   const slug = /^\/public\/workflows\/([\w-]+)$/.exec(page.path)?.[1]
   if (slug) {
     const workflow = WorkflowModel.findPublicBySlug(slug)
@@ -37,7 +29,7 @@ export function requireChatPageActionAccess(requester: McpRequester, page: Pick<
   if (actionId === 'page.navigate' && args) {
     const path = typeof args.path === 'string' ? args.path : ''
     const permission = chatPagePermission(path.split('?')[0])
-    if (!path.startsWith('/') || path.startsWith('//') || !permission || (requester.accountId !== null && !AuthAccessControlService.hasPermission(requester.accountId, permission))) throw new ChatPageContextError('접근할 수 있는 내부 페이지가 아니야.', 403)
+    if (!path.startsWith('/') || path.startsWith('//') || permission === null || (permission !== '' && requester.accountId !== null && !AuthAccessControlService.hasPermission(requester.accountId, permission))) throw new ChatPageContextError('접근할 수 있는 내부 페이지가 아니야.', 403)
   }
   const permission = actionId === 'media.attach' ? 'images.view' : CHAT_PAGE_ACTION_PERMISSIONS[actionId]
   // Public workflow inputs use the authenticated public-page contract; management still requires feature grants.
@@ -51,11 +43,8 @@ export function requireChatPageDataAccess(requester: McpRequester, key: string) 
   if (permission && requester.accountId !== null && !AuthAccessControlService.hasPermission(requester.accountId, permission)) throw new ChatPageContextError(`이 목록을 읽을 권한이 없어: ${permission}`, 403)
 }
 
-export function parseChatPageContext(input: unknown, requester: McpRequester, profile: ChatProfile): ChatPageSnapshot | undefined {
+export function parseChatPageContext(input: unknown, requester: McpRequester): ChatPageSnapshot | undefined {
   if (input === undefined || input === null) return undefined
-  if (!profile.mcpEnabled || !intersectChatScopes(profile.mcpScopes, resolveChatAccess(requester.accountId)).includes('read') || (profile.toolAllowlist && !profile.toolAllowlist.includes('get_current_page'))) {
-    throw new ChatPageContextError('프로필의 읽기 도구에서 현재 페이지 읽기를 허용해줘.', 403)
-  }
   try {
     const page = normalizeChatPageSnapshot(input)
     requireChatPageAccess(requester, page)

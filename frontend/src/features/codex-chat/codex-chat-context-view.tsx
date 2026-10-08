@@ -160,7 +160,7 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
     onSuccess: applied,
     onError,
   })
-  const llmMembers = (group?.memberIds ?? []).flatMap((id) => profilesById.get(id) ?? []).filter((member) => member.engine === 'llm')
+  const llmMembers = (group?.memberIds ?? []).flatMap((id) => profilesById.get(id) ?? []).filter((member) => member.engine !== 'codex')
   const roomLabel = t({ ko: '방', en: 'Room' })
   const profileLabel = t({ ko: '프로필', en: 'Profile' })
   const capLabel = t({ ko: '최대 출력 토큰', en: 'Max output tokens' })

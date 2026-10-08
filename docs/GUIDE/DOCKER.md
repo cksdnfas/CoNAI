@@ -92,6 +92,20 @@ CLI 업데이트는 Codex 탭 상태 옆의 업데이트 버튼(관리자, 새 �
 Docker 기본 설정은 Codex의 Linux sandbox(bwrap)가 쓰는 user namespace를 막습니다. 그래서 이미지는 `CODEX_SANDBOX_MODE=danger-full-access`로 Codex를 sandbox 없이 실행하고, 컨테이너 자체를 격리 경계로 씁니다. 이 상태에서 Codex는 컨테이너 안 파일(`/app/data/user` 포함)에 접근할 수 있으므로, Codex 생성 권한은 신뢰하는 계정에만 주세요.
 :::
 
+## Claude Code 로그인과 업데이트
+
+이미지에 Claude Code CLI도 포함됩니다. 관리자 계정으로 **설정 → LLM → CLI 인증과 업데이트**에서 설치 버전·인증 상태를 확인하고 로그인합니다. 인증 페이지가 코드를 표시하면 로그인 창에 붙여넣습니다. 터미널에서도 로그인할 수 있습니다.
+
+```bash
+docker compose exec conai claude auth login --claudeai
+```
+
+로그인 정보는 `CLAUDE_CONFIG_DIR=/app/data/user/claude`에 보관합니다. 앱에서 설치·업데이트한 CLI는 `/app/data/user/claude-cli`에 저장하므로 기존 데이터 볼륨 하나로 유지됩니다. 이미지 설치본과 업데이트본 중 최신 버전을 실행합니다. 진행 중인 Claude 작업이나 로그인이 있으면 업데이트를 거절합니다. CLI 자체 업데이트는 비활성화하고 앱의 업데이트 기능으로 관리합니다.
+
+자동화용 OAuth 토큰은 `claude setup-token`으로 발급해 `CLAUDE_CODE_OAUTH_TOKEN` 환경 변수에 넣을 수도 있습니다. API 인증은 `ANTHROPIC_API_KEY`를 사용합니다. 키·토큰을 이미지나 저장소에 포함하지 않습니다. OAuth 토큰의 만료·교체는 관리자가 처리합니다. 제3자 제품에서 claude.ai 로그인·구독 한도를 제공하는 사용에는 Anthropic 사전 승인이 필요하다는 [공식 연동 안내](https://code.claude.com/docs/en/agent-sdk/overview#get-started)를 확인하세요.
+
+Claude 채팅은 별도의 전용 홈에서 기본 파일·셸 도구를 끄고 허용된 CoNAI 도구만 제공합니다. Codex 이미지 생성의 `CODEX_SANDBOX_MODE`는 Claude 채팅에 적용하지 않습니다.
+
 ## 감시 폴더 연결
 
 컨테이너는 호스트 폴더를 직접 볼 수 없습니다. 감시할 폴더를 `compose.yaml`의 `volumes`에 추가하고, CoNAI의 감시 폴더에는 **컨테이너 안 경로**를 등록합니다.
@@ -119,6 +133,8 @@ services:
 | `CONAI_SETUP_TOKEN` | 없음 | 원격 초기 관리자 생성용 일회성 토큰 |
 | `HF_TOKEN` | 없음 | Hugging Face 모델 다운로드 속도 제한 완화(선택) |
 | `CODEX_HOME` | `/app/data/user/codex` | Codex CLI 로그인 정보·설정 위치 |
+| `CLAUDE_CONFIG_DIR` | `/app/data/user/claude` | Claude Code 로그인 정보·설정 위치 |
+| `CLAUDE_NPM_PREFIX` | `/app/data/user/claude-cli` | 앱에서 설치·업데이트한 Claude Code 위치 |
 | `CODEX_NPM_PREFIX` | `/app/data/user/codex-cli` | 앱에서 업데이트한 Codex CLI 설치 위치 |
 | `CODEX_SANDBOX_MODE` | `danger-full-access` | `codex exec --sandbox` 값. 컨테이너 밖 기본값은 `workspace-write` |
 

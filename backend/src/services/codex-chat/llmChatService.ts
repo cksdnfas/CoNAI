@@ -112,19 +112,28 @@ export function assertLlmChatAvailable(requester: McpRequester) {
   if (!loadChatSettings().enabled) {
     throw new LlmChatError('채팅이 꺼져 있어.', 403)
   }
-  if (!resolveChatAccess(requester.accountId).llm) {
+  const access = resolveChatAccess(requester.accountId)
+  if (!access.llm && !access.claude) {
     throw new LlmChatError('LLM 채팅 권한이 없어.', 403)
   }
 }
 
-function requireUsableProfile(profileId: number | null) {
+function requireProfileAccess(requester: McpRequester, profile: ChatProfile) {
+  const access = resolveChatAccess(requester.accountId)
+  if (!loadChatSettings().enabled || !(profile.engine === 'claude' ? access.claude : access.llm)) throw new LlmChatError('이 프로필로 채팅할 권한이 없어.', 403)
+  const current = ChatProfileStore.find(profile.id)
+  if (!current?.isEnabled || current.engine !== profile.engine) throw new LlmChatError('프로필 사용 설정이 변경됐어.', 409)
+}
+
+function requireUsableProfile(profileId: number | null, requester: McpRequester) {
   const profile = profileId === null ? null : ChatProfileStore.find(profileId)
-  if (!profile || profile.engine !== 'llm') {
+  if (!profile || (profile.engine !== 'llm' && profile.engine !== 'claude')) {
     throw new LlmChatError('이 채팅의 프로필이 지워졌어.', 409)
   }
   if (!profile.isEnabled) {
     throw new LlmChatError('이 채팅의 프로필이 꺼져 있어.', 409)
   }
+  requireProfileAccess(requester, profile)
   return profile
 }
 
@@ -147,6 +156,7 @@ function readToolImages(result: { content?: unknown[] }) {
 }
 
 async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: string; function: { name: string; arguments: string } }, outputLimit: number, images: string[]) {
+  let nativeResult: Awaited<ReturnType<ChatMcpBridge['call']>> | null = null
   const record: CodexChatToolCall = {
     id: call.id,
     tool: call.function.name,
@@ -164,6 +174,7 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
     record.arguments = parseArguments(call.function.arguments)
     emit(turn, { type: 'tool', call: { ...record } })
     const result = await bridge.call(record.tool, record.arguments as Record<string, unknown>, turn.controller.signal)
+    nativeResult = result
     if (['propose_page_changes', 'propose_workflow_changes', 'propose_page_action'].includes(record.tool) && !result.isError) {
       const structured = result.structuredContent as { proposal?: ChatProposal } | undefined
       if (structured?.proposal?.kind === 'page_fields' || structured?.proposal?.kind === 'workflow_graph' || structured?.proposal?.kind === 'page_action') record.proposal = structured.proposal
@@ -193,7 +204,8 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
   record.summary = pageRead ? '현재 요청에 연결한 페이지를 읽었어.' : output ? truncateToolSummary(output) : null
   record.output = pageRead ? '(Page/editor snapshot omitted; read current-request page tools again.)' : output.slice(0, STORED_TOOL_OUTPUT_LENGTH)
   emit(turn, { type: 'tool', call: { ...record } })
-  return (output.length > outputLimit ? cutToolOutput(output, outputLimit) : output) || '(no output)'
+  const text = (output.length > outputLimit ? cutToolOutput(output, outputLimit) : output) || '(no output)'
+  return { text, nativeResult: nativeResult ? { ...nativeResult, content: [{ type: 'text', text }, ...(nativeResult.content ?? []).filter((part) => (part as { type?: unknown })?.type === 'image')] } : { isError: true, content: [{ type: 'text', text }] } }
 }
 
 /** A direct chat's reply: the profile's prompt and the thread's context window (summarized first if it overflows). */
@@ -278,7 +290,9 @@ function settleRestatement(turn: LlmTurn, previous: TextSpan | null, roundStart:
  * stored) or when the model answered nothing at all.
  */
 async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>, roomTools: 'call' | 'all' | false = false, generation: Partial<LlmGenerationOptions> = {}) {
+  requireProfileAccess(requester, profile)
   const target = resolveChatCompletionTarget(chatConnectionOf(profile), { model: resolveProfileModel(profile, 'chat')?.model ?? null, generation: { ...profileGenerationOptions(profile), ...generation } })
+  if (target.transport === 'claude-code' && !resolveChatAccess(requester.accountId).claude) throw new LlmChatError('Claude Code를 사용할 권한이 없어.', 403)
   const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
   const chatContext = turn.chatContext ?? turn.delivery?.context
   const bridge = !turn.reaction && (scopes.length > 0 || roomTools || chatContext) ? await openChatMcpBridge(requester, scopes, toolAllowlist, { roomTools, generationPresetIds: profile.generationPresetIds, chatContext }) : null
@@ -322,6 +336,11 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           tools,
           signal: turn.controller.signal,
           allowCompatibilityFallback: !turn.reaction,
+          maxToolRounds: profile.maxToolRounds,
+          callTool: bridge ? async (name, args, id) => {
+            requireProfileAccess(requester, profile)
+            return (await runToolCall(turn, bridge, { id, function: { name, arguments: JSON.stringify(args) } }, profile.toolOutputLimit, [])).nativeResult
+          } : undefined,
           onRequestBody: (body, actualTarget) => {
             turn.requestSent = true
             const diagnostics = loadChatSettings().diagnostics
@@ -365,7 +384,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           return
         }
         messages.push({ role: 'tool', tool_call_id: call.id, content: tools.some((tool) => tool.function.name === call.function.name)
-          ? await runToolCall(turn, bridge, call, profile.toolOutputLimit, images)
+          ? (await runToolCall(turn, bridge, call, profile.toolOutputLimit, images)).text
           : `Unknown or not permitted tool: ${call.function.name}` })
       }
       // Tool messages carry text only, so images ride in a user message right after them (this request only).
@@ -563,12 +582,12 @@ export const LlmChatService = {
   /** The profile a new chat would talk to, when this requester may start one. */
   requireStartableProfile(requester: McpRequester, profileId: number) {
     assertLlmChatAvailable(requester)
-    return requireUsableProfile(profileId)
+    return requireUsableProfile(profileId, requester)
   },
 
   createThread(requester: McpRequester, profileId: number, userProfileId: number | null = null, greetingIndex?: number | null) {
     assertLlmChatAvailable(requester)
-    const profile = requireUsableProfile(profileId)
+    const profile = requireUsableProfile(profileId, requester)
     const user = ChatUserProfileStore.requireOwn(requester.accountId, userProfileId)
     const threadId = CodexChatStore.createThread(requester.accountId, '', 'llm', profile.id)
     if (user) ChatUserProfileStore.setThreadUserProfile(threadId, user.id)
@@ -592,8 +611,8 @@ export const LlmChatService = {
    */
   async sendMessage(requester: McpRequester, thread: CodexChatThreadRecord, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown, replyToMessageId?: unknown, pageContext?: unknown) {
     assertLlmChatAvailable(requester)
-    const profile = requireUsableProfile(thread.profile_id)
-    const page = parseChatPageContext(pageContext, requester, profile)
+    const profile = requireUsableProfile(thread.profile_id, requester)
+    const page = parseChatPageContext(pageContext, requester)
     const attachments = validateChatAttachments(requester, fileIds)
     const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length)
     const flags = [...ChatFlagStore.resolve(requester, parseFlagIds(flagIds)), ...parsePicks(picks)]
@@ -617,7 +636,7 @@ export const LlmChatService = {
 
   async rewriteMessage(requester: McpRequester, thread: CodexChatThreadRecord, messageId: number, content: string | undefined, listener: (event: CodexChatStreamEvent) => void) {
     assertLlmChatAvailable(requester)
-    const profile = requireUsableProfile(thread.profile_id)
+    const profile = requireUsableProfile(thread.profile_id, requester)
     if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     const messages = CodexChatStore.listMessages(thread.id)
     const message = messages.find((entry) => entry.id === messageId)
@@ -642,7 +661,7 @@ export const LlmChatService = {
   /** Carry on the last reply where it was cut: the result (old text + new) becomes a new variant of it. */
   continueReply(requester: McpRequester, thread: CodexChatThreadRecord, messageId: number, listener: (event: CodexChatStreamEvent) => void) {
     assertLlmChatAvailable(requester)
-    const profile = requireUsableProfile(thread.profile_id)
+    const profile = requireUsableProfile(thread.profile_id, requester)
     if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     const messages = CodexChatStore.listMessages(thread.id)
     const message = messages[messages.length - 1]
@@ -678,7 +697,7 @@ export const LlmChatService = {
 
   async summarize(requester: McpRequester, thread: CodexChatThreadRecord) {
     assertLlmChatAvailable(requester)
-    const profile = requireUsableProfile(thread.profile_id)
+    const profile = requireUsableProfile(thread.profile_id, requester)
     if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     const summary = await summarizeAll(thread.id, profile)
     if (summary === null) {
