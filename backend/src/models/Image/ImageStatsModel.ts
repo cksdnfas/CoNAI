@@ -12,6 +12,12 @@ import { AutoTagStats } from '../../types/autoTag';
  */
 export class ImageStatsModel {
   private static readonly AUTO_TAG_STATS_CACHE_TTL_MS = 30_000;
+  /**
+   * Every media insert/update/delete invalidates the stats; during ingest that is many times a second, which turned
+   * the cache into a full recompute on almost every request. An invalidation now only shortens the entry's life to
+   * at most this long, so the stats catch up within a few seconds and are recomputed at most once per window.
+   */
+  private static readonly AUTO_TAG_STATS_INVALIDATION_DEBOUNCE_MS = 5_000;
   private static autoTagStatsCache: { value: AutoTagStats; expiresAt: number } | null = null;
 
   private static cloneAutoTagStats(stats: AutoTagStats): AutoTagStats {
@@ -24,6 +30,18 @@ export class ImageStatsModel {
   }
 
   static invalidateAutoTagStatsCache(): void {
+    if (!this.autoTagStatsCache) {
+      return;
+    }
+
+    const debouncedExpiry = Date.now() + this.AUTO_TAG_STATS_INVALIDATION_DEBOUNCE_MS;
+    if (debouncedExpiry < this.autoTagStatsCache.expiresAt) {
+      this.autoTagStatsCache.expiresAt = debouncedExpiry;
+    }
+  }
+
+  /** Drop the cached stats immediately (tests, maintenance that rewrote every row). */
+  static clearAutoTagStatsCache(): void {
     this.autoTagStatsCache = null;
   }
 

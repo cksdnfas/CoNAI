@@ -1,4 +1,5 @@
 import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../../utils/sqlLike';
+import { buildOnOrAfterDateSql, buildOnOrBeforeDateSql } from '../../utils/sqlDateRange';
 import { PromptSearchIndexService } from '../../services/promptSearchIndexService';
 import { requestPromptSearchIndexBackfill } from '../../services/runtimeJobs/handlers/promptSearchIndexHandlers';
 
@@ -210,11 +211,11 @@ export function buildImageSearchFilterParts(
     )`);
   }
   if (searchParams.start_date) {
-    conditions.push('DATE(im.first_seen_date) >= DATE(?)');
+    conditions.push(buildOnOrAfterDateSql('im.first_seen_date'));
     params.push(searchParams.start_date);
   }
   if (searchParams.end_date) {
-    conditions.push('DATE(im.first_seen_date) <= DATE(?)');
+    conditions.push(buildOnOrBeforeDateSql('im.first_seen_date'));
     params.push(searchParams.end_date);
   }
 

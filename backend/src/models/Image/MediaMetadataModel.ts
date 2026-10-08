@@ -5,10 +5,11 @@ import { PromptSimilarityService } from '../../services/promptSimilarityService'
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import { ImageMetadataRecord } from '../../types/image';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../../utils/dynamicUpdate';
-import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../../utils/sqlLike';
 import { ImageStatsModel } from './ImageStatsModel';
 import { MediaImageFeaturesModel } from './MediaImageFeaturesModel';
 import { MediaMetadataFileQueries } from './MediaMetadataFileQueries';
+import { AggregateCache, resolveSearchTotal } from '../../services/aggregateCache';
+import { placeholdersFor, sortedUniqueChunks } from '../../utils/sqlInChunks';
 
 function normalizeSuggestionLimit(limit: number, fallback = 16, max = 50): number {
   if (!Number.isFinite(limit) || limit <= 0) {
@@ -17,15 +18,27 @@ function normalizeSuggestionLimit(limit: number, fallback = 16, max = 50): numbe
   return Math.min(Math.floor(limit), max);
 }
 
-function buildSuggestionSearchFilter(columnExpression: string, normalizedQuery: string): { sql: string; params: string[] } {
-  if (normalizedQuery.length === 0) {
-    return { sql: '', params: [] };
-  }
+type SuggestionRow = { value: string; count: number };
 
-  return {
-    sql: `AND LOWER(${columnExpression}) LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`,
-    params: [buildSqlContainsPattern(normalizedQuery)],
-  };
+/** SQLite's LOWER() and LIKE fold ASCII letters only; non-ASCII characters must match exactly. */
+function lowerAscii(value: string): string {
+  return value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+}
+
+/**
+ * Filter a cached full suggestion list the way `LOWER(value) LIKE '%query%'` (escaped) did, keeping its order.
+ * `normalizedQuery` is already trimmed and lower-cased, so ASCII-folded containment is exactly the LIKE match.
+ */
+function filterSuggestionRows(rows: readonly SuggestionRow[], normalizedQuery: string, limit: number): SuggestionRow[] {
+  const matches = normalizedQuery.length === 0
+    ? rows.slice(0, limit)
+    : rows.filter((row) => lowerAscii(row.value).includes(normalizedQuery)).slice(0, limit);
+  return matches.map((row) => ({ value: row.value, count: row.count }));
+}
+
+/** Whole-library suggestion aggregates move with the library; one cached list serves every keystroke. */
+function resolveLibraryAggregate<T>(key: string, compute: () => T): T {
+  return AggregateCache.resolve(key, compute, { scopes: ['library'] });
 }
 
 function getReadyMediaMetadataCondition(alias = 'media_metadata'): string {
@@ -59,11 +72,15 @@ export class MediaMetadataModel {
   static findByHashes(compositeHashes: string[]): ImageMetadataRecord[] {
     if (compositeHashes.length === 0) return [];
 
-    const placeholders = compositeHashes.map(() => '?').join(',');
-    const rows = db.prepare(
-      `SELECT * FROM media_metadata WHERE composite_hash IN (${placeholders})`
-    ).all(...compositeHashes);
-    return rows as ImageMetadataRecord[];
+    // Chunked so a caller-sized list never exceeds SQLite's bound-parameter limit; sorted chunks keep the
+    // composite_hash index order a single IN lookup returned.
+    const rows: ImageMetadataRecord[] = [];
+    for (const chunk of sortedUniqueChunks(compositeHashes)) {
+      rows.push(...(db.prepare(
+        `SELECT * FROM media_metadata WHERE composite_hash IN (${placeholdersFor(chunk)})`
+      ).all(...chunk) as ImageMetadataRecord[]));
+    }
+    return rows;
   }
 
   /**
@@ -243,16 +260,15 @@ export class MediaMetadataModel {
   static deleteMany(compositeHashes: string[]): number {
     if (compositeHashes.length === 0) return 0;
 
-    const placeholders = compositeHashes.map(() => '?').join(',');
-    const info = db.prepare(
-      `DELETE FROM media_metadata WHERE composite_hash IN (${placeholders})`
-    ).run(...compositeHashes);
+    const changes = db.transaction(() => sortedUniqueChunks(compositeHashes).reduce((total, chunk) => total + db.prepare(
+      `DELETE FROM media_metadata WHERE composite_hash IN (${placeholdersFor(chunk)})`
+    ).run(...chunk).changes, 0))();
 
-    if (info.changes > 0) {
+    if (changes > 0) {
       ImageStatsModel.invalidateAutoTagStatsCache();
     }
 
-    return info.changes;
+    return changes;
   }
 
   /**
@@ -346,11 +362,15 @@ export class MediaMetadataModel {
     const offset = (_page - 1) * _limit;
 
     const readyCondition = getReadyMediaMetadataCondition();
-    const countRow = db.prepare(`
+    // Every page of one range has the same total; count it once per 30s instead of once per page.
+    const countSql = `
       SELECT COUNT(*) as total
       FROM media_metadata
       WHERE first_seen_date BETWEEN ? AND ? AND ${readyCondition}
-    `).get(startDate, endDate) as { total: number };
+    `;
+    const total = resolveSearchTotal('findByDateRange', [countSql], [startDate, endDate], () => (
+      (db.prepare(countSql).get(startDate, endDate) as { total: number }).total
+    ));
 
     const items = db.prepare(`
       SELECT * FROM media_metadata
@@ -359,7 +379,7 @@ export class MediaMetadataModel {
       LIMIT ? OFFSET ?
     `).all(startDate, endDate, _limit, offset) as ImageMetadataRecord[];
 
-    return { items, total: countRow.total };
+    return { items, total };
   }
 
   /**
@@ -400,13 +420,14 @@ export class MediaMetadataModel {
   static getAIToolStats(): Array<{ ai_tool: string; count: number }> {
     const readyCondition = getReadyMediaMetadataCondition();
 
-    return db.prepare(`
+    const rows = resolveLibraryAggregate(`stats:ai-tool:${readyCondition}`, () => db.prepare(`
       SELECT ai_tool, COUNT(*) as count
       FROM media_metadata
       WHERE ai_tool IS NOT NULL AND ${readyCondition}
       GROUP BY ai_tool
       ORDER BY count DESC
-    `).all() as Array<{ ai_tool: string; count: number }>;
+    `).all() as Array<{ ai_tool: string; count: number }>);
+    return rows.map((row) => ({ ...row }));
   }
 
   /**
@@ -415,61 +436,62 @@ export class MediaMetadataModel {
   static getModelStats(): Array<{ model_name: string; count: number }> {
     const readyCondition = getReadyMediaMetadataCondition();
 
-    return db.prepare(`
+    const rows = resolveLibraryAggregate(`stats:model:${readyCondition}`, () => db.prepare(`
       SELECT model_name, COUNT(*) as count
       FROM media_metadata
       WHERE model_name IS NOT NULL AND ${readyCondition}
       GROUP BY model_name
       ORDER BY count DESC
       LIMIT 50
-    `).all() as Array<{ model_name: string; count: number }>;
+    `).all() as Array<{ model_name: string; count: number }>);
+    return rows.map((row) => ({ ...row }));
   }
 
   /**
    * 검색 UI용 모델 자동완성 후보 조회
+   *
+   * The whole model list (one GROUP BY over the library) is cached per library version and filtered per keystroke;
+   * the query filter used to rerun that full aggregate on every keystroke.
    */
   static searchModelSuggestions(query = '', limit = 16): Array<{ value: string; count: number }> {
     const normalizedQuery = query.trim().toLowerCase();
-    const searchFilter = buildSuggestionSearchFilter('model_name', normalizedQuery);
     const normalizedLimit = normalizeSuggestionLimit(limit);
-
     const readyCondition = getReadyMediaMetadataCondition();
 
-    return db.prepare(`
+    const rows = resolveLibraryAggregate(`suggest:model:${readyCondition}`, () => db.prepare(`
       SELECT model_name as value, COUNT(*) as count
       FROM media_metadata
       WHERE model_name IS NOT NULL
         AND TRIM(model_name) != ''
         AND ${readyCondition}
-        ${searchFilter.sql}
       GROUP BY model_name
       ORDER BY count DESC, model_name ASC
-      LIMIT ?
-    `).all(...searchFilter.params, normalizedLimit) as Array<{ value: string; count: number }>;
+    `).all() as SuggestionRow[]);
+    return filterSuggestionRows(rows, normalizedQuery, normalizedLimit);
   }
 
   /**
    * 검색 UI용 LoRA 자동완성 후보 조회
+   *
+   * Cached like the model list. The former per-row filter tested the untrimmed item text; the query is trimmed, so
+   * containment in the untrimmed and the trimmed (grouped) text is the same test.
    */
   static searchLoraSuggestions(query = '', limit = 16): Array<{ value: string; count: number }> {
     const normalizedQuery = query.trim().toLowerCase();
-    const searchFilter = buildSuggestionSearchFilter('CAST(lora_item.value AS TEXT)', normalizedQuery);
     const normalizedLimit = normalizeSuggestionLimit(limit);
-
     const readyCondition = getReadyMediaMetadataCondition('metadata');
 
-    return db.prepare(`
+    const rows = resolveLibraryAggregate(`suggest:lora:${readyCondition}`, () => db.prepare(`
       SELECT TRIM(CAST(lora_item.value AS TEXT)) as value, COUNT(*) as count
       FROM media_metadata AS metadata
       JOIN json_each(CASE WHEN json_valid(metadata.lora_models) = 1 THEN metadata.lora_models ELSE '[]' END) AS lora_item
       WHERE metadata.lora_models IS NOT NULL
         AND TRIM(CAST(lora_item.value AS TEXT)) != ''
         AND ${readyCondition}
-        ${searchFilter.sql}
       GROUP BY TRIM(CAST(lora_item.value AS TEXT))
       ORDER BY count DESC, value ASC
-      LIMIT ?
-    `).all(...searchFilter.params, normalizedLimit) as Array<{ value: string; count: number }>;
+    `).all() as SuggestionRow[]);
+    return filterSuggestionRows(rows, normalizedQuery, normalizedLimit);
   }
 
   /**
@@ -504,6 +526,7 @@ export class MediaMetadataModel {
     limit?: number;
     sortBy?: 'first_seen_date' | 'width' | 'height' | 'scan_date' | 'file_size';
     sortOrder?: 'ASC' | 'DESC';
+    total?: number;
   }): { items: any[], total: number } {
     return MediaMetadataFileQueries.findAllWithFiles(options);
   }

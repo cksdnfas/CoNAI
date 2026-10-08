@@ -4,6 +4,8 @@ import { ImageMetadataRecord, ImageWithFileView } from '../types/image';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
 import { getGroupHierarchyService } from '../services/groupHierarchyService';
 import { GroupPathService } from '../services/groupPathService';
+import type { IdPage, IdPageResponse } from '../utils/idPage';
+import { AggregateCache } from '../services/aggregateCache';
 import {
   findImagesByGroupQuery,
   findImagesByGroupWithFilesQuery,
@@ -13,6 +15,15 @@ import {
   getImageFileIdsForGroupQuery,
   countVisibleImagesByGroupQuery,
 } from './GroupImageQueries';
+
+/**
+ * Group lists with membership counts are read on every group tree / page load and only change when a group row or
+ * a membership changes, which the `groups` aggregate version tracks through triggers (migration 043). Rows are
+ * copied out so callers can decorate them freely.
+ */
+function resolveGroupList(key: string, compute: () => GroupWithStats[]): GroupWithStats[] {
+  return AggregateCache.resolve(key, compute, { scopes: ['groups'] }).map((row) => ({ ...row }));
+}
 
 export class GroupModel {
   /**
@@ -52,6 +63,10 @@ export class GroupModel {
    * 모든 그룹 조회 (통계 포함)
    */
   static findAllWithStats(): GroupWithStats[] {
+    return resolveGroupList('groups:all-with-stats', () => this.queryAllWithStats());
+  }
+
+  private static queryAllWithStats(): GroupWithStats[] {
     const query = `
       SELECT
         g.*,
@@ -166,6 +181,10 @@ export class GroupModel {
    * 루트 그룹들 조회 (parent_id가 NULL인 그룹들)
    */
   static findRoots(): GroupWithStats[] {
+    return resolveGroupList('groups:roots', () => this.queryRoots());
+  }
+
+  private static queryRoots(): GroupWithStats[] {
     const query = `
       SELECT
         g.*,
@@ -187,6 +206,10 @@ export class GroupModel {
    * 특정 부모의 자식 그룹들 조회
    */
   static findChildren(parentId: number): GroupWithStats[] {
+    return resolveGroupList(`groups:children:${parentId}`, () => this.queryChildren(parentId));
+  }
+
+  private static queryChildren(parentId: number): GroupWithStats[] {
     const query = `
       SELECT
         g.*,
@@ -544,7 +567,7 @@ export class ImageGroupModel {
    * 그룹에 속한 모든 image_files.id 조회 (선택 기능용)
    * composite_hash가 같아도 서로 다른 파일로 구분됨
    */
-  static getImageFileIdsForGroup(groupId: number): number[] {
-    return getImageFileIdsForGroupQuery(groupId);
+  static getImageFileIdsForGroup(groupId: number, page?: IdPage): IdPageResponse<number> {
+    return getImageFileIdsForGroupQuery(groupId, page);
   }
 }

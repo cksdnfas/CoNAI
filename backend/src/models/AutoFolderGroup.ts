@@ -18,6 +18,25 @@ function getReadyAutoFolderImageCondition() {
   return MediaPostprocessVisibilityService.buildReadyCondition('m');
 }
 
+/** Share of the library a folder must hold before its page walks the date index (see shouldWalkFolderByDate). */
+const FOLDER_DATE_WALK_MIN_SHARE = 0.9;
+
+/**
+ * Sorting a folder's memberships costs about one index probe per member (~200ms for a 300k-member folder); walking
+ * the first_seen index and probing membership stops as soon as the page is full. Folders are date-clustered by
+ * nature (a folder per day/month), so a walk can skip every newer non-member row first: it only pays off when the
+ * folder holds nearly the whole library, which bounds that skip. MAX(media_id) stands in for the library size: ids
+ * are never reused, so it only overestimates, which only makes the walk less likely.
+ */
+function shouldWalkFolderByDate(groupId: number, offset: number, limit: number): boolean {
+  const members = (db.prepare('SELECT COUNT(*) as total FROM auto_folder_group_images WHERE group_id = ?').get(groupId) as { total: number }).total;
+  if (members === 0) {
+    return false;
+  }
+  const libraryRows = (db.prepare('SELECT MAX(media_id) as maxId FROM media_metadata').get() as { maxId: number | null }).maxId ?? 0;
+  return members >= libraryRows * FOLDER_DATE_WALK_MIN_SHARE && ((offset + limit + 1) * libraryRows) / members < members;
+}
+
 function hasAutoFolderChildren(groupId: number): boolean {
   return !!db.prepare('SELECT 1 FROM auto_folder_groups WHERE parent_id = ? LIMIT 1').get(groupId);
 }
@@ -270,8 +289,10 @@ export class AutoFolderGroupImageModel {
     const offset = Math.floor((page - 1) * pageSize);
 
     try {
+      // Row-value cursor: the same predicate as `date < ? OR (date = ? AND hash < ?)` (neither column is ever NULL),
+      // and one the (first_seen_date, composite_hash) index can seek to.
       const cursorClause = options?.cursorDate && options.cursorHash
-        ? 'AND (m.first_seen_date < ? OR (m.first_seen_date = ? AND m.composite_hash < ?))'
+        ? 'AND (m.first_seen_date, m.composite_hash) < (?, ?)'
         : '';
       const includeChildren = options?.includeChildren === true && hasAutoFolderChildren(groupId);
       const cteClause = includeChildren ? `WITH RECURSIVE target_groups(id) AS (
@@ -287,23 +308,53 @@ export class AutoFolderGroupImageModel {
             INNER JOIN target_groups target ON target.id = source_afgi.group_id) afgi`
         : 'auto_folder_group_images afgi';
       const groupClause = includeChildren ? '' : 'afgi.group_id = ? AND';
+      // Two phases: the inner page picks the page's hashes in (first_seen_date, hash) order, and only those rows load
+      // m.* and their file row. The inner page either sorts the folder's memberships (reading only
+      // idx_media_metadata_hash_visibility, no wide rows) or, for a folder holding a large share of the library,
+      // walks the first_seen index and probes membership until the page is full. Same rows, same order.
+      // The file row is the active file the five former per-column subqueries returned: they walked
+      // idx_image_files_hash_status_verified, i.e. the most recently verified active file, highest id first.
+      const walkByDate = !includeChildren && shouldWalkFolderByDate(groupId, options?.useCursor ? 0 : offset, pageSize);
+      const pageSource = walkByDate
+        ? `
+          SELECT m.composite_hash, m.first_seen_date
+          FROM media_metadata m INDEXED BY idx_metadata_first_seen_hash_desc
+          WHERE EXISTS (
+              SELECT 1 FROM auto_folder_group_images afgi
+              WHERE afgi.group_id = ? AND afgi.composite_hash = m.composite_hash
+            )
+            AND ${getReadyAutoFolderImageCondition()} ${cursorClause}`
+        : `
+          SELECT m.composite_hash, m.first_seen_date
+          FROM ${membershipSource}
+          INNER JOIN media_metadata m ON afgi.composite_hash = m.composite_hash
+          WHERE ${groupClause} ${getReadyAutoFolderImageCondition()} ${cursorClause}`;
       const query = `
         ${cteClause}
         SELECT m.*,
-        (SELECT id FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as id,
-        (SELECT file_type FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as file_type,
-        (SELECT mime_type FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as mime_type,
-        (SELECT file_size FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as file_size,
-        (SELECT original_file_path FROM image_files WHERE composite_hash = m.composite_hash AND file_status = 'active' LIMIT 1) as original_file_path
-        FROM ${membershipSource}
-        INNER JOIN media_metadata m ON afgi.composite_hash = m.composite_hash
-        WHERE ${groupClause} ${getReadyAutoFolderImageCondition()} ${cursorClause}
-        ORDER BY m.first_seen_date DESC, m.composite_hash DESC
-        LIMIT ?${options?.useCursor ? '' : ' OFFSET ?'}
+        if.id as id,
+        if.file_type as file_type,
+        if.mime_type as mime_type,
+        if.file_size as file_size,
+        if.original_file_path as original_file_path
+        FROM (
+          ${pageSource}
+          ORDER BY m.first_seen_date DESC, m.composite_hash DESC
+          LIMIT ?${options?.useCursor ? '' : ' OFFSET ?'}
+        ) page
+        INNER JOIN media_metadata m ON m.composite_hash = page.composite_hash
+        LEFT JOIN image_files if ON if.id = (
+          SELECT if2.id
+          FROM image_files if2
+          WHERE if2.composite_hash = page.composite_hash AND if2.file_status = 'active'
+          ORDER BY if2.last_verified_date DESC, if2.id DESC
+          LIMIT 1
+        )
+        ORDER BY page.first_seen_date DESC, page.composite_hash DESC
       `;
 
       const cursorParams = options?.cursorDate && options.cursorHash
-        ? [options.cursorDate, options.cursorDate, options.cursorHash]
+        ? [options.cursorDate, options.cursorHash]
         : [];
       const rows = db.prepare(query).all(
         groupId,

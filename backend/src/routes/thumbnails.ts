@@ -4,6 +4,7 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { RuntimeJobRunner } from '../services/runtimeJobs/runtimeJobRunner';
 import { RuntimeJobConflictError, RuntimeJobStore } from '../services/runtimeJobs/runtimeJobStore';
 import type { RuntimeJobRecord } from '../types/runtimeJob';
+import { AggregateCache } from '../services/aggregateCache';
 
 const router = Router();
 
@@ -102,35 +103,39 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { db } = await import('../database/init');
 
-    // 전체 파일 수
-    const totalFilesResult = db
-      .prepare(`
-        SELECT COUNT(DISTINCT composite_hash) as count
-        FROM image_files
-        WHERE composite_hash IS NOT NULL
-        AND file_status = 'active'
-      `)
-      .get() as { count: number };
+    // Whole-library counts: cached until the library changes (AggregateCache), and the "with thumbnail" count is
+    // all rows minus the small partial index of rows without one (migration 043) instead of a media_metadata scan.
+    const data = AggregateCache.resolve('thumbnail-stats', () => {
+      // 전체 파일 수
+      const totalFilesResult = db
+        .prepare(`
+          SELECT COUNT(DISTINCT composite_hash) as count
+          FROM image_files
+          WHERE composite_hash IS NOT NULL
+          AND file_status = 'active'
+        `)
+        .get() as { count: number };
 
-    // 썸네일이 있는 파일 수
-    const withThumbnailsResult = db
-      .prepare(`
-        SELECT COUNT(*) as count
-        FROM media_metadata
-        WHERE thumbnail_path IS NOT NULL
-      `)
-      .get() as { count: number };
+      // 썸네일이 있는 파일 수
+      const metadataRows = db.prepare('SELECT COUNT(*) as count FROM media_metadata').get() as { count: number };
+      const withoutThumbnailRows = db
+        .prepare('SELECT COUNT(*) as count FROM media_metadata WHERE thumbnail_path IS NULL')
+        .get() as { count: number };
+      const withThumbnails = metadataRows.count - withoutThumbnailRows.count;
 
-    // 썸네일이 없는 파일 수
-    const withoutThumbnails = totalFilesResult.count - withThumbnailsResult.count;
+      // 썸네일이 없는 파일 수
+      const withoutThumbnails = totalFilesResult.count - withThumbnails;
+
+      return {
+        totalFiles: totalFilesResult.count,
+        withThumbnails,
+        withoutThumbnails: withoutThumbnails > 0 ? withoutThumbnails : 0,
+      };
+    }, { scopes: ['library'], ttlMs: 60_000 });
 
     res.json({
       success: true,
-      data: {
-        totalFiles: totalFilesResult.count,
-        withThumbnails: withThumbnailsResult.count,
-        withoutThumbnails: withoutThumbnails > 0 ? withoutThumbnails : 0,
-      },
+      data,
     });
     return;
   })

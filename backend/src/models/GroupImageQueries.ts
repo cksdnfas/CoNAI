@@ -1,6 +1,8 @@
 import { db } from '../database/init';
 import { ImageSafetyService } from '../services/imageSafetyService';
 import { MediaPostprocessVisibilityService } from '../services/mediaPostprocessVisibilityService';
+import { AggregateCache, resolveSearchTotal } from '../services/aggregateCache';
+import { buildIdPageResponse, normalizeIdPage, type IdPage, type IdPageResponse } from '../utils/idPage';
 import { ImageMetadataRecord, ImageWithFileView } from '../types/image';
 import { PAGINATION } from '@conai/shared';
 
@@ -17,12 +19,24 @@ type GroupImageListResult = {
 type GroupChildRecord = { id: number };
 type FindChildGroups = (groupId: number) => GroupChildRecord[];
 
-function getVisibleGroupImageCondition() {
-  return ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
+// Group membership / tree writes bump this row through triggers (migration 043), wherever they come from.
+let groupsVersionStatement: { get(): unknown } | null = null;
+AggregateCache.setVersionSource('groups', () => {
+  try {
+    groupsVersionStatement ??= db.prepare("SELECT version FROM aggregate_versions WHERE scope = 'groups'");
+    const row = groupsVersionStatement.get() as { version: number } | undefined;
+    return row ? row.version : null;
+  } catch {
+    return null;
+  }
+});
+
+function getVisibleGroupImageCondition(alias = 'im') {
+  return ImageSafetyService.buildVisibleScoreCondition(`${alias}.rating_score`);
 }
 
-function getReadyGroupImageCondition() {
-  return MediaPostprocessVisibilityService.buildReadyCondition('im');
+function getReadyGroupImageCondition(alias = 'im') {
+  return MediaPostprocessVisibilityService.buildReadyCondition(alias);
 }
 
 function getRandomGroupMembershipPivot(groupId: number): number | null {
@@ -209,12 +223,15 @@ export function findImagesByGroupQuery(
   ).get(...baseQueryParams) as { total: number } : null;
   const total = countRow?.total ?? 0;
 
-  // Join one deterministically chosen active file row per hash (instead of repeated
-  // correlated subqueries) and keep the select trimmed to what the compact enricher reads.
+  // Two phases. The inner page picks the page's memberships in display order, reading only the visibility columns
+  // (covered by idx_media_metadata_hash_visibility); for a direct group idx_image_groups_group_order serves the
+  // ORDER BY, so it is an index walk that stops at LIMIT. Only the page's rows then join the metadata columns and one
+  // deterministically chosen active file row. Membership rows are already one per hash (UNIQUE(group_id, hash) for
+  // a direct group, GROUP BY in the descendant source), so no outer GROUP BY is needed.
   const query = `
     ${cteClause}
     SELECT
-      COALESCE(im.composite_hash, ig.composite_hash) as composite_hash,
+      COALESCE(im.composite_hash, page.composite_hash) as composite_hash,
       im.width,
       im.height,
       im.thumbnail_path,
@@ -228,20 +245,24 @@ export function findImagesByGroupQuery(
       if.file_size,
       if.mime_type,
       if.scan_date,
-      ig.collection_type
-      ,ig.order_index as cursor_order_index
-      ,ig.added_date as cursor_added_date
-    FROM ${fromClause}
-    LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
+      page.collection_type
+      ,page.order_index as cursor_order_index
+      ,page.added_date as cursor_added_date
+    FROM (
+      SELECT ig.composite_hash, ig.order_index, ig.added_date, ig.collection_type
+      FROM ${fromClause}
+      LEFT JOIN media_metadata vis ON ig.composite_hash = vis.composite_hash
+      ${whereClause} AND ${getVisibleGroupImageCondition('vis')} AND ${getReadyGroupImageCondition('vis')}
+      ORDER BY ig.order_index ASC, ig.added_date DESC, ig.composite_hash ASC
+      LIMIT ?${cursor ? '' : ' OFFSET ?'}
+    ) page
+    LEFT JOIN media_metadata im ON page.composite_hash = im.composite_hash
     LEFT JOIN image_files if ON if.id = (
       SELECT MIN(if2.id)
       FROM image_files if2
-      WHERE if2.composite_hash = ig.composite_hash AND if2.file_status = 'active'
+      WHERE if2.composite_hash = page.composite_hash AND if2.file_status = 'active'
     )
-    ${whereClause} AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}
-    GROUP BY ig.composite_hash
-    ORDER BY ig.order_index ASC, ig.added_date DESC, ig.composite_hash ASC
-    LIMIT ?${cursor ? '' : ' OFFSET ?'}
+    ORDER BY page.order_index ASC, page.added_date DESC, page.composite_hash ASC
   `;
 
   const rows = db.prepare(query).all(
@@ -299,7 +320,7 @@ export function findImagesByGroupWithFilesQuery(
     LEFT JOIN image_files if ON if.composite_hash = im.composite_hash AND if.file_status = 'active'
     LEFT JOIN watched_folders wf ON if.folder_id = wf.id
     ${whereClause} AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}
-    ORDER BY ig.order_index ASC, ig.added_date DESC
+    ORDER BY ig.order_index ASC, ig.added_date DESC, ig.composite_hash ASC, if.id ASC
     LIMIT ? OFFSET ?
   `;
 
@@ -360,8 +381,22 @@ export type GroupVisibleImageCounts = {
  * ancestors; the rest scales with memberships x group depth (~150ms for 120k
  * memberships / 400 groups in a synthetic test). `ancestry` uses UNION so a
  * corrupt parent cycle terminates instead of recursing forever.
+ *
+ * The group tree asks for these on every load, so the result is cached until group
+ * membership or the library changes (see AggregateCache).
  */
 export function countVisibleImagesByGroupQuery(): Map<number, GroupVisibleImageCounts> {
+  const visibleCondition = getVisibleGroupImageCondition();
+  const readyCondition = getReadyGroupImageCondition();
+  const cached = AggregateCache.resolve(
+    `group-visible-counts:${visibleCondition}:${readyCondition}`,
+    () => computeVisibleImagesByGroup(visibleCondition, readyCondition),
+    { scopes: ['groups', 'library'] },
+  );
+  return new Map(cached);
+}
+
+function computeVisibleImagesByGroup(visibleCondition: string, readyCondition: string): Array<[number, GroupVisibleImageCounts]> {
   const rows = db.prepare(`
     WITH RECURSIVE ancestry(ancestor_id, group_id) AS (
       SELECT id, id FROM groups
@@ -375,8 +410,8 @@ export function countVisibleImagesByGroupQuery(): Map<number, GroupVisibleImageC
       FROM image_groups ig
       LEFT JOIN media_metadata im ON ig.composite_hash = im.composite_hash
       WHERE ig.composite_hash IS NOT NULL
-        AND ${getVisibleGroupImageCondition()}
-        AND ${getReadyGroupImageCondition()}
+        AND ${visibleCondition}
+        AND ${readyCondition}
     )
     SELECT
       ancestry.ancestor_id AS group_id,
@@ -387,7 +422,7 @@ export function countVisibleImagesByGroupQuery(): Map<number, GroupVisibleImageC
     GROUP BY ancestry.ancestor_id
   `).all() as Array<{ group_id: number; own_count: number; total_count: number }>;
 
-  return new Map(rows.map((row) => [row.group_id, { own: row.own_count, total: row.total_count }] as const));
+  return rows.map((row) => [row.group_id, { own: row.own_count, total: row.total_count }]);
 }
 
 /** Find all composite hashes for one group in display order. */
@@ -416,17 +451,22 @@ export function getCompositeHashesForGroupQuery(groupId: number, includeChildren
   return rows.map(row => row.composite_hash);
 }
 
-/** Find all active image file ids for one group in selection order. */
-export function getImageFileIdsForGroupQuery(groupId: number): number[] {
-  const query = `
-    SELECT if.id
+/** One page of active image file ids for a group in selection order (the whole list when it fits a page). */
+export function getImageFileIdsForGroupQuery(groupId: number, page: IdPage = normalizeIdPage(null)): IdPageResponse<number> {
+  const fromWhere = `
     FROM image_groups ig
     INNER JOIN image_files if ON ig.composite_hash = if.composite_hash
     WHERE ig.group_id = ?
       AND if.file_status = 'active'
-    ORDER BY ig.order_index ASC, ig.added_date DESC, if.id ASC
   `;
+  const rows = db.prepare(`
+    SELECT if.id
+    ${fromWhere}
+    ORDER BY ig.order_index ASC, ig.added_date DESC, if.id ASC
+    LIMIT ? OFFSET ?
+  `).all(groupId, page.limit + 1, page.offset) as { id: number }[];
 
-  const rows = db.prepare(query).all(groupId) as { id: number }[];
-  return rows.map(row => row.id);
+  return buildIdPageResponse(rows.map(row => row.id), page, () => resolveSearchTotal('groupImageFileIds', [fromWhere], [groupId], () => (
+    (db.prepare(`SELECT COUNT(*) as total ${fromWhere}`).get(groupId) as { total: number }).total
+  )));
 }

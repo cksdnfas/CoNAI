@@ -103,9 +103,12 @@ export class BackgroundProcessorService {
     const result: ProcessingResult = { processed: 0, duplicates: 0, errors: 0, unique: 0 };
 
     try {
+      // idx_files_background_queue (migration 043) holds exactly the unhashed active rows in scan_date order, so a
+      // batch is an ordered walk that stops at LIMIT. Named explicitly: with sampled statistics the planner can
+      // prefer an equality index on (composite_hash IS NULL) and then sort the whole backlog for every batch.
       const unhashedFiles = db.prepare(`
         SELECT id, original_file_path, folder_id, mime_type, file_type, background_attempt_count
-        FROM image_files
+        FROM image_files INDEXED BY idx_files_background_queue
         WHERE composite_hash IS NULL
           AND file_status = 'active'
           AND (
