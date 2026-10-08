@@ -8,6 +8,7 @@ import { ImageDeleteAction } from './image-delete-action'
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
 import { ImageMetadataEditAction } from './image-metadata-edit-action'
+import { ImageSpriteAction } from './image-sprite-action'
 
 interface ImageDetailActionsProps {
   downloadUrl?: string | null
@@ -72,6 +73,7 @@ export function ImageDetailActions({ downloadUrl, image, isRefreshing, onBack, o
         <ImageGroupAssignAction image={image} variant="ghost" />
         <ImageMetadataEditAction image={image} />
         <ImageEditAction image={image} variant="ghost" />
+        <ImageSpriteAction image={image} />
         {downloadUrl ? <ImageDownloadTriggerButton image={image} variant="ghost" size="icon-sm" /> : null}
         <ImageDeleteAction image={image} variant="ghost" onDeleted={onDeleted} />
       </div>
