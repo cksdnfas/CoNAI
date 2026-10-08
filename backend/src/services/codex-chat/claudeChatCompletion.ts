@@ -10,6 +10,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema, type CallToolResult } fr
 import { runtimePaths } from '../../config/runtimePaths'
 import { claudeConfigDir, claudeEnvironment, getClaudeStatus, resolveClaudeCommand, reserveClaudeRequest } from '../claudeCli'
 import { compareCodexVersions, killCodexProcessTree, scheduleCodexProcessTimeout } from '../codexGenerationExecutor'
+import { isClaudeReasoningEffort } from '../llmGenerationOptions'
 import type { ChatMcpToolResult } from './chatMcpBridge'
 import type { ChatCompletionMessage, ChatCompletionResult, ChatCompletionTarget, ChatCompletionTool } from './llmChatCompletion'
 
@@ -17,7 +18,7 @@ export const CLAUDE_CHAT_PROVIDER = '__conai_claude_code__'
 
 export function claudeChatArgs(model: string, systemFile: string, mcpFile: string, maxTurns: number, effort?: string | null) {
   const args = ['--print', '--restricted', '--tools', '', '--strict-mcp-config', '--mcp-config', mcpFile, '--setting-sources', '', '--disable-slash-commands', '--settings', '{"disableAllHooks":true}', '--permission-mode', 'dontAsk', '--permission-prompts', 'none', '--allowedTools', 'mcp__conai__*', '--no-chrome', '--no-session-persistence', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--system-prompt-file', systemFile, '--model', model, '--max-turns', String(maxTurns)]
-  if (effort && ['low', 'medium', 'high', 'xhigh', 'max'].includes(effort)) args.push('--effort', effort)
+  if (isClaudeReasoningEffort(effort)) args.push('--effort', effort)
   return args
 }
 

@@ -23,7 +23,7 @@ test('model slots: store, per-role resolution, adoption, deletion, usage', { tim
   })
   const db = dbModule.getUserSettingsDb()
   const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
-  const { ChatProfileStore, ChatProfileError } = await import('../src/services/codex-chat/chatProfiles')
+  const { ChatProfileStore, ChatProfileError, profileGenerationOptions } = await import('../src/services/codex-chat/chatProfiles')
   const { ModelSlotStore, modelReferencesOfConnection } = await import('../src/services/codex-chat/modelSlots')
   const { resolveProfileModel, hasTranslation, modelLabelOf } = await import('../src/services/codex-chat/chatModelRoles')
   const { buildModelUsage } = await import('../src/services/codex-chat/modelUsage')
@@ -42,6 +42,14 @@ test('model slots: store, per-role resolution, adoption, deletion, usage', { tim
     assert.equal(resolveProfileModel(profile, 'chat')?.providerName, '__conai_claude_code__')
     assert.equal(modelLabelOf(profile), 'Claude Code · sonnet')
     ChatProfileStore.delete(profile.id)
+  })
+
+  await t.test('Claude profiles keep the CLI-only effort levels that API profiles refuse', () => {
+    const profile = ChatProfileStore.create({ name: 'Claude max', engine: 'claude', model: 'opus', reasoningEffort: 'max' })
+    assert.equal(profileGenerationOptions(profile).reasoningEffort, 'max')
+    ChatProfileStore.delete(profile.id)
+    assert.throws(() => ChatProfileStore.create({ name: 'Claude none', engine: 'claude', model: 'opus', reasoningEffort: 'none' }), ChatProfileError)
+    assert.throws(() => llmProfile('API xhigh', { reasoningEffort: 'xhigh' }), ChatProfileError)
   })
 
   await t.test('profiles with no slot ids resolve exactly like the old direct expressions', () => {

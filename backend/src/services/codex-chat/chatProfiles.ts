@@ -1,7 +1,7 @@
 import { isCodexReasoningEffort, type CodexReasoningEffort } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { CHAT_SCOPES, readLegacyCodexChatSettings, type ChatScope } from './chatSettings'
-import { isLlmReasoningEffort, parseLlmExtraParams, type LlmGenerationOptions } from '../llmGenerationOptions'
+import { isClaudeReasoningEffort, isLlmReasoningEffort, parseLlmExtraParams, type LlmGenerationOptions } from '../llmGenerationOptions'
 import { BACKGROUND_MAX_LENGTH, BACKGROUND_PATTERN, normalizeChatStyle, type ChatStyle } from './chatStyle'
 import { ChatLorebookStore, normalizeLorebookIds } from './chatLorebook'
 import { ChatSharedBlockStore, normalizeBlockIds } from './chatDisplayBlocks'
@@ -431,7 +431,7 @@ export function profileGenerationOptions(profile: ChatProfile): LlmGenerationOpt
   return {
     temperature: profile.temperature,
     maxTokens: profile.maxTokens,
-    reasoningEffort: isLlmReasoningEffort(profile.reasoningEffort) ? profile.reasoningEffort : null,
+    reasoningEffort: isLlmReasoningEffort(profile.reasoningEffort) || (profile.engine === 'claude' && isClaudeReasoningEffort(profile.reasoningEffort)) ? profile.reasoningEffort : null,
     reasoningBudgetTokens: profile.reasoningBudgetTokens,
     extraParams,
   }
@@ -476,7 +476,7 @@ function toColumns(input: ChatProfileInput) {
   if (background && (background.length > BACKGROUND_MAX_LENGTH || !BACKGROUND_PATTERN.test(background))) {
     throw new ChatProfileError('배경 이미지가 올바르지 않거나 너무 커.')
   }
-  if (input.reasoningEffort && (engine === 'codex' ? !isCodexReasoningEffort(input.reasoningEffort) : !isLlmReasoningEffort(input.reasoningEffort))) {
+  if (input.reasoningEffort && (engine === 'codex' ? !isCodexReasoningEffort(input.reasoningEffort) : engine === 'claude' ? !isClaudeReasoningEffort(input.reasoningEffort) : !isLlmReasoningEffort(input.reasoningEffort))) {
     throw new ChatProfileError('추론 강도 값이 올바르지 않아.')
   }
   let extraParams = ''

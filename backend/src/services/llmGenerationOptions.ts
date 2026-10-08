@@ -9,12 +9,16 @@
 
 export const LLM_REASONING_EFFORTS = ['none', 'low', 'medium', 'high'] as const
 export type LlmReasoningEffort = typeof LLM_REASONING_EFFORTS[number]
+/** Claude Code `--effort` levels; each model lists the ones it takes. */
+export const CLAUDE_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
+export type ClaudeReasoningEffort = typeof CLAUDE_REASONING_EFFORTS[number]
 
 export type LlmGenerationOptions = {
   temperature?: number | null
   /** Whole output (reasoning + answer). */
   maxTokens?: number | null
-  reasoningEffort?: LlmReasoningEffort | null
+  /** The Claude levels reach only the Claude Code transport; API connections never get them from a profile. */
+  reasoningEffort?: LlmReasoningEffort | ClaudeReasoningEffort | null
   /** Reasoning budget; the server wraps up thinking when it is reached. */
   reasoningBudgetTokens?: number | null
   /** Provider-specific fields merged into the request body (e.g. chat_template_kwargs). */
@@ -26,6 +30,10 @@ const RESERVED_BODY_FIELDS = new Set(['model', 'messages', 'stream', 'tools', 't
 
 export function isLlmReasoningEffort(value: unknown): value is LlmReasoningEffort {
   return typeof value === 'string' && (LLM_REASONING_EFFORTS as readonly string[]).includes(value)
+}
+
+export function isClaudeReasoningEffort(value: unknown): value is ClaudeReasoningEffort {
+  return typeof value === 'string' && (CLAUDE_REASONING_EFFORTS as readonly string[]).includes(value)
 }
 
 function optionalString(value: unknown) {

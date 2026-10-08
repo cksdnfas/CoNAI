@@ -1,4 +1,4 @@
-import type { AgentCliName, AgentCliStatus, AgentCliVersion, ClaudeLoginState } from '@conai/shared'
+import type { AgentCliName, AgentCliStatus, AgentCliVersion, ClaudeLoginState, ClaudeModelList } from '@conai/shared'
 import { requestApiData } from './api-request'
 
 const route = (agent: AgentCliName) => `/api/settings/agent-cli/${agent}`
@@ -9,3 +9,4 @@ export const startClaudeLogin = () => requestApiData<ClaudeLoginState>(`${route(
 export const getClaudeLogin = () => requestApiData<ClaudeLoginState>(`${route('claude')}/login`)
 export const cancelClaudeLogin = () => requestApiData<ClaudeLoginState>(`${route('claude')}/login`, { method: 'DELETE' })
 export const submitClaudeLoginCode = (code: string) => requestApiData<ClaudeLoginState>(`${route('claude')}/login/code`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) })
+export const getClaudeModels = () => requestApiData<ClaudeModelList>(`${route('claude')}/models`)

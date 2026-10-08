@@ -23,3 +23,17 @@ export type ClaudeLoginState = {
   expiresAt: string | null
   message: string | null
 }
+
+/** A model the server's Claude Code CLI offers: an alias (`opus`, `sonnet`…) that tracks the newest version, or a pinned ID. */
+export type ClaudeModelOption = {
+  id: string
+  label: string
+  /** The model ID the alias currently resolves to. */
+  resolvedModel: string
+  supportedEffortLevels: string[]
+}
+
+export type ClaudeModelList = {
+  models: ClaudeModelOption[]
+  source: 'cli' | 'unavailable'
+}

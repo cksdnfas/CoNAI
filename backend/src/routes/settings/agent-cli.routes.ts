@@ -4,7 +4,7 @@ import { requireAdmin } from '../../middleware/authMiddleware'
 import { getCodexAvailabilityStatus } from '../../services/codexGenerationExecutor'
 import { getCodexCliVersionInfo, updateCodexCli } from '../../services/codexCliMaintenance'
 import { cancelCodexDeviceLogin, getCodexDeviceLoginState, startCodexDeviceLogin } from '../../services/codexDeviceLogin'
-import { cancelClaudeLogin, getClaudeLogin, getClaudeStatus, getClaudeVersion, startClaudeLogin, submitClaudeLoginCode, updateClaudeCli } from '../../services/claudeCli'
+import { cancelClaudeLogin, getClaudeLogin, getClaudeModels, getClaudeStatus, getClaudeVersion, startClaudeLogin, submitClaudeLoginCode, updateClaudeCli } from '../../services/claudeCli'
 import { sendRouteBadRequest } from '../routeValidation'
 
 export const agentCliRoutes = Router()
@@ -23,6 +23,9 @@ agentCliRoutes.get('/agent-cli/:agent/version', asyncHandler(async (req, res) =>
 agentCliRoutes.post('/agent-cli/:agent/update', asyncHandler(async (req, res) => {
   try { res.json({ success: true, data: req.params.agent === 'claude' ? await updateClaudeCli() : await updateCodexCli() }) }
   catch (error) { sendRouteBadRequest(res, error instanceof Error ? error.message : 'CLI update failed') }
+}))
+agentCliRoutes.get('/agent-cli/claude/models', asyncHandler(async (_req, res) => {
+  res.json({ success: true, data: await getClaudeModels() })
 }))
 agentCliRoutes.get('/agent-cli/:agent/login', (req, res) => {
   res.json({ success: true, data: req.params.agent === 'claude' ? getClaudeLogin() : getCodexDeviceLoginState() })

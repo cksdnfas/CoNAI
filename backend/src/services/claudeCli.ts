@@ -2,7 +2,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { spawn, type ChildProcess } from 'child_process'
-import type { AgentCliStatus, AgentCliVersion, ClaudeLoginState } from '@conai/shared'
+import type { AgentCliStatus, AgentCliVersion, ClaudeLoginState, ClaudeModelList, ClaudeModelOption } from '@conai/shared'
 import { runtimePaths } from '../config/runtimePaths'
 import { compareCodexVersions, killCodexProcessTree, scheduleCodexProcessTimeout } from './codexGenerationExecutor'
 
@@ -13,6 +13,9 @@ let activeRequests = 0
 let latestCache: { version: string | null; checkedAt: number } | null = null
 let login: { child: ChildProcess; ready: Promise<void> } | null = null
 let state: ClaudeLoginState = { status: 'idle', verificationUrl: null, expiresAt: null, message: null }
+const MODEL_LIST_TTL_MS = 3600000
+let modelCache: { value: ClaudeModelList; expiresAt: number } | null = null
+let modelsInFlight: Promise<ClaudeModelList> | null = null
 
 export function claudeConfigDir() {
   return path.resolve(process.env.CLAUDE_CONFIG_DIR?.trim() || path.join(os.homedir(), '.claude'))
@@ -111,8 +114,80 @@ export async function updateClaudeCli() {
     const prefix = process.env.CLAUDE_NPM_PREFIX?.trim()
     const result = await run(npm.command, [...npm.prefixArgs, 'install', '-g', ...(prefix ? ['--prefix', prefix] : []), '--no-audit', '--no-fund', `${PACKAGE}@latest`], 600000, npm.shell)
     if (result.code !== 0) throw new Error('Claude Code 설치/업데이트에 실패했어. 서버의 npm 설치 권한과 네트워크를 확인해줘.')
-  } finally { updating = false; latestCache = null }
+  } finally { updating = false; latestCache = null; modelCache = null }
   return getClaudeVersion()
+}
+
+/** The CLI's own model list from its `initialize` answer. `default` is left out: a profile always names its model. */
+export function claudeModelOptions(raw: unknown): ClaudeModelOption[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return []
+    const { value, displayName, resolvedModel, supportedEffortLevels } = entry as Record<string, unknown>
+    if (typeof value !== 'string' || !value.trim() || value === 'default') return []
+    return [{
+      id: value,
+      label: typeof displayName === 'string' && displayName.trim() ? displayName : value,
+      resolvedModel: typeof resolvedModel === 'string' && resolvedModel ? resolvedModel : value,
+      supportedEffortLevels: Array.isArray(supportedEffortLevels) ? supportedEffortLevels.filter((level): level is string => typeof level === 'string') : [],
+    }]
+  })
+}
+
+/** Starts the CLI in stream-json mode, asks `initialize` and stops it; no prompt is sent, so nothing is billed. */
+async function loadClaudeModels(): Promise<ClaudeModelList> {
+  let release: () => void
+  try { release = reserveClaudeRequest() } catch { return { models: [], source: 'unavailable' } }
+  try {
+    fs.mkdirSync(runtimePaths.tempDir, { recursive: true })
+    const cli = resolveClaudeCommand()
+    const args = [...cli.prefixArgs, '--print', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--setting-sources', '', '--strict-mcp-config', '--settings', '{"disableAllHooks":true}', '--disable-slash-commands', '--no-session-persistence']
+    const raw = await new Promise<unknown>((resolve, reject) => {
+      const child = spawn(cli.command, args, { cwd: runtimePaths.tempDir, env: claudeEnvironment(), windowsHide: true, detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'ignore'] })
+      const timeout = scheduleCodexProcessTimeout(child, 20000)
+      let buffer = ''
+      let done = false
+      const finish = (error: Error | null, models?: unknown) => {
+        if (done) return
+        done = true
+        timeout.clear()
+        killCodexProcessTree(child, 'SIGTERM')
+        if (error) reject(error)
+        else resolve(models)
+      }
+      child.stdout.on('data', (chunk: Buffer) => {
+        buffer += chunk.toString()
+        for (let newline = buffer.indexOf('\n'); newline >= 0; newline = buffer.indexOf('\n')) {
+          const line = buffer.slice(0, newline).trim()
+          buffer = buffer.slice(newline + 1)
+          let message: { type?: unknown; response?: { subtype?: unknown; request_id?: unknown; response?: { models?: unknown } } }
+          try { message = JSON.parse(line) } catch { continue }
+          if (message.type !== 'control_response' || message.response?.request_id !== 'models') continue
+          finish(message.response.subtype === 'success' ? null : new Error('initialize failed'), message.response.response?.models)
+          return
+        }
+        if (buffer.length > 8 * 1024 * 1024) finish(new Error('initialize answer too large'))
+      })
+      child.stdin.on('error', () => {})
+      child.once('error', () => finish(new Error('Claude Code CLI did not start')))
+      child.once('close', () => finish(new Error('Claude Code CLI exited before listing models')))
+      child.stdin.write(`${JSON.stringify({ type: 'control_request', request_id: 'models', request: { subtype: 'initialize' } })}\n`)
+    })
+    const models = claudeModelOptions(raw)
+    return { models, source: models.length ? 'cli' : 'unavailable' }
+  } catch {
+    return { models: [], source: 'unavailable' }
+  } finally { release() }
+}
+
+/** Only a live answer is cached, so an install, update or sign-in shows up on the next request. */
+export async function getClaudeModels(): Promise<ClaudeModelList> {
+  if (modelCache && modelCache.expiresAt > Date.now()) return modelCache.value
+  modelsInFlight ??= loadClaudeModels().then((value) => {
+    modelCache = value.source === 'cli' ? { value, expiresAt: Date.now() + MODEL_LIST_TTL_MS } : null
+    return value
+  }).finally(() => { modelsInFlight = null })
+  return modelsInFlight
 }
 
 export function getClaudeLogin(): ClaudeLoginState { return { ...state } }
@@ -155,7 +230,7 @@ export async function startClaudeLogin() {
   child.stdin.on('error', () => {})
   const finish = (status: ClaudeLoginState['status'], message: string | null) => {
     clearTimeout(waitTimer); timeout.clear()
-    if (login === session) { state = { status, message, verificationUrl: null, expiresAt: null }; login = null }
+    if (login === session) { state = { status, message, verificationUrl: null, expiresAt: null }; login = null; modelCache = null }
     ready()
   }
   child.once('error', () => finish('failed', 'Claude Code 로그인을 실행하지 못했어. CLI 설치를 확인해줘.'))

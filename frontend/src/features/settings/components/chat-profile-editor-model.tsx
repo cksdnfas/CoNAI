@@ -7,7 +7,6 @@ import { SegmentedControl } from '@/components/common/segmented-control'
 import { Field } from '@/components/ui/field'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
-import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { CodexModelSelect } from '@/features/image-generation/components/codex-model-select'
@@ -17,6 +16,8 @@ import { thinkingMayFillCap, type ChatProfileDefaults, type ChatProfileInput, ty
 import type { ExternalApiProviderRecord } from '@/lib/api-external-api'
 import type { CodexModelOption } from '@/lib/api-image-generation-queue'
 import { cn } from '@/lib/utils'
+import type { ClaudeModelOption } from '@conai/shared'
+import { ClaudeEffortSelect, ClaudeModelSelect } from './claude-model-select'
 import { applyRoleChoice, ModelRoleSelect, roleChoice, roleDirect, roleModelPatch, roleProviderPatch, type SuggestWriters } from './chat-model-role-select'
 import { ConnectionModelSelect, EditorGroup, GROW_TEXTAREA, numberOrNull, SwitchLine, type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { CollapsibleRow } from './chat-profile-sections'
@@ -63,7 +64,7 @@ function ChatProfileAudience({ draft, patch }: { draft: Draft; patch: PatchDraft
   )
 }
 
-export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, providersLoaded, slots, slotsReady, suggestWriters, connectionModels, summaryModels, translationModels, suggestModels, codexModels }: {
+export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, providersLoaded, slots, slotsReady, suggestWriters, connectionModels, summaryModels, translationModels, suggestModels, codexModels, claudeModels }: {
   draft: Draft
   patch: PatchDraft
   defaults: ChatProfileDefaults | undefined
@@ -78,6 +79,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
   translationModels: ConnectionModels | undefined
   suggestModels: ConnectionModels | undefined
   codexModels: CodexModelOption[] | undefined
+  claudeModels: ClaudeModelOption[] | undefined
 }) {
   const { t } = useI18n()
   const isLlm = draft.engine === 'llm'
@@ -237,13 +239,14 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
         ) : draft.engine === 'claude' ? (<>
           <div className="grid gap-3 md:grid-cols-2">
             <Field label={t({ ko: 'Claude 모델', en: 'Claude model' })}>
-              <Input variant="settings" value={draft.model} placeholder="sonnet" onChange={(event) => patch({ model: event.target.value })} />
+              <ClaudeModelSelect value={draft.model} models={claudeModels} onChange={(model) => {
+                // A level the new model doesn't take falls back to its default instead of staying as unsupported.
+                const levels = claudeModels?.find((entry) => entry.id === model)?.supportedEffortLevels
+                patch({ model, ...(draft.reasoningEffort && levels && !levels.includes(draft.reasoningEffort) ? { reasoningEffort: '' } : {}) })
+              }} aria-label={t({ ko: 'Claude 모델', en: 'Claude model' })} />
             </Field>
             <Field label={t({ ko: '추론 강도', en: 'Reasoning effort' })}>
-              <Select variant="settings" value={draft.reasoningEffort} onChange={(event) => patch({ reasoningEffort: event.target.value as ChatProfileInput['reasoningEffort'] })}>
-                <option value="">{serverDefault}</option>
-                <option value="low">low</option><option value="medium">medium</option><option value="high">high</option>
-              </Select>
+              <ClaudeEffortSelect value={draft.reasoningEffort} model={draft.model} models={claudeModels} onChange={(reasoningEffort) => patch({ reasoningEffort })} />
             </Field>
             <Field label={t({ ko: '최대 출력 토큰', en: 'Max output tokens' })}>
               <NumberStepperInput variant="settings" allowEmpty step={1024} min={1} value={draft.maxTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />

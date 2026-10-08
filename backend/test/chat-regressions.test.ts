@@ -20,7 +20,7 @@ import { isolatedChatPreview } from '../../frontend/src/features/codex-chat/chat
 import { describeChatWorkflowModule } from '../../shared/src/utils/chatWorkflow'
 import { requireChatWorkflowInputs } from '../src/mcp/tools/mcpComfyWorkflowService'
 import { claudeChatArgs, claudeChatInput, verifyClaudeTools } from '../src/services/codex-chat/claudeChatCompletion'
-import { claudeLoginUrl } from '../src/services/claudeCli'
+import { claudeLoginUrl, claudeModelOptions } from '../src/services/claudeCli'
 
 test('Claude chat rejects unexpected host tools, keeps vision data and restricts OAuth links', () => {
   const tools = [{ type: 'function' as const, function: { name: 'search_images', parameters: { type: 'object' } } }]
@@ -31,6 +31,9 @@ test('Claude chat rejects unexpected host tools, keeps vision data and restricts
   assert.equal(args[args.indexOf('--setting-sources') + 1], '')
   assert.ok(args.includes('--restricted') && args.includes('--strict-mcp-config') && args.includes('--disable-slash-commands'))
   assert.ok(!args.includes('--bare') && !args.includes('--dangerously-skip-permissions'))
+  const xhigh = claudeChatArgs('opus', 'system.txt', 'mcp.json', 4, 'xhigh')
+  assert.equal(xhigh[xhigh.indexOf('--effort') + 1], 'xhigh')
+  assert.ok(!claudeChatArgs('opus', 'system.txt', 'mcp.json', 4, 'none').includes('--effort'))
   const input = JSON.parse(claudeChatInput([{ role: 'system', content: 'private instructions' }, { role: 'user', content: [{ type: 'text', text: 'look' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,YQ==' } }] }]))
   assert.equal(input.message.content[1].source.data, 'YQ==')
   assert.ok(!input.message.content[0].text.includes('private instructions'))
@@ -39,6 +42,16 @@ test('Claude chat rejects unexpected host tools, keeps vision data and restricts
   assert.equal(claudeLoginUrl('Open https://claude.com/cai/oauth/authorize?state=abc'), 'https://claude.com/cai/oauth/authorize?state=abc')
   assert.equal(claudeLoginUrl('https://claude.ai.attacker.test/oauth/authorize'), null)
   assert.equal(claudeLoginUrl('https://attacker.test/oauth/authorize'), null)
+  assert.deepEqual(claudeModelOptions([
+    { value: 'default', displayName: 'Default (recommended)', resolvedModel: 'claude-opus-5-5' },
+    { value: 'opus', displayName: 'Opus 5.5', resolvedModel: 'claude-opus-5-5', supportedEffortLevels: ['low', 'max', 3] },
+    { value: 'claude-haiku-4-5-20251001' },
+    { value: '' }, null,
+  ]), [
+    { id: 'opus', label: 'Opus 5.5', resolvedModel: 'claude-opus-5-5', supportedEffortLevels: ['low', 'max'] },
+    { id: 'claude-haiku-4-5-20251001', label: 'claude-haiku-4-5-20251001', resolvedModel: 'claude-haiku-4-5-20251001', supportedEffortLevels: [] },
+  ])
+  assert.deepEqual(claudeModelOptions(undefined), [])
 })
 
 // These requests run without a settings database: their chats have no lorebooks of their own.
