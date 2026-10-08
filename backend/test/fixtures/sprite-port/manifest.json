@@ -1,0 +1,131 @@
+{
+  "produced_by": "CoNAI sprite port (not the original app)",
+  "cases": [
+    {
+      "id": "despill_green_hue",
+      "input": "av-golden:sprite/inputs/green.mp4",
+      "options": {
+        "keyColors": [
+          "#00FF00"
+        ],
+        "intervalSeconds": 0.25
+      },
+      "note": "pure-hue key colour: colour-difference despill generalised from magenta (key channel minus the other two)",
+      "resolved_options": {
+        "startTime": 0,
+        "endTime": null,
+        "intervalSeconds": 0.25,
+        "sampleCount": 0,
+        "backgroundMode": "key",
+        "keyColors": [
+          "#00FF00"
+        ],
+        "tolerance": 0.08,
+        "softness": 0.92,
+        "despill": true,
+        "edgeCleanup": true,
+        "autoCrop": true,
+        "alphaThreshold": 20,
+        "cropX": 0,
+        "cropY": 0,
+        "cropWidth": 0,
+        "cropHeight": 0,
+        "resizeMode": "none",
+        "outputWidth": 0,
+        "outputHeight": 0,
+        "removeDuplicateFrames": false,
+        "frameSimilarityThreshold": 0.99,
+        "columns": 0,
+        "spacing": 0,
+        "outputFormat": "png",
+        "outputQuality": 90
+      },
+      "frame_indices": [
+        0,
+        3,
+        6,
+        9,
+        12,
+        15,
+        18,
+        21
+      ],
+      "result": {
+        "frame_width": 128,
+        "frame_height": 116,
+        "frame_count": 8,
+        "columns": 3,
+        "rows": 3,
+        "sheet_width": 384,
+        "sheet_height": 348
+      },
+      "output": {
+        "file": "sheets/despill_green_hue.png",
+        "rgba_sha256": "00bcff1956ea09e9aada55c03f624d5e100eba8689b5c2e5fee8fa0509480f75"
+      }
+    },
+    {
+      "id": "despill_orange_difference",
+      "input": "sprite-port:inputs/orange.mp4",
+      "options": {
+        "keyColors": [
+          "#FF8000"
+        ],
+        "intervalSeconds": 0.25
+      },
+      "note": "non-hue key colour: colour difference per channel pair, unmixing of the key colour out of edge pixels, then the edge cleanup",
+      "resolved_options": {
+        "startTime": 0,
+        "endTime": null,
+        "intervalSeconds": 0.25,
+        "sampleCount": 0,
+        "backgroundMode": "key",
+        "keyColors": [
+          "#FF8000"
+        ],
+        "tolerance": 0.08,
+        "softness": 0.92,
+        "despill": true,
+        "edgeCleanup": true,
+        "autoCrop": true,
+        "alphaThreshold": 20,
+        "cropX": 0,
+        "cropY": 0,
+        "cropWidth": 0,
+        "cropHeight": 0,
+        "resizeMode": "none",
+        "outputWidth": 0,
+        "outputHeight": 0,
+        "removeDuplicateFrames": false,
+        "frameSimilarityThreshold": 0.99,
+        "columns": 0,
+        "spacing": 0,
+        "outputFormat": "png",
+        "outputQuality": 90
+      },
+      "frame_indices": [
+        0,
+        3,
+        6,
+        9,
+        12,
+        15,
+        18,
+        21
+      ],
+      "result": {
+        "frame_width": 107,
+        "frame_height": 83,
+        "frame_count": 8,
+        "columns": 3,
+        "rows": 3,
+        "sheet_width": 321,
+        "sheet_height": 249
+      },
+      "output": {
+        "file": "sheets/despill_orange_difference.png",
+        "rgba_sha256": "089fe82046a76a8653d1ad10031074b892e382f9b701ab5b659a931ca424a9fc"
+      }
+    }
+  ]
+}
