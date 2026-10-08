@@ -12,6 +12,7 @@ import { ChatGroupStore } from './chatGroupStore'
 import { GroupChatService } from './groupChatService'
 import { LlmChatService } from './llmChatService'
 import { failureMessageOf } from './codexChatMedia'
+import { audioCandidatesByQueueJob } from '../audio/audioJobCandidates'
 import type { ChatCompletionMessage, ChatContentPart } from './llmChatCompletion'
 
 type ReactionState = 'pending' | 'running' | 'done' | 'skipped' | 'failed'
@@ -111,7 +112,8 @@ export class ChatGenerationReactionService {
       for (const job of jobs) {
         const images = db.prepare("SELECT composite_hash FROM api_generation_history WHERE queue_job_id = ? AND requested_by_account_id IS ? AND generation_status = 'completed' AND composite_hash IS NOT NULL ORDER BY id")
           .all(job.id, thread.account_id) as Array<{ composite_hash: string }>
-        lines.push(`작업 #${job.id}: ${images.length ? `이미지 ${images.length}장 첨부됨` : `실패: ${failureMessageOf(job.status, job.status === 'completed' ? 'no_image' : job.failure_code)}`}`)
+        const sounds = images.length ? 0 : audioCandidatesByQueueJob([job.id]).get(job.id)?.length ?? 0
+        lines.push(`작업 #${job.id}: ${images.length ? `이미지 ${images.length}장 첨부됨` : sounds ? `음향 후보 ${sounds}개 첨부됨 (음향 탭에서 검수)` : `실패: ${failureMessageOf(job.status, job.status === 'completed' ? 'no_image' : job.failure_code)}`}`)
         if (!profile.visionEnabled) continue
         try { requireRequesterPermission(requester, 'images.view') } catch { continue }
         for (const image of images) {

@@ -95,5 +95,55 @@ export function ensureAudioSchema(db: Database.Database): void {
       candidates_json TEXT NOT NULL,
       purged_at TEXT NOT NULL
     );
+
+    -- Generation. The workflow itself lives on the generation side (user.db workflows, kind = 'audio'); a binding
+    -- only says which of its marked fields carry the prompt, the length and the seed.
+    CREATE TABLE IF NOT EXISTS audio_workflow_bindings (
+      workflow_id INTEGER PRIMARY KEY,
+      prompt_field_id TEXT NOT NULL,
+      seconds_field_id TEXT NOT NULL,
+      seed_field_id TEXT NOT NULL,
+      is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
+      compat_json TEXT,
+      compat_checked_at TEXT,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_audio_workflow_bindings_default ON audio_workflow_bindings(is_default) WHERE is_default = 1;
+
+    -- One order = count queue jobs (one candidate each), seeds base_seed + idx. The order and its job rows are written
+    -- before anything is queued, so a crash between the two leaves rows without job_id that a reconcile re-queues.
+    CREATE TABLE IF NOT EXISTS audio_orders (
+      id TEXT PRIMARY KEY,
+      request_scope TEXT NOT NULL,
+      request_key TEXT NOT NULL,
+      request_hash TEXT NOT NULL,
+      group_id TEXT NOT NULL REFERENCES audio_groups(id) ON DELETE CASCADE,
+      workflow_id INTEGER NOT NULL,
+      text TEXT NOT NULL,
+      seconds REAL NOT NULL,
+      count INTEGER NOT NULL,
+      base_seed INTEGER NOT NULL,
+      server_id INTEGER,
+      server_tag TEXT,
+      created_by_account_id INTEGER,
+      created_by_account_type TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE (request_scope, request_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_audio_orders_group ON audio_orders(group_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS audio_order_jobs (
+      order_id TEXT NOT NULL REFERENCES audio_orders(id) ON DELETE CASCADE,
+      idx INTEGER NOT NULL,
+      seed INTEGER NOT NULL,
+      attempt INTEGER NOT NULL DEFAULT 1,
+      job_id INTEGER UNIQUE,
+      status_cache TEXT NOT NULL DEFAULT 'pending',
+      candidate_id TEXT,
+      error TEXT,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (order_id, idx)
+    );
+    CREATE INDEX IF NOT EXISTS idx_audio_order_jobs_pending ON audio_order_jobs(order_id) WHERE job_id IS NULL;
   `);
 }

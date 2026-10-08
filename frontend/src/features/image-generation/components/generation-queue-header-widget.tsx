@@ -129,7 +129,7 @@ export function GenerationQueueHeaderWidget() {
 
   const workflowsQuery = useQuery({
     queryKey: ['generation-workflows', 'header-widget'],
-    queryFn: () => getGenerationWorkflows(true),
+    queryFn: () => getGenerationWorkflows(true, 'all'),
     staleTime: 60_000,
     enabled: canViewWorkflows,
   })

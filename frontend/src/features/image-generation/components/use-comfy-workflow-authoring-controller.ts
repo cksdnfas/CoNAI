@@ -6,7 +6,7 @@ import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { useI18n } from '@/i18n'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
-import type { CustomDropdownList, GenerationWorkflowDetail, WorkflowMarkedField } from '@/lib/api-image-generation-types'
+import type { CustomDropdownList, GenerationWorkflowDetail, WorkflowKind, WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { createGenerationWorkflow, updateGenerationWorkflow } from '@/lib/api-image-generation-workflows'
 import { useComfyAuthorChatPage } from './use-comfy-author-chat-page'
 import { listAuthPermissionGroups } from '@/lib/api-auth'
@@ -96,6 +96,7 @@ export function useComfyWorkflowAuthoringController({
   const [publicQueueRoleLimits, setPublicQueueRoleLimits] = useState<Record<string, string>>({})
   const [resultViewMode, setResultViewMode] = useState<'history' | 'artifact_explorer'>('history')
   const [artifactDirectoryMode, setArtifactDirectoryMode] = useState<'shared' | 'per_run'>('shared')
+  const [workflowKind, setWorkflowKind] = useState<WorkflowKind>('image')
   const [artifactRootPath, setArtifactRootPath] = useState('')
   const [markedFields, setMarkedFields] = useState<WorkflowMarkedField[]>([])
   const [expandedFieldIds, setExpandedFieldIds] = useState<string[]>([])
@@ -148,6 +149,7 @@ export function useComfyWorkflowAuthoringController({
       setPublicQueueRoleLimits(roleLimitsToDraft(initialData.workflow.public_queue_role_limits))
       setResultViewMode(initialData.workflow.result_view_mode ?? 'history')
       setArtifactDirectoryMode(initialData.workflow.artifact_directory_mode ?? 'shared')
+      setWorkflowKind(initialData.workflow.kind ?? 'image')
       setArtifactRootPath(initialData.workflow.artifact_root_path ?? '')
       setMarkedFields(initialData.workflow.marked_fields ?? [])
       setExpandedFieldIds([])
@@ -167,6 +169,7 @@ export function useComfyWorkflowAuthoringController({
     setPublicQueueRoleLimits({})
     setResultViewMode('history')
     setArtifactDirectoryMode('shared')
+    setWorkflowKind('image')
     setArtifactRootPath('')
     setMarkedFields([])
     setExpandedFieldIds([])
@@ -337,6 +340,7 @@ export function useComfyWorkflowAuthoringController({
         artifactDirectoryMode,
         artifactRootPath,
         color: initialData?.workflow.color ?? '#2196f3',
+        kind: workflowKind,
         description: workflowDescription,
         isActive: initialData?.workflow.is_active ?? true,
         isPublicPage,
@@ -383,6 +387,7 @@ export function useComfyWorkflowAuthoringController({
     reactFlowColorMode, resultViewMode, roleLimitGroups, searchPlaceholder, setArtifactDirectoryMode,
     setArtifactRootPath, setAuthoringFlowInstance, setGraphSearchIndex, setGraphSearchQuery, setIsPublicPage,
     setPublicQueueMaxCount, setPublicQueueRoleLimits, setPublicSlug, setResultViewMode, setWorkflowDescription,
-    setWorkflowEditorTab, setWorkflowName, workflowDescription, workflowEditorTab, workflowJson, workflowName,
+    setWorkflowEditorTab, setWorkflowKind, setWorkflowName, workflowDescription, workflowEditorTab, workflowJson, workflowKind,
+    workflowName,
   }
 }

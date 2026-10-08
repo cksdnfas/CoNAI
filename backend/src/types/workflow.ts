@@ -3,6 +3,13 @@
  */
 export type WorkflowResultViewMode = 'history' | 'artifact_explorer';
 export type WorkflowArtifactDirectoryMode = 'shared' | 'per_run';
+/** What a workflow produces: image-library media, or sounds for the audio workspace (run only through audio orders). */
+export type WorkflowKind = 'image' | 'audio';
+export const WORKFLOW_KINDS: readonly WorkflowKind[] = ['image', 'audio'];
+
+export function normalizeWorkflowKind(value: unknown): WorkflowKind {
+  return value === 'audio' ? 'audio' : 'image';
+}
 
 export interface WorkflowNodeNumericBound {
   min?: number;
@@ -33,6 +40,7 @@ export interface WorkflowRecord {
   result_view_mode: WorkflowResultViewMode;
   artifact_root_path?: string | null;
   artifact_directory_mode: WorkflowArtifactDirectoryMode;
+  kind: WorkflowKind;
   color: string;
   created_date: string;
   updated_date: string;
@@ -89,6 +97,7 @@ export interface WorkflowCreateData {
   result_view_mode?: WorkflowResultViewMode;
   artifact_root_path?: string | null;
   artifact_directory_mode?: WorkflowArtifactDirectoryMode;
+  kind?: WorkflowKind;
   color?: string;
 }
 
@@ -109,6 +118,7 @@ export interface WorkflowUpdateData {
   result_view_mode?: WorkflowResultViewMode;
   artifact_root_path?: string | null;
   artifact_directory_mode?: WorkflowArtifactDirectoryMode;
+  kind?: WorkflowKind;
   color?: string;
 }
 
@@ -143,6 +153,8 @@ export interface ComfyUIHistoryItem {
     gifs?: ComfyUIOutputFile[];
     videos?: ComfyUIOutputFile[];
     files?: ComfyUIOutputFile[];
+    /** SaveAudio / SaveAudioAdvanced outputs; collected only for audio orders. */
+    audio?: ComfyUIOutputFile[];
   }>;
   status: {
     status_str: string;

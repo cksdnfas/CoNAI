@@ -43,6 +43,11 @@ export type ChatToolCall = {
   summary: string | null
   historyIds: number[]
   compositeHashes: string[]
+  /**
+   * Audio workspace candidates this call references or made (audio orders attach them as their jobs finish). The
+   * client plays them through `/api/audio/candidates/:id/file`; absent when the call has none.
+   */
+  audioCandidateIds?: string[]
   /** Truncated tool output retained for later model requests. */
   output?: string
   jobIds?: number[]

@@ -47,6 +47,19 @@ import {
 import { FileStoreError, parseFileId } from '../services/fileStoreService';
 import { requireFileStoreOwner } from '../services/fileStoreAccess';
 import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers';
+import {
+  addDefaultStableAudioWorkflow,
+  checkAudioWorkflowCompatibility,
+  listAudioWorkflows,
+  saveAudioWorkflowBinding,
+} from '../services/audio/audioWorkflows';
+import {
+  cancelAudioOrder,
+  createAudioOrder,
+  getAudioOrder,
+  listAudioOrders,
+  retryAudioOrderJob,
+} from '../services/audio/audioOrders';
 
 /**
  * /api/audio — the sound-effect workspace. Reads need `audio.view`, every change `audio.edit`.
@@ -200,6 +213,50 @@ router.get('/candidates/:candidateId/file', (req, res, next) => {
       res.status(404).json({ success: false, error: '파일이 없어.' });
     } else next(error);
   });
+});
+
+/* ------------------------------------------------------------------ generation */
+
+const generate = requirePermission('generation.execute');
+const workflowId = (req: Request) => {
+  const id = Number(req.params.workflowId);
+  if (!Number.isSafeInteger(id) || id <= 0) throw new AudioServiceError('잘못된 워크플로 ID야.');
+  return id;
+};
+
+/** GET /api/audio/workflows — audio-kind workflows with their role binding, suggestion and last compatibility check. */
+router.get('/workflows', (_req, res) => res.json({ success: true, data: listAudioWorkflows() }));
+router.put('/workflows/:workflowId/binding', edit, asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await saveAudioWorkflowBinding(workflowId(req), req.body ?? {}) });
+}));
+router.post('/workflows/:workflowId/check', edit, asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await checkAudioWorkflowCompatibility(workflowId(req), { force: true }) });
+}));
+/** Registers the default Stable Audio 3 graph on the generation side, so it also needs workflows.edit. */
+router.post('/workflows/default', edit, requirePermission('workflows.edit'), asyncHandler(async (_req, res) => {
+  res.status(201).json({ success: true, data: await addDefaultStableAudioWorkflow() });
+}));
+
+/** POST /api/audio/orders { group_id, text, seconds, count, seed?, workflow_id?, request_key?, server_id?, server_tag? } */
+router.post('/orders', edit, generate, asyncHandler(async (req, res) => {
+  const order = await createAudioOrder(req.body ?? {}, {
+    accountId: accountId(req),
+    accountType: getRequesterAccountType(req) ?? null,
+    scope: `account:${accountId(req) ?? 'bootstrap'}`,
+  });
+  res.status(201).json({ success: true, data: order });
+}));
+router.get('/orders', (req, res) => {
+  res.json({ success: true, data: listAudioOrders({ groupId: req.query.group_id ?? req.query.groupId, limit: req.query.limit, offset: req.query.offset }) });
+});
+router.get('/orders/:orderId', (req, res) => res.json({ success: true, data: getAudioOrder(param(req, 'orderId')) }));
+router.post('/orders/:orderId/cancel', edit, asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await cancelAudioOrder(param(req, 'orderId')) });
+}));
+router.post('/orders/:orderId/jobs/:idx/retry', edit, generate, (req, res) => {
+  const idx = Number(req.params.idx);
+  if (!Number.isSafeInteger(idx) || idx < 0) throw new AudioServiceError('잘못된 순번이야.');
+  res.json({ success: true, data: retryAudioOrderJob(param(req, 'orderId'), idx) });
 });
 
 router.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {

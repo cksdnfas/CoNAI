@@ -47,6 +47,7 @@ export function registerWorkflowTransferTools(server: McpServer): void {
           color: typeof workflow.color === 'string' ? workflow.color : undefined,
           result_view_mode: workflow.result_view_mode === 'artifact_explorer' ? 'artifact_explorer' : 'history',
           artifact_directory_mode: workflow.artifact_directory_mode === 'per_run' ? 'per_run' : 'shared',
+          kind: workflow.kind === 'audio' ? 'audio' : 'image',
         });
         return { content: [{ type: 'text' as const, text: JSON.stringify({ id, name }, null, 2) }] };
       } catch (error) {

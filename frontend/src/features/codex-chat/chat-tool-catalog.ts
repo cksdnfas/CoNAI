@@ -11,7 +11,7 @@ type Copy = { ko: string; en: string }
  */
 export type ChatToolGroupId =
   | 'images' | 'history' | 'prompts' | 'workflows' | 'files' | 'emoticons' | 'audio' | 'backups' | 'pages'
-  | 'image-gen' | 'workflow-run'
+  | 'image-gen' | 'workflow-run' | 'audio-gen'
   | 'configure'
   | 'image-groups' | 'prompt-groups' | 'file-ops' | 'emoticon-ops' | 'audio-ops'
   | 'sprites' | 'sprite-ops'
@@ -30,6 +30,7 @@ const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
   { id: 'sprites', scope: 'read', label: { ko: '스프라이트', en: 'Sprite' } },
   { id: 'image-gen', scope: 'generate', label: { ko: '이미지 생성', en: 'Image generation' } },
   { id: 'workflow-run', scope: 'generate', label: { ko: '워크플로 실행', en: 'Workflow runs' } },
+  { id: 'audio-gen', scope: 'generate', label: { ko: '음향 생성', en: 'Audio generation' } },
   { id: 'sprite-ops', scope: 'generate', label: { ko: '스프라이트', en: 'Sprite' } },
   { id: 'image-groups', scope: 'organize', label: { ko: '이미지 그룹', en: 'Image groups' } },
   { id: 'prompt-groups', scope: 'organize', label: { ko: '프롬프트 정리', en: 'Prompt organizing' } },
@@ -123,6 +124,12 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   update_audio_group: { group: 'audio-ops', label: { ko: '그룹 수정', en: 'Update audio group' }, ko: '그룹 이름·라벨·설명을 바꿔.' },
   move_audio_candidates: { group: 'audio-ops', label: { ko: '후보 옮기기', en: 'Move candidates' }, ko: '후보를 같은 프로젝트의 다른 그룹으로 옮겨.' },
   import_audio: { group: 'audio-ops', label: { ko: '오디오 가져오기', en: 'Import audio' }, ko: '오디오 파일(data URL 또는 보관함 파일)을 후보로 넣어.' },
+  list_audio_workflows: { group: 'audio', label: { ko: '음향 워크플로 목록', en: 'List audio workflows' }, ko: '음향 생성에 연결된 워크플로와 기본값, 서버 호환 결과를 나열해.' },
+  get_audio_order: { group: 'audio', label: { ko: '음향 주문 읽기', en: 'Read audio order' }, ko: '음향 주문의 작업별 상태와 만들어진 후보를 읽어.' },
+  order_audio: { group: 'audio-gen', label: { ko: '효과음 생성 주문', en: 'Order sound effects' }, ko: '그룹에 효과음 후보를 여러 개 생성해. seed는 하나씩 늘어나.' },
+  wait_audio_order: { group: 'audio-gen', label: { ko: '음향 주문 기다리기', en: 'Wait for audio order' }, ko: '주문이 끝날 때까지 기다렸다가 결과를 돌려줘.' },
+  cancel_audio_order: { group: 'audio-gen', label: { ko: '음향 주문 취소', en: 'Cancel audio order' }, ko: '주문에서 아직 안 끝난 작업을 취소해.' },
+  retry_audio_order_job: { group: 'audio-gen', label: { ko: '음향 작업 다시', en: 'Retry audio job' }, ko: '실패한 작업 하나를 같은 seed로 다시 돌려.' },
   set_audio_group_comment_status: { group: 'audio-ops', label: { ko: '코멘트 완료 처리', en: 'Complete comment' }, ko: '작업 요청 코멘트를 완료로 표시하거나 다시 열어.' },
   get_chat_setup_guide: { group: 'configure', label: { ko: '설정 안내 읽기', en: 'Read setup guide' }, ko: '프로필·표시 블록을 어떻게 짜는지 안내를 읽어.' },
   list_chat_profiles: { group: 'configure', label: { ko: '프로필 목록', en: 'List profiles' }, ko: '채팅 프로필을 나열해.' },
