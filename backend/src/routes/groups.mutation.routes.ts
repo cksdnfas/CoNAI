@@ -1,13 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { GroupModel, ImageGroupModel } from '../models/Group';
-import { AutoCollectionService } from '../services/autoCollectionService';
 import { GroupRematchJobService } from '../services/groupRematchJobService';
-import { ComplexFilterService } from '../services/complexFilterService';
-import { GroupCreateData, GroupUpdateData, ComplexFilter, AutoCollectCondition, errorResponse, successResponse, validateId } from '@conai/shared';
+import { GroupCreateData, GroupUpdateData, errorResponse, successResponse, validateId } from '@conai/shared';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { getGroupHierarchyService } from '../services/groupHierarchyService';
-import { GROUP_NAME_CONFLICT_MESSAGE, isGroupNameConflictError } from '../services/groupPathService';
+import { createCustomGroup, GroupMutationError, updateCustomGroup } from '../services/groupMutationService';
 
 const router = Router();
 
@@ -31,38 +28,6 @@ function resolveJobRequesterAccountId(req: Request): number | null {
   return typeof req.session?.accountId === 'number' ? req.session.accountId : null;
 }
 
-function validateAutoCollectConditions(conditions: AutoCollectCondition[] | ComplexFilter): { valid: boolean; errors: string[] } {
-  const isComplexFilter = conditions && typeof conditions === 'object' && !Array.isArray(conditions);
-
-  if (isComplexFilter) {
-    return ComplexFilterService.validateFilter(conditions as ComplexFilter);
-  }
-
-  return AutoCollectionService.validateConditions(conditions as AutoCollectCondition[]);
-}
-
-/** Validate auto-collect conditions only when the route enables them and supplied input exists. */
-function validateAutoCollectInput(
-  res: Response,
-  autoCollectEnabled: boolean | undefined,
-  autoCollectConditions: AutoCollectCondition[] | ComplexFilter | undefined
-) {
-  if (!autoCollectEnabled || !autoCollectConditions) {
-    return true;
-  }
-
-  const validation = validateAutoCollectConditions(autoCollectConditions);
-  if (!validation.valid) {
-    sendRouteBadRequest(
-      res,
-      `Invalid auto collection conditions: ${validation.errors.join(', ')}`
-    );
-    return false;
-  }
-
-  return true;
-}
-
 /** Validate the bulk composite hash array without changing the route error payload. */
 function requireCompositeHashes(res: Response, compositeHashes: unknown): compositeHashes is string[] {
   if (!Array.isArray(compositeHashes) || compositeHashes.length === 0) {
@@ -76,23 +41,6 @@ function requireCompositeHashes(res: Response, compositeHashes: unknown): compos
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
   const { name, description, color, parent_id, auto_collect_enabled, auto_collect_conditions, emoticon_enabled } = req.body;
 
-  if (typeof name !== 'string' || !name.trim()) {
-    return sendRouteBadRequest(res, 'Group name is required');
-  }
-
-  if (parent_id !== undefined && parent_id !== null) {
-    const hierarchyService = getGroupHierarchyService();
-    const parentDepth = hierarchyService.calculateDepth(parent_id);
-
-    if (parentDepth >= 4) {
-      return sendRouteBadRequest(res, 'Maximum hierarchy depth (5 levels) would be exceeded');
-    }
-  }
-
-  if (!validateAutoCollectInput(res, auto_collect_enabled, auto_collect_conditions)) {
-    return;
-  }
-
   try {
     const groupData: GroupCreateData = {
       name,
@@ -104,18 +52,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       emoticon_enabled: emoticon_enabled === true,
     };
 
-    const groupId = await GroupModel.create(groupData);
-
-    if (auto_collect_enabled && auto_collect_conditions) {
-      try {
-        GroupRematchJobService.startJobProcess('group-auto-collect', {
-          groupId,
-          requestedByAccountId: resolveJobRequesterAccountId(req),
-        });
-      } catch (autoCollectError) {
-        console.warn('Auto collection job failed to start for new group:', autoCollectError);
-      }
-    }
+    const { id: groupId } = createCustomGroup(groupData, resolveJobRequesterAccountId(req));
 
     return res.status(201).json(
       successResponse({
@@ -124,8 +61,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       })
     );
   } catch (error) {
-    if (isGroupNameConflictError(error)) {
-      return sendRouteBadRequest(res, GROUP_NAME_CONFLICT_MESSAGE);
+    if (error instanceof GroupMutationError) {
+      return sendRouteBadRequest(res, error.message);
     }
     console.error('Error creating group:', error);
     return res.status(500).json(errorResponse('Failed to create group'));
@@ -137,19 +74,6 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     const id = parseRouteId(req.params.id);
     const { name, description, color, parent_id, auto_collect_enabled, auto_collect_conditions, emoticon_enabled } = req.body;
 
-    if (parent_id !== undefined) {
-      const hierarchyService = getGroupHierarchyService();
-      const validation = hierarchyService.validateHierarchy(id, parent_id);
-
-      if (!validation.valid) {
-        return sendRouteBadRequest(res, validation.error || 'Invalid hierarchy');
-      }
-    }
-
-    if (!validateAutoCollectInput(res, auto_collect_enabled, auto_collect_conditions)) {
-      return;
-    }
-
     const groupData: GroupUpdateData = {
       name,
       description,
@@ -160,27 +84,16 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
       emoticon_enabled: typeof emoticon_enabled === 'boolean' ? emoticon_enabled : undefined,
     };
 
-    const updated = await GroupModel.update(id, groupData);
+    const { updated } = updateCustomGroup(id, groupData, resolveJobRequesterAccountId(req));
 
     if (!updated) {
       return res.status(404).json(errorResponse('Group not found'));
     }
 
-    if (auto_collect_enabled && auto_collect_conditions) {
-      try {
-        GroupRematchJobService.startJobProcess('group-auto-collect', {
-          groupId: id,
-          requestedByAccountId: resolveJobRequesterAccountId(req),
-        });
-      } catch (autoCollectError) {
-        console.warn('Auto collection job failed to start after group update:', autoCollectError);
-      }
-    }
-
     return res.json(successResponse({ message: 'Group updated successfully' }));
   } catch (error) {
-    if (isGroupNameConflictError(error)) {
-      return sendRouteBadRequest(res, GROUP_NAME_CONFLICT_MESSAGE);
+    if (error instanceof GroupMutationError) {
+      return sendRouteBadRequest(res, error.message);
     }
     console.error('Error updating group:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to update group';

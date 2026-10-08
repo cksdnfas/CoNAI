@@ -62,7 +62,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   registerGraphWorkflowTools(server, context);
   registerImageTools(server, context);
   registerFileStoreTools(server, context);
-  registerImageGroupTools(server);
+  registerImageGroupTools(server, context);
   registerEmoticonTools(server, context);
   registerAudioTools(server, context);
   registerAudioGenerationTools(server, context);

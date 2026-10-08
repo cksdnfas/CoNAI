@@ -72,12 +72,14 @@ export const CHAT_PAGE_ACTION_PERMISSIONS: Record<string, string | null> = {
   'media.attach': null, 'media.clear': null,
   'nai.characters': null,
   'workflow.select': 'workflows.view', 'workflow.inputs': 'workflows.view',
+  'group.select': 'images.view', 'group.create': 'images.edit', 'group.update': 'images.edit', 'group.auto_collect': 'images.edit',
 }
 export function chatPageActionAllowed(path: string, id: string): boolean {
   if (!own(CHAT_PAGE_ACTION_PERMISSIONS, id)) return false
   if (id.startsWith('page.')) return true
   if (id.startsWith('prompt.') || id === 'preset.create' || id === 'preset.update' || id === 'preset.select' || id === 'preset.draft') return path === '/prompts'
   if (id.startsWith('wildcard.')) return path === '/wildcards'
+  if (id.startsWith('group.')) return /^\/groups(?:\/[\w-]+)?$/.test(path)
   if (id === 'media.attach' || id === 'media.clear' || id === 'preset.insert') return path === '/generation' || /^\/public\/workflows\/[\w-]+$/.test(path)
   if (['comfy.node', 'comfy.refresh', 'comfy.open_create', 'comfy.open_edit', 'comfy.author', 'comfy.register', 'comfy.save'].includes(id)) return path === '/generation' || /^\/public\/workflows\/[\w-]+$/.test(path)
   return path === '/generation'
@@ -88,7 +90,7 @@ export function normalizeChatPageActions(path: string, input: unknown): ChatPage
   return input.map((raw: ChatPageAction) => {
     if (!chatPageActionAllowed(path, raw?.id) || ids.has(raw.id) || typeof raw.label !== 'string' || !raw.label || raw.label.length > 160 || typeof raw.description !== 'string' || raw.description.length > 1000 || !['draft', 'save'].includes(raw.effect)) throw new Error('등록되지 않았거나 잘못된 페이지 작업이야.')
     ids.add(raw.id)
-    const saves = ['prompt.create', 'prompt.update', 'preset.create', 'preset.update', 'wildcard.create', 'wildcard.update', 'comfy.save', 'comfy.register']
+    const saves = ['prompt.create', 'prompt.update', 'preset.create', 'preset.update', 'wildcard.create', 'wildcard.update', 'comfy.save', 'comfy.register', 'group.create', 'group.update', 'group.auto_collect']
     if ((raw.effect === 'save') !== saves.includes(raw.id)) throw new Error('작업의 저장 범위가 올바르지 않아.')
     const schema = normalizeChatPageSchema(raw.schema)
     if (schema.type !== 'object') throw new Error('작업 인수는 객체여야 해.')

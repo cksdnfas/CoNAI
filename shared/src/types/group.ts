@@ -74,8 +74,8 @@ export interface GroupCreateData {
 
 export interface GroupUpdateData {
   name?: string;
-  description?: string;
-  color?: string;
+  description?: string | null;
+  color?: string | null;
   parent_id?: number | null;
   auto_collect_enabled?: boolean;
   auto_collect_conditions?: AutoCollectCondition[] | ComplexFilter;  // Support both formats

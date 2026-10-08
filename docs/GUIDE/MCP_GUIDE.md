@@ -200,7 +200,11 @@ stdio:
 | --- | --- | --- |
 | `list_image_groups` | 그룹 ID, 전체 경로, 이미지 수 조회 | `read` |
 | `get_image_groups` | 이미지의 직접 소속 그룹과 수동/자동수집 구분 조회 | `read` |
+| `get_image_group` | 그룹 하나의 이름·설명·색·이미지 수·자동수집 규칙 조회 | `read` |
 | `resolve_image_group_path` | 경로로 그룹 조회·생성 (`create` 기본값 `true`) | `organize` |
+| `create_image_group` | 그룹 생성. 자동수집 규칙을 주면 켜고 첫 수집을 바로 시작 | `organize` |
+| `update_image_group` | 이름·설명·색·자동수집 켜기/끄기·규칙 교체 | `organize` |
+| `run_group_auto_collect` | 자동수집이 켜진 그룹을 한 번 더 수집 (백그라운드 작업) | `organize` |
 | `add_images_to_group` | 기존 이미지를 그룹에 추가, 자동수집 소속은 수동으로 전환 | `organize` |
 | `move_images_between_groups` | 선택 이미지를 원본 그룹에서 대상 그룹으로 이동 | `organize` |
 | `remove_images_from_group` | 특정 그룹에서 선택 이미지의 소속 제거 | `organize` |
@@ -212,6 +216,24 @@ stdio:
 - 제외는 원본 파일을 삭제하지 않습니다. `removed`, `skipped`, `skipped_hashes`를 반환합니다. 하위 그룹 소속으로 상위 그룹 목록에 보이는 이미지는 실제 소속 그룹을 조회한 뒤 제거해야 합니다.
 - 추가·이동·제외는 요청 단위 트랜잭션으로 처리합니다. DB 오류가 나면 해당 요청 전체를 되돌립니다. 없는 이미지나 소속은 위 규칙대로 건너뜁니다.
 - **이동·제외는 영구적인 자동수집 차단이 아닙니다.** 원본 그룹의 조건에 맞으면 자동수집 때 다시 들어올 수 있으며, 응답의 `auto_collection_may_readd: true`로 안내합니다.
+
+- 자동수집 규칙(`auto_collect_rules`)은 그룹 편집기의 칩과 같은 형식입니다. `scope`는 `positive`/`negative`(프롬프트에 포함된 글), `auto_tag`(오토 태그, 일반·캐릭터), `model`, `lora`, `ai_tool`(`nai`/`comfyui`/`other`)이고, `operator`는 `AND`(모두 만족, 기본값), `OR`(하나 이상), `NOT`(제외)입니다. 규칙을 주면 기존 조건 전체를 교체합니다.
+- 규칙으로 표현할 수 없는 조건(정규식, 등급 점수 등)이 저장된 그룹은 `get_image_group`이 `rules: null`과 원본 `custom_conditions`를 돌려줍니다. 이런 그룹에 규칙을 넘기면 기존 조건은 사라집니다.
+- 자동수집을 끄면 앞으로의 수집만 멈추고, 이미 모은 이미지와 저장된 조건은 남습니다. 다시 켜면 저장된 조건으로 다시 수집합니다. 그룹 이동·삭제 도구는 없습니다.
+- 채팅에서 그룹 페이지를 연결하면 같은 작업이 페이지 작업(`group.create`, `group.update`, `group.auto_collect`, `group.select`)으로 제안되고, 사용자가 적용을 눌러야 저장됩니다.
+
+자동수집 그룹 생성 (`create_image_group`):
+
+```json
+{
+  "name": "Misty",
+  "parent_path": "Characters",
+  "auto_collect_rules": [
+    { "scope": "auto_tag", "operator": "AND", "value": "misty_(pokemon)" },
+    { "scope": "negative", "operator": "NOT", "value": "lowres" }
+  ]
+}
+```
 
 이미지 소속 확인 (`get_image_groups`):
 

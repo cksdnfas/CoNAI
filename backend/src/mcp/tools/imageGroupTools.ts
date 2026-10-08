@@ -6,6 +6,18 @@ import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import { GroupPathError, GroupPathService } from '../../services/groupPathService';
 import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup';
+import {
+  buildGroupAutoCollectFilter,
+  GROUP_AUTO_COLLECT_AI_TOOLS,
+  GROUP_AUTO_COLLECT_OPERATORS,
+  GROUP_AUTO_COLLECT_RULE_LIMIT,
+  GROUP_AUTO_COLLECT_SCOPES,
+  readGroupAutoCollectRules,
+  type GroupRecord,
+} from '@conai/shared';
+import type { McpRequestContext } from '../context';
+import { createCustomGroup, updateCustomGroup } from '../../services/groupMutationService';
+import { GroupRematchJobService, type GroupRematchJobRecord } from '../../services/groupRematchJobService';
 
 type GroupSummary = {
   id: number;
@@ -77,7 +89,55 @@ function listGroupSummaries(): GroupSummary[] {
     .sort((a, b) => a.path.localeCompare(b.path));
 }
 
-export function registerImageGroupTools(server: McpServer): void {
+const autoCollectRulesSchema = z.array(z.object({
+  scope: z.enum(GROUP_AUTO_COLLECT_SCOPES).describe(
+    "positive / negative: text contained in the positive / negative prompt; auto_tag: an auto tagger tag (general or character), e.g. 'misty_(pokemon)'; "
+    + `model: checkpoint name; lora: LoRA name; ai_tool: one of ${GROUP_AUTO_COLLECT_AI_TOOLS.join(', ')}`,
+  ),
+  operator: z.enum(GROUP_AUTO_COLLECT_OPERATORS).default('AND').describe('AND: every AND rule must match; OR: at least one OR rule must match; NOT: matching images are excluded'),
+  value: z.string().trim().min(1).max(500),
+})).min(1).max(GROUP_AUTO_COLLECT_RULE_LIMIT)
+  .describe('Complete auto-collect rule list (replaces any previous conditions). The same rules the group editor shows as chips.');
+
+/** Group names are path segments; a slash would make the group unreachable by path. */
+const groupNameSchema = z.string().trim().min(1).max(200).refine((name) => !/[/\\]/.test(name), 'Group name cannot contain / or \\');
+
+function summarizeJob(job: GroupRematchJobRecord | null) {
+  return job ? { job_id: job.job_id, status: job.status } : null;
+}
+
+/** Settings view of one custom group; conditions the rules cannot express are returned raw instead of dropped. */
+function describeGroup(group: GroupRecord) {
+  const stats = GroupModel.findAllWithStats().find((row) => row.id === group.id);
+  const rules = readGroupAutoCollectRules(group.auto_collect_conditions);
+  return {
+    group_id: group.id,
+    name: group.name,
+    path: GroupPathService.getPathLabel(group.id),
+    parent_id: group.parent_id ?? null,
+    description: group.description ?? null,
+    color: group.color ?? null,
+    emoticon_enabled: Boolean(group.emoticon_enabled),
+    image_count: stats?.image_count ?? 0,
+    auto_collected_count: stats?.auto_collected_count ?? 0,
+    manual_added_count: stats?.manual_added_count ?? 0,
+    auto_collect: {
+      enabled: Boolean(group.auto_collect_enabled),
+      rules,
+      ...(rules === null ? { custom_conditions: group.auto_collect_conditions, note: 'These conditions cannot be shown as rules; passing auto_collect_rules replaces them.' } : {}),
+      last_run: group.auto_collect_last_run ?? null,
+    },
+  };
+}
+
+function resolveParentGroup(parentId?: number, parentPath?: string): number | null {
+  if (parentId === undefined && parentPath === undefined) return null;
+  return resolveExistingGroup(parentId, parentPath);
+}
+
+export function registerImageGroupTools(server: McpServer, context: McpRequestContext): void {
+  const requesterAccountId = context.requester?.accountId ?? null;
+
   server.tool(
     'list_image_groups',
     "List image groups (the library's folder-like collections) with their full 'Parent/Child' paths and image counts.",
@@ -268,6 +328,111 @@ export function registerImageGroupTools(server: McpServer): void {
         }).immediate());
       } catch (error) {
         return errorResult('Failed to move images between groups', error);
+      }
+    },
+  );
+
+  server.tool(
+    'get_image_group',
+    'Read one custom image group\'s settings: name, path, description, color, image counts and its auto-collect state and rules. Read this before changing a group with update_image_group.',
+    {
+      group_id: z.number().int().positive().optional(),
+      group_path: existingGroupPathSchema,
+    },
+    async ({ group_id, group_path }) => {
+      try {
+        const group = GroupModel.findById(resolveExistingGroup(group_id, group_path));
+        if (!group) throw new Error('Group not found');
+        return textResult(describeGroup(group));
+      } catch (error) {
+        return errorResult('Failed to get image group', error);
+      }
+    },
+  );
+
+  server.tool(
+    'create_image_group',
+    'Create one custom image group, optionally under an existing parent (max 5 levels; sibling names are unique, case-insensitive). With auto_collect_rules the group collects matching library images: auto-collection is enabled and its first run starts right away in the background. For an empty group by path alone, resolve_image_group_path is enough.',
+    {
+      name: groupNameSchema,
+      parent_id: z.number().int().positive().optional().describe('Existing parent group ID; omit both parent fields for a top-level group'),
+      parent_path: existingGroupPathSchema.describe("Existing parent group path, e.g. 'Characters'. Never creates the parent."),
+      description: z.string().trim().max(2000).optional(),
+      color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).optional().describe('Accent color like #7c3aed'),
+      auto_collect_rules: autoCollectRulesSchema.optional(),
+    },
+    async ({ name, parent_id, parent_path, description, color, auto_collect_rules }) => {
+      try {
+        const parentId = resolveParentGroup(parent_id, parent_path);
+        const { id, autoCollectJob } = createCustomGroup({
+          name,
+          parent_id: parentId,
+          description: description || undefined,
+          color,
+          auto_collect_enabled: Boolean(auto_collect_rules),
+          auto_collect_conditions: auto_collect_rules ? buildGroupAutoCollectFilter(auto_collect_rules) : undefined,
+        }, requesterAccountId);
+        return textResult({ ...describeGroup(GroupModel.findById(id)!), auto_collect_job: summarizeJob(autoCollectJob) });
+      } catch (error) {
+        return errorResult('Failed to create image group', error);
+      }
+    },
+  );
+
+  server.tool(
+    'update_image_group',
+    'Change one custom image group\'s name, description, color or auto-collect settings. Only given fields change. auto_collect_rules replaces the whole rule list and enables auto-collection; auto_collect_enabled=false stops future collection (images already collected stay). Saving enabled rules starts a background auto-collect run. Moving or deleting groups is not available here.',
+    {
+      group_id: z.number().int().positive().optional(),
+      group_path: existingGroupPathSchema,
+      name: groupNameSchema.optional(),
+      description: z.string().trim().max(2000).optional().describe('Empty string clears the description'),
+      color: z.string().trim().regex(/^(#[0-9a-fA-F]{6})?$/).optional().describe('Accent color like #7c3aed; empty string clears it'),
+      auto_collect_enabled: z.boolean().optional(),
+      auto_collect_rules: autoCollectRulesSchema.optional(),
+    },
+    async ({ group_id, group_path, name, description, color, auto_collect_enabled, auto_collect_rules }) => {
+      try {
+        const id = resolveExistingGroup(group_id, group_path);
+        const group = GroupModel.findById(id)!;
+        const enabled = auto_collect_enabled ?? (auto_collect_rules ? true : undefined);
+        if (auto_collect_rules && enabled === false) throw new Error('auto_collect_rules requires auto_collect_enabled to stay true');
+        let conditions = auto_collect_rules ? buildGroupAutoCollectFilter(auto_collect_rules) : undefined;
+        if (enabled && !conditions) {
+          // Re-enabling keeps the stored conditions; they are re-validated and collected again.
+          if (!group.auto_collect_conditions?.trim()) throw new Error('This group has no auto-collect conditions; pass auto_collect_rules');
+          conditions = JSON.parse(group.auto_collect_conditions);
+        }
+        if ([name, description, color, enabled, conditions].every((value) => value === undefined)) throw new Error('Nothing to update');
+        const { autoCollectJob } = updateCustomGroup(id, {
+          name,
+          description: description === undefined ? undefined : description || null,
+          color: color === undefined ? undefined : color || null,
+          auto_collect_enabled: enabled,
+          auto_collect_conditions: conditions,
+        }, requesterAccountId);
+        return textResult({ ...describeGroup(GroupModel.findById(id)!), auto_collect_job: summarizeJob(autoCollectJob) });
+      } catch (error) {
+        return errorResult('Failed to update image group', error);
+      }
+    },
+  );
+
+  server.tool(
+    'run_group_auto_collect',
+    'Run auto-collection again for one custom group that has auto-collect enabled. It runs in the background; the result reports the job id and status. Creating or updating a group with rules already starts a run.',
+    {
+      group_id: z.number().int().positive().optional(),
+      group_path: existingGroupPathSchema,
+    },
+    async ({ group_id, group_path }) => {
+      try {
+        const id = resolveExistingGroup(group_id, group_path);
+        if (!GroupModel.findById(id)?.auto_collect_enabled) throw new Error('Auto-collect is not enabled for this group');
+        const job = GroupRematchJobService.startJobProcess('group-auto-collect', { groupId: id, requestedByAccountId: requesterAccountId });
+        return textResult({ group_id: id, path: GroupPathService.getPathLabel(id), auto_collect_job: summarizeJob(job) });
+      } catch (error) {
+        return errorResult('Failed to run group auto-collect', error);
       }
     },
   );
