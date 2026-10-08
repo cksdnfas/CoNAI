@@ -24,6 +24,7 @@ import codexChatRoutes from '../routes/codex-chat.routes';
 import chatProposalRoutes from '../routes/chat-proposals.routes';
 import filesRoutes from '../routes/files.routes';
 import audioRoutes from '../routes/audio.routes';
+import audioLegacyImportRoutes from '../routes/audio-legacy-import.routes';
 import { isAudioStorePath } from '../services/audio/audioStore';
 import systemFolderRoutes from '../routes/system-folders.routes';
 import { wildcardMutationRoutes } from '../routes/wildcards.mutation.routes';
@@ -278,6 +279,8 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
     const limiter = req.method === 'POST' && req.path === '/upload' ? options.uploadLimiter : options.readOnlyLimiter;
     limiter(req, res, next);
   }, filesRoutes);
+  // Admin only; mounted ahead of /api/audio so the import does not also need the workspace keys.
+  app.use('/api/audio/legacy-import', requireAuth, options.uploadLimiter, audioLegacyImportRoutes);
   app.use('/api/audio', requireAuth, (req, res, next) => {
     const limiter = req.method === 'POST' && /\/upload$/.test(req.path) ? options.uploadLimiter : options.readOnlyLimiter;
     limiter(req, res, next);
