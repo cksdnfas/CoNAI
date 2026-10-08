@@ -24,6 +24,10 @@ export type RuntimeJobKind =
   | 'auto-tag-collection-sync'
   | 'prompt-similarity-rebuild'
   | 'file-verification'
+  | 'sprite-extract'
+  | 'sprite-extract-batch'
+  | 'sprite-normalize'
+  | 'sprite-animation'
 
 export type RuntimeJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 

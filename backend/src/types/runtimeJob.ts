@@ -28,6 +28,10 @@ export type RuntimeJobKind =
   | 'auto-tag-collection-sync'
   | 'prompt-similarity-rebuild'
   | 'file-verification'
+  | 'sprite-extract'
+  | 'sprite-extract-batch'
+  | 'sprite-normalize'
+  | 'sprite-animation'
 
 export type RuntimeJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
@@ -51,6 +55,10 @@ export const RUNTIME_JOB_KINDS: readonly RuntimeJobKind[] = [
   'auto-tag-collection-sync',
   'prompt-similarity-rebuild',
   'file-verification',
+  'sprite-extract',
+  'sprite-extract-batch',
+  'sprite-normalize',
+  'sprite-animation',
 ]
 
 export const RUNTIME_JOB_TERMINAL_STATUSES: readonly RuntimeJobStatus[] = ['completed', 'failed', 'cancelled']

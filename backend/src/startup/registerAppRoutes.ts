@@ -48,6 +48,7 @@ import { runtimeMediaSettingsRoutes } from '../routes/runtime-media-settings.rou
 import publicWorkflowRoutes from '../routes/public-workflows.routes';
 import { workflowInputAssetRoutes } from '../routes/workflow-input-assets.routes';
 import { runtimeEventStreamRoutes } from '../routes/events/event-stream.routes';
+import spriteRoutes from '../routes/sprite.routes';
 import { mcpRoutes } from '../mcp';
 import { errorHandler } from '../middleware/errorHandler';
 import {
@@ -274,6 +275,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/thumbnails', optionalAuth, thumbnailRoutes);
   // 장기 실행 잡의 진행률/취소 공용 라우트. 잡을 시작하는 라우트는 각자의 기존 권한을 유지한다.
   app.use('/api/jobs', optionalAuth, runtimeJobRoutes);
+  app.use('/api/sprite', spriteRoutes);
 
   app.use('/', mcpRoutes);
 
