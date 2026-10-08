@@ -13,6 +13,8 @@ export type RuntimeJobKind =
   | 'all-auto-collect'
   | 'auto-folder-rebuild'
   | 'folder-scan-all'
+  | 'media-orphan-cleanup'
+  | 'database-backup'
 
 export type RuntimeJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 

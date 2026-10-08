@@ -110,6 +110,9 @@ export async function startRuntimeSideEffectServices(
   const { CleanupService } = await import('../services/cleanupService')
   CleanupService.startPeriodicCleanup()
 
+  const { DatabaseMaintenanceScheduler } = await import('../services/maintenance/databaseMaintenanceScheduler')
+  DatabaseMaintenanceScheduler.start()
+
   const autoTagSchedulerStarted = autoTagScheduler.start()
   if (!autoTagSchedulerStarted) {
     console.log('🤖 Auto-tag scheduler skipped: all processors disabled')

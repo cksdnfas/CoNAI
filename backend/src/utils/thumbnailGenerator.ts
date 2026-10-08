@@ -62,8 +62,8 @@ export class ThumbnailGenerator {
    */
   static async deleteThumbnail(thumbnailPath: string): Promise<boolean> {
     try {
-      const absolutePath = path.join(runtimePaths.tempDir, thumbnailPath);
-      if (fs.existsSync(absolutePath)) {
+      const absolutePath = resolveThumbnailAbsolutePath(thumbnailPath);
+      if (absolutePath && fs.existsSync(absolutePath)) {
         await fs.promises.unlink(absolutePath);
         return true;
       }
@@ -81,7 +81,33 @@ export class ThumbnailGenerator {
    * @returns 존재 여부
    */
   static thumbnailExists(thumbnailPath: string): boolean {
-    const absolutePath = path.join(runtimePaths.tempDir, thumbnailPath);
-    return fs.existsSync(absolutePath);
+    const absolutePath = resolveThumbnailAbsolutePath(thumbnailPath);
+    return absolutePath !== null && fs.existsSync(absolutePath);
   }
+}
+
+/**
+ * Resolve a stored `thumbnail_path` to an absolute path inside the temp dir.
+ *
+ * Stored paths are temp-relative (`thumbnails/<date>/<hash>.webp`) and carry the separators of the OS that wrote
+ * them, so a Windows-written `thumbnails\2026-03-17\x.webp` must still resolve on Linux. Returns null for a path
+ * that would land outside the temp dir: callers delete what this returns.
+ */
+export function resolveThumbnailAbsolutePath(thumbnailPath: string, tempDir: string = runtimePaths.tempDir): string | null {
+  const trimmed = thumbnailPath.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const root = path.resolve(tempDir);
+  const resolved = path.isAbsolute(trimmed) || /^[a-zA-Z]:[\\/]/.test(trimmed)
+    ? path.resolve(trimmed)
+    : path.resolve(root, ...trimmed.split(/[\\/]+/).filter(Boolean));
+
+  const relative = path.relative(root, resolved);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    return null;
+  }
+
+  return resolved;
 }
