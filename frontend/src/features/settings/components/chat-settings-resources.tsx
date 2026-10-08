@@ -37,6 +37,7 @@ import { getErrorMessage } from '@/lib/error-message'
 import { ChatBlockEditorModal } from './chat-block-editor-modal'
 import { readChatBlockFile } from './chat-block-file'
 import { ChatGenerationPresetEditorModal } from './chat-generation-preset-editor-modal'
+import { ChatJudgePresetGroup } from './chat-judge-preset-group'
 import { readChatGenerationPresetFile } from './chat-generation-preset-file'
 import { ChatLorebookEditorModal } from './chat-lorebook-editor-modal'
 import { ChatToolPresetEditorModal } from './chat-tool-preset-editor-modal'
@@ -74,7 +75,7 @@ function resourceMeta(fact: ReactNode, profiles?: Array<{ id: number; name: stri
   )
 }
 
-/** Settings › Chat › 자원: tool presets, generation presets, display blocks and lorebooks shared by the chat profiles. */
+/** Settings › Chat › 자원: tool presets, generation presets, judge presets, display blocks and lorebooks shared by the chat profiles. */
 export function ChatSettingsResources() {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -259,6 +260,8 @@ export function ChatSettingsResources() {
         ))}
         {generationPresetsQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(generationPresetsQuery.error, t({ ko: '생성 프리셋을 불러오지 못했어.', en: 'Could not load generation presets.' }))}</p> : null}
       </RowGroup>
+
+      <ChatJudgePresetGroup />
 
       <RowGroup
         headingClassName={KIND_CLASS.block}

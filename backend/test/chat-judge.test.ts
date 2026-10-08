@@ -180,13 +180,28 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     route(s, () => ({ lore: { type: 'noul', noul: 0.95 } }))
     const thread = threadOf(judged.id)
     CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: '나 다음 주에 이사해', tool_calls: [], status: 'completed', error: null })
-    const turn = await judgeBeforeReply({ profile: judged, threadId: thread.id, replyId: 'reply-lore' })
+    const turn = await judgeBeforeReply({ profile: judged, threadId: thread.id, replyId: 'reply-lore', availableTools: ['save_lore'] })
     assert.equal(judgeGrantsLore('reply-lore'), true)
     assert.equal(judgeGrantsLore('another-reply'), false)
     endJudgedTurn(turn, ['save_lore'])
     assert.equal(judgeGrantsLore('reply-lore'), false)
     const [run] = ChatJudgeLogStore.list({ threadId: thread.id })
     assert.equal(run.items[0].outcome.toolUsed, true)
+  })
+
+  await t.test('a yes on tools the turn does not offer adds no directive and logs no action', async (s) => {
+    const imageOnly = ChatJudgePresetStore.create({ name: '이미지', providerName: 'jev', items: [
+      { id: 'image', name: '이미지', instructions: 'Show an image?', tools: ['generate_image*'], directive: '[판단] 이미지를 그려.' },
+    ] })
+    const profile = ChatProfileStore.create({ name: '달', engine: 'llm', providerName: 'chat', model: 'chat-model', summaryEnabled: false, mcpEnabled: false, judgePresetId: imageOnly.id })
+    const calls = route(s, () => ({ image: { type: 'noul', noul: 0.95 } }))
+    const thread = threadOf(profile.id)
+    await LlmChatService.sendMessage(requester, thread, '바다 사진 보여줘', () => {})
+    const chat = calls.find((call) => call.url.endsWith('/chat/completions'))!
+    assert.ok(!lastUserText(chat.body).includes('[판단]'), 'no directive for a tool the profile cannot offer')
+    const [run] = ChatJudgeLogStore.list({ threadId: thread.id })
+    assert.equal(run.items[0].verdict, 'yes')
+    assert.equal(run.items[0].action, 'none')
   })
 
   await t.test('a failed judge leaves the turn exactly as without one and logs the error', async (s) => {

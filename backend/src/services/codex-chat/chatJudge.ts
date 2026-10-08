@@ -222,7 +222,7 @@ export type JudgedTurn = {
  * Judges the conversation up to its latest message (without `excludeMessageId`, a reply being regenerated) for the
  * preset's before-reply items. Null when the profile has no judge or nothing to ask; the turn then goes on as usual.
  */
-export async function judgeBeforeReply(params: { profile: ChatProfile; threadId: number; replyId: string | null; excludeMessageId?: number; signal?: AbortSignal }): Promise<JudgedTurn | null> {
+export async function judgeBeforeReply(params: { profile: ChatProfile; threadId: number; replyId: string | null; availableTools: string[]; excludeMessageId?: number; signal?: AbortSignal }): Promise<JudgedTurn | null> {
   const setup = judgeSetupOf(params.profile)
   if (!setup) return null
   const items = askableJudgeItems(setup.preset.items).filter((item) => item.stage === 'before')
@@ -230,6 +230,11 @@ export async function judgeBeforeReply(params: { profile: ChatProfile; threadId:
   const thread = CodexChatStore.findThreadById(params.threadId)
   const messages = CodexChatStore.listMessages(params.threadId).filter((message) => message.id !== params.excludeMessageId)
   const run = await runJudgeItems(setup, params.profile, items, (window) => judgeStateOf(params.profile, thread, messages, window), params.signal)
+  // An item steering tools this turn does not offer at all does nothing: its directive would name a missing tool.
+  for (const result of run.results) {
+    if ((result.action === 'offered' || result.action === 'withheld') && result.tools.length > 0
+      && !result.tools.some((pattern) => params.availableTools.some((name) => judgeToolMatches(pattern, name)))) result.action = 'none'
+  }
   const latestUser = [...messages].reverse().find((message) => message.role === 'user')
   const runId = logRun(setup, params.profile, params.threadId, 'before', latestUser?.id ?? null, params.replyId, run)
 

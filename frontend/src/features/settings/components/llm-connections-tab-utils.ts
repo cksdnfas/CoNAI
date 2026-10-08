@@ -67,7 +67,18 @@ export const LLM_PROVIDER_OPTIONS: Array<{ value: ExternalApiProviderType; label
     label: { ko: 'Ollama', en: 'Ollama' },
     shortLabel: { ko: 'Ollama', en: 'Ollama' },
   },
+  {
+    value: 'decision_typesafe',
+    label: { ko: 'TypeSafe (판단 모델)', en: 'TypeSafe (judge model)' },
+    shortLabel: { ko: 'TypeSafe', en: 'TypeSafe' },
+  },
 ]
+
+/** Where a TypeSafe judge connection can point: TypeSafe itself or OpenRouter (same `/v1/systemone` path), with its model id. */
+export const TYPESAFE_ENDPOINTS = [
+  { label: 'TypeSafe', baseUrl: 'https://api.typesafe.ai', model: 'jev-latest' },
+  { label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api', model: '~typesafe/jev-latest' },
+] as const
 
 export const LLM_PRESET_SECTIONS: Array<{
   key: LlmPresetCollectionKey
@@ -157,6 +168,9 @@ export function buildProviderDraft(provider: ExternalApiProviderRecord): LlmConn
 export function buildProviderPlaceholder(providerType: ExternalApiProviderType) {
   if (providerType === 'llm_ollama') {
     return 'http://127.0.0.1:11434'
+  }
+  if (providerType === 'decision_typesafe') {
+    return TYPESAFE_ENDPOINTS[0].baseUrl
   }
 
   return 'http://127.0.0.1:1234/v1'

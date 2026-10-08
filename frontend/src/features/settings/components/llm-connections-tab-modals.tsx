@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { FileText, FlaskConical, LoaderCircle, Plug, Save, Trash2, X } from 'lucide-react'
-import { Chip } from '@/components/ui/chip'
+import { Chip, ToggleChip } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -30,6 +30,7 @@ import { ConnectionUsage } from './llm-model-slots'
 import {
   LLM_PRESET_SECTIONS,
   LLM_PROVIDER_OPTIONS,
+  TYPESAFE_ENDPOINTS,
   buildAdditionalConfig,
   buildEmptyDraft,
   buildEmptyPresetDraft,
@@ -149,7 +150,12 @@ function LlmConnectionFormFields({
         <Select
           variant="settings"
           value={draft.providerType}
-          onChange={(event) => onChange({ providerType: event.target.value as ExternalApiProviderType })}
+          onChange={(event) => {
+            const providerType = event.target.value as ExternalApiProviderType
+            // A new judge connection starts on TypeSafe's own address and model.
+            const typesafe = providerType === 'decision_typesafe' ? TYPESAFE_ENDPOINTS[0] : null
+            onChange({ providerType, ...(typesafe && !draft.baseUrl.trim() ? { baseUrl: typesafe.baseUrl } : {}), ...(typesafe && !draft.defaultModel.trim() ? { defaultModel: typesafe.model } : {}) })
+          }}
         >
           {LLM_PROVIDER_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>{t(option.label)}</option>
@@ -161,18 +167,34 @@ function LlmConnectionFormFields({
         <ConnectionModelSelect
           value={draft.defaultModel}
           models={models}
-          defaultModel={draft.providerType === 'llm_ollama' ? t({ ko: '예: qwen2.5:7b', en: 'e.g. qwen2.5:7b' }) : t({ ko: '예: gpt-4.1-mini, local-model', en: 'e.g. gpt-4.1-mini, local-model' })}
+          defaultModel={draft.providerType === 'decision_typesafe' ? 'jev-latest' : draft.providerType === 'llm_ollama' ? t({ ko: '예: qwen2.5:7b', en: 'e.g. qwen2.5:7b' }) : t({ ko: '예: gpt-4.1-mini, local-model', en: 'e.g. gpt-4.1-mini, local-model' })}
           onChange={(defaultModel) => onChange({ defaultModel })}
         />
       </Field>
 
       <Field label={t({ ko: '기본 URL', en: 'Base URL' })} className="md:col-span-2">
-        <Input
-          variant="settings"
-          value={draft.baseUrl}
-          onChange={(event) => onChange({ baseUrl: event.target.value })}
-          placeholder={buildProviderPlaceholder(draft.providerType)}
-        />
+        <div className="flex items-center gap-2">
+          <Input
+            variant="settings"
+            value={draft.baseUrl}
+            onChange={(event) => onChange({ baseUrl: event.target.value })}
+            placeholder={buildProviderPlaceholder(draft.providerType)}
+          />
+          {draft.providerType === 'decision_typesafe' ? (
+            <div className="flex shrink-0 gap-1">
+              {TYPESAFE_ENDPOINTS.map((endpoint) => (
+                <ToggleChip
+                  key={endpoint.label}
+                  size="sm"
+                  pressed={draft.baseUrl.trim().replace(/\/+$/, '') === endpoint.baseUrl}
+                  onClick={() => onChange({ baseUrl: endpoint.baseUrl, defaultModel: endpoint.model })}
+                >
+                  {endpoint.label}
+                </ToggleChip>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </Field>
 
       <Field label={t({ ko: '요청 제한 시간 (초)', en: 'Request time limit (seconds)' })}>
@@ -183,11 +205,11 @@ function LlmConnectionFormFields({
           min={5}
           value={draft.timeoutSeconds}
           onValueCommit={(value) => onChange({ timeoutSeconds: value })}
-          placeholder={t({ ko: '기본 600', en: 'Default 600' })}
+          placeholder={draft.providerType === 'decision_typesafe' ? t({ ko: '기본 20', en: 'Default 20' }) : t({ ko: '기본 600', en: 'Default 600' })}
         />
       </Field>
 
-      <Field label={t('llmConnectionsTab.apiKeyOptional')}>
+      <Field label={draft.providerType === 'decision_typesafe' ? t({ ko: 'API 키', en: 'API key' }) : t('llmConnectionsTab.apiKeyOptional')}>
         <Input
           variant="settings"
           type="password"
@@ -197,6 +219,7 @@ function LlmConnectionFormFields({
         />
       </Field>
 
+      {draft.providerType === 'decision_typesafe' ? null : (<>
       <Field label={t({ ko: '동시 요청 수', en: 'Concurrent requests' })}>
         <NumberStepperInput
           variant="settings"
@@ -220,6 +243,7 @@ function LlmConnectionFormFields({
           <option value="none">{t({ ko: '보내지 않음', en: 'Send nothing' })}</option>
         </Select>
       </Field>
+      </>)}
 
       {draft.providerType === 'llm_openai_compatible' ? (
         <SettingsSwitchRow

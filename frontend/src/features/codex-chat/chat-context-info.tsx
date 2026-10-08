@@ -11,6 +11,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { exportChatDiagnostics, getChatDiagnostics, type ChatContextKind, type ChatContextLore, type ChatContextMeta, type ChatDiagnosticText, type ChatSummarySegment } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
+import { formatProbability, judgeActionLabel, judgeDecidedByLabel, JudgeProbabilityBar, JudgeVerdictChip } from '@/features/settings/components/chat-judge-parts'
 
 type T = ReturnType<typeof useI18n>['t']
 const GROUPS = [
@@ -19,7 +20,7 @@ const GROUPS = [
   { id: 'examples', label: { ko: '예시', en: 'Examples' }, kinds: ['example'] },
   { id: 'window', label: { ko: '원문 창', en: 'Message window' }, kinds: ['window', 'continuation'] },
   { id: 'reference', label: { ko: '참고 설정', en: 'Reference' }, kinds: ['reference', 'lore', 'author-note', 'state', 'recall', 'summary'] },
-  { id: 'directives', label: { ko: '지시·페이지', en: 'Directives · page' }, kinds: ['last-instruction', 'page', 'flags', 'tool-definition', 'tool-result', 'summary-instruction', 'translation-instruction'] },
+  { id: 'directives', label: { ko: '지시·페이지', en: 'Directives · page' }, kinds: ['last-instruction', 'page', 'flags', 'tool-definition', 'tool-result', 'summary-instruction', 'translation-instruction', 'judge'] },
 ]
 const KIND_LABELS: Record<ChatContextKind, { ko: string; en: string }> = {
   'system-prompt': { ko: '시스템 프롬프트', en: 'System prompt' },
@@ -46,8 +47,9 @@ const KIND_LABELS: Record<ChatContextKind, { ko: string; en: string }> = {
   'tool-result': { ko: '도구 결과', en: 'Tool results' },
   'summary-instruction': { ko: '요약 지시', en: 'Summary instructions' },
   'translation-instruction': { ko: '번역 지시', en: 'Translation instructions' },
+  judge: { ko: '판단 지시', en: 'Judge directive' },
 }
-const ADMIN_KINDS = new Set<ChatContextKind>(['system-prompt', 'prompt-section', 'persona', 'guidance', 'group-header', 'example', 'last-instruction', 'tool-definition', 'summary-instruction', 'translation-instruction'])
+const ADMIN_KINDS = new Set<ChatContextKind>(['system-prompt', 'prompt-section', 'persona', 'guidance', 'group-header', 'example', 'last-instruction', 'tool-definition', 'summary-instruction', 'translation-instruction', 'judge'])
 const loreKey = (entry: Pick<ChatContextLore, 'bookId' | 'entryId'>) => `${entry.bookId}:${entry.entryId}`
 
 /** Divide merged sections by their parts without counting the parent again. */
@@ -241,6 +243,16 @@ export function ChatContextInfo({ meta, previous, threadId, messageId, alternati
               {(meta.recall?.length ?? 0) > 0 ? <div className="space-y-2 border-t border-line pt-3">
                 <strong>{t({ ko: '회상 {n}', en: 'Recall {n}' }, { n: meta.recall?.length ?? 0 })}</strong>
                 {(meta.recall ?? []).map((recall) => <div key={recall.segmentId} className="flex flex-wrap items-center gap-1.5"><span>{recallLabel(recall.segmentId, segments, t)}</span><span className="tabular-nums text-muted-foreground">{formatNumber(recall.score, { maximumFractionDigits: 2 })}</span>{recall.terms.map((term) => <Chip key={term} size="sm" tone="muted">{term}</Chip>)}</div>)}
+              </div> : null}
+              {meta.judge ? <div className="space-y-2 border-t border-line pt-3">
+                <div className="flex justify-between gap-2"><strong>{t({ ko: '판단 {n}', en: 'Judge {n}' }, { n: meta.judge.items.length })}</strong><span className="tabular-nums text-muted-foreground">{meta.judge.engine === 'typesafe' ? 'TypeSafe' : 'LLM'} · {formatNumber(meta.judge.latencyMs / 1000, { maximumFractionDigits: 2 })}s</span></div>
+                {meta.judge.error ? <p className="text-2xs text-destructive">{meta.judge.error}</p> : null}
+                {meta.judge.items.map((item) => <div key={item.itemId} className="grid grid-cols-[minmax(0,1fr)_4rem_auto_auto] items-center gap-2">
+                  <span className="min-w-0"><span className="block truncate">{item.name}</span><span className="block truncate text-2xs text-muted-foreground">{judgeActionLabel(item, t)}{judgeDecidedByLabel(item, t) ? ` · ${judgeDecidedByLabel(item, t)}` : ''}</span></span>
+                  <JudgeProbabilityBar probability={item.probability} />
+                  <span className="tabular-nums text-2xs">{formatProbability(item.probability)}</span>
+                  <JudgeVerdictChip result={item} />
+                </div>)}
               </div> : null}
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 border-t border-line pt-3">
                 {details.map(([label, value]) => <div key={label} className="contents"><dt className="text-muted-foreground">{label}</dt><dd className="min-w-0 break-words tabular-nums">{value}</dd></div>)}

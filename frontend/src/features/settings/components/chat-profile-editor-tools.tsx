@@ -13,6 +13,7 @@ import { EditorGroup, SwitchLine, type Draft, type PatchDraft } from './chat-pro
 import { ChatProfileToolLimits } from './chat-profile-tools'
 import { ChatToolPicker, useChatToolGroups } from './chat-tool-picker'
 import { ChatToolPresetEditorModal } from './chat-tool-preset-editor-modal'
+import { ChatProfileJudgeLine } from './chat-profile-judge-line'
 
 /**
  * CoNAI tools (MCP) for the profile: the switch, the profile's own scopes and tools (a tool preset only loads a copy),
@@ -37,6 +38,7 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
   return (
     <div className="space-y-4">
       <EditorGroup>
+        <ChatProfileJudgeLine open={open} draft={draft} patch={patch} />
         <Tip content={t({ ko: '1:1 채팅을 지금 보는 CoNAI 페이지에 연결해 입력을 읽고 변경안을 제안해. 켜면 입력창에 연결 버튼이 생겨.', en: 'Lets a direct chat connect to the CoNAI page you are on, read its inputs and propose changes. Adds a connect button to the composer.' })} side="bottom" align="start">
           <div><SwitchLine label={t({ ko: '페이지 어시스턴트', en: 'Page assistant' })} checked={draft.pageAssist} onCheckedChange={(pageAssist) => patch({ pageAssist })} /></div>
         </Tip>

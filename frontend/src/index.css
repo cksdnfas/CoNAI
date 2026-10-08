@@ -69,6 +69,7 @@
   --color-resource-generation: var(--resource-generation);
   --color-resource-block: var(--resource-block);
   --color-resource-lorebook: var(--resource-lorebook);
+  --color-resource-judge: var(--resource-judge);
   --color-backdrop: var(--backdrop);
   --tracking-overline: var(--overline-tracking);
   --shadow-elevation-1: var(--elevation-1);
@@ -249,6 +250,7 @@
   --resource-generation: #e38aa6;
   --resource-block: #62bfae;
   --resource-lorebook: #a897e6;
+  --resource-judge: #8fb8f0;
   --chat-diagnostics-instructions: #f95e14;
   --chat-diagnostics-lore: #ffb38f;
   --chat-diagnostics-examples: #a8a09c;
@@ -368,6 +370,7 @@
   --resource-generation: #c04f78;
   --resource-block: #1f8a78;
   --resource-lorebook: #6d58c4;
+  --resource-judge: #2f6fb8;
   --chat-diagnostics-window: #d1ccca;
   --theme-shell-surface: rgb(245 242 241 / 0.72);
   --theme-floating-surface: rgb(235 225 221 / 0.88);

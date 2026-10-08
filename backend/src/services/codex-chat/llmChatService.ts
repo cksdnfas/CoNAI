@@ -303,11 +303,11 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
   // A reply carried on or a headless reaction is not judged again.
   let judged: JudgedTurn | null = null
   try {
-    if (!turn.reaction && turn.continuing === undefined && profile.engine === 'llm' && target.transport !== 'claude-code') {
-      judged = await judgeBeforeReply({ profile, threadId: turn.threadId, replyId: chatContext?.replyId ?? null, excludeMessageId: turn.replacingMessageId, signal: turn.controller.signal })
-    }
     // Image viewing is only offered to models the profile says can see images.
     const visible = (bridge?.tools ?? []).filter((tool) => profile.visionEnabled || tool.function.name !== 'view_images')
+    if (!turn.reaction && turn.continuing === undefined && profile.engine === 'llm' && target.transport !== 'claude-code') {
+      judged = await judgeBeforeReply({ profile, threadId: turn.threadId, replyId: chatContext?.replyId ?? null, availableTools: visible.map((tool) => tool.function.name), excludeMessageId: turn.replacingMessageId, signal: turn.controller.signal })
+    }
     const offeredTools = judged ? judged.filterTools(visible) : visible
     turn.offeredTools = offeredTools
     const built = await buildMessages(offeredTools)

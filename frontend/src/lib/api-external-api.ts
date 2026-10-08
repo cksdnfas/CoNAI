@@ -1,6 +1,7 @@
 import { buildApiUrl, fetchJson } from './api-client'
 
-export type ExternalApiProviderType = 'general' | 'llm_openai_compatible' | 'llm_ollama'
+/** `decision_typesafe`: a TypeSafe decision model (Jev) for chat judge presets. */
+export type ExternalApiProviderType = 'general' | 'llm_openai_compatible' | 'llm_ollama' | 'decision_typesafe'
 
 export interface ExternalApiProviderRecord {
   id: number

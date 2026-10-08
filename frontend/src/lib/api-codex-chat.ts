@@ -2,6 +2,7 @@ import { requestApiData, requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
 import type { ChatAssetVisionReview, ChatAssetBatch, ChatAssetBatchInput, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
 export type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetKind, ChatAssetReview, ChatAssetVisionReview, ChatAssetCandidate, ChatAssetAttempt, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
+import type { ChatJudgeDiagnostics } from '@conai/shared'
 import type { ChatStreamEvent, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal } from '@conai/shared'
 
 export type ChatScope = 'read' | 'generate' | 'organize' | 'configure'
@@ -50,7 +51,7 @@ export function applyChatProfileAssetsProposal(proposalId: number) {
 export type ChatEngine = 'llm' | 'codex' | 'claude'
 export type ChatDiagnosticsScope = 'none' | 'view' | 'content' | 'prompts'
 
-export type ChatContextKind = 'persona' | 'system-prompt' | 'prompt-section' | 'guidance' | 'lore-index' | 'constant-lore' | 'lore' | 'summary' | 'example' | 'window' | 'reference' | 'author-note' | 'state' | 'flags' | 'user-persona' | 'recall' | 'page' | 'continuation' | 'last-instruction' | 'tool-definition' | 'tool-result' | 'group-header' | 'summary-instruction' | 'translation-instruction'
+export type ChatContextKind = 'persona' | 'system-prompt' | 'prompt-section' | 'guidance' | 'lore-index' | 'constant-lore' | 'lore' | 'summary' | 'example' | 'window' | 'reference' | 'author-note' | 'state' | 'flags' | 'user-persona' | 'recall' | 'page' | 'continuation' | 'last-instruction' | 'tool-definition' | 'tool-result' | 'group-header' | 'summary-instruction' | 'translation-instruction' | 'judge'
 export type ChatContextPart = { kind: ChatContextKind; role: string; position: number; estTokens: number; hash: string }
 export type ChatContextLore = { key: string; bookId: number; bookKind: ChatLorebookKind; entryId: string; title: string; selected: boolean; reason: string; matched: string[]; hash?: string; file?: 'inline' | 'hint'; remaining?: number }
 
@@ -79,6 +80,8 @@ export interface ChatContextMeta {
   toolRounds?: number
   codexKeys?: string[]
   tokenUsage?: { contextTokens: number | null; inputTokens: number | null; cachedInputTokens: number | null; outputTokens: number | null }
+  /** The judge's answers that steered this reply. */
+  judge?: ChatJudgeDiagnostics
   truncated?: boolean
 }
 
@@ -609,6 +612,10 @@ export interface ChatProfile extends ChatProfileAssetFields {
   pageAssist: boolean
   /** The model may propose chat lorebook entries (save_lore). */
   allowLoreProposals: boolean
+  /** API LLM: the judge preset steering each turn (null: no judge) and an override of its connection. */
+  judgePresetId: number | null
+  judgeProviderName: string | null
+  judgeModel: string
   style: ChatStyle
   backgroundVersion: string | null
   isEnabled: boolean
