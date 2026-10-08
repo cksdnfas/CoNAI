@@ -2,6 +2,7 @@ import { isCodexChatGenerationTool, isCodexChatCreationTool, type ChatProposal }
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { ChatProposalStore } from './chatProposals'
 import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibilityService'
+import { audioCandidatesByQueueJob } from '../audio/audioJobCandidates'
 import type { CodexChatMessageRecord } from './codexChatStore'
 
 export type CodexChatMediaSource = 'generated' | 'found'
@@ -130,6 +131,8 @@ export function attachJobResults(messages: CodexChatMessageRecord[]) {
   const pendingJobIds = new Set<number>()
   const failedJobsByJob = new Map<number, FailedJob>()
   const failedHistoryIds = new Set<number>()
+  // Audio-order jobs make sound candidates (audio.db), not image history rows.
+  const audioByJob = audioCandidatesByQueueJob(jobIds)
   for (const chunk of chunked(jobIds)) {
     const placeholders = chunk.map(() => '?').join(',')
     const linked = db.prepare(`SELECT job_id, reply_id FROM chat_generation_links WHERE job_id IN (${placeholders})`).all(...chunk) as Array<{ job_id: number; reply_id: string }>
@@ -139,7 +142,7 @@ export function attachJobResults(messages: CodexChatMessageRecord[]) {
     const jobs = db.prepare(`SELECT id, status, failure_code FROM generation_queue_jobs WHERE id IN (${placeholders})`).all(...chunk) as Array<{ id: number; status: string; failure_code: string | null }>
     for (const job of jobs) {
       if (!FINISHED_JOB_STATUSES.has(job.status)) pendingJobIds.add(job.id)
-      if (!owners.has(job.id) || historiesByJob.get(job.id)?.length) continue
+      if (!owners.has(job.id) || historiesByJob.get(job.id)?.length || audioByJob.get(job.id)?.length) continue
       if (job.status !== 'failed' && job.status !== 'cancelled' && job.status !== 'completed') continue
       const failureCode = job.status === 'completed' ? 'no_image' : job.failure_code
       failedJobsByJob.set(job.id, { jobId: job.id, status: job.status, failureCode, failureMessage: failureMessageOf(job.status, failureCode) })
@@ -149,11 +152,11 @@ export function attachJobResults(messages: CodexChatMessageRecord[]) {
   // A stored poll may reference a failed/pending history row; the terminal card replaces that empty thumbnail.
   if (failedHistoryIds.size) messages = messages.map((message) => ({ ...message, tool_calls: message.tool_calls.map((call) => ({ ...call, historyIds: call.historyIds.filter((id) => !failedHistoryIds.has(id)) })) }))
 
-  return { pendingJobs: pendingJobIds.size, messages: attachResolvedJobResults(messages, historiesByJob, pendingJobIds, owners, failedJobsByJob) }
+  return { pendingJobs: pendingJobIds.size, messages: attachResolvedJobResults(messages, historiesByJob, pendingJobIds, owners, failedJobsByJob, audioByJob) }
 }
 
-/** What became of a generation job, as a later request should read it. */
-export type GenerationOutcome = { status: string; images: number }
+/** What became of a generation job, as a later request should read it. `sounds`: audio-order candidates. */
+export type GenerationOutcome = { status: string; images: number; sounds?: number }
 
 /**
  * One line in place of the job JSON a creation call stored at submission (always "queued" there): whether the image
@@ -163,6 +166,7 @@ export type GenerationOutcome = { status: string; images: number }
 export function generationOutcomeNote(jobId: number, outcome: GenerationOutcome | undefined): string {
   if (!outcome) return `Generation job #${jobId}: no longer in the queue (its result, if any, is attached to this reply).`
   if (outcome.images > 0) return `Generation job #${jobId} finished: ${outcome.images} image${outcome.images === 1 ? '' : 's'} attached to this reply, visible to the reader. Do not describe or re-announce it.`
+  if ((outcome.sounds ?? 0) > 0) return `Audio job #${jobId} finished: ${outcome.sounds} sound candidate${outcome.sounds === 1 ? '' : 's'} attached to this reply, playable by the reader. A person reviews them in the audio workspace.`
   if (outcome.status === 'completed') return `Generation job #${jobId} finished but produced no image.`
   if (outcome.status === 'failed') return `Generation job #${jobId} failed: no image was attached to this reply.`
   if (outcome.status === 'cancelled') return `Generation job #${jobId} was cancelled: no image was attached to this reply.`
@@ -199,11 +203,14 @@ export function withGenerationOutcomes(messages: CodexChatMessageRecord[]) {
     const histories = db.prepare(`SELECT queue_job_id, COUNT(*) AS images FROM api_generation_history WHERE generation_status = 'completed' AND composite_hash IS NOT NULL AND queue_job_id IN (${placeholders}) GROUP BY queue_job_id`).all(...chunk) as Array<{ queue_job_id: number; images: number }>
     histories.forEach((row) => outcomes.set(row.queue_job_id, { status: outcomes.get(row.queue_job_id)?.status ?? 'completed', images: row.images }))
   }
+  for (const [jobId, candidateIds] of audioCandidatesByQueueJob(jobIds)) {
+    outcomes.set(jobId, { status: outcomes.get(jobId)?.status ?? 'completed', images: outcomes.get(jobId)?.images ?? 0, sounds: candidateIds.length })
+  }
   return applyGenerationOutcomes(messages, outcomes)
 }
 
 /** Pure ownership resolution, also used by regression coverage. Old records prefer an actual submission. */
-export function attachResolvedJobResults(messages: CodexChatMessageRecord[], historiesByJob: ReadonlyMap<number, number[]>, pendingJobIds: ReadonlySet<number>, owners: ReadonlyMap<number, string> = new Map(), failedJobsByJob: ReadonlyMap<number, FailedJob> = new Map()) {
+export function attachResolvedJobResults(messages: CodexChatMessageRecord[], historiesByJob: ReadonlyMap<number, number[]>, pendingJobIds: ReadonlySet<number>, owners: ReadonlyMap<number, string> = new Map(), failedJobsByJob: ReadonlyMap<number, FailedJob> = new Map(), audioByJob: ReadonlyMap<number, string[]> = new Map()) {
   const creator = new Map<number, string>()
   for (const message of messages) for (const call of message.tool_calls) {
     if (!isCodexChatCreationTool(call.tool)) continue
@@ -218,7 +225,8 @@ export function attachResolvedJobResults(messages: CodexChatMessageRecord[], his
         const ids = jobIdsOf(call)
         const ownIds = ids.filter((id) => creator.get(id) === `${message.id}:${call.id}`)
         const attached = ownIds.flatMap((jobId) => historiesByJob.get(jobId) ?? [])
-        const placeholders = ownIds.filter((jobId) => pendingJobIds.has(jobId) && !failedJobsByJob.has(jobId) && !(historiesByJob.get(jobId)?.length))
+        const attachedAudio = ownIds.flatMap((jobId) => audioByJob.get(jobId) ?? [])
+        const placeholders = ownIds.filter((jobId) => pendingJobIds.has(jobId) && !failedJobsByJob.has(jobId) && !(historiesByJob.get(jobId)?.length) && !(audioByJob.get(jobId)?.length))
         const generated = ids.length ? ownIds.length > 0 : call.generated ?? isCodexChatCreationTool(call.tool)
         // A polling call in the creator's own message need not repeat the large result or its placeholder.
         const duplicateIds = ids.filter((id) => creator.get(id)?.startsWith(`${message.id}:`) && !ownIds.includes(id)).flatMap((id) => historiesByJob.get(id) ?? [])
@@ -228,6 +236,7 @@ export function attachResolvedJobResults(messages: CodexChatMessageRecord[], his
           historyIds: [...new Set([...call.historyIds.filter((id) => !duplicateIds.includes(id)), ...attached])],
           pendingJobIds: generated ? placeholders : undefined,
           failedJobs: ownIds.some((id) => failedJobsByJob.has(id)) ? ownIds.flatMap((id) => failedJobsByJob.get(id) ?? []) : undefined,
+          ...(attachedAudio.length || call.audioCandidateIds?.length ? { audioCandidateIds: [...new Set([...(call.audioCandidateIds ?? []), ...attachedAudio])] } : {}),
         }
       }),
     }))

@@ -199,6 +199,7 @@ export async function deleteAudioProject(id: string): Promise<{ deleted: true; r
     SELECT DISTINCT c.file_hash FROM audio_candidates c JOIN audio_groups g ON g.id = c.group_id WHERE g.project_id = ?
   `).all(project.id) as Array<{ file_hash: string }>;
   const snapshot = snapshotCandidatesForRelease(hashes.map((row) => row.file_hash));
+  await cancelOrdersOf((db().prepare('SELECT id FROM audio_groups WHERE project_id = ?').all(project.id) as Array<{ id: string }>).map((row) => row.id));
   db().prepare('DELETE FROM audio_projects WHERE id = ?').run(project.id);
   const released = await releaseUnreferencedAudioBlobs(hashes.map((row) => row.file_hash), snapshot);
   return { deleted: true, released: released.released };
@@ -293,6 +294,12 @@ export function updateAudioGroup(id: string, input: { name?: unknown; label?: un
   return getAudioGroup(current.id);
 }
 
+/** Queued or running generation of these groups' orders stops before the order rows cascade away. */
+async function cancelOrdersOf(groupIds: string[]): Promise<void> {
+  const { cancelAudioOrdersInGroups } = await import('./audioOrders');
+  await cancelAudioOrdersInGroups(groupIds);
+}
+
 /** Delete a group with its candidates and comments (never the inbox); unused blobs go to the RecycleBin. */
 export async function deleteAudioGroup(id: string): Promise<{ deleted: true; released: number }> {
   const group = getAudioGroup(id);
@@ -300,6 +307,7 @@ export async function deleteAudioGroup(id: string): Promise<{ deleted: true; rel
   const hashes = (db().prepare('SELECT DISTINCT file_hash FROM audio_candidates WHERE group_id = ?').all(group.id) as Array<{ file_hash: string }>)
     .map((row) => row.file_hash);
   const snapshot = snapshotCandidatesForRelease(hashes);
+  await cancelOrdersOf([group.id]);
   db().prepare('DELETE FROM audio_groups WHERE id = ?').run(group.id);
   const released = await releaseUnreferencedAudioBlobs(hashes, snapshot);
   return { deleted: true, released: released.released };
@@ -446,6 +454,8 @@ interface CandidateInsert {
   sourceKey?: string | null;
   parentId?: string | null;
   provenance?: unknown;
+  orderId?: string | null;
+  jobId?: number | null;
 }
 
 function insertCandidate(input: CandidateInsert): AudioCandidate {
@@ -457,11 +467,17 @@ function insertCandidate(input: CandidateInsert): AudioCandidate {
   const at = now();
   db().prepare(`
     INSERT INTO audio_candidates (id, group_id, file_hash, parent_id, origin, name, review, notes, provenance_json, source_key,
-      created_by_account_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, 'pending', '', ?, ?, ?, ?, ?)
+      order_id, job_id, created_by_account_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, 'pending', '', ?, ?, ?, ?, ?, ?, ?)
   `).run(id, input.groupId, input.file.hash, input.parentId ?? null, input.origin, input.name,
-    input.provenance === undefined ? null : JSON.stringify(input.provenance), input.sourceKey ?? null, input.accountId, at, at);
+    input.provenance === undefined ? null : JSON.stringify(input.provenance), input.sourceKey ?? null,
+    input.orderId ?? null, input.jobId == null ? null : String(input.jobId), input.accountId, at, at);
   return getAudioCandidate(id);
+}
+
+/** A generation result of an audio order (already ingested). `sourceKey` makes a re-collected output a no-op. */
+export function registerGeneratedAudioCandidate(input: Omit<CandidateInsert, 'origin' | 'parentId'>): AudioCandidate {
+  return insertCandidate({ ...input, origin: 'generated' });
 }
 
 /** Register an uploaded (multer-staged) file as a new candidate. The staged file is consumed. */
@@ -501,6 +517,91 @@ export function audioCandidateFile(id: string): { candidate: AudioCandidate; fil
   const file = getAudioFile(candidate.file_hash);
   if (!file) throw new AudioServiceError('파일 기록이 없어.', 404);
   return { candidate, file };
+}
+
+/* ---------------------------------------------------------------- edits */
+
+export function findEditedAudioCandidate(sourceKey: string): AudioCandidate | null {
+  const row = db().prepare('SELECT id FROM audio_candidates WHERE source_key = ?').get(sourceKey) as { id: string } | undefined;
+  return row ? getAudioCandidate(row.id) : null;
+}
+
+/**
+ * A rendered edit of `sourceId` (already ingested): same group, `parent_id` = source, the source's order/job and
+ * provenance plus `edited_from`, review pending. Fails when the source was deleted while rendering.
+ */
+export function registerEditedAudioCandidate(input: {
+  sourceId: string;
+  file: AudioFileRecord;
+  edit: unknown;
+  accountId: number | null;
+  sourceKey: string | null;
+}): AudioCandidate {
+  const id = newId();
+  const at = now();
+  try {
+    db().transaction(() => {
+      const source = db().prepare('SELECT * FROM audio_candidates WHERE id = ?').get(input.sourceId) as CandidateRow | undefined;
+      if (!source || source.deleted_at) throw new AudioServiceError('편집하는 동안 원본 후보가 삭제됐어.', 409);
+      const inherited = parseJson(source.provenance_json);
+      const provenance = {
+        ...(inherited && typeof inherited === 'object' && !Array.isArray(inherited) ? inherited as Record<string, unknown> : {}),
+        edited_from: source.id,
+      };
+      db().prepare(`
+        INSERT INTO audio_candidates (id, group_id, file_hash, parent_id, origin, name, review, notes, edit_json, provenance_json,
+          source_key, order_id, job_id, created_by_account_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'edited', ?, 'pending', '', ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, source.group_id, input.file.hash, source.id, `${source.name} · 편집`, JSON.stringify(input.edit), JSON.stringify(provenance),
+        input.sourceKey, source.order_id, source.job_id, input.accountId, at, at);
+    }).immediate();
+  } catch (error) {
+    if (input.sourceKey && isUniqueViolation(error)) {
+      const existing = findEditedAudioCandidate(input.sourceKey);
+      if (existing) return existing;
+    }
+    throw error;
+  }
+  return getAudioCandidate(id);
+}
+
+/* ---------------------------------------------------------------- deletion plan */
+
+/** Freeze the ids a "delete unselected / delete all" confirmation is about; later arrivals are not part of it. */
+export function audioDeletionPlan(groupId: string, scope: unknown, candidateId?: unknown): { candidate_ids: string[]; count: number; selected_count: number } {
+  const group = getAudioGroup(groupId);
+  const value = String(scope ?? '');
+  if (value !== 'all' && value !== 'unselected') throw new AudioServiceError('삭제 범위는 all 또는 unselected야.', 422);
+  const only = candidateId === undefined || candidateId === null || candidateId === '' ? null : String(candidateId);
+  const rows = db().prepare(`
+    SELECT id, review FROM audio_candidates
+    WHERE group_id = ? AND deleted_at IS NULL AND (? = 'all' OR review != 'selected') AND (? IS NULL OR id = ?)
+    ORDER BY created_at, id
+  `).all(group.id, value, only, only) as Array<{ id: string; review: string }>;
+  return { candidate_ids: rows.map((row) => row.id), count: rows.length, selected_count: rows.filter((row) => row.review === 'selected').length };
+}
+
+/**
+ * Soft-delete a frozen list of a group's candidates. Without `includeSelected` a candidate that became selected in the
+ * meantime stops the whole delete (409), so a confirmation never removes a take someone just adopted.
+ */
+export function deleteAudioGroupCandidates(groupId: string, ids: unknown, includeSelected: boolean): { deleted: number } {
+  const group = getAudioGroup(groupId);
+  const list = candidateIds(ids);
+  return db().transaction(() => {
+    const rows = db().prepare(`SELECT id, group_id, review, deleted_at FROM audio_candidates WHERE id IN (SELECT value FROM json_each(?))`)
+      .all(JSON.stringify(list)) as Array<{ id: string; group_id: string; review: string; deleted_at: string | null }>;
+    if (rows.length !== list.length || rows.some((row) => row.group_id !== group.id)) {
+      throw new AudioServiceError('이 그룹에 속하지 않는 후보가 있어.', 404);
+    }
+    if (!includeSelected && rows.some((row) => row.review === 'selected' && !row.deleted_at)) {
+      throw new AudioServiceError('채택 상태가 바뀌었어. 삭제 대상을 다시 확인해줘.', 409);
+    }
+    const at = now();
+    const info = db().prepare(`UPDATE audio_candidates SET deleted_at = ?, updated_at = ? WHERE deleted_at IS NULL AND id IN (SELECT value FROM json_each(?))`)
+      .run(at, at, JSON.stringify(list));
+    return { deleted: info.changes };
+  }).immediate();
 }
 
 /* ---------------------------------------------------------------- comments */

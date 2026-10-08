@@ -99,10 +99,12 @@ export function ComfyWorkflowAuthoringModal({
     setResultViewMode,
     setWorkflowDescription,
     setWorkflowEditorTab,
+    setWorkflowKind,
     setWorkflowName,
     workflowDescription,
     workflowEditorTab,
     workflowJson,
+    workflowKind,
     workflowName,
   } = useComfyWorkflowAuthoringController({
     dropdownLists,
@@ -209,6 +211,17 @@ export function ComfyWorkflowAuthoringModal({
                 </Inset>
               </>
             ) : null}
+
+            <Field label={t({ ko: '종류', en: 'Kind' })}>
+              <Select
+                variant="settings"
+                value={workflowKind}
+                onChange={(event) => setWorkflowKind(event.target.value === 'audio' ? 'audio' : 'image')}
+              >
+                <option value="image">{t({ ko: '이미지', en: 'Image' })}</option>
+                <option value="audio">{t({ ko: '음향', en: 'Audio' })}</option>
+              </Select>
+            </Field>
 
             <Field label={t({ ko: '결과 표시 방식', en: 'Result view' })}>
               <Select

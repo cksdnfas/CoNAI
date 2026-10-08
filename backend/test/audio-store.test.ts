@@ -398,12 +398,12 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
     const audioTools = async (client: Awaited<ReturnType<typeof connect>>) => (await client.listTools()).tools.map((tool) => tool.name).filter((name) => name.includes('audio')).sort()
 
     const listener = await connect({ accountId: listenerId, accountType: 'guest' })
-    assert.deepEqual(await audioTools(listener), ['get_audio_candidate', 'list_audio_candidates', 'list_audio_group_comments', 'list_audio_groups', 'list_audio_projects'])
+    assert.deepEqual(await audioTools(listener), ['export_audio_selected', 'get_audio_candidate', 'get_audio_download', 'get_audio_order', 'list_audio_candidates', 'list_audio_group_comments', 'list_audio_groups', 'list_audio_projects', 'list_audio_workflows', 'wait_audio_order'])
     assert.deepEqual(await audioTools(await connect({ accountId: imageOnlyId, accountType: 'guest' })), [])
     const admin = await connect({ accountId: adminId, accountType: 'admin' })
     const adminTools = await audioTools(admin)
     assert.ok(adminTools.includes('import_audio') && adminTools.includes('set_audio_group_comment_status'))
-    assert.deepEqual(adminTools.filter((name) => /review|delete|restore|create_audio_group_comment/.test(name)), [], 'review, delete and comment writing stay with people')
+    assert.deepEqual(adminTools.filter((name) => /review|delete_audio|restore|create_audio_group_comment/.test(name)), [], 'review, unrestricted delete and comment writing stay with people (delete_unselected_audio_candidates never touches a selected take)')
 
     const listed = await listener.callTool({ name: 'list_audio_candidates', arguments: { group_id: snow.id } }) as { content: Array<{ text: string }> }
     assert.ok(JSON.parse(listed.content[0].text).candidates.every((candidate: Record<string, unknown>) => 'candidate_id' in candidate && !('composite_hash' in candidate)))

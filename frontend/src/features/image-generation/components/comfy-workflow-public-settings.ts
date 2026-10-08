@@ -42,6 +42,7 @@ interface BuildComfyWorkflowPayloadOptions {
   artifactDirectoryMode: CreateGenerationWorkflowPayload['artifact_directory_mode']
   artifactRootPath: string
   color: string
+  kind: CreateGenerationWorkflowPayload['kind']
   description: string
   isActive: boolean
   isPublicPage: boolean
@@ -59,6 +60,7 @@ export function buildComfyWorkflowPayload({
   artifactDirectoryMode,
   artifactRootPath,
   color,
+  kind,
   description,
   isActive,
   isPublicPage,
@@ -83,6 +85,7 @@ export function buildComfyWorkflowPayload({
     result_view_mode: resultViewMode,
     artifact_directory_mode: artifactDirectoryMode,
     artifact_root_path: artifactRootPath.trim() || null,
+    kind,
     color,
   }
 }

@@ -28,6 +28,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
       result_view_mode TEXT NOT NULL DEFAULT 'history',
       artifact_root_path TEXT,
       artifact_directory_mode TEXT NOT NULL DEFAULT 'shared',
+      kind TEXT NOT NULL DEFAULT 'image',
       color VARCHAR(10) DEFAULT '#2196f3',
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -898,6 +899,11 @@ export function createUserSettingsSchema(db: Database.Database): void {
   if (!hasColumn('workflows', 'deleted_at')) {
     console.log('  Migrating workflows: adding deleted_at column');
     db.exec('ALTER TABLE workflows ADD COLUMN deleted_at DATETIME');
+  }
+  if (!hasColumn('workflows', 'kind')) {
+    // 'image' (library media) or 'audio' (audio workspace orders only). Existing workflows are all image workflows.
+    console.log('  Migrating workflows: adding kind column');
+    db.exec("ALTER TABLE workflows ADD COLUMN kind TEXT NOT NULL DEFAULT 'image'");
   }
 
   // Migrate comfyui_servers table

@@ -275,7 +275,7 @@ function toToolCall(item: Record<string, unknown>): CodexChatToolCall {
   const result = item.result as { content?: unknown[]; structuredContent?: unknown } | null | undefined
   const error = item.error as { message?: string } | null | undefined
   const tool = String(item.tool ?? '')
-  const { texts, historyIds, compositeHashes, jobIds, pendingJobIds } = readMcpToolResult(result, tool)
+  const { texts, historyIds, compositeHashes, jobIds, pendingJobIds, audioCandidateIds } = readMcpToolResult(result, tool)
 
   return {
     id: String(item.id ?? ''),
@@ -286,6 +286,7 @@ function toToolCall(item: Record<string, unknown>): CodexChatToolCall {
     historyIds,
     compositeHashes,
     ...(jobIds.length > 0 ? { jobIds, pendingJobIds } : {}),
+    ...(audioCandidateIds.length > 0 ? { audioCandidateIds } : {}),
     generated: isCodexChatCreationTool(tool),
   }
 }
