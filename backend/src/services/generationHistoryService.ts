@@ -361,6 +361,28 @@ export class GenerationHistoryService {
     return { records, total };
   }
 
+  /** Compact history-list records of one graph workflow's final results. */
+  static async getHistoryByGraphWorkflow(
+    graphWorkflowId: number,
+    filters?: {
+      generation_status?: 'pending' | 'processing' | 'completed' | 'failed';
+      requested_by_account_id?: number;
+      requested_by_account_type?: AuthAccountType;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<{ records: GenerationHistoryListRecord[]; total: number }> {
+    const records = attachHistoryAudioResults(HistoryQueryRepository.findAllWithMetadata({ ...filters, graph_workflow_id: graphWorkflowId }));
+    const total = HistoryQueryRepository.countListRecords({
+      graph_workflow_id: graphWorkflowId,
+      generation_status: filters?.generation_status,
+      requested_by_account_id: filters?.requested_by_account_id,
+      requested_by_account_type: filters?.requested_by_account_type,
+    });
+
+    return { records, total };
+  }
+
   /**
    * Get workflow statistics aligned with compact history-list visibility.
    */

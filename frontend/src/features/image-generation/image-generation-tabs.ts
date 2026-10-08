@@ -7,6 +7,10 @@ type Translate = (input: TranslationInput, params?: TranslationParams) => string
 /** Query param that keeps the selected ComfyUI workflow across reloads and back navigation. */
 export const IMAGE_GENERATION_WORKFLOW_PARAM = 'workflow'
 
+/** Query params that keep the workflows tab's selected graph workflow and editor mode across reloads and back navigation. */
+export const IMAGE_GENERATION_GRAPH_PARAM = 'graph'
+export const IMAGE_GENERATION_GRAPH_EDIT_PARAM = 'edit'
+
 export const IMAGE_GENERATION_TAB_ORDER: ImageGenerationTab[] = ['nai', 'codex', 'comfyui', 'workflows', 'reservations']
 
 export function getImageGenerationTabLabel(tab: ImageGenerationTab, t: Translate) {

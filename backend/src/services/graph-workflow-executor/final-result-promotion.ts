@@ -402,7 +402,8 @@ export async function promoteFinalResultArtifactToGenerationHistory(params: Fina
   const historyId = HistoryCommandService.create({
     service_type: serviceType,
     generation_status: 'pending',
-    workflow_id: params.workflowId,
+    graph_workflow_id: params.workflowId,
+    graph_execution_id: params.executionId,
     workflow_name: params.workflowName,
     assigned_group_id: params.groupId ?? undefined,
     nai_model: resolveModelName(metadata) ?? (serviceType === 'codex' ? 'codex' : undefined),

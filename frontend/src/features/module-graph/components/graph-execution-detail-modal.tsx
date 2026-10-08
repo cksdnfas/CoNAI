@@ -1,7 +1,6 @@
-import { useRef } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Inset } from '@/components/ui/inset'
 import { Text } from '@/components/ui/text'
 import { Modal } from '@/components/ui/modal'
@@ -29,10 +28,11 @@ import { ExecutionComparisonContextBlock, ExecutionPathDiagnosticsBlock } from '
 import { CODE_BLOCK_CLASS_NAME, ExecutionHeaderBadges, ExecutionInputEntriesList, type GraphExecutionDetail } from './graph-execution-shared-ui'
 import { TechnicalReferenceHint } from './module-graph-field-shared'
 import { EmptyState } from '@/components/ui/empty-state'
+import { TextTabs } from '@/components/common/text-tabs'
 
-type ExecutionDetailSectionKey = 'summary' | 'inputs' | 'compare' | 'artifacts' | 'logs'
+type ExecutionDetailTab = 'result' | 'inputs' | 'diagnostics' | 'logs'
 
-/** Opt-in technical detail modal for one run: plan, inputs, comparison, artifacts and logs. */
+/** One run in a modal: results first (passed in as `resultContent`), technical inputs, diagnostics and logs behind text tabs. */
 export function GraphExecutionDetailModal({
   open,
   onClose,
@@ -42,6 +42,7 @@ export function GraphExecutionDetailModal({
   selectedExecutionPlan,
   executionInputEntries,
   finalResults,
+  resultContent,
 }: {
   open: boolean
   onClose: () => void
@@ -51,40 +52,31 @@ export function GraphExecutionDetailModal({
   selectedExecutionPlan: ParsedExecutionPlan | null
   executionInputEntries: ReturnType<typeof getExecutionInputEntries>
   finalResults: GraphExecutionFinalResultRecord[]
+  /** The run's results (final results and outputs); shown on the first tab. */
+  resultContent?: ReactNode
 }) {
   const { t, formatDateTime } = useI18n()
-  const detailSectionRefs = useRef<Record<ExecutionDetailSectionKey, HTMLDivElement | null>>({
-    summary: null,
-    inputs: null,
-    compare: null,
-    artifacts: null,
-    logs: null,
-  })
-
-  const scrollToDetailSection = (section: ExecutionDetailSectionKey) => {
-    detailSectionRefs.current[section]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
-  const detailSectionButtons = executionDetail ? (
-    <div className="flex flex-wrap gap-2">
-      <Button type="button" size="sm" variant="ghost" onClick={() => scrollToDetailSection('summary')}>{t({ ko: '요약', en: 'Summary' })}</Button>
-      {executionInputEntries.length > 0 ? <Button type="button" size="sm" variant="ghost" onClick={() => scrollToDetailSection('inputs')}>{t({ ko: '입력', en: 'Inputs' })}</Button> : null}
-      <Button type="button" size="sm" variant="ghost" onClick={() => scrollToDetailSection('compare')}>{t({ ko: '비교', en: 'Compare' })}</Button>
-      <Button type="button" size="sm" variant="ghost" onClick={() => scrollToDetailSection('artifacts')}>{t({ ko: '아티팩트', en: 'Artifacts' })}</Button>
-      <Button type="button" size="sm" variant="ghost" onClick={() => scrollToDetailSection('logs')}>{t({ ko: '로그', en: 'Logs' })}</Button>
-    </div>
-  ) : null
+  const [tab, setTab] = useState<ExecutionDetailTab>(resultContent ? 'result' : 'diagnostics')
+  const tabItems = [
+    ...(resultContent ? [{ value: 'result' as const, label: t({ ko: '결과', en: 'Result' }) }] : []),
+    ...(executionInputEntries.length > 0 ? [{ value: 'inputs' as const, label: t({ ko: '입력', en: 'Inputs' }), count: executionInputEntries.length }] : []),
+    { value: 'diagnostics' as const, label: t({ ko: '진단', en: 'Diagnostics' }) },
+    { value: 'logs' as const, label: t({ ko: '로그', en: 'Logs' }), count: executionDetail.logs.length },
+  ]
 
   return (
     <Modal
       open={open}
-      title={t({ ko: '실행 상세 #{id}', en: 'Run details #{id}' }, { id: executionDetail.execution.id })}
-      headerContent={detailSectionButtons}
+      title={t({ ko: '실행 #{id}', en: 'Run #{id}' }, { id: executionDetail.execution.id })}
+      headerContent={<TextTabs value={tab} items={tabItems} onChange={setTab} ariaLabel={t({ ko: '실행 상세', en: 'Run details' })} />}
       onClose={onClose}
       widthClassName="max-w-6xl"
     >
       <div className="space-y-4">
-        <div ref={(node) => { detailSectionRefs.current.summary = node }} className="space-y-2 scroll-mt-24 md:scroll-mt-28">
+        {tab === 'result' ? resultContent : null}
+
+        {tab === 'diagnostics' ? (
+        <div className="space-y-2">
           <Alert>
             <AlertTitle className="flex flex-wrap items-center gap-2">
               <ExecutionHeaderBadges execution={executionDetail.execution} plan={selectedExecutionPlan} />
@@ -109,15 +101,6 @@ export function GraphExecutionDetailModal({
               ) : null}
             </AlertDescription>
           </Alert>
-        </div>
-
-        {executionInputEntries.length > 0 ? (
-          <div ref={(node) => { detailSectionRefs.current.inputs = node }} className="space-y-2 scroll-mt-24 md:scroll-mt-28">
-            <ExecutionInputEntriesList entries={executionInputEntries} itemClassName="p-3" />
-          </div>
-        ) : null}
-
-        <div ref={(node) => { detailSectionRefs.current.compare = node }} className="space-y-2 scroll-mt-24 md:scroll-mt-28">
           <ExecutionComparisonContextBlock
             summary={buildExecutionComparisonSummary({
               inputEntries: executionInputEntries,
@@ -143,8 +126,13 @@ export function GraphExecutionDetailModal({
             })}
           />
         </div>
+        ) : null}
 
-        <div ref={(node) => { detailSectionRefs.current.artifacts = node }} className="space-y-2 scroll-mt-24 md:scroll-mt-28">
+        {tab === 'inputs' ? <ExecutionInputEntriesList entries={executionInputEntries} itemClassName="p-3" /> : null}
+
+        {tab === 'logs' ? (
+        <>
+        <div className="space-y-2">
           <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
             <span>{t({ ko: '아티팩트', en: 'Artifacts' })}</span>
             <Badge variant="outline">{executionDetail.artifacts.length}</Badge>
@@ -187,7 +175,7 @@ export function GraphExecutionDetailModal({
           })}
         </div>
 
-        <div ref={(node) => { detailSectionRefs.current.logs = node }} className="space-y-2 scroll-mt-24 md:scroll-mt-28">
+        <div className="space-y-2">
           <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
             <span>{t({ ko: '로그', en: 'Logs' })}</span>
             <Badge variant="outline">{executionDetail.logs.length}</Badge>
@@ -216,6 +204,8 @@ export function GraphExecutionDetailModal({
             })
           )}
         </div>
+        </>
+        ) : null}
       </div>
     </Modal>
   )

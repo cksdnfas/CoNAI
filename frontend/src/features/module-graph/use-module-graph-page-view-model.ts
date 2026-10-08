@@ -286,6 +286,7 @@ export function useModuleGraphPageViewModel({
     workflowInputCandidates,
     latestExecution,
     latestArtifactPreviewByNode,
+    previewArtifactsByExecution,
     latestExecutionDetail,
     latestExecutionDetailIsLoading,
     latestExecutionDetailError,

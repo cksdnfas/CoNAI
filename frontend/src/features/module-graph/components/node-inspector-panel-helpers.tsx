@@ -98,17 +98,18 @@ export function PortHeader({
   const { t } = useI18n()
 
   return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <div className="flex items-center gap-1">
-          <Tip content={normalizeModulePortDescription(port.description)}>
-            <div className="text-sm font-medium text-foreground">{port.label}</div>
-          </Tip>
-          <TechnicalReferenceHint title={`node ${nodeId}\nport ${port.key}`} label={t({ ko: '포트 내부 키 보기', en: 'Show internal port key' })} />
-        </div>
-        <PortBadges port={port} missingRequired={missingRequired} />
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <Tip content={[normalizeModulePortDescription(port.description), getModuleGraphPortTypeLabel(t, port.data_type)].filter(Boolean).join(' · ')}>
+          <div className="truncate text-sm font-medium text-foreground">
+            {port.label}
+            {port.required ? <span className="ml-0.5 text-destructive" aria-label={t({ ko: '필수', en: 'Required' })}>*</span> : null}
+          </div>
+        </Tip>
+        {missingRequired ? <span className="shrink-0 text-xs text-warning">{t({ ko: '비어 있음', en: 'Empty' })}</span> : null}
+        <TechnicalReferenceHint title={`node ${nodeId}\nport ${port.key}`} label={t({ ko: '포트 내부 키 보기', en: 'Show internal port key' })} />
       </div>
-      <IconButton size="icon-sm" variant="ghost" onClick={onClear} disabled={!hasExplicitValue} label={t({ ko: '값 지우기', en: 'Clear value' })}>
+      <IconButton size="icon-xs" variant="ghost" onClick={onClear} disabled={!hasExplicitValue} label={t({ ko: '값 지우기', en: 'Clear value' })}>
         <Eraser />
       </IconButton>
     </div>

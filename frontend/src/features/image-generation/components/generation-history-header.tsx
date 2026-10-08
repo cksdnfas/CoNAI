@@ -30,6 +30,8 @@ type GenerationHistoryHeaderProps = {
   handleClearHistory: () => Promise<void>
   handleCleanupFailed: () => Promise<void>
   refreshHistory: (options?: { watchForNewRows?: boolean }) => Promise<void>
+  /** Hide the scope-wide clear / clean-failed actions (filtered feeds). */
+  hideScopeActions?: boolean
 }
 
 /** Title, scope/count summary and scope-level actions for the generation history panel. */
@@ -52,6 +54,7 @@ export function GenerationHistoryHeader({
   handleClearHistory,
   handleCleanupFailed,
   refreshHistory,
+  hideScopeActions = false,
 }: GenerationHistoryHeaderProps) {
   const { t } = useI18n()
 
@@ -95,6 +98,8 @@ export function GenerationHistoryHeader({
 
       <div className="flex shrink-0 flex-wrap items-center gap-1">
         {inFlightHistoryCount > 0 ? <Badge variant="info">{t({ ko: '작업 진행 중', en: 'Jobs in progress' })}</Badge> : null}
+        {hideScopeActions ? null : (
+        <>
         <IconButton
           size="icon-sm"
           variant="ghost"
@@ -117,6 +122,8 @@ export function GenerationHistoryHeader({
         >
           <Trash2 />
         </IconButton>
+        </>
+        )}
         <IconButton size="icon-sm" variant="ghost" onClick={() => void refreshHistory({ watchForNewRows: true })} label={t('image-generation.components.generation.history.panel.refresh.history')}>
           <RefreshCw className={cn(isFetching && 'animate-spin')} />
         </IconButton>

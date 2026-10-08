@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
-import { CopyPlus, Trash2 } from 'lucide-react'
-import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
+import { CopyPlus, Folder, Trash2, X } from 'lucide-react'
 import { SelectionActionBar } from '@/components/common/selection-action-bar'
+import { TextTabs } from '@/components/common/text-tabs'
 import { IconButton } from '@/components/ui/icon-button'
-import { Section } from '@/components/ui/section'
-import { StatTile } from '@/components/ui/stat-tile'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -37,15 +35,18 @@ type BrowseTab = 'outputs' | 'artifacts'
 
 const WORKFLOW_OUTPUT_PAGE_SIZE = 50
 
-/** Render folder/root-scoped workflow output management content inside browse mode. */
+/** Folder-scoped (or all) workflow outputs on the workflows tab's first screen: generated outputs and text/intermediate artifacts. */
 export function ModuleWorkflowOutputManagementPanel({
   selectedFolderRecord,
   browseContent,
   onRefresh,
+  onClearFolder,
 }: {
   selectedFolderRecord: GraphWorkflowFolderRecord | null
   browseContent: GraphWorkflowBrowseContentRecord
   onRefresh?: () => Promise<unknown> | unknown
+  /** Shows the folder scope as a removable chip next to the tabs. */
+  onClearFolder?: () => void
 }) {
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
@@ -65,10 +66,6 @@ export function ModuleWorkflowOutputManagementPanel({
   const [isDeletingArtifacts, setIsDeletingArtifacts] = useState(false)
   const [outputsPage, setOutputsPage] = useState(1)
   const [artifactsPage, setArtifactsPage] = useState(1)
-  const browseTabItems = useMemo(() => [
-    { value: 'outputs', label: t('module-graph.components.module.workflow.output.management.panel.generated.outputs') },
-    { value: 'artifacts', label: t('module-graph.components.module.workflow.output.management.panel.text.and.intermediate.artifacts') },
-  ], [t])
 
   const watchedFoldersQuery = useQuery({
     queryKey: ['watched-folders', 'output-copy-targets'],
@@ -491,20 +488,25 @@ export function ModuleWorkflowOutputManagementPanel({
   const allArtifactSelected = pagedTechnicalArtifacts.length > 0 && pagedTechnicalArtifacts.every((artifact) => selectedArtifactIdSet.has(artifact.id))
 
   return (
-    <div className="space-y-6">
-      <Section
-        heading={selectedFolderRecord
-          ? t('module-graph.components.module.workflow.output.management.panel.value.workflow.outputs', { name: selectedFolderRecord.name })
-          : t('module-graph.components.module.workflow.output.management.panel.workflow.outputs')}
-        bodyClassName="grid grid-cols-2 gap-3 space-y-0 xl:grid-cols-4"
-      >
-        <StatTile label={t({ ko: '워크플로', en: 'Workflows' })} value={formatNumber(browseContent.scope.workflow_count)} valueClassName="text-lg" />
-        <StatTile label={t({ ko: '실행', en: 'Executions' })} value={formatNumber(browseContent.scope.execution_count)} valueClassName="text-lg" />
-        <StatTile label={t({ ko: '결과물', en: 'Artifacts' })} value={formatNumber(browseContent.scope.artifact_count)} valueClassName="text-lg" />
-        <StatTile label={t('module-graph.components.module.workflow.output.management.panel.final.results')} value={formatNumber(browseContent.scope.final_result_count)} valueClassName="text-lg" />
-      </Section>
-
-      <SegmentedTabBar value={activeTab} items={browseTabItems} onChange={(next) => setActiveTab(next as BrowseTab)} />
+    <div className="space-y-4">
+      <TextTabs
+        value={activeTab}
+        onChange={setActiveTab}
+        ariaLabel={t({ ko: '워크플로 생성물', en: 'Workflow outputs' })}
+        items={[
+          { value: 'outputs', label: t('module-graph.components.module.workflow.output.management.panel.generated.outputs'), count: formatNumber(outputCollections.outputItems.length) },
+          { value: 'artifacts', label: t('module-graph.components.module.workflow.output.management.panel.text.and.intermediate.artifacts'), count: formatNumber(filteredTechnicalArtifacts.length) },
+        ]}
+        actions={selectedFolderRecord && onClearFolder ? (
+          <span className="inline-flex h-6 max-w-48 items-center gap-1 rounded-sm bg-fill pr-0.5 pl-1.5 text-xs text-muted-foreground">
+            <Folder className="size-3.5 shrink-0" aria-hidden />
+            <span className="truncate">{selectedFolderRecord.name}</span>
+            <IconButton size="icon-xs" variant="ghost" className="size-5" onClick={onClearFolder} label={t({ ko: '전체 보기', en: 'Show all' })}>
+              <X />
+            </IconButton>
+          </span>
+        ) : null}
+      />
 
       {activeTab === 'outputs' ? (
         <ModuleWorkflowGeneratedOutputsTab

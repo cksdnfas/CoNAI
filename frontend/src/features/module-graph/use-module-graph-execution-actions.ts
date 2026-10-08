@@ -304,6 +304,34 @@ export function useModuleGraphExecutionActions({
     await handleExecuteGraph(selectedGraphRecord.id, workflowRunInputValues)
   }, [handleExecuteGraph, selectedGraphRecord, selectedWorkflowValidationIssues, showSnackbar, t, workflowRunInputValues])
 
+  /** Editor "시험 실행": save the draft when needed, then run the whole graph with the inputs tab's values. */
+  const handleTestRunCurrentGraph = useCallback(async () => {
+    if (executingGraphId !== null) {
+      return
+    }
+
+    let graphId = selectedGraphId
+    if (selectedGraphId === null || isDirty) {
+      try {
+        const saveResult = await persistCurrentGraph({ silent: true })
+        if (!saveResult) {
+          showSnackbar({ message: t({ ko: '실행하려면 그래프를 먼저 저장할 수 있어야 해.', en: 'The graph must be savable before running it.' }), tone: 'error' })
+          return
+        }
+        graphId = saveResult.graphId
+      } catch (error) {
+        showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '실행 전에 그래프 저장에 실패했어.', en: 'Failed to save the graph before running it.' }), tone: 'error' })
+        return
+      }
+    }
+
+    if (graphId === null) {
+      return
+    }
+
+    await handleExecuteGraph(graphId, workflowRunInputValues)
+  }, [executingGraphId, handleExecuteGraph, isDirty, persistCurrentGraph, selectedGraphId, showSnackbar, t, workflowRunInputValues])
+
   /** Rerun the active workflow, auto-saving the editor draft first when necessary. */
   const handleRerunSelectedGraph = useCallback(async () => {
     if (executingGraphId !== null) {
@@ -335,14 +363,13 @@ export function useModuleGraphExecutionActions({
     await handleExecuteGraph(graphId)
   }, [executingGraphId, handleExecuteGraph, isDirty, persistCurrentGraph, selectedGraphId, showSnackbar, t, workflowView])
 
-  /** Cancel the currently selected execution and refresh both list and detail views. */
-  const handleCancelSelectedExecution = useCallback(async () => {
-    if (!selectedExecutionIdValue(selectedExecution)) {
+  /** Cancel one run (a row's, or the selected one) and refresh both list and detail views. */
+  const handleCancelSelectedExecution = useCallback(async (target?: GraphExecutionRecord) => {
+    const executionId = target?.id ?? selectedExecutionIdValue(selectedExecution)
+    if (!executionId) {
       showSnackbar({ message: t({ ko: '먼저 실행 하나를 선택해줘.', en: 'Select a run first.' }), tone: 'error' })
       return
     }
-
-    const executionId = selectedExecutionIdValue(selectedExecution) as number
 
     try {
       setCancellingExecutionId(executionId)
@@ -356,15 +383,16 @@ export function useModuleGraphExecutionActions({
     }
   }, [refetchExecutionDetail, refetchGraphExecutions, selectedExecution, showSnackbar, t])
 
-  /** Retry one failed or cancelled execution by rerunning its parent workflow. */
-  const handleRetrySelectedExecution = useCallback(async () => {
-    if (!selectedExecution || (selectedExecution.status !== 'failed' && selectedExecution.status !== 'cancelled')) {
+  /** Retry one failed or cancelled run (a row's, or the selected one) by rerunning its workflow with the current inputs. */
+  const handleRetrySelectedExecution = useCallback(async (target?: GraphExecutionRecord) => {
+    const execution = target ?? selectedExecution
+    if (!execution || (execution.status !== 'failed' && execution.status !== 'cancelled')) {
       showSnackbar({ message: t({ ko: '실패하거나 취소된 실행을 먼저 선택해줘.', en: 'Select a failed or cancelled run first.' }), tone: 'error' })
       return
     }
 
-    await handleExecuteGraph(selectedExecution.graph_workflow_id)
-  }, [handleExecuteGraph, selectedExecution, showSnackbar, t])
+    await handleExecuteGraph(execution.graph_workflow_id, execution.graph_workflow_id === selectedGraphId ? workflowRunInputValues : undefined)
+  }, [handleExecuteGraph, selectedExecution, selectedGraphId, showSnackbar, t, workflowRunInputValues])
 
   return {
     isSavingGraph,
@@ -375,6 +403,7 @@ export function useModuleGraphExecutionActions({
     handleExecuteSelectedNode,
     handleRunSelectedWorkflow,
     handleRerunSelectedGraph,
+    handleTestRunCurrentGraph,
     handleCancelSelectedExecution,
     handleRetrySelectedExecution,
   }

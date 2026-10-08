@@ -4,7 +4,7 @@ import { useBeforeUnload, useBlocker } from 'react-router-dom'
 import { useBlockerConfirm } from '@/components/ui/use-blocker-confirm'
 import { shouldBypassOverlayHistoryBackNavigation } from '@/components/ui/use-overlay-back-close'
 import type { WorkflowValidationIssue } from './module-graph-types'
-import type { EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
+import type { EditorSupportSectionKey } from './module-graph-types'
 import type { ModuleGraphNode } from './module-graph-shared'
 
 /** Own editor-support navigation, validation focus, and unsaved-change blocking for the module-graph page. */
@@ -117,7 +117,16 @@ export function useModuleGraphEditorShell({
     }, [shouldBlockGraphExit]),
   )
 
-  const graphExitBlocker = useBlocker(useCallback(() => shouldBlockGraphExit && !shouldBypassOverlayHistoryBackNavigation(), [shouldBlockGraphExit]))
+  // Only leaving the workflows tab (another route or tab) is blocked here. Moves inside the tab (graph/edit params, back
+  // and forward) go through the workspace, which asks through its own discard confirmation.
+  const graphExitBlocker = useBlocker(useCallback(({ currentLocation, nextLocation }: { currentLocation: { pathname: string; search: string }; nextLocation: { pathname: string; search: string } }) => {
+    if (!shouldBlockGraphExit || shouldBypassOverlayHistoryBackNavigation()) {
+      return false
+    }
+    const currentTab = new URLSearchParams(currentLocation.search).get('tab')
+    const nextTab = new URLSearchParams(nextLocation.search).get('tab')
+    return currentLocation.pathname !== nextLocation.pathname || currentTab !== nextTab
+  }, [shouldBlockGraphExit]))
   useBlockerConfirm(graphExitBlocker, confirmMessage)
 
   const setEditorSupportSectionRef = useCallback((section: EditorSupportSectionKey, node: HTMLDivElement | null) => {

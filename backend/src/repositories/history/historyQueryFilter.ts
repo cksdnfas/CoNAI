@@ -46,6 +46,11 @@ export function buildHistoryFilterClause(
     params.push(filters.workflow_id);
   }
 
+  if (filters.graph_workflow_id !== undefined) {
+    clauses.push(`${prefix}graph_workflow_id = ?`);
+    params.push(filters.graph_workflow_id);
+  }
+
   if (filters.workflow_name) {
     clauses.push(`${prefix}workflow_name LIKE ?`);
     params.push(`%${filters.workflow_name}%`);

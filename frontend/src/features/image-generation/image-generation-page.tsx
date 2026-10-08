@@ -3,9 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { CalendarClock, Workflow } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
-import { SidebarToggle } from '@/components/common/page-toolbar'
 import { ProviderIcon } from '@/components/common/provider-icons'
-import { usePageSidebar } from '@/components/ui/sidebar'
 import { useI18n } from '@/i18n'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
@@ -16,6 +14,8 @@ import { GENERATION_TOOLBAR_STATUS_SLOT_ID } from './components/generation-toolb
 import { useGenerationHistoryFeed } from './components/use-generation-history-feed'
 import { usePendingHistorySettingsLoad } from './history-settings-load-store'
 import {
+  IMAGE_GENERATION_GRAPH_EDIT_PARAM,
+  IMAGE_GENERATION_GRAPH_PARAM,
   IMAGE_GENERATION_WORKFLOW_PARAM,
   getImageGenerationTabLabel,
   parseImageGenerationTab,
@@ -63,17 +63,6 @@ const PROVIDER_TABS: ImageGenerationTab[] = ['nai', 'codex', 'comfyui']
 const STICKY_ACTION_BAR_SLOT_ID = 'generation-sticky-action-bar'
 
 type NarrowView = 'edit' | 'result'
-
-/** Sidebar toggle for the toolbar when it is hosted by the workflow workspace (PageWithSidebar): shown while the
- * explorer is hidden (collapsed on desktop, always on narrow screens), like PageToolbar does. */
-function WorkspaceSidebarToggle() {
-  const sidebar = usePageSidebar()
-  if (!sidebar || (sidebar.isDesktop && !sidebar.collapsed)) {
-    return null
-  }
-
-  return <SidebarToggle className="-ml-1.5 shrink-0" />
-}
 
 function PanelFallback() {
   return <div className="min-h-[16rem] animate-pulse rounded-sm bg-fill" />
@@ -182,6 +171,10 @@ function ImageGenerationPageContent() {
     if (nextTab !== 'comfyui') {
       nextSearchParams.delete(IMAGE_GENERATION_WORKFLOW_PARAM)
     }
+    if (nextTab !== 'workflows') {
+      nextSearchParams.delete(IMAGE_GENERATION_GRAPH_PARAM)
+      nextSearchParams.delete(IMAGE_GENERATION_GRAPH_EDIT_PARAM)
+    }
     setNarrowView('edit')
     setResultView('stage')
     setSearchParams(nextSearchParams)
@@ -273,8 +266,7 @@ function ImageGenerationPageContent() {
     : null
 
   const toolbar = (
-    <div data-slot="page-toolbar" className="flex min-h-14 shrink-0 items-center gap-2 py-2 max-sm:flex-wrap sm:gap-3">
-      <WorkspaceSidebarToggle />
+    <div data-slot="page-toolbar" className="flex min-h-14 shrink-0 items-center gap-2 py-2 max-sm:flex-wrap max-sm:content-start sm:gap-3">
       <SegmentedControl
         value={activeTab}
         items={tabItems}
@@ -292,12 +284,24 @@ function ImageGenerationPageContent() {
     </div>
   )
 
-  // The workflow workspace is its own page root (explorer sidebar + content); it hosts this toolbar in its content column.
+  // The workflows tab sits in the same frame as the other tabs (toolbar in the same place); on wide screens it always
+  // fills the remaining height, so its list/runner/results columns and the node editor scroll inside themselves.
   if (activeTab === 'workflows') {
     return (
-      <Suspense fallback={<PanelFallback />}>
-        <ModuleWorkflowWorkspaceLazy toolbar={toolbar} />
-      </Suspense>
+      <div
+        className={cn(
+          isWideLayout
+            ? 'flex h-[calc(100vh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col overflow-hidden'
+            : 'space-y-4 pb-28',
+        )}
+      >
+        <div className={cn(isWideLayout && 'shrink-0 pb-2')}>
+          {toolbar}
+        </div>
+        <Suspense fallback={<PanelFallback />}>
+          <ModuleWorkflowWorkspaceLazy isWideLayout={isWideLayout} />
+        </Suspense>
+      </div>
     )
   }
 

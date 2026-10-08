@@ -25,7 +25,7 @@ import {
 } from '@/lib/api-module-graph'
 import { buildFlowFromGraphRecord, buildGraphEditorSnapshot, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
 import { deriveWorkflowExposedInputsFromNodes } from './module-graph-workflow-inputs'
-import type { EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
+import type { EditorSupportSectionKey } from './module-graph-types'
 import { clearPersistedWorkflowRunnerDraft, loadPersistedWorkflowRunnerDraft } from './workflow-runner-draft-storage'
 
 /** Own workflow/folder browse-management actions for the module-graph page. */
@@ -105,6 +105,28 @@ export function useModuleGraphBrowseActions({
   const draftStorageOwner = resolveAccountDraftOwner(useAuthStatusQuery().data)
   const queryClient = useQueryClient()
   const confirm = useConfirm()
+
+  /** Resolve the full record of a list row (or the selected workflow when no row is given). */
+  const resolveTargetGraph = useCallback(async (target?: GraphWorkflowSummaryRecord | GraphWorkflowRecord | null): Promise<GraphWorkflowRecord | null> => {
+    if (!target) {
+      return selectedGraphRecord
+    }
+    if ('graph' in target) {
+      return target
+    }
+    if (selectedGraphRecord?.id === target.id) {
+      return selectedGraphRecord
+    }
+    try {
+      return await queryClient.fetchQuery({
+        queryKey: ['module-graph-workflow-detail', target.id],
+        queryFn: () => getGraphWorkflow(target.id),
+      })
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '워크플로우를 불러오지 못했어.', en: 'Failed to load the workflow.' }), tone: 'error' })
+      return null
+    }
+  }, [queryClient, selectedGraphRecord, showSnackbar, t])
 
   /** Apply one saved workflow record into the current editor state. */
   const applyGraphRecordToEditor = useCallback((graph: GraphWorkflowRecord) => {
@@ -296,24 +318,26 @@ export function useModuleGraphBrowseActions({
   }, [refetchGraphWorkflows, selectedGraphRecord, setSelectedFolderId, showSnackbar, t])
 
   /** Open the currently selected workflow inside editor mode. */
-  const handleEditSelectedWorkflow = useCallback(() => {
-    if (!selectedGraphRecord) {
+  const handleEditSelectedWorkflow = useCallback((target?: GraphWorkflowSummaryRecord | GraphWorkflowRecord) => {
+    const graph = target ?? selectedGraphRecord
+    if (!graph) {
       showSnackbar({ message: t({ ko: '먼저 워크플로우를 하나 선택해줘.', en: 'Select a workflow first.' }), tone: 'error' })
       return
     }
 
-    handleLoadGraph(selectedGraphRecord, { openEditor: true, silent: true })
+    void handleLoadGraph(graph, { openEditor: true, silent: true })
   }, [handleLoadGraph, selectedGraphRecord, showSnackbar, t])
 
   /** Duplicate the selected saved workflow while preserving its folder and graph document. */
-  const handleDuplicateSelectedWorkflow = useCallback(async () => {
-    if (!selectedGraphRecord) {
-      showSnackbar({ message: t({ ko: '먼저 워크플로우를 하나 선택해줘.', en: 'Select a workflow first.' }), tone: 'error' })
+  const handleDuplicateSelectedWorkflow = useCallback(async (target?: GraphWorkflowSummaryRecord) => {
+    const sourceGraph = await resolveTargetGraph(target)
+    if (!sourceGraph) {
+      if (!target) showSnackbar({ message: t({ ko: '먼저 워크플로우를 하나 선택해줘.', en: 'Select a workflow first.' }), tone: 'error' })
       return
     }
 
     const currentNames = new Set(graphWorkflows.map((workflow) => workflow.name))
-    const baseName = t({ ko: '{name} 복사본', en: '{name} copy' }, { name: selectedGraphRecord.name })
+    const baseName = t({ ko: '{name} 복사본', en: '{name} copy' }, { name: sourceGraph.name })
     let nextName = baseName
     let suffix = 2
     while (currentNames.has(nextName)) {
@@ -324,11 +348,11 @@ export function useModuleGraphBrowseActions({
     try {
       const result = await createGraphWorkflow({
         name: nextName,
-        description: selectedGraphRecord.description || undefined,
-        graph: JSON.parse(JSON.stringify(selectedGraphRecord.graph)) as GraphWorkflowRecord['graph'],
-        folder_id: selectedGraphRecord.folder_id ?? null,
-        version: selectedGraphRecord.version,
-        is_active: selectedGraphRecord.is_active,
+        description: sourceGraph.description || undefined,
+        graph: JSON.parse(JSON.stringify(sourceGraph.graph)) as GraphWorkflowRecord['graph'],
+        folder_id: sourceGraph.folder_id ?? null,
+        version: sourceGraph.version,
+        is_active: sourceGraph.is_active,
       })
       await refetchGraphWorkflows()
       setSelectedGraphId(result.id)
@@ -338,25 +362,26 @@ export function useModuleGraphBrowseActions({
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '워크플로우 복제에 실패했어.', en: 'Failed to duplicate the workflow.' }), tone: 'error' })
     }
-  }, [graphWorkflows, refetchGraphWorkflows, selectedGraphRecord, setSelectedExecutionId, setSelectedGraphId, setWorkflowView, showSnackbar, t])
+  }, [graphWorkflows, refetchGraphWorkflows, resolveTargetGraph, setSelectedExecutionId, setSelectedGraphId, setWorkflowView, showSnackbar, t])
 
   /** Download the selected saved workflow as a portable JSON export. */
-  const handleExportSelectedWorkflow = useCallback(async () => {
-    if (!selectedGraphRecord) {
+  const handleExportSelectedWorkflow = useCallback(async (target?: GraphWorkflowSummaryRecord) => {
+    const exportTarget = target ?? selectedGraphRecord
+    if (!exportTarget) {
       showSnackbar({ message: t({ ko: '먼저 워크플로우를 하나 선택해줘.', en: 'Select a workflow first.' }), tone: 'error' })
       return
     }
 
     try {
-      const exportPayload = await exportGraphWorkflow(selectedGraphRecord.id)
+      const exportPayload = await exportGraphWorkflow(exportTarget.id)
       const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' })
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
-      const safeName = selectedGraphRecord.name
+      const safeName = exportTarget.name
         .trim()
         .replace(/[^a-zA-Z0-9가-힣_-]+/g, '-')
         .replace(/^-+|-+$/g, '')
-        || `workflow-${selectedGraphRecord.id}`
+        || `workflow-${exportTarget.id}`
       link.href = url
       link.download = `${safeName}.conai-workflow.json`
       document.body.appendChild(link)
@@ -395,17 +420,19 @@ export function useModuleGraphBrowseActions({
   }, [formatNumber, refetchGraphWorkflows, refetchModules, selectedFolderId, setSelectedExecutionId, setSelectedGraphId, setWorkflowView, showSnackbar, t])
 
   /** Delete the selected workflow after confirmation and reset browse/editor state. */
-  const handleDeleteSelectedWorkflow = useCallback(async () => {
-    if (!selectedGraphRecord) {
+  const handleDeleteSelectedWorkflow = useCallback(async (target?: GraphWorkflowSummaryRecord) => {
+    const deleteTarget = target ?? selectedGraphRecord
+    if (!deleteTarget) {
       showSnackbar({ message: t({ ko: '먼저 워크플로우를 하나 선택해줘.', en: 'Select a workflow first.' }), tone: 'error' })
       return
     }
+    const isOpenWorkflow = selectedGraphRecord?.id === deleteTarget.id
 
     const confirmed = await confirm({
       title: t({ ko: '워크플로우 삭제', en: 'Delete workflow' }),
       description: t(
         { ko: '워크플로우 "{name}"을(를) 삭제할까? 이 작업은 되돌릴 수 없어.', en: 'Delete the workflow "{name}"? This cannot be undone.' },
-        { name: selectedGraphRecord.name },
+        { name: deleteTarget.name },
       ),
       confirmLabel: t({ ko: '삭제', en: 'Delete' }),
       tone: 'destructive',
@@ -415,11 +442,13 @@ export function useModuleGraphBrowseActions({
     }
 
     try {
-      const result = await deleteGraphWorkflow(selectedGraphRecord.id)
-      clearPersistedWorkflowRunnerDraft(draftStorageOwner, selectedGraphRecord.id)
-      resetWorkflowDraft()
-      setWorkflowView('browse')
-      setIsEditorSupportOpen(false)
+      const result = await deleteGraphWorkflow(deleteTarget.id)
+      clearPersistedWorkflowRunnerDraft(draftStorageOwner, deleteTarget.id)
+      if (isOpenWorkflow) {
+        resetWorkflowDraft()
+        setWorkflowView('browse')
+        setIsEditorSupportOpen(false)
+      }
       await refetchGraphWorkflows()
       const deletedScheduleCount = result.schedule_maintenance?.deletedScheduleCount ?? 0
       const cancelledQueuedCount = result.schedule_maintenance?.cancelled ?? 0
@@ -442,11 +471,11 @@ export function useModuleGraphBrowseActions({
     if (workflowView !== 'edit') {
       setWorkflowView('browse')
       setIsEditorSupportOpen(false)
-      return
+      return true
     }
 
     if (!(await confirmDiscardUnsavedChanges())) {
-      return
+      return false
     }
 
     if (selectedGraphRecord) {
@@ -458,6 +487,7 @@ export function useModuleGraphBrowseActions({
     setWorkflowView('browse')
     setIsEditorSupportOpen(false)
     setActiveEditorSupportSection('setup')
+    return true
   }, [applyGraphRecordToEditor, confirmDiscardUnsavedChanges, resetWorkflowDraft, selectedGraphRecord, setActiveEditorSupportSection, setIsEditorSupportOpen, setWorkflowView, workflowView])
 
   /** Refresh browse data sources and selected execution list when available. */

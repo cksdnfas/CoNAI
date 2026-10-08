@@ -53,10 +53,12 @@ type GenerationHistoryPanelViewProps = Omit<GenerationHistoryPanelProps, 'refres
   feed: GenerationHistoryFeed
   /** Replaces the heading and scope line (e.g. the result/history toggle); the scope actions stay. */
   headerLeading?: ReactNode
+  /** Hide "clear history" and "clean failed": they act on the whole service scope, not on the feed's filter. */
+  hideScopeActions?: boolean
 }
 
 /** History list body for a feed owned by the caller (the result area shares one feed with the stage). */
-export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack, headerLeading }: GenerationHistoryPanelViewProps) {
+export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publicWorkflowSlug, splitPaneScroll = false, onBack, headerLeading, hideScopeActions = false }: GenerationHistoryPanelViewProps) {
   const { canViewImages } = useImagePermissions()
   const { t, formatNumber } = useI18n()
   const { canExecuteGeneration } = useFeaturePermissions()
@@ -245,6 +247,7 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
         handleClearHistory={handleClearHistory}
         handleCleanupFailed={handleCleanupFailed}
         refreshHistory={refreshHistory}
+        hideScopeActions={hideScopeActions}
       />
 
       {historyQuery.isError ? (

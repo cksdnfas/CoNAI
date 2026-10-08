@@ -57,9 +57,13 @@ export function ensureApiGenerationHistoryTable(userSettingsDb: Database.Databas
       queue_job_id INTEGER,
       requested_by_account_id INTEGER,
       requested_by_account_type TEXT,
-      server_id INTEGER
+      server_id INTEGER,
+      graph_workflow_id INTEGER,
+      graph_execution_id INTEGER
     )
   `);
+
+  ensureGraphWorkflowHistoryColumns(userSettingsDb);
 
   const indexes = [
     'CREATE INDEX IF NOT EXISTS idx_api_gen_service_type ON api_generation_history(service_type)',
@@ -72,7 +76,40 @@ export function ensureApiGenerationHistoryTable(userSettingsDb: Database.Databas
     'CREATE INDEX IF NOT EXISTS idx_api_gen_requested_by_account_id ON api_generation_history(requested_by_account_id)',
     'CREATE INDEX IF NOT EXISTS idx_api_gen_server_id ON api_generation_history(server_id)',
     'CREATE INDEX IF NOT EXISTS idx_api_generation_history_status_created ON api_generation_history(generation_status, created_at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_api_gen_graph_workflow_id ON api_generation_history(graph_workflow_id, created_at DESC)',
   ];
 
   indexes.forEach((sql) => userSettingsDb.exec(sql));
+}
+
+/**
+ * Graph-workflow final results used to put the graph workflow's id into `workflow_id`, which the ComfyUI tab reads as a
+ * ComfyUI workflow id: a graph result showed up in the history of the ComfyUI workflow with the same number. They now
+ * get their own columns. Existing rows move over once, when the columns are added (their metadata names the graph).
+ */
+export function ensureGraphWorkflowHistoryColumns(userSettingsDb: Database.Database): void {
+  const columns = new Set(
+    (userSettingsDb.prepare('PRAGMA table_info(api_generation_history)').all() as Array<{ name: string }>).map((column) => column.name),
+  );
+  if (columns.has('graph_workflow_id') && columns.has('graph_execution_id')) {
+    return;
+  }
+
+  userSettingsDb.transaction(() => {
+    if (!columns.has('graph_workflow_id')) {
+      userSettingsDb.exec('ALTER TABLE api_generation_history ADD COLUMN graph_workflow_id INTEGER');
+    }
+    if (!columns.has('graph_execution_id')) {
+      userSettingsDb.exec('ALTER TABLE api_generation_history ADD COLUMN graph_execution_id INTEGER');
+    }
+    userSettingsDb.exec(`
+      UPDATE api_generation_history
+      SET graph_workflow_id = CAST(json_extract(metadata, '$.graph_workflow_id') AS INTEGER),
+          graph_execution_id = CAST(json_extract(metadata, '$.graph_execution_id') AS INTEGER),
+          workflow_id = NULL
+      WHERE metadata LIKE '%"graph_workflow_id"%'
+        AND json_valid(metadata)
+        AND json_extract(metadata, '$.graph_workflow_id') IS NOT NULL
+    `);
+  })();
 }

@@ -112,8 +112,8 @@ export class HistoryCommandService {
         positive_prompt, negative_prompt, width, height,
         original_path, file_size, assigned_group_id,
         queue_job_id, requested_by_account_id, requested_by_account_type, server_id,
-        error_message, metadata
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        error_message, metadata, graph_workflow_id, graph_execution_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.service_type,
       data.generation_status,
@@ -140,6 +140,8 @@ export class HistoryCommandService {
       data.server_id,
       data.error_message,
       data.metadata,
+      data.graph_workflow_id ?? null,
+      data.graph_execution_id ?? null,
     );
 
     const historyId = info.lastInsertRowid as number;

@@ -85,3 +85,6 @@ export type ModuleGraphClipboardPayload = {
   nodes: ModuleGraphClipboardNode[]
   edges: ModuleGraphClipboardEdge[]
 }
+
+/** Legacy editor-support section keys still threaded through the page state and actions. */
+export type EditorSupportSectionKey = 'setup' | 'inspector' | 'inputs' | 'validation' | 'results'

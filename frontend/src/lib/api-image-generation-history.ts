@@ -77,6 +77,17 @@ export async function getGenerationWorkflowHistory(workflowId: number, params?: 
   return response
 }
 
+/** Final results of one graph workflow (the workflows tab's results column). */
+export async function getGraphWorkflowHistory(graphWorkflowId: number, params?: GenerationHistoryQueryParams) {
+  const searchParams = new URLSearchParams({
+    limit: String(params?.limit ?? 40),
+    offset: String(params?.offset ?? 0),
+  })
+  appendGenerationHistoryFilters(searchParams, params)
+  const response = await requestJson<GenerationHistoryResponse>(`/api/generation-history/graph-workflow/${graphWorkflowId}?${searchParams.toString()}`)
+  return response
+}
+
 /** The request behind one history row, used to copy its prompt or reload its settings. */
 export interface GenerationHistoryRequestSnapshot {
   history_id: number

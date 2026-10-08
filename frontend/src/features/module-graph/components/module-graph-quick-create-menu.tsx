@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { Sparkles, X } from 'lucide-react'
+import { Library, Sparkles, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -35,6 +35,7 @@ export function ModuleGraphQuickCreateMenu({
   modules,
   recommendedModules,
   onSelectModule,
+  onOpenModuleLibrary,
   onClose,
 }: {
   mode: 'pane' | 'connect'
@@ -42,6 +43,8 @@ export function ModuleGraphQuickCreateMenu({
   modules: ModuleDefinitionRecord[]
   recommendedModules: RecommendedModuleMatch[]
   onSelectModule: (module: ModuleDefinitionRecord) => void
+  /** Footer link to the full module library (saved modules, custom node management). */
+  onOpenModuleLibrary?: () => void
   onClose: () => void
 }) {
   const { t, locale } = useI18n()
@@ -281,6 +284,14 @@ export function ModuleGraphQuickCreateMenu({
             ))}
           </div>
         </div>
+        {onOpenModuleLibrary ? (
+          <div className="border-t border-line px-1.5 py-1.5">
+            <Button type="button" variant="ghost" size="sm" className="w-full justify-start" onClick={onOpenModuleLibrary}>
+              <Library className="size-4" />
+              {t({ ko: '모든 모듈', en: 'All modules' })}
+            </Button>
+          </div>
+        ) : null}
       </PopoverContent>
     </Popover>
   )

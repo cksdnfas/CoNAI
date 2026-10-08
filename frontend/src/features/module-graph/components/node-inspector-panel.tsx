@@ -2,12 +2,11 @@ import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { ProviderIcon } from '@/components/common/provider-icons'
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, Eraser, MousePointerClick, RotateCcw } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronRight, Eraser, MousePointerClick, Play, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { Inset } from '@/components/ui/inset'
 import { Panel } from '@/components/ui/panel'
 import { Section } from '@/components/ui/section'
 import { Text } from '@/components/ui/text'
@@ -108,7 +107,7 @@ export function NodeInspectorPanel({
 }: NodeInspectorPanelProps) {
   const { t, formatNumber } = useI18n()
   const { canExecuteGeneration } = useFeaturePermissions()
-  const resolvedExecuteSelectedNodeLabel = executeSelectedNodeLabel ?? t({ ko: '선택 노드 실행', en: 'Run selected node' })
+  const resolvedExecuteSelectedNodeLabel = executeSelectedNodeLabel ?? t({ ko: '이 노드까지 실행', en: 'Run up to this node' })
   const resolvedForceExecuteSelectedNodeLabel = forceExecuteSelectedNodeLabel ?? t({ ko: '강제 재실행', en: 'Force rerun' })
   const [collapsedOutputGroupKeys, setCollapsedOutputGroupKeys] = useState<string[]>([])
   const collapsedOutputGroupKeySet = useMemo(() => new Set(collapsedOutputGroupKeys), [collapsedOutputGroupKeys])
@@ -175,11 +174,11 @@ export function NodeInspectorPanel({
     const missingRequired = Boolean(port.required && !isNodeInputSatisfied(node, port))
     const isHighlightedPort = highlightedPortKey === port.key
     const clearPortValue = () => onNodeValueClear(node.id, port.key)
-    // Status tints over the tonal card (no outline): info for the focused port, warning for a missing required value.
+    // A thin left accent instead of a tinted card: info for the focused port, warning for a missing required value.
     const cardStyle = isHighlightedPort
-      ? ({ backgroundColor: 'color-mix(in srgb, var(--info-soft) 55%, transparent)', boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--info) 45%, transparent)' } as CSSProperties)
+      ? ({ boxShadow: 'inset 2px 0 0 var(--info)', paddingLeft: '0.625rem' } as CSSProperties)
       : missingRequired
-        ? ({ backgroundColor: 'color-mix(in srgb, var(--warning-soft) 45%, transparent)' } as CSSProperties)
+        ? ({ boxShadow: 'inset 2px 0 0 var(--warning)', paddingLeft: '0.625rem' } as CSSProperties)
         : undefined
     const renderPortCard = (children: ReactNode) => (
       <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
@@ -467,24 +466,19 @@ export function NodeInspectorPanel({
                   <Badge variant="outline" className="gap-1"><ProviderIcon provider={selectedNode.data.module.engine_type === 'nai' ? 'novelai' : selectedNode.data.module.engine_type} className="size-3" />{t(MODULE_ENGINE_LABELS[selectedNode.data.module.engine_type] ?? selectedNode.data.module.engine_type)}</Badge>
                   <TechnicalReferenceHint title={`node ${selectedNode.id}`} label={t({ ko: '노드 내부 식별자 보기', en: 'Show internal node identifier' })} />
                 </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                  <div className="space-y-1">
-                    <Text as="div" variant="overline" className="font-medium">{t({ ko: '노드 이름', en: 'Node name' })}</Text>
-                    <Input
-                      value={selectedNode.data.label ?? ''}
-                      onChange={(event) => onNodeLabelChange(selectedNode.id, event.target.value)}
-                      placeholder={getModuleBaseDisplayName(selectedNode.data.module)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Text as="div" variant="overline" className="font-medium">{t({ ko: '기본 타입', en: 'Base type' })}</Text>
-                    <Input value={getModuleBaseDisplayName(selectedNode.data.module)} readOnly aria-readonly className="text-muted-foreground" />
-                  </div>
+                <div className="mt-3 space-y-1">
+                  <Text as="div" variant="overline" className="font-medium">{t({ ko: '노드 이름', en: 'Node name' })}</Text>
+                  <Input
+                    value={selectedNode.data.label ?? ''}
+                    onChange={(event) => onNodeLabelChange(selectedNode.id, event.target.value)}
+                    placeholder={getModuleBaseDisplayName(selectedNode.data.module)}
+                  />
                 </div>
               </div>
               {onExecuteSelectedNode ? (
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="sm" onClick={onExecuteSelectedNode} disabled={!canExecuteGeneration || executeSelectedNodeDisabled}>
+                  <Button type="button" size="sm" variant="secondary" onClick={onExecuteSelectedNode} disabled={!canExecuteGeneration || executeSelectedNodeDisabled}>
+                    <Play className="size-4" />
                     {resolvedExecuteSelectedNodeLabel}
                   </Button>
                   {onForceExecuteSelectedNode ? (
@@ -498,27 +492,20 @@ export function NodeInspectorPanel({
           </div>
 
           {missingRequiredInputs.length > 0 ? (
-            <div role="status" className="rounded-sm bg-warning-soft/45 px-4 py-3">
-              <div className="text-sm font-medium text-foreground">{t({ ko: '아직 채워야 하는 필수 입력', en: 'Required inputs still needed' })}</div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {missingRequiredInputs.map((port) => (
-                  <Badge key={port.key} variant="secondary">{port.label}</Badge>
-                ))}
-              </div>
+            <div role="status" className="flex items-start gap-1.5 text-sm text-warning">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <span className="min-w-0">{t({ ko: '필수 입력 비어 있음: {names}', en: 'Required inputs empty: {names}' }, { names: missingRequiredInputs.map((port) => port.label).join(', ') })}</span>
             </div>
           ) : null}
 
-          <Inset className="space-y-3 p-3">
+          {selectedNodeOutputGroups.length > 0 ? (
+          <div className="space-y-2 border-b border-line pb-3">
             <div className="flex flex-wrap items-center gap-2">
-              <Text as="div" variant="label">{t({ ko: '노드 출력', en: 'Node outputs' })}</Text>
-              {selectedExecutionId ? <Badge variant="outline">{t({ ko: '실행 #{id}', en: 'Run #{id}' }, { id: formatNumber(selectedExecutionId) })}</Badge> : null}
+              <Text as="div" variant="overline" className="font-semibold">{t({ ko: '노드 출력', en: 'Node outputs' })}</Text>
+              {selectedExecutionId ? <span className="font-mono text-2xs text-muted-foreground">#{formatNumber(selectedExecutionId)}</span> : null}
             </div>
 
-            {!selectedExecutionArtifacts ? (
-              <EmptyState size="compact" title={t({ ko: '실행 선택 필요', en: 'Select a run' })} />
-            ) : selectedNodeOutputGroups.length === 0 ? (
-              <EmptyState size="compact" title={t({ ko: '선택한 실행에서 이 노드가 남긴 출력이 없어.', en: 'This node has no outputs in the selected run.' })} />
-            ) : (
+            {(
               <div className="space-y-2">
                 {selectedNodeOutputGroups.map((group) => {
                   const isCollapsed = collapsedOutputGroupKeySet.has(group.portKey)
@@ -552,7 +539,8 @@ export function NodeInspectorPanel({
                 })}
               </div>
             )}
-          </Inset>
+          </div>
+          ) : null}
 
           {selectedNodeInputPorts.length === 0 || selectedNodeWorkflowInputPort ? (
             selectedNodeStandaloneUiFields.length > 0 ? (

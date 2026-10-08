@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from 'react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useI18n } from '@/i18n'
 import type { GraphExecutionRecord, GraphWorkflowExposedInput, GraphWorkflowFolderRecord, GraphWorkflowRecord, GraphWorkflowSummaryRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
-import type { EditorSupportSectionKey } from './components/module-workflow-editor-support-panel'
+import type { EditorSupportSectionKey } from './module-graph-types'
 import type { WorkflowValidationIssue } from './module-graph-types'
 import type { ModuleGraphEdge, ModuleGraphNode } from './module-graph-shared'
 import { useModuleGraphBrowseActions } from './use-module-graph-browse-actions'
@@ -251,6 +251,7 @@ export function useModuleGraphPageActions({
     handleExecuteSelectedNode,
     handleRunSelectedWorkflow,
     handleRerunSelectedGraph,
+    handleTestRunCurrentGraph,
     handleCancelSelectedExecution,
     handleRetrySelectedExecution,
   } = useModuleGraphExecutionActions({
@@ -332,6 +333,7 @@ export function useModuleGraphPageActions({
     handleExecuteSelectedNode,
     handleRunSelectedWorkflow,
     handleRerunSelectedGraph,
+    handleTestRunCurrentGraph,
     handleCancelSelectedExecution,
     handleRetrySelectedExecution,
   }

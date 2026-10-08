@@ -291,6 +291,42 @@ router.delete(
 );
 
 /**
+ * GET /api/generation-history/graph-workflow/:graphWorkflowId
+ * Final results of one graph workflow (the workflows tab's results column), same paging and scope as the workflow list.
+ */
+router.get(
+  '/graph-workflow/:graphWorkflowId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const graphWorkflowId = Number.parseInt(routeParam(req.params.graphWorkflowId), 10);
+    if (!Number.isSafeInteger(graphWorkflowId) || graphWorkflowId <= 0) {
+      res.status(400).json({ success: false, error: 'graphWorkflowId must be a positive integer' });
+      return;
+    }
+    const { filters, error } = buildHistoryQueryFilters(req.query);
+    if (error) {
+      res.status(400).json({ success: false, error });
+      return;
+    }
+
+    const accessScope = applyHistoryAccessScope(req, filters, req.query.mine === 'true');
+    if (accessScope.forceEmpty) {
+      res.json({ success: true, records: [], total: 0, limit: filters.limit, offset: filters.offset, graphWorkflowId });
+      return;
+    }
+
+    const result = await GenerationHistoryService.getHistoryByGraphWorkflow(graphWorkflowId, filters);
+    res.json({
+      success: true,
+      records: result.records,
+      total: result.total,
+      limit: filters.limit,
+      offset: filters.offset,
+      graphWorkflowId,
+    });
+  })
+);
+
+/**
  * GET /api/generation-history/workflow/:workflowId
  * Get generation history for specific workflow
  * ComfyUI only - filtered by workflow_id

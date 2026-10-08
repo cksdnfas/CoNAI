@@ -7,6 +7,7 @@ import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-eve
 import {
   getGenerationHistory,
   getGenerationWorkflowHistory,
+  getGraphWorkflowHistory,
 } from '@/lib/api-image-generation-history'
 import { getPublicGenerationWorkflowHistory } from '@/lib/api-public-workflows'
 import type { GenerationServiceType } from '@/lib/api-image-generation-types'
@@ -27,6 +28,8 @@ export type GenerationHistoryFeedOptions = {
   refreshNonce: number
   serviceType: GenerationServiceType
   workflowId?: number | null
+  /** Final results of this graph workflow (the workflows tab); takes precedence over the service type. */
+  graphWorkflowId?: number | null
   publicWorkflowSlug?: string | null
   /** False keeps the query idle (e.g. while the page shows a view without results). */
   enabled?: boolean
@@ -37,7 +40,7 @@ export type GenerationHistoryFeedOptions = {
  * refresh cadence (with the watchdog poll for rows stuck in progress) and the parent refresh nonce.
  * Mount it once per surface so only one observer drives the refetch interval.
  */
-export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId, publicWorkflowSlug, enabled = true }: GenerationHistoryFeedOptions) {
+export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId, graphWorkflowId, publicWorkflowSlug, enabled = true }: GenerationHistoryFeedOptions) {
   const queryClient = useQueryClient()
   const { canViewImages } = useImagePermissions()
   const authStatusQuery = useAuthStatusQuery()
@@ -53,13 +56,13 @@ export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId
     : (isAdmin ? 'all-users' : 'mine-only')
   const historyQueryKey = useMemo(() => [
     'image-generation-history',
-    serviceType,
-    workflowId ?? null,
+    graphWorkflowId ? 'graph-workflow' : serviceType,
+    graphWorkflowId ?? workflowId ?? null,
     publicWorkflowSlug ?? null,
     historyScope,
     requesterAccountId,
     requesterAccountType,
-  ] as const, [historyScope, publicWorkflowSlug, requesterAccountId, requesterAccountType, serviceType, workflowId])
+  ] as const, [graphWorkflowId, historyScope, publicWorkflowSlug, requesterAccountId, requesterAccountType, serviceType, workflowId])
   // QLIST-4: 사용자가 명시적으로 요청한 새로고침만 로드된 전 페이지를 다시 읽는다.
   const isFullHistoryRefreshRef = useRef(false)
   // 첫 페이지 경계가 밀린 리프레시는(신규 행 유입) 뒤 페이지 캐시를 재사용할 수 없다.
@@ -70,6 +73,12 @@ export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId
           limit: GENERATION_HISTORY_PAGE_SIZE,
           offset,
         })
+      : graphWorkflowId
+        ? getGraphWorkflowHistory(graphWorkflowId, {
+            limit: GENERATION_HISTORY_PAGE_SIZE,
+            offset,
+            ...(isAdmin ? {} : { mine: true }),
+          })
       : serviceType === 'comfyui' && workflowId
         ? getGenerationWorkflowHistory(workflowId, {
             limit: GENERATION_HISTORY_PAGE_SIZE,
@@ -81,7 +90,7 @@ export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId
             offset,
             ...(isAdmin ? {} : { mine: true }),
           })
-  ), [isAdmin, isPublicView, publicWorkflowSlug, serviceType, workflowId])
+  ), [graphWorkflowId, isAdmin, isPublicView, publicWorkflowSlug, serviceType, workflowId])
   const historyQuery = useInfiniteQuery({
     queryKey: historyQueryKey,
     initialPageParam: 0,

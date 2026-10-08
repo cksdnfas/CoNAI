@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Background, Controls, MarkerType, MiniMap, ReactFlow, type Connection, type OnEdgesChange, type OnNodesChange, type ReactFlowInstance } from '@xyflow/react'
+import { Background, Controls, MarkerType, MiniMap, ReactFlow, useNodesInitialized, type Connection, type OnEdgesChange, type OnNodesChange, type ReactFlowInstance } from '@xyflow/react'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import { ModuleGraphActionMenu, type ModuleGraphActionMenuState } from './module-graph-action-menu'
@@ -7,11 +7,11 @@ import { ModuleGraphQuickCreateMenu } from './module-graph-quick-create-menu'
 import { ModuleGraphNodeCard } from './module-graph-node-card'
 import { ADVANCED_OUTPUT_PORTS_ENABLED_KEY, buildHandleId, getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModulePortCompatibility, getVisibleModuleOutputPorts, hasAdvancedModuleOutputPorts, isAdvancedOutputPortsEnabled, parseHandleId, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 import { getActiveModuleInputPorts } from '../module-graph-minimax-director-ports'
+import { GRAPH_FIT_VIEW_OPTIONS } from '../module-graph-viewport'
 
 const MODULE_GRAPH_NODE_TYPES = { module: ModuleGraphNodeCard }
 const MOBILE_NODE_DRAG_HANDLE_SELECTOR = '.module-graph-drag-handle'
-const INITIAL_GRAPH_VIEWPORT = { x: 0, y: 0, zoom: 0.65 }
-const INITIAL_GRAPH_FIT_VIEW_OPTIONS = { padding: 0.35, maxZoom: 0.65 }
+const INITIAL_GRAPH_VIEWPORT = { x: 0, y: 0, zoom: 0.85 }
 
 type PendingConnectionStart = {
   nodeId: string
@@ -219,6 +219,9 @@ export function ModuleGraphCanvas({
   onToggleNodeDisabled,
   onRemoveNodeById,
   isValidConnection,
+  fitViewKey,
+  quickCreateRequest = 0,
+  onOpenModuleLibrary,
 }: {
   nodes: ModuleGraphNode[]
   edges: ModuleGraphEdge[]
@@ -239,6 +242,12 @@ export function ModuleGraphCanvas({
   onToggleNodeDisabled: (nodeId: string) => void
   onRemoveNodeById: (nodeId: string) => void
   isValidConnection: (connection: Connection | ModuleGraphEdge) => boolean
+  /** Changing it (another workflow loaded) fits the view once the new nodes are measured. */
+  fitViewKey?: string | number | null
+  /** Bumping it opens the node picker at the middle of the canvas (the editor bar's "+ 노드"). */
+  quickCreateRequest?: number
+  /** Opens the full module library from the node picker. */
+  onOpenModuleLibrary?: () => void
 }) {
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<ModuleGraphNode, ModuleGraphEdge> | null>(null)
   const [quickCreateState, setQuickCreateState] = useState<QuickCreateState | null>(null)
@@ -252,6 +261,16 @@ export function ModuleGraphCanvas({
   const isCanvasActiveRef = useRef(false)
 
   const nodeById = useMemo(() => buildModuleGraphNodeMap(nodes), [nodes])
+  const nodesInitialized = useNodesInitialized()
+  const [fittedKey, setFittedKey] = useState<string | number | null | undefined>(undefined)
+
+  useEffect(() => {
+    if (!reactFlowInstance || !nodesInitialized || fittedKey === fitViewKey) {
+      return
+    }
+    setFittedKey(fitViewKey)
+    void reactFlowInstance.fitView(GRAPH_FIT_VIEW_OPTIONS)
+  }, [fitViewKey, fittedKey, nodesInitialized, reactFlowInstance])
 
   const recommendedModules = useMemo(
     () => getRecommendedModulesFromConnectionStart(modules, nodeById, quickCreateState?.connectionStart ?? null),
@@ -352,6 +371,23 @@ export function ModuleGraphCanvas({
     })
   }, [reactFlowInstance, suppressNextPaneClick])
 
+  // "+ 노드" from the editor bar: open the picker at the middle of the visible canvas.
+  const handledQuickCreateRequestRef = useRef(quickCreateRequest)
+  useEffect(() => {
+    if (quickCreateRequest === handledQuickCreateRequestRef.current) {
+      return
+    }
+    handledQuickCreateRequestRef.current = quickCreateRequest
+    const rect = canvasRootRef.current?.getBoundingClientRect()
+    if (!rect || !reactFlowInstance) {
+      return
+    }
+    const center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+    const flowPosition = reactFlowInstance.screenToFlowPosition(center)
+    closeActionMenu()
+    openQuickCreateMenuAt({ x: center.x - 180, y: Math.max(rect.top + 12, center.y - 220) }, flowPosition, 'pane', null)
+  }, [closeActionMenu, openQuickCreateMenuAt, quickCreateRequest, reactFlowInstance])
+
   const rememberInteractionPoint = useCallback((event: unknown) => {
     const clientPoint = getEventClientPoint(event)
     if (!clientPoint || !reactFlowInstance) {
@@ -426,7 +462,7 @@ export function ModuleGraphCanvas({
   }, [closeActionMenu, closeQuickCreateMenu, getPasteFlowPosition, onCopySelection, onPasteSelection, rememberInteractionPoint])
 
   return (
-    <div ref={canvasRootRef} className="relative h-[760px] overflow-hidden rounded-sm bg-surface-lowest">
+    <div ref={canvasRootRef} className="relative h-full min-h-[20rem] overflow-hidden bg-surface-lowest">
       <ReactFlow
         className={isCoarsePointer ? 'theme-graph-flow touch-scroll-safe' : 'theme-graph-flow'}
         nodes={reactFlowNodes}
@@ -438,13 +474,10 @@ export function ModuleGraphCanvas({
         onNodeClick={(event, node) => {
           rememberInteractionPoint(event)
           closeQuickCreateMenu()
-          onNodeSelect(node.id)
-          if (isSelectionModifierEvent(event)) {
-            closeActionMenu()
-            return
+          closeActionMenu()
+          if (!isSelectionModifierEvent(event)) {
+            onNodeSelect(node.id)
           }
-
-          openNodeActionMenu(event, node)
         }}
         onNodeContextMenu={(event, node) => {
           event.preventDefault()
@@ -509,8 +542,6 @@ export function ModuleGraphCanvas({
         onConnect={onConnect}
         isValidConnection={isValidConnection}
         nodeTypes={MODULE_GRAPH_NODE_TYPES}
-        fitView
-        fitViewOptions={INITIAL_GRAPH_FIT_VIEW_OPTIONS}
         defaultViewport={INITIAL_GRAPH_VIEWPORT}
         colorMode={reactFlowColorMode}
         nodesDraggable
@@ -530,7 +561,8 @@ export function ModuleGraphCanvas({
           zoomable
           nodeColor="var(--primary)"
           maskColor="color-mix(in srgb, var(--background) 72%, transparent)"
-          className="!bg-surface-lowest"
+          className="!bg-surface-lowest max-sm:!hidden"
+          style={{ width: 140, height: 90 }}
         />
         <Controls />
         <Background gap={20} size={1} color="color-mix(in srgb, var(--foreground) 10%, transparent)" />
@@ -617,6 +649,10 @@ export function ModuleGraphCanvas({
             })
             closeQuickCreateMenu()
           }}
+          onOpenModuleLibrary={onOpenModuleLibrary ? () => {
+            closeQuickCreateMenu()
+            onOpenModuleLibrary()
+          } : undefined}
           onClose={closeQuickCreateMenu}
         />
       ) : null}

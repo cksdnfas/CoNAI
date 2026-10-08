@@ -17,6 +17,9 @@ export interface GenerationHistoryRecord {
 
   workflow_id?: number;
   workflow_name?: string;
+  /** Set on graph-workflow final results instead of `workflow_id` (which only ever names a ComfyUI workflow). */
+  graph_workflow_id?: number;
+  graph_execution_id?: number;
   nai_model?: string;
   composite_hash?: string;
   queue_job_id?: number;
@@ -89,6 +92,7 @@ export interface GenerationHistoryFilterOptions {
   service_type?: ServiceType;
   generation_status?: GenerationStatus;
   workflow_id?: number;
+  graph_workflow_id?: number;
   workflow_name?: string;
   created_after?: string;
   created_before?: string;

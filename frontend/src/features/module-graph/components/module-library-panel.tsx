@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { Inset } from '@/components/ui/inset'
 import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
@@ -57,7 +56,9 @@ function getModuleHoverTitle(module: ModuleDefinitionRecord) {
 }
 
 /** Render the reusable module library for graph authoring. */
-export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule, onOpenCustomNodeManager, showHeader = true, surface = 'card' }: ModuleLibraryPanelProps) {
+export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule, onOpenCustomNodeManager, showHeader: showHeaderProp, surface = 'card' }: ModuleLibraryPanelProps) {
+  // Inside a modal (plain surface) the modal title already names it.
+  const showHeader = showHeaderProp ?? surface !== 'plain'
   const { isAdmin } = useFeaturePermissions()
   const { t } = useI18n()
   const [searchQuery, setSearchQuery] = useState('')
@@ -226,14 +227,10 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
       ) : null}
 
       {!isError && activeTab === 'system' && finalResultModule ? (
-        <Alert>
-          <AlertTitle>{t({ ko: '권장 출력 노드', en: 'Recommended output node' })}</AlertTitle>
-          <AlertDescription className="flex flex-wrap items-center justify-end gap-3">
-            <Button type="button" size="sm" variant="secondary" onClick={() => onAddModule(finalResultModule)}>
-              {t({ ko: '최종 결과 바로 추가', en: 'Add final result now' })}
-            </Button>
-          </AlertDescription>
-        </Alert>
+        <Button type="button" size="sm" variant="secondary" onClick={() => onAddModule(finalResultModule)}>
+          <Plus className="size-4" />
+          {t({ ko: '최종 결과 노드 추가', en: 'Add a final result node' })}
+        </Button>
       ) : null}
 
       {modules.length === 0 ? (
@@ -255,7 +252,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
         <EmptyState size="compact" icon={Search} title={t({ ko: '검색 결과가 없어', en: 'No search results' })} />
       ) : null}
 
-      <div className="max-h-[min(68vh,760px)] space-y-5 overflow-y-auto pr-1">
+      <div className="max-h-[min(68vh,760px)] space-y-3 overflow-y-auto pr-1">
         {groupedModules.map((group) => {
           const scopedKey = `${activeTab}:${group.key}`
           const isCollapsed = collapsedGroupKeySet.has(scopedKey)
@@ -276,26 +273,25 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
               </Button>
 
               {!isCollapsed ? (
-                <div className="space-y-1">
+                <div>
                   {group.modules.map((module) => {
                     const isFinalResult = isFinalResultModule(module)
 
                     return (
-                      <Inset
+                      <div
                         key={module.id}
                         data-engine={module.engine_type}
-                        className="flex items-center justify-between gap-3 px-3 py-2.5"
+                        className="flex min-h-9 items-center justify-between gap-3 border-b border-line px-2 py-1 last:border-b-0"
                       >
-                        <div className={cn('flex min-w-0 flex-wrap items-center gap-2', module.description ? 'cursor-help' : undefined)} title={getModuleHoverTitle(module)}>
-                          <span className="truncate text-sm font-medium text-foreground">{getModuleBaseDisplayName(module)}</span>
-                          <Badge variant="outline">{module.engine_type}</Badge>
+                        <div className={cn('flex min-w-0 items-center gap-2', module.description ? 'cursor-help' : undefined)} title={getModuleHoverTitle(module)}>
+                          <span className="truncate text-sm text-foreground">{getModuleBaseDisplayName(module)}</span>
                           {isFinalResult ? <Badge variant="secondary">{t({ ko: '최종 결과', en: 'Final result' })}</Badge> : null}
                         </div>
 
-                        <IconButton size="icon-sm" variant="ghost" onClick={() => onAddModule(module)} label={t({ ko: '추가', en: 'Add' })}>
+                        <IconButton size="icon-xs" variant="ghost" onClick={() => onAddModule(module)} label={t({ ko: '추가', en: 'Add' })}>
                           <Plus />
                         </IconButton>
-                      </Inset>
+                      </div>
                     )
                   })}
                 </div>
