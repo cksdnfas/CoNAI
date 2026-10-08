@@ -182,7 +182,7 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
       const structured = result.structuredContent as { proposal?: ChatProposal } | undefined
       if (structured?.proposal?.kind === 'page_fields' || structured?.proposal?.kind === 'workflow_graph' || structured?.proposal?.kind === 'page_action') record.proposal = structured.proposal
     }
-    const { texts, historyIds, compositeHashes, jobIds, pendingJobIds } = readMcpToolResult(result, record.tool)
+    const { texts, historyIds, compositeHashes, jobIds, pendingJobIds, audioCandidateIds } = readMcpToolResult(result, record.tool)
     output = texts.join('\n') || (result.structuredContent ? JSON.stringify(result.structuredContent) : '')
     const found = readToolImages(result)
     if (found.length > 0) {
@@ -194,6 +194,7 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
     record.compositeHashes = compositeHashes
     if (jobIds.length > 0) record.jobIds = jobIds
     if (jobIds.length > 0) record.pendingJobIds = pendingJobIds
+    if (audioCandidateIds.length > 0) record.audioCandidateIds = audioCandidateIds
   } catch (error) {
     output = `Error: ${error instanceof Error ? error.message : String(error)}`
     record.status = 'failed'

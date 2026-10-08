@@ -13,6 +13,8 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 6. [Codex 이미지 생성 공급자 연동](/systems/codex-image-provider-integration)
 7. [Danbooru 읽기 전용 탐색](/systems/danbooru-readonly-browser)
 8. [Agent MCP opt-in 운영 계약](/systems/agent-mcp-opt-in-operation-contracts)
+9. [음향 작업실](/systems/audio-workspace)
+10. [스프라이트 도구](/systems/sprite-tools)
 
 ## 왜 이 순서인가
 
@@ -47,3 +49,10 @@ CoNAI 문서는 여기부터 보는 게 맞습니다.
 ### 8) Agent MCP opt-in 운영 계약
 - HTTP MCP의 opt-in, method boundary, agent preflight, dry-run stop conditions를 정리합니다.
 - 에이전트가 live MCP 작업을 시작하기 전에 확인해야 할 승인 경계를 제공합니다.
+
+### 9) 음향 작업실
+- 효과음 프로젝트·그룹·후보를 audio.db와 내용 해시 저장소로 관리하고, 생성·검수·편집·내보내기 흐름을 설명합니다.
+- 오디오가 이미지 라이브러리와 따로 저장되고 정리되는 경로를 확인할 때 사용합니다.
+
+### 10) 스프라이트 도구
+- 라이브러리 영상에서 스프라이트 시트를 만드는 처리 흐름과 원래 도구와 달라진 점을 정리합니다.

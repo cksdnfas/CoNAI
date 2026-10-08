@@ -51,13 +51,30 @@ export function isChatMcpSource(source: McpRequestContext['source']) {
  * Withheld from chat agents: a chat reply must not block on a generation job (Codex jobs can run for minutes).
  * The job is linked to the reply at submission and the app attaches the result when it lands.
  */
-export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'execute_graph_workflow', 'get_codex_generation_options', 'import_workflow_definition']);
+export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'wait_audio_order', 'execute_graph_workflow', 'get_codex_generation_options', 'import_workflow_definition', 'wait_sprite_job']);
 /** A page grants a bounded input task; explicitly linked generation presets keep their independent grant. */
 export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'propose_page_changes', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes', 'read_page_data', 'propose_page_action']);
 
+/**
+ * Tools a connected page of one kind adds to the page tools: the sprite page works through its own engine tools, so
+ * connecting it must not hide them. The audio page adds its workspace tools; reviewing or deleting a single take never has
+ * a tool. The account's feature keys still apply to each call.
+ */
+export const CHAT_PAGE_KIND_TOOLS: Partial<Record<string, ReadonlySet<string>>> = {
+  sprite: new Set(['get_video_info', 'get_sprite_job', 'extract_sprite_sheet', 'extract_sprite_sheets_batch', 'normalize_sprite_sheets', 'create_sprite_animation', 'download_sprite_frames']),
+  audio: new Set([
+    'list_audio_projects', 'list_audio_groups', 'list_audio_candidates', 'get_audio_candidate', 'list_audio_group_comments',
+    'create_audio_project', 'update_audio_project', 'create_audio_group', 'update_audio_group', 'move_audio_candidates', 'import_audio',
+    'set_audio_group_comment_status', 'list_audio_workflows', 'order_audio', 'get_audio_order', 'cancel_audio_order', 'retry_audio_order_job',
+    'edit_audio_candidate', 'delete_unselected_audio_candidates', 'export_audio_selected', 'get_audio_download',
+  ]),
+};
+
 /** Page tools are enabled by the user's explicit connection, independently of general profile tools. */
 export function isConnectedChatPageTool(context: McpRequestContext, toolName: string) {
-  return isChatMcpSource(context.source) && context.chatContext?.kind === 'direct' && !!context.chatContext.page && CHAT_PAGE_TOOLS.has(toolName);
+  const page = context.chatContext?.page;
+  return isChatMcpSource(context.source) && context.chatContext?.kind === 'direct' && !!page
+    && (CHAT_PAGE_TOOLS.has(toolName) || Boolean(CHAT_PAGE_KIND_TOOLS[page.kind]?.has(toolName)));
 }
 
 /** Chat agents must not spend paid NovelAI multi-sample generations on their own; one image per request is free. */
@@ -119,6 +136,15 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   wait_generation_job: 'read',
   get_generation_artifacts: 'read',
   refresh_artifact_download: 'read',
+  get_video_info: 'read',
+  get_sprite_job: 'read',
+  wait_sprite_job: 'read',
+  download_sprite_frames: 'read',
+  extract_sprite_sheet: 'generate',
+  extract_sprite_sheets_batch: 'generate',
+  normalize_sprite_sheets: 'generate',
+  create_sprite_animation: 'generate',
+  resize_images: 'generate',
   generate_comfyui: 'generate',
   generate_comfyui_all_servers: 'generate',
   generate_nai: 'generate',
@@ -139,6 +165,29 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   restore_prompt_data: 'restore',
   import_workflow_definition: 'restore',
   restore_deleted_workflow: 'restore',
+  // Audio workspace. Review (selected / rejected), deletes and writing comments have no tool: people do those.
+  list_audio_projects: 'read',
+  list_audio_groups: 'read',
+  list_audio_candidates: 'read',
+  get_audio_candidate: 'read',
+  list_audio_group_comments: 'read',
+  create_audio_project: 'organize',
+  update_audio_project: 'organize',
+  create_audio_group: 'organize',
+  update_audio_group: 'organize',
+  move_audio_candidates: 'organize',
+  import_audio: 'organize',
+  set_audio_group_comment_status: 'organize',
+  edit_audio_candidate: 'organize',
+  delete_unselected_audio_candidates: 'organize',
+  export_audio_selected: 'organize',
+  get_audio_download: 'read',
+  list_audio_workflows: 'read',
+  get_audio_order: 'read',
+  order_audio: 'generate',
+  wait_audio_order: 'generate',
+  cancel_audio_order: 'generate',
+  retry_audio_order_job: 'generate',
   // Chat-only: HTTP keys never hold `configure` (admin chat accounts only), and propose_* only shows a card a person saves.
   get_chat_setup_guide: 'configure',
   list_chat_profiles: 'configure',

@@ -61,13 +61,14 @@ function registerWorkflowListTools(server: McpServer): void {
   // 워크플로우 목록 조회
   server.tool(
     'list_workflows',
-    'List all ComfyUI workflows registered in the system.',
+    'List the ComfyUI image workflows registered in the system. Audio workflows run only through audio orders (list_audio_workflows / order_audio); pass kind="audio" or "all" to see them here.',
     {
       active_only: z.boolean().default(false).describe('Show only active workflows'),
+      kind: z.enum(['image', 'audio', 'all']).default('image').describe('Which workflows to list: image (default), audio, or all'),
     },
-    async ({ active_only }) => {
+    async ({ active_only, kind }) => {
       try {
-        const workflows = WorkflowModel.findAll(active_only);
+        const workflows = WorkflowModel.findAll(active_only, kind === 'all' ? undefined : kind);
 
         const summary = workflows.map(w => {
           const markedFields = parseMcpMarkedFields(w);
@@ -76,6 +77,7 @@ function registerWorkflowListTools(server: McpServer): void {
             name: w.name,
             description: w.description,
             is_active: w.is_active,
+            kind: w.kind,
             api_endpoint: w.api_endpoint,
             input_fields: markedFields.map(field => ({
               id: field.id,

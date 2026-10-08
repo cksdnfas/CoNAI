@@ -165,6 +165,15 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
     throw new Error(`Queue job ${job.id} references inactive workflow ${job.workflow_id}`)
   }
 
+  // Audio workflows run only as audio orders: their outputs go to the audio store, never the image library.
+  // Image workflows skip this entirely (no audio.db access on their path).
+  const audioOrderJob = workflow.kind === 'audio'
+    ? (await import('../audio/audioOrders')).findAudioOrderJobByQueueJob(job.id)
+    : null
+  if (workflow.kind === 'audio' && !audioOrderJob) {
+    throw new Error(`Queue job ${job.id} uses audio workflow ${workflow.id}, which runs only through audio orders (음향 탭의 생성 주문)`)
+  }
+
   const payload = parseComfyQueuePayload(job)
   const apiEndpoint = assignedServer?.endpoint ?? workflow.api_endpoint
   const comfyService = createComfyUIService(apiEndpoint, assignedServer)
@@ -181,7 +190,8 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
   )
 
   let historyId: number | undefined
-  try {
+  // Audio orders keep their record in audio.db; an image-history row would stay without a picture forever.
+  if (!audioOrderJob) try {
     historyId = await GenerationHistoryService.createComfyUIHistory({
       workflowId: workflow.id,
       workflowName: workflow.name,
@@ -233,10 +243,20 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
 
   let acceptedPromptId = job.provider_job_id ?? null
   try {
+    const audioOrders = audioOrderJob ? await import('../audio/audioOrders') : null
     const result = await executeComfyGeneration({
       comfyService,
       workflow: substitutedWorkflow,
       imageSaveOptions: payload.imageSaveOptions,
+      outputSink: audioOrderJob && audioOrders
+        ? (outputs, promptId) => audioOrders.storeAudioOrderOutputs(audioOrderJob, outputs, {
+          queueJobId: job.id,
+          promptId,
+          serverId: assignedServer?.id ?? job.assigned_server_id ?? null,
+          serverName: assignedServer?.name ?? null,
+          workflow: { id: workflow.id, name: workflow.name, updated_date: workflow.updated_date },
+        })
+        : undefined,
       artifactWorkflow: workflow.result_view_mode === 'artifact_explorer' ? workflow : null,
       queueJobId: job.id,
       signal: context.signal,
@@ -290,7 +310,15 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       },
     })
 
-    if (workflow.result_view_mode === 'artifact_explorer') {
+    if (audioOrderJob) {
+      const stored = result.sinkResult as { order_id: string; candidate_ids: string[] }
+      updateQueueRequestDebugMeta(job, {
+        result_prompt_id: result.promptId,
+        audio_order_id: stored.order_id,
+        audio_order_idx: audioOrderJob.row.idx,
+        audio_candidate_ids: stored.candidate_ids,
+      })
+    } else if (workflow.result_view_mode === 'artifact_explorer') {
       if (result.savedArtifactCount === 0) {
         throw new Error(`Queue job ${job.id} finished ComfyUI artifact execution but no artifact output was saved`)
       }
@@ -345,7 +373,9 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       expectedCurrentStatuses: ['running'],
     })
 
-    if (workflow.result_view_mode === 'artifact_explorer') {
+    if (audioOrderJob) {
+      console.log(`✅ Queue job ${job.id} completed audio order ${audioOrderJob.order.id} #${audioOrderJob.row.idx}`)
+    } else if (workflow.result_view_mode === 'artifact_explorer') {
       console.log(`✅ Queue job ${job.id} completed via ComfyUI artifacts (${result.savedArtifactCount}/${result.attemptedArtifactCount} artifacts saved)`)
     } else {
       console.log(`✅ Queue job ${job.id} completed via ComfyUI (${result.savedImageCount}/${result.attemptedImageCount} outputs saved)`)

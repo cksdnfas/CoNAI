@@ -1,0 +1,437 @@
+{
+ "source": "stable-audio-sfx-manager backend/sfx/naming.py",
+ "filenames": [
+  {
+   "label": "footstep_snow_[00]",
+   "index": 1,
+   "count": 1,
+   "format": "wav",
+   "filename": "footstep_snow_01.wav"
+  },
+  {
+   "label": "footstep_snow_[00]",
+   "index": 2,
+   "count": 3,
+   "format": "wav",
+   "filename": "footstep_snow_02.wav"
+  },
+  {
+   "label": "footstep_snow_[00]",
+   "index": 12,
+   "count": 12,
+   "format": "wav",
+   "filename": "footstep_snow_12.wav"
+  },
+  {
+   "label": "footstep_snow_[00]",
+   "index": 100,
+   "count": 120,
+   "format": "wav",
+   "filename": "footstep_snow_100.wav"
+  },
+  {
+   "label": "ui_click_[000]",
+   "index": 1,
+   "count": 1,
+   "format": "wav",
+   "filename": "ui_click_001.wav"
+  },
+  {
+   "label": "ui_click_[000]",
+   "index": 2,
+   "count": 3,
+   "format": "wav",
+   "filename": "ui_click_002.wav"
+  },
+  {
+   "label": "ui_click_[000]",
+   "index": 12,
+   "count": 12,
+   "format": "wav",
+   "filename": "ui_click_012.wav"
+  },
+  {
+   "label": "ui_click_[000]",
+   "index": 100,
+   "count": 120,
+   "format": "wav",
+   "filename": "ui_click_100.wav"
+  },
+  {
+   "label": "door_wood_open",
+   "index": 1,
+   "count": 1,
+   "format": "wav",
+   "filename": "door_wood_open.wav"
+  },
+  {
+   "label": "door_wood_open",
+   "index": 2,
+   "count": 3,
+   "format": "wav",
+   "filename": "door_wood_open_02.wav"
+  },
+  {
+   "label": "door_wood_open",
+   "index": 12,
+   "count": 12,
+   "format": "wav",
+   "filename": "door_wood_open_12.wav"
+  },
+  {
+   "label": "door_wood_open",
+   "index": 100,
+   "count": 120,
+   "format": "wav",
+   "filename": "door_wood_open_100.wav"
+  },
+  {
+   "label": "hit_05",
+   "index": 1,
+   "count": 1,
+   "format": "wav",
+   "filename": "hit_05.wav"
+  },
+  {
+   "label": "hit_05",
+   "index": 2,
+   "count": 3,
+   "format": "wav",
+   "filename": "hit_06.wav"
+  },
+  {
+   "label": "hit_05",
+   "index": 12,
+   "count": 12,
+   "format": "wav",
+   "filename": "hit_16.wav"
+  },
+  {
+   "label": "hit_05",
+   "index": 100,
+   "count": 120,
+   "format": "wav",
+   "filename": "hit_104.wav"
+  },
+  {
+   "label": "hit_005",
+   "index": 1,
+   "count": 1,
+   "format": "wav",
+   "filename": "hit_005.wav"
+  },
+  {
+   "label": "hit_005",
+   "index": 2,
+   "count": 3,
+   "format": "wav",
+   "filename": "hit_006.wav"
+  },
+  {
+   "label": "hit_005",
+   "index": 12,
+   "count": 12,
+   "format": "wav",
+   "filename": "hit_016.wav"
+  },
+  {
+   "label": "hit_005",
+   "index": 100,
+   "count": 120,
+   "format": "wav",
+   "filename": "hit_104.wav"
+  },
+  {
+   "label": "boom",
+   "index": 1,
+   "count": 1,
+   "format": "wav",
+   "filename": "boom.wav"
+  },
+  {
+   "label": "boom",
+   "index": 2,
+   "count": 3,
+   "format": "wav",
+   "filename": "boom_02.wav"
+  },
+  {
+   "label": "boom",
+   "index": 12,
+   "count": 12,
+   "format": "wav",
+   "filename": "boom_12.wav"
+  },
+  {
+   "label": "boom",
+   "index": 100,
+   "count": 120,
+   "format": "wav",
+   "filename": "boom_100.wav"
+  },
+  {
+   "label": "a_[0]",
+   "index": 1,
+   "count": 1,
+   "format": "wav",
+   "filename": "a_1.wav"
+  },
+  {
+   "label": "a_[0]",
+   "index": 2,
+   "count": 3,
+   "format": "wav",
+   "filename": "a_2.wav"
+  },
+  {
+   "label": "a_[0]",
+   "index": 12,
+   "count": 12,
+   "format": "wav",
+   "filename": "a_12.wav"
+  },
+  {
+   "label": "a_[0]",
+   "index": 100,
+   "count": 120,
+   "format": "wav",
+   "filename": "a_100.wav"
+  },
+  {
+   "label": "x_[00000000]",
+   "index": 1,
+   "count": 1,
+   "format": "wav",
+   "filename": "x_00000001.wav"
+  },
+  {
+   "label": "x_[00000000]",
+   "index": 2,
+   "count": 3,
+   "format": "wav",
+   "filename": "x_00000002.wav"
+  },
+  {
+   "label": "x_[00000000]",
+   "index": 12,
+   "count": 12,
+   "format": "wav",
+   "filename": "x_00000012.wav"
+  },
+  {
+   "label": "x_[00000000]",
+   "index": 100,
+   "count": 120,
+   "format": "wav",
+   "filename": "x_00000100.wav"
+  },
+  {
+   "label": "  spaced_[00]  ",
+   "index": 1,
+   "count": 1,
+   "format": "wav",
+   "filename": "spaced_01.wav"
+  },
+  {
+   "label": "  spaced_[00]  ",
+   "index": 2,
+   "count": 3,
+   "format": "wav",
+   "filename": "spaced_02.wav"
+  },
+  {
+   "label": "  spaced_[00]  ",
+   "index": 12,
+   "count": 12,
+   "format": "wav",
+   "filename": "spaced_12.wav"
+  },
+  {
+   "label": "  spaced_[00]  ",
+   "index": 100,
+   "count": 120,
+   "format": "wav",
+   "filename": "spaced_100.wav"
+  },
+  {
+   "label": "name_9",
+   "index": 1,
+   "count": 1,
+   "format": "wav",
+   "filename": "name_9.wav"
+  },
+  {
+   "label": "name_9",
+   "index": 2,
+   "count": 3,
+   "format": "wav",
+   "filename": "name_10.wav"
+  },
+  {
+   "label": "name_9",
+   "index": 12,
+   "count": 12,
+   "format": "wav",
+   "filename": "name_20.wav"
+  },
+  {
+   "label": "name_9",
+   "index": 100,
+   "count": 120,
+   "format": "wav",
+   "filename": "name_108.wav"
+  },
+  {
+   "label": "발자국_[00]",
+   "index": 1,
+   "count": 1,
+   "format": "wav",
+   "filename": "발자국_01.wav"
+  },
+  {
+   "label": "발자국_[00]",
+   "index": 2,
+   "count": 3,
+   "format": "wav",
+   "filename": "발자국_02.wav"
+  },
+  {
+   "label": "발자국_[00]",
+   "index": 12,
+   "count": 12,
+   "format": "wav",
+   "filename": "발자국_12.wav"
+  },
+  {
+   "label": "발자국_[00]",
+   "index": 100,
+   "count": 120,
+   "format": "wav",
+   "filename": "발자국_100.wav"
+  },
+  {
+   "label": "door_wood_open",
+   "index": 3,
+   "count": 5,
+   "format": "ogg",
+   "filename": "door_wood_open_03.ogg"
+  }
+ ],
+ "labels": [
+  {
+   "label": "",
+   "valid": null,
+   "error": "라벨은 1~120자이며 파일명에 사용할 수 없는 문자를 포함할 수 없습니다."
+  },
+  {
+   "label": "   ",
+   "valid": null,
+   "error": "라벨은 1~120자이며 파일명에 사용할 수 없는 문자를 포함할 수 없습니다."
+  },
+  {
+   "label": "a/b",
+   "valid": null,
+   "error": "라벨은 1~120자이며 파일명에 사용할 수 없는 문자를 포함할 수 없습니다."
+  },
+  {
+   "label": "a:b",
+   "valid": null,
+   "error": "라벨은 1~120자이며 파일명에 사용할 수 없는 문자를 포함할 수 없습니다."
+  },
+  {
+   "label": "x.wav",
+   "valid": null,
+   "error": "라벨에는 확장자 .wav나 끝의 점·공백을 넣지 마세요."
+  },
+  {
+   "label": "X.WAV",
+   "valid": null,
+   "error": "라벨에는 확장자 .wav나 끝의 점·공백을 넣지 마세요."
+  },
+  {
+   "label": "trail.",
+   "valid": null,
+   "error": "라벨에는 확장자 .wav나 끝의 점·공백을 넣지 마세요."
+  },
+  {
+   "label": "trail ",
+   "valid": "trail",
+   "error": null
+  },
+  {
+   "label": ".",
+   "valid": null,
+   "error": "라벨에는 확장자 .wav나 끝의 점·공백을 넣지 마세요."
+  },
+  {
+   "label": "..",
+   "valid": null,
+   "error": "라벨에는 확장자 .wav나 끝의 점·공백을 넣지 마세요."
+  },
+  {
+   "label": "CON",
+   "valid": null,
+   "error": "운영체제 예약 파일명은 라벨로 사용할 수 없습니다."
+  },
+  {
+   "label": "con.txt",
+   "valid": null,
+   "error": "운영체제 예약 파일명은 라벨로 사용할 수 없습니다."
+  },
+  {
+   "label": "LPT1",
+   "valid": null,
+   "error": "운영체제 예약 파일명은 라벨로 사용할 수 없습니다."
+  },
+  {
+   "label": "COM9.x",
+   "valid": null,
+   "error": "운영체제 예약 파일명은 라벨로 사용할 수 없습니다."
+  },
+  {
+   "label": "two_[00]_[00]",
+   "valid": null,
+   "error": "순번은 [00] 또는 [000]처럼 0을 1~8개 넣은 자리 하나로 지정해 주세요."
+  },
+  {
+   "label": "bad_[0",
+   "valid": null,
+   "error": "순번은 [00] 또는 [000]처럼 0을 1~8개 넣은 자리 하나로 지정해 주세요."
+  },
+  {
+   "label": "bad]",
+   "valid": null,
+   "error": "순번은 [00] 또는 [000]처럼 0을 1~8개 넣은 자리 하나로 지정해 주세요."
+  },
+  {
+   "label": "[]",
+   "valid": null,
+   "error": "순번은 [00] 또는 [000]처럼 0을 1~8개 넣은 자리 하나로 지정해 주세요."
+  },
+  {
+   "label": "[000000000]",
+   "valid": null,
+   "error": "순번은 [00] 또는 [000]처럼 0을 1~8개 넣은 자리 하나로 지정해 주세요."
+  },
+  {
+   "label": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "valid": null,
+   "error": "라벨은 1~120자이며 파일명에 사용할 수 없는 문자를 포함할 수 없습니다."
+  },
+  {
+   "label": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "valid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "error": null
+  },
+  {
+   "label": "tab\tx",
+   "valid": null,
+   "error": "라벨은 1~120자이며 파일명에 사용할 수 없는 문자를 포함할 수 없습니다."
+  },
+  {
+   "label": "ok_[00]",
+   "valid": "ok_[00]",
+   "error": null
+  }
+ ]
+}

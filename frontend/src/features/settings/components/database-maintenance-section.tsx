@@ -27,6 +27,7 @@ import {
   type MediaOrphanCleanupResult,
 } from '@/lib/api-database-maintenance'
 import { cn } from '@/lib/utils'
+import { LegacyAudioImportRow } from './audio-legacy-import-row'
 import type { RuntimeJobKind, RuntimeJobRecord } from '@/types/runtime-job'
 
 /** One row of the section, laid out like the 유지보수 tab's action rows: icon + title + meta, actions, body. */
@@ -338,6 +339,8 @@ export function DatabaseMaintenanceSection() {
           <div className="text-xs text-destructive">{compactJob.job.failureMessage}</div>
         ) : null}
       </DatabaseRow>
+
+      <LegacyAudioImportRow />
     </RowGroup>
   )
 }

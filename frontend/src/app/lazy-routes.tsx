@@ -32,7 +32,7 @@ const routeModuleLoaders = {
   ),
   'home-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/home/home-page'),
-    [() => import('@/i18n/resources/home').then((module) => module.homeCatalog), () => import('@/i18n/resources/search').then((module) => module.searchCatalog), () => import('@/i18n/resources/images').then((module) => module.imagesCatalog)],
+    [() => import('@/i18n/resources/home').then((module) => module.homeCatalog), () => import('@/i18n/resources/search').then((module) => module.searchCatalog), () => import('@/i18n/resources/images').then((module) => module.imagesCatalog), () => import('@/i18n/resources/groups').then((module) => module.groupsCatalog)],
   ),
   'image-generation-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/image-generation/image-generation-page'),
@@ -49,7 +49,7 @@ const routeModuleLoaders = {
   'codex-chat-page': () => import('@/features/codex-chat/codex-chat-page'),
   'image-detail-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/images/image-detail-page'),
-    [() => import('@/i18n/resources/images').then((module) => module.imagesCatalog), () => import('@/i18n/resources/image-editor').then((module) => module.imageEditorCatalog)],
+    [() => import('@/i18n/resources/images').then((module) => module.imagesCatalog), () => import('@/i18n/resources/image-editor').then((module) => module.imageEditorCatalog), () => import('@/i18n/resources/groups').then((module) => module.groupsCatalog)],
   ),
   'image-metadata-edit-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/metadata/image-metadata-edit-page'),
@@ -57,7 +57,7 @@ const routeModuleLoaders = {
   ),
   'prompt-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/prompts/prompt-page'),
-    [() => import('@/i18n/resources/prompts').then((module) => module.promptsCatalog)],
+    [() => import('@/i18n/resources/prompts').then((module) => module.promptsCatalog), () => import('@/i18n/resources/groups').then((module) => module.groupsCatalog)],
   ),
   'settings-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/settings/settings-page'),
@@ -72,6 +72,8 @@ const routeModuleLoaders = {
     [() => import('@/i18n/resources/upload').then((module) => module.uploadCatalog)],
   ),
   'files-page': () => import('@/features/files/files-page'),
+  'audio-page': () => import('@/features/audio/audio-page'),
+  'sprite-page': () => import('@/features/sprite/sprite-page'),
   'wallpaper-editor-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/wallpaper/wallpaper-editor-page'),
     [() => import('@/i18n/resources/wallpaper').then((module) => module.wallpaperCatalog)],
@@ -178,6 +180,14 @@ function getRouteModuleLoader(to: string): RouteModuleLoader | null {
     return routeModuleLoaders['files-page']
   }
 
+  if (pathname === '/audio') {
+    return routeModuleLoaders['audio-page']
+  }
+
+  if (pathname === '/sprite') {
+    return routeModuleLoaders['sprite-page']
+  }
+
   if (pathname === '/settings') {
     return routeModuleLoaders['settings-page']
   }
@@ -281,6 +291,24 @@ const FilesPageLazy = lazy(async () => {
 
 export function FilesRoute() {
   return withSuspense(<FilesPageLazy />)
+}
+
+const AudioPageLazy = lazy(async () => {
+  const module = await loadLazyRoute('audio-page', routeModuleLoaders['audio-page'])
+  return { default: module.AudioPage }
+})
+
+export function AudioRoute() {
+  return withSuspense(<AudioPageLazy />)
+}
+
+const SpritePageLazy = lazy(async () => {
+  const module = await loadLazyRoute('sprite-page', routeModuleLoaders['sprite-page'])
+  return { default: module.SpritePage }
+})
+
+export function SpriteRoute() {
+  return withSuspense(<SpritePageLazy />)
 }
 
 const WallpaperEditorPageLazy = lazy(async () => {

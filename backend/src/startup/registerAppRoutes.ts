@@ -23,6 +23,9 @@ import generationQueueRoutes from '../routes/generation-queue.routes';
 import codexChatRoutes from '../routes/codex-chat.routes';
 import chatProposalRoutes from '../routes/chat-proposals.routes';
 import filesRoutes from '../routes/files.routes';
+import audioRoutes from '../routes/audio.routes';
+import audioLegacyImportRoutes from '../routes/audio-legacy-import.routes';
+import { isAudioStorePath } from '../services/audio/audioStore';
 import systemFolderRoutes from '../routes/system-folders.routes';
 import { wildcardMutationRoutes } from '../routes/wildcards.mutation.routes';
 import { wildcardReadRoutes } from '../routes/wildcards.read.routes';
@@ -48,6 +51,7 @@ import { runtimeMediaSettingsRoutes } from '../routes/runtime-media-settings.rou
 import publicWorkflowRoutes from '../routes/public-workflows.routes';
 import { workflowInputAssetRoutes } from '../routes/workflow-input-assets.routes';
 import { runtimeEventStreamRoutes } from '../routes/events/event-stream.routes';
+import spriteRoutes from '../routes/sprite.routes';
 import { mcpRoutes } from '../mcp';
 import { errorHandler } from '../middleware/errorHandler';
 import {
@@ -155,6 +159,22 @@ function requireReadAccess(permissionKey: string, readPostPaths: readonly string
 
 /** Register API routes, runtime static directories, frontend assets, and terminal handlers. */
 export function registerAppRoutes(app: Express, options: RegisterAppRoutesOptions): RegisterAppRoutesResult {
+  // The audio store lives under uploads but is only served through /api/audio (audio.view), never statically.
+  // Resolve the request like serve-static would, so `//audio`, `%2e%2e` or case tricks cannot reach it either.
+  app.use('/uploads', (req, res, next) => {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(req.path);
+    } catch {
+      next();
+      return;
+    }
+    if (isAudioStorePath(path.join(options.uploadsDir, path.normalize(decoded)))) {
+      res.status(404).end();
+      return;
+    }
+    next();
+  });
   registerRuntimeStaticDirectory(app, '/uploads', options.uploadsDir);
   registerRuntimeStaticDirectory(app, '/temp', options.tempDir);
   registerRuntimeStaticDirectory(app, '/save', options.saveDir);
@@ -259,6 +279,12 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
     const limiter = req.method === 'POST' && req.path === '/upload' ? options.uploadLimiter : options.readOnlyLimiter;
     limiter(req, res, next);
   }, filesRoutes);
+  // Admin only; mounted ahead of /api/audio so the import does not also need the workspace keys.
+  app.use('/api/audio/legacy-import', requireAuth, options.uploadLimiter, audioLegacyImportRoutes);
+  app.use('/api/audio', requireAuth, (req, res, next) => {
+    const limiter = req.method === 'POST' && /\/upload$/.test(req.path) ? options.uploadLimiter : options.readOnlyLimiter;
+    limiter(req, res, next);
+  }, audioRoutes);
   app.use('/api/system-folders', requireAuth, options.readOnlyLimiter, systemFolderRoutes);
   app.use('/api/wildcards', wildcardUtilityRoutes);
   app.use('/api/wildcards', optionalAuth, wildcardMutationRoutes);
@@ -274,6 +300,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/thumbnails', optionalAuth, thumbnailRoutes);
   // 장기 실행 잡의 진행률/취소 공용 라우트. 잡을 시작하는 라우트는 각자의 기존 권한을 유지한다.
   app.use('/api/jobs', optionalAuth, runtimeJobRoutes);
+  app.use('/api/sprite', spriteRoutes);
 
   app.use('/', mcpRoutes);
 

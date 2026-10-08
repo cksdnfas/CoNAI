@@ -17,6 +17,8 @@ import {
   PromptRoute,
   SettingsRoute,
   FilesRoute,
+  SpriteRoute,
+  AudioRoute,
   UploadRoute,
   WallpaperEditorRoute,
   WallpaperRuntimeRoute,
@@ -89,6 +91,14 @@ export const appRouter = createHashRouter([
       {
         path: 'generation',
         element: <RequireAuthPermission permissionKey="page.generation.view"><ImageGenerationRoute /></RequireAuthPermission>,
+      },
+      {
+        path: 'audio',
+        element: <RequireAuthPermission permissionKey="page.audio.view"><AudioRoute /></RequireAuthPermission>,
+      },
+      {
+        path: 'sprite',
+        element: <RequireAuthPermission permissionKey="page.sprite.view"><SpriteRoute /></RequireAuthPermission>,
       },
       {
         path: 'wildcards',

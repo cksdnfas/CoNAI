@@ -1,5 +1,6 @@
 import { publishRuntimeEvent } from './runtimeEventBus'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { audioCandidatesByQueueJob } from '../audio/audioJobCandidates'
 import type {
   ChatGenerationFinishedEventPayload,
   GraphExecutionEventPayload,
@@ -122,12 +123,13 @@ function publishChatGenerationFinished(job: Parameters<typeof buildQueueJobPaylo
       WHERE l.thread_id = ? AND l.reply_id = ? AND j.requested_by_account_id IS ?
         AND h.requested_by_account_id IS ? AND h.generation_status = 'completed' AND h.composite_hash IS NOT NULL
     `).get(job.id, chat.threadId, chat.replyId, accountId, accountId) as Pick<ChatGenerationFinishedEventPayload, 'imageCount' | 'thumbnailHistoryId'> & { jobImageCount: number }
+    const audioCandidateCount = audioCandidatesByQueueJob([job.id]).get(job.id)?.length ?? 0
     publishRuntimeEvent({
       name: 'chat.generation.finished',
       topic: 'generation-queue',
       visibility: 'owner',
       accountId: job.requested_by_account_id ?? null,
-      payload: { jobId: job.id, requestedByAccountId: accountId, status: job.status, chat, imageCount: images.imageCount, thumbnailHistoryId: images.thumbnailHistoryId, failureCode: job.status === 'completed' && images.jobImageCount === 0 ? 'no_image' : job.failure_code ?? null } satisfies ChatGenerationFinishedEventPayload,
+      payload: { jobId: job.id, requestedByAccountId: accountId, status: job.status, chat, imageCount: images.imageCount, thumbnailHistoryId: images.thumbnailHistoryId, failureCode: job.status === 'completed' && images.jobImageCount === 0 && audioCandidateCount === 0 ? 'no_image' : job.failure_code ?? null, ...(audioCandidateCount > 0 ? { audioCandidateCount } : {}) } satisfies ChatGenerationFinishedEventPayload,
     })
   } catch (error) {
     console.warn('Failed to publish chat generation outcome:', error instanceof Error ? error.message : error)

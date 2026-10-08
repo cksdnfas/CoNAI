@@ -10,10 +10,11 @@ type Copy = { ko: string; en: string }
  * description, so nothing is hidden by an outdated catalog.
  */
 export type ChatToolGroupId =
-  | 'images' | 'history' | 'prompts' | 'workflows' | 'files' | 'emoticons' | 'backups' | 'pages'
-  | 'image-gen' | 'workflow-run'
+  | 'images' | 'history' | 'prompts' | 'workflows' | 'files' | 'emoticons' | 'audio' | 'backups' | 'pages'
+  | 'image-gen' | 'workflow-run' | 'audio-gen'
   | 'configure'
-  | 'image-groups' | 'prompt-groups' | 'file-ops' | 'emoticon-ops'
+  | 'image-groups' | 'prompt-groups' | 'file-ops' | 'emoticon-ops' | 'audio-ops'
+  | 'sprites' | 'sprite-ops'
   | 'other'
 
 const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
@@ -24,13 +25,18 @@ const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
   { id: 'workflows', scope: 'read', label: { ko: '워크플로·서버', en: 'Workflows and servers' } },
   { id: 'files', scope: 'read', label: { ko: '파일 보관함', en: 'File store' } },
   { id: 'emoticons', scope: 'read', label: { ko: '이모티콘', en: 'Emoticons' } },
+  { id: 'audio', scope: 'read', label: { ko: '음향', en: 'Audio' } },
   { id: 'backups', scope: 'read', label: { ko: '백업', en: 'Backups' } },
+  { id: 'sprites', scope: 'read', label: { ko: '스프라이트', en: 'Sprite' } },
   { id: 'image-gen', scope: 'generate', label: { ko: '이미지 생성', en: 'Image generation' } },
   { id: 'workflow-run', scope: 'generate', label: { ko: '워크플로 실행', en: 'Workflow runs' } },
+  { id: 'audio-gen', scope: 'generate', label: { ko: '음향 생성', en: 'Audio generation' } },
+  { id: 'sprite-ops', scope: 'generate', label: { ko: '스프라이트', en: 'Sprite' } },
   { id: 'image-groups', scope: 'organize', label: { ko: '이미지 그룹', en: 'Image groups' } },
   { id: 'prompt-groups', scope: 'organize', label: { ko: '프롬프트 정리', en: 'Prompt organizing' } },
   { id: 'file-ops', scope: 'organize', label: { ko: '파일 변경', en: 'File changes' } },
   { id: 'emoticon-ops', scope: 'organize', label: { ko: '이모티콘 설정', en: 'Emoticon setup' } },
+  { id: 'audio-ops', scope: 'organize', label: { ko: '음향 정리', en: 'Audio organizing' } },
   { id: 'configure', scope: 'configure', label: { ko: '설정', en: 'Setup' } },
 ]
 
@@ -77,13 +83,22 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   read_file_text: { group: 'files', label: { ko: '파일 내용 읽기', en: 'Read file text' }, ko: '보관함의 텍스트 파일을 잘라 가며 읽어.' },
   list_emoticon_groups: { group: 'emoticons', label: { ko: '이모티콘 그룹 목록', en: 'Emoticon groups' }, ko: '이모티콘 그룹과 이미지·키워드 수를 나열해.' },
   list_emoticons: { group: 'emoticons', label: { ko: '이모티콘 목록', en: 'List emoticons' }, ko: '그룹 안의 이모티콘 이미지와 키워드를 읽어.' },
+  get_video_info: { group: 'sprites', label: { ko: '영상 정보', en: 'Video info' }, ko: '라이브러리 영상의 크기·fps·길이·프레임 수를 읽어.' },
+  get_sprite_job: { group: 'sprites', label: { ko: '스프라이트 작업 상태', en: 'Sprite job status' }, ko: '스프라이트 작업의 진행 상태와 저장된 결과를 읽어.' },
+  wait_sprite_job: { group: 'sprites', label: { ko: '스프라이트 작업 대기', en: 'Wait for sprite job' }, ko: '스프라이트 작업이 끝날 때까지 기다려. 채팅에선 안 쓰여.' },
+  download_sprite_frames: { group: 'sprites', label: { ko: '프레임 ZIP 받기', en: 'Download frames ZIP' }, ko: '추출한 프레임을 낱장 이미지 ZIP으로 묶어 다운로드 링크를 줘.' },
   list_backups: { group: 'backups', label: { ko: '백업 목록', en: 'List backups' }, ko: '프롬프트 백업 파일을 나열해.' },
   submit_generation_job: { group: 'image-gen', label: { ko: '생성 작업 접수', en: 'Submit generation job' }, ko: 'NovelAI·ComfyUI·Codex 생성을 백그라운드 작업으로 접수해. 생성의 기본 도구야.' },
   generate_nai: { group: 'image-gen', label: { ko: 'NovelAI 바로 생성', en: 'Generate with NovelAI' }, ko: 'NovelAI로 바로 생성하고 끝날 때까지 기다려. 한 번에 한 장만.' },
   generate_comfyui: { group: 'image-gen', label: { ko: 'ComfyUI 바로 생성', en: 'Generate with ComfyUI' }, ko: 'ComfyUI 워크플로로 바로 생성하고 끝날 때까지 기다려.' },
   generate_comfyui_all_servers: { group: 'image-gen', label: { ko: '모든 서버에서 생성', en: 'Generate on all servers' }, ko: '활성 ComfyUI 서버 전부에서 한 번씩 생성해.' },
   cancel_generation_job: { group: 'image-gen', label: { ko: '생성 작업 취소', en: 'Cancel generation job' }, ko: '진행 중인 생성 작업을 취소해.' },
+  resize_images: { group: 'image-gen', label: { ko: '이미지 크기 변경', en: 'Resize images' }, ko: '라이브러리 이미지를 정한 크기로 바꿔 새 이미지로 저장해. 원본은 그대로 둬.' },
   execute_graph_workflow: { group: 'workflow-run', label: { ko: '그래프 워크플로 실행', en: 'Run graph workflow' }, ko: '직접 만든 워크플로를 실행하고 결과를 기다려.' },
+  extract_sprite_sheet: { group: 'sprite-ops', label: { ko: '스프라이트 시트 추출', en: 'Extract sprite sheet' }, ko: '영상에서 프레임을 뽑아 배경색을 빼고 시트로 만들어 라이브러리에 저장해.' },
+  extract_sprite_sheets_batch: { group: 'sprite-ops', label: { ko: '스프라이트 일괄 추출', en: 'Batch extract sprites' }, ko: '여러 영상을 같은 설정으로 시트로 만들어 저장해.' },
+  normalize_sprite_sheets: { group: 'sprite-ops', label: { ko: '스프라이트 정규화', en: 'Normalize sprite sheets' }, ko: '시트의 프레임을 같은 셀 크기와 기준점으로 맞춰 저장해.' },
+  create_sprite_animation: { group: 'sprite-ops', label: { ko: '스프라이트 애니메이션', en: 'Sprite animation' }, ko: '시트를 WebP·GIF·MP4 애니메이션으로 만들어 저장해.' },
   resolve_image_group_path: { group: 'image-groups', label: { ko: '그룹 경로 찾기·만들기', en: 'Resolve group path' }, ko: '"프로젝트/효과" 같은 경로를 그룹으로 바꿔. 없으면 만들 수도 있어.' },
   add_images_to_group: { group: 'image-groups', label: { ko: '그룹에 이미지 추가', en: 'Add images to group' }, ko: '이미지를 그룹에 넣어. 다른 그룹 소속은 그대로 둬.' },
   move_images_between_groups: { group: 'image-groups', label: { ko: '그룹 간 이미지 이동', en: 'Move images between groups' }, ko: '이미지를 한 그룹에서 다른 그룹으로 옮겨.' },
@@ -99,6 +114,28 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   delete_files: { group: 'file-ops', label: { ko: '파일 삭제', en: 'Delete files' }, ko: '보관함의 파일이나 빈 폴더를 영구히 지워. 채팅에 붙은 파일은 보호돼.' },
   set_emoticon_keywords: { group: 'emoticon-ops', label: { ko: '이모티콘 키워드 설정', en: 'Set emoticon keywords' }, ko: '그룹 안 이미지의 이모티콘 키워드를 정해.' },
   set_emoticon_group: { group: 'emoticon-ops', label: { ko: '이모티콘 그룹 지정', en: 'Set emoticon group' }, ko: '그룹을 이모티콘 그룹으로 만들거나 되돌려.' },
+  list_audio_projects: { group: 'audio', label: { ko: '음향 프로젝트 목록', en: 'List audio projects' }, ko: '음향 프로젝트와 그룹·후보 수, 받은 파일 그룹을 나열해.' },
+  list_audio_groups: { group: 'audio', label: { ko: '음향 그룹 목록', en: 'List audio groups' }, ko: '프로젝트의 효과음 그룹과 파일명 규칙, 채택·코멘트 수를 나열해.' },
+  list_audio_candidates: { group: 'audio', label: { ko: '후보 목록', en: 'List candidates' }, ko: '그룹의 생성 후보·업로드·편집본을 검수 상태와 함께 나열해.' },
+  get_audio_candidate: { group: 'audio', label: { ko: '후보 읽기', en: 'Read candidate' }, ko: '후보 하나의 출처(프롬프트, seed, 워크플로)와 검수 메모를 읽어.' },
+  list_audio_group_comments: { group: 'audio', label: { ko: '그룹 코멘트 읽기', en: 'Read group comments' }, ko: '그룹에 남긴 작업 요청 코멘트를 읽어.' },
+  create_audio_project: { group: 'audio-ops', label: { ko: '프로젝트 만들기', en: 'Create audio project' }, ko: '음향 프로젝트를 만들어. 받은 파일 그룹이 같이 생겨.' },
+  update_audio_project: { group: 'audio-ops', label: { ko: '프로젝트 수정', en: 'Update audio project' }, ko: '음향 프로젝트 이름이나 설명을 바꿔.' },
+  create_audio_group: { group: 'audio-ops', label: { ko: '그룹 만들기', en: 'Create audio group' }, ko: '효과음 그룹을 만들어. 라벨이 내보내기 파일명 규칙이야.' },
+  update_audio_group: { group: 'audio-ops', label: { ko: '그룹 수정', en: 'Update audio group' }, ko: '그룹 이름·라벨·설명을 바꿔.' },
+  move_audio_candidates: { group: 'audio-ops', label: { ko: '후보 옮기기', en: 'Move candidates' }, ko: '후보를 같은 프로젝트의 다른 그룹으로 옮겨.' },
+  import_audio: { group: 'audio-ops', label: { ko: '오디오 가져오기', en: 'Import audio' }, ko: '오디오 파일(data URL 또는 보관함 파일)을 후보로 넣어.' },
+  list_audio_workflows: { group: 'audio', label: { ko: '음향 워크플로 목록', en: 'List audio workflows' }, ko: '음향 생성에 연결된 워크플로와 기본값, 서버 호환 결과를 나열해.' },
+  get_audio_order: { group: 'audio', label: { ko: '음향 주문 읽기', en: 'Read audio order' }, ko: '음향 주문의 작업별 상태와 만들어진 후보를 읽어.' },
+  order_audio: { group: 'audio-gen', label: { ko: '효과음 생성 주문', en: 'Order sound effects' }, ko: '그룹에 효과음 후보를 여러 개 생성해. seed는 하나씩 늘어나.' },
+  wait_audio_order: { group: 'audio-gen', label: { ko: '음향 주문 기다리기', en: 'Wait for audio order' }, ko: '주문이 끝날 때까지 기다렸다가 결과를 돌려줘.' },
+  cancel_audio_order: { group: 'audio-gen', label: { ko: '음향 주문 취소', en: 'Cancel audio order' }, ko: '주문에서 아직 안 끝난 작업을 취소해.' },
+  retry_audio_order_job: { group: 'audio-gen', label: { ko: '음향 작업 다시', en: 'Retry audio job' }, ko: '실패한 작업 하나를 같은 seed로 다시 돌려.' },
+  set_audio_group_comment_status: { group: 'audio-ops', label: { ko: '코멘트 완료 처리', en: 'Complete comment' }, ko: '작업 요청 코멘트를 완료로 표시하거나 다시 열어.' },
+  edit_audio_candidate: { group: 'audio-ops', label: { ko: '편집본 저장', en: 'Save audio edit' }, ko: '후보를 자르고 음량·피치·속도·페이드를 바꾼 편집본을 새 후보로 저장해. 원본은 그대로야.' },
+  delete_unselected_audio_candidates: { group: 'audio-ops', label: { ko: '미채택 정리', en: 'Clear unselected takes' }, ko: '그룹의 미채택 후보를 휴지통으로 보내. 채택된 후보는 지우지 않아.' },
+  export_audio_selected: { group: 'audio-ops', label: { ko: '채택본 내보내기', en: 'Export selected takes' }, ko: '채택된 효과음을 그룹 라벨 파일명으로 WAV·OGG 또는 ZIP으로 내보내.' },
+  get_audio_download: { group: 'audio', label: { ko: '오디오 내려받기', en: 'Download audio' }, ko: '후보 파일이나 내보내기 결과의 다운로드 링크를 받아.' },
   get_chat_setup_guide: { group: 'configure', label: { ko: '설정 안내 읽기', en: 'Read setup guide' }, ko: '프로필·표시 블록을 어떻게 짜는지 안내를 읽어.' },
   list_chat_profiles: { group: 'configure', label: { ko: '프로필 목록', en: 'List profiles' }, ko: '채팅 프로필을 나열해.' },
   get_chat_profile: { group: 'configure', label: { ko: '프로필 읽기', en: 'Read profile' }, ko: '프로필 하나의 설정을 읽어.' },

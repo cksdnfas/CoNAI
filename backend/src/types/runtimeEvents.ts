@@ -113,6 +113,8 @@ export interface ChatGenerationFinishedEventPayload {
   imageCount: number
   thumbnailHistoryId: number | null
   failureCode: string | null
+  /** Audio-order jobs: sound candidates this job made (absent for image jobs). */
+  audioCandidateCount?: number
 }
 
 export interface QueueJobProgressEventPayload {

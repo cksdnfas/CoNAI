@@ -106,6 +106,14 @@ export async function startRuntimeSideEffectServices(
   GenerationQueueService.start()
   const { ChatGenerationReactionService } = await import('../services/codex-chat/chatGenerationReactions')
   ChatGenerationReactionService.start()
+  try {
+    // Audio orders whose rows were stored but not queued before the last shutdown/crash.
+    const { reconcileAllAudioOrders } = await import('../services/audio/audioOrders')
+    const requeued = reconcileAllAudioOrders()
+    if (requeued > 0) console.log(`🔊 Re-queued ${requeued} audio order job(s)`)
+  } catch (error) {
+    console.warn('⚠️ Audio order reconcile failed:', error instanceof Error ? error.message : error)
+  }
 
   const { CleanupService } = await import('../services/cleanupService')
   CleanupService.startPeriodicCleanup()

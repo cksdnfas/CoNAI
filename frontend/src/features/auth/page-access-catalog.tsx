@@ -1,4 +1,4 @@
-import { Archive, FolderTree, Image as ImageIcon, Images, LayoutGrid, MessageSquareText, Settings2, Sparkles, Upload, WandSparkles, type LucideIcon } from 'lucide-react'
+import { Archive, AudioLines, Film, FolderTree, Image as ImageIcon, Images, LayoutGrid, MessageSquareText, Settings2, Sparkles, Upload, WandSparkles, type LucideIcon } from 'lucide-react'
 import { hasAuthPermission } from './auth-permissions'
 
 export interface PageAccessCatalogItem {
@@ -37,6 +37,20 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
     labelKey: 'pageAccessCatalog.generation',
     permissionKey: 'page.generation.view',
     icon: Sparkles,
+    category: 'primary',
+  },
+  {
+    path: '/audio',
+    labelKey: 'pageAccessCatalog.audio',
+    permissionKey: 'page.audio.view',
+    icon: AudioLines,
+    category: 'primary',
+  },
+  {
+    path: '/sprite',
+    labelKey: 'pageAccessCatalog.sprite',
+    permissionKey: 'page.sprite.view',
+    icon: Film,
     category: 'primary',
   },
   {

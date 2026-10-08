@@ -15,6 +15,8 @@ export function resolveImagePermissions(permissionKeys?: string[], authenticated
     canEditMetadata: authenticated && canViewImages && has('images.edit'),
     canAssignGroups: authenticated && canViewImages && has('images.edit'),
     canDeleteImages: authenticated && canViewImages && has('images.delete'),
+    /** New library items from existing ones (batch resize): editing plus uploading. */
+    canCreateImageCopies: authenticated && canViewImages && has('images.edit') && has('images.upload'),
   }
 }
 

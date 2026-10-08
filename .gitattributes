@@ -1,0 +1,2 @@
+# Golden fixtures are compared byte-for-byte (sha256 in manifest.json); never rewrite line endings.
+backend/test/fixtures/av-golden/** -text

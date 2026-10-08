@@ -174,7 +174,7 @@ stdio:
 
 | Tool | 용도 |
 | --- | --- |
-| `list_workflows` | 등록된 ComfyUI 워크플로우 조회 |
+| `list_workflows` | 등록된 ComfyUI 워크플로우 조회 (기본은 이미지 워크플로, `kind: "audio"`·`"all"`로 음향 포함) |
 | `list_comfyui_servers` | 등록된 ComfyUI 서버 조회 |
 | `get_workflow_details` | 워크플로우 상세와 marked fields 조회 |
 | `generate_comfyui` | 특정 ComfyUI 서버에서 생성 |
@@ -277,6 +277,55 @@ stdio:
 
 - 정리 도구는 계정에 권한이 추가로 필요합니다: `create_file_folder`·`rename_file`·`move_files`는 `files.organize`, `delete_files`는 `files.delete`. 이름 변경으로 실행파일 등 제한 확장자를 붙이려면 `files.upload.any`도 있어야 합니다.
 - MCP 도구는 항상 요청 계정 본인의 보관함만 다룹니다. 관리자의 다른 계정 보관함 탐색(`files.browse.all`)은 웹 UI·HTTP API(`?owner=`)에서만 됩니다.
+
+### 음향
+
+효과음 작업실(음향 탭)입니다. 프로젝트 → 그룹 → 후보(생성 테이크·업로드·편집본) 구조이고, 이미지 라이브러리와 따로 `audio.db`에 저장됩니다. 후보 식별자는 `candidate_id`이며 이미지의 `composite_hash`가 아닙니다.
+
+| Tool | 용도 | HTTP MCP 키 권한 | 계정 권한 |
+| --- | --- | --- | --- |
+| `list_audio_projects` | 프로젝트와 그룹·후보 수, 프로젝트별 받은 파일 그룹 ID | `read` | `audio.view` |
+| `list_audio_groups` | 프로젝트의 그룹, 파일명 규칙(`label`), 채택·코멘트 수 | `read` | `audio.view` |
+| `list_audio_candidates` | 그룹의 후보 목록(검수 상태, 길이, 출처) | `read` | `audio.view` |
+| `get_audio_candidate` | 후보 하나의 출처(프롬프트, seed, 워크플로, 서버)와 검수 메모 | `read` | `audio.view` |
+| `list_audio_group_comments` | 그룹에 남긴 작업 요청 코멘트(리비전 포함) | `read` | `audio.view` |
+| `get_audio_download` | 후보 파일 또는 백그라운드 내보내기 결과의 다운로드 링크 | `read` | `audio.view` |
+| `list_audio_workflows` | 음향 생성에 연결된 워크플로, 역할 필드, 호환성 검사 결과 | `read` | `audio.view` |
+| `get_audio_order` | 생성 주문의 잡별 상태와 만들어진 후보 ID | `read` | `audio.view` |
+| `create_audio_project` / `update_audio_project` | 프로젝트 만들기(받은 파일 그룹이 같이 생김)·수정 | `organize` | `audio.edit` |
+| `create_audio_group` / `update_audio_group` | 그룹 만들기·수정(`label`이 내보내기 파일명 규칙) | `organize` | `audio.edit` |
+| `move_audio_candidates` | 후보를 같은 프로젝트의 다른 그룹으로 이동 | `organize` | `audio.edit` |
+| `import_audio` | `data_url`(audio/*, 최대 50MB) 또는 내 파일 `file_id`(복사)를 후보로 추가 | `organize` | `audio.edit` (+`files.view`) |
+| `set_audio_group_comment_status` | 작업 요청 완료 처리·되돌리기(읽은 `revision` 필요) | `organize` | `audio.edit` |
+| `edit_audio_candidate` | 구간·음량·피치·속도·페이드 편집본을 새 후보로 저장(원본 보존) | `organize` | `audio.edit` |
+| `delete_unselected_audio_candidates` | 미채택 후보를 휴지통으로(채택 후보가 섞이면 전체 거부) | `organize` | `audio.edit` |
+| `export_audio_selected` | 채택본을 그룹 라벨 파일명으로 내보내기(WAV/OGG, 여러 개면 ZIP, 20개 초과는 백그라운드) | `organize` | `audio.view` |
+| `order_audio` | 그룹에 생성 주문(1~50개, seed는 기준값 +1씩) | `generate` | `audio.edit` + `generation.execute` |
+| `wait_audio_order` | 주문이 끝날 때까지 대기(채팅에서는 제공되지 않음) | `generate` | `audio.view` |
+| `cancel_audio_order` | 끝나지 않은 잡 취소 | `generate` | `audio.edit` |
+| `retry_audio_order_job` | 실패·취소된 잡을 같은 seed로 다시 실행 | `generate` | `audio.edit` + `generation.execute` |
+
+- **채택·보류·미검수 변경과 검수 메모, 코멘트 작성·수정·삭제는 도구가 없습니다.** 사람이 웹 화면에서만 합니다. 봇은 결과를 만들고 정리할 수 있지만 최종 검수는 바꿀 수 없습니다.
+- 채팅에서 `order_audio`로 주문하면 생성이 끝나는 대로 앱이 후보를 답변에 붙입니다. 채팅 봇은 주문을 기다리거나 다시 조회할 필요가 없습니다.
+- 생성은 생성 쪽에 **음향 종류**로 등록되고 음향 설정에서 역할(프롬프트·길이·seed)이 연결된 워크플로로만 됩니다.
+
+### 스프라이트
+
+라이브러리 영상(또는 애니메이션 GIF/WebP)에서 프레임을 뽑아 스프라이트 시트를 만드는 도구입니다. 결과는 기본으로 라이브러리 "스프라이트" 그룹에 저장되고 `composite_hash`로 돌아옵니다. 입력 영상은 `composite_hash` 또는 `data_url`(video/*, 최대 50MB)입니다.
+
+| Tool | 용도 | HTTP MCP 키 권한 | 계정 권한 |
+| --- | --- | --- | --- |
+| `get_video_info` | 영상 크기, fps, 길이, 프레임 수 | `read` | `images.view` |
+| `get_sprite_job` | 스프라이트 작업 상태와 저장된 `composite_hashes` | `read` | `images.view` |
+| `wait_sprite_job` | 작업이 끝날 때까지 대기(채팅에서는 제공되지 않음) | `read` | `images.view` |
+| `download_sprite_frames` | 끝난 추출의 프레임 ZIP 다운로드 링크(약 1시간 보관) | `read` | `images.view` |
+| `extract_sprite_sheet` | 구간·간격/개수로 프레임 추출, 지정색 제거(디스필 선택), 자동 크롭·리사이즈·배치 | `generate` | `images.edit` + `images.upload` |
+| `extract_sprite_sheets_batch` | 같은 옵션으로 영상 여러 개를 각각 시트로(작업 ID 반환) | `generate` | `images.edit` + `images.upload` |
+| `normalize_sprite_sheets` | 기준점을 지키며 시트들의 셀 크기를 맞춤(시트별 / 묶음 공통) | `generate` | `images.edit` + `images.upload` |
+| `create_sprite_animation` | 시트를 WebP(기본)·GIF·MP4 애니메이션으로 | `generate` | `images.edit` + `images.upload` |
+
+- 지정색은 최대 8개입니다. 디스필은 색 1개일 때만 켤 수 있고, 마젠타 `#FF00FF`는 원래 도구와 같은 알고리즘입니다.
+- `extract_sprite_sheet`는 일정 시간 안에 끝나면 결과 해시를 바로 돌려주고, 길어지면 `job_id`를 돌려줍니다.
 
 ### 채팅 설정 (configure)
 
