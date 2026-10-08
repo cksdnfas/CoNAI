@@ -43,6 +43,8 @@ export type CodexChatThreadRecord = {
   /** Group rooms: bot-to-bot wakes per user message and messages handed to a woken member (null: defaults). */
   group_chain_limit: number | null
   group_window_limit: number | null
+  /** Group rooms: the judge preset that picks who answers and whether the room goes on (null: none). */
+  judge_preset_id: number | null
   /** This chat's author's note (null: the profile's default) and its depth in turns before the end (null: the profile's lore depth). */
   author_note: string | null
   author_note_depth: number | null
@@ -430,6 +432,30 @@ export const CodexChatStore = {
         .run(content, alternatives.length > 0 ? JSON.stringify(alternatives) : null, messageId)
       invalidateContext(threadId, messageId)
     }).immediate()
+  },
+
+  /**
+   * Add `suffix` to the end of a reply (its shown variant and the reader's translation too) when its text is still
+   * `expected`; false when it changed meanwhile (regenerated, edited, switched). The summary is left as it is: what is
+   * added are block fences, which the history leaves out (see stripBlockFences). Announced like a new reply.
+   */
+  appendToReply(threadId: number, messageId: number, expected: string, suffix: string) {
+    const db = getUserSettingsDb()
+    const accountId = db.transaction(() => {
+      const row = db.prepare("SELECT m.content, m.display_content, m.alternatives, m.active_alternative, t.account_id FROM codex_chat_messages m JOIN codex_chat_threads t ON t.id = m.thread_id WHERE m.thread_id = ? AND m.id = ? AND m.role = 'assistant'").get(threadId, messageId) as { content: string; display_content: string | null; alternatives: string | null; active_alternative: number; account_id: number | null } | undefined
+      if (!row || row.content !== expected) return undefined
+      const content = `${row.content.trimEnd()}${suffix}`
+      const display = row.display_content === null ? null : `${row.display_content.trimEnd()}${suffix}`
+      const alternatives = parseAlternatives(row.alternatives)
+      if (alternatives[row.active_alternative]) alternatives[row.active_alternative] = { ...alternatives[row.active_alternative], content, display_content: display }
+      db.prepare('UPDATE codex_chat_messages SET content = ?, display_content = ?, alternatives = ? WHERE id = ?')
+        .run(content, display, alternatives.length > 0 ? JSON.stringify(alternatives) : null, messageId)
+      return row.account_id
+    }).immediate()
+    if (accountId === undefined) return false
+    publishRuntimeEvent({ name: 'chat.message.updated', topic: 'generation-queue', visibility: 'owner', accountId,
+      payload: { threadId, messageId, requestedByAccountId: accountId } })
+    return true
   },
 
   clearThread(threadId: number, greeting: string) {

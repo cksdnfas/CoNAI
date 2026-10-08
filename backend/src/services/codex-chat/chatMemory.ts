@@ -180,8 +180,9 @@ const COMMON_TERM_SHARE = 0.6
 /**
  * The folded segments the latest messages (`query`) are about, best first, within `budgetTokens`. Scored by the rare
  * terms they share with the query (inverse document frequency over the candidates), so stock phrases do not count.
+ * `minShared`: fewer terms in common than this is not a match (the judge, which reads each candidate, asks wider).
  */
-export function selectRecall(candidates: ChatSummarySegment[], query: string, budgetTokens: number, estimate: (text: string) => number, limit = 3) {
+export function selectRecall(candidates: ChatSummarySegment[], query: string, budgetTokens: number, estimate: (text: string) => number, limit = 3, minShared = MIN_SHARED_TERMS) {
   if (candidates.length === 0 || budgetTokens <= 0) return []
   const queryTerms = recallTerms(query)
   if (queryTerms.size === 0) return []
@@ -201,7 +202,7 @@ export function selectRecall(candidates: ChatSummarySegment[], query: string, bu
       score += weight
       sharedTerms.push({ term, weight })
     }
-    return shared >= MIN_SHARED_TERMS ? [{ segment, score, terms: sharedTerms.sort((a, b) => b.weight - a.weight).slice(0, 6).map(({ term }) => term) }] : []
+    return shared >= minShared ? [{ segment, score, terms: sharedTerms.sort((a, b) => b.weight - a.weight).slice(0, 6).map(({ term }) => term) }] : []
   }).sort((a, b) => b.score - a.score || b.segment.until_message_id - a.segment.until_message_id)
   const chosen: Array<ChatSummarySegment & { score: number; terms: string[] }> = []
   let remaining = budgetTokens

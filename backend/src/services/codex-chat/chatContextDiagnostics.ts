@@ -1,5 +1,6 @@
 import { createHash } from 'crypto'
 import type { ChatCompletionMessage, ChatCompletionTool } from './llmChatCompletion'
+import type { ChatJudgeDiagnostics } from '@conai/shared'
 import type { LoreDecision } from './chatLorebook'
 
 /** Names reflect the pieces CoNAI actually sends; merged messages keep one section position. */
@@ -7,7 +8,7 @@ export const CHAT_CONTEXT_SECTION_KINDS = [
   'persona', 'system-prompt', 'prompt-section', 'guidance', 'lore-index', 'constant-lore', 'lore', 'summary',
   'example', 'window', 'reference', 'author-note', 'state', 'flags', 'user-persona', 'recall',
   'page', 'continuation', 'last-instruction', 'tool-definition', 'tool-result', 'group-header',
-  'summary-instruction', 'translation-instruction',
+  'summary-instruction', 'translation-instruction', 'judge',
 ] as const
 export type ChatContextSectionKind = typeof CHAT_CONTEXT_SECTION_KINDS[number]
 export const CHAT_CONTEXT_META_LIMITS = { sections: 512, parts: 64, sources: 512, lore: 256, loreSkipped: 256, recall: 12, terms: 6, string: 160 } as const
@@ -31,6 +32,8 @@ export type ChatDiagnosticsFields = {
   toolRounds?: number
   codexKeys?: string[]
   tokenUsage?: { contextTokens: number | null; inputTokens: number | null; cachedInputTokens: number | null; outputTokens: number | null }
+  /** The judge's answers that steered this reply (API LLM profiles with a judge preset). */
+  judge?: ChatJudgeDiagnostics
   truncated?: boolean
 }
 
@@ -119,5 +122,6 @@ export function metadataOnly(meta: { lore: string[] } & ChatDiagnosticsFields) {
     recall: meta.recall?.map((recall) => pick(recall, ['segmentId', 'score', 'terms', 'hash'])),
     window: meta.window ? pick(meta.window, ['fromId', 'sent', 'droppedTurns']) : undefined,
     tokenUsage: meta.tokenUsage ? pick(meta.tokenUsage, ['contextTokens', 'inputTokens', 'cachedInputTokens', 'outputTokens']) : undefined,
+    judge: meta.judge ? { ...pick(meta.judge, ['runId', 'presetId', 'engine', 'latencyMs', 'error']), items: meta.judge.items?.map((item) => pick(item, ['itemId', 'name', 'stage', 'probability', 'confidence', 'choice', 'verdict', 'decidedBy', 'action'])) } : undefined,
   }
 }

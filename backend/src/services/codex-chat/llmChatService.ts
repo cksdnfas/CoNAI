@@ -23,7 +23,7 @@ import { withGenerationOutcomes } from './codexChatMedia'
 import type { CodexChatStreamEvent } from './codexChatService'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 import { ChatSummaryStore } from './chatMemory'
-import { buildChatMessages, cutToolOutput, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
+import { appendUserDirective, buildChatMessages, cutToolOutput, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
 import { addressLabelFilter, restatement, roundSeparator } from './chatReplyText'
 import { chatPageReference, parseChatPageContext } from './chatPageContext'
 import { contextSections, limitContextMeta, markContextMessage, legacyContextMeta } from './chatContextDiagnostics'
@@ -31,11 +31,16 @@ import { redactChatRequestBody, saveChatRequestCapture } from './chatRequestCapt
 import { ChatGroupStore, groupLimitsOf } from './chatGroupStore'
 import { buildGroupLlmMessages } from './groupChatContext'
 import { skipThreadGenerationReactions } from './chatReplyRegistry'
+import { cancelJudgeFollowUp, endJudgedTurn, judgeAfterReply, judgeBeforeReply, type JudgedTurn } from './chatJudge'
+import type { JudgedContext } from './chatJudgeContext'
+import { judgeStatusFields } from './chatJudgeFields'
 
 type GenerationReaction = {
   result: ChatCompletionMessage
   persist: (save: (() => number) | null) => number | null
   skip: () => void
+  /** A judge's follow-up message (not a generation result): the judge may follow it up once more, within its limit. */
+  followUp?: boolean
 }
 
 /** Tool output kept on the stored call for replay; the model gets more of it within the reply itself. */
@@ -215,7 +220,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
   const listMessages = () => withGenerationOutcomes(CodexChatStore.listMessages(thread.id).filter((message) => message.id !== turn.replacingMessageId))
   const config = resolveContextConfig(thread, profile)
   if (turn.reaction && thread.kind === 'group') config.maxTokens = ChatGroupStore.member(thread.id, profile.id)?.max_tokens ?? config.maxTokens
-  return streamReply(turn, requester, profile, async (tools) => {
+  return streamReply(turn, requester, profile, async (tools, judged) => {
     const attachmentTexts = await inlineTextsForChat(turn.reaction ? { ...profile, mcpEnabled: false } : profile, requester.accountId, listMessages())
     if (turn.reaction && thread.kind === 'group') {
       const members = ChatGroupStore.members(thread.id).flatMap((member) => ChatProfileStore.find(member.profile_id) ?? [])
@@ -237,7 +242,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     }
     const current = CodexChatStore.findThreadById(thread.id) ?? thread
     const request = buildChatMessages({
-      profile, thread: current, messages: listMessages(), config, tools, segments: config.summaryEnabled ? ChatSummaryStore.list(thread.id) : [], attachmentTexts, extraTokens,
+      profile, thread: current, messages: listMessages(), config, tools, segments: config.summaryEnabled ? ChatSummaryStore.list(thread.id) : [], attachmentTexts, extraTokens, judged,
       onMeta: (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(profile, 'chat')?.model ?? null } },
     })
     const latestUser = request.map((message) => message.role).lastIndexOf('user')
@@ -289,7 +294,7 @@ function settleRestatement(turn: LlmTurn, previous: TextSpan | null, roundStart:
  * Fails the reply (LlmChatError) when the output cap cut tool calls (their arguments are broken: never run, never
  * stored) or when the model answered nothing at all.
  */
-async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[]) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>, generation: Partial<LlmGenerationOptions> = {}) {
+async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[], judged: JudgedContext | null) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>, generation: Partial<LlmGenerationOptions> = {}) {
   requireProfileAccess(requester, profile)
   const target = resolveChatCompletionTarget(chatConnectionOf(profile), { model: resolveProfileModel(profile, 'chat')?.model ?? null, generation: { ...profileGenerationOptions(profile), ...generation } })
   if (target.transport === 'claude-code' && !resolveChatAccess(requester.accountId).claude) throw new LlmChatError('Claude Code를 사용할 권한이 없어.', 403)
@@ -297,11 +302,20 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
   const chatContext = turn.chatContext ?? turn.delivery?.context
   const bridge = !turn.reaction && (scopes.length > 0 || chatContext) ? await openChatMcpBridge(requester, scopes, toolAllowlist, { generationPresetIds: profile.generationPresetIds, chatContext }) : null
 
+  // The judge reads the conversation before the request is built: its answers decide the tools, the directive, and
+  // the lore and past episodes beyond keywords. A reply carried on or a headless reaction is not judged again.
+  let judged: JudgedTurn | null = null
   try {
     // Image viewing is only offered to models the profile says can see images.
-    const offeredTools = (bridge?.tools ?? []).filter((tool) => profile.visionEnabled || tool.function.name !== 'view_images')
+    const visible = (bridge?.tools ?? []).filter((tool) => profile.visionEnabled || tool.function.name !== 'view_images')
+    if (!turn.reaction && turn.continuing === undefined) {
+      judged = await judgeBeforeReply({ profile, threadId: turn.threadId, replyId: chatContext?.replyId ?? null, availableTools: visible.map((tool) => tool.function.name), excludeMessageId: turn.replacingMessageId, context: true, signal: turn.controller.signal })
+    }
+    const offeredTools = judged ? judged.filterTools(visible) : visible
     turn.offeredTools = offeredTools
-    const messages = await buildMessages(offeredTools)
+    const built = await buildMessages(offeredTools, judged?.context ?? null)
+    const messages = judged?.directive ? appendUserDirective(built, judged.directive, 'judge') : built
+    if (judged && turn.contextMeta) turn.contextMeta.judge = judged.diagnostics
     let previousRound: TextSpan | null = null
     for (let round = 1; ; round += 1) {
       turn.controller.signal.throwIfAborted()
@@ -393,6 +407,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
       }
     }
   } finally {
+    endJudgedTurn(judged, [...turn.toolCalls.values()].map((call) => call.tool))
     await bridge?.close()
   }
 }
@@ -502,17 +517,26 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
   turn.delivery = beginDirectReply(updatedThread, profile.id, history, [...history].reverse().find((entry) => entry.role === 'user') ?? null, turn.controller.signal, (routing) => emit(turn, { type: 'routing', routing }))
   if (reaction) turn.delivery.routing = { ...turn.delivery.routing, replyTo: null, recipients: ['user'] }
   if (page) turn.chatContext = { ...turn.delivery.context, page }
+  let stored: CodexChatMessageRecord | null = null
   void runReply(turn, requester, updatedThread, profile)
     .then(() => finishTurn(turn, profile, turn.controller.signal.aborted ? 'interrupted' : 'completed', null), (error: unknown) => {
       const aborted = turn.controller.signal.aborted
       return finishTurn(turn, profile, aborted ? 'interrupted' : 'failed', aborted ? null : error instanceof Error ? error.message : String(error))
     })
-    .then(resolveFinished, rejectFinished)
+    .then((message) => { stored = message ?? null; resolveFinished(message) }, rejectFinished)
     .finally(() => {
       turn.delivery?.close()
       if (activeTurns.get(thread.id) === turn) activeTurns.delete(thread.id)
       turn.listeners.clear()
-      if (turn.controller.signal.aborted || reaction) return
+      if (turn.controller.signal.aborted) return
+      // The status fields the reply left alone are settled by the judge (in the background).
+      if (stored) judgeStatusFields({ profile, threadId: thread.id, messageId: stored.id, speakerId: thread.kind === 'group' ? profile.id : undefined })
+      // A direct chat's finished reply (or follow-up) may get a follow-up message from the judge.
+      if ((!reaction || reaction.followUp) && thread.kind !== 'group') {
+        const last = CodexChatStore.listMessages(thread.id).at(-1)
+        if (last) judgeAfterReply({ profile, threadId: thread.id, message: last, write: (directive, signal) => writeFollowUp(requester, thread.id, profile.id, directive, signal) })
+      }
+      if (reaction) return
       summarizeAhead(thread.id, profile, turn.offeredTools).catch((error: unknown) => {
         console.warn('[llm-chat] summary update failed:', error instanceof Error ? error.message : error)
       })
@@ -520,7 +544,25 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
   return turn.finished
 }
 
-export type GroupReplyResult = Pick<CodexChatMessageRecord, 'content' | 'tool_calls' | 'status' | 'error'> & { finish_reason?: string | null; contextMeta?: ChatContextMeta; requestCapture?: string }
+/**
+ * The judge's follow-up: a headless reply (like a generation reaction) told to add one more message. Skipped when the
+ * chat or profile changed meanwhile or another turn runs; the user's next message interrupts it.
+ */
+function writeFollowUp(requester: McpRequester, threadId: number, profileId: number, directive: string, signal: AbortSignal) {
+  const thread = CodexChatStore.findThreadById(threadId)
+  const profile = ChatProfileStore.find(profileId)
+  if (!thread || thread.profile_id !== profileId || !profile?.isEnabled || (profile.engine !== 'llm' && profile.engine !== 'claude') || activeTurns.has(threadId) || signal.aborted) return Promise.resolve(null)
+  const onAbort = () => LlmChatService.skipReaction(threadId)
+  signal.addEventListener('abort', onAbort, { once: true })
+  return LlmChatService.react(requester, thread, profile, {
+    result: { role: 'user', content: directive },
+    persist: (save) => (save ? save() : null),
+    skip: () => {},
+    followUp: true,
+  }).finally(() => signal.removeEventListener('abort', onAbort))
+}
+
+export type GroupReplyResult =Pick<CodexChatMessageRecord, 'content' | 'tool_calls' | 'status' | 'error'> & { finish_reason?: string | null; contextMeta?: ChatContextMeta; requestCapture?: string }
 
 /**
  * One group room member's reply (not stored here: the room stores it with its speaker). Streams `delta`,
@@ -531,7 +573,7 @@ export async function generateLlmGroupReply(params: {
   requester: McpRequester
   threadId: number
   profile: ChatProfile
-  buildMessages: (tools: ChatCompletionTool[], onMeta: (meta: ChatContextMeta) => void) => ChatCompletionMessage[]
+  buildMessages: (tools: ChatCompletionTool[], onMeta: (meta: ChatContextMeta) => void, judged: JudgedContext | null) => ChatCompletionMessage[]
   /** Overrides of the profile's generation options (the member's or room's reply cap). */
   generation?: Partial<LlmGenerationOptions>
   signal: AbortSignal
@@ -550,7 +592,7 @@ export async function generateLlmGroupReply(params: {
   let status: CodexChatMessageRecord['status'] = 'completed'
   let error: string | null = null
   try {
-    await streamReply(turn, params.requester, params.profile, (tools) => params.buildMessages(tools, (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(params.profile, 'chat')?.model ?? null } }), params.generation ?? {})
+    await streamReply(turn, params.requester, params.profile, (tools, judged) => params.buildMessages(tools, (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(params.profile, 'chat')?.model ?? null } }, judged), params.generation ?? {})
     if (controller.signal.aborted) status = 'interrupted'
   } catch (caught) {
     status = controller.signal.aborted ? 'interrupted' : 'failed'
@@ -621,6 +663,7 @@ export const LlmChatService = {
     }
     const routing = userReplyRouting(thread, replyToMessageId)
     LlmChatService.skipReaction(thread.id)
+    cancelJudgeFollowUp(thread.id)
     if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     skipThreadGenerationReactions(thread.id)
     // The model reads the message in English; the reader keeps their own words.
@@ -636,6 +679,7 @@ export const LlmChatService = {
   async rewriteMessage(requester: McpRequester, thread: CodexChatThreadRecord, messageId: number, content: string | undefined, listener: (event: CodexChatStreamEvent) => void) {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id, requester)
+    cancelJudgeFollowUp(thread.id)
     if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     const messages = CodexChatStore.listMessages(thread.id)
     const message = messages.find((entry) => entry.id === messageId)
@@ -661,6 +705,7 @@ export const LlmChatService = {
   continueReply(requester: McpRequester, thread: CodexChatThreadRecord, messageId: number, listener: (event: CodexChatStreamEvent) => void) {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id, requester)
+    cancelJudgeFollowUp(thread.id)
     if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     const messages = CodexChatStore.listMessages(thread.id)
     const message = messages[messages.length - 1]
@@ -681,6 +726,7 @@ export const LlmChatService = {
 
   /** Stop a running reply and wait (bounded) until it is stored, e.g. before deleting the thread. */
   async stop(threadId: number) {
+    cancelJudgeFollowUp(threadId)
     const turn = activeTurns.get(threadId)
     if (!turn) {
       return

@@ -28,6 +28,11 @@ import { loreIndexText, threadLorebooks } from '../services/codex-chat/chatLoreC
 import { applyMerge, assertMergeDecisions, draftMerge, hasDuplicates, MergeDecisionsMissingError, previewMerge, type MergeResult } from '../services/codex-chat/chatLorebookMerge'
 import { ChatSharedBlockStore, readBlockFile } from '../services/codex-chat/chatDisplayBlocks'
 import { ChatToolPresetStore, readToolPresetFile } from '../services/codex-chat/chatToolPresets'
+import { ChatJudgePresetStore, readJudgePresetFile } from '../services/codex-chat/chatJudgePresets'
+import { ChatJudgeLogStore } from '../services/codex-chat/chatJudgeLogs'
+import { JudgeError } from '../services/judge/judgeEngine'
+import { testJudgePreset } from '../services/codex-chat/chatJudge'
+import type { ChatJudgePresetInput } from '@conai/shared'
 import { ModelSlotStore } from '../services/codex-chat/modelSlots'
 import { buildModelUsage } from '../services/codex-chat/modelUsage'
 import { effectiveModelOf, modelLabelOf } from '../services/codex-chat/chatModelRoles'
@@ -373,7 +378,7 @@ router.patch('/threads/:threadId/group', requireChatAccess, (req: Request, res: 
   if (threadId === null) return
   try {
     const body = (req.body ?? {}) as Record<string, unknown>
-    res.json({ success: true, data: GroupChatService.updateRoom(requesterFrom(req), threadId, { representativeId: body.representativeId, title: body.title, chainLimit: body.chainLimit, windowLimit: body.windowLimit, maxTokens: body.maxTokens }) })
+    res.json({ success: true, data: GroupChatService.updateRoom(requesterFrom(req), threadId, { representativeId: body.representativeId, title: body.title, chainLimit: body.chainLimit, windowLimit: body.windowLimit, maxTokens: body.maxTokens, judgePresetId: body.judgePresetId }) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -1142,6 +1147,108 @@ router.delete('/admin/tool-presets/:presetId', requireAdmin, (req: Request, res:
   if (presetId === null) { sendRouteBadRequest(res, 'Invalid preset id'); return }
   try {
     res.json({ success: true, data: { deleted: ChatToolPresetStore.delete(presetId) } })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** GET /judge-presets — the judge presets by name, for a room owner picking one for a group room (the rest is admin only). */
+router.get('/judge-presets', requireChatAccess, (_req: Request, res: Response) => {
+  res.json({ success: true, data: ChatJudgePresetStore.list().map((preset) => ({ id: preset.id, name: preset.name })) })
+})
+
+/** Judge presets (a decision model's questions about chat turns, group rooms, status fields and assets). Profiles and rooms reference one, so an edit reaches them all. */
+router.get('/admin/judge-presets', requireAdmin, (_req: Request, res: Response) => {
+  res.json({ success: true, data: ChatJudgePresetStore.list() })
+})
+
+router.post('/admin/judge-presets', requireAdmin, (req: Request, res: Response) => {
+  try {
+    res.status(201).json({ success: true, data: ChatJudgePresetStore.create((req.body ?? {}) as ChatJudgePresetInput) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** POST /admin/judge-presets/import — the parsed contents of a judge preset JSON file; each becomes a preset (without a connection). */
+router.post('/admin/judge-presets/import', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const created = readJudgePresetFile(req.body).map((item) => ChatJudgePresetStore.create(item))
+    res.status(201).json({ success: true, data: created })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/**
+ * POST /admin/judge-presets/test — runs a preset (`presetId`, or the unsaved `preset` draft) over the last `turns`
+ * messages of one of the requester's own API LLM chats. Nothing is logged or changed.
+ */
+router.post('/admin/judge-presets/test', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as { presetId?: unknown; preset?: ChatJudgePresetInput; threadId?: unknown; turns?: unknown; providerName?: unknown; model?: unknown }
+  const threadId = parseId(body.threadId)
+  const thread = threadId === null ? undefined : CodexChatStore.findThreadById(threadId)
+  if (!thread || thread.account_id !== getRequesterAccountId(req) || thread.kind === 'group' || thread.profile_id === null) {
+    res.status(404).json({ success: false, error: '테스트할 대화를 찾을 수 없어. 내 1:1 채팅만 고를 수 있어.' })
+    return
+  }
+  const profile = ChatProfileStore.find(thread.profile_id)
+  if (!profile) { res.status(404).json({ success: false, error: '이 대화의 프로필이 지워졌어.' }); return }
+  try {
+    const presetId = parseId(body.presetId)
+    const preset = body.preset ? ChatJudgePresetStore.draft(body.preset) : presetId === null ? null : ChatJudgePresetStore.find(presetId)
+    if (!preset) { res.status(404).json({ success: false, error: '판단 프리셋을 찾을 수 없어.' }); return }
+    const typedConnection = typeof body.providerName === 'string' && body.providerName.trim() ? body.providerName.trim() : null
+    const providerName = typedConnection ?? preset.providerName ?? profile.judgeProviderName
+    if (!providerName) { res.status(400).json({ success: false, error: '판단 연결을 골라줘.' }); return }
+    const model = typedConnection ? (typeof body.model === 'string' ? body.model : '') : preset.providerName ? preset.model : profile.judgeModel
+    const turns = Math.min(20, Math.max(1, Number(body.turns) || 6))
+    res.json({ success: true, data: await testJudgePreset({ preset, providerName, model, profile, thread, turns }) })
+  } catch (error) {
+    if (error instanceof JudgeError) { res.status(400).json({ success: false, error: error.message }); return }
+    sendChatError(res, error)
+  }
+}))
+
+router.put('/admin/judge-presets/:presetId', requireAdmin, (req: Request, res: Response) => {
+  const presetId = parseId(req.params.presetId)
+  if (presetId === null) { sendRouteBadRequest(res, 'Invalid preset id'); return }
+  try {
+    const updated = ChatJudgePresetStore.update(presetId, (req.body ?? {}) as ChatJudgePresetInput)
+    if (!updated) { res.status(404).json({ success: false, error: '판단 프리셋을 찾을 수 없어.' }); return }
+    res.json({ success: true, data: updated })
+  } catch (error) { sendChatError(res, error) }
+})
+
+router.delete('/admin/judge-presets/:presetId', requireAdmin, (req: Request, res: Response) => {
+  const presetId = parseId(req.params.presetId)
+  if (presetId === null) { sendRouteBadRequest(res, 'Invalid preset id'); return }
+  try {
+    res.json({ success: true, data: { deleted: ChatJudgePresetStore.delete(presetId) } })
+  } catch (error) { sendChatError(res, error) }
+})
+
+function judgeLogFilter(query: Request['query']) {
+  const id = (value: unknown) => parseId(value) ?? undefined
+  const string = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : undefined)
+  return {
+    profileId: id(query.profileId),
+    presetId: id(query.presetId),
+    threadId: id(query.threadId),
+    itemId: string(query.itemId),
+    verdict: string(query.verdict),
+    stage: string(query.stage),
+    beforeId: id(query.beforeId),
+    limit: id(query.limit),
+    days: id(query.days),
+  }
+}
+
+/** GET /admin/judge-logs — judge runs, newest first (filters: profileId, presetId, threadId, itemId, verdict, stage; beforeId pages). */
+router.get('/admin/judge-logs', requireAdmin, (req: Request, res: Response) => {
+  try {
+    res.json({ success: true, data: ChatJudgeLogStore.list(judgeLogFilter(req.query)) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** GET /admin/judge-stats — per preset item over the last `days` days (default 7). */
+router.get('/admin/judge-stats', requireAdmin, (req: Request, res: Response) => {
+  try {
+    res.json({ success: true, data: ChatJudgeLogStore.stats(judgeLogFilter(req.query)) })
   } catch (error) { sendChatError(res, error) }
 })
 

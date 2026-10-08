@@ -19,6 +19,7 @@ export type RuntimeEventName =
   | 'chat.generation.finished'
   | 'chat.reaction.created'
   | 'chat.message.created'
+  | 'chat.message.updated'
   | 'history.record.created'
   | 'history.record.status'
   | 'graph.schedule.changed'
@@ -66,6 +67,9 @@ export interface ChatMessageCreatedEventPayload {
   messageId: number
   requestedByAccountId: number | null
 }
+
+/** A stored reply changed after it was announced (the judge settled its status fields): its chat refetches. */
+export type ChatMessageUpdatedEventPayload = ChatMessageCreatedEventPayload
 
 export interface QueueJobEventPayload {
   job_id: number

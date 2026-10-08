@@ -470,8 +470,11 @@ export function loreEntryMatches(entry: Pick<ChatLoreEntry, 'keys' | 'secondaryK
  * `entries`: the request's books (see chatLoreContext); without them, the profile's global books. A matched keyword
  * entry with a linked file takes the file's text along (`  자료 <name>: "<text>"`) when `files.inline`, the file is at
  * most LORE_FILE_INLINE_MAX_TOKENS and the budget has room; otherwise `files.hint` stands in for it.
+ *
+ * `judged`: keys of keyword entries the judge found the conversation is about although no keyword named them (see
+ * chatJudgeContext); they go in as if a keyword had matched, reason `judge`.
  */
-export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<{ content: string; display_content?: string | null }> | undefined, estimate: (text: string) => number, render: (text: string) => string, options: { skip?: (key: string) => boolean; entries?: KeyedLoreEntry[]; files?: LoreFileOptions; timing?: LoreTimingOptions } = {}): SelectedLore {
+export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<{ content: string; display_content?: string | null }> | undefined, estimate: (text: string) => number, render: (text: string) => string, options: { skip?: (key: string) => boolean; entries?: KeyedLoreEntry[]; files?: LoreFileOptions; timing?: LoreTimingOptions; judged?: ReadonlySet<string> } = {}): SelectedLore {
   const lorebook = options.entries ?? ChatLorebookStore.keyedEntriesOf(profile.lorebookIds)
   if (lorebook.length === 0) return { text: '', constant: '', constantCount: 0, keyed: '', keys: [], keyedKeys: [], labels: [], decisions: [], unmatched: 0 }
   const recent = (messages?.slice(-profile.loreScanDepth).map((message) => [message.content, message.display_content].filter(Boolean).join('\n')).join('\n') ?? '').slice(-SCAN_TEXT_MAX_LENGTH)
@@ -484,6 +487,7 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
     ...(selected ? { hash: createHash('sha256').update(render(item.entry.content)).digest('hex').slice(0, 12) } : {}),
   })
   const matches = new Map<string, string[]>()
+  const judgedIn = new Set<string>()
   const activationAges = options.timing ? loreActivationAges(lorebook, options.timing) : new Map<string, number>()
   const sticky = new Map<string, number>()
   const active = lorebook.filter((item) => {
@@ -509,7 +513,11 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
     if (entry.constant) return true
     const skipped = messages !== undefined && options.skip?.(key)
     const matched = messages === undefined ? [] : entry.keys.filter((word) => keywordMatches(word, entry, recent, folded))
-    if (!matched.length) { unmatched += 1; return false }
+    if (!matched.length) {
+      if (messages !== undefined && !skipped && options.judged?.has(key)) { judgedIn.add(key); return true }
+      unmatched += 1
+      return false
+    }
     if (skipped) { decisions.push(decisionOf(item, false, 'codex-sent', matched)); return false }
     matches.set(key, matched)
     if (!loreEntryMatches(entry, recent, folded)) {
@@ -550,7 +558,7 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
       if (used + cost > profile.loreTokenBudget) continue
       chosen.push({ key: item.key, entry: item.entry, rendered })
       selected = true
-      const decision = decisionOf(item, true, sticky.has(item.key) ? 'sticky' : item.entry.constant ? 'constant' : isRegexKeyword(matched[0]) ? 'regex' : `key:${matched[0]}`, matched)
+      const decision = decisionOf(item, true, sticky.has(item.key) ? 'sticky' : item.entry.constant ? 'constant' : judgedIn.has(item.key) ? 'judge' : isRegexKeyword(matched[0]) ? 'regex' : `key:${matched[0]}`, matched)
       if (sticky.has(item.key)) decision.remaining = sticky.get(item.key)
       if (file) decision.file = rendered === `${content}\n  자료 ${file.name}: "${file.text.trim()}"` ? 'inline' : 'hint'
       decisions.push(decision)

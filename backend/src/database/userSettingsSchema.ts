@@ -6,6 +6,7 @@ import {
   applyGenerationQueueInputRefs,
 } from './generationQueueSchema';
 import { migrateLlmConnectionGenerationDefaults } from './llmConnectionDefaultsMigration';
+import { DEFAULT_JUDGE_PRESETS } from '../services/codex-chat/chatJudgeDefaults';
 
 /** Bootstrap core user-settings tables, indexes, and simple column backfills. */
 export function createUserSettingsSchema(db: Database.Database): void {
@@ -519,6 +520,35 @@ export function createUserSettingsSchema(db: Database.Database): void {
     )
   `);
 
+  // Judge presets: a decision model's connection plus the questions it answers about each chat turn (items, JSON),
+  // the follow-up message settings (JSON) and the other sections (options, JSON: group rooms, context, status fields,
+  // asset review); chat profiles (llm_chat_profiles.judge_preset_id) and group rooms (codex_chat_threads.judge_preset_id)
+  // reference one.
+  // The built-in presets are written once, when the table is new; deleting them later keeps them deleted.
+  const judgePresetsExisted = Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chat_judge_presets'").get());
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_judge_presets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      provider_name TEXT,
+      model TEXT NOT NULL DEFAULT '',
+      escalation_provider_name TEXT,
+      escalation_model TEXT NOT NULL DEFAULT '',
+      items TEXT NOT NULL DEFAULT '[]',
+      follow_up TEXT NOT NULL DEFAULT '{}',
+      options TEXT NOT NULL DEFAULT '{}',
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  if (judgePresetsExisted && !(db.prepare('PRAGMA table_info(chat_judge_presets)').all() as Array<{ name: string }>).some((column) => column.name === 'options')) {
+    db.exec("ALTER TABLE chat_judge_presets ADD COLUMN options TEXT NOT NULL DEFAULT '{}'");
+  }
+  if (!judgePresetsExisted) {
+    const insertJudgePreset = db.prepare('INSERT INTO chat_judge_presets (name, items, follow_up, options) VALUES (?, ?, ?, ?)');
+    for (const preset of DEFAULT_JUDGE_PRESETS) insertJudgePreset.run(preset.name, JSON.stringify(preset.items), JSON.stringify(preset.followUp), JSON.stringify(preset.options));
+  }
+
   // Model slots: a named LLM connection + model; chat profiles and workflow nodes reference them by id per role.
   db.exec(`
     CREATE TABLE IF NOT EXISTS llm_model_slots (
@@ -679,6 +709,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     // A branch: the chat and message it was copied from, and why ('preserve': kept before an edit rewrote the
     // original; 'continue': branched to go on from there). Null on chats that are no branch, or older branches.
     ['branched_from_thread_id', 'INTEGER'],
+    // Group rooms: the judge preset (chat_judge_presets; no foreign key) that picks who answers and whether the room goes on.
+    ['judge_preset_id', 'INTEGER'],
     ['branched_at_message_id', 'INTEGER'],
     ['branch_purpose', 'TEXT'],
   ];
@@ -755,6 +787,52 @@ export function createUserSettingsSchema(db: Database.Database): void {
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (message_id, alternative)
   )`);
+  // Judge log: one run per judge call (the request as sent, timing, error) and its items' answers. `stage` says what
+  // was judged (a turn's items, a group room's speaker, status fields, an asset); a run outside a chat (asset review)
+  // has no thread, a room's own run no profile. `reply_id` ties a before-reply run to the reply it steered (tool use,
+  // lore proposals); `follow_up_message_id` is the follow-up an after-reply run sent. No foreign keys to
+  // presets/profiles: a log outlives their edits. The first version only knew turns (NOT NULL thread and profile, a
+  // stage CHECK); its rows are logs only, so the tables are simply made again.
+  const judgeRunsSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'chat_judge_runs'").get() as { sql?: string } | undefined)?.sql ?? '';
+  if (judgeRunsSql.includes("CHECK (stage IN ('before', 'after'))")) {
+    db.exec('DROP TABLE IF EXISTS chat_judge_items');
+    db.exec('DROP TABLE IF EXISTS chat_judge_runs');
+  }
+  db.exec(`CREATE TABLE IF NOT EXISTS chat_judge_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    thread_id INTEGER REFERENCES codex_chat_threads(id) ON DELETE CASCADE,
+    profile_id INTEGER,
+    preset_id INTEGER NOT NULL,
+    stage TEXT NOT NULL,
+    message_id INTEGER,
+    reply_id TEXT,
+    engine TEXT NOT NULL,
+    provider_name TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT '',
+    latency_ms INTEGER NOT NULL DEFAULT 0,
+    error TEXT,
+    request TEXT,
+    tools_called TEXT,
+    follow_up_message_id INTEGER
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_judge_runs_created ON chat_judge_runs(created_at)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_judge_runs_reply ON chat_judge_runs(reply_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_judge_runs_thread ON chat_judge_runs(thread_id, id)');
+  db.exec(`CREATE TABLE IF NOT EXISTS chat_judge_items (
+    run_id INTEGER NOT NULL REFERENCES chat_judge_runs(id) ON DELETE CASCADE,
+    item_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    probability REAL,
+    confidence REAL,
+    choice TEXT,
+    verdict TEXT NOT NULL,
+    decided_by TEXT NOT NULL,
+    action TEXT NOT NULL,
+    tools TEXT,
+    PRIMARY KEY (run_id, item_id)
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_judge_items_item ON chat_judge_items(item_id)');
   // LLM chat summaries by stretch of conversation: level 0 summarizes messages from..until, level 1 (at most one per
   // thread) is the plot folded from the older level-0 rows, which stay for recall. `codex_chat_threads.summary` keeps
   // the rendered text the model gets.
@@ -840,6 +918,10 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['suggest_user_profile_id', 'INTEGER'],
     // The model may propose chat lorebook entries (save_lore).
     ['allow_lore_proposals', 'INTEGER NOT NULL DEFAULT 1'],
+    // Judge preset (chat_judge_presets; no foreign key, like the slots) and an override of its judge connection.
+    ['judge_preset_id', 'INTEGER'],
+    ['judge_provider_name', 'TEXT'],
+    ['judge_model', 'TEXT'],
   ];
   for (const [columnName, definition] of chatProfileColumns) {
     if (!hasColumn('llm_chat_profiles', columnName)) {

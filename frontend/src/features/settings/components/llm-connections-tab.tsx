@@ -166,7 +166,7 @@ export function LlmConnectionsTab() {
   })
 
   const llmProviders = useMemo(
-    () => (providersQuery.data ?? []).filter((provider) => provider.provider_type === 'llm_openai_compatible' || provider.provider_type === 'llm_ollama'),
+    () => (providersQuery.data ?? []).filter((provider) => provider.provider_type === 'llm_openai_compatible' || provider.provider_type === 'llm_ollama' || provider.provider_type === 'decision_typesafe'),
     [providersQuery.data],
   )
 

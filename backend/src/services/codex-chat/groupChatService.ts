@@ -27,6 +27,9 @@ import { ChatSummaryStore } from './chatMemory'
 import { branchChatThread } from './chatBranch'
 import { LlmChatService, generateLlmGroupReply, type GroupReplyResult } from './llmChatService'
 import { ExternalApiProvider } from '../../models/ExternalApiProvider'
+import { judgeNext, judgeRoute, roomJudgeSetup } from './chatJudgeRoom'
+import { ChatJudgePresetStore } from './chatJudgePresets'
+import { judgeStatusFields } from './chatJudgeFields'
 import { readLlmConnectionConfig } from '../llmGenerationOptions'
 
 const STOP_WAIT_MS = 8000
@@ -57,6 +60,13 @@ type GroupRun = {
   chainLimit: number
   chainUsed: number
   reserved: Map<string, number[]>
+  /** The judge deciding who speaks next, while it is asked (stop() cuts it). */
+  judging: AbortController | null
+  /**
+   * The room's judge decides whether the room goes on (see continueByJudge): a reply that only answers another
+   * member's message (no @mention, no explicit routing) then wakes no one by itself — the judge does, or the room waits.
+   */
+  judgeDecides: boolean
   listeners: Set<(event: CodexChatStreamEvent) => void>
   finished: Promise<void>
 }
@@ -138,6 +148,62 @@ function userRecipients(requester: McpRequester, thread: CodexChatThreadRecord, 
   return ids as number[]
 }
 
+/** Whether a user message names no one (no @mention, no reply target): the representative answers it unless the judge picks. */
+function unaddressed(thread: CodexChatThreadRecord, text: string, routing: ChatMessageRouting) {
+  return !routing.replyTo && parseMentions(text, memberProfiles(thread.id)).length === 0
+}
+
+/** Members who can answer now: switched on and usable by this account. */
+function answerableMembers(requester: McpRequester, threadId: number) {
+  const access = resolveChatAccess(requester.accountId)
+  return memberProfiles(threadId).filter((member) => member.isEnabled && canUseChatProfile(access, member))
+}
+
+/**
+ * A user message `messageId` that names no one: the member the room's judge picks answers it instead of the
+ * representative (kept when the judge has no answer). The message's routing is updated to say who it went to.
+ */
+async function routeByJudge(run: GroupRun, requester: McpRequester, messageId: number, routing: ChatMessageRouting) {
+  const thread = CodexChatStore.findThreadById(run.threadId)
+  if (!thread) return
+  run.judging = new AbortController()
+  try {
+    const picked = await judgeRoute({ thread, members: answerableMembers(requester, run.threadId), messages: CodexChatStore.listMessages(run.threadId), messageId, signal: run.judging.signal })
+    if (picked === null || run.stopped || (routing.recipients.length === 1 && routing.recipients[0] === picked)) return
+    routing.recipients = [picked]
+    CodexChatStore.setMessageRouting(run.threadId, messageId, routing)
+  } catch (error) {
+    if (!run.stopped) console.warn('[group-chat] route judge failed:', error instanceof Error ? error.message : error)
+  } finally {
+    run.judging = null
+  }
+}
+
+/**
+ * The room fell quiet with no one called: the judge decides whether another member speaks (queued as a reply to the
+ * latest message, counting against the chain limit) or the room waits for the user. True when someone was queued.
+ */
+async function continueByJudge(run: GroupRun, requester: McpRequester) {
+  if (!run.chain || run.stopped || run.chainUsed >= run.chainLimit || run.queue.length > 0) return false
+  const thread = CodexChatStore.findThreadById(run.threadId)
+  const messages = CodexChatStore.listMessages(run.threadId)
+  const last = messages.at(-1)
+  if (!thread || !last || last.role !== 'assistant' || last.status !== 'completed' || last.speaker_profile_id === null) return false
+  run.judging = new AbortController()
+  try {
+    const next = await judgeNext({ thread, members: answerableMembers(requester, run.threadId), messages, message: last, signal: run.judging.signal })
+    if (next === null || run.stopped || CodexChatStore.listMessages(run.threadId).at(-1)?.id !== last.id) return false
+    run.queue.push({ profileId: next, sourceMessageId: last.id })
+    run.chainUsed += 1
+    return true
+  } catch (error) {
+    if (!run.stopped) console.warn('[group-chat] next-speaker judge failed:', error instanceof Error ? error.message : error)
+    return false
+  } finally {
+    run.judging = null
+  }
+}
+
 /** Forget every Codex member's memory of the room (its history was rewritten or cleared). */
 function resetCodexMemory(requester: McpRequester, threadId: number) {
   for (const codexThreadId of ChatGroupStore.resetCodexMemory(threadId)) deleteCodexRollout(requester, codexThreadId)
@@ -212,7 +278,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
       const mentioned = parseMentions(content, members, profile.id)
       const recipients = mentioned.length ? mentioned : active.routing.recipients.filter((id) => id !== profile.id)
       active.routing = { ...active.routing, recipients }
-      try { reserve(recipients) } catch (error) { emit(run, { type: 'notice', message: error instanceof Error ? error.message : String(error) }) }
+      try { reserve(mentioned.length || !run.judgeDecides ? recipients : []) } catch (error) { emit(run, { type: 'notice', message: error instanceof Error ? error.message : String(error) }) }
     }
     if (reply.status !== 'completed') run.reserved.delete(replyId)
     // The member's own translation model gives the reader its reply in Korean.
@@ -263,7 +329,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         profile,
         // The CoNAI tool guidance is for the profile's own tools, not the room tools every member gets.
         chatContext: context,
-        buildMessages: (tools, onMeta) => buildGroupLlmMessages({ profile, thread, members, messages, routing: active.routing, windowLimit: limits.window, tools, maxTokens, withTools: tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)), segments: groupSummaryOn(thread) ? ChatSummaryStore.list(run.threadId) : undefined , attachmentTexts, onMeta }),
+        buildMessages: (tools, onMeta, judged) => buildGroupLlmMessages({ profile, thread, members, messages, routing: active.routing, windowLimit: limits.window, tools, maxTokens, withTools: tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)), segments: groupSummaryOn(thread) ? ChatSummaryStore.list(run.threadId) : undefined , attachmentTexts, onMeta, judged }),
         // The member's own cap, else the room's, else the profile's (a Codex member has no hard cap).
         generation: { maxTokens },
         signal: controller.signal,
@@ -277,7 +343,11 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     unregister()
     run.active.delete(profile.id)
   }
-  if (message.status === 'completed') ChatGroupStore.setLastSeen(run.threadId, profile.id, messages.at(-1)?.id ?? 0)
+  if (message.status === 'completed') {
+    ChatGroupStore.setLastSeen(run.threadId, profile.id, messages.at(-1)?.id ?? 0)
+    // The status fields the reply left alone are settled by the judge (in the background).
+    judgeStatusFields({ profile, threadId: run.threadId, messageId: message.id, speakerId: profile.id })
+  }
   return message
 }
 
@@ -297,7 +367,8 @@ function emitQueue(run: GroupRun) {
 /**
  * Work through the queue: members answer in queue order, together as far as their connection allows, and a reply's
  * own `@mentions` wake more members — at most `chain` bot-to-bot wakes per user message, so bots cannot keep each
- * other talking. A member that starts later sees the replies that ended before it.
+ * other talking. A member that starts later sees the replies that ended before it. When the queue runs dry, the room's
+ * judge (if any) may let another member speak on, within the same limit (see continueByJudge).
  */
 async function processQueue(run: GroupRun, requester: McpRequester, options: { chain: boolean }) {
   run.chain = options.chain
@@ -331,23 +402,25 @@ async function processQueue(run: GroupRun, requester: McpRequester, options: { c
     }
   }
 
-  startReady()
-  while (inFlight.size > 0) {
-    const { profileId, key, message } = await Promise.race(inFlight.values())
-    inFlight.delete(profileId)
-    used.set(key, (used.get(key) ?? 1) - 1)
-    if (message) emit(run, { type: 'done', message })
-    if (message && options.chain && message.status === 'completed' && !run.stopped) {
-      const called = run.reserved.get(message.routing?.replyId ?? '') ?? []
-      run.reserved.delete(message.routing?.replyId ?? '')
-      for (const next of called) {
-        run.queue.push({ profileId: next, sourceMessageId: message.id })
-        run.chainUsed += 1
-      }
-    }
+  do {
     startReady()
-    emitQueue(run)
-  }
+    while (inFlight.size > 0) {
+      const { profileId, key, message } = await Promise.race(inFlight.values())
+      inFlight.delete(profileId)
+      used.set(key, (used.get(key) ?? 1) - 1)
+      if (message) emit(run, { type: 'done', message })
+      if (message && options.chain && message.status === 'completed' && !run.stopped) {
+        const called = run.reserved.get(message.routing?.replyId ?? '') ?? []
+        run.reserved.delete(message.routing?.replyId ?? '')
+        for (const next of called) {
+          run.queue.push({ profileId: next, sourceMessageId: message.id })
+          run.chainUsed += 1
+        }
+      }
+      startReady()
+      emitQueue(run)
+    }
+  } while (await continueByJudge(run, requester))
 }
 
 /** Reserve the room for one run (after stopping any run in progress), run it, and release the room. */
@@ -356,7 +429,8 @@ async function startRun(threadId: number, listener: (event: CodexChatStreamEvent
   let resolveFinished: () => void = () => {}
   const run: GroupRun = {
     threadId, stopped: false, active: new Map(), queue: [], chain: true,
-    chainLimit: groupLimitsOf(CodexChatStore.findThreadById(threadId)!).chain, chainUsed: 0, reserved: new Map(),
+    chainLimit: groupLimitsOf(CodexChatStore.findThreadById(threadId)!).chain, chainUsed: 0, reserved: new Map(), judging: null,
+    judgeDecides: Boolean(roomJudgeSetup(CodexChatStore.findThreadById(threadId)!)?.preset.room.next.enabled),
     listeners: new Set([listener]), finished: new Promise((resolve) => { resolveFinished = resolve }),
   }
   runs.set(threadId, run)
@@ -450,6 +524,8 @@ export const GroupChatService = {
         // Reply token caps: the room's (null: each profile's own) and each member's override of it.
         maxTokens: thread.max_tokens,
         memberMaxTokens: Object.fromEntries(ChatGroupStore.members(threadId).map((member) => [member.profile_id, member.max_tokens])),
+        // The judge preset that picks who answers and whether the room goes on (null: none; a deleted one reads as none).
+        judgePresetId: ChatJudgePresetStore.existing(thread.judge_preset_id),
       },
     }
   },
@@ -468,6 +544,7 @@ export const GroupChatService = {
     if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) throw new CodexChatError('메시지를 입력해줘.')
     const routing = userReplyRouting(thread, replyToMessageId)
     routing.recipients = userRecipients(requester, thread, trimmed, routing)
+    const judgeRoutes = unaddressed(thread, trimmed, routing)
     LlmChatService.skipReaction(threadId)
     skipThreadGenerationReactions(threadId)
     // The members read the message in English; the reader keeps their own words.
@@ -478,6 +555,7 @@ export const GroupChatService = {
       if (routing.replyTo) requireReplyTarget(threadId, routing.replyTo.messageId)
       const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: modelText ?? trimmed, display_content: modelText ? trimmed : null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
       ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
+      if (judgeRoutes) await routeByJudge(run, requester, userMessageId, routing)
       emit(run, { type: 'user', message: findMessage(threadId, userMessageId) })
       run.queue = (routing.recipients as number[]).map((profileId) => ({ profileId, sourceMessageId: userMessageId }))
       await processQueue(run, requester, { chain: true })
@@ -520,12 +598,14 @@ export const GroupChatService = {
     if (!trimmed && !message.attachments?.length && !message.mediaAttachments?.length) throw new CodexChatError('메시지를 입력해줘.')
     const routing = message.routing ?? { replyTo: null, recipients: [] }
     routing.recipients = userRecipients(requester, thread, trimmed, routing)
+    const judgeRoutes = unaddressed(thread, trimmed, routing)
     const modelText = await translateUserInput(translatorOf(memberProfiles(threadId)), trimmed)
     if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     await startRun(threadId, listener, async (run) => {
       CodexChatStore.editUserMessage(threadId, messageId, modelText ?? trimmed, modelText ? trimmed : null)
       CodexChatStore.setMessageRouting(threadId, messageId, routing)
       resetCodexMemory(requester, threadId)
+      if (judgeRoutes) await routeByJudge(run, requester, messageId, routing)
       emit(run, { type: 'rewind', mode: 'edit', message: { ...message, content: modelText ?? trimmed, display_content: modelText ? trimmed : null, routing } })
       run.queue = (routing.recipients as number[]).map((profileId) => ({ profileId, sourceMessageId: messageId }))
       await processQueue(run, requester, { chain: true })
@@ -565,6 +645,7 @@ export const GroupChatService = {
     run.stopped = true
     run.queue = []
     run.reserved.clear()
+    run.judging?.abort()
     for (const reply of run.active.values()) reply.controller.abort()
     let timer: NodeJS.Timeout | undefined
     try {
@@ -625,9 +706,14 @@ export const GroupChatService = {
     return GroupChatService.getThread(requester, threadId)
   },
 
-  /** Representative, title, the per-room limits and the room's reply token cap (null restores a default). */
-  updateRoom(requester: McpRequester, threadId: number, patch: { representativeId?: unknown; title?: unknown; chainLimit?: unknown; windowLimit?: unknown; maxTokens?: unknown }) {
+  /** Representative, title, the per-room limits, the room's reply token cap (null restores a default) and its judge preset (null: none). */
+  updateRoom(requester: McpRequester, threadId: number, patch: { representativeId?: unknown; title?: unknown; chainLimit?: unknown; windowLimit?: unknown; maxTokens?: unknown; judgePresetId?: unknown }) {
     requireGroup(requester, threadId)
+    if (patch.judgePresetId !== undefined) {
+      const id = patch.judgePresetId === null || patch.judgePresetId === '' ? null : ChatJudgePresetStore.existing(Number(patch.judgePresetId))
+      if (patch.judgePresetId !== null && patch.judgePresetId !== '' && id === null) throw new CodexChatError('판단 프리셋을 찾을 수 없어.')
+      ChatGroupStore.setJudgePreset(threadId, id)
+    }
     if (patch.maxTokens !== undefined) {
       CodexChatStore.updateThreadContext(threadId, { maxTokens: replyCapOf(patch.maxTokens) })
     }

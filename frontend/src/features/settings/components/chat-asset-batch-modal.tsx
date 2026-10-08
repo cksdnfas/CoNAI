@@ -41,6 +41,7 @@ function ReviewChips({ review }: { review?: ChatAssetReview }) {
     {checks.map(({ label, check }) => check?.matches == null ? null : <Chip key={label} size="sm" tone={check.matches ? 'success' : 'warning'} title={'expected' in check ? `${check.expected.join(', ')} → ${check.matched.join(', ')}` : `${check.reference.join(', ')} → ${check.candidate.join(', ')}`}>{label}</Chip>)}
     {rating ? <Chip size="sm" tone="muted" title={`${Math.round(rating[1] * 100)}%`}>{rating[0]}</Chip> : null}
     {review.similarSlots.length ? <Chip size="sm" tone="warning" title={review.similarSlots.map((slot) => `${slot.slotKey} ${slot.confidence}%`).join(', ')}>{t({ ko: '비슷함', en: 'Similar' })}</Chip> : null}
+    {review.judge ? <Chip size="sm" tone={review.judge.probability >= 0.5 ? 'success' : review.judge.probability >= 0.2 ? 'muted' : 'warning'} title={`${review.judge.picked} · ${review.judge.probability.toFixed(2)}`}>{t({ ko: '판단: {emotion}', en: 'Judge: {emotion}' }, { emotion: review.judge.picked })}</Chip> : null}
   </>
 }
 

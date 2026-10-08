@@ -9,6 +9,7 @@ import { ChatProfileError } from './chatProfileError'
 import { AuthPermissionGroup } from '../../models/AuthPermissionGroup'
 import { ChatGenerationPresetStore, normalizeGenerationPresetIds } from './chatGenerationPresets'
 import { ModelSlotStore } from './modelSlots'
+import { ChatJudgePresetStore, existingJudgeConnection, judgeConnectionName } from './chatJudgePresets'
 import { fileProfileAssetsUnderGroup, normalizeAvatarCrop, normalizeProfileAssetHash, type ChatAvatarCrop } from './chatProfileAssets'
 
 const NAME_MAX_LENGTH = 60
@@ -175,6 +176,14 @@ export type ChatProfile = {
   pageAssist: boolean
   /** The model may propose chat lorebook entries (save_lore) for the user to save. */
   allowLoreProposals: boolean
+  /**
+   * The judge preset (chat_judge_presets) that steers each turn; null judges nothing (the chat behaves as without a
+   * judge). A preset that went missing reads as null.
+   */
+  judgePresetId: number | null
+  /** The judge connection instead of the preset's own; null keeps the preset's. Empty model: the connection's default. */
+  judgeProviderName: string | null
+  judgeModel: string
   /** Typeface, roleplay colours, background dimming. */
   style: ChatStyle
   /** Chat background as a data URL; served on its own route, never inside profile lists. */
@@ -249,6 +258,9 @@ type ProfileRow = {
   vision_enabled: number | null
   page_assist: number | null
   allow_lore_proposals: number | null
+  judge_preset_id: number | null
+  judge_provider_name: string | null
+  judge_model: string | null
   is_enabled: number
   sort_order: number
   created_date: string
@@ -394,6 +406,9 @@ function toProfile(row: ProfileRow): ChatProfile {
     visionEnabled: row.vision_enabled === 1,
     pageAssist: row.page_assist === 1,
     allowLoreProposals: row.allow_lore_proposals !== 0,
+    judgePresetId: ChatJudgePresetStore.existing(row.judge_preset_id),
+    judgeProviderName: existingJudgeConnection(row.judge_provider_name),
+    judgeModel: row.judge_model ?? '',
     // Display blocks live in chat_display_blocks; the profile only links them (the style column's own list is legacy).
     style: { ...normalizeChatStyle(row.chat_style), blocks: ChatSharedBlockStore.blocksOf(blockIds) },
     background: row.background_image,
@@ -448,6 +463,13 @@ function normalizeAllowedGroupKeys(value: unknown): string[] {
   if (!Array.isArray(value) || value.length === 0) return []
   const known = new Set(AuthPermissionGroup.listAllGroups().map((group) => group.group_key).filter((key) => key !== 'guest' && key !== 'anonymous'))
   return [...new Set(value.filter((key): key is string => typeof key === 'string' && known.has(key)))]
+}
+
+function judgePresetId(value: unknown) {
+  if (value === null || value === undefined || value === '') return null
+  const id = ChatJudgePresetStore.existing(Number(value))
+  if (id === null) throw new ChatProfileError('판단 프리셋을 찾을 수 없어.')
+  return id
 }
 
 function toColumns(input: ChatProfileInput) {
@@ -551,6 +573,10 @@ function toColumns(input: ChatProfileInput) {
     vision_enabled: input.visionEnabled ? 1 : 0,
     page_assist: input.pageAssist ? 1 : 0,
     allow_lore_proposals: input.allowLoreProposals === false ? 0 : 1,
+    // Every engine can be judged (a Codex chat gets the directives and status fields only, see chatJudge).
+    judge_preset_id: judgePresetId(input.judgePresetId),
+    judge_provider_name: judgeConnectionName(input.judgeProviderName),
+    judge_model: text(input.judgeModel, MODEL_MAX_LENGTH) || null,
     chat_style: JSON.stringify({ ...normalizeChatStyle(input.style), blocks: [] }),
     background_image: background,
     is_enabled: input.isEnabled === false ? 0 : 1,

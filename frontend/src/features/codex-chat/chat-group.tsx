@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Crown, UserMinus, UserPlus, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -11,6 +11,7 @@ import { Spinner } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import {
@@ -24,6 +25,7 @@ import {
   type ChatUserProfile,
   type CodexChatThreadDetail,
 } from '@/lib/api-codex-chat'
+import { CHAT_JUDGE_PRESET_NAMES_QUERY_KEY, listChatJudgePresetNames } from '@/lib/api-chat-judge'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { ChatProfileAvatar } from './chat-profile-avatar'
@@ -58,7 +60,25 @@ function LimitRow({ label, value, range, disabled, onCommit }: { label: string; 
   )
 }
 
-/** Members of a group room: who represents it, invite / remove, and how far members may wake each other. */
+/** The room's judge preset: it picks who answers a message that names no one and whether the room goes on. */
+function JudgePresetRow({ value, open, disabled, onCommit }: { value: number | null; open: boolean; disabled: boolean; onCommit: (value: number | null) => void }) {
+  const { t } = useI18n()
+  const id = useId()
+  const presetsQuery = useQuery({ queryKey: CHAT_JUDGE_PRESET_NAMES_QUERY_KEY, queryFn: listChatJudgePresetNames, enabled: open })
+  const presets = presetsQuery.data ?? []
+  return (
+    <div className="flex min-h-11 items-center justify-between gap-3 px-2">
+      <label htmlFor={id} className="text-sm">{t({ ko: '판단 프리셋', en: 'Judge preset' })}</label>
+      <Select id={id} className="h-8 w-36 text-xs" value={value ?? ''} disabled={disabled} onChange={(event) => onCommit(event.target.value ? Number(event.target.value) : null)}>
+        <option value="">{t({ ko: '없음', en: 'None' })}</option>
+        {presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+        {value !== null && presetsQuery.isSuccess && !presets.some((preset) => preset.id === value) ? <option value={value} disabled>{t({ ko: '프리셋 #{id}', en: 'Preset #{id}' }, { id: value })}</option> : null}
+      </Select>
+    </div>
+  )
+}
+
+/** Members of a group room: who represents it, invite / remove, how far members may wake each other, and its judge. */
 export function GroupMembersPopover({ threadId, group, profilesById, disabled, onInvite, children }: {
   threadId: number
   group: ChatGroupInfo
@@ -126,6 +146,7 @@ export function GroupMembersPopover({ threadId, group, profilesById, disabled, o
         <div className="my-1 h-px bg-line" />
         <LimitRow label={t({ ko: '봇끼리 이어지기', en: 'Bot-to-bot replies' })} value={group.chainLimit} range={group.limits.chain} disabled={busy} onCommit={(chainLimit) => updateMutation.mutate({ chainLimit })} />
         <LimitRow label={t({ ko: '넘길 대화', en: 'Messages handed over' })} value={group.windowLimit} range={group.limits.window} disabled={busy} onCommit={(windowLimit) => updateMutation.mutate({ windowLimit })} />
+        <JudgePresetRow value={group.judgePresetId ?? null} open={open} disabled={busy} onCommit={(judgePresetId) => updateMutation.mutate({ judgePresetId })} />
       </PopoverContent>
     </Popover>
   )

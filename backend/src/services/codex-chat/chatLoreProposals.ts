@@ -12,6 +12,7 @@ import { ChatProfileStore } from './chatProfiles'
 import { ChatProposalStore } from './chatProposals'
 import { userPersonaForThread } from './chatUserProfiles'
 import { CodexChatStore, type CodexChatMessageRecord } from './codexChatStore'
+import { judgeGrantsLore } from './chatJudge'
 
 /**
  * save_lore: the model proposes an entry for the chat's own lorebook; the entry goes in only when a person saves the
@@ -147,7 +148,8 @@ export function proposeLore(context: ChatExecutionContext, input: SaveLoreInput)
   if (ChatProposalStore.forReply(context.threadId, context.replyId, 'lore').length > 0) {
     throw new LoreProposalError('This reply already has a lore proposal (one per reply). Propose another one in a later reply if it still matters.')
   }
-  if (loreProposedRecently(context)) {
+  // A judge that found a lasting fact in this exchange lifts the spacing for its reply.
+  if (!judgeGrantsLore(context.replyId) && loreProposedRecently(context)) {
     throw new LoreProposalError(`A lore proposal was made within the last ${LORE_PROPOSAL_SPACING} replies. Propose again only when the user asks you to remember something or a lasting fact (a promise, a preference, who someone is) comes up. Just reply now.`)
   }
   const folded = foldLoreTitle(title)
