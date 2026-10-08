@@ -55,9 +55,24 @@ export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'wait_audio_or
 /** A page grants a bounded input task; explicitly linked generation presets keep their independent grant. */
 export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'propose_page_changes', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes', 'read_page_data', 'propose_page_action']);
 
+/**
+ * Workspace pages that come with their own tools: while such a page is connected, its tools stay offered next to the
+ * page tools (the account still needs each tool's feature keys). Review and deletion of a take never have a tool.
+ */
+export const CHAT_PAGE_KIND_TOOLS: Partial<Record<string, ReadonlySet<string>>> = {
+  audio: new Set([
+    'list_audio_projects', 'list_audio_groups', 'list_audio_candidates', 'get_audio_candidate', 'list_audio_group_comments',
+    'create_audio_project', 'update_audio_project', 'create_audio_group', 'update_audio_group', 'move_audio_candidates', 'import_audio',
+    'set_audio_group_comment_status', 'list_audio_workflows', 'order_audio', 'get_audio_order', 'cancel_audio_order', 'retry_audio_order_job',
+    'edit_audio_candidate', 'delete_unselected_audio_candidates', 'export_audio_selected', 'get_audio_download',
+  ]),
+};
+
 /** Page tools are enabled by the user's explicit connection, independently of general profile tools. */
 export function isConnectedChatPageTool(context: McpRequestContext, toolName: string) {
-  return isChatMcpSource(context.source) && context.chatContext?.kind === 'direct' && !!context.chatContext.page && CHAT_PAGE_TOOLS.has(toolName);
+  const page = context.chatContext?.page;
+  return isChatMcpSource(context.source) && context.chatContext?.kind === 'direct' && !!page
+    && (CHAT_PAGE_TOOLS.has(toolName) || CHAT_PAGE_KIND_TOOLS[page.kind]?.has(toolName) === true);
 }
 
 /** Chat agents must not spend paid NovelAI multi-sample generations on their own; one image per request is free. */

@@ -27,6 +27,7 @@ export function chatPagePermission(path: string): string | null {
   if (path === '/groups' || /^\/groups\/[\w-]+$/.test(path)) return 'page.groups.view'
   if (path === '/wildcards') return 'page.wildcards.view'
   if (path === '/files') return 'page.files.view'
+  if (path === '/audio') return 'page.audio.view'
   if (path === '/upload') return 'page.upload.view'
   if (path === '/settings') return 'page.settings.view'
   if (/^\/images\/[\w.-]+\/metadata$/.test(path)) return 'page.metadata-editor.view'
@@ -42,10 +43,10 @@ export function normalizeChatPageSnapshot(value: unknown): ChatPageSnapshot {
   const path = text(raw.path, 240)
   if (chatPagePermission(path) === null) throw new Error('이 페이지는 채팅에 연결할 수 없어.')
   const kind = raw.kind
-  if (!['page', 'nai', 'codex', 'comfyui', 'comfy_author', 'library', 'prompt_search', 'presets', 'wildcards', 'metadata', 'workflow', 'workflow_runner', 'groups', 'files', 'upload', 'settings', 'wallpaper', 'image_detail'].includes(kind as string)) throw new Error('페이지 종류가 올바르지 않아.')
+  if (!['page', 'nai', 'codex', 'comfyui', 'comfy_author', 'library', 'prompt_search', 'presets', 'wildcards', 'metadata', 'workflow', 'workflow_runner', 'groups', 'files', 'upload', 'settings', 'wallpaper', 'image_detail', 'audio'].includes(kind as string)) throw new Error('페이지 종류가 올바르지 않아.')
   const metadataHash = /^\/images\/([\w.-]+)\/metadata$/.exec(path)?.[1]
   const publicComfy = /^\/public\/workflows\/[\w-]+$/.test(path)
-  const routes: Partial<Record<ChatPageSnapshot['kind'], RegExp>> = { groups: /^\/groups(?:\/[\w-]+)?$/, files: /^\/files$/, upload: /^\/upload$/, settings: /^\/settings$/, wallpaper: /^\/wallpaper(?:\/runtime)?$/ }
+  const routes: Partial<Record<ChatPageSnapshot['kind'], RegExp>> = { groups: /^\/groups(?:\/[\w-]+)?$/, files: /^\/files$/, upload: /^\/upload$/, settings: /^\/settings$/, wallpaper: /^\/wallpaper(?:\/runtime)?$/, audio: /^\/audio$/ }
   if (routes[kind as ChatPageSnapshot['kind']] && !routes[kind as ChatPageSnapshot['kind']]!.test(path)) throw new Error('입력 종류와 대상 페이지가 맞지 않아.')
   if ((['nai', 'codex', 'workflow', 'workflow_runner'].includes(kind as string) && path !== '/generation') || (['comfyui', 'comfy_author'].includes(kind as string) && path !== '/generation' && !publicComfy) || (kind === 'library' && path !== '/') || (['prompt_search', 'presets'].includes(kind as string) && path !== '/prompts') || (kind === 'wildcards' && path !== '/wildcards') || (kind === 'metadata' && (!metadataHash || raw.resourceId !== metadataHash))) throw new Error('입력 종류와 대상 페이지가 맞지 않아.')
   if (!Array.isArray(raw.fields) || raw.fields.length > CHAT_PAGE_LIMITS.fields || (kind === 'page' && raw.fields.length > 0)) throw new Error('페이지 필드 목록이 올바르지 않아.')

@@ -51,6 +51,7 @@ export const PAGE_PERMISSION_RULES = {
   'page.wallpaper.view': { all: ['images.view'] },
   'page.wallpaper.runtime.view': { all: ['images.view'] },
   'page.upload.view': { all: ['images.upload'] },
+  'page.audio.view': { all: ['audio.view'] },
   'page.prompts.view': { all: ['prompts.view'] },
   'page.wildcards.view': { all: ['wildcards.view'] },
   'page.generation.view': { any: ['generation.execute', 'workflows.view'] },

@@ -26,6 +26,7 @@ export const HEADER_NAVIGATION_ITEM_KEYS = [
   'groups',
   'prompts',
   'generation',
+  'audio',
   'chat',
   'upload',
   'files',
