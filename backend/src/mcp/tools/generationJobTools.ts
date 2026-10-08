@@ -405,8 +405,8 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
       }
       if (context.requester) {
         const identity = McpArtifactService.identity(artifact_id);
-        // Sprite frame ZIPs check the workspace owner inside refreshDescriptor.
-        if (!identity || (identity.kind !== 'history' && identity.kind !== 'sprite-frames')) return { isError: true, content: [{ type: 'text' as const, text: 'Artifact not accessible to this account' }] };
+        // Sprite frame ZIPs and audio exports check their owner (audio files: audio.view) inside refreshDescriptor.
+        if (!identity || !['history', 'sprite-frames', 'audio', 'audio-export'].includes(identity.kind)) return { isError: true, content: [{ type: 'text' as const, text: 'Artifact not accessible to this account' }] };
         if (identity.kind === 'history') requireMcpResourceOwner(context, HistoryQueryRepository.findAllWithMetadata({ ids: [identity.id], limit: 1 })[0], true);
       }
       const artifact = await McpArtifactService.refreshDescriptor(artifact_id, context.baseUrl, context.requester).catch((error: Error) => {

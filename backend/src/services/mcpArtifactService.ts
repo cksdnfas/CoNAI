@@ -10,6 +10,10 @@ import type { McpRequester } from '../mcp/context';
 import { requireRequesterImagePermission } from '../middleware/imageAccess';
 import { requireMcpResourceOwner } from '../mcp/toolAccess';
 import { canAccessSpriteWorkspace, getSpriteWorkspace } from './sprite/spriteCache';
+import { audioCandidateFile } from './audio/audioService';
+import { AUDIO_MIME_BY_EXTENSION, audioBlobPath } from './audio/audioStore';
+import { audioExportMimeType, audioExportResultFile, canAccessAudioExport, getAudioExportWorkspace } from './audio/audioExport';
+import { requireRequesterPermission } from '../middleware/featureAccess';
 
 const MCP_ARTIFACT_PREFIX = 'mcp_artifact_';
 const DEFAULT_ARTIFACT_URL_TTL_SECONDS = 15 * 60;
@@ -17,7 +21,11 @@ const DEFAULT_ARTIFACT_URL_TTL_SECONDS = 15 * 60;
 type McpArtifactPayload =
   | { kind: 'history' | 'graph'; id: number }
   /** A file inside a temporary sprite workspace (frames ZIP); expires with the workspace. */
-  | { kind: 'sprite-frames'; id: string; file: string };
+  | { kind: 'sprite-frames'; id: string; file: string }
+  /** One audio workspace candidate's stored file. */
+  | { kind: 'audio'; id: string }
+  /** The result of an audio export (single file or ZIP); expires with its export workspace. */
+  | { kind: 'audio-export'; id: string };
 
 const SPRITE_WORKSPACE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SPRITE_FILE_NAME = /^[^\\/:*?"<>|]{1,120}\.zip$/;
@@ -79,6 +87,9 @@ function decodeArtifactId(artifactId: string): McpArtifactPayload | null {
         ? { kind: 'sprite-frames', id: parsed.id, file: parsed.file }
         : null;
     }
+    if (parsed.kind === 'audio' || parsed.kind === 'audio-export') {
+      return typeof parsed.id === 'string' && SPRITE_WORKSPACE_ID.test(parsed.id) ? { kind: parsed.kind, id: parsed.id } : null;
+    }
     if ((parsed.kind !== 'history' && parsed.kind !== 'graph') || !Number.isInteger(parsed.id) || Number(parsed.id) <= 0) {
       return null;
     }
@@ -138,6 +149,27 @@ function resolveSpriteFramesArtifact(workspaceId: string, file: string): Resolve
   return { payload: { kind: 'sprite-frames', id: workspaceId, file }, absolutePath, fileName: file, mimeType: 'application/zip' };
 }
 
+function resolveAudioArtifact(candidateId: string): ResolvedMcpArtifact | null {
+  try {
+    const { candidate, file } = audioCandidateFile(candidateId);
+    if (candidate.deleted_at) return null;
+    const absolutePath = audioBlobPath(file.hash, file.ext);
+    if (!fs.existsSync(absolutePath) || !fs.statSync(absolutePath).isFile()) return null;
+    // eslint-disable-next-line no-control-regex
+    const fileName = `${candidate.name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_')}.${file.ext}`;
+    return { payload: { kind: 'audio', id: candidate.id }, absolutePath, fileName, mimeType: AUDIO_MIME_BY_EXTENSION[file.ext] ?? 'application/octet-stream' };
+  } catch {
+    return null;
+  }
+}
+
+function resolveAudioExportArtifact(exportId: string): ResolvedMcpArtifact | null {
+  const workspace = getAudioExportWorkspace(exportId);
+  const file = workspace ? audioExportResultFile(workspace) : null;
+  if (!file) return null;
+  return { payload: { kind: 'audio-export', id: exportId }, absolutePath: file.path, fileName: file.fileName, mimeType: audioExportMimeType(file.fileName) };
+}
+
 async function sha256File(absolutePath: string): Promise<string> {
   return await new Promise((resolve, reject) => {
     const hash = crypto.createHash('sha256');
@@ -159,6 +191,8 @@ export class McpArtifactService {
       return null;
     }
     if (payload.kind === 'sprite-frames') return resolveSpriteFramesArtifact(payload.id, payload.file);
+    if (payload.kind === 'audio') return resolveAudioArtifact(payload.id);
+    if (payload.kind === 'audio-export') return resolveAudioExportArtifact(payload.id);
     return payload.kind === 'history' ? resolveHistoryArtifact(payload.id) : resolveGraphArtifact(payload.id);
   }
 
@@ -204,11 +238,38 @@ export class McpArtifactService {
     return requester ? { ...descriptor, download_url: `${baseUrl.replace(/\/$/, '')}/api/sprite/results/${workspaceId}/download?file=${encodeURIComponent(file)}` } : descriptor;
   }
 
+  /**
+   * One audio candidate's file. Account-bound callers need audio.view and get the session file route; key callers get
+   * the signed `/mcp/artifacts` URL.
+   */
+  static async createAudioDescriptor(candidateId: string, baseUrl: string, requester?: McpRequester): Promise<McpArtifactDescriptor | null> {
+    if (requester) requireRequesterPermission(requester, 'audio.view');
+    const artifact = resolveAudioArtifact(candidateId);
+    if (!artifact) return null;
+    const descriptor = await this.createDescriptor(artifact, baseUrl);
+    return requester ? { ...descriptor, download_url: `${baseUrl.replace(/\/$/, '')}/api/audio/candidates/${candidateId}/file?download=1` } : descriptor;
+  }
+
+  /** An export result: only its starter (or an admin) may fetch it. */
+  static async createAudioExportDescriptor(exportId: string, baseUrl: string, requester?: McpRequester): Promise<McpArtifactDescriptor | null> {
+    const artifact = resolveAudioExportArtifact(exportId);
+    if (!artifact) return null;
+    if (requester) {
+      requireRequesterPermission(requester, 'audio.view');
+      const owner = getAudioExportWorkspace(exportId)?.owner;
+      if (!owner || !canAccessAudioExport(owner, requester)) throw new Error('Resource is not accessible to this account.');
+    }
+    const descriptor = await this.createDescriptor(artifact, baseUrl);
+    return requester ? { ...descriptor, download_url: `${baseUrl.replace(/\/$/, '')}/api/audio/exports/${exportId}/download` } : descriptor;
+  }
+
   /** Resolve a stable artifact ID and issue a fresh short-lived download URL. */
   static async refreshDescriptor(artifactId: string, baseUrl: string, requester?: McpRequester): Promise<McpArtifactDescriptor | null> {
     if (requester) {
       const identity = decodeArtifactId(artifactId);
       if (identity?.kind === 'sprite-frames') return this.createSpriteFramesDescriptor(identity.id, identity.file, baseUrl, requester);
+      if (identity?.kind === 'audio') return this.createAudioDescriptor(identity.id, baseUrl, requester);
+      if (identity?.kind === 'audio-export') return this.createAudioExportDescriptor(identity.id, baseUrl, requester);
       return identity?.kind === 'history' ? this.createHistoryDescriptor(identity.id, baseUrl, requester) : null;
     }
     const artifact = this.resolve(artifactId);
