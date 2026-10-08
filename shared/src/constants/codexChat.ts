@@ -15,6 +15,10 @@ export const CODEX_CHAT_GENERATION_TOOLS: readonly string[] = [
   'generate_comfyui_all_servers',
   'execute_graph_workflow',
   'get_graph_workflow_execution',
+  // Audio orders: their jobs make sound candidates (attached as audioCandidateIds), not images.
+  'order_audio',
+  'retry_audio_order_job',
+  'get_audio_order',
 ];
 
 const GENERATION_TOOL_SET = new Set(CODEX_CHAT_GENERATION_TOOLS);
@@ -25,7 +29,7 @@ export function isCodexChatGenerationTool(tool: string): boolean {
 
 /** Creation is distinct from reading another member's generation job. */
 export function isCodexChatCreationTool(tool: string): boolean {
-  return isCodexChatGenerationTool(tool) && !['get_generation_job', 'wait_generation_job', 'get_generation_artifacts', 'get_graph_workflow_execution'].includes(tool);
+  return isCodexChatGenerationTool(tool) && !['get_generation_job', 'wait_generation_job', 'get_generation_artifacts', 'get_graph_workflow_execution', 'get_audio_order'].includes(tool);
 }
 
 /** While streaming, a later poll updates the submitting call in the same reply, never another speaker's reply. */

@@ -5,6 +5,21 @@ type McpToolResult = { content?: unknown[]; structuredContent?: unknown } | null
 
 /** Tools whose result is one generation queue job (its `id`). */
 const JOB_RESULT_TOOLS = new Set(['submit_generation_job', 'get_generation_job', 'wait_generation_job', 'get_generation_artifacts'])
+/** Tools whose result is an audio order: several queue jobs (`job_ids`, with per-job status in `jobs`). */
+const AUDIO_ORDER_RESULT_TOOLS = new Set(['order_audio', 'get_audio_order', 'wait_audio_order', 'cancel_audio_order', 'retry_audio_order_job'])
+const AUDIO_CANDIDATE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Queue job ids of an audio order result and the ones not finished yet. */
+function readAudioOrderJobs(value: unknown, jobIds: Set<number>, pendingJobIds: Set<number>) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return
+  const jobs = (value as { jobs?: unknown }).jobs
+  for (const job of Array.isArray(jobs) ? jobs : []) {
+    const id = (job as { job_id?: unknown })?.job_id
+    if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0) continue
+    jobIds.add(id)
+    if (!['completed', 'failed', 'cancelled'].includes(String((job as { status?: unknown }).status))) pendingJobIds.add(id)
+  }
+}
 
 function readJobId(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
@@ -39,13 +54,13 @@ export function truncateToolSummary(value: string) {
   return value.length > TOOL_SUMMARY_LENGTH ? `${value.slice(0, TOOL_SUMMARY_LENGTH)}…` : value
 }
 
-/** Pull history ids and composite hashes out of a tool result so the UI can show thumbnails. */
-function collectReferences(value: unknown, historyIds: Set<number>, compositeHashes: Set<string>, depth = 0) {
+/** Pull history ids, composite hashes and audio candidate ids out of a tool result so the UI can show them. */
+function collectReferences(value: unknown, historyIds: Set<number>, compositeHashes: Set<string>, depth = 0, audioCandidateIds?: Set<string>) {
   if (depth > 8 || value === null || typeof value !== 'object') {
     return
   }
   if (Array.isArray(value)) {
-    value.forEach((item) => collectReferences(item, historyIds, compositeHashes, depth + 1))
+    value.forEach((item) => collectReferences(item, historyIds, compositeHashes, depth + 1, audioCandidateIds))
     return
   }
   for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
@@ -61,8 +76,14 @@ function collectReferences(value: unknown, historyIds: Set<number>, compositeHas
           compositeHashes.add(hash)
         }
       }
+    } else if (audioCandidateIds && /^audio_?candidate_?ids?$/i.test(key)) {
+      for (const id of Array.isArray(entry) ? entry : [entry]) {
+        if (typeof id === 'string' && AUDIO_CANDIDATE_ID.test(id) && audioCandidateIds.size < MAX_REFERENCES_PER_CALL) {
+          audioCandidateIds.add(id)
+        }
+      }
     } else {
-      collectReferences(entry, historyIds, compositeHashes, depth + 1)
+      collectReferences(entry, historyIds, compositeHashes, depth + 1, audioCandidateIds)
     }
   }
 }
@@ -76,8 +97,10 @@ export function readMcpToolResult(result: McpToolResult, toolName?: string) {
   const compositeHashes = new Set<string>()
   const jobIds = new Set<number>()
   const pendingJobIds = new Set<number>()
+  const audioCandidateIds = new Set<string>()
   const texts: string[] = []
   const readsJob = toolName !== undefined && (JOB_RESULT_TOOLS.has(toolName) || /^generate_image(_\d+)?$/.test(toolName))
+  const readsAudioOrder = toolName !== undefined && AUDIO_ORDER_RESULT_TOOLS.has(toolName)
 
   for (const content of result?.content ?? []) {
     const text = content && typeof content === 'object' ? (content as { text?: unknown }).text : undefined
@@ -87,7 +110,8 @@ export function readMcpToolResult(result: McpToolResult, toolName?: string) {
     texts.push(text)
     try {
       const parsed = JSON.parse(text)
-      collectReferences(parsed, historyIds, compositeHashes)
+      collectReferences(parsed, historyIds, compositeHashes, 0, audioCandidateIds)
+      if (readsAudioOrder) readAudioOrderJobs(parsed, jobIds, pendingJobIds)
       const jobId = readsJob ? readJobId(parsed) : null
       if (jobId !== null) {
         jobIds.add(jobId)
@@ -98,7 +122,8 @@ export function readMcpToolResult(result: McpToolResult, toolName?: string) {
     }
   }
   if (result?.structuredContent) {
-    collectReferences(result.structuredContent, historyIds, compositeHashes)
+    collectReferences(result.structuredContent, historyIds, compositeHashes, 0, audioCandidateIds)
+    if (readsAudioOrder) readAudioOrderJobs(result.structuredContent, jobIds, pendingJobIds)
     const jobId = readsJob ? readJobId(result.structuredContent) : null
     if (jobId !== null) {
       jobIds.add(jobId)
@@ -106,5 +131,5 @@ export function readMcpToolResult(result: McpToolResult, toolName?: string) {
     }
   }
 
-  return { texts, historyIds: [...historyIds], compositeHashes: [...compositeHashes], jobIds: [...jobIds], pendingJobIds: [...pendingJobIds] }
+  return { texts, historyIds: [...historyIds], compositeHashes: [...compositeHashes], jobIds: [...jobIds], pendingJobIds: [...pendingJobIds], audioCandidateIds: [...audioCandidateIds] }
 }
