@@ -50,7 +50,8 @@ export interface DatabaseBackupEntry {
 }
 
 export interface DatabaseBackupHooks {
-  progress?: (fileName: string, totalPages: number, remainingPages: number) => void;
+  /** Per-file progress; `pageSize` turns pages into bytes for "user.db · 412 / 1,024 MB". */
+  progress?: (fileName: string, totalPages: number, remainingPages: number, pageSize: number) => void;
   throwIfCancelled?: () => void;
 }
 
@@ -140,6 +141,47 @@ export function pruneDatabaseBackups(keep: number, root: string = getDatabaseBac
   return removed;
 }
 
+export class DatabaseBackupNotFoundError extends Error {}
+export class DatabaseBackupBusyError extends Error {}
+
+/**
+ * The folder of one finished backup, or DatabaseBackupNotFoundError. Only exact stamp names the list returns qualify:
+ * no `.partial`, no traversal, no links standing in for the folder.
+ */
+export function resolveDatabaseBackupDir(stamp: unknown, root: string = getDatabaseBackupRoot()): string {
+  if (typeof stamp !== 'string' || !BACKUP_DIR_PATTERN.test(stamp)) {
+    throw new DatabaseBackupNotFoundError('Backup not found');
+  }
+  const dir = path.join(root, stamp);
+  let stat: fs.Stats;
+  try {
+    stat = fs.lstatSync(dir);
+  } catch {
+    throw new DatabaseBackupNotFoundError('Backup not found');
+  }
+  if (!stat.isDirectory()) {
+    throw new DatabaseBackupNotFoundError('Backup not found');
+  }
+  return dir;
+}
+
+/** The `.db` files of one finished backup (regular files only), for download. */
+export function listDatabaseBackupFiles(stamp: unknown, root: string = getDatabaseBackupRoot()): Array<{ fileName: string; absolutePath: string }> {
+  const dir = resolveDatabaseBackupDir(stamp, root);
+  return fs.readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.db'))
+    .map((entry) => ({ fileName: entry.name, absolutePath: path.join(dir, entry.name) }));
+}
+
+/** Delete one finished backup. Refused while a backup runs, so a run never prunes or races a folder in use. */
+export function deleteDatabaseBackup(stamp: unknown, root: string = getDatabaseBackupRoot()): void {
+  if (isDatabaseBackupRunning()) {
+    throw new DatabaseBackupBusyError('A database backup is running');
+  }
+  const dir = resolveDatabaseBackupDir(stamp, root);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
 let backupInFlight: Promise<DatabaseBackupResult> | null = null;
 
 export function isDatabaseBackupRunning(): boolean {
@@ -185,13 +227,16 @@ export async function runDatabaseBackup(options: {
       for (const source of sources) {
         options.hooks?.throwIfCancelled?.();
         const target = path.join(partialDir, source.fileName);
+        const pageSize = Number(source.db.pragma('page_size', { simple: true })) || 4096;
         const progress = await source.db.backup(target, {
           progress: ({ totalPages, remainingPages }) => {
-            options.hooks?.progress?.(source.fileName, totalPages, remainingPages);
+            options.hooks?.progress?.(source.fileName, totalPages, remainingPages, pageSize);
             options.hooks?.throwIfCancelled?.();
             return PAGES_PER_STEP;
           },
         });
+        // The callback runs before each step, so the last step is never reported: close the file at 100%.
+        options.hooks?.progress?.(source.fileName, progress.totalPages, 0, pageSize);
         files.push({ fileName: source.fileName, bytes: fs.statSync(target).size, totalPages: progress.totalPages });
       }
 

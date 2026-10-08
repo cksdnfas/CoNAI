@@ -70,7 +70,8 @@ test('maintenance routes are admin-only and search history is per account', { ti
     const maintenance: Array<[string, string]> = [
       ['/api/system/cache-stats', 'GET'], ['/api/system/cache-stats/reset', 'POST'], ['/api/system/cache/invalidate', 'POST'],
       ['/api/system/maintenance/orphan-cleanup', 'POST'], ['/api/system/database-backups', 'GET'], ['/api/system/database-backups', 'POST'],
-      ['/api/system/maintenance/compact-database', 'POST'],
+      ['/api/system/maintenance/compact-database', 'POST'], ['/api/system/database-stats', 'GET'],
+      ['/api/system/database-backups/20260101-000000/download', 'GET'], ['/api/system/database-backups/20260101-000000', 'DELETE'],
       ['/api/file-verification/stats', 'GET'], ['/api/file-verification/verify', 'POST'], ['/api/file-verification/settings', 'PUT'],
       ['/api/civitai/settings', 'PUT'], ['/api/civitai/stats/reset', 'POST'], ['/api/civitai/models', 'DELETE'],
       ['/api/civitai/rescan-all', 'POST'], ['/api/civitai/reset-failed', 'POST'], ['/api/civitai/lookup/abc', 'POST'],
@@ -101,6 +102,63 @@ test('maintenance routes are admin-only and search history is per account', { ti
     }
     assert.equal(job.status, 'completed', `VACUUM finished: ${job.failureMessage ?? ''}`)
     assert.ok(job.result.bytesAfter <= job.result.bytesBefore)
+  })
+
+  await t.test('database stats, backup download and delete', async () => {
+    const stats = await call('/api/system/database-stats', adminId)
+    assert.equal(stats.status, 200)
+    const images = stats.body.data.databases.find((entry: { fileName: string }) => entry.fileName === 'images.db')
+    assert.ok(images, 'images.db listed')
+    for (const key of ['fileBytes', 'walBytes', 'pageSize', 'pageCount', 'databaseBytes', 'freelistPages', 'reclaimableBytes']) {
+      assert.equal(typeof images[key], 'number', key)
+    }
+    assert.equal(images.databaseBytes, images.pageSize * images.pageCount)
+    assert.equal(images.reclaimableBytes, images.pageSize * images.freelistPages)
+    assert.ok(images.fileBytes >= images.walBytes)
+
+    // A real backup, with per-file byte progress on the job.
+    const started = await call('/api/system/database-backups', adminId, 'POST', {})
+    assert.equal(started.status, 202)
+    let job = started.body.data
+    for (let i = 0; i < 200 && (job.status === 'queued' || job.status === 'running'); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      job = (await call(`/api/jobs/${job.jobId}`, adminId)).body.data
+    }
+    assert.equal(job.status, 'completed', job.failureMessage ?? '')
+    assert.match(job.phase ?? '', /\.db$/, 'phase names the file being copied')
+    assert.equal(job.progress.processed, job.progress.total, 'progress counts bytes of the last file')
+    assert.equal(job.progress.total % 512, 0, 'bytes, not pages')
+    const latest = (await call('/api/jobs?kind=database-backup&limit=1', adminId)).body.data
+    assert.equal(latest[0].jobId, job.jobId, 'the jobs API filters by kind for the last result')
+
+    const stamp = (await call('/api/system/database-backups', adminId)).body.data.backups[0].name as string
+    const download = await fetch(`${origin}/api/system/database-backups/${stamp}/download`, { headers: { 'x-test-account': String(adminId) } })
+    assert.equal(download.status, 200)
+    assert.equal(download.headers.get('content-type'), 'application/zip')
+    const AdmZip = (await import('adm-zip')).default
+    const names = new AdmZip(Buffer.from(await download.arrayBuffer())).getEntries().map((entry) => entry.entryName).sort()
+    assert.ok(names.includes('images.db') && names.includes('user.db'), names.join(','))
+
+    // Only finished stamp folders: no traversal, no .partial, no files posing as folders.
+    const backupRoot = path.join(root, 'database', 'backups')
+    fs.mkdirSync(path.join(backupRoot, '20260101-000000.partial'), { recursive: true })
+    fs.writeFileSync(path.join(backupRoot, '20260101-000001'), 'not a folder')
+    for (const bad of ['..', '..%2F..%2Fdatabase', '%2E%2E', '20260101-000000.partial', '20260101-000001', 'images.db', '20991231-235959']) {
+      assert.equal((await call(`/api/system/database-backups/${bad}/download`, adminId)).status, 404, `download ${bad}`)
+      assert.equal((await call(`/api/system/database-backups/${bad}`, adminId, 'DELETE')).status, 404, `delete ${bad}`)
+    }
+    assert.ok(fs.existsSync(path.join(backupRoot, '20260101-000000.partial')))
+
+    // Refused while a backup job is queued or running.
+    const { RuntimeJobStore } = await import('../src/services/runtimeJobs/runtimeJobStore')
+    const live = RuntimeJobStore.create({ kind: 'database-backup', singletonKey: 'test-live-backup' })
+    assert.equal((await call(`/api/system/database-backups/${stamp}`, adminId, 'DELETE')).status, 409)
+    assert.ok(fs.existsSync(path.join(backupRoot, stamp)))
+    RuntimeJobStore.markCancelled(live.jobId, 'test')
+
+    assert.equal((await call(`/api/system/database-backups/${stamp}`, adminId, 'DELETE')).status, 200)
+    assert.ok(!fs.existsSync(path.join(backupRoot, stamp)))
+    assert.equal((await call(`/api/system/database-backups/${stamp}/download`, adminId)).status, 404)
   })
 
   await t.test('search history belongs to the account that saved it', async () => {
