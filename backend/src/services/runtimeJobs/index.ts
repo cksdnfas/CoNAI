@@ -5,6 +5,8 @@ import { registerPromptSearchIndexJobHandlers } from './handlers/promptSearchInd
 import { registerThumbnailJobHandlers } from './handlers/thumbnailHandlers'
 import { registerThumbnailRepairJobHandlers } from './handlers/thumbnailRepairHandlers'
 import { registerVideoPosterJobHandlers } from './handlers/videoPosterHandlers'
+import { registerMediaOrphanCleanupJobHandlers } from './handlers/mediaOrphanCleanupHandlers'
+import { registerDatabaseBackupJobHandlers } from './handlers/databaseBackupHandlers'
 
 export { RuntimeJobRunner, RuntimeJobCancelledError } from './runtimeJobRunner'
 export type { RuntimeJobContext, RuntimeJobHandlerOptions } from './runtimeJobRunner'
@@ -35,6 +37,8 @@ export function registerRuntimeJobHandlers(): void {
   registerPromptSearchIndexJobHandlers()
   registerGroupRematchJobHandlers()
   registerFolderScanJobHandlers()
+  registerMediaOrphanCleanupJobHandlers()
+  registerDatabaseBackupJobHandlers()
 }
 
 /** Register handlers and recover interrupted jobs. `index.ts` 기동 시퀀스가 1회 호출한다. */

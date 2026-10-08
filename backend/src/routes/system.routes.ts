@@ -1,8 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { QueryCacheService } from '../services/QueryCacheService';
+import { systemMaintenanceRoutes } from './system-maintenance.routes';
 
 const router = Router();
+
+router.use(systemMaintenanceRoutes);
 
 /**
  * 캐시 통계 조회

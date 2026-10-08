@@ -121,7 +121,14 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
     },
     shutdownRuntimeJobs: async () => {
       const { RuntimeJobRunner } = await import('../services/runtimeJobs/runtimeJobRunner');
-      return RuntimeJobRunner.shutdown();
+      const { DatabaseMaintenanceScheduler } = await import('../services/maintenance/databaseMaintenanceScheduler');
+      const { waitForDatabaseBackup } = await import('../services/maintenance/databaseBackupService');
+      DatabaseMaintenanceScheduler.stop();
+      const interrupted = RuntimeJobRunner.shutdown();
+      // The abort above stops a running backup at its next page step; let it close its handles before the
+      // connections are closed.
+      await waitForDatabaseBackup();
+      return interrupted;
     },
     closeMainDatabase: async () => {
       const { closeDatabase } = await import('../database/init');

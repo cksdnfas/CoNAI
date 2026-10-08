@@ -69,6 +69,7 @@ test('maintenance routes are admin-only and search history is per account', { ti
   await t.test('a guest with image viewing cannot run server maintenance', async () => {
     const maintenance: Array<[string, string]> = [
       ['/api/system/cache-stats', 'GET'], ['/api/system/cache-stats/reset', 'POST'], ['/api/system/cache/invalidate', 'POST'],
+      ['/api/system/maintenance/orphan-cleanup', 'POST'], ['/api/system/database-backups', 'GET'], ['/api/system/database-backups', 'POST'],
       ['/api/file-verification/stats', 'GET'], ['/api/file-verification/verify', 'POST'], ['/api/file-verification/settings', 'PUT'],
       ['/api/civitai/settings', 'PUT'], ['/api/civitai/stats/reset', 'POST'], ['/api/civitai/models', 'DELETE'],
       ['/api/civitai/rescan-all', 'POST'], ['/api/civitai/reset-failed', 'POST'], ['/api/civitai/lookup/abc', 'POST'],
@@ -77,6 +78,18 @@ test('maintenance routes are admin-only and search history is per account', { ti
     assert.equal((await call('/api/civitai/settings', guestId)).status, 200, 'model info reads stay open to image viewers')
     assert.equal((await call('/api/file-verification/stats', adminId)).status, 200)
     assert.equal((await call('/api/civitai/settings', adminId, 'PUT', { enabled: false })).status, 200)
+    assert.equal((await call('/api/system/database-backups', adminId)).status, 200)
+    ;(await import('../src/services/runtimeJobs')).registerRuntimeJobHandlers()
+    const dryRun = await call('/api/system/maintenance/orphan-cleanup', adminId, 'POST', {})
+    assert.equal(dryRun.status, 202)
+    assert.equal(dryRun.body.data.kind, 'media-orphan-cleanup')
+    let job = dryRun.body.data
+    for (let i = 0; i < 100 && (job.status === 'queued' || job.status === 'running'); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      job = (await call(`/api/jobs/${job.jobId}`, adminId)).body.data
+    }
+    assert.equal(job.status, 'completed', `orphan cleanup dry run finished: ${job.failureMessage ?? ''}`)
+    assert.equal(job.result.dryRun, true, 'an empty body is a dry run')
   })
 
   await t.test('search history belongs to the account that saved it', async () => {

@@ -17,6 +17,8 @@ export type RuntimeJobKind =
   | 'all-auto-collect'
   | 'auto-folder-rebuild'
   | 'folder-scan-all'
+  | 'media-orphan-cleanup'
+  | 'database-backup'
 
 export type RuntimeJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
@@ -29,6 +31,8 @@ export const RUNTIME_JOB_KINDS: readonly RuntimeJobKind[] = [
   'all-auto-collect',
   'auto-folder-rebuild',
   'folder-scan-all',
+  'media-orphan-cleanup',
+  'database-backup',
 ]
 
 export const RUNTIME_JOB_TERMINAL_STATUSES: readonly RuntimeJobStatus[] = ['completed', 'failed', 'cancelled']
