@@ -53,6 +53,7 @@ import {
   type LoreMergePreview,
   type OwnedChatLorebook,
   type ThreadLorebookAction,
+  markCodexChatThreadRead,
 } from '@/lib/api-codex-chat'
 import { getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
@@ -396,6 +397,23 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const showList = canOpenList && listOpen
   // Off while the list covers the chat: coming back remounts the transcript, which scrolls down again.
   const isTranscript = activeView === 'chat' && !showList
+
+  // An open chat on screen is read: its replies stop counting as unread (not while the tab is in the background).
+  const latestMessageId = threadQuery.data?.messages.at(-1)?.id ?? null
+  const activeUnreadCount = activeThread?.unread_count ?? 0
+  useEffect(() => {
+    if (showList || activeThreadId === null || latestMessageId === null || activeUnreadCount === 0) return
+    const threadId = activeThreadId
+    const markRead = () => {
+      if (document.visibilityState !== 'visible') return
+      void markCodexChatThreadRead(threadId, latestMessageId)
+        .then(() => queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }))
+        .catch(() => {})
+    }
+    markRead()
+    document.addEventListener('visibilitychange', markRead)
+    return () => document.removeEventListener('visibilitychange', markRead)
+  }, [activeThreadId, activeUnreadCount, latestMessageId, queryClient, showList])
 
   const handleEdit = useCallback(async (id: number, content: string) => {
     if (activeThreadId === null || isBusy) return false

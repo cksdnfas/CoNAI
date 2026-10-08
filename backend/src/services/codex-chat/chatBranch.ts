@@ -2,7 +2,7 @@ import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { OwnedLorebookStore } from './chatLorebookFiles'
 import { parseBlockEdits } from './chatBlockState'
 import { renderSummary, type ChatSummarySegment } from './chatMemory'
-import { parseMessageRouting, type ChatBranchPurpose, type CodexChatThreadRecord } from './codexChatStore'
+import { CodexChatStore, parseMessageRouting, type ChatBranchPurpose, type CodexChatThreadRecord } from './codexChatStore'
 import type { ChatContextMeta } from './llmChatContext'
 
 const BRANCH_TITLE_SUFFIX = ' (분기)'
@@ -118,6 +118,8 @@ export function branchChatThread(thread: CodexChatThreadRecord, untilMessageId: 
     const until = copied.reduce<number | null>((max, segment) => (max === null || segment.until_message_id > max ? segment.until_message_id : max), null)
     db.prepare(`UPDATE codex_chat_threads SET summary = ?, summary_until_message_id = ?, summary_updated_date = CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END WHERE id = ?`)
       .run(renderSummary(copied) || null, until, until, branchId)
+    // The copied conversation was already there to read: a branch starts with nothing unread.
+    CodexChatStore.markRead(branchId, Number.MAX_SAFE_INTEGER)
     return branchId
   }).immediate()
 }

@@ -18,6 +18,7 @@ export type RuntimeEventName =
   | 'queue.job.progress'
   | 'chat.generation.finished'
   | 'chat.reaction.created'
+  | 'chat.message.created'
   | 'history.record.created'
   | 'history.record.status'
   | 'graph.schedule.changed'
@@ -54,6 +55,13 @@ export interface RuntimeEventEnvelope<TPayload = unknown> {
 export type QueueJobEventStatus = 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled'
 
 export interface ChatReactionCreatedEventPayload {
+  threadId: number
+  messageId: number
+  requestedByAccountId: number | null
+}
+
+/** A reply was saved to one of the owner's chats (any engine, any tab): unread counts may have changed. */
+export interface ChatMessageCreatedEventPayload {
   threadId: number
   messageId: number
   requestedByAccountId: number | null

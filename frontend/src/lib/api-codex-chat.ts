@@ -695,6 +695,10 @@ export interface CodexChatThread {
   preview?: { text: string; role: 'user' | 'assistant'; media: boolean; files: boolean } | null
   /** Chat lists: a reply is on its way (in any tab, or one started before a reload). */
   running?: boolean
+  /** The owner has read up to this message (null: none read). */
+  last_read_message_id?: number | null
+  /** Chat lists: replies after the read mark. */
+  unread_count?: number
   created_date: string
   updated_date: string
 }
@@ -1459,6 +1463,11 @@ export function editChatReplyText(threadId: number, messageId: number, content: 
 /** A new chat holding this one up to the message (API LLM direct chats). */
 export function branchCodexChatThread(threadId: number, messageId: number, purpose: ChatBranchPurpose = 'continue') {
   return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/messages/${messageId}/branch`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ purpose }) })
+}
+
+/** The owner has seen this chat up to `messageId`: replies up to it stop counting as unread. */
+export function markCodexChatThreadRead(threadId: number, messageId: number) {
+  return requestApiData<undefined>(`/api/codex-chat/threads/${threadId}/read`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ messageId }) })
 }
 
 /** Pin, archive or rename a chat from the chat list. */

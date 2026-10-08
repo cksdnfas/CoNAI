@@ -13,13 +13,14 @@ import { cn } from '@/lib/utils'
 import { GroupAvatarStack } from './chat-group'
 import { ChatDeleteDialog } from './chat-delete-dialog'
 import { ChatProfileAvatar } from './chat-profile-avatar'
+import { UnreadCount } from './chat-unread-count'
 
 export type ChatListPatch = { title?: string; pinned?: boolean; archived?: boolean }
 export type ChatBulkAction = 'archive' | 'unarchive' | 'delete'
 
 /**
  * The chats: pinned first, then the latest activity (as the server lists them). Each row shows the face it talks to,
- * its title, when it last moved and (roomy rows) the latest message or the unsent text. Branches kept before an edit
+ * its title, when it last moved, how many replies are unread and (roomy rows) the latest message or the unsent text. Branches kept before an edit
  * fold under the chat they came from; archived chats wait behind the archive row at the end.
  * `dense` is the page's side column; the panel's list screen uses roomier rows.
  *
@@ -135,9 +136,13 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
               </span>
               {preview ? <span className="block truncate text-xs text-muted-foreground">{preview}</span> : null}
             </span>
-            <span className="flex shrink-0 items-center gap-2 group-hover/row:invisible">
-              {runningThreadIds.has(entry.id) ? <span role="img" aria-label={t({ ko: '답변 중', en: 'Replying' })} className="size-1.5 rounded-full bg-success motion-safe:animate-pulse" /> : null}
-              {Number.isNaN(movedAt.getTime()) ? null : <time className="text-2xs tabular-nums text-muted-foreground" dateTime={movedAt.toISOString()}>{whenLabel(movedAt)}</time>}
+            {/* Time on top, the unread count under it (side by side in the dense list). */}
+            <span className={cn('flex shrink-0 group-hover/row:invisible', dense ? 'items-center gap-2' : 'flex-col items-end gap-1')}>
+              <span className="flex items-center gap-2">
+                {runningThreadIds.has(entry.id) ? <span role="img" aria-label={t({ ko: '답변 중', en: 'Replying' })} className="size-1.5 rounded-full bg-success motion-safe:animate-pulse" /> : null}
+                {Number.isNaN(movedAt.getTime()) ? null : <time className="text-2xs tabular-nums text-muted-foreground" dateTime={movedAt.toISOString()}>{whenLabel(movedAt)}</time>}
+              </span>
+              {entry.unread_count ? <UnreadCount count={entry.unread_count} /> : null}
             </span>
           </button>
         </ListRow>

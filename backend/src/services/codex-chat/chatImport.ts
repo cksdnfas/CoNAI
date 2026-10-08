@@ -229,6 +229,8 @@ export function importChatThread(requester: McpRequester, raw: Buffer, target: C
       nullableText(thread.author_note, 4000), intOrNull(thread.author_note_depth, 0, 20), intOrNull(thread.max_tokens, 1, 1_000_000),
       edits.length ? JSON.stringify(edits) : null, created.id,
     )
+    // An imported transcript is history, not new replies.
+    CodexChatStore.markRead(created.id, Number.MAX_SAFE_INTEGER)
     // An export from before the lorebook carries pinned memories: they become the chat book's always-on entries.
     const memories = parsePinnedMemories(typeof thread.memories === 'string' ? thread.memories : Array.isArray(thread.memories) ? JSON.stringify(thread.memories) : null)
     if (memories.length > 0) OwnedLorebookStore.addChatBookEntries(created.id, pinnedMemoryEntries(memories.slice(0, 50)))

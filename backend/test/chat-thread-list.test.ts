@@ -204,4 +204,35 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     assert.deepEqual([orphan.branched_from_thread_id, orphan.branch_purpose], [null, 'preserve'])
     assert.equal(CodexChatStore.listMessages(kept.id).length, 1)
   })
+
+  await t.test('unread: replies after the read mark count, writing or reading moves it forward, branches start read', async () => {
+    const { subscribeToRuntimeEvents } = await import('../src/services/runtime-events/runtimeEventBus')
+    const events: Array<{ name: string; accountId?: number | null; payload: unknown }> = []
+    const unsubscribe = subscribeToRuntimeEvents((event) => { if (event.name === 'chat.message.created') events.push(event) })
+    const id = newThread()
+    const unread = () => CodexChatStore.countUnread([id]).get(id) ?? 0
+    const first = say(id, 'assistant', '안녕')
+    const second = say(id, 'assistant', '뭐 해?')
+    assert.equal(unread(), 2)
+    assert.deepEqual(events.map((event) => [event.accountId, event.payload]), [[1, { threadId: id, messageId: first, requestedByAccountId: 1 }], [1, { threadId: id, messageId: second, requestedByAccountId: 1 }]])
+    unsubscribe()
+
+    CodexChatStore.markRead(id, first)
+    assert.equal(unread(), 1)
+    CodexChatStore.markRead(id, first - 1)
+    assert.equal(CodexChatStore.findThreadById(id)!.last_read_message_id, first, 'never moves backwards')
+    CodexChatStore.markRead(id, Number.MAX_SAFE_INTEGER)
+    assert.equal(CodexChatStore.findThreadById(id)!.last_read_message_id, second, 'capped at the latest message')
+    assert.equal(unread(), 0)
+
+    say(id, 'assistant', '대답해 줘')
+    const mine = say(id, 'user', '응')
+    assert.equal(unread(), 0, 'writing a message reads everything before it')
+    assert.equal(CodexChatStore.findThreadById(id)!.last_read_message_id, mine)
+
+    say(id, 'assistant', '좋아')
+    const branch = CodexChatService.branchThread(requester, id, mine)
+    assert.equal(CodexChatStore.countUnread([branch.id]).get(branch.id) ?? 0, 0)
+    assert.equal(unread(), 1, 'the source keeps its own mark')
+  })
 })

@@ -11,7 +11,7 @@ import { useI18n } from '@/i18n'
 import { buildApiUrl } from '@/lib/api-client'
 import type { CodexChatThread } from '@/lib/api-codex-chat'
 import { createRuntimeEventStream } from '@/lib/runtime-event-stream'
-import type { ChatGenerationFinishedEventPayload, ChatReactionCreatedEventPayload, RuntimeEventEnvelope } from '@/lib/runtime-events-types'
+import type { ChatGenerationFinishedEventPayload, ChatMessageCreatedEventPayload, ChatReactionCreatedEventPayload, RuntimeEventEnvelope } from '@/lib/runtime-events-types'
 
 /** A short retry covers the gap between queue completion and thumbnail post-processing. */
 function GenerationThumbnail({ historyId }: { historyId: number }) {
@@ -82,6 +82,15 @@ export function useChatGenerationNotifications() {
       void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
       return
     }
+    if (envelope.name === 'chat.message.created') {
+      const payload = envelope.payload as ChatMessageCreatedEventPayload
+      if (!chat?.canUse || !auth || (auth.hasCredentials && !auth.authenticated) || payload.requestedByAccountId !== accountId) return
+      // The unread counts live in the chat list. A turn this tab is streaming refetches its chat when it ends; a
+      // group room saves members one by one meanwhile, so its transcript is left to that.
+      if (chat.liveTurn?.threadId !== payload.threadId) void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(payload.threadId) })
+      void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+      return
+    }
     if (envelope.name !== 'chat.generation.finished' || !chat?.canUse || !auth || (auth.hasCredentials && !auth.authenticated)) return
     const payload = envelope.payload as ChatGenerationFinishedEventPayload
     if (payload.requestedByAccountId !== accountId) return
@@ -120,8 +129,9 @@ export function useChatGenerationNotifications() {
     return createRuntimeEventStream({
       onEnvelope: (envelope) => handlerRef.current(envelope),
       onStatusChange: () => {},
-      onResync: () => {},
+      // Replies saved while the stream was down still count as unread.
+      onResync: () => { void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }) },
       onSessionExpired: () => {},
     })
-  }, [accountId, canUse])
+  }, [accountId, canUse, queryClient])
 }

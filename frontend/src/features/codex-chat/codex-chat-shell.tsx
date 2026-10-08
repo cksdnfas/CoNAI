@@ -2,12 +2,13 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { Suspense, lazy, useCallback, useEffect, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { MessageSquare } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { LoadingState } from '@/components/ui/loading-state'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useI18n } from '@/i18n'
+import { listCodexChatThreads } from '@/lib/api-codex-chat'
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
 import { CODEX_CHAT_ROUTE, CODEX_CHAT_THREADS_QUERY_KEY, useCodexChat } from './codex-chat-context'
@@ -137,9 +138,19 @@ export function useCodexChatDockVisible() {
   return Boolean(chat?.canUse && chat.isPanelOpen && location.pathname !== CODEX_CHAT_ROUTE)
 }
 
-/** Header key: toggles the side panel; on the /chat page it folds the page back into the panel. */
-export function CodexChatHeaderButton() {
-  const { t } = useI18n()
+/** Unread replies across the chat list (archived chats left out); 0 when this account can't use chat. */
+export function useCodexChatUnreadCount() {
+  const canUse = useCodexChat()?.canUse === true
+  const threadsQuery = useQuery({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY, queryFn: listCodexChatThreads, enabled: canUse })
+  if (!canUse) return 0
+  return (threadsQuery.data ?? []).reduce((total, thread) => total + (thread.archived ? 0 : thread.unread_count ?? 0), 0)
+}
+
+/**
+ * The side-panel toggle shared by the header key and the account menu: toggles the panel; on the /chat page it
+ * folds the page back into the panel. Null when this account can't use chat.
+ */
+export function useCodexChatPanelToggle() {
   const chat = useCodexChat()
   const location = useLocation()
   const leaveChatPage = useLeaveCodexChatPage()
@@ -149,8 +160,7 @@ export function CodexChatHeaderButton() {
   }
 
   const isChatRoute = location.pathname === CODEX_CHAT_ROUTE
-  const isWorking = chat.liveTurn !== null
-  const handleClick = () => {
+  const toggle = () => {
     if (isChatRoute) {
       chat.openPanel()
       leaveChatPage()
@@ -161,20 +171,37 @@ export function CodexChatHeaderButton() {
     }
   }
 
+  return {
+    isActive: isChatRoute || chat.isPanelOpen,
+    toggle,
+    preload: () => void loadCodexChatView(),
+  }
+}
+
+/** Header key for the chat side panel. */
+export function CodexChatHeaderButton() {
+  const { t } = useI18n()
+  const chatToggle = useCodexChatPanelToggle()
+  const unreadCount = useCodexChatUnreadCount()
+
+  if (!chatToggle) {
+    return null
+  }
+
   return (
     <IconButton
       variant="shell"
-      label={isWorking ? t({ ko: '채팅 (답변 중)', en: 'Chat (replying)' }) : t({ ko: '채팅', en: 'Chat' })}
+      label={unreadCount > 0 ? t({ ko: '채팅 (안 읽은 답변 {count}개)', en: 'Chat ({count} unread)' }, { count: unreadCount }) : t({ ko: '채팅', en: 'Chat' })}
       tooltipSide="bottom"
-      active={isChatRoute || chat.isPanelOpen}
-      onClick={handleClick}
-      onPointerEnter={() => void loadCodexChatView()}
-      onFocus={() => void loadCodexChatView()}
+      active={chatToggle.isActive}
+      onClick={chatToggle.toggle}
+      onPointerEnter={chatToggle.preload}
+      onFocus={chatToggle.preload}
       className="relative"
     >
       <MessageSquare />
-      {/* A reply still running (panel closed or not) shows as a pulsing dot on the key. */}
-      {isWorking ? <span aria-hidden="true" className="absolute right-1.5 top-1.5 size-2 animate-pulse rounded-full bg-primary" /> : null}
+      {/* Replies not read yet show as a dot on the key. */}
+      {unreadCount > 0 ? <span aria-hidden="true" className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary" /> : null}
     </IconButton>
   )
 }

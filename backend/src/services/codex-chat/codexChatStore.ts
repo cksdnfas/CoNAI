@@ -1,4 +1,5 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { publishRuntimeEvent } from '../runtime-events/runtimeEventBus'
 import type { StoredFileEntry, ChatMessageRouting } from '@conai/shared'
 import { FileStoreService, fileOwnerKey } from '../fileStoreService'
 import { parseBlockEdits, type BlockEdit } from './chatBlockState'
@@ -66,6 +67,8 @@ export type CodexChatThreadRecord = {
   branched_from_thread_id: number | null
   branched_at_message_id: number | null
   branch_purpose: ChatBranchPurpose | null
+  /** The owner has read up to this message; replies after it are unread (null: none read). */
+  last_read_message_id: number | null
   created_date: string
   updated_date: string
 }
@@ -219,6 +222,28 @@ export const CodexChatStore = {
     `).all(...threadIds) as Array<{ thread_id: number; role: 'user' | 'assistant'; content: string; media: number; files: number }>
     for (const row of rows) previews.set(row.thread_id, { text: previewText(row.content), role: row.role, media: row.media === 1, files: row.files === 1 })
     return previews
+  },
+
+  /** Replies (assistant messages) after each chat's read mark. */
+  countUnread(threadIds: number[]) {
+    const counts = new Map<number, number>()
+    if (threadIds.length === 0) return counts
+    const rows = getUserSettingsDb().prepare(`
+      SELECT t.id AS thread_id, COUNT(m.id) AS unread
+      FROM codex_chat_threads t JOIN codex_chat_messages m ON m.thread_id = t.id AND m.role = 'assistant' AND m.id > COALESCE(t.last_read_message_id, 0)
+      WHERE t.id IN (${threadIds.map(() => '?').join(', ')}) GROUP BY t.id
+    `).all(...threadIds) as Array<{ thread_id: number; unread: number }>
+    for (const row of rows) counts.set(row.thread_id, row.unread)
+    return counts
+  },
+
+  /** Move the read mark forward to `messageId` (capped at the chat's latest message; never backwards). */
+  markRead(threadId: number, messageId: number) {
+    getUserSettingsDb().prepare(`
+      UPDATE codex_chat_threads SET last_read_message_id = target.id
+      FROM (SELECT MIN(?, COALESCE(MAX(id), 0)) AS id FROM codex_chat_messages WHERE thread_id = ?) AS target
+      WHERE codex_chat_threads.id = ? AND COALESCE(last_read_message_id, 0) < target.id
+    `).run(messageId, threadId, threadId)
   },
 
   /** Pin, archive or rename a chat from the chat list (rename keeps its place: the list sorts by activity). */
@@ -479,7 +504,7 @@ export const CodexChatStore = {
 
   addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'display_content' | 'tool_calls' | 'status' | 'error' | 'flags' | 'mediaAttachments' | 'routing'> & { speaker_profile_id?: number | null; finish_reason?: string | null }, fileIds: string[] = []) {
     const db = getUserSettingsDb()
-    return db.transaction(() => {
+    const saved = db.transaction(() => {
       const thread = CodexChatStore.findThreadById(message.thread_id)
       if (!thread) throw new Error('Chat thread not found')
       const attachments = FileStoreService.validateAttachments(fileOwnerKey(thread.account_id), fileIds)
@@ -501,7 +526,15 @@ export const CodexChatStore = {
       for (const file of attachments) db.prepare('INSERT INTO chat_file_attachments (message_id, file_id) VALUES (?, ?)').run(result.lastInsertRowid, file.id)
       if (message.routing) CodexChatStore.setMessageRouting(message.thread_id, Number(result.lastInsertRowid), message.routing)
       CodexChatStore.touchThread(message.thread_id)
-      return Number(result.lastInsertRowid)
+      // Writing a message means the owner has seen everything before it.
+      if (message.role === 'user') CodexChatStore.markRead(message.thread_id, Number(result.lastInsertRowid))
+      return { id: Number(result.lastInsertRowid), accountId: thread.account_id }
     }).immediate()
+    // A new reply refreshes the owner's unread marks in every tab, wherever it was written.
+    if (message.role === 'assistant') {
+      publishRuntimeEvent({ name: 'chat.message.created', topic: 'generation-queue', visibility: 'owner', accountId: saved.accountId,
+        payload: { threadId: message.thread_id, messageId: saved.id, requestedByAccountId: saved.accountId } })
+    }
+    return saved.id
   },
 }

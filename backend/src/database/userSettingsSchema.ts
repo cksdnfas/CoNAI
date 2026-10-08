@@ -686,6 +686,11 @@ export function createUserSettingsSchema(db: Database.Database): void {
       db.exec(`ALTER TABLE codex_chat_threads ADD COLUMN ${columnName} ${definition}`);
     }
   }
+  // The owner's read mark: replies after it count as unread. Chats from before it existed start fully read.
+  if (!hasColumn('codex_chat_threads', 'last_read_message_id')) {
+    db.exec('ALTER TABLE codex_chat_threads ADD COLUMN last_read_message_id INTEGER');
+    db.exec('UPDATE codex_chat_threads SET last_read_message_id = (SELECT MAX(id) FROM codex_chat_messages m WHERE m.thread_id = codex_chat_threads.id)');
+  }
   // Lorebooks come in three kinds: global (admin-shared, DB only), account (a folder of the owner's file store) and
   // chat (the same folder shape, tied to one thread). For account and chat books `entries` caches lorebook.json.
   for (const [columnName, definition] of [

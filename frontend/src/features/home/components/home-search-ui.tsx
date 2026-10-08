@@ -55,9 +55,25 @@ function scheduleHomeSearchDrawerContentPreload() {
 
 const HomeSearchDrawerContentLazy = lazy(loadHomeSearchDrawerContent)
 
+/** Open/close the search drawer and read its applied-filter count; shared by the header key and the account menu. */
+export function useHomeSearchToggle() {
+  const { appliedChips, isDrawerOpen, openDrawer, closeDrawer } = useHomeSearch()
+  const toggle = () => {
+    if (isDrawerOpen) {
+      closeDrawer()
+      return
+    }
+
+    void loadHomeSearchDrawerContent()
+    openDrawer()
+  }
+
+  return { appliedChipCount: appliedChips.length, isDrawerOpen, toggle }
+}
+
 /** Render the header search control as a drawer toggle button. */
 export function HomeSearchHeaderBox({ active }: { active: boolean }) {
-  const { appliedChips, isDrawerOpen, openDrawer, closeDrawer } = useHomeSearch()
+  const { appliedChipCount, isDrawerOpen, toggle } = useHomeSearchToggle()
   const { t } = useI18n()
 
   if (!active) {
@@ -67,25 +83,17 @@ export function HomeSearchHeaderBox({ active }: { active: boolean }) {
   return (
     <IconButton
       variant="shell"
-      onClick={() => {
-        if (isDrawerOpen) {
-          closeDrawer()
-          return
-        }
-
-        void loadHomeSearchDrawerContent()
-        openDrawer()
-      }}
-      data-state={isDrawerOpen ? 'open' : appliedChips.length > 0 ? 'active' : 'closed'}
+      onClick={toggle}
+      data-state={isDrawerOpen ? 'open' : appliedChipCount > 0 ? 'active' : 'closed'}
       aria-expanded={isDrawerOpen}
       className="relative"
       label={isDrawerOpen ? t({ ko: '라이브러리 검색 닫기', en: 'Close library search' }) : t({ ko: '라이브러리 검색', en: 'Search library' })}
       tooltipSide="bottom"
     >
       <Search className="h-4 w-4" />
-      {appliedChips.length > 0 ? (
+      {appliedChipCount > 0 ? (
         <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-sm bg-primary px-1 text-2xs font-semibold leading-4 text-primary-foreground ring-2 ring-background">
-          {appliedChips.length}
+          {appliedChipCount}
         </span>
       ) : null}
     </IconButton>

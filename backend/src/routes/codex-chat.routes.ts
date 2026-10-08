@@ -297,13 +297,26 @@ router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
   const threads = CodexChatService.listThreads(requesterFrom(req))
   const members = ChatGroupStore.memberIdsByThread(threads.filter((thread) => thread.kind === 'group').map((thread) => thread.id))
   const previews = CodexChatStore.listPreviews(threads.map((thread) => thread.id))
+  const unread = CodexChatStore.countUnread(threads.map((thread) => thread.id))
   res.json({ success: true, data: threads.map((thread) => ({
     ...thread,
     ...(thread.kind === 'group' ? { member_profile_ids: members.get(thread.id) ?? [] } : {}),
     preview: previews.get(thread.id) ?? null,
+    unread_count: unread.get(thread.id) ?? 0,
     // A reply on its way (this or another tab, or one started before a reload).
     running: CodexChatService.isRunning(thread.id) || GroupChatService.isRunning(thread.id),
   })) })
+})
+
+/** POST /api/codex-chat/threads/:threadId/read — `{ messageId }`: the owner has seen the chat up to this message. */
+router.post('/threads/:threadId/read', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  const messageId = (req.body ?? {}).messageId
+  if (!Number.isSafeInteger(messageId) || messageId < 1) { sendRouteBadRequest(res, 'messageId must be a positive integer'); return }
+  if (!CodexChatStore.findThread(threadId, getRequesterAccountId(req))) { res.status(404).json({ success: false, error: '채팅을 찾을 수 없어.' }); return }
+  CodexChatStore.markRead(threadId, messageId)
+  res.json({ success: true })
 })
 
 /** PATCH /api/codex-chat/threads/:threadId/list — `{ title?, pinned?, archived? }`: the chat's place in the chat list. */

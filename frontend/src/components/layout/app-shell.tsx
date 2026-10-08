@@ -19,6 +19,7 @@ import { registerTranslationCatalog, useI18n } from '@/i18n'
 import { getPublicHeaderNavigationSettings } from '@/lib/api-settings-general'
 import { APP_BRAND_TOOLTIP, APP_ICON_SRC, APP_NAME } from '@/lib/app-metadata'
 import { cn } from '@/lib/utils'
+import { useMinWidth } from '@/lib/use-min-width'
 import type { HeaderNavigationItemKey } from '@conai/shared'
 import { DEFAULT_HEADER_NAVIGATION_SETTINGS } from '@/lib/settings-defaults'
 import { useHorizontalDragScroll } from '@/components/common/use-horizontal-drag-scroll'
@@ -32,6 +33,9 @@ const GenerationQueueHeaderWidgetLazy = lazy(async () => {
   registerTranslationCatalog(imageGenerationCatalog)
   return { default: module.GenerationQueueHeaderWidget }
 })
+
+/** Below Tailwind `sm` the search and chat keys fold into the account menu so the page icons get the room. */
+const FULL_HEADER_MIN_WIDTH_PX = 640
 
 const PRIMARY_NAV_ORDER = ['/', '/groups', '/prompts', '/generation', CODEX_CHAT_ROUTE, '/upload', '/files', '/wallpaper', '/settings'] as const
 const PRIMARY_NAV_ITEM_IDS: Record<typeof PRIMARY_NAV_ORDER[number], HeaderNavigationItemKey> = {
@@ -111,6 +115,8 @@ function AppShellLayout() {
   const shouldShowGenerationQueueWidget = headerNavigation.queue !== false && (authStatusQuery.data?.hasCredentials !== true || authStatusQuery.data?.authenticated === true)
   const shouldShowHeaderSearch = headerNavigation.search !== false && !isAnonymousSession
   const shouldShowAccountMenu = headerNavigation.account !== false
+  // With the account menu hidden by settings there is nowhere to fold into, so the keys stay out.
+  const shouldFoldKeysIntoAccountMenu = !useMinWidth(FULL_HEADER_MIN_WIDTH_PX) && shouldShowAccountMenu
   const shouldUseGlobalScrollRestoration = location.pathname !== '/' && !location.pathname.startsWith('/groups')
   const isCodexChatDockVisible = useCodexChatDockVisible()
   const {
@@ -212,9 +218,11 @@ function AppShellLayout() {
 
           <div className="flex shrink-0 items-center gap-2 sm:gap-4">
             {shouldShowGenerationQueueWidget ? <DeferredGenerationQueueHeaderWidget /> : null}
-            <HomeSearchHeaderBox active={shouldShowHeaderSearch} />
-            <CodexChatHeaderButton />
-            {shouldShowAccountMenu ? <HeaderAccountMenu /> : null}
+            <HomeSearchHeaderBox active={shouldShowHeaderSearch && !shouldFoldKeysIntoAccountMenu} />
+            {shouldFoldKeysIntoAccountMenu ? null : <CodexChatHeaderButton />}
+            {shouldShowAccountMenu ? (
+              <HeaderAccountMenu foldedSearch={shouldFoldKeysIntoAccountMenu && shouldShowHeaderSearch} foldedChat={shouldFoldKeysIntoAccountMenu} />
+            ) : null}
           </div>
         </div>
       </header>
