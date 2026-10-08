@@ -32,6 +32,7 @@ export type RuntimeJobKind =
   | 'sprite-extract-batch'
   | 'sprite-normalize'
   | 'sprite-animation'
+  | 'audio-export'
 
 export type RuntimeJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
@@ -59,6 +60,7 @@ export const RUNTIME_JOB_KINDS: readonly RuntimeJobKind[] = [
   'sprite-extract-batch',
   'sprite-normalize',
   'sprite-animation',
+  'audio-export',
 ]
 
 export const RUNTIME_JOB_TERMINAL_STATUSES: readonly RuntimeJobStatus[] = ['completed', 'failed', 'cancelled']
