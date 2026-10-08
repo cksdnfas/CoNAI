@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
 import type { QueueJobEventPayload, QueueJobProgressEventPayload, RuntimeEventEnvelope, RuntimeJobHintPayload } from '@/lib/runtime-events-types'
+import { AUDIO_QUERY_KEY } from '@/lib/api-audio'
 import { RUNTIME_JOB_QUERY_KEY } from '@/lib/use-runtime-job'
 
 /**
@@ -230,7 +231,7 @@ export function useRuntimeEventQueryBridge() {
           pendingProgressByJobIdRef.current.delete(queuePayload.job_id)
         }
         applyQueueEventToCaches(queryClient, queuePayload)
-        scheduleInvalidate([QUEUE_QUERY_KEY_PREFIX], QUEUE_INVALIDATE_DEBOUNCE_MS)
+        scheduleInvalidate([QUEUE_QUERY_KEY_PREFIX, AUDIO_QUERY_KEY], QUEUE_INVALIDATE_DEBOUNCE_MS)
         if (affectsHistorySurface(queuePayload)) {
           scheduleInvalidate([HISTORY_QUERY_KEY_PREFIX], HISTORY_INVALIDATE_DEBOUNCE_MS)
         }
@@ -238,7 +239,7 @@ export function useRuntimeEventQueryBridge() {
       }
       case 'queue.job.created': {
         // 신규 행의 전체 필드(대기 순번/ETA)를 모르므로 패치 없이 무효화만 한다.
-        scheduleInvalidate([QUEUE_QUERY_KEY_PREFIX], QUEUE_INVALIDATE_DEBOUNCE_MS)
+        scheduleInvalidate([QUEUE_QUERY_KEY_PREFIX, AUDIO_QUERY_KEY], QUEUE_INVALIDATE_DEBOUNCE_MS)
         return
       }
       case 'queue.job.progress': {

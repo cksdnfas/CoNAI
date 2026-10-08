@@ -37,12 +37,13 @@ const GenerationQueueHeaderWidgetLazy = lazy(async () => {
 /** Below Tailwind `sm` the search and chat keys fold into the account menu so the page icons get the room. */
 const FULL_HEADER_MIN_WIDTH_PX = 640
 
-const PRIMARY_NAV_ORDER = ['/', '/groups', '/prompts', '/generation', '/sprite', CODEX_CHAT_ROUTE, '/upload', '/files', '/wallpaper', '/settings'] as const
+const PRIMARY_NAV_ORDER = ['/', '/groups', '/prompts', '/generation', '/audio', '/sprite', CODEX_CHAT_ROUTE, '/upload', '/files', '/wallpaper', '/settings'] as const
 const PRIMARY_NAV_ITEM_IDS: Record<typeof PRIMARY_NAV_ORDER[number], HeaderNavigationItemKey> = {
   '/': 'home',
   '/groups': 'groups',
   '/prompts': 'prompts',
   '/generation': 'generation',
+  '/audio': 'audio',
   '/sprite': 'sprite',
   [CODEX_CHAT_ROUTE]: 'chat',
   '/upload': 'upload',

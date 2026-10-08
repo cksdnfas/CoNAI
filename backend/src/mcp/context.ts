@@ -57,10 +57,17 @@ export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'propose_page_change
 
 /**
  * Tools a connected page of one kind adds to the page tools: the sprite page works through its own engine tools, so
- * connecting it must not hide them. The account's feature keys still apply to each call.
+ * connecting it must not hide them. The audio page adds its workspace tools; reviewing or deleting a single take never has
+ * a tool. The account's feature keys still apply to each call.
  */
 export const CHAT_PAGE_KIND_TOOLS: Partial<Record<string, ReadonlySet<string>>> = {
   sprite: new Set(['get_video_info', 'get_sprite_job', 'extract_sprite_sheet', 'extract_sprite_sheets_batch', 'normalize_sprite_sheets', 'create_sprite_animation', 'download_sprite_frames']),
+  audio: new Set([
+    'list_audio_projects', 'list_audio_groups', 'list_audio_candidates', 'get_audio_candidate', 'list_audio_group_comments',
+    'create_audio_project', 'update_audio_project', 'create_audio_group', 'update_audio_group', 'move_audio_candidates', 'import_audio',
+    'set_audio_group_comment_status', 'list_audio_workflows', 'order_audio', 'get_audio_order', 'cancel_audio_order', 'retry_audio_order_job',
+    'edit_audio_candidate', 'delete_unselected_audio_candidates', 'export_audio_selected', 'get_audio_download',
+  ]),
 };
 
 /** Page tools are enabled by the user's explicit connection, independently of general profile tools. */
