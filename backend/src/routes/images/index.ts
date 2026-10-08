@@ -8,6 +8,7 @@ import complexSearchRoutes from './complex-search.routes';
 import metadataRoutes from './metadata.routes';
 import hashRoutes from './hash.routes';
 import promptSimilarityRoutes from './prompt-similarity.routes';
+import { batchResizeRoutes } from './batch-resize.routes';
 import { logger } from '../../utils/logger';
 import { requireImageAction } from '../../middleware/imageAccess';
 
@@ -35,6 +36,9 @@ router.use('/', hashRoutes);
 // Prompt similarity routes
 router.use('/prompt-similarity', (req, res, next) => req.method === 'POST'
   ? requireImageAction('images.edit')(req, res, next) : next(), promptSimilarityRoutes);
+
+// Batch resize into new library items (guards inside: images.edit + images.upload)
+router.use('/batch-resize', batchResizeRoutes);
 
 // Query and download routes
 router.use('/', queryRoutes);

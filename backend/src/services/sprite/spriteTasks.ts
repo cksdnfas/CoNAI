@@ -8,6 +8,7 @@ import { normalizeSpriteSheets, normalizeSpriteSheetsBulk, type NormalizationOpt
 import { validateImageOutput, type SheetLayout, type SpriteExtractOptions, type SpriteImageFormat, type SpriteVideoInfo } from './spriteOptions'
 import { SpriteError } from './spriteErrors'
 import type { Rect } from './spritePixels'
+import { pillowLanczosResize } from '../imageBatchResize/pillowResample'
 
 /**
  * The heavy sprite operations as plain async functions over files. They never touch the databases, so the same code
@@ -223,12 +224,29 @@ export async function previewTask(payload: PreviewTaskPayload): Promise<{ png: U
   return { png: new Uint8Array(await encodePreviewPng(loadBuildFrame(payload.workDir, meta, payload.index), payload.maxSide)) }
 }
 
+export interface ResizeImageTaskPayload {
+  sourcePath: string
+  output: string
+  width: number
+  height: number
+  format: SpriteImageFormat
+  quality: number
+}
+
+/** Library batch resize ("크기 변경"): Pillow-exact Lanczos on this thread, encoded like the other still outputs. */
+export async function resizeImageTask(payload: ResizeImageTaskPayload): Promise<{ file: string; width: number; height: number }> {
+  const resized = pillowLanczosResize(await decodeImage(payload.sourcePath), payload.width, payload.height)
+  fs.writeFileSync(payload.output, await encodeStill(resized, payload.format, payload.quality))
+  return { file: payload.output, width: resized.width, height: resized.height }
+}
+
 export const SPRITE_TASKS = {
   extract: extractTask,
   render: renderTask,
   framesZip: framesZipTask,
   normalize: normalizeTask,
   animation: animationTask,
+  resizeImage: resizeImageTask,
   preview: previewTask,
 } as const
 
