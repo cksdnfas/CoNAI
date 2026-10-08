@@ -34,13 +34,16 @@ function resolveMigrationEnvConfiguredPath(value: string, currentDir: string) {
 }
 
 // ============================================================================
-// Mirrored SQL fragments (migrations 028 / 031)
+// Baseline = 예전 마이그레이션 000~035 를 끝까지 적용한 스키마
 //
-// 이 파일은 "신규 DB 생성" 경로, 028/031 은 "기존 DB 업그레이드" 경로다. 두 경로가
-// 같은 스키마를 만들어야 하므로 상태 테이블/부분 인덱스/트리거를 여기에도 미러링한다.
-// 아래 표현식은 028/031 과 문자 단위로 동일해야 한다 (FTS5 external-content 인덱스는
-// 삽입 때와 삭제 때의 텍스트가 1바이트라도 다르면 조용히 손상된다).
-// 이 파일과 028/031 의 SQL 사본은 변경할 때 함께 맞춰야 한다.
+// 001~035 는 이 파일 하나로 합쳐졌다 (목록: migrationManager.ts 의 SQUASHED_MIGRATION_VERSIONS).
+// 이 파일은 빈 DB 에서만 실행된다. 기존 DB 는 000 기록이 있어서 건너뛰고, migrationManager 가
+// 합쳐진 버전 기록이 전부 있는지 확인한다. 036 이후는 이 baseline 위에 그대로 이어진다.
+// 그래서 여기서 테이블 정의를 바꾸면 안 된다. 스키마 변경은 새 마이그레이션 파일로 한다.
+//
+// 아래 자동 태그 / 프롬프트 검색 SQL 은 런타임 서비스와 문자 단위로 같아야 한다
+// (autoTagStateService.ts, promptSearchIndexService.ts 의 POSITIVE_TEXT_SQL / NEGATIVE_TEXT_SQL).
+// FTS5 external-content 인덱스는 삽입 때와 삭제 때의 텍스트가 1바이트라도 다르면 조용히 손상된다.
 // 마이그레이션 파일은 프로젝트 모듈을 import 할 수 없다(포터블/SEA 빌드가 컴파일된
 // migrations 디렉터리만 통째로 복사한다). 그래서 공유가 아니라 복사본이다.
 // ============================================================================
@@ -87,26 +90,27 @@ function syncGateSql(rowidExpression: string): string {
   )`;
 }
 
+function execAll(db: Database.Database, statements: string[]): void {
+  statements.forEach((sql) => db.exec(sql));
+}
+
 /**
- * 통합 마이그레이션: 모든 필수 테이블 생성
- * - 프롬프트 관리 (prompt_collection, negative_prompt_collection, prompt_groups, negative_prompt_groups)
- * - 그룹 관리 (groups, image_groups)
- * - 평가 시스템 (rating_weights, rating_tiers)
- * - 미디어 메타데이터 (media_metadata, image_files)
- * - 폴더 관리 (watched_folders, scan_logs)
+ * Baseline: images.db 의 모든 테이블을 만든다.
+ * - 프롬프트 수집 (prompt_collection, negative_prompt_collection, prompt_groups, negative_prompt_groups, auto_prompt_*)
+ * - 그룹 (groups, image_groups, auto_folder_groups, auto_folder_group_images)
+ * - 평가 (rating_weights, rating_tiers)
+ * - 미디어 (media_metadata, media_auto_tag_index, image_files, image_metadata_edit_revisions)
+ * - 폴더/백업 소스 (watched_folders, scan_logs, backup_sources)
  * - 자동 태그 상태 / 프롬프트 검색 인덱스 (auto_tag_state_meta, media_prompt_fts*)
- * - 워크플로우 (workflows, comfyui_servers, workflow_servers)
- * - API 생성 히스토리 (generation_history)
- * - 사용자 설정 (user_preferences, wildcards)
+ * - Civitai 모델 정보 (model_info, image_models, civitai_settings)
+ * - 시스템 (system_settings, file_verification_logs)
  */
 export const up = async (db: Database.Database): Promise<void> => {
-  console.log('🚀 통합 마이그레이션: 모든 테이블 생성 시작...\n');
+  console.log('🚀 Baseline 마이그레이션: images.db 테이블 생성 시작...');
 
   // ============================================
-  // 1. 프롬프트 수집 시스템
+  // 1. 프롬프트 수집
   // ============================================
-  console.log('📝 프롬프트 수집 테이블 생성 중...');
-
   db.exec(`
     CREATE TABLE IF NOT EXISTS prompt_collection (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -141,6 +145,7 @@ export const up = async (db: Database.Database): Promise<void> => {
       is_visible BOOLEAN DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      parent_id INTEGER DEFAULT NULL,
       UNIQUE(group_name)
     )
   `);
@@ -153,25 +158,53 @@ export const up = async (db: Database.Database): Promise<void> => {
       is_visible BOOLEAN DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      parent_id INTEGER DEFAULT NULL,
       UNIQUE(group_name)
     )
   `);
 
-  // 프롬프트 인덱스
-  const promptIndexes = [
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS auto_prompt_collection (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      prompt TEXT NOT NULL,
+      usage_count INTEGER DEFAULT 0,
+      group_id INTEGER,
+      synonyms TEXT, -- JSON array string
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS auto_prompt_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_name TEXT NOT NULL UNIQUE,
+      display_order INTEGER DEFAULT 0,
+      is_visible INTEGER DEFAULT 1,
+      parent_id INTEGER, -- 계층 구조를 위한 부모 그룹 ID
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  execAll(db, [
     'CREATE INDEX IF NOT EXISTS idx_prompt_usage ON prompt_collection(usage_count)',
     'CREATE INDEX IF NOT EXISTS idx_prompt_group ON prompt_collection(group_id)',
+    'CREATE INDEX IF NOT EXISTS idx_prompt_collection_prompt ON prompt_collection(prompt)',
     'CREATE INDEX IF NOT EXISTS idx_negative_prompt_usage ON negative_prompt_collection(usage_count)',
     'CREATE INDEX IF NOT EXISTS idx_negative_prompt_group ON negative_prompt_collection(group_id)',
     'CREATE INDEX IF NOT EXISTS idx_prompt_groups_order ON prompt_groups(display_order)',
     'CREATE INDEX IF NOT EXISTS idx_prompt_groups_visible ON prompt_groups(is_visible)',
+    'CREATE INDEX IF NOT EXISTS idx_prompt_groups_parent ON prompt_groups(parent_id)',
     'CREATE INDEX IF NOT EXISTS idx_negative_groups_order ON negative_prompt_groups(display_order)',
-    'CREATE INDEX IF NOT EXISTS idx_negative_groups_visible ON negative_prompt_groups(is_visible)'
-  ];
-
-  promptIndexes.forEach(sql => {
-    db.exec(sql);
-  });
+    'CREATE INDEX IF NOT EXISTS idx_negative_groups_visible ON negative_prompt_groups(is_visible)',
+    'CREATE INDEX IF NOT EXISTS idx_negative_prompt_groups_parent ON negative_prompt_groups(parent_id)',
+    'CREATE INDEX IF NOT EXISTS idx_auto_prompt_collection_prompt ON auto_prompt_collection(prompt)',
+    'CREATE INDEX IF NOT EXISTS idx_auto_prompt_collection_usage ON auto_prompt_collection(usage_count DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_auto_prompt_collection_group ON auto_prompt_collection(group_id)',
+    'CREATE INDEX IF NOT EXISTS idx_auto_prompt_groups_order ON auto_prompt_groups(display_order)',
+    'CREATE INDEX IF NOT EXISTS idx_auto_prompt_groups_parent ON auto_prompt_groups(parent_id)',
+  ]);
 
   // Pre-create LoRA groups to avoid race conditions during prompt collection
   db.prepare(`INSERT OR IGNORE INTO prompt_groups (group_name, display_order, is_visible)
@@ -179,13 +212,10 @@ export const up = async (db: Database.Database): Promise<void> => {
   db.prepare(`INSERT OR IGNORE INTO negative_prompt_groups (group_name, display_order, is_visible)
     VALUES (?, ?, ?)`).run('LoRA', 999, 1);
 
-  console.log('  ✅ 프롬프트 테이블 4개 + 인덱스 + LoRA 그룹 생성 완료\n');
-
   // ============================================
-  // 2. 그룹 관리 시스템
+  // 2. 그룹
   // ============================================
-  console.log('📁 그룹 관리 테이블 생성 중...');
-
+  // groups.name 의 전역 UNIQUE 는 036 이 "같은 부모 안에서만 고유" 로 바꾼다 (테이블 재생성).
   db.exec(`
     CREATE TABLE IF NOT EXISTS groups (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -217,8 +247,37 @@ export const up = async (db: Database.Database): Promise<void> => {
     )
   `);
 
-  // 그룹 인덱스
-  const groupIndexes = [
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS auto_folder_groups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      folder_path TEXT NOT NULL,
+      absolute_path TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      parent_id INTEGER,
+      depth INTEGER NOT NULL DEFAULT 0,
+      has_images BOOLEAN DEFAULT 0,
+      image_count INTEGER DEFAULT 0,
+      color VARCHAR(7),
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (parent_id) REFERENCES auto_folder_groups(id) ON DELETE SET NULL,
+      UNIQUE(folder_path)
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS auto_folder_group_images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER NOT NULL,
+      composite_hash TEXT NOT NULL,
+      added_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (group_id) REFERENCES auto_folder_groups(id) ON DELETE CASCADE,
+      FOREIGN KEY (composite_hash) REFERENCES media_metadata(composite_hash) ON DELETE CASCADE,
+      UNIQUE(group_id, composite_hash)
+    )
+  `);
+
+  execAll(db, [
     'CREATE INDEX IF NOT EXISTS idx_groups_parent_id ON groups(parent_id)',
     'CREATE INDEX IF NOT EXISTS idx_groups_created_date ON groups(created_date)',
     'CREATE INDEX IF NOT EXISTS idx_groups_auto_collect ON groups(auto_collect_enabled)',
@@ -227,24 +286,21 @@ export const up = async (db: Database.Database): Promise<void> => {
     'CREATE INDEX IF NOT EXISTS idx_image_groups_added_date ON image_groups(added_date)',
     'CREATE INDEX IF NOT EXISTS idx_image_groups_order ON image_groups(order_index)',
     'CREATE INDEX IF NOT EXISTS idx_image_groups_collection_type ON image_groups(collection_type)',
-    'CREATE INDEX IF NOT EXISTS idx_image_groups_auto_date ON image_groups(auto_collected_date)'
-  ];
+    'CREATE INDEX IF NOT EXISTS idx_image_groups_auto_date ON image_groups(auto_collected_date)',
+    'CREATE INDEX IF NOT EXISTS idx_image_groups_group_composite ON image_groups(group_id, composite_hash)',
+    'CREATE INDEX IF NOT EXISTS idx_image_groups_group_collection_hash ON image_groups(group_id, collection_type, composite_hash)',
+    'CREATE INDEX IF NOT EXISTS idx_auto_folder_groups_parent_id ON auto_folder_groups(parent_id)',
+    'CREATE INDEX IF NOT EXISTS idx_auto_folder_groups_folder_path ON auto_folder_groups(folder_path)',
+    'CREATE INDEX IF NOT EXISTS idx_auto_folder_images_group ON auto_folder_group_images(group_id)',
+    'CREATE INDEX IF NOT EXISTS idx_auto_folder_images_hash ON auto_folder_group_images(composite_hash)',
+  ]);
 
-  groupIndexes.forEach(sql => {
-    db.exec(sql);
-  });
-
-  // 기본 그룹 생성
   db.prepare(`INSERT OR IGNORE INTO groups (name, description, color) VALUES (?, ?, ?)`)
     .run('즐겨찾기', '즐겨찾는 이미지들', '#f59e0b');
 
-  console.log('  ✅ 그룹 테이블 2개 + 인덱스 + 기본 그룹 생성 완료\n');
-
   // ============================================
-  // 3. 평가 시스템
+  // 3. 평가
   // ============================================
-  console.log('⭐ 평가 시스템 테이블 생성 중...');
-
   db.exec(`
     CREATE TABLE IF NOT EXISTS rating_weights (
       id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -272,36 +328,27 @@ export const up = async (db: Database.Database): Promise<void> => {
     )
   `);
 
-  // 기본 가중치 삽입
   db.prepare(`
     INSERT OR IGNORE INTO rating_weights (id, general_weight, sensitive_weight, questionable_weight, explicit_weight)
     VALUES (1, 1, 5, 15, 50)
   `).run();
 
-  // 기본 등급 삽입
-  const defaultTiers = [
-    { tier_name: 'G', min_score: 0, max_score: 2, tier_order: 1, color: '#22c55e', feed_visibility: 'show' },
-    { tier_name: 'Teen', min_score: 2, max_score: 6, tier_order: 2, color: '#3b82f6', feed_visibility: 'show' },
-    { tier_name: 'SFW', min_score: 6, max_score: 15, tier_order: 3, color: '#f59e0b', feed_visibility: 'show' },
-    { tier_name: 'NSFW', min_score: 15, max_score: null, tier_order: 4, color: '#ef4444', feed_visibility: 'show' }
-  ];
-
   const insertTier = db.prepare(`
     INSERT OR IGNORE INTO rating_tiers (tier_name, min_score, max_score, tier_order, color, feed_visibility)
     VALUES (?, ?, ?, ?, ?, ?)
   `);
-
-  defaultTiers.forEach(tier => {
-    insertTier.run(tier.tier_name, tier.min_score, tier.max_score, tier.tier_order, tier.color, tier.feed_visibility);
+  [
+    { tier_name: 'G', min_score: 0, max_score: 2, tier_order: 1, color: '#22c55e' },
+    { tier_name: 'Teen', min_score: 2, max_score: 6, tier_order: 2, color: '#3b82f6' },
+    { tier_name: 'SFW', min_score: 6, max_score: 15, tier_order: 3, color: '#f59e0b' },
+    { tier_name: 'NSFW', min_score: 15, max_score: null, tier_order: 4, color: '#ef4444' },
+  ].forEach((tier) => {
+    insertTier.run(tier.tier_name, tier.min_score, tier.max_score, tier.tier_order, tier.color, 'show');
   });
 
-  console.log('  ✅ 평가 테이블 2개 + 기본 데이터 생성 완료\n');
-
   // ============================================
-  // 4. 미디어 메타데이터 시스템
+  // 4. 미디어 메타데이터
   // ============================================
-  console.log('🖼️  미디어 메타데이터 테이블 생성 중...');
-
   db.exec(`
     CREATE TABLE IF NOT EXISTS media_metadata (
       composite_hash TEXT PRIMARY KEY,
@@ -337,30 +384,49 @@ export const up = async (db: Database.Database): Promise<void> => {
       metadata_updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       postprocess_status TEXT NOT NULL DEFAULT 'ready',
       postprocess_completed_at DATETIME DEFAULT NULL,
-      -- NovelAI 원본 생성 파라미터 (마이그레이션 009). 아래 031 미러 트리거가 읽는다.
+      -- NovelAI 원본 생성 파라미터. 아래 프롬프트 검색 트리거가 읽는다.
       raw_nai_parameters TEXT DEFAULT NULL,
-      -- NAI v4 캐릭터 캡션 평문 (마이그레이션 010). 아래 031 미러 트리거가 읽는다.
+      -- NAI v4 캐릭터 캡션 평문. 아래 프롬프트 검색 트리거가 읽는다.
       character_prompt_text TEXT DEFAULT NULL,
-      -- 자동 태그 스케줄러 작업 상태 (마이그레이션 028): 'pending' | 'done' | 'skip' | NULL
-      auto_tag_state TEXT DEFAULT NULL
+      -- 자동 태그 스케줄러 작업 상태: 'pending' | 'done' | 'skip' | NULL
+      auto_tag_state TEXT DEFAULT NULL,
+      model_references TEXT,
+      prompt_similarity_algorithm TEXT DEFAULT NULL,
+      prompt_similarity_version INTEGER DEFAULT NULL,
+      pos_prompt_normalized TEXT DEFAULT NULL,
+      neg_prompt_normalized TEXT DEFAULT NULL,
+      auto_prompt_normalized TEXT DEFAULT NULL,
+      pos_prompt_fingerprint TEXT DEFAULT NULL,
+      neg_prompt_fingerprint TEXT DEFAULT NULL,
+      auto_prompt_fingerprint TEXT DEFAULT NULL,
+      prompt_similarity_updated_date DATETIME DEFAULT NULL
     )
   `);
 
-  // 미디어 메타데이터 인덱스
-  const metadataIndexes = [
+  const promptSimilarityCandidateIndex = (name: string, fingerprintColumn: string) => `
+    CREATE INDEX IF NOT EXISTS ${name}
+      ON media_metadata (
+        prompt_similarity_algorithm,
+        prompt_similarity_version,
+        ${fingerprintColumn},
+        rating_score,
+        postprocess_status,
+        composite_hash
+      )
+      WHERE ${fingerprintColumn} IS NOT NULL`;
+
+  execAll(db, [
     'CREATE INDEX IF NOT EXISTS idx_metadata_phash ON media_metadata(perceptual_hash)',
     'CREATE INDEX IF NOT EXISTS idx_metadata_dhash ON media_metadata(dhash)',
     'CREATE INDEX IF NOT EXISTS idx_metadata_ahash ON media_metadata(ahash)',
     'CREATE INDEX IF NOT EXISTS idx_metadata_ai_tool ON media_metadata(ai_tool)',
     'CREATE INDEX IF NOT EXISTS idx_metadata_model ON media_metadata(model_name)',
     'CREATE INDEX IF NOT EXISTS idx_metadata_first_seen ON media_metadata(first_seen_date)',
-    // Performance index for composite hash lookup (from migration 002)
     'CREATE INDEX IF NOT EXISTS idx_metadata_composite_lookup ON media_metadata(composite_hash, perceptual_hash, dhash, ahash)',
-    // Thumbnail loading index for chronological queries (from migration 005)
     'CREATE INDEX IF NOT EXISTS idx_metadata_first_seen_desc ON media_metadata(first_seen_date DESC)',
     // Hide media that is still in immediate post-processing
     'CREATE INDEX IF NOT EXISTS idx_metadata_postprocess_status ON media_metadata(postprocess_status)',
-    // Auto-tag stats hot path (from migration 025)
+    // Auto-tag stats hot path
     'CREATE INDEX IF NOT EXISTS idx_auto_tag_stats_tagged ON media_metadata(composite_hash) WHERE auto_tags IS NOT NULL',
     'CREATE INDEX IF NOT EXISTS idx_auto_tag_stats_untagged ON media_metadata(composite_hash) WHERE auto_tags IS NULL',
     `CREATE INDEX IF NOT EXISTS idx_auto_tag_stats_root_rating
@@ -377,22 +443,23 @@ export const up = async (db: Database.Database): Promise<void> => {
     `CREATE INDEX IF NOT EXISTS idx_auto_tag_stats_root_model
       ON media_metadata(json_extract(auto_tags, '$.model'))
       WHERE json_extract(auto_tags, '$.model') IS NOT NULL`,
-    // Home feed visibility count covering index (from migration 027).
+    // Home feed visibility count covering index.
     // composite_hash is part of the index on purpose: media_metadata is a rowid table,
     // so without it the EXISTS(image_files) correlation drops back to the wide row.
     `CREATE INDEX IF NOT EXISTS idx_media_metadata_visibility
       ON media_metadata(rating_score, postprocess_status, composite_hash)`,
-    // Auto-tag pending work set (from migration 028). Partial + leading with the state
-    // column so an idle poll is an index SEARCH over an almost always empty set.
+    // Auto-tag pending work set. Partial + leading with the state column so an idle
+    // poll is an index SEARCH over an almost always empty set.
     `CREATE INDEX IF NOT EXISTS idx_media_metadata_auto_tag_pending
       ON media_metadata(auto_tag_state, composite_hash)
-      WHERE auto_tag_state = 'pending'`
-  ];
-
-  metadataIndexes.forEach(sql => {
-    db.exec(sql);
-  });
-  console.log('  ✅ 미디어 메타데이터 테이블 + 인덱스 생성 완료\n');
+      WHERE auto_tag_state = 'pending'`,
+    'CREATE INDEX IF NOT EXISTS idx_metadata_character_prompt_text ON media_metadata(character_prompt_text)',
+    // Home feed keyset cursor
+    'CREATE INDEX IF NOT EXISTS idx_metadata_first_seen_hash_desc ON media_metadata(first_seen_date DESC, composite_hash DESC)',
+    promptSimilarityCandidateIndex('idx_prompt_similarity_pos_candidates', 'pos_prompt_fingerprint'),
+    promptSimilarityCandidateIndex('idx_prompt_similarity_neg_candidates', 'neg_prompt_fingerprint'),
+    promptSimilarityCandidateIndex('idx_prompt_similarity_auto_candidates', 'auto_prompt_fingerprint'),
+  ]);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS media_auto_tag_index (
@@ -413,11 +480,10 @@ export const up = async (db: Database.Database): Promise<void> => {
     CREATE INDEX IF NOT EXISTS idx_media_auto_tag_lookup
     ON media_auto_tag_index(tag_type, search_key, score, composite_hash)
   `);
-  // ============================================
-  // 5. 폴더 스캔 시스템
-  // ============================================
-  console.log('📂 폴더 스캔 테이블 생성 중...');
 
+  // ============================================
+  // 5. 폴더 스캔 / 파일 / 백업 소스
+  // ============================================
   db.exec(`
     CREATE TABLE IF NOT EXISTS watched_folders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -439,7 +505,9 @@ export const up = async (db: Database.Database): Promise<void> => {
       last_scan_found INTEGER DEFAULT 0,
       last_scan_error TEXT,
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      -- NULL = 네이티브 이벤트 감시. 값이 있으면 chokidar 폴링(파일마다 stat 타이머)이라 비싸다.
+      watcher_polling_interval INTEGER DEFAULT NULL
     )
   `);
 
@@ -482,8 +550,43 @@ export const up = async (db: Database.Database): Promise<void> => {
     )
   `);
 
-  // 폴더 시스템 인덱스
-  const folderIndexes = [
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS image_metadata_edit_revisions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      composite_hash TEXT NOT NULL,
+      image_file_id INTEGER,
+      previous_file_path TEXT NOT NULL,
+      replacement_file_path TEXT NOT NULL,
+      recycle_bin_path TEXT NOT NULL,
+      previous_metadata_json TEXT,
+      next_metadata_json TEXT,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      restored_date DATETIME,
+      FOREIGN KEY (image_file_id) REFERENCES image_files(id) ON DELETE SET NULL
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS backup_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_path TEXT NOT NULL UNIQUE,
+      display_name TEXT,
+      target_folder_name TEXT NOT NULL,
+      recursive INTEGER DEFAULT 1,
+      watcher_enabled INTEGER DEFAULT 1,
+      watcher_polling_interval INTEGER DEFAULT NULL,
+      import_mode TEXT DEFAULT 'copy_original',
+      webp_quality INTEGER DEFAULT 90,
+      is_active INTEGER DEFAULT 1,
+      watcher_status TEXT,
+      watcher_error TEXT,
+      watcher_last_event DATETIME,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_date DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  execAll(db, [
     'CREATE INDEX IF NOT EXISTS idx_folders_active ON watched_folders(is_active)',
     'CREATE INDEX IF NOT EXISTS idx_folders_auto_scan ON watched_folders(auto_scan)',
     'CREATE INDEX IF NOT EXISTS idx_files_composite_hash ON image_files(composite_hash)',
@@ -492,23 +595,24 @@ export const up = async (db: Database.Database): Promise<void> => {
     // Partial index for active files (optimized for common queries)
     "CREATE INDEX IF NOT EXISTS idx_files_status ON image_files(file_status) WHERE file_status = 'active'",
     'CREATE INDEX IF NOT EXISTS idx_files_scan_date ON image_files(scan_date)',
-    'CREATE INDEX IF NOT EXISTS idx_scan_logs_folder_id ON scan_logs(folder_id)',
-    'CREATE INDEX IF NOT EXISTS idx_scan_logs_scan_date ON scan_logs(scan_date)',
-    'CREATE INDEX IF NOT EXISTS idx_scan_logs_status ON scan_logs(scan_status)',
-    // Performance indexes (from migration 002)
     'CREATE INDEX IF NOT EXISTS idx_files_folder_status ON image_files(folder_id, file_status)',
     'CREATE INDEX IF NOT EXISTS idx_files_hash_folder ON image_files(composite_hash, folder_id)',
-    // Thumbnail loading indexes (from migration 005)
     "CREATE INDEX IF NOT EXISTS idx_files_composite_status ON image_files(composite_hash, file_status) WHERE file_status = 'active'",
     'CREATE INDEX IF NOT EXISTS idx_files_scan_date_desc ON image_files(scan_date DESC)',
     `CREATE INDEX IF NOT EXISTS idx_files_background_retry
       ON image_files(background_next_retry_at, scan_date)
-      WHERE composite_hash IS NULL AND file_status = 'active'`
-  ];
-
-  folderIndexes.forEach(sql => {
-    db.exec(sql);
-  });
+      WHERE composite_hash IS NULL AND file_status = 'active'`,
+    // Image detail: newest verified active file per hash
+    'CREATE INDEX IF NOT EXISTS idx_image_files_hash_status_verified ON image_files(composite_hash, file_status, last_verified_date DESC, id DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_scan_logs_folder_id ON scan_logs(folder_id)',
+    'CREATE INDEX IF NOT EXISTS idx_scan_logs_scan_date ON scan_logs(scan_date)',
+    'CREATE INDEX IF NOT EXISTS idx_scan_logs_status ON scan_logs(scan_status)',
+    'CREATE INDEX IF NOT EXISTS idx_image_metadata_edit_revisions_hash ON image_metadata_edit_revisions(composite_hash)',
+    'CREATE INDEX IF NOT EXISTS idx_image_metadata_edit_revisions_created ON image_metadata_edit_revisions(created_date DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_image_metadata_edit_revisions_restored ON image_metadata_edit_revisions(restored_date)',
+    'CREATE INDEX IF NOT EXISTS idx_backup_sources_active ON backup_sources(is_active)',
+    'CREATE INDEX IF NOT EXISTS idx_backup_sources_watcher_enabled ON backup_sources(watcher_enabled)',
+  ]);
 
   // 기본 업로드 폴더 등록
   // runtimePaths 기본 해석과 동일한 우선순위로 계산 (runtimePaths 직접 의존은 피함)
@@ -557,17 +661,10 @@ export const up = async (db: Database.Database): Promise<void> => {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(defaultUploadPath, 'Upload', 1, 60, 1, 1, 1, 1);
 
-  console.log('  ✅ 폴더 테이블 3개 + 인덱스 + 기본 폴더 1개 생성 완료\n');
-
   // ============================================
-  // 5-1. 자동 태그 대기 상태 (마이그레이션 028 미러)
+  // 6. 자동 태그 대기 상태
   // ============================================
   // image_files 트리거가 있으므로 image_files 생성 이후여야 한다.
-  // 028의 백필(UPDATE ... SET auto_tag_state = 'pending')은 옮기지 않는다: 신규 DB에는
-  // 대상 행이 없고, 000이 (migrations 레코드가 사라진) 기존 DB에 대해 실행되는 경우에도
-  // 028이 바로 뒤에 실행되며 백필을 직접 수행한다.
-  console.log('🏷️  자동 태그 대기 상태 테이블/트리거 생성 중...');
-
   db.exec(`
     CREATE TABLE IF NOT EXISTS auto_tag_state_meta (
       id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -648,24 +745,14 @@ export const up = async (db: Database.Database): Promise<void> => {
     END;
   `);
 
-  console.log('  ✅ auto_tag_state_meta + 상태 유지 트리거 5개 생성 완료\n');
-
   // ============================================
-  // 5-2. 프롬프트 검색 FTS5 인덱스 (마이그레이션 031 미러)
+  // 7. 프롬프트 검색 FTS5 인덱스
   // ============================================
-  // 상태는 반드시 'pending' / last_rowid = 0 으로 시작한다 (031과 동일).
-  //  - 'ready' 로 시드하면 트리거가 처음부터 살아난다. 정말로 빈 DB라면 무해하지만,
-  //    000은 전부 `IF NOT EXISTS` 라서 (migrations 레코드가 유실된 DB 등) 이미 행이 있는
-  //    media_metadata 위에서도 실행될 수 있다. 그 경우 인덱스에 넣은 적 없는 rowid 에
-  //    대해 FTS5 'delete' 명령이 나가고 external-content 인덱스가 조용히 손상된다.
-  //  - 시드 행 자체를 빼면 반대로 게이트의 EXISTS 가 영원히 false 이고, 백필 잡은
-  //    status='absent' 를 보고 경고만 남긴 채 종료한다 → 인덱스가 영영 안 채워진다.
-  //  - 'pending' 은 두 경우 모두에서 안전하고, 신규 설치에서 손해도 없다. 첫 프롬프트
-  //    검색이 `media-prompt-index` 잡을 요청하고, 빈 테이블은 한 배치에서 끝나며
-  //    markReady() 가 인덱스를 살린다. 그 전까지 검색은 원래의 LIKE 경로로 정확히 동작한다.
-  // 백필은 여기에도 031에도 없다. 인덱싱은 전적으로 런타임 잡의 몫이다.
-  console.log('🔎 프롬프트 검색 FTS5 인덱스 생성 중...');
-
+  // 상태는 'pending' / last_rowid = 0 으로 시작한다. 'ready' 로 시드하면 트리거가 처음부터
+  // 살아나고, 시드 행을 빼면 게이트의 EXISTS 가 영원히 false 라 백필 잡이 인덱스를 못 채운다.
+  // 첫 프롬프트 검색이 `media-prompt-index` 잡을 요청하고, 빈 테이블은 한 배치에서 끝나며
+  // markReady() 가 인덱스를 살린다. 그 전까지 검색은 LIKE 경로로 정확히 동작한다.
+  // 백필은 여기 없다. 인덱싱은 전적으로 런타임 잡의 몫이다.
   db.exec(`
     CREATE TABLE IF NOT EXISTS media_prompt_fts_state (
       id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -740,14 +827,72 @@ export const up = async (db: Database.Database): Promise<void> => {
         WHERE ${syncGateSql('NEW.rowid')};
       END;
     `);
-    console.log('  ✅ media_prompt_fts + 상태 테이블 + 동기화 트리거 3개 생성 완료 (백필은 런타임 잡)\n');
   }
 
   // ============================================
-  // 6. 시스템 설정
+  // 8. Civitai 모델 정보
   // ============================================
-  console.log('⚙️  시스템 설정 테이블 생성 중...');
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS model_info (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      model_hash TEXT UNIQUE NOT NULL,
+      model_name TEXT,
+      model_version_id TEXT,
+      civitai_model_id INTEGER,
+      model_type TEXT,
+      civitai_data TEXT,
+      thumbnail_path TEXT,
+      last_checked_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS image_models (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      composite_hash TEXT NOT NULL,
+      model_hash TEXT NOT NULL,
+      model_role TEXT NOT NULL,
+      weight REAL,
+      civitai_checked INTEGER DEFAULT 0,
+      civitai_failed INTEGER DEFAULT 0,
+      checked_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (composite_hash) REFERENCES media_metadata(composite_hash) ON DELETE CASCADE,
+      UNIQUE(composite_hash, model_hash, model_role)
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS civitai_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      -- 기본: 비활성화 (API 키 설정 전까지)
+      enabled INTEGER DEFAULT 0,
+      api_call_interval INTEGER DEFAULT 2,
+      total_lookups INTEGER DEFAULT 0,
+      successful_lookups INTEGER DEFAULT 0,
+      failed_lookups INTEGER DEFAULT 0,
+      last_api_call DATETIME,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  execAll(db, [
+    'CREATE INDEX IF NOT EXISTS idx_model_hash ON model_info(model_hash)',
+    'CREATE INDEX IF NOT EXISTS idx_model_version ON model_info(model_version_id)',
+    'CREATE INDEX IF NOT EXISTS idx_civitai_model ON model_info(civitai_model_id)',
+    'CREATE INDEX IF NOT EXISTS idx_model_type ON model_info(model_type)',
+    'CREATE INDEX IF NOT EXISTS idx_image_models_composite ON image_models(composite_hash)',
+    'CREATE INDEX IF NOT EXISTS idx_image_models_hash ON image_models(model_hash)',
+    'CREATE INDEX IF NOT EXISTS idx_image_models_unchecked ON image_models(civitai_checked, civitai_failed)',
+  ]);
+
+  db.exec(`INSERT OR IGNORE INTO civitai_settings (id) VALUES (1)`);
+
+  // ============================================
+  // 9. 시스템 설정 / 파일 검증 로그
+  // ============================================
   db.exec(`
     CREATE TABLE IF NOT EXISTS system_settings (
       key TEXT PRIMARY KEY,
@@ -757,18 +902,10 @@ export const up = async (db: Database.Database): Promise<void> => {
     )
   `);
 
-  // 기본 설정값 삽입
   db.prepare(`
     INSERT OR IGNORE INTO system_settings (key, value, description)
     VALUES (?, ?, ?)
   `).run('phase2_interval', '5', 'Phase 2 백그라운드 해시 생성 간격 (분)');
-
-  console.log('  ✅ 시스템 설정 테이블 + 기본값 생성 완료\n');
-
-  // ============================================
-  // 7. 파일 검증 로그 시스템
-  // ============================================
-  console.log('🔍 파일 검증 로그 테이블 생성 중...');
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS file_verification_logs (
@@ -785,35 +922,45 @@ export const up = async (db: Database.Database): Promise<void> => {
     )
   `);
 
-  // 검증 날짜 인덱스 (로그 조회 성능 향상)
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_file_verification_logs_date
     ON file_verification_logs(verification_date DESC)
   `);
 
-  console.log('  ✅ 파일 검증 로그 테이블 + 인덱스 생성 완료\n');
-
   // ============================================
-  // 8. API 생성 히스토리 (apiGenerationDb.ts에서 관리)
+  // 10. graph_execution_node_io (예전 021 이 images.db 에 만든 테이블)
   // ============================================
-  // Note: generation_history 테이블은 별도 DB에서 관리됨
+  // 런타임은 user.db 의 같은 이름 테이블만 쓴다(GraphExecutionNodeIoModel). 여기 사본은 쓰이지 않고
+  // FK 대상 graph_executions 도 images.db 에 없다. 기존 DB 와 스키마를 똑같이 맞추려고 남겨 둔다.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS graph_execution_node_io (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      execution_id INTEGER NOT NULL,
+      node_id TEXT NOT NULL,
+      direction TEXT NOT NULL CHECK(direction IN ('input', 'output')),
+      port_key TEXT NOT NULL,
+      source_node_id TEXT,
+      source_port_key TEXT,
+      output_index INTEGER NOT NULL DEFAULT 1,
+      artifact_type TEXT,
+      ref_kind TEXT,
+      ref_value TEXT,
+      summary TEXT,
+      created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (execution_id) REFERENCES graph_executions(id) ON DELETE CASCADE
+    )
+  `);
 
-  console.log('🎉 통합 마이그레이션 완료!');
-  console.log('📊 생성된 테이블 요약:');
-  console.log('   - 프롬프트: 4개 테이블');
-  console.log('   - 그룹: 2개 테이블');
-  console.log('   - 평가: 2개 테이블');
-  console.log('   - 미디어 메타데이터: 1개 테이블');
-  console.log('   - 폴더 관리: 3개 테이블');
-  console.log('   - 시스템 설정: 1개 테이블');
-  console.log('   - 파일 검증 로그: 1개 테이블');
-  console.log('   - 자동 태그/프롬프트 검색 색인: 4개 테이블');
-  console.log('   총 18개 테이블 + 인덱스 + 트리거 생성');
-  console.log('   (워크플로우, 사용자 설정, API 생성 히스토리는 별도 DB)\n');
+  execAll(db, [
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_node_io_execution_node ON graph_execution_node_io(execution_id, node_id)',
+    'CREATE INDEX IF NOT EXISTS idx_graph_execution_node_io_execution_direction ON graph_execution_node_io(execution_id, direction)',
+  ]);
+
+  console.log('🎉 Baseline 마이그레이션 완료');
 };
 
 export const down = async (db: Database.Database): Promise<void> => {
-  console.log('🔄 통합 마이그레이션 롤백 시작...\n');
+  console.log('🔄 Baseline 마이그레이션 롤백 시작...');
 
   // 프롬프트 검색 FTS5 인덱스는 media_metadata 를 external content 로 참조하므로 먼저 제거한다.
   // (media_metadata 를 DROP 하면 그 위의 트리거는 SQLite 가 함께 제거한다.)
@@ -823,20 +970,31 @@ export const down = async (db: Database.Database): Promise<void> => {
     DROP TRIGGER IF EXISTS trg_media_prompt_fts_update;
   `);
 
-  // 역순으로 테이블 제거 (images.db 테이블만)
+  // 자식 테이블부터 제거한다.
   const tables = [
+    'graph_execution_node_io',
+    'file_verification_logs',
+    'system_settings',
+    'civitai_settings',
+    'image_models',
+    'model_info',
     'media_prompt_fts',
     'media_prompt_fts_state',
     'auto_tag_state_meta',
-    'file_verification_logs',
-    'system_settings',
+    'backup_sources',
+    'image_metadata_edit_revisions',
     'scan_logs',
     'image_files',
     'watched_folders',
+    'media_auto_tag_index',
+    'auto_folder_group_images',
+    'auto_folder_groups',
     'image_groups',
     'groups',
     'rating_tiers',
     'rating_weights',
+    'auto_prompt_groups',
+    'auto_prompt_collection',
     'negative_prompt_groups',
     'prompt_groups',
     'negative_prompt_collection',
@@ -846,8 +1004,7 @@ export const down = async (db: Database.Database): Promise<void> => {
 
   tables.forEach(table => {
     db.exec(`DROP TABLE IF EXISTS ${table}`);
-    console.log(`  ✅ ${table} 테이블 제거`);
   });
 
-  console.log('\n✅ 통합 마이그레이션 롤백 완료');
+  console.log('✅ Baseline 마이그레이션 롤백 완료');
 };

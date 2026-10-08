@@ -637,7 +637,7 @@ For external internet access:
 
 All data is stored in these folders (created automatically):
 - \`uploads/\` - Your images and videos
-- \`database/\` - Database files (images.db, api-generation-history.db)
+- \`database/\` - Database files (images.db, user.db, auth.db)
 - \`config/\` - Application settings (settings.json)
 - \`logs/\` - Application logs
 - \`models/\` - AI model cache (if using tagger)
