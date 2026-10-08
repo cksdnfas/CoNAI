@@ -145,5 +145,26 @@ export function ensureAudioSchema(db: Database.Database): void {
       PRIMARY KEY (order_id, idx)
     );
     CREATE INDEX IF NOT EXISTS idx_audio_order_jobs_pending ON audio_order_jobs(order_id) WHERE job_id IS NULL;
+
+    -- Import from the old standalone SFX manager. Projects, groups and comments it created are remembered by their old
+    -- ids so a second run reuses them; candidates use source_key 'legacy:<old id>'. Its workflows are kept here (not
+    -- registered on the generation side) until an admin registers one.
+    CREATE TABLE IF NOT EXISTS audio_legacy_import_map (
+      kind TEXT NOT NULL CHECK (kind IN ('project', 'group', 'comment')),
+      legacy_id TEXT NOT NULL,
+      new_id TEXT NOT NULL,
+      imported_at TEXT NOT NULL,
+      PRIMARY KEY (kind, legacy_id)
+    );
+    CREATE TABLE IF NOT EXISTS audio_legacy_workflows (
+      legacy_id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      prompt_json TEXT NOT NULL,
+      mapping_json TEXT NOT NULL,
+      deleted INTEGER NOT NULL DEFAULT 0,
+      registered_workflow_id INTEGER,
+      imported_at TEXT NOT NULL
+    );
   `);
 }

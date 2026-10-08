@@ -13,6 +13,7 @@ import { registerDuplicateGroupScanJobHandlers } from './handlers/duplicateGroup
 import { registerLibraryMaintenanceJobHandlers } from './handlers/libraryMaintenanceHandlers'
 import { registerSpriteJobHandlers } from '../sprite/spriteService'
 import { registerAudioExportJobHandlers } from '../audio/audioExportJob'
+import { registerAudioLegacyImportJobHandlers } from '../audio/audioLegacyImportJob'
 
 export { RuntimeJobRunner, RuntimeJobCancelledError } from './runtimeJobRunner'
 export type { RuntimeJobContext, RuntimeJobHandlerOptions } from './runtimeJobRunner'
@@ -51,6 +52,7 @@ export function registerRuntimeJobHandlers(): void {
   registerLibraryMaintenanceJobHandlers()
   registerSpriteJobHandlers()
   registerAudioExportJobHandlers()
+  registerAudioLegacyImportJobHandlers()
 }
 
 /** Register handlers and recover interrupted jobs. `index.ts` 기동 시퀀스가 1회 호출한다. */

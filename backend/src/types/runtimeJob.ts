@@ -33,6 +33,7 @@ export type RuntimeJobKind =
   | 'sprite-normalize'
   | 'sprite-animation'
   | 'audio-export'
+  | 'audio-legacy-import'
 
 export type RuntimeJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
@@ -61,6 +62,7 @@ export const RUNTIME_JOB_KINDS: readonly RuntimeJobKind[] = [
   'sprite-normalize',
   'sprite-animation',
   'audio-export',
+  'audio-legacy-import',
 ]
 
 export const RUNTIME_JOB_TERMINAL_STATUSES: readonly RuntimeJobStatus[] = ['completed', 'failed', 'cancelled']
