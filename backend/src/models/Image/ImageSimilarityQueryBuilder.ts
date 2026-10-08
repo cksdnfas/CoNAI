@@ -300,19 +300,22 @@ ${buildCandidateSelect(true)},
 }
 
 /**
- * Duplicate-group candidates in composite_hash order (the order the greedy grouping walks): pHash halves from the
- * index and the number of active files, so groups can be judged without loading metadata rows.
+ * One page of duplicate-group candidates in composite_hash order (the order the greedy grouping walks), after
+ * `@after`: pHash halves from the index and the number of active files, so groups can be judged without loading
+ * metadata rows.
  */
 export function buildDuplicateGroupIndexQuery() {
   return `
     SELECT
       m.media_id,
+      m.composite_hash,
       s.p_hi,
       s.p_lo,
       (SELECT COUNT(*) FROM image_files f WHERE f.composite_hash = m.composite_hash AND f.file_status = 'active') AS active_files
     FROM media_metadata m
     JOIN media_similarity_index s ON s.media_id = m.media_id
-    WHERE m.perceptual_hash IS NOT NULL
+    WHERE m.composite_hash > @after
+      AND m.perceptual_hash IS NOT NULL
       AND s.p_hi IS NOT NULL
       AND ${ImageSafetyService.buildVisibleScoreCondition('m.rating_score')}
       AND ${getReadySimilarityCondition('m')}
@@ -321,6 +324,7 @@ export function buildDuplicateGroupIndexQuery() {
         WHERE f.composite_hash = m.composite_hash AND f.file_status = 'active'
       )
     ORDER BY m.composite_hash
+    LIMIT @limit
   `
 }
 

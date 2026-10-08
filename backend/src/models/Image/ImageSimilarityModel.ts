@@ -50,6 +50,8 @@ export const DUPLICATE_GROUP_SYNC_CANDIDATE_LIMIT = 50000;
 
 /** SQLite host-parameter budget per IN list. */
 const IN_LIST_CHUNK = 500;
+/** Duplicate-group candidates read per query (keyset pages by composite_hash). */
+const DUPLICATE_GROUP_LOAD_PAGE = 20000;
 
 export type DuplicateGroupScanHooks = {
   /** Awaited every few thousand candidates: event-loop yield, cancellation check, progress. */
@@ -505,26 +507,41 @@ export class ImageSimilarityModel {
     const minGroupSize = options.minGroupSize ?? 2;
     const onProgress = options.hooks?.onProgress;
 
-    // STEP 1: pHash halves of every visible media row with an active file, in composite_hash order.
-    const rows = db.prepare(buildDuplicateGroupIndexQuery()).all() as Array<{
-      media_id: number;
-      p_hi: number;
-      p_lo: number;
-      active_files: number;
-    }>;
-    if (rows.length === 0) {
+    // STEP 1: pHash halves of every visible media row with an active file, in composite_hash order, a page at a time
+    // so a large library does not hold the event loop for the whole read.
+    type CandidateRow = { media_id: number; composite_hash: string; p_hi: number; p_lo: number; active_files: number };
+    const mediaIdList: number[] = [];
+    const hiList: number[] = [];
+    const loList: number[] = [];
+    const activeList: number[] = [];
+    const page = db.prepare(buildDuplicateGroupIndexQuery());
+    for (let after = ''; ;) {
+      const batch = page.all({ after, limit: DUPLICATE_GROUP_LOAD_PAGE }) as CandidateRow[];
+      for (const row of batch) {
+        mediaIdList.push(row.media_id);
+        hiList.push(row.p_hi);
+        loList.push(row.p_lo);
+        activeList.push(row.active_files);
+      }
+      if (batch.length < DUPLICATE_GROUP_LOAD_PAGE) break;
+      after = batch[batch.length - 1].composite_hash;
+      if (onProgress) await onProgress(0, mediaIdList.length);
+    }
+    const count = mediaIdList.length;
+    if (count === 0) {
       return [];
     }
 
-    const layout = planBandLayout(rows.length, threshold);
+    const layout = planBandLayout(count, threshold);
     if (!layout) {
       // Thresholds this loose would compare a large share of all pairs; refuse like the old synchronous cap did.
-      throw new DuplicateGroupScanTooLargeError(rows.length, DUPLICATE_GROUP_SYNC_CANDIDATE_LIMIT);
+      throw new DuplicateGroupScanTooLargeError(count, DUPLICATE_GROUP_SYNC_CANDIDATE_LIMIT);
     }
 
-    const hi = Uint32Array.from(rows, (row) => row.p_hi);
-    const lo = Uint32Array.from(rows, (row) => row.p_lo);
-    const activeFiles = Int32Array.from(rows, (row) => row.active_files);
+    const mediaIds = Int32Array.from(mediaIdList);
+    const hi = Uint32Array.from(hiList);
+    const lo = Uint32Array.from(loList);
+    const activeFiles = Int32Array.from(activeList);
 
     // STEP 2: the same greedy grouping as the full scan, with neighbours from band buckets.
     const positionGroups = await greedyDuplicateGroups(
@@ -543,7 +560,7 @@ export class ImageSimilarityModel {
 
     // STEP 3: active file ids of the kept groups, a few hundred media rows per query.
     const filesByMediaId = new Map<number, Array<{ file_id: number; composite_hash: string }>>();
-    const mediaIdChunks = chunk(kept.flatMap((group) => group.map((position) => rows[position].media_id)), IN_LIST_CHUNK);
+    const mediaIdChunks = chunk(kept.flatMap((group) => group.map((position) => mediaIds[position])), IN_LIST_CHUNK);
     for (let index = 0; index < mediaIdChunks.length; index += 1) {
       const { query, params } = buildDuplicateGroupFileIdsQuery(mediaIdChunks[index]);
       for (const record of db.prepare(query).all(...params) as Array<{ media_id: number; file_id: number; composite_hash: string }>) {
@@ -551,14 +568,14 @@ export class ImageSimilarityModel {
         if (list) list.push(record); else filesByMediaId.set(record.media_id, [record]);
       }
       if (index % 20 === 19 && onProgress) {
-        await onProgress(rows.length, rows.length);
+        await onProgress(count, count);
       }
     }
 
     const refs: DuplicateGroupRef[] = [];
     for (const group of kept) {
       // Members are in composite_hash order, so this matches ORDER BY composite_hash, file id.
-      const files = group.flatMap((position) => filesByMediaId.get(rows[position].media_id) ?? []);
+      const files = group.flatMap((position) => filesByMediaId.get(mediaIds[position]) ?? []);
       if (files.length === 0) {
         continue;
       }
