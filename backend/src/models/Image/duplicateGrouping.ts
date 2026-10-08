@@ -100,11 +100,15 @@ export async function greedyDuplicateGroups(
   hooks: GroupingHooks = {},
 ): Promise<number[][]> {
   const count = hi.length;
-  const bandValues = layout.bands.map((band) => {
+  const bandValues: Uint32Array[] = [];
+  for (const band of layout.bands) {
     const values = new Uint32Array(count);
-    for (let index = 0; index < count; index += 1) values[index] = extractBits(hi[index], lo[index], band.start, band.length);
-    return values;
-  });
+    for (let index = 0; index < count; index += 1) {
+      values[index] = extractBits(hi[index], lo[index], band.start, band.length);
+      if (index % 65536 === 65535 && hooks.onProgress) await hooks.onProgress(0, count);
+    }
+    bandValues.push(values);
+  }
 
   // Buckets per band in CSR form; members are filled in ascending position.
   const buckets = layout.bands.map((band, bandIndex) => {

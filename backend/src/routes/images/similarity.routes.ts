@@ -250,7 +250,7 @@ router.get('/duplicates/all', asyncHandler(async (req: Request, res: Response) =
     const threshold = parseIntegerWithFallback(req.query.threshold, SIMILARITY_THRESHOLDS.NEAR_DUPLICATE);
     const minGroupSize = parseIntegerWithFallback(req.query.minGroupSize, 2);
 
-    const candidateCount = ImageSimilarityModel.countDuplicateGroupCandidates();
+    const candidateCount = ImageSimilarityModel.estimateDuplicateGroupCandidates();
     if (candidateCount > DUPLICATE_GROUP_SYNC_CANDIDATE_LIMIT) {
       try {
         const job = RuntimeJobRunner.start('duplicate-group-scan', { threshold, minGroupSize }, {

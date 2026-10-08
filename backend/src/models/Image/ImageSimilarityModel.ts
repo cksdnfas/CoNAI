@@ -52,7 +52,7 @@ export const DUPLICATE_GROUP_SYNC_CANDIDATE_LIMIT = 50000;
 /** SQLite host-parameter budget per IN list. */
 const IN_LIST_CHUNK = 500;
 /** Duplicate-group candidates read per query (keyset pages by composite_hash). */
-const DUPLICATE_GROUP_LOAD_PAGE = 20000;
+const DUPLICATE_GROUP_LOAD_PAGE = 10000;
 
 export type DuplicateGroupScanHooks = {
   /** Awaited every few thousand candidates: event-loop yield, cancellation check, progress. */
@@ -123,6 +123,16 @@ export class ImageSimilarityModel {
       ${MediaImageFeaturesModel.join('mm')}
       WHERE mm.composite_hash = ?
     `).get(compositeHash) as ImageMetadataRecord | undefined;
+  }
+
+  /**
+   * Upper bound of the duplicate-group candidates (every media row with a parsable pHash), read from a band index in
+   * milliseconds. Enough to choose between grouping in the request and the runtime job; the exact count below joins
+   * image_files for every row and takes seconds on a large library.
+   */
+  static estimateDuplicateGroupCandidates(): number {
+    const result = db.prepare('SELECT COUNT(*) AS count FROM media_similarity_index WHERE p_b0 IS NOT NULL').get() as { count: number };
+    return result.count;
   }
 
   static countDuplicateGroupCandidates(): number {
@@ -568,7 +578,7 @@ export class ImageSimilarityModel {
         const list = filesByMediaId.get(record.media_id);
         if (list) list.push(record); else filesByMediaId.set(record.media_id, [record]);
       }
-      if (index % 20 === 19 && onProgress) {
+      if (index % 5 === 4 && onProgress) {
         await onProgress(count, count);
       }
     }
