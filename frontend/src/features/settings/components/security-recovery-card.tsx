@@ -35,10 +35,9 @@ export function SecurityRecoveryCard({ databaseInfo, isError, isRetrying, onRetr
         </Alert>
       ) : (
         <>
-          <SettingRow label={t({ ko: '인증 DB', en: 'Auth DB' })} controlClassName="min-w-0 sm:max-w-md">
+          <SettingRow label={<span className="flex items-center gap-1">{t({ ko: '인증 DB', en: 'Auth DB' })}{recoveryInstruction ? <FieldInfo>{recoveryInstruction}</FieldInfo> : null}</span>} controlClassName="min-w-0 sm:max-w-md">
             <span className="break-all font-mono text-xs text-muted-foreground">{databaseInfo?.authDbPath ?? t({ ko: '불러오는 중…', en: 'Loading…' })}</span>
           </SettingRow>
-          <SettingRow label={<span className="flex items-center gap-1">{t({ ko: '방법', en: 'Method' })}{recoveryInstruction ? <FieldInfo>{recoveryInstruction}</FieldInfo> : null}</span>} />
         </>
       )}
     </RowGroup>

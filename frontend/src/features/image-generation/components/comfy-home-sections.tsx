@@ -69,7 +69,7 @@ export function ComfyWorkflowListSection({
           <div
             key={workflow.id}
             data-selected={isSelected || undefined}
-            className="flex min-h-11 items-center gap-1 border-b border-line px-2 last:border-b-0 data-[selected=true]:bg-primary/8"
+            className="relative -mx-2 flex min-h-11 items-center gap-1 rounded-sm px-2 before:pointer-events-none before:absolute before:inset-x-2 before:top-0 before:border-t before:border-line first:before:hidden data-[selected=true]:bg-primary/8"
             // The workflow's own colour marks the selected row as a left accent (tone, not an outline).
             style={isSelected ? { boxShadow: `inset 3px 0 0 ${workflow.color || 'var(--color-primary)'}` } : undefined}
           >

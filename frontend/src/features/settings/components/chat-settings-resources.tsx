@@ -252,7 +252,7 @@ export function ChatSettingsResources() {
             name={preset.name}
             extra={(
               <>
-                <Tip content={preset.kind === 'nai' ? preset.nai?.model : null}><span><Chip size="sm" tone="muted">{preset.kind === 'nai' ? 'NAI' : 'Comfy'}</Chip></span></Tip>
+                <Tip content={preset.kind === 'nai' ? preset.nai?.model : null}><span className="inline-flex"><Chip size="sm" tone="muted">{preset.kind === 'nai' ? 'NAI' : 'Comfy'}</Chip></span></Tip>
                 <NotLinked profiles={preset.profiles} />
               </>
             )}
