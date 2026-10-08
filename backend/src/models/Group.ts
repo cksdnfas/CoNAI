@@ -15,7 +15,7 @@ import {
   getImageFileIdsForGroupQuery,
   countVisibleImagesByGroupQuery,
 } from './GroupImageQueries';
-import { LIBRARY_BATCH_SIZE, chunkArray, pageBoundary, type LibraryBatchHooks } from '../services/maintenance/libraryBatch';
+import { LIBRARY_BATCH_SIZE, chunkArray, pageBoundary, placeholders, type LibraryBatchHooks } from '../services/maintenance/libraryBatch';
 
 let autoCollectStageCounter = 0;
 
@@ -380,7 +380,9 @@ export class ImageGroupModel {
     });
 
     for (const page of chunkArray(compositeHashes)) {
-      applyPage(page);
+      // IMMEDIATE: each page reads before it writes, and a deferred read transaction cannot be upgraded once another
+      // connection has written (SQLITE_BUSY at once, busy_timeout ignored).
+      applyPage.immediate(page);
       await pageBoundary({});
     }
     return counts;
@@ -483,10 +485,11 @@ export class ImageGroupModel {
         ORDER BY ig.composite_hash
         LIMIT ${LIBRARY_BATCH_SIZE}
       `);
-      const deleteAuto = db.prepare(`
-        DELETE FROM image_groups WHERE group_id = ? AND composite_hash = ? AND collection_type = 'auto'
-      `);
-      const removePage = db.transaction((hashes: string[]) => hashes.reduce((count, hash) => count + deleteAuto.run(groupId, hash).changes, 0));
+      // One statement per page (a single statement is its own transaction).
+      const removePage = (hashes: string[]) => db.prepare(`
+        DELETE FROM image_groups
+        WHERE group_id = ? AND collection_type = 'auto' AND composite_hash IN (${placeholders(hashes.length)})
+      `).run(groupId, ...hashes).changes;
 
       const missingHashes = db.prepare(`
         SELECT t.composite_hash
@@ -496,12 +499,13 @@ export class ImageGroupModel {
         ORDER BY t.composite_hash
         LIMIT ${LIBRARY_BATCH_SIZE}
       `);
-      const insertAuto = db.prepare(`
+      // One statement per page; the join drops hashes whose media row went away after they were staged.
+      const addPage = (hashes: string[]) => db.prepare(`
         INSERT OR IGNORE INTO image_groups (group_id, composite_hash, order_index, collection_type)
-        SELECT ?, ?, 0, 'auto'
-        WHERE EXISTS (SELECT 1 FROM media_metadata WHERE composite_hash = ?)
-      `);
-      const addPage = db.transaction((hashes: string[]) => hashes.reduce((count, hash) => count + insertAuto.run(groupId, hash, hash).changes, 0));
+        SELECT ?, m.composite_hash, 0, 'auto'
+        FROM media_metadata m
+        WHERE m.composite_hash IN (${placeholders(hashes.length)})
+      `).run(groupId, ...hashes).changes;
 
       let removedCount = 0;
       let cursor = '';

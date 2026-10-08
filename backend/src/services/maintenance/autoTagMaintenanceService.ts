@@ -50,12 +50,17 @@ function invalidateTagCaches(): void {
 
 /**
  * Clear every row's auto_tags (the auto-tag state triggers move them back to 'pending' for the scheduler) and empty
- * the tag search index. Index rows go with their media page; terms nobody references any more go at the end, so a
- * row the scheduler re-tags while the reset is still running keeps its fresh tags.
+ * the tag search index.
+ *
+ * The index is emptied first with unqualified DELETEs: SQLite truncates a table without WHERE or triggers by freeing
+ * its pages, far faster than deleting millions of index rows page by page, and it is what the old reset did. A row
+ * the scheduler re-tags while the reset is still running then keeps its fresh index rows.
  */
 export async function resetAllAutoTags(hooks: LibraryBatchHooks = {}): Promise<AutoTagResetResult> {
   const total = countTaggedMedia();
-  const hasIndex = AutoTagIndexService.hasIndexTable();
+  if (AutoTagIndexService.hasIndexTable()) {
+    AutoTagIndexService.clearAll();
+  }
   const nextPage = db.prepare(`
     SELECT rowid AS id FROM media_metadata
     WHERE rowid > ? AND auto_tags IS NOT NULL
@@ -74,52 +79,18 @@ export async function resetAllAutoTags(hooks: LibraryBatchHooks = {}): Promise<A
     }
     cursor = ids[ids.length - 1];
 
-    const list = placeholders(ids.length);
-    db.transaction(() => {
-      changes += db.prepare(`UPDATE media_metadata SET auto_tags = NULL WHERE rowid IN (${list}) AND auto_tags IS NOT NULL`).run(...ids).changes;
-      if (hasIndex) {
-        db.prepare(`DELETE FROM media_auto_tags WHERE media_id IN (${list})`).run(...ids);
-      }
-    })();
+    changes += db.prepare(`UPDATE media_metadata SET auto_tags = NULL WHERE rowid IN (${placeholders(ids.length)}) AND auto_tags IS NOT NULL`)
+      .run(...ids).changes;
 
     hooks.progress?.(changes, total);
     maybeTruncateImagesWal('auto-tag-reset');
     await pageBoundary(hooks);
   }
 
-  if (hasIndex) {
-    await clearIndexRowsOfUntaggedMedia(hooks);
-    db.prepare(`
-      DELETE FROM auto_tag_terms
-      WHERE NOT EXISTS (SELECT 1 FROM media_auto_tags t WHERE t.term_id = auto_tag_terms.term_id)
-    `).run();
-  }
-
   invalidateTagCaches();
   maybeTruncateImagesWal('auto-tag-reset');
   logger.info(`[ResetAutoTags] Reset complete. Changes: ${changes}`);
   return { changes, message: 'All auto tags have been reset. The scheduler will pick them up shortly.' };
-}
-
-/** Index rows whose media already had no auto_tags (stale leftovers the old full clear also dropped). */
-async function clearIndexRowsOfUntaggedMedia(hooks: LibraryBatchHooks): Promise<void> {
-  const nextPage = db.prepare(`
-    SELECT DISTINCT t.media_id AS id FROM media_auto_tags t
-    WHERE t.media_id > ?
-      AND NOT EXISTS (SELECT 1 FROM media_metadata m WHERE m.rowid = t.media_id AND m.auto_tags IS NOT NULL)
-    ORDER BY t.media_id
-    LIMIT ${LIBRARY_BATCH_SIZE}
-  `);
-  let cursor = 0;
-  for (;;) {
-    const ids = (nextPage.all(cursor) as Array<{ id: number }>).map((row) => row.id);
-    if (ids.length === 0) {
-      return;
-    }
-    cursor = ids[ids.length - 1];
-    db.prepare(`DELETE FROM media_auto_tags WHERE media_id IN (${placeholders(ids.length)})`).run(...ids);
-    await pageBoundary(hooks);
-  }
 }
 
 /** Recompute rating_score from each row's stored tagger rating with the current weights. */

@@ -403,17 +403,17 @@ export class AutoFolderGroupService {
       ORDER BY t.node_key, t.composite_hash
       LIMIT ${LIBRARY_BATCH_SIZE}
     `);
-    const insertMember = db.prepare(`
+    // One set-based statement per page: everything staged between the previous cursor and this page's last row.
+    // Rows already present are ignored (UNIQUE), and the media join drops hashes deleted since staging.
+    const insertRange = db.prepare(`
       INSERT OR IGNORE INTO auto_folder_group_images (group_id, composite_hash)
-      SELECT g.id, ? FROM auto_folder_groups g
-      WHERE g.folder_path = ?
-        AND EXISTS (SELECT 1 FROM media_metadata m WHERE m.composite_hash = ?)
+      SELECT g.id, t.composite_hash
+      FROM temp_auto_folder_members t
+      JOIN auto_folder_groups g ON g.folder_path = t.node_key
+      JOIN media_metadata m ON m.composite_hash = t.composite_hash
+      WHERE (t.node_key, t.composite_hash) > (?, ?)
+        AND (t.node_key, t.composite_hash) <= (?, ?)
     `);
-    const insertPage = db.transaction((rows: Array<{ node_key: string; composite_hash: string }>) => {
-      for (const row of rows) {
-        insertMember.run(row.composite_hash, row.node_key, row.composite_hash);
-      }
-    });
     let keyCursor = '';
     let hashCursor = '';
     for (;;) {
@@ -422,9 +422,10 @@ export class AutoFolderGroupService {
       if (rows.length === 0) {
         return;
       }
-      keyCursor = rows[rows.length - 1].node_key;
-      hashCursor = rows[rows.length - 1].composite_hash;
-      insertPage(rows);
+      const last = rows[rows.length - 1];
+      insertRange.run(keyCursor, hashCursor, last.node_key, last.composite_hash);
+      keyCursor = last.node_key;
+      hashCursor = last.composite_hash;
       await pageBoundary(hooks);
     }
   }

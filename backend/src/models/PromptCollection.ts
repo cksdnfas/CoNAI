@@ -90,7 +90,9 @@ export class PromptCollectionModel {
       }
     });
 
-    transaction();
+    // IMMEDIATE: the batch reads before it writes, and a deferred read transaction cannot be upgraded
+    // (SQLITE_BUSY at once, busy_timeout ignored) once another connection has written.
+    transaction.immediate();
     return processedCount;
   }
 
@@ -124,7 +126,9 @@ export class PromptCollectionModel {
       }
     });
 
-    transaction();
+    // IMMEDIATE: the batch reads before it writes, and a deferred read transaction cannot be upgraded
+    // (SQLITE_BUSY at once, busy_timeout ignored) once another connection has written.
+    transaction.immediate();
     return processedCount;
   }
 
@@ -155,7 +159,9 @@ export class PromptCollectionModel {
       }
     });
 
-    transaction();
+    // IMMEDIATE: the batch reads before it writes, and a deferred read transaction cannot be upgraded
+    // (SQLITE_BUSY at once, busy_timeout ignored) once another connection has written.
+    transaction.immediate();
     return processedCount;
   }
 
