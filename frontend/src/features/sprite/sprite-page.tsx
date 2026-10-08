@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useI18n } from '@/i18n'
@@ -19,6 +19,7 @@ export function SpritePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = parseTab(searchParams.get('tab'))
   const videoHash = searchParams.get('video')
+  const [toolbarSlot, setToolbarSlot] = useState<HTMLDivElement | null>(null)
 
   const setTab = (next: string) => setSearchParams((params) => {
     const copy = new URLSearchParams(params)
@@ -40,15 +41,16 @@ export function SpritePage() {
   // All three stay mounted so switching tabs keeps each form and result.
   return (
     <Tabs value={tab} onValueChange={setTab} className="gap-5">
-      <div data-slot="page-toolbar" className="flex min-h-14 items-end pt-2">
-        <TabsList className={TEXT_TAB_LIST_CLASS} aria-label={t({ ko: '스프라이트 메뉴', en: 'Sprite sections' })}>
+      <div data-slot="page-toolbar" className="flex min-h-14 items-end gap-3 border-b border-line pt-2">
+        <TabsList className={`${TEXT_TAB_LIST_CLASS} w-auto flex-1 border-b-0`} aria-label={t({ ko: '스프라이트 메뉴', en: 'Sprite sections' })}>
           <TabsTrigger value="extract" className={TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '추출', en: 'Extract' })}</TabsTrigger>
           <TabsTrigger value="normalize" className={TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '정규화', en: 'Normalize' })}</TabsTrigger>
           <TabsTrigger value="animation" className={TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '애니메이션', en: 'Animation' })}</TabsTrigger>
         </TabsList>
+        <div ref={setToolbarSlot} className={tab === 'extract' ? 'flex items-center gap-1 pb-1.5' : 'hidden'} />
       </div>
       <TabsContent value="extract" forceMount className="data-[state=inactive]:hidden">
-        <SpriteExtractTab initialVideoHash={videoHash} onVideoChange={onVideoChange} />
+        <SpriteExtractTab initialVideoHash={videoHash} onVideoChange={onVideoChange} toolbarSlot={toolbarSlot} />
       </TabsContent>
       <TabsContent value="normalize" forceMount className="data-[state=inactive]:hidden">
         <SpriteNormalizeTab />

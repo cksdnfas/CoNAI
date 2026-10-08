@@ -19,6 +19,7 @@ export function useSpriteChatPage({ videoHash, info, form, setForm, output, buil
 }) {
   const { t } = useI18n()
   const fields: ChatPageField[] = [
+    { id: 'rangeMode', label: t({ ko: '구간 (full = 영상 전체, common = 공통 구간)', en: 'Range (full = whole video, common = same start/end)' }), type: 'select', value: form.rangeMode, options: ['full', 'common'] },
     { id: 'startTime', label: t({ ko: '시작 (초)', en: 'Start (s)' }), type: 'number', value: form.startTime, min: 0 },
     { id: 'endTime', label: t({ ko: '끝 (초, 비우면 끝까지)', en: 'End (s, empty = to the end)' }), type: 'number', value: form.endTime ?? '', min: 0, allowEmpty: true },
     { id: 'samplingMode', label: t({ ko: '추출 방식', en: 'Sampling' }), type: 'select', value: form.samplingMode, options: ['interval', 'count'] },
@@ -64,7 +65,11 @@ function applySpritePatch(current: ExtractForm, patch: Record<string, ChatPageVa
       if (colors.length) next.keyColors = next.despill ? colors.slice(0, 1) : colors.slice(0, 8)
     } else if (key === 'endTime') {
       next.endTime = value === '' ? null : Number(value)
-    } else if (key === 'samplingMode' || key === 'intervalUnit' || key === 'resizeMode') {
+      if (!('rangeMode' in patch)) next.rangeMode = 'common'
+    } else if (key === 'startTime') {
+      next.startTime = Number(value)
+      if (!('rangeMode' in patch)) next.rangeMode = 'common'
+    } else if (key === 'samplingMode' || key === 'intervalUnit' || key === 'resizeMode' || key === 'rangeMode') {
       next = { ...next, [key]: String(value) } as ExtractForm
     } else if (typeof value === 'boolean') {
       next = { ...next, [key]: value }

@@ -10,9 +10,12 @@ export const MAGENTA = '#FF00FF'
 
 export type IntervalUnit = 'seconds' | 'frames'
 export type SamplingMode = 'interval' | 'count'
+/** full = every video from start to end; common = the same start/end seconds for every video. */
+export type RangeMode = 'full' | 'common'
 
 /** Form state: what the left column edits. Interval can be typed in seconds or frames. */
 export interface ExtractForm {
+  rangeMode: RangeMode
   startTime: number
   /** null = the last frame. */
   endTime: number | null
@@ -47,8 +50,17 @@ export interface OutputForm {
 
 export const DEFAULT_OUTPUT: OutputForm = { columns: 0, spacing: 0, format: 'png', quality: 90 }
 
+/** Where the sheets go: a library group path (null = "스프라이트") and whether a ZIP is downloaded too. */
+export interface SaveForm {
+  groupPath: string | null
+  zip: boolean
+}
+
+export const DEFAULT_SAVE: SaveForm = { groupPath: null, zip: false }
+
 export function defaultExtractForm(info?: SpriteVideoInfo | null): ExtractForm {
   return {
+    rangeMode: 'full',
     startTime: 0,
     endTime: null,
     samplingMode: 'interval',
@@ -87,8 +99,12 @@ export function intervalSeconds(form: ExtractForm, fps: number) {
   return form.intervalUnit === 'frames' ? form.intervalValue / Math.max(1, fps) : form.intervalValue
 }
 
+export function resolvedStartTime(form: ExtractForm) {
+  return form.rangeMode === 'full' ? 0 : form.startTime
+}
+
 export function resolvedEndTime(form: ExtractForm, info: SpriteVideoInfo | null | undefined) {
-  return form.endTime ?? info?.lastFrameTime ?? 0
+  return (form.rangeMode === 'full' ? null : form.endTime) ?? info?.lastFrameTime ?? 0
 }
 
 /** Same selection as the server (exact interval sampling by frame index, D3). */
@@ -96,7 +112,7 @@ export function estimateFrameIndices(form: ExtractForm, info: SpriteVideoInfo | 
   if (!info || info.frameCount < 1) return []
   const last = info.frameCount - 1
   const clamp = (value: number) => Math.min(last, Math.max(0, value))
-  const start = Math.max(0, form.startTime)
+  const start = Math.max(0, resolvedStartTime(form))
   const end = Math.max(start, resolvedEndTime(form, info))
   if (form.samplingMode === 'count') {
     const startIndex = clamp(Math.floor(start * info.fps + 0.5))
@@ -118,8 +134,8 @@ export function estimateFrameIndices(form: ExtractForm, info: SpriteVideoInfo | 
 export function toExtractOptions(form: ExtractForm, info: SpriteVideoInfo | null | undefined, output: OutputForm): Partial<SpriteExtractOptions> {
   const fps = info?.fps ?? 30
   return {
-    startTime: form.startTime,
-    endTime: form.endTime,
+    startTime: resolvedStartTime(form),
+    endTime: form.rangeMode === 'full' ? null : form.endTime,
     intervalSeconds: Number(intervalSeconds(form, fps).toFixed(6)),
     sampleCount: form.samplingMode === 'count' ? form.sampleCount : 0,
     backgroundMode: 'key',
@@ -187,4 +203,48 @@ export function formatSeconds(value: number) {
   const minutes = Math.floor(value / 60)
   const seconds = value - minutes * 60
   return `${minutes}:${seconds.toFixed(2).padStart(5, '0')}`
+}
+
+/**
+ * Stored options (a preset or a saved sheet's settings) back into the form. Interval comes back in seconds since the
+ * options keep seconds; output size falls back to the selected video's when the options had none.
+ */
+export function formFromOptions(options: Partial<SpriteExtractOptions>, info?: SpriteVideoInfo | null): { form: ExtractForm; output: OutputForm } {
+  const base = defaultExtractForm(info)
+  const keyColors = (options.keyColors ?? base.keyColors).map((color) => normalizeHex(color)).filter((color): color is string => Boolean(color))
+  const despill = options.despill ?? base.despill
+  const hasCrop = (options.cropWidth ?? 0) > 0 && (options.cropHeight ?? 0) > 0
+  const startTime = options.startTime ?? 0
+  const endTime = options.endTime ?? null
+  return {
+    form: {
+      ...base,
+      rangeMode: startTime > 0 || endTime !== null ? 'common' : 'full',
+      startTime,
+      endTime,
+      samplingMode: (options.sampleCount ?? 0) > 0 ? 'count' : 'interval',
+      intervalUnit: 'seconds',
+      intervalValue: options.intervalSeconds ?? Number((base.intervalValue / Math.max(1, info?.fps ?? 30)).toFixed(4)),
+      sampleCount: (options.sampleCount ?? 0) > 0 ? options.sampleCount! : base.sampleCount,
+      removeDuplicateFrames: options.removeDuplicateFrames ?? base.removeDuplicateFrames,
+      similarityPercent: options.frameSimilarityThreshold !== undefined ? options.frameSimilarityThreshold * 100 : base.similarityPercent,
+      keyColors: keyColors.length ? (despill ? keyColors.slice(0, 1) : keyColors.slice(0, MAX_KEY_COLORS)) : base.keyColors,
+      tolerancePercent: options.tolerance !== undefined ? options.tolerance * 100 : base.tolerancePercent,
+      softnessPercent: options.softness !== undefined ? options.softness * 100 : base.softnessPercent,
+      despill,
+      edgeCleanup: options.edgeCleanup ?? base.edgeCleanup,
+      autoCrop: options.autoCrop ?? base.autoCrop,
+      alphaThreshold: options.alphaThreshold ?? base.alphaThreshold,
+      preCrop: hasCrop ? { x: options.cropX ?? 0, y: options.cropY ?? 0, width: options.cropWidth!, height: options.cropHeight! } : null,
+      resizeMode: options.resizeMode ?? base.resizeMode,
+      outputWidth: options.outputWidth || base.outputWidth,
+      outputHeight: options.outputHeight || base.outputHeight,
+    },
+    output: {
+      columns: options.columns ?? DEFAULT_OUTPUT.columns,
+      spacing: options.spacing ?? DEFAULT_OUTPUT.spacing,
+      format: options.outputFormat ?? DEFAULT_OUTPUT.format,
+      quality: options.outputQuality ?? DEFAULT_OUTPUT.quality,
+    },
+  }
 }

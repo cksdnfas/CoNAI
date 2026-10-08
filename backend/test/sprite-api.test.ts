@@ -173,6 +173,79 @@ test('sprite REST + MCP: permissions, ownership, library save and artifacts', { 
     assert.equal(((await readSpriteSettings(animJob.result.saved.compositeHash)) as Record<string, string>).kind, 'sprite-animation')
   })
 
+  await t.test('presets are one shared list; edit needs images.edit', async () => {
+    assert.equal((await call('POST', '/api/sprite/presets', readerId, { name: 'denied' })).status, 403)
+    const created = await call('POST', '/api/sprite/presets', editorId, { name: '게임A · 걷기', options: { sampleCount: 14, keyColors: ['#5BE459'], despill: false, columns: 3 }, output: { zip: true, groupPath: '스프라이트/게임A' } })
+    assert.equal(created.status, 201, JSON.stringify(created.json))
+    const preset = created.json.data
+    assert.deepEqual([preset.options.sampleCount, preset.options.keyColors, preset.options.columns, preset.options.tolerance], [14, ['#5BE459'], 3, 0.1], 'stored whole, defaults filled')
+    assert.deepEqual(preset.output, { zip: true, groupPath: '스프라이트/게임A' })
+    assert.equal((await call('POST', '/api/sprite/presets', makerId, { name: '게임a · 걷기' })).status, 409, 'names are unique, case-insensitive')
+    const listed = await call('GET', '/api/sprite/presets', readerId)
+    assert.deepEqual(listed.json.data.map((item: { id: string }) => item.id), [preset.id], 'every account sees the same list')
+    const renamed = await call('PUT', `/api/sprite/presets/${preset.id}`, makerId, { name: '게임A · 공격', options: { sampleCount: 20 } })
+    assert.deepEqual([renamed.json.data.name, renamed.json.data.options.sampleCount, renamed.json.data.options.columns], ['게임A · 공격', 20, 0], 'options are replaced, not merged')
+    assert.deepEqual(renamed.json.data.output, preset.output, 'output kept when not sent')
+    assert.equal((await call('DELETE', `/api/sprite/presets/${preset.id}`, readerId)).status, 403)
+    assert.equal((await call('DELETE', `/api/sprite/presets/${preset.id}`, makerId)).status, 200)
+    assert.equal((await call('DELETE', `/api/sprite/presets/${preset.id}`, makerId)).status, 404)
+  })
+
+  await t.test('batch: per-video states while running, ZIP of the saved sheets, stop after the current video', async () => {
+    const green = await saveSpriteOutputToLibrary({ bytes: fs.readFileSync(path.join(__dirname, 'fixtures/av-golden/sprite/inputs/green.mp4')), extension: 'mp4', mimeType: 'video/mp4', group: { groupPath: 'sprite-test/inputs' } })
+    const dupes = await saveSpriteOutputToLibrary({ bytes: fs.readFileSync(path.join(__dirname, 'fixtures/av-golden/sprite/inputs/dupes.mp4')), extension: 'mp4', mimeType: 'video/mp4', group: { groupPath: 'sprite-test/inputs' } })
+    const started = await call('POST', '/api/sprite/extract-batch', makerId, { videoHashes: [videoHash, green.compositeHash], options: { intervalSeconds: 0.25 }, render: { columns: 2 }, zip: true })
+    assert.equal(started.status, 202, JSON.stringify(started.json))
+    const jobId = started.json.data.jobId
+    assert.equal((await call('GET', `/api/sprite/batches/${jobId}/items`, otherMakerId)).status, 403, 'owner only')
+    const job = await waitJob(jobId, makerId)
+    assert.equal(job.status, 'completed', job.failureMessage ?? '')
+    assert.deepEqual(job.result.items.map((item: { status: string }) => item.status), ['done', 'failed'], 'the green video fails on the magenta key')
+    assert.deepEqual([job.result.succeeded, job.result.failed, job.result.skipped, job.result.stopped], [1, 1, 0, false])
+    const live = await call('GET', `/api/sprite/batches/${jobId}/items`, makerId)
+    assert.deepEqual(live.json.data.items.map((item: { status: string }) => item.status), ['done', 'failed'])
+    assert.ok(job.result.zip, 'zip requested')
+    const zip = await call('GET', `/api/sprite/results/${job.result.zip.workspaceId}/download?file=${encodeURIComponent(job.result.zip.fileName)}`, makerId)
+    assert.equal(zip.headers.get('content-type'), 'application/zip')
+    const AdmZip = (await import('adm-zip')).default
+    const names = new AdmZip(zip.bytes!).getEntries().map((entry) => entry.entryName).sort()
+    assert.equal(names.length, 2)
+    assert.ok(names.includes('batch-manifest.json'))
+    assert.match(names.find((name) => name !== 'batch-manifest.json')!, /\.png$/)
+    assert.equal((await call('GET', `/api/sprite/results/${job.result.zip.workspaceId}/download?file=${encodeURIComponent(job.result.zip.fileName)}`, otherMakerId)).status, 403)
+
+    const stopping = await call('POST', '/api/sprite/extract-batch', makerId, { videoHashes: [videoHash, dupes.compositeHash, green.compositeHash], options: { intervalSeconds: 0.25 } })
+    const stopJobId = stopping.json.data.jobId
+    assert.equal((await call('POST', `/api/sprite/batches/${stopJobId}/stop`, otherMakerId)).status, 403)
+    assert.equal((await call('POST', `/api/sprite/batches/${stopJobId}/stop`, makerId)).status, 200)
+    const stopped = await waitJob(stopJobId, makerId)
+    assert.equal(stopped.status, 'completed', stopped.failureMessage ?? '')
+    assert.equal(stopped.result.stopped, true)
+    const statuses: string[] = stopped.result.items.map((item: { status: string }) => item.status)
+    assert.ok(statuses.includes('skipped'), statuses.join(','))
+    assert.deepEqual(statuses.slice(statuses.indexOf('skipped')), statuses.slice(statuses.indexOf('skipped')).map(() => 'skipped'), 'nothing runs after the stop')
+    assert.equal(stopped.result.zip, null)
+    assert.equal((await call('POST', `/api/sprite/batches/${stopJobId}/stop`, makerId)).status, 409, 'already finished')
+
+    // One range for videos of different lengths: an end past a video means "to its end".
+    const longRange = await call('POST', '/api/sprite/extract-batch', makerId, { videoHashes: [videoHash, dupes.compositeHash], options: { intervalSeconds: 0.25, startTime: 0, endTime: 999 } })
+    assert.equal(longRange.status, 202, JSON.stringify(longRange.json))
+    const clamped = await waitJob(longRange.json.data.jobId, makerId)
+    assert.equal(clamped.status, 'completed', clamped.failureMessage ?? '')
+    assert.ok(clamped.result.items.every((item: { status: string; error?: string }) => item.status === 'done' || !/종료 시간/.test(item.error ?? '')), JSON.stringify(clamped.result.items))
+  })
+
+  await t.test('a still of the video for browsers that cannot play it', async () => {
+    assert.equal((await call('GET', `/api/sprite/videos/${videoHash}/frame?t=0.5`, undefined)).status, 401)
+    const frame = await call('GET', `/api/sprite/videos/${videoHash}/frame?t=0.5&size=64`, readerId)
+    assert.equal(frame.status, 200)
+    assert.equal(frame.headers.get('content-type'), 'image/png')
+    const sharp = (await import('sharp')).default
+    const meta = await sharp(frame.bytes!).metadata()
+    assert.deepEqual([meta.width, meta.height], [64, 64])
+    assert.equal((await call('GET', `/api/sprite/videos/${sheetHash}/frame`, readerId)).status, 422, 'images are not videos')
+  })
+
   await t.test('MCP tools: listing follows the account, results carry composite hashes, frames ZIP artifact', async () => {
     const { createMcpServer } = await import('../src/mcp/server')
     const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')

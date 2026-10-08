@@ -11,7 +11,10 @@ import {
   buildFramePreview,
   buildFramesZip,
   buildSummary,
+  getExtractBatchItems,
   probeLibraryVideo,
+  renderVideoFrame,
+  requestExtractBatchStop,
   renderBuildSheet,
   requireBuild,
   saveBuild,
@@ -23,6 +26,7 @@ import {
   type SpriteRequester,
 } from '../services/sprite/spriteService'
 import type { SpriteGroupTarget } from '../services/sprite/spriteLibrary'
+import { createSpritePreset, deleteSpritePreset, listSpritePresets, updateSpritePreset } from '../services/sprite/spritePresets'
 
 /**
  * /api/sprite — sprite sheets from library videos (extract, re-layout, save, frame ZIP), sheet normalisation and
@@ -109,6 +113,32 @@ router.get('/videos/:hash/info', requirePermission(VIEW), handle(async (req, res
   res.json(successResponse(await probeLibraryVideo(String(req.params.hash))))
 }))
 
+/** A still of the video at `t` seconds (PNG), when the browser cannot play the file. */
+router.get('/videos/:hash/frame', requirePermission(VIEW), handle(async (req, res) => {
+  const png = await renderVideoFrame(String(req.params.hash), numberQuery(req.query.t) ?? 0, numberQuery(req.query.size) ?? 1024)
+  res.setHeader('Content-Type', 'image/png')
+  res.setHeader('Cache-Control', 'private, max-age=300')
+  res.end(png)
+}))
+
+/** Extraction presets: one list shared by every account. */
+router.get('/presets', requirePermission(VIEW), handle(async (_req, res) => {
+  res.json(successResponse(listSpritePresets()))
+}))
+
+router.post('/presets', requirePermission(EDIT), handle(async (req, res) => {
+  res.status(201).json(successResponse(createSpritePreset(req.body ?? {}, requester(req).accountId)))
+}))
+
+router.put('/presets/:id', requirePermission(EDIT), handle(async (req, res) => {
+  res.json(successResponse(updateSpritePreset(String(req.params.id), req.body ?? {}, requester(req).accountId)))
+}))
+
+router.delete('/presets/:id', requirePermission(EDIT), handle(async (req, res) => {
+  deleteSpritePreset(String(req.params.id))
+  res.json(successResponse({ deleted: true }))
+}))
+
 router.post('/extract', requirePermission(EDIT), requireUploadWhenSaving, handle(async (req, res) => {
   const body = req.body ?? {}
   const job = await startExtractJob({
@@ -129,9 +159,21 @@ router.post('/extract-batch', requirePermission(EDIT), requirePermission(UPLOAD)
     options: body.options ?? {},
     render: body.render ? renderFrom(body.render) : undefined,
     save: saveTarget(body.save ?? true) ?? {},
+    zip: body.zip === true,
     requester: requester(req),
   })
   res.status(202).json(successResponse(job))
+}))
+
+/** Per-video states of a running batch (null when the run is long finished). */
+router.get('/batches/:jobId/items', requirePermission(VIEW), handle(async (req, res) => {
+  res.json(successResponse(getExtractBatchItems(String(req.params.jobId), requester(req))))
+}))
+
+/** Finish the current video, then end the batch. */
+router.post('/batches/:jobId/stop', requirePermission(EDIT), handle(async (req, res) => {
+  requestExtractBatchStop(String(req.params.jobId), requester(req))
+  res.json(successResponse({ stopping: true }))
 }))
 
 router.get('/builds/:buildId', requirePermission(VIEW), handle(async (req, res) => {

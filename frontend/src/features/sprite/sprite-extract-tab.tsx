@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Film, Locate, Pipette, Plus, X } from 'lucide-react'
+import { Download, Film, Locate, Settings2, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -9,98 +10,153 @@ import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useI18n } from '@/i18n'
+import { triggerBrowserDownload } from '@/lib/api-client'
 import { getErrorMessage } from '@/lib/error-message'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { useRuntimeJob } from '@/lib/use-runtime-job'
-import { getSpriteVideoInfo, libraryMediaFileUrl, libraryThumbnailUrl, saveSpriteBuild, startSpriteExtract, startSpriteExtractBatch, type SpriteExtractBatchResult, type SpriteExtractResult, type SpriteRect } from '@/lib/api-sprite'
+import {
+  getSpriteBatchItems,
+  getSpriteVideoInfo,
+  libraryMediaFileUrl,
+  saveSpriteBuild,
+  spriteResultDownloadUrl,
+  spriteVideoFrameUrl,
+  startSpriteExtract,
+  startSpriteExtractBatch,
+  stopSpriteBatch,
+  type SpriteBatchItem,
+  type SpriteExtractBatchResult,
+  type SpriteExtractOptions,
+  type SpriteExtractResult,
+  type SpriteGroupTarget,
+  type SpriteRect,
+} from '@/lib/api-sprite'
 import { cn } from '@/lib/utils'
-import { LibraryMediaButtons, LibraryResults } from './sprite-library'
-import { DEFAULT_OUTPUT, MAX_KEY_COLORS, MAX_SPRITE_FRAMES, defaultExtractForm, estimateFrameIndices, extractSignature, normalizeHex, resolvedEndTime, toExtractOptions, withDespill, type ExtractForm, type OutputForm } from './sprite-options'
-import { HexInput, SpriteResultPanel } from './sprite-result-panel'
-import { MiniField, SliderLine, SpriteSection, SwitchLine } from './sprite-ui'
+import { LibraryResults } from './sprite-library'
+import { MAX_SPRITE_FRAMES, estimateFrameIndices, extractSignature, formFromOptions, normalizeHex, resolvedEndTime, resolvedStartTime, toExtractOptions, type ExtractForm, type OutputForm, type SaveForm } from './sprite-options'
+import { SpritePresetMenu } from './sprite-presets'
+import { SpriteQueue } from './sprite-queue'
+import { SpriteResultPanel } from './sprite-result-panel'
+import { SpriteSettingsPanel } from './sprite-settings-panel'
+import { readStoredSpriteSettings, writeStoredSpriteSettings } from './sprite-storage'
+import { MiniField } from './sprite-ui'
 import { SpriteVideoSource, type SpriteVideoHandle } from './sprite-video-source'
 import { useSpriteChatPage } from './use-sprite-chat-page'
 
-export function SpriteExtractTab({ initialVideoHash, onVideoChange }: { initialVideoHash: string | null; onVideoChange: (hash: string | null) => void }) {
+type CenterView = 'video' | 'result'
+
+function saveTarget(save: SaveForm): SpriteGroupTarget | true {
+  return save.groupPath ? { groupPath: save.groupPath } : true
+}
+
+/**
+ * Extract: one list of videos (one or many), one set of settings for all of them. A selected video can be previewed
+ * on its own before the whole list runs; the run saves every sheet to the library and can also hand over a ZIP.
+ */
+export function SpriteExtractTab({ initialVideoHash, onVideoChange, toolbarSlot }: {
+  initialVideoHash: string | null
+  onVideoChange: (hash: string | null) => void
+  /** Where the preset menu goes (the page toolbar, next to the tabs). */
+  toolbarSlot: HTMLElement | null
+}) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const { has } = useFeaturePermissions()
   const isWide = useDesktopPageLayout()
+  const [stored] = useState(readStoredSpriteSettings)
   const [videoHashes, setVideoHashes] = useState<string[]>(initialVideoHash ? [initialVideoHash] : [])
-  const videoHash = videoHashes.length === 1 ? videoHashes[0] : null
-  const batch = videoHashes.length > 1
-  const infoQuery = useQuery({ queryKey: ['sprite-video-info', videoHash], queryFn: () => getSpriteVideoInfo(videoHash as string), enabled: Boolean(videoHash), retry: false })
-  const info = infoQuery.data ?? null
-  const [form, setForm] = useState<ExtractForm>(() => defaultExtractForm(null))
-  const [output, setOutput] = useState<OutputForm>(DEFAULT_OUTPUT)
-  const [crop, setCrop] = useState<SpriteRect | null>(null)
+  const [selectedHash, setSelectedHash] = useState<string | null>(initialVideoHash)
+  const [form, setForm] = useState<ExtractForm>(stored.form)
+  const [output, setOutput] = useState<OutputForm>(stored.output)
+  const [save, setSave] = useState<SaveForm>(stored.save)
+  const [presetId, setPresetId] = useState<string | null>(stored.presetId)
+  const [view, setView] = useState<CenterView>('video')
   const [picking, setPicking] = useState(false)
   const [activeColor, setActiveColor] = useState(0)
-  const [jobId, setJobId] = useState<string | null>(null)
-  const [jobKind, setJobKind] = useState<'single' | 'batch'>('single')
-  const [jobSignature, setJobSignature] = useState('')
+  const [crop, setCrop] = useState<SpriteRect | null>(null)
+  const [previewJobId, setPreviewJobId] = useState<string | null>(null)
+  const [previewSignature, setPreviewSignature] = useState('')
   const [build, setBuild] = useState<SpriteExtractResult | null>(null)
   const [buildSignature, setBuildSignature] = useState('')
+  const [batchJobId, setBatchJobId] = useState<string | null>(null)
   const [batchResult, setBatchResult] = useState<SpriteExtractBatchResult | null>(null)
+  const [stopRequested, setStopRequested] = useState(false)
+  const [showSummary, setShowSummary] = useState(false)
   const [starting, setStarting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savedHashes, setSavedHashes] = useState<string[]>([])
   const videoRef = useRef<SpriteVideoHandle | null>(null)
 
-  useEffect(() => { if (initialVideoHash) setVideoHashes([initialVideoHash]) }, [initialVideoHash])
-  useEffect(() => { onVideoChange(videoHash) }, [videoHash, onVideoChange])
+  const selected = selectedHash && videoHashes.includes(selectedHash) ? selectedHash : videoHashes[0] ?? null
+  const multiple = videoHashes.length > 1
+  const infoQuery = useQuery({ queryKey: ['sprite-video-info', selected], queryFn: () => getSpriteVideoInfo(selected as string), enabled: Boolean(selected), retry: false, staleTime: 5 * 60_000 })
+  const info = infoQuery.data ?? null
 
-  // A new video resets what depends on its length and size; key colour and clean-up choices stay.
-  const infoKey = info ? `${info.compositeHash}` : null
+  useEffect(() => { if (initialVideoHash) { setVideoHashes((current) => current.includes(initialVideoHash) ? current : [initialVideoHash, ...current]); setSelectedHash(initialVideoHash) } }, [initialVideoHash])
+  useEffect(() => { onVideoChange(selected) }, [selected, onVideoChange])
+  useEffect(() => { writeStoredSpriteSettings({ form, output, save, presetId }) }, [form, output, save, presetId])
+  // A size the user never set follows the selected video.
   useEffect(() => {
-    if (!info) return
-    const fresh = defaultExtractForm(info)
-    setForm((current) => ({ ...current, startTime: 0, endTime: null, intervalValue: fresh.intervalValue, sampleCount: fresh.sampleCount, preCrop: null, outputWidth: info.width, outputHeight: info.height }))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [infoKey])
+    if (info && (!form.outputWidth || !form.outputHeight)) setForm((current) => ({ ...current, outputWidth: current.outputWidth || info.width, outputHeight: current.outputHeight || info.height }))
+  }, [info, form.outputWidth, form.outputHeight])
 
-  const job = useRuntimeJob<SpriteExtractResult | SpriteExtractBatchResult>(jobId, {
+  const previewJob = useRuntimeJob<SpriteExtractResult>(previewJobId, {
     onCompleted: (completed) => {
-      setJobId(null)
-      if (jobKind === 'batch') {
-        const result = completed.result as SpriteExtractBatchResult
-        setBatchResult(result)
-        setSavedHashes(result.items.flatMap((item) => item.compositeHash ? [item.compositeHash] : []))
-        if (result.failed) showSnackbar({ tone: 'error', message: t({ ko: '{count}개 영상은 실패했어.', en: '{count} videos failed.' }, { count: result.failed }) })
-        return
-      }
+      setPreviewJobId(null)
       setBuild(completed.result as SpriteExtractResult)
-      setBuildSignature(jobSignature)
+      setBuildSignature(previewSignature)
       setCrop(null)
+      setView('result')
     },
-    onFailed: (failed) => { setJobId(null); showSnackbar({ tone: 'error', message: failed.failureMessage ?? failed.message ?? t({ ko: '스프라이트를 만들지 못했어.', en: 'Could not build the sprites.' }) }) },
-    onCancelled: () => setJobId(null),
+    onFailed: (failed) => { setPreviewJobId(null); showSnackbar({ tone: 'error', message: failed.failureMessage ?? failed.message ?? t({ ko: '스프라이트를 만들지 못했어.', en: 'Could not build the sprites.' }) }) },
+    onCancelled: () => setPreviewJobId(null),
   })
 
-  const update = (patch: Partial<ExtractForm>) => setForm((current) => ({ ...current, ...patch }))
-  const indices = useMemo(() => estimateFrameIndices(form, info), [form, info])
-  const endTime = resolvedEndTime(form, info)
-  const signature = extractSignature(videoHash, form)
-  const stale = Boolean(build) && buildSignature !== signature
-  const tooMany = !batch && indices.length > MAX_SPRITE_FRAMES
-  const running = Boolean(jobId) || starting
-  const canRun = has('images.edit') && (batch ? true : Boolean(info)) && !tooMany && !running && (!batch || has('images.upload'))
+  const batchJob = useRuntimeJob<SpriteExtractBatchResult>(batchJobId, {
+    onCompleted: (completed) => {
+      const result = completed.result as SpriteExtractBatchResult
+      setBatchJobId(null)
+      setBatchResult(result)
+      setSavedHashes(result.items.flatMap((item) => item.compositeHash ? [item.compositeHash] : []))
+      if (result.zip) triggerBrowserDownload(spriteResultDownloadUrl(result.zip.workspaceId, result.zip.fileName))
+      showSnackbar({
+        tone: result.failed ? 'error' : 'info',
+        message: t({ ko: '{done}개 저장 · {failed}개 실패{skipped}', en: '{done} saved · {failed} failed{skipped}' }, { done: result.succeeded, failed: result.failed, skipped: result.skipped ? t({ ko: ' · {count}개 건너뜀', en: ' · {count} skipped' }, { count: result.skipped }) : '' }),
+      })
+    },
+    onFailed: (failed) => { setBatchJobId(null); showSnackbar({ tone: 'error', message: failed.failureMessage ?? failed.message ?? t({ ko: '일괄 생성이 실패했어.', en: 'The batch failed.' }) }) },
+    onCancelled: () => setBatchJobId(null),
+  })
+  const liveItems = useQuery({
+    queryKey: ['sprite-batch-items', batchJobId],
+    queryFn: () => getSpriteBatchItems(batchJobId as string),
+    enabled: Boolean(batchJobId),
+    refetchInterval: 1000,
+  })
 
-  const run = async () => {
+  const statuses = useMemo(() => {
+    const items: SpriteBatchItem[] = batchJobId ? liveItems.data?.items ?? videoHashes.map((videoHash) => ({ videoHash, status: 'waiting' as const })) : batchResult?.items ?? []
+    return new Map(items.map((item) => [item.videoHash, item]))
+  }, [batchJobId, liveItems.data, batchResult, videoHashes])
+
+  const indices = useMemo(() => estimateFrameIndices(form, info), [form, info])
+  const signature = extractSignature(selected, form)
+  const stale = Boolean(build) && buildSignature !== signature
+  const batchRunning = Boolean(batchJobId)
+  const previewRunning = Boolean(previewJobId)
+  const tooMany = indices.length > MAX_SPRITE_FRAMES
+  const canEdit = has('images.edit')
+  const canUpload = has('images.upload')
+  const canPreview = canEdit && Boolean(info) && !tooMany && !previewRunning && !batchRunning && !starting
+  const canRunAll = canEdit && canUpload && videoHashes.length > 0 && !batchRunning && !starting
+
+  const preview = async () => {
+    if (!selected) return
     setStarting(true)
     try {
-      if (batch) {
-        const options = toExtractOptions({ ...form, intervalUnit: 'seconds' }, null, output)
-        const record = await startSpriteExtractBatch({ videoHashes, options, save: true })
-        setJobKind('batch')
-        setBatchResult(null)
-        setJobId(record.jobId)
-      } else if (videoHash) {
-        const record = await startSpriteExtract({ videoHash, options: toExtractOptions(form, info, output) })
-        setJobKind('single')
-        setJobSignature(signature)
-        setJobId(record.jobId)
-      }
+      const record = await startSpriteExtract({ videoHash: selected, options: toExtractOptions(form, info, output) })
+      setPreviewSignature(signature)
+      setPreviewJobId(record.jobId)
     } catch (error) {
       showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '시작하지 못했어.', en: 'Could not start.' })) })
     } finally {
@@ -108,13 +164,40 @@ export function SpriteExtractTab({ initialVideoHash, onVideoChange }: { initialV
     }
   }
 
-  const save = async () => {
+  const runAll = async () => {
+    setStarting(true)
+    try {
+      // Frame intervals differ per video; several videos always take seconds.
+      const options = toExtractOptions(multiple ? { ...form, intervalUnit: 'seconds' } : form, info, output)
+      const record = await startSpriteExtractBatch({ videoHashes, options, render: { columns: output.columns, spacing: output.spacing, format: output.format, quality: output.quality }, save: saveTarget(save), zip: save.zip })
+      setBatchResult(null)
+      setStopRequested(false)
+      setShowSummary(true)
+      setBatchJobId(record.jobId)
+    } catch (error) {
+      showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '시작하지 못했어.', en: 'Could not start.' })) })
+    } finally {
+      setStarting(false)
+    }
+  }
+
+  const stopAfterCurrent = async () => {
+    if (!batchJobId) return
+    try {
+      await stopSpriteBatch(batchJobId)
+      setStopRequested(true)
+    } catch (error) {
+      showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '멈추지 못했어.', en: 'Could not stop.' })) })
+    }
+  }
+
+  const saveBuild = async () => {
     if (!build) return
     setSaving(true)
     try {
-      const saved = await saveSpriteBuild(build.buildId, { columns: output.columns, spacing: output.spacing, crop, format: output.format, quality: output.quality })
+      const saved = await saveSpriteBuild(build.buildId, { columns: output.columns, spacing: output.spacing, crop, format: output.format, quality: output.quality }, save.groupPath ? { groupPath: save.groupPath } : undefined)
       setSavedHashes((current) => [saved.compositeHash, ...current.filter((hash) => hash !== saved.compositeHash)])
-      showSnackbar({ message: t({ ko: '"스프라이트" 그룹에 저장했어.', en: 'Saved to the "스프라이트" group.' }) })
+      showSnackbar({ message: t({ ko: '"{group}" 그룹에 저장했어.', en: 'Saved to "{group}".' }, { group: save.groupPath ?? '스프라이트' }) })
     } catch (error) {
       showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })) })
     } finally {
@@ -122,201 +205,260 @@ export function SpriteExtractTab({ initialVideoHash, onVideoChange }: { initialV
     }
   }
 
-  const setColor = (index: number, value: string) => {
-    const hex = normalizeHex(value)
-    if (!hex) return
-    update({ keyColors: form.keyColors.map((color, position) => position === index ? hex : color) })
+  const detectBackground = () => {
+    const hex = videoRef.current?.detectBackground()
+    const color = hex ? normalizeHex(hex) : null
+    if (!color) { showSnackbar({ tone: 'error', message: t({ ko: '이 화면에서는 색을 읽을 수 없어.', en: 'The colour cannot be read here.' }) }); return }
+    const index = form.despill ? 0 : activeColor
+    setForm((current) => ({ ...current, keyColors: current.keyColors.map((value, position) => position === index ? color : value) }))
+    setPresetId(null)
   }
 
-  useSpriteChatPage({ videoHash, info, form, setForm, output, build })
+  const applyStored = useCallback((options: Partial<SpriteExtractOptions>, nextSave: SaveForm | null) => {
+    const restored = formFromOptions(options, info)
+    setForm(restored.form)
+    setOutput(restored.output)
+    if (nextSave) setSave(nextSave)
+    setActiveColor(0)
+  }, [info])
 
-  const summary = batch
-    ? t({ ko: '영상 {count}개 · 지정색{despill}', en: '{count} videos · key colour{despill}' }, { count: videoHashes.length, despill: form.despill ? t({ ko: ' + 디스필', en: ' + despill' }) : '' })
-    : t({ ko: '{count}프레임 · 지정색{despill}', en: '{count} frames · key colour{despill}' }, { count: indices.length, despill: form.despill ? t({ ko: ' + 디스필', en: ' + despill' }) : '' })
+  useSpriteChatPage({ videoHash: selected, info, form, setForm, output, build })
 
-  const left = (
-    <div className="flex min-w-0 flex-col">
-      <SpriteSection
-        title={t({ ko: '영상', en: 'Video' })}
-        actions={<LibraryMediaButtons kind="video" maxCount={100} initialHashes={videoHashes} onPick={(hashes) => { setVideoHashes(hashes); setBuild(null); setBatchResult(null); setSavedHashes([]) }} />}
-      >
-        {videoHash && info ? (
-          <SpriteVideoSource
-            ref={videoRef}
-            src={libraryMediaFileUrl(videoHash)}
-            info={info}
-            rangeStart={form.startTime}
-            rangeEnd={endTime}
-            picking={picking}
-            onPick={(hex) => {
-              setPicking(false)
-              if (!hex) { showSnackbar({ tone: 'error', message: t({ ko: '이 화면에서는 색을 읽을 수 없어.', en: 'The colour cannot be read here.' }) }); return }
-              setColor(form.despill ? 0 : activeColor, hex)
-            }}
-            preCrop={form.preCrop}
-            onPreCropChange={(rect) => update({ preCrop: rect })}
-          />
-        ) : batch ? (
-          <div className="flex flex-wrap gap-1.5">
-            {videoHashes.map((hash) => (
-              <div key={hash} className="group relative size-16 overflow-hidden rounded-sm bg-surface-low">
-                <img src={libraryThumbnailUrl(hash)} alt="" loading="lazy" className="size-full object-cover" />
-                <IconButton size="icon-xs" variant="secondary" className="absolute right-0.5 top-0.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100" label={t({ ko: '빼기', en: 'Remove' })} onClick={() => setVideoHashes(videoHashes.filter((item) => item !== hash))}><X /></IconButton>
-              </div>
-            ))}
-          </div>
+  const selectedItem = selected ? statuses.get(selected) : undefined
+  // Sheets appear in the summary as each video finishes, not only at the end.
+  const runSaved = batchRunning ? [...statuses.values()].flatMap((item) => item.status === 'done' && item.compositeHash ? [item.compositeHash] : []) : savedHashes
+  const progress = batchJob.job?.progress
+  const summary = [
+    t({ ko: '영상 {count}', en: '{count} videos' }, { count: videoHashes.length }),
+    form.samplingMode === 'count' ? t({ ko: '각 {count}컷', en: '{count} frames each' }, { count: form.sampleCount }) : `${form.intervalValue}${multiple || form.intervalUnit === 'seconds' ? 's' : 'f'}`,
+    output.columns > 0 ? t({ ko: '{count}열', en: '{count} cols' }, { count: output.columns }) : t({ ko: '열 자동', en: 'auto cols' }),
+    form.keyColors.join(' '),
+    `${output.format.toUpperCase()}${save.zip ? ' + ZIP' : ''}`,
+  ].join(' · ')
+
+  const queue = (
+    <SpriteQueue
+      hashes={videoHashes}
+      selected={selected}
+      statuses={statuses}
+      locked={batchRunning}
+      onSelect={(hash) => { setSelectedHash(hash); setPicking(false); const item = statuses.get(hash); setView(item?.status === 'done' ? 'result' : 'video') }}
+      onChange={(next) => { setVideoHashes(next); if (!next.includes(selected ?? '')) setSelectedHash(next[0] ?? null); setBatchResult(null) }}
+    />
+  )
+
+  const center = (
+    <section aria-label={t({ ko: '미리보기', en: 'Preview' })} className="flex min-w-0 flex-col gap-3">
+      <div className="flex min-h-8 items-center justify-between gap-2">
+        <span className="min-w-0 truncate text-sm text-muted-foreground">{info?.name ?? ''}</span>
+        <SegmentedControl
+          size="sm"
+          semantics="tabs"
+          value={view}
+          onChange={(next) => setView(next as CenterView)}
+          items={[{ value: 'video', label: t({ ko: '영상', en: 'Video' }) }, { value: 'result', label: t({ ko: '결과', en: 'Result' }) }]}
+          ariaLabel={t({ ko: '보기', en: 'View' })}
+        />
+      </div>
+      {previewRunning ? <RuntimeJobProgress job={previewJob.job} cancel={previewJob.cancel} isCancelling={previewJob.isCancelling} /> : null}
+      {view === 'video' ? (
+        selected && info ? (
+          <>
+            <SpriteVideoSource
+              ref={videoRef}
+              src={libraryMediaFileUrl(selected)}
+              frameUrl={(time) => spriteVideoFrameUrl(selected, time, Math.max(info.width, info.height))}
+              info={info}
+              rangeStart={resolvedStartTime(form)}
+              rangeEnd={resolvedEndTime(form, info)}
+              picking={picking}
+              onPick={(hex) => {
+                setPicking(false)
+                const color = normalizeHex(hex)
+                if (!color) { showSnackbar({ tone: 'error', message: t({ ko: '이 화면에서는 색을 읽을 수 없어.', en: 'The colour cannot be read here.' }) }); return }
+                const index = form.despill ? 0 : activeColor
+                setForm((current) => ({ ...current, keyColors: current.keyColors.map((value, position) => position === index ? color : value) }))
+                setPresetId(null)
+              }}
+              preCrop={form.preCrop}
+              onPreCropChange={(rect) => setForm((current) => ({ ...current, preCrop: rect }))}
+            />
+            <RangeControls form={form} setForm={(next) => { setForm(next); setPresetId(null) }} frameCount={indices.length} tooMany={tooMany} currentTime={() => Number((videoRef.current?.currentTime() ?? 0).toFixed(3))} maxTime={info.lastFrameTime} />
+          </>
         ) : (
           <div className="flex aspect-[16/10] items-center justify-center rounded-sm bg-surface-low text-muted-foreground">
             {infoQuery.isError ? <span role="alert" className="px-4 text-center text-sm text-destructive">{getErrorMessage(infoQuery.error, t({ ko: '영상을 읽지 못했어.', en: 'Could not read the video.' }))}</span> : <Film className="size-8 opacity-40" />}
           </div>
-        )}
-      </SpriteSection>
-
-      <SpriteSection title={t({ ko: '구간', en: 'Range' })} actions={!batch && info ? <span className="rounded-sm bg-fill px-2 py-0.5 text-xs font-semibold text-muted-foreground">{t({ ko: '예상 {count}프레임', en: '~{count} frames' }, { count: indices.length })}</span> : undefined}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <MiniField label={t({ ko: '시작 (초)', en: 'Start (s)' })}>
-            <div className="flex items-center gap-1">
-              <NumberStepperInput value={form.startTime} min={0} max={info?.lastFrameTime} step={0.001} onValueCommit={(value) => update({ startTime: Math.max(0, Number(value) || 0) })} />
-              {!batch ? <IconButton variant="ghost" size="icon-sm" disabled={!info} label={t({ ko: '현재 재생 위치 사용', en: 'Use current position' })} onClick={() => update({ startTime: Number((videoRef.current?.currentTime() ?? 0).toFixed(3)) })}><Locate /></IconButton> : null}
-            </div>
-          </MiniField>
-          <MiniField label={t({ ko: '끝 (초)', en: 'End (s)' })}>
-            <div className="flex items-center gap-1">
-              <NumberStepperInput value={form.endTime ?? (batch ? '' : Number(endTime.toFixed(3)))} placeholder={batch ? t({ ko: '끝까지', en: 'To the end' }) : undefined} min={0} max={info?.lastFrameTime} step={0.001} onValueCommit={(value) => update({ endTime: value === '' ? null : Number(value) })} />
-              {!batch ? <IconButton variant="ghost" size="icon-sm" disabled={!info} label={t({ ko: '현재 재생 위치 사용', en: 'Use current position' })} onClick={() => update({ endTime: Number((videoRef.current?.currentTime() ?? 0).toFixed(3)) })}><Locate /></IconButton> : null}
-            </div>
-          </MiniField>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <SegmentedControl size="sm" value={form.samplingMode} onChange={(mode) => update({ samplingMode: mode as ExtractForm['samplingMode'] })} items={[{ value: 'interval', label: t({ ko: '간격', en: 'Interval' }) }, { value: 'count', label: t({ ko: '개수', en: 'Count' }) }]} ariaLabel={t({ ko: '추출 방식', en: 'Sampling' })} />
-          {form.samplingMode === 'interval' ? (
-            <>
-              <NumberStepperInput className="w-24" value={form.intervalValue} min={form.intervalUnit === 'frames' ? 1 : 0.001} step={form.intervalUnit === 'frames' ? 1 : 0.01} onValueCommit={(value) => update({ intervalValue: Math.max(0.001, Number(value) || 1) })} aria-label={t({ ko: '간격', en: 'Interval' })} />
-              <SegmentedControl
-                size="sm"
-                value={batch ? 'seconds' : form.intervalUnit}
-                onChange={(unit) => {
-                  const fps = info?.fps ?? 30
-                  const next = unit as ExtractForm['intervalUnit']
-                  if (next === form.intervalUnit) return
-                  update({ intervalUnit: next, intervalValue: next === 'frames' ? Math.max(1, Math.round(form.intervalValue * fps)) : Number((form.intervalValue / fps).toFixed(4)) })
-                }}
-                items={[{ value: 'seconds', label: t({ ko: '초', en: 'sec' }) }, { value: 'frames', label: t({ ko: '프레임', en: 'frames' }), disabled: batch }]}
-                ariaLabel={t({ ko: '간격 단위', en: 'Interval unit' })}
-              />
-            </>
-          ) : (
-            <NumberStepperInput className="w-24" value={form.sampleCount} min={2} max={MAX_SPRITE_FRAMES} step={1} onValueCommit={(value) => update({ sampleCount: Math.max(2, Math.min(MAX_SPRITE_FRAMES, Number(value) || 2)) })} aria-label={t({ ko: '개수', en: 'Count' })} />
-          )}
-        </div>
-        <SwitchLine
-          label={t({ ko: '연속 중복 프레임 빼기', en: 'Drop repeated frames' })}
-          checked={form.removeDuplicateFrames}
-          onChange={(checked) => update({ removeDuplicateFrames: checked })}
-          extra={form.removeDuplicateFrames ? <NumberStepperInput className="h-7 w-36 text-xs" value={form.similarityPercent} min={1} max={100} step={0.5} onValueCommit={(value) => update({ similarityPercent: Math.max(1, Math.min(100, Number(value) || 99)) })} aria-label={t({ ko: '유사도 %', en: 'Similarity %' })} /> : undefined}
-        />
-        {tooMany ? <div role="alert" className="text-xs text-destructive">{t({ ko: '프레임은 {max}개까지야. 간격을 늘리거나 구간을 줄여.', en: 'Up to {max} frames. Widen the interval or shorten the range.' }, { max: MAX_SPRITE_FRAMES })}</div> : null}
-      </SpriteSection>
-
-      <SpriteSection title={t({ ko: '배경 지정색', en: 'Key colour' })}>
-        <div className="flex flex-col gap-1.5">
-          {form.keyColors.map((color, index) => (
-            <div key={index} className="flex items-center gap-2">
-              <label className={cn('relative size-7 shrink-0 cursor-pointer overflow-hidden rounded-sm border-2', index === activeColor && !form.despill ? 'border-foreground' : 'border-line')} style={{ background: color }} onClick={() => setActiveColor(index)}>
-                <input type="color" className="absolute inset-0 cursor-pointer opacity-0" value={color.toLowerCase()} aria-label={t({ ko: '색 고르기', en: 'Choose colour' })} onChange={(event) => setColor(index, event.target.value)} />
-              </label>
-              <HexInput value={color} label={t({ ko: '색 코드', en: 'Colour code' })} onCommit={(value) => setColor(index, value)} />
-              <span className="flex-1" />
-              {index === 0 ? (
-                <>
-                  <IconButton variant="secondary" size="icon-sm" active={picking} disabled={!info} label={t({ ko: '영상에서 색 찍기', en: 'Pick from the video' })} onClick={() => setPicking(!picking)}><Pipette /></IconButton>
-                  <IconButton variant="secondary" size="icon-sm" disabled={form.despill || form.keyColors.length >= MAX_KEY_COLORS} label={form.despill ? t({ ko: '디스필은 색 하나만 써', en: 'Despill uses one colour' }) : t({ ko: '색 추가', en: 'Add colour' })} onClick={() => { update({ keyColors: [...form.keyColors, '#00FF00'] }); setActiveColor(form.keyColors.length) }}><Plus /></IconButton>
-                </>
-              ) : (
-                <IconButton variant="ghost" size="icon-sm" label={t({ ko: '색 빼기', en: 'Remove colour' })} onClick={() => { update({ keyColors: form.keyColors.filter((_, position) => position !== index) }); setActiveColor(0) }}><X /></IconButton>
-              )}
-            </div>
-          ))}
-        </div>
-        <SliderLine label={t({ ko: '허용치', en: 'Tolerance' })} value={form.tolerancePercent} min={1} max={100} format={(value) => `${Math.round(value)}%`} onChange={(value) => update({ tolerancePercent: value })} />
-        <SliderLine label={t({ ko: '부드러움', en: 'Softness' })} value={form.softnessPercent} min={form.despill ? 1 : 0} max={100} format={(value) => `${Math.round(value)}%`} onChange={(value) => update({ softnessPercent: value })} />
-        <SwitchLine label={t({ ko: '디스필', en: 'Despill' })} checked={form.despill} onChange={(checked) => { setForm(withDespill(form, checked)); setActiveColor(0) }} />
-        {form.despill ? (
-          <div className="border-l-2 border-line pl-3">
-            <SwitchLine muted label={t({ ko: '가장자리 정리', en: 'Edge clean-up' })} checked={form.edgeCleanup} onChange={(checked) => update({ edgeCleanup: checked })} />
+        )
+      ) : build && build.videoHash === selected ? (
+        <SpriteResultPanel build={build} output={output} onOutputChange={setOutput} crop={crop} onCropChange={setCrop} stale={stale} saving={saving} canSave={canUpload} onSave={() => void saveBuild()} />
+      ) : selectedItem?.status === 'done' && selectedItem.compositeHash ? (
+        <div className="flex flex-col gap-2">
+          <div className="bg-checker flex h-[min(60vh,560px)] items-center justify-center overflow-auto rounded-sm p-3">
+            <img src={libraryMediaFileUrl(selectedItem.compositeHash)} alt={t({ ko: '저장된 시트', en: 'Saved sheet' })} className="max-h-full max-w-full object-contain" />
           </div>
-        ) : null}
-      </SpriteSection>
-
-      <SpriteSection title={t({ ko: '보정·크기', en: 'Clean-up and size' })}>
-        <SwitchLine
-          label={t({ ko: '자동 크롭', en: 'Auto crop' })}
-          checked={form.autoCrop}
-          onChange={(checked) => update({ autoCrop: checked })}
-          extra={form.autoCrop ? <NumberStepperInput className="h-7 w-36 text-xs" value={form.alphaThreshold} min={1} max={255} step={1} onValueCommit={(value) => update({ alphaThreshold: Math.max(1, Math.min(255, Number(value) || 20)) })} aria-label={t({ ko: '알파 임계값', en: 'Alpha threshold' })} /> : undefined}
-        />
-        <SwitchLine
-          label={t({ ko: '사전 크롭', en: 'Pre-crop' })}
-          checked={Boolean(form.preCrop)}
-          disabled={!info}
-          onChange={(checked) => update({ preCrop: checked && info ? { x: Math.round(info.width * 0.1), y: Math.round(info.height * 0.1), width: Math.round(info.width * 0.8), height: Math.round(info.height * 0.8) } : null })}
-        />
-        {form.preCrop ? (
-          <div className="grid grid-cols-2 gap-2">
-            {(['x', 'y', 'width', 'height'] as const).map((key) => (
-              <MiniField key={key} label={key === 'x' ? 'X' : key === 'y' ? 'Y' : key === 'width' ? 'W' : 'H'}>
-                <NumberStepperInput value={form.preCrop![key]} min={key === 'width' || key === 'height' ? 1 : 0} max={key === 'x' || key === 'width' ? info?.width : info?.height} step={1} onValueCommit={(value) => update({ preCrop: { ...form.preCrop!, [key]: Math.max(0, Math.round(Number(value) || 0)) } })} />
-              </MiniField>
-            ))}
+          <div className="font-mono text-xs text-muted-foreground">
+            {t({ ko: '{count}컷', en: '{count} frames' }, { count: selectedItem.frameCount ?? 0 })}{selectedItem.sheet ? ` · ${selectedItem.sheet.width}×${selectedItem.sheet.height}` : ''} · {save.groupPath ?? '스프라이트'}
           </div>
-        ) : null}
-        <SegmentedControl
-          size="sm"
-          value={form.resizeMode}
-          onChange={(mode) => update({ resizeMode: mode as ExtractForm['resizeMode'] })}
-          items={[{ value: 'none', label: t({ ko: '원본', en: 'Original' }) }, { value: 'contain', label: t({ ko: '맞춤', en: 'Fit' }) }, { value: 'cover', label: t({ ko: '채움', en: 'Fill' }) }, { value: 'stretch', label: t({ ko: '늘림', en: 'Stretch' }) }]}
-          ariaLabel={t({ ko: '크기 조정', en: 'Resize' })}
-        />
-        {form.resizeMode !== 'none' ? (
-          <div className="grid grid-cols-2 gap-3">
-            <MiniField label={t({ ko: '가로', en: 'Width' })}><NumberStepperInput value={form.outputWidth} min={1} max={16384} step={1} onValueCommit={(value) => update({ outputWidth: Math.max(1, Number(value) || 1) })} /></MiniField>
-            <MiniField label={t({ ko: '세로', en: 'Height' })}><NumberStepperInput value={form.outputHeight} min={1} max={16384} step={1} onValueCommit={(value) => update({ outputHeight: Math.max(1, Number(value) || 1) })} /></MiniField>
-          </div>
-        ) : null}
-      </SpriteSection>
-
-      <div className="sticky bottom-3 z-sticky mt-2 flex items-center gap-3 rounded-md bg-surface-container/95 p-1.5 pl-3 shadow-elevation-3 backdrop-blur-md">
-        <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{summary}</span>
-        <Button disabled={!canRun} onClick={() => void run()}>
-          <Film />
-          {t({ ko: '스프라이트 생성', en: 'Build sprites' })}
-        </Button>
-      </div>
-    </div>
-  )
-
-  const right = (
-    <div className="flex min-w-0 flex-col gap-4">
-      {jobId ? <RuntimeJobProgress job={job.job} cancel={job.cancel} isCancelling={job.isCancelling} /> : null}
-      {build && !batch ? (
-        <SpriteResultPanel build={build} output={output} onOutputChange={setOutput} crop={crop} onCropChange={setCrop} stale={stale} saving={saving} canSave={has('images.upload')} onSave={() => void save()} />
-      ) : batchResult ? null : (
+        </div>
+      ) : (
         <div className="bg-checker flex h-[min(56vh,420px)] items-center justify-center rounded-sm">
           <Film className="size-10 text-muted-foreground opacity-30" />
         </div>
       )}
-      {batchResult?.items.some((item) => item.error) ? (
-        <ul role="alert" className="flex flex-col gap-1 text-xs text-destructive">
-          {batchResult.items.filter((item) => item.error).map((item) => <li key={item.videoHash} className="truncate">{item.videoHash.slice(0, 12)} · {item.error}</li>)}
-        </ul>
-      ) : null}
-      <LibraryResults hashes={savedHashes} />
-    </div>
+    </section>
   )
 
-  return isWide ? (
-    <div className="grid grid-cols-[minmax(360px,4fr)_minmax(0,6fr)] items-start gap-8">{left}<div className="sticky top-[calc(var(--theme-shell-header-height)+1rem)]">{right}</div></div>
+  const right = showSummary && (batchRunning || batchResult) ? (
+    <RunSummary form={form} output={output} save={save} multiple={multiple} savedHashes={runSaved} canClose={!batchRunning} onClose={() => setShowSummary(false)} />
   ) : (
-    <div className="flex flex-col gap-6">{left}{right}</div>
+    <SpriteSettingsPanel
+      form={form}
+      setForm={(next) => { setForm(next); setPresetId(null) }}
+      output={output}
+      setOutput={(next) => { setOutput(next); setPresetId(null) }}
+      save={save}
+      setSave={(next) => { setSave(next); setPresetId(null) }}
+      info={info}
+      multiple={multiple}
+      picking={picking}
+      onPickingChange={(next) => { setPicking(next); if (next) setView('video') }}
+      activeColor={activeColor}
+      onActiveColorChange={setActiveColor}
+      onDetectBackground={detectBackground}
+      canSave={canUpload}
+    />
+  )
+
+  return (
+    <div className="flex flex-col">
+      {toolbarSlot ? createPortal(
+        <SpritePresetMenu
+          activeId={presetId}
+          current={() => ({ options: toExtractOptions(multiple ? { ...form, intervalUnit: 'seconds' } : form, info, output), save })}
+          onApply={applyStored}
+          onActiveChange={setPresetId}
+        />,
+        toolbarSlot,
+      ) : null}
+      {isWide ? (
+        <div className="grid grid-cols-[minmax(230px,280px)_minmax(0,1fr)_minmax(300px,360px)] items-start gap-7">{queue}{center}{right}</div>
+      ) : (
+        <div className="flex flex-col gap-6">{queue}{center}{right}</div>
+      )}
+
+      <div className="sticky bottom-3 z-sticky mt-4 flex flex-wrap items-center gap-3 rounded-md bg-surface-container/95 p-1.5 pl-3 shadow-elevation-3 backdrop-blur-md">
+        {batchRunning ? (
+          <span className="flex min-w-0 flex-1 items-center gap-3">
+            <span className="whitespace-nowrap font-mono text-xs">
+              {t({ ko: '{done} / {total} 완료', en: '{done} / {total} done' }, { done: [...statuses.values()].filter((item) => item.status === 'done').length, total: videoHashes.length })}
+              {[...statuses.values()].some((item) => item.status === 'failed') ? t({ ko: ' · {count} 실패', en: ' · {count} failed' }, { count: [...statuses.values()].filter((item) => item.status === 'failed').length }) : ''}
+            </span>
+            <span className="relative h-1 min-w-16 max-w-80 flex-1 rounded-full bg-surface-highest">
+              <span className="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width]" style={{ width: `${progress?.total ? Math.round((progress.processed / progress.total) * 100) : 0}%` }} />
+            </span>
+          </span>
+        ) : (
+          <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{summary}</span>
+        )}
+        {batchRunning ? (
+          <Button variant="secondary" disabled={stopRequested} onClick={() => void stopAfterCurrent()}>
+            <Square />{stopRequested ? t({ ko: '멈추는 중', en: 'Stopping' }) : t({ ko: '지금 영상 끝나고 멈추기', en: 'Stop after this video' })}
+          </Button>
+        ) : (
+          <>
+            {batchResult?.zip ? (
+              <IconButton variant="secondary" label={t({ ko: 'ZIP 다시 받기', en: 'Download the ZIP again' })} onClick={() => triggerBrowserDownload(spriteResultDownloadUrl(batchResult.zip!.workspaceId, batchResult.zip!.fileName))}><Download /></IconButton>
+            ) : null}
+            <Button variant="secondary" disabled={!canPreview} onClick={() => void preview()}>{t({ ko: '이 영상만 미리보기', en: 'Preview this video' })}</Button>
+            <Button disabled={!canRunAll} onClick={() => void runAll()}>
+              <Film />
+              {t({ ko: '전체 생성 · {count}', en: 'Build all · {count}' }, { count: videoHashes.length })}
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Range under the player: the whole video, or the same start/end seconds for every video. */
+function RangeControls({ form, setForm, frameCount, tooMany, currentTime, maxTime }: {
+  form: ExtractForm
+  setForm: (next: ExtractForm) => void
+  frameCount: number
+  tooMany: boolean
+  currentTime: () => number
+  maxTime: number
+}) {
+  const { t } = useI18n()
+  const update = (patch: Partial<ExtractForm>) => setForm({ ...form, ...patch })
+  return (
+    <div className="flex flex-col gap-3 pt-1">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">{t({ ko: '구간', en: 'Range' })}</span>
+          <SegmentedControl size="sm" value={form.rangeMode} onChange={(mode) => update({ rangeMode: mode as ExtractForm['rangeMode'] })} items={[{ value: 'full', label: t({ ko: '영상 전체', en: 'Whole video' }) }, { value: 'common', label: t({ ko: '공통 구간', en: 'Same range' }) }]} ariaLabel={t({ ko: '구간', en: 'Range' })} />
+        </div>
+        <span className={cn('font-mono text-xs', tooMany ? 'text-destructive' : 'text-muted-foreground')}>{t({ ko: '이 영상 예상 {count}컷', en: '~{count} frames here' }, { count: frameCount })}</span>
+      </div>
+      {form.rangeMode === 'common' ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <MiniField label={t({ ko: '시작 (초)', en: 'Start (s)' })}>
+            <div className="flex items-center gap-1">
+              <NumberStepperInput value={form.startTime} min={0} max={maxTime} step={0.001} onValueCommit={(value) => update({ startTime: Math.max(0, Number(value) || 0) })} />
+              <IconButton variant="ghost" size="icon-sm" label={t({ ko: '현재 재생 위치 사용', en: 'Use current position' })} onClick={() => update({ startTime: currentTime() })}><Locate /></IconButton>
+            </div>
+          </MiniField>
+          <MiniField label={t({ ko: '끝 (초)', en: 'End (s)' })}>
+            <div className="flex items-center gap-1">
+              <NumberStepperInput value={form.endTime ?? ''} placeholder={t({ ko: '끝까지', en: 'To the end' })} min={0} max={maxTime} step={0.001} onValueCommit={(value) => update({ endTime: value === '' ? null : Number(value) })} />
+              <IconButton variant="ghost" size="icon-sm" label={t({ ko: '현재 재생 위치 사용', en: 'Use current position' })} onClick={() => update({ endTime: currentTime() })}><Locate /></IconButton>
+            </div>
+          </MiniField>
+        </div>
+      ) : null}
+      {tooMany ? <div role="alert" className="text-xs text-destructive">{t({ ko: '프레임은 {max}개까지야. 간격을 늘리거나 구간을 줄여.', en: 'Up to {max} frames. Widen the interval or shorten the range.' }, { max: MAX_SPRITE_FRAMES })}</div> : null}
+    </div>
+  )
+}
+
+/** While (and after) the whole list runs: what this run uses, and the sheets saved so far. */
+function RunSummary({ form, output, save, multiple, savedHashes, canClose, onClose }: {
+  form: ExtractForm
+  output: OutputForm
+  save: SaveForm
+  multiple: boolean
+  savedHashes: string[]
+  canClose: boolean
+  onClose: () => void
+}) {
+  const { t } = useI18n()
+  const rows: Array<[string, string]> = [
+    [t({ ko: '추출', en: 'Frames' }), form.samplingMode === 'count' ? t({ ko: '영상마다 {count}컷', en: '{count} per video' }, { count: form.sampleCount }) : `${form.intervalValue}${multiple || form.intervalUnit === 'seconds' ? 's' : 'f'}`],
+    [t({ ko: '구간', en: 'Range' }), form.rangeMode === 'full' ? t({ ko: '영상 전체', en: 'Whole video' }) : `${form.startTime}s – ${form.endTime ?? t({ ko: '끝', en: 'end' })}`],
+    [t({ ko: '배경', en: 'Background' }), `${form.keyColors.join(' ')} · ${Math.round(form.tolerancePercent)}% / ${Math.round(form.softnessPercent)}%${form.despill ? t({ ko: ' · 디스필', en: ' · despill' }) : ''}`],
+    [t({ ko: '시트', en: 'Sheet' }), `${output.columns > 0 ? t({ ko: '{count}열', en: '{count} cols' }, { count: output.columns }) : t({ ko: '열 자동', en: 'auto cols' })} · ${output.spacing}px · ${output.format.toUpperCase()}`],
+    [t({ ko: '저장', en: 'Saved to' }), `${save.groupPath ?? '스프라이트'}${save.zip ? ' + ZIP' : ''}`],
+  ]
+  return (
+    <div className="flex min-w-0 flex-col">
+      <div className="flex min-h-8 items-center justify-between gap-2 pb-2">
+        <h2 className="text-sm font-semibold">{t({ ko: '이번 생성', en: 'This run' })}</h2>
+        {canClose ? <IconButton variant="ghost" size="icon-sm" label={t({ ko: '설정으로 돌아가기', en: 'Back to settings' })} onClick={onClose}><Settings2 /></IconButton> : null}
+      </div>
+      {rows.map(([label, value]) => (
+        <div key={label} className="flex justify-between gap-3 border-t border-line py-2 text-sm">
+          <span className="shrink-0 text-muted-foreground">{label}</span>
+          <span className="min-w-0 truncate text-right font-mono text-xs leading-5">{value}</span>
+        </div>
+      ))}
+      {savedHashes.length ? (
+        <>
+          <h2 className="pb-2 pt-5 text-sm font-semibold">{t({ ko: '저장된 시트', en: 'Saved sheets' })}</h2>
+          <LibraryResults hashes={savedHashes} />
+        </>
+      ) : null}
+    </div>
   )
 }

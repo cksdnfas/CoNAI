@@ -74,11 +74,43 @@ export interface SpriteExtractResult {
   saved: { compositeHash: string; groupId: number } | null
 }
 
+export type SpriteBatchItemStatus = 'waiting' | 'running' | 'done' | 'failed' | 'skipped'
+
+export interface SpriteBatchItem {
+  videoHash: string
+  status: SpriteBatchItemStatus
+  compositeHash?: string
+  frameCount?: number
+  sheet?: { width: number; height: number }
+  error?: string
+}
+
 export interface SpriteExtractBatchResult {
   total: number
   succeeded: number
   failed: number
-  items: Array<{ videoHash: string; compositeHash?: string; frameCount?: number; sheet?: { width: number; height: number }; error?: string }>
+  skipped: number
+  stopped: boolean
+  items: SpriteBatchItem[]
+  zip: { workspaceId: string; fileName: string } | null
+}
+
+/** Shared (every account) extraction preset: the full options plus the batch output choices. */
+export interface SpritePreset {
+  id: string
+  name: string
+  options: SpriteExtractOptions
+  output: { groupPath: string | null; zip: boolean }
+  updatedAt: string
+}
+
+export type SpritePresetInput = { name?: string; options?: Partial<SpriteExtractOptions>; output?: SpritePreset['output'] }
+
+/** The settings record embedded in a saved sheet (`GET /api/sprite/settings/:hash`). */
+export interface SpriteSheetSettings {
+  kind: string
+  options?: SpriteExtractOptions
+  render?: SpriteRender
 }
 
 export type SpriteReadOrder = 'row_major' | 'column_major'
@@ -147,8 +179,43 @@ export function startSpriteExtract(input: { videoHash: string; options: Partial<
   return requestApiData<RuntimeJobRecord<SpriteExtractResult>>('/api/sprite/extract', json(input))
 }
 
-export function startSpriteExtractBatch(input: { videoHashes: string[]; options: Partial<SpriteExtractOptions>; render?: SpriteRender; save?: SpriteGroupTarget | boolean }) {
+export function startSpriteExtractBatch(input: { videoHashes: string[]; options: Partial<SpriteExtractOptions>; render?: SpriteRender; save?: SpriteGroupTarget | boolean; zip?: boolean }) {
   return requestApiData<RuntimeJobRecord<SpriteExtractBatchResult>>('/api/sprite/extract-batch', json(input))
+}
+
+/** Per-video states of a running batch; null when the run is long finished. */
+export function getSpriteBatchItems(jobId: string) {
+  return requestApiData<{ items: SpriteBatchItem[]; stopRequested: boolean } | null>(`/api/sprite/batches/${encodeURIComponent(jobId)}/items`)
+}
+
+/** Finish the current video, then end the batch. */
+export function stopSpriteBatch(jobId: string) {
+  return requestApiData<{ stopping: boolean }>(`/api/sprite/batches/${encodeURIComponent(jobId)}/stop`, { method: 'POST' })
+}
+
+export function listSpritePresets() {
+  return requestApiData<SpritePreset[]>('/api/sprite/presets')
+}
+
+export function createSpritePreset(input: SpritePresetInput) {
+  return requestApiData<SpritePreset>('/api/sprite/presets', json(input))
+}
+
+export function updateSpritePreset(id: string, input: SpritePresetInput) {
+  return requestApiData<SpritePreset>(`/api/sprite/presets/${encodeURIComponent(id)}`, { ...json(input), method: 'PUT' })
+}
+
+export function deleteSpritePreset(id: string) {
+  return requestApiData<{ deleted: boolean }>(`/api/sprite/presets/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export function getSpriteSheetSettings(compositeHash: string) {
+  return requestApiData<SpriteSheetSettings | null>(`/api/sprite/settings/${encodeURIComponent(compositeHash)}`)
+}
+
+/** A still of a library video at `time` seconds (PNG), for browsers that cannot play the file. */
+export function spriteVideoFrameUrl(compositeHash: string, time: number, size = 1024) {
+  return buildApiUrl(`/api/sprite/videos/${encodeURIComponent(compositeHash)}/frame?t=${time.toFixed(3)}&size=${size}`)
 }
 
 export function saveSpriteBuild(buildId: string, render: SpriteRender, group?: SpriteGroupTarget) {

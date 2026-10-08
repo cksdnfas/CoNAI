@@ -55,7 +55,6 @@ export function SpriteResultPanel({ build, output, onOutputChange, crop, onCropC
             if (!editingCrop) { setView('frames'); if (!crop) onCropChange({ x: 0, y: 0, width: build.frameWidth, height: build.frameHeight }) }
             setEditingCrop(!editingCrop)
           }}><Crop /></IconButton>
-          <LayoutPopover output={output} onOutputChange={onOutputChange} layout={layout} />
           <DownloadPopover buildId={build.buildId} output={output} onOutputChange={onOutputChange} render={render} crop={crop} disabled={tooLarge} />
           <Button size="sm" variant="secondary" disabled={!canSave || saving || tooLarge} onClick={onSave}>
             {saving ? <Loader2 className="animate-spin" /> : <Save />}
@@ -86,7 +85,8 @@ function FramePlayer({ build, crop, editingCrop, onCropChange }: { build: Sprite
   const [index, setIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [fps, setFps] = useState(12)
-  const [zoom, setZoom] = useState(200)
+  // Start at the largest zoom that keeps the frame inside the stage (about 400px), never above 200%.
+  const [zoom, setZoom] = useState(() => [...FRAME_ZOOMS].reverse().find((value) => value <= 200 && Math.max(build.frameWidth, build.frameHeight) * value / 100 <= 400) ?? FRAME_ZOOMS[0])
   const count = build.frameCount
   const native = Math.min(1024, Math.max(build.frameWidth, build.frameHeight))
   const urls = useMemo(() => Array.from({ length: count }, (_, frame) => spriteFrameUrl(build.buildId, frame, native)), [build.buildId, count, native])
@@ -244,28 +244,6 @@ function SheetView({ buildId, render }: { buildId: string; render: SpriteRender 
         </Select>
       </div>
     </div>
-  )
-}
-
-function LayoutPopover({ output, onOutputChange, layout }: { output: OutputForm; onOutputChange: (next: OutputForm) => void; layout: { columns: number; rows: number; width: number; height: number } | null }) {
-  const { t } = useI18n()
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <IconButton variant="ghost" size="icon-sm" label={t({ ko: '시트 배치', en: 'Sheet layout' })}><LayoutGrid /></IconButton>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="flex w-80 flex-col gap-3">
-        <div className="grid grid-cols-2 gap-2">
-          <MiniField label={t({ ko: '열 (0 = 자동)', en: 'Columns (0 = auto)' })}>
-            <NumberStepperInput value={output.columns} min={0} max={64} step={1} onValueCommit={(value) => onOutputChange({ ...output, columns: Number(value) || 0 })} />
-          </MiniField>
-          <MiniField label={t({ ko: '간격', en: 'Spacing' })}>
-            <NumberStepperInput value={output.spacing} min={0} max={64} step={1} onValueCommit={(value) => onOutputChange({ ...output, spacing: Number(value) || 0 })} />
-          </MiniField>
-        </div>
-        {layout ? <div className="font-mono text-xs text-muted-foreground">{layout.columns}×{layout.rows} = {layout.width}×{layout.height}</div> : null}
-      </PopoverContent>
-    </Popover>
   )
 }
 

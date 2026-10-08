@@ -3,16 +3,16 @@ import path from 'path'
 import { RuntimeJobRunner, type RuntimeJobContext } from '../runtimeJobs/runtimeJobRunner'
 import { RuntimeJobStore } from '../runtimeJobs/runtimeJobStore'
 import { isRuntimeJobTerminalStatus, type RuntimeJobKind, type RuntimeJobRecord } from '../../types/runtimeJob'
-import { readBuildMeta, type SpriteBuildMeta } from './spriteBuild'
+import { readBuildMeta, writeZip, type SpriteBuildMeta } from './spriteBuild'
 import { canAccessSpriteWorkspace, createSpriteWorkspace, getSpriteWorkspace, removeSpriteWorkspace, workspaceFile, type SpriteWorkspace } from './spriteCache'
 import { spriteOptionsXmp } from './spriteEncode'
 import { SpriteError } from './spriteErrors'
-import { probeVideo } from './spriteFfmpeg'
+import { ffmpegBinary, probeVideo, runTool } from './spriteFfmpeg'
 import { ANIMATION_DEFAULTS, ANIMATION_MIME, type AnimationOptions } from './spriteAnimation'
 import { NORMALIZATION_DEFAULTS, type NormalizationOptions, type NormalizationSheetOptions } from './spriteNormalize'
 import { resolveExtractOptions, validateExtractOptions, validateImageOutput, type SpriteExtractOptionsInput, type SpriteImageFormat, type SpriteVideoInfo } from './spriteOptions'
 import type { Rect } from './spritePixels'
-import { requireLibraryImage, requireLibraryVideo, saveSpriteOutputToLibrary, type SpriteGroupTarget } from './spriteLibrary'
+import { findLibraryMedia, requireLibraryImage, requireLibraryVideo, saveSpriteOutputToLibrary, type SpriteGroupTarget } from './spriteLibrary'
 import { runSpriteTask } from './spriteWorkerClient'
 import type { RenderSpec } from './spriteTasks'
 
@@ -63,6 +63,20 @@ export function requireBuild(id: string, requester: SpriteRequester): { workspac
   const meta = readBuildMeta(workspace.dir)
   if (!meta) throw new SpriteError('작업 결과가 아직 준비되지 않았거나 만료되었습니다.', 410)
   return { workspace, meta }
+}
+
+/**
+ * One frame of a library video as PNG, for browsers that cannot play the file itself: the picture stays exact so the
+ * eyedropper still reads the real key colour.
+ */
+export async function renderVideoFrame(compositeHash: string, time: number, maxSide: number): Promise<Buffer> {
+  const media = requireLibraryVideo(compositeHash)
+  const side = Math.round(Math.min(2048, Math.max(64, Number.isFinite(maxSide) ? maxSide : 1024)))
+  const seconds = Math.max(0, Number.isFinite(time) ? time : 0)
+  const scale = `scale='if(gt(iw,ih),min(${side},iw),-2)':'if(gt(iw,ih),-2,min(${side},ih))'`
+  const { stdout } = await runTool(ffmpegBinary(), ['-v', 'error', '-ss', seconds.toFixed(3), '-i', media.filePath, '-frames:v', '1', '-vf', scale, '-f', 'image2pipe', '-c:v', 'png', 'pipe:1'], { timeoutMs: 30_000 })
+  if (stdout.length === 0) throw new SpriteError('이 위치의 프레임을 읽지 못했습니다.', 422)
+  return stdout
 }
 
 export async function probeLibraryVideo(compositeHash: string): Promise<SpriteVideoInfo & { compositeHash: string; name: string }> {
@@ -191,39 +205,159 @@ export interface ExtractBatchJobParams {
   options: SpriteExtractOptionsInput
   render?: RenderInput
   save: SpriteGroupTarget
+  /** Also pack the saved sheets (and a manifest) into one ZIP to download. */
+  zip?: boolean
   requester: SpriteRequester
+}
+
+export type ExtractBatchItemStatus = 'waiting' | 'running' | 'done' | 'failed' | 'skipped'
+
+export interface ExtractBatchItem {
+  videoHash: string
+  status: ExtractBatchItemStatus
+  compositeHash?: string
+  frameCount?: number
+  sheet?: { width: number; height: number }
+  error?: string
 }
 
 export interface ExtractBatchJobResult {
   total: number
   succeeded: number
   failed: number
-  items: Array<{ videoHash: string; compositeHash?: string; frameCount?: number; sheet?: { width: number; height: number }; error?: string }>
+  skipped: number
+  /** True when "stop after this video" ended the run early. */
+  stopped: boolean
+  items: ExtractBatchItem[]
+  zip: { workspaceId: string; fileName: string } | null
+}
+
+/**
+ * Live state of running batches, for the per-video list while the job runs and for "stop after this video". Sprite
+ * jobs run inline (one process), so a map is enough; entries stay a while after the end for late polls.
+ */
+interface LiveBatch {
+  items: ExtractBatchItem[]
+  stopRequested: boolean
+  requestedByAccountId: number | null
+}
+const liveBatches = new Map<string, LiveBatch>()
+const LIVE_BATCH_KEEP_MS = 60 * 60 * 1000
+
+function requireBatchAccess(jobId: string, requester: SpriteRequester): void {
+  const ownership = RuntimeJobStore.getOwnership(jobId)
+  if (!ownership) throw new SpriteError('작업을 찾을 수 없습니다.', 404)
+  if (ownership.requestedByAccountId !== null && requester.accountType !== 'admin' && ownership.requestedByAccountId !== requester.accountId) {
+    throw new SpriteError('이 작업에 접근할 수 없습니다.', 403)
+  }
+}
+
+/** Per-video states of a batch; null once the run is long gone (use the job result then). */
+export function getExtractBatchItems(jobId: string, requester: SpriteRequester): { items: ExtractBatchItem[]; stopRequested: boolean } | null {
+  requireBatchAccess(jobId, requester)
+  const live = liveBatches.get(jobId)
+  return live ? { items: live.items.map((item) => ({ ...item })), stopRequested: live.stopRequested } : null
+}
+
+/** Finish the video being processed, then end the batch with what is done (the rest are skipped). */
+export function requestExtractBatchStop(jobId: string, requester: SpriteRequester): void {
+  requireBatchAccess(jobId, requester)
+  const live = liveBatches.get(jobId)
+  const job = RuntimeJobStore.get(jobId)
+  if (!live || !job || isRuntimeJobTerminalStatus(job.status)) throw new SpriteError('이미 끝난 작업입니다.', 409)
+  live.stopRequested = true
+}
+
+function fileStem(name: string, fallback: string): string {
+  return (path.parse(name).name || fallback).replace(/[^\p{L}\p{N}._-]+/gu, '_').slice(0, 80) || fallback
+}
+
+/** The saved sheets under their video names (duplicates get -2, -3), plus a manifest of the run. */
+async function writeBatchZip(params: ExtractBatchJobParams, items: ExtractBatchItem[]): Promise<ExtractBatchJobResult['zip']> {
+  const saved = items.filter((item) => item.status === 'done' && item.compositeHash)
+  if (saved.length === 0) return null
+  const workspace = createSpriteWorkspace('batch', params.requester)
+  const used = new Map<string, number>()
+  const entries: Array<{ name: string; data: Buffer }> = []
+  const manifest: Array<Record<string, unknown>> = []
+  for (const item of items) {
+    const video = findLibraryMedia(item.videoHash)
+    const stem = fileStem(video?.name ?? '', item.videoHash.slice(0, 12))
+    if (item.status !== 'done' || !item.compositeHash) {
+      manifest.push({ video: video?.name ?? item.videoHash, status: item.status, error: item.error ?? null })
+      continue
+    }
+    const sheet = requireLibraryImage(item.compositeHash)
+    const count = (used.get(stem.toLowerCase()) ?? 0) + 1
+    used.set(stem.toLowerCase(), count)
+    const name = `${stem}${count > 1 ? `-${count}` : ''}${path.extname(sheet.filePath).toLowerCase()}`
+    entries.push({ name, data: await fs.promises.readFile(sheet.filePath) })
+    manifest.push({ video: video?.name ?? item.videoHash, status: item.status, file: name, compositeHash: item.compositeHash, frameCount: item.frameCount, sheet: item.sheet })
+  }
+  entries.push({ name: 'batch-manifest.json', data: Buffer.from(JSON.stringify({ createdAt: new Date().toISOString(), options: resolveExtractOptions(params.options), render: params.render ?? null, items: manifest }, null, 2)) })
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
+  const fileName = `sprite-sheets-${stamp}.zip`
+  await writeZip(workspaceFile(workspace, fileName), entries)
+  return { workspaceId: workspace.id, fileName }
+}
+
+/**
+ * One shared range for videos of different lengths: an end past a video's last frame means "to its end" (the
+ * original batch clamped the same way). A start past the end still fails that video.
+ */
+async function clampRangeToVideo(videoHash: string, options: SpriteExtractOptionsInput): Promise<SpriteExtractOptionsInput> {
+  if (options.endTime === null || options.endTime === undefined) return options
+  const info = await probeVideo(requireLibraryVideo(videoHash).filePath)
+  return Number(options.endTime) > info.lastFrameTime ? { ...options, endTime: null } : options
 }
 
 async function runExtractBatch(params: ExtractBatchJobParams, ctx: RuntimeJobContext<unknown>): Promise<ExtractBatchJobResult> {
-  const items: ExtractBatchJobResult['items'] = []
   const total = params.videoHashes.length
-  for (let index = 0; index < total; index += 1) {
-    ctx.throwIfCancelled()
-    const videoHash = params.videoHashes[index]
-    ctx.report({ phase: 'batch', total, processed: index, currentLabel: videoHash })
-    try {
-      const result = await runExtract({ videoHash, options: params.options, render: params.render, save: params.save, requester: params.requester }, ctx, () => {})
-      // Batch outputs live in the library; drop the workspace right away to keep the temp folder small.
-      removeSpriteWorkspace(result.buildId)
-      items.push({ videoHash, compositeHash: result.saved?.compositeHash, frameCount: result.frameCount, sheet: { width: result.sheet.width, height: result.sheet.height } })
-    } catch (error) {
-      if (ctx.isCancelRequested()) throw error
-      const message = error instanceof Error ? error.message : String(error)
-      ctx.recordError(videoHash, message)
-      items.push({ videoHash, error: message })
-    }
+  const live: LiveBatch = {
+    items: params.videoHashes.map((videoHash) => ({ videoHash, status: 'waiting' })),
+    stopRequested: false,
+    requestedByAccountId: params.requester.accountId,
   }
-  ctx.report({ phase: 'done', total, processed: total })
-  const failed = items.filter((item) => item.error).length
-  if (failed === total) throw new SpriteError(items[0]?.error ?? '모든 영상 처리에 실패했습니다.')
-  return { total, succeeded: total - failed, failed, items }
+  liveBatches.set(ctx.jobId, live)
+  try {
+    let stopped = false
+    for (let index = 0; index < total; index += 1) {
+      ctx.throwIfCancelled()
+      const item = live.items[index]
+      if (live.stopRequested) {
+        stopped = true
+        for (const rest of live.items.slice(index)) rest.status = 'skipped'
+        break
+      }
+      item.status = 'running'
+      ctx.report({ phase: 'batch', total, processed: index, currentLabel: item.videoHash })
+      try {
+        const options = await clampRangeToVideo(item.videoHash, params.options)
+        const result = await runExtract({ videoHash: item.videoHash, options, render: params.render, save: params.save, requester: params.requester }, ctx, () => {})
+        // Batch outputs live in the library; drop the workspace right away to keep the temp folder small.
+        removeSpriteWorkspace(result.buildId)
+        Object.assign(item, { status: 'done', compositeHash: result.saved?.compositeHash, frameCount: result.frameCount, sheet: { width: result.sheet.width, height: result.sheet.height } })
+      } catch (error) {
+        if (ctx.isCancelRequested()) throw error
+        const message = error instanceof Error ? error.message : String(error)
+        ctx.recordError(item.videoHash, message)
+        Object.assign(item, { status: 'failed', error: message })
+      }
+    }
+    ctx.report({ phase: 'done', total, processed: total })
+    const items = live.items.map((item) => ({ ...item }))
+    const failed = items.filter((item) => item.status === 'failed').length
+    const succeeded = items.filter((item) => item.status === 'done').length
+    if (succeeded === 0 && failed > 0 && !stopped) throw new SpriteError(items.find((item) => item.error)?.error ?? '모든 영상 처리에 실패했습니다.')
+    let zip: ExtractBatchJobResult['zip'] = null
+    if (params.zip) {
+      ctx.flush({ phase: 'zip' })
+      zip = await writeBatchZip(params, items)
+    }
+    return { total, succeeded, failed, skipped: items.filter((item) => item.status === 'skipped').length, stopped, items, zip }
+  } finally {
+    setTimeout(() => liveBatches.delete(ctx.jobId), LIVE_BATCH_KEEP_MS).unref?.()
+  }
 }
 
 export interface NormalizeJobSheet {
@@ -356,7 +490,7 @@ export async function startExtractBatchJob(params: ExtractBatchJobParams): Promi
   if (new Set(params.videoHashes).size !== params.videoHashes.length) throw new SpriteError('같은 영상이 두 번 들어 있습니다.')
   params.videoHashes.forEach(requireLibraryVideo)
   // Per-video problems (range past the end, …) become item errors; option errors fail the request here.
-  await validateAgainstVideo(params.videoHashes[0], resolveExtractOptions(params.options))
+  await validateAgainstVideo(params.videoHashes[0], resolveExtractOptions(await clampRangeToVideo(params.videoHashes[0], params.options)))
   return RuntimeJobRunner.start('sprite-extract-batch', params, { requestedByAccountId: params.requester.accountId, total: params.videoHashes.length })
 }
 
