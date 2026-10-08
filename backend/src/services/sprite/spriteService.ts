@@ -10,7 +10,7 @@ import { SpriteError } from './spriteErrors'
 import { probeVideo } from './spriteFfmpeg'
 import { ANIMATION_DEFAULTS, ANIMATION_MIME, type AnimationOptions } from './spriteAnimation'
 import { NORMALIZATION_DEFAULTS, type NormalizationOptions, type NormalizationSheetOptions } from './spriteNormalize'
-import { resolveExtractOptions, validateImageOutput, type SpriteExtractOptionsInput, type SpriteImageFormat, type SpriteVideoInfo } from './spriteOptions'
+import { resolveExtractOptions, validateExtractOptions, validateImageOutput, type SpriteExtractOptionsInput, type SpriteImageFormat, type SpriteVideoInfo } from './spriteOptions'
 import type { Rect } from './spritePixels'
 import { requireLibraryImage, requireLibraryVideo, saveSpriteOutputToLibrary, type SpriteGroupTarget } from './spriteLibrary'
 import { runSpriteTask } from './spriteWorkerClient'
@@ -336,20 +336,27 @@ export function registerSpriteJobHandlers(): void {
 // Entry points (validate early so callers get a 4xx instead of a failed job)
 // ---------------------------------------------------------------------------------------------------------------------
 
-export function startExtractJob(params: ExtractJobParams): RuntimeJobRecord {
-  requireLibraryVideo(params.videoHash)
+/** Option errors (colours, tolerance, range, sizes) answer the request as 4xx; one probe of the video is enough. */
+async function validateAgainstVideo(videoHash: string, options: ReturnType<typeof resolveExtractOptions>): Promise<void> {
+  const media = requireLibraryVideo(videoHash)
+  validateExtractOptions(await probeVideo(media.filePath), options)
+}
+
+export async function startExtractJob(params: ExtractJobParams): Promise<RuntimeJobRecord> {
   const options = resolveExtractOptions(params.options)
+  await validateAgainstVideo(params.videoHash, options)
   resolveRender(params.render, { format: options.outputFormat, quality: options.outputQuality, columns: options.columns, spacing: options.spacing })
   return RuntimeJobRunner.start('sprite-extract', params, { requestedByAccountId: params.requester.accountId })
 }
 
-export function startExtractBatchJob(params: ExtractBatchJobParams): RuntimeJobRecord {
+export async function startExtractBatchJob(params: ExtractBatchJobParams): Promise<RuntimeJobRecord> {
   if (!Array.isArray(params.videoHashes) || params.videoHashes.length < 1 || params.videoHashes.length > 100) {
     throw new SpriteError('영상은 한 번에 1개에서 100개까지 처리할 수 있습니다.')
   }
   if (new Set(params.videoHashes).size !== params.videoHashes.length) throw new SpriteError('같은 영상이 두 번 들어 있습니다.')
   params.videoHashes.forEach(requireLibraryVideo)
-  resolveExtractOptions(params.options)
+  // Per-video problems (range past the end, …) become item errors; option errors fail the request here.
+  await validateAgainstVideo(params.videoHashes[0], resolveExtractOptions(params.options))
   return RuntimeJobRunner.start('sprite-extract-batch', params, { requestedByAccountId: params.requester.accountId, total: params.videoHashes.length })
 }
 

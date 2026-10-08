@@ -111,7 +111,7 @@ router.get('/videos/:hash/info', requirePermission(VIEW), handle(async (req, res
 
 router.post('/extract', requirePermission(EDIT), requireUploadWhenSaving, handle(async (req, res) => {
   const body = req.body ?? {}
-  const job = startExtractJob({
+  const job = await startExtractJob({
     videoHash: String(body.videoHash ?? ''),
     options: body.options ?? {},
     frameIndices: Array.isArray(body.frameIndices) ? body.frameIndices.map(Number) : undefined,
@@ -124,7 +124,7 @@ router.post('/extract', requirePermission(EDIT), requireUploadWhenSaving, handle
 
 router.post('/extract-batch', requirePermission(EDIT), requirePermission(UPLOAD), handle(async (req, res) => {
   const body = req.body ?? {}
-  const job = startExtractBatchJob({
+  const job = await startExtractBatchJob({
     videoHashes: Array.isArray(body.videoHashes) ? body.videoHashes.map(String) : [],
     options: body.options ?? {},
     render: body.render ? renderFrom(body.render) : undefined,

@@ -70,7 +70,7 @@ const extractOptionShape = {
   output_height: z.number().int().min(0).max(4096).optional().describe('Frame height for resize (0 = keep aspect)'),
   remove_duplicate_frames: z.boolean().optional().describe('Drop near-identical consecutive frames (default false)'),
   frame_similarity_threshold: z.number().min(0).max(1).optional().describe('Similarity treated as duplicate (default 0.99)'),
-  columns: z.number().int().min(0).max(256).optional().describe('Sheet columns (0 = most square layout)'),
+  columns: z.number().int().min(0).max(64).optional().describe('Sheet columns 1..64 (0 = most square layout)'),
   spacing: z.number().int().min(0).max(64).optional().describe('Pixels between cells (default 0)'),
   output_format: z.enum(['png', 'webp']).optional().describe('Sheet format (default png)'),
   output_quality: z.number().int().min(1).max(100).optional().describe('WebP quality (default 90)'),
@@ -149,8 +149,8 @@ function requireSpriteJob(jobId: string, requester: SpriteRequester): RuntimeJob
   return job;
 }
 
-async function startAndWait(context: McpRequestContext, start: () => RuntimeJobRecord, waitSeconds: number | undefined) {
-  const job = start();
+async function startAndWait(context: McpRequestContext, start: () => RuntimeJobRecord | Promise<RuntimeJobRecord>, waitSeconds: number | undefined) {
+  const job = await start();
   const finished = await waitForRuntimeJob(job.jobId, waitBudgetMs(context, waitSeconds));
   return textResult(describeJob(finished ?? job));
 }
