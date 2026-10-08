@@ -119,10 +119,9 @@ export function ModuleGraphWorkspaceModals({
           <Alert>
             <AlertTitle>{folderDeleteTarget ? t({ ko: '"{name}" 폴더를 어떻게 삭제할지 골라줘.', en: 'Choose how to delete the "{name}" folder.' }, { name: folderDeleteTarget.name }) : t({ ko: '폴더 삭제', en: 'Delete folder' })}</AlertTitle>
             <AlertDescription>
-              <div>{t({ ko: '원하는 정리 방식을 선택하면 돼.', en: 'Choose the cleanup mode you want.' })}</div>
-              <ul className="mt-2 list-disc space-y-1 pl-5">
-                <li>{t({ ko: '폴더만 삭제: 하위 폴더와 워크플로우를 상위 폴더로 올림', en: 'Delete folder only: move child folders and workflows up to the parent folder' })}</li>
-                <li>{t({ ko: '내용 포함 삭제: 하위 폴더와 그 안의 워크플로우까지 함께 삭제', en: 'Delete with contents: remove child folders and workflows inside them too' })}</li>
+              <ul className="list-disc space-y-1 pl-5">
+                <li>{t({ ko: '폴더만 삭제: 안의 항목은 상위 폴더로', en: 'Folder only: contents move up' })}</li>
+                <li>{t({ ko: '내용 포함 삭제: 안의 폴더·워크플로우까지', en: 'With contents: child folders and workflows too' })}</li>
               </ul>
             </AlertDescription>
           </Alert>

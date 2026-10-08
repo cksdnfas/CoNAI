@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Folder, FolderInput, FolderOpen, X } from 'lucide-react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Button } from '@/components/ui/button'
+import { FieldInfo } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { normalizeGroupPathInput, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
@@ -182,9 +183,17 @@ function GenerationTargetGroupModal({
       <form onSubmit={handleSubmit}>
         <ModalBody className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground" htmlFor="generation-target-group-path">
-              {t({ ko: '그룹 경로', en: 'Group path' })}
-            </label>
+            <span className="flex items-center gap-1">
+              <label className="text-sm font-medium text-foreground" htmlFor="generation-target-group-path">
+                {t({ ko: '그룹 경로', en: 'Group path' })}
+              </label>
+              <FieldInfo>
+                {t({
+                  ko: '슬래시(/)로 하위 그룹을 적어. 없는 그룹은 생성할 때 자동으로 만들어지고, 같은 위치의 이름은 대소문자를 구분하지 않아.',
+                  en: 'Use a slash (/) for sub-groups. Missing groups are created on generation; names at the same level are case-insensitive.',
+                })}
+              </FieldInfo>
+            </span>
             <Input
               id="generation-target-group-path"
               value={draft}
@@ -197,18 +206,10 @@ function GenerationTargetGroupModal({
             <datalist id="generation-target-group-path-options">
               {sortedPaths.map((groupPath) => <option key={groupPath} value={groupPath} />)}
             </datalist>
-            <p className="text-xs text-muted-foreground">
-              {t({
-                ko: '슬래시(/)로 하위 그룹을 적어. 없는 그룹은 생성할 때 자동으로 만들어지고, 같은 위치의 이름은 대소문자를 구분하지 않아.',
-                en: 'Use a slash (/) for sub-groups. Missing groups are created on generation; names at the same level are case-insensitive.',
-              })}
-            </p>
             {tooDeep ? (
               <p className="text-xs text-destructive">{t({ ko: `그룹은 최대 ${GROUP_PATH_MAX_DEPTH}단계까지야.`, en: `Groups can be at most ${GROUP_PATH_MAX_DEPTH} levels deep.` })}</p>
             ) : normalizedDraft && missingCount > 0 ? (
               <p className="text-xs text-primary">{t({ ko: `새 그룹 ${missingCount}개가 만들어져.`, en: `${missingCount} new group(s) will be created.` })}</p>
-            ) : normalizedDraft && groupsQuery.isSuccess ? (
-              <p className="text-xs text-muted-foreground">{t({ ko: '기존 그룹에 넣어.', en: 'Results go into the existing group.' })}</p>
             ) : null}
           </div>
 
