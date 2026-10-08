@@ -1,5 +1,5 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query'
 import { ImageOff, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -23,12 +23,14 @@ import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 
 /** Search the full library on the server; selection survives filters and page changes. */
-export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, applyLabel, note, initialGroupPath, imagesOnly = false }: {
+export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, applyLabel, note, initialGroupPath, imagesOnly = false, videosOnly = false }: {
   initial: ChatMediaAttachment[]; maxCount: number; onPick: (items: ChatMediaAttachment[]) => void; onClose: () => void
   /** Defaults are worded for chat attachments; `note: null` drops the attachment note. */
   title?: string; applyLabel?: string; note?: string | null
   initialGroupPath?: string
   imagesOnly?: boolean
+  /** Only videos (the sprite tab). Like imagesOnly it keeps loading pages until the filtered list has enough. */
+  videosOnly?: boolean
 }) {
   const { t } = useI18n()
   const { canViewImages } = useImagePermissions()
@@ -75,10 +77,19 @@ export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, app
     },
     getNextPageParam: (lastPage, pages) => lastPage.hasMore ? { page: pages.length + 1, cursorOrderIndex: lastPage.cursorOrderIndex, cursorAddedDate: lastPage.cursorAddedDate, cursorHash: lastPage.cursorHash } : undefined,
   })
-  const items = useMemo(() => [...new Map((query.data?.pages.flatMap((page) => page.images) ?? []).filter((item) => !imagesOnly || item.mime_type?.startsWith('image/')).map((item) => [item.composite_hash, item])).values()], [query.data, imagesOnly])
+  const kindOnly = imagesOnly || videosOnly
+  const items = useMemo(() => [...new Map((query.data?.pages.flatMap((page) => page.images) ?? [])
+    .filter((item) => (!imagesOnly || item.mime_type?.startsWith('image/')) && (!videosOnly || item.mime_type?.startsWith('video/')))
+    .map((item) => [item.composite_hash, item])).values()], [query.data, imagesOnly, videosOnly])
+  // A media-kind filter can leave pages nearly empty: fetch further pages (bounded) until there is enough to show.
+  const loadedPages = query.data?.pages.length ?? 0
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query
+  useEffect(() => {
+    if (kindOnly && items.length < 24 && hasNextPage && !isFetchingNextPage && loadedPages < 20) void fetchNextPage()
+  }, [kindOnly, items.length, hasNextPage, isFetchingNextPage, fetchNextPage, loadedPages])
   const safety = useImageFeedSafety({ items, hasMore: query.hasNextPage, isLoading: query.isPending, isError: query.isError, isLoadingMore: query.isFetchingNextPage, onLoadMore: query.fetchNextPage })
   const select = (ids: string[]) => {
-    if (imagesOnly && maxCount === 1) ids = ids.slice(-1)
+    if (kindOnly && maxCount === 1) ids = ids.slice(-1)
     if (ids.length > maxCount) {
       showSnackbar({ tone: 'error', message: t({ ko: '미디어는 {count}개까지 선택할 수 있어. 전체 첨부 한도는 20개야.', en: 'Select up to {count} media items. The total attachment limit is 20.' }, { count: maxCount }) })
       return
@@ -111,7 +122,7 @@ export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, app
         <Button type="button" variant="ghost" onClick={() => { setChosenGroupId(null); setInput(''); setSearch(''); setTool(''); setOrder('DESC') }}>{t({ ko: '필터 초기화', en: 'Reset filters' })}</Button>
       </form>
       {query.isPending ? <p className="py-12 text-center text-sm text-muted-foreground">{t({ ko: '불러오는 중…', en: 'Loading…' })}</p> : safety.visibleItems.length ? <ImageList
-        items={safety.visibleItems} resetKey={`${groupId}:${search}:${tool}:${order}`} layout={imagesOnly ? 'masonry' : 'grid'} activationMode="none"
+        items={safety.visibleItems} resetKey={`${groupId}:${search}:${tool}:${order}`} layout={kindOnly ? 'masonry' : 'grid'} activationMode="none"
         selectable forceSelectionMode selectedIds={[...selected.keys()]} onSelectedIdsChange={select}
         scrollMode="container" viewportHeight="min(48vh, 480px)" minColumnWidth={130} gridItemHeight={145} columnGap={8} rowGap={8}
         showDefaultQuickActions={false} shouldBlurItemPreview={safety.shouldBlurItemPreview} renderItemPersistentOverlay={safety.renderItemPersistentOverlay}
@@ -127,7 +138,7 @@ export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, app
       <span className="mr-auto text-sm text-muted-foreground">{t({ ko: '{count}개 선택', en: '{count} selected' }, { count: selected.size })}</span>
       <Button variant="ghost" disabled={!selected.size} onClick={() => setSelected(new Map())}>{t({ ko: '선택 해제', en: 'Clear selection' })}</Button>
       <Button variant="secondary" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-      <Button disabled={selected.size > maxCount || (imagesOnly && !selected.size)} onClick={() => onPick([...selected.values()])}>{applyLabel ?? t({ ko: '첨부 적용', en: 'Apply attachments' })}</Button>
+      <Button disabled={selected.size > maxCount || (kindOnly && !selected.size)} onClick={() => onPick([...selected.values()])}>{applyLabel ?? t({ ko: '첨부 적용', en: 'Apply attachments' })}</Button>
     </ModalFooter>
   </Modal>
 }
