@@ -12,7 +12,8 @@ import { Tip } from '@/components/ui/tooltip'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { useI18n } from '@/i18n'
 import { uploadChatProfileAsset, type ChatLorebook, type ChatProfile } from '@/lib/api-codex-chat'
-import { EditorGroup, SwitchLine, type Draft, type PatchDraft } from './chat-profile-editor-fields'
+import { cn } from '@/lib/utils'
+import { EditorGroup, GROW_TEXTAREA, SwitchLine, type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { draftProfileAssetUrl } from './chat-profile-images'
 import { PROFILE_IMAGE_ACCEPT, useChatProfileAssetImport } from './chat-profile-asset-input'
 import { ChatProfileMediaRow, useChatMediaLocalize, useLastTextarea } from './chat-profile-media'
@@ -106,18 +107,18 @@ export function ChatProfileCharacterPanel({ open, draft, patch, lorebooks, onPre
         )}
       >
         <Field label={t({ ko: '시스템 프롬프트', en: 'System prompt' })}>
-          <Textarea variant="settings" rows={5} value={draft.systemPrompt} onChange={(event) => patch({ systemPrompt: event.target.value })} />
+          <Textarea variant="settings" rows={5} className={GROW_TEXTAREA} value={draft.systemPrompt} onChange={(event) => patch({ systemPrompt: event.target.value })} />
         </Field>
         <ChatPromptSectionsEditor sections={draft.promptSections} onChange={(promptSections) => patch({ promptSections })} />
         <div className="border-t border-line">
           <CollapsibleRow title={t({ ko: '첫 인사말', en: 'Greeting' })} meta={greetingMeta}>
-            <Textarea variant="settings" rows={3} value={draft.greeting} onChange={(event) => patch({ greeting: event.target.value })} aria-label={t({ ko: '첫 인사말', en: 'Greeting' })} />
+            <Textarea variant="settings" rows={3} className={GROW_TEXTAREA} value={draft.greeting} onChange={(event) => patch({ greeting: event.target.value })} aria-label={t({ ko: '첫 인사말', en: 'Greeting' })} />
             {alternates.map((text, index) => (
               <div key={index} className="flex items-start gap-1">
                 <Textarea
                   variant="settings"
                   rows={3}
-                  className="min-w-0 flex-1"
+                  className={cn('min-w-0 flex-1', GROW_TEXTAREA)}
                   value={text}
                   aria-label={t({ ko: '추가 인사말 {n}', en: 'Alternate greeting {n}' }, { n: index + 1 })}
                   onChange={(event) => updateAlternate(index, event.target.value)}

@@ -37,7 +37,7 @@ function GenerationReactionSettings({ thread }: { thread: CodexChatThread }) {
     <SettingRow label={t({ ko: '완료 반응', en: 'Completion reaction' })}>
       <div className="flex items-center gap-3">
         <Select
-          className="w-44"
+          className="w-48"
           value={thread.reaction_model_slot_id === null ? '' : String(thread.reaction_model_slot_id)}
           onChange={(event) => mutation.mutate({ reactionModelSlotId: event.target.value ? Number(event.target.value) : null })}
           disabled={mutation.isPending}
@@ -111,9 +111,9 @@ export function AuthorNoteBlock({ thread, defaults }: { thread: CodexChatThread;
           step={1}
           min={0}
           max={20}
-          className="w-44"
+          className="w-48"
           value={thread.author_note_depth ?? null}
-          placeholder={defaults.depth !== null ? t({ ko: '{label} ({depth}턴 앞)', en: '{label} ({depth} turns back)' }, { label: profileLabel, depth: defaults.depth }) : profileLabel}
+          placeholder={defaults.depth !== null ? `${profileLabel} (${defaults.depth})` : profileLabel}
           onValueCommit={(value) => mutate({ authorNoteDepth: value.trim() === '' ? null : Number(value) })}
           aria-label={t({ ko: '작가 노트 위치 (끝에서 몇 턴 앞)', en: "Author's note depth (turns from the end)" })}
         />
@@ -123,7 +123,8 @@ export function AuthorNoteBlock({ thread, defaults }: { thread: CodexChatThread;
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         rows={3}
-        className="text-sm leading-relaxed"
+        // Grows with the note (or with the profile's note shown as the hint) instead of scrolling inside three rows.
+        className="max-h-80 min-h-20 text-sm leading-relaxed [field-sizing:content]"
         placeholder={defaults.note || t({ ko: '작가 노트', en: "Author's note" })}
       />
     </div>
@@ -180,7 +181,7 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
               step={128}
               min={1}
               max={1000000}
-              className="w-44"
+              className="w-48"
               value={group.maxTokens}
               placeholder={profileLabel}
               onValueCommit={(value) => roomMutation.mutate(commit(value))}
@@ -218,7 +219,7 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
                     step={128}
                     min={1}
                     max={1000000}
-                    className="w-44"
+                    className="w-48"
                     value={own}
                     placeholder={fallback !== null ? `${fallbackLabel} (${fallback})` : fallbackLabel}
                     onValueCommit={(value) => memberMutation.mutate({ profileId: member.id, maxTokens: commit(value) })}
@@ -403,7 +404,7 @@ export function CodexChatContextView({ thread, profiles, segments, profileTurns,
           step={1}
           min={1}
           max={200}
-          className="w-44"
+          className="w-48"
           value={thread.context_turns}
           placeholder={profileTurns !== null ? `${profileLabel} (${profileTurns})` : profileLabel}
           onValueCommit={(value) => contextMutation.mutate({ contextTurns: value.trim() === '' ? null : Number(value) })}
@@ -423,7 +424,7 @@ export function CodexChatContextView({ thread, profiles, segments, profileTurns,
             step={128}
             min={1}
             max={1000000}
-            className="w-44"
+            className="w-48"
             value={thread.max_tokens}
             placeholder={profileMaxTokens !== null ? `${profileLabel} (${profileMaxTokens})` : profileLabel}
             onValueCommit={(value) => contextMutation.mutate({ maxTokens: value.trim() === '' ? null : Number(value) })}

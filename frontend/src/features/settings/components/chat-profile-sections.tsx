@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import type { ChatPromptSection } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
+import { GROW_TEXTAREA } from './chat-profile-editor-fields'
 
 /** A hairline row that folds its content: chevron + title on the left, small controls on the right. */
 export function CollapsibleRow({ title, info, meta, actions, defaultOpen = false, open: controlledOpen, onOpenChange, children }: {
@@ -137,6 +138,7 @@ export function ChatPromptSectionsEditor({ sections, onChange }: { sections: Cha
                   ref={(element) => { if (element) textareas.current.set(section.id, element); else textareas.current.delete(section.id) }}
                   variant="settings"
                   rows={section.kind === 'dialogue' ? 6 : 5}
+                  className={GROW_TEXTAREA}
                   value={section.content}
                   onChange={(event) => update(section.id, { content: event.target.value })}
                   onBlur={() => setWarnings((current) => ({ ...current, [section.id]: unknownChatMacros(section.content) }))}

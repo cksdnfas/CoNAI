@@ -98,7 +98,8 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
             }} />
           </> : null}
         </div>
-        <div className={cn('grid gap-x-6', layout === 'page' && 'md:grid-cols-2')}>
+        {/* grid-cols-1 sizes the column to the panel, so a long tagline truncates instead of widening the list. */}
+        <div className={cn('grid grid-cols-1 gap-x-6', layout === 'page' && 'md:grid-cols-2')}>
           {usable.map((profile) => {
             const pickedIndex = picked.indexOf(profile.id)
             const isPicked = pickedIndex >= 0

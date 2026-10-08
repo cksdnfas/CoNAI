@@ -73,7 +73,8 @@ function CodeBlock({ language, code }: { language: string | null; code: string }
           {copied ? <Check /> : <Copy />}
         </IconButton>
       </div>
-      <pre className="overflow-x-auto p-3 font-mono text-[0.85em] leading-relaxed"><code>{code}</code></pre>
+      {/* Wrapped, not scrolled: chat code blocks are mostly status sheets and notes read on narrow panels. */}
+      <pre className="whitespace-pre-wrap break-words p-3 font-mono text-[0.85em] leading-relaxed"><code>{code}</code></pre>
       {canPreview ? <HtmlPreviewModal open={previewOpen} source={code} onClose={() => setPreviewOpen(false)} /> : null}
     </div>
   )

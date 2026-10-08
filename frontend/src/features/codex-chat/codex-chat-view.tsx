@@ -99,6 +99,12 @@ const CodexChatGallery = lazy(async () => ({ default: (await import('./codex-cha
 const RUNNING_POLL_MS = 2000
 const PENDING_JOB_POLL_MS = 3000
 const COMPOSER_MAX_HEIGHT_PX = 220
+/** Names longer than this are shortened in the composer hint so it stays on one line in narrow panels. */
+const COMPOSER_HINT_NAME_MAX = 10
+
+function shortHintName(name: string) {
+  return name.length > COMPOSER_HINT_NAME_MAX ? `${name.slice(0, COMPOSER_HINT_NAME_MAX - 1)}…` : name
+}
 const MESSAGE_FLASH_MS = 1600
 const MESSAGE_PAGE_SIZE = 80
 /** Messages a poll fetches; the rest come from the copy already loaded. */
@@ -738,14 +744,30 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     return () => window.clearTimeout(timer)
   }, [flashMessageId])
 
-  useLayoutEffect(() => {
+  // The room title is already in the header; the hint only has to fit beside the composer buttons.
+  const composerPlaceholder = isGroup
+    ? t({ ko: '그룹에 메시지', en: 'Message the group' })
+    : profile ? t({ ko: '{name}에게 메시지', en: 'Message {name}' }, { name: shortHintName(profile.name) }) : t({ ko: '메시지', en: 'Message' })
+
+  // The composer grows with its text, and with its hint when empty, so neither ever scrolls inside a one-line box.
+  const resizeComposer = useCallback(() => {
     const node = composerRef.current
-    if (!node) {
-      return
-    }
+    if (!node) return
     node.style.height = 'auto'
     node.style.height = `${Math.min(node.scrollHeight, COMPOSER_MAX_HEIGHT_PX)}px`
-  }, [draft, isTranscript])
+  }, [])
+  useLayoutEffect(resizeComposer, [draft, isTranscript, composerPlaceholder, resizeComposer])
+  useEffect(() => {
+    // A narrower panel rewraps the text: measure again when the composer's width changes.
+    const node = composerRef.current
+    if (!node || typeof ResizeObserver === 'undefined') return
+    let width = node.clientWidth
+    const observer = new ResizeObserver(() => {
+      if (node.clientWidth !== width) { width = node.clientWidth; resizeComposer() }
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [isTranscript, activeThreadId, resizeComposer])
 
   const profileMissing = thread !== null ? (isGroup ? !memberProfiles.some((member) => member.isEnabled) : !profile || !profile.isEnabled) : pendingProfile !== null && !pendingProfile.usable
   const codexUnavailable = isCodexThread && !codexStatus?.available
@@ -1111,7 +1133,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
           onKeyDown={handleComposerKeyDown}
           rows={1}
-          placeholder={isGroup ? t({ ko: '{name}에 메시지', en: 'Message {name}' }, { name: thread?.title || t({ ko: '그룹', en: 'group' }) }) : profile ? t({ ko: '{name}에게 메시지', en: 'Message {name}' }, { name: profile.name }) : t({ ko: '메시지', en: 'Message' })}
+          placeholder={composerPlaceholder}
           aria-label={t({ ko: '메시지', en: 'Message' })}
           aria-autocomplete="list"
           aria-controls={showCommands ? commandListId : showMentions ? mentionListId : undefined}

@@ -18,7 +18,7 @@ import type { ExternalApiProviderRecord } from '@/lib/api-external-api'
 import type { CodexModelOption } from '@/lib/api-image-generation-queue'
 import { cn } from '@/lib/utils'
 import { applyRoleChoice, ModelRoleSelect, roleChoice, roleDirect, roleModelPatch, roleProviderPatch, type SuggestWriters } from './chat-model-role-select'
-import { ConnectionModelSelect, EditorGroup, numberOrNull, SwitchLine, type Draft, type PatchDraft } from './chat-profile-editor-fields'
+import { ConnectionModelSelect, EditorGroup, GROW_TEXTAREA, numberOrNull, SwitchLine, type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { CollapsibleRow } from './chat-profile-sections'
 
 /** What a connection lists for a model field. */
@@ -159,7 +159,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
         en: "A scene instruction added to every request in every chat, near the end of the conversation. A note written per chat under ⋯ → Context takes precedence.",
       })}
     >
-      <Textarea variant="settings" rows={3} value={draft.authorNote} onChange={(event) => patch({ authorNote: event.target.value })} />
+      <Textarea variant="settings" rows={3} className={GROW_TEXTAREA} value={draft.authorNote} onChange={(event) => patch({ authorNote: event.target.value })} />
     </Field>
   )
 
@@ -223,7 +223,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
                   <Textarea
                     variant="settings"
                     rows={4}
-                    className={cn('font-mono text-xs', extraParamsError && 'border-destructive')}
+                    className={cn('font-mono text-xs', GROW_TEXTAREA, extraParamsError && 'border-destructive')}
                     value={draft.extraParams}
                     placeholder={'{\n  "chat_template_kwargs": { "enable_thinking": true }\n}'}
                     onChange={(event) => patch({ extraParams: event.target.value })}
@@ -278,7 +278,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
                 label={t({ ko: '번역 지시', en: 'Translation notes' })}
                 info={t({ ko: '답변을 한국어로 옮길 때 번역 모델이 따르는 메모. 말투, 호칭, 고유명사 번역표 등. {{char}}·{{user}}는 이름으로 바뀌어. 캐릭터 이름은 비워도 알려 줘. 내 메시지 번역에는 쓰지 않아.', en: 'Notes the translation model follows when it puts replies into Korean: voice, forms of address, a glossary. {{char}} and {{user}} become the names. The character’s name is passed even when empty. Not used for your own messages.' })}
               >
-                <Textarea variant="settings" rows={3} maxLength={4000} value={draft.translationInstructions} placeholder={t({ ko: '{{char}}는 무뚝뚝한 반말, 문장 끝을 "…"로 자주 끊음. {{user}}를 "선배"라고 부름.', en: '{{char}} speaks in curt casual Korean and trails off with "…". Calls {{user}} "선배".' })} onChange={(event) => patch({ translationInstructions: event.target.value })} />
+                <Textarea variant="settings" rows={3} className={GROW_TEXTAREA} maxLength={4000} value={draft.translationInstructions} placeholder={t({ ko: '{{char}}는 무뚝뚝한 반말, 문장 끝을 "…"로 자주 끊음. {{user}}를 "선배"라고 부름.', en: '{{char}} speaks in curt casual Korean and trails off with "…". Calls {{user}} "선배".' })} onChange={(event) => patch({ translationInstructions: event.target.value })} />
               </Field>
             ) : null}
           </AuxModelRow>
@@ -311,7 +311,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, llmProviders, pr
             {noteField}
             {summaryOn ? (
               <Field label={t({ ko: '요약 프롬프트', en: 'Summary prompt' })}>
-                <Textarea variant="settings" rows={4} value={draft.summaryPrompt} placeholder={defaults?.summaryPrompt} onChange={(event) => patch({ summaryPrompt: event.target.value })} />
+                <Textarea variant="settings" rows={4} className={GROW_TEXTAREA} value={draft.summaryPrompt} placeholder={defaults?.summaryPrompt} onChange={(event) => patch({ summaryPrompt: event.target.value })} />
               </Field>
             ) : null}
           </>
