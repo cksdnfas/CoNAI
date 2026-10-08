@@ -29,6 +29,7 @@ export type RuntimeJobKind =
   | 'sprite-normalize'
   | 'sprite-animation'
   | 'audio-export'
+  | 'audio-legacy-import'
 
 export type RuntimeJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
