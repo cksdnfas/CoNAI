@@ -70,7 +70,7 @@ export async function deleteRetiredGraphWorkflowArtifacts(artifactIds: number[])
     }
 
     try {
-      await recycleBinDeleteFile(resolvedPath, useRecycleBin)
+      await recycleBinDeleteFile(resolvedPath, useRecycleBin, 'workflow-retention')
       deletedFileCount += 1
     } catch (error) {
       if ((error as NodeJS.ErrnoException | undefined)?.code !== 'ENOENT') {

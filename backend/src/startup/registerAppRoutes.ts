@@ -23,6 +23,7 @@ import generationQueueRoutes from '../routes/generation-queue.routes';
 import codexChatRoutes from '../routes/codex-chat.routes';
 import chatProposalRoutes from '../routes/chat-proposals.routes';
 import filesRoutes from '../routes/files.routes';
+import systemFolderRoutes from '../routes/system-folders.routes';
 import { wildcardMutationRoutes } from '../routes/wildcards.mutation.routes';
 import { wildcardReadRoutes } from '../routes/wildcards.read.routes';
 import { wildcardUtilityRoutes } from '../routes/wildcards.utility.routes';
@@ -258,6 +259,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
     const limiter = req.method === 'POST' && req.path === '/upload' ? options.uploadLimiter : options.readOnlyLimiter;
     limiter(req, res, next);
   }, filesRoutes);
+  app.use('/api/system-folders', requireAuth, options.readOnlyLimiter, systemFolderRoutes);
   app.use('/api/wildcards', wildcardUtilityRoutes);
   app.use('/api/wildcards', optionalAuth, wildcardMutationRoutes);
   app.use('/api/wildcards', wildcardReadRoutes);
