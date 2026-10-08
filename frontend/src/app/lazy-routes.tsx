@@ -72,6 +72,7 @@ const routeModuleLoaders = {
     [() => import('@/i18n/resources/upload').then((module) => module.uploadCatalog)],
   ),
   'files-page': () => import('@/features/files/files-page'),
+  'audio-page': () => import('@/features/audio/audio-page'),
   'sprite-page': () => import('@/features/sprite/sprite-page'),
   'wallpaper-editor-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/wallpaper/wallpaper-editor-page'),
@@ -177,6 +178,10 @@ function getRouteModuleLoader(to: string): RouteModuleLoader | null {
 
   if (pathname === '/files') {
     return routeModuleLoaders['files-page']
+  }
+
+  if (pathname === '/audio') {
+    return routeModuleLoaders['audio-page']
   }
 
   if (pathname === '/sprite') {
@@ -286,6 +291,15 @@ const FilesPageLazy = lazy(async () => {
 
 export function FilesRoute() {
   return withSuspense(<FilesPageLazy />)
+}
+
+const AudioPageLazy = lazy(async () => {
+  const module = await loadLazyRoute('audio-page', routeModuleLoaders['audio-page'])
+  return { default: module.AudioPage }
+})
+
+export function AudioRoute() {
+  return withSuspense(<AudioPageLazy />)
 }
 
 const SpritePageLazy = lazy(async () => {
