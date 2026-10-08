@@ -378,7 +378,7 @@ function ToolCallsBadge({ calls }: { calls: CodexChatToolCall[] }) {
                 {group.count > 1 ? <span className="tabular-nums text-muted-foreground">×{group.count}</span> : null}
                 <span className="text-muted-foreground"><ToolStatusIcon status={group.status} /></span>
               </div>
-              {group.summary ? <p className="mt-0.5 line-clamp-2 break-words font-mono text-2xs text-muted-foreground">{group.summary}</p> : null}
+              {group.summary ? <p className="mt-0.5 truncate font-mono text-2xs text-muted-foreground">{group.summary}</p> : null}
             </li>
           ))}
         </ul>

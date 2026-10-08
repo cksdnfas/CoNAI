@@ -1,4 +1,4 @@
-import { Fragment, memo, useMemo, useState } from 'react'
+import { Fragment, memo, useMemo, useState, type MouseEvent } from 'react'
 import { Check, ChevronLeft, ChevronRight, Ellipsis, GitBranch, Languages, Pencil, Reply, RotateCcw, StepForward, X } from 'lucide-react'
 import type { ChatMessageRouting } from '@conai/shared'
 import { IconButton } from '@/components/ui/icon-button'
@@ -70,11 +70,15 @@ function ChatMessageEditor({ message, busy, onSave, onCancel, reply = false }: {
   </div>
 }
 
-const ChatMessageRow = memo(function ChatMessageRow({ message, previousContext, segments, flash, media, actions, speakerOf, mentions, userSpeaker = null, ...look }: MessageLook & {
-  message: CodexChatMessage; previousContext: ChatContextMeta | null; segments: ChatSummarySegment[]; flash: boolean; media?: Record<string, CodexChatMediaInfo>; actions: MessageActions
+/** Clicks on these inside a message do their own thing and never fold its action bar. */
+const MESSAGE_CONTROLS = 'button, a, input, textarea, select, summary, label, video, audio, [role="button"], [data-message-bar]'
+
+const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousContext, segments, flash, media, actions, speakerOf, mentions, userSpeaker = null, ...look }: MessageLook & {
+  message: CodexChatMessage; last: boolean; previousContext: ChatContextMeta | null; segments: ChatSummarySegment[]; flash: boolean; media?: Record<string, CodexChatMediaInfo>; actions: MessageActions
 }) {
   const { t } = useI18n()
-  const [tapped, setTapped] = useState(false)
+  // The last message keeps its action bar; an earlier one opens it with a click or tap on the message.
+  const [barOpen, setBarOpen] = useState(false)
   // Chats with a translation model keep both texts; the reader's (display_content) shows first.
   const [showOriginal, setShowOriginal] = useState(false)
   const translated = typeof message.display_content === 'string' && message.display_content.length > 0
@@ -91,7 +95,17 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, previousContext, 
   // 1:1 chats show only a quote the user picked; addressing and the reply's automatic quote are room-only.
   const routing = speakerOf ? message.routing : isUser && message.routing?.replyTo ? { ...message.routing, recipients: [] } : null
   const recipientLabel = routing?.recipients.map((id) => typeof id === 'number' ? (speakerOf?.(id)?.name ?? look.speaker?.name ?? '') : id === 'user' ? userSpeaker?.name ?? t({ ko: '사용자', en: 'User' }) : t({ ko: '방 전체', en: 'Room' })).filter(Boolean).join(', ')
-  return <div data-message-id={message.id} onPointerDown={(event) => { if (event.pointerType !== 'mouse') setTapped(true) }} className={cn('group/message -mx-2 rounded-md px-2 transition-colors duration-500', flash && 'bg-primary/10')}>
+  const showBar = last || barOpen || moreOpen
+  const toggleBar = (event: MouseEvent<HTMLDivElement>) => {
+    if (last || actions.editingId === message.id || (event.target as HTMLElement).closest(MESSAGE_CONTROLS)) return
+    // Display blocks live in a shadow root; their pick / set targets only show up in the composed path.
+    if (event.nativeEvent.composedPath().some((node) => node instanceof HTMLElement && (node.dataset.pick !== undefined || node.dataset.set !== undefined))) return
+    // Selecting text ends in a click too; that must not fold or open the bar.
+    if (window.getSelection()?.toString()) return
+    setBarOpen(!showBar)
+    if (showBar) setMoreOpen(false)
+  }
+  return <div data-message-id={message.id} onClick={toggleBar} className={cn('group/message -mx-2 rounded-md px-2 transition-colors duration-500', flash && 'bg-primary/10')}>
     {isUser
       ? <>{actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEdit} onCancel={() => actions.onEditingChange(null)} />
@@ -99,7 +113,8 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, previousContext, 
       : actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEditReply} onCancel={() => actions.onEditingChange(null)} reply />
         : <ChatMessageIdContext.Provider value={message.id}><CodexChatAssistantMessage content={content} routing={routing} recipientLabel={recipientLabel} toolCalls={message.tool_calls} threadId={message.thread_id} status={message.status} error={message.error} finishReason={message.finish_reason ?? null} media={media} {...look} createdAt={message.created_date} speaker={speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker} /></ChatMessageIdContext.Provider>}
-    <div className={cn('mt-1 flex flex-wrap items-center gap-x-1 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100', isUser && 'justify-end', (tapped || moreOpen) && 'opacity-100')}>
+    {/* A folded bar takes no room but stays in the tab order, and shows while a key lands on one of its buttons. */}
+    <div data-message-bar className={cn('mt-1 flex flex-wrap items-center gap-x-1', isUser && 'justify-end', !showBar && 'sr-only focus-within:not-sr-only')}>
       <IconButton size="icon-xs" variant="ghost" label={t({ ko: '답장', en: 'Reply' })} onClick={() => actions.onReply(message)}><Reply /></IconButton>
       {translated ? <IconButton size="icon-xs" variant="ghost" aria-pressed={showOriginal} className={cn(showOriginal && 'text-primary')} label={showOriginal ? t({ ko: '번역 보기', en: 'Show translation' }) : t({ ko: '원문 보기', en: 'Show original' })} onClick={() => setShowOriginal((current) => !current)}><Languages /></IconButton> : null}
       {hasMore ? <IconButton size="icon-xs" variant="ghost" aria-expanded={moreOpen} className={cn(moreOpen && 'text-primary')} label={moreOpen ? t({ ko: '접기', en: 'Less' }) : t({ ko: '더 보기', en: 'More' })} onClick={() => setMoreOpen((current) => !current)}><Ellipsis /></IconButton> : null}
@@ -147,8 +162,8 @@ export const ChatSavedMessages = memo(function ChatSavedMessages({ messages, con
   const divider = <div role="separator" className="flex items-center gap-3 text-xs text-muted-foreground"><span className="h-px flex-1 bg-line" />{t({ ko: '여기까지 요약됨', en: 'Summarized up to here' })}<span className="h-px flex-1 bg-line" /></div>
   return <>
     {summaryUntilId !== null && messages[0]?.id > summaryUntilId ? divider : null}
-    {messages.map((message) => <Fragment key={message.id}>
-      <ChatMessageRow message={message} previousContext={previousContexts.get(message.id) ?? null} segments={segments} flash={flashMessageId === message.id} media={media} actions={actions} {...look} />
+    {messages.map((message, index) => <Fragment key={message.id}>
+      <ChatMessageRow message={message} last={index === messages.length - 1} previousContext={previousContexts.get(message.id) ?? null} segments={segments} flash={flashMessageId === message.id} media={media} actions={actions} {...look} />
       {message.id === summaryUntilId ? divider : null}
     </Fragment>)}
   </>

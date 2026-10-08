@@ -44,8 +44,6 @@ export function ChatPageProposalCard({ proposal }: { proposal: PageProposal }) {
     <div className="flex items-center gap-2">
       {state === 'undone' ? <span className="text-xs text-muted-foreground">{t({ ko: '입력을 되돌렸어.', en: 'Inputs undone.' })}</span>
         : handled && !applied ? <span className="text-xs text-muted-foreground">{t(proposal.dismissed ? { ko: '무시한 제안이야.', en: 'Proposal dismissed.' } : { ko: '이전에 적용한 제안이야.', en: 'Previously applied.' })}</span>
-          : <Button size="xs" variant={applied ? 'secondary' : 'default'} disabled={busy || !!unavailable} onClick={() => void run()}>{t(applied ? { ko: '입력 되돌리기', en: 'Undo inputs' } : { ko: '입력 적용', en: 'Apply inputs' })}</Button>}
-      <span className="text-xs text-muted-foreground">{t({ ko: '입력값만 변경해.', en: 'Changes input values only.' })}</span>
-    </div>
+          : <Button size="xs" variant={applied ? 'secondary' : 'default'} disabled={busy || !!unavailable} onClick={() => void run()}>{t(applied ? { ko: '입력 되돌리기', en: 'Undo inputs' } : { ko: '입력 적용', en: 'Apply inputs' })}</Button>}    </div>
   </div>
 }

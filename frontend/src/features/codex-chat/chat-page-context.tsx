@@ -240,5 +240,10 @@ export function ChatPageConnectionNotice() {
   const inputCount = page.snapshot.fields.filter((field) => field.editable !== false).length
   const workflow = page.snapshot.workflow
   const actionCount = page.snapshot.actions?.length ?? 0
-  return <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground"><Monitor className="size-3.5 shrink-0" /><span>{t({ ko: '연결된 페이지: {name}', en: 'Connected page: {name}' }, { name: page.snapshot.title })}{workflow ? t({ ko: ' · 노드 {nodes}개 · 연결 {edges}개', en: ' · {nodes} nodes · {edges} edges' }, { nodes: workflow.nodes.length, edges: workflow.edges.length }) : inputCount ? t({ ko: ' · 입력 {count}개', en: ' · {count} inputs' }, { count: inputCount }) : ''}{actionCount ? t({ ko: ' · 작업 {count}개', en: ' · {count} operations' }, { count: actionCount }) : !inputCount && !workflow ? t({ ko: ' · 페이지 정보 읽기만 지원', en: ' · Page information only' }) : ''}</span></p>
+  // The page's name only; what the chat can read and change sits in the tooltip.
+  const details = [
+    workflow ? t({ ko: '노드 {nodes} · 연결 {edges}', en: '{nodes} nodes · {edges} edges' }, { nodes: workflow.nodes.length, edges: workflow.edges.length }) : inputCount ? t({ ko: '입력 {count}', en: '{count} inputs' }, { count: inputCount }) : '',
+    actionCount ? t({ ko: '작업 {count}', en: '{count} operations' }, { count: actionCount }) : !inputCount && !workflow ? t({ ko: '읽기만', en: 'Read only' }) : '',
+  ].filter(Boolean).join(' · ')
+  return <Tip content={details} side="top" align="start"><p className="mb-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground"><Monitor aria-label={t({ ko: '연결된 페이지', en: 'Connected page' })} className="size-3.5 shrink-0" /><span className="truncate">{page.snapshot.title}</span></p></Tip>
 }

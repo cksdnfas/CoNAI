@@ -104,7 +104,7 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
             const pickedIndex = picked.indexOf(profile.id)
             const isPicked = pickedIndex >= 0
             const blocked = selecting && !isPicked && (picked.length >= GROUP_MEMBER_MAX || takenNames.has(profile.name.trim().toLowerCase()))
-            return <div key={profile.id} className="group/profile border-b border-line py-1">
+            return <div key={profile.id} className="border-b border-line py-1">
               <div className="relative">
                 <ListRow asChild interactive selected={isPicked}>
                   <button
@@ -129,10 +129,7 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
                   checked={isPicked}
                   disabled={disabled || blocked}
                   aria-label={t({ ko: '{name} 그룹에 담기', en: 'Add {name} to a group' }, { name: profile.name })}
-                  className={cn(
-                    "absolute right-3 top-1/2 size-5 -translate-y-1/2 rounded-[5px] transition-opacity before:absolute before:-inset-2.5 before:content-['']",
-                    selecting ? 'opacity-100' : 'opacity-0 group-hover/profile:opacity-100 group-focus-within/profile:opacity-100 pointer-coarse:opacity-100',
-                  )}
+                  className="absolute right-3 top-1/2 size-5 -translate-y-1/2 rounded-[5px] before:absolute before:-inset-2.5 before:content-['']"
                   onCheckedChange={() => toggle(profile.id)}
                 />
               </div>
