@@ -68,7 +68,7 @@ import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatPortrait, ChatStatusAside, ChatStatusFloating, ChatStatusStrip, useStatusPanelLayout, type ChatStatusBlock, type ChatStatusData } from './chat-status-panel'
 import { ChatProfilePicker } from './chat-profile-picker'
 import { ChatThreadList, type ChatListPatch } from './chat-thread-list'
-import { ChatAttachButton, ChatDraftAttachments } from './chat-attachments'
+import { ChatAttachButton, ChatDraftAttachments, useChatFileDrop } from './chat-attachments'
 import { ChatFlagButton, ChatFlagManagerModal, ChatFlagTray, useChatFlags } from './chat-flags'
 import { ChatRoomRoutinesModal, useRoutineThreadIds } from './chat-routines'
 import { ChatSuggestButton, ChatSuggestTray, useReplySuggestions } from './chat-suggestions'
@@ -377,6 +377,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '답변 전환 실패', en: 'Could not switch answer' })), tone: 'error' }),
   })
   const isBusy = isStreaming || serverRunning || alternativeMutation.isPending || commandPending || isCompacting
+  const fileDrop = useChatFileDrop(chat, isBusy || activeThreadId === null)
   const replacingMessageId = liveTurn?.threadId === activeThreadId ? liveTurn.replacingMessageId : threadQuery.data?.running?.replacingMessageId
   const messages: CodexChatMessage[] = useMemo(() => (threadQuery.data?.messages ?? []).filter((message) => message.id !== replacingMessageId), [threadQuery.data?.messages, replacingMessageId])
   // Reply suggestions: made on request only, kept until the chat moves on (the last message changes).
@@ -1185,7 +1186,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           onClose={closeFlagTray}
         />
       ) : null}
-      <div className={cn('flex items-end gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-primary/55', backgroundUrl && 'bg-background/85 backdrop-blur-sm')}>
+      <div {...fileDrop.dropHandlers} className={cn('flex items-end gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-primary/55', backgroundUrl && 'bg-background/85 backdrop-blur-sm', fileDrop.dragging && 'border-primary focus-within:border-primary')}>
         <ChatAttachButton chat={chat} disabled={isBusy || activeThreadId === null} />
         {!isGroup && profile?.pageAssist ? <ChatPageConnectButton disabled={isBusy} /> : null}
         {flags.length > 0 ? <ChatFlagButton buttonRef={flagButtonRef} count={activeFlagIds.length} open={flagTrayOpen} disabled={activeThreadId === null} onToggle={() => setFlagTrayOpen((open) => !open)} /> : null}
@@ -1196,6 +1197,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           onChange={(event) => { setDraft(event.target.value); setCaret(event.target.selectionStart); setCommandIndex(0); setMentionIndex(0) }}
           onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
           onKeyDown={handleComposerKeyDown}
+          onPaste={fileDrop.onPaste}
           rows={1}
           placeholder={composerPlaceholder}
           aria-label={t({ ko: '메시지', en: 'Message' })}

@@ -1,5 +1,5 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import { useRef, useState } from 'react'
+import { useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
 import { EyeOff, File, FolderOpen, Images, Paperclip, Upload, X } from 'lucide-react'
 import type { StoredFileEntry } from '@conai/shared'
 import { Button } from '@/components/ui/button'
@@ -59,6 +59,56 @@ export function ChatAttachButton({ chat, disabled }: { chat: CodexChatApi; disab
       {mediaPickerOpen ? <ChatMediaPicker initial={chat.draftMediaAttachments} maxCount={20 - chat.draftAttachments.length} onClose={() => setMediaPickerOpen(false)} onPick={(items) => { if (chat.setMediaAttachments(items)) setMediaPickerOpen(false) }} /> : null}
     </>
   )
+}
+
+/** Screenshots paste as a bare "image.png"; stamp them with the time so several in one message stay apart. */
+function nameCapture(file: File, index: number, count: number) {
+  if (!/^image\.\w+$/i.test(file.name)) return file
+  const now = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  return new globalThis.File([file], `capture-${stamp}${count > 1 ? `-${index + 1}` : ''}.${file.name.split('.').pop()}`, { type: file.type, lastModified: file.lastModified })
+}
+
+/**
+ * Ctrl+V and drag-and-drop into the composer: files take the same upload as "새 파일 올리기".
+ * Text on the clipboard wins (a spreadsheet copy carries a picture of the cells too), and a file dropped while
+ * uploads are closed is swallowed so the browser does not open it in place of the app.
+ */
+export function useChatFileDrop(chat: CodexChatApi, disabled: boolean) {
+  const auth = useAuthStatusQuery()
+  const permissions = auth.data?.permissionKeys ?? []
+  const enabled = !disabled && !chat.attachmentsUploading && permissions.includes('files.view') && permissions.includes('files.edit')
+  const [dragging, setDragging] = useState(false)
+  const depth = useRef(0)
+  const upload = (files: File[]) => { void chat.uploadAttachments(files.map((file, index) => nameCapture(file, index, files.length))) }
+  const carriesFiles = (event: DragEvent) => event.dataTransfer.types.includes('Files')
+  const reset = () => { depth.current = 0; setDragging(false) }
+
+  return {
+    dragging: enabled && dragging,
+    onPaste: (event: ClipboardEvent<HTMLTextAreaElement>) => {
+      const files = Array.from(event.clipboardData.files)
+      if (!enabled || !files.length || event.clipboardData.getData('text/plain').trim()) return
+      event.preventDefault()
+      upload(files)
+    },
+    dropHandlers: {
+      onDragEnter: (event: DragEvent) => { if (carriesFiles(event)) { depth.current += 1; setDragging(true) } },
+      onDragLeave: (event: DragEvent) => { if (carriesFiles(event) && --depth.current <= 0) reset() },
+      onDragOver: (event: DragEvent) => {
+        if (!carriesFiles(event)) return
+        event.preventDefault()
+        event.dataTransfer.dropEffect = enabled ? 'copy' : 'none'
+      },
+      onDrop: (event: DragEvent) => {
+        if (!carriesFiles(event)) return
+        event.preventDefault()
+        reset()
+        if (enabled && event.dataTransfer.files.length) upload(Array.from(event.dataTransfer.files))
+      },
+    },
+  }
 }
 
 /** Files attached to the message being written; shown only while there are some (or an upload runs). */
