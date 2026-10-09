@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { CornerDownLeft, ImageIcon, Search } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
-import { useMediaHoverPreview } from '@/components/common/media-hover-preview'
+import { MediaHoverExpandCue, useMediaHoverPreview } from '@/components/common/media-hover-preview'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { IconButton } from '@/components/ui/icon-button'
@@ -61,6 +61,7 @@ function GalleryTile({ entry, showFoundMark, onOpen }: { entry: GalleryEntry; sh
             <Search className="size-3" />
           </span>
         ) : null}
+        {hoverPreview.inPlace && <MediaHoverExpandCue />}
       </button>
       {hoverPreview.preview}
     </ChatThumbOverlay>

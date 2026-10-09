@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { Maximize2 } from 'lucide-react'
 
 export interface MediaHoverPreviewSource {
   /** Shown right away; usually the thumbnail the trigger already loaded. */
@@ -16,6 +17,8 @@ const HOVER_DELAY_MS = 300
 const VIEWPORT_MARGIN = 12
 const ANCHOR_GAP = 12
 const MAX_EDGE_PX = 480
+/** The preview must come out at least this much larger than the thumbnail on screen to be worth showing. */
+const MIN_PREVIEW_GAIN = 1.25
 const FINE_HOVER_QUERY = '(hover: hover) and (pointer: fine)'
 
 type Size = { width: number; height: number }
@@ -28,12 +31,36 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), Math.max(min, max))
 }
 
-/** Fit the media into the preview box (up to 480px, 40vw × 60vh), upscaling small thumbnails. */
+/** The preview box: up to 480px, 40vw × 60vh. */
+function previewBox(): Size {
+  return { width: Math.min(MAX_EDGE_PX, window.innerWidth * 0.4), height: Math.min(MAX_EDGE_PX, window.innerHeight * 0.6) }
+}
+
+/** Fit the media into the preview box, upscaling small thumbnails. */
 function fitPreviewSize(natural: Size): Size {
-  const maxWidth = Math.min(MAX_EDGE_PX, window.innerWidth * 0.4)
-  const maxHeight = Math.min(MAX_EDGE_PX, window.innerHeight * 0.6)
-  const scale = Math.min(maxWidth / natural.width, maxHeight / natural.height)
+  const box = previewBox()
+  const scale = Math.min(box.width / natural.width, box.height / natural.height)
   return { width: Math.round(natural.width * scale), height: Math.round(natural.height * scale) }
+}
+
+/** A thumbnail already drawn about as large as the preview box gains nothing from a card beside it. */
+function previewWouldEnlarge(anchor: DOMRect) {
+  const box = previewBox()
+  return Math.min(box.width / anchor.width, box.height / anchor.height) >= MIN_PREVIEW_GAIN
+}
+
+/**
+ * Drawn inside the trigger (which must be `relative`) while `inPlace` is set: the thumbnail is too large for a
+ * preview card, so it dims and blurs a little under an expand mark that points at the click-to-open lightbox.
+ */
+export function MediaHoverExpandCue() {
+  return (
+    <span aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center backdrop-blur-[2px] backdrop-brightness-90 animate-in fade-in-0 duration-200 motion-reduce:animate-none">
+      <span className="flex size-10 items-center justify-center rounded-full bg-backdrop text-white">
+        <Maximize2 className="size-5" />
+      </span>
+    </span>
+  )
 }
 
 function MediaHoverPreviewCard({ anchor, source }: { anchor: DOMRect; source: MediaHoverPreviewSource }) {
@@ -141,9 +168,11 @@ function MediaHoverPreviewCard({ anchor, source }: { anchor: DOMRect; source: Me
 /**
  * PC-only enlarged preview beside a thumbnail: spread `triggerProps` on the thumbnail and render `preview` anywhere.
  * It waits a beat before showing and hides on leave, press, scroll or wheel. Touch and coarse pointers never get it.
+ * A thumbnail already about as large as the preview gets no card; `inPlace` turns on instead (see MediaHoverExpandCue).
  */
 export function useMediaHoverPreview(source: MediaHoverPreviewSource | null) {
   const [anchor, setAnchor] = useState<DOMRect | null>(null)
+  const [inPlace, setInPlace] = useState(false)
   const timerRef = useRef<number | null>(null)
 
   const clearTimer = useCallback(() => {
@@ -156,12 +185,13 @@ export function useMediaHoverPreview(source: MediaHoverPreviewSource | null) {
   const hide = useCallback(() => {
     clearTimer()
     setAnchor(null)
+    setInPlace(false)
   }, [clearTimer])
 
   useEffect(() => clearTimer, [clearTimer])
 
   useEffect(() => {
-    if (!anchor) {
+    if (!anchor && !inPlace) {
       return
     }
 
@@ -173,7 +203,7 @@ export function useMediaHoverPreview(source: MediaHoverPreviewSource | null) {
       window.removeEventListener('wheel', hide)
       window.removeEventListener('blur', hide)
     }
-  }, [anchor, hide])
+  }, [anchor, inPlace, hide])
 
   const handlePointerEnter = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     if (event.pointerType !== 'mouse' || !source || !canHover()) {
@@ -184,8 +214,14 @@ export function useMediaHoverPreview(source: MediaHoverPreviewSource | null) {
     clearTimer()
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null
-      if (target.isConnected) {
-        setAnchor(target.getBoundingClientRect())
+      if (!target.isConnected) {
+        return
+      }
+      const rect = target.getBoundingClientRect()
+      if (previewWouldEnlarge(rect)) {
+        setAnchor(rect)
+      } else {
+        setInPlace(true)
       }
     }, HOVER_DELAY_MS)
   }, [clearTimer, source])
@@ -197,6 +233,7 @@ export function useMediaHoverPreview(source: MediaHoverPreviewSource | null) {
       onPointerDown: hide,
     },
     preview: anchor && source ? <MediaHoverPreviewCard key={source.src} anchor={anchor} source={source} /> : null,
+    inPlace: inPlace && source !== null,
     hide,
   }
 }

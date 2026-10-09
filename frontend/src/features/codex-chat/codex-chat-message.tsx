@@ -8,7 +8,7 @@ import { ChatMessageReply } from './chat-reply'
 import { Button } from '@/components/ui/button'
 import { Tip } from '@/components/ui/tooltip'
 import { IconButton } from '@/components/ui/icon-button'
-import { useMediaHoverPreview } from '@/components/common/media-hover-preview'
+import { MediaHoverExpandCue, useMediaHoverPreview } from '@/components/common/media-hover-preview'
 import { Spinner } from '@/components/ui/loading-state'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
@@ -139,6 +139,7 @@ function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: Thu
             )}
           />
         )}
+        {drawn && hoverPreview.inPlace && <MediaHoverExpandCue />}
         {!drawn && (
           <span className="absolute inset-0 flex items-center justify-center">
             {retried.failed ? <ImageOff className="size-5" /> : <Spinner size="md" />}
@@ -163,7 +164,7 @@ function ChatFoundTile({ image, onOpen }: { image: ImageRecord; onOpen: () => vo
       <button
         type="button"
         aria-label={t({ ko: '크게 보기', en: 'View larger' })}
-        className="block aspect-square w-full cursor-zoom-in overflow-hidden rounded-sm bg-surface-high outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
+        className="relative block aspect-square w-full cursor-zoom-in overflow-hidden rounded-sm bg-surface-high outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
         onClick={onOpen}
         {...hoverPreview.triggerProps}
       >
@@ -172,6 +173,7 @@ function ChatFoundTile({ image, onOpen }: { image: ImageRecord; onOpen: () => vo
         ) : (
           <img src={thumbnailUrl} alt="" loading="lazy" draggable={false} className="block size-full object-cover" />
         )}
+        {hoverPreview.inPlace && <MediaHoverExpandCue />}
       </button>
       {hoverPreview.preview}
     </ChatThumbOverlay>
