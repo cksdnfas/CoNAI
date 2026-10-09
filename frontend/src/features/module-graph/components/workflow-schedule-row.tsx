@@ -72,9 +72,10 @@ export function WorkflowScheduleRow({ schedule, workflowName, cover, compact = f
         </div>
         {actions ? <div className="flex shrink-0 items-center gap-1">{actions}</div> : null}
       </div>
-      {stopReason ? (
-        <div role="status" className="mt-2 ml-12 rounded-sm bg-warning-soft/45 px-3 py-2 text-xs text-muted-foreground">{stopReason}</div>
-      ) : null}
+      {stopReason ? compact
+        ? <div role="status" className="mt-1 ml-12 truncate text-2xs text-warning">{stopReason}</div>
+        : <div role="status" className="mt-2 ml-12 rounded-sm bg-warning-soft/45 px-3 py-2 text-xs text-muted-foreground">{stopReason}</div>
+        : null}
     </div>
   )
 }

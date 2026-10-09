@@ -144,7 +144,7 @@ export function ChatRoutineRows({ routines, onEdit }: { routines: ChatRoutineVie
         return (
           <div key={routine.id} className="border-b border-line py-2.5 last:border-b-0">
             <div className="flex items-start gap-3">
-              <span className="flex w-8 shrink-0 justify-center pt-0.5">{face}</span>
+              <span className="flex shrink-0 pt-0.5">{face}</span>
               <div className="min-w-0 flex-1 space-y-0.5">
                 <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                   <StatusDot routine={routine} t={t} />

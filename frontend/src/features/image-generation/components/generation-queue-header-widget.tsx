@@ -215,6 +215,7 @@ export function GenerationQueueHeaderWidget() {
   )
 
   const reservationSchedules = useMemo(() => sortWorkflowReservationSchedules(reservationSchedulesQuery.data ?? []), [reservationSchedulesQuery.data])
+  const activeReservationCount = getActiveWorkflowReservationScheduleCount(reservationSchedules)
 
   useEffect(() => {
     if (globalQueueQuery.isPending || globalQueueQuery.isError || isNotificationBaselineReady) {
@@ -370,7 +371,7 @@ export function GenerationQueueHeaderWidget() {
                     // The active count rides on the label (the tab has no summary row).
                     label: [
                       t('image-generation.components.generation.queue.header.widget.reservations'),
-                      reservationSchedules.length > 0 ? t({ ko: '활성 {count}', en: 'Active {count}' }, { count: formatNumber(getActiveWorkflowReservationScheduleCount(reservationSchedules)) }) : null,
+                      activeReservationCount > 0 ? t({ ko: '활성 {count}', en: 'Active {count}' }, { count: formatNumber(activeReservationCount) }) : null,
                     ].filter(Boolean).join(' · '),
                   }]
                 : []),

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { RowPicker, type RowPickerItem } from '@/components/ui/row-picker'
 import { useI18n } from '@/i18n'
+import { cn } from '@/lib/utils'
 import type { ChatProfileSummary, CodexChatThread } from '@/lib/api-codex-chat'
 import { GroupAvatarStack } from './chat-group'
 import { ChatProfileAvatar } from './chat-profile-avatar'
@@ -20,7 +21,15 @@ export function ChatRoomFace({ thread, profilesById, size = 'md', ringClassName 
 }) {
   if (thread.kind === 'group') {
     const members = (thread.member_profile_ids ?? []).flatMap((id) => profilesById.get(id) ?? [])
-    return <GroupAvatarStack profiles={members} size={size === 'md' ? 'sm' : 'xs'} ringClassName={ringClassName} />
+    if (size !== 'md' || members.length < 2) return <GroupAvatarStack profiles={members} size="xs" ringClassName={ringClassName} />
+    // Two faces corner to corner, in the same square as a single face, so names line up down a list.
+    const [first, second] = members
+    return (
+      <span className="relative size-8 shrink-0" aria-hidden="true">
+        <ChatProfileAvatar name={first.name} profile={first} engine={first.engine} size="xs" className="absolute top-0 left-0" />
+        <ChatProfileAvatar name={second.name} profile={second} engine={second.engine} size="xs" className={cn('absolute right-0 bottom-0 ring-2', ringClassName)} />
+      </span>
+    )
   }
   const profile = thread.profile_id !== null ? profilesById.get(thread.profile_id) : undefined
   return profile
