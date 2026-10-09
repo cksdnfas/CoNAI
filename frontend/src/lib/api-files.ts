@@ -1,4 +1,4 @@
-import type { FileStoreListing, StoredFileEntry, StoredFileOwner, StoredFileText } from '@conai/shared'
+import type { FileStoreListing, StoredFileEntry, StoredFileOwner, StoredFileSearchResult, StoredFileText } from '@conai/shared'
 import { requestApiData } from './api-request'
 import { buildApiUrl } from './api-url'
 
@@ -9,6 +9,8 @@ export type StoredFileOwnerKey = string | null | undefined
 const ownerQuery = (owner: StoredFileOwnerKey, first = false) => (owner ? `${first ? '?' : '&'}owner=${encodeURIComponent(owner)}` : '')
 
 export const listStoredFiles = (parentId: string | null, offset = 0, owner?: StoredFileOwnerKey) => requestApiData<FileStoreListing>(`/api/files?parentId=${parentId ?? ''}&offset=${offset}${ownerQuery(owner)}`)
+/** Files and folders whose name or text contains every word of `query` (a "quoted phrase" is one term). */
+export const searchStoredFiles = (query: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileSearchResult>(`/api/files/search?q=${encodeURIComponent(query)}${ownerQuery(owner)}`)
 export const listStoredFolders = (owner?: StoredFileOwnerKey) => requestApiData<StoredFileEntry[]>(`/api/files/folders${ownerQuery(owner, true)}`)
 export const listStoredFileOwners = () => requestApiData<StoredFileOwner[]>('/api/files/owners')
 export const storedFileDownloadUrl = (id: string, owner?: StoredFileOwnerKey) => buildApiUrl(`/api/files/${encodeURIComponent(id)}/download${ownerQuery(owner, true)}`)

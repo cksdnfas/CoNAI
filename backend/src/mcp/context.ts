@@ -103,6 +103,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   list_files: 'read',
   get_file_info: 'read',
   read_file_text: 'read',
+  search_files: 'read',
   list_emoticon_groups: 'read',
   list_emoticons: 'read',
   view_images: 'read',

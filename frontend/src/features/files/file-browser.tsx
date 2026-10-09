@@ -1,8 +1,8 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import { useMemo, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AudioLines, ChevronRight, Download, File, FileText, Film, Folder, FolderInput, FolderPlus, Image as ImageIcon, LayoutGrid, List, Music, Pencil, RefreshCw, Trash2, Upload, Users } from 'lucide-react'
-import type { StoredFileEntry, StoredFileOwner } from '@conai/shared'
+import { AudioLines, ChevronRight, Download, File, FileText, Film, Folder, FolderInput, FolderPlus, Image as ImageIcon, LayoutGrid, List, Music, Pencil, RefreshCw, Search, Trash2, Upload, Users, X } from 'lucide-react'
+import type { StoredFileEntry, StoredFileOwner, StoredFileSearchHit } from '@conai/shared'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -25,7 +25,7 @@ import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-a
 import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
-import { FILES_QUERY_KEY, createStoredFolder, deleteStoredFiles, formatFileSize, listStoredFileOwners, listStoredFiles, listStoredFolders, moveStoredFiles, renameStoredFile, storedFileDownloadUrl, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
+import { FILES_QUERY_KEY, createStoredFolder, deleteStoredFiles, formatFileSize, listStoredFileOwners, listStoredFiles, listStoredFolders, moveStoredFiles, renameStoredFile, searchStoredFiles, storedFileDownloadUrl, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { FilePreview } from './file-preview'
@@ -122,6 +122,39 @@ function FileTile({ entry, owner, selected, showCheckbox, canSelect, draggable, 
           <Checkbox aria-label={t({ ko: '{name} 선택', en: 'Select {name}' }, { name: entry.name })} checked={selected} onCheckedChange={(checked) => onToggle(checked === true)} />
         </span>
       ) : null}
+    </div>
+  )
+}
+
+/** `text` with every search term marked (terms are matched case-insensitively, as the server does for Latin letters). */
+function highlightTerms(text: string, terms: string[]): ReactNode {
+  if (terms.length === 0) return text
+  const pattern = new RegExp(`(${terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi')
+  return text.split(pattern).map((part, index) => (index % 2 === 1 ? <mark key={index} className="rounded-sm bg-primary/20 px-0.5 text-foreground">{part}</mark> : part))
+}
+
+/** Search results in place of the folder list: name, folder path and the text around the match. */
+function SearchHits({ hits, terms, truncated, onOpen }: { hits: StoredFileSearchHit[]; terms: string[]; truncated: boolean; onOpen: (entry: StoredFileEntry) => void }) {
+  const { t } = useI18n()
+  return (
+    <div className="space-y-1">
+      <p className="text-xs text-muted-foreground">
+        {truncated ? t({ ko: '결과 {count}개 이상', en: '{count}+ results' }, { count: hits.length }) : t({ ko: '결과 {count}개', en: '{count} results' }, { count: hits.length })}
+      </p>
+      <ul className="divide-y divide-line">
+        {hits.map(({ entry, path, snippet }) => (
+          <li key={entry.id}>
+            <Button variant="ghost" className="h-auto w-full flex-col items-stretch gap-1 whitespace-normal py-2 text-left font-normal" onClick={() => onOpen(entry)}>
+              <span className="flex min-w-0 items-center gap-2">
+                <EntryIcon entry={entry} />
+                <span className="min-w-0 truncate text-sm text-foreground">{highlightTerms(entry.name, terms)}</span>
+                <span className="min-w-0 shrink truncate text-xs text-muted-foreground">{path}</span>
+              </span>
+              {snippet ? <span className="line-clamp-2 break-all pl-6 text-xs leading-relaxed text-muted-foreground">{highlightTerms(snippet, terms)}</span> : null}
+            </Button>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -224,8 +257,19 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
   const canSendAudio = useCanSendToAudio() && storeOwner === null
   const [viewMode, changeViewMode] = useFileViewMode()
   const uploadInput = useRef<HTMLInputElement>(null)
+  // Search replaces the folder list while open; the request waits for typing to pause.
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchInput, setSearchInput] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSearchQuery(searchInput.trim()), 300)
+    return () => window.clearTimeout(timer)
+  }, [searchInput])
+  const canSearch = !isPicker && !browsingAll
+  const searching = canSearch && searchOpen && searchQuery !== ''
   const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'list', parentId, offset], queryFn: () => listStoredFiles(parentId, offset, storeOwner), enabled: canViewFiles && !browsingAll && !browsingSystem })
   const foldersQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'folders'], queryFn: () => listStoredFolders(storeOwner), enabled: canViewFiles && !browsingAll })
+  const searchResults = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'search', searchQuery], queryFn: () => searchStoredFiles(searchQuery, storeOwner), enabled: canViewFiles && searching })
   const ownersQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'owners'], queryFn: listStoredFileOwners, enabled: canBrowseAll })
   const folders = useMemo(() => folderTree(foldersQuery.data ?? []), [foldersQuery.data])
   const entries = query.data?.entries ?? []
@@ -249,14 +293,15 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
   const busy = mutation.isPending
 
   useChatPageRegistration(!isPicker && chatCanReadFiles && !browsingAll && !browsingSystem ? {
-    kind: 'files', title: t({ ko: '파일 보관함', en: 'File store' }), resourceId: `${storeOwner ?? 'self'}:${parentId ?? 'root'}`, localRevision: JSON.stringify([selected, preview?.id, nameDialog, moveOpen]),
+    kind: 'files', title: t({ ko: '파일 보관함', en: 'File store' }), resourceId: `${storeOwner ?? 'self'}:${parentId ?? 'root'}`, localRevision: JSON.stringify([selected, preview?.id, nameDialog, moveOpen, searchOpen, searchInput]),
     fields: [
       { id: 'viewMode', label: t({ ko: '목록 표시', en: 'List view' }), type: 'select', value: viewMode, options: ['grid', 'list'] },
+      { id: 'search', label: t({ ko: '파일 검색어 (이름·내용, 빈 값은 검색 닫기)', en: 'File search (name or text; empty closes search)' }), type: 'text', value: searchOpen ? searchInput : '' },
       ...(nameDialog ? [{ id: 'name', label: t({ ko: '폴더·파일 이름 입력', en: 'Folder or file name draft' }), type: 'text' as const, value: nameDialog.name }] : []),
       ...(moveOpen ? [{ id: 'moveTarget', label: t({ ko: '이동할 폴더 (빈 값은 최상위)', en: 'Destination folder (empty means root)' }), type: 'select' as const, value: moveTarget, options: ['', ...folders.filter((entry) => !selected.includes(entry.folder.id)).map((entry) => entry.folder.id)].slice(0, 100) }] : []),
     ],
     data: { files: entries.slice(0, 512).map((entry) => ({ id: entry.id, name: entry.name, kind: entry.kind, mimeType: entry.mimeType, bytes: entry.size })), selected: selection.map((entry) => ({ id: entry.id, name: entry.name })), total: query.data?.total ?? 0, offset },
-    apply: (patch) => { if (patch.viewMode !== undefined) changeViewMode(patch.viewMode as FileViewMode); if (patch.name !== undefined) setNameDialog((old) => old ? { ...old, name: String(patch.name) } : old); if (patch.moveTarget !== undefined) setMoveTarget(String(patch.moveTarget)) },
+    apply: (patch) => { if (patch.viewMode !== undefined) changeViewMode(patch.viewMode as FileViewMode); if (patch.search !== undefined) { setSearchInput(String(patch.search)); setSearchOpen(String(patch.search).trim() !== '') } if (patch.name !== undefined) setNameDialog((old) => old ? { ...old, name: String(patch.name) } : old); if (patch.moveTarget !== undefined) setMoveTarget(String(patch.moveTarget)) },
     actions: [
       pageAction('files.open', t({ ko: '폴더 열기', en: 'Open folder' }), t({ ko: '목록(data.files)의 폴더나 최상위(root)를 열어.', en: 'Open a listed folder or the top level (root).' }), pageObject({ id: pageChoice(['root', ...entries.filter((entry) => entry.kind === 'folder').slice(0, 200).map((entry) => entry.id)]) }, ['id'])),
       ...(entries.some((entry) => entry.kind !== 'folder') ? [pageAction('files.preview', t({ ko: '파일 미리보기', en: 'Preview file' }), t({ ko: '목록의 파일 미리보기를 열어.', en: 'Open a listed file preview.' }), pageObject({ id: pageChoice(entries.filter((entry) => entry.kind !== 'folder').slice(0, 300).map((entry) => entry.id)) }, ['id']))] : []),
@@ -270,7 +315,12 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
     },
   } : null)
 
+  const closeSearch = () => {
+    setSearchOpen(false)
+    setSearchInput('')
+  }
   const navigate = (id: string | null) => {
+    closeSearch()
     setSelected([])
     setOffset(0)
     onNavigate(id)
@@ -332,6 +382,11 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
       <IconButton variant="ghost" label={t({ ko: '새로고침', en: 'Refresh' })} onClick={() => void refresh()} disabled={busy}>
         <RefreshCw />
       </IconButton>
+      {canSearch && !searchOpen ? (
+        <IconButton variant="ghost" label={t({ ko: '검색', en: 'Search' })} onClick={() => setSearchOpen(true)}>
+          <Search />
+        </IconButton>
+      ) : null}
       {canOrganize && !browsingAll ? (
         <IconButton variant="ghost" label={t({ ko: '새 폴더', en: 'New folder' })} disabled={busy} onClick={() => setNameDialog({ name: '' })}>
           <FolderPlus />
@@ -363,6 +418,24 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
     </nav>
   )
 
+  const searchField = (
+    <div className="flex min-w-0 flex-1 items-center gap-1">
+      <Search className="size-4 shrink-0 text-muted-foreground" />
+      <Input
+        autoFocus
+        variant="settings"
+        className="min-w-0 flex-1"
+        aria-label={t({ ko: '파일 이름이나 내용 검색', en: 'Search file names and text' })}
+        value={searchInput}
+        onChange={(event) => setSearchInput(event.target.value)}
+        onKeyDown={(event) => { if (event.key === 'Escape') closeSearch() }}
+      />
+      <IconButton variant="ghost" size="icon-sm" label={t({ ko: '검색 닫기', en: 'Close search' })} onClick={closeSearch}>
+        <X />
+      </IconButton>
+    </div>
+  )
+
   const sidebar = (
     <SidebarNav aria-label={t({ ko: '폴더', en: 'Folders' })}>
       {canBrowseAll ? <SidebarItem icon={Users} label={t({ ko: '전체 계정', en: 'All accounts' })} active={browsingAll} onClick={() => openOwner(null)} /> : null}
@@ -383,7 +456,12 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
   }
 
   let list
-  if (browsingAll) {
+  if (searching) {
+    if (searchResults.isPending) list = <LoadingState />
+    else if (searchResults.isError) list = <ErrorState title={t({ ko: '검색하지 못했어.', en: 'Search failed.' })} error={searchResults.error} onRetry={() => void searchResults.refetch()} />
+    else if (searchResults.data.hits.length === 0) list = <EmptyState icon={Search} title={t({ ko: '찾은 파일이 없어', en: 'No matching files' })} />
+    else list = <SearchHits hits={searchResults.data.hits} terms={searchResults.data.terms} truncated={searchResults.data.truncated} onOpen={(entry) => (entry.kind === 'folder' ? navigate(entry.id) : setPreview(entry))} />
+  } else if (browsingAll) {
     if (ownersQuery.isPending) list = <LoadingState />
     else if (ownersQuery.isError) list = <ErrorState title={t({ ko: '계정 목록을 불러오지 못했어.', en: 'Could not load accounts.' })} error={ownersQuery.error} onRetry={() => void ownersQuery.refetch()} />
     else list = <OwnerList owners={ownersQuery.data} onOpen={openOwner} />
@@ -499,7 +577,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
     )
   }
 
-  const pager = !browsingAll && query.data && query.data.total > query.data.limit ? (
+  const pager = !browsingAll && !searching && query.data && query.data.total > query.data.limit ? (
     <div className="flex justify-end gap-2">
       <Button variant="ghost" size="sm" disabled={offset === 0} onClick={() => { setOffset((value) => Math.max(0, value - PAGE_SIZE)); setSelected([]) }}>{t({ ko: '이전', en: 'Previous' })}</Button>
       <Button variant="ghost" size="sm" disabled={offset + query.data.limit >= query.data.total} onClick={() => { setOffset((value) => value + PAGE_SIZE); setSelected([]) }}>{t({ ko: '다음', en: 'Next' })}</Button>
@@ -543,7 +621,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
           storageKey="files"
           sidebarLabel={t({ ko: '파일 보관함', en: 'Files' })}
           sidebar={sidebar}
-          toolbar={<PageToolbar sticky start={breadcrumbs} actions={actions} />}
+          toolbar={<PageToolbar sticky start={canSearch && searchOpen ? searchField : breadcrumbs} actions={actions} />}
         >
           {body}
         </PageWithSidebar>

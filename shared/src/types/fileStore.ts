@@ -38,6 +38,23 @@ export interface StoredFileText {
   size: number;
 }
 
+/** One search hit: a file or folder whose name or UTF-8 text contains every search term. */
+export interface StoredFileSearchHit {
+  entry: StoredFileEntry;
+  /** Folder path from the store root, e.g. `/설정 문서` (`/` at the top). */
+  path: string;
+  /** A short excerpt around the first term found in the text, or null when only the name matched. */
+  snippet: string | null;
+}
+
+export interface StoredFileSearchResult {
+  /** The parsed terms, lowercased; a quoted phrase is one term. */
+  terms: string[];
+  hits: StoredFileSearchHit[];
+  /** More hits exist than were returned. */
+  truncated: boolean;
+}
+
 /** Server folders administrators can browse next to the file store. Only the RecycleBin can be changed. */
 export type SystemFolderRootId = 'recycle-bin' | 'uploads' | 'save' | 'temp' | 'logs';
 

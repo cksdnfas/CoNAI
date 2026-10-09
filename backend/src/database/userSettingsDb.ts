@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { attachMainImagesDatabase, ensureApiGenerationHistoryTable, USER_DB_PATH } from './userSettingsBootstrap';
+import { attachSearchDatabase } from './searchDb';
 import { ensureUserSettingsCompatibility } from './userSettingsCompatibility';
 import { createUserSettingsSchema } from './userSettingsSchema';
 import { configureSqliteConnection } from './sqlitePragmas';
@@ -33,6 +34,7 @@ export function initializeUserSettingsDb(): void {
     createUserSettingsSchema(userSettingsDb);
     ensureUserSettingsCompatibility(userSettingsDb);
     attachMainImagesDatabase(userSettingsDb);
+    attachSearchDatabase(userSettingsDb);
     ensureApiGenerationHistoryTable(userSettingsDb);
   } catch (error) {
     console.error('Failed to initialize unified user database:', error);

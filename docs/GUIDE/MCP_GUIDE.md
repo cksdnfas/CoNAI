@@ -292,6 +292,7 @@ stdio:
 | `list_files` | 폴더 내용 조회 | `read` |
 | `get_file_info` | 파일·폴더 정보 조회 | `read` |
 | `read_file_text` | UTF-8 텍스트 파일을 나눠 읽기 | `read` |
+| `search_files` | 이름·내용으로 파일 찾기 (띄어 쓴 단어 모두 포함, `"문장"`은 그대로) | `read` |
 | `create_file_folder` | 폴더 만들기 | `organize` |
 | `rename_file` | 이름 바꾸기 | `organize` |
 | `move_files` | 폴더로 옮기기 (폴더는 내용과 함께) | `organize` |

@@ -8,6 +8,7 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { FileStoreError, FileStoreService, assertFileTypeAllowed, fileOwnerKey, parseFileId, parseOwnerKey } from '../services/fileStoreService';
 import { ensureFileStoreDirectories, fileStoreIncoming } from '../services/fileStorePaths';
 import { filePreviewMime, getFileThumbnail } from '../services/fileStorePreview';
+import { searchStoredFiles } from '../services/fileStoreSearch';
 import { getRequesterAccountId, isAdminRequest } from './requester-session-helpers';
 
 const router = Router();
@@ -38,6 +39,10 @@ router.get('/', (req, res) => {
 });
 router.get('/owners', requireAdmin, (req, res) => res.json({ success: true, data: FileStoreService.owners(selfOwner(req)) }));
 router.get('/folders', (req, res) => res.json({ success: true, data: FileStoreService.folders(owner(req)) }));
+/** GET /api/files/search?q= — files and folders whose name or text contains every word ("quoted phrase" = one term). */
+router.get('/search', asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await searchStoredFiles(owner(req), req.query.q, Number(req.query.limit ?? 50)) });
+}));
 router.post('/folders', requirePermission('files.edit'), (req, res) => {
   res.status(201).json({ success: true, data: FileStoreService.createFolder(owner(req), parseFileId(req.body?.parentId, true), req.body?.name) });
 });

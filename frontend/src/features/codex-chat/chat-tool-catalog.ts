@@ -83,6 +83,7 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   get_codex_generation_options: { group: 'workflows', label: { ko: 'Codex 생성 옵션', en: 'Codex generation options' }, ko: 'Codex 이미지 생성의 요청 형식과 모델을 읽어.' },
   list_files: { group: 'files', label: { ko: '파일 목록', en: 'List files' }, ko: '채팅 파일 보관함의 폴더와 파일을 둘러봐.' },
   get_file_info: { group: 'files', label: { ko: '파일 정보', en: 'File info' }, ko: '보관함 파일 하나의 이름·크기·종류를 읽어.' },
+  search_files: { group: 'files', label: { ko: '파일 검색', en: 'Search files' }, ko: '보관함에서 이름이나 내용에 단어가 들어간 파일을 찾아.' },
   read_file_text: { group: 'files', label: { ko: '파일 내용 읽기', en: 'Read file text' }, ko: '보관함의 텍스트 파일을 잘라 가며 읽어.' },
   list_emoticon_groups: { group: 'emoticons', label: { ko: '이모티콘 그룹 목록', en: 'Emoticon groups' }, ko: '이모티콘 그룹과 이미지·키워드 수를 나열해.' },
   list_emoticons: { group: 'emoticons', label: { ko: '이모티콘 목록', en: 'List emoticons' }, ko: '그룹 안의 이모티콘 이미지와 키워드를 읽어.' },

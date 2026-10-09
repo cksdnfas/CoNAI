@@ -10,7 +10,7 @@ export class FileStoreError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
 }
 
-type FileRow = {
+export type FileRow = {
   id: string; owner_key: string; parent_id: string | null; name: string; name_key: string;
   kind: 'file' | 'folder'; mime_type: string | null; size: number; created_at: string; updated_at: string;
 };
@@ -49,7 +49,7 @@ export function assertFileTypeAllowed(name: string, allowAnyType: boolean): void
   }
 }
 
-function toEntry(row: FileRow): StoredFileEntry {
+export function toEntry(row: FileRow): StoredFileEntry {
   return { id: row.id, parentId: row.parent_id, name: row.name, kind: row.kind, mimeType: row.mime_type,
     size: row.size, createdAt: `${row.created_at.replace(' ', 'T')}Z`, updatedAt: `${row.updated_at.replace(' ', 'T')}Z` };
 }
@@ -239,6 +239,8 @@ export const FileStoreService = {
       if (row.kind === 'file' && name.toLowerCase() !== row.name_key) assertFileTypeAllowed(name, allowAnyType);
       assertUnique(owner, row.parent_id, name, id);
       getUserSettingsDb().prepare('UPDATE stored_file_entries SET name = ?, name_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(name, name.toLowerCase(), id);
+      // The extension decides whether the text is searchable; a same-second rename would look unchanged to the cache.
+      getUserSettingsDb().prepare("DELETE FROM search_db.search_documents WHERE source = 'file' AND source_id = ?").run(id);
       return [row, requireRow(owner, id)];
     }).immediate();
     notifyChange({ owner, action: 'rename', entries: [changedEntry(current, previous)] });
@@ -336,6 +338,8 @@ export const FileStoreService = {
         const id = existing?.id ?? crypto.randomBytes(16).toString('hex');
         if (existing) {
           getUserSettingsDb().prepare('UPDATE stored_file_entries SET size = ?, mime_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(data.length, textMimeType(name), id);
+          // A rewrite in the same second at the same size would look unchanged to the search cache.
+          getUserSettingsDb().prepare("DELETE FROM search_db.search_documents WHERE source = 'file' AND source_id = ?").run(id);
         } else {
           insert(owner, parentId, name, 'file', id, data.length, textMimeType(name));
         }
@@ -440,6 +444,7 @@ export const FileStoreService = {
           fs.rmSync(fileStoreThumbnailPath(row.id), { force: true });
         }
         db.prepare('DELETE FROM stored_file_entries WHERE id = ? AND NOT EXISTS (SELECT 1 FROM stored_file_entries WHERE parent_id = ?)').run(row.id, row.id);
+        db.prepare("DELETE FROM search_db.search_documents WHERE source = 'file' AND source_id = ?").run(row.id);
       } catch (error) {
         console.warn('[file-store] Deletion will retry:', row.id, error instanceof Error ? error.message : error);
       }
