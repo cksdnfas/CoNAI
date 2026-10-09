@@ -288,6 +288,22 @@ test('workflow chat nodes: run requester, characters, presets, lorebooks and cha
     await assert.rejects(run('system.post_to_chat_room', { room_id: bootstrapRoom, text: 'x' }), /로그인한 계정으로 직접 실행/)
   })
 
+  // ---- B5: post to the board ----------------------------------------------------------------------------------------
+  const { PostStore } = await import('../src/services/posts/postStore')
+  const boardReader = { accountId: null, isAdmin: true, keys: new Set<string>(), profileId: null }
+  const boardImage = await imageUrl('#3366cc')
+  const posted = await run('system.post_to_board', { title: '워크플로 글', text: '본문', image: boardImage, tags: '자동, 테스트', profile_id: mina.id })
+  const savedPost = PostStore.get(boardReader, posted.post.id)
+  assert.equal(savedPost.author.name, mina.name, 'written as the character')
+  assert.equal(savedPost.status, 'published')
+  assert.match(savedPost.body, /^본문\n\n!\[\]\(media:[a-f0-9]{48}\)$/)
+  assert.deepEqual(savedPost.tags, ['자동', '테스트'])
+  assert.equal((await run('system.post_to_board', { title: '초안', status: 'draft' })).post.status, 'draft')
+  await assert.rejects(run('system.post_to_board', { text: '제목 없음' }), /제목/)
+  await withAuthConfigured(async () => {
+    await assert.rejects(run('system.post_to_board', { title: 'x' }), /실행 계정이 없어/, 'a run without an account cannot post once accounts exist')
+  })
+
   // ---- B2: generate with a chat preset (the queue never dispatches; the run is aborted while it waits) -------------
   const latestJob = () => {
     const row = db.prepare('SELECT id FROM generation_queue_jobs ORDER BY id DESC LIMIT 1').get() as { id: number }

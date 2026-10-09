@@ -18,6 +18,8 @@ import { ChatProfileStore, type ChatProfile } from '../codex-chat/chatProfiles'
 import { CodexChatStore } from '../codex-chat/codexChatStore'
 import { ensureAutomationRoom, wakeChatRoom, wakeReplyText, ChatWakeBusyError } from '../codex-chat/chatRoomWake'
 import { resolveAutomationRunAs } from '../automationRunAs'
+import { actorFromRequester } from '../posts/postActor'
+import { PostStore } from '../posts/postStore'
 import { buildPersonaPrompt } from '../codex-chat/llmChatContext'
 import { fileOwnerKey } from '../fileStoreService'
 import { GenerationQueueService } from '../generationQueueService'
@@ -425,6 +427,38 @@ export async function executePostToChatRoomNode(
   }
   completeSystemNode(context, node, moduleDefinition, 'system.post_to_chat_room', {
     message: buildRuntimeArtifact(context.executionId, node.id, 'message', 'json', message, { kind: 'system-post-to-chat-room', room_id: thread.id }),
+  })
+}
+
+/**
+ * Post to the board as the run's account, or as a character the account may use. The image goes into the body as a
+ * library embed under the text. Schedules post with their run-as account.
+ */
+export async function executePostToBoardNode(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  resolvedInputs: Record<string, any>,
+) {
+  const title = optionalText(resolvedInputs.title)
+  if (!title) throw new Error('게시물 제목을 넣어줘.')
+  const runAs = resolveAutomationRunAs(runRequester(context), ['posts.view', 'posts.write'])
+  if (!runAs.ok) throw new Error(runAs.message)
+  const profile = parsePositiveIntegerish(resolvedInputs.profile_id) === null ? null : requireWorkflowProfile(context, resolvedInputs.profile_id)
+  const compositeHash = await libraryHashOfImageInput(resolvedInputs.image)
+  const body = [optionalText(resolvedInputs.text), compositeHash ? `![](media:${compositeHash})` : ''].filter(Boolean).join('\n\n')
+  const categoryId = parsePositiveIntegerish(resolvedInputs.category_id)
+  const post = PostStore.create(actorFromRequester(runAs.requester, profile?.id ?? null), {
+    title,
+    body,
+    categoryId,
+    tags: optionalText(resolvedInputs.tags),
+    status: resolvedInputs.status === 'draft' ? 'draft' : 'published',
+  }, 'workflow')
+  writeExecutionLog({ executionId: context.executionId, nodeId: node.id, eventType: 'node_post_to_board', message: `Post ${post.id} written`, details: { postId: post.id, status: post.status } })
+  const output = { id: post.id, title: post.title, status: post.status, author: post.author.name, category_id: post.categoryId }
+  completeSystemNode(context, node, moduleDefinition, 'system.post_to_board', {
+    post: buildRuntimeArtifact(context.executionId, node.id, 'post', 'json', output, { kind: 'system-post-to-board', post_id: post.id }),
   })
 }
 

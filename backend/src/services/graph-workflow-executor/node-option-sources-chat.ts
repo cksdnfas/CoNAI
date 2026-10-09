@@ -5,6 +5,7 @@ import { OwnedLorebookStore } from '../codex-chat/chatLorebookFiles'
 import { ChatProfileStore } from '../codex-chat/chatProfiles'
 import { CodexChatStore } from '../codex-chat/codexChatStore'
 import { fileOwnerKey } from '../fileStoreService'
+import { PostCategoryStore } from '../posts/postStore'
 import type { NodeOptionContext, NodeOptionSource } from './node-option-sources'
 
 /** The asking account; null is the bootstrap owner only while no accounts are configured, otherwise nobody. */
@@ -25,6 +26,19 @@ export const CHAT_NODE_OPTION_SOURCES: Record<string, NodeOptionSource> = {
     const owner = askingOwner(context)
     const books = [...ChatLorebookStore.list(), ...(owner ? OwnedLorebookStore.list(owner.fileOwner) : [])]
     return books.map((book) => ({ value: String(book.id), label: book.name }))
+  },
+
+  // Board categories as paths (창작 / 일러스트), in tree order.
+  post_categories: () => {
+    const categories = PostCategoryStore.list()
+    const byId = new Map(categories.map((category) => [category.id, category]))
+    const pathOf = (id: number | null, depth = 0): string[] => {
+      const category = id === null ? undefined : byId.get(id)
+      return category && depth < 8 ? [...pathOf(category.parentId, depth + 1), category.name] : []
+    }
+    return categories
+      .map((category) => ({ value: String(category.id), label: pathOf(category.id).join(' / ') }))
+      .sort((left, right) => left.label.localeCompare(right.label))
   },
 
   // The asking account's chats and group rooms, most recent first.

@@ -13,6 +13,7 @@ import {
   Image as ImageIcon,
   Languages,
   MessageCircle,
+  Newspaper,
   Puzzle,
   Scale,
   Search,
@@ -72,6 +73,7 @@ const OPERATION_ICONS: Readonly<Record<string, LucideIcon>> = {
   'system.search_lorebook': BookOpen,
   'system.post_to_chat_room': Send,
   'system.wake_chat_room': AlarmClock,
+  'system.post_to_board': Newspaper,
   'system.read_runtime_status': Activity,
 }
 

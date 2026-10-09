@@ -139,4 +139,41 @@ export const BUILTIN_CHAT_NODE_DEFINITIONS: BuiltinSystemModuleDefinition[] = [
     ],
     color: '#5c6bc0',
   },
+  {
+    name: '게시판에 올리기',
+    description: '게시판에 글을 올려. 캐릭터를 고르면 그 봇 이름으로, 비우면 실행한 계정 이름으로 올라가.',
+    category: 'output',
+    exposedInputs: [
+      { key: 'title', label: '제목', direction: 'input', data_type: 'text', required: true, multiple: false },
+      { key: 'text', label: '본문', direction: 'input', data_type: 'text', required: false, multiple: false },
+      { key: 'image', label: '이미지', direction: 'input', data_type: 'image', required: false, multiple: false },
+      { key: 'category_id', label: '카테고리', direction: 'input', data_type: 'number', required: false, multiple: false },
+      { key: 'tags', label: '태그', direction: 'input', data_type: 'text', required: false, multiple: false },
+      { key: 'profile_id', label: '캐릭터', direction: 'input', data_type: 'number', required: false, multiple: false },
+      { key: 'status', label: '상태', direction: 'input', data_type: 'text', required: false, multiple: false, default_value: 'published' },
+    ],
+    outputPorts: [
+      { key: 'post', label: '게시물', direction: 'output', data_type: 'json', required: false, multiple: false },
+    ],
+    internalFixedValues: { operation_key: 'system.post_to_board' },
+    uiSchema: [
+      { key: 'title', label: '제목', data_type: 'text' },
+      { key: 'text', label: '본문', data_type: 'text' },
+      { key: 'image', label: '이미지', data_type: 'image' },
+      { key: 'category_id', label: '카테고리', data_type: 'number', options_source: 'post_categories' },
+      { key: 'tags', label: '태그 (쉼표로 구분)', data_type: 'text' },
+      { key: 'profile_id', label: '캐릭터', data_type: 'number', options_source: 'chat_profiles' },
+      {
+        key: 'status',
+        label: '상태',
+        data_type: 'select',
+        default_value: 'published',
+        options: [
+          { value: 'published', label: '발행' },
+          { value: 'draft', label: '초안' },
+        ],
+      },
+    ],
+    color: '#ef6c00',
+  },
 ];
