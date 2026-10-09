@@ -176,7 +176,7 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
         }}
       >
         <DialogPrimitive.Portal>
-          <div data-slot="modal" data-side-panel={sidePanelInset ? 'true' : undefined} className={cn('fixed inset-0 z-modal bg-backdrop p-3 sm:p-4 md:p-6', sidePanelInset && 'lg:right-(--modal-side-inset)')} style={sidePanelInset ? { '--modal-side-inset': sidePanelInset } as CSSProperties : undefined} onMouseDown={onClose}>
+          <div data-slot="modal" data-side-panel={sidePanelInset ? 'true' : undefined} className={cn('fixed inset-0 z-modal flex items-center justify-center bg-backdrop p-3 sm:p-4 md:p-6', sidePanelInset && 'lg:right-(--modal-side-inset)')} style={sidePanelInset ? { '--modal-side-inset': sidePanelInset } as CSSProperties : undefined} onMouseDown={onClose}>
             <DialogPrimitive.Content
               ref={contentRef}
               aria-modal={!sidePanelInset}
