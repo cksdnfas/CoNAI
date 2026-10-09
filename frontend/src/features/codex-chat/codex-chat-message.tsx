@@ -1,7 +1,7 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { memo, useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Ban, Check, ChevronLeft, ChevronRight, ImageOff, Scissors, Wrench, X } from 'lucide-react'
+import { AlertTriangle, Ban, Check, ChevronLeft, ChevronRight, ImageOff, Repeat, Scissors, Wrench, X } from 'lucide-react'
 import { isCodexChatGenerationTool, stripEchoedAddresses, withChatGenerationProgress } from '@conai/shared'
 import type { ChatMessageRouting } from '@conai/shared'
 import { ChatMessageReply } from './chat-reply'
@@ -689,7 +689,8 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   )
   const showOwnRow = !hasCast || Boolean(ownText || showReasoning || toolCalls.length > 0)
   const truncated = !streaming && status === 'completed' && finishReason === 'length'
-  const footer = streaming || status === 'interrupted' || status === 'failed' || truncated ? (
+  const loopCut = !streaming && status === 'completed' && finishReason === 'repetition'
+  const footer = streaming || status === 'interrupted' || status === 'failed' || truncated || loopCut ? (
     <div className="space-y-2">
       {streaming ? <ActivityLine toolCalls={toolCalls} translating={translating} /> : null}
       {status === 'interrupted' ? <p className="text-xs text-muted-foreground">{t({ ko: '중단됨', en: 'Stopped' })}</p> : null}
@@ -698,6 +699,13 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
         <Tip content={t({ ko: '최대 출력 토큰에 닿아서 답변이 여기서 끊겼어. ⋯ → 컨텍스트에서 한도를 올릴 수 있어.', en: 'The reply hit the max output tokens. Raise the cap under ⋯ → Context.' })} side="bottom" align="start">
           <p tabIndex={0} className="flex w-fit cursor-help items-center gap-1 rounded-sm text-xs text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
             <Scissors className="size-3" aria-hidden />{t({ ko: '길이 제한에서 잘림', en: 'Cut at the length limit' })}
+          </p>
+        </Tip>
+      ) : null}
+      {loopCut ? (
+        <Tip content={t({ ko: '모델이 같은 걸 계속 반복해서 거기서 끊고 반복한 부분은 지웠어.', en: 'The model kept repeating itself, so the reply was stopped there and the loop removed.' })} side="bottom" align="start">
+          <p tabIndex={0} className="flex w-fit cursor-help items-center gap-1 rounded-sm text-xs text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+            <Repeat className="size-3" aria-hidden />{t({ ko: '반복이라 끊음', en: 'Stopped a loop' })}
           </p>
         </Tip>
       ) : null}

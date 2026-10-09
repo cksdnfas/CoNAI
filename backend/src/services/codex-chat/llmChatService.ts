@@ -90,7 +90,7 @@ type LlmTurn = {
   reasoning: string
   toolCalls: Map<string, CodexChatToolCall>
   offeredTools: ChatCompletionTool[]
-  /** The provider's finish_reason of the last round ('length': the token cap cut the reply). */
+  /** The provider's finish_reason of the last round ('length': the token cap cut the reply; 'repetition': a loop was cut off). */
   finishReason: string | null
   /** Continuing a cut reply: its text, which `text` starts with, and the model is asked to carry on from. */
   continuing?: string
@@ -355,6 +355,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           tools,
           signal: turn.controller.signal,
           allowCompatibilityFallback: !turn.reaction,
+          stopLoops: true,
           maxToolRounds: profile.maxToolRounds,
           callTool: bridge ? async (name, args, id) => {
             requireProfileAccess(requester, profile)
@@ -372,6 +373,11 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           },
         }).then((value) => {
           filter.flush()
+          // The loop was already shown live: take it back off the reply.
+          if (value.loopCut) {
+            turn.text = turn.text.slice(0, Math.max(roundStart, turn.text.length - value.loopCut)).trimEnd()
+            emit(turn, { type: 'text', text: turn.text })
+          }
           return value
         })
       }

@@ -343,6 +343,37 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     assert.equal(reply.content, '안녕, 반가워.')
   })
 
+  await t.test('a looping reply is hung up on, and the loop is taken back off the live text and the stored reply', async (s) => {
+    const thread = directChat()
+    const said = '"좋아, 존. 그땐 네가 1번 회원으로 가입하는 거야.'
+    const loop = Array.from({ length: 400 }, () => text('wuwx'))
+    let served = 0
+    s.mock.method(globalThis, 'fetch', async () => {
+      const chunks = [text(said), text('wxwuxwux'), ...loop, text('', 'length')]
+      return new Response(new ReadableStream({
+        pull(controller) {
+          const chunk = chunks[served++]
+          if (!chunk) { controller.close(); return }
+          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`))
+        },
+      }), { headers: { 'Content-Type': 'text/event-stream' } })
+    })
+    const events: StreamEvent[] = []
+    const reply = await LlmChatService.sendMessage(requester, thread, '계약하자', (event) => events.push(event))
+    assert.equal(reply.content, said)
+    assert.equal(reply.finish_reason, 'repetition')
+    assert.ok(served < 150, `kept reading after the loop (${served} chunks)`)
+    const last = events.filter((event) => event.type === 'text').at(-1)
+    assert.deepEqual(last && 'text' in last ? last.text : null, said)
+  })
+
+  await t.test('the loop check leaves ordinary repeats and long varied text alone', async () => {
+    const { repetitionCut, withoutRepetition } = await import('../src/services/codex-chat/repetitionGuard')
+    assert.equal(repetitionCut('ㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋㅋ 진짜 웃기다……'), null)
+    assert.equal(repetitionCut(Array.from({ length: 80 }, (_, index) => `${index}번째 줄이야.`).join('\n')), null)
+    assert.equal(withoutRepetition(`끝.\n${'같은 문장을 또 쓴다. '.repeat(30)}`), '끝.')
+  })
+
   await t.test('a room reply that rewrites its pre-tool text after the tool round keeps it once', async (s) => {
     const before = '등불 찻집 열던 날이었어. 카운터上等 램프가 번아웃 돼서, 본인이 직접 싣고 내 수리점에 들었지. 그때부터 지금까지 고쳐줘 온 거야.\n\n'
     const after = '등불 찻집 열던 날이었어. 카운터 램프가 번아웃 돼서, 루나가 직접 싣고 내 수리점에 들었지. 그때부터 지금까지 고쳐주고 있다.'

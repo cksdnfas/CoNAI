@@ -6,6 +6,7 @@ import { LlmRequestError } from '../llmRequestRetry'
 import { CLAUDE_CHAT_PROVIDER, streamClaudeChatCompletion } from './claudeChatCompletion'
 import type { ChatMcpToolResult } from './chatMcpBridge'
 import { primaryModelOf } from './modelSlots'
+import { createRepetitionWatch, withoutRepetition } from './repetitionGuard'
 
 export type ChatCompletionToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } }
 
@@ -48,6 +49,11 @@ export type ChatCompletionResult = {
   finishReason: string | null
   /** Prompt tokens the server reported, when it reports usage. */
   promptTokens: number | null
+  /**
+   * finishReason 'repetition': the model was looping, so the stream was stopped and this many characters were cut off
+   * the end of the content (they had already gone out through onContent).
+   */
+  loopCut?: number
 }
 
 function readPromptTokens(json: unknown) {
@@ -280,6 +286,8 @@ export async function streamChatCompletion(params: {
   allowCompatibilityFallback?: boolean
   callTool?: (name: string, args: Record<string, unknown>, id: string) => Promise<ChatMcpToolResult>
   maxToolRounds?: number
+  /** Hang up on a model that starts looping and cut the loop off (finishReason 'repetition', see repetitionGuard). */
+  stopLoops?: boolean
 }): Promise<ChatCompletionResult> {
   const release = await acquireLlmRequestSlot(params.target.providerName, params.target.maxConcurrentRequests ?? 1, params.signal)
   const controller = new AbortController()
@@ -343,8 +351,10 @@ export async function streamChatCompletion(params: {
       throw new LlmRequestError(`LLM 요청 실패 (${response.status}): ${errorText.slice(0, 500) || response.statusText}`, response.status)
     }
     if (!response.body || !(response.headers.get('content-type') ?? '').includes('text/event-stream')) {
-      const result = readJsonCompletion(await response.json())
+      const read = readJsonCompletion(await response.json())
       signal.throwIfAborted()
+      const unlooped = params.stopLoops ? withoutRepetition(read.content) : read.content
+      const result = unlooped === read.content ? read : { ...read, content: unlooped, toolCalls: [], finishReason: 'repetition' }
       if (result.content) params.onContent?.(result.content)
       if (result.reasoning) params.onReasoning?.(result.reasoning)
       return result
@@ -357,6 +367,8 @@ export async function streamChatCompletion(params: {
     const drafts = new Map<number, ToolCallDraft>()
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
     let buffer = ''
+    const watch = createRepetitionWatch()
+    let looping = false
 
     const handleEvent = (data: string) => {
       if (!data || data === '[DONE]') {
@@ -382,6 +394,7 @@ export async function streamChatCompletion(params: {
       if (typeof delta.content === 'string' && delta.content) {
         content += delta.content
         params.onContent?.(delta.content)
+        if (params.stopLoops && watch.looping(content)) looping = true
       }
       const reasoningDelta = readReasoning(delta)
       if (reasoningDelta) {
@@ -410,12 +423,18 @@ export async function streamChatCompletion(params: {
       touch()
       buffer += value
       let boundary = buffer.search(/\r?\n\r?\n/)
-      while (boundary >= 0) {
+      while (boundary >= 0 && !looping) {
         const block = buffer.slice(0, boundary)
         buffer = buffer.slice(boundary).replace(/^\r?\n\r?\n/, '')
         const data = block.split(/\r?\n/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n')
         handleEvent(data)
         boundary = buffer.search(/\r?\n\r?\n/)
+      }
+      // A looping model would write on to the cap: hang up and keep what came before the loop.
+      if (looping) {
+        await reader.cancel().catch(() => {})
+        const kept = withoutRepetition(content)
+        return { content: kept, reasoning, toolCalls: [], finishReason: 'repetition', promptTokens, loopCut: content.length - kept.length }
       }
     }
     if (buffer.trim()) {
