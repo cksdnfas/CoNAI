@@ -138,7 +138,7 @@ export function SecurityPermissionGroupEditorModal({
   const dirty = open && (isCreateMode
     ? draft.name.trim() !== '' || draft.description.trim() !== ''
     : group !== null && (draft.name !== group.name || draft.description !== (group.description ?? '') || !sameKeys(draft.permissionKeys, group.directPermissionKeys)))
-  const canSave = canEditPermissions && !isBusy && (dirty || isCreateMode)
+  const canSave = canEditPermissions && !isBusy && draft.name.trim() !== '' && (dirty || isCreateMode)
   const readOnlyBadge = <Badge variant="secondary">{t({ ko: '읽기 전용', en: 'Read only' })}</Badge>
 
   return (
@@ -188,16 +188,26 @@ export function SecurityPermissionGroupEditorModal({
               </div>
             ) : null}
 
-            <TextTabs
-              value={shownTab}
-              onChange={setTab}
-              ariaLabel={t({ ko: '권한 그룹 항목', en: 'Permission group sections' })}
-              items={[
-                { value: 'permissions', label: t({ ko: '권한', en: 'Permissions' }), count: draft.permissionKeys.length },
-                ...(isCreateMode ? [] : [{ value: 'members' as const, label: t({ ko: '멤버', en: 'Members' }), count: members.length }]),
-              ]}
-              actions={(shownTab === 'permissions' ? !canEditPermissions : !canManageMembers) ? readOnlyBadge : undefined}
-            />
+            {isCreateMode ? (
+              // A new group has no members yet: one section, so a heading rather than a one-tab strip.
+              <div className="flex min-h-7 items-center gap-3 border-b border-line pb-2">
+                <h3 className="flex-1 text-2xs font-semibold tracking-overline text-muted-foreground uppercase">
+                  {t({ ko: '권한', en: 'Permissions' })} <span className="tabular-nums">{draft.permissionKeys.length}</span>
+                </h3>
+                {!canEditPermissions ? readOnlyBadge : null}
+              </div>
+            ) : (
+              <TextTabs
+                value={shownTab}
+                onChange={setTab}
+                ariaLabel={t({ ko: '권한 그룹 항목', en: 'Permission group sections' })}
+                items={[
+                  { value: 'permissions', label: t({ ko: '권한', en: 'Permissions' }), count: draft.permissionKeys.length },
+                  { value: 'members', label: t({ ko: '멤버', en: 'Members' }), count: members.length },
+                ]}
+                actions={(shownTab === 'permissions' ? !canEditPermissions : !canManageMembers) ? readOnlyBadge : undefined}
+              />
+            )}
 
             {shownTab === 'permissions' ? (
               <SecurityPermissionChecklist

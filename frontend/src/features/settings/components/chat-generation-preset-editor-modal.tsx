@@ -90,7 +90,7 @@ function NaiPresetFields({ config, onChange }: { config: ChatNaiPresetConfig; on
 
   return (
     <div className="space-y-4">
-      <EditorGroup label={t({ ko: '모델', en: 'Model' })}>
+      <EditorGroup label={t({ ko: '생성 설정', en: 'Generation' })}>
         <div className="grid gap-3 md:grid-cols-2">
           <Field className="md:col-span-2" label={<ChatFilledLabel fieldId="model">{t({ ko: '모델', en: 'Model' })}</ChatFilledLabel>}>
             <Select variant="settings" className="px-3" value={config.model} onChange={(event) => patch({ model: event.target.value })}>

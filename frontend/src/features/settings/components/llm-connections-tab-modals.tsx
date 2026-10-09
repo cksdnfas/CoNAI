@@ -208,7 +208,7 @@ function LlmConnectionFormFields({
               value={draft.timeoutSeconds}
               onValueCommit={(value) => onChange({ timeoutSeconds: value })}
               aria-label={t({ ko: '제한 시간 (초)', en: 'Time limit (s)' })}
-              placeholder={draft.providerType === 'decision_typesafe' ? t({ ko: '기본 20', en: 'Default 20' }) : t({ ko: '기본 600', en: 'Default 600' })}
+              placeholder={draft.providerType === 'decision_typesafe' ? '20' : '600'}
             />
           </SettingRow>
           {draft.providerType === 'decision_typesafe' ? null : (
