@@ -59,6 +59,11 @@ export const PERMISSIONS_V2_SOURCES: Record<PermissionKey, readonly string[]> = 
   // New in the audio workspace: no older key to fold in; administrators get them like every catalog key.
   'audio.view': [],
   'audio.edit': [],
+  // New with posts: nothing to fold in.
+  'posts.view': [],
+  'posts.comment': [],
+  'posts.write': [],
+  'posts.summon': [],
   'chat.use': ['chat.llm.use'],
   'chat.agent.use': ['chat.codex.use', 'chat.claude.use'],
   'chat.diagnostics.view': ['chat.diagnostics.view', 'chat.diagnostics.content'],

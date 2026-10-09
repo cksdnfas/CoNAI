@@ -286,6 +286,9 @@ export const FileStoreService = {
         if (db.prepare('SELECT 1 FROM chat_file_attachments WHERE file_id = ?').get(id)) {
           throw new FileStoreError(`채팅에서 참조 중인 파일은 삭제할 수 없어: ${row.name}`, 409);
         }
+        if (db.prepare("SELECT 1 FROM post_media_refs WHERE kind = 'file' AND ref = ?").get(id)) {
+          throw new FileStoreError(`게시물에서 쓰는 파일은 삭제할 수 없어: ${row.name}`, 409);
+        }
         rows.push(row);
       }
       for (const id of ids) db.prepare('UPDATE stored_file_entries SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
@@ -393,6 +396,9 @@ export const FileStoreService = {
       for (const row of rows) {
         if (db.prepare('SELECT 1 FROM chat_file_attachments WHERE file_id = ?').get(row.id)) {
           throw new FileStoreError(`채팅에서 참조 중인 파일은 삭제할 수 없어: ${row.name}`, 409);
+        }
+        if (db.prepare("SELECT 1 FROM post_media_refs WHERE kind = 'file' AND ref = ?").get(row.id)) {
+          throw new FileStoreError(`게시물에서 쓰는 파일은 삭제할 수 없어: ${row.name}`, 409);
         }
       }
       const mark = db.prepare('UPDATE stored_file_entries SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?');

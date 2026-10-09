@@ -19,6 +19,7 @@ const SECTION_LABELS: Record<CatalogSection, TranslationInput> = {
   generation: { ko: '생성', en: 'Generation' },
   files: { ko: '파일 보관함', en: 'Files' },
   audio: { ko: '오디오', en: 'Audio' },
+  posts: { ko: '게시판', en: 'Posts' },
   chat: { ko: '채팅', en: 'Chat' },
   account: { ko: '계정', en: 'Account' },
 }

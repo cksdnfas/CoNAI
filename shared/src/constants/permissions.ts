@@ -19,13 +19,17 @@ export const PERMISSION_CATALOG = [
   { key: 'files.delete', section: 'files', label: { ko: '내 파일 삭제', en: 'Delete my files' }, description: 'Delete files and folders in your own file store.' },
   { key: 'audio.view', section: 'audio', label: { ko: '오디오 보기', en: 'View audio' }, description: 'Browse sound projects, groups and candidates, play and download them, read group comments.' },
   { key: 'audio.edit', section: 'audio', label: { ko: '오디오 편집·검수', en: 'Edit and review audio' }, description: 'Create and organize sound projects and groups, upload and import sounds, review candidates and manage comments.' },
+  { key: 'posts.view', section: 'posts', label: { ko: '게시판 보기', en: 'View posts' }, description: 'Read published posts, their media and comments.' },
+  { key: 'posts.comment', section: 'posts', label: { ko: '게시판 댓글', en: 'Comment on posts' }, description: 'Write, edit and delete your own comments.' },
+  { key: 'posts.write', section: 'posts', label: { ko: '게시물 쓰기', en: 'Write posts' }, description: 'Write posts and edit or delete your own.' },
+  { key: 'posts.summon', section: 'posts', label: { ko: '댓글로 봇 부르기 (부른 계정 사용량)', en: 'Call bots from comments (uses your account)' }, description: 'Call chat profiles with @ in a comment; the bot runs as your account.' },
   { key: 'chat.use', section: 'chat', label: { ko: '채팅', en: 'Chat' }, description: 'Chat with API model profiles.' },
   { key: 'chat.agent.use', section: 'chat', label: { ko: '서버 에이전트 채팅 (Codex·Claude Code, 서버 계정 사용량 공유)', en: 'Server agent chat (Codex, Claude Code; shares server account usage)' }, description: 'Chat with profiles that run on the server Codex or Claude Code account.' },
   { key: 'chat.diagnostics.view', section: 'chat', label: { ko: '채팅 진단 보기', en: 'View chat diagnostics' }, description: 'Inspect how your own replies were composed.' },
   { key: 'auth.guest.create', section: 'account', anonymousOnly: true, anonymous: true, label: { ko: '게스트 가입', en: 'Guest signup' }, description: 'Create a guest account from the login page.' },
 ] as const satisfies ReadonlyArray<{
   key: string
-  section: 'images' | 'prompts' | 'generation' | 'files' | 'audio' | 'chat' | 'account'
+  section: 'images' | 'prompts' | 'generation' | 'files' | 'audio' | 'posts' | 'chat' | 'account'
   label: { ko: string; en: string }
   description: string
   /** Visitors who are not signed in can use it. */
@@ -57,6 +61,7 @@ export const PAGE_PERMISSION_RULES = {
   'page.generation.view': { any: ['generation.execute', 'workflows.view'] },
   'page.sprite.view': { all: ['images.view', 'images.edit'] },
   'page.files.view': { all: ['files.view'] },
+  'page.posts.view': { all: ['posts.view'] },
   'page.chat.view': { any: ['chat.use', 'chat.agent.use'] },
   'page.settings.view': { admin: true },
 } as const satisfies Record<string, { all?: readonly PermissionKey[]; any?: readonly PermissionKey[]; admin?: true }>

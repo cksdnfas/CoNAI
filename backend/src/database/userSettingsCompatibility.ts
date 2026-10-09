@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import { ensureFileStoreSchema } from './fileStoreSchema';
+import { ensurePostsSchema } from './postsSchema';
 import { ensureChatAssetSchema } from './chatAssetSchema';
 import { ensureBuiltinSystemModules as ensureBuiltinSystemModulesInDb } from './userSettingsBuiltinModules';
 
@@ -52,6 +53,7 @@ function ensureModuleDefinitionCompatibilityIndexes(db: Database.Database): void
 export function ensureUserSettingsCompatibility(db: Database.Database): void {
   ensureChatAssetSchema(db);
   ensureFileStoreSchema(db);
+  ensurePostsSchema(db);
   ensureComfyUIServerSingleDefaultIndex(db);
   ensureModuleDefinitionCompatibilityIndexes(db);
   ensureBuiltinSystemModulesInDb(db);
