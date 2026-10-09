@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -31,8 +32,6 @@ import { cn } from '@/lib/utils'
 import { CompatLine } from './audio-settings-dialog'
 
 const GLOBAL_PREFS_KEY = 'conai:audio:generate'
-// The unit sits inside the number field, so the native spinner would cover it.
-const NO_SPIN = '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
 const groupPrefsKey = (groupId: string) => `conai:audio:generate:${groupId}`
 
 interface GroupPrefs { seconds: string; count: string; seed: string }
@@ -301,21 +300,19 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
         }}
       />
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="relative inline-flex">
-          <Tip content={secondsMax !== null
-            ? t({ ko: '길이(초): 만들 오디오 길이, 최대 {max}초', en: 'Length (s): clip length, up to {max} s' }, { max: secondsMax })
-            : t({ ko: '길이(초): 만들 오디오 길이', en: 'Length (s): clip length' })}
-          >
-            <Input className={cn('h-8 w-20 pr-6 font-mono', NO_SPIN)} type="number" step="0.1" min={0.1} max={secondsMax ?? undefined} aria-label={t({ ko: '길이(초)', en: 'Length (s)' })} value={prefs.seconds} aria-invalid={secondsOver || undefined} onChange={(event) => set({ seconds: event.target.value })} />
-          </Tip>
-          <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground" aria-hidden>{t({ ko: '초', en: 's' })}</span>
-        </span>
-        <span className="relative inline-flex">
-          <Tip content={t({ ko: '개수: 한 번에 만들 후보 수 (1–50)', en: 'Count: candidates per run (1–50)' })}>
-            <Input className={cn('h-8 w-16 pr-6 font-mono', NO_SPIN)} type="number" step="1" min={1} max={50} aria-label={t({ ko: '개수', en: 'Count' })} value={prefs.count} onChange={(event) => set({ count: event.target.value })} />
-          </Tip>
-          <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground" aria-hidden>{t({ ko: '개', en: '×' })}</span>
-        </span>
+        <Tip content={secondsMax !== null
+          ? t({ ko: '길이(초): 만들 오디오 길이, 최대 {max}초', en: 'Length (s): clip length, up to {max} s' }, { max: secondsMax })
+          : t({ ko: '길이(초): 만들 오디오 길이', en: 'Length (s): clip length' })}
+        >
+          <span className="inline-flex">
+            <NumberStepperInput className="h-8 w-32 font-mono" min={0.1} max={secondsMax ?? undefined} precision={1} aria-label={t({ ko: '길이(초)', en: 'Length (s)' })} value={prefs.seconds} aria-invalid={secondsOver || undefined} onValueCommit={(value) => set({ seconds: value })} />
+          </span>
+        </Tip>
+        <Tip content={t({ ko: '개수: 한 번에 만들 후보 수 (1–50)', en: 'Count: candidates per run (1–50)' })}>
+          <span className="inline-flex">
+            <NumberStepperInput className="h-8 w-32 font-mono" min={1} max={50} precision={0} aria-label={t({ ko: '개수', en: 'Count' })} value={prefs.count} onValueCommit={(value) => set({ count: value })} />
+          </span>
+        </Tip>
         <Tip content={t({ ko: 'seed: 비워두면 매번 랜덤', en: 'Seed: leave empty for a random one each time' })}>
           <Input className="h-8 w-24 font-mono" inputMode="numeric" aria-label="seed" placeholder={t({ ko: 'seed 랜덤', en: 'seed: random' })} value={prefs.seed} onChange={(event) => set({ seed: event.target.value })} />
         </Tip>
