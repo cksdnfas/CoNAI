@@ -5,7 +5,7 @@ import { useI18n, type TranslationDictionary } from '@/i18n'
 import type { VideoOptimizationSettings } from '@conai/shared'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SectionDirtyBadge } from './settings-section-status'
-import { SettingsSwitchRow } from './settings-switch-row'
+import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { SettingsLabelTip } from './settings-label-tip'
 import { SETTINGS_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
 

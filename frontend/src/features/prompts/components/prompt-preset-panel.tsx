@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { usePresetChatPage, presetChatInput, presetChatSchema } from '../use-preset-chat-page'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
@@ -13,7 +13,6 @@ import { ListRow } from '@/components/ui/list-row'
 import { RowGroup } from '@/components/ui/row-group'
 import { SidebarGroupLabel, SidebarNav } from '@/components/ui/sidebar'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -21,12 +20,14 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { Field } from '@/components/ui/field'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { EditorFooter } from '@/components/ui/editor-footer'
+import { EditorGroup } from '@/components/ui/editor-group'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { buildPromptPresetInsertionText, createPromptPreset, deletePromptPreset, getPromptPresets, updatePromptPreset, type PromptPresetMutationInput, type PromptPresetRecord } from '@/lib/api-prompt-presets'
 import { copyTextToClipboard } from '@/lib/clipboard'
-import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
+import { SettingsResourceTable } from '@/features/settings/components/settings-resource-shared'
 import { getErrorMessage } from '@/features/image-generation/image-generation-shared'
 import { PromptPageToolbar, type PromptPageToolbarBaseProps } from './prompt-page-toolbar'
 import { SidebarTree } from './sidebar-tree'
@@ -107,6 +108,7 @@ function PromptPresetEditorModal({
   const [description, setDescription] = useState('')
   const [parentId, setParentId] = useState<number | null>(null)
   const [drafts, setDrafts] = useState<PromptPresetItemDraft[]>(() => [createPromptPresetItemDraft()])
+  const formRef = useRef<HTMLFormElement | null>(null)
 
   useEffect(() => {
     if (!open) {
@@ -161,72 +163,83 @@ function PromptPresetEditorModal({
     await onSubmit(normalizePromptPresetInput(name, description, parentId, drafts))
   }
 
+  const canSave = !isSubmitting && (mode === 'create' || chatDirty)
+
   return (
-    <Modal open={open} sidePanelInset="var(--chat-dock-width, 0px)" title={mode === 'create' ? t('prompts.components.prompt.preset.panel.add.preset') : t('prompts.components.prompt.preset.panel.edit.preset')} widthClassName="max-w-5xl" height="tall" onClose={onClose}>
-      <form onSubmit={(event) => void handleSubmit(event)}>
+    <Modal
+      open={open}
+      sidePanelInset="var(--chat-dock-width, 0px)"
+      title={mode === 'create' ? t('prompts.components.prompt.preset.panel.add.preset') : t('prompts.components.prompt.preset.panel.edit.preset')}
+      size="wide"
+      height="tall"
+      dirty={chatDirty}
+      onSave={canSave ? () => formRef.current?.requestSubmit() : undefined}
+      onClose={onClose}
+    >
+      <form ref={formRef} onSubmit={(event) => void handleSubmit(event)}>
         <ModalBody className="space-y-5">
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_18rem]">
             <div className="space-y-4">
               <Field label={t('prompts.components.prompt.preset.panel.name')}>
-                <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('prompts.components.prompt.preset.panel.preset.name')} required />
+                <Input variant="settings" value={name} onChange={(event) => setName(event.target.value)} placeholder={t('prompts.components.prompt.preset.panel.preset.name')} required />
               </Field>
               <Field label={t('prompts.components.prompt.preset.panel.description')}>
-                <Textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} placeholder={t('prompts.components.prompt.preset.panel.optional')} />
+                <Textarea variant="settings" value={description} onChange={(event) => setDescription(event.target.value)} rows={3} placeholder={t('prompts.components.prompt.preset.panel.optional')} />
               </Field>
             </div>
 
-            <Field label={t('prompts.components.prompt.preset.panel.parent.preset')}>
-              <HierarchyPicker
-                items={selectableParents}
-                selectedId={parentId}
-                onSelectRoot={() => setParentId(null)}
-                onSelect={(item) => setParentId(item.id)}
-                getId={(item) => item.id}
-                getParentId={(item) => item.parent_id}
-                getLabel={(item) => <span className="truncate">{item.name}</span>}
-                sortItems={(left, right) => left.name.localeCompare(right.name)}
-                rootLabel={t('prompts.components.prompt.preset.panel.root')}
-              />
-            </Field>
+            <div>
+              <EditorGroup label={t('prompts.components.prompt.preset.panel.parent.preset')}>
+                <HierarchyPicker
+                  items={selectableParents}
+                  selectedId={parentId}
+                  onSelectRoot={() => setParentId(null)}
+                  onSelect={(item) => setParentId(item.id)}
+                  getId={(item) => item.id}
+                  getParentId={(item) => item.parent_id}
+                  getLabel={(item) => <span className="truncate">{item.name}</span>}
+                  sortItems={(left, right) => left.name.localeCompare(right.name)}
+                  rootLabel={t('prompts.components.prompt.preset.panel.root')}
+                />
+              </EditorGroup>
+            </div>
           </div>
 
-          <SettingsSegmentedTable
-            value="items"
-            items={[{ value: 'items', label: t('prompts.components.prompt.preset.panel.description.value') }]}
-            onChange={() => undefined}
-            gridClassName="grid-cols-[3rem_minmax(9rem,0.55fr)_minmax(12rem,1fr)_3rem] gap-x-3"
-            headers={[
-              t('prompts.components.prompt.preset.panel.number'),
-              t('prompts.components.prompt.preset.panel.description'),
-              t('prompts.components.prompt.preset.panel.value'),
-              t('prompts.components.prompt.preset.panel.delete'),
-            ]}
+          <EditorGroup
+            label={`${t('prompts.components.prompt.preset.panel.description.value')} ${drafts.length}`}
             actions={(
-              <IconButton size="icon-sm" variant="secondary" onClick={handleAddDraft} label={t('prompts.components.prompt.preset.panel.add.preset.value')}>
+              <IconButton size="icon-sm" variant="ghost" onClick={handleAddDraft} label={t('prompts.components.prompt.preset.panel.add.preset.value')}>
                 <Plus className="h-4 w-4" />
               </IconButton>
             )}
-            minWidthClassName="min-w-[720px]"
           >
-            {drafts.map((draft, index) => (
-              <div key={draft.id} className="grid grid-cols-[3rem_minmax(9rem,0.55fr)_minmax(12rem,1fr)_3rem] items-start gap-x-3 px-4 py-3 transition-colors hover:bg-surface-high/60">
-                <div className="pt-2.5 text-center text-sm font-medium tabular-nums text-muted-foreground">{index + 1}</div>
-                <Input variant="settings" className="self-start" value={draft.description} onChange={(event) => handleChangeDraft(draft.id, 'description', event.target.value)} placeholder={t('prompts.components.prompt.preset.panel.hair.style')} />
-                <Textarea className="self-start" value={draft.value} onChange={(event) => handleChangeDraft(draft.id, 'value', event.target.value)} rows={2} placeholder={t('prompts.components.prompt.preset.panel.hair.token.example')} />
-                <div className="flex justify-center pt-0.5">
-                  <IconButton size="icon-sm" variant="ghost" onClick={() => handleRemoveDraft(draft.id)} label={t('prompts.components.prompt.preset.panel.delete.preset.value.index', { index: index + 1 })}>
-                    <Trash2 className="h-4 w-4" />
-                  </IconButton>
+            <SettingsResourceTable
+              gridClassName="grid-cols-[3rem_minmax(9rem,0.55fr)_minmax(12rem,1fr)_3rem] gap-x-3"
+              headers={[
+                t('prompts.components.prompt.preset.panel.number'),
+                t('prompts.components.prompt.preset.panel.description'),
+                t('prompts.components.prompt.preset.panel.value'),
+                t('prompts.components.prompt.preset.panel.delete'),
+              ]}
+              minWidthClassName="min-w-[720px]"
+            >
+              {drafts.map((draft, index) => (
+                <div key={draft.id} className="grid grid-cols-[3rem_minmax(9rem,0.55fr)_minmax(12rem,1fr)_3rem] items-start gap-x-3 px-4 py-3">
+                  <div className="pt-2.5 text-center text-sm font-medium tabular-nums text-muted-foreground">{index + 1}</div>
+                  <Input variant="settings" className="self-start" value={draft.description} onChange={(event) => handleChangeDraft(draft.id, 'description', event.target.value)} placeholder={t('prompts.components.prompt.preset.panel.hair.style')} />
+                  <Textarea variant="settings" className="self-start" value={draft.value} onChange={(event) => handleChangeDraft(draft.id, 'value', event.target.value)} rows={2} placeholder={t('prompts.components.prompt.preset.panel.hair.token.example')} />
+                  <div className="flex justify-center pt-0.5">
+                    <IconButton size="icon-sm" variant="ghost" onClick={() => handleRemoveDraft(draft.id)} label={t('prompts.components.prompt.preset.panel.delete.preset.value.index', { index: index + 1 })}>
+                      <Trash2 className="h-4 w-4" />
+                    </IconButton>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </SettingsSegmentedTable>
+              ))}
+            </SettingsResourceTable>
+          </EditorGroup>
         </ModalBody>
 
-        <ModalFooter>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>{t('prompts.components.prompt.preset.panel.cancel')}</Button>
-          <Button type="submit" disabled={isSubmitting}>{isSubmitting ? t('prompts.components.prompt.preset.panel.saving') : t('prompts.components.prompt.preset.panel.save')}</Button>
-        </ModalFooter>
+        <EditorFooter saveSubmit canSave={canSave} saving={isSubmitting} saveLabel={t('prompts.components.prompt.preset.panel.save')} />
       </form>
     </Modal>
   )

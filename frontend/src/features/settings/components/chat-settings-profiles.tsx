@@ -39,7 +39,7 @@ import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-a
 import { ChatCardImportReportModal } from './chat-card-import-report'
 import { InstantApplyHint } from './settings-section-status'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
-import { SettingsSwitchRow } from './settings-switch-row'
+import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 
 /** An API LLM profile's model row: its own, else the default (★) it falls back to. */
 function profileModelRow(profile: ChatProfile, slots: ModelSlot[]) {

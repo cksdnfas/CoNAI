@@ -5,7 +5,8 @@ import { BookPlus, BookUp, ChevronDown, ChevronRight, Ellipsis, FileText, Folder
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { EditorFooter } from '@/components/ui/editor-footer'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
 import { Switch } from '@/components/ui/switch'
@@ -313,8 +314,16 @@ function LoreEntryModal({ target, filePlace, promoteLabel, saving, onSave, onDel
     setDraft(target ? { ...target.entry } : null)
   }
   const entry = draft ?? target?.entry ?? null
+  const dirty = Boolean(target && entry && JSON.stringify(entry) !== JSON.stringify(target.entry))
+  const canSave = Boolean(entry && target) && !saving && Boolean(entry?.content.trim() || entry?.file) && (dirty || Boolean(target?.isNew))
   return (
-    <Modal open={target !== null} onClose={onClose} title={entry ? loreEntryTitle(entry) || t({ ko: '새 항목', en: 'New entry' }) : ''} widthClassName="max-w-xl"
+    <Modal
+      open={target !== null}
+      onClose={onClose}
+      title={entry ? loreEntryTitle(entry) || t({ ko: '새 항목', en: 'New entry' }) : ''}
+      size="narrow"
+      dirty={dirty}
+      onSave={canSave && entry ? () => onSave(entry) : undefined}
       headerActions={entry ? <Switch checked={entry.enabled} onCheckedChange={(enabled) => setDraft((current) => current ? { ...current, enabled } : current)} aria-label={t({ ko: '로어 사용', en: 'Enable lore' })} /> : null}
       description={entry && (entry.source || usage?.turnsAgo !== undefined) ? <div className="flex items-center gap-3 text-xs">
         {entry.source ? usage?.sourceMessageId ? <Button variant="ghost" size="xs" className="h-auto p-0 text-primary" onClick={() => onSource(entry.source!.threadId, usage.sourceMessageId!)}>{t({ ko: '출처 답변', en: 'Source reply' })}</Button> : <span className="text-muted-foreground/50">{t({ ko: '출처 없음', en: 'Source unavailable' })}</span> : null}
@@ -326,12 +335,9 @@ function LoreEntryModal({ target, filePlace, promoteLabel, saving, onSave, onDel
           <ModalBody>
             <ChatLoreEntryFields entry={entry} filePlace={filePlace} onChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))} />
           </ModalBody>
-          <ModalFooter className="justify-start">
-            {!target.isNew ? <Button size="sm" variant="ghost" disabled={saving} onClick={onDelete}>{t({ ko: '지우기', en: 'Delete' })}</Button> : null}
-            {promoteLabel ? <Button size="sm" variant="ghost" disabled={saving} onClick={onPromote}>{promoteLabel}</Button> : null}
-            <span className="flex-1" />
-            <Button size="sm" disabled={saving || (!entry.content.trim() && !entry.file)} onClick={() => onSave(entry)}>{t({ ko: '저장', en: 'Save' })}</Button>
-          </ModalFooter>
+          <EditorFooter onDelete={target.isNew ? undefined : onDelete} deleting={saving} onSave={() => onSave(entry)} canSave={canSave} saving={saving}>
+            {promoteLabel ? <IconButton size="icon-sm" variant="ghost" disabled={saving} onClick={onPromote} label={promoteLabel}><BookUp /></IconButton> : null}
+          </EditorFooter>
         </>
       ) : null}
     </Modal>

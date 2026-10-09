@@ -1,25 +1,23 @@
-import { useState, type ReactNode } from 'react'
 import type { ChatJudgeItem, ChatJudgeTestTurn, ChatJudgeUncertain } from '@conai/shared'
-import { ChevronRight, Plus, Trash2, X } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Chip, ToggleChip } from '@/components/ui/chip'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { EditorPaneHeader } from '@/components/ui/editor-split'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
+import { SettingRow } from '@/components/ui/setting-row'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { GROW_TEXTAREA } from './chat-profile-editor-fields'
+import { EditorGroup } from '@/components/ui/editor-group'
 import { formatProbability, JudgeProbabilityBar, JudgeVerdictChip } from './chat-judge-parts'
-
-/** Tools a before-reply item usually steers; any other tool name (or `prefix*`) can be typed. */
-const TOOL_SUGGESTIONS = ['save_lore', 'generate_image*', 'generate_nai', 'generate_comfyui*', 'submit_generation_job', 'chat_reply_to', 'view_images', 'read_lore_file']
-const TOOL_PATTERN = /^[a-z0-9_]{1,64}\*?$/
+import { JudgeToolPicker, JudgeWithheldTools } from './chat-judge-tool-picker'
 
 /** The verdict an answer gets under the item's current thresholds (so moving them re-reads the test at once). */
 export function verdictUnder(item: Pick<ChatJudgeItem, 'yesThreshold' | 'noThreshold'>, probability: number | null) {
@@ -27,48 +25,25 @@ export function verdictUnder(item: Pick<ChatJudgeItem, 'yesThreshold' | 'noThres
   return probability >= item.yesThreshold ? 'yes' : probability <= item.noThreshold ? 'no' : 'uncertain'
 }
 
-function ToolPatterns({ tools, onChange }: { tools: string[]; onChange: (tools: string[]) => void }) {
-  const { t } = useI18n()
-  const [typed, setTyped] = useState('')
-  const add = (name: string) => {
-    const value = name.trim()
-    if (!TOOL_PATTERN.test(value) || tools.includes(value)) return
-    onChange([...tools, value])
-    setTyped('')
+/** The item's tested turns with their result. */
+function testRowsOf(item: ChatJudgeItem, turns: ChatJudgeTestTurn[]) {
+  return turns.flatMap((turn) => {
+    const result = turn.items.find((entry) => entry.itemId === item.id)
+    return result ? [{ turn, result }] : []
+  })
+}
+
+/** How a test went for one item under its current thresholds, or null when it judged no turn. */
+export function itemTestSummary(item: ChatJudgeItem, turns: ChatJudgeTestTurn[]) {
+  const rows = testRowsOf(item, turns)
+  if (rows.length === 0) return null
+  const verdicts = rows.map(({ result }) => verdictUnder(item, result.probability))
+  return {
+    total: rows.length,
+    yes: verdicts.filter((verdict) => verdict === 'yes').length,
+    no: verdicts.filter((verdict) => verdict === 'no').length,
+    unsure: verdicts.filter((verdict) => verdict === 'uncertain').length,
   }
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {tools.map((tool) => (
-        <Chip key={tool} size="sm" tone="success" className="font-mono">
-          {tool}
-          <IconButton size="icon-xs" variant="ghost" className="-mr-1 size-4" onClick={() => onChange(tools.filter((entry) => entry !== tool))} label={t({ ko: '빼기', en: 'Remove' })}><X /></IconButton>
-        </Chip>
-      ))}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <IconButton size="icon-sm" variant="ghost" label={t({ ko: '도구 추가', en: 'Add tool' })}><Plus /></IconButton>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-56">
-          {TOOL_SUGGESTIONS.filter((tool) => !tools.includes(tool)).map((tool) => (
-            <DropdownMenuItem key={tool} onSelect={() => add(tool)}><span className="font-mono text-xs">{tool}</span></DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <Input
-        variant="settings"
-        value={typed}
-        aria-label={t({ ko: '도구 이름', en: 'Tool name' })}
-        placeholder="tool_name*"
-        className="h-8 w-36 font-mono text-xs"
-        onChange={(event) => setTyped(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key !== 'Enter') return
-          event.preventDefault()
-          add(typed)
-        }}
-      />
-    </div>
-  )
 }
 
 function ChoiceOptions({ item, onChange }: { item: ChatJudgeItem; onChange: (patch: Partial<ChatJudgeItem>) => void }) {
@@ -92,10 +67,7 @@ function ChoiceOptions({ item, onChange }: { item: ChatJudgeItem; onChange: (pat
 /** The test results of one item: each tested turn with its probability, read under the current thresholds. */
 function ItemTestRows({ item, turns }: { item: ChatJudgeItem; turns: ChatJudgeTestTurn[] }) {
   const { t } = useI18n()
-  const rows = turns.flatMap((turn) => {
-    const result = turn.items.find((entry) => entry.itemId === item.id)
-    return result ? [{ turn, result }] : []
-  })
+  const rows = testRowsOf(item, turns)
   if (rows.length === 0) return <p className="py-2 text-xs text-muted-foreground">{t({ ko: '이 항목이 판단할 턴이 없어.', en: 'No turns for this item.' })}</p>
   return (
     <div className="divide-y divide-line">
@@ -116,21 +88,18 @@ function ItemTestRows({ item, turns }: { item: ChatJudgeItem; turns: ChatJudgeTe
 }
 
 /**
- * One judgment item as a hairline row that unfolds in place: name, question, thresholds, what a yes / no does, and
- * the test results for it.
+ * One judgment item as the right side of the judge preset editor: name, question, thresholds, what a yes / no does,
+ * and the last test's results for it.
  */
-export function ChatJudgeItemRow({ item, open, onToggle, onChange, onRemove, test, testTurns }: {
+export function ChatJudgeItemPane({ item, onChange, onRemove, testTurns }: {
   item: ChatJudgeItem
-  open: boolean
-  onToggle: () => void
   onChange: (patch: Partial<ChatJudgeItem>) => void
   onRemove: () => void
-  /** The test controls (chat + run), shown inside the open item. */
-  test: ReactNode
   testTurns: ChatJudgeTestTurn[] | null
 }) {
   const { t } = useI18n()
   const before = item.stage === 'before'
+  const summary = testTurns ? itemTestSummary(item, testTurns) : null
   const uncertainOptions: Array<{ value: ChatJudgeUncertain; label: string }> = [
     { value: 'default', label: t({ ko: '지금 방식대로', en: 'As usual' }) },
     { value: 'yes', label: t({ ko: '예로', en: 'As yes' }) },
@@ -139,117 +108,117 @@ export function ChatJudgeItemRow({ item, open, onToggle, onChange, onRemove, tes
   ]
 
   return (
-    <div className="border-t border-line first:border-t-0">
-      <div className="flex min-h-11 items-center gap-2">
-        {/* eslint-disable-next-line no-restricted-syntax -- a full-width disclosure row; Button would pad and centre it */}
-        <button type="button" aria-expanded={open} onClick={onToggle} className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-sm py-2 text-left text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40">
-          <ChevronRight className={cn('size-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
-          <span className={cn('min-w-0 truncate font-medium', !item.enabled && 'text-muted-foreground')}>{item.name || t({ ko: '이름 없음', en: 'Untitled' })}</span>
-        </button>
-        {before ? (item.tools[0] ? <Chip size="sm" tone="muted" className="font-mono">{item.tools.length > 1 ? `${item.tools[0]} +${item.tools.length - 1}` : item.tools[0]}</Chip> : item.directive ? <Chip size="sm" tone="muted">{t({ ko: '지시문', en: 'Directive' })}</Chip> : null)
-          : <Chip size="sm" tone="muted">{t({ ko: '후속', en: 'Follow-up' })}</Chip>}
-        <Switch checked={item.enabled} onCheckedChange={(enabled) => onChange({ enabled })} aria-label={t({ ko: '켜기', en: 'Enabled' })} />
-      </div>
-      {open ? (
-        <div className="space-y-4 pb-4 pl-6">
-          <div className="grid gap-3 md:grid-cols-3">
-            <Field label={t({ ko: '이름', en: 'Name' })}>
-              <Input variant="settings" value={item.name} maxLength={40} onChange={(event) => onChange({ name: event.target.value })} />
-            </Field>
-            <Field label={t({ ko: '시점', en: 'When' })}>
-              <SegmentedControl
-                value={item.stage}
-                onChange={(stage) => onChange({ stage: stage as ChatJudgeItem['stage'] })}
-                items={[{ value: 'before', label: t({ ko: '답변 전', en: 'Before reply' }) }, { value: 'after', label: t({ ko: '답변 후', en: 'After reply' }) }]}
-                fullWidth
-                size="sm"
-              />
-            </Field>
-            <Field label={t({ ko: '종류', en: 'Kind' })}>
-              <SegmentedControl
-                value={item.kind}
-                onChange={(kind) => onChange({ kind: kind as ChatJudgeItem['kind'], ...(kind === 'choice' && item.options.length === 0 ? { options: [{ label: 'yes', description: '', yes: true }, { label: 'no', description: '', yes: false }] } : {}) })}
-                items={[{ value: 'noul', label: t({ ko: '예/아니오', en: 'Yes/no' }) }, { value: 'choice', label: t({ ko: '선택', en: 'Choice' }) }]}
-                fullWidth
-                size="sm"
-              />
-            </Field>
-          </div>
-          <Field label={t({ ko: '질문', en: 'Question' })}>
-            <Textarea variant="settings" className={cn(GROW_TEXTAREA, 'font-mono text-xs')} value={item.instructions} maxLength={2000} placeholder="Did the user …?" onChange={(event) => onChange({ instructions: event.target.value })} />
+    <div>
+      <EditorPaneHeader
+        title={<span className={cn(!item.enabled && 'text-muted-foreground')}>{item.name || t({ ko: '이름 없음', en: 'Untitled' })}</span>}
+        actions={(
+          <>
+            <Switch checked={item.enabled} onCheckedChange={(enabled) => onChange({ enabled })} aria-label={t({ ko: '사용', en: 'On' })} />
+            <IconButton size="icon-sm" variant="destructive-ghost" onClick={onRemove} label={t({ ko: '항목 삭제', en: 'Remove item' })}><Trash2 /></IconButton>
+          </>
+        )}
+      />
+      <div className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
+          <Field label={t({ ko: '이름', en: 'Name' })}>
+            <Input variant="settings" value={item.name} maxLength={40} onChange={(event) => onChange({ name: event.target.value })} />
           </Field>
-          {item.kind === 'noul' ? (
-            <div className="grid gap-3 md:grid-cols-2">
-              <Field label={t({ ko: '예 기준', en: 'Yes looks like' })}>
-                <Textarea variant="settings" className={GROW_TEXTAREA} value={item.criteria.yes} maxLength={600} onChange={(event) => onChange({ criteria: { ...item.criteria, yes: event.target.value } })} />
-              </Field>
-              <Field label={t({ ko: '아니오 기준', en: 'No looks like' })}>
-                <Textarea variant="settings" className={GROW_TEXTAREA} value={item.criteria.no} maxLength={600} onChange={(event) => onChange({ criteria: { ...item.criteria, no: event.target.value } })} />
-              </Field>
-            </div>
-          ) : (
-            <Field label={t({ ko: '선택지', en: 'Options' })}>
-              <ChoiceOptions item={item} onChange={onChange} />
-            </Field>
-          )}
-          <div className="grid items-end gap-3 md:grid-cols-[8rem_minmax(0,1fr)_12rem]">
-            <Field label={t({ ko: '대화 범위', en: 'Messages read' })}>
-              <NumberStepperInput variant="settings" min={1} max={30} step={1} value={item.window} onValueCommit={(value) => onChange({ window: Number(value) || 1 })} aria-label={t({ ko: '대화 범위', en: 'Messages read' })} />
-            </Field>
-            <Field label={t({ ko: '기준값', en: 'Thresholds' })}>
-              <div className="space-y-1.5 pt-1">
-                <div className="flex justify-between text-2xs">
-                  <span className="text-warning">{t({ ko: '아니오 ≤ {value}', en: 'No ≤ {value}' }, { value: item.noThreshold.toFixed(2) })}</span>
-                  <span className="text-muted-foreground">{t({ ko: '애매', en: 'Unsure' })}</span>
-                  <span className="text-success">{t({ ko: '예 ≥ {value}', en: 'Yes ≥ {value}' }, { value: item.yesThreshold.toFixed(2) })}</span>
-                </div>
-                <Slider
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  minStepsBetweenThumbs={0}
-                  value={[item.noThreshold, item.yesThreshold]}
-                  thumbLabels={[t({ ko: '아니오 기준값', en: 'No threshold' }), t({ ko: '예 기준값', en: 'Yes threshold' })]}
-                  onValueChange={([no, yes]) => onChange({ noThreshold: Math.round(no * 100) / 100, yesThreshold: Math.round(yes * 100) / 100 })}
-                />
-              </div>
-            </Field>
-            <Field label={t({ ko: '애매할 때', en: 'When unsure' })}>
-              <Select variant="settings" value={item.uncertain} onChange={(event) => onChange({ uncertain: event.target.value as ChatJudgeUncertain })}>
-                {uncertainOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </Select>
-            </Field>
-          </div>
-          {before ? (
-            <div className="grid gap-3 md:grid-cols-2">
-              <Field label={t({ ko: '예일 때', en: 'On yes' })}>
-                <div className="space-y-2">
-                  <ToolPatterns tools={item.tools} onChange={(tools) => onChange({ tools })} />
-                  <Textarea variant="settings" className={GROW_TEXTAREA} value={item.directive} maxLength={2000} placeholder={t({ ko: '대화 모델에게 붙일 지시문', en: 'Directive for the chat model' })} onChange={(event) => onChange({ directive: event.target.value })} />
-                </div>
-              </Field>
-              <Field label={t({ ko: '아니오일 때', en: 'On no' })}>
-                <div className="flex min-h-10 flex-wrap items-center gap-1.5">
-                  {item.tools.length > 0
-                    ? item.tools.map((tool) => <Chip key={tool} size="sm" tone="muted" className="font-mono line-through">{tool}</Chip>)
-                    : <span className="text-xs text-muted-foreground">{t({ ko: '동작 없음', en: 'Nothing' })}</span>}
-                </div>
-              </Field>
-            </div>
-          ) : (
-            <Field label={t({ ko: '예일 때', en: 'On yes' })}>
-              <Chip size="sm" tone="success" className="w-fit">{t({ ko: '후속 메시지 보내기', en: 'Send a follow-up' })}</Chip>
-            </Field>
-          )}
-          <div className="space-y-1 border-t border-line pt-3">
-            {test}
-            {testTurns ? <ItemTestRows item={item} turns={testTurns} /> : null}
-          </div>
-          <div className="flex justify-end">
-            <IconButton size="icon-sm" variant="destructive" onClick={onRemove} label={t({ ko: '항목 삭제', en: 'Remove item' })}><Trash2 /></IconButton>
-          </div>
+          <Field label={t({ ko: '시점', en: 'When' })}>
+            <SegmentedControl
+              value={item.stage}
+              onChange={(stage) => onChange({ stage: stage as ChatJudgeItem['stage'] })}
+              items={[{ value: 'before', label: t({ ko: '답변 전', en: 'Before reply' }) }, { value: 'after', label: t({ ko: '답변 후', en: 'After reply' }) }]}
+              size="sm"
+            />
+          </Field>
+          <Field label={t({ ko: '종류', en: 'Kind' })}>
+            <SegmentedControl
+              value={item.kind}
+              onChange={(kind) => onChange({ kind: kind as ChatJudgeItem['kind'], ...(kind === 'choice' && item.options.length === 0 ? { options: [{ label: 'yes', description: '', yes: true }, { label: 'no', description: '', yes: false }] } : {}) })}
+              items={[{ value: 'noul', label: t({ ko: '예/아니오', en: 'Yes/no' }) }, { value: 'choice', label: t({ ko: '선택', en: 'Choice' }) }]}
+              size="sm"
+            />
+          </Field>
         </div>
-      ) : null}
+        <Field label={t({ ko: '질문', en: 'Question' })}>
+          <Textarea variant="settings" className={cn(GROW_TEXTAREA, 'font-mono text-xs')} value={item.instructions} maxLength={2000} placeholder="Did the user …?" onChange={(event) => onChange({ instructions: event.target.value })} />
+        </Field>
+        {item.kind === 'noul' ? (
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label={t({ ko: '예 기준', en: 'Yes looks like' })}>
+              <Textarea variant="settings" className={GROW_TEXTAREA} value={item.criteria.yes} maxLength={600} onChange={(event) => onChange({ criteria: { ...item.criteria, yes: event.target.value } })} />
+            </Field>
+            <Field label={t({ ko: '아니오 기준', en: 'No looks like' })}>
+              <Textarea variant="settings" className={GROW_TEXTAREA} value={item.criteria.no} maxLength={600} onChange={(event) => onChange({ criteria: { ...item.criteria, no: event.target.value } })} />
+            </Field>
+          </div>
+        ) : (
+          <Field label={t({ ko: '선택지', en: 'Options' })}>
+            <ChoiceOptions item={item} onChange={onChange} />
+          </Field>
+        )}
+
+        <div className="border-t border-line">
+          <SettingRow label={t({ ko: '읽을 메시지', en: 'Messages read' })}>
+            <NumberStepperInput variant="settings" className="w-32" min={1} max={30} step={1} value={item.window} onValueCommit={(value) => onChange({ window: Number(value) || 1 })} aria-label={t({ ko: '읽을 메시지', en: 'Messages read' })} />
+          </SettingRow>
+          <SettingRow label={t({ ko: '기준값', en: 'Thresholds' })} controlClassName="w-full sm:w-72">
+            <div className="w-full space-y-1.5">
+              <div className="flex justify-between text-2xs">
+                <span className="text-warning">{t({ ko: '아니오 ≤ {value}', en: 'No ≤ {value}' }, { value: item.noThreshold.toFixed(2) })}</span>
+                <span className="text-muted-foreground">{t({ ko: '애매', en: 'Unsure' })}</span>
+                <span className="text-success">{t({ ko: '예 ≥ {value}', en: 'Yes ≥ {value}' }, { value: item.yesThreshold.toFixed(2) })}</span>
+              </div>
+              <Slider
+                min={0}
+                max={1}
+                step={0.01}
+                minStepsBetweenThumbs={0}
+                value={[item.noThreshold, item.yesThreshold]}
+                thumbLabels={[t({ ko: '아니오 기준값', en: 'No threshold' }), t({ ko: '예 기준값', en: 'Yes threshold' })]}
+                onValueChange={([no, yes]) => onChange({ noThreshold: Math.round(no * 100) / 100, yesThreshold: Math.round(yes * 100) / 100 })}
+              />
+            </div>
+          </SettingRow>
+          <SettingRow label={t({ ko: '애매할 때', en: 'When unsure' })}>
+            <Select variant="settings" className="w-44" aria-label={t({ ko: '애매할 때', en: 'When unsure' })} value={item.uncertain} onChange={(event) => onChange({ uncertain: event.target.value as ChatJudgeUncertain })}>
+              {uncertainOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </Select>
+          </SettingRow>
+          {before ? (
+            <>
+              <SettingRow label={t({ ko: '예일 때', en: 'On yes' })} align="start" controlClassName="w-full sm:w-80 flex-col items-stretch">
+                <JudgeToolPicker tools={item.tools} onChange={(tools) => onChange({ tools })} />
+                <Textarea variant="settings" className={GROW_TEXTAREA} value={item.directive} maxLength={2000} aria-label={t({ ko: '지시문', en: 'Directive' })} placeholder={t({ ko: '대화 모델에게 붙일 지시문', en: 'Directive for the chat model' })} onChange={(event) => onChange({ directive: event.target.value })} />
+              </SettingRow>
+              <SettingRow label={t({ ko: '아니오일 때', en: 'On no' })}>
+                {item.tools.length > 0
+                  ? <div className="flex flex-wrap gap-1.5"><JudgeWithheldTools tools={item.tools} /></div>
+                  : <span className="text-xs text-muted-foreground">{t({ ko: '동작 없음', en: 'Nothing' })}</span>}
+              </SettingRow>
+            </>
+          ) : (
+            <SettingRow label={t({ ko: '예일 때', en: 'On yes' })}>
+              <Chip size="sm" tone="success">{t({ ko: '후속 메시지 보내기', en: 'Send a follow-up' })}</Chip>
+            </SettingRow>
+          )}
+        </div>
+
+        {testTurns ? (
+          <EditorGroup
+            label={t({ ko: '테스트 결과', en: 'Test results' })}
+            actions={summary ? (
+              <span className="flex gap-2 text-2xs tabular-nums">
+                <span className="text-success">{t({ ko: '예 {n}', en: 'Yes {n}' }, { n: summary.yes })}</span>
+                <span className="text-warning">{t({ ko: '아니오 {n}', en: 'No {n}' }, { n: summary.no })}</span>
+                <span className="text-muted-foreground">{t({ ko: '애매 {n}', en: 'Unsure {n}' }, { n: summary.unsure })}</span>
+              </span>
+            ) : undefined}
+          >
+            <ItemTestRows item={item} turns={testTurns} />
+          </EditorGroup>
+        ) : null}
+      </div>
     </div>
   )
 }

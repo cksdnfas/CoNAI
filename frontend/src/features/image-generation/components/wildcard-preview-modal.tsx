@@ -2,7 +2,7 @@ import { Braces, Copy, Sparkles, WandSparkles } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Inset } from '@/components/ui/inset'
 import { Text } from '@/components/ui/text'
 import { Input } from '@/components/ui/input'
@@ -92,14 +92,12 @@ export function WildcardPreviewModal({
         />
 
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="secondary" onClick={onFillSelectedSyntax} disabled={!selectedWildcardSyntax}>
+          <IconButton variant="secondary" onClick={onFillSelectedSyntax} disabled={!selectedWildcardSyntax} label={t({ ko: '선택 항목 넣기', en: 'Insert selection' })}>
             <Braces className="h-4 w-4" />
-            {t({ ko: '선택 항목 넣기', en: 'Insert selection' })}
-          </Button>
-          <Button type="button" onClick={onParsePreview} disabled={isParsing || previewText.trim().length === 0}>
+          </IconButton>
+          <IconButton variant="default" onClick={onParsePreview} disabled={isParsing || previewText.trim().length === 0} aria-busy={isParsing || undefined} label={isParsing ? t('image-generation.components.wildcard.preview.modal.testing') : t('image-generation.components.wildcard.preview.modal.test')}>
             <Sparkles className="h-4 w-4" />
-            {isParsing ? t('image-generation.components.wildcard.preview.modal.testing') : t('image-generation.components.wildcard.preview.modal.test')}
-          </Button>
+          </IconButton>
         </div>
 
         {parseErrorMessage ? (
@@ -123,10 +121,9 @@ export function WildcardPreviewModal({
                 <Inset key={`${index}:${result}`} className="p-3 text-sm text-muted-foreground">
                   <div className="flex items-center justify-between gap-3">
                     <Text as="div" variant="overline" className="font-semibold">{t({ ko: '샘플 {count}', en: 'Sample {count}' }, { count: index + 1 })}</Text>
-                    <Button type="button" size="sm" variant="ghost" onClick={() => onCopyResult(result, t({ ko: '프리뷰 결과 {count}', en: 'Preview result {count}' }, { count: index + 1 }))}>
+                    <IconButton size="icon-sm" variant="ghost" onClick={() => onCopyResult(result, t({ ko: '프리뷰 결과 {count}', en: 'Preview result {count}' }, { count: index + 1 }))} label={t({ ko: '복사', en: 'Copy' })}>
                       <Copy className="h-4 w-4" />
-                      {t({ ko: '복사', en: 'Copy' })}
-                    </Button>
+                    </IconButton>
                   </div>
                   <div className="mt-2 break-words whitespace-pre-wrap text-foreground">{result}</div>
                 </Inset>

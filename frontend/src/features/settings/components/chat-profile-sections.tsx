@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowDown, ArrowUp, Braces, ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowDown, ArrowUp, Braces, Plus, Trash2 } from 'lucide-react'
 import { unknownChatMacros } from '@conai/shared'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
-import { Field, FieldInfo } from '@/components/ui/field'
+import { CollapsibleRow } from '@/components/ui/collapsible-row'
+import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -13,55 +14,6 @@ import { useI18n } from '@/i18n'
 import type { ChatPromptSection } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 import { GROW_TEXTAREA } from './chat-profile-editor-fields'
-
-/** A hairline row that folds its content: chevron + title on the left, small controls on the right. */
-export function CollapsibleRow({ title, info, meta, actions, defaultOpen = false, open: controlledOpen, onOpenChange, children }: {
-  title: ReactNode
-  /** Explanation in a tooltip behind a small info icon right after the row text. */
-  info?: ReactNode
-  /** Muted text after the title (kind, count…). */
-  meta?: ReactNode
-  /** Controls at the row end; clicks there do not toggle the row. */
-  actions?: ReactNode
-  defaultOpen?: boolean
-  open?: boolean
-  onOpenChange?: (open: boolean) => void
-  children: ReactNode
-}) {
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen)
-  const open = controlledOpen ?? uncontrolledOpen
-  const setOpen = (next: boolean) => {
-    setUncontrolledOpen(next)
-    onOpenChange?.(next)
-  }
-
-  return (
-    <div className="border-t border-line first:border-t-0">
-      <div className="flex min-h-11 items-center gap-2">
-        {/* eslint-disable-next-line no-restricted-syntax -- a full-width disclosure row; Button would pad and centre it */}
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-          className={cn('flex min-w-0 cursor-pointer items-center gap-2 rounded-sm py-2 text-left text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40', !info && 'flex-1')}
-        >
-          <ChevronRight className={cn('size-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
-          <span className="truncate font-medium">{title}</span>
-          {meta ? <span className="shrink-0 text-xs text-muted-foreground">{meta}</span> : null}
-        </button>
-        {info ? (
-          <>
-            <FieldInfo>{info}</FieldInfo>
-            {/* The rest of the row still toggles, as it does without an info icon. */}
-            <div aria-hidden className="min-h-11 flex-1 cursor-pointer self-stretch" onClick={() => setOpen(!open)} />
-          </>
-        ) : null}
-        {actions ? <div className="flex shrink-0 items-center gap-1">{actions}</div> : null}
-      </div>
-      {open ? <div className="space-y-3 pb-4 pl-6">{children}</div> : null}
-    </div>
-  )
-}
 
 function newSection(): ChatPromptSection {
   return { id: `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title: '', content: '', kind: 'text', enabled: true }

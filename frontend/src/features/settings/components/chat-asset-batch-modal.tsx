@@ -3,7 +3,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { AlertTriangle, Check, ImageOff, RotateCcw, ScanEye, Sparkles, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Chip, ToggleChip } from '@/components/ui/chip'
-import { FieldInfo } from '@/components/ui/field'
+import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
@@ -210,32 +210,39 @@ export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = f
   const selected = batch?.slots.filter((slot) => slot.kind !== 'full' && slot.chosenHash && slot.attempts.some((attempt) => attempt.candidates.some((candidate) => candidate.compositeHash === slot.chosenHash))).length ?? 0
   const complete = batch?.slots.filter((slot) => terminal(slot.status)).length ?? 0
   const displayedPresetId = batch?.presetId ?? presetId
-  return <Modal open onClose={onClose} widthClassName="max-w-[1040px] max-sm:fixed max-sm:inset-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:rounded-none" height="tall" title={<>{t({ ko: '자산 만들기', en: 'Create assets' })}<span className="ml-3 text-sm font-normal text-muted-foreground">{savedProfile?.name ?? profile?.name}</span></>}>
+  return <Modal open onClose={onClose} widthClassName="max-w-5xl max-sm:fixed max-sm:inset-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:rounded-none" height="tall" title={<>{t({ ko: '자산 만들기', en: 'Create assets' })}<span className="ml-3 text-sm font-normal text-muted-foreground">{savedProfile?.name ?? profile?.name}</span></>}>
     <ModalBody>
-      <div className="flex flex-wrap items-center gap-2 border-b border-line pb-3">
-        <Select className="w-auto max-w-full" aria-label={t({ ko: '생성 프리셋', en: 'Generation preset' })} value={displayedPresetId} disabled={frozen} onChange={(event) => setPresetChoice(Number(event.target.value))}>
+      <div className="flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-line pb-3">
+        <Field label={t({ ko: '생성 프리셋', en: 'Generation preset' })} className="min-w-0">
+        <Select variant="settings" className="w-auto max-w-full" aria-label={t({ ko: '생성 프리셋', en: 'Generation preset' })} value={displayedPresetId} disabled={frozen} onChange={(event) => setPresetChoice(Number(event.target.value))}>
           {!presets.data?.length ? <option value={0}>{t({ ko: '생성 프리셋', en: 'Generation preset' })}</option> : null}
           {batch && !presets.data?.some((entry) => entry.id === batch.presetId) ? <option value={batch.presetId}>{String(batch.snapshot.preset.name ?? `#${batch.presetId}`)}</option> : null}
           {presets.data?.map((entry) => <option key={entry.id} value={entry.id}>{batch?.presetId === entry.id ? String(batch.snapshot.preset.name ?? entry.name) : entry.name}</option>)}
         </Select>
-        <Select className="w-auto max-w-full" aria-label={t({ ko: '표정 목록', en: 'Expression list' })} value={batch ? -1 : expressionPresetId} disabled={frozen || referenceOnly} onChange={(event) => setExpressionChoice(Number(event.target.value))}>
+        </Field>
+        <Field label={t({ ko: '표정 목록', en: 'Expression list' })} className="min-w-0">
+        <Select variant="settings" className="w-auto max-w-full" aria-label={t({ ko: '표정 목록', en: 'Expression list' })} value={batch ? -1 : expressionPresetId} disabled={frozen || referenceOnly} onChange={(event) => setExpressionChoice(Number(event.target.value))}>
           {batch ? <option value={-1}>{t({ ko: '표정 {count}', en: '{count} expressions' }, { count: batch.slots.filter((slot) => slot.kind === 'expression').length })}</option> : null}
           {!expressionPresets.data?.length ? <option value={0}>{t({ ko: '표정 목록', en: 'Expression list' })}</option> : null}
           {expressionPresets.data?.map((entry) => <option key={entry.id} value={entry.id}>{entry.name === '기본 캐릭터 표정' ? t({ ko: '기본 표정 8', en: 'Default 8 expressions' }) : entry.name}</option>)}
         </Select>
-        {preset?.kind === 'comfyui' ? <Select className="w-auto max-w-full" value={promptField} disabled={frozen} aria-label={t({ ko: '슬롯 프롬프트 필드', en: 'Slot prompt field' })} onChange={(event) => setPromptChoice(event.target.value)}><option value="">{t({ ko: '프롬프트 필드', en: 'Prompt field' })}</option>{promptFields.map((field) => <option key={field.id} value={field.id}>{field.label}</option>)}</Select> : null}
-        <Select className="w-auto max-w-full" aria-label={t({ ko: '비전 검수 모델', en: 'Vision review model' })} value={visionSlotId} disabled={modelSlots.isPending} onChange={(event) => setVisionChoice(Number(event.target.value))}>
+        </Field>
+        {preset?.kind === 'comfyui' ? <Field label={t({ ko: '프롬프트 필드', en: 'Prompt field' })} className="min-w-0"><Select variant="settings" className="w-auto max-w-full" value={promptField} disabled={frozen} aria-label={t({ ko: '슬롯 프롬프트 필드', en: 'Slot prompt field' })} onChange={(event) => setPromptChoice(event.target.value)}><option value="">{t({ ko: '프롬프트 필드', en: 'Prompt field' })}</option>{promptFields.map((field) => <option key={field.id} value={field.id}>{field.label}</option>)}</Select></Field> : null}
+        <Field label={t({ ko: '비전 검수 모델', en: 'Vision review model' })} info={t({ ko: '후보가 기준 이미지와 같은 인물인지, 표정이 맞는지 보는 모델. 이미지를 볼 수 있는 모델을 골라줘.', en: 'Checks that a candidate matches the reference character and expression. Choose a model that can see images.' })} className="min-w-0">
+        <Select variant="settings" className="w-auto max-w-full" aria-label={t({ ko: '비전 검수 모델', en: 'Vision review model' })} value={visionSlotId} disabled={modelSlots.isPending} onChange={(event) => setVisionChoice(Number(event.target.value))}>
           <option value={0}>{t({ ko: '비전 검수 모델', en: 'Vision review model' })}</option>
           {modelSlots.data?.map((slot) => <option key={slot.id} value={slot.id}>{slot.label}</option>)}
         </Select>
-        <FieldInfo>{t({ ko: '비전 검수 모델: 후보가 기준 이미지와 같은 인물인지, 표정이 맞는지 보는 모델. 이미지를 볼 수 있는 모델을 골라줘.', en: 'Vision review model: checks that a candidate matches the reference character and expression. Choose a model that can see images.' })}</FieldInfo>
-        <span className="mx-1 h-6 w-px bg-line" aria-hidden />
+        </Field>
+        <span className="mx-1 mb-2 h-6 w-px bg-line" aria-hidden />
+        <div className="flex min-h-10 items-center gap-2">
         <ToggleChip pressed={batch ? batch.slots.some((slot) => slot.kind === 'expression') : expressions} disabled={frozen || referenceOnly} onClick={() => setExpressions(!expressions)}>{t({ ko: '표정', en: 'Expressions' })}</ToggleChip>
         <ToggleChip pressed={batch ? batch.slots.some((slot) => slot.kind === 'background') : background} disabled={frozen || referenceOnly} onClick={() => setBackground(!background)}>{t({ ko: '배경', en: 'Background' })}</ToggleChip>
         <ToggleChip pressed={batch ? batch.slots.some((slot) => slot.kind === 'full') : full} disabled={frozen || referenceOnly} onClick={() => setFull(!full)}>{t({ ko: '전신', en: 'Full body' })}</ToggleChip>
+        </div>
         <span className="flex-1" />
         {isRunning ? <span aria-live="polite" className="text-xs tabular-nums text-muted-foreground">{complete} / {batch?.slots.length}</span> : null}
-        <Tip content={batchId !== null ? t({ ko: '새 묶음 만들기', en: 'Create a new batch' }) : onPrepare ? t({ ko: '이름·외형·기준 이미지를 저장하고 만들기', en: 'Save name, appearance and reference, then create' }) : null}><Button size="sm" disabled={busy || isRunning || !savedProfile?.name.trim() || (batchId === null && (!presetId || !preview.length || preview.length > 32 || (expressions && !emotionNames.length) || (preset?.kind === 'comfyui' && !promptField)))} onClick={() => { if (batchId !== null) { setBatchId(null); request.current = null } else if (!creating.current) { creating.current = true; create.mutate() } }}>{create.isPending ? <Spinner /> : <Sparkles />}{t({ ko: '만들기', en: 'Create' })}</Button></Tip>
+        <Tip content={batchId !== null ? t({ ko: '새 묶음 만들기', en: 'Create a new batch' }) : onPrepare ? t({ ko: '이름·외형·기준 이미지를 저장하고 만들기', en: 'Save name, appearance and reference, then create' }) : t({ ko: '만들기', en: 'Create' })}><IconButton variant="default" size="icon-sm" tooltip={false} label={batchId !== null ? t({ ko: '새 묶음 만들기', en: 'Create a new batch' }) : t({ ko: '만들기', en: 'Create' })} aria-busy={create.isPending || undefined} disabled={busy || isRunning || !savedProfile?.name.trim() || (batchId === null && (!presetId || !preview.length || preview.length > 32 || (expressions && !emotionNames.length) || (preset?.kind === 'comfyui' && !promptField)))} onClick={() => { if (batchId !== null) { setBatchId(null); request.current = null } else if (!creating.current) { creating.current = true; create.mutate() } }}>{create.isPending ? <Spinner /> : <Sparkles />}</IconButton></Tip>
       </div>
       {[presets, expressionPresets, workflows, modelSlots, batchQuery].filter((query) => query.isError).map((query, index) => <div key={index} role="alert" className="flex items-center gap-2 text-sm text-destructive">{getErrorMessage(query.error, t({ ko: '불러오지 못했어.', en: 'Could not load.' }))}<Button size="xs" variant="ghost" onClick={() => void query.refetch()}>{t({ ko: '다시 시도', en: 'Retry' })}</Button></div>)}
       {batchQuery.isPending && batchId !== null ? <Spinner /> : null}
@@ -277,7 +284,7 @@ export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = f
         })}
       </div>
     </ModalBody>
-    <ModalFooter><Button size="sm" disabled={!selected || busy} onClick={() => apply.mutate()}>{apply.isPending ? <Spinner /> : <Check />}{t({ ko: '적용 {count}', en: 'Apply {count}' }, { count: selected })}</Button></ModalFooter>
+    <ModalFooter className="mt-4 border-t border-line pt-3"><Button size="sm" disabled={!selected || busy} onClick={() => apply.mutate()}>{apply.isPending ? <Spinner /> : <Check />}{t({ ko: '적용 {count}', en: 'Apply {count}' }, { count: selected })}</Button></ModalFooter>
     <MediaLightbox items={safety.visibleItems} index={lightboxIndex} onIndexChange={setLightboxIndex} onClose={() => setLightboxIndex(null)} />
   </Modal>
 }

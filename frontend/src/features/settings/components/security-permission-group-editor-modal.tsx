@@ -1,7 +1,8 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { UserMinus, UserPlus } from 'lucide-react'
+import { TextTabs } from '@/components/common/text-tabs'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -15,7 +16,7 @@ import type {
   PermissionGroupListItem,
 } from '@/lib/api-auth'
 import { Field } from '@/components/ui/field'
-import { Modal, ModalFooter } from '@/components/ui/modal'
+import { Modal } from '@/components/ui/modal'
 import { SecurityAccountManagementList } from './security-account-management-list'
 import { SecurityPermissionChecklist } from './security-permission-checklist'
 import {
@@ -124,13 +125,31 @@ export function SecurityPermissionGroupEditorModal({
       ? getPermissionGroupDisplayName(language, group.groupKey, group.name)
       : t({ ko: '권한 그룹', en: 'Permission group' })
   const isBusy = isSaving || isDeleting
+  const [tab, setTab] = useState<'permissions' | 'members'>('permissions')
+  const [tabFor, setTabFor] = useState<string | null>(null)
+  const sessionKey = open ? `${mode}:${group?.id ?? 'new'}` : null
+  if (sessionKey !== tabFor) {
+    // A newly opened group starts on its permissions.
+    setTabFor(sessionKey)
+    setTab('permissions')
+  }
+  const shownTab = isCreateMode ? 'permissions' : tab
+  const sameKeys = (a: string[], b: string[]) => a.length === b.length && [...a].sort().join('\n') === [...b].sort().join('\n')
+  const dirty = open && (isCreateMode
+    ? draft.name.trim() !== '' || draft.description.trim() !== ''
+    : group !== null && (draft.name !== group.name || draft.description !== (group.description ?? '') || !sameKeys(draft.permissionKeys, group.directPermissionKeys)))
+  const canSave = canEditPermissions && !isBusy && (dirty || isCreateMode)
+  const readOnlyBadge = <Badge variant="secondary">{t({ ko: '읽기 전용', en: 'Read only' })}</Badge>
 
   return (
     <Modal
       open={open}
       onClose={onClose}
       title={title}
-      widthClassName="max-w-5xl" height="tall"
+      size="wide"
+      height="tall"
+      dirty={dirty}
+      onSave={canSave ? onSave : undefined}
       headerContent={
         !isCreateMode && group ? (
           <div className="flex flex-wrap gap-2">
@@ -143,9 +162,9 @@ export function SecurityPermissionGroupEditorModal({
         <div className="min-h-[360px] flex-1 animate-pulse rounded-sm bg-fill" />
       ) : (
         <>
-          <div className="space-y-6">
+          <div className="space-y-5">
             {canEditFields ? (
-              <>
+              <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
                 <Field label={t({ ko: '그룹 이름', en: 'Group name' })}>
                   <Input
                     variant="settings"
@@ -159,21 +178,28 @@ export function SecurityPermissionGroupEditorModal({
                 <Field label={t({ ko: '설명', en: 'Description' })}>
                   <Textarea
                     variant="settings"
-                    rows={3}
+                    rows={1}
+                    className="min-h-10 max-h-40 [field-sizing:content]"
                     value={draft.description}
                     disabled={isBusy}
                     onChange={(event) => onDraftChange({ description: event.target.value })}
                   />
                 </Field>
-              </>
+              </div>
             ) : null}
 
-            <section className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-sm font-semibold text-foreground">{t({ ko: '권한', en: 'Permissions' })}</h3>
-                {!canEditPermissions ? <Badge variant="secondary">{t({ ko: '읽기 전용', en: 'Read only' })}</Badge> : null}
-              </div>
+            <TextTabs
+              value={shownTab}
+              onChange={setTab}
+              ariaLabel={t({ ko: '권한 그룹 항목', en: 'Permission group sections' })}
+              items={[
+                { value: 'permissions', label: t({ ko: '권한', en: 'Permissions' }), count: draft.permissionKeys.length },
+                ...(isCreateMode ? [] : [{ value: 'members' as const, label: t({ ko: '멤버', en: 'Members' }), count: members.length }]),
+              ]}
+              actions={(shownTab === 'permissions' ? !canEditPermissions : !canManageMembers) ? readOnlyBadge : undefined}
+            />
 
+            {shownTab === 'permissions' ? (
               <SecurityPermissionChecklist
                 permissionCatalog={permissionCatalog}
                 groupKey={group?.groupKey ?? null}
@@ -182,98 +208,76 @@ export function SecurityPermissionGroupEditorModal({
                 disabled={!canEditPermissions || isBusy}
                 onToggle={onTogglePermission}
               />
-            </section>
-
-            {!isCreateMode ? (
-              <section className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold text-foreground">{t({ ko: '그룹 멤버', en: 'Group members' })}</h3>
-                  {!canManageMembers ? <Badge variant="secondary">{t({ ko: '읽기 전용', en: 'Read only' })}</Badge> : null}
-                </div>
-
+            ) : (
+              <div className="space-y-3">
                 {canManageMembers ? (
-                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-                    <Field label={t({ ko: '계정', en: 'Account' })}>
-                      <Select
-                        variant="settings"
-                        value={selectedAddMemberAccountId === null ? '' : String(selectedAddMemberAccountId)}
-                        disabled={isAddingMember || isBusy}
-                        onChange={(event) => onSelectedAddMemberAccountIdChange(event.target.value ? Number(event.target.value) : null)}
-                      >
-                        <option value="">{t({ ko: '계정 선택', en: 'Select account' })}</option>
-                        {addableAccounts.map((account) => (
-                          <option key={account.id} value={account.id}>
-                            {account.username} ({getAccountTypeLabel(language, account.accountType)})
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-
-                    <div className="flex items-end">
-                      <IconButton
-                        variant="secondary"
-                        onClick={onAddMember}
-                        disabled={selectedAddMemberAccountId === null || isAddingMember || isBusy}
-                        label={t({ ko: '고른 계정을 멤버로 추가', en: 'Add the selected account as a member' })}
-                      >
-                        <UserPlus className="h-4 w-4" />
-                      </IconButton>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      variant="settings"
+                      className="min-w-0 flex-1"
+                      aria-label={t({ ko: '추가할 계정', en: 'Account to add' })}
+                      value={selectedAddMemberAccountId === null ? '' : String(selectedAddMemberAccountId)}
+                      disabled={isAddingMember || isBusy}
+                      onChange={(event) => onSelectedAddMemberAccountIdChange(event.target.value ? Number(event.target.value) : null)}
+                    >
+                      <option value="">{t({ ko: '계정 선택', en: 'Select account' })}</option>
+                      {addableAccounts.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.username} ({getAccountTypeLabel(language, account.accountType)})
+                        </option>
+                      ))}
+                    </Select>
+                    <IconButton
+                      variant="secondary"
+                      onClick={onAddMember}
+                      disabled={selectedAddMemberAccountId === null || isAddingMember || isBusy}
+                      label={t({ ko: '고른 계정을 멤버로 추가', en: 'Add the selected account as a member' })}
+                    >
+                      <UserPlus className="h-4 w-4" />
+                    </IconButton>
                   </div>
                 ) : null}
 
-                <div>
-                  <SecurityAccountManagementList
-                    accounts={memberAccounts}
-                    availableGroups={availableGroups}
-                    groupColors={groupColors}
-                    groupLabels={groupLabels}
-                    pageSize={10}
-                    searchPlaceholder={t({ ko: '멤버 검색', en: 'Search members' })}
-                    searchAriaLabel={t({ ko: '그룹 멤버 검색', en: 'Search group members' })}
-                    emptyMessage={members.length === 0 ? t({ ko: '멤버가 없어.', en: 'There are no members.' }) : t({ ko: '멤버 계정 정보를 불러오는 중이야.', en: 'Loading member account details.' })}
-                    paginationClassName="pt-4"
-                    isUpdatingAccountGroup={isUpdatingAccountGroup}
-                    isUpdatingAccountPassword={isUpdatingAccountPassword}
-                    isDeletingAccount={isDeletingAccount}
-                    renderExtraActions={(account) => canManageMembers ? (
-                      <IconButton
-                        size="icon-sm"
-                        variant="ghost"
-                        disabled={isRemovingMember || isBusy}
-                        onClick={() => onRemoveMember(account.id)}
-                        label={t({ ko: '이 그룹에서 멤버 제거', en: 'Remove member from this group' })}
-                      >
-                        <UserMinus className="h-4 w-4" />
-                      </IconButton>
-                    ) : null}
-                    onAccountGroupChange={onAccountGroupChange}
-                    onAccountPasswordChange={onAccountPasswordChange}
-                    onAccountDelete={onAccountDelete}
-                  />
-                </div>
-              </section>
-            ) : null}
+                <SecurityAccountManagementList
+                  accounts={memberAccounts}
+                  availableGroups={availableGroups}
+                  groupColors={groupColors}
+                  groupLabels={groupLabels}
+                  pageSize={10}
+                  searchPlaceholder={t({ ko: '멤버 검색', en: 'Search members' })}
+                  searchAriaLabel={t({ ko: '그룹 멤버 검색', en: 'Search group members' })}
+                  emptyMessage={members.length === 0 ? t({ ko: '멤버가 없어.', en: 'There are no members.' }) : t({ ko: '멤버 계정 정보를 불러오는 중이야.', en: 'Loading member account details.' })}
+                  paginationClassName="pt-4"
+                  isUpdatingAccountGroup={isUpdatingAccountGroup}
+                  isUpdatingAccountPassword={isUpdatingAccountPassword}
+                  isDeletingAccount={isDeletingAccount}
+                  renderExtraActions={(account) => canManageMembers ? (
+                    <IconButton
+                      size="icon-sm"
+                      variant="ghost"
+                      disabled={isRemovingMember || isBusy}
+                      onClick={() => onRemoveMember(account.id)}
+                      label={t({ ko: '이 그룹에서 멤버 제거', en: 'Remove member from this group' })}
+                    >
+                      <UserMinus className="h-4 w-4" />
+                    </IconButton>
+                  ) : null}
+                  onAccountGroupChange={onAccountGroupChange}
+                  onAccountPasswordChange={onAccountPasswordChange}
+                  onAccountDelete={onAccountDelete}
+                />
+              </div>
+            )}
           </div>
 
-          <ModalFooter className="justify-between gap-3 pt-4">
-            <div>
-              {canDelete && group ? (
-                <Button type="button" variant="destructive" onClick={() => onDelete(group.id)} disabled={isBusy}>
-                  {t({ ko: '삭제', en: 'Delete' })}
-                </Button>
-              ) : null}
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" onClick={onClose} disabled={isBusy}>
-                {t({ ko: '닫기', en: 'Close' })}
-              </Button>
-              <Button type="button" onClick={onSave} disabled={!canEditPermissions || isBusy}>
-                {isSaving ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })}
-              </Button>
-            </div>
-          </ModalFooter>
+          <EditorFooter
+            onDelete={canDelete && group ? () => onDelete(group.id) : undefined}
+            deleteLabel={t({ ko: '그룹 삭제', en: 'Delete group' })}
+            deleting={isDeleting}
+            onSave={onSave}
+            canSave={canSave}
+            saving={isSaving}
+          />
         </>
       )}
     </Modal>

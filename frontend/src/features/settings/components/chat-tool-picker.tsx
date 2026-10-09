@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Tip } from '@/components/ui/tooltip'
 import { getChatScopeCopy } from '@/features/codex-chat/chat-scope-copy'
-import { groupChatTools, type ChatToolGroup } from '@/features/codex-chat/chat-tool-catalog'
+import { groupChatTools, matchesChatTool, type ChatToolGroup } from '@/features/codex-chat/chat-tool-catalog'
 import { useI18n } from '@/i18n'
 import { listChatTools, type ChatScope } from '@/lib/api-codex-chat'
 
@@ -21,7 +21,7 @@ export function useChatToolGroups(enabled: boolean) {
 
 /**
  * Pick the tools of a grant: the "every tool" switch, then per scope the groups of tools with a group-level all/none
- * toggle, a search box over labels, names and descriptions, and a plain label per tool (the tool name in the tooltip).
+ * toggle, a Korean-aware search box over labels, names and descriptions, and a plain label per tool (the tool name in the tooltip).
  * `allowlist` null means every tool the scopes allow.
  */
 export function ChatToolPicker({ groups, scopes, allowlist, onChange, loading = false }: {
@@ -38,7 +38,6 @@ export function ChatToolPicker({ groups, scopes, allowlist, onChange, loading = 
   const names = visibleGroups.flatMap((group) => group.tools.map((tool) => tool.name))
   const selected = allowlist === null ? names : allowlist.filter((name) => names.includes(name))
   const selectedSet = new Set(selected)
-  const needle = query.trim().toLowerCase()
 
   const setMany = (toolNames: string[], checked: boolean) => {
     const next = checked ? [...new Set([...selected, ...toolNames])] : selected.filter((name) => !toolNames.includes(name))
@@ -76,9 +75,7 @@ export function ChatToolPicker({ groups, scopes, allowlist, onChange, loading = 
                   </IconButton>
                 </div>
                 {scopeGroups.map((group) => {
-                  const tools = needle
-                    ? group.tools.filter((tool) => tool.name.includes(needle) || tool.label.toLowerCase().includes(needle) || tool.description.toLowerCase().includes(needle))
-                    : group.tools
+                  const tools = group.tools.filter((tool) => matchesChatTool(tool, query))
                   if (tools.length === 0) return null
                   const groupNames = group.tools.map((tool) => tool.name)
                   const groupCount = groupNames.filter((name) => selectedSet.has(name)).length

@@ -1,15 +1,18 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Pause, Play, Plus, Rocket, Save, SquarePen, Trash2 } from 'lucide-react'
+import { Pause, Play, Plus, Rocket, SquarePen, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
+import { EditorGroup } from '@/components/ui/editor-group'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
-import { Modal, ModalFooter } from '@/components/ui/modal'
+import { Modal } from '@/components/ui/modal'
+import { SettingRow } from '@/components/ui/setting-row'
+import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { Section } from '@/components/ui/section'
 import { useI18n, type TranslationInput } from '@/i18n'
 import { getGraphWorkflow } from '@/lib/api-module-graph'
@@ -128,6 +131,9 @@ export function ModuleWorkflowSchedulesPanel({
   const [draftFailurePolicy, setDraftFailurePolicy] = useState<GraphWorkflowScheduleFailurePolicy>('stop')
   const [draftEnqueueCount, setDraftEnqueueCount] = useState('1')
   const [draftInputValues, setDraftInputValues] = useState<Record<string, unknown>>({})
+  /** The draft as the editor opened, to tell unsaved edits (null until the opened values have rendered). */
+  const [openedSnapshot, setOpenedSnapshot] = useState<string | null>(null)
+  const draftSnapshot = JSON.stringify([draftWorkflowId, draftName, draftScheduleType, draftEnabled, draftRunAt, draftIntervalMinutes, draftDailyTime, draftMaxRunCount, draftFailurePolicy, draftEnqueueCount, draftInputValues])
 
   // WF-1: 예약 목록 응답에는 그래프 문서가 없다. 편집기를 열 때 선택한 워크플로우만 by-id 로 받아
   // 노출 입력 정의를 구성한다(모듈그래프 페이지 상세 쿼리와 키가 같아 캐시를 함께 쓴다).
@@ -155,7 +161,14 @@ export function ModuleWorkflowSchedulesPanel({
     setDraftFailurePolicy('stop')
     setDraftEnqueueCount('1')
     setDraftInputValues({})
+    setOpenedSnapshot(null)
   }
+
+  useEffect(() => {
+    if (editorMode !== null && openedSnapshot === null) {
+      setOpenedSnapshot(draftSnapshot)
+    }
+  }, [draftSnapshot, editorMode, openedSnapshot])
 
   useEffect(() => {
     if (!editorMode && !editingScheduleId && !draftWorkflowId && workflows[0]) {
@@ -267,6 +280,9 @@ export function ModuleWorkflowSchedulesPanel({
     resetDraft()
   }
 
+  const draftDirty = editorMode !== null && openedSnapshot !== null && draftSnapshot !== openedSnapshot
+  const canSaveDraft = canExecuteGeneration && canUpdateWorkflows && !isMutating && !submitDisabled && (draftDirty || editorMode === 'create')
+
   return (
     <>
       <Section
@@ -350,65 +366,70 @@ export function ModuleWorkflowSchedulesPanel({
         open={editorMode !== null}
         onClose={resetDraft}
         title={editorMode === 'edit' ? t({ ko: '자동 실행 수정', en: 'Edit autorun' }) : t({ ko: '자동 실행 추가', en: 'Add autorun' })}
-        widthClassName="max-w-5xl" height="tall"
+        size="normal"
+        height="tall"
+        dirty={draftDirty}
+        onSave={canSaveDraft ? () => void handleSubmit() : undefined}
       >
         <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <Field label={t({ ko: '대상 워크플로우', en: 'Target workflow' })} className="xl:col-span-2">
-              <Select value={draftWorkflowId} onChange={(event) => setDraftWorkflowId(event.target.value)} disabled={editorMode === 'edit' || isMutating}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label={t({ ko: '대상 워크플로우', en: 'Target workflow' })}>
+              <Select variant="settings" value={draftWorkflowId} onChange={(event) => setDraftWorkflowId(event.target.value)} disabled={editorMode === 'edit' || isMutating}>
                 {workflows.map((workflow) => (
                   <option key={workflow.id} value={workflow.id}>{workflow.name}</option>
                 ))}
               </Select>
             </Field>
+            <Field label={t({ ko: '이름', en: 'Name' })}>
+              <Input variant="settings" value={draftName} onChange={(event) => setDraftName(event.target.value)} disabled={isMutating} />
+            </Field>
             <Field label={t({ ko: '일정 방식', en: 'Schedule type' })}>
-              <Select value={draftScheduleType} onChange={(event) => setDraftScheduleType(event.target.value as GraphWorkflowScheduleType)} disabled={isMutating}>
+              <Select variant="settings" value={draftScheduleType} onChange={(event) => setDraftScheduleType(event.target.value as GraphWorkflowScheduleType)} disabled={isMutating}>
                 <option value="once">{t({ ko: '1회 실행', en: 'Run once' })}</option>
                 <option value="interval">{t({ ko: 'N분마다', en: 'Every N minutes' })}</option>
                 <option value="daily">{t({ ko: '매일', en: 'Daily' })}</option>
               </Select>
             </Field>
-            <Field label={t({ ko: '시작 상태', en: 'Initial status' })}>
-              <Select value={draftEnabled} onChange={(event) => setDraftEnabled(event.target.value as 'active' | 'paused')} disabled={isMutating}>
-                <option value="active">{t({ ko: '활성', en: 'Active' })}</option>
-                <option value="paused">{t({ ko: '일시정지', en: 'Paused' })}</option>
-              </Select>
-            </Field>
-            <Field label={t({ ko: '이름', en: 'Name' })} className="xl:col-span-2">
-              <Input value={draftName} onChange={(event) => setDraftName(event.target.value)} disabled={isMutating} />
-            </Field>
-            <Field label={t({ ko: '최대 예약 횟수', en: 'Max runs' })}>
-              <NumberStepperInput min={-1} value={draftMaxRunCount} onValueCommit={(nextValue) => setDraftMaxRunCount(nextValue)} disabled={isMutating} />
-            </Field>
-            <Field label={t({ ko: '1회 큐 등록수', en: 'Queue count per run' })}>
-              <NumberStepperInput min={1} max={100} value={draftEnqueueCount} onValueCommit={(nextValue) => setDraftEnqueueCount(nextValue)} disabled={isMutating} />
-            </Field>
-            <Field label={t({ ko: '실패 처리', en: 'Failure handling' })}>
-              <Select value={draftFailurePolicy} onChange={(event) => setDraftFailurePolicy(event.target.value as GraphWorkflowScheduleFailurePolicy)} disabled={isMutating}>
-                <option value="stop">{t({ ko: '실패 시 중지', en: 'Stop on failure' })}</option>
-                <option value="continue">{t({ ko: '실패해도 계속', en: 'Continue on failure' })}</option>
-              </Select>
-            </Field>
             {draftScheduleType === 'once' ? (
               <Field label={t({ ko: '실행 시각', en: 'Run time' })}>
-                <Input type="datetime-local" value={draftRunAt} onChange={(event) => setDraftRunAt(event.target.value)} disabled={isMutating} />
+                <Input variant="settings" type="datetime-local" value={draftRunAt} onChange={(event) => setDraftRunAt(event.target.value)} disabled={isMutating} />
               </Field>
             ) : null}
             {draftScheduleType === 'interval' ? (
               <Field label={t({ ko: '반복 간격(분)', en: 'Repeat interval (min)' })}>
-                <NumberStepperInput min={1} value={draftIntervalMinutes} onValueCommit={(nextValue) => setDraftIntervalMinutes(nextValue)} disabled={isMutating} />
+                <NumberStepperInput variant="settings" min={1} value={draftIntervalMinutes} onValueCommit={(nextValue) => setDraftIntervalMinutes(nextValue)} disabled={isMutating} />
               </Field>
             ) : null}
             {draftScheduleType === 'daily' ? (
               <Field label={t({ ko: '실행 시각', en: 'Run time' })}>
-                <Input type="time" value={draftDailyTime} onChange={(event) => setDraftDailyTime(event.target.value)} disabled={isMutating} />
+                <Input variant="settings" type="time" value={draftDailyTime} onChange={(event) => setDraftDailyTime(event.target.value)} disabled={isMutating} />
               </Field>
             ) : null}
+            <Field label={t({ ko: '최대 예약 횟수', en: 'Max runs' })}>
+              <NumberStepperInput variant="settings" min={-1} value={draftMaxRunCount} onValueCommit={(nextValue) => setDraftMaxRunCount(nextValue)} disabled={isMutating} />
+            </Field>
+            <Field label={t({ ko: '1회 큐 등록수', en: 'Queue count per run' })}>
+              <NumberStepperInput variant="settings" min={1} max={100} value={draftEnqueueCount} onValueCommit={(nextValue) => setDraftEnqueueCount(nextValue)} disabled={isMutating} />
+            </Field>
+          </div>
+
+          <div className="border-y border-line">
+            <SettingsSwitchRow
+              label={t({ ko: '활성', en: 'Active' })}
+              checked={draftEnabled === 'active'}
+              disabled={isMutating}
+              onCheckedChange={(checked) => setDraftEnabled(checked ? 'active' : 'paused')}
+            />
+            <SettingRow label={t({ ko: '실패 처리', en: 'Failure handling' })}>
+              <Select variant="settings" className="w-44" aria-label={t({ ko: '실패 처리', en: 'Failure handling' })} value={draftFailurePolicy} onChange={(event) => setDraftFailurePolicy(event.target.value as GraphWorkflowScheduleFailurePolicy)} disabled={isMutating}>
+                <option value="stop">{t({ ko: '실패 시 중지', en: 'Stop on failure' })}</option>
+                <option value="continue">{t({ ko: '실패해도 계속', en: 'Continue on failure' })}</option>
+              </Select>
+            </SettingRow>
           </div>
 
           {selectedInputDefinitions.length > 0 ? (
-            <div className="space-y-3">
-              <div className="text-sm font-medium text-foreground">{t({ ko: '저장 입력값', en: 'Saved inputs' })}</div>
+            <EditorGroup label={t({ ko: '저장 입력값', en: 'Saved inputs' })}>
               <WorkflowInputFields
                 inputDefinitions={selectedInputDefinitions}
                 inputValues={draftInputValues}
@@ -430,18 +451,15 @@ export function ModuleWorkflowSchedulesPanel({
                   })
                 }}
               />
-            </div>
+            </EditorGroup>
           ) : null}
 
-          <ModalFooter>
-            <Button type="button" variant="secondary" onClick={resetDraft} disabled={isMutating}>
-              {t({ ko: '취소', en: 'Cancel' })}
-            </Button>
-            <Button type="submit" disabled={!(canExecuteGeneration && canUpdateWorkflows) || (isMutating || submitDisabled)}>
-              {editorMode === 'edit' ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-              {editorMode === 'edit' ? t({ ko: '저장', en: 'Save' }) : t({ ko: '추가', en: 'Add' })}
-            </Button>
-          </ModalFooter>
+          <EditorFooter
+            saveSubmit
+            canSave={canSaveDraft}
+            saving={isMutating}
+            saveLabel={editorMode === 'edit' ? t({ ko: '저장', en: 'Save' }) : t({ ko: '추가', en: 'Add' })}
+          />
         </form>
       </Modal>
     </>

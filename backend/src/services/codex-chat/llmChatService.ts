@@ -23,13 +23,13 @@ import { withGenerationOutcomes } from './codexChatMedia'
 import type { CodexChatStreamEvent } from './codexChatService'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 import { ChatSummaryStore } from './chatMemory'
-import { appendUserDirective, buildChatMessages, cutToolOutput, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
+import { appendUserDirective, buildChatMessages, cutToolOutput, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, prefixUserContent, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
 import { addressLabelFilter, restatement, roundSeparator } from './chatReplyText'
-import { chatPageReference, parseChatPageContext, proposalOutcomeNote } from './chatPageContext'
+import { chatPageReference, NO_PAGE_NOTE, parseChatPageContext, proposalOutcomeNote } from './chatPageContext'
 import type { ChatSendOptions } from './chatTasks'
 import { rememberChatPage } from './chatPageBridge'
 import { notifyChatUserSend } from './chatSendEvents'
-import { contextSections, limitContextMeta, markContextMessage, legacyContextMeta } from './chatContextDiagnostics'
+import { contextPartsOf, contextSections, limitContextMeta, markContextMessage, markContextParts, legacyContextMeta } from './chatContextDiagnostics'
 import { redactChatRequestBody, saveChatRequestCapture } from './chatRequestCaptures'
 import { ChatGroupStore, groupLimitsOf } from './chatGroupStore'
 import { buildGroupLlmMessages } from './groupChatContext'
@@ -238,7 +238,8 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     // Continuing: the cut reply as the model's own turn, then the request to carry on from its last word — room for
     // both is kept before the window is chosen.
     const continuation: ChatCompletionMessage[] = turn.continuing === undefined ? [] : [markContextMessage({ role: 'assistant', content: turn.continuing }, 'continuation'), markContextMessage({ role: 'user', content: CONTINUE_DIRECTIVE }, 'continuation')]
-    const reference = [chatPageReference(turn.page), proposalOutcomeNote(thread.id)].filter(Boolean).join('\n\n')
+    // The "no page" note only matters to a model that has tools to misuse; a plain roleplay reply goes without it.
+    const reference = [turn.page ? chatPageReference(turn.page, requester) : tools.length > 0 ? NO_PAGE_NOTE : '', proposalOutcomeNote(thread.id)].filter(Boolean).join('\n\n')
     const pageMessages: ChatCompletionMessage[] = reference ? [markContextMessage({ role: 'user', content: reference }, 'page')] : []
     const reactionMessages = turn.reaction ? [turn.reaction.result] : []
     const extraTokens = estimateMessagesTokens(profile.id, [...continuation, ...pageMessages, ...reactionMessages])
@@ -250,13 +251,26 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
       profile, thread: current, messages: listMessages(), config, tools, segments: config.summaryEnabled ? ChatSummaryStore.list(thread.id) : [], attachmentTexts, extraTokens, judged,
       onMeta: (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(profile, 'chat')?.model ?? null } },
     })
-    const latestUser = request.map((message) => message.role).lastIndexOf('user')
-    const final = [...request.slice(0, latestUser), ...pageMessages, ...request.slice(latestUser), ...continuation, ...reactionMessages]
+    const final = [...withPageReference(request, reference), ...continuation, ...reactionMessages]
     if (turn.contextMeta?.version === 2) {
       turn.contextMeta = limitContextMeta({ ...turn.contextMeta, sections: contextSections(final, tools, (text) => estimateTokens(profile.id, text)), estimatedTokens: estimateMessagesTokens(profile.id, final, tools) })
     }
     return final
   }, { maxTokens: config.maxTokens })
+}
+
+/**
+ * The page reference in front of the latest user message, merged into it: a separate user message would put two user
+ * turns in a row, which chat templates that require alternating roles (Gemma and others) refuse.
+ */
+export function withPageReference(messages: ChatCompletionMessage[], reference: string): ChatCompletionMessage[] {
+  if (!reference) return messages
+  const latestUser = messages.map((message) => message.role).lastIndexOf('user')
+  if (latestUser < 0) return [...messages, markContextMessage({ role: 'user', content: reference }, 'page')]
+  return messages.map((message, index) => (index === latestUser && message.role === 'user' ? markContextParts({ ...message, content: prefixUserContent(message.content, reference) }, [
+    { kind: 'page', text: reference },
+    ...(contextPartsOf(message).length ? contextPartsOf(message) : [{ kind: 'window' as const, text: typeof message.content === 'string' ? message.content : JSON.stringify(message.content) }]),
+  ]) : message))
 }
 
 /** `work`, with a `waiting` event every WAITING_EVENT_MS while it runs: the stream carries bytes and says why it is quiet. */

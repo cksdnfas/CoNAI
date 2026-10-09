@@ -1,17 +1,19 @@
 import { Folder, FolderOpen } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
+import { EditorGroup } from '@/components/ui/editor-group'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/ui/field'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
-import { ToggleRow } from '@/components/ui/toggle-row'
+import { Modal, ModalBody } from '@/components/ui/modal'
+import { SettingRow } from '@/components/ui/setting-row'
+import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
+import { AppearanceColorControl } from '@/features/settings/components/appearance-tab-editor-shared'
 import { collectDescendantGroupIds } from '@/features/groups/group-option-utils'
 import type { GroupMutationInput, GroupRecord, GroupWithHierarchy } from '@/types/group'
 import { AutoCollectChipEditor } from './auto-collect-chip-editor'
-import { Switch } from '@/components/ui/switch'
 import { useI18n } from '@/i18n'
 
 interface GroupEditorModalProps {
@@ -60,6 +62,7 @@ export function GroupEditorModal({
   })
   const [autoCollectInitialText, setAutoCollectInitialText] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
+  const formRef = useRef<HTMLFormElement | null>(null)
 
   useEffect(() => {
     if (!open) {
@@ -135,14 +138,30 @@ export function GroupEditorModal({
     await onSubmit(input)
   }
 
+  // Auto-collect conditions are left out: the chip editor re-serialises them, so comparing would flag untouched groups.
+  const initialParentValue = String(group?.parent_id ?? defaultParentId ?? 'root')
+  const dirty = open && (
+    name !== (group?.name ?? '')
+    || description !== (group?.description ?? '')
+    || color !== (group?.color ?? '')
+    || parentValue !== initialParentValue
+    || autoCollectEnabled !== Boolean(group?.auto_collect_enabled)
+    || emoticonEnabled !== Boolean(group?.emoticon_enabled)
+  )
+  const canSave = !isSubmitting && (mode === 'create' || dirty || autoCollectEnabled)
+  const colorValue = /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(color.trim()) ? color.trim() : '#7c3aed'
+
   return (
     <Modal
       open={open}
       onClose={onClose}
       title={mode === 'create' ? t('groups.components.group.editor.modal.custom.group') : t('groups.components.group.editor.modal.custom.groups.edit')}
-      widthClassName="max-w-3xl" height="tall"
+      size="normal"
+      height="tall"
+      dirty={dirty}
+      onSave={canSave ? () => formRef.current?.requestSubmit() : undefined}
     >
-      <form onSubmit={(event) => void handleSubmit(event)}>
+      <form ref={formRef} onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (
           <Alert variant="destructive">
             <AlertTitle>{t('groups.components.group.editor.modal.check.your.input')}</AlertTitle>
@@ -150,63 +169,74 @@ export function GroupEditorModal({
           </Alert>
         ) : null}
 
-        <ModalBody className="space-y-5">
-          <div className="space-y-5">
-            <Field label={t('groups.components.group.editor.modal.group.name')}>
-              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('groups.components.group.editor.modal.e.g.concept.art.characters.favorites')} />
-            </Field>
+        <ModalBody className="space-y-4">
+          <Field label={t('groups.components.group.editor.modal.group.name')}>
+            <Input variant="settings" value={name} onChange={(event) => setName(event.target.value)} placeholder={t('groups.components.group.editor.modal.e.g.concept.art.characters.favorites')} />
+          </Field>
 
-            <Field label={t('groups.components.group.editor.modal.description')}>
-              <Textarea
-                rows={3}
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
+          <Field label={t('groups.components.group.editor.modal.description')}>
+            <Textarea
+              variant="settings"
+              rows={3}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </Field>
+
+          <EditorGroup label={t('groups.components.group.editor.modal.group.location')}>
+            <HierarchyPicker
+              items={parentGroups}
+              selectedId={parentValue === 'root' ? null : Number(parentValue)}
+              onSelectRoot={() => setParentValue('root')}
+              onSelect={(candidate) => setParentValue(String(candidate.id))}
+              getId={(candidate) => candidate.id}
+              getParentId={(candidate) => candidate.parent_id}
+              getLabel={(candidate) => candidate.name}
+              sortItems={(left, right) => left.name.localeCompare(right.name)}
+              renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
+            />
+          </EditorGroup>
+
+          <EditorGroup>
+            <div>
+              <div className="border-b border-line">
+                <SettingsSwitchRow
+                  className="border-b-0"
+                  label={t('groups.components.group.editor.modal.filter.apply')}
+                  checked={autoCollectEnabled}
+                  onCheckedChange={setAutoCollectEnabled}
+                />
+                {autoCollectEnabled ? (
+                  <div className="pb-4">
+                    <AutoCollectChipEditor initialJsonText={autoCollectInitialText} onChange={setAutoCollectEditorState} />
+                  </div>
+                ) : null}
+              </div>
+              <SettingsSwitchRow
+                label={t({ ko: 'LLM 이모티콘 그룹', en: 'LLM emoticon group' })}
+                checked={emoticonEnabled}
+                onCheckedChange={setEmoticonEnabled}
               />
-            </Field>
-
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-foreground">{t('groups.components.group.editor.modal.group.location')}</p>
-              <HierarchyPicker
-                items={parentGroups}
-                selectedId={parentValue === 'root' ? null : Number(parentValue)}
-                onSelectRoot={() => setParentValue('root')}
-                onSelect={(candidate) => setParentValue(String(candidate.id))}
-                getId={(candidate) => candidate.id}
-                getParentId={(candidate) => candidate.parent_id}
-                getLabel={(candidate) => candidate.name}
-                sortItems={(left, right) => left.name.localeCompare(right.name)}
-                renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
-              />
+              <SettingRow label={t('groups.components.group.editor.modal.accent.color')}>
+                <AppearanceColorControl
+                  ariaLabel={t('groups.components.group.editor.modal.accent.color')}
+                  colorValue={colorValue}
+                  textValue={color}
+                  placeholder="#7c3aed"
+                  onChangeColor={setColor}
+                  onChangeText={setColor}
+                />
+              </SettingRow>
             </div>
-
-            <div className="space-y-3">
-              <ToggleRow className="justify-between">
-                <p className="text-sm font-medium text-foreground">{t('groups.components.group.editor.modal.filter.apply')}</p>
-                <Switch checked={autoCollectEnabled} onCheckedChange={setAutoCollectEnabled} />
-              </ToggleRow>
-
-              {autoCollectEnabled ? <AutoCollectChipEditor initialJsonText={autoCollectInitialText} onChange={setAutoCollectEditorState} /> : null}
-            </div>
-
-            <ToggleRow className="justify-between">
-              <p className="text-sm font-medium text-foreground">{t({ ko: 'LLM 이모티콘 그룹', en: 'LLM emoticon group' })}</p>
-              <Switch checked={emoticonEnabled} onCheckedChange={setEmoticonEnabled} aria-label={t({ ko: 'LLM 이모티콘 그룹', en: 'LLM emoticon group' })} />
-            </ToggleRow>
-
-            <Field label={t('groups.components.group.editor.modal.accent.color')}>
-              <Input value={color} onChange={(event) => setColor(event.target.value)} placeholder="#7c3aed" />
-            </Field>
-          </div>
+          </EditorGroup>
         </ModalBody>
 
-        <ModalFooter>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-            {t({ ko: '취소', en: 'Cancel' })}
-          </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? t('groups.components.group.editor.modal.saving') : mode === 'create' ? t('groups.components.group.editor.modal.create.group') : t('groups.components.group.editor.modal.save.changes')}
-          </Button>
-        </ModalFooter>
+        <EditorFooter
+          saveSubmit
+          canSave={canSave}
+          saving={isSubmitting}
+          saveLabel={mode === 'create' ? t('groups.components.group.editor.modal.create.group') : t('groups.components.group.editor.modal.save.changes')}
+        />
       </form>
     </Modal>
   )

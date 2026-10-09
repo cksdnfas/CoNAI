@@ -237,14 +237,14 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
     chip = <StatusChip tone="bad">{t({ ko: '워크플로 목록을 못 불러왔어', en: 'Could not load workflows' })}</StatusChip>
   } else if (readiness.kind === 'no-workflow') {
     chip = <StatusChip tone="bad">{t({ ko: '오디오 워크플로 없음', en: 'No audio workflow' })}</StatusChip>
-    if (canAddWorkflow) fix = <Button type="button" variant="secondary" size="sm" disabled={busy !== null} onClick={() => void addDefault()}><Plus />{t({ ko: 'Stable Audio 3 추가', en: 'Add Stable Audio 3' })}</Button>
+    if (canAddWorkflow) fix = <IconButton variant="secondary" size="icon-sm" disabled={busy !== null} onClick={() => void addDefault()} label={t({ ko: 'Stable Audio 3 추가', en: 'Add Stable Audio 3' })}><Plus /></IconButton>
   } else if (readiness.kind === 'no-server') {
     chip = <StatusChip tone="bad">{t({ ko: 'ComfyUI 서버 없음', en: 'No ComfyUI server' })}</StatusChip>
-    fix = <Button type="button" variant="secondary" size="sm" onClick={() => navigate('/generation?tab=comfyui')}><Server />{t({ ko: '서버 추가', en: 'Add a server' })}</Button>
+    fix = <IconButton variant="secondary" size="icon-sm" onClick={() => navigate('/generation?tab=comfyui')} label={t({ ko: '서버 추가', en: 'Add a server' })}><Server /></IconButton>
   } else if (readiness.kind === 'unlinked') {
     const { candidate } = readiness
     chip = <StatusChip tone="warn">{t({ ko: '{name} · 연결 안 됨', en: '{name} · not linked' }, { name: candidate.name })}</StatusChip>
-    fix = <Button type="button" variant="secondary" size="sm" disabled={busy !== null} onClick={() => void runFix(() => link(candidate))}><Link2 />{t({ ko: '연결', en: 'Link' })}</Button>
+    fix = <IconButton variant="secondary" size="icon-sm" disabled={busy !== null} onClick={() => void runFix(() => link(candidate))} label={t({ ko: '연결', en: 'Link' })}><Link2 /></IconButton>
   } else {
     chip = (
       <Popover open={chipOpen} onOpenChange={setChipOpen}>
@@ -323,9 +323,9 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
         <div className="flex min-w-0 items-center gap-2">
           {chip}
           {fix}
-          <Button type="submit" size="sm" disabled={!runnable || !valid || busy !== null}>
-            <Sparkles />{t({ ko: '{count}개 생성', en: 'Generate {count}' }, { count: Number.isInteger(count) && count > 0 ? count : 0 })}
-          </Button>
+          <IconButton type="submit" variant="default" size="icon-sm" disabled={!runnable || !valid || busy !== null} label={t({ ko: '{count}개 생성', en: 'Generate {count}' }, { count: Number.isInteger(count) && count > 0 ? count : 0 })}>
+            <Sparkles />
+          </IconButton>
         </div>
       </div>
     </form>

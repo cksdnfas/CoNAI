@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Download, Eye, Film, Locate, Settings2, Square } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -377,10 +376,9 @@ export function SpriteExtractTab({ initialVideoHash, onVideoChange, toolbarSlot 
               <IconButton variant="secondary" label={t({ ko: 'ZIP 다시 받기', en: 'Download the ZIP again' })} onClick={() => triggerBrowserDownload(spriteResultDownloadUrl(batchResult.zip!.workspaceId, batchResult.zip!.fileName))}><Download /></IconButton>
             ) : null}
             <IconButton variant="secondary" disabled={!canPreview} onClick={() => void preview()} label={t({ ko: '이 영상만 미리보기: 저장 없이 결과만 만들어봐', en: 'Preview this video: build without saving' })}><Eye /></IconButton>
-            <Button disabled={!canRunAll} onClick={() => void runAll()}>
+            <IconButton variant="default" disabled={!canRunAll} onClick={() => void runAll()} label={t({ ko: '전체 생성 · {count}', en: 'Build all · {count}' }, { count: videoHashes.length })}>
               <Film />
-              {t({ ko: '전체 생성 · {count}', en: 'Build all · {count}' }, { count: videoHashes.length })}
-            </Button>
+            </IconButton>
           </>
         )}
       </div>

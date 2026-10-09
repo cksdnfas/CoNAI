@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { EditorGroup } from '@/components/ui/editor-group'
 import { FieldInfo } from '@/components/ui/field'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Modal, ModalBody } from '@/components/ui/modal'
@@ -29,7 +30,7 @@ export function ChatProfilePreviewModal({ open, draft, onClose }: { open: boolea
   const overBudget = budget !== null && preview !== undefined && preview.tokens.total > budget
 
   return (
-    <Modal open={open} onClose={onClose} title={t({ ko: '프롬프트 미리보기', en: 'Prompt preview' })} widthClassName="max-w-3xl">
+    <Modal open={open} onClose={onClose} title={t({ ko: '프롬프트 미리보기', en: 'Prompt preview' })} size="normal">
       <ModalBody className="space-y-4">
         {previewQuery.isPending ? <LoadingState variant="inline" /> : null}
         {previewQuery.isError ? <p className="text-sm text-destructive">{getErrorMessage(previewQuery.error, t({ ko: '미리보기를 만들지 못했어.', en: 'Could not build the preview.' }))}</p> : null}
@@ -50,18 +51,16 @@ export function ChatProfilePreviewModal({ open, draft, onClose }: { open: boolea
               <div><dt className="text-xs text-muted-foreground">{t({ ko: '컨텍스트 길이', en: 'Context length' })}</dt><dd className="tabular-nums">{budget !== null ? formatNumber(budget) : t({ ko: '제한 없음', en: 'No limit' })}</dd></div>
             </dl>
             {overBudget ? <p className="text-xs text-destructive">{t({ ko: '대화 전에 이미 컨텍스트 길이를 넘어. 섹션을 줄이거나 도구를 덜 고르거나 길이를 늘려줘.', en: 'This already exceeds the context length before any conversation.' })}</p> : null}
-            <div className="space-y-3">
+            <div className="space-y-4 border-t border-line pt-4">
               {preview.messages.map((message, index) => (
-                <section key={index} className="space-y-1">
-                  <h4 className="text-xs font-semibold text-muted-foreground">{t(ROLE_LABELS[message.role] ?? { ko: message.role, en: message.role })}</h4>
-                  <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-surface-low p-3 font-mono text-xs leading-relaxed">{message.content}</pre>
-                </section>
+                <EditorGroup key={index} label={t(ROLE_LABELS[message.role] ?? { ko: message.role, en: message.role })}>
+                  <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">{message.content}</pre>
+                </EditorGroup>
               ))}
               {preview.tools.length > 0 ? (
-                <section className="space-y-1">
-                  <h4 className="text-xs font-semibold text-muted-foreground">{t({ ko: '도구', en: 'Tools' })}</h4>
+                <EditorGroup label={t({ ko: '도구', en: 'Tools' })}>
                   <p className="break-words font-mono text-xs leading-relaxed">{preview.tools.join(', ')}</p>
-                </section>
+                </EditorGroup>
               ) : null}
             </div>
           </>

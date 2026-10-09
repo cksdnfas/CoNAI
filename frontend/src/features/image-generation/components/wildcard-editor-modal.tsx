@@ -10,9 +10,11 @@ import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/ui/field'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
-import { Switch } from '@/components/ui/switch'
-import { ToggleRow } from '@/components/ui/toggle-row'
+import { EditorFooter } from '@/components/ui/editor-footer'
+import { EditorGroup } from '@/components/ui/editor-group'
+import { Modal, ModalBody } from '@/components/ui/modal'
+import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
+import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
 import { useI18n, type TranslationParams } from '@/i18n'
 import type { WildcardRecord, WildcardTool } from '@/lib/api-wildcards'
@@ -372,7 +374,7 @@ function WildcardItemDraftEditor({
           <input ref={fileInputRef} type="file" accept=".json,application/json" className="hidden" onChange={handleFileChange} />
           <IconButton
             size="icon-sm"
-            variant="secondary"
+            variant="ghost"
             onClick={() => fileInputRef.current?.click()}
             label={t(wildcardEditorKey('import.json.file'))}
           >
@@ -382,7 +384,7 @@ function WildcardItemDraftEditor({
           <span ref={templateMenuAnchorRef} className="relative inline-flex">
             <IconButton
               size="icon-sm"
-              variant="secondary"
+              variant="ghost"
               onClick={() => setTemplateMenuOpen((current) => !current)}
               label={t(wildcardEditorKey('download.json.template'))}
             >
@@ -393,7 +395,7 @@ function WildcardItemDraftEditor({
           <span ref={exportMenuAnchorRef} className="relative inline-flex">
             <IconButton
               size="icon-sm"
-              variant="secondary"
+              variant="ghost"
               onClick={() => setExportMenuOpen((current) => !current)}
               disabled={exportDisabled}
               label={t(wildcardEditorKey('export.json'))}
@@ -404,7 +406,7 @@ function WildcardItemDraftEditor({
 
           <IconButton
             size="icon-sm"
-            variant="secondary"
+            variant="ghost"
             onClick={handleAddDraft}
             label={t(wildcardEditorKey('add.tool.item'), { tool: activeToolLabel })}
           >
@@ -489,7 +491,9 @@ export function WildcardEditorModal({
     comfyui: [createWildcardItemDraft()],
   })
   const [formError, setFormError] = useState<string | null>(null)
-  const [formNotice, setFormNotice] = useState<string | null>(null)
+  const { showSnackbar } = useSnackbar()
+  const notify = (message: string) => showSnackbar({ message, tone: 'info' })
+  const formRef = useRef<HTMLFormElement | null>(null)
 
   useEffect(() => {
     if (!open) {
@@ -519,7 +523,6 @@ export function WildcardEditorModal({
           : 'comfyui',
     )
     setFormError(null)
-    setFormNotice(null)
   }, [defaultParentId, open, wildcard])
 
   const parentCandidates = useMemo(
@@ -559,7 +562,7 @@ export function WildcardEditorModal({
 
     downloadJsonFile(filename, buildWildcardTemplatePayload(format, activeItemTool, t))
     setFormError(null)
-    setFormNotice(
+    notify(
       format === 'simple'
         ? t(wildcardEditorKey('tool.simple.template.downloaded'), { tool: wildcardToolLabels[activeItemTool] })
         : t(wildcardEditorKey('full.template.downloaded')),
@@ -568,7 +571,6 @@ export function WildcardEditorModal({
 
   const handleExportJson = (format: WildcardJsonFormat) => {
     if (!hasExportableItems) {
-      setFormNotice(null)
       setFormError(t(wildcardEditorKey('no.items.to.export')))
       return
     }
@@ -577,25 +579,23 @@ export function WildcardEditorModal({
     if (format === 'simple') {
       const simpleItems = createSimpleJsonItems(exportItems[activeItemTool])
       if (simpleItems.length === 0) {
-        setFormNotice(null)
         setFormError(t(wildcardEditorKey('no.items.to.export.for.tool'), { tool: wildcardToolLabels[activeItemTool] }))
         return
       }
 
       downloadJsonFile(`${filenameBase}-${activeItemTool}.json`, simpleItems)
       setFormError(null)
-      setFormNotice(t(wildcardEditorKey('tool.items.exported'), { tool: wildcardToolLabels[activeItemTool] }))
+      notify(t(wildcardEditorKey('tool.items.exported'), { tool: wildcardToolLabels[activeItemTool] }))
       return
     }
 
     downloadJsonFile(`${filenameBase}-full.json`, exportItems)
     setFormError(null)
-    setFormNotice(t(wildcardEditorKey('all.tool.items.exported')))
+    notify(t(wildcardEditorKey('all.tool.items.exported')))
   }
 
   const handleImportJsonFile = async (file: File) => {
     if (!file.name.toLowerCase().endsWith('.json') && file.type !== 'application/json') {
-      setFormNotice(null)
       setFormError(t(wildcardEditorKey('only.json.files.can.be.imported')))
       return
     }
@@ -616,7 +616,6 @@ export function WildcardEditorModal({
         (tool, count) => t(wildcardEditorKey('tool.count.items'), { tool, count }),
       )
       if (!importedCountSummary) {
-        setFormNotice(null)
         setFormError(t(wildcardEditorKey('no.importable.items.found')))
         return
       }
@@ -627,9 +626,8 @@ export function WildcardEditorModal({
         setActiveItemTool(firstImportedTool)
       }
       setFormError(null)
-      setFormNotice(t(wildcardEditorKey('imported.items.save.to.apply'), { summary: importedCountSummary }))
+      notify(t(wildcardEditorKey('imported.items.save.to.apply'), { summary: importedCountSummary }))
     } catch (error) {
-      setFormNotice(null)
       setFormError(error instanceof Error ? error.message : t(wildcardEditorKey('could.not.read.the.json.file')))
     }
   }
@@ -667,6 +665,8 @@ export function WildcardEditorModal({
     })
   }
 
+  const canSave = !isSubmitting && (mode === 'create' || chatDirty)
+
   return (
     <Modal
       sidePanelInset="var(--chat-dock-width, 0px)"
@@ -675,23 +675,21 @@ export function WildcardEditorModal({
       title={mode === 'create'
         ? t(wildcardEditorKey('create.tab.item'), { tab: tabLabel })
         : t(wildcardEditorKey('edit.tab.item'), { tab: tabLabel })}
-      widthClassName="max-w-4xl" height="tall"
+      size="wide"
+      height="tall"
+      dirty={chatDirty}
+      onSave={canSave ? () => formRef.current?.requestSubmit() : undefined}
     >
-      <form onSubmit={(event) => void handleSubmit(event)}>
+      <form ref={formRef} onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (
           <Alert variant="destructive">
             <AlertTitle>{t(wildcardEditorKey('input.review.needed'))}</AlertTitle>
             <AlertDescription>{formError}</AlertDescription>
           </Alert>
-        ) : formNotice ? (
-          <Alert>
-            <AlertTitle>{t(wildcardEditorKey('done'))}</AlertTitle>
-            <AlertDescription>{formNotice}</AlertDescription>
-          </Alert>
         ) : null}
 
         <ModalBody className="space-y-5">
-          <div className={isChainTab ? 'grid gap-4 md:grid-cols-2' : 'space-y-2'}>
+          <div className={isChainTab ? 'grid gap-4 md:grid-cols-2' : undefined}>
             <Field label={t(wildcardEditorKey('name'))}>
               <Input variant="settings" value={name} onChange={(event) => setName(event.target.value)} placeholder={t(wildcardEditorKey('e.g.character.pose'))} />
             </Field>
@@ -710,8 +708,7 @@ export function WildcardEditorModal({
             <Textarea variant="settings" value={description} onChange={(event) => setDescription(event.target.value)} rows={3} placeholder={t(wildcardEditorKey('optional'))} />
           </Field>
 
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">{t(wildcardEditorKey('parent.item'))}</p>
+          <EditorGroup label={t(wildcardEditorKey('parent.item'))}>
             <HierarchyPicker
               items={parentCandidates}
               selectedId={parentValue === 'root' ? null : Number(parentValue)}
@@ -724,18 +721,11 @@ export function WildcardEditorModal({
               renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
               rootLabel={t(wildcardEditorKey('root'))}
             />
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <ToggleRow className="justify-between">
-              <span className="font-medium text-foreground">{t(wildcardEditorKey('auto.include.children'))}</span>
-              <Switch checked={includeChildren} onCheckedChange={setIncludeChildren} />
-            </ToggleRow>
-            <ToggleRow className="justify-between">
-              <span className="font-medium text-foreground">{t(wildcardEditorKey('children.only'))}</span>
-              <Switch checked={onlyChildren} onCheckedChange={setOnlyChildren} />
-            </ToggleRow>
-          </div>
+            <div className="border-t border-line">
+              <SettingsSwitchRow label={t(wildcardEditorKey('auto.include.children'))} checked={includeChildren} onCheckedChange={setIncludeChildren} />
+              <SettingsSwitchRow label={t(wildcardEditorKey('children.only'))} checked={onlyChildren} onCheckedChange={setOnlyChildren} />
+            </div>
+          </EditorGroup>
 
           <WildcardItemDraftEditor
             activeTool={activeItemTool}
@@ -754,18 +744,12 @@ export function WildcardEditorModal({
           />
         </ModalBody>
 
-        <ModalFooter>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-            {t(wildcardEditorKey('cancel'))}
-          </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting
-              ? t(wildcardEditorKey('saving'))
-              : mode === 'create'
-                ? t(wildcardEditorKey('create.item'))
-                : t(wildcardEditorKey('save.changes'))}
-          </Button>
-        </ModalFooter>
+        <EditorFooter
+          saveSubmit
+          canSave={canSave}
+          saving={isSubmitting}
+          saveLabel={mode === 'create' ? t(wildcardEditorKey('create.item')) : t(wildcardEditorKey('save.changes'))}
+        />
       </form>
     </Modal>
   )

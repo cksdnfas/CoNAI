@@ -416,7 +416,7 @@ export function estimateDepthBlocks(profileId: number, blocks: Array<{ block: st
   return blocks.reduce((total, { block }) => total + estimateTokens(profileId, block), 0)
 }
 
-function prefixUserContent(content: string | ChatContentPart[], block: string): string | ChatContentPart[] {
+export function prefixUserContent(content: string | ChatContentPart[], block: string): string | ChatContentPart[] {
   if (typeof content === 'string') return content ? `${block}\n\n${content}` : block
   return [{ type: 'text', text: block }, ...content]
 }

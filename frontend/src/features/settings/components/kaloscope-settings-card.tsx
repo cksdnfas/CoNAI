@@ -9,7 +9,7 @@ import type { KaloscopeServerStatus, KaloscopeSettings } from '@conai/shared'
 import { DEFAULT_ARTIST_LINK_URL_TEMPLATE } from '@/lib/settings-defaults'
 import { useI18n, type TranslationInput } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
-import { SettingsSwitchRow } from './settings-switch-row'
+import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { SETTINGS_CONTROL_CLASS, SETTINGS_WIDE_CONTROL_CLASS, SettingsRowsSkeleton, SettingsStatLine } from './settings-rows'
 
 interface KaloscopeSettingsCardProps {

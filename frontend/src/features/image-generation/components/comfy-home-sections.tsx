@@ -358,10 +358,9 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
           <div className="text-sm text-muted-foreground">
             {t({ ko: '{count}개 경로', en: '{count} paths' }, { count: formatNumber(apiPaths.length) })}
           </div>
-          <Button type="button" variant="secondary" size="sm" onClick={() => setApiPathText(defaultPathText)} disabled={isSubmitting}>
+          <IconButton variant="secondary" size="icon-sm" onClick={() => setApiPathText(defaultPathText)} disabled={isSubmitting} label={t({ ko: '기본값 초기화', en: 'Reset defaults' })}>
             <RotateCcw className="h-4 w-4" />
-            {t({ ko: '기본값 초기화', en: 'Reset defaults' })}
-          </Button>
+          </IconButton>
         </div>
 
         <ModalFooter>

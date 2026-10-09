@@ -1,13 +1,12 @@
 import type { ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
-import { Inset } from '@/components/ui/inset'
-import { Modal, ModalFooter } from '@/components/ui/modal'
-import { ToggleRow } from '@/components/ui/toggle-row'
-import { useI18n } from '@/i18n'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Field } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Modal } from '@/components/ui/modal'
+import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
+import { useI18n } from '@/i18n'
 
 interface ModuleGraphWorkflowSaveModalProps {
   open: boolean
@@ -27,7 +26,10 @@ interface ModuleGraphWorkflowSaveModalProps {
   onSave: () => Promise<boolean>
 }
 
-/** Render the workflow save modal used from the editor top bar. */
+/**
+ * Render the workflow save modal used from the editor top bar. Its fields edit the page's own workflow draft, so
+ * closing loses nothing and needs no discard check; `isDirty` is the graph's unsaved state, shown in the summary line.
+ */
 export function ModuleGraphWorkflowSaveModal({
   open,
   workflowName,
@@ -46,6 +48,7 @@ export function ModuleGraphWorkflowSaveModal({
   onSave,
 }: ModuleGraphWorkflowSaveModalProps) {
   const { t } = useI18n()
+  const canSave = hasNodes && !isSavingGraph
 
   const handleSave = async () => {
     const saved = await onSave()
@@ -59,50 +62,37 @@ export function ModuleGraphWorkflowSaveModal({
       open={open}
       onClose={onClose}
       title={selectedGraphVersion !== null ? t({ ko: '워크플로우 저장', en: 'Save workflow' }) : t({ ko: '워크플로우 등록', en: 'Register workflow' })}
-      widthClassName="max-w-3xl"
+      size="normal"
+      height="medium"
+      onSave={canSave ? () => void handleSave() : undefined}
     >
       <div className="space-y-5">
-        <Inset className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
-          <span className="font-medium text-foreground">{selectedGraphName || workflowName.trim() || t({ ko: '워크플로우 초안', en: 'Workflow Draft' })}</span>
-          {selectedGraphVersion !== null ? <Badge variant="outline">v{selectedGraphVersion}</Badge> : <Badge variant="outline">{t({ ko: '초안', en: 'Draft' })}</Badge>}
-          {isDirty ? <Badge variant="outline">{t({ ko: '미저장', en: 'Unsaved' })}</Badge> : null}
-        </Inset>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="space-y-2">
-            <span className="text-sm font-medium text-foreground">{t({ ko: '워크플로우 이름', en: 'Workflow name' })}</span>
-            <Input value={workflowName} onChange={(event) => onWorkflowNameChange(event.target.value)} placeholder={t({ ko: '워크플로우 이름', en: 'Workflow name' })} />
-          </label>
-
-          <label className="space-y-2">
-            <span className="text-sm font-medium text-foreground">{t({ ko: '설명', en: 'Description' })}</span>
-            <Input value={workflowDescription} onChange={(event) => onWorkflowDescriptionChange(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
-          </label>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="min-w-0 truncate font-medium text-foreground">{selectedGraphName || workflowName.trim() || t({ ko: '워크플로우 초안', en: 'Workflow Draft' })}</span>
+          <Badge variant="outline">{selectedGraphVersion !== null ? `v${selectedGraphVersion}` : t({ ko: '초안', en: 'Draft' })}</Badge>
+          {isDirty ? <span className="text-xs text-muted-foreground">{t({ ko: '미저장', en: 'Unsaved' })}</span> : null}
         </div>
 
-        <ToggleRow variant="detail" className="cursor-pointer">
-          <Checkbox
-            checked={workflowDebugMode}
-            onCheckedChange={(checked) => onWorkflowDebugModeChange(checked === true)}
-          />
-          <span className="font-medium text-foreground">{t({ ko: '디버그 모드', en: 'Debug mode' })}</span>
-        </ToggleRow>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label={t({ ko: '워크플로우 이름', en: 'Workflow name' })}>
+            <Input variant="settings" value={workflowName} onChange={(event) => onWorkflowNameChange(event.target.value)} />
+          </Field>
+          <Field label={t({ ko: '설명', en: 'Description' })}>
+            <Input variant="settings" value={workflowDescription} onChange={(event) => onWorkflowDescriptionChange(event.target.value)} placeholder={t({ ko: '선택', en: 'Optional' })} />
+          </Field>
+        </div>
+
+        <div className="border-y border-line">
+          <SettingsSwitchRow label={t({ ko: '디버그 모드', en: 'Debug mode' })} checked={workflowDebugMode} onCheckedChange={onWorkflowDebugModeChange} />
+        </div>
 
         {folderPanel}
 
         {!hasNodes ? (
           <EmptyState size="compact" title={t({ ko: '저장하려면 먼저 노드를 하나 이상 배치해줘.', en: 'Place at least one node before saving.' })} />
         ) : null}
-
-        <ModalFooter>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={isSavingGraph}>
-            {t({ ko: '취소', en: 'Cancel' })}
-          </Button>
-          <Button type="button" onClick={() => void handleSave()} disabled={isSavingGraph || !hasNodes}>
-            {isSavingGraph ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })}
-          </Button>
-        </ModalFooter>
       </div>
+      <EditorFooter onSave={() => void handleSave()} canSave={canSave} saving={isSavingGraph} />
     </Modal>
   )
 }

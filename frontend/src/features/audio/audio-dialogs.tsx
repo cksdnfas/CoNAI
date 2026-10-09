@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Check, Link2, Link2Off, Pencil, Trash2 } from 'lucide-react'
+import { TextTabs as CommonTextTabs } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -51,8 +53,12 @@ export function AudioProjectDialog({ open, project, onClose, onSaved }: {
     setDescription(project?.description ?? '')
   }, [open, project])
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
+  const dirty = open && (name !== (project?.name ?? '') || description !== (project?.description ?? ''))
+  const canSave = !busy && name.trim().length > 0 && (dirty || !project)
+
+  const submit = async (event?: FormEvent) => {
+    event?.preventDefault()
+    if (!canSave) return
     setBusy(true)
     try {
       onSaved(project ? await updateAudioProject(project.id, { name, description }) : await createAudioProject({ name, description }))
@@ -63,16 +69,13 @@ export function AudioProjectDialog({ open, project, onClose, onSaved }: {
     }
   }
   return (
-    <Modal open={open} title={project ? t({ ko: '프로젝트 수정', en: 'Edit project' }) : t({ ko: '새 프로젝트', en: 'New project' })} onClose={() => { if (!busy) onClose() }} widthClassName="max-w-md">
+    <Modal open={open} title={project ? t({ ko: '프로젝트 수정', en: 'Edit project' }) : t({ ko: '새 프로젝트', en: 'New project' })} onClose={() => { if (!busy) onClose() }} size="narrow" dirty={dirty} onSave={canSave ? () => void submit() : undefined}>
       <form onSubmit={(event) => void submit(event)}>
         <ModalBody className="space-y-4">
-          <Field label={t({ ko: '이름', en: 'Name' })}><Input autoFocus value={name} maxLength={120} onChange={(event) => setName(event.target.value)} /></Field>
-          <Field label={t({ ko: '설명', en: 'Description' })}><Textarea rows={2} value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
+          <Field label={t({ ko: '이름', en: 'Name' })}><Input variant="settings" autoFocus value={name} maxLength={120} onChange={(event) => setName(event.target.value)} /></Field>
+          <Field label={t({ ko: '설명', en: 'Description' })}><Textarea variant="settings" rows={2} value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
         </ModalBody>
-        <ModalFooter>
-          <span className="flex-1" />
-          <Button type="submit" disabled={busy || !name.trim()}>{t({ ko: '저장', en: 'Save' })}</Button>
-        </ModalFooter>
+        <EditorFooter saveSubmit canSave={canSave} saving={busy} />
       </form>
     </Modal>
   )
@@ -100,19 +103,28 @@ export function AudioGroupDialog({ open, group, takenLabels, onClose, onSaved, o
   const [follows, setFollows] = useState(true)
   const [description, setDescription] = useState('')
   const [busy, setBusy] = useState(false)
+  /** The fields as the dialog opened (null until the opened values have rendered), to tell unsaved edits. */
+  const [openedSnapshot, setOpenedSnapshot] = useState<string | null>(null)
   useEffect(() => {
     if (!open || !group) return
     setName(group.name)
     setLabel(group.label ?? '')
     setFollows(group.label ? followsAudioName(group.label, group.name) : true)
     setDescription(group.description)
+    setOpenedSnapshot(null)
   }, [open, group])
   const inbox = group?.is_inbox === true
   const effectiveLabel = follows ? autoAudioLabel(name, takenLabels) : label
+  const snapshot = JSON.stringify([name, effectiveLabel, description])
+  useEffect(() => {
+    if (open && group && openedSnapshot === null) setOpenedSnapshot(snapshot)
+  }, [group, open, openedSnapshot, snapshot])
+  const dirty = open && openedSnapshot !== null && snapshot !== openedSnapshot
+  const canSave = !busy && name.trim().length > 0 && (inbox || effectiveLabel.trim().length > 0) && dirty
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!group) return
+  const submit = async (event?: FormEvent) => {
+    event?.preventDefault()
+    if (!group || !canSave) return
     setBusy(true)
     try {
       onSaved(await updateAudioGroup(group.id, inbox ? { name } : { name, label: effectiveLabel, description }))
@@ -124,16 +136,17 @@ export function AudioGroupDialog({ open, group, takenLabels, onClose, onSaved, o
   }
 
   return (
-    <Modal open={open} title={inbox ? t({ ko: '받은 파일', en: 'Inbox' }) : t({ ko: '효과음 수정', en: 'Edit effect' })} onClose={() => { if (!busy) onClose() }} widthClassName="max-w-md">
+    <Modal open={open} title={inbox ? t({ ko: '받은 파일', en: 'Inbox' }) : t({ ko: '효과음 수정', en: 'Edit effect' })} onClose={() => { if (!busy) onClose() }} size="narrow" dirty={dirty} onSave={canSave ? () => void submit() : undefined}>
       <form onSubmit={(event) => void submit(event)}>
         <ModalBody className="space-y-4">
-          <Field label={t({ ko: '이름', en: 'Name' })}><Input autoFocus value={name} maxLength={120} onChange={(event) => setName(event.target.value)} /></Field>
+          <Field label={t({ ko: '이름', en: 'Name' })}><Input variant="settings" autoFocus value={name} maxLength={120} onChange={(event) => setName(event.target.value)} /></Field>
           {!inbox ? (
             <>
-              <Field label={t({ ko: '프롬프트', en: 'Prompt' })}><Textarea rows={3} value={description} maxLength={4000} onChange={(event) => setDescription(event.target.value)} /></Field>
+              <Field label={t({ ko: '프롬프트', en: 'Prompt' })}><Textarea variant="settings" rows={3} value={description} maxLength={4000} onChange={(event) => setDescription(event.target.value)} /></Field>
               <Field label={t({ ko: '파일명', en: 'File name' })} info={t({ ko: '채택본을 내보낼 때의 파일 이름. [00]은 번호 자리야.', en: 'File name of exported takes. [00] is the number slot.' })}>
                 <div className="flex items-center gap-1">
                   <Input
+                    variant="settings"
                     className="font-mono"
                     value={effectiveLabel}
                     maxLength={120}
@@ -160,11 +173,13 @@ export function AudioGroupDialog({ open, group, takenLabels, onClose, onSaved, o
             </>
           ) : null}
         </ModalBody>
-        <ModalFooter>
-          {group && !inbox ? <IconButton variant="ghost" label={t({ ko: '효과음 삭제', en: 'Delete effect' })} disabled={busy} onClick={onDelete}><Trash2 /></IconButton> : null}
-          <span className="flex-1" />
-          <Button type="submit" disabled={busy || !name.trim() || (!inbox && !effectiveLabel.trim())}>{t({ ko: '저장', en: 'Save' })}</Button>
-        </ModalFooter>
+        <EditorFooter
+          onDelete={group && !inbox ? onDelete : undefined}
+          deleteLabel={t({ ko: '효과음 삭제', en: 'Delete effect' })}
+          saveSubmit
+          canSave={canSave}
+          saving={busy}
+        />
       </form>
     </Modal>
   )
@@ -212,12 +227,12 @@ export function AudioCommentsDialog({ open, group, canEdit, onClose, onChanged }
     setDraft('')
     void run(() => createAudioComment(group.id, text))
   }
-  const tabs: Array<[AudioCommentStatus | 'all', string]> = [['pending', t({ ko: '대기', en: 'Pending' })], ['completed', t({ ko: '완료', en: 'Completed' })], ['all', t({ ko: '전체', en: 'All' })]]
+  const tabs: Array<{ value: AudioCommentStatus | 'all'; label: string }> = [{ value: 'pending', label: t({ ko: '대기', en: 'Pending' }) }, { value: 'completed', label: t({ ko: '완료', en: 'Completed' }) }, { value: 'all', label: t({ ko: '전체', en: 'All' }) }]
 
   return (
-    <Modal open={open} title={t({ ko: '{name} 코멘트', en: '{name} comments' }, { name: group.name })} onClose={onClose} widthClassName="max-w-lg" height="medium">
+    <Modal open={open} title={t({ ko: '{name} 코멘트', en: '{name} comments' }, { name: group.name })} onClose={onClose} size="narrow" height="medium">
       <ModalBody className="space-y-3">
-        <TextTabs value={status} items={tabs} onChange={setStatus} />
+        <CommonTextTabs value={status} items={tabs} onChange={setStatus} />
         <ul className="divide-y divide-line">
           {items.map((comment) => (
             <li key={comment.id} className="flex items-start gap-3 py-3">
@@ -231,6 +246,7 @@ export function AudioCommentsDialog({ open, group, canEdit, onClose, onChanged }
               <div className="min-w-0 flex-1 space-y-1">
                 {editing?.id === comment.id ? (
                   <Textarea
+                    variant="settings"
                     autoFocus
                     rows={2}
                     value={editing.text}
@@ -272,6 +288,7 @@ export function AudioCommentsDialog({ open, group, canEdit, onClose, onChanged }
       {canEdit ? (
         <ModalFooter>
           <Textarea
+            variant="settings"
             rows={2}
             className="flex-1"
             placeholder={t({ ko: '코멘트', en: 'Comment' })}
@@ -291,7 +308,7 @@ export function AudioCommentsDialog({ open, group, canEdit, onClose, onChanged }
   )
 }
 
-/** Underlined text tabs (the app's in-place tab style); content is rendered by the caller. */
+/** Underlined text tabs taking `[id, label, count]` tuples (the audio page's strip); dialogs use the common TextTabs. */
 export function TextTabs<T extends string>({ value, items, onChange, className }: { value: T; items: Array<[T, string, number?]>; onChange: (value: T) => void; className?: string }) {
   return (
     <Tabs value={value} onValueChange={(next) => onChange(next as T)}>
@@ -344,9 +361,9 @@ export function AudioCleanupDialog({ open, group, onClose, onDone }: { open: boo
   }
 
   return (
-    <Modal open={open} title={t({ ko: '후보 정리', en: 'Clean up takes' })} onClose={() => { if (!busy) onClose() }} widthClassName="max-w-md">
+    <Modal open={open} title={t({ ko: '후보 정리', en: 'Clean up takes' })} onClose={() => { if (!busy) onClose() }} size="narrow">
       <ModalBody className="space-y-4">
-        <TextTabs value={scope} items={[['unselected', t({ ko: '미채택만', en: 'Unselected only' })], ['all', t({ ko: '전체', en: 'Everything' })]]} onChange={setScope} />
+        <CommonTextTabs value={scope} items={[{ value: 'unselected', label: t({ ko: '미채택만', en: 'Unselected only' }) }, { value: 'all', label: t({ ko: '전체', en: 'Everything' }) }]} onChange={setScope} />
         <p className="text-sm">
           {plan.data
             ? t({ ko: '후보 {count}개가 휴지통으로 가.', en: '{count} takes go to the RecycleBin.' }, { count: plan.data.count })
@@ -354,8 +371,7 @@ export function AudioCleanupDialog({ open, group, onClose, onDone }: { open: boo
           {plan.data && plan.data.selected_count > 0 ? <span className="text-destructive"> {t({ ko: '채택본 {count}개 포함', en: 'Includes {count} selected takes' }, { count: plan.data.selected_count })}</span> : null}
         </p>
       </ModalBody>
-      <ModalFooter>
-        <span className="flex-1" />
+      <ModalFooter className="mt-4 border-t border-line pt-3">
         <Button variant="destructive" disabled={busy || !plan.data || plan.data.count === 0} onClick={() => void run()}><Trash2 />{t({ ko: '정리', en: 'Clean up' })}</Button>
       </ModalFooter>
     </Modal>

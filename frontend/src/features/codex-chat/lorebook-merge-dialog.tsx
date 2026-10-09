@@ -62,14 +62,15 @@ export function LorebookMergeDialog(props: LorebookMergeDialogProps) {
       open={props.open}
       onClose={props.onClose}
       title={targetName ? t({ ko: '{name}에 병합', en: 'Merge into {name}' }, { name: targetName }) : t({ ko: '병합', en: 'Merge' })}
-      widthClassName="max-w-3xl" height="tall"
+      size="normal"
+      height="tall"
     >
       {props.open ? <MergeBody {...props} onTargetName={setTargetName} /> : null}
     </Modal>
   )
 }
 
-function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, initialPreview, profiles, defaultProfileId, onSubmit, onMerged, onClose, onTargetName }: LorebookMergeDialogProps & { onTargetName: (name: string | null) => void }) {
+function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, initialPreview, profiles, defaultProfileId, onSubmit, onMerged, onTargetName }: LorebookMergeDialogProps & { onTargetName: (name: string | null) => void }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
@@ -167,7 +168,7 @@ function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, 
       <ModalBody>
         {fixedTargetId == null && !initialPreview ? (
           <SettingRow label={t({ ko: '대상', en: 'Into' })}>
-            <Select className="w-56" value={targetId === null ? '' : String(targetId)} onChange={(event) => { setOverride(null); setTargetId(event.target.value ? Number(event.target.value) : null) }} aria-label={t({ ko: '병합할 계정 로어북', en: 'Account lorebook to merge into' })}>
+            <Select variant="settings" className="w-56" value={targetId === null ? '' : String(targetId)} onChange={(event) => { setOverride(null); setTargetId(event.target.value ? Number(event.target.value) : null) }} aria-label={t({ ko: '병합할 계정 로어북', en: 'Account lorebook to merge into' })}>
               <option value="">{t({ ko: '고르기', en: 'Choose' })}</option>
               {targets.map((book) => <option key={book.id} value={book.id}>{book.name}</option>)}
             </Select>
@@ -246,23 +247,21 @@ function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, 
           </>
         ) : null}
       </ModalBody>
-      <ModalFooter className="justify-start">
+      <ModalFooter className="mt-4 gap-1 border-t border-line pt-3">
         {duplicates.length > 0 && profiles.length > 0 ? (
           <>
-            <Button size="sm" variant="secondary" disabled={profileId === null || draftMutation.isPending || mergeMutation.isPending} onClick={() => draftMutation.mutate()}>
+            <IconButton size="icon-sm" variant="ghost" disabled={profileId === null || draftMutation.isPending || mergeMutation.isPending} onClick={() => draftMutation.mutate()} label={t({ ko: '{name}에게 맡기기', en: 'Ask {name}' }, { name: draftProfile?.name ?? '' })}>
               {draftMutation.isPending ? <Spinner className="size-3.5" /> : <Sparkles />}
-              {t({ ko: '{name}에게 맡기기', en: 'Ask {name}' }, { name: draftProfile?.name ?? '' })}
-            </Button>
+            </IconButton>
             <IconButton variant="ghost" size="icon-sm" active={instructionOpen} onClick={() => setInstructionOpen((open) => !open)} label={t({ ko: '지시 고치기', en: 'Edit instruction' })}><Pencil /></IconButton>
             {profiles.length > 1 ? (
-              <Select className="h-8 w-40" value={profileId === null ? '' : String(profileId)} onChange={(event) => setProfileId(Number(event.target.value))} aria-label={t({ ko: '맡길 프로필', en: 'Profile to ask' })}>
+              <Select variant="settings" className="h-8 w-40 text-xs" value={profileId === null ? '' : String(profileId)} onChange={(event) => setProfileId(Number(event.target.value))} aria-label={t({ ko: '맡길 프로필', en: 'Profile to ask' })}>
                 {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
               </Select>
             ) : null}
           </>
         ) : null}
         <span className="flex-1" />
-        <Button size="sm" variant="ghost" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
         <Button size="sm" disabled={!preview || changing === 0 || emptyMerged || mergeMutation.isPending} onClick={() => mergeMutation.mutate()}>
           {mergeMutation.isPending ? <Spinner className="size-3.5" /> : null}
           {t({ ko: '병합 ({count})', en: 'Merge ({count})' }, { count: changing })}
@@ -274,7 +273,7 @@ function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, 
 
 function ComparePane({ label, extra, text }: { label: string; extra?: string; text: string }) {
   return (
-    <div className="min-w-0 rounded-sm border border-line px-2.5 py-2 text-sm">
+    <div className="min-w-0 border-t border-line pt-2 text-sm">
       <div className="mb-1 flex items-center justify-between gap-2 text-2xs font-semibold tracking-overline text-muted-foreground uppercase">
         <span className="min-w-0 truncate">{label}</span>
         {extra ? <span className="shrink-0">{extra}</span> : null}

@@ -545,10 +545,9 @@ export function WallpaperEditorPage() {
           {activePreset && hasUnsavedPresetChanges ? (
             <span className="ml-1 size-2 shrink-0 rounded-full bg-primary" role="status" aria-label={unsavedLabel} title={unsavedLabel} />
           ) : null}
-          <Button size="sm" className="ml-1" disabled={!(isAdmin) || (wallpaperPresetMutation.isPending)} onClick={() => handleSavePreset()}>
+          <IconButton variant="default" size="icon-sm" className="ml-1" disabled={!(isAdmin) || (wallpaperPresetMutation.isPending)} onClick={() => handleSavePreset()} aria-busy={wallpaperPresetMutation.isPending || undefined} label={t({ ko: '저장', en: 'Save' })}>
             <Save />
-            {t({ ko: '저장', en: 'Save' })}
-          </Button>
+          </IconButton>
         </>
       )}
     >

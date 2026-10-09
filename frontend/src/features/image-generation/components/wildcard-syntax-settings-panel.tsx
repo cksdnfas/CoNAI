@@ -1,5 +1,4 @@
 import { ArrowDown, ArrowUp, RotateCcw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { FieldInfo } from '@/components/ui/field'
 import { ListRow } from '@/components/ui/list-row'
@@ -60,10 +59,9 @@ export function WildcardSyntaxSettingsPanel() {
           headingAs="h2"
           heading={t({ ko: '문법 우선순위', en: 'Syntax Priority' })}
           actions={(
-            <Button type="button" variant="ghost" size="sm" onClick={() => setSettings(DEFAULT_PROMPT_INLINE_SYNTAX_SETTINGS)}>
+            <IconButton variant="ghost" size="icon-sm" onClick={() => setSettings(DEFAULT_PROMPT_INLINE_SYNTAX_SETTINGS)} label={t({ ko: '기본값', en: 'Reset' })}>
               <RotateCcw />
-              {t({ ko: '기본값', en: 'Reset' })}
-            </Button>
+            </IconButton>
           )}
         >
           {settings.priority.map((source, index) => {

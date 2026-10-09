@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, Bug, LayoutGrid, Loader2, Maximize, PanelRight, Play, Plus, Save, X } from 'lucide-react'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { TextTabs } from '@/components/common/text-tabs'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
@@ -185,16 +184,9 @@ export function ModuleWorkflowEditorView({
           <PanelRight />
         </IconButton>
       ) : null}
-      {isWideLayout ? (
-        <Button type="button" size="sm" onClick={onSave} disabled={!canUpdateWorkflows || isSavingGraph || nodesCount === 0}>
-          {isSavingGraph ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-          {t({ ko: '저장', en: 'Save' })}
-        </Button>
-      ) : (
-        <IconButton size="icon-sm" variant="ghost" onClick={onSave} disabled={!canUpdateWorkflows || isSavingGraph || nodesCount === 0} label={t({ ko: '저장', en: 'Save' })} className="text-primary hover:text-primary">
-          <Save />
-        </IconButton>
-      )}
+      <IconButton size="icon-sm" variant="default" onClick={onSave} disabled={!canUpdateWorkflows || isSavingGraph || nodesCount === 0} aria-busy={isSavingGraph || undefined} label={isSavingGraph ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '저장', en: 'Save' })}>
+        {isSavingGraph ? <Loader2 className="animate-spin" /> : <Save />}
+      </IconButton>
     </div>
   )
 

@@ -65,6 +65,10 @@ test('chat runtime fails closed on unknown host capabilities, invalid inventorie
   assert.throws(() => parseChatFeatureInventory('shell_tool ??? true'), /could not be verified/)
   assert.equal(chatFeatureOverrides(features).future_host_tool, false)
   assert.equal(chatFeatureOverrides(features).skip_host_skill_discovery, true)
+  // MCP tools are only reachable through code mode: turning it off silently removes every CoNAI tool.
+  assert.equal(chatFeatureOverrides(features).code_mode_host, true)
+  assert.equal(chatFeatureOverrides(features).code_mode, false)
+  assert.equal(chatFeatureOverrides(features).shell_tool, false)
   assert.ok(chatRuntimeArgs(features, 'private-work', '1666').some((arg) => arg.includes('"future_host_tool"=false')))
   assert.throws(() => chatRuntimeArgs(features, 'private-work', '1666/injected'), /port/)
   assert.deepEqual(chatTurnRestrictions('private-work'), { cwd: 'private-work', approvalPolicy: 'never', sandboxPolicy: { type: 'readOnly', networkAccess: false } })

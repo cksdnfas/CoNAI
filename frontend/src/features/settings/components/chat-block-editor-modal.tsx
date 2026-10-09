@@ -1,11 +1,12 @@
 import { useLayoutEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Copy, Download, Save, Trash2 } from 'lucide-react'
+import { Copy, Download } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import {
@@ -42,13 +43,17 @@ export function ChatBlockEditorModal({ open, shared, initialName, initialBlock, 
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [block, setBlock] = useState<ChatDisplayBlock>(starterBlock)
-  /** Bumped with every open, so the editor (and its field table) mounts on the block being opened, not the last one. */
+  /** What was opened, to tell unsaved edits apart (the starter of a new block counts as unedited). */
+  const [opened, setOpened] = useState<{ name: string; block: ChatDisplayBlock } | null>(null)
+  /** Bumped with every open, so the editor (and its field rows) mounts on the block being opened, not the last one. */
   const [session, setSession] = useState(0)
 
   useLayoutEffect(() => {
     if (open) {
-      setName(shared?.name ?? initialName ?? '')
-      setBlock(shared?.block ?? initialBlock ?? starterBlock())
+      const next = { name: shared?.name ?? initialName ?? '', block: shared?.block ?? initialBlock ?? starterBlock() }
+      setName(next.name)
+      setBlock(next.block)
+      setOpened(next)
       setSession((current) => current + 1)
     }
   }, [shared, initialName, initialBlock, open])
@@ -92,21 +97,32 @@ export function ChatBlockEditorModal({ open, shared, initialName, initialBlock, 
   }
 
   const keyValid = BLOCK_KEY_PATTERN.test(block.key)
+  const dirty = opened !== null && JSON.stringify({ name, block }) !== JSON.stringify(opened)
+  const canSave = keyValid && !saveMutation.isPending && (dirty || !shared)
 
   return (
-    <Modal open={open} onClose={onClose} title={shared ? t({ ko: '표시 블록 편집', en: 'Edit display block' }) : t({ ko: '표시 블록 추가', en: 'Add display block' })} widthClassName="max-w-4xl" height="tall">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={shared ? t({ ko: '표시 블록 편집', en: 'Edit display block' }) : t({ ko: '표시 블록 추가', en: 'Add display block' })}
+      size="wide"
+      height="tall"
+      dirty={dirty}
+      onSave={canSave ? () => saveMutation.mutate() : undefined}
+    >
       <ModalBody className="space-y-4">
         <Field label={t({ ko: '이름', en: 'Name' })} info={t({ ko: '비우면 블록 이름을 써.', en: 'Empty uses the block name.' })}>
           <Input variant="settings" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
         </Field>
         <ChatBlockEditor key={session} block={block} onChange={setBlock} />
       </ModalBody>
-      <ModalFooter>
-        {shared ? (
-          <IconButton size="icon-sm" variant="destructive" onClick={() => void handleDelete()} disabled={deleteMutation.isPending} label={t({ ko: '삭제', en: 'Delete' })}>
-            <Trash2 />
-          </IconButton>
-        ) : null}
+      <EditorFooter
+        onDelete={shared ? () => void handleDelete() : undefined}
+        deleting={deleteMutation.isPending}
+        onSave={() => saveMutation.mutate()}
+        canSave={canSave}
+        saving={saveMutation.isPending}
+      >
         <IconButton size="icon-sm" variant="ghost" onClick={() => downloadChatBlockFile(name.trim() || block.key, block)} disabled={!keyValid} label={t({ ko: 'JSON으로 내보내기', en: 'Export as JSON' })}>
           <Download />
         </IconButton>
@@ -115,11 +131,7 @@ export function ChatBlockEditorModal({ open, shared, initialName, initialBlock, 
             <Copy />
           </IconButton>
         ) : null}
-        <span className="flex-1" />
-        <IconButton size="icon-sm" variant="default" onClick={() => saveMutation.mutate()} disabled={!keyValid || saveMutation.isPending} label={t({ ko: '저장', en: 'Save' })}>
-          <Save />
-        </IconButton>
-      </ModalFooter>
+      </EditorFooter>
     </Modal>
   )
 }

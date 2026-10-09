@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Check, MoreHorizontal, Sparkles, Square, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
@@ -215,7 +214,7 @@ export function ExpressionSlots({ runs, characterName, profileId, referenceHash,
         <AssetPresetPicker runs={runs} showExpressionMenu />
         <Tip content={blockedReason}>
           <span className="inline-flex" tabIndex={blockedReason ? 0 : -1}>
-            <Button size="sm" disabled={!canGenerate || !emptyNames.length} onClick={fillAll}><Sparkles />{t({ ko: '빈 칸 채우기 {count}', en: 'Fill {count} empty' }, { count: emptyNames.length })}</Button>
+            <IconButton variant="default" size="icon-sm" disabled={!canGenerate || !emptyNames.length} onClick={fillAll} tooltip={!blockedReason} label={t({ ko: '빈 칸 채우기 {count}', en: 'Fill {count} empty' }, { count: emptyNames.length })}><Sparkles /></IconButton>
           </span>
         </Tip>
       </div>

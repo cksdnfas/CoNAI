@@ -186,10 +186,9 @@ export function SpriteNormalizeTab() {
           {problems ? t({ ko: '확인 필요 {count}개', en: '{count} need a check' }, { count: problems }) : null}
         </span>
         <IconButton variant="ghost" size="icon-sm" disabled={!canRun} label={t({ ko: 'ZIP으로 받기', en: 'Download ZIP' })} onClick={() => void run(false)}><Download /></IconButton>
-        <Button disabled={!canRun || !has('images.upload')} onClick={() => void run(true)}>
+        <IconButton variant="default" disabled={!canRun || !has('images.upload')} onClick={() => void run(true)} aria-busy={running || undefined} label={running ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '라이브러리에 저장', en: 'Save to library' })}>
           {running ? <Loader2 className="animate-spin" /> : <Save />}
-          {t({ ko: '라이브러리에 저장', en: 'Save to library' })}
-        </Button>
+        </IconButton>
       </div>
     </div>
   )

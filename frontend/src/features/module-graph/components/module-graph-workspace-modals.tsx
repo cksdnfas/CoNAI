@@ -1,7 +1,7 @@
 import { Suspense, lazy } from 'react'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Modal } from '@/components/ui/modal'
+import { Modal, ModalFooter } from '@/components/ui/modal'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 
@@ -88,7 +88,7 @@ export function ModuleGraphWorkspaceModals({
         open={workflowView === 'browse' && isBrowseManageModalOpen}
         title={browseManageModalTitle}
         onClose={onCloseBrowseManage}
-        widthClassName="max-w-3xl"
+        size="normal"
       >
         {workflowView === 'browse' && isBrowseManageModalOpen ? (
           <Suspense fallback={<WorkspaceModalFallback />}>
@@ -113,38 +113,31 @@ export function ModuleGraphWorkspaceModals({
         open={folderDeleteTarget !== null}
         title={t({ ko: '폴더 삭제', en: 'Delete folder' })}
         onClose={onCloseFolderDelete}
-        widthClassName="max-w-xl"
+        size="narrow"
       >
-        <div className="space-y-4">
-          <Alert>
-            <AlertTitle>{folderDeleteTarget ? t({ ko: '"{name}" 폴더를 어떻게 삭제할지 골라줘.', en: 'Choose how to delete the "{name}" folder.' }, { name: folderDeleteTarget.name }) : t({ ko: '폴더 삭제', en: 'Delete folder' })}</AlertTitle>
-            <AlertDescription>
-              <ul className="list-disc space-y-1 pl-5">
-                <li>{t({ ko: '폴더만 삭제: 안의 항목은 상위 폴더로', en: 'Folder only: contents move up' })}</li>
-                <li>{t({ ko: '내용 포함 삭제: 안의 폴더·워크플로우까지', en: 'With contents: child folders and workflows too' })}</li>
-              </ul>
-            </AlertDescription>
-          </Alert>
-
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={onCloseFolderDelete}>
-              {t({ ko: '취소', en: 'Cancel' })}
-            </Button>
+        <p className="text-sm text-foreground">
+          {folderDeleteTarget ? t({ ko: '"{name}" 폴더를 어떻게 삭제할지 골라줘.', en: 'Choose how to delete the "{name}" folder.' }, { name: folderDeleteTarget.name }) : null}
+        </p>
+        <ModalFooter className="mt-4 border-t border-line pt-3">
+          <Tip content={t({ ko: '안의 항목은 상위 폴더로 옮겨', en: 'Contents move up a level' })}>
             <Button type="button" variant="secondary" onClick={() => onConfirmDeleteFolder('move_children')}>
               {t({ ko: '폴더만 삭제', en: 'Delete folder only' })}
             </Button>
+          </Tip>
+          <Tip content={t({ ko: '안의 폴더·워크플로우까지 지워', en: 'Child folders and workflows go too' })}>
             <Button type="button" variant="destructive" onClick={() => onConfirmDeleteFolder('delete_tree')}>
               {t({ ko: '내용 포함 삭제', en: 'Delete with contents' })}
             </Button>
-          </div>
-        </div>
+          </Tip>
+        </ModalFooter>
       </Modal>
 
       <Modal
         open={isModuleLibraryOpen}
         title={t({ ko: '모듈 추가', en: 'Add module' })}
         onClose={onCloseModuleLibrary}
-        widthClassName="max-w-6xl" height="tall"
+        size="wide"
+        height="tall"
       >
         {isModuleLibraryOpen ? (
           <Suspense fallback={<WorkspaceModalFallback />}>
@@ -164,7 +157,8 @@ export function ModuleGraphWorkspaceModals({
         open={isCustomNodeManagerOpen}
         title={t({ ko: '커스텀 노드 관리', en: 'Manage custom nodes' })}
         onClose={onCloseCustomNodeManager}
-        widthClassName="max-w-6xl" height="tall"
+        size="wide"
+        height="tall"
       >
         {isCustomNodeManagerOpen ? (
           <Suspense fallback={<WorkspaceModalFallback />}>

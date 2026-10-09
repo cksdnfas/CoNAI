@@ -1,10 +1,9 @@
 import { useLayoutEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Save } from 'lucide-react'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
-import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { CHAT_GENERATION_PRESETS_QUERY_KEY, createChatGenerationPreset, type ChatGenerationPresetInput } from '@/lib/api-codex-chat'
@@ -51,8 +50,17 @@ export function ChatGenerationPresetSaveModal({ open, build, summary, onClose }:
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
 
+  const canSave = name.trim().length > 0 && !saveMutation.isPending
+
   return (
-    <Modal open={open} onClose={onClose} title={t({ ko: '채팅 생성 프리셋으로 저장', en: 'Save as chat generation preset' })} widthClassName="max-w-lg">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={t({ ko: '채팅 생성 프리셋으로 저장', en: 'Save as chat generation preset' })}
+      size="narrow"
+      dirty={name.trim().length > 0 || instruction.trim().length > 0}
+      onSave={canSave ? () => saveMutation.mutate() : undefined}
+    >
       <ModalBody className="space-y-4">
         <div className="text-xs text-muted-foreground">{summary}</div>
         <Field label={t({ ko: '이름', en: 'Name' })}>
@@ -62,12 +70,7 @@ export function ChatGenerationPresetSaveModal({ open, build, summary, onClose }:
           <Input variant="settings" value={instruction} maxLength={400} placeholder={t({ ko: '캐릭터 전신 일러스트', en: 'Full-body character art' })} onChange={(event) => setInstruction(event.target.value)} />
         </Field>
       </ModalBody>
-      <ModalFooter>
-        <span className="flex-1" />
-        <IconButton size="icon-sm" variant="default" onClick={() => saveMutation.mutate()} disabled={name.trim().length === 0 || saveMutation.isPending} label={t({ ko: '저장', en: 'Save' })}>
-          <Save />
-        </IconButton>
-      </ModalFooter>
+      <EditorFooter onSave={() => saveMutation.mutate()} canSave={canSave} saving={saveMutation.isPending} />
     </Modal>
   )
 }

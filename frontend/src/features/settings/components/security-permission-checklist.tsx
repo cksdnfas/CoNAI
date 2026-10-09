@@ -5,7 +5,7 @@ import type { PageAccessPermissionItem } from '@/lib/api-auth'
 import { cn } from '@/lib/utils'
 import { buildPermissionSections, type PermissionSectionRow } from './security-permission-catalog'
 import { getPermissionGroupDisplayName } from './security-ui-text'
-import { CollapsibleRow } from './chat-profile-sections'
+import { CollapsibleRow } from '@/components/ui/collapsible-row'
 
 interface SecurityPermissionChecklistProps {
   permissionCatalog: PageAccessPermissionItem[]

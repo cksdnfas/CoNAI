@@ -22,7 +22,7 @@ import {
 import { ToggleChip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
-import { SettingsSwitchRow } from './settings-switch-row'
+import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { InstantApplyHint } from './settings-section-status'
 import { SETTINGS_WIDE_CONTROL_CLASS, SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Headphones, Pause, Play, RotateCcw, Save, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
@@ -253,9 +252,9 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
           <span className="font-mono text-xs text-muted-foreground" tabIndex={0}>{length > 0 ? `${length.toFixed(2)}s` : '—'}</span>
         </Tip>
         {canEdit ? (
-          <Button size="sm" disabled={Boolean(problem) || !changed || busy !== null} onClick={() => void save()}>
-            <Save />{t({ ko: '편집본 저장', en: 'Save edit' })}
-          </Button>
+          <IconButton variant="default" size="icon-sm" disabled={Boolean(problem) || !changed || busy !== null} onClick={() => void save()} label={t({ ko: '편집본 저장', en: 'Save edit' })}>
+            <Save />
+          </IconButton>
         ) : null}
       </div>
 

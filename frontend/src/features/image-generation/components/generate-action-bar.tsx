@@ -1,7 +1,6 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, type ComponentProps, type ReactNode } from 'react'
 import { AlertTriangle, Loader2, RotateCcw, Sparkles } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Tip } from '@/components/ui/tooltip'
@@ -23,9 +22,9 @@ export type GenerateActionBarRepeat = {
 export type GenerateActionBarProps = {
   /** `inline` sits inside the controller panel; `sticky` is the bottom-docked surface used with the controller drawer. */
   variant?: GenerateActionBarVariant
-  /** Visible Generate label chosen by the provider ("생성", "로그인 후 생성"…). */
+  /** Accessible Generate label and tooltip chosen by the provider ("생성", "로그인 후 생성"…). */
   generateLabel: string
-  /** Short trailing text such as NAI "(무료)" or "12 Anlas"; hidden on narrow sticky bars. */
+  /** Cost next to Generate, such as NAI "(무료)" or "12 Anlas"; shown in the tooltip on narrow sticky bars. */
   generateSuffix?: ReactNode
   onGenerate: () => void
   /** Blocks both the button and the Ctrl/Cmd+Enter shortcut. */
@@ -54,7 +53,6 @@ export type GenerateActionBarProps = {
 
 const GenerateActionBarVariantContext = createContext<GenerateActionBarVariant>('inline')
 
-const STICKY_CONTROL_HEIGHT = 'h-11 sm:h-9'
 const STICKY_ICON_SIZE = 'size-11 sm:size-9'
 
 /** One secondary icon action sized for the surrounding GenerateActionBar variant. */
@@ -172,7 +170,7 @@ export function GenerateActionBar({
     if (canGenerate) onGenerate()
   })
 
-  const visibleLabel = !canExecuteGeneration ? t({ ko: '생성 권한 필요', en: 'Generation permission required' }) : isGenerating ? (generatingLabel ?? generateLabel) : generateLabel
+  const actionLabel = !canExecuteGeneration ? t({ ko: '생성 권한 필요', en: 'Generation permission required' }) : isGenerating ? (generatingLabel ?? generateLabel) : generateLabel
   const repeatHint = t({ ko: '반복: 한 번 누를 때 큐에 넣을 작업 수', en: 'Repeat: jobs to queue per click' })
   const resolvedResetLabel = resetLabel ?? t({ ko: '초기화', en: 'Reset' })
   const messageClassName = messageTone === 'error'
@@ -182,22 +180,26 @@ export function GenerateActionBar({
       : 'text-warning'
 
   const generateButton = (
-    <Tip content={`${visibleLabel} (${shortcutHint})`}>
-      <Button
-        type="button"
-        onClick={onGenerate}
-        disabled={!canGenerate}
-        aria-busy={isGenerating || undefined}
-        aria-keyshortcuts="Control+Enter Meta+Enter"
-        className={cn('min-w-0', isSticky ? cn(STICKY_CONTROL_HEIGHT, 'max-w-[11rem] sm:max-w-none') : 'max-w-full')}
-      >
-        {isGenerating ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
-        <span className="truncate">{visibleLabel}</span>
-        {generateSuffix && !isGenerating ? (
-          <span className={cn('shrink-0 font-normal opacity-85', isSticky && 'hidden sm:inline')}>{generateSuffix}</span>
-        ) : null}
-      </Button>
-    </Tip>
+    <>
+      {generateSuffix && !isGenerating ? (
+        <span className={cn('shrink-0 text-sm font-normal text-muted-foreground', isSticky && 'hidden sm:inline')}>{generateSuffix}</span>
+      ) : null}
+      <Tip content={<>{`${actionLabel} (${shortcutHint})`}{generateSuffix && !isGenerating ? <> · {generateSuffix}</> : null}</>}>
+        <IconButton
+          variant="default"
+          size="icon"
+          label={typeof generateSuffix === 'string' && !isGenerating ? `${actionLabel} · ${generateSuffix}` : actionLabel}
+          tooltip={false}
+          onClick={onGenerate}
+          disabled={!canGenerate}
+          aria-busy={isGenerating || undefined}
+          aria-keyshortcuts="Control+Enter Meta+Enter"
+          className={isSticky ? STICKY_ICON_SIZE : undefined}
+        >
+          {isGenerating ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
+        </IconButton>
+      </Tip>
+    </>
   )
 
   const repeatStepper = repeat ? (

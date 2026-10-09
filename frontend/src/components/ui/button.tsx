@@ -21,6 +21,9 @@ const buttonVariants = cva(
           "bg-primary text-primary-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--secondary)_45%,transparent),0_0_20px_color-mix(in_srgb,var(--primary)_14%,transparent)] hover:brightness-108 hover:shadow-[inset_0_1px_0_color-mix(in_srgb,var(--secondary)_55%,transparent),0_0_28px_color-mix(in_srgb,var(--primary)_18%,transparent)]",
         destructive:
           "bg-destructive-soft text-destructive-soft-foreground hover:brightness-110 focus-visible:ring-destructive/25",
+        /** Delete in editor footers and rows: red icon/text, no fill until hover, so it never outweighs Save. */
+        "destructive-ghost":
+          "text-destructive hover:bg-destructive/10 hover:text-destructive aria-expanded:bg-destructive/10 focus-visible:ring-destructive/25",
         /** Default non-primary action: tonal fill, no border. Steps up one tone on a surface-high parent (popover, Panel tone=high). */
         secondary: cn(
           "ui-tone-secondary text-foreground hover:bg-surface-highest hover:text-foreground aria-expanded:bg-surface-highest data-[state=open]:bg-surface-highest in-data-[surface=high]:hover:bg-surface-bright",

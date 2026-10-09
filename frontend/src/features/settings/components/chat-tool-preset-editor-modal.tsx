@@ -1,12 +1,14 @@
-import { useLayoutEffect, useState } from 'react'
+import { useLayoutEffect, useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Copy, Download, Save, Trash2 } from 'lucide-react'
+import { Copy, Download } from 'lucide-react'
 import { ToggleChip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { EditorFooter } from '@/components/ui/editor-footer'
+import { EditorGroup } from '@/components/ui/editor-group'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
 import { getChatScopeCopy } from '@/features/codex-chat/chat-scope-copy'
@@ -26,6 +28,7 @@ import {
 import { getErrorMessage } from '@/lib/error-message'
 import { ChatToolPicker, useChatToolGroups } from './chat-tool-picker'
 import { downloadChatToolPresetFile } from './chat-tool-preset-file'
+import { CHAT_DOCK_INSET } from './use-settings-editor-chat-page'
 
 const EMPTY: ChatToolPresetInput = { name: '', scopes: ['read'], toolAllowlist: null }
 
@@ -50,10 +53,11 @@ export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSa
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState<ChatToolPresetInput>(EMPTY)
   const { groups, isPending } = useChatToolGroups(open)
+  const saved = useMemo<ChatToolPresetInput>(() => (preset ? { name: preset.name, scopes: preset.scopes, toolAllowlist: preset.toolAllowlist } : initial ?? EMPTY), [initial, preset])
 
   useLayoutEffect(() => {
-    if (open) setDraft(preset ? { name: preset.name, scopes: preset.scopes, toolAllowlist: preset.toolAllowlist } : initial ?? EMPTY)
-  }, [initial, open, preset])
+    if (open) setDraft(saved)
+  }, [open, saved])
 
   const refresh = async () => {
     await Promise.all([
@@ -100,9 +104,20 @@ export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSa
   }
 
   const nameMissing = draft.name.trim().length === 0
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
+  const canSave = !nameMissing && !saveMutation.isPending && (dirty || !preset)
 
   return (
-    <Modal open={open} onClose={onClose} title={preset ? t({ ko: '도구 프리셋 편집', en: 'Edit tool preset' }) : t({ ko: '도구 프리셋 추가', en: 'Add tool preset' })} widthClassName="max-w-3xl" height="tall">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={preset ? t({ ko: '도구 프리셋 편집', en: 'Edit tool preset' }) : t({ ko: '도구 프리셋 추가', en: 'Add tool preset' })}
+      size="normal"
+      height="tall"
+      sidePanelInset={CHAT_DOCK_INSET}
+      dirty={dirty}
+      onSave={canSave ? () => saveMutation.mutate() : undefined}
+    >
       <ModalBody className="space-y-4">
         <div className="grid gap-3 md:grid-cols-2">
           <Field label={t({ ko: '이름', en: 'Name' })}>
@@ -122,16 +137,17 @@ export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSa
             </div>
           </Field>
         </div>
-        <div className="border-t border-line pt-3">
+        <EditorGroup label={t({ ko: '도구', en: 'Tools' })}>
           <ChatToolPicker groups={groups} scopes={draft.scopes} allowlist={draft.toolAllowlist} onChange={(toolAllowlist) => setDraft({ ...draft, toolAllowlist })} loading={isPending} />
-        </div>
+        </EditorGroup>
       </ModalBody>
-      <ModalFooter>
-        {preset ? (
-          <IconButton size="icon-sm" variant="destructive" onClick={() => void handleDelete()} disabled={deleteMutation.isPending} label={t({ ko: '삭제', en: 'Delete' })}>
-            <Trash2 />
-          </IconButton>
-        ) : null}
+      <EditorFooter
+        onDelete={preset ? () => void handleDelete() : undefined}
+        deleting={deleteMutation.isPending}
+        onSave={() => saveMutation.mutate()}
+        canSave={canSave}
+        saving={saveMutation.isPending}
+      >
         <IconButton size="icon-sm" variant="ghost" onClick={() => downloadChatToolPresetFile(draft)} disabled={nameMissing} label={t({ ko: 'JSON으로 내보내기', en: 'Export as JSON' })}>
           <Download />
         </IconButton>
@@ -140,11 +156,7 @@ export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSa
             <Copy />
           </IconButton>
         ) : null}
-        <span className="flex-1" />
-        <IconButton size="icon-sm" variant="default" onClick={() => saveMutation.mutate()} disabled={nameMissing || saveMutation.isPending} label={t({ ko: '저장', en: 'Save' })}>
-          <Save />
-        </IconButton>
-      </ModalFooter>
+      </EditorFooter>
     </Modal>
   )
 }

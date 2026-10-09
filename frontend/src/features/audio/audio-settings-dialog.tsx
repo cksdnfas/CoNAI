@@ -2,13 +2,15 @@ import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Check, CircleAlert, ExternalLink, Plus, RotateCcw } from 'lucide-react'
+import { TextTabs } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
-import { Field } from '@/components/ui/field'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { IconButton } from '@/components/ui/icon-button'
-import { Input } from '@/components/ui/input'
-import { Modal, ModalBody } from '@/components/ui/modal'
+import { Modal } from '@/components/ui/modal'
+import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
+import { SettingRow } from '@/components/ui/setting-row'
+import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import {
@@ -34,7 +36,6 @@ import {
   useAudioShortcuts,
   type AudioShortcutAction,
 } from './audio-shortcuts'
-import { TextTabs } from './audio-dialogs'
 
 export type AudioSettingsTab = 'workflows' | 'export' | 'shortcuts'
 
@@ -45,16 +46,16 @@ export function AudioSettingsDialog({ open, onClose, canManage, focusWorkflowId 
   useEffect(() => {
     if (open && focusWorkflowId !== null && canManage) setTab('workflows')
   }, [open, focusWorkflowId, canManage])
-  const tabs: Array<[AudioSettingsTab, string]> = [
-    ...(canManage ? [['workflows', t({ ko: '워크플로', en: 'Workflows' })], ['export', t({ ko: '내보내기', en: 'Export' })]] as Array<[AudioSettingsTab, string]> : []),
-    ['shortcuts', t({ ko: '단축키', en: 'Shortcuts' })],
+  const tabs: Array<{ value: AudioSettingsTab; label: string }> = [
+    ...(canManage ? [{ value: 'workflows' as const, label: t({ ko: '워크플로', en: 'Workflows' }) }, { value: 'export' as const, label: t({ ko: '내보내기', en: 'Export' }) }] : []),
+    { value: 'shortcuts', label: t({ ko: '단축키', en: 'Shortcuts' }) },
   ]
+  // Each tab saves its own thing (a workflow link, the export settings, shortcuts as they change), so each ends in its
+  // own footer; it sits at the dialog's end like every editor footer.
   return (
-    <Modal open={open} title={t({ ko: '오디오 설정', en: 'Audio settings' })} onClose={onClose} widthClassName="max-w-lg">
-      <ModalBody className="space-y-4">
-        <TextTabs value={tab} items={tabs} onChange={setTab} />
-        {tab === 'workflows' ? <WorkflowTab key={focusWorkflowId ?? 'all'} focusWorkflowId={focusWorkflowId} /> : tab === 'export' ? <ExportTab /> : <ShortcutTab />}
-      </ModalBody>
+    <Modal open={open} title={t({ ko: '오디오 설정', en: 'Audio settings' })} onClose={onClose} size="narrow">
+      <TextTabs value={tab} items={tabs} onChange={setTab} className="mb-4" />
+      {tab === 'workflows' ? <WorkflowTab key={focusWorkflowId ?? 'all'} focusWorkflowId={focusWorkflowId} /> : tab === 'export' ? <ExportTab /> : <ShortcutTab />}
     </Modal>
   )
 }
@@ -124,9 +125,10 @@ function WorkflowTab({ focusWorkflowId }: { focusWorkflowId: number | null }) {
   }
 
   return (
+    <>
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <Select className="flex-1" aria-label={t({ ko: '워크플로', en: 'Workflow' })} value={workflowId ?? ''} disabled={list.length === 0} onChange={(event) => setWorkflowId(Number(event.target.value))}>
+        <Select variant="settings" className="flex-1" aria-label={t({ ko: '워크플로', en: 'Workflow' })} value={workflowId ?? ''} disabled={list.length === 0} onChange={(event) => setWorkflowId(Number(event.target.value))}>
           {list.length === 0 ? <option value="">{t({ ko: '오디오 워크플로 없음', en: 'No audio workflow' })}</option> : null}
           {list.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}{entry.binding ? '' : ` · ${t({ ko: '미연결', en: 'not linked' })}`}</option>)}
         </Select>
@@ -135,28 +137,30 @@ function WorkflowTab({ focusWorkflowId }: { focusWorkflowId: number | null }) {
       </div>
       {workflow ? (
         <>
-          <div className="space-y-2">
+          <div className="border-y border-line">
             {ROLES.map(([role]) => (
-              <div key={role} className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-3">
-                <span className="text-2xs font-semibold tracking-overline text-muted-foreground uppercase">{roleLabel[role]}</span>
-                <Select aria-label={roleLabel[role]} value={roles[role]} onChange={(event) => setRoles((current) => ({ ...current, [role]: event.target.value }))}>
+              <SettingRow key={role} label={roleLabel[role]}>
+                <Select variant="settings" className="w-52" aria-label={roleLabel[role]} value={roles[role]} onChange={(event) => setRoles((current) => ({ ...current, [role]: event.target.value }))}>
                   <option value="">—</option>
                   {workflow.fields.map((field) => <option key={field.id} value={field.id}>{field.label}{field.node_class_type ? ` · ${field.node_class_type}` : ''}</option>)}
                 </Select>
-              </div>
+              </SettingRow>
             ))}
+            <SettingsSwitchRow label={t({ ko: '기본 워크플로', en: 'Default workflow' })} checked={isDefault} onCheckedChange={setIsDefault} />
           </div>
           <CompatLine compat={compat} />
-          <div className="flex items-center gap-3">
-            <label className="flex flex-1 items-center gap-2 text-sm">
-              <Switch checked={isDefault} onCheckedChange={setIsDefault} />
-              {t({ ko: '기본 워크플로', en: 'Default workflow' })}
-            </label>
-            <Button size="sm" disabled={busy || !complete} onClick={() => void save()}>{workflow.binding ? t({ ko: '저장 후 검사', en: 'Save and check' }) : t({ ko: '연결', en: 'Link' })}</Button>
-          </div>
         </>
       ) : null}
     </div>
+    {workflow ? (
+      <EditorFooter
+        onSave={() => void save()}
+        canSave={complete}
+        saving={busy}
+        saveLabel={workflow.binding ? t({ ko: '저장 후 검사', en: 'Save and check' }) : t({ ko: '연결', en: 'Link' })}
+      />
+    ) : null}
+    </>
   )
 }
 
@@ -194,7 +198,9 @@ function ExportTab() {
   if (!draft) return null
   const set = <K extends keyof AudioExportOptions>(key: K, value: AudioExportOptions[K]) => setDraft({ ...draft, [key]: value })
   const num = (key: 'quality' | 'target_lufs' | 'peak_db' | 'loudness_range' | 'sample_rate' | 'channels', label: string, step: string) => (
-    <Field label={label}><Input className="font-mono" type="number" step={step} value={String(draft[key])} onChange={(event) => set(key, Number(event.target.value))} /></Field>
+    <SettingRow label={label}>
+      <NumberStepperInput variant="settings" className="w-36" step={step} value={draft[key]} aria-label={label} onValueCommit={(value) => set(key, Number(value))} />
+    </SettingRow>
   )
   const dirty = JSON.stringify(draft) !== JSON.stringify(settings.data)
 
@@ -212,33 +218,28 @@ function ExportTab() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
-        <Field label={t({ ko: '형식', en: 'Format' })}>
-          <Select value={draft.format} onChange={(event) => set('format', event.target.value as AudioExportOptions['format'])}>
+    <>
+      <div className="border-y border-line">
+        <SettingRow label={t({ ko: '형식', en: 'Format' })}>
+          <Select variant="settings" className="w-36" aria-label={t({ ko: '형식', en: 'Format' })} value={draft.format} onChange={(event) => set('format', event.target.value as AudioExportOptions['format'])}>
             <option value="wav">WAV</option>
             <option value="ogg">OGG Vorbis</option>
           </Select>
-        </Field>
-        {draft.format === 'ogg' ? num('quality', t({ ko: 'OGG 품질', en: 'OGG quality' }), '1') : <span />}
+        </SettingRow>
+        {draft.format === 'ogg' ? num('quality', t({ ko: 'OGG 품질', en: 'OGG quality' }), '1') : null}
         {num('sample_rate', t({ ko: '샘플레이트', en: 'Sample rate' }), '1')}
         {num('channels', t({ ko: '채널', en: 'Channels' }), '1')}
+        <SettingsSwitchRow label={t({ ko: '음량 맞추기', en: 'Normalize loudness' })} checked={draft.normalize} onCheckedChange={(checked) => set('normalize', checked)} />
+        {draft.normalize ? (
+          <>
+            {num('target_lufs', 'LUFS', '0.5')}
+            {num('peak_db', t({ ko: '피크(dB)', en: 'Peak (dB)' }), '0.1')}
+            {num('loudness_range', 'LRA', '0.5')}
+          </>
+        ) : null}
       </div>
-      <label className="flex items-center gap-2 text-sm">
-        <Switch checked={draft.normalize} onCheckedChange={(checked) => set('normalize', checked)} />
-        {t({ ko: '음량 맞추기', en: 'Normalize loudness' })}
-      </label>
-      {draft.normalize ? (
-        <div className="grid grid-cols-3 gap-3">
-          {num('target_lufs', 'LUFS', '0.5')}
-          {num('peak_db', t({ ko: '피크(dB)', en: 'Peak (dB)' }), '0.1')}
-          {num('loudness_range', 'LRA', '0.5')}
-        </div>
-      ) : null}
-      <div className="flex justify-end">
-        <Button size="sm" disabled={busy || !dirty} onClick={() => void save()}>{t({ ko: '저장', en: 'Save' })}</Button>
-      </div>
-    </div>
+      <EditorFooter onSave={() => void save()} canSave={dirty} saving={busy} />
+    </>
   )
 }
 
@@ -302,9 +303,9 @@ function ShortcutTab() {
         ))}
       </ul>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
-      <div className="flex justify-end">
-        <IconButton variant="ghost" label={t({ ko: '기본값으로', en: 'Reset to defaults' })} onClick={() => { setError(null); saveAudioShortcuts(DEFAULT_AUDIO_SHORTCUTS) }}><RotateCcw /></IconButton>
-      </div>
+      <EditorFooter>
+        <IconButton size="icon-sm" variant="ghost" label={t({ ko: '기본값으로', en: 'Reset to defaults' })} onClick={() => { setError(null); saveAudioShortcuts(DEFAULT_AUDIO_SHORTCUTS) }}><RotateCcw /></IconButton>
+      </EditorFooter>
     </div>
   )
 }

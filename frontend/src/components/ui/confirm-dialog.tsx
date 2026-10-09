@@ -204,4 +204,9 @@ function useConfirm(): ConfirmFn {
   return context
 }
 
-export { ConfirmDialog, ConfirmProvider, useConfirm }
+/** The shared confirm, or null outside a ConfirmProvider (shared overlays that must still render there). */
+function useOptionalConfirm(): ConfirmFn | null {
+  return useContext(ConfirmContext)
+}
+
+export { ConfirmDialog, ConfirmProvider, useConfirm, useOptionalConfirm }

@@ -7,6 +7,12 @@ import { runtimePaths } from '../../config/runtimePaths'
 import type { CodexAppServerClient } from './codexAppServerClient'
 
 const INERT_FEATURES = new Set(['secret_auth_storage', 'enable_request_compression'])
+/**
+ * Host features chat keeps on. Codex reaches MCP tools only through code mode (`exec` in the code-mode host); with it
+ * off every CoNAI tool disappears ("code-mode host is disabled"). Its JS has no require/process, and the read-only
+ * sandbox still blocks writes; shell, the experimental `code_mode` and every other host tool stay off.
+ */
+const KEPT_FEATURES = new Set(['skip_host_skill_discovery', 'code_mode_host'])
 const REQUIRED_FEATURES = ['shell_tool', 'unified_exec', 'hooks', 'plugins', 'apps', 'code_mode_host', 'code_mode', 'browser_use', 'computer_use', 'multi_agent', 'image_generation', 'view_image', 'skill_mcp_dependency_install', 'skill_search', 'skip_host_skill_discovery']
 
 /** Strictly parse the installed CLI inventory; absence/malformed output never means an empty capability set. */
@@ -22,7 +28,7 @@ export function parseChatFeatureInventory(output: string): Set<string> {
 }
 
 export function chatFeatureOverrides(features: Set<string>): Record<string, boolean> {
-  return Object.fromEntries([...features].map((feature) => [feature, feature === 'skip_host_skill_discovery' || INERT_FEATURES.has(feature)]))
+  return Object.fromEntries([...features].map((feature) => [feature, KEPT_FEATURES.has(feature) || INERT_FEATURES.has(feature)]))
 }
 
 function isWithin(candidate: string, root: string) {

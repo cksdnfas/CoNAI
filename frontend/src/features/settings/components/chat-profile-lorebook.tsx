@@ -16,7 +16,7 @@ import { loreEntryTitle, type ChatLoreEntry, type LoreSecondaryLogic } from '@/l
 import { createStoredFolder, listStoredFiles, uploadStoredFiles } from '@/lib/api-files'
 import { getErrorMessage } from '@/lib/error-message'
 import { createRandomUuid } from '@/lib/random-uuid'
-import { CollapsibleRow } from './chat-profile-sections'
+import { CollapsibleRow } from '@/components/ui/collapsible-row'
 
 /** Where an entry's linked file lives: a global book has none; an account or chat book has its folder (null until it exists). */
 export type LoreFilePlace = { kind: 'global' } | { kind: 'owned'; folderId: string | null }

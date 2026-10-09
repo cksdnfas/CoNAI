@@ -17,6 +17,9 @@ const view = (task: ChatTask) => ({ id: task.id, goal: task.goal, status: task.s
 export function registerChatTaskTools(server: McpServer, context: McpRequestContext) {
   const chat = context.chatContext
   if (!chat || chat.kind !== 'direct') return
+  // A profile with nothing to work with (no scopes, no page, no generation presets) has no use for a plan; its tools
+  // would only cost every request and break models that cannot take tools. A task already running keeps them.
+  if (context.scopes.length === 0 && !chat.page && !context.generationPresetIds?.length && !ChatTaskStore.live(chat.threadId)) return
   const live = () => {
     const task = ChatTaskStore.live(chat.threadId)
     if (!task) throw new Error('진행 중인 작업이 없어. task_propose로 플랜부터 제안해.')

@@ -11,7 +11,7 @@ import { chatAssetUrl, chatMediaThumbnailUrl, chatMediaUrl, getChatMediaInfo, lo
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import type { Draft, PatchDraft } from './chat-profile-editor-fields'
-import { CollapsibleRow } from './chat-profile-sections'
+import { CollapsibleRow } from '@/components/ui/collapsible-row'
 
 type Translate = ReturnType<typeof useI18n>['t']
 

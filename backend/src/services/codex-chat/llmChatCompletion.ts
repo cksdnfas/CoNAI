@@ -64,6 +64,24 @@ function readPromptTokens(json: unknown) {
 /** No reply bytes for this long means the server is stuck; a long answer that keeps streaming is fine. */
 const STREAM_IDLE_TIMEOUT_MS = 5 * 60 * 1000
 
+/**
+ * Models whose server refused `tools` (Ollama "does not support tools", llama-server without --jinja), by connection
+ * and model, until when: their requests go without tools instead of failing first every time. Expires so a server
+ * restarted with tool support gets them back.
+ */
+const toolsRefused = new Map<string, number>()
+const TOOLS_REFUSED_TTL_MS = 10 * 60_000
+const toolsKey = (target: ChatCompletionTarget) => `${target.providerName}\u0000${target.model}`
+export function toolsRefusedBy(target: ChatCompletionTarget) {
+  const until = toolsRefused.get(toolsKey(target))
+  if (until !== undefined && until < Date.now()) toolsRefused.delete(toolsKey(target))
+  return until !== undefined && until >= Date.now()
+}
+/** A 400 that says the server or model cannot take tool definitions (not a broken call or schema of ours). */
+export function isToolsRefusal(errorText: string) {
+  return /does not support tools|tools? (?:are|is) not supported|not support(?:ed)? (?:for )?tool|--jinja|tool[_ ]?(?:calling|use) (?:is )?not (?:supported|enabled)|unrecognized (?:request )?argument.{0,20}tools|extra_forbidden.{0,40}tools/i.test(errorText)
+}
+
 function parseConfig(value: unknown): Record<string, unknown> {
   if (value && typeof value === 'object') {
     return value as Record<string, unknown>
@@ -313,7 +331,7 @@ export async function streamChatCompletion(params: {
     }
     let streamUsage = true
     const request = (target: ChatCompletionTarget) => {
-      const body = buildBody(target, params.messages, params.tools ?? [], true, streamUsage)
+      const body = buildBody(target, params.messages, toolsRefusedBy(target) ? [] : params.tools ?? [], true, streamUsage)
       params.onRequestBody?.(body, target)
       return fetch(target.endpoint, {
         method: 'POST',
@@ -345,6 +363,13 @@ export async function streamChatCompletion(params: {
       // Likewise the usage chunk: a server that names stream_options in its refusal gets the request without it.
       if (params.allowCompatibilityFallback !== false && response.status === 400 && streamUsage && errorText.includes('stream_options')) {
         streamUsage = false
+        touch()
+        continue
+      }
+      // A model that cannot take tools still answers in text: remember it and send the request without them.
+      if (params.allowCompatibilityFallback !== false && response.status === 400 && (params.tools?.length ?? 0) > 0 && !toolsRefusedBy(target) && isToolsRefusal(errorText)) {
+        console.warn(`[llm-chat] ${params.target.displayName} (${target.model}): tools refused (${errorText.slice(0, 200)}); sending without tools for ${TOOLS_REFUSED_TTL_MS / 60_000} min`)
+        toolsRefused.set(toolsKey(target), Date.now() + TOOLS_REFUSED_TTL_MS)
         touch()
         continue
       }

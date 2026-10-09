@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, Save, Trash2 } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import {
@@ -86,12 +87,13 @@ export function ChatLorebookEditorModal({ open, lorebook, kind = 'global', onClo
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '삭제하지 못했어.', en: 'Could not delete.' })), tone: 'error' }),
   })
 
+  const dirty = name !== (lorebook?.name ?? '') || JSON.stringify(entries) !== JSON.stringify(lorebook?.entries ?? [])
   // A connected chat reads the book, adds or replaces entries (draft) and asks to save it with a card.
   useSettingsEditorChatPage({
     open,
     title: lorebook ? t({ ko: '로어북 편집 · {name}', en: 'Edit lorebook · {name}' }, { name: lorebook.name }) : t({ ko: '로어북 추가', en: 'Add lorebook' }),
     resourceId: `lorebook:${lorebook?.id ?? 'new'}`,
-    dirty: name !== (lorebook?.name ?? '') || JSON.stringify(entries) !== JSON.stringify(lorebook?.entries ?? []),
+    dirty,
     fields: [{ id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: name }],
     data: {
       kind: owned ? 'account' : 'global',
@@ -131,30 +133,38 @@ export function ChatLorebookEditorModal({ open, lorebook, kind = 'global', onClo
     if (confirmed) deleteMutation.mutate()
   }
 
+  const canSave = Boolean(name.trim()) && !saveMutation.isPending && (dirty || !lorebook)
+
   return (
-    <Modal open={open} onClose={onClose} title={lorebook ? t({ ko: '로어북 편집', en: 'Edit lorebook' }) : owned ? t({ ko: '계정 로어북 추가', en: 'Add account lorebook' }) : t({ ko: '로어북 추가', en: 'Add lorebook' })} widthClassName="max-w-3xl" height="tall" sidePanelInset={CHAT_DOCK_INSET}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={lorebook ? t({ ko: '로어북 편집', en: 'Edit lorebook' }) : owned ? t({ ko: '계정 로어북 추가', en: 'Add account lorebook' }) : t({ ko: '로어북 추가', en: 'Add lorebook' })}
+      size="normal"
+      height="tall"
+      sidePanelInset={CHAT_DOCK_INSET}
+      dirty={dirty}
+      onSave={canSave ? () => saveMutation.mutate() : undefined}
+    >
       <ModalBody className="space-y-4">
         <Field label={<ChatFilledLabel fieldId="name">{t({ ko: '이름', en: 'Name' })}</ChatFilledLabel>}>
           <Input variant="settings" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
         </Field>
         <ChatLorebookEditor entries={entries} onChange={setEntries} filePlace={owned ? { kind: 'owned', folderId } : { kind: 'global' }} />
       </ModalBody>
-      <ModalFooter>
-        {lorebook ? (
-          <IconButton size="icon-sm" variant="destructive" onClick={() => void handleDelete()} disabled={deleteMutation.isPending} label={t({ ko: '삭제', en: 'Delete' })}>
-            <Trash2 />
-          </IconButton>
-        ) : null}
+      <EditorFooter
+        onDelete={lorebook ? () => void handleDelete() : undefined}
+        deleting={deleteMutation.isPending}
+        onSave={() => saveMutation.mutate()}
+        canSave={canSave}
+        saving={saveMutation.isPending}
+      >
         {lorebook && onUpdateFromFile && !owned ? (
           <IconButton size="icon-sm" variant="ghost" onClick={() => onUpdateFromFile(lorebook)} disabled={updating} label={t({ ko: '파일로 업데이트', en: 'Update from file' })}>
             <RefreshCw />
           </IconButton>
         ) : null}
-        <span className="flex-1" />
-        <IconButton size="icon-sm" variant="default" onClick={() => saveMutation.mutate()} disabled={!name.trim() || saveMutation.isPending} label={t({ ko: '저장', en: 'Save' })}>
-          <Save />
-        </IconButton>
-      </ModalFooter>
+      </EditorFooter>
     </Modal>
   )
 }

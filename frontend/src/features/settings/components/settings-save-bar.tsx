@@ -65,10 +65,9 @@ export function SettingsSaveBar({ dirtySections, isSaving, onSave, onDiscard, on
           <IconButton size="icon-sm" variant="ghost" disabled={isSaving || dirtySections.length === 0} onClick={() => void handleDiscard()} label={t({ ko: '변경 취소', en: 'Discard changes' })}>
             <Undo2 className="h-4 w-4" />
           </IconButton>
-          <Button type="button" size="sm" disabled={isSaving || dirtySections.length === 0} onClick={onSave}>
+          <IconButton variant="default" size="icon-sm" disabled={isSaving || dirtySections.length === 0} onClick={onSave} aria-busy={isSaving || undefined} label={isSaving ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '저장', en: 'Save' })}>
             {isSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            {isSaving ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '저장', en: 'Save' })}
-          </Button>
+          </IconButton>
         </div>
       </div>
     </div>

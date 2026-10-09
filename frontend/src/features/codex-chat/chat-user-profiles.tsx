@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Save, Star, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { ImageOff, Plus, Star } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { ResourceRow } from '@/components/ui/resource-row'
 import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -67,10 +67,11 @@ export function ChatUserProfileEditorModal({ open, profile, onClose }: { open: b
   const [draft, setDraft] = useState<{ name: string; persona: string; avatar: string | null; isDefault: boolean; modelSlotId: number | null }>({ name: '', persona: '', avatar: null, isDefault: false, modelSlotId: null })
   const modelsQuery = useQuery({ queryKey: CHAT_MODEL_OPTIONS_QUERY_KEY, queryFn: listChatModelOptions, enabled: open })
   const models = modelsQuery.data ?? []
+  const saved = useMemo(() => ({ name: profile?.name ?? '', persona: profile?.persona ?? '', avatar: profile?.avatar ?? null, isDefault: profile?.isDefault ?? false, modelSlotId: profile?.modelSlotId ?? null }), [profile])
 
   useEffect(() => {
-    if (open) setDraft({ name: profile?.name ?? '', persona: profile?.persona ?? '', avatar: profile?.avatar ?? null, isDefault: profile?.isDefault ?? false, modelSlotId: profile?.modelSlotId ?? null })
-  }, [profile, open])
+    if (open) setDraft(saved)
+  }, [saved, open])
 
   const refresh = () => Promise.all([
     queryClient.invalidateQueries({ queryKey: CHAT_USER_PROFILES_QUERY_KEY }),
@@ -108,10 +109,18 @@ export function ChatUserProfileEditorModal({ open, profile, onClose }: { open: b
       showSnackbar({ message: t({ ko: '이미지를 읽지 못했어.', en: 'Could not read the image.' }), tone: 'error' })
     }
   }
-  const canSave = draft.name.trim().length > 0 && !saveMutation.isPending
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
+  const canSave = draft.name.trim().length > 0 && !saveMutation.isPending && (dirty || !profile)
 
   return (
-    <Modal open={open} onClose={onClose} title={profile ? t({ ko: '사용자 프로필 편집', en: 'Edit user profile' }) : t({ ko: '사용자 프로필 추가', en: 'Add user profile' })} widthClassName="max-w-lg">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={profile ? t({ ko: '사용자 프로필 편집', en: 'Edit user profile' }) : t({ ko: '사용자 프로필 추가', en: 'Add user profile' })}
+      size="narrow"
+      dirty={dirty}
+      onSave={canSave ? () => saveMutation.mutate() : undefined}
+    >
       <ModalBody className="space-y-4">
         <div className="flex items-end gap-3">
           {/* eslint-disable-next-line no-restricted-syntax -- the avatar itself is the control */}
@@ -146,15 +155,18 @@ export function ChatUserProfileEditorModal({ open, profile, onClose }: { open: b
           </Select>
         </Field>
       </ModalBody>
-      <ModalFooter>
-        {profile ? <IconButton size="icon-sm" variant="destructive" disabled={deleteMutation.isPending} onClick={() => void handleDelete()} label={t({ ko: '삭제', en: 'Delete' })}><Trash2 /></IconButton> : null}
-        {draft.avatar ? <Button size="sm" variant="ghost" onClick={() => setDraft((current) => ({ ...current, avatar: null }))}>{t({ ko: '아바타 지우기', en: 'Remove avatar' })}</Button> : null}
-        <span className="flex-1" />
+      <EditorFooter
+        onDelete={profile ? () => void handleDelete() : undefined}
+        deleting={deleteMutation.isPending}
+        onSave={() => saveMutation.mutate()}
+        canSave={canSave}
+        saving={saveMutation.isPending}
+      >
+        {draft.avatar ? <IconButton size="icon-sm" variant="ghost" onClick={() => setDraft((current) => ({ ...current, avatar: null }))} label={t({ ko: '아바타 지우기', en: 'Remove avatar' })}><ImageOff /></IconButton> : null}
         <IconButton size="icon-sm" variant="ghost" active={draft.isDefault} onClick={() => setDraft((current) => ({ ...current, isDefault: !current.isDefault }))} label={t({ ko: '새 채팅 기본', en: 'Default for new chats' })}>
           <Star className={cn(draft.isDefault && 'fill-current')} />
         </IconButton>
-        <IconButton size="icon-sm" variant="default" disabled={!canSave} onClick={() => saveMutation.mutate()} label={t({ ko: '저장', en: 'Save' })}><Save /></IconButton>
-      </ModalFooter>
+      </EditorFooter>
     </Modal>
   )
 }
@@ -202,15 +214,13 @@ export function ChatUserProfileManagerModal({ open, onClose }: { open: boolean; 
         open={open}
         onClose={onClose}
         title={t({ ko: '사용자 프로필', en: 'User profiles' })}
-        widthClassName="max-w-xl" height="medium"
-        headerContent={<IconButton size="icon-sm" variant="ghost" disabled={full} onClick={() => setEditor({ profile: null })} label={t({ ko: '사용자 프로필 추가', en: 'Add user profile' })}><Plus /></IconButton>}
+        size="narrow"
+        height="medium"
+        headerActions={<IconButton size="icon-sm" variant="ghost" disabled={full} onClick={() => setEditor({ profile: null })} label={t({ ko: '사용자 프로필 추가', en: 'Add user profile' })}><Plus /></IconButton>}
       >
         <ModalBody>
           {profilesQuery.isSuccess && profiles.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-4 text-xs text-muted-foreground">
-              {t({ ko: '아직 사용자 프로필이 없어.', en: 'No user profiles yet.' })}
-              <IconButton size="icon-sm" variant="secondary" label={t({ ko: '사용자 프로필 추가', en: 'Add user profile' })} onClick={() => setEditor({ profile: null })}><Plus /></IconButton>
-            </div>
+            <p className="py-4 text-center text-xs text-muted-foreground">{t({ ko: '아직 사용자 프로필이 없어.', en: 'No user profiles yet.' })}</p>
           ) : (
             <ChatUserProfileRows profiles={profiles} onEdit={(profile) => setEditor({ profile })} />
           )}

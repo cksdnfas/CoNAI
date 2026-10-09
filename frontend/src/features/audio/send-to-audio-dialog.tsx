@@ -57,23 +57,22 @@ export function SendToAudioDialog({ files, onClose }: { files: Array<{ id: strin
   }
 
   return (
-    <Modal open={open} title={t({ ko: '오디오로 보내기', en: 'Send to Audio' })} onClose={() => { if (!busy) onClose() }} widthClassName="max-w-md">
+    <Modal open={open} title={t({ ko: '오디오로 보내기', en: 'Send to Audio' })} onClose={() => { if (!busy) onClose() }} size="narrow">
       <ModalBody className="space-y-4">
         <Field label={t({ ko: '프로젝트', en: 'Project' })}>
-          <Select value={projectId} disabled={!projects.data?.length} onChange={(event) => setProjectId(event.target.value)}>
+          <Select variant="settings" value={projectId} disabled={!projects.data?.length} onChange={(event) => setProjectId(event.target.value)}>
             {!projects.data?.length ? <option value="">—</option> : null}
             {(projects.data ?? []).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
           </Select>
         </Field>
         <Field label={t({ ko: '효과음', en: 'Effect' })}>
-          <Select value={groupId} disabled={!projectId} onChange={(event) => setGroupId(event.target.value)}>
+          <Select variant="settings" value={groupId} disabled={!projectId} onChange={(event) => setGroupId(event.target.value)}>
             <option value="">{t({ ko: '받은 파일', en: 'Inbox' })}</option>
             {(groups.data ?? []).filter((group) => !group.is_inbox).map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
           </Select>
         </Field>
       </ModalBody>
-      <ModalFooter>
-        <span className="flex-1" />
+      <ModalFooter className="mt-4 border-t border-line pt-3">
         <Tip content={projects.isSuccess && projects.data.length === 0 ? t({ ko: '오디오 탭에서 프로젝트를 먼저 만들어줘.', en: 'Create a project in the Audio tab first.' }) : null}>
           <span className="inline-flex" tabIndex={projects.isSuccess && projects.data.length === 0 ? 0 : undefined}>
             <Button disabled={busy || !projectId} onClick={() => void send()}><AudioLines />{t({ ko: '{count}개 보내기', en: 'Send {count}' }, { count: files?.length ?? 0 })}</Button>

@@ -183,7 +183,7 @@ export function SettingsResourceTable({
   )
 }
 
-/** Render one shared settings-style segmented table shell with a tab header and DB-like body. */
+/** Render one shared settings-style table with a segmented switcher above it; flat (hairlines only), no box around it. */
 export function SettingsSegmentedTable({
   value,
   items,
@@ -198,8 +198,8 @@ export function SettingsSegmentedTable({
   size = 'xs',
 }: SettingsSegmentedTableProps) {
   return (
-    <div className={cn('overflow-hidden rounded-sm bg-surface-lowest', className)}>
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+    <div className={cn('min-w-0', className)}>
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-2">
         <SegmentedControl value={value} items={items} onChange={onChange} size={size} />
         {count || actions ? (
           <div className="flex items-center gap-2">

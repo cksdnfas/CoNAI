@@ -1,13 +1,13 @@
 import { Folder, FolderOpen } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { EditorFooter } from '@/components/ui/editor-footer'
+import { EditorGroup } from '@/components/ui/editor-group'
 import { Input } from '@/components/ui/input'
 import { Field } from '@/components/ui/field'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
-import { ToggleRow } from '@/components/ui/toggle-row'
-import { Switch } from '@/components/ui/switch'
+import { Modal, ModalBody } from '@/components/ui/modal'
+import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import type { PromptGroupRecord } from '@/types/prompt'
 import { useI18n } from '@/i18n'
 
@@ -39,6 +39,7 @@ export function PromptGroupEditorModal({
   const [parentValue, setParentValue] = useState('root')
   const [isVisible, setIsVisible] = useState(true)
   const [formError, setFormError] = useState<string | null>(null)
+  const formRef = useRef<HTMLFormElement | null>(null)
 
   useEffect(() => {
     if (!open) {
@@ -75,14 +76,24 @@ export function PromptGroupEditorModal({
 
   const typeLabel = promptType === 'positive' ? 'Positive' : promptType === 'negative' ? 'Negative' : 'Auto'
 
+  const dirty = open && (
+    groupName !== (group?.group_name ?? '')
+    || parentValue !== String(group?.parent_id ?? defaultParentId ?? 'root')
+    || isVisible !== (group?.is_visible ?? true)
+  )
+  const canSave = !isSubmitting && (mode === 'create' || dirty)
+
   return (
     <Modal
       open={open}
       onClose={onClose}
       title={mode === 'create' ? t({ ko: '{typeLabel} 그룹 만들기', en: '{typeLabel} group' }, { typeLabel }) : t({ ko: '{typeLabel} 그룹 편집', en: '{typeLabel} group edit' }, { typeLabel })}
-      widthClassName="max-w-2xl"
+      size="narrow"
+      height="medium"
+      dirty={dirty}
+      onSave={canSave ? () => formRef.current?.requestSubmit() : undefined}
     >
-      <form onSubmit={(event) => void handleSubmit(event)}>
+      <form ref={formRef} onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (
           <Alert variant="destructive">
             <AlertTitle>{t('prompts.components.prompt.group.editor.modal.check.your.input')}</AlertTitle>
@@ -90,13 +101,12 @@ export function PromptGroupEditorModal({
           </Alert>
         ) : null}
 
-        <ModalBody className="space-y-5">
+        <ModalBody className="space-y-4">
           <Field label={t('prompts.components.prompt.group.editor.modal.group.name')}>
-            <Input value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder={t('prompts.components.prompt.group.editor.modal.e.g.character.background.lora')} />
+            <Input variant="settings" value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder={t('prompts.components.prompt.group.editor.modal.e.g.character.background.lora')} />
           </Field>
 
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">{t('prompts.components.prompt.group.editor.modal.parent.group')}</p>
+          <EditorGroup label={t('prompts.components.prompt.group.editor.modal.parent.group')}>
             <HierarchyPicker
               items={parentGroups}
               selectedId={parentValue === 'root' ? null : Number(parentValue)}
@@ -108,22 +118,19 @@ export function PromptGroupEditorModal({
               sortItems={(left, right) => left.display_order - right.display_order || left.group_name.localeCompare(right.group_name)}
               renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
             />
+          </EditorGroup>
+
+          <div className="border-t border-line">
+            <SettingsSwitchRow label={t('prompts.components.prompt.group.editor.modal.display.status')} checked={isVisible} onCheckedChange={setIsVisible} />
           </div>
-
-          <ToggleRow className="justify-between">
-            <span className="font-medium text-foreground">{t('prompts.components.prompt.group.editor.modal.display.status')}</span>
-            <Switch checked={isVisible} onCheckedChange={setIsVisible} />
-          </ToggleRow>
-
-          <ModalFooter>
-            <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-              {t({ ko: '취소', en: 'Cancel' })}
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? t('prompts.components.prompt.group.editor.modal.saving') : mode === 'create' ? t('prompts.components.prompt.group.editor.modal.create.group') : t('prompts.components.prompt.group.editor.modal.save.changes')}
-            </Button>
-          </ModalFooter>
         </ModalBody>
+
+        <EditorFooter
+          saveSubmit
+          canSave={canSave}
+          saving={isSubmitting}
+          saveLabel={mode === 'create' ? t('prompts.components.prompt.group.editor.modal.create.group') : t('prompts.components.prompt.group.editor.modal.save.changes')}
+        />
       </form>
     </Modal>
   )

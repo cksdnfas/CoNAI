@@ -1,7 +1,7 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
-import { RotateCcw } from 'lucide-react'
+import { RotateCcw, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
@@ -41,21 +41,21 @@ export function GenerationHistoryRecoveryPanel({
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Badge variant="warning">{t({ ko: '재실행 {count}', en: 'Rerun {count}' }, { count: formatNumber(visibleRetryableHistoryRecords.length) })}</Badge>
-          <Button
-            type="button"
-            size="sm"
+          <IconButton
+            size="icon-sm"
             variant="secondary"
             onClick={() => void handleRetryVisibleRecoveryRecords()}
             disabled={!(canExecuteGeneration) || (isRetryingRunRecovery)}
-          >
-            <RotateCcw className={cn('h-4 w-4', isRetryingRunRecovery && 'animate-spin')} />
-            {isRetryingRunRecovery
+            aria-busy={isRetryingRunRecovery || undefined}
+            label={isRetryingRunRecovery
               ? t({ ko: '등록 중', en: 'Queueing' })
               : t({ ko: '모두 재실행', en: 'Rerun all' })}
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={handleAcknowledgeRunRecovery}>
-            {t({ ko: '확인', en: 'Dismiss' })}
-          </Button>
+          >
+            <RotateCcw className={cn('h-4 w-4', isRetryingRunRecovery && 'animate-spin')} />
+          </IconButton>
+          <IconButton size="icon-sm" variant="ghost" onClick={handleAcknowledgeRunRecovery} label={t({ ko: '확인', en: 'Dismiss' })}>
+            <X />
+          </IconButton>
         </div>
       </div>
 
@@ -81,18 +81,18 @@ export function GenerationHistoryRecoveryPanel({
                 </div>
                 <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{getHistoryRecoveryDetail(record, t)}</div>
               </div>
-              <Button
-                type="button"
-                size="sm"
+              <IconButton
+                size="icon-sm"
                 variant="ghost"
                 className="shrink-0"
                 onClick={() => void handleRetryHistoryRecord(record)}
                 disabled={!(canExecuteGeneration) || (isRetryingRunRecovery)}
                 data-no-select-drag="true"
+                aria-busy={isRetrying || undefined}
+                label={isRetrying ? t({ ko: '등록 중', en: 'Queueing' }) : t({ ko: '재실행', en: 'Rerun' })}
               >
                 <RotateCcw className={cn('h-4 w-4', isRetrying && 'animate-spin')} />
-                {isRetrying ? t({ ko: '등록 중', en: 'Queueing' }) : t({ ko: '재실행', en: 'Rerun' })}
-              </Button>
+              </IconButton>
             </div>
           )
         })}

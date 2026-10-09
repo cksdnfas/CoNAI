@@ -9,7 +9,7 @@ import { getDataRematchStatus, startDataRematchJob, type DataRematchJobSnapshot,
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { RowGroup } from '@/components/ui/row-group'
-import { SettingsSwitchRow } from './settings-switch-row'
+import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { SettingsStatLine } from './settings-rows'
 
 const DEFAULT_DATA_REMATCH_OPTIONS: DataRematchOptions = {

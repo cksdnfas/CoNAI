@@ -1,15 +1,18 @@
 import { useLayoutEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, Download, Save, Trash2 } from 'lucide-react'
+import { Copy, Download, Trash2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
-import { ToggleChip } from '@/components/ui/chip'
+import { Chip, ToggleChip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field, FieldInfo } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
+import { SettingRow } from '@/components/ui/setting-row'
+import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { NAI_MODEL_OPTIONS, NAI_RESOLUTION_PRESETS, NAI_SAMPLER_OPTIONS, NAI_SCHEDULER_OPTIONS } from '@/features/image-generation/image-generation-shared'
@@ -28,7 +31,7 @@ import {
 import { getGenerationWorkflows } from '@/lib/api-image-generation-workflows'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { getErrorMessage } from '@/lib/error-message'
-import { EditorGroup, SwitchLine } from './chat-profile-editor-fields'
+import { EditorGroup } from '@/components/ui/editor-group'
 import { downloadChatGenerationPresetFile } from './chat-generation-preset-file'
 import { CHAT_DOCK_INSET, useSettingsEditorChatPage } from './use-settings-editor-chat-page'
 import { ChatFilledLabel } from '@/features/codex-chat/chat-page-context'
@@ -88,8 +91,8 @@ function NaiPresetFields({ config, onChange }: { config: ChatNaiPresetConfig; on
   return (
     <div className="space-y-4">
       <EditorGroup label={t({ ko: '모델', en: 'Model' })}>
-        <div className="grid gap-3 md:grid-cols-3">
-          <Field label={<ChatFilledLabel fieldId="model">{t({ ko: '모델', en: 'Model' })}</ChatFilledLabel>}>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field className="md:col-span-2" label={<ChatFilledLabel fieldId="model">{t({ ko: '모델', en: 'Model' })}</ChatFilledLabel>}>
             <Select variant="settings" className="px-3" value={config.model} onChange={(event) => patch({ model: event.target.value })}>
               {NAI_MODEL_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               {NAI_MODEL_OPTIONS.some((option) => option.value === config.model) ? null : <option value={config.model}>{config.model}</option>}
@@ -106,15 +109,17 @@ function NaiPresetFields({ config, onChange }: { config: ChatNaiPresetConfig; on
               {NAI_SCHEDULER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </Select>
           </Field>
-          <Field label={<ChatFilledLabel fieldId="steps">{t({ ko: '스텝', en: 'Steps' })}</ChatFilledLabel>}>
-            <NumberStepperInput variant="settings" step={1} min={1} max={50} value={config.steps} onValueCommit={(value) => patch({ steps: numberOrKeep(value, config.steps) })} />
-          </Field>
-          <Field label={<ChatFilledLabel fieldId="scale">{t({ ko: 'CFG', en: 'CFG scale' })}</ChatFilledLabel>}>
-            <NumberStepperInput variant="settings" step={0.5} min={0} max={30} value={config.scale} onValueCommit={(value) => patch({ scale: numberOrKeep(value, config.scale) })} />
-          </Field>
         </div>
-        <SwitchLine label="Variety+" checked={config.varietyPlus} onCheckedChange={(varietyPlus) => patch({ varietyPlus })} />
-        <SwitchLine label={t({ ko: '투명 배경', en: 'Transparent background' })} checked={config.transparentBackground} onCheckedChange={(transparentBackground) => patch({ transparentBackground })} />
+        <div className="border-t border-line">
+          <SettingRow label={<ChatFilledLabel fieldId="steps">{t({ ko: '스텝', en: 'Steps' })}</ChatFilledLabel>}>
+            <NumberStepperInput variant="settings" className="w-32" step={1} min={1} max={50} value={config.steps} onValueCommit={(value) => patch({ steps: numberOrKeep(value, config.steps) })} aria-label={t({ ko: '스텝', en: 'Steps' })} />
+          </SettingRow>
+          <SettingRow label={<ChatFilledLabel fieldId="scale">{t({ ko: 'CFG', en: 'CFG scale' })}</ChatFilledLabel>}>
+            <NumberStepperInput variant="settings" className="w-32" step={0.5} min={0} max={30} value={config.scale} onValueCommit={(value) => patch({ scale: numberOrKeep(value, config.scale) })} aria-label="CFG" />
+          </SettingRow>
+          <SettingsSwitchRow label="Variety+" checked={config.varietyPlus} onCheckedChange={(varietyPlus) => patch({ varietyPlus })} />
+          <SettingsSwitchRow label={t({ ko: '투명 배경', en: 'Transparent background' })} checked={config.transparentBackground} onCheckedChange={(transparentBackground) => patch({ transparentBackground })} />
+        </div>
       </EditorGroup>
       <EditorGroup label={t({ ko: '모델이 고를 수 있는 크기', en: 'Sizes the model may pick' })} info={t({ ko: '하나만 고르면 크기 필드가 모델에게 보이지 않아.', en: 'With one size picked, the model sees no size field.' })}>
         <div className="flex flex-wrap gap-1.5">
@@ -315,12 +320,23 @@ export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDupli
   }
 
   const nameMissing = draft.name.trim().length === 0
-  useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty: JSON.stringify(draft) !== JSON.stringify(initial), save: () => saveMutation.mutateAsync() })
+  const dirty = JSON.stringify(draft) !== JSON.stringify(initial)
+  useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, save: () => saveMutation.mutateAsync() })
   const comfyIncomplete = draft.kind === 'comfyui' && !(draft.comfyui?.workflowId)
   const kindLabel = useMemo(() => ({ nai: 'NovelAI', comfyui: 'ComfyUI' }), [])
+  const canSave = !nameMissing && !comfyIncomplete && !saveMutation.isPending && (dirty || !preset)
 
   return (
-    <Modal open={open} onClose={onClose} title={preset ? t({ ko: '생성 프리셋 편집', en: 'Edit generation preset' }) : t({ ko: '생성 프리셋 추가', en: 'Add generation preset' })} widthClassName="max-w-3xl" height="tall" sidePanelInset={CHAT_DOCK_INSET}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={preset ? t({ ko: '생성 프리셋 편집', en: 'Edit generation preset' }) : t({ ko: '생성 프리셋 추가', en: 'Add generation preset' })}
+      size="normal"
+      height="tall"
+      sidePanelInset={CHAT_DOCK_INSET}
+      dirty={dirty}
+      onSave={canSave ? () => saveMutation.mutate() : undefined}
+    >
       <ModalBody className="space-y-4">
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
           <Field label={<ChatFilledLabel fieldId="name">{t({ ko: '이름', en: 'Name' })}</ChatFilledLabel>}>
@@ -331,7 +347,7 @@ export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDupli
           </Field>
           <Field label={t({ ko: '종류', en: 'Kind' })}>
             {preset ? (
-              <div className="flex h-10 items-center text-sm">{kindLabel[draft.kind]}</div>
+              <div className="flex h-10 items-center"><Chip size="sm" tone="muted">{kindLabel[draft.kind]}</Chip></div>
             ) : (
               <Select variant="settings" className="px-3" value={draft.kind} onChange={(event) => setDraft({ ...emptyDraft(event.target.value as 'nai' | 'comfyui'), name: draft.name, instruction: draft.instruction })}>
                 <option value="nai">NovelAI</option>
@@ -343,12 +359,13 @@ export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDupli
         {draft.kind === 'nai' ? <NaiPresetFields config={draft.nai ?? EMPTY_NAI_PRESET} onChange={(nai) => setDraft({ ...draft, nai })} /> : null}
         {draft.kind === 'comfyui' && draft.comfyui ? <ComfyPresetFields config={draft.comfyui} onChange={(comfyui) => setDraft({ ...draft, comfyui })} /> : null}
       </ModalBody>
-      <ModalFooter>
-        {preset ? (
-          <IconButton size="icon-sm" variant="destructive" onClick={() => void handleDelete()} disabled={deleteMutation.isPending} label={t({ ko: '삭제', en: 'Delete' })}>
-            <Trash2 />
-          </IconButton>
-        ) : null}
+      <EditorFooter
+        onDelete={preset ? () => void handleDelete() : undefined}
+        deleting={deleteMutation.isPending}
+        onSave={() => saveMutation.mutate()}
+        canSave={canSave}
+        saving={saveMutation.isPending}
+      >
         <IconButton size="icon-sm" variant="ghost" onClick={() => downloadChatGenerationPresetFile(draft)} disabled={nameMissing} label={t({ ko: 'JSON으로 내보내기', en: 'Export as JSON' })}>
           <Download />
         </IconButton>
@@ -357,11 +374,7 @@ export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDupli
             <Copy />
           </IconButton>
         ) : null}
-        <span className="flex-1" />
-        <IconButton size="icon-sm" variant="default" onClick={() => saveMutation.mutate()} disabled={nameMissing || comfyIncomplete || saveMutation.isPending} label={t({ ko: '저장', en: 'Save' })}>
-          <Save />
-        </IconButton>
-      </ModalFooter>
+      </EditorFooter>
     </Modal>
   )
 }

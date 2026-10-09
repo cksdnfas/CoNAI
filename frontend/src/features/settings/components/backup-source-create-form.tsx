@@ -5,7 +5,7 @@ import { SettingsResourceCreateActionRow } from './settings-resource-shared'
 import { buildBackupTargetPreviewPath, type NewBackupSourceDraft } from '../settings-utils'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
-import { SettingsSwitchRow } from './settings-switch-row'
+import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { SettingsLabelTip } from './settings-label-tip'
 
 interface BackupSourceCreateFormProps {

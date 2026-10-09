@@ -8,7 +8,7 @@ import { useImageFeedSafety } from '@/features/images/components/image-list/use-
 import { useI18n } from '@/i18n'
 import { getGroupImages } from '@/lib/api-groups'
 import { getErrorMessage } from '@/lib/error-message'
-import { CollapsibleRow } from './chat-profile-sections'
+import { CollapsibleRow } from '@/components/ui/collapsible-row'
 import { useCharacterGroups } from './chat-profile-asset-slots'
 
 /** Every generated asset candidate of the character ("채팅 캐릭터/<name>/후보"), in the shared masonry and viewer. */

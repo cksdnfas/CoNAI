@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type ComponentProps, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PropsWithChildren, type ReactNode } from 'react'
 import { Dialog as DialogPrimitive } from 'radix-ui'
 import { X } from 'lucide-react'
+import { useOptionalConfirm } from './confirm-dialog'
 import { IconButton } from './icon-button'
+import { Tip } from './tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useOverlayBackClose } from './use-overlay-back-close'
@@ -13,8 +15,20 @@ interface ModalProps extends PropsWithChildren {
   headerContent?: ReactNode
   headerActions?: ReactNode
   onClose: () => void
+  /**
+   * Width step: `narrow` (35rem) for a few fields, `normal` (48rem) for one-column editors, `wide` (64rem) for editors
+   * with a side list or a table. `widthClassName` overrides it.
+   */
+  size?: ModalSize
   widthClassName?: string
   closeOnBack?: boolean
+  /**
+   * Unsaved edits: a dot after the title, and a close from the dialog itself (Esc, backdrop, back, ✕) asks before
+   * discarding them. Closing from code (after a save) never asks.
+   */
+  dirty?: boolean
+  /** Ctrl/⌘+S inside the dialog calls it; leave it out while saving is not possible. */
+  onSave?: () => void
   /**
    * `auto` fits the content. `medium` and `tall` open at a fixed height (up to 40rem / 64rem) for content that grows or
    * changes while open (sections, accordions, lists): the frame stays put, the body scrolls, and a `ModalFooter` at the
@@ -24,6 +38,10 @@ interface ModalProps extends PropsWithChildren {
   /** Reserve room for an existing desktop side panel so both surfaces remain interactive. */
   sidePanelInset?: string
 }
+
+type ModalSize = 'narrow' | 'normal' | 'wide'
+
+const SIZE_CLASS: Record<ModalSize, string> = { narrow: 'max-w-[35rem]', normal: 'max-w-3xl', wide: 'max-w-5xl' }
 
 const TABBABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'
 
@@ -82,19 +100,45 @@ function preventOutsideDismiss(event: Event) {
  * Esc closes only the top-most dialog, and only when nothing handled the keydown first (`defaultPrevented`), whether in
  * the capture phase (image editor) or in content bubble handlers (inputs that revert their draft on Esc).
  */
-function Modal({ open, title, description, headerContent, headerActions, onClose, widthClassName = 'max-w-4xl', closeOnBack = true, height = 'auto', sidePanelInset, children }: ModalProps) {
+function Modal({ open, title, description, headerContent, headerActions, onClose, size, widthClassName, closeOnBack = true, height = 'auto', dirty = false, onSave, sidePanelInset, children }: ModalProps) {
   const fixedHeight = height !== 'auto'
   const { t } = useI18n()
+  const confirm = useOptionalConfirm()
   const contentRef = useRef<HTMLDivElement | null>(null)
   const returnFocusRef = useRef<HTMLElement | null>(null)
   const pendingEscapeRef = useRef<KeyboardEvent | null>(null)
   const onCloseRef = useRef(onClose)
+  const dirtyRef = useRef(dirty)
+  const onSaveRef = useRef(onSave)
+  const askingRef = useRef(false)
 
   useEffect(() => {
     onCloseRef.current = onClose
-  }, [onClose])
+    dirtyRef.current = dirty
+    onSaveRef.current = onSave
+  }, [onClose, dirty, onSave])
 
-  useOverlayBackClose({ open, onClose, enabled: closeOnBack })
+  /** A close the person asked for: with unsaved edits it waits for "discard" (and asks only once at a time). */
+  const requestClose = useCallback(() => {
+    if (!dirtyRef.current || !confirm) {
+      onCloseRef.current()
+      return
+    }
+    if (askingRef.current) return
+    askingRef.current = true
+    void confirm({
+      title: t({ ko: '저장 안 한 변경이 있어', en: 'You have unsaved changes' }),
+      confirmLabel: t({ ko: '버리기', en: 'Discard' }),
+      cancelLabel: t({ ko: '계속 편집', en: 'Keep editing' }),
+      tone: 'destructive',
+    }).then((discard) => {
+      askingRef.current = false
+      if (discard) onCloseRef.current()
+    })
+  }, [confirm, t])
+
+  // A declined back-close stays open; the hook re-pushes its history entry.
+  useOverlayBackClose({ open, onClose: requestClose, enabled: closeOnBack })
 
   useEffect(() => {
     if (!open) {
@@ -117,7 +161,7 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
       }
 
       event.preventDefault()
-      onCloseRef.current()
+      requestClose()
     }
 
     document.addEventListener('keydown', handleKeyDown)
@@ -126,7 +170,7 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
       document.removeEventListener('keydown', handleKeyDown)
       pendingEscapeRef.current = null
     }
-  }, [open])
+  }, [open, requestClose])
 
   const handleEscapeKeyDown = useCallback((event: KeyboardEvent) => {
     // Already consumed earlier in the capture phase (e.g. the image editor clearing a selection): Radix will not dismiss either.
@@ -157,6 +201,13 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
   }, [])
 
   const handleContentKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
+      // Always keep the browser's "save page" away from an open editor; save only when it can.
+      event.preventDefault()
+      if (!event.repeat) onSaveRef.current?.()
+      return
+    }
+
     // Radix loops Tab between the first/last tabbable; Shift+Tab from the dialog container itself would otherwise leave it.
     if (event.key !== 'Tab' || !event.shiftKey || event.target !== event.currentTarget) {
       return
@@ -178,19 +229,19 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
         modal={false}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) {
-            onClose()
+            requestClose()
           }
         }}
       >
         <DialogPrimitive.Portal>
-          <div data-slot="modal" data-side-panel={sidePanelInset ? 'true' : undefined} className={cn('fixed inset-0 z-modal flex items-center justify-center bg-backdrop p-3 sm:p-4 md:p-6', sidePanelInset && 'lg:right-(--modal-side-inset)')} style={sidePanelInset ? { '--modal-side-inset': sidePanelInset } as CSSProperties : undefined} onMouseDown={onClose}>
+          <div data-slot="modal" data-side-panel={sidePanelInset ? 'true' : undefined} className={cn('fixed inset-0 z-modal flex items-center justify-center bg-backdrop p-3 sm:p-4 md:p-6', sidePanelInset && 'lg:right-(--modal-side-inset)')} style={sidePanelInset ? { '--modal-side-inset': sidePanelInset } as CSSProperties : undefined} onMouseDown={requestClose}>
             <DialogPrimitive.Content
               ref={contentRef}
               aria-modal={!sidePanelInset}
               aria-label={hasTitle ? undefined : t({ ko: '대화 상자', en: 'Dialog' })}
               {...(description ? {} : { 'aria-describedby': undefined })}
               data-height={height}
-              className={cn('mx-auto flex max-h-full w-full flex-col rounded-sm bg-background shadow-elevation-3 outline-none', !fixedHeight && 'overflow-y-auto', height === 'medium' && 'h-full max-h-[min(100%,40rem)]', height === 'tall' && 'h-full max-h-[min(100%,64rem)]', widthClassName)}
+              className={cn('mx-auto flex max-h-full w-full flex-col rounded-sm bg-background shadow-elevation-3 outline-none', !fixedHeight && 'overflow-y-auto', height === 'medium' && 'h-full max-h-[min(100%,40rem)]', height === 'tall' && 'h-full max-h-[min(100%,64rem)]', widthClassName ?? (size ? SIZE_CLASS[size] : 'max-w-4xl'))}
               onMouseDown={(event) => event.stopPropagation()}
               onKeyDown={handleContentKeyDown}
               onEscapeKeyDown={handleEscapeKeyDown}
@@ -201,7 +252,14 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
               <div className="sticky top-0 z-10 shrink-0 bg-background/96 px-4 pt-4 pb-2 backdrop-blur md:px-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1 space-y-1">
-                    <DialogPrimitive.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">{title}</DialogPrimitive.Title>
+                    <DialogPrimitive.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
+                      {title}
+                      {dirty ? (
+                        <Tip content={t({ ko: '저장 안 한 변경', en: 'Unsaved changes' })}>
+                          <span role="img" aria-label={t({ ko: '저장 안 한 변경', en: 'Unsaved changes' })} className="ml-2 inline-block size-1.5 rounded-full bg-primary align-middle" />
+                        </Tip>
+                      ) : null}
+                    </DialogPrimitive.Title>
                     {description ? (
                       <DialogPrimitive.Description asChild>
                         <div className="text-sm text-muted-foreground">{description}</div>
@@ -210,7 +268,7 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
                   </div>
 
                   {headerActions}
-                  <IconButton size="icon-sm" variant="secondary" className="shrink-0" onClick={onClose} label={t({ ko: '닫기', en: 'Close' })}>
+                  <IconButton size="icon-sm" variant="secondary" className="shrink-0" onClick={requestClose} label={t({ ko: '닫기', en: 'Close' })}>
                     <X className="h-4 w-4" />
                   </IconButton>
                 </div>

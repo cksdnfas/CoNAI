@@ -1,5 +1,6 @@
 import type { useI18n } from '@/i18n'
 import type { ChatScope, ChatToolInfo } from '@/lib/api-codex-chat'
+import { matchesSearch } from '@/lib/text-search'
 
 type TranslateFn = ReturnType<typeof useI18n>['t']
 type Copy = { ko: string; en: string }
@@ -160,6 +161,8 @@ export type ChatToolEntry = {
   label: string
   /** Tooltip, in the UI language (English falls back to the server's own description). */
   description: string
+  /** Name, labels and descriptions in both languages, so a search finds a tool in either. */
+  search: string[]
 }
 
 export type ChatToolGroup = { id: ChatToolGroupId; scope: ChatScope; label: string; tools: ChatToolEntry[] }
@@ -174,9 +177,10 @@ export function groupChatTools(tools: ChatToolInfo[], t: TranslateFn): ChatToolG
     const entry = TOOLS[tool.name]
     const label = entry ? t(entry.label) : tool.name
     const description = entry ? t({ ko: entry.ko, en: tool.description || entry.label.en }) : tool.description
+    const search = entry ? [tool.name, entry.label.ko, entry.label.en, entry.ko, tool.description] : [tool.name, tool.description]
     const target = entry && groups.get(entry.group)?.scope === tool.scope ? groups.get(entry.group) : null
     if (target) {
-      target.tools.push({ name: tool.name, scope: tool.scope, label, description })
+      target.tools.push({ name: tool.name, scope: tool.scope, label, description, search })
       continue
     }
     let fallback = other.get(tool.scope)
@@ -184,7 +188,7 @@ export function groupChatTools(tools: ChatToolInfo[], t: TranslateFn): ChatToolG
       fallback = { id: 'other', scope: tool.scope, label: t({ ko: '기타', en: 'Other' }), tools: [] }
       other.set(tool.scope, fallback)
     }
-    fallback.tools.push({ name: tool.name, scope: tool.scope, label, description })
+    fallback.tools.push({ name: tool.name, scope: tool.scope, label, description, search })
   }
   const ordered: ChatToolGroup[] = []
   for (const scope of ['read', 'generate', 'organize', 'configure'] as ChatScope[]) {
@@ -199,4 +203,62 @@ export function groupChatTools(tools: ChatToolInfo[], t: TranslateFn): ChatToolG
 export function chatToolLabel(name: string, t: TranslateFn) {
   const entry = TOOLS[name]
   return entry ? t(entry.label) : name
+}
+
+/** Whether a picker search finds this tool (Korean-aware: spacing, 초성 and half-typed syllables). */
+export function matchesChatTool(tool: Pick<ChatToolEntry, 'search'>, query: string) {
+  return matchesSearch(tool.search, query)
+}
+
+/** One tool, or a `prefix*` pattern, a judge item can offer or withhold. */
+export type JudgeToolEntry = Pick<ChatToolEntry, 'name' | 'label' | 'description' | 'search'> & { pattern: boolean }
+export type JudgeToolGroup = { id: string; label: string; tools: JudgeToolEntry[] }
+
+type FixedTool = { name: string; label: Copy; description: Copy }
+
+/** The chat's own tools: offered by the chat itself, not by a scope, so the server's tool list never has them. */
+const CHAT_TOOLS: FixedTool[] = [
+  { name: 'save_lore', label: { ko: '로어 저장 제안', en: 'Propose lore entry' }, description: { ko: '대화에서 나온 설정을 이 채팅 로어북에 남기자고 제안해. 저장은 네가 해.', en: "Proposes an entry for this chat's lorebook; you save it." } },
+  { name: 'read_lore_file', label: { ko: '로어 자료 읽기', en: 'Read lore file' }, description: { ko: '로어북 항목에 연결된 텍스트 파일을 읽어.', en: 'Reads the text file a lorebook entry links.' } },
+  { name: 'chat_reply_to', label: { ko: '답장 대상 지정', en: 'Set reply target' }, description: { ko: '답변이 인용할 메시지와 받을 멤버를 정해.', en: 'Sets the quote and recipients of the reply.' } },
+  { name: 'room_call_member', label: { ko: '멤버 부르기', en: 'Call members' }, description: { ko: '그룹 채팅에서 다른 멤버가 이어서 답하게 불러.', en: 'Asks other group members to answer next.' } },
+  { name: 'room_history_search', label: { ko: '대화 기록 검색', en: 'Search room history' }, description: { ko: '그룹 채팅의 이전 메시지를 글로 찾아.', en: 'Searches earlier messages of the group room.' } },
+  { name: 'room_history_read', label: { ko: '대화 기록 읽기', en: 'Read room history' }, description: { ko: '그룹 채팅에서 메시지 하나 주변의 대화를 읽어.', en: 'Reads the group conversation around one message.' } },
+  { name: 'task_propose', label: { ko: '작업 계획 제안', en: 'Propose task' }, description: { ko: '여러 턴이 걸리는 작업을 계획 카드로 제안해.', en: 'Proposes a multi-step task as a plan card.' } },
+  { name: 'task_status', label: { ko: '작업 상태 읽기', en: 'Task status' }, description: { ko: '진행 중인 작업의 단계와 상태를 읽어.', en: "Reads the current task's steps and status." } },
+  { name: 'task_update', label: { ko: '작업 단계 표시', en: 'Update task step' }, description: { ko: '작업 단계 하나를 진행 중·완료·건너뜀으로 표시해.', en: 'Marks one task step doing, done or skipped.' } },
+  { name: 'task_wait', label: { ko: '작업 잠시 멈추기', en: 'Pause task' }, description: { ko: '승인·생성·답을 기다리는 동안 작업을 멈춰.', en: 'Pauses the task until something outside the reply happens.' } },
+  { name: 'task_finish', label: { ko: '작업 끝내기', en: 'Finish task' }, description: { ko: '작업을 완료나 실패로 끝내.', en: 'Ends the task as done or failed.' } },
+  { name: 'get_proposal_status', label: { ko: '카드 처리 결과 읽기', en: 'Proposal status' }, description: { ko: '제안 카드를 저장했는지, 넘겼는지 읽어.', en: 'Reads what happened to review cards.' } },
+]
+
+/** Tools whose names vary, picked as a pattern: one generate_image tool per preset a profile links. */
+const IMAGE_GEN_PATTERNS: FixedTool[] = [
+  { name: 'generate_image*', label: { ko: '생성 프리셋 전부', en: 'Every generation preset' }, description: { ko: '프로필에 연결된 생성 프리셋 도구 전부 (generate_image, generate_image_2…).', en: 'Every generation preset tool a profile links (generate_image, generate_image_2…).' } },
+  { name: 'generate_comfyui*', label: { ko: 'ComfyUI 생성 전부', en: 'Every ComfyUI generation' }, description: { ko: 'ComfyUI로 바로 생성하는 도구 전부.', en: 'Every direct ComfyUI generation tool.' } },
+]
+
+function fixedEntry(tool: FixedTool, t: TranslateFn): JudgeToolEntry {
+  return { name: tool.name, label: t(tool.label), description: t(tool.description), search: [tool.name, tool.label.ko, tool.label.en, tool.description.ko, tool.description.en], pattern: tool.name.endsWith('*') }
+}
+
+/**
+ * What a judge item can steer: the chat's own tools first, then image generation led by its patterns, then every
+ * other group of the server's tools. A group label that repeats under another scope gets the scope added.
+ */
+export function judgeToolGroups(groups: ChatToolGroup[], t: TranslateFn, scopeLabel: (scope: ChatScope) => string): JudgeToolGroup[] {
+  const repeated = new Set(groups.map((group) => group.label).filter((label, index, labels) => labels.indexOf(label) !== index))
+  const serverGroups = groups.map((group): JudgeToolGroup => ({
+    id: `${group.scope}:${group.id}`,
+    label: repeated.has(group.label) ? `${group.label} · ${scopeLabel(group.scope)}` : group.label,
+    tools: [
+      ...(group.id === 'image-gen' ? IMAGE_GEN_PATTERNS.map((tool) => fixedEntry(tool, t)) : []),
+      ...group.tools.map((tool) => ({ name: tool.name, label: tool.label, description: tool.description, search: tool.search, pattern: false })),
+    ],
+  }))
+  return [
+    { id: 'chat', label: t({ ko: '채팅', en: 'Chat' }), tools: CHAT_TOOLS.map((tool) => fixedEntry(tool, t)) },
+    ...serverGroups.filter((group) => group.id === 'generate:image-gen'),
+    ...serverGroups.filter((group) => group.id !== 'generate:image-gen'),
+  ]
 }

@@ -1,13 +1,14 @@
-import { createElement, useEffect, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from 'react'
+import { createElement, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Ban, Eye, EyeOff, Flag, GripVertical, Pencil, Plus, RotateCcw, Save, Trash2, Users } from 'lucide-react'
+import { Ban, Eye, EyeOff, Flag, GripVertical, Pencil, Plus, RotateCcw, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { ResourceRow } from '@/components/ui/resource-row'
 import { Input } from '@/components/ui/input'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
@@ -303,10 +304,11 @@ export function ChatFlagEditorModal({ open, flag, onClose }: { open: boolean; fl
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState({ icon: '', name: '', content: '' })
+  const saved = useMemo(() => ({ icon: flag?.icon ?? '', name: flag?.name ?? '', content: flag?.content ?? '' }), [flag])
 
   useEffect(() => {
-    if (open) setDraft({ icon: flag?.icon ?? '', name: flag?.name ?? '', content: flag?.content ?? '' })
-  }, [flag, open])
+    if (open) setDraft(saved)
+  }, [saved, open])
 
   const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' })
   const saveMutation = useMutation({
@@ -340,10 +342,18 @@ export function ChatFlagEditorModal({ open, flag, onClose }: { open: boolean; fl
     })
     if (confirmed) deleteMutation.mutate()
   }
-  const canSave = draft.name.trim().length > 0 && draft.content.trim().length > 0 && !saveMutation.isPending
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved)
+  const canSave = draft.name.trim().length > 0 && draft.content.trim().length > 0 && !saveMutation.isPending && (dirty || !flag)
 
   return (
-    <Modal open={open} onClose={onClose} title={flag ? t({ ko: '플래그 편집', en: 'Edit flag' }) : t({ ko: '플래그 추가', en: 'Add flag' })} widthClassName="max-w-lg">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={flag ? t({ ko: '플래그 편집', en: 'Edit flag' }) : t({ ko: '플래그 추가', en: 'Add flag' })}
+      size="narrow"
+      dirty={dirty}
+      onSave={canSave ? () => saveMutation.mutate() : undefined}
+    >
       <ModalBody className="space-y-4">
         <div className="flex items-end gap-3">
           <ChatFlagIconPicker value={draft.icon} name={draft.name} onChange={(icon) => setDraft((current) => ({ ...current, icon }))} />
@@ -362,16 +372,20 @@ export function ChatFlagEditorModal({ open, flag, onClose }: { open: boolean; fl
           />
         </Field>
       </ModalBody>
-      <ModalFooter>
+      <EditorFooter
+        onDelete={flag && !ownCopy ? () => void handleDelete() : undefined}
+        deleting={deleteMutation.isPending}
+        onSave={() => saveMutation.mutate()}
+        canSave={canSave}
+        saving={saveMutation.isPending}
+      >
         {flag && ownCopy ? (
           <IconButton size="icon-sm" variant="ghost" disabled={deleteMutation.isPending || flag.hidden} onClick={() => void handleDelete()} label={t({ ko: '나한테서 숨기기', en: 'Hide for me' })}><EyeOff /></IconButton>
-        ) : flag ? <IconButton size="icon-sm" variant="destructive" disabled={deleteMutation.isPending} onClick={() => void handleDelete()} label={t({ ko: '삭제', en: 'Delete' })}><Trash2 /></IconButton> : null}
+        ) : null}
         {flag && ownCopy && flag.edited ? (
           <IconButton size="icon-sm" variant="ghost" disabled={resetMutation.isPending} onClick={() => resetMutation.mutate()} label={t({ ko: '관리자 원본으로 되돌리기', en: 'Back to the original' })}><RotateCcw /></IconButton>
         ) : null}
-        <span className="flex-1" />
-        <IconButton size="icon-sm" variant="default" disabled={!canSave} onClick={() => saveMutation.mutate()} label={t({ ko: '저장', en: 'Save' })}><Save /></IconButton>
-      </ModalFooter>
+      </EditorFooter>
     </Modal>
   )
 }
@@ -485,15 +499,13 @@ export function ChatFlagManagerModal({ open, onClose }: { open: boolean; onClose
         open={open}
         onClose={onClose}
         title={t({ ko: '플래그 관리', en: 'Manage flags' })}
-        widthClassName="max-w-xl" height="medium"
-        headerContent={<IconButton size="icon-sm" variant="ghost" disabled={full} onClick={() => setEditor({ flag: null })} label={t({ ko: '플래그 추가', en: 'Add flag' })}><Plus /></IconButton>}
+        size="narrow"
+        height="medium"
+        headerActions={<IconButton size="icon-sm" variant="ghost" disabled={full} onClick={() => setEditor({ flag: null })} label={t({ ko: '플래그 추가', en: 'Add flag' })}><Plus /></IconButton>}
       >
         <ModalBody>
           {flagsQuery.isSuccess && flags.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-4 text-xs text-muted-foreground">
-              {t({ ko: '아직 플래그가 없어.', en: 'No flags yet.' })}
-              <IconButton size="icon-sm" variant="secondary" label={t({ ko: '플래그 추가', en: 'Add flag' })} onClick={() => setEditor({ flag: null })}><Plus /></IconButton>
-            </div>
+            <p className="py-4 text-center text-xs text-muted-foreground">{t({ ko: '아직 플래그가 없어.', en: 'No flags yet.' })}</p>
           ) : (
             <ChatFlagRows flags={flags} onEdit={(flag) => setEditor({ flag })} />
           )}

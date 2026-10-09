@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { FileText, FlaskConical, LoaderCircle, Plug, Save, Trash2, X } from 'lucide-react'
+import { FileText, FlaskConical, LoaderCircle, Plug } from 'lucide-react'
 import { Chip, ToggleChip } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
 import { IconButton } from '@/components/ui/icon-button'
@@ -22,10 +22,14 @@ import type { LlmPresetRecord } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { EditorFooter } from '@/components/ui/editor-footer'
+import { EditorGroup } from '@/components/ui/editor-group'
+import { Modal, ModalBody } from '@/components/ui/modal'
+import { SettingRow } from '@/components/ui/setting-row'
+import { Switch } from '@/components/ui/switch'
 import { Tip } from '@/components/ui/tooltip'
 import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
-import { SettingsSwitchRow } from './settings-switch-row'
+import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { ConnectionModelChecklist, type ConnectionModelsDraft } from './llm-connection-models'
 import {
   LLM_PRESET_SECTIONS,
@@ -122,49 +126,39 @@ function LlmConnectionFormFields({
   const { t } = useI18n()
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <Field label={t('llmConnectionsTab.connectionName')} className="md:col-span-2">
-        <Input
-          variant="settings"
-          value={draft.providerName}
-          onChange={(event) => onChange({ providerName: event.target.value, displayName: event.target.value })}
-          placeholder={t({ ko: '예: lmstudio-local', en: 'e.g. lmstudio-local' })}
-          readOnly={mode === 'edit'}
-          disabled={mode === 'edit'}
-        />
-      </Field>
+    <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field label={t('llmConnectionsTab.connectionName')}>
+          <Input
+            variant="settings"
+            value={draft.providerName}
+            onChange={(event) => onChange({ providerName: event.target.value, displayName: event.target.value })}
+            placeholder={t({ ko: '예: lmstudio-local', en: 'e.g. lmstudio-local' })}
+            readOnly={mode === 'edit'}
+            disabled={mode === 'edit'}
+          />
+        </Field>
 
-      <Field label={t('llmConnectionsTab.connectionType')}>
-        <Select
-          variant="settings"
-          value={draft.providerType}
-          onChange={(event) => {
-            const providerType = event.target.value as ExternalApiProviderType
-            // A new judge connection starts on TypeSafe's own address and model.
-            const typesafe = providerType === 'decision_typesafe' ? TYPESAFE_ENDPOINTS[0] : null
-            onChange({ providerType, ...(typesafe && !draft.baseUrl.trim() ? { baseUrl: typesafe.baseUrl } : {}) })
-            if (typesafe) onEndpointModel(typesafe.model)
-          }}
-        >
-          {LLM_PROVIDER_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>{t(option.label)}</option>
-          ))}
-        </Select>
-      </Field>
+        <Field label={t('llmConnectionsTab.connectionType')}>
+          <Select
+            variant="settings"
+            value={draft.providerType}
+            onChange={(event) => {
+              const providerType = event.target.value as ExternalApiProviderType
+              // A new judge connection starts on TypeSafe's own address and model.
+              const typesafe = providerType === 'decision_typesafe' ? TYPESAFE_ENDPOINTS[0] : null
+              onChange({ providerType, ...(typesafe && !draft.baseUrl.trim() ? { baseUrl: typesafe.baseUrl } : {}) })
+              if (typesafe) onEndpointModel(typesafe.model)
+            }}
+          >
+            {LLM_PROVIDER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{t(option.label)}</option>
+            ))}
+          </Select>
+        </Field>
+      </div>
 
-      <Field label={t({ ko: '요청 제한 시간 (초)', en: 'Request time limit (seconds)' })}>
-        <NumberStepperInput
-          variant="settings"
-          allowEmpty
-          step={30}
-          min={5}
-          value={draft.timeoutSeconds}
-          onValueCommit={(value) => onChange({ timeoutSeconds: value })}
-          placeholder={draft.providerType === 'decision_typesafe' ? t({ ko: '기본 20', en: 'Default 20' }) : t({ ko: '기본 600', en: 'Default 600' })}
-        />
-      </Field>
-
-      <Field label={t({ ko: '기본 URL', en: 'Base URL' })} className="md:col-span-2">
+      <Field label={t({ ko: '기본 URL', en: 'Base URL' })}>
         <div className="flex items-center gap-2">
           <Input
             variant="settings"
@@ -202,46 +196,60 @@ function LlmConnectionFormFields({
         />
       </Field>
 
-      {draft.providerType === 'decision_typesafe' ? null : (<>
-      <Field label={t({ ko: '동시 요청 수', en: 'Concurrent requests' })}>
-        <NumberStepperInput
-          variant="settings"
-          step={1}
-          min={1}
-          max={8}
-          value={draft.concurrentRequests}
-          onValueCommit={(value) => onChange({ concurrentRequests: value })}
-          aria-label={t({ ko: '동시 요청 수', en: 'Concurrent requests' })}
-        />
-      </Field>
-
-      <Field label={t({ ko: '생각 끄는 방법', en: 'Turning thinking off' })} className="md:col-span-2">
-        <Select
-          variant="settings"
-          value={draft.thinkingSwitch}
-          onChange={(event) => onChange({ thinkingSwitch: event.target.value as LlmThinkingSwitch })}
-        >
-          <option value="reasoning_effort">reasoning_effort: none</option>
-          <option value="enable_thinking">enable_thinking: false</option>
-          <option value="none">{t({ ko: '보내지 않음', en: 'Send nothing' })}</option>
-        </Select>
-      </Field>
-      </>)}
-
-      {draft.providerType === 'llm_openai_compatible' ? (
-        <SettingsSwitchRow
-          className="md:col-span-2"
-          checked={draft.promptCacheMarks}
-          onCheckedChange={(checked) => onChange({ promptCacheMarks: checked })}
-          label={t({ ko: '프롬프트 캐시 표시 (Anthropic 경유)', en: 'Prompt cache marks (Anthropic via proxy)' })}
-        />
-      ) : null}
-      <SettingsSwitchRow
-        className="md:col-span-2"
-        checked={draft.isEnabled}
-        onCheckedChange={(checked) => onChange({ isEnabled: checked })}
-        label={t({ ko: '연결 활성화', en: 'Enable connection' })}
-      />
+      <EditorGroup label={t({ ko: '요청', en: 'Requests' })}>
+        <div>
+          <SettingRow label={t({ ko: '제한 시간 (초)', en: 'Time limit (s)' })}>
+            <NumberStepperInput
+              variant="settings"
+              className="w-36"
+              allowEmpty
+              step={30}
+              min={5}
+              value={draft.timeoutSeconds}
+              onValueCommit={(value) => onChange({ timeoutSeconds: value })}
+              aria-label={t({ ko: '제한 시간 (초)', en: 'Time limit (s)' })}
+              placeholder={draft.providerType === 'decision_typesafe' ? t({ ko: '기본 20', en: 'Default 20' }) : t({ ko: '기본 600', en: 'Default 600' })}
+            />
+          </SettingRow>
+          {draft.providerType === 'decision_typesafe' ? null : (
+            <>
+              <SettingRow label={t({ ko: '동시 요청', en: 'Concurrent requests' })}>
+                <NumberStepperInput
+                  variant="settings"
+                  className="w-36"
+                  step={1}
+                  min={1}
+                  max={8}
+                  value={draft.concurrentRequests}
+                  onValueCommit={(value) => onChange({ concurrentRequests: value })}
+                  aria-label={t({ ko: '동시 요청', en: 'Concurrent requests' })}
+                />
+              </SettingRow>
+              <SettingRow label={t({ ko: '생각 끄는 방법', en: 'Turning thinking off' })}>
+                <Select
+                  variant="settings"
+                  className="w-56 font-mono text-xs"
+                  aria-label={t({ ko: '생각 끄는 방법', en: 'Turning thinking off' })}
+                  value={draft.thinkingSwitch}
+                  onChange={(event) => onChange({ thinkingSwitch: event.target.value as LlmThinkingSwitch })}
+                >
+                  <option value="reasoning_effort">reasoning_effort: none</option>
+                  <option value="enable_thinking">enable_thinking: false</option>
+                  <option value="none">{t({ ko: '보내지 않음', en: 'Send nothing' })}</option>
+                </Select>
+              </SettingRow>
+            </>
+          )}
+          {draft.providerType === 'llm_openai_compatible' ? (
+            <SettingsSwitchRow
+              checked={draft.promptCacheMarks}
+              onCheckedChange={(checked) => onChange({ promptCacheMarks: checked })}
+              label={t({ ko: '프롬프트 캐시 표시', en: 'Prompt cache marks' })}
+              info={t({ ko: 'Anthropic 모델을 거치는 프록시일 때 켜.', en: 'Turn on for a proxy in front of Anthropic models.' })}
+            />
+          ) : null}
+        </div>
+      </EditorGroup>
     </div>
   )
 }
@@ -341,6 +349,7 @@ export function LlmConnectionEditorModal({
     if (modelsLoadedFor.current === key || (provider && !slotsQuery.isSuccess)) return
     modelsLoadedFor.current = key
     modelsTouched.current = false
+    setModelsChanged(false)
     setModelDraft({ models: saved.map((slot) => slot.model), defaultModel: saved.find((slot) => slot.isDefault)?.model ?? '' })
     // Runs once per opened connection, when its rows are known.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -349,8 +358,10 @@ export function LlmConnectionEditorModal({
     if (!isOpen || models.length === 0 || modelsTouched.current) return
     setModelDraft((current) => (current.models.length > 0 ? current : { ...current, models: [models[0]] }))
   }, [isOpen, models])
+  const [modelsChanged, setModelsChanged] = useState(false)
   const changeModels = (next: ConnectionModelsDraft) => {
     modelsTouched.current = true
+    setModelsChanged(true)
     setModelDraft(next)
   }
   const addEndpointModel = (model: string) => setModelDraft((current) => (current.models.includes(model) ? current : { ...current, models: [...current.models, model] }))
@@ -458,14 +469,27 @@ export function LlmConnectionEditorModal({
   })
 
   const isSaving = createMutation.isPending || updateMutation.isPending
-  const canSave = draft.providerName.trim().length > 0 && draft.baseUrl.trim().length > 0
+  const savedDraft = useMemo(() => (provider ? buildProviderDraft(provider) : buildEmptyDraft()), [provider])
+  const dirty = isOpen && (modelsChanged || JSON.stringify(draft) !== JSON.stringify(savedDraft))
+  const canSave = draft.providerName.trim().length > 0 && draft.baseUrl.trim().length > 0 && (dirty || !isEditMode) && !isSaving
+  const save = () => (isEditMode ? updateMutation.mutate() : createMutation.mutate())
 
   return (
     <Modal
       open={isOpen}
       onClose={onClose}
       title={isEditMode ? t('llmConnectionsTab.editLlmConnection') : t('llmConnectionsTab.addLlmConnection')}
-      widthClassName="max-w-3xl" height="tall"
+      size="normal"
+      height="tall"
+      dirty={dirty}
+      onSave={canSave ? save : undefined}
+      headerActions={(
+        <Tip content={draft.isEnabled ? t({ ko: '사용 중', en: 'On' }) : t({ ko: '꺼짐', en: 'Off' })}>
+          <span className="inline-flex px-1.5">
+            <Switch checked={draft.isEnabled} onCheckedChange={(isEnabled) => setDraft((current) => ({ ...current, isEnabled }))} aria-label={t({ ko: '연결 사용', en: 'Connection on' })} />
+          </span>
+        </Tip>
+      )}
     >
       <ModalBody>
         <div className="space-y-4">
@@ -488,54 +512,35 @@ export function LlmConnectionEditorModal({
         </div>
       </ModalBody>
 
-      <ModalFooter>
+      <EditorFooter
+        onDelete={provider ? () => void (async () => {
+          const confirmed = await confirm({
+            title: t({ ko: '연결 삭제', en: 'Delete connection' }),
+            description: t({ ko: "연결 '{providerName}' 을(를) 삭제할까?", en: "Delete connection '{providerName}'?" }, { providerName: provider.provider_name }),
+            confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+            tone: 'destructive',
+          })
+          if (confirmed) deleteMutation.mutate()
+        })() : undefined}
+        deleteLabel={t('llmConnectionsTab.deleteConnection')}
+        deleting={deleteMutation.isPending}
+        onSave={save}
+        canSave={canSave}
+        saving={isSaving}
+        saveLabel={isEditMode ? t('llmConnectionsTab.saveConnection') : t('llmConnectionsTab.createAndSaveConnection')}
+      >
         {isEditMode ? (
-          <>
-            <IconButton
-              size="icon-sm"
-              variant="secondary"
-              onClick={() => testMutation.mutate()}
-              disabled={testMutation.isPending || isSaving}
-              label={t('llmConnectionsTab.testConnection')}
-            >
-              {testMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
-            </IconButton>
-            <IconButton
-              size="icon-sm"
-              variant="destructive"
-              onClick={async () => {
-                if (!provider) {
-                  return
-                }
-                const confirmed = await confirm({
-                  title: t({ ko: '연결 삭제', en: 'Delete connection' }),
-                  description: t({ ko: "연결 '{providerName}' 을(를) 삭제할까?", en: "Delete connection '{providerName}'?" }, { providerName: provider.provider_name }),
-                  confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-                  tone: 'destructive',
-                })
-                if (confirmed) {
-                  deleteMutation.mutate()
-                }
-              }}
-              disabled={deleteMutation.isPending || isSaving}
-              label={t('llmConnectionsTab.deleteConnection')}
-            >
-              {deleteMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            </IconButton>
-          </>
+          <IconButton
+            size="icon-sm"
+            variant="ghost"
+            onClick={() => testMutation.mutate()}
+            disabled={testMutation.isPending || isSaving}
+            label={t('llmConnectionsTab.testConnection')}
+          >
+            {testMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
+          </IconButton>
         ) : null}
-        <IconButton size="icon-sm" variant="secondary" onClick={onClose} disabled={isSaving} label={t({ ko: '취소', en: 'Cancel' })}>
-          <X className="h-4 w-4" />
-        </IconButton>
-        <IconButton
-          size="icon-sm"
-          onClick={() => (isEditMode ? updateMutation.mutate() : createMutation.mutate())}
-          disabled={!canSave || isSaving}
-          label={isEditMode ? t('llmConnectionsTab.saveConnection') : t('llmConnectionsTab.createAndSaveConnection')}
-        >
-          {isSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-        </IconButton>
-      </ModalFooter>
+      </EditorFooter>
     </Modal>
   )
 }
@@ -572,14 +577,18 @@ export function LlmPresetEditorModal({
     setDraft(preset ? buildPresetDraft(preset) : buildEmptyPresetDraft(presetType))
   }, [isOpen, preset, presetType])
 
-  const canSave = draft.name.trim().length > 0
+  const savedDraft = useMemo(() => (preset ? buildPresetDraft(preset) : buildEmptyPresetDraft(presetType)), [preset, presetType])
+  const dirty = isOpen && JSON.stringify(draft) !== JSON.stringify(savedDraft)
+  const canSave = draft.name.trim().length > 0 && (dirty || !isEditMode) && !isSaving && !isDeleting
 
   return (
     <Modal
       open={isOpen}
       onClose={onClose}
       title={isEditMode ? t({ ko: '{heading} 수정', en: 'Edit {heading}' }, { heading: t(section.heading) }) : t({ ko: '{heading} 추가', en: 'Add {heading}' }, { heading: t(section.heading) })}
-      widthClassName="max-w-4xl"
+      size="narrow"
+      dirty={dirty}
+      onSave={canSave ? () => void onSave(draft) : undefined}
     >
       <ModalBody>
         <LlmPresetFormFields
@@ -589,40 +598,23 @@ export function LlmPresetEditorModal({
         />
       </ModalBody>
 
-      <ModalFooter>
-        {preset ? (
-          <IconButton
-            size="icon-sm"
-            variant="destructive"
-            disabled={isSaving || isDeleting}
-            onClick={async () => {
-              const confirmed = await confirm({
-                title: t({ ko: '프리셋 삭제', en: 'Delete preset' }),
-                description: t({ ko: "프리셋 '{presetName}' 을(를) 삭제할까?", en: "Delete preset '{presetName}'?" }, { presetName: preset.name }),
-                confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-                tone: 'destructive',
-              })
-              if (confirmed) {
-                void onDelete(preset)
-              }
-            }}
-            label={t('llmConnectionsTab.deletePreset')}
-          >
-            {isDeleting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-          </IconButton>
-        ) : null}
-        <IconButton size="icon-sm" variant="secondary" onClick={onClose} disabled={isSaving || isDeleting} label={t({ ko: '취소', en: 'Cancel' })}>
-          <X className="h-4 w-4" />
-        </IconButton>
-        <IconButton
-          size="icon-sm"
-          onClick={() => void onSave(draft)}
-          disabled={!canSave || isSaving || isDeleting}
-          label={preset ? t('llmConnectionsTab.savePreset') : t({ ko: '{fieldLabel} 저장', en: 'Save {fieldLabel}' }, { fieldLabel: t(section.fieldLabel) })}
-        >
-          {isSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-        </IconButton>
-      </ModalFooter>
+      <EditorFooter
+        onDelete={preset ? () => void (async () => {
+          const confirmed = await confirm({
+            title: t({ ko: '프리셋 삭제', en: 'Delete preset' }),
+            description: t({ ko: "프리셋 '{presetName}' 을(를) 삭제할까?", en: "Delete preset '{presetName}'?" }, { presetName: preset.name }),
+            confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+            tone: 'destructive',
+          })
+          if (confirmed) void onDelete(preset)
+        })() : undefined}
+        deleteLabel={t('llmConnectionsTab.deletePreset')}
+        deleting={isDeleting}
+        onSave={() => void onSave(draft)}
+        canSave={canSave}
+        saving={isSaving}
+        saveLabel={preset ? t('llmConnectionsTab.savePreset') : t({ ko: '{fieldLabel} 저장', en: 'Save {fieldLabel}' }, { fieldLabel: t(section.fieldLabel) })}
+      />
     </Modal>
   )
 }

@@ -4,7 +4,8 @@ import { Field } from '@/components/ui/field'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useI18n } from '@/i18n'
 import type { ChatLorebook, ChatProfileDefaults } from '@/lib/api-codex-chat'
-import { EditorGroup, numberOrNull, SwitchLine, type Draft, type PatchDraft } from './chat-profile-editor-fields'
+import { numberOrNull, SwitchLine, type Draft, type PatchDraft } from './chat-profile-editor-fields'
+import { EditorGroup } from '@/components/ui/editor-group'
 
 /**
  * What the model is given from before: how much of the conversation, and the lorebooks with how much of them.

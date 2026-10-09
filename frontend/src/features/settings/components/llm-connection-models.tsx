@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link2, LoaderCircle, Lock, Plus, RefreshCw, Save, Star, Trash2, X } from 'lucide-react'
+import { Link2, LoaderCircle, Lock, Plus, RefreshCw, Save, Star, Trash2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
+import { EditorGroup } from '@/components/ui/editor-group'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -142,7 +143,14 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
   const busy = saveMutation.isPending || deleteMutation.isPending
 
   return (
-    <Modal open={slot !== null} onClose={onClose} title={slot ? slot.providerLabel : ''} widthClassName="max-w-md">
+    <Modal
+      open={slot !== null}
+      onClose={onClose}
+      title={slot ? slot.providerLabel : ''}
+      size="narrow"
+      dirty={slot !== null && model.trim() !== slot.model}
+      onSave={model.trim() && model.trim() !== slot?.model && !busy ? () => saveMutation.mutate() : undefined}
+    >
       <ModalBody>
         <Field
           label={t({ ko: '모델', en: 'Model' })}
@@ -151,17 +159,16 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
           <ConnectionModelSelect value={model} models={modelsQuery.data?.models ?? EMPTY_MODELS} defaultModel={slot?.model ?? null} onChange={setModel} />
         </Field>
       </ModalBody>
-      <ModalFooter>
+      {/* EditorFooter's shape; the delete keeps its own tooltip listing what uses the model. */}
+      <ModalFooter className="mt-4 gap-1 border-t border-line pt-3">
         <Tip content={used ? <span className="whitespace-pre-line">{`${t({ ko: '쓰는 곳이 있어서 지울 수 없어', en: 'In use, so it cannot be deleted' })}\n${lines.join('\n')}`}</span> : null}>
           <span>
-            <IconButton size="icon-sm" variant="destructive" disabled={used || busy} onClick={() => deleteMutation.mutate()} label={t({ ko: '모델 삭제', en: 'Delete model' })}>
+            <IconButton size="icon-sm" variant="destructive-ghost" disabled={used || busy} onClick={() => deleteMutation.mutate()} label={t({ ko: '모델 삭제', en: 'Delete model' })}>
               {deleteMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
             </IconButton>
           </span>
         </Tip>
-        <IconButton size="icon-sm" variant="secondary" onClick={onClose} disabled={busy} label={t({ ko: '취소', en: 'Cancel' })}>
-          <X className="h-4 w-4" />
-        </IconButton>
+        <span className="flex-1" />
         <IconButton size="icon-sm" onClick={() => saveMutation.mutate()} disabled={!model.trim() || model.trim() === slot?.model || busy} label={t({ ko: '저장', en: 'Save' })}>
           {saveMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
         </IconButton>
@@ -204,14 +211,15 @@ export function ConnectionModelChecklist({ value, listed, saved, loading, canSta
   }
 
   return (
-    <div className="space-y-1 border-t border-line pt-3">
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold text-muted-foreground">{t({ ko: '모델', en: 'Models' })}</span>
-        <span className="text-xs text-muted-foreground tabular-nums">{all.length > 0 ? `${value.models.length} / ${all.length}` : null}</span>
-        <IconButton size="icon-sm" variant="ghost" className="ml-auto" onClick={onRefresh} disabled={loading} label={t({ ko: '서버 목록 다시 읽기', en: 'Reload the server list' })}>
+    <EditorGroup
+      label={all.length > 0 ? `${t({ ko: '모델', en: 'Models' })} ${value.models.length} / ${all.length}` : t({ ko: '모델', en: 'Models' })}
+      actions={(
+        <IconButton size="icon-sm" variant="ghost" onClick={onRefresh} disabled={loading} label={t({ ko: '서버 목록 다시 읽기', en: 'Reload the server list' })}>
           <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
         </IconButton>
-      </div>
+      )}
+    >
+      <div>
       {all.map((model) => {
         const row = saved.find((slot) => slot.model === model)
         const uses = row ? slotUseCount(row) : 0
@@ -257,6 +265,7 @@ export function ConnectionModelChecklist({ value, listed, saved, loading, canSta
           <Plus className="h-4 w-4" />
         </IconButton>
       </div>
-    </div>
+      </div>
+    </EditorGroup>
   )
 }
