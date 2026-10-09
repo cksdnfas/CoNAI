@@ -139,6 +139,8 @@ export function SettingsPage() {
 
   const setActiveTab = (tab: SettingsTab) => {
     const nextSearchParams = new URLSearchParams(searchParams)
+    // `?view=` is the inner tab of one section; carried over, LLM's `view=judge` trips Chat's old-link redirect back to LLM.
+    if (tab !== activeTab) nextSearchParams.delete('view')
     if (tab === 'general') {
       nextSearchParams.delete('section')
     } else {
