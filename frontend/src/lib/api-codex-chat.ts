@@ -3,7 +3,7 @@ import { buildApiUrl } from '@/lib/api-url'
 import type { ChatAssetVisionReview, ChatAssetBatch, ChatAssetBatchInput, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
 export type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetKind, ChatAssetReview, ChatAssetVisionReview, ChatAssetCandidate, ChatAssetAttempt, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
 import type { ChatJudgeDiagnostics } from '@conai/shared'
-import type { ChatStreamEvent, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal } from '@conai/shared'
+import type { ChatStreamEvent, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal, ChatTask } from '@conai/shared'
 
 export type ChatScope = 'read' | 'generate' | 'organize' | 'configure'
 const assetBatchPath = (profileId: number, batchId?: number) => `/api/codex-chat/admin/profiles/${profileId}/asset-batches${batchId === undefined ? '' : `/${batchId}`}`
@@ -44,6 +44,18 @@ export function reviewChatAssetVision(profileId: number, batchId: number, slotKe
 }
 export function applyChatAssetBatch(profileId: number, batchId: number, input: ChatAssetApplyInput = {}) {
   return requestApiData<ChatAssetApplyResult>(`${assetBatchPath(profileId, batchId)}/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
+}
+/** Choose one slot's candidate and apply only that slot. */
+export function applyChatAssetSlot(profileId: number, batchId: number, slotKey: string, compositeHash: string) {
+  return requestApiData<ChatAssetApplyResult>(`${assetBatchPath(profileId, batchId)}/slots/${encodeURIComponent(slotKey)}/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ compositeHash }) })
+}
+/** Put a library image on one emotion of the profile's expression group, replacing the one it had. */
+export function setChatProfileExpression(profileId: number, name: string, compositeHash: string) {
+  return requestApiData<{ expressionGroupId: number; profile: ChatProfile }>(`/api/codex-chat/admin/profiles/${profileId}/expressions/${encodeURIComponent(name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ compositeHash }) })
+}
+/** Empty one emotion of the profile's expression group. */
+export function clearChatProfileExpression(profileId: number, name: string) {
+  return requestApiData<{ expressionGroupId: number | null }>(`/api/codex-chat/admin/profiles/${profileId}/expressions/${encodeURIComponent(name)}`, { method: 'DELETE' })
 }
 export function applyChatProfileAssetsProposal(proposalId: number) {
   return requestApiData<{ proposal: ChatProposal; batch?: ChatAssetBatch; result?: ChatAssetApplyResult }>(`/api/chat-proposals/${proposalId}/apply`, { method: 'POST' })
@@ -517,6 +529,8 @@ export interface ChatComfyPresetConfig {
   fixedInputs: Record<string, unknown>
   exposedFieldIds: string[]
   referenceField?: string | null
+  /** The text field that takes a character asset's slot prompt; null: found on its own when clear. */
+  promptField?: string | null
 }
 
 export type ChatGenerationPresetKind = 'nai' | 'comfyui'
@@ -533,7 +547,15 @@ export interface ChatGenerationPreset {
   profiles: Array<{ id: number; name: string }>
   createdDate: string
   updatedDate: string
+  /** How the preset can make character assets (admin list only). */
+  assetSupport?: ChatPresetAssetSupport
 }
+
+/**
+ * `reference`: draws from the reference image (NAI character reference or a ComfyUI image input); `appearance`: a
+ * text-to-image workflow, drawing from the appearance text alone; null: cannot make assets (`problem` says why).
+ */
+export type ChatPresetAssetSupport = { mode: 'reference' | 'appearance' | null; problem: string | null; promptChoices: Array<{ id: string; label: string }>; imageChoices: Array<{ id: string; label: string }> }
 
 export type ChatGenerationPresetInput = { name: string; instruction: string; kind: ChatGenerationPresetKind; nai: ChatNaiPresetConfig | null; comfyui: ChatComfyPresetConfig | null }
 
@@ -556,7 +578,7 @@ export interface ChatProfile extends ChatProfileAssetFields {
   name: string
   avatar: string | null
   engine: ChatEngine
-  providerName: string
+  /** Codex / Claude Code: the engine's own model. API LLM profiles use `modelSlotId`. */
   model: string
   /** Codex: CLI effort. API LLM: none / low / medium / high, sent as reasoning_effort. Empty: not sent. */
   reasoningEffort: CodexReasoningEffort | ''
@@ -584,18 +606,14 @@ export interface ChatProfile extends ChatProfileAssetFields {
   summaryEnabled: boolean
   summaryTriggerTurns: number
   summaryPrompt: string
-  summaryProviderName: string | null
-  summaryModel: string
-  /** Translation model: messages go to the chat model in English, replies are shown in Korean. Null: none. */
-  translationProviderName: string | null
-  translationModel: string
   /** Notes for translating this profile's replies (voice, how it addresses the user, a glossary); `{{char}}`/`{{user}}` filled. */
   translationInstructions: string
-  /** Reply suggestions on the composer's sparkle button; null provider uses the chat's own model (Codex: a one-shot run). */
+  /** Reply suggestions on the composer's sparkle button; with no model of its own it uses the chat's (Codex: a one-shot run). */
   suggestEnabled: boolean
-  suggestProviderName: string | null
-  suggestModel: string
-  /** Model slots per role; a slot wins over the role's direct connection + model above. Null: the direct pair applies. */
+  /**
+   * Model rows (a connection's model) per role. Chat null: the default model. Summary / suggestions null: the chat's
+   * model. Translation null: no translation (messages go to the chat model in English, replies are shown in Korean).
+   */
   modelSlotId: number | null
   summarySlotId: number | null
   translationSlotId: number | null
@@ -612,10 +630,9 @@ export interface ChatProfile extends ChatProfileAssetFields {
   pageAssist: boolean
   /** The model may propose chat lorebook entries (save_lore). */
   allowLoreProposals: boolean
-  /** API LLM: the judge preset steering each turn (null: no judge) and an override of its connection. */
+  /** The judge preset steering each turn (null: no judge) and a judge model instead of the preset's (null: the preset's). */
   judgePresetId: number | null
-  judgeProviderName: string | null
-  judgeModel: string
+  judgeSlotId: number | null
   style: ChatStyle
   backgroundVersion: string | null
   isEnabled: boolean
@@ -654,6 +671,8 @@ import type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
 
 export interface CodexChatThread {
   id: number
+  /** Chat lists: the chat's unfinished task (progress ring). */
+  task?: import('@conai/shared').ChatTaskSummary | null
   codex_thread_id: string | null
   title: string
   engine: ChatEngine
@@ -954,46 +973,51 @@ export function deleteChatToolPreset(presetId: number) {
 
 export type ModelRole = 'chat' | 'summary' | 'translation' | 'suggest'
 
-/** A named connection + model; profiles and workflow nodes reference it per role, so editing it reaches all of them. */
+/** What a profile uses a model row for: one of its roles, or its judge. */
+export type ModelUseRole = ModelRole | 'judge'
+
+/**
+ * One model an LLM connection serves (Settings → LLM lists them under their connection). Profiles, judge presets, user
+ * profiles and chats reference rows by id, so changing a row's model reaches all of them.
+ */
 export interface ModelSlot {
   id: number
-  name: string
   providerName: string
+  providerLabel: string
+  /** Null when the connection is gone. */
+  providerType: string | null
   model: string
+  /** `connection · model` */
+  label: string
   isDefault: boolean
   sortOrder: number
-  profiles: Array<{ id: number; name: string; roles: ModelRole[] }>
+  profiles: Array<{ id: number; name: string; roles: ModelUseRole[] }>
+  judgePresets: Array<{ id: number; name: string }>
+  userProfiles: number
+  chats: number
   createdDate: string
   updatedDate: string
   /** Read-only: its connection can be used. */
   ready?: boolean
 }
 
-/** `adoptProfiles`: bind profiles whose direct connection + model equals this slot's (and have no slot for that role). */
-export type ModelSlotInput = { name: string; providerName: string; model: string; isDefault?: boolean; adoptProfiles?: boolean }
-
-export type ModelSlotSaveResult = { slot: ModelSlot; adopted: Record<ModelRole, number> }
-
 export interface ModelUsage {
-  connections: Array<{
-    providerName: string
-    slots: Array<{ id: number; name: string }>
-    directProfiles: Array<{ id: number; name: string; roles: ModelRole[] }>
-    workflowNodes: number
-  }>
-  slots: Array<{ id: number; name: string; profiles: Array<{ id: number; name: string; roles: ModelRole[] }>; workflowNodes: number }>
+  /** Saved workflow LLM nodes per row (through the profile they chat as). */
+  slots: Array<{ id: number; workflowNodes: number }>
 }
 
 export function listModelSlots() {
   return requestApiData<ModelSlot[]>('/api/codex-chat/admin/model-slots')
 }
 
-export function createModelSlot(input: ModelSlotInput) {
-  return requestApiData<ModelSlotSaveResult>('/api/codex-chat/admin/model-slots', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
+/** Sets a connection's models to exactly `models`, in order; a model still in use is never dropped (the call fails instead). */
+export function syncConnectionModels(providerName: string, models: string[]) {
+  return requestApiData<ModelSlot[]>(`/api/codex-chat/admin/connections/${encodeURIComponent(providerName)}/models`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ models }) })
 }
 
-export function updateModelSlot(slotId: number, patch: Partial<ModelSlotInput>) {
-  return requestApiData<ModelSlotSaveResult>(`/api/codex-chat/admin/model-slots/${slotId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+/** Changes a row's model; everything that references the row follows. */
+export function updateModelSlot(slotId: number, patch: { model?: string; isDefault?: boolean }) {
+  return requestApiData<ModelSlot>(`/api/codex-chat/admin/model-slots/${slotId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
 export function setDefaultModelSlot(slotId: number) {
@@ -1041,7 +1065,7 @@ export interface ChatUserProfile {
   /** New chats take this profile without asking. */
   isDefault: boolean
   sortOrder: number
-  /** The model (a model slot) this profile writes reply suggestions with when a chat profile links it; null: none. */
+  /** The model (a model row) this profile writes reply suggestions with when a chat profile links it; null: none. */
   modelSlotId: number | null
   /** Read-only: the model is set and its connection works. */
   modelReady?: boolean
@@ -1050,10 +1074,13 @@ export interface ChatUserProfile {
 /** `modelSlotId` left out keeps the model the profile had. */
 export type ChatUserProfileInput = Pick<ChatUserProfile, 'name' | 'persona' | 'avatar' | 'isDefault'> & { modelSlotId?: number | null }
 
-/** A model any chat user can give a user profile: a model slot, and whether its connection works. */
+/** A model any chat user can give a user profile: an LLM model row, and whether its connection works. */
 export interface ChatModelOption {
   id: number
-  name: string
+  providerName: string
+  providerLabel: string
+  /** `connection · model` */
+  label: string
   model: string
   ready: boolean
 }
@@ -1457,6 +1484,27 @@ export function checkChatPageProposal<T extends Extract<ChatProposal, { kind: 'p
 
 export function acknowledgeChatPageProposal<T extends Extract<ChatProposal, { kind: 'page_fields' | 'workflow_graph' | 'page_action' }>>(proposal: T) {
   return requestApiData<T>(`/api/chat-proposals/${proposal.id}/page-applied`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ instanceId: proposal.page.instanceId, connectionId: proposal.page.connectionId, revision: proposal.kind !== 'page_fields' ? proposal.revision : undefined }) })
+}
+
+export const chatTaskQueryKey = (threadId: number | null) => ['codex-chat-task', threadId] as const
+
+/** The chat's newest multi-step task, or null. */
+export function getChatTask(threadId: number) {
+  return requestApiData<ChatTask | null>(`/api/codex-chat/threads/${threadId}/task`)
+}
+
+export function setChatTaskState(threadId: number, action: 'pause' | 'resume' | 'cancel') {
+  return requestApiData<ChatTask>(`/api/codex-chat/threads/${threadId}/task/${action}`, { method: 'POST' })
+}
+
+/** Approve a task plan card; the server starts the task. */
+export function approveChatTaskPlan(proposalId: number) {
+  return requestApiData<unknown>(`/api/chat-proposals/${proposalId}/task-approve`, { method: 'POST' })
+}
+
+/** The connected tab's answer to a page operation the chat ran: the new screen, or why it could not run. */
+export function answerChatPageCommand(commandId: string, answer: { ok: true; page: ChatPageSnapshot } | { ok: false; error: string }) {
+  return requestApiData<void>(`/api/codex-chat/page-commands/${encodeURIComponent(commandId)}`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(answer) })
 }
 
 /** Carry on a cut last reply (API LLM direct chats); the stream reads like a regeneration. */

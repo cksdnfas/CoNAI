@@ -1,5 +1,6 @@
 import { getUserSettingsDb } from '../database/userSettingsDb';
 import { ExternalApiService } from '../services/externalApiService';
+import { adoptConnectionDefaultModel } from '../services/codex-chat/modelSlots';
 import type {
   ExternalApiProvider as ExternalApiProviderType,
   ExternalApiProviderResponse,
@@ -236,6 +237,8 @@ export class ExternalApiProvider {
       additionalConfig,
       isEnabled
     );
+    // A connection holds no model of its own: a default_model key becomes one of its model rows.
+    adoptConnectionDefaultModel(input.provider_name);
 
     return result.lastInsertRowid as number;
   }
@@ -297,6 +300,7 @@ export class ExternalApiProvider {
       SET ${updates.join(', ')}
       WHERE provider_name = ?
     `).run(...values);
+    if (result.changes > 0) adoptConnectionDefaultModel(providerName);
 
     return result.changes > 0;
   }

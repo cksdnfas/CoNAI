@@ -4,6 +4,7 @@ import { TypedFieldInput } from '@/features/shared-fields/typed-field-input'
 import { formatModuleGraphDefaultOptionLabel, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
 import type { ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import { getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import {
   buildHandleId,
@@ -151,23 +152,25 @@ export function PortCell({ nodeId, port, side, accentColor, connected, satisfied
     <div
       className={`relative min-h-[28px] border-b ${alignmentClass} ${outputState === 'inactive' ? 'opacity-65' : ''}`}
       style={{ borderColor } as CSSProperties}
-      title={buildPortTooltip(t, port, statusLabel)}
       onMouseDown={side === 'input' && connected ? () => onDisconnectInput?.(nodeId, port.key) : undefined}
     >
-      <Handle
-        id={buildHandleId(side === 'input' ? 'in' : 'out', port.key)}
-        type={side === 'input' ? 'target' : 'source'}
-        position={side === 'input' ? Position.Left : Position.Right}
-        style={buildHandleStyle({ side, color: handleColor })}
-        title={buildPortTooltip(t, port, statusLabel)}
-        onMouseDown={side === 'input' && connected ? () => onDisconnectInput?.(nodeId, port.key) : undefined}
-      />
+      <Tip content={buildPortTooltip(t, port, statusLabel)}>
+        <Handle
+          id={buildHandleId(side === 'input' ? 'in' : 'out', port.key)}
+          type={side === 'input' ? 'target' : 'source'}
+          position={side === 'input' ? Position.Left : Position.Right}
+          style={buildHandleStyle({ side, color: handleColor })}
+          onMouseDown={side === 'input' && connected ? () => onDisconnectInput?.(nodeId, port.key) : undefined}
+        />
+      </Tip>
 
       <div className={`flex min-h-[28px] items-center gap-2 ${rowJustifyClass}`}>
-        <span className="min-w-0 flex-1 truncate text-2xs font-medium text-foreground">
-          {port.label}
-          {port.required ? <span className="ml-1 text-2xs text-warning">*</span> : null}
-        </span>
+        <Tip content={buildPortTooltip(t, port, statusLabel)}>
+          <span className="min-w-0 flex-1 truncate text-2xs font-medium text-foreground">
+            {port.label}
+            {port.required ? <span className="ml-1 text-2xs text-warning">*</span> : null}
+          </span>
+        </Tip>
         {outputStateLabel ? (
           <span className={`shrink-0 rounded-sm px-1 py-0.5 text-2xs font-medium ${outputState === 'active' ? 'bg-success-soft text-success-soft-foreground' : 'bg-surface-high text-muted-foreground'}`}>
             {outputState === 'active' ? t({ ko: '활성', en: 'Active' }) : t({ ko: '꺼짐', en: 'Off' })}
@@ -273,21 +276,24 @@ export function InputPortCell({
   }
 
   return (
-    <div className="relative min-h-[28px] border-b pl-4 pr-2" style={{ borderColor } as CSSProperties} title={buildPortTooltip(t, port, statusLabel)}>
-      <Handle
-        id={buildHandleId('in', port.key)}
-        type="target"
-        position={Position.Left}
-        style={buildHandleStyle({ side: 'input', color: portTypeColor })}
-        title={buildPortTooltip(t, port, statusLabel)}
-        onMouseDown={connected ? () => data.onDisconnectNodeInput?.(nodeId, port.key) : undefined}
-      />
+    <div className="relative min-h-[28px] border-b pl-4 pr-2" style={{ borderColor } as CSSProperties}>
+      <Tip content={buildPortTooltip(t, port, statusLabel)}>
+        <Handle
+          id={buildHandleId('in', port.key)}
+          type="target"
+          position={Position.Left}
+          style={buildHandleStyle({ side: 'input', color: portTypeColor })}
+          onMouseDown={connected ? () => data.onDisconnectNodeInput?.(nodeId, port.key) : undefined}
+        />
+      </Tip>
 
       <div className="flex min-h-[28px] items-center gap-2">
-        <span className={`min-w-0 truncate text-2xs font-medium text-foreground ${isPromptLikePort ? 'flex-1' : 'shrink-0'}`}>
-          {port.label}
-          {port.required ? <span className="ml-1 text-2xs text-warning">*</span> : null}
-        </span>
+        <Tip content={buildPortTooltip(t, port, statusLabel)}>
+          <span className={`min-w-0 truncate text-2xs font-medium text-foreground ${isPromptLikePort ? 'flex-1' : 'shrink-0'}`}>
+            {port.label}
+            {port.required ? <span className="ml-1 text-2xs text-warning">*</span> : null}
+          </span>
+        </Tip>
         {!isPromptLikePort ? <div className="min-w-0 flex-1">{renderEditor()}</div> : null}
       </div>
     </div>

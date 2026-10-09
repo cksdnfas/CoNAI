@@ -400,7 +400,7 @@ export function useComfyWorkflowAuthoringController({
   }
 
   useComfyAuthorChatPage({
-    enabled: open && !isSaving, graph: parsedGraph, saved: mode === 'edit' ? initialData?.workflow ?? null : null,
+    enabled: open && !isSaving, dirty: isDirty, graph: parsedGraph, saved: mode === 'edit' ? initialData?.workflow ?? null : null,
     draft: { name: draft.name, description: draft.description, workflowJson: draft.workflowJson, markedFields: draft.markedFields, isPublicPage: draft.isPublicPage, publicSlug: draft.publicSlug, publicQueueMaxCount: draft.publicQueueMaxCount },
     setDraft: (next) => {
       setDraft((current) => ({ ...current, name: next.name, description: next.description, workflowJson: next.workflowJson, markedFields: next.markedFields, isPublicPage: next.isPublicPage, publicSlug: next.publicSlug, publicQueueMaxCount: next.publicQueueMaxCount }))

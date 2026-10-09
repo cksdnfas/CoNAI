@@ -199,7 +199,7 @@ export const SpriteVideoSource = forwardRef<SpriteVideoHandle, {
         </div>
         <span className="font-mono text-xs tabular-nums text-muted-foreground">{formatSeconds(time)} / {formatSeconds(duration)}</span>
       </div>
-      <div className="truncate font-mono text-xs text-muted-foreground">{info.name} · {info.width}×{info.height} · {Number(info.fps.toFixed(2))}fps · {info.frameCount}{t({ ko: '프레임', en: ' frames' })}</div>
+      <div className="truncate font-mono text-xs text-muted-foreground">{info.width}×{info.height} · {Number(info.fps.toFixed(2))}fps · {info.frameCount}{t({ ko: '프레임', en: ' frames' })}</div>
     </div>
   )
 })

@@ -4,6 +4,7 @@ import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
@@ -16,6 +17,7 @@ import { SettingsSegmentedTable } from '@/features/settings/components/settings-
 import { useI18n, type TranslationParams } from '@/i18n'
 import type { WildcardRecord, WildcardTool } from '@/lib/api-wildcards'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useDirtyBaseline } from '@/features/codex-chat/use-dirty-baseline'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
 import { pageAction } from '@/features/codex-chat/page-action-helpers'
 import { wildcardChatInput, wildcardChatSchema } from './use-wildcard-chat-page'
@@ -368,54 +370,46 @@ function WildcardItemDraftEditor({
       actions={
         <div className="flex items-center gap-1.5">
           <input ref={fileInputRef} type="file" accept=".json,application/json" className="hidden" onChange={handleFileChange} />
-          <Button
-            type="button"
+          <IconButton
             size="icon-sm"
             variant="secondary"
             onClick={() => fileInputRef.current?.click()}
-            aria-label={t(wildcardEditorKey('import.json.file'))}
-            title={t(wildcardEditorKey('import.json.file'))}
+            label={t(wildcardEditorKey('import.json.file'))}
           >
             <FileUp className="h-4 w-4" />
-          </Button>
+          </IconButton>
 
           <span ref={templateMenuAnchorRef} className="relative inline-flex">
-            <Button
-              type="button"
+            <IconButton
               size="icon-sm"
               variant="secondary"
               onClick={() => setTemplateMenuOpen((current) => !current)}
-              aria-label={t(wildcardEditorKey('download.json.template'))}
-              title={t(wildcardEditorKey('download.json.template'))}
+              label={t(wildcardEditorKey('download.json.template'))}
             >
               <Download className="h-4 w-4" />
-            </Button>
+            </IconButton>
           </span>
 
           <span ref={exportMenuAnchorRef} className="relative inline-flex">
-            <Button
-              type="button"
+            <IconButton
               size="icon-sm"
               variant="secondary"
               onClick={() => setExportMenuOpen((current) => !current)}
               disabled={exportDisabled}
-              aria-label={t(wildcardEditorKey('export.json'))}
-              title={t(wildcardEditorKey('export.json'))}
+              label={t(wildcardEditorKey('export.json'))}
             >
               <FileDown className="h-4 w-4" />
-            </Button>
+            </IconButton>
           </span>
 
-          <Button
-            type="button"
+          <IconButton
             size="icon-sm"
             variant="secondary"
             onClick={handleAddDraft}
-            aria-label={t(wildcardEditorKey('add.tool.item'), { tool: activeToolLabel })}
-            title={t(wildcardEditorKey('add.item'))}
+            label={t(wildcardEditorKey('add.tool.item'), { tool: activeToolLabel })}
           >
             <Plus className="h-4 w-4" />
-          </Button>
+          </IconButton>
 
           <AnchoredPopup open={templateMenuOpen} anchorRef={templateMenuAnchorRef} onClose={() => setTemplateMenuOpen(false)} align="end" side="bottom" className="z-floating" closeOnBack>
             <WildcardJsonFormatMenu simpleLabel={t(wildcardEditorKey('simple.format'))} fullLabel={t(wildcardEditorKey('full.format'))} onSelect={handleDownloadTemplate} />
@@ -454,16 +448,14 @@ function WildcardItemDraftEditor({
             aria-label={t(wildcardEditorKey('tool.item.weight'), { tool: activeToolLabel, index: formatNumber(index + 1) })}
           />
           <div className="flex justify-center">
-            <Button
-              type="button"
+            <IconButton
               size="icon-sm"
               variant="ghost"
               onClick={() => handleRemoveDraft(draft.id)}
-              aria-label={t(wildcardEditorKey('delete.tool.item'), { tool: activeToolLabel, index: formatNumber(index + 1) })}
-              title={t(wildcardEditorKey('delete'))}
+              label={t(wildcardEditorKey('delete.tool.item'), { tool: activeToolLabel, index: formatNumber(index + 1) })}
             >
               <Trash2 className="h-4 w-4" />
-            </Button>
+            </IconButton>
           </div>
         </div>
       ))}
@@ -547,8 +539,9 @@ export function WildcardEditorModal({
     setName(next.name); setDescription(next.description); setParentValue(String(next.parent_id ?? 'root')); setIncludeChildren(!!next.include_children); setOnlyChildren(!!next.only_children); setChainOption(next.chain_option)
     setItemDrafts(Object.fromEntries(wildcardTools.map((tool) => [tool, next.items[tool].map((item) => createWildcardItemDraft(item.content, item.weight))])) as Record<WildcardTool, WildcardItemDraft[]>)
   })
+  const chatDirty = useDirtyBaseline(`${open}:${wildcard?.id ?? 'new'}`, chatDraft)
   useChatPageRegistration(open && !isSubmitting ? {
-    kind: 'wildcards', title: t({ ko: '와일드카드 편집', en: 'Wildcard editor' }), priority: 100, resourceId: String(wildcard?.id ?? 'new-wildcard'), fields: [
+    kind: 'wildcards', title: t({ ko: '와일드카드 편집', en: 'Wildcard editor' }), priority: 100, resourceId: String(wildcard?.id ?? 'new-wildcard'), dirty: chatDirty, fields: [
       { id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: name }, { id: 'description', label: t({ ko: '설명', en: 'Description' }), type: 'text', value: description },
       { id: 'includeChildren', label: t({ ko: '하위 항목 포함', en: 'Include children' }), type: 'boolean', value: includeChildren }, { id: 'onlyChildren', label: t({ ko: '하위 항목만', en: 'Only children' }), type: 'boolean', value: onlyChildren },
       { id: 'chainOption', label: t({ ko: '체인 동작', en: 'Chain behavior' }), type: 'select', value: chainOption, options: ['replace', 'append'] },

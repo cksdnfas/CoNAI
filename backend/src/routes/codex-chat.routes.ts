@@ -4,6 +4,8 @@ import { getUserSettingsDb } from '../database/userSettingsDb'
 import multer from 'multer'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import { ChatPageContextError } from '../services/codex-chat/chatPageContext'
+import { resolveChatPageCommand } from '../services/codex-chat/chatPageBridge'
+import { ChatTaskRunner, ChatTaskStore } from '../services/codex-chat/chatTasks'
 import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
@@ -63,7 +65,7 @@ import { validateBlockData } from '../services/codex-chat/chatBlockState'
 import { canSuggest, ChatSuggestError, profileWriterReady, suggestReplies, userWriterReady } from '../services/codex-chat/chatSuggestions'
 import { createUploadStorage, MAX_UPLOAD_FILE_SIZE_BYTES } from '../middleware/upload'
 import { downloadProfileAsset, importFileStoreProfileAsset, ingestProfileAsset, isProfileAssetHidden, profileAssetFields, resolveProfileAsset } from '../services/codex-chat/chatProfileAssets'
-import chatAssetBatchesRouter from './chat-asset-batches.routes'
+import chatAssetBatchesRouter, { chatProfileExpressionsRouter } from './chat-asset-batches.routes'
 import { draftChatAppearance } from '../services/codex-chat/chatAppearanceDraft'
 import { ChatAssetError } from '../services/codex-chat/chatAssetAccess'
 
@@ -71,6 +73,7 @@ const MESSAGE_MAX_LENGTH = 20000
 
 const router = express.Router()
 router.use('/admin/profiles/:profileId/asset-batches', chatAssetBatchesRouter)
+router.use('/admin/profiles/:profileId/expressions', chatProfileExpressionsRouter)
 
 // The old server-wide Codex chat settings become a "Codex" profile the first time chat is used after the upgrade.
 router.use((_req: Request, _res: Response, next: NextFunction) => {
@@ -303,6 +306,7 @@ router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
   const members = ChatGroupStore.memberIdsByThread(threads.filter((thread) => thread.kind === 'group').map((thread) => thread.id))
   const previews = CodexChatStore.listPreviews(threads.map((thread) => thread.id))
   const unread = CodexChatStore.countUnread(threads.map((thread) => thread.id))
+  const tasks = ChatTaskStore.summaries(threads.filter((thread) => thread.kind === 'direct').map((thread) => thread.id))
   res.json({ success: true, data: threads.map((thread) => ({
     ...thread,
     ...(thread.kind === 'group' ? { member_profile_ids: members.get(thread.id) ?? [] } : {}),
@@ -310,6 +314,7 @@ router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
     unread_count: unread.get(thread.id) ?? 0,
     // A reply on its way (this or another tab, or one started before a reload).
     running: CodexChatService.isRunning(thread.id) || GroupChatService.isRunning(thread.id),
+    task: tasks.get(thread.id) ?? null,
   })) })
 })
 
@@ -322,6 +327,37 @@ router.post('/threads/:threadId/read', requireChatAccess, (req: Request, res: Re
   if (!CodexChatStore.findThread(threadId, getRequesterAccountId(req))) { res.status(404).json({ success: false, error: '채팅을 찾을 수 없어.' }); return }
   CodexChatStore.markRead(threadId, messageId)
   res.json({ success: true })
+})
+
+/** GET /api/codex-chat/threads/:threadId/task — the chat's newest task (for the progress card and strip), or null. */
+router.get('/threads/:threadId/task', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  if (!CodexChatStore.findThread(threadId, getRequesterAccountId(req))) { res.status(404).json({ success: false, error: '채팅을 찾을 수 없어.' }); return }
+  res.json({ success: true, data: ChatTaskStore.latest(threadId) })
+})
+
+/** POST /api/codex-chat/threads/:threadId/task/:action — pause, resume or cancel the chat's running task. */
+router.post('/threads/:threadId/task/:action', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  if (!CodexChatStore.findThread(threadId, getRequesterAccountId(req))) { res.status(404).json({ success: false, error: '채팅을 찾을 수 없어.' }); return }
+  try {
+    const action = String(req.params.action)
+    const task = action === 'pause' ? ChatTaskRunner.pause(threadId) : action === 'resume' ? ChatTaskRunner.resume(threadId) : action === 'cancel' ? ChatTaskRunner.cancel(threadId) : null
+    if (!task) { sendRouteBadRequest(res, 'action must be pause, resume or cancel'); return }
+    res.json({ success: true, data: task })
+  } catch (error) {
+    res.status(409).json({ success: false, error: error instanceof Error ? error.message : '작업을 바꾸지 못했어.' })
+  }
+})
+
+/** POST /api/codex-chat/page-commands/:commandId — the connected browser tab's answer to a page operation the chat ran. */
+router.post('/page-commands/:commandId', requireChatAccess, (req: Request, res: Response) => {
+  try {
+    resolveChatPageCommand(requesterFrom(req), String(req.params.commandId), req.body)
+    res.json({ success: true })
+  } catch (error) { sendChatError(res, error) }
 })
 
 /** PATCH /api/codex-chat/threads/:threadId/list — `{ title?, pinned?, archived? }`: the chat's place in the chat list. */
@@ -753,15 +789,15 @@ router.post('/admin/profiles/import-card', requireAdmin, (req, res, next) => {
 }, asyncHandler(async (req, res) => {
   try {
     if (!req.file) throw new ChatProfileError('카드를 골라줘.')
-    const providerName = ExternalApiProvider.findEnabledLlmOptions()[0]?.provider_name ?? ''
-    res.json({ success: true, data: await importChatCard(req.file.buffer, providerName) })
+    // The card starts on the default model; the editor lets the admin pick another before saving.
+    res.json({ success: true, data: await importChatCard(req.file.buffer, ModelSlotStore.defaultTarget()?.id ?? null) })
   } catch (error) { sendChatError(res, error) }
 }))
 
 router.post('/admin/profiles', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   try {
     const input = (req.body ?? {}) as ChatProfileInput
-    // An API LLM profile with no model of its own starts on the default slot, when there is one.
+    // An API LLM profile with no model of its own starts on the default row, when there is one.
     if (input.engine !== 'codex' && input.engine !== 'claude' && !input.providerName && (input.modelSlotId === null || input.modelSlotId === undefined)) {
       const defaultSlot = ModelSlotStore.findDefault()
       if (defaultSlot) input.modelSlotId = defaultSlot.id
@@ -1071,14 +1107,27 @@ router.delete('/admin/blocks/:blockId', requireAdmin, (req: Request, res: Respon
   res.json({ success: true, data: { deleted: ChatSharedBlockStore.delete(blockId) } })
 })
 
-/** Model slots (a named connection + model). Profiles and workflow nodes reference them per role, so an edit reaches all of them. */
+/**
+ * Model rows: the models each LLM connection serves (Settings → LLM lists them under their connection). Profiles,
+ * judge presets, user profiles and chats reference rows by id, so changing a row's model reaches all of them.
+ */
 router.get('/admin/model-slots', requireAdmin, (_req: Request, res: Response) => {
   res.json({ success: true, data: ModelSlotStore.list().map((slot) => ({ ...slot, ready: isChatTargetReady(slot.providerName, slot.model) })) })
 })
 
+/** Adds one model to a connection (returns the existing row when it is already there). */
 router.post('/admin/model-slots', requireAdmin, (req: Request, res: Response) => {
   try {
-    res.status(201).json({ success: true, data: ModelSlotStore.create((req.body ?? {}) as Record<string, unknown>) })
+    const body = (req.body ?? {}) as { providerName?: unknown; model?: unknown }
+    const id = ModelSlotStore.ensure(body.providerName, typeof body.model === 'string' && body.model.trim() ? body.model : null) as number
+    res.status(201).json({ success: true, data: ModelSlotStore.find(id) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** Sets a connection's models to exactly the given list (the checklist of the connection editor); rows in use are never dropped. */
+router.put('/admin/connections/:providerName/models', requireAdmin, (req: Request, res: Response) => {
+  try {
+    res.json({ success: true, data: ModelSlotStore.syncConnection(req.params.providerName, (req.body ?? {}).models) })
   } catch (error) { sendChatError(res, error) }
 })
 
@@ -1103,10 +1152,12 @@ router.post('/admin/model-slots/:slotId/default', requireAdmin, (req: Request, r
 router.delete('/admin/model-slots/:slotId', requireAdmin, (req: Request, res: Response) => {
   const slotId = parseId(req.params.slotId)
   if (slotId === null) { sendRouteBadRequest(res, 'Invalid model slot id'); return }
-  res.json({ success: true, data: { deleted: ModelSlotStore.delete(slotId) } })
+  try {
+    res.json({ success: true, data: { deleted: ModelSlotStore.delete(slotId) } })
+  } catch (error) { sendChatError(res, error) }
 })
 
-/** Which profiles, slots and saved workflow nodes use each LLM connection and slot. */
+/** Saved workflow nodes per model row (a row's other uses come with the row). */
 router.get('/admin/model-usage', requireAdmin, (_req: Request, res: Response) => {
   res.json({ success: true, data: buildModelUsage() })
 })
@@ -1179,7 +1230,7 @@ router.post('/admin/judge-presets/import', requireAdmin, (req: Request, res: Res
  * messages of one of the requester's own API LLM chats. Nothing is logged or changed.
  */
 router.post('/admin/judge-presets/test', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
-  const body = (req.body ?? {}) as { presetId?: unknown; preset?: ChatJudgePresetInput; threadId?: unknown; turns?: unknown; providerName?: unknown; model?: unknown }
+  const body = (req.body ?? {}) as { presetId?: unknown; preset?: ChatJudgePresetInput; threadId?: unknown; turns?: unknown; slotId?: unknown }
   const threadId = parseId(body.threadId)
   const thread = threadId === null ? undefined : CodexChatStore.findThreadById(threadId)
   if (!thread || thread.account_id !== getRequesterAccountId(req) || thread.kind === 'group' || thread.profile_id === null) {
@@ -1192,10 +1243,10 @@ router.post('/admin/judge-presets/test', requireAdmin, asyncHandler(async (req: 
     const presetId = parseId(body.presetId)
     const preset = body.preset ? ChatJudgePresetStore.draft(body.preset) : presetId === null ? null : ChatJudgePresetStore.find(presetId)
     if (!preset) { res.status(404).json({ success: false, error: '판단 프리셋을 찾을 수 없어.' }); return }
-    const typedConnection = typeof body.providerName === 'string' && body.providerName.trim() ? body.providerName.trim() : null
-    const providerName = typedConnection ?? preset.providerName ?? profile.judgeProviderName
-    if (!providerName) { res.status(400).json({ success: false, error: '판단 연결을 골라줘.' }); return }
-    const model = typedConnection ? (typeof body.model === 'string' ? body.model : '') : preset.providerName ? preset.model : profile.judgeModel
+    // The model picked for the test, else the preset's, else the profile's own.
+    const target = ModelSlotStore.target(parseId(body.slotId) ?? preset.modelSlotId ?? profile.judgeSlotId)
+    if (!target) { res.status(400).json({ success: false, error: '판단 모델을 골라줘.' }); return }
+    const { providerName, model } = target
     const turns = Math.min(20, Math.max(1, Number(body.turns) || 6))
     res.json({ success: true, data: await testJudgePreset({ preset, providerName, model, profile, thread, turns }) })
   } catch (error) {
@@ -1254,7 +1305,7 @@ router.get('/admin/judge-stats', requireAdmin, (req: Request, res: Response) => 
 
 /** Generation presets (a fixed NAI setup or ComfyUI workflow the model fills in). Profiles link them by id. */
 router.get('/admin/generation-presets', requireAdmin, (_req: Request, res: Response) => {
-  res.json({ success: true, data: ChatGenerationPresetStore.list() })
+  res.json({ success: true, data: ChatGenerationPresetStore.listWithAssetSupport() })
 })
 
 router.post('/admin/generation-presets', requireAdmin, (req: Request, res: Response) => {
@@ -1830,7 +1881,7 @@ router.get('/user-profiles', requireChatAccess, (req: Request, res: Response) =>
 
 /** GET /api/codex-chat/model-options — the models a user profile can write reply suggestions with (any chat user). */
 router.get('/model-options', requireChatAccess, (_req: Request, res: Response) => {
-  res.json({ success: true, data: ModelSlotStore.list().map((slot) => ({ id: slot.id, name: slot.name, model: slot.model, ready: isChatTargetReady(slot.providerName, slot.model) })) })
+  res.json({ success: true, data: ModelSlotStore.list().filter((slot) => slot.providerType !== 'decision_typesafe').map((slot) => ({ id: slot.id, providerName: slot.providerName, providerLabel: slot.providerLabel, label: slot.label, model: slot.model, ready: isChatTargetReady(slot.providerName, slot.model) })) })
 })
 
 router.post('/user-profiles', requireChatAccess, (req: Request, res: Response) => {

@@ -1,7 +1,6 @@
 import { BrushCleaning, Combine, Eraser, Layers2, SquareDashed, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
-import { Heading } from '@/components/ui/heading'
 import { useI18n } from '@/i18n'
 import type { ImageEditorCropRect } from './image-editor-types'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -54,8 +53,7 @@ export function ImageEditorSessionActions({
 
   return (
     <section className="space-y-3 border-t border-line pt-4 xl:border-t-0 xl:pt-0">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Heading level={3}>{t({ ko: '세션 작업', en: 'Session actions' })}</Heading>
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <div className="flex flex-wrap items-center gap-1">
             <IconButton variant="ghost" size="icon-sm" onClick={onMergeVisible} disabled={!canMergeVisible} label={t({ ko: '보이는 레이어 병합', en: 'Merge visible' })}>
               <Combine className="h-4 w-4" />
@@ -76,8 +74,7 @@ export function ImageEditorSessionActions({
         </div>
 
         {selectionRect ? (
-          <div className="space-y-2 border-t border-line pt-3">
-            <div className="text-xs font-medium text-foreground">{t({ ko: '선택 범위', en: 'Selection bounds' })}</div>
+          <div className="space-y-2 border-t border-line pt-3" role="group" aria-label={t({ ko: '선택 범위', en: 'Selection bounds' })}>
             <div className="grid grid-cols-2 gap-2">
               <label className="space-y-1 text-xs text-muted-foreground">X<NumberStepperInput value={Math.round(selectionRect.x)} onValueCommit={(nextValue) => onSelectionRectFieldChange('x', Number(nextValue) || 0)} className="h-8" /></label>
               <label className="space-y-1 text-xs text-muted-foreground">Y<NumberStepperInput value={Math.round(selectionRect.y)} onValueCommit={(nextValue) => onSelectionRectFieldChange('y', Number(nextValue) || 0)} className="h-8" /></label>
@@ -89,9 +86,8 @@ export function ImageEditorSessionActions({
 
         {cropRect ? (
           <>
-            <div className="space-y-2 border-t border-line pt-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-xs font-medium text-foreground">{t({ ko: '자르기 범위', en: 'Crop bounds' })}</div>
+            <div className="space-y-2 border-t border-line pt-3" role="group" aria-label={t({ ko: '자르기 범위', en: 'Crop bounds' })}>
+              <div className="flex items-center justify-end gap-2">
                 <IconButton variant="ghost" size="icon-xs" onClick={onCancelCrop} label={t({ ko: '자르기 취소', en: 'Cancel crop' })}>
                   <X className="h-3.5 w-3.5" />
                 </IconButton>
@@ -106,11 +102,11 @@ export function ImageEditorSessionActions({
           </>
         ) : null}
         {/* Below xl the modal layout pins these actions in a sticky footer instead. */}
-        <div className="hidden gap-2 pt-2 xl:flex">
-          <Button type="button" variant="secondary" className="flex-1" onClick={onClose} disabled={saving}>
+        <div className="hidden justify-end gap-2 pt-2 xl:flex">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
             {t({ ko: '취소', en: 'Cancel' })}
           </Button>
-          <Button type="button" className="flex-1" onClick={onSave} disabled={!canSave || saving || loading}>
+          <Button type="button" onClick={onSave} disabled={!canSave || saving || loading}>
             {saving ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })}
           </Button>
         </div>

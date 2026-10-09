@@ -125,7 +125,7 @@ export function SecurityAccountFormCard({
           <div className="flex justify-end pt-3">
             <Button type="button" size="sm" variant="secondary" onClick={onSubmitUpdate} disabled={isUpdateDisabled}>
               <KeyRound className="h-4 w-4" />
-              {isSubmittingUpdate ? t({ ko: '관리자 계정 변경 중', en: 'Updating admin account' }) : t({ ko: '관리자 계정 저장', en: 'Save admin account' })}
+              {isSubmittingUpdate ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })}
             </Button>
           </div>
         </>

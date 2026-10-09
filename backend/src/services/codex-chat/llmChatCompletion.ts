@@ -5,6 +5,7 @@ import { normalizeOptionalString } from '../../utils/valueNormalization'
 import { LlmRequestError } from '../llmRequestRetry'
 import { CLAUDE_CHAT_PROVIDER, streamClaudeChatCompletion } from './claudeChatCompletion'
 import type { ChatMcpToolResult } from './chatMcpBridge'
+import { primaryModelOf } from './modelSlots'
 
 export type ChatCompletionToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } }
 
@@ -111,7 +112,7 @@ export function resolveChatCompletionTarget(providerName: string, overrides: { m
   if (providerName === CLAUDE_CHAT_PROVIDER) return { providerName, displayName: 'Claude Code', endpoint: 'claude-code://local', apiKey: null, model: overrides.model?.trim() || 'sonnet', generation: overrides.generation ?? {}, promptCacheMarks: false, transport: 'claude-code', maxConcurrentRequests: 1 }
   const { provider, config, apiBase, apiKey } = resolveConnection(providerName)
   const connectionConfig = readLlmConnectionConfig(config)
-  const model = normalizeOptionalString(overrides.model) ?? connectionConfig.defaultModel
+  const model = normalizeOptionalString(overrides.model) ?? primaryModelOf(provider.provider_name)
   if (!model) {
     throw new Error(`LLM 모델이 정해지지 않았어: ${provider.display_name}`)
   }
@@ -140,10 +141,10 @@ export function isChatTargetReady(providerName: string, model?: string | null) {
   }
 }
 
-/** Model ids the connection lists at `GET {base}/models`, plus its default model. */
+/** Model ids the connection lists at `GET {base}/models`, plus its primary model row. */
 export async function listChatCompletionModels(providerName: string) {
-  const { config, apiBase, apiKey } = resolveConnection(providerName)
-  return { models: await fetchOpenAiCompatibleModels(apiBase, apiKey), defaultModel: readLlmConnectionConfig(config).defaultModel }
+  const { provider, apiBase, apiKey } = resolveConnection(providerName)
+  return { models: await fetchOpenAiCompatibleModels(apiBase, apiKey), defaultModel: primaryModelOf(provider.provider_name) }
 }
 
 /** Model ids an OpenAI-compatible server lists at `{apiBase}/models`; for unsaved or edited connections too. */

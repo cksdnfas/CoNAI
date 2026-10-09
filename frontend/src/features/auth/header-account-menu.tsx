@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Separator } from '@/components/ui/separator'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Tip } from '@/components/ui/tooltip'
 import { useCodexChatPanelToggle, useCodexChatUnreadCount } from '@/features/codex-chat/codex-chat-shell'
 import { UnreadCount } from '@/features/codex-chat/chat-unread-count'
 import { useHomeSearchToggle } from '@/features/home/components/home-search-ui'
@@ -119,9 +120,11 @@ export function HeaderAccountMenu({ foldedSearch = false, foldedChat = false }: 
         <div className={`w-[248px] space-y-2 ${anchoredPopupBodyClassName}`} role="menu" aria-label={t('headerAccountMenu.accountMenu')}>
           <div className="flex items-center gap-2.5">
             {isSignedIn ? (
-              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/12 text-sm font-semibold text-primary" aria-hidden="true">
-                {authStatus.username?.charAt(0).toUpperCase()}
-              </span>
+              <Tip content={accountTypeLabel}>
+                <span role="img" aria-label={accountTypeLabel} className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/12 text-sm font-semibold text-primary">
+                  {authStatus.username?.charAt(0).toUpperCase()}
+                </span>
+              </Tip>
             ) : (
               <span className="grid size-8 shrink-0 place-items-center rounded-full bg-fill text-muted-foreground" aria-hidden="true">
                 <CircleUserRound className="h-4 w-4" />
@@ -129,10 +132,7 @@ export function HeaderAccountMenu({ foldedSearch = false, foldedChat = false }: 
             )}
             <div className="min-w-0 flex-1 leading-tight">
               {isSignedIn ? (
-                <>
-                  <div className="truncate text-sm font-semibold text-foreground">{authStatus.username}</div>
-                  <div className="text-xs text-muted-foreground">{accountTypeLabel}</div>
-                </>
+                <div className="truncate text-sm font-semibold text-foreground">{authStatus.username}</div>
               ) : (
                 <div className="text-sm text-muted-foreground">
                   {isAnonymousSession ? t({ ko: '로그인하지 않음', en: 'Not signed in' }) : accountTypeLabel}

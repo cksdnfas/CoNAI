@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save, Trash2 } from 'lucide-react'
-import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
+import { BookOpen, ChevronLeft, ChevronRight, Image as ImageIcon, Palette, Save, Sparkles, Trash2, UserRound, Users, Wrench } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalFooter } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Switch } from '@/components/ui/switch'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
+import { listAuthPermissionGroups } from '@/lib/api-auth'
 import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
   CHAT_BLOCKS_QUERY_KEY,
@@ -19,7 +23,6 @@ import {
   deleteChatProfile,
   listChatAdminProfiles,
   listChatBlocks,
-  listChatConnectionModels,
   listChatLorebooks,
   listChatUserProfiles,
   listOwnLorebooks,
@@ -27,26 +30,30 @@ import {
   updateChatProfile,
   type ChatProfile,
   type ChatAssetApplyResult,
-  type ChatAssetBatch,
+  type ChatAssetKind,
   type ChatProfileDefaults,
   type ChatProfileInput,
   type ChatStyle,
 } from '@/lib/api-codex-chat'
-import { getExternalApiProviders } from '@/lib/api-external-api'
 import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { getClaudeModels } from '@/lib/api-agent-cli'
 import { getErrorMessage } from '@/lib/error-message'
-import { roleChoice, roleDirect } from './chat-model-role-select'
+import { cn } from '@/lib/utils'
+import { useProfileAssetRuns } from './chat-profile-asset-runs'
 import { ChatProfileAppearancePanel } from './chat-profile-editor-appearance'
 import { draftProfileAssetUrl } from './chat-profile-images'
 import { ChatProfileCharacterPanel } from './chat-profile-editor-character'
-import type { Draft } from './chat-profile-editor-fields'
+import type { Draft, PatchDraft } from './chat-profile-editor-fields'
 import { ChatProfileLookPanel } from './chat-profile-editor-look'
+import { ChatProfileMemoryPanel } from './chat-profile-editor-memory'
 import { ChatProfileModelPanel } from './chat-profile-editor-model'
 import { ChatProfileToolsPanel } from './chat-profile-editor-tools'
 import { ChatProfilePreviewModal } from './chat-profile-preview-modal'
+import { ProfileAssistContext, useProfileEditorChatPage } from './use-profile-editor-chat-page'
 
-type EditorTab = 'character' | 'appearance' | 'model' | 'look' | 'tools'
+type EditorSection = 'character' | 'appearance' | 'model' | 'memory' | 'tools' | 'look'
+
+const ADVANCED_KEY = 'conai:chat-profile-editor:advanced'
 
 /** Shown until the server's defaults load (new profiles only). */
 const FALLBACK_STYLE: ChatStyle = { typeface: 'sans', roleplay: false, colors: { dialogue: '', narration: '', thought: '' }, backgroundDim: 55, backgroundBlur: 0, blocks: [], cast: [], emoticonGroupIds: [] }
@@ -68,7 +75,6 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     avatarCrop: profile?.avatarCrop,
     backgroundHash: profile?.backgroundHash,
     engine: profile?.engine ?? 'llm',
-    providerName: profile?.providerName ?? '',
     model: profile?.model ?? '',
     reasoningEffort: profile?.reasoningEffort ?? '',
     reasoningBudgetTokens: profile?.reasoningBudgetTokens ?? null,
@@ -90,14 +96,8 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     summaryEnabled: profile?.summaryEnabled ?? false,
     summaryTriggerTurns: profile?.summaryTriggerTurns ?? defaults?.summaryTriggerTurns ?? 6,
     summaryPrompt: profile?.summaryPrompt ?? '',
-    summaryProviderName: profile?.summaryProviderName ?? null,
-    summaryModel: profile?.summaryModel ?? '',
-    translationProviderName: profile?.translationProviderName ?? null,
-    translationModel: profile?.translationModel ?? '',
     translationInstructions: profile?.translationInstructions ?? '',
     suggestEnabled: profile?.suggestEnabled ?? false,
-    suggestProviderName: profile?.suggestProviderName ?? null,
-    suggestModel: profile?.suggestModel ?? '',
     modelSlotId: profile?.modelSlotId ?? null,
     summarySlotId: profile?.summarySlotId ?? null,
     translationSlotId: profile?.translationSlotId ?? null,
@@ -109,32 +109,53 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     pageAssist: profile?.pageAssist ?? false,
     allowLoreProposals: profile?.allowLoreProposals ?? true,
     judgePresetId: profile?.judgePresetId ?? null,
-    judgeProviderName: profile?.judgeProviderName ?? null,
-    judgeModel: profile?.judgeModel ?? '',
+    judgeSlotId: profile?.judgeSlotId ?? null,
     style: { ...FALLBACK_STYLE, ...(profile?.style ?? defaults?.style) },
     isEnabled: profile?.isEnabled ?? true,
     sortOrder: profile?.sortOrder ?? 0,
   }
 }
 
-/** A tab label; the dot marks a tab holding a field that must be filled before saving. */
-function TabLabel({ children, incomplete, incompleteLabel }: { children: ReactNode; incomplete: boolean; incompleteLabel: string }) {
+
+/**
+ * Who may chat with this profile: everyone with the engine's permission, or members of the picked groups.
+ * Administrators always may, so picking only Administrators keeps the profile to them.
+ */
+function AudienceMenu({ draft, patch }: { draft: Draft; patch: PatchDraft }) {
+  const { t } = useI18n()
+  const groupsQuery = useQuery({ queryKey: ['auth-permission-groups', 'all'], queryFn: listAuthPermissionGroups, staleTime: 60_000, retry: false })
+  const groups = (groupsQuery.data ?? []).filter((group) => group.groupKey === 'admin' || !group.systemGroup)
+  const picked = draft.allowedGroupKeys
+  const nameOf = (key: string) => (key === 'admin' ? t({ ko: '관리자', en: 'Administrators' }) : groups.find((group) => group.groupKey === key)?.name ?? key)
+  const summary = picked.length === 0 ? t({ ko: '모두', en: 'Everyone' }) : picked.length === 1 ? nameOf(picked[0]) : t({ ko: '그룹 {count}', en: '{count} groups' }, { count: picked.length })
+  const toggle = (key: string) => patch({ allowedGroupKeys: picked.includes(key) ? picked.filter((item) => item !== key) : [...picked, key] })
   return (
-    <span className="inline-flex items-center gap-1.5">
-      {children}
-      {incomplete ? (
-        <>
-          <span aria-hidden="true" className="size-1.5 rounded-full bg-primary" />
-          <span className="sr-only">{incompleteLabel}</span>
-        </>
-      ) : null}
-    </span>
+    <DropdownMenu>
+      <Tip content={t({ ko: '사용 대상', en: 'Who can use it' })}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="max-w-40 gap-1.5 text-muted-foreground" aria-label={t({ ko: '사용 대상: {who}', en: 'Who can use it: {who}' }, { who: summary })}>
+            <Users />
+            <span className="truncate max-sm:hidden">{summary}</span>
+          </Button>
+        </DropdownMenuTrigger>
+      </Tip>
+      <DropdownMenuContent align="end" className="min-w-48">
+        <DropdownMenuCheckboxItem checked={picked.length === 0} onSelect={(event) => event.preventDefault()} onCheckedChange={() => patch({ allowedGroupKeys: [] })}>{t({ ko: '모두', en: 'Everyone' })}</DropdownMenuCheckboxItem>
+        {groups.length ? <DropdownMenuSeparator /> : null}
+        {groups.map((group) => (
+          <DropdownMenuCheckboxItem key={group.groupKey} checked={picked.includes(group.groupKey)} onSelect={(event) => event.preventDefault()} onCheckedChange={() => toggle(group.groupKey)}>
+            {nameOf(group.groupKey)}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
 /**
- * Create or edit one chat profile: character, appearance, model, look and tools.
- * One draft spans the tabs, so switching loses nothing.
+ * Create or edit one chat profile. A list of sections on the left (on a phone: the list, then one section at a time);
+ * one draft spans them, so switching loses nothing. The header holds who may use it, the on switch and the switch that
+ * shows the advanced fields in every section.
  */
 export function ChatProfileEditorModal({ open, profile: initialProfile, initialDraft, defaults, onClose }: {
   open: boolean
@@ -150,8 +171,10 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
   const [profile, setProfile] = useState(initialProfile)
   const editorSession = useRef({ open: false, id: initialProfile?.id ?? null })
   const [draft, setDraft] = useState<Draft>(() => buildDraft(profile ?? initialDraft ?? null, defaults))
-  const [assetBatchId, setAssetBatchId] = useState<number | null>(null)
-  const [tab, setTab] = useState<EditorTab>('character')
+  const [section, setSection] = useState<EditorSection>('character')
+  /** Phone layout: the section list until one is picked. */
+  const [showingList, setShowingList] = useState(true)
+  const [advanced, setAdvanced] = useState(() => { try { return localStorage.getItem(ADVANCED_KEY) === '1' } catch { return false } })
   const [assetImports, setAssetImports] = useState(0)
   const assetBusy = assetImports > 0
   const onAssetBusyChange = (busy: boolean) => setAssetImports((count) => Math.max(0, count + (busy ? 1 : -1)))
@@ -161,79 +184,49 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
     if (open && (!editorSession.current.open || editorSession.current.id !== (initialProfile?.id ?? null))) {
       setProfile(initialProfile)
       setDraft(buildDraft(initialProfile ?? initialDraft ?? null, defaults))
-      setTab('character')
-      let batchId: number | null = null
-      try { const value = Number(sessionStorage.getItem(`conai:chat-asset-batch:${initialProfile?.id ?? 0}`)); if (Number.isSafeInteger(value) && value > 0) batchId = value } catch { /* Storage can be unavailable. */ }
-      setAssetBatchId(batchId)
+      setSection('character')
+      setShowingList(true)
     }
     editorSession.current = { open, id: initialProfile?.id ?? null }
   }, [defaults, initialDraft, open, initialProfile])
 
   const patch = (next: Partial<Draft>) => setDraft((current) => ({ ...current, ...next }))
-  const rememberBatch = (id: number) => {
-    setAssetBatchId(id)
-    try { sessionStorage.setItem(`conai:chat-asset-batch:${profile?.id ?? 0}`, String(id)) } catch { /* Storage can be unavailable. */ }
+  const toggleAdvanced = (next: boolean) => {
+    setAdvanced(next)
+    try { localStorage.setItem(ADVANCED_KEY, next ? '1' : '0') } catch { /* Storage can be unavailable. */ }
   }
-  const prepareAssets = async () => {
+  const refreshProfiles = () => Promise.all([queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }), queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY })])
+  /** Saves what generation reads (name, appearance, reference); a new profile is created whole first. */
+  const ensureProfile = async () => {
     const updated = profile ? await updateChatProfile(profile.id, { name: draft.name, appearance: draft.appearance, referenceHash: draft.referenceHash }) : await createChatProfile(draft)
     setProfile(updated)
-    if (!profile) setDraft(buildDraft(updated, defaults))
-    showSnackbar({ message: profile ? t({ ko: '외형을 저장했어.', en: 'Appearance saved.' }) : t({ ko: '프로필을 저장했어.', en: 'Profile saved.' }), tone: 'info' })
-    await Promise.all([queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }), queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY })])
+    if (!profile) {
+      setDraft(buildDraft(updated, defaults))
+      showSnackbar({ message: t({ ko: '프로필을 저장했어.', en: 'Profile saved.' }), tone: 'info' })
+    }
+    await refreshProfiles()
     return updated
   }
-  const assetsApplied = (result: ChatAssetApplyResult, batch: ChatAssetBatch, updated?: ChatProfile) => {
+  /** An applied asset changes the saved profile; the draft takes over just those fields. */
+  const assetApplied = (result: ChatAssetApplyResult, slot: { kind: ChatAssetKind; hash: string }, updated?: ChatProfile) => {
     if (updated) setProfile(updated)
     setDraft((current) => {
       const next = { ...current }
-      for (const slot of batch.slots.filter((slot) => slot.chosenHash)) {
-        if (slot.kind === 'reference') next.referenceHash = slot.chosenHash
-        if (slot.kind === 'avatar') { if (next.avatarHash !== slot.chosenHash) next.avatar = null; next.avatarHash = slot.chosenHash; next.avatarCrop = null }
-        if (slot.kind === 'background') { if (next.backgroundHash !== slot.chosenHash) next.background = null; next.backgroundHash = slot.chosenHash }
-      }
+      if (slot.kind === 'reference') next.referenceHash = slot.hash
+      if (slot.kind === 'avatar') { if (next.avatarHash !== slot.hash) next.avatar = null; next.avatarHash = slot.hash; next.avatarCrop = null }
+      if (slot.kind === 'background') { next.backgroundHash = slot.hash; next.background = undefined }
       const groupId = result.applied.expressionGroupId
       if (groupId) next.style = { ...next.style, emoticonGroupIds: [groupId, ...next.style.emoticonGroupIds.filter((id) => id !== groupId)] }
-      if (updated) {
-        if (result.applied.profileFields.includes('referenceHash')) next.referenceHash = updated.referenceHash
-        if (result.applied.profileFields.includes('avatarHash')) { next.avatarHash = updated.avatarHash; next.avatarCrop = updated.avatarCrop; next.avatar = updated.avatar }
-        if (result.applied.profileFields.includes('backgroundHash')) { next.backgroundHash = updated.backgroundHash; next.background = undefined }
-      }
+      if (updated && result.applied.profileFields.includes('avatarHash')) { next.avatarHash = updated.avatarHash; next.avatarCrop = updated.avatarCrop; next.avatar = updated.avatar }
       return next
     })
   }
+  const runs = useProfileAssetRuns({ profileId: profile?.id ?? null, ensureProfile, onApplied: assetApplied })
   const isLlm = draft.engine === 'llm'
 
-  const providersQuery = useQuery({ queryKey: ['external-api-providers', 'chat-profiles'], queryFn: getExternalApiProviders, enabled: open })
-  const llmProviders = (providersQuery.data ?? []).filter((provider) => provider.provider_type === 'llm_openai_compatible' || provider.provider_type === 'llm_ollama')
   const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled: open })
   const slots = slotsQuery.data ?? []
   const slotsSettled = slotsQuery.isSuccess || slotsQuery.isError
-  // A role lists connection models only while it is "direct" with a connection of its own.
-  const chatDirect = roleDirect(draft, 'chat')
-  const summaryDirect = roleDirect(draft, 'summary')
-  const translationDirect = roleDirect(draft, 'translation')
-  const suggestDirect = roleDirect(draft, 'suggest')
-  const modelsQuery = useQuery({
-    queryKey: ['codex-chat-connection-models', chatDirect.provider],
-    queryFn: () => listChatConnectionModels(chatDirect.provider),
-    enabled: open && isLlm && roleChoice(draft, 'chat', slots, true, slotsSettled) === 'direct' && Boolean(chatDirect.provider),
-    retry: false,
-    staleTime: 60_000,
-  })
-  const summaryModelsQuery = useQuery({
-    queryKey: ['codex-chat-connection-models', summaryDirect.provider],
-    queryFn: () => listChatConnectionModels(summaryDirect.provider),
-    enabled: open && draft.engine !== 'codex' && roleChoice(draft, 'summary', slots, true, slotsSettled) === 'direct' && Boolean(summaryDirect.provider),
-    retry: false,
-    staleTime: 60_000,
-  })
-  const translationModelsQuery = useQuery({
-    queryKey: ['codex-chat-connection-models', translationDirect.provider],
-    queryFn: () => listChatConnectionModels(translationDirect.provider),
-    enabled: open && roleChoice(draft, 'translation', slots, isLlm, slotsSettled) === 'direct' && Boolean(translationDirect.provider),
-    retry: false,
-    staleTime: 60_000,
-  })
   // Reply suggestions can be written by a chat profile (this one too, once saved) or one of the editor's user profiles;
   // one that is off or has no working model is listed greyed out.
   const profilesQuery = useQuery({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, queryFn: listChatAdminProfiles, enabled: open })
@@ -244,13 +237,6 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
       : { id: entry.id, name: entry.name, ready: entry.isEnabled && entry.suggestWriterReady !== false }),
     users: userProfilesQuery.data?.map((entry) => ({ id: entry.id, name: entry.name, ready: entry.modelReady === true })),
   }), [profilesQuery.data, userProfilesQuery.data, profile?.id, t])
-  const suggestModelsQuery = useQuery({
-    queryKey: ['codex-chat-connection-models', suggestDirect.provider],
-    queryFn: () => listChatConnectionModels(suggestDirect.provider),
-    enabled: open && roleChoice(draft, 'suggest', slots, isLlm, slotsSettled) === 'direct' && Boolean(suggestDirect.provider),
-    retry: false,
-    staleTime: 60_000,
-  })
   const lorebooksQuery = useQuery({ queryKey: CHAT_LOREBOOKS_QUERY_KEY, queryFn: listChatLorebooks, enabled: open })
   // The editor's own account books can be linked too (another account's book on the profile stays as it is).
   const ownLorebooksQuery = useQuery({ queryKey: OWN_LOREBOOKS_QUERY_KEY, queryFn: listOwnLorebooks, enabled: open })
@@ -259,52 +245,16 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
   const codexModelsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 5 * 60 * 1000, enabled: open && draft.engine === 'codex' })
   const claudeModelsQuery = useQuery({ queryKey: ['claude-models'], queryFn: getClaudeModels, staleTime: 5 * 60 * 1000, enabled: open && draft.engine === 'claude' })
 
-  // Fields start on real values, not on a "choose" or "connection default" entry: the first connection, then the
-  // connection's default model (or its first listed one). Declared after the draft reset so they apply on top of it.
-  // They stay here, not in the model panel, so switching tabs never re-runs them over edited values.
-  // A new profile starts on the default model slot when there is one. Waits for the slot list so the first connection
-  // is not picked in the meantime. Existing profiles never get a slot; they only get the first connection if empty.
-  const firstProviderName = llmProviders[0]?.provider_name ?? ''
+  // A new API LLM profile starts on the default model; waits for the model list. Existing profiles keep what they have
+  // (no model of their own means the default anyway). Declared after the draft reset so it applies on top of it.
   const defaultSlotId = slots.find((slot) => slot.isDefault)?.id ?? null
   useEffect(() => {
-    if (!open || !slotsSettled) return
-    setDraft((current) => {
-      if (current.engine !== 'llm' || current.providerName || current.modelSlotId) return current
-      if (!profile && defaultSlotId !== null) return { ...current, modelSlotId: defaultSlotId }
-      return firstProviderName ? { ...current, providerName: firstProviderName } : current
-    })
-  }, [open, slotsSettled, defaultSlotId, firstProviderName, draft.engine, profile])
-  useEffect(() => {
-    const data = modelsQuery.data
-    const fill = data?.defaultModel || data?.models[0]
-    if (!open || !fill) return
-    setDraft((current) => (current.engine !== 'llm' || current.model || current.modelSlotId || !current.providerName ? current : { ...current, model: fill }))
-  }, [open, modelsQuery.data, draft.engine])
-  useEffect(() => {
-    const data = summaryModelsQuery.data
-    const fill = data?.defaultModel || data?.models[0]
-    if (!open || !fill) return
-    setDraft((current) => (!current.summaryProviderName || current.summarySlotId || current.summaryModel ? current : { ...current, summaryModel: fill }))
-  }, [open, summaryModelsQuery.data])
-  useEffect(() => {
-    const data = translationModelsQuery.data
-    const fill = data?.defaultModel || data?.models[0]
-    if (!open || !fill) return
-    setDraft((current) => (!current.translationProviderName || current.translationSlotId || current.translationModel ? current : { ...current, translationModel: fill }))
-  }, [open, translationModelsQuery.data])
-  useEffect(() => {
-    const data = suggestModelsQuery.data
-    const fill = data?.defaultModel || data?.models[0]
-    if (!open || !fill) return
-    setDraft((current) => (!current.suggestProviderName || current.suggestSlotId || current.suggestModel ? current : { ...current, suggestModel: fill }))
-  }, [open, suggestModelsQuery.data])
+    if (!open || !slotsSettled || profile || defaultSlotId === null) return
+    setDraft((current) => (current.engine !== 'llm' || current.modelSlotId ? current : { ...current, modelSlotId: defaultSlotId }))
+  }, [open, slotsSettled, defaultSlotId, draft.engine, profile])
 
   const refresh = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }),
-      queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY }),
-      queryClient.invalidateQueries({ queryKey: CHAT_LOREBOOKS_QUERY_KEY }),
-    ])
+    await Promise.all([refreshProfiles(), queryClient.invalidateQueries({ queryKey: CHAT_LOREBOOKS_QUERY_KEY })])
   }
   const saveMutation = useMutation({
     mutationFn: () => (profile ? updateChatProfile(profile.id, draft) : createChatProfile(draft)),
@@ -335,69 +285,108 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
 
   const backgroundUrl = draftProfileAssetUrl(draft, profile, 'background')
   const nameMissing = draft.name.trim().length === 0
-  const connectionMissing = isLlm && !draft.modelSlotId && !draft.providerName
+  const connectionMissing = isLlm && !draft.modelSlotId && defaultSlotId === null
   const canSave = !nameMissing && !connectionMissing && !assetBusy && !saveMutation.isPending
   const incompleteLabel = t({ ko: '입력 필요', en: 'Needs input' })
+
+  const sections: Array<{ value: EditorSection; label: string; icon: ReactNode; incomplete?: boolean }> = [
+    { value: 'character', label: t({ ko: '캐릭터', en: 'Character' }), icon: <UserRound />, incomplete: nameMissing },
+    { value: 'appearance', label: t({ ko: '외형', en: 'Appearance' }), icon: <ImageIcon /> },
+    { value: 'model', label: t({ ko: '모델', en: 'Model' }), icon: <Sparkles />, incomplete: connectionMissing },
+    { value: 'memory', label: t({ ko: '기억', en: 'Memory' }), icon: <BookOpen /> },
+    { value: 'tools', label: t({ ko: '도구', en: 'Tools' }), icon: <Wrench /> },
+    { value: 'look', label: t({ ko: '꾸미기', en: 'Look' }), icon: <Palette /> },
+  ]
+  const current = sections.find((entry) => entry.value === section)!
+  const go = (next: EditorSection) => { if (!assetBusy) { setSection(next); setShowingList(false) } }
+  // A connected chat reads and fills this draft, opens sections, and asks (by card) to save or generate images.
+  const savedDraft = useMemo(() => JSON.stringify(buildDraft(profile ?? initialDraft ?? null, defaults)), [profile, initialDraft, defaults])
+  const assist = useProfileEditorChatPage({
+    open, profile, draft, setDraft, dirty: open && JSON.stringify(draft) !== savedDraft, section, go, slots,
+    lorebooks: linkableLorebooks, blocks: blocksQuery.data, runs, save: () => saveMutation.mutateAsync(),
+  })
 
   return (
     <Modal
       open={open}
       onClose={onClose}
       title={profile ? t({ ko: '프로필 편집', en: 'Edit profile' }) : t({ ko: '프로필 추가', en: 'Add profile' })}
-      widthClassName="max-w-3xl"
-      headerContent={(
-        <SegmentedTabBar
-          size="sm"
-          fullWidth
-          value={tab}
-          onChange={(value) => { if (!assetBusy) setTab(value as EditorTab) }}
-          ariaLabel={t({ ko: '프로필 편집 탭', en: 'Profile editor tabs' })}
-          items={[
-            { value: 'character', label: <TabLabel incomplete={nameMissing} incompleteLabel={incompleteLabel}>{t({ ko: '캐릭터', en: 'Character' })}</TabLabel> },
-            { value: 'appearance', label: t({ ko: '외형', en: 'Appearance' }) },
-            { value: 'model', label: <TabLabel incomplete={connectionMissing} incompleteLabel={incompleteLabel}>{t({ ko: '모델', en: 'Model' })}</TabLabel> },
-            { value: 'look', label: t({ ko: '꾸미기', en: 'Look' }) },
-            { value: 'tools', label: t({ ko: '도구', en: 'Tools' }) },
-          ]}
-        />
+      widthClassName="max-w-5xl"
+      // A docked chat that fills this editor stays usable beside it.
+      sidePanelInset="var(--chat-dock-width, 0px)"
+      headerActions={(
+        <div className="flex shrink-0 items-center gap-1">
+          <AudienceMenu draft={draft} patch={patch} />
+          <label className="flex h-8 cursor-pointer items-center gap-1.5 px-1.5 text-sm text-muted-foreground">
+            {t({ ko: '고급', en: 'Advanced' })}
+            <Switch size="sm" checked={advanced} onCheckedChange={toggleAdvanced} />
+          </label>
+          <Tip content={draft.isEnabled ? t({ ko: '사용 중', en: 'On' }) : t({ ko: '꺼짐', en: 'Off' })}>
+            <span className="inline-flex px-1.5"><Switch checked={draft.isEnabled} onCheckedChange={(isEnabled) => patch({ isEnabled })} aria-label={t({ ko: '사용', en: 'On' })} /></span>
+          </Tip>
+        </div>
       )}
     >
-      <ModalBody>
-        {tab === 'character' ? (
-          <ChatProfileCharacterPanel
-            open={open}
-            draft={draft}
-            patch={patch}
-            lorebooks={linkableLorebooks}
-            onPreview={() => setPreviewOpen(true)}
-            profile={profile}
-            onBusyChange={onAssetBusyChange}
-            busy={assetBusy}
-          />
-        ) : null}
-        {tab === 'appearance' ? <ChatProfileAppearancePanel draft={draft} patch={patch} profile={profile} onBusyChange={onAssetBusyChange} busy={assetBusy} batchId={assetBatchId} onBatchChange={rememberBatch} onPrepareAssets={prepareAssets} onAssetsApplied={assetsApplied} /> : null}
-        {tab === 'model' ? (
-          <ChatProfileModelPanel
-            draft={draft}
-            patch={patch}
-            defaults={defaults}
-            llmProviders={llmProviders}
-            providersLoaded={providersQuery.isSuccess}
-            slots={slots}
-            slotsReady={slotsSettled}
-            suggestWriters={suggestWriters}
-            connectionModels={modelsQuery.data}
-            summaryModels={summaryModelsQuery.data}
-            translationModels={translationModelsQuery.data}
-            suggestModels={suggestModelsQuery.data}
-            codexModels={codexModelsQuery.data?.data.models}
-            claudeModels={claudeModelsQuery.data?.models}
-          />
-        ) : null}
-        {tab === 'look' ? <ChatProfileLookPanel profile={profile} draft={draft} patch={patch} defaults={defaults?.style} backgroundUrl={backgroundUrl} blocks={blocksQuery.data} onBusyChange={onAssetBusyChange} busy={assetBusy} /> : null}
-        {tab === 'tools' ? <ChatProfileToolsPanel open={open} draft={draft} patch={patch} defaults={defaults} /> : null}
-      </ModalBody>
-      <ModalFooter>
+      <ProfileAssistContext.Provider value={assist}>
+      <div className="grid gap-x-6 md:grid-cols-[10.5rem_minmax(0,1fr)]">
+        <nav aria-label={t({ ko: '프로필 편집 항목', en: 'Profile sections' })} className={cn('self-start md:sticky md:top-20 md:block', !showingList && 'max-md:hidden')}>
+          <ul className="space-y-0.5 max-md:divide-y max-md:divide-line">
+            {sections.map((entry) => (
+              <li key={entry.value}>
+                {/* eslint-disable-next-line no-restricted-syntax -- a navigation row; Button styles would fight the list look */}
+                <button
+                  type="button"
+                  aria-current={entry.value === section ? 'page' : undefined}
+                  disabled={assetBusy && entry.value !== section}
+                  onClick={() => go(entry.value)}
+                  className={cn(
+                    'flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-left text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-default disabled:opacity-50 max-md:min-h-12 md:min-h-9 [&_svg]:size-4',
+                    entry.value === section ? 'md:bg-fill md:font-semibold md:text-foreground' : 'text-muted-foreground hover:bg-fill hover:text-foreground',
+                  )}
+                >
+                  {entry.icon}
+                  <span className="flex-1">{entry.label}</span>
+                  {entry.incomplete ? <><span aria-hidden="true" className="size-1.5 rounded-full bg-primary" /><span className="sr-only">{incompleteLabel}</span></> : assist.sectionFilled(entry.value)
+                    ? <Tip content={t({ ko: '어시스턴트가 채움', en: 'Filled by the assistant' })}><span role="img" aria-label={t({ ko: '어시스턴트가 채움', en: 'Filled by the assistant' })} className="size-1.5 rounded-full bg-primary" /></Tip>
+                    : null}
+                  <ChevronRight className="text-muted-foreground md:hidden" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        <div className={cn('min-w-0 space-y-4 md:min-h-[min(640px,70vh)]', showingList && 'max-md:hidden')}>
+          <div className="flex items-center gap-1 md:hidden">
+            <IconButton size="icon-sm" variant="ghost" onClick={() => setShowingList(true)} label={t({ ko: '항목 목록', en: 'Sections' })}><ChevronLeft /></IconButton>
+            <span className="text-sm font-semibold">{current.label}</span>
+          </div>
+          {section === 'character' ? (
+            <ChatProfileCharacterPanel open={open} draft={draft} patch={patch} onPreview={() => setPreviewOpen(true)} profile={profile} onOpenAppearance={() => go('appearance')} />
+          ) : null}
+          {section === 'appearance' ? (
+            <ChatProfileAppearancePanel draft={draft} patch={patch} profile={profile} onBusyChange={onAssetBusyChange} busy={assetBusy} runs={runs} ensureProfile={ensureProfile} onProfileChange={setProfile} />
+          ) : null}
+          {section === 'model' ? (
+            <ChatProfileModelPanel
+              draft={draft}
+              patch={patch}
+              defaults={defaults}
+              slots={slots}
+              slotsReady={slotsSettled}
+              suggestWriters={suggestWriters}
+              codexModels={codexModelsQuery.data?.data.models}
+              claudeModels={claudeModelsQuery.data?.models}
+              advanced={advanced}
+            />
+          ) : null}
+          {section === 'memory' ? <ChatProfileMemoryPanel draft={draft} patch={patch} defaults={defaults} lorebooks={linkableLorebooks} advanced={advanced} /> : null}
+          {section === 'tools' ? <ChatProfileToolsPanel open={open} draft={draft} patch={patch} defaults={defaults} advanced={advanced} /> : null}
+          {section === 'look' ? <ChatProfileLookPanel profile={profile} draft={draft} patch={patch} defaults={defaults?.style} backgroundUrl={backgroundUrl} blocks={blocksQuery.data} onBusyChange={onAssetBusyChange} busy={assetBusy} runs={runs} /> : null}
+        </div>
+      </div>
+      </ProfileAssistContext.Provider>
+      <ModalFooter className="mt-4 border-t border-line pt-3">
         {profile ? (
           <IconButton size="icon-sm" variant="destructive" onClick={() => void handleDelete()} disabled={deleteMutation.isPending} label={t({ ko: '삭제', en: 'Delete' })}>
             <Trash2 />

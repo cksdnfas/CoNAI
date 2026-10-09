@@ -216,7 +216,7 @@ test('generation reactions: opt-in, one-shot recovery, user precedence and speak
   await t.test('the requesting group speaker reacts with its context; a selected slot overrides the chat model', async (s) => {
     const speaker = ChatProfileStore.create({ name: '솔', engine: 'llm', providerName: 'test', model: 'speaker-model', systemPrompt: '나는 솔이야.', mcpEnabled: false, summaryEnabled: false })
     const room = GroupChatService.create(requester, { profileIds: [profile.id, speaker.id], representativeId: profile.id, userProfileId: null })
-    const slot = ModelSlotStore.create({ name: '반응', providerName: 'test', model: 'reaction-model' }).slot
+    const slot = ModelSlotStore.find(ModelSlotStore.ensure('test', 'reaction-model') as number)!
     CodexChatStore.updateThreadContext(room.id, { reactionEnabled: true, reactionModelSlotId: slot.id })
     const linked = attach(room, ['completed'], speaker.id)
     let body: any

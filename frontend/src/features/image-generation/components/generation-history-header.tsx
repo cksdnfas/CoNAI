@@ -57,6 +57,12 @@ export function GenerationHistoryHeader({
   hideScopeActions = false,
 }: GenerationHistoryHeaderProps) {
   const { t } = useI18n()
+  // Scope, total and the rating-hidden note live in the count badge's tooltip instead of a caption line.
+  const scopeSummary = [
+    isPublicView ? null : isAdmin ? t('image-generation.components.generation.history.panel.all.users') : t('image-generation.components.generation.history.panel.my.records'),
+    t({ ko: '전체 기록 {count}', en: 'Total records: {count}' }, { count: historyTotalLabel }),
+    hasHiddenHistoryItems ? t({ ko: '일부는 등급 설정으로 숨김', en: 'Some hidden by rating settings' }) : null,
+  ].filter(Boolean).join('\n')
 
   const backButton = onBack ? (
     <IconButton
@@ -88,10 +94,10 @@ export function GenerationHistoryHeader({
                 <span className="inline-flex items-center" aria-label={historyLabel}><ProviderIcon provider={historyProvider} className="size-3.5" /></span>
               </Tip>
             ) : <span>{historyLabel}</span>}
-            {!isPublicView ? <span>· {isAdmin ? t('image-generation.components.generation.history.panel.all.users') : t('image-generation.components.generation.history.panel.my.records')}</span> : null}
-            <span>· {t({ ko: '전체 기록 {count}', en: 'Total records: {count}' }, { count: historyTotalLabel })}</span>
-            {hasHiddenHistoryItems ? <span>· {t({ ko: '일부는 등급 설정으로 숨김', en: 'Some hidden by rating settings' })}</span> : null}
-            {isRefreshing ? <span>· {t({ ko: '새로고침 중…', en: 'Refreshing…' })}</span> : null}
+            <Tip content={scopeSummary} className="whitespace-pre-line">
+              <Badge variant="outline" className="tabular-nums" tabIndex={0} aria-label={scopeSummary}>{historyTotalLabel}</Badge>
+            </Tip>
+            {isRefreshing ? <Spinner size="sm" label={t({ ko: '새로고침 중…', en: 'Refreshing…' })} /> : null}
           </div>
         </div>
       )}

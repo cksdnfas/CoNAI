@@ -34,26 +34,34 @@ import {
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { ChatProfileEditorModal } from './chat-profile-editor-modal'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { ChatCardImportReportModal } from './chat-card-import-report'
 import { InstantApplyHint } from './settings-section-status'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 import { SettingsSwitchRow } from './settings-switch-row'
 
-/** `★ slot · model` when the profile uses a model slot, else the direct connection line. */
-function profileModelLine(profile: ChatProfile, slots: ModelSlot[], t: ReturnType<typeof useI18n>['t']) {
-  const slot = profile.modelSlotId ? slots.find((item) => item.id === profile.modelSlotId) : undefined
-  if (slot) return `${slot.isDefault ? '★ ' : ''}${slot.name} · ${slot.model}`
-  const model = profile.model || t({ ko: '기본 모델', en: 'default model' })
-  if (profile.engine === 'claude') return `Claude Code · ${profile.model || 'sonnet'}`
-  return profile.engine === 'codex' ? `Codex · ${model}` : `${profile.providerName} · ${model}`
+/** An API LLM profile's model row: its own, else the default (★) it falls back to. */
+function profileModelRow(profile: ChatProfile, slots: ModelSlot[]) {
+  if (profile.engine !== 'llm') return undefined
+  return slots.find((item) => item.id === profile.modelSlotId) ?? slots.find((item) => item.isDefault)
 }
 
-/** Short chip text for the row: the model's name, else the engine or connection. The full line is its tooltip. */
+/** `★ connection · model` for an API LLM profile, else the engine and its model. */
+function profileModelLine(profile: ChatProfile, slots: ModelSlot[], t: ReturnType<typeof useI18n>['t']) {
+  const slot = profileModelRow(profile, slots)
+  if (slot) return `${slot.isDefault ? '★ ' : ''}${slot.label}`
+  if (profile.engine === 'claude') return `Claude Code · ${profile.model || 'sonnet'}`
+  if (profile.engine === 'codex') return `Codex · ${profile.model || t({ ko: '기본 모델', en: 'default model' })}`
+  return t({ ko: '모델 없음', en: 'No model' })
+}
+
+/** Short chip text for the row: the model, else the engine. The full line is its tooltip. */
 function profileModelChip(profile: ChatProfile, slots: ModelSlot[]) {
-  const slot = profile.modelSlotId ? slots.find((item) => item.id === profile.modelSlotId) : undefined
-  if (slot) return `${slot.isDefault ? '★ ' : ''}${slot.name}`
+  const slot = profileModelRow(profile, slots)
+  if (slot) return `${slot.isDefault ? '★ ' : ''}${slot.model}`
   if (profile.engine === 'claude') return 'Claude Code'
-  return profile.engine === 'codex' ? 'Codex' : profile.providerName
+  return profile.engine === 'codex' ? 'Codex' : '—'
 }
 
 /** The one tool chip of a profile: the allowed-tool count, else just "tools". */
@@ -113,6 +121,24 @@ export function ChatSettingsProfiles() {
 
   const profiles = profilesQuery.data ?? []
   const slots = slotsQuery.data ?? []
+
+  // A connected chat can open the editor for a new or listed profile; it fills and saves from there.
+  useChatPageRegistration({
+    kind: 'settings', title: t({ ko: '설정 · 채팅 프로필', en: 'Settings · Chat profiles' }), resourceId: 'chat', priority: 5, fields: [],
+    data: { section: 'chat', profiles: profiles.map((profile) => ({ id: profile.id, name: profile.name, tagline: profile.tagline, engine: profile.engine, isEnabled: profile.isEnabled })) },
+    actions: [
+      pageAction('profile.open_create', t({ ko: '새 프로필 편집기 열기', en: 'Open new profile editor' }), t({ ko: '빈 프로필 편집기를 열어. 열린 편집기가 바로 돌아오니 이어서 profile.draft로 채워.', en: 'Open an empty profile editor; it comes back so you can fill it with profile.draft next.' })),
+      ...(profiles.length ? [pageAction('profile.open_edit', t({ ko: '프로필 편집기 열기', en: 'Open profile editor' }), t({ ko: '목록(data.profiles)의 프로필 편집기를 열어.', en: 'Open the editor of a listed profile (data.profiles).' }), pageObject({ id: pageChoice(profiles.map((profile) => profile.id)) }, ['id']))] : []),
+    ],
+    apply: () => {},
+    applyAction: (id, args, assertCurrent) => {
+      assertCurrent()
+      if (id === 'profile.open_create') { setEditor({ profile: null }); return }
+      const profile = profiles.find((entry) => entry.id === Number(args.id))
+      if (!profile) throw new Error('목록에 없는 프로필이야.')
+      setEditor({ profile })
+    },
+  }, { preserveOnSearchChange: true })
 
   return (
     <div className="space-y-8">

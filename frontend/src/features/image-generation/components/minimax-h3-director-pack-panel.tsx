@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Download, FolderOpen, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { FieldInfo } from '@/components/ui/field'
+import { IconButton } from '@/components/ui/icon-button'
 import { Select } from '@/components/ui/select'
 import { Modal } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
@@ -102,18 +102,17 @@ export function MiniMaxH3DirectorPackPanel({ value, onChange, allowFiles, allowP
 
   if (!allowFiles && !allowPrompt) return null
   return <>
-    <Button type="button" size="icon-sm" variant="secondary" disabled={disabled} onClick={() => setOpen(true)} aria-label={t({ ko: '참조 팩', en: 'Reference pack' })} title={t({ ko: '참조 팩', en: 'Reference pack' })}><FolderOpen className="h-4 w-4" /></Button>
+    <IconButton size="icon-sm" variant="secondary" disabled={disabled} onClick={() => setOpen(true)} label={t({ ko: '참조 팩 저장·불러오기', en: 'Save or load reference pack' })}><FolderOpen className="h-4 w-4" /></IconButton>
     <Modal open={open} title={t({ ko: '참조 팩', en: 'Reference pack' })} onClose={() => { if (!busy) setOpen(false) }} widthClassName="max-w-xl">
       <div className="space-y-4 p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <FieldInfo>{t({ ko: 'DaSiWa JSON. 미디어 파일은 안 들어 있어서 없는 파일은 직접 연결해.', en: 'DaSiWa JSON. Media files are not embedded; attach missing ones yourself.' })}</FieldInfo>
           <Select aria-label={t({ ko: '데이터 범위', en: 'Data scope' })} value={effectiveScope} disabled={busy} onChange={(event) => setScope(event.target.value as MiniMaxDirectorPackScope)}>
             {allowFiles && allowPrompt ? <option value="all">{t({ ko: '전체', en: 'All' })}</option> : null}
             {allowFiles ? <option value="files">{t({ ko: '참조 파일', en: 'Reference files' })}</option> : null}
             {allowPrompt ? <option value="prompt">{t({ ko: '프롬프트', en: 'Prompt' })}</option> : null}
           </Select>
-          <Button type="button" size="icon-sm" variant="secondary" disabled={busy} onClick={save} aria-label={t({ ko: '팩 저장', en: 'Save pack' })} title={t({ ko: '팩 저장', en: 'Save pack' })}><Download className="h-4 w-4" /></Button>
-          <Button type="button" size="icon-sm" variant="secondary" disabled={busy} onClick={() => packInput.current?.click()} aria-label={t({ ko: '팩 불러오기', en: 'Load pack' })} title={t({ ko: '팩 불러오기', en: 'Load pack' })}><Upload className="h-4 w-4" /></Button>
+          <IconButton size="icon-sm" variant="secondary" disabled={busy} onClick={save} label={t({ ko: '팩 저장 (DaSiWa JSON)', en: 'Save pack (DaSiWa JSON)' })}><Download className="h-4 w-4" /></IconButton>
+          <IconButton size="icon-sm" variant="secondary" disabled={busy} onClick={() => packInput.current?.click()} label={t({ ko: '팩 불러오기 (미디어 파일은 안 들어 있어서 직접 연결해)', en: 'Load pack (media files are not embedded; attach them yourself)' })}><Upload className="h-4 w-4" /></IconButton>
           <input ref={packInput} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void loadFile(file) }} />
         </div>
         {pack ? <div className="space-y-3">

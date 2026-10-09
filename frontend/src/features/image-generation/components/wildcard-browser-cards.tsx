@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ListRow } from '@/components/ui/list-row'
 import { RowGroup } from '@/components/ui/row-group'
 import { StatTile } from '@/components/ui/stat-tile'
+import { Tip } from '@/components/ui/tooltip'
 import { SidebarTree } from '@/features/prompts/components/sidebar-tree'
 import { useI18n } from '@/i18n'
 import {
@@ -146,16 +147,17 @@ export function WildcardDetailCard({
   return (
     <section className="space-y-6">
       <div className="flex min-h-10 items-center justify-between gap-3">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => void onCopySyntax(selectedWildcardSyntax, selectedWildcardSyntaxLabel)}
-          className="-ml-2 min-w-0 max-w-full"
-          title={t({ ko: '클릭해서 복사', en: 'Click to copy' })}
-        >
-          <code className="truncate text-base font-semibold text-foreground">{selectedWildcardSyntax}</code>
-        </Button>
+        <Tip content={t({ ko: '와일드카드 문법 복사', en: 'Copy wildcard syntax' })}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => void onCopySyntax(selectedWildcardSyntax, selectedWildcardSyntaxLabel)}
+            className="-ml-2 min-w-0 max-w-full"
+          >
+            <code className="truncate text-base font-semibold text-foreground">{selectedWildcardSyntax}</code>
+          </Button>
+        </Tip>
         {extraActions ? <div className="flex shrink-0 items-center gap-1">{extraActions}</div> : null}
       </div>
 

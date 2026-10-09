@@ -8,7 +8,7 @@ export type ChatAssetBatchInput = {
   /** Emotion names from that prompt preset; omitted means every entry. */
   expressions?: string[]
   slots?: ChatAssetSlotInput[]
-  /** Required for ComfyUI: an exposed text/textarea field receiving the slot prompt. */
+  /** ComfyUI: the text field receiving the slot prompt; omitted, the preset's chosen field or the only clear one. */
   promptField?: string
 }
 export type ChatAssetApplyInput = { avatarCrop?: { x: number; y: number; scale: number } | null }
@@ -55,5 +55,6 @@ export type ChatProfileAssetsProposal = {
   savedId?: number | null
 } & (
   | { action: 'create'; input: ChatAssetBatchInput }
-  | { action: 'apply'; batchId: number; chosenHashes: Record<string, string>; input: ChatAssetApplyInput }
+  /** `picks`: candidates the chat chose (slot → hash); approving picks them first, then applies every chosen slot. */
+  | { action: 'apply'; batchId: number; chosenHashes: Record<string, string>; picks?: Record<string, string>; input: ChatAssetApplyInput }
 )

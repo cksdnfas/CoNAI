@@ -10,7 +10,6 @@ import {
   NAI_CHARACTER_GRID_Y_OPTIONS,
   normalizeNaiCharacterPromptDrafts,
 } from '@/features/image-generation/image-generation-shared'
-import { EmptyState } from '@/components/ui/empty-state'
 import { useSerializedDrafts } from './use-serialized-drafts'
 
 type NaiCharacterPromptDraft = {
@@ -153,9 +152,8 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm bg-surface-low px-3 py-2.5">
-        <div className="text-sm font-medium text-foreground">{t({ ko: 'Character Prompt', en: 'Character Prompt' })}</div>
-        <IconButton size="icon-sm" variant="secondary" onClick={handleAdd} label={t({ ko: '추가', en: 'Add' })}>
+      <div className="flex justify-end">
+        <IconButton size="icon-sm" variant="secondary" onClick={handleAdd} label={t({ ko: '캐릭터 프롬프트 추가', en: 'Add character prompt' })}>
           <Plus className="h-4 w-4" />
         </IconButton>
       </div>
@@ -176,9 +174,7 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
         />
       ) : null}
 
-      {drafts.length === 0 ? (
-        <EmptyState size="compact" title={t({ ko: '캐릭터 없음', en: 'No characters' })} />
-      ) : (
+      {drafts.length === 0 ? null : (
         drafts.map((draft, index) => (
           <div
             key={`nai-character-input-${index}`}

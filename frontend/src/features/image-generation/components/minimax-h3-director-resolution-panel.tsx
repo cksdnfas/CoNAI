@@ -32,11 +32,6 @@ export function MiniMaxH3DirectorResolutionPanel({ value, canvas, numericBounds,
 
   return (
     <section className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-xs font-semibold text-foreground">{t({ ko: '출력 규격', en: 'Output dimensions' })}</div>
-        <div className="text-xs tabular-nums text-primary">{canvas[0]} × {canvas[1]} · 32px</div>
-      </div>
-
       <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 13rem), 1fr))' }}>
         <ResolutionPicker
           mode="ratio"
@@ -51,7 +46,8 @@ export function MiniMaxH3DirectorResolutionPanel({ value, canvas, numericBounds,
             { value: 'custom', label: 'CUSTOM' },
           ]}
           onTierChange={(resolution) => patch({ resolution: resolution as MiniMaxH3DirectorResolutionState['resolution'] })}
-          tierLabel={t({ ko: '해상도 / 메가픽셀', en: 'Resolution / megapixels' })}
+          tierLabel={t({ ko: '해상도', en: 'Resolution' })}
+          tierHint={`${canvas[0]} × ${canvas[1]}`}
           renderAbove={(slot) => renderInputPort?.(slot === 'ratio' ? 'resolution.aspect' : 'resolution.resolution')}
         />
 

@@ -5,7 +5,7 @@ import { ExternalApiProvider } from '../models/ExternalApiProvider';
 import { ExternalApiService } from '../services/externalApiService';
 import { ChatProfileStore } from '../services/codex-chat/chatProfiles';
 import { resolveProfileModel } from '../services/codex-chat/chatModelRoles';
-import { modelReferencesOfConnection } from '../services/codex-chat/modelSlots';
+import { deleteModelsOfConnection, modelReferencesOfConnection } from '../services/codex-chat/modelSlots';
 import { fetchOpenAiCompatibleModels, toOpenAiApiBase } from '../services/codex-chat/llmChatCompletion';
 import { listTypesafeModels } from '../services/judge/typesafeClient';
 import { asyncHandler } from '../middleware/asyncHandler';
@@ -56,7 +56,7 @@ router.get('/llm-profile-options', requirePermission('workflows.view'), asyncHan
           name: profile.name,
           avatar: profile.avatar,
           provider_name: resolved?.providerName ?? '',
-          model: resolved?.model || ExternalApiProvider.findEnabledLlmOptions().find((option) => option.provider_name === resolved?.providerName)?.default_model || null,
+          model: resolved?.model || null,
           is_enabled: profile.isEnabled,
         };
       }),
@@ -226,18 +226,19 @@ router.put('/providers/:name', asyncHandler(async (req: Request, res: Response) 
 router.delete('/providers/:name', asyncHandler(async (req: Request, res: Response) => {
   const name = routeParam(req.params.name);
 
-  // A connection that slots or chat profiles still name would leave them failing at request time.
+  // A connection whose models are still used would leave those profiles / judges failing at request time.
   const references = modelReferencesOfConnection(name);
-  if (references.slots.length > 0 || references.profiles.length > 0) {
+  if (references.models.length > 0) {
     res.status(409).json({
       success: false,
-      error: '이 연결을 쓰는 모델·프로필이 있어.',
+      error: `이 연결의 모델을 쓰는 곳이 있어: ${references.models.join(', ')}`,
       data: references,
     });
     return;
   }
 
   const deleted = ExternalApiProvider.delete(name);
+  if (deleted) deleteModelsOfConnection(name);
 
   if (!deleted) {
     res.status(404).json({

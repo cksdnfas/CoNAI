@@ -2,6 +2,7 @@ import type { ChatPageProposal, ChatPageSnapshot } from './chatPage'
 import type { ChatWorkflowProposal } from './chatWorkflow'
 import type { ChatPageActionProposal } from './chatPageAction'
 import type { ChatProfileAssetsProposal } from './chatAssets'
+import type { ChatTaskPlanProposal, ChatTaskRouting } from './chatTask'
 
 /** A recipient is a member profile, the human, or a room announcement (no automatic reply). */
 export type ChatRecipient = number | 'user' | 'room'
@@ -22,6 +23,8 @@ export type ChatMessageRouting = {
   replyId?: string
   replyTo: ChatReplyQuote | null
   recipients: ChatRecipient[]
+  /** A request the server sent to move a task on (see ChatTask), not something the person typed. */
+  task?: ChatTaskRouting
 }
 
 /** Server-issued MCP binding. Models cannot choose their sender, room, or active reply. */
@@ -35,6 +38,8 @@ export type ChatExecutionContext = {
 }
 
 /** Wire contracts shared by the chat server and client. */
+export type ChatPageOperation = { commandId: string; tier: 'view' | 'draft'; label: string }
+
 export type ChatToolCall = {
   id: string
   tool: string
@@ -50,6 +55,8 @@ export type ChatToolCall = {
   audioCandidateIds?: string[]
   /** Truncated tool output retained for later model requests. */
   output?: string
+  /** A view/draft operation the chat ran on the connected page; the reader's tab keeps the undo for drafts under this id. */
+  pageOperation?: ChatPageOperation
   jobIds?: number[]
   pendingJobIds?: number[]
   /** Terminal linked jobs without a completed image, derived when reading the reply. */
@@ -71,6 +78,7 @@ export type ChatProposal = { id: number; dismissed?: boolean } & (
   | ChatWorkflowProposal
   | ChatPageActionProposal
   | ChatProfileAssetsProposal
+  | ChatTaskPlanProposal
   | {
       kind: 'display_block'
       /** Shared block name (defaults to the block key). */

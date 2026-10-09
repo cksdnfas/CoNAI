@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { FormField } from '../image-generation-shared'
 
@@ -80,12 +81,16 @@ type OptionSelectFieldProps = {
 function OptionSelectField({ label, hint, value, options, onChange, above }: OptionSelectFieldProps) {
   return (
     <FieldSlot above={above}>
-      <FormField label={label} hint={hint}>
-        <Select value={value} onChange={(event) => onChange(event.target.value)}>
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </Select>
+      <FormField label={label}>
+        <Tip content={hint}>
+          <div>
+            <Select value={value} onChange={(event) => onChange(event.target.value)}>
+              {options.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </Select>
+          </div>
+        </Tip>
       </FormField>
     </FieldSlot>
   )
@@ -111,7 +116,7 @@ type RatioResolutionPickerProps = {
   tiers: readonly ResolutionOption[]
   onTierChange: (value: string) => void
   tierLabel?: string
-  /** Short read-out next to the tier label, e.g. the resulting pixel size. */
+  /** Short read-out shown as the tier select's tooltip, e.g. the resulting pixel size. */
   tierHint?: string
   renderAbove?: (slot: 'ratio' | 'tier') => ReactNode
 }

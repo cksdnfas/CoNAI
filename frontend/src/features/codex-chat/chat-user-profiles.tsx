@@ -142,7 +142,7 @@ export function ChatUserProfileEditorModal({ open, profile, onClose }: { open: b
           >
             <option value="">{t({ ko: '없음', en: 'None' })}</option>
             {/* A model whose connection cannot be used shows greyed out. */}
-            {models.map((model) => <option key={model.id} value={model.id} disabled={!model.ready}>{`${model.name} · ${model.model}`}</option>)}
+            {models.map((model) => <option key={model.id} value={model.id} disabled={!model.ready}>{model.label}</option>)}
           </Select>
         </Field>
       </ModalBody>
@@ -207,9 +207,9 @@ export function ChatUserProfileManagerModal({ open, onClose }: { open: boolean; 
       >
         <ModalBody>
           {profilesQuery.isSuccess && profiles.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 py-8 text-sm text-muted-foreground">
+            <div className="flex flex-col items-center gap-2 py-4 text-xs text-muted-foreground">
               {t({ ko: '아직 사용자 프로필이 없어.', en: 'No user profiles yet.' })}
-              <Button size="sm" variant="secondary" onClick={() => setEditor({ profile: null })}><Plus />{t({ ko: '사용자 프로필 추가', en: 'Add user profile' })}</Button>
+              <IconButton size="icon-sm" variant="secondary" label={t({ ko: '사용자 프로필 추가', en: 'Add user profile' })} onClick={() => setEditor({ profile: null })}><Plus /></IconButton>
             </div>
           ) : (
             <ChatUserProfileRows profiles={profiles} onEdit={(profile) => setEditor({ profile })} />

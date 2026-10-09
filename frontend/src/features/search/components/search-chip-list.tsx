@@ -6,13 +6,15 @@ import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { ListRow } from '@/components/ui/list-row'
 import { Text } from '@/components/ui/text'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 interface SearchChipListProps {
   chips: SearchChip[]
   title?: string | null
-  emptyMessage?: string
+  /** Shown while there are no chips; null shows nothing. */
+  emptyMessage?: string | null
   onCycleOperator: (chipId: string) => void
   onRemove: (chipId: string) => void
   className?: string
@@ -34,7 +36,7 @@ export function SearchChipList({
   return (
     <div className={cn('space-y-2', className)}>
       {resolvedTitle ? <Text as="div" variant="overline" className="font-semibold">{resolvedTitle}</Text> : null}
-      {chips.length === 0 ? <p className="py-2 text-sm text-muted-foreground">{resolvedEmptyMessage}</p> : null}
+      {chips.length === 0 && resolvedEmptyMessage ? <p className="py-2 text-sm text-muted-foreground">{resolvedEmptyMessage}</p> : null}
       {chips.length > 0 ? (
         <div>
           {chips.map((chip) => (
@@ -42,20 +44,21 @@ export function SearchChipList({
               <span className="rounded-sm px-2 py-1 text-2xs font-semibold" style={getSearchScopeStyle(chip.scope)}>
                 {t(SEARCH_SCOPE_LABEL_KEYS[chip.scope])}
               </span>
-              <Button
-                type="button"
-                variant="subtle"
-                size="xs"
-                onClick={() => onCycleOperator(chip.id)}
-                className="bg-primary/10 font-bold text-primary hover:bg-primary/18 hover:text-primary"
-                aria-label={t(
-                  { ko: '{label}: {operator}. {hint}', en: '{label}: {operator}. {hint}' },
-                  { label: chip.label, operator: t(SEARCH_OPERATOR_DESCRIPTIONS[chip.operator]), hint: t(SEARCH_OPERATOR_CYCLE_HINT) },
-                )}
-                title={[t(SEARCH_OPERATOR_DESCRIPTIONS[chip.operator]), t(SEARCH_OPERATOR_CYCLE_HINT)].join('\n')}
-              >
-                {t(SEARCH_OPERATOR_LABELS[chip.operator])}
-              </Button>
+              <Tip content={[t(SEARCH_OPERATOR_DESCRIPTIONS[chip.operator]), t(SEARCH_OPERATOR_CYCLE_HINT)].join('\n')} className="whitespace-pre-line">
+                <Button
+                  type="button"
+                  variant="subtle"
+                  size="xs"
+                  onClick={() => onCycleOperator(chip.id)}
+                  className="bg-primary/10 font-bold text-primary hover:bg-primary/18 hover:text-primary"
+                  aria-label={t(
+                    { ko: '{label}: {operator}. {hint}', en: '{label}: {operator}. {hint}' },
+                    { label: chip.label, operator: t(SEARCH_OPERATOR_DESCRIPTIONS[chip.operator]), hint: t(SEARCH_OPERATOR_CYCLE_HINT) },
+                  )}
+                >
+                  {t(SEARCH_OPERATOR_LABELS[chip.operator])}
+                </Button>
+              </Tip>
               <span className="min-w-0 flex-1 truncate text-sm text-foreground" style={chip.color ? { color: chip.color } : undefined}>
                 {chip.label}
               </span>

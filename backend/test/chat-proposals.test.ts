@@ -37,13 +37,21 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
   updateChatSettings({ enabled: true })
   const { intersectChatScopes } = await import('../src/services/codex-chat/codexChatAccess')
   const { MCP_HTTP_SCOPES } = await import('../src/services/mcpHttpSettingsService')
-  const { ALL_MCP_HTTP_SCOPES, getMcpToolScope } = await import('../src/mcp/context')
+  const { ALL_MCP_HTTP_SCOPES, getMcpToolScope, CHAT_PAGE_TOOLS } = await import('../src/mcp/context')
+  // A connected page also keeps library/catalog reads and setup proposals; these checks look at everything else.
+  // Task tools are the chat's own bookkeeping in every 1:1 chat (see assistant-agent.test.ts), so they are left out here too.
+  const pageOnly = (names: string[]) => names.filter((name) => !name.startsWith('task_') && name !== 'get_proposal_status' && (CHAT_PAGE_TOOLS.has(name) || !['read', 'configure'].includes(getMcpToolScope(name) ?? ''))).sort()
+  const PRIVATE_FILE_TOOLS = ['list_files', 'get_file_info', 'read_file_text']
   const { openChatMcpBridge } = await import('../src/services/codex-chat/chatMcpBridge')
   const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
+  const { setChatPageCommandTimeout, resolveChatPageCommand } = await import('../src/services/codex-chat/chatPageBridge')
+  const { subscribeToRuntimeEvents } = await import('../src/services/runtime-events/runtimeEventBus')
+  // No browser answers here unless a test plays one; a page read then falls back to the reported screen quickly.
+  setChatPageCommandTimeout(100)
   const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
 
   ExternalApiProvider.create({ provider_name: 'conn', display_name: 'Conn', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
-  const slot = ModelSlotStore.create({ name: 'Fast Model', providerName: 'conn', model: 'm1' }).slot
+  const slot = ModelSlotStore.find(ModelSlotStore.ensure('conn', 'm1') as number)!
   const profile = ChatProfileStore.create({ name: 'Mina', engine: 'llm', providerName: 'conn', systemPrompt: 'old prompt', tagline: 'old tagline', mcpEnabled: true, mcpScopes: ['read', 'configure'] })
   const threadId = CodexChatStore.createThread(null, 'proposal chat', 'llm', profile.id)
   const controller = new AbortController()
@@ -71,10 +79,11 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     { id: 'steps', label: 'Steps', type: 'number', value: '20', min: 1, max: 50, integer: true },
     { id: 'sampler', label: 'Sampler', type: 'select', value: 'euler', options: ['euler', 'euler_ancestral'] },
   ], apiKey: 'must-not-be-retained' })
-  const pageProfile = ChatProfileStore.create({ name: 'Page assistant', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page', 'propose_page_changes'] })
+  const pageProfile = ChatProfileStore.create({ name: 'Page assistant', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page', 'page_fill'] })
   const pageThreadId = CodexChatStore.createThread(null, 'page chat', 'llm', pageProfile.id)
-  const workflowPage = normalizeChatPageSnapshot({ ...page, kind: 'workflow', resourceId: 'workflow:draft:session-test', fields: [], workflow: emptyWorkflow })
-  const workflowProfile = ChatProfileStore.create({ name: 'Workflow assistant', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes'] })
+  // Its own connection: the bridge keeps the newest screen per connection, and other tests report other screens.
+  const workflowPage = normalizeChatPageSnapshot({ ...page, connectionId: 'connection-workflow-1', kind: 'workflow', resourceId: 'workflow:draft:session-test', fields: [], workflow: emptyWorkflow })
+  const workflowProfile = ChatProfileStore.create({ name: 'Workflow assistant', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page', 'get_workflow_editor', 'list_workflow_modules', 'workflow_edit'] })
   const workflowThreadId = CodexChatStore.createThread(null, 'workflow chat', 'llm', workflowProfile.id)
 
   await t.test('workflow transactions: atomic creation, rewiring/removal, protected fields and cycles', () => {
@@ -114,35 +123,58 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     assert.throws(() => normalizeChatPageSnapshot({ ...workflowPage, path: '/prompts' }), /대상 페이지/)
   })
 
-  await t.test('workflow tools: request-owned revision, read-only catalog, reviewed proposal and schema changes', async () => {
+  await t.test('workflow tools: edits run in the open editor right away, bound to its own revision', async () => {
+    const admin = { accountId: null, accountType: 'admin' as const }
     const context: ChatExecutionContext = { threadId: workflowThreadId, profileId: workflowProfile.id, kind: 'direct', replyId: 'workflow-tools', page: workflowPage }
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
-    const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'generate', 'organize', 'configure'], null, { chatContext: context })
+    const bridge = await openChatMcpBridge(admin, ['read', 'generate', 'organize', 'configure'], null, { chatContext: context })
     try {
-      assert.deepEqual(bridge.tools.map((tool) => tool.function.name).sort(), ['get_current_page', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes', 'save_lore'].sort(), 'page tools plus the chat own tools')
+      assert.deepEqual(pageOnly(bridge.tools.map((tool) => tool.function.name)), ['get_current_page', 'page_act', 'page_fill', 'propose_page_action', 'read_page_data', 'get_workflow_editor', 'list_workflow_modules', 'workflow_edit', 'save_lore'].sort(), 'page tools plus the chat own tools')
+      assert.ok(bridge.tools.some((tool) => tool.function.name === 'propose_chat_profile'), 'setup proposals stay offered on a connected page')
+      assert.ok(!bridge.tools.some((tool) => PRIVATE_FILE_TOOLS.includes(tool.function.name)), 'private files stay out of page mode')
       const read = await bridge.call('get_workflow_editor', {})
       assert.ok(!read.isError)
       const catalog = await bridge.call('list_workflow_modules', { moduleIds: [textModule.id] })
       assert.ok(!catalog.isError)
       assert.ok(!JSON.stringify(catalog).includes('template_defaults'))
-      assert.ok((await bridge.call('propose_workflow_changes', { operations: [{ type: 'add_node', nodeId: 'unknown', moduleId: 9999999 }] })).isError)
-      const result = await bridge.call('propose_workflow_changes', { revision: 'untrusted-model-revision', operations: createGraph })
-      assert.ok(!result.isError, JSON.stringify(result))
-      const proposal = (result.structuredContent as { proposal: import('@conai/shared').ChatProposal }).proposal
-      assert.ok(proposal.kind === 'workflow_graph')
-      assert.equal(proposal.nodeCount, 2)
-      assert.equal(proposal.revision, emptyWorkflow.revision, 'model arguments cannot override the request-owned editor revision')
-      assert.equal(proposal.saved, undefined)
-      assert.ok(!('workflow' in proposal.page), 'review cards do not retain the entire page graph')
-      const restored = attachProposals([{ id: 100, thread_id: workflowThreadId, role: 'assistant', content: '', tool_calls: [], routing: { replyId: context.replyId, replyTo: null, recipients: [] } } as unknown as CodexChatMessageRecord])
-      assert.equal(restored[0].tool_calls[0].tool, 'propose_workflow_changes')
-      assert.equal(restored[0].tool_calls[0].proposal?.id, proposal.id, 'Codex replies and reloaded history restore the graph review card')
-      requireChatWorkflowModules(proposal.modules)
-      ModuleDefinitionModel.update(textModule.id, { version: textModule.version + 1 })
-      assert.throws(() => requireChatWorkflowModules(proposal.modules), /모듈 정의/)
-      ModuleDefinitionModel.update(textModule.id, { version: textModule.version })
+      assert.ok((await bridge.call('workflow_edit', { operations: [{ type: 'add_node', nodeId: 'unknown', moduleId: 9999999 }] })).isError, 'an invalid transaction never reaches the tab')
+
+      // A test tab: it applies the transaction to its editor and answers with the new screen.
+      const commands: import('@conai/shared').ChatPageCommandEvent[] = []
+      let tabPage: unknown = workflowPage
+      setChatPageCommandTimeout(2000)
+      const stop = subscribeToRuntimeEvents((record) => {
+        if (record.name !== 'chat.page.command') return
+        const event = record.payload as import('@conai/shared').ChatPageCommandEvent
+        commands.push(event)
+        if (event.type === 'capture') { setImmediate(() => resolveChatPageCommand(admin, event.commandId, { ok: true, page: tabPage })); return }
+        if (event.type !== 'workflow') return
+        const graph = applyChatWorkflowOperations(emptyWorkflow, workflowModules, event.operations).graph
+        tabPage = { ...workflowPage, workflow: { ...graph, revision: 'workflow-revision-after' } }
+        setImmediate(() => resolveChatPageCommand(admin, event.commandId, { ok: true, page: tabPage }))
+      })
+      try {
+        const result = await bridge.call('workflow_edit', { revision: 'untrusted-model-revision', operations: createGraph })
+        assert.ok(!result.isError, JSON.stringify(result.content))
+        const command = commands.find((event) => event.type === 'workflow')
+        assert.ok(command?.type === 'workflow')
+        assert.equal(command.revision, emptyWorkflow.revision, 'model arguments cannot override the editor revision')
+        assert.deepEqual(command.modules.map((module) => module.id).sort(), [textModule.id, finalModule.id].sort(), 'only the modules the edit uses travel to the tab')
+        const body = JSON.parse((result.content?.[0] as { text: string }).text)
+        assert.equal(body.status, 'applied')
+        assert.equal(body.nodeCount, 2)
+        assert.equal(body.revision, 'workflow-revision-after')
+        assert.deepEqual((result.structuredContent as { pageOperation: { tier: string } }).pageOperation.tier, 'draft', 'the edit is an undoable draft chip, not a card')
+        assert.equal(ChatProposalStore.listForThread(workflowThreadId).length, 0, 'no review card is left behind')
+        const after = JSON.parse(((await bridge.call('get_workflow_editor', {})).content?.[0] as { text: string }).text)
+        assert.equal(after.nodeCount, 2, 'the next read sees the editor as the tab reported it')
+        requireChatWorkflowModules(command.modules)
+        ModuleDefinitionModel.update(textModule.id, { version: textModule.version + 1 })
+        assert.throws(() => requireChatWorkflowModules(command.modules), /모듈 정의/)
+        ModuleDefinitionModel.update(textModule.id, { version: textModule.version })
+      } finally { stop(); setChatPageCommandTimeout(100) }
       unregister()
-      assert.ok((await bridge.call('propose_workflow_changes', { revision: emptyWorkflow.revision, operations: createGraph })).isError)
+      assert.ok((await bridge.call('workflow_edit', { operations: createGraph })).isError)
     } finally { unregister(); await bridge.close() }
   })
 
@@ -188,9 +220,10 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
     const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'generate', 'organize', 'configure'], null, { chatContext: context })
     try {
-      assert.deepEqual(bridge.tools.map((tool) => tool.function.name).sort(), ['get_current_page', 'read_page_data', 'propose_page_action', 'save_lore'].sort())
+      assert.deepEqual(pageOnly(bridge.tools.map((tool) => tool.function.name)), ['get_current_page', 'page_act', 'page_fill', 'propose_page_action', 'read_page_data', 'save_lore'].sort())
       assert.ok(!(await bridge.call('read_page_data', { key: 'presets', limit: 1 })).isError)
       const args = { id: preset.id, name: 'Edited fixture', items: [{ description: 'Style', value: 'new' }] }
+      assert.match(JSON.stringify((await bridge.call('page_act', { action: 'preset.update', arguments: args })).content), /propose_page_action/, 'a save never runs from page_act')
       assert.ok((await bridge.call('propose_page_action', { actionId: 'preset.update', arguments: { ...args, id: preset.id + 1 } })).isError)
       const result = await bridge.call('propose_page_action', { actionId: 'preset.update', arguments: args })
       assert.ok(!result.isError, JSON.stringify(result))
@@ -312,33 +345,57 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
   await t.test('read-only page context never offers a modification tool', async () => {
     const context: ChatExecutionContext = { threadId: pageThreadId, profileId: pageProfile.id, kind: 'direct', replyId: 'page-read-only', page: { ...page, fields: page.fields.map((field) => ({ ...field, editable: false })) } }
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
-    const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read'], ['get_current_page', 'propose_page_changes'], { chatContext: context })
+    const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read'], ['get_current_page', 'page_fill'], { chatContext: context })
     try {
-      assert.deepEqual(bridge.tools.map((tool) => tool.function.name).sort(), ['get_current_page', 'save_lore'])
+      assert.deepEqual(pageOnly(bridge.tools.map((tool) => tool.function.name)), ['get_current_page', 'page_act', 'page_fill', 'propose_page_action', 'read_page_data', 'save_lore'].sort())
       const read = await bridge.call('get_current_page', {})
       assert.ok(!read.isError)
       assert.match(JSON.stringify(read.content), /editable/)
-      assert.ok((await bridge.call('propose_page_changes', { changes: [{ fieldId: 'steps', value: 30 }] })).isError)
+      assert.ok((await bridge.call('page_fill', { changes: [{ fieldId: 'steps', value: 30 }] })).isError)
     } finally { unregister(); await bridge.close() }
   })
 
-  await t.test('page tools: explicit binding, proposed fields only, and reply expiry', async () => {
+  await t.test('page tools: explicit binding, filled fields only, and reply expiry', async () => {
     const context: ChatExecutionContext = { threadId: pageThreadId, profileId: pageProfile.id, kind: 'direct', replyId: 'page-tools', page }
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
-    const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read'], ['get_current_page', 'propose_page_changes'], { chatContext: context })
+    const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read'], ['get_current_page', 'page_fill'], { chatContext: context })
     const unbound = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read'])
     const broad = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'generate', 'organize', 'configure'], null, { chatContext: context })
     try {
       assert.ok(!unbound.tools.some((tool) => tool.function.name === 'get_current_page'))
-      assert.ok(!broad.tools.some((tool) => ['submit_generation_job', 'generate_nai', 'delete_files', 'propose_profile_update'].includes(tool.function.name)), 'page mode withholds side-effect tools even for broad profiles')
-      assert.ok(broad.tools.every((tool) => ['get_current_page', 'propose_page_changes', 'save_lore'].includes(tool.function.name)), 'page text cannot request unrelated private files or library data')
+      assert.ok(!broad.tools.some((tool) => ['submit_generation_job', 'generate_nai', 'delete_files', 'move_files'].includes(tool.function.name)), 'page mode withholds side-effect tools even for broad profiles')
+      assert.ok(pageOnly(broad.tools.map((tool) => tool.function.name)).every((name) => ['get_current_page', 'page_act', 'page_fill', 'propose_page_action', 'read_page_data', 'save_lore'].includes(name)), 'page mode adds nothing that changes data by itself')
+      assert.ok(!broad.tools.some((tool) => PRIVATE_FILE_TOOLS.includes(tool.function.name)), 'page text cannot request private files')
+      const shared = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'generate', 'organize', 'configure'], null, { chatContext: { ...context, replyId: 'page-tools', page: normalizeChatPageSnapshot({ ...page, path: '/public/workflows/example' }) } })
+      try { assert.ok(shared.tools.every((tool) => CHAT_PAGE_TOOLS.has(tool.function.name) || tool.function.name === 'save_lore' || tool.function.name === 'get_proposal_status' || tool.function.name.startsWith('task_')), 'a public workflow page written by someone else keeps only its page tools') } finally { await shared.close() }
       assert.ok(!(await bridge.call('get_current_page', {})).isError)
-      const created = await bridge.call('propose_page_changes', { changes: [{ fieldId: 'steps', value: 30 }] })
-      assert.ok(!created.isError)
-      assert.match(JSON.stringify(created.structuredContent), /page_fields/)
-      const resultText = (created.content?.[0] as { text: string }).text
-      assert.deepEqual(JSON.parse(resultText).changes, [{ fieldId: 'steps', label: 'Steps', before: '20', value: '30' }], 'the model receives the validated diff instead of guessing current values from old replies')
-      assert.ok((await bridge.call('propose_page_changes', { changes: [{ fieldId: 'steps', value: 51 }] })).isError)
+      // Play the connected tab: it receives the validated change set and answers with its new screen.
+      setChatPageCommandTimeout(2000)
+      const seen: string[] = []
+      const stop = subscribeToRuntimeEvents((record) => {
+        if (record.name !== 'chat.page.command') return
+        const event = record.payload as import('@conai/shared').ChatPageCommandEvent
+        seen.push(event.type)
+        if (event.type === 'fields') {
+          assert.deepEqual(event.changes, [{ fieldId: 'steps', label: 'Steps', before: '20', value: '30' }], 'the tab receives the validated diff, not the raw request')
+          const next = { ...page, fields: page.fields.map((field) => ({ ...field, value: event.changes.find((change) => change.fieldId === field.id)?.value ?? field.value })) }
+          setImmediate(() => resolveChatPageCommand({ accountId: null, accountType: 'admin' }, event.commandId, { ok: true, page: next }))
+        } else if (event.type === 'action') {
+          setImmediate(() => resolveChatPageCommand({ accountId: null, accountType: 'admin' }, event.commandId, { ok: false, error: '테스트 탭이 거절했어.' }))
+        }
+      })
+      try {
+        const filled = await bridge.call('page_fill', { changes: [{ fieldId: 'steps', value: 30 }] })
+        assert.ok(!filled.isError, JSON.stringify(filled.content))
+        const body = JSON.parse((filled.content?.[0] as { text: string }).text)
+        assert.deepEqual(body.fields, ['Steps'])
+        assert.equal(body.page.fields.find((field: { id: string }) => field.id === 'steps').value, '30', 'the model gets the screen after the fill')
+        assert.ok((await bridge.call('page_fill', { changes: [{ fieldId: 'steps', value: 51 }] })).isError, 'out-of-range values never reach the tab')
+        assert.deepEqual(seen, ['fields'])
+        assert.throws(() => resolveChatPageCommand({ accountId: null, accountType: 'admin' }, 'no-such-command', { ok: true, page }), /기다리는/)
+      } finally { stop(); setChatPageCommandTimeout(100) }
+      const silent = await bridge.call('page_fill', { changes: [{ fieldId: 'sampler', value: 'euler_ancestral' }] })
+      assert.ok(silent.isError && /응답하지 않아/.test(JSON.stringify(silent.content)), 'a tab that never answers times out with a clear reason')
       unregister()
       assert.ok((await bridge.call('get_current_page', {})).isError)
     } finally { unregister(); await bridge.close(); await unbound.close(); await broad.close() }
@@ -387,7 +444,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       try {
         assert.ok(!(await granted.call('get_workflow_editor', {})).isError, 'a grant shows up in the next reply')
         permissions = permissions.filter((permission) => permission !== 'workflows.view')
-        assert.ok((await granted.call('propose_workflow_changes', { operations: createGraph })).isError, 'revocation is checked during the same reply')
+        assert.ok((await granted.call('workflow_edit', { operations: createGraph })).isError, 'revocation is checked during the same reply')
       } finally { await granted.close() }
     } finally { unregister(); await bridge.close() }
   })
@@ -427,7 +484,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     assert.deepEqual(intersectChatScopes(['read', 'configure'], access(['read', 'configure'])), ['read', 'configure'])
     assert.ok(!(MCP_HTTP_SCOPES as readonly string[]).includes('configure'))
     assert.ok(!(ALL_MCP_HTTP_SCOPES as string[]).includes('configure'))
-    for (const tool of ['get_chat_setup_guide', 'list_chat_profiles', 'get_chat_profile', 'list_display_blocks', 'get_display_block', 'propose_display_block', 'propose_chat_profile', 'propose_profile_update']) {
+    for (const tool of ['get_chat_setup_guide', 'list_chat_profiles', 'get_chat_profile', 'list_display_blocks', 'get_display_block', 'propose_display_block', 'propose_chat_profile', 'propose_profile_update', 'propose_profile_assets', 'get_asset_batch']) {
       assert.equal(getMcpToolScope(tool), 'configure', tool)
     }
     const without = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read'])
@@ -435,7 +492,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     try {
       assert.ok(!without.tools.some((tool) => tool.function.name.startsWith('propose_')))
       assert.equal(withScope.tools.filter((tool) => tool.function.name.startsWith('propose_')).length, 4)
-      assert.equal(withScope.tools.length, 9)
+      assert.equal(withScope.tools.length, 10)
     } finally { await without.close(); await withScope.close() }
   })
 
@@ -507,7 +564,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.match(blockGuide, /data-pick/)
       assert.ok(blockGuide.length < 7000)
       const profileGuide = text(await bridge.call('get_chat_setup_guide', { topic: 'profile' }))
-      assert.match(profileGuide, /Fast Model/)
+      assert.match(profileGuide, /"Conn · m1"/)
       assert.match(profileGuide, /Existing card/)
       const list = JSON.parse(text(await bridge.call('list_chat_profiles', {})))
       assert.equal(list[0].name, 'Mina')
@@ -557,12 +614,12 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.equal(unlinkedStored?.kind === 'display_block' && unlinkedStored.name, 'fresh')
       assert.equal(unlinkedStored?.kind === 'display_block' && unlinkedStored.linkProfileId, null)
 
-      const created = JSON.parse(read(await bridge.call('propose_chat_profile', { name: 'Newbie', system_prompt: 'You are {{char}}.', model_slot: 'fast model', prompt_sections: [{ title: 'World', content: 'Rainy city' }], block_ids: [1], typeface: 'serif' })))
+      const created = JSON.parse(read(await bridge.call('propose_chat_profile', { name: 'Newbie', system_prompt: 'You are {{char}}.', model_slot: 'conn · M1', prompt_sections: [{ title: 'World', content: 'Rainy city' }], block_ids: [1], typeface: 'serif' })))
       assert.equal(created.input.modelSlotId, slot.id)
       assert.equal(created.input.promptSections[0].title, 'World')
       assert.deepEqual(created.input.style, { typeface: 'serif' })
       assert.deepEqual(created.warnings, [])
-      assert.match(read(await bridge.call('propose_chat_profile', { name: 'X', system_prompt: 'y', model_slot: 'nope' })), /Known model slots: Fast Model/)
+      assert.match(read(await bridge.call('propose_chat_profile', { name: 'X', system_prompt: 'y', model_slot: 'nope' })), /Known models: .*Conn · m1/)
       assert.match(read(await bridge.call('propose_chat_profile', { name: 'X', system_prompt: 'y', lorebook_ids: [77] })), /no such id 77/)
       assert.equal((await bridge.call('propose_chat_profile', { name: '   ', system_prompt: 'y' })).isError, true)
       assert.equal((await bridge.call('propose_chat_profile', { name: 'X', system_prompt: 'y'.repeat(20_001) })).isError, true)
@@ -573,13 +630,13 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       const unchanged = await bridge.call('propose_profile_update', { patch: { name: 'Mina', system_prompt: 'old prompt', tagline: 'old tagline' } })
       assert.equal(unchanged.isError, true)
       assert.match(read(unchanged), /Nothing would change/)
-      const update = JSON.parse(read(await bridge.call('propose_profile_update', { patch: { name: 'Mina', tagline: 'new tagline', model_slot: slot.name } })))
+      const update = JSON.parse(read(await bridge.call('propose_profile_update', { patch: { name: 'Mina', tagline: 'new tagline', model_slot: slot.model } })))
       assert.deepEqual(update.changed, ['tagline', 'modelSlotId'])
       const updateStored = ChatProposalStore.find(update.proposalId)
       assert.ok(updateStored && updateStored.kind === 'profile_update')
       if (updateStored.kind === 'profile_update') {
         assert.deepEqual(updateStored.patch, { tagline: 'new tagline', modelSlotId: slot.id })
-        assert.deepEqual(updateStored.before, { tagline: 'old tagline', modelSlotId: null })
+        assert.deepEqual(updateStored.before, { tagline: 'old tagline', modelSlotId: profile.modelSlotId })
         assert.equal(updateStored.profileName, 'Mina')
       }
       assert.match(read(await bridge.call('propose_profile_update', { profile_id: 9999, patch: { name: 'Z' } })), /not found/)
@@ -638,7 +695,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       kind: 'workflow_graph', page: chatPageTarget(workflowPage), revision: emptyWorkflow.revision, operations: transaction.operations,
       modules: [textModule, finalModule], changes: transaction.changes, issues: transaction.issues, nodeCount: 2, edgeCount: 1, expiresAt: Date.now() + 60_000,
     })
-    const graphBinding = { ...binding, revision: emptyWorkflow.revision }
+    const graphBinding = { instanceId: workflowPage.instanceId, connectionId: workflowPage.connectionId, revision: emptyWorkflow.revision }
     assert.equal((await post(graphProposal.id, { ...graphBinding, revision: 'wrong-revision' }, 'page-check')).status, 409)
     assert.equal((await post(graphProposal.id, graphBinding, 'page-check')).status, 200)
     ModuleDefinitionModel.update(textModule.id, { version: textModule.version + 1 })

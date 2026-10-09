@@ -1,4 +1,3 @@
-import { EmptyState } from '@/components/ui/empty-state'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -35,9 +34,7 @@ interface WallpaperWidgetInspectorProps {
 export function WallpaperWidgetInspector({ selectedWidget, groups, onPatchWidget }: WallpaperWidgetInspectorProps) {
   const { t } = useI18n()
   if (!selectedWidget) {
-    return (
-      <EmptyState size="compact" title={t({ ko: '위젯을 선택해.', en: 'Select a widget.' })} />
-    )
+    return null
   }
 
   const updateWidgetSettings = (settingsPatch: Partial<WallpaperWidgetInstance['settings']>) => {

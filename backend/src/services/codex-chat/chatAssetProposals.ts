@@ -5,13 +5,13 @@ import { ChatProposalStore } from './chatProposals'
 import { ChatProfileStore } from './chatProfiles'
 import { CodexChatStore } from './codexChatStore'
 import { ChatAssetError, requireChatAssetAdmin } from './chatAssetAccess'
-import { createChatAssetBatch, getChatAssetBatch, applyChatAssetBatch, validateChatAssetBatchProposal } from './chatAssetBatches'
+import { createChatAssetBatch, getChatAssetBatch, applyChatAssetBatch, chooseChatAssetSlot, validateChatAssetBatchProposal } from './chatAssetBatches'
 import { normalizeAvatarCrop } from './chatProfileAssets'
 
 type AssetsProposal = ChatProfileAssetsProposal & { id: number; dismissed?: boolean }
 
 /** Stores a review card only; generation and profile/group changes require separate user approvals. */
-export function proposeProfileAssets(requester: McpRequester, context: ChatExecutionContext, value: { action?: 'create' | 'apply'; profile_id?: number; input?: unknown; batch_id?: number; avatarCrop?: unknown }): AssetsProposal {
+export function proposeProfileAssets(requester: McpRequester, context: ChatExecutionContext, value: { action?: 'create' | 'apply'; profile_id?: number; input?: unknown; batch_id?: number; picks?: Record<string, string>; avatarCrop?: unknown }): AssetsProposal {
   requireChatAssetAdmin(requester)
   requireActiveChatReply(context)
   const profileId = value.profile_id ?? context.profileId
@@ -21,9 +21,15 @@ export function proposeProfileAssets(requester: McpRequester, context: ChatExecu
   if (value.action === 'apply') {
     if (!value.batch_id) throw new ChatAssetError('적용할 자산 묶음을 골라줘.')
     const batch = getChatAssetBatch(requester, value.batch_id, profileId)
-    const chosenHashes = Object.fromEntries(batch.slots.filter((slot) => slot.chosenHash).map((slot) => [slot.slotKey, slot.chosenHash!]))
+    // The chat may pick among a slot's own successful candidates; anything else is refused here, before the card.
+    const picks = Object.fromEntries(Object.entries(value.picks ?? {}).map(([slotKey, hash]) => {
+      const slot = batch.slots.find((entry) => entry.slotKey === slotKey)
+      if (!slot || !slot.attempts.some((attempt) => attempt.candidates.some((candidate) => candidate.compositeHash === hash))) throw new ChatAssetError(`${slotKey}: 이 슬롯의 성공한 후보를 골라줘.`)
+      return [slotKey, hash]
+    }))
+    const chosenHashes = { ...Object.fromEntries(batch.slots.filter((slot) => slot.chosenHash).map((slot) => [slot.slotKey, slot.chosenHash!])), ...picks }
     if (!Object.keys(chosenHashes).length) throw new ChatAssetError('적용할 후보를 먼저 골라줘.')
-    return ChatProposalStore.add(context, { kind: 'profile_assets', action: 'apply', profileId, profileName: profile.name, batchId: batch.id, chosenHashes, input: value.avatarCrop === undefined ? {} : { avatarCrop: normalizeAvatarCrop(value.avatarCrop) } }) as AssetsProposal
+    return ChatProposalStore.add(context, { kind: 'profile_assets', action: 'apply', profileId, profileName: profile.name, batchId: batch.id, chosenHashes, ...(Object.keys(picks).length ? { picks } : {}), input: value.avatarCrop === undefined ? {} : { avatarCrop: normalizeAvatarCrop(value.avatarCrop) } }) as AssetsProposal
   }
   const input = validateChatAssetBatchProposal(requester, profileId, { ...(value.input as Record<string, unknown>), idempotencyKey: `proposal:${context.threadId}:${context.replyId}` })
   return ChatProposalStore.add(context, { kind: 'profile_assets', action: 'create', profileId, profileName: profile.name, input }) as AssetsProposal
@@ -47,6 +53,7 @@ export async function applyProfileAssetsProposal(requester: McpRequester, propos
       const batch = await createChatAssetBatch(requester, proposal.profileId, proposal.input)
       return { proposal: ChatProposalStore.markSaved(proposalId, batch.id), batch }
     }
+    for (const [slotKey, hash] of Object.entries(proposal.picks ?? {})) await chooseChatAssetSlot(requester, proposal.batchId, slotKey, hash)
     const result = applyChatAssetBatch(requester, proposal.batchId, proposal.input, proposal.chosenHashes)
     return { proposal: ChatProposalStore.markSaved(proposalId, proposal.batchId), result }
   })

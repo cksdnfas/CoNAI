@@ -1,7 +1,7 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, BookmarkPlus, ChevronDown, RotateCcw, Save } from 'lucide-react'
+import { ArrowLeft, BookmarkPlus, RotateCcw, Save, Server } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
@@ -16,7 +16,8 @@ import { GenerationControllerFieldStack } from './shared-generation-controller'
 import { GenerateActionBar, GenerateActionBarIconButton, GenerateActionDock } from './generate-action-bar'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY } from '@/features/groups/generation-target-group-store'
 import { WorkflowFieldGroupList } from './workflow-field-group-list'
-import { FLOATING_DROPDOWN_MENU_CLASS, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
+import { formatWorkflowFieldLabel } from './workflow-field-disclosure-card'
+import { FLOATING_DROPDOWN_MENU_CLASS, getFloatingDropdownStyle, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
 import {
   buildComfyWorkflowServerRoutingSummary,
   isComfyWorkflowModalServer,
@@ -29,22 +30,20 @@ type WorkflowTargetOption = {
   description?: string
 }
 
-/** Render one styled workflow-target selector with a portal menu so it is not clipped by controller chrome. */
+/** Icon-only generation-target picker for the action bar; the portal menu is not clipped by controller chrome. */
 function WorkflowTargetSelect({
   value,
   options,
+  ready,
   disabled = false,
-  triggerVariant = 'ghost',
-  buttonClassName,
   menuMinWidth = 220,
   onChange,
 }: {
   value: string
   options: WorkflowTargetOption[]
+  /** Whether the selected target can take a job right now (status dot on the icon). */
+  ready: boolean
   disabled?: boolean
-  /** Tonal `secondary` beside other controls, `ghost` inside the sticky bar surface. */
-  triggerVariant?: 'ghost' | 'secondary'
-  buttonClassName?: string
   menuMinWidth?: number
   onChange: (value: string) => void
 }) {
@@ -104,23 +103,28 @@ function WorkflowTargetSelect({
     }
   }, [isOpen, menuMinWidth])
 
+  const selectedText = selectedOption
+    ? (selectedOption.description ? `${selectedOption.label} · ${selectedOption.description}` : selectedOption.label)
+    : t({ ko: '선택 안 됨', en: 'None' })
+  const triggerLabel = t({ ko: '생성 서버: {target}', en: 'Generation server: {target}' }, { target: selectedText })
+
   return (
     <>
-      <div ref={triggerRef} className="min-w-0">
-        <Button
-          type="button"
-          variant={triggerVariant}
-          size="sm"
+      <div ref={triggerRef} className="inline-flex shrink-0">
+        <GenerateActionBarIconButton
+          label={triggerLabel}
           disabled={disabled || options.length === 0}
           onClick={() => setIsOpen((current) => !current)}
-          className={cn('w-full justify-between px-2 text-xs text-foreground', buttonClassName)}
           aria-haspopup="listbox"
           aria-expanded={isOpen}
-          title={selectedOption?.description ? `${selectedOption.label} · ${selectedOption.description}` : selectedOption?.label}
+          className="relative"
         >
-          <span className="min-w-0 truncate">{selectedOption?.label ?? t({ ko: '선택', en: 'Select' })}</span>
-          <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', isOpen && 'rotate-180')} />
-        </Button>
+          <Server />
+          <span
+            aria-hidden="true"
+            className={cn('absolute top-1.5 right-1.5 size-1.5 rounded-full', ready ? 'bg-success' : 'bg-destructive')}
+          />
+        </GenerateActionBarIconButton>
       </div>
 
       {isOpen && menuRect && typeof document !== 'undefined'
@@ -129,12 +133,7 @@ function WorkflowTargetSelect({
               id="comfy-workflow-target-select-menu"
               data-surface="high"
               className={cn(FLOATING_DROPDOWN_MENU_CLASS, 'overflow-auto p-1')}
-              style={{
-                left: menuRect.left,
-                top: menuRect.top,
-                width: menuRect.width,
-                maxHeight: menuRect.maxHeight,
-              }}
+              style={getFloatingDropdownStyle(menuRect)}
               role="listbox"
               aria-label={t({ ko: '생성 타겟 선택', en: 'Select generation target' })}
             >
@@ -289,7 +288,7 @@ export function ComfyWorkflowControllerPanel({
     }
 
     if (missingRequiredFields.length > 0) {
-      const labels = missingRequiredFields.slice(0, 3).map((field) => field.label).join(', ')
+      const labels = missingRequiredFields.slice(0, 3).map(formatWorkflowFieldLabel).join(', ')
       const suffix = missingRequiredFields.length > 3
         ? t({ ko: ' 외 {count}개', en: ' and {count} more' }, { count: missingRequiredFields.length - 3 })
         : ''
@@ -316,7 +315,7 @@ export function ComfyWorkflowControllerPanel({
       const firstIssue = workflowNodeIssues[0]
       issues.push(t(
         { ko: '{label}: {message}', en: '{label}: {message}' },
-        { label: firstIssue.field.label, message: t({ ko: firstIssue.issue.ko, en: firstIssue.issue.en }) },
+        { label: formatWorkflowFieldLabel(firstIssue.field), message: t({ ko: firstIssue.issue.ko, en: firstIssue.issue.en }) },
       ))
     }
 
@@ -394,16 +393,13 @@ export function ComfyWorkflowControllerPanel({
       onReset={workflowFields.length > 0 ? onResetDraft : undefined}
       resetLabel={resetLabel}
       leading={servers.length > 0 ? (
-        <div className="w-[168px] shrink-0 sm:w-[200px]">
-          <WorkflowTargetSelect
-            value={selectedTarget}
-            options={targetOptions}
-            disabled={isGenerating}
-            triggerVariant="secondary"
-            buttonClassName="h-9 w-full min-w-0"
-            onChange={onSelectTarget}
-          />
-        </div>
+        <WorkflowTargetSelect
+          value={selectedTarget}
+          options={targetOptions}
+          ready={routingCanGenerate}
+          disabled={isGenerating}
+          onChange={onSelectTarget}
+        />
       ) : null}
       targetGroupStorageKey={IMAGE_GENERATION_TARGET_GROUP_KEY}
     />
@@ -472,16 +468,14 @@ export function ComfyWorkflowControllerPanel({
       onReset={useDrawerCompactChrome || workflowFields.length === 0 ? undefined : onResetDraft}
       resetLabel={resetLabel}
       leading={servers.length > 0 ? (
-        <div className="w-[120px] shrink-0">
-          <WorkflowTargetSelect
-            value={selectedTarget}
-            options={targetOptions}
-            disabled={isGenerating}
-            buttonClassName="h-11 w-full min-w-0 sm:h-9"
-            menuMinWidth={180}
-            onChange={onSelectTarget}
-          />
-        </div>
+        <WorkflowTargetSelect
+          value={selectedTarget}
+          options={targetOptions}
+          ready={routingCanGenerate}
+          disabled={isGenerating}
+          menuMinWidth={180}
+          onChange={onSelectTarget}
+        />
       ) : null}
       targetGroupStorageKey={IMAGE_GENERATION_TARGET_GROUP_KEY}
     />
@@ -503,9 +497,8 @@ export function ComfyWorkflowControllerPanel({
         useDrawerCompactChrome ? 'px-5 pb-5' : undefined,
       )}>
         {servers.length === 0 ? (
-          <Alert>
-            <AlertTitle>{t({ ko: '서버 필요', en: 'Server required' })}</AlertTitle>
-            <AlertDescription>{t({ ko: '서버를 먼저 등록해줘.', en: 'Register a server first.' })}</AlertDescription>
+          <Alert className="py-2 text-xs">
+            <AlertTitle>{t({ ko: '서버를 먼저 등록해줘.', en: 'Register a server first.' })}</AlertTitle>
           </Alert>
         ) : null}
 
@@ -542,9 +535,8 @@ export function ComfyWorkflowControllerPanel({
               />
             </GenerationControllerFieldStack>
           ) : (
-            <Alert>
-              <AlertTitle>{t({ ko: '입력 필드 없음', en: 'No input fields' })}</AlertTitle>
-              <AlertDescription>{t({ ko: '노출된 필드가 없어.', en: 'There are no exposed fields.' })}</AlertDescription>
+            <Alert className="py-2 text-xs">
+              <AlertTitle>{t({ ko: '노출된 입력 필드 없음', en: 'No exposed input fields' })}</AlertTitle>
             </Alert>
           )}
         </section>

@@ -5,11 +5,23 @@ import { getUserSettingsDb } from '../../database/userSettingsDb'
 /** A proposal before it is stored: the shared contract without the row id. */
 export type NewChatProposal = ChatProposal extends infer P ? (P extends { id: number } ? Omit<P, 'id'> : never) : never
 
-export type StoredChatProposal = { id: number; replyId: string; seq: number; proposal: ChatProposal }
+export type StoredChatProposal = { id: number; replyId: string; seq: number; proposal: ChatProposal; createdAt: string }
 
-type ProposalRow = { id: number; thread_id: number; reply_id: string; seq: number; kind: string; proposal: string; saved_id: number | null; saved: number; dismissed: number }
+type ProposalRow = { id: number; thread_id: number; reply_id: string; seq: number; kind: string; proposal: string; saved_id: number | null; saved: number; dismissed: number; created_date: string }
 
 const ensured = new WeakSet<Database.Database>()
+
+/** Told when a person saves or sets aside a card (a waiting task moves on from it). */
+const resolvedListeners = new Set<(threadId: number, proposal: ChatProposal) => void>()
+export function onProposalResolved(listener: (threadId: number, proposal: ChatProposal) => void) {
+  resolvedListeners.add(listener)
+  return () => { resolvedListeners.delete(listener) }
+}
+function resolved(id: number, proposal: ChatProposal | null) {
+  const threadId = proposal ? ChatProposalStore.threadIdOf(id) : null
+  if (threadId === null || !proposal) return
+  for (const listener of resolvedListeners) { try { listener(threadId, proposal) } catch { /* a listener must not break the save */ } }
+}
 
 /**
  * Creates the table on first use of a database handle. TODO: move this DDL into userSettingsSchema.ts (the schema file
@@ -76,7 +88,7 @@ export const ChatProposalStore = {
   listForThread(threadId: number): StoredChatProposal[] {
     const rows = table().prepare('SELECT * FROM chat_proposals WHERE thread_id = ? ORDER BY id ASC').all(threadId) as ProposalRow[]
     // Ids grow with insertion, so id order is also seq order within a reply.
-    return rows.map((row) => ({ id: row.id, replyId: row.reply_id, seq: row.seq, proposal: toProposal(row) }))
+    return rows.map((row) => ({ id: row.id, replyId: row.reply_id, seq: row.seq, proposal: toProposal(row), createdAt: row.created_date }))
   },
 
   find(id: number): ChatProposal | null {
@@ -106,13 +118,17 @@ export const ChatProposalStore = {
   /** Saved, and no longer set aside. */
   markSaved(id: number, savedId: number | null): ChatProposal | null {
     const changed = table().prepare('UPDATE chat_proposals SET saved = 1, saved_id = ?, dismissed = 0 WHERE id = ?').run(savedId, id).changes
-    return changed > 0 ? ChatProposalStore.find(id) : null
+    const proposal = changed > 0 ? ChatProposalStore.find(id) : null
+    resolved(id, proposal)
+    return proposal
   },
 
   /** A person set the proposal aside (무시); a saved one stays saved. */
   markDismissed(id: number): ChatProposal | null {
     const changed = table().prepare('UPDATE chat_proposals SET dismissed = 1 WHERE id = ? AND saved = 0').run(id).changes
-    return changed > 0 ? ChatProposalStore.find(id) : null
+    const proposal = changed > 0 ? ChatProposalStore.find(id) : null
+    resolved(id, proposal)
+    return proposal
   },
 
   /** The proposals of one kind in one reply. */

@@ -25,7 +25,10 @@ import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionM
 import { ChatSummaryStore } from './chatMemory'
 import { appendUserDirective, buildChatMessages, cutToolOutput, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
 import { addressLabelFilter, restatement, roundSeparator } from './chatReplyText'
-import { chatPageReference, parseChatPageContext } from './chatPageContext'
+import { chatPageReference, parseChatPageContext, proposalOutcomeNote } from './chatPageContext'
+import type { ChatSendOptions } from './chatTasks'
+import { rememberChatPage } from './chatPageBridge'
+import { notifyChatUserSend } from './chatSendEvents'
 import { contextSections, limitContextMeta, markContextMessage, legacyContextMeta } from './chatContextDiagnostics'
 import { redactChatRequestBody, saveChatRequestCapture } from './chatRequestCaptures'
 import { ChatGroupStore, groupLimitsOf } from './chatGroupStore'
@@ -181,10 +184,12 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
     const result = await bridge.call(record.tool, record.arguments as Record<string, unknown>, turn.controller.signal)
     nativeResult = result
     if (['propose_page_changes', 'propose_workflow_changes', 'propose_page_action'].includes(record.tool) && !result.isError) {
+      // propose_page_changes / propose_workflow_changes are retired; the names stay for chats recorded before.
       const structured = result.structuredContent as { proposal?: ChatProposal } | undefined
       if (structured?.proposal?.kind === 'page_fields' || structured?.proposal?.kind === 'workflow_graph' || structured?.proposal?.kind === 'page_action') record.proposal = structured.proposal
     }
-    const { texts, historyIds, compositeHashes, jobIds, pendingJobIds, audioCandidateIds } = readMcpToolResult(result, record.tool)
+    const { texts, historyIds, compositeHashes, jobIds, pendingJobIds, audioCandidateIds, pageOperation } = readMcpToolResult(result, record.tool)
+    if (pageOperation && !result.isError) record.pageOperation = pageOperation
     output = texts.join('\n') || (result.structuredContent ? JSON.stringify(result.structuredContent) : '')
     const found = readToolImages(result)
     if (found.length > 0) {
@@ -207,8 +212,8 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
 
   // A later request must read its own fresh snapshot, not replay private state from an old page.
   const pageRead = ['get_current_page', 'get_workflow_editor', 'list_workflow_modules', 'read_page_data'].includes(record.tool) && record.status === 'completed'
-  record.summary = pageRead ? '현재 요청에 연결한 페이지를 읽었어.' : output ? truncateToolSummary(output) : null
-  record.output = pageRead ? '(Page/editor snapshot omitted; read current-request page tools again.)' : output.slice(0, STORED_TOOL_OUTPUT_LENGTH)
+  record.summary = pageRead ? '현재 요청에 연결한 페이지를 읽었어.' : record.pageOperation ? record.pageOperation.label : output ? truncateToolSummary(output) : null
+  record.output = pageRead ? '(Page/editor snapshot omitted; read current-request page tools again.)' : record.pageOperation ? `(Page operation done: ${record.pageOperation.label}. Screen snapshot omitted; read the current page again.)` : output.slice(0, STORED_TOOL_OUTPUT_LENGTH)
   emit(turn, { type: 'tool', call: { ...record } })
   const text = (output.length > outputLimit ? cutToolOutput(output, outputLimit) : output) || '(no output)'
   return { text, nativeResult: nativeResult ? { ...nativeResult, content: [{ type: 'text', text }, ...(nativeResult.content ?? []).filter((part) => (part as { type?: unknown })?.type === 'image')] } : { isError: true, content: [{ type: 'text', text }] } }
@@ -233,7 +238,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     // Continuing: the cut reply as the model's own turn, then the request to carry on from its last word — room for
     // both is kept before the window is chosen.
     const continuation: ChatCompletionMessage[] = turn.continuing === undefined ? [] : [markContextMessage({ role: 'assistant', content: turn.continuing }, 'continuation'), markContextMessage({ role: 'user', content: CONTINUE_DIRECTIVE }, 'continuation')]
-    const reference = chatPageReference(turn.page)
+    const reference = [chatPageReference(turn.page), proposalOutcomeNote(thread.id)].filter(Boolean).join('\n\n')
     const pageMessages: ChatCompletionMessage[] = reference ? [markContextMessage({ role: 'user', content: reference }, 'page')] : []
     const reactionMessages = turn.reaction ? [turn.reaction.result] : []
     const extraTokens = estimateMessagesTokens(profile.id, [...continuation, ...pageMessages, ...reactionMessages])
@@ -649,11 +654,13 @@ export const LlmChatService = {
    * Send one user message and stream the reply to `listener`. Resolves with the stored assistant message; the reply
    * keeps running (and is stored) when the listener goes away.
    */
-  async sendMessage(requester: McpRequester, thread: CodexChatThreadRecord, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown, replyToMessageId?: unknown, pageContext?: unknown) {
+  async sendMessage(requester: McpRequester, thread: CodexChatThreadRecord, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown, replyToMessageId?: unknown, pageContext?: unknown, options: ChatSendOptions = {}) {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id, requester)
     if (pageContext != null && !profile.pageAssist) throw new LlmChatError('이 프로필은 페이지 어시스턴트가 꺼져 있어.', 400)
     const page = parseChatPageContext(pageContext, requester)
+    rememberChatPage(requester, page, thread.id)
+    if (!options.task) notifyChatUserSend(thread.id, Boolean(page))
     const attachments = validateChatAttachments(requester, fileIds)
     const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length)
     const flags = [...ChatFlagStore.resolve(requester, parseFlagIds(flagIds)), ...parsePicks(picks)]
@@ -661,7 +668,7 @@ export const LlmChatService = {
     if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) {
       throw new LlmChatError('메시지를 입력해줘.')
     }
-    const routing = userReplyRouting(thread, replyToMessageId)
+    const routing = { ...userReplyRouting(thread, replyToMessageId), ...(options.task ? { task: options.task } : {}) }
     LlmChatService.skipReaction(thread.id)
     cancelJudgeFollowUp(thread.id)
     if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)

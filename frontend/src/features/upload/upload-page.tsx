@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { FileDown, FileSearch, ImageDown, Library, RotateCcw, Settings2, Upload } from 'lucide-react'
+import { FileDown, FileSearch, ImageDown, Library, RotateCcw, ScanSearch, Settings2, Upload } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
-import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   downloadConvertedWebP,
@@ -39,6 +39,11 @@ const UPLOAD_ACCEPT = `${IMAGE_ACCEPT},video/mp4,video/webm,video/quicktime,vide
 
 type ExtractAction = 'prompt' | 'tagger' | 'kaloscope' | 'all'
 type ManualExtractAction = 'all' | 'tagger' | 'kaloscope'
+const MANUAL_EXTRACT_ACTIONS: Array<{ action: ManualExtractAction; labelKey: 'uploadPageSections.extractAll' | 'uploadPageSections.autoExtract' | 'uploadPageSections.artistExtract' }> = [
+  { action: 'all', labelKey: 'uploadPageSections.extractAll' },
+  { action: 'tagger', labelKey: 'uploadPageSections.autoExtract' },
+  { action: 'kaloscope', labelKey: 'uploadPageSections.artistExtract' },
+]
 type UploadPageMode = 'library' | 'inspect'
 
 export function UploadPage() {
@@ -55,7 +60,6 @@ export function UploadPage() {
   const [kaloscopeResult, setKaloscopeResult] = useState<AutoTestKaloscopeResult | null>(null)
   const [extractError, setExtractError] = useState<string | null>(null)
   const [activeExtractAction, setActiveExtractAction] = useState<ExtractAction | null>(null)
-  const [selectedExtractAction, setSelectedExtractAction] = useState<ManualExtractAction>('all')
   const [isConvertingWebP, setIsConvertingWebP] = useState(false)
   const [isRewritingMetadata, setIsRewritingMetadata] = useState(false)
   const [isRewritePanelOpen, setIsRewritePanelOpen] = useState(false)
@@ -120,7 +124,6 @@ export function UploadPage() {
     setPendingUploadSave,
     pendingUploadSaveInfo,
     setPendingUploadSaveInfo,
-    uploadTotalSize,
     applyUploadFiles,
     resetUploadState,
     handleUploadFileChange,
@@ -189,10 +192,6 @@ export function UploadPage() {
       cancelled = true
     }
   }, [extractFile, showSnackbar, t])
-
-  const handleRunSelectedExtract = async () => {
-    await handleExtractAction(selectedExtractAction)
-  }
 
   const handleConvertWebP = async () => {
     if (!extractFile || extractBusy) {
@@ -405,20 +404,27 @@ export function UploadPage() {
       >
         <RotateCcw />
       </IconButton>
-      <Select
-        aria-label={t('uploadPageSections.runExtract')}
-        className="ml-1 h-9 w-32"
-        value={selectedExtractAction}
-        onChange={(event) => setSelectedExtractAction(event.target.value as ManualExtractAction)}
-        disabled={!extractFile || extractBusy}
-      >
-        <option value="all">{t('uploadPageSections.extractAll')}</option>
-        <option value="tagger">{t('uploadPageSections.autoExtract')}</option>
-        <option value="kaloscope">{t('uploadPageSections.artistExtract')}</option>
-      </Select>
-      <Button type="button" onClick={() => void handleRunSelectedExtract()} disabled={!extractFile || extractBusy}>
-        {activeExtractAction === selectedExtractAction ? t('uploadPageSections.extracting') : t('uploadPageSections.runExtract')}
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild disabled={!extractFile || extractBusy}>
+          <IconButton
+            variant="ghost"
+            size="icon-sm"
+            disabled={!extractFile || extractBusy}
+            label={activeExtractAction !== null && activeExtractAction !== 'prompt'
+              ? t('uploadPageSections.extracting')
+              : t({ ko: '추출 실행: 태그·작가를 다시 뽑아봐', en: 'Run extraction: tags and artists' })}
+          >
+            <ScanSearch />
+          </IconButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {MANUAL_EXTRACT_ACTIONS.map(({ action, labelKey }) => (
+            <DropdownMenuItem key={action} onSelect={() => void handleExtractAction(action)}>
+              {t(labelKey)}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </>
   )
 
@@ -433,8 +439,8 @@ export function UploadPage() {
             semantics="tabs"
             ariaLabel={t({ ko: '업로드 방식', en: 'Upload mode' })}
             items={[
-              { value: 'library', label: <><Library />{t({ ko: '라이브러리에 저장', en: 'Save to library' })}</> },
-              { value: 'inspect', label: <><FileSearch />{t({ ko: '메타데이터만 보기', en: 'Metadata only' })}</> },
+              { value: 'library', label: <Library />, ariaLabel: t({ ko: '라이브러리에 저장: 올린 파일을 라이브러리에 넣어', en: 'Save to library: upload files into the library' }) },
+              { value: 'inspect', label: <FileSearch />, ariaLabel: t({ ko: '메타데이터만 보기: 저장 없이 이미지 정보만 확인해', en: 'Metadata only: inspect an image without saving it' }) },
             ]}
           />
         )}
@@ -476,7 +482,6 @@ export function UploadPage() {
             uploadResult={uploadResult}
             uploadError={uploadError}
             uploadProgress={uploadProgress}
-            uploadTotalSize={uploadTotalSize}
             isUploading={isUploading}
             onRemoveUploadFile={(index) => {
               setUploadFiles((current) => current.filter((_, currentIndex) => currentIndex !== index))

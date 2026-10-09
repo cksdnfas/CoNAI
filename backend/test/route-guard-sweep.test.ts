@@ -28,6 +28,7 @@ const OPEN_TO_ANY_ACCOUNT: Record<string, string> = {
   'POST /api/chat-proposals/:proposalId/undo': 'proposal in own chat',
   'POST /api/chat-proposals/:proposalId/page-check': 'proposal in own chat',
   'POST /api/chat-proposals/:proposalId/page-applied': 'proposal in own chat',
+  'POST /api/chat-proposals/:proposalId/task-approve': 'task plan in own chat',
 }
 
 test('state-changing API routes refuse an account without permissions', { timeout: 120000 }, async (t) => {

@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
-import { FileSearch, RefreshCcw, ScanSearch, Search, ShieldCheck, Shuffle } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { FileSearch, Play, RefreshCcw, ScanSearch, Search, ShieldCheck, Shuffle } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
 import { useConfirm, type ConfirmOptions } from '@/components/ui/confirm-dialog'
@@ -37,21 +36,20 @@ function MaintenanceActionRow({ icon, title, actionLabel, busyLabel, isBusy, con
           <span className="shrink-0 text-muted-foreground">{icon}</span>
           <div className="min-w-0 text-sm text-foreground">{title}</div>
         </div>
-        <Button
-          type="button"
-          size="sm"
+        <IconButton
+          size="icon-sm"
           variant={confirmOptions.tone === 'destructive' ? 'destructive' : 'secondary'}
           className="shrink-0"
           disabled={isBusy}
+          label={isBusy ? busyLabel : actionLabel}
           onClick={async () => {
             if (await confirm(confirmOptions)) {
               onRun()
             }
           }}
         >
-          {isBusy ? <RefreshCcw className="h-4 w-4 animate-spin" /> : null}
-          {isBusy ? busyLabel : actionLabel}
-        </Button>
+          {isBusy ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+        </IconButton>
       </div>
       {children ? <div className="pt-2 pl-7">{children}</div> : null}
     </div>
@@ -99,7 +97,7 @@ export function MaintenanceTab({
         <MaintenanceActionRow
           icon={<ScanSearch className="h-4 w-4" />}
           title={t({ ko: '전체 스캔', en: 'Full scan' })}
-          actionLabel={t({ ko: '전체 스캔', en: 'Scan all' })}
+          actionLabel={t({ ko: '전체 스캔 실행: 모든 감시 폴더를 다시 훑어', en: 'Run full scan: rescan every watched folder' })}
           busyLabel={t({ ko: '스캔 중', en: 'Scanning' })}
           isBusy={isScanningAll}
           confirmOptions={{
@@ -115,7 +113,7 @@ export function MaintenanceTab({
         <MaintenanceActionRow
           icon={<ShieldCheck className="h-4 w-4" />}
           title={t({ ko: '전체 파일 검증', en: 'Verify all files' })}
-          actionLabel={t({ ko: '검증 실행', en: 'Verify' })}
+          actionLabel={t({ ko: '검증 실행: 디스크에 없는 파일 기록 정리', en: 'Run verification: clean up records of missing files' })}
           busyLabel={t({ ko: '검증 중', en: 'Verifying' })}
           isBusy={isVerifyingAllFiles}
           confirmOptions={{
@@ -132,7 +130,7 @@ export function MaintenanceTab({
         <MaintenanceActionRow
           icon={<FileSearch className="h-4 w-4" />}
           title={t({ ko: '메타데이터 전체 재추출', en: 'Re-extract all metadata' })}
-          actionLabel={t({ ko: '재추출', en: 'Re-extract' })}
+          actionLabel={t({ ko: '메타데이터 재추출 실행', en: 'Run metadata re-extraction' })}
           busyLabel={t({ ko: '등록 중', en: 'Queuing' })}
           isBusy={isReextracting}
           confirmOptions={{

@@ -4,6 +4,7 @@ import { Pipette, Plus, Wand2, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
+import { Tip } from '@/components/ui/tooltip'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { useI18n } from '@/i18n'
 import { getGroupsHierarchyAll } from '@/lib/api-groups'
@@ -60,18 +61,21 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
     <div className="flex min-w-0 flex-col">
       <SpriteSection title={t({ ko: '추출', en: 'Frames' })} actions={<SegmentedControl size="sm" value={form.samplingMode} onChange={(mode) => update({ samplingMode: mode as ExtractForm['samplingMode'] })} items={[{ value: 'count', label: t({ ko: '개수', en: 'Count' }) }, { value: 'interval', label: t({ ko: '간격', en: 'Interval' }) }]} ariaLabel={t({ ko: '추출 방식', en: 'Sampling' })} />}>
         {form.samplingMode === 'count' ? (
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <span>{t({ ko: '영상마다', en: 'Per video' })}</span>
-            <span className="flex items-center gap-2">
-              <NumberStepperInput className="w-28" value={form.sampleCount} min={2} max={MAX_SPRITE_FRAMES} step={1} onValueCommit={(value) => update({ sampleCount: Math.max(2, Math.min(MAX_SPRITE_FRAMES, Number(value) || 2)) })} aria-label={t({ ko: '개수', en: 'Count' })} />
-              <span className="text-muted-foreground">{t({ ko: '컷', en: 'frames' })}</span>
-            </span>
+          <div className="flex items-center justify-end gap-3 text-sm">
+            <Tip content={t({ ko: '영상마다 뽑을 컷 수', en: 'Frames to take from each video' })}>
+              <span className="inline-flex">
+                <NumberStepperInput className="w-28" value={form.sampleCount} min={2} max={MAX_SPRITE_FRAMES} step={1} onValueCommit={(value) => update({ sampleCount: Math.max(2, Math.min(MAX_SPRITE_FRAMES, Number(value) || 2)) })} aria-label={t({ ko: '영상마다 뽑을 컷 수', en: 'Frames per video' })} />
+              </span>
+            </Tip>
           </div>
         ) : (
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <span>{t({ ko: '간격', en: 'Every' })}</span>
+          <div className="flex items-center justify-end gap-3 text-sm">
             <span className="flex items-center gap-2">
-              <NumberStepperInput className="w-28" value={form.intervalValue} min={intervalUnit === 'frames' ? 1 : 0.001} step={intervalUnit === 'frames' ? 1 : 0.01} onValueCommit={(value) => update({ intervalValue: Math.max(0.001, Number(value) || 1) })} aria-label={t({ ko: '간격', en: 'Interval' })} />
+              <Tip content={t({ ko: '이 간격마다 한 컷씩 뽑아', en: 'Take one frame every interval' })}>
+                <span className="inline-flex">
+                  <NumberStepperInput className="w-28" value={form.intervalValue} min={intervalUnit === 'frames' ? 1 : 0.001} step={intervalUnit === 'frames' ? 1 : 0.01} onValueCommit={(value) => update({ intervalValue: Math.max(0.001, Number(value) || 1) })} aria-label={t({ ko: '간격', en: 'Interval' })} />
+                </span>
+              </Tip>
               <SegmentedControl
                 size="sm"
                 value={intervalUnit}
@@ -164,9 +168,12 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
       </SpriteSection>
 
       <SpriteSection title={t({ ko: '시트', en: 'Sheet' })}>
-        <div className="flex items-center justify-between gap-3 text-sm">
-          <span>{t({ ko: '열', en: 'Columns' })}</span>
-          <NumberStepperInput className="w-28" value={output.columns} min={0} max={64} step={1} onValueCommit={(value) => setOutput({ ...output, columns: Math.max(0, Math.min(64, Math.round(Number(value) || 0))) })} aria-label={t({ ko: '열 수 (0은 자동)', en: 'Columns (0 = auto)' })} />
+        <div className="flex items-center justify-end gap-3 text-sm">
+          <Tip content={t({ ko: '시트 열 수 (0은 자동)', en: 'Sheet columns (0 = auto)' })}>
+            <span className="inline-flex">
+              <NumberStepperInput className="w-28" value={output.columns} min={0} max={64} step={1} onValueCommit={(value) => setOutput({ ...output, columns: Math.max(0, Math.min(64, Math.round(Number(value) || 0))) })} aria-label={t({ ko: '열 수 (0은 자동)', en: 'Columns (0 = auto)' })} />
+            </span>
+          </Tip>
         </div>
         <SegmentedControl
           size="sm"
@@ -176,12 +183,14 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
           items={COLUMN_PRESETS.map((columns) => ({ value: String(columns), label: columns === 0 ? t({ ko: '자동', en: 'Auto' }) : String(columns) }))}
           ariaLabel={t({ ko: '열 빠른 선택', en: 'Column presets' })}
         />
-        <div className="flex items-center justify-between gap-3 text-sm">
-          <span>{t({ ko: '간격 px', en: 'Spacing px' })}</span>
-          <NumberStepperInput className="w-28" value={output.spacing} min={0} max={64} step={1} onValueCommit={(value) => setOutput({ ...output, spacing: Math.max(0, Math.min(64, Math.round(Number(value) || 0))) })} aria-label={t({ ko: '간격', en: 'Spacing' })} />
+        <div className="flex items-center justify-end gap-3 text-sm">
+          <Tip content={t({ ko: '셀 사이 간격 (px)', en: 'Gap between cells (px)' })}>
+            <span className="inline-flex">
+              <NumberStepperInput className="w-28" value={output.spacing} min={0} max={64} step={1} onValueCommit={(value) => setOutput({ ...output, spacing: Math.max(0, Math.min(64, Math.round(Number(value) || 0))) })} aria-label={t({ ko: '셀 사이 간격 (px)', en: 'Cell spacing (px)' })} />
+            </span>
+          </Tip>
         </div>
-        <div className="flex items-center justify-between gap-3 text-sm">
-          <span>{t({ ko: '포맷', en: 'Format' })}</span>
+        <div className="flex items-center justify-end gap-3 text-sm">
           <SegmentedControl size="sm" value={output.format} onChange={(format) => setOutput({ ...output, format: format as OutputForm['format'] })} items={[{ value: 'png', label: 'PNG' }, { value: 'webp', label: 'WebP' }]} ariaLabel={t({ ko: '포맷', en: 'Format' })} />
         </div>
         {output.format === 'webp' ? <SliderLine label={t({ ko: '품질', en: 'Quality' })} value={output.quality} min={1} max={100} onChange={(quality) => setOutput({ ...output, quality })} /> : null}
@@ -189,13 +198,14 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
 
       {canSave ? (
         <SpriteSection title={t({ ko: '출력', en: 'Output' })}>
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="shrink-0">{t({ ko: '라이브러리 저장', en: 'Library group' })}</span>
-            <Select className="h-8 min-w-0 max-w-56" value={save.groupPath ?? ''} onChange={(event) => setSave({ ...save, groupPath: event.target.value || null })} aria-label={t({ ko: '저장할 그룹', en: 'Group to save in' })}>
-              <option value="">{SPRITE_GROUP}</option>
-              {save.groupPath && !groupPaths.includes(save.groupPath) && save.groupPath !== SPRITE_GROUP ? <option value={save.groupPath}>{save.groupPath}</option> : null}
-              {groupPaths.map((path) => <option key={path} value={path}>{path}</option>)}
-            </Select>
+          <div className="flex items-center justify-end gap-3 text-sm">
+            <Tip content={t({ ko: '라이브러리에 저장할 그룹', en: 'Library group to save in' })}>
+              <Select className="h-8 min-w-0 max-w-56" value={save.groupPath ?? ''} onChange={(event) => setSave({ ...save, groupPath: event.target.value || null })} aria-label={t({ ko: '저장할 그룹', en: 'Group to save in' })}>
+                <option value="">{SPRITE_GROUP}</option>
+                {save.groupPath && !groupPaths.includes(save.groupPath) && save.groupPath !== SPRITE_GROUP ? <option value={save.groupPath}>{save.groupPath}</option> : null}
+                {groupPaths.map((path) => <option key={path} value={path}>{path}</option>)}
+              </Select>
+            </Tip>
           </div>
           <SwitchLine label={t({ ko: 'ZIP으로도 받기', en: 'Also download a ZIP' })} checked={save.zip} onChange={(zip) => setSave({ ...save, zip })} />
         </SpriteSection>

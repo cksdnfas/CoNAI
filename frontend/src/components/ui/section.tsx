@@ -4,6 +4,7 @@ import { ChevronDown } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { Button } from './button'
+import { FieldInfo } from './field'
 
 /**
  * Flat by default (DESIGN_PRESET "Flat"): a heading row + content on the page tone, no box, no padding. Separate
@@ -132,8 +133,13 @@ function Section({
   const headerContent = (
     <>
       <div className={slots.titleBlock}>
-        {heading ? <Heading className={slots.heading}>{heading}</Heading> : null}
-        {description ? <div className="mt-1 text-sm text-muted-foreground">{description}</div> : null}
+        {description ? (
+          // The explanation lives in an ⓘ tooltip next to the heading, not as a visible line.
+          <div className="flex min-w-0 items-center gap-1">
+            {heading ? <Heading className={slots.heading}>{heading}</Heading> : null}
+            <FieldInfo>{description}</FieldInfo>
+          </div>
+        ) : heading ? <Heading className={slots.heading}>{heading}</Heading> : null}
       </div>
       {actions || collapsible ? (
         <div className={slots.actions}>

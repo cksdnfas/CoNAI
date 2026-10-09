@@ -1,71 +1,41 @@
 import { useQuery } from '@tanstack/react-query'
-import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
-import { getExternalApiProviders, type ExternalApiProviderRecord } from '@/lib/api-external-api'
-
-const LLM_TYPES = new Set(['llm_openai_compatible', 'llm_ollama'])
-
-/** Connections a judge can ask: TypeSafe decision models first, then LLM connections (asked for JSON). */
-export function useJudgeConnections(enabled: boolean) {
-  const query = useQuery({ queryKey: ['external-api-providers', 'chat-judge'], queryFn: getExternalApiProviders, enabled })
-  const providers = query.data ?? []
-  return {
-    decision: providers.filter((provider) => provider.provider_type === 'decision_typesafe'),
-    llm: providers.filter((provider) => LLM_TYPES.has(provider.provider_type)),
-    all: providers,
-    isPending: query.isPending,
-  }
-}
-
-function defaultModelOf(provider: ExternalApiProviderRecord | undefined) {
-  const value = provider?.additional_config?.default_model ?? provider?.additional_config?.model
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
+import { MODEL_SLOTS_QUERY_KEY, listModelSlots } from '@/lib/api-codex-chat'
+import { chatModelRows, ModelRowOptions } from './chat-model-role-select'
 
 /**
- * A judge connection + model: a select of decision and LLM connections (`llmOnly` hides the decision ones), and the
- * model as free text (empty: the connection's default). `emptyLabel` names what no connection means here.
+ * A judge model: one select of the connections' models, TypeSafe decision models first, then the LLM ones (asked for
+ * JSON); `llmOnly` hides the decision ones. `emptyLabel` names what no model means here.
  */
-export function JudgeConnectionSelect({ enabled, providerName, model, emptyLabel, llmOnly = false, onChange, ariaLabel }: {
+export function JudgeModelSelect({ enabled, slotId, emptyLabel, llmOnly = false, onChange, ariaLabel }: {
   enabled: boolean
-  providerName: string | null
-  model: string
+  slotId: number | null
   emptyLabel: string
   llmOnly?: boolean
-  onChange: (next: { providerName: string | null; model: string }) => void
+  onChange: (slotId: number | null) => void
   ariaLabel: string
 }) {
   const { t } = useI18n()
-  const { decision, llm, all } = useJudgeConnections(enabled)
-  const selected = all.find((provider) => provider.provider_name === providerName)
-  const label = (provider: ExternalApiProviderRecord) => `${provider.display_name || provider.provider_name}${provider.is_enabled ? '' : ` (${t({ ko: '꺼짐', en: 'off' })})`}`
+  const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled })
+  const slots = slotsQuery.data ?? []
+  const decision = llmOnly ? [] : slots.filter((slot) => slot.providerType === 'decision_typesafe')
+  const llm = chatModelRows(slots)
+  const value = slotId !== null ? `slot:${slotId}` : ''
+  const known = [...decision, ...llm].some((slot) => slot.id === slotId)
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,10rem)] gap-2">
-      <Select variant="settings" aria-label={ariaLabel} value={providerName ?? ''} onChange={(event) => onChange({ providerName: event.target.value || null, model: '' })}>
-        <option value="">{emptyLabel}</option>
-        {!llmOnly && decision.length > 0 ? (
-          <optgroup label={t({ ko: '판단 모델', en: 'Judge models' })}>
-            {decision.map((provider) => <option key={provider.provider_name} value={provider.provider_name}>{label(provider)}</option>)}
-          </optgroup>
-        ) : null}
-        {llm.length > 0 ? (
-          <optgroup label={t({ ko: 'LLM 연결', en: 'LLM connections' })}>
-            {llm.map((provider) => <option key={provider.provider_name} value={provider.provider_name}>{label(provider)}</option>)}
-          </optgroup>
-        ) : null}
-        {providerName && !selected ? <option value={providerName} disabled>{providerName}</option> : null}
-      </Select>
-      <Input
-        variant="settings"
-        aria-label={t({ ko: '모델', en: 'Model' })}
-        value={model}
-        disabled={!providerName}
-        placeholder={defaultModelOf(selected) ?? t({ ko: '기본 모델', en: 'Default model' })}
-        onChange={(event) => onChange({ providerName, model: event.target.value })}
-        className="font-mono"
-      />
-    </div>
+    <Select variant="settings" aria-label={ariaLabel} value={value} disabled={!slotsQuery.isSuccess && slotId !== null} onChange={(event) => onChange(event.target.value ? Number(event.target.value.slice(5)) : null)}>
+      <option value="">{emptyLabel}</option>
+      <ModelRowOptions slots={decision} />
+      <ModelRowOptions slots={llm} />
+      {slotId !== null && !known && slotsQuery.isSuccess ? <option value={value} disabled>{t({ ko: '모델 #{id}', en: 'Model #{id}' }, { id: slotId })}</option> : null}
+    </Select>
   )
+}
+
+/** `connection · model` of a row, for a line that names the model in use (undefined until the list loads). */
+export function useModelLabel(enabled: boolean, slotId: number | null) {
+  const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled: enabled && slotId !== null })
+  return slotId === null ? null : slotsQuery.data?.find((slot) => slot.id === slotId)?.label
 }

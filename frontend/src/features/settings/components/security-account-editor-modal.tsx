@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
 import type { AuthAccountListItem, PermissionGroupListItem } from '@/lib/api-auth'
-import { Field } from '@/components/ui/field'
+import { Field, FieldInfo } from '@/components/ui/field'
+import { IconButton } from '@/components/ui/icon-button'
 import { Modal } from '@/components/ui/modal'
 import { getAccountStatusLabel, getPermissionGroupDisplayName } from './security-ui-text'
 import { getSecurityGroupBadgeStyle, type SecurityGroupColorMap, getSecurityGroupColor } from './security-group-color-utils'
@@ -139,19 +140,16 @@ export function SecurityAccountEditorModal({
           ]}
         />
 
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant={activeSection === 'group' ? 'default' : 'secondary'} size="sm" onClick={() => setActiveSection('group')}>
+        <div className="flex flex-wrap gap-1">
+          <IconButton variant="ghost" size="icon-sm" active={activeSection === 'group'} label={t({ ko: '그룹 바꾸기', en: 'Change group' })} onClick={() => setActiveSection('group')}>
             <Shield className="h-4 w-4" />
-            {t({ ko: '그룹', en: 'Group' })}
-          </Button>
-          <Button type="button" variant={activeSection === 'password' ? 'default' : 'secondary'} size="sm" onClick={() => setActiveSection('password')}>
+          </IconButton>
+          <IconButton variant="ghost" size="icon-sm" active={activeSection === 'password'} label={t({ ko: '비밀번호 바꾸기', en: 'Change password' })} onClick={() => setActiveSection('password')}>
             <KeyRound className="h-4 w-4" />
-            {t({ ko: '비밀번호', en: 'Password' })}
-          </Button>
-          <Button type="button" variant={activeSection === 'danger' ? 'destructive' : 'secondary'} size="sm" onClick={() => setActiveSection('danger')}>
+          </IconButton>
+          <IconButton variant={activeSection === 'danger' ? 'destructive' : 'ghost'} size="icon-sm" active={activeSection === 'danger'} label={t({ ko: '계정 삭제', en: 'Delete account' })} onClick={() => setActiveSection('danger')}>
             <Trash2 className="h-4 w-4" />
-            {t({ ko: '삭제', en: 'Delete' })}
-          </Button>
+          </IconButton>
         </div>
 
         {activeSection === 'group' ? (
@@ -219,9 +217,10 @@ export function SecurityAccountEditorModal({
                 </div>
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                {t({ ko: '레거시 관리자 계정이라 비밀번호는 관리자 계정 카드에서 바꿔.', en: 'Legacy admin account: change its password in the admin account card.' })}
-              </p>
+              <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                {t({ ko: '여기선 못 바꿔', en: 'Not editable here' })}
+                <FieldInfo>{t({ ko: '레거시 관리자 계정이라 비밀번호는 관리자 계정 카드에서 바꿔.', en: 'Legacy admin account: change its password in the admin account card.' })}</FieldInfo>
+              </div>
             )}
           </div>
         ) : null}
@@ -232,17 +231,18 @@ export function SecurityAccountEditorModal({
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
               <div className="space-y-1">
                 <div className="font-semibold">{t({ ko: '계정 삭제', en: 'Delete account' })}</div>
-                <div className="text-muted-foreground">
-                  {canDeleteAccount
-                    ? t({ ko: '정말 지우려면 아래에 {username} 를 그대로 입력해.', en: 'To confirm deletion, type {username} exactly below.' }, { username: account.username })
-                    : t({ ko: '레거시 관리자 계정은 여기서 못 지워.', en: 'Legacy admin accounts cannot be deleted here.' })}
-                </div>
+                {canDeleteAccount ? null : (
+                  <div className="text-muted-foreground">{t({ ko: '레거시 관리자 계정은 여기서 못 지워.', en: 'Legacy admin accounts cannot be deleted here.' })}</div>
+                )}
               </div>
             </div>
 
             {canDeleteAccount ? (
               <>
-                <Field label={t({ ko: '확인용 사용자명', en: 'Confirmation username' })}>
+                <Field
+                  label={t({ ko: '확인용 사용자명', en: 'Confirmation username' })}
+                  info={t({ ko: '정말 지우려면 {username} 를 그대로 입력해.', en: 'To confirm deletion, type {username} exactly.' }, { username: account.username })}
+                >
                   <Input
                     variant="settings"
                     value={deleteConfirmText}

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ClipboardCopy, Loader2, SlidersHorizontal } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { useI18n } from '@/i18n'
@@ -109,12 +109,12 @@ export function GenerationHistoryReuseActions({ historyId }: GenerationHistoryRe
 
   return (
     <>
-      <Button size="icon-sm" variant="secondary" onClick={() => void handleCopyPrompt()} disabled={busyAction !== null} aria-label={copyLabel} title={copyLabel}>
+      <IconButton size="icon-sm" variant="secondary" onClick={() => void handleCopyPrompt()} disabled={busyAction !== null} label={copyLabel}>
         {busyAction === 'copy' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardCopy className="h-4 w-4" />}
-      </Button>
-      <Button size="icon-sm" variant="secondary" onClick={() => void handleLoadSettings()} disabled={busyAction !== null} aria-label={loadLabel} title={loadLabel}>
+      </IconButton>
+      <IconButton size="icon-sm" variant="secondary" onClick={() => void handleLoadSettings()} disabled={busyAction !== null} label={loadLabel}>
         {busyAction === 'load' ? <Loader2 className="h-4 w-4 animate-spin" /> : <SlidersHorizontal className="h-4 w-4" />}
-      </Button>
+      </IconButton>
     </>
   )
 }

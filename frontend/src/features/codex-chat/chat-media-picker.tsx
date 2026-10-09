@@ -1,14 +1,16 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query'
-import { ImageOff, Search, X } from 'lucide-react'
+import { ImageOff, RotateCcw, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { FieldInfo } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { Spinner } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Tip } from '@/components/ui/tooltip'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { getImageListDisplayName } from '@/features/images/components/image-list/image-list-utils'
@@ -110,7 +112,7 @@ export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, app
         </Select>
         {groupId === null ? <>
           <Input className="min-w-40 flex-1" value={input} onChange={(event) => setInput(event.target.value)} aria-label={t({ ko: '프롬프트·태그 검색', en: 'Search prompts and tags' })} placeholder={t({ ko: '전체 미디어의 프롬프트·태그 검색', en: 'Search prompts and tags across the library' })} maxLength={300} />
-          <Button type="submit" variant="secondary"><Search />{t({ ko: '검색', en: 'Search' })}</Button>
+          <IconButton type="submit" variant="secondary" label={t({ ko: '검색 (Enter)', en: 'Search (Enter)' })}><Search /></IconButton>
           <Select className="w-auto" aria-label={t({ ko: '생성 도구', en: 'Generation tool' })} value={tool} onChange={(event) => setTool(event.target.value)}>
             <option value="">{t({ ko: '모든 도구', en: 'All tools' })}</option>
             {SEARCH_AI_TOOL_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.value === 'other' ? t({ ko: '기타', en: 'Other' }) : option.label}</option>)}
@@ -120,14 +122,14 @@ export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, app
             <option value="ASC">{t({ ko: '오래된순', en: 'Oldest first' })}</option>
           </Select>
         </> : null}
-        <Button type="button" variant="ghost" onClick={() => { setChosenGroupId(null); setInput(''); setSearch(''); setTool(''); setOrder('DESC') }}>{t({ ko: '필터 초기화', en: 'Reset filters' })}</Button>
+        <IconButton variant="ghost" label={t({ ko: '필터 초기화', en: 'Reset filters' })} onClick={() => { setChosenGroupId(null); setInput(''); setSearch(''); setTool(''); setOrder('DESC') }}><RotateCcw /></IconButton>
       </form>
-      {query.isPending ? <p className="py-12 text-center text-sm text-muted-foreground">{t({ ko: '불러오는 중…', en: 'Loading…' })}</p> : safety.visibleItems.length ? <ImageList
+      {query.isPending ? <div className="flex justify-center py-6"><Spinner label={t({ ko: '불러오는 중', en: 'Loading' })} /></div> : safety.visibleItems.length ? <ImageList
         items={safety.visibleItems} resetKey={`${groupId}:${search}:${tool}:${order}`} layout={kindOnly ? 'masonry' : 'grid'} activationMode="none"
         selectable forceSelectionMode selectedIds={[...selected.keys()]} onSelectedIdsChange={select}
         scrollMode="container" viewportHeight="min(48vh, 480px)" minColumnWidth={130} gridItemHeight={145} columnGap={8} rowGap={8}
         showDefaultQuickActions={false} shouldBlurItemPreview={safety.shouldBlurItemPreview} renderItemPersistentOverlay={safety.renderItemPersistentOverlay}
-      /> : !query.isError ? <p className="py-12 text-center text-sm text-muted-foreground">{t({ ko: '조건에 맞는 미디어가 없어.', en: 'No media matches these filters.' })}</p> : null}
+      /> : !query.isError ? <p className="py-3 text-center text-xs text-muted-foreground">{t({ ko: '맞는 미디어 없음', en: 'No matching media' })}</p> : null}
       {query.isError ? <div role="alert" className="flex items-center gap-2 text-sm text-destructive">
         {getErrorMessage(query.error, t({ ko: '미디어를 불러오지 못했어.', en: 'Could not load media.' }))}
         <Button variant="ghost" onClick={() => void (query.isFetchNextPageError ? query.fetchNextPage() : query.refetch())}>{t({ ko: '다시 시도', en: 'Retry' })}</Button>
@@ -139,8 +141,7 @@ export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, app
         {t({ ko: '{count}개 선택', en: '{count} selected' }, { count: selected.size })}
         {note === null ? null : <FieldInfo>{note ?? t({ ko: '원본을 참조해 첨부해. 이미지 이해에는 이미지 보기 도구와 비전 모델이 필요하고, 영상·오디오 내용 분석은 지원하지 않아.', en: 'Attachments reference the originals. Image understanding requires the image tool and a vision model; video/audio analysis is not supported.' })}</FieldInfo>}
       </span>
-      <Button variant="ghost" disabled={!selected.size} onClick={() => setSelected(new Map())}>{t({ ko: '선택 해제', en: 'Clear selection' })}</Button>
-      <Button variant="secondary" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
+      <IconButton variant="ghost" disabled={!selected.size} label={t({ ko: '선택 해제', en: 'Clear selection' })} onClick={() => setSelected(new Map())}><X /></IconButton>
       <Button disabled={selected.size > maxCount || (kindOnly && !selected.size)} onClick={() => onPick([...selected.values()])}>{applyLabel ?? t({ ko: '첨부 적용', en: 'Apply attachments' })}</Button>
     </ModalFooter>
   </Modal>
@@ -162,10 +163,10 @@ export function ChatMediaAttachments({ items = [], onRemove, disabled = false }:
     {items.map((item) => {
       const image: ImageRecord | undefined = canViewImages ? visible.get(item.compositeHash) : undefined
       return <div key={item.compositeHash} className="relative flex w-24 flex-col overflow-hidden rounded-sm bg-surface-high">
-        <Button variant="ghost" className="h-20 w-full overflow-hidden p-0" disabled={!image || !viewer} title={item.name} onClick={() => viewer?.openImageView({ compositeHash: item.compositeHash, sourceItems: image ? [image] : [] })}>
+        <Button variant="ghost" className="h-20 w-full overflow-hidden p-0" disabled={!image || !viewer} aria-label={item.name} onClick={() => viewer?.openImageView({ compositeHash: item.compositeHash, sourceItems: image ? [image] : [] })}>
           {image ? <img src={buildApiUrl(`/api/images/${encodeURIComponent(item.compositeHash)}/thumbnail`)} alt={item.name} loading="lazy" className={cn('size-full object-cover', safety.shouldBlurItemPreview(image) && 'blur-md')} /> : <ImageOff className="size-5 text-muted-foreground" />}
         </Button>
-        <span className="truncate px-1 py-1 text-2xs" title={item.name}>{item.name}</span>
+        <Tip content={item.name}><span className="truncate px-1 py-1 text-2xs">{item.name}</span></Tip>
         {onRemove ? <IconButton variant="secondary" size="icon-xs" className="absolute right-0.5 top-0.5" disabled={disabled} label={t({ ko: '첨부 빼기', en: 'Remove attachment' })} onClick={() => onRemove(item.compositeHash)}><X /></IconButton> : null}
       </div>
     })}

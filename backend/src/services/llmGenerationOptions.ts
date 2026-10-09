@@ -79,7 +79,6 @@ export function readLlmConnectionConfig(additionalConfig: unknown) {
   const timeoutMs = optionalPositiveNumber(config.request_timeout_ms) ?? optionalPositiveNumber(config.timeout_ms)
   const concurrent = optionalPositiveNumber(config.max_concurrent_requests)
   return {
-    defaultModel: optionalString(config.default_model) ?? optionalString(config.model),
     timeoutMs: timeoutMs === null ? null : Math.floor(timeoutMs),
     /** Requests the server answers at once (a proxy over several servers takes more); group rooms run that many members together. */
     maxConcurrentRequests: concurrent === null ? 1 : Math.min(Math.floor(concurrent), LLM_MAX_CONCURRENT_REQUESTS),

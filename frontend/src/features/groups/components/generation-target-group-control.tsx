@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Folder, FolderInput, FolderOpen, X } from 'lucide-react'
+import { Folder, FolderInput, FolderOpen } from 'lucide-react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Button } from '@/components/ui/button'
 import { FieldInfo } from '@/components/ui/field'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { normalizeGroupPathInput, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
@@ -49,21 +50,15 @@ function countMissingSegments(path: string, existingPaths: Set<string>) {
 interface GenerationTargetGroupControlProps {
   /** localStorage 키(생성 화면 공용, 워크플로우별 등) */
   storageKey: string
-  /** field: 라벨 + 현재 경로 버튼, icon: 떠 있는 액션 바용 아이콘 버튼 */
-  variant?: 'field' | 'icon'
   disabled?: boolean
   className?: string
-  /** field 변형의 라벨 */
-  label?: string
 }
 
-/** 생성 결과를 넣을 그룹 경로를 고르는 컨트롤. 그룹 권한이 없으면 렌더링하지 않는다. */
+/** 생성 결과를 넣을 그룹 경로를 고르는 아이콘 버튼. 지정되면 강조색, 경로는 툴팁으로. 그룹 권한이 없으면 렌더링하지 않는다. */
 export function GenerationTargetGroupControl({
   storageKey,
-  variant = 'field',
   disabled = false,
   className,
-  label,
 }: GenerationTargetGroupControlProps) {
   const { t } = useI18n()
   const { canAssignGroup, path, setPath } = useGenerationTargetGroupPath(storageKey)
@@ -73,57 +68,21 @@ export function GenerationTargetGroupControl({
     return null
   }
 
-  const fieldLabel = label ?? t({ ko: '결과 그룹', en: 'Result group' })
-  const emptyLabel = t({ ko: '지정 안 함', en: 'None' })
-  const title = path
-    ? t({ ko: `결과 그룹: ${path}`, en: `Result group: ${path}` })
-    : t({ ko: '결과 그룹 지정', en: 'Set result group' })
+  const label = path
+    ? t({ ko: `결과 그룹: 생성 후 '${path}' 그룹에 넣어`, en: `Result group: results go into '${path}'` })
+    : t({ ko: '결과 그룹: 생성 후 넣을 그룹 지정 (지금은 없음)', en: 'Result group: pick a group for new results (none now)' })
 
   return (
     <>
-      {variant === 'icon' ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={() => setOpen(true)}
-          disabled={disabled}
-          aria-label={title}
-          title={title}
-          className={cn('rounded-none border-r border-border/70 shadow-none', path ? 'text-primary' : undefined, className)}
-        >
-          {path ? <FolderInput className="h-4 w-4" /> : <Folder className="h-4 w-4" />}
-        </Button>
-      ) : (
-        <div className={cn('flex min-w-0 items-center gap-2', className)}>
-          <span className="shrink-0 text-xs text-muted-foreground">{fieldLabel}</span>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => setOpen(true)}
-            disabled={disabled}
-            title={title}
-            className={cn('min-w-0 max-w-full justify-start', path ? 'text-foreground' : 'text-muted-foreground')}
-          >
-            {path ? <FolderInput className="h-4 w-4 shrink-0 text-primary" /> : <Folder className="h-4 w-4 shrink-0" />}
-            <span className="truncate">{path || emptyLabel}</span>
-          </Button>
-          {path ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setPath('')}
-              disabled={disabled}
-              aria-label={t({ ko: '결과 그룹 해제', en: 'Clear result group' })}
-              title={t({ ko: '결과 그룹 해제', en: 'Clear result group' })}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          ) : null}
-        </div>
-      )}
+      <IconButton
+        variant="ghost"
+        onClick={() => setOpen(true)}
+        disabled={disabled}
+        label={label}
+        className={cn(path ? 'text-primary' : undefined, className)}
+      >
+        {path ? <FolderInput /> : <Folder />}
+      </IconButton>
 
       {open ? (
         <GenerationTargetGroupModal

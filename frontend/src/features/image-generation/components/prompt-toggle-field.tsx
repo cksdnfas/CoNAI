@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
 import { TextSegmentSpreadsheetInput, getTextSegmentSpreadsheetRows, joinTextSegmentSpreadsheetRows } from './text-segment-spreadsheet-input'
@@ -29,16 +30,24 @@ function countPromptSegments(value: string) {
     .length
 }
 
-/** Tab label with the prompt's segment count, so a filled negative prompt stays visible while another tab is open. */
+/** Tab label with the prompt's segment count, so a filled negative prompt stays visible while another tab is open; the length readout lives in its tooltip. */
 function PromptTabLabel({ label, value }: { label: string; value: string }) {
-  const { formatNumber } = useI18n()
+  const { t, formatNumber } = useI18n()
   const segmentCount = countPromptSegments(value)
+  const summary = value.trim().length > 0
+    ? t({ ko: '{characters}자 · {rows}행', en: '{characters} chars · {rows} rows' }, {
+      characters: formatNumber(value.trim().length),
+      rows: formatNumber(getTextSegmentSpreadsheetRows(value).length),
+    })
+    : null
 
   return (
-    <span className="inline-flex items-center gap-1.5">
-      {label}
-      {segmentCount > 0 ? <span className="text-xs tabular-nums text-muted-foreground">{formatNumber(segmentCount)}</span> : null}
-    </span>
+    <Tip content={summary}>
+      <span className="inline-flex items-center gap-1.5">
+        {label}
+        {segmentCount > 0 ? <span className="text-xs tabular-nums text-muted-foreground">{formatNumber(segmentCount)}</span> : null}
+      </span>
+    </Tip>
   )
 }
 
@@ -55,16 +64,11 @@ export function PromptToggleField({
   negativePlaceholder = '',
   compact = false,
 }: PromptToggleFieldProps) {
-  const { t, formatNumber } = useI18n()
+  const { t } = useI18n()
   const [activeTab, setActiveTab] = useState<'positive' | 'negative'>('positive')
   const resolvedPositiveLabel = positiveLabel ?? t('image-generation.components.prompt.toggle.field.positive')
   const resolvedNegativeLabel = negativeLabel ?? t('image-generation.components.prompt.toggle.field.negative')
   const promptValue = activeTab === 'negative' ? negativeValue : positiveValue
-
-  const summary = t({ ko: '{characters}자 · {rows}행', en: '{characters} chars · {rows} rows' }, {
-    characters: formatNumber(promptValue.trim().length),
-    rows: formatNumber(getTextSegmentSpreadsheetRows(promptValue).length),
-  })
 
   return (
     <div className="min-w-0 space-y-3">
@@ -77,7 +81,6 @@ export function PromptToggleField({
           { value: 'negative', label: <PromptTabLabel label={resolvedNegativeLabel} value={negativeValue} /> },
         ]}
         onChange={(value) => setActiveTab(value === 'negative' ? 'negative' : 'positive')}
-        actions={<span className="text-xs tabular-nums text-muted-foreground">{summary}</span>}
       />
 
       <TextSegmentSpreadsheetInput

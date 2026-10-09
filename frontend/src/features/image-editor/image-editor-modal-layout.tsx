@@ -1,7 +1,6 @@
 import type { RefObject, WheelEvent } from 'react'
 import type Konva from 'konva'
 import { Button } from '@/components/ui/button'
-import { Heading } from '@/components/ui/heading'
 import { useI18n } from '@/i18n'
 import { Modal } from '@/components/ui/modal'
 import { ImageEditorCanvas } from './image-editor-canvas'
@@ -134,9 +133,7 @@ export function ImageEditorModalLayout({
   open,
   saving,
   title,
-  sourceFileName,
   onClose,
-  sourceSummary,
   toolbar,
   canvas,
   layerPanel,
@@ -159,14 +156,6 @@ export function ImageEditorModalLayout({
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0 space-y-4">
             <div className="space-y-4">
-                <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <Heading level={3} className="min-w-0 truncate">{sourceFileName || t({ ko: '편집 세션', en: 'Editor Session' })}</Heading>
-                  <div className="text-xs text-muted-foreground">
-                    {sourceSummary.width > 0 ? `${sourceSummary.width} × ${sourceSummary.height}` : t({ ko: '불러온 이미지가 없어.', en: 'No image loaded' })}
-                    {((sourceSummary.rotation % 360) + 360) % 360 !== 0 ? <>{' · '}{t({ ko: '회전 {value}°', en: 'Rotate {value}°' }, { value: ((sourceSummary.rotation % 360) + 360) % 360 })}</> : null}
-                  </div>
-                </div>
-
                 <ImageEditorToolbar {...toolbar} />
                 <ImageEditorCanvas {...canvas} />
             </div>
@@ -180,11 +169,11 @@ export function ImageEditorModalLayout({
         </div>
 
         {/* Below xl the side panel stacks under the tall canvas, so keep the primary actions pinned to the modal bottom. */}
-        <div className="sticky bottom-0 z-10 flex gap-2 bg-background/96 py-3 backdrop-blur xl:hidden">
-          <Button type="button" variant="secondary" className="flex-1" onClick={sessionActions.onClose} disabled={sessionActions.saving}>
+        <div className="sticky bottom-0 z-10 flex justify-end gap-2 bg-background/96 py-3 backdrop-blur xl:hidden">
+          <Button type="button" variant="secondary" onClick={sessionActions.onClose} disabled={sessionActions.saving}>
             {t({ ko: '취소', en: 'Cancel' })}
           </Button>
-          <Button type="button" className="flex-1" onClick={sessionActions.onSave} disabled={!sessionActions.canSave || sessionActions.saving || sessionActions.loading}>
+          <Button type="button" onClick={sessionActions.onSave} disabled={!sessionActions.canSave || sessionActions.saving || sessionActions.loading}>
             {sessionActions.saving ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })}
           </Button>
         </div>

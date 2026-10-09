@@ -1,3 +1,4 @@
+import { ChatFilledMark } from '@/features/codex-chat/chat-page-context'
 import { Archive, AudioLines, CircleUserRound, Film, FolderTree, Images, LayoutGrid, ListTodo, Map as MapIcon, MessageSquare, MessageSquareText, Search, Settings2, Sparkles, Upload, type LucideIcon } from 'lucide-react'
 import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
@@ -100,7 +101,7 @@ export function GeneralPreferencesSections({
           <SettingsSwitchRow
             checked={generalDraft.promptForDownloadLocation ?? false}
             onCheckedChange={(checked) => onPatchGeneral({ promptForDownloadLocation: checked })}
-            label={t({ ko: '다운로드할 때 파일명과 위치 확인', en: 'Ask for file name and save location' })}
+            label={<span className="inline-flex items-center gap-2">{t({ ko: '다운로드할 때 파일명과 위치 확인', en: 'Ask for file name and save location' })}<ChatFilledMark fieldId="promptForDownloadLocation" /></span>}
           />
         </RowGroup>
       ) : null}
@@ -110,12 +111,12 @@ export function GeneralPreferencesSections({
           <SettingsSwitchRow
             checked={generalDraft.enableGallery ?? true}
             onCheckedChange={(checked) => onPatchGeneral({ enableGallery: checked })}
-            label={t({ ko: '갤러리 기능 사용', en: 'Enable gallery features' })}
+            label={<span className="inline-flex items-center gap-2">{t({ ko: '갤러리 기능 사용', en: 'Enable gallery features' })}<ChatFilledMark fieldId="enableGallery" /></span>}
           />
           <SettingsSwitchRow
             checked={generalDraft.showRatingBadges ?? true}
             onCheckedChange={(checked) => onPatchGeneral({ showRatingBadges: checked })}
-            label={t({ ko: '등급 배지 표시', en: 'Show rating badges' })}
+            label={<span className="inline-flex items-center gap-2">{t({ ko: '등급 배지 표시', en: 'Show rating badges' })}<ChatFilledMark fieldId="showRatingBadges" /></span>}
           />
           <SettingRow label={t({ ko: '상단 메뉴', en: 'Header menu' })} align="start" controlClassName="justify-start sm:max-w-xl sm:justify-end">
             {HEADER_NAVIGATION_OPTIONS.map((option) => {

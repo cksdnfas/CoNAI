@@ -275,7 +275,7 @@ export function mentionOptions(query: string, members: ChatProfileSummary[], rep
 export function MentionList({ id, options, selected, onSelect }: { id: string; options: MentionOption[]; selected: number; onSelect: (option: MentionOption) => void }) {
   const { t } = useI18n()
   return (
-    <div id={id} role="listbox" aria-label={t({ ko: '멘션할 참가자', en: 'Members to mention' })} className="absolute bottom-full left-3 z-10 mb-1 w-64 max-w-[calc(100%-1.5rem)] overflow-y-auto rounded-md bg-surface-high p-1.5 shadow-elevation-2">
+    <div id={id} role="listbox" aria-label={t({ ko: '멘션할 참가자', en: 'Members to mention' })} className="absolute bottom-full left-3 z-10 mb-1 max-h-72 w-64 max-w-[calc(100%-1.5rem)] overflow-y-auto rounded-md bg-surface-high p-1.5 shadow-elevation-2">
       {options.map((option, index) => (
         <Button key={option.key} id={`${id}-${index}`} role="option" aria-selected={selected === index} variant="ghost" size="sm" className={cn('w-full justify-start gap-2.5 font-semibold text-foreground', selected === index && 'bg-fill')} onMouseDown={(event) => event.preventDefault()} onClick={() => onSelect(option)}>
           {option.profile

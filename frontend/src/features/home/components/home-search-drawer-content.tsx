@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
+import { Spinner } from '@/components/ui/loading-state'
 import { Panel } from '@/components/ui/panel'
 import { Text } from '@/components/ui/text'
-import { BottomDrawerNotice } from '@/components/ui/bottom-drawer-sheet'
+import { Tip } from '@/components/ui/tooltip'
 import { SearchChipList } from '@/features/search/components/search-chip-list'
 import { SearchScopeTabs } from '@/features/search/components/search-scope-tabs'
 import { SearchSuggestionList } from '@/features/search/components/search-suggestion-list'
@@ -125,8 +126,6 @@ function HomeSearchSuggestionPanel({
           onSelectMetadataSuggestion={(value: string) => addSuggestionChip(value)}
           onSelectRatingTier={(tier: RatingTierRecord) => addRatingChip(createRatingSearchChip(tier))}
           onSelectAIToolSuggestion={addAIToolChip}
-          emptyRatingText={t('homeSearchDrawerContent.noMatchingRatingTiers')}
-          idlePromptText={t('homeSearchDrawerContent.enterSearchTerms')}
         />
       </div>
     </div>
@@ -278,7 +277,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
           </section>
 
           <section className="space-y-3">
-            <SearchChipList chips={draftChips} title={null} emptyMessage={t({ ko: '필터 없음', en: 'No filters' })} onCycleOperator={cycleChipOperator} onRemove={removeChip} />
+            <SearchChipList chips={draftChips} title={null} emptyMessage={null} onCycleOperator={cycleChipOperator} onRemove={removeChip} />
 
             <div className="flex gap-2">
               <Button type="button" className="flex-1" onClick={handleApplySearch}>
@@ -290,73 +289,77 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
             </div>
           </section>
 
-          <section className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <Text as="div" variant="overline" className="min-w-0 flex-1 font-semibold">{t({ ko: '최근 검색', en: 'Recent searches' })}</Text>
-              <div className="flex shrink-0 items-center gap-2">
-                <IconButton
-                  variant="ghost"
-                  size="icon-sm"
-                  label={t({ ko: '히스토리 비우기', en: 'Clear history' })}
-                  onClick={async () => {
-                    const confirmed = await confirm({
-                      title: t({ ko: '최근 검색 비우기', en: 'Clear recent searches' }),
-                      description: t({ ko: '최근 검색 기록을 모두 지울까?', en: 'Clear all recent searches?' }),
-                      confirmLabel: t({ ko: '비우기', en: 'Clear' }),
-                      tone: 'destructive',
-                    })
-                    if (confirmed) {
-                      void clearHistoryEntries()
-                    }
-                  }}
-                  disabled={historyEntries.length === 0}
-                >
-                  <Trash2 className="size-4" />
-                </IconButton>
+          {/* Recent searches: hidden while there is no history (a spinner while it loads). */}
+          {historyLoading || historyEntries.length > 0 ? (
+            <section className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <Text as="div" variant="overline" className="min-w-0 flex-1 font-semibold">{t({ ko: '최근 검색', en: 'Recent searches' })}</Text>
+                <div className="flex shrink-0 items-center gap-2">
+                  <IconButton
+                    variant="ghost"
+                    size="icon-sm"
+                    label={t({ ko: '히스토리 비우기', en: 'Clear history' })}
+                    onClick={async () => {
+                      const confirmed = await confirm({
+                        title: t({ ko: '최근 검색 비우기', en: 'Clear recent searches' }),
+                        description: t({ ko: '최근 검색 기록을 모두 지울까?', en: 'Clear all recent searches?' }),
+                        confirmLabel: t({ ko: '비우기', en: 'Clear' }),
+                        tone: 'destructive',
+                      })
+                      if (confirmed) {
+                        void clearHistoryEntries()
+                      }
+                    }}
+                    disabled={historyEntries.length === 0}
+                  >
+                    <Trash2 className="size-4" />
+                  </IconButton>
+                </div>
               </div>
-            </div>
 
-            {historyLoading ? <BottomDrawerNotice>{t({ ko: '불러오는 중…', en: 'Loading…' })}</BottomDrawerNotice> : null}
-            {!historyLoading && historyEntries.length === 0 ? <BottomDrawerNotice>{t({ ko: '히스토리 없음', en: 'No history' })}</BottomDrawerNotice> : null}
-            {!historyLoading && historyEntries.length > 0 ? (
-              <div>
-                {historyEntries.map((entry) => (
-                  // The whole entry is the hit target (hairline row); the delete key floats at its right edge.
-                  <div key={entry.id} className="relative border-b border-line last:border-b-0">
-                    <Panel asChild tone="none" padding="none" interactive className="block w-full rounded-none py-3 pr-12 pl-2 text-left">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          selectHistoryEntry(entry)
-                          setIsSuggestionPanelOpen(false)
-                          closeDrawer()
-                        }}
-                      >
-                        <div className="flex flex-wrap gap-2">
-                          {entry.chips.map((chip) => (
-                            <Chip key={chip.id}>
-                              <span className="rounded-sm px-1.5 py-0.5 text-2xs font-semibold" style={getSearchScopeStyle(chip.scope)}>
-                                {t(SEARCH_SCOPE_LABEL_KEYS[chip.scope])}
-                              </span>
-                              <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-2xs font-bold text-primary" title={t(SEARCH_OPERATOR_DESCRIPTIONS[chip.operator])}>
-                                {t(SEARCH_OPERATOR_LABELS[chip.operator])}
-                              </span>
-                              <span className="truncate" style={chip.color ? { color: chip.color } : undefined}>
-                                {chip.label}
-                              </span>
-                            </Chip>
-                          ))}
-                        </div>
-                      </button>
-                    </Panel>
-                    <IconButton size="icon-xs" variant="ghost" className="absolute top-3 right-2" onClick={() => void deleteHistoryEntry(entry.id)} label={t('homeSearchDrawerContent.deleteSearchHistory')}>
-                      <X className="h-4 w-4" />
-                    </IconButton>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </section>
+              {historyLoading ? <div className="flex justify-center py-2 text-muted-foreground"><Spinner size="sm" label={t({ ko: '불러오는 중…', en: 'Loading…' })} /></div> : null}
+              {!historyLoading && historyEntries.length > 0 ? (
+                <div>
+                  {historyEntries.map((entry) => (
+                    // The whole entry is the hit target (hairline row); the delete key floats at its right edge.
+                    <div key={entry.id} className="relative border-b border-line last:border-b-0">
+                      <Panel asChild tone="none" padding="none" interactive className="block w-full rounded-none py-3 pr-12 pl-2 text-left">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            selectHistoryEntry(entry)
+                            setIsSuggestionPanelOpen(false)
+                            closeDrawer()
+                          }}
+                        >
+                          <div className="flex flex-wrap gap-2">
+                            {entry.chips.map((chip) => (
+                              <Chip key={chip.id}>
+                                <span className="rounded-sm px-1.5 py-0.5 text-2xs font-semibold" style={getSearchScopeStyle(chip.scope)}>
+                                  {t(SEARCH_SCOPE_LABEL_KEYS[chip.scope])}
+                                </span>
+                                <Tip content={t(SEARCH_OPERATOR_DESCRIPTIONS[chip.operator])}>
+                                  <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-2xs font-bold text-primary">
+                                    {t(SEARCH_OPERATOR_LABELS[chip.operator])}
+                                  </span>
+                                </Tip>
+                                <span className="truncate" style={chip.color ? { color: chip.color } : undefined}>
+                                  {chip.label}
+                                </span>
+                              </Chip>
+                            ))}
+                          </div>
+                        </button>
+                      </Panel>
+                      <IconButton size="icon-xs" variant="ghost" className="absolute top-3 right-2" onClick={() => void deleteHistoryEntry(entry.id)} label={t('homeSearchDrawerContent.deleteSearchHistory')}>
+                        <X className="h-4 w-4" />
+                      </IconButton>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
         </div>
       </aside>
     </>

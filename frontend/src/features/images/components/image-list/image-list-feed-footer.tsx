@@ -16,9 +16,9 @@ interface ImageListFeedFooterProps {
 
 /**
  * Bottom of an infinite image feed: a spinner while the next page loads, a retry when auto-loading
- * failed (the only manual "load more"), and an end marker once everything is loaded.
+ * failed (the only manual "load more"). Nothing once everything is loaded.
  */
-export function ImageListFeedFooter({ itemCount, hasMore, isLoadingMore, loadMoreError, isRetrying = false, onRetry, className }: ImageListFeedFooterProps) {
+export function ImageListFeedFooter({ isLoadingMore, loadMoreError, isRetrying = false, onRetry, className }: ImageListFeedFooterProps) {
   const { t } = useI18n()
   const hasLoadMoreError = loadMoreError !== null && loadMoreError !== undefined
 
@@ -36,14 +36,6 @@ export function ImageListFeedFooter({ itemCount, hasMore, isLoadingMore, loadMor
         isRetrying={isRetrying}
         retryLabel={t({ ko: '다시 불러오기', en: 'Load again' })}
       />
-    )
-  } else if (!hasMore && itemCount > 0) {
-    content = (
-      <div className="flex w-full max-w-md items-center gap-3 text-xs text-muted-foreground" role="status">
-        <span className="h-px flex-1 bg-line" aria-hidden />
-        <span>{t({ ko: '끝까지 다 봤어', en: "You've reached the end" })}</span>
-        <span className="h-px flex-1 bg-line" aria-hidden />
-      </div>
     )
   }
 

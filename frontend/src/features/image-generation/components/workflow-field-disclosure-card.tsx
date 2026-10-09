@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ChevronDown, CircleQuestionMark } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
@@ -9,12 +10,11 @@ import type { SelectedImageDraft, WorkflowFieldDraftValue } from '../image-gener
 import { WorkflowFieldInput } from './workflow-field-input'
 import { validateMiniMaxH3DirectorNodeValue } from './minimax-h3-director-dasiwa-utils'
 
-function formatWorkflowFieldTypeLabel(field: WorkflowMarkedField) {
-  if (field.type === 'node') {
-    return 'Node'
-  }
-
-  return field.type
+/** Collapse the authoring default "Title-Title" (node title repeated as the input label) to one title. */
+export function formatWorkflowFieldLabel(field: Pick<WorkflowMarkedField, 'id' | 'label'>) {
+  const label = field.label || field.id
+  const repeated = /^(.+)-\1$/.exec(label)
+  return repeated ? repeated[1] : label
 }
 
 /** Flat field block (DESIGN_PRESET "Flat"): a plain disclosure row over the field, no surface of its own. */
@@ -48,7 +48,7 @@ type WorkflowFieldDisclosureCardProps = {
 export function WorkflowFieldDisclosureCard({ field, value, grouped = false, loraOptions, isRefreshingOptions = false, onRefreshOptions, issueMessage, onChange, onImageChange }: WorkflowFieldDisclosureCardProps) {
   const { t } = useI18n()
   const [isExpanded, setIsExpanded] = useState(field.default_collapsed !== true)
-  const fieldLabel = field.label || field.id
+  const fieldLabel = formatWorkflowFieldLabel(field)
   const hasNodeIssues = field.type === 'node'
     && field.node_editor === 'minimax_h3_director_dasiwa'
     && typeof value === 'object'
@@ -84,22 +84,26 @@ export function WorkflowFieldDisclosureCard({ field, value, grouped = false, lor
         <ChevronDown className={cn('mt-0.5 text-muted-foreground transition-transform', !isExpanded && '-rotate-90')} aria-hidden />
         <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <span className={cn('min-w-0 truncate font-medium', isInvalid || hasNodeIssues ? 'text-destructive' : 'text-foreground')}>{fieldLabel}</span>
-          {field.required ? <Badge variant="outline">{t('image-generation.components.workflow.field.disclosure.card.required')}</Badge> : null}
-          {field.description ? (
-            <span
-              className="inline-flex cursor-help text-muted-foreground"
-              title={field.description}
-              aria-label={t('image-generation.components.workflow.field.disclosure.card.description', { label: fieldLabel })}
-            >
-              <CircleQuestionMark className="size-3.5" />
-            </span>
+          {field.required ? (
+            <Tip content={t('image-generation.components.workflow.field.disclosure.card.required')}>
+              <span
+                className="size-1.5 shrink-0 rounded-full bg-primary"
+                role="img"
+                aria-label={t('image-generation.components.workflow.field.disclosure.card.required')}
+              />
+            </Tip>
           ) : null}
-        </span>
-        <span className={cn(
-          'shrink-0 text-2xs font-medium text-muted-foreground',
-          field.type !== 'node' && 'uppercase tracking-overline',
-        )}>
-          {formatWorkflowFieldTypeLabel(field)}
+          {field.description ? (
+            <Tip content={field.description}>
+              <span
+                className="inline-flex cursor-help text-muted-foreground"
+                role="img"
+                aria-label={t('image-generation.components.workflow.field.disclosure.card.description', { label: fieldLabel })}
+              >
+                <CircleQuestionMark className="size-3.5" />
+              </span>
+            </Tip>
+          ) : null}
         </span>
       </Button>
       {issueMessage ? (
@@ -170,14 +174,10 @@ export function WorkflowNodeFieldDisclosureCard({
   return (
     <div className={WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS}>
       <div className="flex items-start justify-between gap-3 py-2">
-        <div className="min-w-0">
-          <div className={cn('truncate text-sm font-semibold', issueCount > 0 || hasFieldIssues ? 'text-destructive' : 'text-foreground')}>{nodeTitle ?? t('image-generation.components.workflow.field.group.unknown.node')}</div>
-          {nodeId ? <div className="mt-0.5 text-2xs text-muted-foreground">{t('image-generation.components.workflow.field.group.node.id', { id: nodeId })}</div> : null}
-        </div>
-        <div className="flex shrink-0 flex-wrap justify-end gap-2">
-          <Badge variant="outline">{t('image-generation.components.workflow.field.group.field.count', { count: fields.length })}</Badge>
-          {issueCount > 0 ? <Badge variant="destructive">{t('image-generation.components.workflow.field.group.error.count', { count: issueCount })}</Badge> : null}
-        </div>
+        <Tip content={nodeId ? t('image-generation.components.workflow.field.group.node.id', { id: nodeId }) : null}>
+          <div className={cn('min-w-0 truncate text-sm font-semibold', issueCount > 0 || hasFieldIssues ? 'text-destructive' : 'text-foreground')}>{nodeTitle ?? t('image-generation.components.workflow.field.group.unknown.node')}</div>
+        </Tip>
+        {issueCount > 0 ? <Badge variant="destructive" className="shrink-0">{t('image-generation.components.workflow.field.group.error.count', { count: issueCount })}</Badge> : null}
       </div>
 
       <div className="divide-y divide-line">

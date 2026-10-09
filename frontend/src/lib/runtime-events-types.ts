@@ -20,6 +20,8 @@ export type RuntimeEventName =
   | 'chat.reaction.created'
   | 'chat.message.created'
   | 'chat.message.updated'
+  | 'chat.page.command'
+  | 'chat.task.updated'
   | 'history.record.created'
   | 'history.record.status'
   | 'graph.schedule.changed'

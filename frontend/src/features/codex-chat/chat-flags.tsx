@@ -263,10 +263,12 @@ function ChatFlagIconPicker({ value, name, onChange }: { value: string; name: st
                 {Object.entries(group.icons).map(([key, Icon]) => {
                   const icon = `${LUCIDE_PREFIX}${key}`
                   return (
-                    // eslint-disable-next-line no-restricted-syntax -- picker tile
-                    <button key={key} type="button" aria-label={key} title={key} className={tile(value === icon)} onClick={() => pick(icon)}>
-                      <Icon className="size-[18px]" />
-                    </button>
+                    <Tip key={key} content={key}>
+                      {/* eslint-disable-next-line no-restricted-syntax -- picker tile */}
+                      <button type="button" aria-label={key} className={tile(value === icon)} onClick={() => pick(icon)}>
+                        <Icon className="size-[18px]" />
+                      </button>
+                    </Tip>
                   )
                 })}
               </div>
@@ -488,9 +490,9 @@ export function ChatFlagManagerModal({ open, onClose }: { open: boolean; onClose
       >
         <ModalBody>
           {flagsQuery.isSuccess && flags.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 py-8 text-sm text-muted-foreground">
+            <div className="flex flex-col items-center gap-2 py-4 text-xs text-muted-foreground">
               {t({ ko: '아직 플래그가 없어.', en: 'No flags yet.' })}
-              <Button size="sm" variant="secondary" onClick={() => setEditor({ flag: null })}><Plus />{t({ ko: '플래그 추가', en: 'Add flag' })}</Button>
+              <IconButton size="icon-sm" variant="secondary" label={t({ ko: '플래그 추가', en: 'Add flag' })} onClick={() => setEditor({ flag: null })}><Plus /></IconButton>
             </div>
           ) : (
             <ChatFlagRows flags={flags} onEdit={(flag) => setEditor({ flag })} />

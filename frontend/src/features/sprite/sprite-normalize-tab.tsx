@@ -7,6 +7,7 @@ import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Tip } from '@/components/ui/tooltip'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { getImageListDisplayName } from '@/features/images/components/image-list/image-list-utils'
 import { useI18n } from '@/i18n'
@@ -119,7 +120,11 @@ export function SpriteNormalizeTab() {
                 selected={sheet.hash === selected}
                 className="px-2"
                 trailing={<>
-                  <span className={cn('rounded-sm px-1.5 py-0.5 text-xs font-semibold', problem ? 'bg-warning-soft text-warning' : 'bg-success-soft text-success')}>{problem ? t({ ko: '확인', en: 'Check' }) : t({ ko: '준비', en: 'Ready' })}</span>
+                  <Tip content={problem ? t({ ko: '확인 필요: 격자나 프레임 수를 봐줘', en: 'Needs a check: grid or frame count' }) : t({ ko: '준비됨', en: 'Ready' })}>
+                    <span className="inline-flex size-6 items-center justify-center" role="img" aria-label={problem ? t({ ko: '확인 필요', en: 'Needs a check' }) : t({ ko: '준비됨', en: 'Ready' })}>
+                      <span className={cn('size-2 rounded-full', problem ? 'bg-warning' : 'bg-success')} />
+                    </span>
+                  </Tip>
                   <IconButton size="icon-xs" variant="ghost" label={t({ ko: '빼기', en: 'Remove' })} onClick={() => { setSheets(sheets.filter((item) => item.hash !== sheet.hash)); if (selected === sheet.hash) setSelected(null) }}><X /></IconButton>
                 </>}
               >
@@ -128,7 +133,7 @@ export function SpriteNormalizeTab() {
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium">{sheet.name}</span>
                     <span className="block truncate font-mono text-xs text-muted-foreground">
-                      {sheet.options.columns}×{sheet.options.rows} · {t({ ko: '{count}프레임', en: '{count} frames' }, { count: sheet.options.frameCount })} · {sheet.options.readOrder === 'row_major' ? t({ ko: '행 우선', en: 'rows first' }) : t({ ko: '열 우선', en: 'columns first' })}
+                      {sheet.options.columns}×{sheet.options.rows} · {t({ ko: '{count}컷', en: '{count} frames' }, { count: sheet.options.frameCount })}
                     </span>
                   </span>
                 </Button>
@@ -177,8 +182,8 @@ export function SpriteNormalizeTab() {
       </SpriteSection>
 
       <div className="sticky bottom-3 z-sticky mt-2 flex items-center gap-2 rounded-md bg-surface-container/95 p-1.5 pl-3 shadow-elevation-3 backdrop-blur-md">
-        <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
-          {problems ? t({ ko: '확인 필요 {count}개', en: '{count} need a check' }, { count: problems }) : t({ ko: '시트 {count}개', en: '{count} sheets' }, { count: sheets.length })}
+        <span className="min-w-0 flex-1 truncate font-mono text-xs text-warning">
+          {problems ? t({ ko: '확인 필요 {count}개', en: '{count} need a check' }, { count: problems }) : null}
         </span>
         <IconButton variant="ghost" size="icon-sm" disabled={!canRun} label={t({ ko: 'ZIP으로 받기', en: 'Download ZIP' })} onClick={() => void run(false)}><Download /></IconButton>
         <Button disabled={!canRun || !has('images.upload')} onClick={() => void run(true)}>
@@ -196,9 +201,11 @@ export function SpriteNormalizeTab() {
         {current ? <GridPreview sheet={current} anchor={options.anchorPolicy} /> : <LayoutGrid className="size-10 text-muted-foreground opacity-30" />}
       </div>
       {current ? (
-        <div className="font-mono text-xs text-muted-foreground">
-          {(() => { const cell = cellSize(current.width, current.height, current.options.columns, current.options.rows, current.options.inputSpacing); return `${current.width}×${current.height} · ${t({ ko: '셀', en: 'cell' })} ${Number(cell.cellWidth.toFixed(2))}×${Number(cell.cellHeight.toFixed(2))}` })()}
-        </div>
+        <Tip content={t({ ko: '셀 크기 · 시트 {width}×{height}', en: 'Cell size · sheet {width}×{height}' }, { width: current.width, height: current.height })}>
+          <span className="self-start font-mono text-xs text-muted-foreground" tabIndex={0}>
+            {(() => { const cell = cellSize(current.width, current.height, current.options.columns, current.options.rows, current.options.inputSpacing); return `${Number(cell.cellWidth.toFixed(2))}×${Number(cell.cellHeight.toFixed(2))}` })()}
+          </span>
+        </Tip>
       ) : null}
       {failures.length ? <ul role="alert" className="flex flex-col gap-1 text-xs text-destructive">{failures.map((failure) => <li key={failure.source} className="truncate">{failure.source} · {failure.error}</li>)}</ul> : null}
       <LibraryResults hashes={savedHashes} />

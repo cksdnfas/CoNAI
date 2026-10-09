@@ -80,13 +80,15 @@ export function ChatDeleteDialog({ open, count = 1, book, pending, onConfirm, on
           {radio(!backup, () => setBackup(false), t({ ko: '그냥 지우기', en: 'Just delete' }))}
         </div>
         {withBook ? <>
-        <p className="text-sm text-muted-foreground">
-          {files > 0
-            ? t({ ko: '로어북 항목 {entries} · 자료 {files}', en: 'Lorebook: {entries} entries · {files} files' }, { entries, files })
-            : t({ ko: '로어북 항목 {entries}', en: 'Lorebook: {entries} entries' }, { entries })}
-        </p>
         <div role="radiogroup" aria-label={t({ ko: '채팅 로어북', en: 'Chat lorebook' })} className="flex flex-col gap-1.5">
-          {choice('delete', t({ ko: '같이 지우기', en: 'Delete it too' }))}
+          {/* The lorebook size rides on the first choice instead of a separate helper line. */}
+          {choice('delete', t({ ko: '로어북도 같이 지우기', en: 'Delete the lorebook too' }), (
+            <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
+              {files > 0
+                ? t({ ko: '항목 {entries} · 자료 {files}', en: '{entries} entries · {files} files' }, { entries, files })
+                : t({ ko: '항목 {entries}', en: '{entries} entries' }, { entries })}
+            </span>
+          ))}
           {choice('keep', t({ ko: '계정 로어북으로 보관', en: 'Keep as an account lorebook' }), book ? <span className="block truncate font-mono text-xs text-muted-foreground">로어북/{book.name}</span> : null)}
           {choice('merge', t({ ko: '계정 로어북에 병합', en: 'Merge into an account lorebook' }), undefined, targets.length === 0, targets.length > 0 ? (
             <Select className="h-8 w-36" value={targetId === null ? '' : String(targetId)} onChange={(event) => { setTargetId(Number(event.target.value)); setAction('merge') }} aria-label={t({ ko: '병합할 계정 로어북', en: 'Account lorebook to merge into' })}>

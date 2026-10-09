@@ -44,8 +44,6 @@ export function MiniMaxH3DirectorPostprocessPanel({ value, hiddenControls = [], 
 
   return (
     <section className="space-y-3">
-      <div className="text-xs font-semibold text-foreground">{t({ ko: '업스케일 및 후처리', en: 'Upscaling and post-processing' })}</div>
-
       <div className="grid gap-2 md:grid-cols-3">
         {showSimple ? <ToggleRow
           checked={value.simple.enabled}
@@ -79,14 +77,14 @@ export function MiniMaxH3DirectorPostprocessPanel({ value, hiddenControls = [], 
       {showRtx && value.rtx.enabled ? (
         <Inset className="space-y-3 px-3">
           <div className="grid gap-3 md:grid-cols-2">
-            <ToggleRow checked={value.rtx.denoise} label={t({ ko: 'RTX 노이즈 제거', en: 'RTX denoise' })} port={renderInputPort?.('postprocess.rtx.denoise')} onChange={(denoise) => patchRtx({ denoise })} />
+            <ToggleRow checked={value.rtx.denoise} label={t({ ko: '노이즈 제거', en: 'Denoise' })} port={renderInputPort?.('postprocess.rtx.denoise')} onChange={(denoise) => patchRtx({ denoise })} />
             <div className="space-y-1">
               {renderInputPort?.('postprocess.rtx.denoise_quality')}
               <FormField label={t({ ko: '노이즈 제거 품질', en: 'Denoise quality' })}>
                 <Select value={value.rtx.denoise_quality} onChange={(event) => patchRtx({ denoise_quality: event.target.value as MiniMaxH3DirectorRtxSettings['denoise_quality'] })}>{QUALITY_OPTIONS.map((option) => <option key={option}>{option}</option>)}</Select>
               </FormField>
             </div>
-            <ToggleRow checked={value.rtx.deblur} label={t({ ko: 'RTX 디블러', en: 'RTX deblur' })} port={renderInputPort?.('postprocess.rtx.deblur')} onChange={(deblur) => patchRtx({ deblur })} />
+            <ToggleRow checked={value.rtx.deblur} label={t({ ko: '디블러', en: 'Deblur' })} port={renderInputPort?.('postprocess.rtx.deblur')} onChange={(deblur) => patchRtx({ deblur })} />
             <div className="space-y-1">
               {renderInputPort?.('postprocess.rtx.deblur_quality')}
               <FormField label={t({ ko: '디블러 품질', en: 'Deblur quality' })}>
@@ -98,7 +96,7 @@ export function MiniMaxH3DirectorPostprocessPanel({ value, hiddenControls = [], 
           <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 12rem), 1fr))' }}>
             <div className="space-y-1">
               {renderInputPort?.('postprocess.rtx.upscale')}
-              <FormField label={t({ ko: 'RTX 업스케일 모드', en: 'RTX upscale mode' })}>
+              <FormField label={t({ ko: '업스케일 모드', en: 'Upscale mode' })}>
                 <Select value={value.rtx.upscale} onChange={(event) => patchRtx({ upscale: event.target.value as MiniMaxH3DirectorRtxSettings['upscale'] })}><option>Off</option><option>VSR</option><option>High Bitrate</option></Select>
               </FormField>
             </div>
@@ -131,8 +129,8 @@ export function MiniMaxH3DirectorPostprocessPanel({ value, hiddenControls = [], 
             </div>
           ) : value.rtx.resize_type === 'Manual' ? (
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">{renderInputPort?.('postprocess.rtx.width')}<FormField label={t({ ko: 'RTX 너비', en: 'RTX width' })}><NumberStepperInput min={64} max={8192} step={8} value={String(value.rtx.width)} onValueCommit={(next) => patchRtx({ width: Number(next) })} /></FormField></div>
-              <div className="space-y-1">{renderInputPort?.('postprocess.rtx.height')}<FormField label={t({ ko: 'RTX 높이', en: 'RTX height' })}><NumberStepperInput min={64} max={8192} step={8} value={String(value.rtx.height)} onValueCommit={(next) => patchRtx({ height: Number(next) })} /></FormField></div>
+              <div className="space-y-1">{renderInputPort?.('postprocess.rtx.width')}<FormField label={t({ ko: '너비', en: 'Width' })}><NumberStepperInput min={64} max={8192} step={8} value={String(value.rtx.width)} onValueCommit={(next) => patchRtx({ width: Number(next) })} /></FormField></div>
+              <div className="space-y-1">{renderInputPort?.('postprocess.rtx.height')}<FormField label={t({ ko: '높이', en: 'Height' })}><NumberStepperInput min={64} max={8192} step={8} value={String(value.rtx.height)} onValueCommit={(next) => patchRtx({ height: Number(next) })} /></FormField></div>
             </div>
           ) : null}
 
@@ -141,7 +139,7 @@ export function MiniMaxH3DirectorPostprocessPanel({ value, hiddenControls = [], 
           ) : null}
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-1">{renderInputPort?.('postprocess.rtx.device_id')}<FormField label={t({ ko: 'RTX GPU 번호', en: 'RTX GPU index' })}><NumberStepperInput min={0} max={8} step={1} value={String(value.rtx.device_id)} onValueCommit={(next) => patchRtx({ device_id: Math.trunc(Number(next)) })} /></FormField></div>
+            <div className="space-y-1">{renderInputPort?.('postprocess.rtx.device_id')}<FormField label={t({ ko: 'GPU 번호', en: 'GPU index' })}><NumberStepperInput min={0} max={8} step={1} value={String(value.rtx.device_id)} onValueCommit={(next) => patchRtx({ device_id: Math.trunc(Number(next)) })} /></FormField></div>
             <ToggleRow checked={value.rtx.empty_cache} label={t({ ko: '실행 전 캐시 비우기', en: 'Empty cache first' })} port={renderInputPort?.('postprocess.rtx.empty_cache')} onChange={(empty_cache) => patchRtx({ empty_cache })} />
             <ToggleRow checked={value.rtx.use_mmap} label={t({ ko: '디스크 mmap 허용', en: 'Allow disk mmap' })} port={renderInputPort?.('postprocess.rtx.use_mmap')} onChange={(use_mmap) => patchRtx({ use_mmap })} />
             <ToggleRow checked={value.rtx.auto_unload_models} label={t({ ko: '모델 자동 언로드', en: 'Auto-unload models' })} port={renderInputPort?.('postprocess.rtx.auto_unload_models')} onChange={(auto_unload_models) => patchRtx({ auto_unload_models })} />

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type ComponentProps, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PropsWithChildren, type ReactNode } from 'react'
 import { Dialog as DialogPrimitive } from 'radix-ui'
 import { X } from 'lucide-react'
-import { Button } from './button'
+import { IconButton } from './icon-button'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useOverlayBackClose } from './use-overlay-back-close'
@@ -202,9 +202,9 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
                   </div>
 
                   {headerActions}
-                  <Button type="button" size="icon-sm" variant="secondary" className="shrink-0" onClick={onClose} aria-label={t({ ko: '닫기', en: 'Close' })} title={t({ ko: '닫기', en: 'Close' })}>
+                  <IconButton size="icon-sm" variant="secondary" className="shrink-0" onClick={onClose} label={t({ ko: '닫기', en: 'Close' })}>
                     <X className="h-4 w-4" />
-                  </Button>
+                  </IconButton>
                 </div>
 
                 {headerContent ? <div className="mt-3">{headerContent}</div> : null}

@@ -314,7 +314,7 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
 
   useWorkflowChatPage({
     enabled: workflowView === 'edit' && !modulesQuery.isLoading && !isSavingGraph && executingGraphId === null && !isWorkflowSaveModalOpen && executionList[0]?.status !== 'running' && executionList[0]?.status !== 'queued',
-    editorSessionId, selectedGraphId, name: workflowName, description: workflowDescription, debugMode: workflowDebugMode,
+    dirty: isDirty, editorSessionId, selectedGraphId, name: workflowName, description: workflowDescription, debugMode: workflowDebugMode,
     nodes, edges, modules, runInputs: workflowRunInputValues, setNodes, setEdges,
     setName: setWorkflowName, setDescription: setWorkflowDescription, setRunInputs: setWorkflowRunInputValues, setExposedInputs: setWorkflowExposedInputs, setSelectedNodeId, setSelectedEdgeId,
   })
@@ -659,7 +659,7 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
               onInputImageChange={handleWorkflowRunInputImageChange}
             />
           ) : (
-            <Text variant="muted" className="text-sm">{t({ ko: '노드 입력에서 "실행 입력"을 켜면 여기에 나와.', en: 'Inputs marked as run inputs on nodes show up here.' })}</Text>
+            <Text variant="caption">{t({ ko: '노드 입력에서 "실행 입력"을 켜면 여기에 나와.', en: 'Inputs marked as run inputs on nodes show up here.' })}</Text>
           )}
           runsPanel={selectedGraphId !== null ? (
             <div className="space-y-3">
@@ -675,7 +675,7 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
               {runHistory}
             </div>
           ) : (
-            <Text variant="muted" className="text-sm">{t({ ko: '저장한 뒤 실행하면 여기에 쌓여.', en: 'Runs appear here once the workflow is saved and run.' })}</Text>
+            <Text variant="caption">{t({ ko: '저장한 뒤 실행하면 여기에 쌓여.', en: 'Runs appear here once the workflow is saved and run.' })}</Text>
           )}
           workflowSaveModal={workflowSaveModal}
           workflowDebugMode={workflowDebugMode}

@@ -12,6 +12,7 @@ import { Spinner } from '@/components/ui/loading-state'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { ChatPageConnectButton, ChatPageConnectionNotice } from './chat-page-context'
+import { ChatTaskChecklist, ChatTaskStrip } from './chat-task-ui'
 import {
   CHAT_APPEARANCE_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
@@ -1050,6 +1051,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           <ChatLiveMessage turn={liveTurn} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
         ) : null}
         {runningFromServer && !isGroup && speaker ? <CodexChatAssistantMessage content={runningFromServer.text} routing={runningFromServer.routing} toolCalls={runningFromServer.toolCalls} streaming appearance={appearance} speaker={speaker} /> : null}
+        {!isGroup && activeThreadId !== null ? <ChatTaskChecklist threadId={activeThreadId} /> : null}
         {serverReplies.map((reply) => {
           const replySpeaker = speakerOf(reply.profileId)
           return replySpeaker ? <CodexChatAssistantMessage key={reply.routing?.replyId ?? reply.profileId} content={reply.text} routing={reply.routing} toolCalls={reply.toolCalls} streaming appearance={appearance} speaker={replySpeaker} /> : null
@@ -1113,6 +1115,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         </Tip>
       ) : null}
       <ChatDraftAttachments chat={chat} disabled={isBusy} canReadText={profile?.canReadFileText === true} />
+      {!isGroup && activeThreadId !== null ? <ChatTaskStrip threadId={activeThreadId} /> : null}
       {!isGroup && profile?.pageAssist ? <ChatPageConnectionNotice /> : null}
       {picks.length > 0 ? (
         <div className="mb-2 flex flex-wrap gap-1.5">

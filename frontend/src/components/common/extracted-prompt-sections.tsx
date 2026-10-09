@@ -3,6 +3,7 @@ import { ChevronDown, Copy, FolderTree, GitBranch } from 'lucide-react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { getThemeToneStyle, getThemeToneTextStyle } from '@/lib/theme-tones'
@@ -114,15 +115,17 @@ function ExtractedPromptGroupedBody({ sections, actionScope, onAddSearchFilter }
           <div key={section.id} className="space-y-2">
             <div className="flex items-center gap-2">
               {getGroupedSectionIcon(section)}
-              <span
-                className={cn(
-                  'inline-flex max-w-full items-center rounded-sm bg-surface-high px-2 py-1 text-sm font-semibold text-foreground',
-                  tooltip && 'cursor-help',
-                )}
-                title={tooltip}
-              >
-                {section.label}
-              </span>
+              <Tip content={tooltip}>
+                <span
+                  className={cn(
+                    'inline-flex max-w-full items-center rounded-sm bg-surface-high px-2 py-1 text-sm font-semibold text-foreground',
+                    tooltip && 'cursor-help',
+                  )}
+                  tabIndex={tooltip ? 0 : undefined}
+                >
+                  {section.label}
+                </span>
+              </Tip>
             </div>
             <div className="text-base leading-8 text-foreground/92 break-words">
               {actionScope ? (

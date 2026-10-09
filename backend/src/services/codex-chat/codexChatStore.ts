@@ -363,6 +363,8 @@ export const CodexChatStore = {
       db.prepare('DELETE FROM chat_group_members WHERE thread_id = ?').run(threadId)
       ChatSummaryStore.clear(threadId)
       ChatProposalStore.deleteForThread(threadId)
+      // chat_tasks is created on first use (see chatTasks.ts); deleted here without importing the task runner.
+      if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chat_tasks'").get()) db.prepare('DELETE FROM chat_tasks WHERE thread_id = ?').run(threadId)
       // Its branches stay, as chats of their own.
       db.prepare('UPDATE codex_chat_threads SET branched_from_thread_id = NULL, branched_at_message_id = NULL WHERE branched_from_thread_id = ?').run(threadId)
       db.prepare('DELETE FROM codex_chat_threads WHERE id = ?').run(threadId)

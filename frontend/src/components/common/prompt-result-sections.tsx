@@ -74,6 +74,7 @@ export function ArtistPromptSection({
   label = 'artist',
   accentClassName = 'bg-primary/80',
   collapsibleScores = true,
+  hideLabels = false,
   getTagHref,
   onTagClick,
   onAddSearchFilter,
@@ -83,6 +84,8 @@ export function ArtistPromptSection({
   label?: string
   accentClassName?: string
   collapsibleScores?: boolean
+  /** Drop the inner "artist" overlines when the parent section already carries the title. */
+  hideLabels?: boolean
   getTagHref?: (tag: string) => string | null
   onTagClick?: (tag: string, href: string) => void
   onAddSearchFilter?: (tag: string) => void
@@ -91,11 +94,11 @@ export function ArtistPromptSection({
 
   return (
     <div className="space-y-3">
-      {tags.length > 0 ? <TagBundleSection label={label} tags={tags} getTagHref={getTagHref} onTagClick={onTagClick} onAddSearchFilter={onAddSearchFilter} /> : null}
+      {tags.length > 0 ? <TagBundleSection label={label} tags={tags} getTagHref={getTagHref} onTagClick={onTagClick} onAddSearchFilter={onAddSearchFilter} hideLabel={hideLabels} /> : null}
       {entries.length > 0
         ? collapsibleScores
-          ? <CollapsibleScoreMeterList title={label} entries={entries} accentClassName={accentClassName} />
-          : <ScoreMeterList title={label} entries={entries} accentClassName={accentClassName} />
+          ? <CollapsibleScoreMeterList title={label} entries={entries} accentClassName={accentClassName} hideTitle={hideLabels} />
+          : <ScoreMeterList title={label} entries={entries} accentClassName={accentClassName} hideTitle={hideLabels} />
         : null}
     </div>
   )

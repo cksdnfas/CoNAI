@@ -14,6 +14,7 @@ import { ChatMessageFlags } from './chat-flags'
 import type { CodexChatLiveTurn } from './codex-chat-context'
 import { ChatMessageIdContext } from './chat-display-block'
 import { CodexChatAssistantMessage, CodexChatUserMessage, type ChatSpeaker, type ChatUserSpeaker } from './codex-chat-message'
+import { ChatTaskEventLine } from './chat-task-ui'
 
 const EMPTY_SEGMENTS: ChatSummarySegment[] = []
 
@@ -105,6 +106,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousCon
     setBarOpen(!showBar)
     if (showBar) setMoreOpen(false)
   }
+  if (isUser && message.routing?.task) return <div data-message-id={message.id}><ChatTaskEventLine routing={message.routing.task} /></div>
   return <div data-message-id={message.id} onClick={toggleBar} className={cn('group/message -mx-2 rounded-md px-2 transition-colors duration-500', flash && 'bg-primary/10')}>
     {isUser
       ? <>{actions.editingId === message.id

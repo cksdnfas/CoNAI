@@ -15,11 +15,12 @@ export function AppProviders({ children }: PropsWithChildren) {
       <RuntimeEventStreamProvider>
         <I18nProvider>
           <ThemeProvider>
-            <SnackbarProvider>
-              <TooltipProvider>
+            {/* 스낵바 닫기 버튼도 툴팁을 쓰므로 TooltipProvider 가 SnackbarProvider 바깥이어야 한다. */}
+            <TooltipProvider>
+              <SnackbarProvider>
                 <ConfirmProvider>{children}</ConfirmProvider>
-              </TooltipProvider>
-            </SnackbarProvider>
+              </SnackbarProvider>
+            </TooltipProvider>
           </ThemeProvider>
         </I18nProvider>
       </RuntimeEventStreamProvider>

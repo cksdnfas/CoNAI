@@ -5,7 +5,6 @@ import { useQuery } from '@tanstack/react-query'
 import { useLocation } from 'react-router-dom'
 import { ImageIcon, Reply } from 'lucide-react'
 import { useMediaHoverPreview } from '@/components/common/media-hover-preview'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { useI18n } from '@/i18n'
@@ -179,18 +178,18 @@ function ChatReferenceChip({ item, sourceMessageId, media }: { item: ChatMediaAt
   }
   return (
     <>
-      <Button
+      <IconButton
         variant="subtle"
-        size="sm"
-        className="gap-1.5"
-        title={canJump ? t({ ko: '이 이미지가 나온 메시지로 이동', en: 'Go to the message with this image' }) : item.name}
+        size="icon-sm"
+        label={canJump
+          ? t({ ko: '참조 이미지: 이 이미지가 나온 메시지로 이동', en: 'Referenced image: go to the message with this image' })
+          : t({ ko: '참조 이미지: {name}', en: 'Referenced image: {name}' }, { name: item.name })}
         disabled={!canJump && (!canViewImages || !viewer)}
         onClick={open}
         {...hoverPreview.triggerProps}
       >
         <ImageIcon className="size-3.5 shrink-0" />
-        {t({ ko: '참조 이미지', en: 'Referenced image' })}
-      </Button>
+      </IconButton>
       {hoverPreview.preview}
     </>
   )

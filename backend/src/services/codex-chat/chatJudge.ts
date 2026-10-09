@@ -6,6 +6,7 @@ import { ChatJudgeLogStore, judgeToolMatches, type JudgeLogItem } from './chatJu
 import { DEFAULT_FOLLOW_UP_DIRECTIVE } from './chatJudgeDefaults'
 import { contextQuestions, type JudgedContext } from './chatJudgeContext'
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
+import { ModelSlotStore } from './modelSlots'
 import { userPersonaForThread } from './chatUserProfiles'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import type { ChatCompletionTool } from './llmChatCompletion'
@@ -27,14 +28,18 @@ const MESSAGE_CHARS = 1500
 
 export type JudgeSetup = { preset: ChatJudgePreset; providerName: string; model: string }
 
-/** The preset and connection that judge this profile's turns, or null (no preset, or no connection). */
+/** The preset with the connection + model of a judge model row, or null when the row is gone. */
+export function judgeSetupFor(preset: ChatJudgePreset, slotId: number | null | undefined): JudgeSetup | null {
+  const target = ModelSlotStore.target(slotId)
+  return target ? { preset, providerName: target.providerName, model: target.model } : null
+}
+
+/** The preset and model that judge this profile's turns, or null (no preset, or no model): the profile's own, else the preset's. */
 export function judgeSetupOf(profile: ChatProfile): JudgeSetup | null {
   if (!profile.judgePresetId) return null
   const preset = ChatJudgePresetStore.find(profile.judgePresetId)
   if (!preset) return null
-  const providerName = profile.judgeProviderName ?? preset.providerName
-  if (!providerName) return null
-  return { preset, providerName, model: profile.judgeProviderName ? profile.judgeModel : preset.model }
+  return judgeSetupFor(preset, profile.judgeSlotId ?? preset.modelSlotId)
 }
 
 /** What the judge reads of a message: the user's own words, or the reply as the model wrote it. */
@@ -85,10 +90,11 @@ function actionOf(item: ChatJudgeItem, verdict: ChatJudgeVerdict): ChatJudgeItem
   return 'none'
 }
 
-/** The LLM asked again for uncertain items set to `llm`: the preset's escalation connection, else the chat's own. */
+/** The LLM asked again for uncertain items set to `llm`: the preset's escalation model, else the chat's own. */
 function escalationConnectionOf(preset: ChatJudgePreset, profile: ChatProfile): JudgeConnection | null {
   try {
-    if (preset.escalationProviderName) return resolveJudgeConnection(preset.escalationProviderName, preset.escalationModel)
+    const escalation = ModelSlotStore.target(preset.escalationSlotId)
+    if (escalation) return resolveJudgeConnection(escalation.providerName, escalation.model)
     const chat = resolveProfileModel(profile, 'chat')
     if (!chat) return null
     const connection = resolveJudgeConnection(chat.providerName, chat.model)

@@ -3,6 +3,7 @@ import { Handle, Position } from '@xyflow/react'
 import { Plus, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { ModuleGraphSimpleValueInput, formatModuleGraphDefaultOptionLabel } from '../module-graph-simple-value-input'
 import { ModuleGraphKeyValueListInput, getKeyValueConnectionKeys, normalizeKeyValueEntries, type KeyValueEntry } from '../module-graph-key-value-list-input'
@@ -53,20 +54,23 @@ function ApiRequestInputRow({
   const borderColor = requiredMissing ? 'color-mix(in srgb, var(--warning) 60%, transparent)' : connected ? `${portTypeColor}88` : `${accentColor}26`
 
   return (
-    <div className="relative min-h-[28px] border-b py-1 pl-4 pr-1" style={{ borderColor } as CSSProperties} title={buildPortTooltip(t, port, statusLabel)}>
-      <Handle
-        id={buildHandleId('in', port.key)}
-        type="target"
-        position={Position.Left}
-        style={buildHandleStyle({ side: 'input', color: portTypeColor })}
-        title={buildPortTooltip(t, port, statusLabel)}
-        onMouseDown={connected ? () => data.onDisconnectNodeInput?.(nodeId, port.key) : undefined}
-      />
+    <div className="relative min-h-[28px] border-b py-1 pl-4 pr-1" style={{ borderColor } as CSSProperties}>
+      <Tip content={buildPortTooltip(t, port, statusLabel)}>
+        <Handle
+          id={buildHandleId('in', port.key)}
+          type="target"
+          position={Position.Left}
+          style={buildHandleStyle({ side: 'input', color: portTypeColor })}
+          onMouseDown={connected ? () => data.onDisconnectNodeInput?.(nodeId, port.key) : undefined}
+        />
+      </Tip>
       <div className="flex min-h-[28px] items-start gap-2">
-        <span className="w-20 shrink-0 truncate pt-1 text-2xs font-medium text-foreground">
-          {port.label}
-          {port.required ? <span className="ml-1 text-2xs text-warning">*</span> : null}
-        </span>
+        <Tip content={buildPortTooltip(t, port, statusLabel)}>
+          <span className="w-20 shrink-0 truncate pt-1 text-2xs font-medium text-foreground">
+            {port.label}
+            {port.required ? <span className="ml-1 text-2xs text-warning">*</span> : null}
+          </span>
+        </Tip>
         <div className="min-w-0 flex-1">
           {connected ? <div className="truncate pt-1 text-2xs text-muted-foreground">{t({ ko: '연결됨', en: 'Linked' })}</div> : children}
         </div>
@@ -225,16 +229,17 @@ export function ApiRequestNodeLayout({
     const borderColor = connected ? `${portTypeColor}88` : `${accentColor}26`
 
     return (
-      <div key={`${portKey}-${index}`} className="relative min-h-[28px] border-b py-1 pl-4 pr-1" style={{ borderColor } as CSSProperties} title={dynamicPort ? buildPortTooltip(t, dynamicPort, statusLabel) : parentPort.label}>
+      <div key={`${portKey}-${index}`} className="relative min-h-[28px] border-b py-1 pl-4 pr-1" style={{ borderColor } as CSSProperties}>
         {dynamicPort ? (
-          <Handle
-            id={buildHandleId('in', dynamicPort.key)}
-            type="target"
-            position={Position.Left}
-            style={buildHandleStyle({ side: 'input', color: portTypeColor })}
-            title={buildPortTooltip(t, dynamicPort, statusLabel)}
-            onMouseDown={connected ? () => data.onDisconnectNodeInput?.(id, dynamicPort.key) : undefined}
-          />
+          <Tip content={buildPortTooltip(t, dynamicPort, statusLabel)}>
+            <Handle
+              id={buildHandleId('in', dynamicPort.key)}
+              type="target"
+              position={Position.Left}
+              style={buildHandleStyle({ side: 'input', color: portTypeColor })}
+              onMouseDown={connected ? () => data.onDisconnectNodeInput?.(id, dynamicPort.key) : undefined}
+            />
+          </Tip>
         ) : null}
         <div className="nodrag nowheel grid grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)_auto] gap-1" onMouseDown={stopNodeInteraction}>
           <Input

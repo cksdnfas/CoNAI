@@ -3,6 +3,7 @@ import { GripVertical, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
@@ -148,15 +149,16 @@ export function ComfyWorkflowMarkedFieldList({
             className={cn('rounded-sm transition-colors', dropTargetKey === `group:${group.key}` && dropHighlight)}
           >
             <div className="group/heading flex items-center gap-1 pt-3 pr-4 pb-1 pl-2">
-              <span
-                draggable={!isFiltering}
-                onDragStart={startDrag({ kind: 'group', groupKey: group.key })}
-                onDragEnd={clearDrag}
-                title={t({ ko: '드래그해서 그룹 순서 바꾸기', en: 'Drag to reorder the group' })}
-                className={cn('flex size-5 shrink-0 items-center justify-center text-muted-foreground/40', !isFiltering && 'cursor-grab hover:text-muted-foreground active:cursor-grabbing')}
-              >
-                <GripVertical className="size-3.5" />
-              </span>
+              <Tip content={t({ ko: '드래그해서 그룹 순서 바꾸기', en: 'Drag to reorder the group' })}>
+                <span
+                  draggable={!isFiltering}
+                  onDragStart={startDrag({ kind: 'group', groupKey: group.key })}
+                  onDragEnd={clearDrag}
+                  className={cn('flex size-5 shrink-0 items-center justify-center text-muted-foreground/40', !isFiltering && 'cursor-grab hover:text-muted-foreground active:cursor-grabbing')}
+                >
+                  <GripVertical className="size-3.5" />
+                </span>
+              </Tip>
               <span className="min-w-0 truncate text-2xs font-bold tracking-overline text-muted-foreground uppercase">
                 {group.nodeTitle ?? t({ ko: '노드 없음', en: 'No node' })}
                 {group.nodeId ? <span className="font-mono font-normal normal-case"> · #{group.nodeId}</span> : null}
@@ -176,15 +178,16 @@ export function ComfyWorkflowMarkedFieldList({
                     dropTargetKey === `field:${field.id}` && dropHighlight,
                   )}
                 >
-                  <span
-                    draggable={!isFiltering}
-                    onDragStart={startDrag({ kind: 'field', groupKey: group.key, fieldId: field.id })}
-                    onDragEnd={clearDrag}
-                    title={t({ ko: '드래그해서 순서 바꾸기', en: 'Drag to reorder' })}
-                    className={cn('flex h-full w-6 shrink-0 items-center justify-center text-muted-foreground/40', !isFiltering && 'cursor-grab hover:text-muted-foreground active:cursor-grabbing')}
-                  >
-                    <GripVertical className="size-3.5" />
-                  </span>
+                  <Tip content={t({ ko: '드래그해서 순서 바꾸기', en: 'Drag to reorder' })}>
+                    <span
+                      draggable={!isFiltering}
+                      onDragStart={startDrag({ kind: 'field', groupKey: group.key, fieldId: field.id })}
+                      onDragEnd={clearDrag}
+                      className={cn('flex h-full w-6 shrink-0 items-center justify-center text-muted-foreground/40', !isFiltering && 'cursor-grab hover:text-muted-foreground active:cursor-grabbing')}
+                    >
+                      <GripVertical className="size-3.5" />
+                    </span>
+                  </Tip>
                   <Button
                     type="button"
                     variant="nav"

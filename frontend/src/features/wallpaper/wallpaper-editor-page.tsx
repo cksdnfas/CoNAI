@@ -1,12 +1,11 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, ClipboardCopy, Copy, ExternalLink, Eye, EyeOff, GripVertical, HelpCircle, LayoutTemplate, Lock, MoreHorizontal, Plus, Redo2, Save, Trash2, Undo2 } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ClipboardCopy, Copy, ExternalLink, Eye, EyeOff, FoldHorizontal, FoldVertical, GripVertical, HelpCircle, LayoutTemplate, Lock, MoreHorizontal, Plus, Redo2, Save, Trash2, Undo2, UnfoldHorizontal, UnfoldVertical } from 'lucide-react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { Button } from '@/components/ui/button'
-import { EmptyState } from '@/components/ui/empty-state'
 import { RowGroup } from '@/components/ui/row-group'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -19,6 +18,8 @@ import { getWallpaperRuntimeSettings } from '@/lib/api-settings-appearance'
 import { updateAppearanceSettings } from '@/lib/api-settings-appearance'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
+import { WALLPAPER_WIDGET_TYPES } from '@conai/shared'
 import { getWallpaperCanvasPreset, listWallpaperCanvasPresets } from './wallpaper-canvas-presets'
 import {
   appendWallpaperWidget,
@@ -153,15 +154,6 @@ export function WallpaperEditorPage() {
   })
 
   const canvasPreset = useMemo(() => getWallpaperCanvasPreset(layoutPreset.canvasPresetId), [layoutPreset.canvasPresetId])
-  useChatPageRegistration({
-    kind: 'wallpaper', title: t({ ko: '배경화면 편집', en: 'Wallpaper editor' }), resourceId: layoutPreset.id, localRevision: JSON.stringify(layoutPreset),
-    fields: [
-      { id: 'name', label: t({ ko: '배경화면 이름', en: 'Wallpaper name' }), type: 'text', value: layoutPreset.name },
-      { id: 'canvasPresetId', label: t({ ko: '캔버스 크기', en: 'Canvas size' }), type: 'select', value: layoutPreset.canvasPresetId, options: listWallpaperCanvasPresets().map((preset) => preset.id) },
-    ],
-    data: { widgets: layoutPreset.widgets.map((widget) => ({ id: widget.id, type: widget.type })), selected: { widgetId: selectedWidgetId ?? '' } },
-    apply: (patch) => { const next = { ...layoutPreset, ...patch } as typeof layoutPreset; setLayoutPreset(normalizeWallpaperLayoutPreset(next, getWallpaperCanvasPreset(next.canvasPresetId))) },
-  })
   const savedPresetById = useMemo(() => new Map(savedPresets.map((preset) => [preset.id, preset])), [savedPresets])
   const widgetById = useMemo(() => new Map(layoutPreset.widgets.map((widget) => [widget.id, widget])), [layoutPreset.widgets])
   const effectiveActivePresetId = useMemo(
@@ -462,6 +454,47 @@ export function WallpaperEditorPage() {
     syncWallpaperPresetState(savedPresets, null)
   }
 
+  // A connected chat fills the name and canvas, picks and adds widgets (draft), loads a saved wallpaper and asks to save with a card.
+  const layoutRef = useRef(layoutPreset)
+  layoutRef.current = layoutPreset
+  useChatPageRegistration({
+    kind: 'wallpaper', title: t({ ko: '배경화면 편집', en: 'Wallpaper editor' }), resourceId: layoutPreset.id, localRevision: JSON.stringify(layoutPreset),
+    dirty: hasUnsavedEdits,
+    fields: [
+      { id: 'name', label: t({ ko: '배경화면 이름', en: 'Wallpaper name' }), type: 'text', value: layoutPreset.name },
+      { id: 'canvasPresetId', label: t({ ko: '캔버스 크기', en: 'Canvas size' }), type: 'select', value: layoutPreset.canvasPresetId, options: listWallpaperCanvasPresets().map((preset) => preset.id) },
+    ],
+    data: {
+      widgets: layoutPreset.widgets.map((widget) => ({ id: widget.id, type: widget.type })),
+      selected: { widgetId: selectedWidgetId ?? '', name: layoutPreset.name, widgets: layoutPreset.widgets.length, saveTo: activePreset?.name ?? '' },
+      savedWallpapers: savedPresets.map((preset) => ({ id: preset.id, name: preset.name, active: preset.id === effectiveActivePresetId })),
+    },
+    actions: [
+      ...(layoutPreset.widgets.length ? [pageAction('wallpaper.select', t({ ko: '위젯 선택', en: 'Select widget' }), t({ ko: '캔버스의 위젯(data.widgets)을 골라 설정 패널을 열어.', en: 'Select a widget on the canvas (data.widgets).' }), pageObject({ widgetId: pageChoice(layoutPreset.widgets.map((widget) => widget.id)) }, ['widgetId']))] : []),
+      pageAction('wallpaper.add_widget', t({ ko: '위젯 추가', en: 'Add widget' }), t({ ko: '캔버스에 위젯을 하나 더해. 저장하지 않아.', en: 'Add one widget to the canvas; nothing is saved.' }), pageObject({ type: pageChoice([...WALLPAPER_WIDGET_TYPES]) }, ['type'])),
+      ...(savedPresets.length ? [pageAction('wallpaper.open_preset', t({ ko: '저장된 배경화면 불러오기', en: 'Load saved wallpaper' }), t({ ko: '저장된 배경화면(data.savedWallpapers)을 편집기로 불러와.', en: 'Load a saved wallpaper (data.savedWallpapers) into the editor.' }), pageObject({ presetId: pageChoice(savedPresets.map((preset) => preset.id)) }, ['presetId']))] : []),
+      pageAction('wallpaper.save', t({ ko: '배경화면 저장', en: 'Save wallpaper' }), t({ ko: '편집 중인 배경화면을 저장해. asNew면 새 프리셋으로, 아니면 열린 프리셋(selected.saveTo)에 덮어써.', en: 'Save the wallpaper; asNew saves a new preset, otherwise it overwrites the open one (selected.saveTo).' }), pageObject({ asNew: { type: 'boolean' } }), 'save'),
+    ],
+    apply: (patch) => { const next = { ...layoutPreset, ...patch } as typeof layoutPreset; setLayoutPreset(normalizeWallpaperLayoutPreset(next, getWallpaperCanvasPreset(next.canvasPresetId))) },
+    applyAction: async (id, args, assertCurrent) => {
+      assertCurrent()
+      if (id === 'wallpaper.select') { setSelectedWidgetId(String(args.widgetId)); return }
+      if (id === 'wallpaper.open_preset') {
+        if (hasDiscardableEdits) throw new Error('편집 중인 배경화면이 저장되지 않았어. 사용자가 저장하거나 버린 뒤에 다시 해.')
+        await handleLoadPreset(String(args.presetId))
+        return
+      }
+      if (id === 'wallpaper.save') { handleSavePreset({ saveAsNew: args.asNew === true }); return }
+      if (id !== 'wallpaper.add_widget') throw new Error('배경화면 편집기에 없는 작업이야.')
+      const before = layoutRef.current
+      const next = appendWallpaperWidget(before, String(args.type) as WallpaperWidgetType)
+      setLayoutPreset(next)
+      setSelectedLibraryWidgetType(String(args.type) as WallpaperWidgetType)
+      setSelectedWidgetId(next.widgets[next.widgets.length - 1]?.id ?? null)
+      return { isCurrent: () => JSON.stringify(layoutRef.current) === JSON.stringify(next), restore: () => setLayoutPreset(before) }
+    },
+  })
+
   const unsavedLabel = t({ ko: '저장 안 된 변경', en: 'Unsaved changes' })
   const toolbar = (
     <PageToolbar
@@ -601,74 +634,50 @@ export function WallpaperEditorPage() {
             }}
           />
 
-          <RowGroup
-            heading={t({ ko: '선택 위젯 컨트롤', en: 'Selected widget controls' })}
-            bodyClassName="space-y-3 pt-1"
-            actions={selectedWidget ? (
+          {/* Selected widget: one row of 1-cell nudges (position, then size) and delete. Hidden while nothing is selected. */}
+          {selectedWidget ? (
+            <div className="flex flex-wrap items-center gap-0.5">
+              {[
+                { key: 'left', icon: <ArrowLeft />, label: t({ ko: '왼쪽으로 1칸 ({value})', en: 'Move left 1 cell ({value})' }, { value: selectedWidget.x }), patch: { x: selectedWidget.x - 1 } },
+                { key: 'right', icon: <ArrowRight />, label: t({ ko: '오른쪽으로 1칸 ({value})', en: 'Move right 1 cell ({value})' }, { value: selectedWidget.x }), patch: { x: selectedWidget.x + 1 } },
+                { key: 'up', icon: <ArrowUp />, label: t({ ko: '위로 1칸 ({value})', en: 'Move up 1 cell ({value})' }, { value: selectedWidget.y }), patch: { y: selectedWidget.y - 1 } },
+                { key: 'down', icon: <ArrowDown />, label: t({ ko: '아래로 1칸 ({value})', en: 'Move down 1 cell ({value})' }, { value: selectedWidget.y }), patch: { y: selectedWidget.y + 1 } },
+                { key: 'w-', icon: <FoldHorizontal />, label: t({ ko: '너비 1칸 줄이기 ({value})', en: 'Width −1 cell ({value})' }, { value: selectedWidget.w }), patch: { w: selectedWidget.w - 1 } },
+                { key: 'w+', icon: <UnfoldHorizontal />, label: t({ ko: '너비 1칸 늘리기 ({value})', en: 'Width +1 cell ({value})' }, { value: selectedWidget.w }), patch: { w: selectedWidget.w + 1 } },
+                { key: 'h-', icon: <FoldVertical />, label: t({ ko: '높이 1칸 줄이기 ({value})', en: 'Height −1 cell ({value})' }, { value: selectedWidget.h }), patch: { h: selectedWidget.h - 1 } },
+                { key: 'h+', icon: <UnfoldVertical />, label: t({ ko: '높이 1칸 늘리기 ({value})', en: 'Height +1 cell ({value})' }, { value: selectedWidget.h }), patch: { h: selectedWidget.h + 1 } },
+              ].map(({ key, icon, label, patch }) => (
                 <IconButton
+                  key={key}
                   variant="ghost"
-                  size="icon-sm"
-                  className="text-destructive hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                  label={t({ ko: '위젯 삭제', en: 'Delete widget' })}
+                  size="icon-xs"
+                  label={label}
+                  disabled={selectedWidget.locked}
                   onClick={() => {
-                    setLayoutPreset((current) => removeSelectedWidget(current, selectedWidget.id))
-                    notifyInfo(t({ ko: '위젯을 삭제했어. 실행 취소(Ctrl+Z)로 되돌릴 수 있어.', en: 'Widget deleted. Undo (Ctrl+Z) brings it back.' }))
+                    setLayoutPreset((current) => patchSelectedWidget(current, selectedWidget.id, patch))
                   }}
                 >
-                  <Trash2 />
+                  {icon}
                 </IconButton>
-            ) : null}
-          >
-            {selectedWidget ? (
-              <>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
-                  {[
-                    ['X', selectedWidget.x],
-                    ['Y', selectedWidget.y],
-                    ['W', selectedWidget.w],
-                    ['H', selectedWidget.h],
-                  ].map(([label, value]) => (
-                    <div key={String(label)} className="inline-flex items-center gap-1.5">
-                      <span className="text-2xs font-semibold uppercase tracking-overline">{label}</span>
-                      <span className="text-sm font-medium text-foreground">{value}</span>
-                    </div>
-                  ))}
-                </div>
+              ))}
+              <span className="flex-1" />
+              <IconButton
+                variant="ghost"
+                size="icon-xs"
+                className="text-destructive hover:bg-destructive-soft hover:text-destructive-soft-foreground"
+                label={t({ ko: '위젯 삭제', en: 'Delete widget' })}
+                onClick={() => {
+                  setLayoutPreset((current) => removeSelectedWidget(current, selectedWidget.id))
+                  notifyInfo(t({ ko: '위젯을 삭제했어. 실행 취소(Ctrl+Z)로 되돌릴 수 있어.', en: 'Widget deleted. Undo (Ctrl+Z) brings it back.' }))
+                }}
+              >
+                <Trash2 />
+              </IconButton>
+            </div>
+          ) : null}
 
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { label: '←', patch: { x: selectedWidget.x - 1 } },
-                    { label: '→', patch: { x: selectedWidget.x + 1 } },
-                    { label: '↑', patch: { y: selectedWidget.y - 1 } },
-                    { label: '↓', patch: { y: selectedWidget.y + 1 } },
-                    { label: 'W-', patch: { w: selectedWidget.w - 1 } },
-                    { label: 'W+', patch: { w: selectedWidget.w + 1 } },
-                    { label: 'H-', patch: { h: selectedWidget.h - 1 } },
-                    { label: 'H+', patch: { h: selectedWidget.h + 1 } },
-                  ].map(({ label, patch }) => (
-                    <Button
-                      key={label}
-                      variant="subtle"
-                      size="sm"
-                      disabled={selectedWidget.locked}
-                      onClick={() => {
-                        setLayoutPreset((current) => patchSelectedWidget(current, selectedWidget.id, patch))
-                      }}
-                    >
-                      {label}
-                    </Button>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <EmptyState size="compact" title={t({ ko: '위젯을 선택해.', en: 'Select a widget.' })} />
-            )}
-          </RowGroup>
-
-          <RowGroup heading={t({ ko: '위젯 순서', en: 'Widget order' })}>
-            {orderedWidgets.length === 0 ? (
-              <EmptyState size="compact" title={t({ ko: '아직 추가된 위젯이 없어.', en: 'No widgets added yet.' })} />
-            ) : (
+          {orderedWidgets.length > 0 ? (
+            <RowGroup heading={t({ ko: '위젯 순서', en: 'Widget order' })}>
               <div className="max-h-[320px] overflow-auto pr-1">
                 {orderedWidgets.map((widget, index) => {
                   const isSelected = effectiveSelectedWidgetId === widget.id
@@ -761,8 +770,8 @@ export function WallpaperEditorPage() {
                   )
                 })}
               </div>
-            )}
-          </RowGroup>
+            </RowGroup>
+          ) : null}
         </div>
 
         {/* Inspector: a right column split from the canvas by one hairline (stacks under it below xl). */}
@@ -770,11 +779,6 @@ export function WallpaperEditorPage() {
           aria-label={t({ ko: '위젯 설정', en: 'Widget settings' })}
           className="min-w-0 space-y-4 self-start xl:sticky xl:top-(--theme-shell-header-height) xl:max-h-[calc(100dvh-var(--theme-shell-header-height))] xl:overflow-y-auto xl:border-l xl:border-line xl:pt-2 xl:pb-6 xl:pl-6"
         >
-          <div>
-            <h2 className="text-sm font-semibold tracking-tight text-foreground">{t({ ko: '위젯 설정', en: 'Widget settings' })}</h2>
-            {selectedWidget ? <div className="mt-0.5 truncate text-xs text-muted-foreground">{getWallpaperWidgetDisplayTitle(selectedWidget, t)}</div> : null}
-          </div>
-
           <WallpaperWidgetInspector
             selectedWidget={selectedWidget}
             groups={groupsQuery.data ?? []}

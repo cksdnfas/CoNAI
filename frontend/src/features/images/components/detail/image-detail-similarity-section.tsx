@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { ScanSearch } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import { updateSimilaritySettings } from '@/lib/api-settings'
 import { getErrorMessage } from '@/lib/error-message'
@@ -303,10 +303,9 @@ export function ImageDetailSimilaritySection({
   const imageSimilarityActions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
       {!similarImagesRequested && onRequestSimilarImages ? (
-        <Button type="button" variant="secondary" size="sm" onClick={onRequestSimilarImages}>
-          <ScanSearch className="h-4 w-4" />
-          {t({ ko: '유사 이미지 검사', en: 'Check similar images' })}
-        </Button>
+        <IconButton variant="ghost" size="icon-sm" onClick={onRequestSimilarImages} label={t({ ko: '유사 이미지 검사: 그림이 비슷한 이미지를 찾아', en: 'Check similar images: find visually similar images' })}>
+          <ScanSearch />
+        </IconButton>
       ) : null}
 
       {canEditSettings && currentSimilaritySettings ? (
@@ -332,10 +331,9 @@ export function ImageDetailSimilaritySection({
   const promptSimilarityActions = (
     <div className="flex flex-wrap items-center justify-end gap-2">
       {!promptSimilarImagesRequested && onRequestPromptSimilarImages ? (
-        <Button type="button" variant="secondary" size="sm" onClick={onRequestPromptSimilarImages}>
-          <ScanSearch className="h-4 w-4" />
-          {t({ ko: '텍스트 유사 이미지 검사', en: 'Check text-similar images' })}
-        </Button>
+        <IconButton variant="ghost" size="icon-sm" onClick={onRequestPromptSimilarImages} label={t({ ko: '텍스트 유사 이미지 검사: 프롬프트가 비슷한 이미지를 찾아', en: 'Check text-similar images: find images with similar prompts' })}>
+          <ScanSearch />
+        </IconButton>
       ) : null}
 
       {canEditSettings && currentSimilaritySettings ? (

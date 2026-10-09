@@ -53,7 +53,7 @@ export function isChatMcpSource(source: McpRequestContext['source']) {
  */
 export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'wait_audio_order', 'execute_graph_workflow', 'get_codex_generation_options', 'import_workflow_definition', 'wait_sprite_job']);
 /** A page grants a bounded input task; explicitly linked generation presets keep their independent grant. */
-export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'propose_page_changes', 'get_workflow_editor', 'list_workflow_modules', 'propose_workflow_changes', 'read_page_data', 'propose_page_action']);
+export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'page_fill', 'page_act', 'get_workflow_editor', 'list_workflow_modules', 'workflow_edit', 'read_page_data', 'propose_page_action']);
 
 /**
  * Tools a connected page of one kind adds to the page tools: the sprite page works through its own engine tools, so
@@ -88,12 +88,13 @@ export const ALL_MCP_HTTP_SCOPES: McpHttpScope[] = ['read', 'generate', 'organiz
 
 const TOOL_SCOPES: Record<string, McpHttpScope> = {
   get_current_page: 'read',
-  propose_page_changes: 'read',
+  page_fill: 'read',
+  page_act: 'read',
   read_page_data: 'read',
   propose_page_action: 'read',
   get_workflow_editor: 'read',
   list_workflow_modules: 'read',
-  propose_workflow_changes: 'read',
+  workflow_edit: 'read',
   list_files: 'read',
   get_file_info: 'read',
   read_file_text: 'read',
@@ -202,13 +203,14 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   propose_chat_profile: 'configure',
   propose_profile_update: 'configure',
   propose_profile_assets: 'configure',
+  get_asset_batch: 'configure',
 };
 
 /**
  * Tools over the caller's own chat (its room, its history, its attached lorebooks), offered to chat agents in a chat
  * regardless of scopes; not CoNAI actions, so they do not bring the app tool guidance along.
  */
-export const CHAT_ROOM_TOOLS = new Set(['chat_reply_to', 'room_call_member', 'room_history_search', 'room_history_read', 'read_lore_file', 'save_lore']);
+export const CHAT_ROOM_TOOLS = new Set(['chat_reply_to', 'room_call_member', 'room_history_search', 'room_history_read', 'read_lore_file', 'save_lore', 'task_propose', 'task_status', 'task_update', 'task_wait', 'task_finish', 'get_proposal_status']);
 
 /**
  * The room tools only a group room offers. A direct chat keeps chat_reply_to (it quotes an earlier message of the

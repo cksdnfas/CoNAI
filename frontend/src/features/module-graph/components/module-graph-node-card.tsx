@@ -4,8 +4,9 @@ import { useUpdateNodeInternals, type NodeProps } from '@xyflow/react'
 import { GripVertical, Play, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { Text } from '@/components/ui/text'
+import { Tip } from '@/components/ui/tooltip'
 import { MiniMaxH3DirectorDasiwaInput } from '@/features/image-generation/components/minimax-h3-director-dasiwa-input'
 import type { MiniMaxH3DirectorGraphInputKey } from '@/features/image-generation/components/minimax-h3-director-dasiwa-utils'
 import { useI18n } from '@/i18n'
@@ -29,7 +30,6 @@ import {
   getModuleColor,
   getModuleNodeDisplayLabelFromData,
   getVisibleModuleOutputPorts,
-  hasCustomModuleNodeLabel,
   isAdvancedOutputPortsEnabled,
   isFinalResultModule,
   type ModuleGraphNode,
@@ -105,7 +105,13 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
 
   const nodeDisplayLabel = getModuleNodeDisplayLabelFromData(data)
   const moduleBaseLabel = getModuleBaseDisplayName(module)
-  const usesCustomNodeLabel = hasCustomModuleNodeLabel(data)
+  const nodeTitleTooltip = [
+    nodeDisplayLabel,
+    t({ ko: '기본 타입: {label}', en: 'Base type: {label}' }, { label: moduleBaseLabel }),
+    t({ ko: '모듈 ID: {id}', en: 'Module ID: {id}' }, { id: module.id }),
+    module.description,
+    selected ? t({ ko: '클릭해서 이름 변경', en: 'Click to rename' }) : null,
+  ].filter(Boolean).join('\n')
   const [isEditingLabel, setIsEditingLabel] = useState(false)
   const [labelDraft, setLabelDraft] = useState(data.label ?? '')
   const missingStatusLabel = isWorkflowInputWaiting
@@ -232,7 +238,6 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
         borderColor: selected ? accentColor : statusBorderColor,
         boxShadow: selected ? `0 0 0 2px ${accentColor}66, 0 0 0 1px ${accentColor}22` : `0 0 0 1px ${accentColor}22`,
       } as CSSProperties}
-      title={`${nodeDisplayLabel}\n${t({ ko: '기본 타입: {label}', en: 'Base type: {label}' }, { label: moduleBaseLabel })}\n${t({ ko: '모듈 ID: {id}', en: 'Module ID: {id}' }, { id: module.id })}${module.description ? `\n${module.description}` : ''}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2">
@@ -269,28 +274,34 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
                 className={`nodrag nowheel h-8 text-sm ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
               />
             ) : (
-              <Button
-                type="button"
-                variant="link"
-                className="block h-auto max-w-full truncate p-0 text-left text-sm font-semibold text-foreground"
-                onClick={(event) => {
-                  if (!selected) {
-                    return
-                  }
-                  stopNodeActionEvent(event)
-                  setIsEditingLabel(true)
-                }}
-                title={selected ? t({ ko: '클릭해서 이름 변경', en: 'Click to rename' }) : undefined}
-              >
-                {nodeDisplayLabel}
-              </Button>
+              <Tip content={nodeTitleTooltip} className="whitespace-pre-line" side="top" align="start">
+                <Button
+                  type="button"
+                  variant="link"
+                  className="block h-auto max-w-full truncate p-0 text-left text-sm font-semibold text-foreground"
+                  onClick={(event) => {
+                    if (!selected) {
+                      return
+                    }
+                    stopNodeActionEvent(event)
+                    setIsEditingLabel(true)
+                  }}
+                >
+                  {nodeDisplayLabel}
+                </Button>
+              </Tip>
             )}
-            {usesCustomNodeLabel ? <div className="mt-0.5 truncate text-2xs text-muted-foreground">{moduleBaseLabel}</div> : null}
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-          {data.plannedExecutionOrder ? <Badge variant="outline" title={t({ ko: '계획 실행 순서', en: 'Planned execution order' })}>#{data.plannedExecutionOrder}</Badge> : null}
-          <Badge variant="outline" title={activationTitle}>{activationLabel}</Badge>
+          {data.plannedExecutionOrder ? (
+            <Tip content={t({ ko: '계획 실행 순서', en: 'Planned execution order' })}>
+              <Badge variant="outline">#{data.plannedExecutionOrder}</Badge>
+            </Tip>
+          ) : null}
+          <Tip content={activationTitle}>
+            <Badge variant="outline">{activationLabel}</Badge>
+          </Tip>
           {isFinalResult ? <Badge variant="secondary">{t({ ko: '최종 결과', en: 'Final result' })}</Badge> : null}
           {data.executionReuseState === 'reused' ? <Badge variant="outline">{t({ ko: '캐시', en: 'Cache' })}</Badge> : null}
           {statusLabel && statusLabel !== activationLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}
@@ -300,9 +311,9 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
       {(data.onExecuteNode || data.onForceExecuteNode) ? (
         <div className="nodrag nowheel mt-2 flex flex-wrap gap-1.5">
           {data.onExecuteNode ? (
-            <Button
-              type="button"
+            <IconButton
               size="icon-sm"
+              variant="default"
               className="h-7 w-7"
               disabled={!canExecuteGeneration || data.executeNodeDisabled}
               onMouseDown={stopNodeActionEvent}
@@ -310,15 +321,13 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
                 stopNodeActionEvent(event)
                 data.onExecuteNode?.()
               }}
-              title={t({ ko: '실행', en: 'Run' })}
-              aria-label={t({ ko: '실행', en: 'Run' })}
+              label={t({ ko: '이 노드까지 실행', en: 'Run up to this node' })}
             >
               <Play className="h-3.5 w-3.5" />
-            </Button>
+            </IconButton>
           ) : null}
           {data.onForceExecuteNode ? (
-            <Button
-              type="button"
+            <IconButton
               size="icon-sm"
               variant="secondary"
               className="h-7 w-7"
@@ -328,11 +337,10 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
                 stopNodeActionEvent(event)
                 data.onForceExecuteNode?.()
               }}
-              title={t({ ko: '재실행', en: 'Rerun' })}
-              aria-label={t({ ko: '재실행', en: 'Rerun' })}
+              label={t({ ko: '재실행 (캐시 무시)', en: 'Rerun (ignore cache)' })}
             >
               <RotateCcw className="h-3.5 w-3.5" />
-            </Button>
+            </IconButton>
           ) : null}
         </div>
       ) : null}
@@ -347,9 +355,6 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
         >
           {miniMaxDirectorUiFields.map((field) => (
             <div key={field.key} className="space-y-2">
-              {miniMaxDirectorUiFields.length > 1 ? (
-                <Text as="div" variant="overline" className="px-0.5 font-medium">{field.label}</Text>
-              ) : null}
               <MiniMaxH3DirectorDasiwaInput
                 value={normalizeCompositeNodeValue(data.inputValues?.[field.key] ?? field.default_value)}
                 visibleFields={field.node_visible_fields}
@@ -398,7 +403,6 @@ function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGr
 
       {powerLoraUiFields.length > 0 ? (
         <div className="nodrag nowheel mt-2.5 space-y-1" onMouseDown={stopNodeInteraction} onClick={stopNodeInteraction}>
-          <Text as="div" variant="overline" className="px-1 font-medium">LoRA</Text>
           {powerLoraUiFields.map((field) => {
             const value = data.inputValues?.[field.key] ?? field.default_value
             return (

@@ -73,10 +73,48 @@ export const CHAT_PAGE_ACTION_PERMISSIONS: Record<string, string | null> = {
   'nai.characters': null,
   'workflow.select': 'workflows.view', 'workflow.inputs': 'workflows.view',
   'group.select': 'images.view', 'group.create': 'images.edit', 'group.update': 'images.edit', 'group.auto_collect': 'images.edit',
+  // Chat profile editor (settings › chat). Saving goes through the editor's own admin-only API.
+  'profile.open_create': null, 'profile.open_edit': null, 'profile.section': null, 'profile.draft': null, 'profile.save': null, 'profile.assets': 'generation.execute',
+  'library.search': 'images.view', 'library.open': 'images.view', 'library.select': 'images.view', 'files.open': 'files.view', 'files.preview': 'files.view',
+  // Settings › Chat › 자원 editors (lorebooks, generation presets, judge presets, blocks, tool presets). Saving uses each editor's own admin API.
+  'resource.open': null, 'resource.save': null, 'lorebook.entries': null,
+  'chat.open': 'chat.use', 'chat.prepare': 'chat.use',
+  'audio.open': 'audio.view', 'audio.filter': 'audio.view', 'audio.select': 'audio.view',
+  'sprite.select': null,
+  'wallpaper.select': null, 'wallpaper.open_preset': null, 'wallpaper.add_widget': null, 'wallpaper.save': null,
+  'metadata.save': 'images.edit',
+}
+/**
+ * What running an action does, decided here and never by the page that registers it:
+ * - view: moves or opens something (navigation, tabs, selection, opening an editor). Runs right away.
+ * - draft: changes inputs on screen without saving. Runs right away; the person can undo it.
+ * - commit: saves, registers or otherwise decides. Always a review card the person applies.
+ */
+export type ChatPageActionTier = 'view' | 'draft' | 'commit'
+const COMMIT_ACTIONS = new Set(['prompt.create', 'prompt.update', 'preset.create', 'preset.update', 'wildcard.create', 'wildcard.update', 'comfy.save', 'comfy.register', 'group.create', 'group.update', 'group.auto_collect', 'profile.save', 'profile.assets', 'resource.save', 'wallpaper.save', 'metadata.save'])
+const VIEW_ACTIONS = new Set(['page.navigate', 'page.refresh', 'prompt.select', 'preset.select', 'wildcard.select', 'comfy.select', 'comfy.refresh', 'comfy.open_create', 'comfy.open_edit', 'workflow.select', 'group.select', 'profile.open_create', 'profile.open_edit', 'profile.section', 'library.search', 'library.open', 'library.select', 'files.open', 'files.preview',
+  'resource.open', 'chat.open', 'chat.prepare', 'audio.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'wallpaper.open_preset'])
+/** View operations that stay inside the open editor, so unsaved changes there do not block them. */
+const IN_PLACE_VIEW_ACTIONS = new Set(['profile.section', 'library.select', 'resource.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select'])
+export function chatPageActionTier(id: string): ChatPageActionTier {
+  return COMMIT_ACTIONS.has(id) ? 'commit' : VIEW_ACTIONS.has(id) ? 'view' : 'draft'
+}
+/** A view operation that would leave the screen (and lose its unsaved changes). */
+export function chatPageActionLeavesScreen(id: string) {
+  return chatPageActionTier(id) === 'view' && !IN_PLACE_VIEW_ACTIONS.has(id)
 }
 export function chatPageActionAllowed(path: string, id: string): boolean {
   if (!own(CHAT_PAGE_ACTION_PERMISSIONS, id)) return false
   if (id.startsWith('page.')) return true
+  if (id.startsWith('profile.')) return path === '/settings'
+  if (id.startsWith('library.')) return path === '/'
+  if (id.startsWith('files.')) return path === '/files'
+  if (id.startsWith('resource.') || id.startsWith('lorebook.')) return path === '/settings'
+  if (id.startsWith('chat.')) return path === '/chat'
+  if (id.startsWith('audio.')) return path === '/audio'
+  if (id.startsWith('sprite.')) return path === '/sprite'
+  if (id.startsWith('wallpaper.')) return path === '/wallpaper'
+  if (id.startsWith('metadata.')) return /^\/images\/[\w.-]+\/metadata$/.test(path)
   if (id.startsWith('prompt.') || id === 'preset.create' || id === 'preset.update' || id === 'preset.select' || id === 'preset.draft') return path === '/prompts'
   if (id.startsWith('wildcard.')) return path === '/wildcards'
   if (id.startsWith('group.')) return /^\/groups(?:\/[\w-]+)?$/.test(path)
@@ -90,8 +128,7 @@ export function normalizeChatPageActions(path: string, input: unknown): ChatPage
   return input.map((raw: ChatPageAction) => {
     if (!chatPageActionAllowed(path, raw?.id) || ids.has(raw.id) || typeof raw.label !== 'string' || !raw.label || raw.label.length > 160 || typeof raw.description !== 'string' || raw.description.length > 1000 || !['draft', 'save'].includes(raw.effect)) throw new Error('등록되지 않았거나 잘못된 페이지 작업이야.')
     ids.add(raw.id)
-    const saves = ['prompt.create', 'prompt.update', 'preset.create', 'preset.update', 'wildcard.create', 'wildcard.update', 'comfy.save', 'comfy.register', 'group.create', 'group.update', 'group.auto_collect']
-    if ((raw.effect === 'save') !== saves.includes(raw.id)) throw new Error('작업의 저장 범위가 올바르지 않아.')
+    if ((raw.effect === 'save') !== COMMIT_ACTIONS.has(raw.id)) throw new Error('작업의 저장 범위가 올바르지 않아.')
     const schema = normalizeChatPageSchema(raw.schema)
     if (schema.type !== 'object') throw new Error('작업 인수는 객체여야 해.')
     return { id: raw.id, label: raw.label, description: raw.description, effect: raw.effect, schema }

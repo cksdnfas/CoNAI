@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { Download } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Download, RefreshCcw } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
+import { Tip } from '@/components/ui/tooltip'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { buildApiUrl, triggerBlobDownload } from '@/lib/api-client'
 import { getDownloadFileName, readDownloadError } from '@/lib/download-utils'
 import { useI18n } from '@/i18n'
 import { RowGroup } from '@/components/ui/row-group'
-import { SettingRow } from '@/components/ui/setting-row'
 
 const CONAI_HELPER_DOWNLOAD_PATH = '/api/settings/resources/comfyui-helper/download'
 const CONAI_HELPER_PACKAGE_FILENAME = 'conai-helper-comfyui-custom-node.zip'
@@ -44,25 +44,29 @@ export function IntegrationToolsTab() {
     }
   }
 
+  const downloadLabel = isDownloading
+    ? t({ ko: '다운로드 중', en: 'Downloading' })
+    : t({ ko: 'CoNAI Helper 커스텀 노드 ZIP 다운로드', en: 'Download the CoNAI Helper custom node ZIP' })
+
   return (
     <RowGroup
       heading={t({ ko: 'ComfyUI 연동', en: 'ComfyUI integration' })}
       actions={
-        <Button type="button" size="sm" variant="secondary" onClick={() => void handleDownload()} disabled={isDownloading}>
-          <Download className="h-4 w-4" />
-          {isDownloading ? t({ ko: '다운로드 중', en: 'Downloading' }) : t({ ko: 'ZIP 다운로드', en: 'Download ZIP' })}
-        </Button>
+        // Package details live in the button's tooltip instead of static rows.
+        <Tip
+          className="whitespace-pre-line"
+          content={[
+            downloadLabel,
+            t({ ko: '패키지: CoNAI Helper', en: 'Package: CoNAI Helper' }),
+            t({ ko: '대상: ComfyUI custom_nodes', en: 'Target: ComfyUI custom_nodes' }),
+            t({ ko: '노드: CoNAI Helper: Artifact Output', en: 'Node: CoNAI Helper: Artifact Output' }),
+          ].join('\n')}
+        >
+          <IconButton size="icon-sm" variant="secondary" tooltip={false} label={downloadLabel} onClick={() => void handleDownload()} disabled={isDownloading}>
+            {isDownloading ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          </IconButton>
+        </Tip>
       }
-    >
-      <SettingRow label={t({ ko: '패키지', en: 'Package' })}>
-        <span className="text-sm text-muted-foreground">CoNAI Helper</span>
-      </SettingRow>
-      <SettingRow label={t({ ko: '대상', en: 'Target' })}>
-        <span className="font-mono text-xs text-muted-foreground">ComfyUI custom_nodes</span>
-      </SettingRow>
-      <SettingRow label={t({ ko: '노드', en: 'Node' })}>
-        <span className="text-sm text-muted-foreground">CoNAI Helper: Artifact Output</span>
-      </SettingRow>
-    </RowGroup>
+    />
   )
 }

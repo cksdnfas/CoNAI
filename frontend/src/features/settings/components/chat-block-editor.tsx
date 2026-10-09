@@ -158,7 +158,7 @@ function BlockFieldsTable({ rows, onChange }: { rows: FieldRow[]; onChange: (row
           })}
         </div>
       ) : null}
-      <Button variant="ghost" size="xs" onClick={() => onChange([...rows, { id: rowId(), name: '', start: '', ...EMPTY_RULE }])}><Plus />{t({ ko: '필드 추가', en: 'Add field' })}</Button>
+      <IconButton variant="ghost" size="icon-xs" label={t({ ko: '필드 추가', en: 'Add field' })} onClick={() => onChange([...rows, { id: rowId(), name: '', start: '', ...EMPTY_RULE }])}><Plus /></IconButton>
     </div>
   )
 }

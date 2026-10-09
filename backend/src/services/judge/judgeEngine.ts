@@ -3,6 +3,7 @@ import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../llmGenerationOptions'
 import { callTypesafeSystemOne, TYPESAFE_DEFAULT_MODEL, type TypesafeQuestion } from './typesafeClient'
 import { completeChat, resolveChatCompletionTarget, type ChatCompletionTarget } from '../codex-chat/llmChatCompletion'
+import { primaryModelOf } from '../codex-chat/modelSlots'
 
 /**
  * The judge: typed questions about a state (any JSON — a conversation, an image's tags), answered either by the
@@ -44,7 +45,7 @@ export function resolveJudgeConnection(providerName: string, model: string | nul
     return {
       engine: 'typesafe',
       providerName,
-      model: model?.trim() || settings.defaultModel || TYPESAFE_DEFAULT_MODEL,
+      model: model?.trim() || primaryModelOf(providerName) || TYPESAFE_DEFAULT_MODEL,
       baseUrl: provider.base_url,
       apiKey: ExternalApiProvider.getDecryptedKey(providerName, true),
       timeoutMs: settings.timeoutMs,

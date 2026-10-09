@@ -24,7 +24,7 @@ export function SegmentedTabBar({
   controlClassName,
   actions,
   fullWidth = false,
-  size = 'md',
+  size = 'sm',
   ariaLabel,
 }: SegmentedTabBarProps) {
   return (

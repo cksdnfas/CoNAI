@@ -149,17 +149,18 @@ function AppShellLayout() {
       <header className="theme-shell-header fixed inset-x-0 top-0 z-50">
         <div className="theme-shell-inner mx-auto flex w-full max-w-[1680px] items-center gap-3 sm:gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-6">
-            <NavLink
-              to={logoTarget}
-              className="flex shrink-0 items-center gap-3 rounded-sm transition-opacity hover:opacity-90"
-              aria-label={t('appShell.availablePages')}
-              title={APP_BRAND_TOOLTIP}
-              onMouseEnter={() => prefetchAppRoute(logoTarget)}
-              onFocus={() => prefetchAppRoute(logoTarget)}
-            >
-              <img src={APP_ICON_SRC} alt="" className="size-8 shrink-0 rounded-sm object-cover" draggable={false} />
-              <span className="hidden text-lg font-bold tracking-[-0.04em] text-foreground sm:inline">{APP_NAME}</span>
-            </NavLink>
+            <Tip content={APP_BRAND_TOOLTIP} side="bottom" align="start">
+              <NavLink
+                to={logoTarget}
+                className="flex shrink-0 items-center gap-3 rounded-sm transition-opacity hover:opacity-90"
+                aria-label={t('appShell.availablePages')}
+                onMouseEnter={() => prefetchAppRoute(logoTarget)}
+                onFocus={() => prefetchAppRoute(logoTarget)}
+              >
+                <img src={APP_ICON_SRC} alt="" className="size-8 shrink-0 rounded-sm object-cover" draggable={false} />
+                <span className="hidden text-lg font-bold tracking-[-0.04em] text-foreground sm:inline">{APP_NAME}</span>
+              </NavLink>
+            </Tip>
 
             <div className="relative min-w-0 flex-1">
               <div

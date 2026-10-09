@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
 import { Progress } from '@/components/ui/progress'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { GenerateActionBar, GenerateActionBarIconButton, type GenerateActionBarVariant } from './generate-action-bar'
@@ -63,15 +64,17 @@ export function NaiConnectionHeader({ connected, tierName, anlasBalance, opusRem
         </div>
         <div className="flex items-center gap-2">
           {!connected ? (
-            <Button type="button" variant="secondary" size="sm" onClick={onOpenAuth}>
-              {t('image-generation.components.nai.auth.modal.log.in')}
-            </Button>
+            <IconButton size="icon-sm" variant="secondary" onClick={onOpenAuth} label={t('image-generation.components.nai.auth.modal.log.in')}>
+              <LogIn />
+            </IconButton>
           ) : null}
-          <Button type="button" variant="secondary" size="icon-sm" asChild>
-            <a href="https://novelai.net/" target="_blank" rel="noreferrer noopener" aria-label={novelAiHomeLabel} title={novelAiHomeLabel}>
-              <ExternalLink className="h-4 w-4" />
-            </a>
-          </Button>
+          <Tip content={novelAiHomeLabel}>
+            <Button type="button" variant="secondary" size="icon-sm" asChild>
+              <a href="https://novelai.net/" target="_blank" rel="noreferrer noopener" aria-label={novelAiHomeLabel}>
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            </Button>
+          </Tip>
         </div>
       </div>
     </section>
@@ -95,11 +98,13 @@ export function NaiToolbarStatus({ connected, tierName, anlasBalance, opusRemain
           <LogIn />
         </IconButton>
       ) : null}
-      <Button type="button" variant="ghost" size="icon-sm" asChild>
-        <a href="https://novelai.net/" target="_blank" rel="noreferrer noopener" aria-label={novelAiHomeLabel} title={novelAiHomeLabel}>
-          <ExternalLink className="h-4 w-4" />
-        </a>
-      </Button>
+      <Tip content={novelAiHomeLabel}>
+        <Button type="button" variant="ghost" size="icon-sm" asChild>
+          <a href="https://novelai.net/" target="_blank" rel="noreferrer noopener" aria-label={novelAiHomeLabel}>
+            <ExternalLink className="h-4 w-4" />
+          </a>
+        </Button>
+      </Tip>
     </GenerationToolbarStatus>
   )
 }

@@ -45,7 +45,10 @@ export type ChatComfyPresetConfig = {
   fixedInputs: Record<string, unknown>
   /** Marked fields the model fills. */
   exposedFieldIds: string[]
+  /** The image field that takes the profile's reference image (character assets); null: found on its own when only one. */
   referenceField: string | null
+  /** The text field that takes a character asset's slot prompt; null: found on its own when it is clear. */
+  promptField?: string | null
 }
 
 export type ChatGenerationPreset = {
@@ -160,6 +163,64 @@ export function normalizeNaiPresetConfig(value: unknown): ChatNaiPresetConfig {
   }
 }
 
+function workflowMarkedFields(workflowId: number): MarkedField[] {
+  try {
+    const fields: unknown = JSON.parse(WorkflowModel.findByIdIncludingDeleted(workflowId)?.marked_fields ?? '[]')
+    return Array.isArray(fields) ? fields as MarkedField[] : []
+  } catch {
+    return []
+  }
+}
+
+const isTextField = (field: MarkedField) => field.type === 'text' || field.type === 'textarea'
+const isSeedField = (field: MarkedField) => field.type === 'number' && /(?:^|[._])(?:noise_seed|seed)$/.test(field.jsonPath)
+
+/**
+ * The fields a ComfyUI preset uses for character assets. The reference goes into the chosen image field, or the
+ * only image field there is; the slot prompt into the chosen text field, or the only exposed one, or the one named
+ * like a positive prompt. `promptChoices` lists the text fields when that is not clear.
+ */
+export function comfyAssetFields(config: ChatComfyPresetConfig, fields: MarkedField[]) {
+  const images = fields.filter((field) => field.type === 'image')
+  const referenceField = config.referenceField && images.some((field) => field.id === config.referenceField)
+    ? config.referenceField
+    : images.length === 1 ? images[0].id : null
+  const texts = fields.filter(isTextField)
+  const named = (list: MarkedField[]) => list.filter((field) => /positive|prompt|프롬프트|긍정/i.test(`${field.id} ${field.label}`) && !/negative|neg_|부정|undesired/i.test(`${field.id} ${field.label}`))
+  const exposed = texts.filter((field) => config.exposedFieldIds.includes(field.id))
+  const pick = [exposed, named(exposed), named(texts), texts].find((list) => list.length === 1)
+  const promptField = config.promptField && texts.some((field) => field.id === config.promptField) ? config.promptField : pick?.[0].id ?? null
+  return {
+    referenceField,
+    /** Several image fields and none chosen: the reference has nowhere to go until one is picked. */
+    referenceAmbiguous: !referenceField && images.length > 1,
+    promptField,
+    promptChoices: texts.map((field) => ({ id: field.id, label: field.label })),
+    imageChoices: images.map((field) => ({ id: field.id, label: field.label })),
+    hasSeed: fields.some(isSeedField),
+  }
+}
+
+/**
+ * How a preset can make character assets. `reference`: it draws from the reference image (NAI's character reference,
+ * or a ComfyUI image input); `appearance`: a text-to-image workflow, drawing from the appearance text alone; `null`
+ * with a `problem` when it cannot make assets.
+ */
+export type ChatPresetAssetSupport = { mode: 'reference' | 'appearance' | null; problem: string | null; promptChoices: Array<{ id: string; label: string }>; imageChoices: Array<{ id: string; label: string }> }
+
+export function chatPresetAssetSupport(preset: Pick<ChatGenerationPreset, 'kind' | 'comfyui'>): ChatPresetAssetSupport {
+  if (preset.kind === 'nai') return { mode: 'reference', problem: null, promptChoices: [], imageChoices: [] }
+  if (!preset.comfyui) return { mode: null, problem: 'ComfyUI 프리셋 설정을 찾을 수 없어.', promptChoices: [], imageChoices: [] }
+  const { workflow, problem } = resolvePresetWorkflow(preset.comfyui)
+  if (!workflow) return { mode: null, problem, promptChoices: [], imageChoices: [] }
+  const fields = comfyAssetFields(preset.comfyui, workflowMarkedFields(workflow.id))
+  const base = { promptChoices: fields.promptChoices, imageChoices: fields.imageChoices }
+  if (!fields.promptField) return { mode: null, problem: fields.promptChoices.length ? '생성 프리셋에서 프롬프트 필드를 골라줘.' : '워크플로에 텍스트 필드가 없어.', ...base }
+  if (!fields.hasSeed) return { mode: null, problem: '워크플로의 시드 입력을 숫자 필드로 표시해줘.', ...base }
+  if (fields.referenceAmbiguous) return { mode: 'appearance', problem: '생성 프리셋에서 기준 이미지 필드를 골라줘.', ...base }
+  return { mode: fields.referenceField ? 'reference' : 'appearance', problem: null, ...base }
+}
+
 export function normalizeComfyPresetConfig(value: unknown): ChatComfyPresetConfig {
   const raw = isRecord(value) ? value : {}
   const workflowId = number(raw.workflowId, { min: 1, max: Number.MAX_SAFE_INTEGER }, 0, true)
@@ -170,14 +231,12 @@ export function normalizeComfyPresetConfig(value: unknown): ChatComfyPresetConfi
   const exposedFieldIds = [...new Set((Array.isArray(raw.exposedFieldIds) ? raw.exposedFieldIds : []).filter((id): id is string => typeof id === 'string' && id.length > 0 && id.length <= 200))].slice(0, 50)
   if (raw.referenceField != null && typeof raw.referenceField !== 'string') throw new ChatProfileError('기준 이미지 필드가 올바르지 않아.')
   const referenceField = text(raw.referenceField, 200) || null
-  if (referenceField) {
-    const workflow = WorkflowModel.findByIdIncludingDeleted(workflowId)
-    let fields: MarkedField[] = []
-    try { fields = JSON.parse(workflow?.marked_fields ?? '[]') } catch { /* Validation below rejects unreadable fields. */ }
-    if (!Array.isArray(fields) || !fields.some((field) => field.id === referenceField && field.type === 'image')
-      || (!exposedFieldIds.includes(referenceField) && !Object.prototype.hasOwnProperty.call(fixedInputs, referenceField))) {
-      throw new ChatProfileError('기준 이미지는 노출하거나 고정한 이미지 필드 하나에 지정해줘.')
-    }
+  if (raw.promptField != null && typeof raw.promptField !== 'string') throw new ChatProfileError('프롬프트 필드가 올바르지 않아.')
+  const promptField = text(raw.promptField, 200) || null
+  if (referenceField || promptField) {
+    const fields = workflowMarkedFields(workflowId)
+    if (referenceField && !fields.some((field) => field.id === referenceField && field.type === 'image')) throw new ChatProfileError('기준 이미지는 이미지 필드 하나에 지정해줘.')
+    if (promptField && !fields.some((field) => field.id === promptField && isTextField(field))) throw new ChatProfileError('프롬프트 필드는 텍스트 필드 하나에 지정해줘.')
   }
   return {
     workflowId,
@@ -186,6 +245,7 @@ export function normalizeComfyPresetConfig(value: unknown): ChatComfyPresetConfi
     fixedInputs,
     exposedFieldIds,
     referenceField,
+    promptField,
   }
 }
 
@@ -221,7 +281,7 @@ function parseConfig(row: PresetRow): Pick<ChatGenerationPreset, 'kind' | 'nai' 
     try {
       return { kind, nai: null, comfyui: normalizeComfyPresetConfig(raw) }
     } catch {
-      return { kind, nai: null, comfyui: { workflowId: 0, serverId: null, serverTag: null, fixedInputs: {}, exposedFieldIds: [], referenceField: null } }
+      return { kind, nai: null, comfyui: { workflowId: 0, serverId: null, serverTag: null, fixedInputs: {}, exposedFieldIds: [], referenceField: null, promptField: null } }
     }
   }
   return { kind, nai: normalizeNaiPresetConfig(raw), comfyui: null }
@@ -257,6 +317,11 @@ export const ChatGenerationPresetStore = {
     const rows = getUserSettingsDb().prepare('SELECT * FROM chat_generation_presets ORDER BY name COLLATE NOCASE ASC, id ASC').all() as PresetRow[]
     const profiles = linkedProfiles()
     return rows.map((row) => toPreset(row, profiles))
+  },
+
+  /** The list with how each preset can make character assets (settings and the profile editor show it). */
+  listWithAssetSupport() {
+    return ChatGenerationPresetStore.list().map((preset) => ({ ...preset, assetSupport: chatPresetAssetSupport(preset) }))
   },
 
   find(presetId: number) {

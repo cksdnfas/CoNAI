@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react'
 import { useRef } from 'react'
-import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupHeaderClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
+import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupHeaderClassName } from '@/components/ui/anchored-popup'
 import { IconButton } from '@/components/ui/icon-button'
-import { useI18n } from '@/i18n'
 
 export const detailSettingsLabelClassName = 'text-xs font-semibold tracking-overline text-muted-foreground uppercase'
 
@@ -27,7 +26,6 @@ export function DetailSettingsFlyout({
   icon,
 }: DetailSettingsFlyoutProps) {
   const triggerRef = useRef<HTMLButtonElement | null>(null)
-  const { t } = useI18n()
 
   return (
     <>
@@ -36,8 +34,7 @@ export function DetailSettingsFlyout({
       </IconButton>
       <AnchoredPopup open={isOpen} anchorRef={triggerRef} onClose={onToggle} align="end" side="bottom" className={panelWidthClassName} closeOnBack>
         <div className={anchoredPopupHeaderClassName}>
-          <div className={anchoredPopupLabelClassName}>{t('images.components.detail.detail.settings.flyout.options')}</div>
-          <div className="mt-1 text-sm font-semibold text-foreground">{triggerTitle}</div>
+          <div className="text-sm font-semibold text-foreground">{triggerTitle}</div>
         </div>
         <div className={anchoredPopupBodyClassName}>{children}</div>
       </AnchoredPopup>

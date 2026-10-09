@@ -70,6 +70,7 @@ const PROPOSAL_TOOLS: Record<ChatProposal['kind'], string> = {
   page_fields: 'propose_page_changes',
   workflow_graph: 'propose_workflow_changes',
   page_action: 'propose_page_action',
+  task_plan: 'task_propose',
 }
 
 /** Tools whose call leaves a proposal card under the reply. */

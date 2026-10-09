@@ -6,10 +6,10 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Text } from '@/components/ui/text'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { GenerateActionBar, GenerateActionDock } from '@/features/image-generation/components/generate-action-bar'
 import { buildGraphWorkflowTargetGroupKey } from '@/features/groups/generation-target-group-store'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowExposedInput, GraphWorkflowFolderRecord, GraphWorkflowRecord, GraphWorkflowSummaryRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
@@ -104,18 +104,19 @@ export function WorkflowRunnerPanel({
           <ArrowLeft />
         </IconButton>
         <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-auto min-w-0 justify-start gap-1 px-1.5 py-1 text-foreground"
-              aria-label={t({ ko: '다른 워크플로 고르기', en: 'Pick another workflow' })}
-              title={selectedGraph.description || undefined}
-            >
-              <span className="truncate text-base font-semibold tracking-tight text-foreground">{selectedGraph.name}</span>
-              <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-            </Button>
-          </PopoverTrigger>
+          <Tip content={selectedGraph.description || t({ ko: '다른 워크플로 고르기', en: 'Pick another workflow' })} className="whitespace-pre-line" align="start">
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-auto min-w-0 justify-start gap-1 px-1.5 py-1 text-foreground"
+                aria-label={t({ ko: '다른 워크플로 고르기', en: 'Pick another workflow' })}
+              >
+                <span className="truncate text-base font-semibold tracking-tight text-foreground">{selectedGraph.name}</span>
+                <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+              </Button>
+            </PopoverTrigger>
+          </Tip>
           <PopoverContent align="start" className="flex max-h-[min(60vh,480px)] w-[min(360px,calc(100vw-2rem))] flex-col p-2">
             <WorkflowListPanel
               variant="picker"
@@ -161,9 +162,7 @@ export function WorkflowRunnerPanel({
             onInputValueClear={onInputValueClear}
             onInputImageChange={onInputImageChange}
           />
-        ) : (
-          <Text variant="muted" className="py-2 text-sm">{t({ ko: '입력 항목 없이 바로 실행돼.', en: 'Runs as is, no inputs.' })}</Text>
-        )}
+        ) : null}
       </div>
 
       {stickyBarTargetId

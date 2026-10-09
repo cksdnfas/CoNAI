@@ -1,5 +1,5 @@
 import { choiceQuestion } from '../judge/judgeEngine'
-import { askBuiltQuestions, judgeConversationOf, logJudgeRun, type JudgeSetup } from './chatJudge'
+import { askBuiltQuestions, judgeConversationOf, judgeSetupFor, logJudgeRun, type JudgeSetup } from './chatJudge'
 import { DEFAULT_NEXT_INSTRUCTIONS, DEFAULT_ROUTE_INSTRUCTIONS } from './chatJudgeDefaults'
 import type { JudgeLogItem } from './chatJudgeLogs'
 import { ChatJudgePresetStore } from './chatJudgePresets'
@@ -21,9 +21,9 @@ export function roomJudgeSetup(thread: Pick<CodexChatThreadRecord, 'kind' | 'jud
   if (thread.kind !== 'group' || !thread.judge_preset_id) return null
   const preset = ChatJudgePresetStore.find(thread.judge_preset_id)
   if (!preset) return null
-  if (preset.providerName) return { preset, providerName: preset.providerName, model: preset.model }
+  if (preset.modelSlotId) return judgeSetupFor(preset, preset.modelSlotId)
   const representative = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
-  return representative?.judgeProviderName ? { preset, providerName: representative.judgeProviderName, model: representative.judgeModel } : null
+  return representative?.judgeSlotId ? judgeSetupFor(preset, representative.judgeSlotId) : null
 }
 
 const WAIT = 'wait'

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, DatabaseZap, RotateCw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -131,15 +131,15 @@ export function DataRematchSection() {
     <RowGroup
       heading={t({ ko: '데이터 재매칭', en: 'Data rematch' })}
       actions={(
-        <Button
-          size="sm"
+        <IconButton
+          size="icon-sm"
           variant={dataRematchOptions.hash ? 'destructive' : 'secondary'}
           onClick={() => void startDataRematch()}
           disabled={isDataRematchBusy || !hasSelectedDataRematchOption || (dataRematchOptions.hash && !hashConfirmed)}
+          label={isDataRematchBusy ? t({ ko: '진행 중', en: 'Running' }) : t({ ko: '데이터 재매칭 실행', en: 'Run data rematch' })}
         >
           {isDataRematchBusy ? <RotateCw className="h-4 w-4 animate-spin" /> : <DatabaseZap className="h-4 w-4" />}
-          {isDataRematchBusy ? t({ ko: '진행 중', en: 'Running' }) : t({ ko: '실행', en: 'Run' })}
-        </Button>
+        </IconButton>
       )}
     >
       {optionRows.map((option) => (

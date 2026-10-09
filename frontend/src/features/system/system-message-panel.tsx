@@ -10,14 +10,13 @@ interface SystemMessagePanelProps {
   /** Short code or kind above the title, e.g. "404". */
   overline?: ReactNode
   title: ReactNode
-  description?: ReactNode
   /** Extra body such as a collapsed technical detail. */
   children?: ReactNode
   actions?: ReactNode
 }
 
 /** Centered flat message (no card) shared by the 404 and route-error screens. */
-export function SystemMessagePanel({ icon: Icon, iconTone = 'neutral', overline, title, description, children, actions }: SystemMessagePanelProps) {
+export function SystemMessagePanel({ icon: Icon, iconTone = 'neutral', overline, title, children, actions }: SystemMessagePanelProps) {
   return (
     <div className="mx-auto flex min-h-[60vh] w-full max-w-xl items-center py-10">
       <div className="w-full space-y-5">
@@ -25,7 +24,6 @@ export function SystemMessagePanel({ icon: Icon, iconTone = 'neutral', overline,
         <div className="space-y-2">
           {overline ? <Text variant="overline" className="font-semibold">{overline}</Text> : null}
           <Heading level={1}>{title}</Heading>
-          {description ? <div className="space-y-2 text-sm text-muted-foreground">{description}</div> : null}
         </div>
         {children}
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}

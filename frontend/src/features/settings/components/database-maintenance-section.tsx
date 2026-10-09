@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Database, Download, Shrink, Trash2, Eraser, RefreshCcw } from 'lucide-react'
+import { Database, Download, Eye, Play, Shrink, Trash2, Eraser, RefreshCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Progress } from '@/components/ui/progress'
@@ -230,10 +230,9 @@ export function DatabaseMaintenanceSection() {
         title={t({ ko: 'DB 백업', en: 'Database backup' })}
         meta={backupMeta}
         actions={(
-          <Button type="button" size="sm" variant="secondary" disabled={backupRunning} onClick={() => startBackup.mutate()}>
-            {backupRunning ? busyIcon : null}
-            {backupRunning ? t({ ko: '백업 중', en: 'Backing up' }) : t({ ko: '지금 백업', en: 'Back up now' })}
-          </Button>
+          <IconButton size="icon-sm" variant="secondary" disabled={backupRunning} onClick={() => startBackup.mutate()} label={backupRunning ? t({ ko: '백업 중', en: 'Backing up' }) : t({ ko: '지금 백업', en: 'Back up now' })}>
+            {backupRunning ? busyIcon : <Play className="h-4 w-4" />}
+          </IconButton>
         )}
       >
         {backupRunning && backupProgress ? (
@@ -279,12 +278,17 @@ export function DatabaseMaintenanceSection() {
             {t({ ko: '정리하기', en: 'Clean up' })}
           </Button>
         ) : (
-          <Button type="button" size="sm" variant="secondary" disabled={orphanRunning} onClick={() => startOrphan.mutate(true)}>
-            {orphanRunning ? busyIcon : null}
-            {orphanRunning
+          <IconButton
+            size="icon-sm"
+            variant="secondary"
+            disabled={orphanRunning}
+            onClick={() => startOrphan.mutate(true)}
+            label={orphanRunning
               ? startOrphan.variables === false ? t({ ko: '정리 중', en: 'Cleaning' }) : t({ ko: '확인 중', en: 'Checking' })
-              : t({ ko: '미리보기', en: 'Preview' })}
-          </Button>
+              : t({ ko: '미리보기: 지울 항목을 먼저 세어 봐', en: 'Preview: count what would be removed first' })}
+          >
+            {orphanRunning ? busyIcon : <Eye className="h-4 w-4" />}
+          </IconButton>
         )}
       >
         {orphanRunning ? <Progress size="lg" value={null} /> : null}
@@ -311,10 +315,9 @@ export function DatabaseMaintenanceSection() {
         title={t({ ko: 'DB 압축', en: 'Compact database' })}
         meta={compactMeta}
         actions={(
-          <Button type="button" size="sm" variant="secondary" disabled={compactRunning} onClick={() => void confirmCompaction()}>
-            {compactRunning ? busyIcon : null}
-            {compactRunning ? t({ ko: '압축 중', en: 'Compacting' }) : t({ ko: '압축', en: 'Compact' })}
-          </Button>
+          <IconButton size="icon-sm" variant="secondary" disabled={compactRunning} onClick={() => void confirmCompaction()} label={compactRunning ? t({ ko: '압축 중', en: 'Compacting' }) : t({ ko: 'DB 압축 실행', en: 'Compact the database' })}>
+            {compactRunning ? busyIcon : <Play className="h-4 w-4" />}
+          </IconButton>
         )}
       >
         {compactRunning ? (

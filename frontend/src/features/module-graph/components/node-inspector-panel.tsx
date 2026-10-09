@@ -41,7 +41,7 @@ import {
   resolveEdgeEndpoint,
   summarizeLlmPresetContent,
 } from './node-inspector-panel-helpers'
-import { getModuleBaseDisplayName, getModuleNodeDisplayLabel, getModuleOperationKey, normalizeModulePortDescription, normalizeOptionalString, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
+import { getModuleBaseDisplayName, getModuleOperationKey, normalizeModulePortDescription, normalizeOptionalString, type ModuleGraphEdge, type ModuleGraphNode } from '../module-graph-shared'
 import { EmptyState } from '@/components/ui/empty-state'
 import type { PromptWildcardTool } from '@/features/image-generation/components/wildcard-inline-picker-helpers'
 import { TypedFieldInput, type TypedFieldKind } from '@/features/shared-fields/typed-field-input'
@@ -439,7 +439,7 @@ export function NodeInspectorPanel({
   return (
     <Section heading={showHeader ? t({ ko: '노드 인스펙터', en: 'Node Inspector' }) : undefined}>
       {!selectedNode && !selectedEdge ? (
-        <EmptyState icon={MousePointerClick} title={t({ ko: '노드나 엣지를 선택해.', en: 'Select a node or edge.' })} />
+        <EmptyState size="compact" icon={MousePointerClick} title={t({ ko: '노드나 엣지를 선택해.', en: 'Select a node or edge.' })} />
       ) : null}
 
       {!selectedNode && selectedEdge && sourceEndpoint && targetEndpoint ? (
@@ -459,28 +459,21 @@ export function NodeInspectorPanel({
       {selectedNode ? (
         <>
           <div className={NODE_INSPECTOR_NODE_SURFACE_CLASS}>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-foreground">{getModuleNodeDisplayLabel(selectedNode)}</span>
-                  <Badge variant="outline" className="gap-1"><ProviderIcon provider={selectedNode.data.module.engine_type === 'nai' ? 'novelai' : selectedNode.data.module.engine_type} className="size-3" />{t(MODULE_ENGINE_LABELS[selectedNode.data.module.engine_type] ?? selectedNode.data.module.engine_type)}</Badge>
-                  <TechnicalReferenceHint title={`node ${selectedNode.id}`} label={t({ ko: '노드 내부 식별자 보기', en: 'Show internal node identifier' })} />
-                </div>
-                <div className="mt-3 space-y-1">
-                  <Text as="div" variant="overline" className="font-medium">{t({ ko: '노드 이름', en: 'Node name' })}</Text>
-                  <Input
-                    value={selectedNode.data.label ?? ''}
-                    onChange={(event) => onNodeLabelChange(selectedNode.id, event.target.value)}
-                    placeholder={getModuleBaseDisplayName(selectedNode.data.module)}
-                  />
-                </div>
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                value={selectedNode.data.label ?? ''}
+                onChange={(event) => onNodeLabelChange(selectedNode.id, event.target.value)}
+                aria-label={t({ ko: '노드 이름', en: 'Node name' })}
+                placeholder={getModuleBaseDisplayName(selectedNode.data.module)}
+                className="min-w-40 flex-1"
+              />
+              <Badge variant="outline" className="gap-1"><ProviderIcon provider={selectedNode.data.module.engine_type === 'nai' ? 'novelai' : selectedNode.data.module.engine_type} className="size-3" />{t(MODULE_ENGINE_LABELS[selectedNode.data.module.engine_type] ?? selectedNode.data.module.engine_type)}</Badge>
+              <TechnicalReferenceHint title={`node ${selectedNode.id}`} label={t({ ko: '노드 내부 식별자 보기', en: 'Show internal node identifier' })} />
               {onExecuteSelectedNode ? (
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="sm" variant="secondary" onClick={onExecuteSelectedNode} disabled={!canExecuteGeneration || executeSelectedNodeDisabled}>
-                    <Play className="size-4" />
-                    {resolvedExecuteSelectedNodeLabel}
-                  </Button>
+                <div className="flex gap-1">
+                  <IconButton size="icon-sm" variant="secondary" onClick={onExecuteSelectedNode} disabled={!canExecuteGeneration || executeSelectedNodeDisabled} label={resolvedExecuteSelectedNodeLabel}>
+                    <Play />
+                  </IconButton>
                   {onForceExecuteSelectedNode ? (
                     <IconButton size="icon-sm" variant="secondary" onClick={onForceExecuteSelectedNode} disabled={!canExecuteGeneration || executeSelectedNodeDisabled} label={resolvedForceExecuteSelectedNodeLabel}>
                       <RotateCcw />

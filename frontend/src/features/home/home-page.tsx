@@ -1,7 +1,7 @@
 import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { FolderPlus, ImageOff, SearchX, Trash2, X } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { CountSummary } from '@/components/ui/count-summary'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
@@ -25,6 +25,7 @@ import { SelectionBarAction } from '@/components/common/selection-action-bar'
 import { SearchChipStrip } from '@/features/search/components/search-chip-strip'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { pageAction, pageArray, pageChoice, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { COUNT_UNITS } from '@/lib/count-display'
 import { cn } from '@/lib/utils'
@@ -52,7 +53,7 @@ function getHomeImageSelectionId(image: ImageRecord) {
 export function HomePage() {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
-  const { appliedChips, removeAppliedChip, cycleAppliedChipOperator, clearAppliedChips, searchScope, searchInput, setSearchInput } = useHomeSearch()
+  const { appliedChips, removeAppliedChip, cycleAppliedChipOperator, clearAppliedChips, searchScope, searchInput, setSearchInput, addScopedTextChip } = useHomeSearch()
   const {
     columnCount: homeColumnCount,
     setColumnCount: setHomeColumnCount,
@@ -116,6 +117,8 @@ export function HomePage() {
   })
 
   const chatCanReadImages = useChatPageDataPermissions().canReadImages
+  const navigate = useNavigate()
+  const chatOpenableHashes = chatCanReadImages ? visibleImages.slice(0, 100).map((image) => image.composite_hash ?? '').filter(Boolean) : []
   useChatPageRegistration(canViewHome && !isAnonymousSession ? {
     kind: 'library', title: t({ ko: '이미지 라이브러리', en: 'Image library' }), resourceId: `library:${viewportClass}`,
     fields: [
@@ -125,6 +128,26 @@ export function HomePage() {
       { id: 'columns', label: t({ ko: '한 줄의 이미지 수', en: 'Images per row' }), type: 'number', value: homeColumnCount, min: minHomeColumnCount, max: maxHomeColumnCount, integer: true },
     ],
     data: { filters: JSON.parse(JSON.stringify(appliedChips)), selected: { imageIds: selectedIds }, images: chatCanReadImages ? visibleImages.slice(0, 100).map((image) => ({ hash: image.composite_hash ?? '', width: image.width ?? 0, height: image.height ?? 0 })) : [] },
+    actions: [
+      pageAction('library.search', t({ ko: '검색 실행', en: 'Run a search' }), t({ ko: '검색어를 넣고 바로 검색해. 결과 화면이 돌아와.', en: 'Search right away; the results come back.' }), pageObject({ query: pageText(500) }, ['query'])),
+      ...(chatOpenableHashes.length ? [pageAction('library.select', t({ ko: '이미지 선택', en: 'Select images' }), t({ ko: '목록(data.images)의 이미지를 선택해. 빈 목록이면 선택을 풀어. 선택한 이미지로 하단 작업줄(그룹 담기·다운로드)을 쓸 수 있어.', en: 'Select listed images (data.images); an empty list clears the selection.' }), pageObject({ hashes: pageArray(pageChoice(chatOpenableHashes), 100) }, ['hashes']))] : []),
+      ...(chatOpenableHashes.length ? [pageAction('library.open', t({ ko: '이미지 열기', en: 'Open image' }), t({ ko: '목록(data.images)의 이미지 상세를 열어.', en: 'Open a listed image (data.images).' }), pageObject({ hash: pageChoice(chatOpenableHashes) }, ['hash']))] : []),
+    ],
+    applyAction: (id, args, assertCurrent) => {
+      assertCurrent()
+      // Applied straight away with the search drawer closed, so the chat panel stays where it is.
+      if (id === 'library.search') {
+        if (!addScopedTextChip(searchScope === 'rating' || searchScope === 'tool' ? 'positive' : searchScope, String(args.query), { apply: true })) throw new Error('검색어가 비었어.')
+        return
+      }
+      if (id === 'library.open') { void navigate(`/images/${encodeURIComponent(String(args.hash))}`); return }
+      if (id === 'library.select' && Array.isArray(args.hashes)) {
+        const wanted = new Set(args.hashes.map(String))
+        setSelectedIds(visibleImages.filter((image) => wanted.has(image.composite_hash ?? '')).map(getHomeImageSelectionId))
+        return
+      }
+      throw new Error('라이브러리에 없는 작업이야.')
+    },
     apply: (patch) => {
       if (patch.searchInput !== undefined) setSearchInput(String(patch.searchInput))
       if (patch.sortOrder !== undefined) setSortOrder(patch.sortOrder === 'oldest' ? 'oldest' : 'newest')

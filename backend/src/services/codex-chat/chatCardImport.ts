@@ -88,7 +88,7 @@ function lorebookReport(raw: unknown[], entries: ChatLoreEntry[], report: ChatCa
 }
 
 /** A card is data only. Its lorebook becomes a shared lorebook; no profile, file, connection or tool is installed. */
-export async function importChatCard(buffer: Buffer, providerName: string): Promise<ChatProfileInput & { importReport: ChatCardImportReport }> {
+export async function importChatCard(buffer: Buffer, modelSlotId: number | null): Promise<ChatProfileInput & { importReport: ChatCardImportReport }> {
   if (buffer.length > CHAT_CARD_MAX_BYTES) throw new ChatProfileError('카드는 8MB까지 가져올 수 있어.')
   const parsed = readJsonFile(buffer, '캐릭터 카드 PNG 또는 JSON을 읽지 못했어.')
   let avatar: string | null = null
@@ -147,7 +147,7 @@ export async function importChatCard(buffer: Buffer, providerName: string): Prom
   return {
     importReport: report,
     authorNote: authorNote || undefined,
-    name, avatar, referenceHash: original?.compositeHash ?? null, avatarHash: original?.compositeHash ?? null, engine: 'llm', providerName, mcpEnabled: false,
+    name, avatar, referenceHash: original?.compositeHash ?? null, avatarHash: original?.compositeHash ?? null, engine: 'llm', modelSlotId, mcpEnabled: false,
     tagline: text(data.tagline, 200) || text(data.creator_notes, 200) || tags.slice(0, 200),
     systemPrompt: localized(systemPrompt),
     promptSections: sections.map((section) => ({ ...section, content: localized(section.content) })),

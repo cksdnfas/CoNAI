@@ -12,7 +12,7 @@ import { GroupPathService } from '../groupPathService'
 import { attachMainImagesDatabase } from '../../database/userSettingsBootstrap'
 import { EmoticonService, normalizeKeyword } from '../emoticonService'
 import { ChatProfileStore, type ChatProfileInput } from './chatProfiles'
-import { ChatGenerationPresetStore, resolvePresetWorkflow, type ChatGenerationPreset } from './chatGenerationPresets'
+import { ChatGenerationPresetStore, comfyAssetFields, resolvePresetWorkflow, type ChatGenerationPreset } from './chatGenerationPresets'
 import { buildChatGenerationPresetJob, CHAT_NAI_PAYLOAD_MAX_BYTES } from './chatGenerationPayload'
 import { chatCharacterGroupPath, normalizeAvatarCrop, normalizeProfileAssetHash, isProfileAssetHidden } from './chatProfileAssets'
 import { activeMediaFile } from './chatCardAssets'
@@ -20,7 +20,7 @@ import { ChatAssetError, requireChatAssetAdmin, requireChatAssetGeneration } fro
 import { assetTaggerEnabled, tagAsset, reviewAsset, type AssetTagCache } from './chatAssetReview'
 import { assetJudgeSetup, judgeExpression, type ExpressionJudgement } from './chatJudgeAssets'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
-import { normalizeChatStyle } from './chatStyle'
+import { assignExpressionKeywords, styleWithExpressionGroup } from './chatProfileExpressions'
 
 const positiveId = z.number().int().positive().safe()
 const promptText = z.string().trim().min(1).max(8000)
@@ -100,17 +100,26 @@ function recipes(input: ChatAssetBatchInput): SlotRecipe[] {
   return result
 }
 
-function requireComfyFields(preset: ChatGenerationPreset, promptField?: string, needsReference = true) {
-  if (preset.kind !== 'comfyui') return
+/**
+ * The ComfyUI fields an asset batch writes: the slot prompt's text field (given, or found on its own) and the
+ * reference's image field (none: a text-to-image workflow that draws from the appearance text alone). NAI: none.
+ */
+function assetFields(preset: ChatGenerationPreset, promptField?: string) {
+  if (preset.kind !== 'comfyui') return { promptField: undefined, referenceField: null as string | null, drawsReference: true }
   if (!preset.comfyui) throw new ChatAssetError('ComfyUI 프리셋 설정을 찾을 수 없어.')
   const { workflow, problem } = resolvePresetWorkflow(preset.comfyui)
   if (!workflow) throw new ChatAssetError(problem ?? '워크플로를 찾을 수 없어.')
-  const fields = parseMcpMarkedFields(workflow)
-  const field = fields.find((entry) => entry.id === promptField)
-  if (!field || !['text', 'textarea'].includes(field.type) || !preset.comfyui.exposedFieldIds.includes(field.id)) throw new ChatAssetError('슬롯 프롬프트를 넣을 노출 텍스트 필드(promptField)를 골라줘.')
-  if (needsReference && !preset.comfyui.referenceField) throw new ChatAssetError('자산 생성에는 ComfyUI 기준 이미지 필드를 지정해줘.')
-  if (!fields.some((entry) => entry.type === 'number' && /(?:^|[._])(?:noise_seed|seed)$/.test(entry.jsonPath))) throw new ChatAssetError('자산 생성에는 워크플로의 시드 입력을 숫자 필드로 표시해줘.')
+  const marked = parseMcpMarkedFields(workflow)
+  const found = comfyAssetFields(preset.comfyui, marked)
+  const chosen = promptField ?? found.promptField
+  if (!chosen || !marked.some((entry) => entry.id === chosen && ['text', 'textarea'].includes(entry.type))) throw new ChatAssetError('슬롯 프롬프트를 넣을 텍스트 필드(promptField)를 생성 프리셋에서 골라줘.')
+  if (!found.hasSeed) throw new ChatAssetError('자산 생성에는 워크플로의 시드 입력을 숫자 필드로 표시해줘.')
+  if (found.referenceAmbiguous) throw new ChatAssetError('이미지 필드가 여러 개야. 생성 프리셋에서 기준 이미지 필드를 골라줘.')
+  return { promptField: chosen, referenceField: found.referenceField, drawsReference: Boolean(found.referenceField) }
 }
+
+/** A slot that draws from the reference: not the reference itself and not a background (scenery, no character). */
+const followsReference = (slot: { kind: ChatAssetKind }) => slot.kind !== 'reference' && slot.kind !== 'background'
 
 /** Validate a creation proposal without writing a batch or job. */
 export function validateChatAssetBatchProposal(requester: McpRequester, profileId: number, value: unknown) {
@@ -120,8 +129,8 @@ export function validateChatAssetBatchProposal(requester: McpRequester, profileI
   if (!preset) throw new ChatAssetError('생성 프리셋을 찾을 수 없어.')
   const profile = requireChatAssetGeneration(requester, profileId, preset.kind === 'nai' ? 'novelai' : 'comfyui')
   const slots = recipes(input)
-  if (!profile.referenceHash && !slots.some((slot) => slot.kind === 'reference')) throw new ChatAssetError('기준 이미지를 고르거나 기준 이미지 슬롯을 먼저 만들어줘.')
-  requireComfyFields(preset, input.promptField, slots.some((slot) => slot.kind !== 'reference') || Boolean(profile.referenceHash))
+  const fields = assetFields(preset, input.promptField)
+  if (fields.drawsReference && !profile.referenceHash && slots.some(followsReference) && !slots.some((slot) => slot.kind === 'reference')) throw new ChatAssetError('기준 이미지를 고르거나 기준 이미지 슬롯을 먼저 만들어줘.')
   return input
 }
 
@@ -140,9 +149,9 @@ export async function createChatAssetBatch(requester: McpRequester, profileId: n
     if (!preset) throw new ChatAssetError('생성 프리셋을 찾을 수 없어.')
     const profile = requireChatAssetGeneration(requester, profileId, preset.kind === 'nai' ? 'novelai' : 'comfyui')
     const slots = recipes(input)
-    if (!profile.referenceHash && !slots.some((slot) => slot.kind === 'reference')) throw new ChatAssetError('기준 이미지를 고르거나 기준 이미지 슬롯을 먼저 만들어줘.')
-    requireComfyFields(preset, input.promptField, slots.some((slot) => slot.kind !== 'reference') || Boolean(profile.referenceHash))
-    const snapshot: Snapshot = { requestKey: input.idempotencyKey, request, preset, appearance: profile.appearance, referenceHash: profile.referenceHash, slots, promptField: input.promptField, groupPath: `${chatCharacterGroupPath(profile.name)}/후보` }
+    const fields = assetFields(preset, input.promptField)
+    if (fields.drawsReference && !profile.referenceHash && slots.some(followsReference) && !slots.some((slot) => slot.kind === 'reference')) throw new ChatAssetError('기준 이미지를 고르거나 기준 이미지 슬롯을 먼저 만들어줘.')
+    const snapshot: Snapshot = { requestKey: input.idempotencyKey, request, preset, appearance: profile.appearance, referenceHash: profile.referenceHash, slots, promptField: fields.promptField, groupPath: `${chatCharacterGroupPath(profile.name)}/후보` }
     const batchId = Number(db.prepare('INSERT INTO chat_asset_batches(account_id, profile_id, preset_id, snapshot) VALUES (?, ?, ?, ?)').run(requester.accountId, profileId, preset.id, JSON.stringify(snapshot)).lastInsertRowid)
     const insert = db.prepare('INSERT INTO chat_asset_slots(batch_id, slot_key, kind, prompt) VALUES (?, ?, ?, ?)')
     slots.forEach((slot) => insert.run(batchId, slot.slotKey, slot.kind, slot.prompt))
@@ -156,7 +165,7 @@ export async function createChatAssetBatch(requester: McpRequester, profileId: n
 
 function effectiveReference(row: BatchRow, slot: SlotRow) {
   const reference = slotRows(row.id).find((entry) => entry.kind === 'reference')
-  if (slot.kind !== 'reference' && reference && !reference.chosen_hash) throw new ChatAssetError('기준 이미지가 성공한 뒤 먼저 골라줘.', 409)
+  if (followsReference(slot) && reference && !reference.chosen_hash) throw new ChatAssetError('기준 이미지가 성공한 뒤 먼저 골라줘.', 409)
   return slot.kind !== 'reference' && reference ? reference.chosen_hash : snapshotOf(row).referenceHash
 }
 
@@ -171,15 +180,19 @@ async function submitSlot(requester: McpRequester, row: BatchRow, slot: SlotRow,
   const preset = useCurrentPreset ? ChatGenerationPresetStore.find(row.preset_id) : snapshot.preset
   if (!preset) throw new ChatAssetError('현재 생성 프리셋을 찾을 수 없어.')
   const profile = requireChatAssetGeneration(requester, row.profile_id, preset.kind === 'nai' ? 'novelai' : 'comfyui')
-  const referenceHash = effectiveReference(row, slot)
+  const fields = assetFields(preset, snapshot.promptField)
+  // Only character slots draw from the reference: a new reference and a background start from the text alone.
+  const drawsReference = fields.drawsReference && followsReference(slot)
+  const referenceHash = drawsReference ? effectiveReference(row, slot) : null
   const recipe = snapshot.slots.find((entry) => entry.slotKey === slot.slot_key)!
-  requireComfyFields(preset, snapshot.promptField, Boolean(referenceHash) || slot.kind !== 'reference')
+  if (drawsReference && !referenceHash) throw new ChatAssetError('기준 이미지를 먼저 골라줘.', 409)
   const prompt = [snapshot.appearance, recipe.prompt].map((part) => part.trim()).filter(Boolean).join(', ')
   const args: Record<string, unknown> = { ...recipe.inputs, prompt, size: recipe.size }
-  if (preset.comfyui && snapshot.promptField) {
-    args[snapshot.promptField] = [String(preset.comfyui.fixedInputs[snapshot.promptField] ?? ''), prompt].filter(Boolean).join(', ')
+  const input = await buildChatGenerationPresetJob(preset, args, { ...profile, referenceHash }, { forceReference: true, omitReference: !referenceHash })
+  // The slot prompt follows the field's fixed text, whether the field is exposed to the model or fixed.
+  if (preset.comfyui && fields.promptField && 'inputs' in input && input.inputs) {
+    input.inputs[fields.promptField] = [String(preset.comfyui.fixedInputs[fields.promptField] ?? ''), prompt].filter(Boolean).join(', ')
   }
-  const input = await buildChatGenerationPresetJob(preset, args, { ...profile, referenceHash }, { forceReference: true, omitReference: slot.kind === 'reference' && !referenceHash })
   // NAI already randomizes an omitted seed. Every exposed or fixed ComfyUI seed is replaced per attempt.
   if (preset.comfyui && 'inputs' in input && input.inputs) {
     const { workflow } = resolvePresetWorkflow(preset.comfyui)
@@ -192,7 +205,7 @@ async function submitSlot(requester: McpRequester, row: BatchRow, slot: SlotRow,
     authorize(requester, row.id)
     const live = slotRow(row.id, slot.slot_key)
     const liveAttempts = attemptsOf(live)
-    if (JSON.stringify(liveAttempts.map((entry) => entry.jobId)) !== JSON.stringify(existing.map((entry) => entry.jobId)) || effectiveReference(row, live) !== referenceHash) throw new ChatAssetError('슬롯이 다른 요청에서 바뀌었어. 다시 읽고 시도해줘.', 409)
+    if (JSON.stringify(liveAttempts.map((entry) => entry.jobId)) !== JSON.stringify(existing.map((entry) => entry.jobId)) || (drawsReference ? effectiveReference(row, live) : null) !== referenceHash) throw new ChatAssetError('슬롯이 다른 요청에서 바뀌었어. 다시 읽고 시도해줘.', 409)
     const saved: StoredAttempt = { jobId, createdAt: new Date().toISOString(), useCurrentPreset, referenceHash }
     getUserSettingsDb().prepare('UPDATE chat_asset_slots SET attempts = ? WHERE batch_id = ? AND slot_key = ?').run(JSON.stringify([...liveAttempts, saved]), row.id, slot.slot_key)
   }, preset.kind === 'nai' ? CHAT_NAI_PAYLOAD_MAX_BYTES : undefined)
@@ -218,6 +231,12 @@ function candidatesOf(jobId: number): ChatAssetCandidate[] {
 }
 
 /** Queue rows are the only progress authority; attempts retain job identities and tag caches only. */
+/** The newest batch made for a profile, for a chat that only knows the profile. */
+export function latestChatAssetBatchId(profileId: number): number | null {
+  const row = getUserSettingsDb().prepare('SELECT id FROM chat_asset_batches WHERE profile_id = ? ORDER BY id DESC LIMIT 1').get(profileId) as { id: number } | undefined
+  return row?.id ?? null
+}
+
 export function getChatAssetBatch(requester: McpRequester, id: number, profileId?: number): ChatAssetBatch {
   const row = authorize(requester, id, profileId)
   const snapshot = snapshotOf(row)
@@ -352,13 +371,14 @@ async function judgeExpressionCandidates(id: number, tags: Record<string, AssetT
 }
 
 /** Profile and group writes share the user.db connection and its attached image database transaction. */
-export function applyChatAssetBatch(requester: McpRequester, id: number, value: ChatAssetApplyInput = {}, expected?: Record<string, string>): ChatAssetApplyResult {
+export function applyChatAssetBatch(requester: McpRequester, id: number, value: ChatAssetApplyInput = {}, expected?: Record<string, string>, onlySlot?: string): ChatAssetApplyResult {
   const row = authorize(requester, id)
   const parsed = z.object({ avatarCrop: z.unknown().optional() }).strict().safeParse(value)
   if (!parsed.success) throw new ChatAssetError('자산 적용 입력을 확인해줘.')
   requireRequesterPermission(requester, 'images.edit')
   const crop = normalizeAvatarCrop(value.avatarCrop)
-  const selected = slotRows(id).filter((slot) => slot.chosen_hash)
+  const inScope = (slot: SlotRow) => Boolean(slot.chosen_hash) && (onlySlot === undefined || slot.slot_key === onlySlot)
+  const selected = slotRows(id).filter(inScope)
   if (!selected.length) throw new ChatAssetError('적용할 후보를 먼저 골라줘.')
   const chosen = Object.fromEntries(selected.map((slot) => [slot.slot_key, slot.chosen_hash!]))
   if (expected && (Object.keys(expected).length !== selected.length || selected.some((slot) => expected[slot.slot_key] !== slot.chosen_hash))) throw new ChatAssetError('고른 후보가 제안 뒤 바뀌었어. 새 적용 제안을 만들어줘.', 409)
@@ -371,7 +391,7 @@ export function applyChatAssetBatch(requester: McpRequester, id: number, value: 
   attachMainImagesDatabase(database)
   try {
     database.transaction(() => {
-      const liveChosen = Object.fromEntries(slotRows(id).filter((slot) => slot.chosen_hash).map((slot) => [slot.slot_key, slot.chosen_hash]))
+      const liveChosen = Object.fromEntries(slotRows(id).filter(inScope).map((slot) => [slot.slot_key, slot.chosen_hash]))
       if (JSON.stringify(liveChosen) !== JSON.stringify(chosen)) throw new ChatAssetError('고른 후보가 다른 요청에서 바뀌었어. 다시 읽어줘.', 409)
       const profile = ChatProfileStore.find(row.profile_id)!
       const path = chatCharacterGroupPath(profile.name)
@@ -394,14 +414,9 @@ export function applyChatAssetBatch(requester: McpRequester, id: number, value: 
         database.prepare('UPDATE groups SET emoticon_enabled = 1 WHERE id = ?').run(group.groupId)
         const byHash = new Map<string, string[]>()
         expressions.forEach((slot) => byHash.set(slot.chosen_hash!, [...(byHash.get(slot.chosen_hash!) ?? []), slot.slot_key]))
-        const entries = new Map(EmoticonService.listEntries(group.groupId, database).map((entry) => [entry.compositeHash, entry]))
-        const items = [...byHash].map(([compositeHash, keywords]) => ({ compositeHash, keywords: [...new Set([...(entries.get(compositeHash)?.explicit ? entries.get(compositeHash)!.keywords : []), ...keywords])] }))
-        if (items.some((item) => item.keywords.length > 12)) throw new ChatAssetError('한 이미지에 표정 키워드를 12개 넘게 넣을 수 없어.', 409)
-        const result = EmoticonService.addImages(group.groupId, items, database)
-        if (result.conflicts.length || result.missing.length) throw new ChatAssetError('표정 그룹의 키워드가 겹치거나 이미지가 사라졌어.', 409, { conflicts: result.conflicts, missing: result.missing })
-        const groupIds = [group.groupId, ...profile.style.emoticonGroupIds.filter((groupId) => groupId !== group.groupId)]
-        const style = { ...profile.style, emoticonGroupIds: groupIds }
-        if (normalizeChatStyle(style).emoticonGroupIds.length !== groupIds.length) throw new ChatAssetError('이모티콘 그룹 연결이 상한에 닿았어. 먼저 연결 하나를 풀어줘.', 409)
+        // A newer pick replaces the image an emotion had before.
+        assignExpressionKeywords(group.groupId, [...byHash].map(([compositeHash, keywords]) => ({ compositeHash, keywords })), database)
+        const style = styleWithExpressionGroup(profile, group.groupId)
         patch.style = style
         applied.expressionGroupId = group.groupId
         applied.expressionSlots = expressions.map((slot) => slot.slot_key)
@@ -417,4 +432,10 @@ export function applyChatAssetBatch(requester: McpRequester, id: number, value: 
       applied: { profileFields: [], expressionSlots: [], expressionGroupId: null, backgroundGroupId: null },
     })
   }
+}
+
+/** Choose one slot's candidate and apply only that slot (the profile editor's expression and background slots). */
+export async function applyChatAssetSlot(requester: McpRequester, id: number, key: string, hash: unknown) {
+  await chooseChatAssetSlot(requester, id, key, hash)
+  return serialized(id, async () => applyChatAssetBatch(requester, id, {}, undefined, key))
 }

@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react'
 import type { ChatPageField, ChatPageValue } from '@conai/shared'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { useI18n } from '@/i18n'
 import type { SpriteExtractResult, SpriteVideoInfo } from '@/lib/api-sprite'
 import { MAX_SPRITE_FRAMES, normalizeHex, toExtractOptions, withDespill, type ExtractForm, type OutputForm } from './sprite-options'
@@ -9,8 +10,11 @@ import { MAX_SPRITE_FRAMES, normalizeHex, toExtractOptions, withDespill, type Ex
  * The sprite tab shares its video, the extraction form and the last build with a connected chat. The bot can propose
  * form changes, and — because the page adds the sprite tools — run the extraction itself with these values.
  */
-export function useSpriteChatPage({ videoHash, info, form, setForm, output, build }: {
+export function useSpriteChatPage({ videoHash, videos, selectVideo, info, form, setForm, output, build }: {
   videoHash: string | null
+  /** The videos in the extract list; the chat picks which one the form shows. */
+  videos: string[]
+  selectVideo: (hash: string) => void
   info: SpriteVideoInfo | null
   form: ExtractForm
   setForm: Dispatch<SetStateAction<ExtractForm>>
@@ -47,11 +51,18 @@ export function useSpriteChatPage({ videoHash, info, form, setForm, output, buil
     fields,
     data: {
       videoHash: videoHash ?? '',
+      videos,
       video: info ? { name: info.name, width: info.width, height: info.height, fps: info.fps, frameCount: info.frameCount, duration: info.duration } : null,
       extractOptions: JSON.parse(JSON.stringify(toExtractOptions(form, info, output))),
       lastBuild: build ? { buildId: build.buildId, frameCount: build.frameCount, frameWidth: build.frameWidth, frameHeight: build.frameHeight, saved: build.saved?.compositeHash ?? '' } : null,
     },
+    actions: videos.length > 1 ? [pageAction('sprite.select', t({ ko: '영상 고르기', en: 'Pick video' }), t({ ko: '추출 목록(data.videos)에서 볼 영상을 골라.', en: 'Pick which listed video (data.videos) the form shows.' }), pageObject({ hash: pageChoice(videos) }, ['hash']))] : [],
     apply: (patch: Record<string, ChatPageValue>) => setForm((current) => applySpritePatch(current, patch)),
+    applyAction: (id, args, assertCurrent) => {
+      assertCurrent()
+      if (id !== 'sprite.select' || !videos.includes(String(args.hash))) throw new Error('추출 목록에 없는 영상이야.')
+      selectVideo(String(args.hash))
+    },
   })
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type P
 import { Film, ImageIcon, Music2, RefreshCw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Tip } from '@/components/ui/tooltip'
 import { buildWorkflowInputAssetUrl, type WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
 import { cn } from '@/lib/utils'
 import {
@@ -278,18 +279,15 @@ export function MiniMaxH3DirectorMediaCard({
         hasIssue && 'ring-2 ring-destructive/60',
       )}
     >
-      <div className="relative flex min-h-28 max-h-64 w-full items-center justify-center overflow-hidden bg-surface-lowest p-1">
+      <div className="relative flex min-h-20 max-h-64 w-full items-center justify-center overflow-hidden bg-surface-lowest p-1">
         <MiniMaxDirectorMediaPreview item={item} asset={asset} onSourceDimensionsChange={handleSourceDimensionsChange} />
-        <Badge className="absolute left-2 top-2 max-w-[calc(100%-4rem)] truncate bg-background/88">{label}</Badge>
+        <Tip content={aspectRatio}>
+          <Badge data-minimax-aspect-ratio={aspectRatio ?? undefined} className="absolute left-2 top-2 max-w-[calc(100%-4rem)] truncate bg-background/88">{label}</Badge>
+        </Tip>
       </div>
 
-      {aspectRatio || children ? (
+      {children ? (
         <div data-minimax-interactive="true" className="space-y-2 p-3" onClick={(event) => event.stopPropagation()}>
-          {aspectRatio ? (
-            <Badge data-minimax-aspect-ratio variant="outline" className="normal-case tracking-normal tabular-nums">
-              {aspectRatio}
-            </Badge>
-          ) : null}
           {children}
         </div>
       ) : null}

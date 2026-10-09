@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { Text } from '@/components/ui/text'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { NodeArtifactPreviewBody } from '../module-graph-node-artifact-preview'
 import type { ModuleGraphNode } from '../../module-graph-shared'
@@ -56,29 +57,30 @@ export function NodeArtifactOutputs({
 
             return (
               <div key={group.portKey} className="border-b border-outline-subtle py-0.5 last:border-b-0">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="xs"
-                  aria-expanded={isExpanded}
-                  className="nodrag nowheel min-h-[28px] w-full justify-between px-1 text-left"
-                  onMouseDown={stopNodeActionEvent}
-                  onClick={(event) => {
-                    stopNodeActionEvent(event)
-                    setExpandedOutputGroupKeys((current) => (
-                      current.includes(group.portKey)
-                        ? current.filter((key) => key !== group.portKey)
-                        : [...current, group.portKey]
-                    ))
-                  }}
-                  title={`${group.portLabel} output`}
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    {isExpanded ? <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />}
-                    <span className="truncate text-2xs font-medium text-foreground">{group.portLabel}</span>
-                  </span>
-                  <span className="shrink-0 text-2xs text-muted-foreground">{group.artifactCount}</span>
-                </Button>
+                <Tip content={isExpanded ? t({ ko: '{label} 출력 접기', en: 'Collapse {label} output' }, { label: group.portLabel }) : t({ ko: '{label} 출력 펼치기', en: 'Expand {label} output' }, { label: group.portLabel })}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    aria-expanded={isExpanded}
+                    className="nodrag nowheel min-h-[28px] w-full justify-between px-1 text-left"
+                    onMouseDown={stopNodeActionEvent}
+                    onClick={(event) => {
+                      stopNodeActionEvent(event)
+                      setExpandedOutputGroupKeys((current) => (
+                        current.includes(group.portKey)
+                          ? current.filter((key) => key !== group.portKey)
+                          : [...current, group.portKey]
+                      ))
+                    }}
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      {isExpanded ? <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />}
+                      <span className="truncate text-2xs font-medium text-foreground">{group.portLabel}</span>
+                    </span>
+                    <span className="shrink-0 text-2xs text-muted-foreground">{group.artifactCount}</span>
+                  </Button>
+                </Tip>
 
                 {isExpanded ? (
                   <div className="pb-1 pl-5 pr-1">

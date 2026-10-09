@@ -21,6 +21,7 @@ import { SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SendToAudioDialog, useCanSendToAudio } from '@/features/audio/send-to-audio-dialog'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
@@ -256,6 +257,17 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
     ],
     data: { files: entries.slice(0, 512).map((entry) => ({ id: entry.id, name: entry.name, kind: entry.kind, mimeType: entry.mimeType, bytes: entry.size })), selected: selection.map((entry) => ({ id: entry.id, name: entry.name })), total: query.data?.total ?? 0, offset },
     apply: (patch) => { if (patch.viewMode !== undefined) changeViewMode(patch.viewMode as FileViewMode); if (patch.name !== undefined) setNameDialog((old) => old ? { ...old, name: String(patch.name) } : old); if (patch.moveTarget !== undefined) setMoveTarget(String(patch.moveTarget)) },
+    actions: [
+      pageAction('files.open', t({ ko: '폴더 열기', en: 'Open folder' }), t({ ko: '목록(data.files)의 폴더나 최상위(root)를 열어.', en: 'Open a listed folder or the top level (root).' }), pageObject({ id: pageChoice(['root', ...entries.filter((entry) => entry.kind === 'folder').slice(0, 200).map((entry) => entry.id)]) }, ['id'])),
+      ...(entries.some((entry) => entry.kind !== 'folder') ? [pageAction('files.preview', t({ ko: '파일 미리보기', en: 'Preview file' }), t({ ko: '목록의 파일 미리보기를 열어.', en: 'Open a listed file preview.' }), pageObject({ id: pageChoice(entries.filter((entry) => entry.kind !== 'folder').slice(0, 300).map((entry) => entry.id)) }, ['id']))] : []),
+    ],
+    applyAction: (id, args, assertCurrent) => {
+      assertCurrent()
+      if (id === 'files.open') { navigate(args.id === 'root' ? null : String(args.id)); return }
+      const entry = entries.find((item) => item.id === String(args.id))
+      if (id !== 'files.preview' || !entry) throw new Error('보관함에 없는 파일이야.')
+      setPreview(entry)
+    },
   } : null)
 
   const navigate = (id: string | null) => {
@@ -326,10 +338,9 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
         </IconButton>
       ) : null}
       {canUpload && !browsingAll ? (
-        <Button disabled={busy} onClick={() => uploadInput.current?.click()}>
+        <IconButton variant="ghost" label={t({ ko: '파일 업로드', en: 'Upload files' })} disabled={busy} onClick={() => uploadInput.current?.click()}>
           <Upload />
-          {t({ ko: '업로드', en: 'Upload' })}
-        </Button>
+        </IconButton>
       ) : null}
     </>
   )
@@ -532,7 +543,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
           storageKey="files"
           sidebarLabel={t({ ko: '파일 보관함', en: 'Files' })}
           sidebar={sidebar}
-          toolbar={<PageToolbar sticky title={t({ ko: '파일 보관함', en: 'Files' })} start={breadcrumbs} actions={actions} />}
+          toolbar={<PageToolbar sticky start={breadcrumbs} actions={actions} />}
         >
           {body}
         </PageWithSidebar>

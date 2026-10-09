@@ -106,13 +106,15 @@ export function ChatFileLinks({ files = [] }: { files?: StoredFileEntry[] }) {
   return (
     <div className="mt-1 flex flex-wrap justify-end gap-1">
       {files.map((file) => (
-        <Button key={file.id} asChild variant="subtle" size="sm">
-          <a href={storedFileDownloadUrl(file.id)} download title={t({ ko: '{name} 다운로드', en: 'Download {name}' }, { name: file.name })}>
-            <File className="size-3.5 shrink-0" />
-            <span className="max-w-56 truncate">{file.name}</span>
-            <span className="text-2xs text-muted-foreground">{formatFileSize(file.size)}</span>
-          </a>
-        </Button>
+        <Tip key={file.id} content={t({ ko: '{name} 다운로드', en: 'Download {name}' }, { name: file.name })}>
+          <Button asChild variant="subtle" size="sm">
+            <a href={storedFileDownloadUrl(file.id)} download>
+              <File className="size-3.5 shrink-0" />
+              <span className="max-w-56 truncate">{file.name}</span>
+              <span className="text-2xs text-muted-foreground">{formatFileSize(file.size)}</span>
+            </a>
+          </Button>
+        </Tip>
       ))}
     </div>
   )

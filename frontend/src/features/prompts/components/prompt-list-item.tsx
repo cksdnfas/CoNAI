@@ -4,6 +4,7 @@ import type { MouseEvent } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { IconButton } from '@/components/ui/icon-button'
 import { ListRow } from '@/components/ui/list-row'
+import { Tip } from '@/components/ui/tooltip'
 import type { PromptCollectionItem } from '@/types/prompt'
 import { useI18n } from '@/i18n'
 import { formatPromptUsageCount } from '../prompt-page-utils'
@@ -24,7 +25,7 @@ interface PromptListItemProps {
 /** One prompt as a hairline row: checkbox · text · group · row actions (on hover) · usage count. Click copies. */
 export function PromptListItem({ item, groupName, selected = false, active = false, canAssign = true, canDelete = true, onToggleSelect, onAssignGroup, onDelete, onActivate }: PromptListItemProps) {
   const { canUpdatePrompts, canDeletePrompts } = useFeaturePermissions()
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
   const stopAction = (event: MouseEvent<HTMLElement>) => {
     event.preventDefault()
     event.stopPropagation()
@@ -38,7 +39,6 @@ export function PromptListItem({ item, groupName, selected = false, active = fal
       data-prompt-id={item.id}
       data-active={active ? 'true' : 'false'}
       onClick={() => onActivate?.()}
-      title={t('prompts.components.prompt.list.item.click.to.copy')}
       leading={(
         <span className="flex" data-no-select-drag="true" onClick={stopAction}>
           <Checkbox checked={selected} onCheckedChange={(checked) => onToggleSelect?.(checked === true)} aria-label={t({ ko: '{prompt} 선택', en: 'Select {prompt}' }, { prompt: item.prompt })} />
@@ -61,11 +61,16 @@ export function PromptListItem({ item, groupName, selected = false, active = fal
             ) : null}
           </span>
           {active ? <Sparkles className="size-3.5 text-primary" aria-hidden /> : null}
-          <span className="min-w-10 text-right text-xs tabular-nums text-muted-foreground" title={String(item.usage_count)}>{formatPromptUsageCount(item.usage_count)}</span>
+          <Tip content={t({ ko: '사용 {count}회', en: 'Used {count} times' }, { count: formatNumber(item.usage_count) })}>
+            <span className="min-w-10 text-right text-xs tabular-nums text-muted-foreground">{formatPromptUsageCount(item.usage_count)}</span>
+          </Tip>
         </>
       )}
     >
-      <span className="min-w-0 break-all">{item.prompt}</span>
+      {/* Only the text carries the hint, so it never stacks with the row actions' tooltips. */}
+      <Tip content={t('prompts.components.prompt.list.item.click.to.copy')} side="top" align="start" delayDuration={700}>
+        <span className="min-w-0 break-all">{item.prompt}</span>
+      </Tip>
       {groupName ? <span className="shrink-0 text-xs text-muted-foreground">{groupName}</span> : null}
       <span className="prompt-list-selection-frame pointer-events-none absolute inset-0 z-10 rounded-sm" />
     </ListRow>

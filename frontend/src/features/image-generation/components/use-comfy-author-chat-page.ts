@@ -46,14 +46,14 @@ function reviewedWorkflowJson(input: string, previous: string) {
   return JSON.stringify(next, null, 2)
 }
 
-export function useComfyAuthorChatPage(input: { enabled: boolean; draft: ComfyAuthorDraft; setDraft: (draft: ComfyAuthorDraft) => void; graph: ParsedWorkflowGraph | null; saved: GenerationWorkflowDetail | null; save: (revision?: string) => Promise<void> }) {
-  const { enabled, draft, setDraft, graph, saved, save } = input
+export function useComfyAuthorChatPage(input: { enabled: boolean; dirty?: boolean; draft: ComfyAuthorDraft; setDraft: (draft: ComfyAuthorDraft) => void; graph: ParsedWorkflowGraph | null; saved: GenerationWorkflowDetail | null; save: (revision?: string) => Promise<void> }) {
+  const { enabled, dirty, draft, setDraft, graph, saved, save } = input
   const { t } = useI18n()
   const commit = useChatDraftTransaction(draft, setDraft)
   const nodes = (graph?.nodes ?? []).map((node) => ({ id: node.id, classType: node.data.classType, title: node.data.title, inputs: node.data.editableInputs.filter((item) => !isPrivateChatPageKey(item.key)).map((item) => ({ key: item.key, label: item.label, type: item.inferredType, jsonPath: item.jsonPath ?? `${node.id}.inputs.${item.key}`, value: (() => { try { if (item.inferredType === 'node') { const field = buildWorkflowMarkedFieldFromInput(node.id, node.data.title, node.data.classType, item); return comfyNodeChatData(field, item.value) } if (['timeline_data', 'builder_state'].includes(item.key)) return null; return copyChatPageData(item.value) } catch { return null } })() })) }))
   const markedFields = draft.markedFields.map((field) => JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(field).filter(([key]) => key !== 'default_value')))) as ChatPageData)
   useChatPageRegistration(enabled ? {
-    kind: 'comfy_author', title: t({ ko: 'ComfyUI 워크플로 등록·수정', en: 'ComfyUI workflow registration and editing' }), priority: 100, resourceId: String(saved?.id ?? 'new-comfy'), localRevision: JSON.stringify(draft),
+    kind: 'comfy_author', title: t({ ko: 'ComfyUI 워크플로 등록·수정', en: 'ComfyUI workflow registration and editing' }), priority: 100, resourceId: String(saved?.id ?? 'new-comfy'), localRevision: JSON.stringify(draft), dirty,
     fields: [
       { id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: draft.name }, { id: 'description', label: t({ ko: '설명', en: 'Description' }), type: 'text', value: draft.description },
       { id: 'isPublicPage', label: t({ ko: '공유 페이지 사용', en: 'Enable shared page' }), type: 'boolean', value: draft.isPublicPage }, { id: 'publicSlug', label: t({ ko: '공유 주소 이름', en: 'Shared slug' }), type: 'text', value: draft.publicSlug },
@@ -88,7 +88,7 @@ export function useComfyAuthorChatPage(input: { enabled: boolean; draft: ComfyAu
           const node = currentGraph?.nodes.find((node) => node.id === nodeId)
           const nativeInput = node?.data.editableInputs.find((item) => item.key === key)
           const source = parsed[nodeId]
-          if (!source || (!nativeInput && !Object.hasOwn(source.inputs ?? {}, key))) throw new Error('등록할 노드 입력이 없어. JSON 변경을 먼저 적용하고 새 요청으로 등록해줘.')
+          if (!source || (!nativeInput && !Object.hasOwn(source.inputs ?? {}, key))) throw new Error('등록할 노드 입력이 없어. JSON 변경을 먼저 적용한 뒤 바뀐 화면에서 등록해줘.')
           const field = buildWorkflowMarkedFieldFromInput(nodeId, node?.data.title ?? source.class_type ?? nodeId, source.class_type ?? '', nativeInput ?? { key, label: key, value: source.inputs![key], inferredType: typeof source.inputs![key] === 'number' ? 'number' : 'text' })
           if (entry.id !== undefined) { const id = String(entry.id); if (!/^[\w-]+$/.test(id) || isPrivateChatPageKey(id)) throw new Error('표시 필드 ID가 올바르지 않아.'); field.id = id }
           if (entry.config) Object.assign(field, configureField(field, entry.config))

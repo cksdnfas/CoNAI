@@ -5,6 +5,7 @@ import { withLlmRequestSlot } from './llmRequestScheduler'
 import { normalizeOptionalString } from '../utils/valueNormalization'
 import type { ProviderType } from '../types/externalApi'
 import { LlmRequestError, retryLlmRequest } from './llmRequestRetry'
+import { primaryModelOf } from './codex-chat/modelSlots'
 
 type LlmResponseMode = 'text' | 'json'
 type LlmJsonParseStrategy = 'none' | 'strict' | 'markdown_fence' | 'embedded_json' | 'invalid_escape_repaired'
@@ -684,7 +685,7 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
 
   const structuredOutputJson = normalizeStructuredOutputJson(request.structuredOutputJson)
   const responseMode: LlmResponseMode = structuredOutputJson ? 'json' : 'text'
-  const model = normalizeOptionalString(request.model) ?? readLlmConnectionConfig(provider.additional_config).defaultModel
+  const model = normalizeOptionalString(request.model) ?? primaryModelOf(provider.provider_name)
   if (!model) {
     throw new Error(`LLM 모델이 필요해: ${provider.display_name}`)
   }

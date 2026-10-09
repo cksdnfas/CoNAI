@@ -2,6 +2,7 @@ import { useRef, useState, type ReactNode } from 'react'
 import { Search } from 'lucide-react'
 import { AnchoredPopup, anchoredPopupBodyClassName } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { buildDanbooruTagUrl } from '@/lib/danbooru-tag-links'
 import { cn } from '@/lib/utils'
@@ -58,23 +59,24 @@ export function PromptTagActionMenu({
 
   return (
     <>
-      <Button
-        ref={anchorRef}
-        type="button"
-        variant="subtle"
-        size="xs"
-        className={cn(tagChipClassName, className)}
-        onClick={(event) => {
-          event.stopPropagation()
-          setOpen((current) => !current)
-        }}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={t({ ko: '{tag} 태그 작업', en: '{tag} tag actions' }, { tag })}
-        title={t({ ko: '{tag} 태그 작업', en: '{tag} tag actions' }, { tag })}
-      >
-        {children ?? tag}
-      </Button>
+      <Tip content={t({ ko: '{tag} 태그 작업', en: '{tag} tag actions' }, { tag })}>
+        <Button
+          ref={anchorRef}
+          type="button"
+          variant="subtle"
+          size="xs"
+          className={cn(tagChipClassName, className)}
+          onClick={(event) => {
+            event.stopPropagation()
+            setOpen((current) => !current)
+          }}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label={t({ ko: '{tag} 태그 작업', en: '{tag} tag actions' }, { tag })}
+        >
+          {children ?? tag}
+        </Button>
+      </Tip>
 
       <AnchoredPopup open={open} anchorRef={anchorRef} onClose={() => setOpen(false)} align="start" side="bottom" className="w-[min(15rem,calc(100vw-1.5rem))] p-0">
         <div className={cn(anchoredPopupBodyClassName, 'space-y-1 p-1.5')} role="menu" aria-label={t({ ko: '{tag} 태그 작업', en: '{tag} tag actions' }, { tag })}>

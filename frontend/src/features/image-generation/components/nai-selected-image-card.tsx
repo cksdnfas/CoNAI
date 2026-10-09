@@ -1,3 +1,4 @@
+import { Tip } from '@/components/ui/tooltip'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import type { SelectedImageDraft } from '../image-generation-shared'
 
@@ -6,19 +7,20 @@ interface NaiSelectedImageCardProps {
   alt: string
 }
 
-/** Render a compact selected-image preview for NAI image inputs and assets. */
+/** Render a compact selected-image preview for NAI image inputs and assets; the file name shows in its tooltip. */
 export function NaiSelectedImageCard({ image, alt }: NaiSelectedImageCardProps) {
   return (
-    <div className="space-y-2">
-      {image.fileName ? <div className="truncate text-xs text-muted-foreground">{image.fileName}</div> : null}
-      <InlineMediaPreview
-        src={image.dataUrl}
-        mimeType={image.mimeType}
-        fileName={image.fileName}
-        alt={alt}
-        frameClassName="p-3"
-        mediaClassName="max-h-56 w-full object-contain"
-      />
-    </div>
+    <Tip content={image.fileName || null}>
+      <div>
+        <InlineMediaPreview
+          src={image.dataUrl}
+          mimeType={image.mimeType}
+          fileName={image.fileName}
+          alt={alt}
+          frameClassName="p-3"
+          mediaClassName="max-h-56 w-full object-contain"
+        />
+      </div>
+    </Tip>
   )
 }

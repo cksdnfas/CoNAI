@@ -9,7 +9,6 @@ import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
-import { StatTile } from '@/components/ui/stat-tile'
 import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -284,22 +283,29 @@ function WorkflowReservationsPanelContent() {
         ) : null}
 
         {!reservationsQuery.isError && reservationsQuery.isPending ? <LoadingState variant="inline" label={t({ ko: '예약작업 불러오는 중…', en: 'Loading reservation jobs…' })} /> : null}
-
-        {!reservationsQuery.isPending && !reservationsQuery.isError && reservationContent ? (
-          <div className="grid grid-cols-3 gap-3">
-            <StatTile label={t({ ko: '활성 일정', en: 'Active schedules' })} value={activeScheduleCount} valueClassName="text-lg" />
-            <StatTile label={t({ ko: '실행 중', en: 'Running' })} value={runningExecutionCount} valueClassName="text-lg" />
-            <StatTile label={t({ ko: '대기 중', en: 'Queued' })} value={queuedExecutionCount} valueClassName="text-lg" />
-          </div>
-        ) : null}
       </Section>
 
+      {/* Active/running/queued counts ride on the tab labels instead of a separate stat row. */}
       <SegmentedTabBar
+        size="xs"
         value={activeView}
         onChange={(value) => setActiveView(value as ReservationView)}
         items={[
-          { value: 'schedules', label: t({ ko: '일정 {count}', en: 'Schedules {count}' }, { count: formatNumber(schedules.length) }) },
-          { value: 'executions', label: t({ ko: '실행 현황 {count}', en: 'Run status {count}' }, { count: formatNumber(reservationExecutions.length) }) },
+          {
+            value: 'schedules',
+            label: [
+              t({ ko: '일정 {count}', en: 'Schedules {count}' }, { count: formatNumber(schedules.length) }),
+              activeScheduleCount > 0 ? t({ ko: '활성 {count}', en: 'Active {count}' }, { count: formatNumber(activeScheduleCount) }) : null,
+            ].filter(Boolean).join(' · '),
+          },
+          {
+            value: 'executions',
+            label: [
+              t({ ko: '실행 현황 {count}', en: 'Run status {count}' }, { count: formatNumber(reservationExecutions.length) }),
+              runningExecutionCount > 0 ? t({ ko: '실행 중 {count}', en: 'Running {count}' }, { count: formatNumber(runningExecutionCount) }) : null,
+              queuedExecutionCount > 0 ? t({ ko: '대기 {count}', en: 'Queued {count}' }, { count: formatNumber(queuedExecutionCount) }) : null,
+            ].filter(Boolean).join(' · '),
+          },
         ]}
       />
 

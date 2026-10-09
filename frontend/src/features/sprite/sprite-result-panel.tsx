@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select } from '@/components/ui/select'
+import { Tip } from '@/components/ui/tooltip'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { useI18n } from '@/i18n'
 import { triggerBrowserDownload } from '@/lib/api-client'
@@ -56,10 +57,9 @@ export function SpriteResultPanel({ build, output, onOutputChange, crop, onCropC
             setEditingCrop(!editingCrop)
           }}><Crop /></IconButton>
           <DownloadPopover buildId={build.buildId} output={output} onOutputChange={onOutputChange} render={render} crop={crop} disabled={tooLarge} />
-          <Button size="sm" variant="secondary" disabled={!canSave || saving || tooLarge} onClick={onSave}>
+          <IconButton variant="ghost" size="icon-sm" disabled={!canSave || saving || tooLarge} onClick={onSave} label={t({ ko: '라이브러리에 저장', en: 'Save to library' })}>
             {saving ? <Loader2 className="animate-spin" /> : <Save />}
-            {t({ ko: '라이브러리에 저장', en: 'Save to library' })}
-          </Button>
+          </IconButton>
         </div>
       </div>
 
@@ -67,13 +67,19 @@ export function SpriteResultPanel({ build, output, onOutputChange, crop, onCropC
         ? <FramePlayer build={build} crop={crop} editingCrop={editingCrop} onCropChange={onCropChange} />
         : <SheetView buildId={build.buildId} render={render} />}
 
-      <div className="font-mono text-xs text-muted-foreground">
-        {t({ ko: '{count}프레임', en: '{count} frames' }, { count: build.frameCount })}
-        {build.removedFrameCount ? t({ ko: ' (중복 {count} 제외)', en: ' ({count} duplicates removed)' }, { count: build.removedFrameCount }) : ''}
-        {` · ${t({ ko: '셀', en: 'cell' })} ${frameWidth}×${frameHeight}`}
-        {layout ? ` · ${t({ ko: '시트', en: 'sheet' })} ${layout.columns}×${layout.rows} = ${layout.width}×${layout.height}` : ''}
-        {` · ${output.format.toUpperCase()}`}
-      </div>
+      <Tip
+        className="whitespace-pre-line"
+        content={[
+          build.removedFrameCount ? t({ ko: '중복 {count} 제외', en: '{count} duplicates removed' }, { count: build.removedFrameCount }) : null,
+          `${t({ ko: '셀', en: 'cell' })} ${frameWidth}×${frameHeight}`,
+          layout ? `${t({ ko: '시트', en: 'sheet' })} ${layout.columns}×${layout.rows} = ${layout.width}×${layout.height}` : null,
+          output.format.toUpperCase(),
+        ].filter(Boolean).join('\n')}
+      >
+        <span className="self-start font-mono text-xs text-muted-foreground" tabIndex={0}>
+          {t({ ko: '{count}프레임', en: '{count} frames' }, { count: build.frameCount })}
+        </span>
+      </Tip>
       {tooLarge ? <div role="alert" className="flex items-center gap-1.5 text-xs text-destructive"><AlertTriangle className="size-3.5" />{t({ ko: '시트가 {max}px을 넘어. 열이나 간격을 줄여.', en: 'The sheet exceeds {max}px. Reduce columns or spacing.' }, { max: MAX_SHEET_DIMENSION })}</div> : null}
       {stale ? <div className="flex items-center gap-1.5 text-xs text-warning"><AlertTriangle className="size-3.5" />{t({ ko: '설정이 바뀌었어. 다시 생성해야 반영돼.', en: 'Settings changed. Generate again to apply them.' })}</div> : null}
     </div>

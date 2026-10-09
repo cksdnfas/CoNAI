@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { FileText, FlaskConical, LoaderCircle, Plug, Save, Trash2, X } from 'lucide-react'
 import { Chip, ToggleChip } from '@/components/ui/chip'
@@ -17,7 +17,7 @@ import {
   type ExternalApiProviderRecord,
   type ExternalApiProviderType,
 } from '@/lib/api-external-api'
-import type { ModelUsage } from '@/lib/api-codex-chat'
+import { MODEL_SLOTS_QUERY_KEY, listModelSlots, setDefaultModelSlot, syncConnectionModels } from '@/lib/api-codex-chat'
 import type { LlmPresetRecord } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -26,8 +26,7 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Tip } from '@/components/ui/tooltip'
 import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
 import { SettingsSwitchRow } from './settings-switch-row'
-import { ConnectionModelSelect } from './chat-profile-editor-fields'
-import { ConnectionUsage, isConnectionUsed } from './llm-model-slots'
+import { ConnectionModelChecklist, type ConnectionModelsDraft } from './llm-connection-models'
 import {
   LLM_PRESET_SECTIONS,
   LLM_PROVIDER_OPTIONS,
@@ -46,20 +45,20 @@ import {
   type LlmThinkingSwitch,
 } from './llm-connections-tab-utils'
 
+/** A connection (server) row; its models are listed under it. */
 export function LlmConnectionListItem({
   provider,
-  usage,
+  modelCount,
   onOpenOptions,
 }: {
   provider: ExternalApiProviderRecord
-  usage?: ModelUsage['connections'][number]
+  modelCount: number
   onOpenOptions: (provider: ExternalApiProviderRecord) => void
 }) {
   const { t } = useI18n()
   const notSetLabel = t('llmConnectionsTab.notSet')
   const baseUrlSummary = getBaseUrlSummary(provider, notSetLabel)
   const kind = LLM_PROVIDER_OPTIONS.find((option) => option.value === provider.provider_type)
-  const used = isConnectionUsed(usage)
 
   return (
     <ResourceRow
@@ -70,10 +69,9 @@ export function LlmConnectionListItem({
           {kind ? <Tip content={baseUrlSummary === notSetLabel ? null : baseUrlSummary}><span><Chip size="sm" tone="muted">{t(kind.shortLabel)}</Chip></span></Tip> : null}
           {baseUrlSummary === notSetLabel ? <ResourceRowStatus>{notSetLabel}</ResourceRowStatus> : null}
           {provider.is_enabled ? null : <ResourceRowStatus>{t({ ko: '비활성', en: 'Inactive' })}</ResourceRowStatus>}
-          {used ? null : <ConnectionUsage usage={usage} />}
+          {modelCount === 0 ? <ResourceRowStatus>{t({ ko: '모델 없음', en: 'No models' })}</ResourceRowStatus> : null}
         </>
       )}
-      aside={used ? <ConnectionUsage usage={usage} /> : null}
       onOpen={() => onOpenOptions(provider)}
     />
   )
@@ -111,14 +109,15 @@ function LlmConnectionFormFields({
   draft,
   mode,
   apiKeyMasked,
-  models,
   onChange,
+  onEndpointModel,
 }: {
   draft: LlmConnectionDraft
   mode: 'create' | 'edit'
   apiKeyMasked?: string
-  models: string[]
   onChange: (patch: Partial<LlmConnectionDraft>) => void
+  /** A TypeSafe endpoint was picked: its model should be among the connection's models. */
+  onEndpointModel: (model: string) => void
 }) {
   const { t } = useI18n()
 
@@ -143,7 +142,8 @@ function LlmConnectionFormFields({
             const providerType = event.target.value as ExternalApiProviderType
             // A new judge connection starts on TypeSafe's own address and model.
             const typesafe = providerType === 'decision_typesafe' ? TYPESAFE_ENDPOINTS[0] : null
-            onChange({ providerType, ...(typesafe && !draft.baseUrl.trim() ? { baseUrl: typesafe.baseUrl } : {}), ...(typesafe && !draft.defaultModel.trim() ? { defaultModel: typesafe.model } : {}) })
+            onChange({ providerType, ...(typesafe && !draft.baseUrl.trim() ? { baseUrl: typesafe.baseUrl } : {}) })
+            if (typesafe) onEndpointModel(typesafe.model)
           }}
         >
           {LLM_PROVIDER_OPTIONS.map((option) => (
@@ -152,12 +152,15 @@ function LlmConnectionFormFields({
         </Select>
       </Field>
 
-      <Field label={t('llmConnectionsTab.defaultModel')}>
-        <ConnectionModelSelect
-          value={draft.defaultModel}
-          models={models}
-          defaultModel={draft.providerType === 'decision_typesafe' ? 'jev-latest' : draft.providerType === 'llm_ollama' ? t({ ko: '예: qwen2.5:7b', en: 'e.g. qwen2.5:7b' }) : t({ ko: '예: gpt-4.1-mini, local-model', en: 'e.g. gpt-4.1-mini, local-model' })}
-          onChange={(defaultModel) => onChange({ defaultModel })}
+      <Field label={t({ ko: '요청 제한 시간 (초)', en: 'Request time limit (seconds)' })}>
+        <NumberStepperInput
+          variant="settings"
+          allowEmpty
+          step={30}
+          min={5}
+          value={draft.timeoutSeconds}
+          onValueCommit={(value) => onChange({ timeoutSeconds: value })}
+          placeholder={draft.providerType === 'decision_typesafe' ? t({ ko: '기본 20', en: 'Default 20' }) : t({ ko: '기본 600', en: 'Default 600' })}
         />
       </Field>
 
@@ -176,7 +179,10 @@ function LlmConnectionFormFields({
                   key={endpoint.label}
                   size="sm"
                   pressed={draft.baseUrl.trim().replace(/\/+$/, '') === endpoint.baseUrl}
-                  onClick={() => onChange({ baseUrl: endpoint.baseUrl, defaultModel: endpoint.model })}
+                  onClick={() => {
+                    onChange({ baseUrl: endpoint.baseUrl })
+                    onEndpointModel(endpoint.model)
+                  }}
                 >
                   {endpoint.label}
                 </ToggleChip>
@@ -184,18 +190,6 @@ function LlmConnectionFormFields({
             </div>
           ) : null}
         </div>
-      </Field>
-
-      <Field label={t({ ko: '요청 제한 시간 (초)', en: 'Request time limit (seconds)' })}>
-        <NumberStepperInput
-          variant="settings"
-          allowEmpty
-          step={30}
-          min={5}
-          value={draft.timeoutSeconds}
-          onValueCommit={(value) => onChange({ timeoutSeconds: value })}
-          placeholder={draft.providerType === 'decision_typesafe' ? t({ ko: '기본 20', en: 'Default 20' }) : t({ ko: '기본 600', en: 'Default 600' })}
-        />
       </Field>
 
       <Field label={draft.providerType === 'decision_typesafe' ? t({ ko: 'API 키', en: 'API key' }) : t('llmConnectionsTab.apiKeyOptional')}>
@@ -221,7 +215,7 @@ function LlmConnectionFormFields({
         />
       </Field>
 
-      <Field label={t({ ko: '생각 끄는 방법', en: 'Turning thinking off' })}>
+      <Field label={t({ ko: '생각 끄는 방법', en: 'Turning thinking off' })} className="md:col-span-2">
         <Select
           variant="settings"
           value={draft.thinkingSwitch}
@@ -332,11 +326,41 @@ export function LlmConnectionEditorModal({
   })
   const models = modelsQuery.data ?? EMPTY_MODELS
 
-  // A connection without a default model takes the first listed one, as the profile editor does for its fields.
+  // The connection's models: its saved rows when editing; a new connection starts on the first model the server lists.
+  const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled: isOpen })
+  const saved = (slotsQuery.data ?? []).filter((slot) => provider !== null && slot.providerName === provider.provider_name)
+  const [modelDraft, setModelDraft] = useState<ConnectionModelsDraft>({ models: [], defaultModel: '' })
+  const modelsTouched = useRef(false)
+  const modelsLoadedFor = useRef<string | null>(null)
   useEffect(() => {
-    if (!isOpen || models.length === 0) return
-    setDraft((current) => (current.defaultModel ? current : { ...current, defaultModel: models[0] }))
+    if (!isOpen) {
+      modelsLoadedFor.current = null
+      return
+    }
+    const key = provider?.provider_name ?? ''
+    if (modelsLoadedFor.current === key || (provider && !slotsQuery.isSuccess)) return
+    modelsLoadedFor.current = key
+    modelsTouched.current = false
+    setModelDraft({ models: saved.map((slot) => slot.model), defaultModel: saved.find((slot) => slot.isDefault)?.model ?? '' })
+    // Runs once per opened connection, when its rows are known.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, provider, slotsQuery.isSuccess])
+  useEffect(() => {
+    if (!isOpen || models.length === 0 || modelsTouched.current) return
+    setModelDraft((current) => (current.models.length > 0 ? current : { ...current, models: [models[0]] }))
   }, [isOpen, models])
+  const changeModels = (next: ConnectionModelsDraft) => {
+    modelsTouched.current = true
+    setModelDraft(next)
+  }
+  const addEndpointModel = (model: string) => setModelDraft((current) => (current.models.includes(model) ? current : { ...current, models: [...current.models, model] }))
+
+  /** After the connection itself is saved: its models become exactly the checked ones, and a starred one the default. */
+  const saveModels = async (providerName: string) => {
+    const rows = await syncConnectionModels(providerName, modelDraft.models)
+    const starred = rows.find((slot) => slot.model === modelDraft.defaultModel)
+    if (starred && !starred.isDefault) await setDefaultModelSlot(starred.id)
+  }
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -349,6 +373,7 @@ export function LlmConnectionEditorModal({
         additional_config: buildAdditionalConfig(draft),
         is_enabled: draft.isEnabled,
       })
+      await saveModels(draft.providerName)
     },
     onSuccess: async () => {
       showSnackbar({ message: t('llmConnectionsTab.llmConnectionCreated'), tone: 'info' })
@@ -377,6 +402,7 @@ export function LlmConnectionEditorModal({
         additional_config: buildAdditionalConfig(draft, provider.additional_config),
         is_enabled: draft.isEnabled,
       })
+      await saveModels(provider.provider_name)
     },
     onSuccess: async () => {
       showSnackbar({ message: t('llmConnectionsTab.llmConnectionSaved'), tone: 'info' })
@@ -442,13 +468,24 @@ export function LlmConnectionEditorModal({
       widthClassName="max-w-3xl"
     >
       <ModalBody>
-        <LlmConnectionFormFields
-          draft={draft}
-          mode={isEditMode ? 'edit' : 'create'}
-          apiKeyMasked={provider?.api_key_masked}
-          models={models}
-          onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
-        />
+        <div className="space-y-4">
+          <LlmConnectionFormFields
+            draft={draft}
+            mode={isEditMode ? 'edit' : 'create'}
+            apiKeyMasked={provider?.api_key_masked}
+            onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
+            onEndpointModel={addEndpointModel}
+          />
+          <ConnectionModelChecklist
+            value={modelDraft}
+            listed={models}
+            saved={saved}
+            loading={modelsQuery.isFetching}
+            canStar={draft.providerType !== 'decision_typesafe'}
+            onRefresh={() => void modelsQuery.refetch()}
+            onChange={changeModels}
+          />
+        </div>
       </ModalBody>
 
       <ModalFooter>

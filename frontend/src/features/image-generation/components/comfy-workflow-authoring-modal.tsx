@@ -14,6 +14,7 @@ import { TextTabs } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
+import { Tip } from '@/components/ui/tooltip'
 import { Textarea } from '@/components/ui/textarea'
 import { useBlockerConfirm } from '@/components/ui/use-blocker-confirm'
 import { shouldBypassOverlayHistoryBackNavigation, useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
@@ -217,7 +218,11 @@ export function ComfyWorkflowAuthoringModal({
             isWideLayout ? 'max-w-72' : 'max-w-28',
           )}
         />
-        {isDirty ? <span className="size-1.5 shrink-0 rounded-full bg-warning" title={t({ ko: '저장 안 함', en: 'Unsaved' })} /> : null}
+        {isDirty ? (
+          <Tip content={t({ ko: '저장 안 한 변경 있음', en: 'Unsaved changes' })}>
+            <span role="img" aria-label={t({ ko: '저장 안 한 변경 있음', en: 'Unsaved changes' })} className="size-1.5 shrink-0 rounded-full bg-warning" />
+          </Tip>
+        ) : null}
       </div>
       <span className="mx-1 h-4 w-px shrink-0 bg-line" />
       <div className="flex h-full min-w-0 shrink items-end overflow-hidden">

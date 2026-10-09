@@ -46,12 +46,12 @@ export function MetadataRewriteForm({ draft, disabled = false, formatLabel, show
 
         <label className="space-y-2 text-sm md:col-span-2 xl:col-span-3">
           <span className="text-muted-foreground">{t({ ko: '프롬프트', en: 'Prompt' })}</span>
-          <Textarea value={draft.prompt} onChange={(event) => onDraftChange({ prompt: event.target.value })} placeholder={t({ ko: '긍정 프롬프트', en: 'Positive prompt' })} className="min-h-28" disabled={disabled} />
+          <Textarea value={draft.prompt} onChange={(event) => onDraftChange({ prompt: event.target.value })} placeholder="masterpiece, 1girl, …" className="min-h-28" disabled={disabled} />
         </label>
 
         <label className="space-y-2 text-sm md:col-span-2 xl:col-span-3">
           <span className="text-muted-foreground">{t({ ko: '네거티브 프롬프트', en: 'Negative prompt' })}</span>
-          <Textarea value={draft.negativePrompt} onChange={(event) => onDraftChange({ negativePrompt: event.target.value })} placeholder={t({ ko: '네거티브 프롬프트', en: 'Negative prompt' })} className="min-h-24" disabled={disabled} />
+          <Textarea value={draft.negativePrompt} onChange={(event) => onDraftChange({ negativePrompt: event.target.value })} placeholder="lowres, bad hands, …" className="min-h-24" disabled={disabled} />
         </label>
 
         <label className="space-y-2 text-sm md:col-span-2 xl:col-span-3">

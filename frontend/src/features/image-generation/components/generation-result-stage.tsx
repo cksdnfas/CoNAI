@@ -1,12 +1,13 @@
 import { useEffect, type KeyboardEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AudioLines, ChevronLeft, ChevronRight, History, ImageIcon, Maximize2 } from 'lucide-react'
+import { AudioLines, ChevronLeft, ChevronRight, History, ImageIcon, Info, Maximize2 } from 'lucide-react'
 import { useHorizontalDragScroll } from '@/components/common/use-horizontal-drag-scroll'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Progress } from '@/components/ui/progress'
+import { Tip } from '@/components/ui/tooltip'
 import { DownloadSoundButton, HistoryAudioResult, HistorySoundBar, OpenSoundsInAudioTab } from '@/features/audio/history-audio-result'
 import { ImageDeleteAction } from '@/features/images/components/detail/image-delete-action'
 import { ImageGroupAssignAction } from '@/features/images/components/detail/image-group-assign-action'
@@ -62,7 +63,11 @@ function StageJobProgress({ job, jobCount, nowMs, inline = false }: { job: Gener
 
   if (inline) {
     const label = [title, jobCount > 1 ? `+${formatNumber(jobCount - 1)}` : null, detail].filter(Boolean).join(' · ')
-    return <Progress size="sm" value={isRunning ? percent : null} aria-label={label || undefined} title={label || undefined} />
+    return (
+      <Tip content={label || null}>
+        <Progress size="sm" value={isRunning ? percent : null} aria-label={label || undefined} />
+      </Tip>
+    )
   }
 
   return (
@@ -79,9 +84,9 @@ function StageJobProgress({ job, jobCount, nowMs, inline = false }: { job: Gener
   )
 }
 
-/** One compact line of the selected result's size and sampling settings, read from its image metadata. */
-function StageMetaLine({ image }: { image: ImageRecord }) {
-  const { formatNumber } = useI18n()
+/** Info icon whose tooltip lists the selected result's size and sampling settings, read from its image metadata. */
+function StageMetaInfo({ image }: { image: ImageRecord }) {
+  const { t, formatNumber } = useI18n()
   const compositeHash = image.composite_hash
   const detailQuery = useQuery({
     queryKey: getImageDetailQueryKey(compositeHash ?? '', image),
@@ -104,7 +109,18 @@ function StageMetaLine({ image }: { image: ImageRecord }) {
     return null
   }
 
-  return <div className="truncate text-xs tabular-nums text-muted-foreground">{parts.join(' · ')}</div>
+  const summary = parts.join('\n')
+  return (
+    <Tip content={summary} side="left" className="whitespace-pre-line tabular-nums">
+      <span
+        tabIndex={0}
+        aria-label={`${t({ ko: '생성 설정', en: 'Generation settings' })}: ${parts.join(', ')}`}
+        className="inline-flex size-8 shrink-0 cursor-help items-center justify-center rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40"
+      >
+        <Info className="size-4" />
+      </span>
+    </Tip>
+  )
 }
 
 /** Large view of the latest (or picked) generation result with its actions and a filmstrip of recent results. */
@@ -209,6 +225,7 @@ export function GenerationResultStage({
         <Maximize2 />
       </IconButton>
       {allowReuse ? <ImageDeleteAction key={`delete-${selectedId}`} image={selected} onDeleted={() => onDeleted?.()} /> : null}
+      <StageMetaInfo key={`meta-${selectedId}`} image={selected} />
     </div>
   ) : null
 
@@ -270,7 +287,6 @@ export function GenerationResultStage({
           <OpenSoundsInAudioTab sounds={extraSounds} />
         </div>
       ) : null}
-      {selected && !sounds ? <StageMetaLine key={selectedId} image={selected} /> : null}
 
       {items.length > 0 ? (
         <div className="flex shrink-0 items-center gap-2">

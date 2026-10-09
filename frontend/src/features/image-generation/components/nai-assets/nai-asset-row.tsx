@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { SelectedImageDraft } from '../../image-generation-shared'
 
@@ -61,16 +62,18 @@ export function NaiAssetRow({
         {meta ? <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{meta}</div> : null}
       </div>
 
-      <NumberStepperInput
-        aria-label={strengthLabel}
-        title={strengthLabel}
-        min={strengthMin}
-        max={1}
-        step={0.01}
-        value={strength}
-        onValueCommit={onStrengthCommit}
-        className="w-32 min-w-0 shrink-0"
-      />
+      <Tip content={strengthLabel}>
+        <div className="w-32 min-w-0 shrink-0">
+          <NumberStepperInput
+            aria-label={strengthLabel}
+            min={strengthMin}
+            max={1}
+            step={0.01}
+            value={strength}
+            onValueCommit={onStrengthCommit}
+          />
+        </div>
+      </Tip>
 
       <Popover>
         <PopoverTrigger asChild>
@@ -88,12 +91,17 @@ export function NaiAssetRow({
               </Button>
             </PopoverClose>
             {onSave ? (
-              <PopoverClose asChild>
-                <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={onSave} disabled={!canUpdateWorkflows || !canViewImages || saveDisabled} title={saveTitle}>
-                  <Save />
-                  {t({ ko: '라이브러리에 저장', en: 'Save to library' })}
-                </Button>
-              </PopoverClose>
+              // A disabled button swallows hover, so the span carries the "why disabled" tooltip.
+              <Tip content={saveDisabled ? saveTitle : undefined} side="left">
+                <span className="grid" tabIndex={saveDisabled && saveTitle ? 0 : undefined}>
+                  <PopoverClose asChild>
+                    <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={onSave} disabled={!canUpdateWorkflows || !canViewImages || saveDisabled}>
+                      <Save />
+                      {t({ ko: '라이브러리에 저장', en: 'Save to library' })}
+                    </Button>
+                  </PopoverClose>
+                </span>
+              </Tip>
             ) : null}
             <PopoverClose asChild>
               <Button type="button" variant="ghost" size="sm" className="justify-start text-destructive hover:text-destructive" onClick={onRemove}>

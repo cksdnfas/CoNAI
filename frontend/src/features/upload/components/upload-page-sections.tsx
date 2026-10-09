@@ -1,6 +1,6 @@
 import { useMemo, type DragEvent, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Check, ChevronDown, Copy, ExternalLink, File as FileIcon, ImagePlus, Video, X } from 'lucide-react'
+import { Check, ChevronDown, CircleAlert, Clock, Copy, ExternalLink, File as FileIcon, ImagePlus, LoaderCircle, Video, X } from 'lucide-react'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block'
 import { WDTaggerResultBlock } from '@/components/common/wd-tagger-result-block'
@@ -12,6 +12,7 @@ import { ListRow } from '@/components/ui/list-row'
 import { Panel } from '@/components/ui/panel'
 import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Tip } from '@/components/ui/tooltip'
 import { MetadataRewriteForm } from '@/features/metadata/components/metadata-rewrite-form'
 import { useHomeSearch, type TextSearchScope } from '@/features/home/home-search-context'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
@@ -63,23 +64,6 @@ function getTextSearchScopeForExtractedPrompt(scope: ExtractedPromptActionScope)
   return 'positive'
 }
 
-/** Turn a MIME type such as "image/png" into a friendly label like "PNG image". */
-function describeFileType(file: File, t: ReturnType<typeof useI18n>['t']): string {
-  const [kind = '', subtype = ''] = file.type.split('/')
-  const extension = file.name.includes('.') ? file.name.split('.').pop() ?? '' : ''
-  const format = (subtype.replace(/^x-/, '').replace(/\+.*$/, '') || extension).toUpperCase()
-  if (!format) {
-    return '—'
-  }
-  if (kind === 'image') {
-    return t({ ko: '{format} 이미지', en: '{format} image' }, { format })
-  }
-  if (kind === 'video') {
-    return t({ ko: '{format} 동영상', en: '{format} video' }, { format })
-  }
-  return t({ ko: '{format} 파일', en: '{format} file' }, { format })
-}
-
 /** The page's one drop target: a quiet filled area (no dashed box); a primary ring while files hover over it. */
 export function UploadDropZone({
   ariaLabel,
@@ -114,13 +98,14 @@ export function UploadDropZone({
         onDragEnter={dropZone.handleDragEnter}
         onDragOver={dropZone.handleDragOver}
         onDragLeave={dropZone.handleDragLeave}
-        className="flex min-h-48 w-full items-center justify-center overflow-hidden p-3"
+        className="flex min-h-28 w-full items-center justify-center overflow-hidden p-3"
       >
         {children ?? (
-          <span className="flex flex-col items-center gap-2 text-center text-sm text-muted-foreground">
-            <ImagePlus className={cn('size-7', dropZone.isDragActive ? 'text-primary' : 'text-muted-foreground/70')} aria-hidden />
-            {t({ ko: '끌어다 놓거나 눌러서 고르기', en: 'Drop files or click to choose' })}
-          </span>
+          <Tip content={t({ ko: '끌어다 놓거나 눌러서 고르기', en: 'Drop files or click to choose' })}>
+            <span className="inline-flex">
+              <ImagePlus className={cn('size-7', dropZone.isDragActive ? 'text-primary' : 'text-muted-foreground/70')} aria-hidden />
+            </span>
+          </Tip>
         )}
       </button>
     </Panel>
@@ -171,6 +156,23 @@ function useStatusLabel() {
   }
 }
 
+/** Status icon for one queue row; the word lives in its tooltip. */
+function RowStatusIcon({ status, label }: { status: UploadQueueFileState['status']; label: string }) {
+  const icon = status === 'done'
+    ? <Check className="size-4 text-success" />
+    : status === 'failed'
+      ? <CircleAlert className="size-4 text-destructive" />
+      : status === 'uploading' || status === 'processing'
+        ? <LoaderCircle className="size-4 animate-spin text-primary motion-reduce:animate-none" />
+        : <Clock className="size-4 text-muted-foreground" />
+
+  return (
+    <Tip content={label}>
+      <span className="inline-flex w-6 justify-center" role="img" aria-label={label}>{icon}</span>
+    </Tip>
+  )
+}
+
 /** Queue of picked files plus the last run's saved files, as hairline rows with inline progress. */
 export function UploadQueueList({
   uploadFiles,
@@ -178,7 +180,6 @@ export function UploadQueueList({
   uploadResult,
   uploadError,
   uploadProgress,
-  uploadTotalSize,
   isUploading,
   onRemoveUploadFile,
 }: {
@@ -187,7 +188,6 @@ export function UploadQueueList({
   uploadResult: UploadBatchResult | null
   uploadError: string | null
   uploadProgress: UploadFlowProgress | null
-  uploadTotalSize: number
   isUploading: boolean
   onRemoveUploadFile: (index: number) => void
 }) {
@@ -206,22 +206,6 @@ export function UploadQueueList({
     return null
   }
 
-  const summary = uploadProgress && uploadProgress.phase !== 'done'
-    ? t(
-      { ko: '전송 {percent}% · 처리 {processed}/{total}', en: 'Sent {percent}% · processed {processed}/{total}' },
-      {
-        percent: uploadProgress.percent ?? 0,
-        processed: formatNumber(uploadProgress.processedFiles),
-        total: formatNumber(uploadProgress.totalFiles),
-      },
-    )
-    : uploadResult
-      ? t({ ko: '저장 {successful} · 실패 {failed}', en: '{successful} saved · {failed} failed' }, {
-        successful: formatNumber(uploadResult.successful),
-        failed: formatNumber(uploadResult.failed_count),
-      })
-      : t({ ko: '{count}개 · {size}', en: '{count} files · {size}' }, { count: formatNumber(uploadFiles.length), size: formatBytes(uploadTotalSize) })
-
   return (
     <div className="space-y-4">
       {uploadError ? (
@@ -233,8 +217,6 @@ export function UploadQueueList({
 
       {hasRows ? (
         <div>
-          <div className="flex h-8 items-center border-b border-line text-xs text-muted-foreground/75">{summary}</div>
-
           {uploadFiles.slice(0, MAX_VISIBLE_FILES).map((file, index) => {
             const state = states.get(file) ?? { status: 'waiting', percent: 0 }
             return (
@@ -245,15 +227,7 @@ export function UploadQueueList({
                 trailing={(
                   <>
                     <RowProgress percent={state.percent} tone={state.status === 'failed' ? 'destructive' : 'primary'} className="hidden sm:block" />
-                    <span
-                      className={cn(
-                        'w-14 text-right text-xs',
-                        state.status === 'done' && 'text-success',
-                        state.status === 'failed' && 'text-destructive',
-                      )}
-                    >
-                      {getStatusLabel(state)}
-                    </span>
+                    <RowStatusIcon status={state.status} label={getStatusLabel(state)} />
                     <IconButton
                       variant="ghost"
                       size="icon-xs"
@@ -296,7 +270,7 @@ export function UploadQueueList({
                 trailing={(
                   <>
                     <RowProgress percent={100} className="hidden sm:block" />
-                    <span className="w-14 text-right text-xs text-success">{t({ ko: '완료', en: 'Done' })}</span>
+                    <RowStatusIcon status="done" label={t({ ko: '완료', en: 'Done' })} />
                     {detailPath ? (
                       <IconButton asChild variant="ghost" size="icon-xs" label={t({ ko: '상세 열기', en: 'Open details' })}>
                         <Link to={detailPath} state={buildImageSourceState(location)}>
@@ -425,12 +399,6 @@ export function UploadInspectDetails({
       {extractFile ? (
         <div className={cn('grid gap-10', isDesktopPageLayout ? 'grid-cols-2 items-start' : 'grid-cols-1')}>
           <div className="space-y-8">
-            <RowGroup headingAs="h2" heading={t({ ko: '파일', en: 'File' })}>
-              <InfoRow label={t({ ko: '이름', en: 'Name' })} value={extractFile.name} />
-              <InfoRow label={t({ ko: '크기', en: 'Size' })} value={formatBytes(extractFile.size)} />
-              <InfoRow label={t({ ko: '형식', en: 'Type' })} value={describeFileType(extractFile, t)} />
-            </RowGroup>
-
             {extractResult ? (
               <RowGroup headingAs="h2" heading={t({ ko: '생성 정보', en: 'Generation' })}>
                 <InfoRow label={t({ ko: '해상도', en: 'Dimensions' })} value={formatDimensions(extractResult.width, extractResult.height)} />
@@ -470,12 +438,8 @@ export function UploadInspectDetails({
           </div>
 
           <div className="space-y-8">
-            {extractResult ? (
-              extractedPromptCards.length > 0 ? (
-                <ExtractedPromptSections items={extractedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
-              ) : (
-                <p className="text-sm text-muted-foreground">{t({ ko: '표시할 프롬프트가 없어.', en: 'No prompts to show.' })}</p>
-              )
+            {extractResult && extractedPromptCards.length > 0 ? (
+              <ExtractedPromptSections items={extractedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
             ) : null}
 
             {taggerResult ? <WDTaggerResultBlock result={taggerResult} title={t({ ko: '자동', en: 'Auto' })} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null}

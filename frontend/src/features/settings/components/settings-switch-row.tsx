@@ -7,19 +7,20 @@ interface SettingsSwitchRowProps {
   checked: boolean
   onCheckedChange: (checked: boolean) => void
   label: ReactNode
-  description?: ReactNode
+  /** Explanation behind the ⓘ after the label. */
+  info?: ReactNode
   disabled?: boolean
   className?: string
 }
 
 /** An on/off setting as a flat hairline row: label on the left, a switch on the right; the label toggles it too. */
-export function SettingsSwitchRow({ checked, onCheckedChange, label, description, disabled = false, className }: SettingsSwitchRowProps) {
+export function SettingsSwitchRow({ checked, onCheckedChange, label, info, disabled = false, className }: SettingsSwitchRowProps) {
   const id = useId()
 
   return (
     <SettingRow
       label={label}
-      description={description}
+      info={info}
       htmlFor={id}
       className={cn('[&_label]:cursor-pointer', disabled && 'opacity-60 [&_label]:cursor-not-allowed', className)}
     >

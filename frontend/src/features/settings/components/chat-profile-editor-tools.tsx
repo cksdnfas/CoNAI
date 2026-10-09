@@ -13,17 +13,18 @@ import { EditorGroup, SwitchLine, type Draft, type PatchDraft } from './chat-pro
 import { ChatProfileToolLimits } from './chat-profile-tools'
 import { ChatToolPicker, useChatToolGroups } from './chat-tool-picker'
 import { ChatToolPresetEditorModal } from './chat-tool-preset-editor-modal'
-import { ChatProfileJudgeLine } from './chat-profile-judge-line'
 
 /**
  * CoNAI tools (MCP) for the profile: the switch, the profile's own scopes and tools (a tool preset only loads a copy),
- * the linked generation presets, and the folded limits for API LLM profiles.
+ * the linked generation presets, and (advanced) the tool-call limits for API LLM profiles.
  */
-export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
+export function ChatProfileToolsPanel({ open, draft, patch, defaults, advanced }: {
   open: boolean
   draft: Draft
   patch: PatchDraft
   defaults: ChatProfileDefaults | undefined
+  /** Shows the tool-call limits. */
+  advanced: boolean
 }) {
   const { t } = useI18n()
   const presetsQuery = useQuery({ queryKey: CHAT_TOOL_PRESETS_QUERY_KEY, queryFn: listChatToolPresets, enabled: open && draft.mcpEnabled })
@@ -38,7 +39,6 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
   return (
     <div className="space-y-4">
       <EditorGroup>
-        <ChatProfileJudgeLine open={open} draft={draft} patch={patch} />
         <Tip content={t({ ko: '1:1 채팅을 지금 보는 CoNAI 페이지에 연결해 입력을 읽고 변경안을 제안해. 켜면 입력창에 연결 버튼이 생겨.', en: 'Lets a direct chat connect to the CoNAI page you are on, read its inputs and propose changes. Adds a connect button to the composer.' })} side="bottom" align="start">
           <div><SwitchLine label={t({ ko: '페이지 어시스턴트', en: 'Page assistant' })} checked={draft.pageAssist} onCheckedChange={(pageAssist) => patch({ pageAssist })} /></div>
         </Tip>
@@ -108,15 +108,15 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
                 {generationPresets.map((item) => {
                   const linked = draft.generationPresetIds.includes(item.id)
                   return (
-                    <ToggleChip
-                      key={item.id}
-                      pressed={linked}
-                      title={item.instruction || undefined}
-                      onClick={() => patch({ generationPresetIds: linked ? draft.generationPresetIds.filter((id) => id !== item.id) : [...draft.generationPresetIds, item.id] })}
-                    >
-                      {item.name}
-                      <span className="font-mono opacity-60">{item.kind === 'nai' ? 'NAI' : 'Comfy'}</span>
-                    </ToggleChip>
+                    <Tip key={item.id} content={item.instruction || null} className="whitespace-pre-line">
+                      <ToggleChip
+                        pressed={linked}
+                        onClick={() => patch({ generationPresetIds: linked ? draft.generationPresetIds.filter((id) => id !== item.id) : [...draft.generationPresetIds, item.id] })}
+                      >
+                        {item.name}
+                        <span className="font-mono opacity-60">{item.kind === 'nai' ? 'NAI' : 'Comfy'}</span>
+                      </ToggleChip>
+                    </Tip>
                   )
                 })}
                 {generationPresetsQuery.isSuccess && generationPresets.length === 0 ? <span className="text-sm text-muted-foreground">{t({ ko: '아직 없어.', en: 'None yet.' })}</span> : null}
@@ -130,14 +130,9 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
             </CollapsibleRow>
           </div>
         ) : null}
-        {draft.mcpEnabled && draft.engine !== 'codex' ? (
-          <div className="border-t border-line">
-            <CollapsibleRow
-              title={t({ ko: '고급', en: 'Advanced' })}
-              meta={t({ ko: '반복 {rounds}회 · 결과 {chars}자', en: '{rounds} rounds · {chars} chars' }, { rounds: draft.maxToolRounds, chars: draft.toolOutputLimit.toLocaleString() })}
-            >
-              <ChatProfileToolLimits maxToolRounds={draft.maxToolRounds} toolOutputLimit={draft.toolOutputLimit} onChange={patch} />
-            </CollapsibleRow>
+        {advanced && draft.mcpEnabled && draft.engine !== 'codex' ? (
+          <div className="border-t border-line pt-3">
+            <ChatProfileToolLimits maxToolRounds={draft.maxToolRounds} toolOutputLimit={draft.toolOutputLimit} onChange={patch} />
           </div>
         ) : null}
       </EditorGroup>

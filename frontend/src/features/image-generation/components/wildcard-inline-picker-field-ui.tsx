@@ -6,6 +6,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { getFloatingDropdownStyle } from './floating-dropdown-utils'
 import {
   getPromptSyntaxKindLabel,
   type PromptSyntaxToken,
@@ -25,6 +26,8 @@ export type PromptSyntaxPopupPosition = {
   top: number
   left: number
   width: number
+  /** Space left on the chosen side; the popup scrolls past it. */
+  maxHeight: number
   placement: 'top' | 'bottom'
 }
 
@@ -241,12 +244,13 @@ export function PromptSyntaxTokenPopup({ token, position, popupRef, onMouseEnter
       ref={popupRef}
       data-surface="high"
       // A popup opened from inside the inline picker's anchored popover: one layer above z-popover.
-      className="z-popover-nested rounded-md bg-surface-high px-3 py-2.5 shadow-elevation-2"
+      className="z-popover-nested overflow-y-auto overscroll-contain rounded-md bg-surface-high px-3 py-2.5 shadow-elevation-2"
       style={{
         position: 'fixed',
         top: position.top,
         left: position.left,
         width: position.width,
+        maxHeight: position.maxHeight,
         transform: position.placement === 'top' ? 'translateY(-100%)' : undefined,
       }}
       onMouseEnter={onMouseEnter}
@@ -294,12 +298,7 @@ export function WildcardInlinePickerPopup({
       data-surface="high"
       // Above the token preview (z-popover-nested) and anchored popovers (z-popover).
       className="fixed z-[calc(var(--z-index-popover-nested)+10)] overflow-hidden rounded-md bg-surface-high shadow-elevation-2"
-      style={{
-        top: position.top,
-        left: position.left,
-        width: position.width,
-        maxHeight: position.maxHeight,
-      }}
+      style={getFloatingDropdownStyle(position)}
       onMouseDown={(event) => {
         event.preventDefault()
       }}

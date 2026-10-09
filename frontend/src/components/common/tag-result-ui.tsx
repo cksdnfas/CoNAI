@@ -1,8 +1,10 @@
 import { useState, type ReactNode } from 'react'
-import { Button } from '@/components/ui/button'
+import { ChevronDown } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
-import { getThemeToneFillStyle, getThemeToneStyle } from '@/lib/theme-tones'
+import { getThemeToneFillStyle } from '@/lib/theme-tones'
+import { cn } from '@/lib/utils'
 import { PromptTagActionMenu } from './prompt-tag-action-menu'
 import { formatScore } from './tag-result-utils'
 
@@ -29,6 +31,7 @@ export function TagBundleSection({
   onTagClick,
   onAddSearchFilter,
   headerAction,
+  hideLabel = false,
 }: {
   label: string
   tags: string[]
@@ -36,15 +39,19 @@ export function TagBundleSection({
   onTagClick?: (tag: string, href: string) => void
   onAddSearchFilter?: (tag: string) => void
   headerAction?: ReactNode
+  /** Skip the overline when the surrounding section already names it. */
+  hideLabel?: boolean
 }) {
   if (tags.length === 0) return null
 
   return (
     <div className="space-y-2 rounded-sm bg-surface-lowest px-3 py-3">
-      <div className="flex items-center justify-between gap-3">
-        <Text as="div" variant="overline" className="font-semibold">{label}</Text>
-        {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
-      </div>
+      {hideLabel && !headerAction ? null : (
+        <div className={cn('flex items-center gap-3', hideLabel ? 'justify-end' : 'justify-between')}>
+          {hideLabel ? null : <Text as="div" variant="overline" className="font-semibold">{label}</Text>}
+          {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         {tags.map((tag) => {
           const href = getTagHref?.(tag) ?? null
@@ -115,11 +122,14 @@ export function CollapsibleScoreMeterList({
   entries,
   accentClassName = 'bg-primary',
   defaultExpanded = false,
+  hideTitle = false,
 }: {
   title: string
   entries: Array<[string, number]>
   accentClassName?: string
   defaultExpanded?: boolean
+  /** Skip the overline when the surrounding section already names it. */
+  hideTitle?: boolean
 }) {
   const { t } = useI18n()
   const [expanded, setExpanded] = useState(defaultExpanded)
@@ -128,11 +138,17 @@ export function CollapsibleScoreMeterList({
 
   return (
     <div className="space-y-3 rounded-sm bg-surface-lowest px-3 py-3">
-      <div className="flex items-center justify-between gap-3">
-        <Text as="div" variant="overline" className="font-semibold">{title}</Text>
-        <Button type="button" variant="ghost" size="xs" onClick={() => setExpanded((current) => !current)} aria-expanded={expanded}>
-          {expanded ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기 ({count})', en: 'Expand ({count})' }, { count: entries.length })}
-        </Button>
+      <div className={cn('flex items-center gap-3', hideTitle ? 'justify-end' : 'justify-between')}>
+        {hideTitle ? null : <Text as="div" variant="overline" className="font-semibold">{title}</Text>}
+        <IconButton
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => setExpanded((current) => !current)}
+          aria-expanded={expanded}
+          label={expanded ? t({ ko: '점수 접기', en: 'Hide scores' }) : t({ ko: '점수 펼치기 ({count}개)', en: 'Show scores ({count})' }, { count: entries.length })}
+        >
+          <ChevronDown className={cn('transition-transform', !expanded && '-rotate-90')} />
+        </IconButton>
       </div>
       {expanded ? <ScoreMeterList title={title} entries={entries} accentClassName={accentClassName} hideTitle /> : null}
     </div>
@@ -154,19 +170,16 @@ export function StackedRatingBar({ title, entries }: { title: string; entries: A
             key={label}
             className="h-full"
             style={{ width: `${Math.max(0, Math.min(score * 100, 100))}%`, ...getRatingAccentStyle(label) }}
-            title={`${label} ${formatScore(score)}`}
           />
         ))}
       </div>
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
         {normalizedEntries.map(([label, score]) => (
-          <div key={`${label}-legend`} className="flex items-center justify-between gap-3 rounded-sm bg-surface-low px-3 py-2 text-xs" style={getThemeToneStyle('rating')}>
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={getRatingAccentStyle(label)} />
-              <span className="truncate text-foreground">{label}</span>
-            </div>
-            <span className="shrink-0 font-mono text-muted-foreground">{formatScore(score)}</span>
-          </div>
+          <span key={`${label}-legend`} className="inline-flex items-center gap-1.5">
+            <span className="size-2 shrink-0 rounded-full" style={getRatingAccentStyle(label)} />
+            <span className="text-foreground">{label}</span>
+            <span className="font-mono text-muted-foreground">{formatScore(score)}</span>
+          </span>
         ))}
       </div>
     </div>

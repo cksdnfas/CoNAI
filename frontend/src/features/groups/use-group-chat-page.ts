@@ -52,7 +52,7 @@ export function useGroupChatPage(input: GroupChatPageInput) {
     kind: 'groups', title: t({ ko: '그룹 목록·이미지', en: 'Groups and images' }), resourceId: `${input.sourceKey}:${input.selectedGroupId ?? 'root'}`,
     fields: input.fields,
     actions: isCustomSource ? [
-      ...(groupIds.length ? [pageAction('group.select', t({ ko: '그룹 열기', en: 'Open group' }), t({ ko: '목록의 그룹을 열어. 연 뒤 새 요청으로 그 그룹을 수정할 수 있어.', en: 'Open a listed group; request edits after applying.' }), pageObject({ id: pageChoice(groupIds) }, ['id']))] : []),
+      ...(groupIds.length ? [pageAction('group.select', t({ ko: '그룹 열기', en: 'Open group' }), t({ ko: '목록의 그룹을 열어. 연 화면이 바로 돌아오니 이어서 그 그룹을 다룰 수 있어.', en: 'Open a listed group; the opened screen comes back so you can continue with it.' }), pageObject({ id: pageChoice(groupIds) }, ['id']))] : []),
       ...(editable ? [pageAction('group.create', t({ ko: '그룹 만들기', en: 'Create group' }), t({ ko: '새 그룹을 만들어. parent_id 0은 최상위야. 규칙을 넣으면 자동수집이 켜지고 바로 모으기 시작해. {help}', en: 'Create a group. parent_id 0 means top level. Rules enable auto-collect and start collecting. {help}' }, { help: ruleHelp }), pageObject({
         name: pageText(200), description: pageText(2000), parent_id: pageChoice([0, ...groupIds]), auto_collect_rules: rulesSchema,
       }, ['name']), 'save')] : []),

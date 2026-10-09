@@ -3,6 +3,7 @@ import { Handle, Position } from '@xyflow/react'
 import { Plus, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { ModuleGraphSimpleValueInput } from '../module-graph-simple-value-input'
 import { normalizeKeyValueEntries } from '../module-graph-key-value-list-input'
@@ -139,16 +140,17 @@ export function RandomTextChoiceNodeLayout({
           const borderColor = connected ? `${portTypeColor}88` : `${accentColor}26`
 
           return (
-            <div key={`${entry.key || 'option'}-${index}`} className="relative min-h-[28px] border-b py-1 pl-4 pr-1" style={{ borderColor } as CSSProperties} title={dynamicPort ? buildPortTooltip(t, dynamicPort, statusLabel) : parentPort?.label}>
+            <div key={`${entry.key || 'option'}-${index}`} className="relative min-h-[28px] border-b py-1 pl-4 pr-1" style={{ borderColor } as CSSProperties}>
               {dynamicPort ? (
-                <Handle
-                  id={buildHandleId('in', dynamicPort.key)}
-                  type="target"
-                  position={Position.Left}
-                  style={buildHandleStyle({ side: 'input', color: portTypeColor })}
-                  title={buildPortTooltip(t, dynamicPort, statusLabel)}
-                  onMouseDown={connected ? () => data.onDisconnectNodeInput?.(id, dynamicPort.key) : undefined}
-                />
+                <Tip content={buildPortTooltip(t, dynamicPort, statusLabel)}>
+                  <Handle
+                    id={buildHandleId('in', dynamicPort.key)}
+                    type="target"
+                    position={Position.Left}
+                    style={buildHandleStyle({ side: 'input', color: portTypeColor })}
+                    onMouseDown={connected ? () => data.onDisconnectNodeInput?.(id, dynamicPort.key) : undefined}
+                  />
+                </Tip>
               ) : null}
               <div className="nodrag nowheel grid grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)_auto] gap-1" onMouseDown={stopNodeInteraction}>
                 <Input

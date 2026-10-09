@@ -1,10 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import { Plus } from 'lucide-react'
-import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Section } from '@/components/ui/section'
-import { Text } from '@/components/ui/text'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { StoredNaiCharacterReferenceAsset } from '@/lib/api-image-generation-types'
 import { FormField, type NAICharacterReferenceDraft, type SelectedImageDraft } from '../../image-generation-shared'
@@ -21,13 +20,11 @@ export type NaiCharacterReferenceLibraryProps = Omit<NaiSavedAssetBrowserProps, 
 
 type NaiCharacterReferencesEditorProps = {
   references: NAICharacterReferenceDraft[]
-  /** False disables adding rows and shows the "not available for this model" note. */
+  /** False disables adding rows; the add button's tooltip says it's not available for this model. */
   supportsCharacterReference?: boolean
   /** Section starts collapsed on the generation page; inline editors (module graph) open it. */
   defaultOpen?: boolean
   description?: ReactNode
-  /** Shown when there are no rows; omit to render nothing. */
-  emptyLabel?: string
   /** Append one new reference row from a picked image. */
   onAddImage: (image: SelectedImageDraft) => void
   onRemove: (index: number) => void
@@ -46,7 +43,6 @@ export function NaiCharacterReferencesEditor({
   supportsCharacterReference = true,
   defaultOpen = false,
   description,
-  emptyLabel,
   onAddImage,
   onRemove,
   onImageChange,
@@ -71,15 +67,31 @@ export function NaiCharacterReferencesEditor({
       actions={(
         <>
           <span className="px-1 text-xs tabular-nums text-muted-foreground">{references.length}</span>
-          <IconButton
-            size="icon-sm"
-            variant="ghost"
-            onClick={() => setPicker({ mode: 'add' })}
-            disabled={!supportsCharacterReference}
-            label={t('image-generation.components.nai.references.section.add.reference')}
-          >
-            <Plus />
-          </IconButton>
+          {supportsCharacterReference ? (
+            <IconButton
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => setPicker({ mode: 'add' })}
+              label={t('image-generation.components.nai.references.section.add.reference')}
+            >
+              <Plus />
+            </IconButton>
+          ) : (
+            // A disabled button swallows hover, so the span carries the "why" tooltip.
+            <Tip content={t('image-generation.components.nai.references.section.character.reference.is.not.available.for.the')}>
+              <span className="inline-flex" tabIndex={0}>
+                <IconButton
+                  size="icon-sm"
+                  variant="ghost"
+                  disabled
+                  tooltip={false}
+                  label={t('image-generation.components.nai.references.section.add.reference')}
+                >
+                  <Plus />
+                </IconButton>
+              </span>
+            </Tip>
+          )}
           <ImageAttachmentPickerButton
             hideTrigger
             label={t('image-generation.components.nai.references.section.add.reference')}
@@ -131,8 +143,6 @@ export function NaiCharacterReferencesEditor({
         </>
       )}
     >
-      {!supportsCharacterReference ? <Text variant="caption" className="text-destructive">{t('image-generation.components.nai.references.section.character.reference.is.not.available.for.the')}</Text> : null}
-
       {references.length > 0 ? (
         <div className="divide-y divide-line">
           {references.map((reference, index) => (
@@ -167,8 +177,6 @@ export function NaiCharacterReferencesEditor({
             />
           ))}
         </div>
-      ) : emptyLabel ? (
-        <EmptyState size="compact" title={emptyLabel} />
       ) : null}
     </Section>
   )

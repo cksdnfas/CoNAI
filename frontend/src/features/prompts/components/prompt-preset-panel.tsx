@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { usePresetChatPage, presetChatInput, presetChatSchema } from '../use-preset-chat-page'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useDirtyBaseline } from '@/features/codex-chat/use-dirty-baseline'
 import { pageAction } from '@/features/codex-chat/page-action-helpers'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
 import { Copy, Pencil, Plus, Trash2 } from 'lucide-react'
@@ -132,8 +133,9 @@ function PromptPresetEditorModal({
 
   const chatDraft = { name, description, parent_id: parentId, items: drafts.map((item) => ({ description: item.description, value: item.value })) }
   const applyChatDraft = useChatDraftTransaction(chatDraft, (next) => { setName(next.name); setDescription(next.description); setParentId(next.parent_id); setDrafts(next.items.map((item) => createPromptPresetItemDraft(item.description, item.value))) })
+  const chatDirty = useDirtyBaseline(`${open}:${preset?.id ?? 'new'}`, chatDraft)
   useChatPageRegistration(open && !isSubmitting ? {
-    kind: 'presets', title: t({ ko: '프리셋 편집', en: 'Preset editor' }), priority: 100, resourceId: String(preset?.id ?? 'new-preset'), fields: [
+    kind: 'presets', title: t({ ko: '프리셋 편집', en: 'Preset editor' }), priority: 100, resourceId: String(preset?.id ?? 'new-preset'), dirty: chatDirty, fields: [
       { id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: name },
       { id: 'description', label: t({ ko: '설명', en: 'Description' }), type: 'text', value: description },
     ],

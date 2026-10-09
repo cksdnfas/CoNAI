@@ -4,12 +4,11 @@ import { createPortal } from 'react-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { LogIn, RefreshCw, RotateCcw, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useCodexChatPage } from './use-codex-chat-page'
 import { Text } from '@/components/ui/text'
-import { Field } from '@/components/ui/field'
+import { Tip } from '@/components/ui/tooltip'
 import { Select } from '@/components/ui/select'
 import { getRuntimeImageSaveSettings } from '@/lib/api-settings'
 import { createGenerationQueueJob, getCodexGenerationModels, getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
@@ -589,13 +588,16 @@ export function CodexGenerationPanel({
           splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
           useDrawerCompactChrome ? 'px-5 pb-5' : undefined,
         )}>
-        <Field label={t({ ko: 'Codex 실행 모델', en: 'Codex agent model' })}>
-          <CodexModelSelect
-            value={codexForm.model}
-            onChange={(value) => handleFieldChange('model', value)}
-            models={modelOptionsQuery.data?.data.models}
-          />
-        </Field>
+        <Tip content={t({ ko: 'Codex 실행 모델: 프롬프트를 해석하고 이미지를 만드는 에이전트 모델', en: 'Codex agent model: the agent that reads the prompt and makes the image' })}>
+          <div>
+            <CodexModelSelect
+              value={codexForm.model}
+              onChange={(value) => handleFieldChange('model', value)}
+              models={modelOptionsQuery.data?.data.models}
+              aria-label={t({ ko: 'Codex 실행 모델', en: 'Codex agent model' })}
+            />
+          </div>
+        </Tip>
         <NaiPromptSection
           tool="codex"
           prompt={codexForm.prompt}
@@ -626,59 +628,73 @@ export function CodexGenerationPanel({
         </Section>
 
         <Section variant="settings" heading={t({ ko: '이미지', en: 'Images' })} className="@container">
-          <Field label={t({ ko: '이미지 사용 방식', en: 'Image usage' })}>
-            <Select value={codexForm.imageMode} onChange={(event) => setCodexForm((current) => ({ ...current, imageMode: event.target.value === 'edit' ? 'edit' : 'reference', maskImage: undefined }))}>
+          <Tip content={t({ ko: '이미지 사용 방식: 참조로만 쓸지, 원본을 직접 편집할지', en: 'Image usage: reference only, or edit the source directly' })}>
+            <Select aria-label={t({ ko: '이미지 사용 방식', en: 'Image usage' })} value={codexForm.imageMode} onChange={(event) => setCodexForm((current) => ({ ...current, imageMode: event.target.value === 'edit' ? 'edit' : 'reference', maskImage: undefined }))}>
               <option value="reference">{t({ ko: '새 이미지 생성 · 참조 (t2i)', en: 'New image · reference (t2i)' })}</option>
               <option value="edit">{t({ ko: '원본 이미지 편집 (i2i)', en: 'Edit source image (i2i)' })}</option>
             </Select>
-          </Field>
+          </Tip>
           <div className="grid gap-4 @2xl:grid-cols-2">
             <div className="min-w-0 space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <Text variant="label">{codexForm.imageMode === 'edit' ? t({ ko: '원본 이미지', en: 'Source image' }) : t({ ko: '참조 이미지 (선택)', en: 'Reference image (optional)' })}</Text>
-                <ImageAttachmentPickerButton
-                  label={codexForm.referenceImage ? t({ ko: '교체', en: 'Replace' }) : t({ ko: '선택', en: 'Select' })}
-                  modalTitle={t({ ko: 'Codex 참조 이미지 선택', en: 'Select Codex reference image' })}
-                  onSelect={(image) => {
-                    setCodexForm((current) => ({
-                      ...current,
-                      referenceImage: image,
-                      maskImage: undefined,
-                    }))
-                  }}
-                />
+                <Text variant="label">{codexForm.imageMode === 'edit' ? t({ ko: '원본', en: 'Source' }) : t({ ko: '참조', en: 'Reference' })}</Text>
+                <div className="flex items-center gap-1">
+                  <ImageAttachmentPickerButton
+                    label={codexForm.imageMode === 'edit'
+                      ? (codexForm.referenceImage ? t({ ko: '원본 이미지 교체', en: 'Replace source image' }) : t({ ko: '원본 이미지 선택', en: 'Select source image' }))
+                      : (codexForm.referenceImage ? t({ ko: '참조 이미지 교체', en: 'Replace reference image' }) : t({ ko: '참조 이미지 선택 (선택 사항)', en: 'Select reference image (optional)' }))}
+                    modalTitle={t({ ko: 'Codex 참조 이미지 선택', en: 'Select Codex reference image' })}
+                    onSelect={(image) => {
+                      setCodexForm((current) => ({
+                        ...current,
+                        referenceImage: image,
+                        maskImage: undefined,
+                      }))
+                    }}
+                  />
+                  {codexForm.referenceImage ? (
+                    <IconButton
+                      variant="ghost"
+                      className="hover:text-destructive"
+                      onClick={() => setCodexForm((current) => ({ ...current, referenceImage: undefined, maskImage: undefined }))}
+                      label={codexForm.imageMode === 'edit' ? t({ ko: '원본 이미지 제거', en: 'Remove source image' }) : t({ ko: '참조 이미지 제거', en: 'Remove reference image' })}
+                    >
+                      <X />
+                    </IconButton>
+                  ) : null}
+                </div>
               </div>
 
               {codexForm.referenceImage ? (
-                <div className="space-y-3">
-                  <NaiSelectedImageCard image={codexForm.referenceImage} alt={t({ ko: 'Codex 참조 이미지', en: 'Codex reference image' })} />
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setCodexForm((current) => ({ ...current, referenceImage: undefined, maskImage: undefined }))}>
-                    <X className="h-4 w-4" />
-                    {t({ ko: '참조 이미지 제거', en: 'Remove reference image' })}
-                  </Button>
-                </div>
+                <NaiSelectedImageCard image={codexForm.referenceImage} alt={t({ ko: 'Codex 참조 이미지', en: 'Codex reference image' })} />
               ) : null}
             </div>
 
             {codexForm.imageMode === 'edit' ? <div className="min-w-0 space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <Text variant="label">{t({ ko: '마스크 이미지', en: 'Mask Image' })}</Text>
-                <ImageAttachmentPickerButton
-                  label={codexForm.maskImage ? t({ ko: '교체', en: 'Replace' }) : t({ ko: '선택', en: 'Select' })}
-                  modalTitle={t({ ko: 'Codex 마스크 이미지 선택', en: 'Select Codex mask image' })}
-                  disabled={!codexForm.referenceImage}
-                  onSelect={(image) => handleFieldChange('maskImage', image)}
-                />
+                <Text variant="label">{t({ ko: '마스크', en: 'Mask' })}</Text>
+                <div className="flex items-center gap-1">
+                  <ImageAttachmentPickerButton
+                    label={codexForm.maskImage ? t({ ko: '마스크 이미지 교체', en: 'Replace mask image' }) : t({ ko: '마스크 이미지 선택', en: 'Select mask image' })}
+                    modalTitle={t({ ko: 'Codex 마스크 이미지 선택', en: 'Select Codex mask image' })}
+                    disabled={!codexForm.referenceImage}
+                    onSelect={(image) => handleFieldChange('maskImage', image)}
+                  />
+                  {codexForm.maskImage ? (
+                    <IconButton
+                      variant="ghost"
+                      className="hover:text-destructive"
+                      onClick={() => handleFieldChange('maskImage', undefined)}
+                      label={t({ ko: '마스크 제거', en: 'Remove mask' })}
+                    >
+                      <X />
+                    </IconButton>
+                  ) : null}
+                </div>
               </div>
 
               {codexForm.maskImage ? (
-                <div className="space-y-3">
-                  <NaiSelectedImageCard image={codexForm.maskImage} alt={t({ ko: 'Codex 마스크 이미지', en: 'Codex mask image' })} />
-                  <Button type="button" variant="ghost" size="sm" onClick={() => handleFieldChange('maskImage', undefined)}>
-                    <X className="h-4 w-4" />
-                    {t({ ko: '마스크 제거', en: 'Remove mask' })}
-                  </Button>
-                </div>
+                <NaiSelectedImageCard image={codexForm.maskImage} alt={t({ ko: 'Codex 마스크 이미지', en: 'Codex mask image' })} />
               ) : null}
             </div> : null}
           </div>

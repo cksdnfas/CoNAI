@@ -4,6 +4,7 @@ import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { TextTabs } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { WorkflowValidationIssue } from '../module-graph-types'
@@ -147,19 +148,16 @@ export function ModuleWorkflowEditorView({
           placeholder={t({ ko: '이름 없음', en: 'Untitled' })}
           className="h-8 max-w-72 min-w-20 rounded-sm bg-transparent px-1.5 text-sm font-bold text-foreground outline-none [field-sizing:content] hover:bg-fill focus:bg-field"
         />
-        {isDirty ? <span className="size-1.5 shrink-0 rounded-full bg-warning" title={t({ ko: '저장 안 함', en: 'Unsaved' })} /> : null}
+        {isDirty ? (
+          <Tip content={t({ ko: '저장 안 한 변경 있음', en: 'Unsaved changes' })}>
+            <span role="img" aria-label={t({ ko: '저장 안 한 변경 있음', en: 'Unsaved changes' })} className="size-1.5 shrink-0 rounded-full bg-warning" />
+          </Tip>
+        ) : null}
       </div>
       <span className="mx-1 h-4 w-px shrink-0 bg-line" />
-      {isWideLayout ? (
-        <Button type="button" size="sm" variant="secondary" onClick={onAddNode} disabled={!canUpdateWorkflows}>
-          <Plus className="size-4" />
-          {t({ ko: '노드', en: 'Node' })}
-        </Button>
-      ) : (
-        <IconButton size="icon-sm" variant="ghost" onClick={onAddNode} disabled={!canUpdateWorkflows} label={t({ ko: '노드 추가', en: 'Add node' })}>
-          <Plus />
-        </IconButton>
-      )}
+      <IconButton size="icon-sm" variant="ghost" onClick={onAddNode} disabled={!canUpdateWorkflows} label={t({ ko: '노드 추가', en: 'Add node' })}>
+        <Plus />
+      </IconButton>
       <IconButton size="icon-sm" variant="ghost" onClick={onAutoLayout} disabled={nodesCount === 0} label={t({ ko: '자동 정렬', en: 'Auto layout' })}>
         <LayoutGrid />
       </IconButton>
@@ -179,16 +177,9 @@ export function ModuleWorkflowEditorView({
       </IconButton>
       <WorkflowValidationIndicator issues={validationIssues} onIssueSelect={onValidationIssueSelect} />
       <span className="min-w-2 flex-1" />
-      {isWideLayout ? (
-        <Button type="button" size="sm" variant="secondary" onClick={onTestRun} disabled={!canExecuteGeneration || isExecuting || nodesCount === 0}>
-          {isExecuting ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
-          {t({ ko: '시험 실행', en: 'Test run' })}
-        </Button>
-      ) : (
-        <IconButton size="icon-sm" variant="ghost" onClick={onTestRun} disabled={!canExecuteGeneration || isExecuting || nodesCount === 0} label={t({ ko: '시험 실행', en: 'Test run' })}>
-          <Play />
-        </IconButton>
-      )}
+      <IconButton size="icon-sm" variant="ghost" onClick={onTestRun} disabled={!canExecuteGeneration || isExecuting || nodesCount === 0} label={t({ ko: '시험 실행', en: 'Test run' })}>
+        {isExecuting ? <Loader2 className="animate-spin" /> : <Play />}
+      </IconButton>
       {!isDockOpen ? (
         <IconButton size="icon-sm" variant="ghost" onClick={toggleDock} label={t({ ko: '패널 열기', en: 'Open panel' })}>
           <PanelRight />

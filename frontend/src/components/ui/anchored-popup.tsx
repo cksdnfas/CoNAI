@@ -71,7 +71,7 @@ export function AnchoredPopup({
       const preferredBottom = side === 'bottom'
       const shouldOpenAbove = preferredBottom
         ? availableBelow < panelRect.height && availableAbove > availableBelow
-        : !(availableAbove >= panelRect.height || availableAbove >= availableBelow)
+        : availableAbove >= panelRect.height || availableAbove >= availableBelow
 
       let left = anchorRect.left
       if (align === 'center') {

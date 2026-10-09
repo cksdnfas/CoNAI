@@ -2,7 +2,8 @@ import { useCallback, useMemo, type ChangeEvent, type KeyboardEvent, type ReactN
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { KaloscopeResultBlock } from '@/components/common/kaloscope-result-block'
 import { WDTaggerResultBlock } from '@/components/common/wd-tagger-result-block'
-import { Button } from '@/components/ui/button'
+import { LoaderCircle, Tags, Telescope } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { useHomeSearch, type TextSearchScope } from '@/features/home/home-search-context'
 import { getImageExtractedPromptCards, type ExtractedPromptActionScope } from '@/lib/image-extracted-prompts'
@@ -138,9 +139,7 @@ export function AutoTestCard({
       ) : null}
 
       {isLoadingAutoTestImage ? (
-        <p className="text-sm text-muted-foreground">
-          {t({ ko: '추출 프롬프트를 불러오는 중이야…', en: 'Loading extracted prompts…' })}
-        </p>
+        <LoaderCircle role="status" aria-label={t({ ko: '추출 프롬프트를 불러오는 중', en: 'Loading extracted prompts' })} className="size-4 animate-spin text-muted-foreground" />
       ) : null}
 
       {extractedPromptCards.length > 0 ? (
@@ -152,13 +151,13 @@ export function AutoTestCard({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" onClick={onRunTaggerAutoTest} disabled={!autoTestMedia?.existsOnDisk || isRunningTaggerAutoTest}>
-          {isRunningTaggerAutoTest ? t({ ko: '태거 테스트 중…', en: 'Running tagger test…' }) : t({ ko: '태거 테스트', en: 'Tagger test' })}
-        </Button>
-        <Button size="sm" variant="secondary" onClick={onRunKaloscopeAutoTest} disabled={!autoTestMedia?.existsOnDisk || isRunningKaloscopeAutoTest}>
-          {isRunningKaloscopeAutoTest ? t({ ko: 'Kaloscope 테스트 중…', en: 'Running Kaloscope test…' }) : t({ ko: 'Kaloscope 테스트', en: 'Kaloscope test' })}
-        </Button>
+      <div className="flex flex-wrap gap-1">
+        <IconButton size="icon-sm" variant="secondary" onClick={onRunTaggerAutoTest} disabled={!autoTestMedia?.existsOnDisk || isRunningTaggerAutoTest} label={isRunningTaggerAutoTest ? t({ ko: '태거 테스트 중…', en: 'Running tagger test…' }) : t({ ko: '태거 테스트: 이 미디어로 WD 태거 실행', en: 'Tagger test: run the WD tagger on this media' })}>
+          {isRunningTaggerAutoTest ? <LoaderCircle className="animate-spin" /> : <Tags />}
+        </IconButton>
+        <IconButton size="icon-sm" variant="secondary" onClick={onRunKaloscopeAutoTest} disabled={!autoTestMedia?.existsOnDisk || isRunningKaloscopeAutoTest} label={isRunningKaloscopeAutoTest ? t({ ko: 'Kaloscope 테스트 중…', en: 'Running Kaloscope test…' }) : t({ ko: 'Kaloscope 테스트: 이 미디어로 작가 추정 실행', en: 'Kaloscope test: run artist detection on this media' })}>
+          {isRunningKaloscopeAutoTest ? <LoaderCircle className="animate-spin" /> : <Telescope />}
+        </IconButton>
       </div>
 
       {kaloscopeTestResult ? <KaloscopeResultBlock result={kaloscopeTestResult} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null}

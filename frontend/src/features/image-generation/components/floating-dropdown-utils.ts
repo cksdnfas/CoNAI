@@ -1,7 +1,9 @@
+import type { CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
 
 export type FloatingDropdownRect = {
   left: number
+  /** Top edge for `bottom` placement, bottom edge for `top` placement. */
   top: number
   width: number
   maxHeight: number
@@ -42,11 +44,24 @@ export function resolveFloatingDropdownRectFromRect(rect: FloatingDropdownAnchor
   const availableHeight = placement === 'top' ? availableAbove : availableBelow
   const fallbackHeight = Math.max(96, Math.max(availableAbove, availableBelow))
   const maxHeight = Math.min(preferredMaxHeight, Math.max(96, availableHeight || fallbackHeight))
+  // Upward menus are anchored by their bottom edge (see getFloatingDropdownStyle) so a short menu
+  // hugs the trigger instead of sitting a full maxHeight above it.
   const top = placement === 'top'
-    ? clamp(rect.top - maxHeight - gap, viewportPadding, viewportHeight - viewportPadding - maxHeight)
+    ? clamp(rect.top - gap, viewportPadding + maxHeight, viewportHeight - viewportPadding)
     : clamp(rect.bottom + gap, viewportPadding, viewportHeight - viewportPadding - maxHeight)
 
   return { left, top, width, maxHeight, placement }
+}
+
+/** Inline style for a fixed menu. For `placement: 'top'`, `top` is the menu's bottom edge. */
+export function getFloatingDropdownStyle(rect: FloatingDropdownRect): CSSProperties {
+  return {
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    maxHeight: rect.maxHeight,
+    transform: rect.placement === 'top' ? 'translateY(-100%)' : undefined,
+  }
 }
 
 /** Resolve a dropdown menu rectangle that opens upward when the trigger is near the viewport bottom. */

@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { getGroupHierarchyCountDescription, getGroupHierarchyCountLabel, type GroupCountMaps } from '@/features/groups/group-count-utils'
@@ -77,10 +78,12 @@ export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '',
     return (
       <div className="flex min-w-0 items-center justify-between gap-2">
         <span className="truncate">{group.name}</span>
-        <span className="shrink-0 text-xs tabular-nums text-muted-foreground" title={countDescription}>
-          <span aria-hidden="true">{countLabel}</span>
-          <span className="sr-only">{countDescription}</span>
-        </span>
+        <Tip content={countDescription}>
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+            <span aria-hidden="true">{countLabel}</span>
+            <span className="sr-only">{countDescription}</span>
+          </span>
+        </Tip>
       </div>
     )
   }, [countMaps, formatNumber, t])

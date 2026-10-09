@@ -382,7 +382,7 @@ export function buildWorkflowMarkedFieldFromInput(
 
   return {
     id: sanitizeWorkflowFieldId(`${nodeId}_${input.key}`),
-    label: `${nodeTitle}-${input.label}`,
+    label: !input.label || input.label === nodeTitle ? nodeTitle : `${nodeTitle}-${input.label}`,
     description: input.typeLabel ? `${classType} · ${input.typeLabel}` : `${classType} · ${input.key}`,
     jsonPath: resolvedJsonPath,
     source_node_id: nodeId,

@@ -15,6 +15,7 @@ test('chat generation: terminal results and owner-only completion events', { tim
   process.env.RUNTIME_SAVE_DIR = path.join(root, 'save')
   const dbModule = await import('../src/database/userSettingsDb')
   dbModule.initializeUserSettingsDb()
+  ;(await import('../src/models/ExternalApiProvider')).ExternalApiProvider.create({ provider_name: 'test', display_name: 'test', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
   const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
   const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
   const { attachJobResults, withGenerationOutcomes, generationOutcomeNote } = await import('../src/services/codex-chat/codexChatMedia')

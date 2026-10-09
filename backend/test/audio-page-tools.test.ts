@@ -83,10 +83,11 @@ test('audio page: connected /audio offers the audio tools, other pages do not', 
   assert.ok(onAudio.has('order_audio'), 'order_audio is offered on the connected audio page')
   assert.ok(onAudio.has('list_audio_candidates') && onAudio.has('edit_audio_candidate') && onAudio.has('get_current_page'))
   assert.ok(![...onAudio].some((name) => /review|wait_audio_order/.test(name)), 'no review tool, no blocking wait in chat')
-  assert.ok(!onAudio.has('search_images') && !onAudio.has('extract_sprite_sheet'), 'other tools stay narrowed away')
+  assert.ok(!onAudio.has('move_files') && !onAudio.has('extract_sprite_sheet'), 'other tools that change things stay narrowed away')
+  assert.ok(onAudio.has('search_images'), 'reads stay offered on a connected page')
 
   const onFiles = await listTools(filesPage)
-  assert.ok(!onFiles.has('order_audio') && !onFiles.has('list_audio_candidates'), 'another page does not bring the audio tools')
+  assert.ok(!onFiles.has('order_audio') && !onFiles.has('edit_audio_candidate'), 'another page does not bring the audio tools that change things')
   assert.ok(onFiles.has('get_current_page'))
 
   assert.match(chatPageReference(audioPage), /오디오/)

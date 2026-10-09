@@ -274,10 +274,9 @@ export function ModuleWorkflowSchedulesPanel({
         heading={t({ ko: '자동 실행', en: 'Autorun' })}
         actions={(
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button type="button" size="sm" variant="secondary" onClick={openCreateEditor} disabled={!(canExecuteGeneration && canUpdateWorkflows) || (workflows.length === 0 || isMutating)}>
-              <Plus className="h-4 w-4" />
-              {t({ ko: '자동 실행 추가', en: 'Add autorun' })}
-            </Button>
+            <IconButton size="icon-sm" variant="secondary" onClick={openCreateEditor} disabled={!(canExecuteGeneration && canUpdateWorkflows) || (workflows.length === 0 || isMutating)} label={t({ ko: '자동 실행 추가', en: 'Add autorun' })}>
+              <Plus />
+            </IconButton>
           </div>
         )}
       >

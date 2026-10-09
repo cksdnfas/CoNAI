@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, Eraser, TriangleAlert } from 'lucide-react'
+import { ChevronDown, Eraser, LoaderCircle, ScrollText, Shrink, TriangleAlert } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -44,7 +44,7 @@ function GenerationReactionSettings({ thread }: { thread: CodexChatThread }) {
           aria-label={t({ ko: '완료 반응 모델', en: 'Completion reaction model' })}
         >
           <option value="">{t({ ko: '대화 모델', en: 'Chat model' })}</option>
-          {(models.data ?? []).map((model) => <option key={model.id} value={model.id} disabled={!model.ready}>{model.name}</option>)}
+          {(models.data ?? []).map((model) => <option key={model.id} value={model.id} disabled={!model.ready}>{model.label}</option>)}
         </Select>
         <Switch checked={thread.reaction_enabled === 1} onCheckedChange={(reactionEnabled) => mutation.mutate({ reactionEnabled })} disabled={mutation.isPending} aria-label={t({ ko: '완료 반응', en: 'Completion reaction' })} />
       </div>
@@ -330,9 +330,9 @@ function SummaryBlock({ thread, segments, summaryOn }: { thread: CodexChatThread
         <span className="flex-1 text-sm">{t({ ko: '요약', en: 'Summary' })}</span>
         {thread.summary_updated_date ? <span className="text-xs text-muted-foreground">{formatDateTime(parseServerDate(thread.summary_updated_date))}</span> : null}
         {segments.length > 0 ? <IconButton variant="ghost" size="icon-sm" onClick={() => void clearSummary()} disabled={clearMutation.isPending} label={t({ ko: '요약 지우기', en: 'Clear summary' })}><Eraser /></IconButton> : null}
-        <Button size="sm" variant="secondary" onClick={() => summarizeMutation.mutate()} disabled={summarizeMutation.isPending}>
-          {summarizeMutation.isPending ? t({ ko: '요약 중…', en: 'Summarizing…' }) : t({ ko: '지금 요약', en: 'Summarize now' })}
-        </Button>
+        <IconButton variant="secondary" size="icon-sm" onClick={() => summarizeMutation.mutate()} disabled={summarizeMutation.isPending} label={summarizeMutation.isPending ? t({ ko: '요약 중…', en: 'Summarizing…' }) : t({ ko: '지금 요약', en: 'Summarize now' })}>
+          {summarizeMutation.isPending ? <LoaderCircle className="animate-spin" /> : <ScrollText />}
+        </IconButton>
       </div>
       {summaryOn && thread.summary_error ? (
         <p className="flex items-start gap-1.5 pb-2 text-xs text-warning" role="status">
@@ -340,7 +340,6 @@ function SummaryBlock({ thread, segments, summaryOn }: { thread: CodexChatThread
           <span className="min-w-0 break-words">{t({ ko: '요약하지 못했어: {error}', en: 'Could not summarize: {error}' }, { error: thread.summary_error })}</span>
         </p>
       ) : null}
-      {segments.length === 0 ? <p className="text-sm text-muted-foreground">{t({ ko: '아직 요약이 없어.', en: 'No summary yet.' })}</p> : null}
       <div className="flex flex-col gap-4">
         {plot ? <SummarySegmentEditor threadId={thread.id} segment={plot} label={t({ ko: '줄거리', en: 'Plot' })} /> : null}
         {active.map((segment) => <SummarySegmentEditor key={segment.id} threadId={thread.id} segment={segment} label={stretchLabel(segment)} />)}
@@ -470,28 +469,27 @@ export function CodexEngineContextView({ thread, profiles, compactTokens, noteDe
       <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock thread={thread} defaults={noteDefaults} />
       <LorebookBlock threadId={thread.id} profiles={profiles} />
+      {/* One line: context / compaction threshold. Window and running totals live in its tooltip. */}
       <SettingRow label={t({ ko: '현재 컨텍스트', en: 'Current context' })}>
-        <span className="text-sm tabular-nums">{tokens(thread.codex_context_tokens)} / {tokens(compactTokens)}</span>
-      </SettingRow>
-      <SettingRow label={t({ ko: '모델 한도', en: 'Model window' })}>
-        <span className="text-sm tabular-nums">{tokens(thread.codex_context_window)}</span>
-      </SettingRow>
-      <SettingRow label={t({ ko: '누적 입력', en: 'Total input' })}>
-        <span className="text-sm tabular-nums">
-          {tokens(thread.codex_input_tokens)}
-          {cachedShare !== null ? <span className="text-muted-foreground"> · {t({ ko: '캐시', en: 'cached' })} {cachedShare}%</span> : null}
-        </span>
-      </SettingRow>
-      <SettingRow label={t({ ko: '누적 출력', en: 'Total output' })}>
-        <span className="text-sm tabular-nums">{tokens(thread.codex_output_tokens)}</span>
+        <Tip
+          className="whitespace-pre-line"
+          content={[
+            t({ ko: '현재 컨텍스트 / 압축 기준 토큰', en: 'Current context / compaction threshold tokens' }),
+            `${t({ ko: '모델 한도', en: 'Model window' })}: ${tokens(thread.codex_context_window)}`,
+            `${t({ ko: '누적 입력', en: 'Total input' })}: ${tokens(thread.codex_input_tokens)}${cachedShare !== null ? ` · ${t({ ko: '캐시', en: 'cached' })} ${cachedShare}%` : ''}`,
+            `${t({ ko: '누적 출력', en: 'Total output' })}: ${tokens(thread.codex_output_tokens)}`,
+          ].join('\n')}
+        >
+          <span tabIndex={0} className="cursor-help rounded-sm text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring/40">{tokens(thread.codex_context_tokens)} / {tokens(compactTokens)}</span>
+        </Tip>
       </SettingRow>
 
       <div className="flex items-center gap-2 pt-4">
         <span className="flex-1 text-sm">{t({ ko: '압축', en: 'Compaction' })}</span>
         {thread.summary_updated_date ? <span className="text-xs text-muted-foreground">{formatDateTime(parseServerDate(thread.summary_updated_date))}</span> : null}
-        <Button size="sm" variant="secondary" onClick={() => compactMutation.mutate()} disabled={compactMutation.isPending || !thread.codex_thread_id}>
-          {compactMutation.isPending ? t({ ko: '압축 중…', en: 'Compacting…' }) : t({ ko: '지금 압축', en: 'Compact now' })}
-        </Button>
+        <IconButton variant="secondary" size="icon-sm" onClick={() => compactMutation.mutate()} disabled={compactMutation.isPending || !thread.codex_thread_id} label={compactMutation.isPending ? t({ ko: '압축 중…', en: 'Compacting…' }) : t({ ko: '지금 압축', en: 'Compact now' })}>
+          {compactMutation.isPending ? <LoaderCircle className="animate-spin" /> : <Shrink />}
+        </IconButton>
       </div>
     </div>
   )

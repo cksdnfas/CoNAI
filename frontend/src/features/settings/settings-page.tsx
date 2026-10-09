@@ -206,17 +206,6 @@ export function SettingsPage() {
   const effectiveThumbnailDraft = thumbnailDraft ?? settingsQuery.data?.thumbnail ?? null
   const effectiveGenerationThrottleDraft = generationThrottleDraft ?? settingsQuery.data?.generationThrottle ?? null
   const effectiveVideoOptimizationDraft = videoOptimizationDraft ?? settingsQuery.data?.videoOptimization ?? null
-  useChatPageRegistration(canOpenSettings ? {
-    kind: 'settings', title: t({ ko: '설정 · {section}', en: 'Settings · {section}' }, { section: t(SETTINGS_TAB_LABELS[activeTab]) }), resourceId: activeTab,
-    fields: effectiveGeneralDraft && activeTab === 'general' ? [
-      { id: 'language', label: t({ ko: '언어', en: 'Language' }), type: 'select', value: effectiveGeneralDraft.language, options: ['ko', 'en'] },
-      { id: 'promptForDownloadLocation', label: t({ ko: '다운로드 위치 묻기', en: 'Ask for download location' }), type: 'boolean', value: effectiveGeneralDraft.promptForDownloadLocation },
-      { id: 'enableGallery', label: t({ ko: '갤러리 표시', en: 'Show gallery' }), type: 'boolean', value: effectiveGeneralDraft.enableGallery ?? false },
-      { id: 'showRatingBadges', label: t({ ko: '등급 배지 표시', en: 'Show rating badges' }), type: 'boolean', value: effectiveGeneralDraft.showRatingBadges ?? false },
-    ] : effectiveGeneralDraft && activeTab === 'library' ? [{ id: 'imageSimilarityCheckMode', label: t({ ko: '유사도 검사 방식', en: 'Similarity inspection mode' }), type: 'select', value: effectiveGeneralDraft.imageSimilarityCheckMode ?? 'always', options: ['manual', 'always'] }] : [],
-    data: { section: activeTab },
-    apply: (patch) => { if (effectiveGeneralDraft) setGeneralDraft({ ...effectiveGeneralDraft, ...patch } as GeneralSettings) },
-  } : null, { preserveOnSearchChange: true })
   const savedAppearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
   const savedGeneral = settingsQuery.data?.general
   const isGeneralSectionDirty = (section: GeneralPreferenceSection) => Boolean(
@@ -394,6 +383,19 @@ export function SettingsPage() {
     },
   ]
   const dirtySections = draftSections.filter((section) => section.isDirty)
+  useChatPageRegistration(canOpenSettings ? {
+    kind: 'settings', title: t({ ko: '설정 · {section}', en: 'Settings · {section}' }, { section: t(SETTINGS_TAB_LABELS[activeTab]) }), resourceId: activeTab,
+    fields: effectiveGeneralDraft && activeTab === 'general' ? [
+      { id: 'language', label: t({ ko: '언어', en: 'Language' }), type: 'select', value: effectiveGeneralDraft.language, options: ['ko', 'en'] },
+      { id: 'promptForDownloadLocation', label: t({ ko: '다운로드 위치 묻기', en: 'Ask for download location' }), type: 'boolean', value: effectiveGeneralDraft.promptForDownloadLocation },
+      { id: 'enableGallery', label: t({ ko: '갤러리 표시', en: 'Show gallery' }), type: 'boolean', value: effectiveGeneralDraft.enableGallery ?? false },
+      { id: 'showRatingBadges', label: t({ ko: '등급 배지 표시', en: 'Show rating badges' }), type: 'boolean', value: effectiveGeneralDraft.showRatingBadges ?? false },
+    ] : effectiveGeneralDraft && activeTab === 'library' ? [{ id: 'imageSimilarityCheckMode', label: t({ ko: '유사도 검사 방식', en: 'Similarity inspection mode' }), type: 'select', value: effectiveGeneralDraft.imageSimilarityCheckMode ?? 'always', options: ['manual', 'always'] }] : [],
+    data: { section: activeTab },
+    // Unsaved sections keep a connected chat from navigating away and losing them.
+    dirty: dirtySections.length > 0,
+    apply: (patch) => { if (effectiveGeneralDraft) setGeneralDraft({ ...effectiveGeneralDraft, ...patch } as GeneralSettings) },
+  } : null, { preserveOnSearchChange: true })
 
   const handleSaveAll = async () => {
     if (isSavingAll || dirtySections.length === 0) {

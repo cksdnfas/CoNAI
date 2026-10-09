@@ -1,6 +1,6 @@
 import type { ChangeEvent, ReactNode, RefObject } from 'react'
 import { Check, Download, Pencil, Star, Trash2, Upload, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -126,32 +126,24 @@ export function WallpaperSavedEasingPresetsSection({
         className="hidden"
         onChange={onImportPresets}
       />
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-sm font-medium text-foreground">{t({ ko: '내 프리셋', en: 'My presets' })}</div>
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            size="icon-xs"
-            variant="ghost"
-            onClick={() => importInputRef.current?.click()}
-            title={t({ ko: '프리셋 가져오기', en: 'Import presets' })}
-            aria-label={t({ ko: '프리셋 가져오기', en: 'Import presets' })}
-          >
-            <Upload className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            type="button"
-            size="icon-xs"
-            variant="ghost"
-            onClick={onExportPresets}
-            disabled={savedPresets.length === 0}
-            title={t({ ko: '프리셋 내보내기', en: 'Export presets' })}
-            aria-label={t({ ko: '프리셋 내보내기', en: 'Export presets' })}
-          >
-            <Download className="h-3.5 w-3.5" />
-          </Button>
-          <div className="text-xs text-muted-foreground">{savedPresets.length}/{MAX_WALLPAPER_SAVED_EASING_PRESETS}</div>
-        </div>
+      <div className="flex items-center justify-end gap-2">
+        <IconButton
+          size="icon-xs"
+          variant="ghost"
+          onClick={() => importInputRef.current?.click()}
+          label={t({ ko: '내 프리셋 가져오기 ({count}/{max})', en: 'Import my presets ({count}/{max})' }, { count: savedPresets.length, max: MAX_WALLPAPER_SAVED_EASING_PRESETS })}
+        >
+          <Upload className="h-3.5 w-3.5" />
+        </IconButton>
+        <IconButton
+          size="icon-xs"
+          variant="ghost"
+          onClick={onExportPresets}
+          disabled={savedPresets.length === 0}
+          label={t({ ko: '내 프리셋 내보내기', en: 'Export my presets' })}
+        >
+          <Download className="h-3.5 w-3.5" />
+        </IconButton>
       </div>
 
       {importExportMessage ? (
@@ -200,27 +192,23 @@ export function WallpaperSavedEasingPresetsSection({
                     className="min-w-0 flex-1"
                   />
                   <div className="flex shrink-0 items-center gap-0.5">
-                    <Button
-                      type="button"
+                    <IconButton
                       size="icon-xs"
                       variant="ghost"
                       onClick={() => onRenamePreset(preset.id)}
                       disabled={!editingPresetName.trim() || isDuplicateName}
-                      title={t({ ko: '이름 저장', en: 'Save name' })}
-                      aria-label={t({ ko: '이름 저장', en: 'Save name' })}
+                      label={t({ ko: '이름 저장', en: 'Save name' })}
                     >
                       <Check className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      type="button"
+                    </IconButton>
+                    <IconButton
                       size="icon-xs"
                       variant="ghost"
                       onClick={onCancelEditingPreset}
-                      title={t({ ko: '이름 편집 취소', en: 'Cancel name edit' })}
-                      aria-label={t({ ko: '이름 편집 취소', en: 'Cancel name edit' })}
+                      label={t({ ko: '이름 편집 취소', en: 'Cancel name edit' })}
                     >
                       <X className="h-3.5 w-3.5" />
-                    </Button>
+                    </IconButton>
                   </div>
                 </div>
                 <div className="rounded-sm bg-surface-lowest px-2 py-1.5">
@@ -238,51 +226,41 @@ export function WallpaperSavedEasingPresetsSection({
                 selected={selectedEasing === preset.easing}
                 onSelect={() => onSelectPreset(preset.easing)}
                 leading={(
-                  <Button
-                    type="button"
+                  <IconButton
                     size="icon-xs"
                     variant="ghost"
                     onClick={() => onTogglePinnedPreset(preset.id)}
-                    title={preset.pinned ? t({ ko: '고정 해제', en: 'Unpin' }) : t({ ko: '고정', en: 'Pin' })}
-                    aria-label={preset.pinned ? t({ ko: '고정 해제', en: 'Unpin' }) : t({ ko: '고정', en: 'Pin' })}
+                    label={preset.pinned ? t({ ko: '고정 해제', en: 'Unpin' }) : t({ ko: '고정: 목록 맨 앞에 둬', en: 'Pin to the front' })}
                     className={cn('h-6 w-6 p-0', preset.pinned ? 'text-primary' : 'text-muted-foreground')}
                   >
                     <Star className={cn('h-3.5 w-3.5', preset.pinned ? 'fill-current' : '')} />
-                  </Button>
+                  </IconButton>
                 )}
                 actions={(
                   <>
-                    <Button
-                      type="button"
+                    <IconButton
                       size="icon-xs"
                       variant="ghost"
                       onClick={() => onStartEditingPreset(preset)}
-                      title={t({ ko: '이름 편집', en: 'Edit name' })}
-                      aria-label={t({ ko: '이름 편집', en: 'Edit name' })}
+                      label={t({ ko: '이름 편집', en: 'Edit name' })}
                     >
                       <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      type="button"
+                    </IconButton>
+                    <IconButton
                       size="icon-xs"
                       variant="ghost"
                       onClick={() => onRemovePreset(preset.id)}
-                      title={t({ ko: '프리셋 삭제', en: 'Delete preset' })}
-                      aria-label={t({ ko: '프리셋 삭제', en: 'Delete preset' })}
+                      label={t({ ko: '프리셋 삭제', en: 'Delete preset' })}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    </IconButton>
                   </>
                 )}
               />
             )
           })}
         </div>
-      ) : (
-        <div className="rounded-sm bg-surface-lowest px-3 py-5 text-center text-xs text-muted-foreground">
-          {t({ ko: '아직 저장한 커스텀 프리셋이 없어.', en: 'There are no saved custom presets yet.' })}
-        </div>
-      )}
+      ) : null}
     </div>
   )
 }

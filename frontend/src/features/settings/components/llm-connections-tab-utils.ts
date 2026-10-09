@@ -8,7 +8,6 @@ export type LlmConnectionDraft = {
   displayName: string
   providerType: ExternalApiProviderType
   baseUrl: string
-  defaultModel: string
   /** Request time limit in seconds; empty uses the server-wide default. */
   timeoutSeconds: string
   /** Requests the server answers at once; group rooms let that many members on this connection answer together. */
@@ -139,7 +138,6 @@ export function buildEmptyDraft(): LlmConnectionDraft {
     displayName: '',
     providerType: 'llm_openai_compatible',
     baseUrl: '',
-    defaultModel: '',
     timeoutSeconds: '',
     concurrentRequests: '1',
     apiKey: '',
@@ -155,7 +153,6 @@ export function buildProviderDraft(provider: ExternalApiProviderRecord): LlmConn
     displayName: provider.display_name,
     providerType: provider.provider_type,
     baseUrl: normalizeOptionalString(provider.base_url) ?? '',
-    defaultModel: normalizeOptionalString(provider.additional_config?.default_model ?? provider.additional_config?.model) ?? '',
     timeoutSeconds: readTimeoutSeconds(provider),
     concurrentRequests: readConcurrentRequests(provider),
     apiKey: '',
@@ -193,7 +190,7 @@ export function getBaseUrlSummary(provider: ExternalApiProviderRecord, notSetLab
 export function buildAdditionalConfig(draft: LlmConnectionDraft, baseConfig?: Record<string, unknown> | null) {
   const restConfig = { ...(baseConfig ?? {}) }
   // Generation options live on chat profiles / workflow nodes now; legacy keys are dropped on save.
-  for (const key of ['default_response_mode', 'response_mode', 'default_temperature', 'temperature', 'default_max_tokens', 'max_tokens', 'model', 'timeout_ms']) {
+  for (const key of ['default_response_mode', 'response_mode', 'default_temperature', 'temperature', 'default_max_tokens', 'max_tokens', 'model', 'default_model', 'timeout_ms']) {
     delete restConfig[key]
   }
   const seconds = Number(draft.timeoutSeconds)
@@ -201,7 +198,6 @@ export function buildAdditionalConfig(draft: LlmConnectionDraft, baseConfig?: Re
 
   return {
     ...restConfig,
-    default_model: draft.defaultModel || undefined,
     request_timeout_ms: Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : undefined,
     max_concurrent_requests: Number.isFinite(concurrent) && concurrent > 1 ? concurrent : undefined,
     prompt_cache_marks: draft.promptCacheMarks || undefined,

@@ -1,7 +1,7 @@
 import type { ChatJudgeChoiceOption, ChatJudgeFollowUp, ChatJudgeItem, ChatJudgePreset, ChatJudgePresetInput, ChatJudgeUncertain } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
-import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { ChatProfileError } from './chatProfileError'
+import { LLM_CONNECTION_TYPES, MODEL_CONNECTION_TYPES, ModelSlotStore } from './modelSlots'
 import { JUDGE_FOLLOW_UP_DEFAULTS, JUDGE_ITEM_DEFAULTS, JUDGE_OPTION_DEFAULTS, type JudgeOptions } from './chatJudgeDefaults'
 
 /**
@@ -26,9 +26,6 @@ export const JUDGE_LIMITS = {
   loreCandidates: { min: 1, max: 12 },
 } as const
 
-/** Connection types a judge preset can ask: the decision model, or an LLM answering in JSON. */
-export const JUDGE_PROVIDER_TYPES = ['decision_typesafe', 'llm_openai_compatible', 'llm_ollama'] as const
-const LLM_PROVIDER_TYPES = ['llm_openai_compatible', 'llm_ollama']
 const UNCERTAIN: readonly ChatJudgeUncertain[] = ['default', 'yes', 'no', 'llm']
 const ITEM_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/
 const TOOL_PATTERN = /^[a-z0-9_]{1,64}\*?$/
@@ -40,6 +37,8 @@ type PresetRow = {
   model: string
   escalation_provider_name: string | null
   escalation_model: string
+  model_slot_id: number | null
+  escalation_slot_id: number | null
   items: string
   follow_up: string
   options: string | null
@@ -172,18 +171,15 @@ export function normalizeJudgeOptions(value: unknown): JudgeOptions {
   }
 }
 
-/** A judge connection name, checked: unknown or not a decision / LLM connection is refused. Empty: none. */
-export function judgeConnectionName(value: unknown, kinds: readonly string[] = JUDGE_PROVIDER_TYPES) {
-  const name = text(value, 200)
-  if (!name) return null
-  const provider = ExternalApiProvider.findByName(name)
-  if (!provider || !kinds.includes(provider.provider_type)) throw new ChatProfileError(kinds === LLM_PROVIDER_TYPES ? 'LLM 연결을 찾을 수 없어.' : '판단 연결을 찾을 수 없어.')
-  return name
-}
-
-/** A stored connection name, or null once that connection is gone (the next save clears it). */
-export function existingJudgeConnection(name: string | null | undefined) {
-  return name && ExternalApiProvider.findByName(name) ? name : null
+/**
+ * A judge model row: its id, or a legacy connection + model pair landing on that connection's row (not created for a
+ * draft). Judges ask TypeSafe or LLM models; the escalation only LLM ones. Empty: none.
+ */
+function judgeSlot(slotId: unknown, providerName: unknown, model: unknown, kinds: readonly string[], draft: boolean) {
+  if (slotId !== null && slotId !== undefined && slotId !== '') return ModelSlotStore.checked(slotId, kinds)
+  if (typeof providerName !== 'string' || !providerName.trim()) return null
+  const id = ModelSlotStore.ensure(providerName, model, { create: !draft })
+  return id === null ? null : ModelSlotStore.checked(id, kinds)
 }
 
 function presetName(value: unknown) {
@@ -204,10 +200,8 @@ function toPreset(row: PresetRow): ChatJudgePreset {
   return {
     id: row.id,
     name: row.name,
-    providerName: existingJudgeConnection(row.provider_name),
-    model: row.model ?? '',
-    escalationProviderName: existingJudgeConnection(row.escalation_provider_name),
-    escalationModel: row.escalation_model ?? '',
+    modelSlotId: ModelSlotStore.existing(row.model_slot_id),
+    escalationSlotId: ModelSlotStore.existing(row.escalation_slot_id),
     items: normalizeJudgeItems(parseJson(row.items)),
     followUp: normalizeFollowUp(parseJson(row.follow_up)),
     ...normalizeJudgeOptions(parseJson(row.options)),
@@ -218,13 +212,16 @@ function toPreset(row: PresetRow): ChatJudgePreset {
   }
 }
 
-function toColumns(input: ChatJudgePresetInput) {
+function toColumns(input: ChatJudgePresetInput, draft = false) {
   return {
     name: presetName(input.name),
-    provider_name: judgeConnectionName(input.providerName),
-    model: text(input.model, 200),
-    escalation_provider_name: judgeConnectionName(input.escalationProviderName, LLM_PROVIDER_TYPES),
-    escalation_model: text(input.escalationModel, 200),
+    // The pair columns are the older form of the model rows; a save clears them.
+    provider_name: null,
+    model: '',
+    escalation_provider_name: null,
+    escalation_model: '',
+    model_slot_id: judgeSlot(input.modelSlotId, input.providerName, input.model, MODEL_CONNECTION_TYPES, draft),
+    escalation_slot_id: judgeSlot(input.escalationSlotId, input.escalationProviderName, input.escalationModel, LLM_CONNECTION_TYPES, draft),
     items: JSON.stringify(normalizeJudgeItems(input.items)),
     follow_up: JSON.stringify(normalizeFollowUp(input.followUp)),
     options: JSON.stringify(normalizeJudgeOptions({ room: input.room, context: input.context, fields: input.fields, assets: input.assets })),
@@ -251,7 +248,7 @@ export const ChatJudgePresetStore = {
 
   /** A preset as it would be saved, without saving it (testing an unsaved draft). */
   draft(input: ChatJudgePresetInput): ChatJudgePreset {
-    const columns = toColumns({ ...input, name: input.name || '판단 프리셋' })
+    const columns = toColumns({ ...input, name: input.name || '판단 프리셋' }, true)
     return toPreset({ ...columns, id: 0, created_date: '', updated_date: '' })
   },
 
@@ -265,7 +262,10 @@ export const ChatJudgePresetStore = {
   update(presetId: number, patch: ChatJudgePresetInput) {
     const current = ChatJudgePresetStore.find(presetId)
     if (!current) return null
-    const merged = { ...current, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) }
+    const merged: ChatJudgePresetInput = { ...current, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) }
+    // A legacy pair in the patch replaces the current row unless the patch names a row too.
+    if (patch.providerName && patch.modelSlotId === undefined) delete merged.modelSlotId
+    if (patch.escalationProviderName && patch.escalationSlotId === undefined) delete merged.escalationSlotId
     const columns = toColumns(merged)
     getUserSettingsDb().prepare(`UPDATE chat_judge_presets SET ${Object.keys(columns).map((name) => `${name} = @${name}`).join(', ')}, updated_date = CURRENT_TIMESTAMP WHERE id = @id`).run({ ...columns, id: presetId })
     return ChatJudgePresetStore.find(presetId)

@@ -27,6 +27,8 @@ export type RecommendedModuleMatch = {
 type QuickCreateState = {
   mode: 'pane' | 'connect'
   anchor: { x: number; y: number }
+  /** `center` hangs the menu centered under the anchor (toolbar "+ node"); pointer opens use `start`. */
+  align: 'start' | 'center'
   flowPosition: { x: number; y: number }
   connectionStart: PendingConnectionStart | null
 }
@@ -305,21 +307,11 @@ export function ModuleGraphCanvas({
     flowPosition: { x: number; y: number },
     mode: 'pane' | 'connect',
     connectionStart: PendingConnectionStart | null,
+    align: QuickCreateState['align'] = 'start',
   ) => {
     suppressNextPaneClick()
-    const menuWidth = 360
-    const menuHeight = 560
-    const viewportPadding = 12
-
-    setQuickCreateState({
-      mode,
-      anchor: {
-        x: Math.min(Math.max(anchor.x, viewportPadding), Math.max(window.innerWidth - menuWidth - viewportPadding, viewportPadding)),
-        y: Math.min(Math.max(anchor.y, viewportPadding), Math.max(window.innerHeight - menuHeight - viewportPadding, viewportPadding)),
-      },
-      flowPosition,
-      connectionStart,
-    })
+    // Raw pointer point: the Radix popover flips/shifts against the viewport using the menu's real size.
+    setQuickCreateState({ mode, anchor, align, flowPosition, connectionStart })
   }, [suppressNextPaneClick])
 
   const openQuickCreateMenu = useCallback((
@@ -385,7 +377,7 @@ export function ModuleGraphCanvas({
     const center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
     const flowPosition = reactFlowInstance.screenToFlowPosition(center)
     closeActionMenu()
-    openQuickCreateMenuAt({ x: center.x - 180, y: Math.max(rect.top + 12, center.y - 220) }, flowPosition, 'pane', null)
+    openQuickCreateMenuAt(center, flowPosition, 'pane', null, 'center')
   }, [closeActionMenu, openQuickCreateMenuAt, quickCreateRequest, reactFlowInstance])
 
   const rememberInteractionPoint = useCallback((event: unknown) => {
@@ -640,6 +632,7 @@ export function ModuleGraphCanvas({
           key={`${quickCreateState.mode}:${quickCreateState.anchor.x}:${quickCreateState.anchor.y}`}
           mode={quickCreateState.mode}
           anchor={quickCreateState.anchor}
+          align={quickCreateState.align}
           modules={modules}
           recommendedModules={recommendedModules}
           onSelectModule={(module) => {

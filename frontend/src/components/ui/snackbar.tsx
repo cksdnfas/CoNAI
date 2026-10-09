@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { Tip } from './tooltip'
 
 interface SnackbarProps {
   message: string
@@ -63,15 +64,16 @@ export function Snackbar({ message, content, tone = 'info', onClose, durationMs 
             {repeatCount > 1 ? <span className="ml-2 text-xs font-semibold text-muted-foreground">×{repeatCount}</span> : null}
           </>}
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className={cn('-mr-1 shrink-0 rounded-sm p-0.5 text-muted-foreground transition hover:text-foreground', 'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35')}
-          aria-label={t({ ko: '닫기', en: 'Close' })}
-          title={t({ ko: '닫기', en: 'Close' })}
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <Tip content={t({ ko: '닫기', en: 'Close' })}>
+          <button
+            type="button"
+            onClick={onClose}
+            className={cn('-mr-1 shrink-0 rounded-sm p-0.5 text-muted-foreground transition hover:text-foreground', 'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35')}
+            aria-label={t({ ko: '닫기', en: 'Close' })}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </Tip>
       </div>
     </div>
   )

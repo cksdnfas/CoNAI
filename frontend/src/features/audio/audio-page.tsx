@@ -23,9 +23,11 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Tip } from '@/components/ui/tooltip'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { useStreamFallbackInterval } from '@/features/runtime-events/use-runtime-event-stream'
 import { useI18n } from '@/i18n'
 import {
@@ -452,6 +454,9 @@ export function AudioPage() {
 
   /* ---------------------------------------------------------------------------------------------- chat */
 
+  // The chat moves around the tree (groups of the loaded projects), the review tabs and the takes; reviewing stays here.
+  const chatGroups = Object.values(groupsByProject).flatMap((entries) => entries ?? []).slice(0, 200)
+  const chatTakes = rows.slice(0, 200).map((row) => row.candidate)
   useChatPageRegistration({
     kind: 'audio',
     title: t({ ko: '오디오', en: 'Audio' }),
@@ -462,9 +467,33 @@ export function AudioPage() {
       group: group ? { id: group.id, name: group.name, label: group.label, description: group.description, isInbox: group.is_inbox } : null,
       reviewFilter: reviewTab,
       selectedCandidateIds: selected ? [selected.id] : [],
+      groups: chatGroups.map((entry) => ({ id: entry.id, projectId: entry.project_id, name: entry.name, isInbox: entry.is_inbox })),
+      takes: chatTakes.map((candidate) => ({ id: candidate.id, name: candidate.name, review: candidate.review })),
     },
+    actions: [
+      ...(chatGroups.length ? [pageAction('audio.open', t({ ko: '오디오 그룹 열기', en: 'Open audio group' }), t({ ko: '목록(data.groups)의 효과음 그룹이나 받은 파일을 열어.', en: 'Open a listed group (data.groups).' }), pageObject({ groupId: pageChoice(chatGroups.map((entry) => entry.id)) }, ['groupId']))] : []),
+      ...(group ? [pageAction('audio.filter', t({ ko: '검수 탭 바꾸기', en: 'Switch review tab' }), t({ ko: '전체·미검수·채택·보류 탭으로 바꿔.', en: 'Show all, unreviewed, adopted or rejected takes.' }), pageObject({ review: pageChoice(['all', 'pending', 'selected', 'rejected']) }, ['review']))] : []),
+      ...(chatTakes.length ? [pageAction('audio.select', t({ ko: '테이크 선택', en: 'Select take' }), t({ ko: '목록(data.takes)의 테이크를 골라 편집 패널을 열어.', en: 'Select a listed take (data.takes) and open its editor.' }), pageObject({ candidateId: pageChoice(chatTakes.map((candidate) => candidate.id)) }, ['candidateId']))] : []),
+    ],
     apply: () => undefined,
-  })
+    applyAction: (id, args, assertCurrent) => {
+      assertCurrent()
+      if (id === 'audio.open') {
+        const target = chatGroups.find((entry) => entry.id === String(args.groupId))
+        if (!target) throw new Error('목록에 없는 그룹이야.')
+        setProjectId(target.project_id)
+        setGroupId(target.id)
+        return
+      }
+      if (id === 'audio.filter') { setReviewTab(String(args.review) as ReviewTab); setSelectedId(null); return }
+      if (id === 'audio.select') {
+        if (!chatTakes.some((candidate) => candidate.id === String(args.candidateId))) throw new Error('목록에 없는 테이크야.')
+        setSelectedId(String(args.candidateId))
+        return
+      }
+      throw new Error('오디오 페이지에 없는 작업이야.')
+    },
+  }, { preserveOnSearchChange: true })
 
   /* ---------------------------------------------------------------------------------------------- render */
 
@@ -589,16 +618,20 @@ export function AudioPage() {
         <PageToolbar
           title={groupTitle}
           start={group?.label && !inbox ? (
-            <Button
-              variant="subtle"
-              size="xs"
-              className="min-w-0 truncate font-mono font-normal"
-              disabled={!permissions.canEdit}
-              title={t({ ko: '내보낼 파일명', en: 'Export file name' })}
-              onClick={() => setDialog('group-edit')}
-            >
-              {group.label}
-            </Button>
+            <Tip content={permissions.canEdit ? t({ ko: '내보낼 파일명: 눌러서 바꾸기', en: 'Export file name: click to change' }) : t({ ko: '내보낼 파일명', en: 'Export file name' })}>
+              {/* The span carries the tooltip while the button is disabled (a disabled button gets no pointer events). */}
+              <span className="inline-flex min-w-0" tabIndex={permissions.canEdit ? undefined : 0}>
+                <Button
+                  variant="subtle"
+                  size="xs"
+                  className="min-w-0 truncate font-mono font-normal"
+                  disabled={!permissions.canEdit}
+                  onClick={() => setDialog('group-edit')}
+                >
+                  {group.label}
+                </Button>
+              </span>
+            </Tip>
           ) : null}
           actions={toolbarActions}
         />
@@ -694,7 +727,7 @@ export function AudioPage() {
                   />
                 ))}
                 {rows.length === 0 && candidatesQuery.isSuccess && visibleOrders.length === 0 ? (
-                  <p className="py-10 text-center text-sm text-muted-foreground">{t({ ko: '후보 없음', en: 'No takes' })}</p>
+                  <p className="py-3 text-center text-xs text-muted-foreground">{t({ ko: '후보 없음', en: 'No takes' })}</p>
                 ) : null}
                 <div ref={loadMoreRef} className="h-px" />
               </div>
@@ -769,7 +802,7 @@ export function AudioPage() {
 
 function EmptyAudio({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
+    <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
       <p className="text-sm text-muted-foreground">{title}</p>
       {children}
     </div>

@@ -100,6 +100,7 @@ export function normalizeChatPageSnapshot(value: unknown): ChatPageSnapshot {
     if (!snapshot.revision) throw new Error('페이지 작업의 현재 버전이 필요해.')
   }
   if (raw.data !== undefined) snapshot.data = copyChatPageData(record(raw.data)) as ChatPageSnapshot['data']
+  if (raw.dirty === true) snapshot.dirty = true
   const limit = raw.actions || raw.data ? CHAT_PAGE_ACTION_LIMITS.bytes : kind === 'workflow' ? CHAT_WORKFLOW_LIMITS.snapshot + CHAT_PAGE_LIMITS.snapshot : CHAT_PAGE_LIMITS.snapshot
   if (JSON.stringify(snapshot).length > limit) throw new Error('연결할 페이지 정보가 너무 커. 필드 내용을 줄여줘.')
   return snapshot

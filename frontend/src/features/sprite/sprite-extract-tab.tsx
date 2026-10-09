@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Download, Film, Locate, Settings2, Square } from 'lucide-react'
+import { Download, Eye, Film, Locate, Settings2, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Tip } from '@/components/ui/tooltip'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useI18n } from '@/i18n'
 import { triggerBrowserDownload } from '@/lib/api-client'
@@ -222,14 +223,13 @@ export function SpriteExtractTab({ initialVideoHash, onVideoChange, toolbarSlot 
     setActiveColor(0)
   }, [info])
 
-  useSpriteChatPage({ videoHash: selected, info, form, setForm, output, build })
+  useSpriteChatPage({ videoHash: selected, videos: videoHashes, selectVideo: setSelectedHash, info, form, setForm, output, build })
 
   const selectedItem = selected ? statuses.get(selected) : undefined
   // Sheets appear in the summary as each video finishes, not only at the end.
   const runSaved = batchRunning ? [...statuses.values()].flatMap((item) => item.status === 'done' && item.compositeHash ? [item.compositeHash] : []) : savedHashes
   const progress = batchJob.job?.progress
   const summary = [
-    t({ ko: '영상 {count}', en: '{count} videos' }, { count: videoHashes.length }),
     form.samplingMode === 'count' ? t({ ko: '각 {count}컷', en: '{count} frames each' }, { count: form.sampleCount }) : `${form.intervalValue}${multiple || form.intervalUnit === 'seconds' ? 's' : 'f'}`,
     output.columns > 0 ? t({ ko: '{count}열', en: '{count} cols' }, { count: output.columns }) : t({ ko: '열 자동', en: 'auto cols' }),
     form.keyColors.join(' '),
@@ -286,7 +286,7 @@ export function SpriteExtractTab({ initialVideoHash, onVideoChange, toolbarSlot 
             <RangeControls form={form} setForm={(next) => { setForm(next); setPresetId(null) }} frameCount={indices.length} tooMany={tooMany} currentTime={() => Number((videoRef.current?.currentTime() ?? 0).toFixed(3))} maxTime={info.lastFrameTime} />
           </>
         ) : (
-          <div className="flex aspect-[16/10] items-center justify-center rounded-sm bg-surface-low text-muted-foreground">
+          <div className="flex h-40 items-center justify-center rounded-sm bg-surface-low text-muted-foreground">
             {infoQuery.isError ? <span role="alert" className="px-4 text-center text-sm text-destructive">{getErrorMessage(infoQuery.error, t({ ko: '영상을 읽지 못했어.', en: 'Could not read the video.' }))}</span> : <Film className="size-8 opacity-40" />}
           </div>
         )
@@ -297,13 +297,15 @@ export function SpriteExtractTab({ initialVideoHash, onVideoChange, toolbarSlot 
           <div className="bg-checker flex h-[min(60vh,560px)] items-center justify-center overflow-auto rounded-sm p-3">
             <img src={libraryMediaFileUrl(selectedItem.compositeHash)} alt={t({ ko: '저장된 시트', en: 'Saved sheet' })} className="max-h-full max-w-full object-contain" />
           </div>
-          <div className="font-mono text-xs text-muted-foreground">
-            {t({ ko: '{count}컷', en: '{count} frames' }, { count: selectedItem.frameCount ?? 0 })}{selectedItem.sheet ? ` · ${selectedItem.sheet.width}×${selectedItem.sheet.height}` : ''} · {save.groupPath ?? '스프라이트'}
-          </div>
+          <Tip content={[selectedItem.sheet ? `${selectedItem.sheet.width}×${selectedItem.sheet.height}` : null, save.groupPath ?? '스프라이트'].filter(Boolean).join(' · ')}>
+            <span className="self-start font-mono text-xs text-muted-foreground" tabIndex={0}>
+              {t({ ko: '{count}컷', en: '{count} frames' }, { count: selectedItem.frameCount ?? 0 })}
+            </span>
+          </Tip>
         </div>
       ) : (
-        <div className="bg-checker flex h-[min(56vh,420px)] items-center justify-center rounded-sm">
-          <Film className="size-10 text-muted-foreground opacity-30" />
+        <div className="bg-checker flex h-40 items-center justify-center rounded-sm">
+          <Film className="size-8 text-muted-foreground opacity-30" />
         </div>
       )}
     </section>
@@ -359,18 +361,22 @@ export function SpriteExtractTab({ initialVideoHash, onVideoChange, toolbarSlot 
             </span>
           </span>
         ) : (
-          <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{summary}</span>
+          <span className="min-w-0 flex-1">
+            <Tip content={summary}>
+              <span className="font-mono text-xs text-muted-foreground" tabIndex={0}>{t({ ko: '영상 {count}', en: '{count} videos' }, { count: videoHashes.length })}</span>
+            </Tip>
+          </span>
         )}
         {batchRunning ? (
-          <Button variant="secondary" disabled={stopRequested} onClick={() => void stopAfterCurrent()}>
-            <Square />{stopRequested ? t({ ko: '멈추는 중', en: 'Stopping' }) : t({ ko: '지금 영상 끝나고 멈추기', en: 'Stop after this video' })}
-          </Button>
+          <IconButton variant="secondary" disabled={stopRequested} onClick={() => void stopAfterCurrent()} label={stopRequested ? t({ ko: '멈추는 중', en: 'Stopping' }) : t({ ko: '지금 영상 끝나고 멈추기', en: 'Stop after this video' })}>
+            <Square />
+          </IconButton>
         ) : (
           <>
             {batchResult?.zip ? (
               <IconButton variant="secondary" label={t({ ko: 'ZIP 다시 받기', en: 'Download the ZIP again' })} onClick={() => triggerBrowserDownload(spriteResultDownloadUrl(batchResult.zip!.workspaceId, batchResult.zip!.fileName))}><Download /></IconButton>
             ) : null}
-            <Button variant="secondary" disabled={!canPreview} onClick={() => void preview()}>{t({ ko: '이 영상만 미리보기', en: 'Preview this video' })}</Button>
+            <IconButton variant="secondary" disabled={!canPreview} onClick={() => void preview()} label={t({ ko: '이 영상만 미리보기: 저장 없이 결과만 만들어봐', en: 'Preview this video: build without saving' })}><Eye /></IconButton>
             <Button disabled={!canRunAll} onClick={() => void runAll()}>
               <Film />
               {t({ ko: '전체 생성 · {count}', en: 'Build all · {count}' }, { count: videoHashes.length })}
@@ -395,12 +401,11 @@ function RangeControls({ form, setForm, frameCount, tooMany, currentTime, maxTim
   const update = (patch: Partial<ExtractForm>) => setForm({ ...form, ...patch })
   return (
     <div className="flex flex-col gap-3 pt-1">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground">{t({ ko: '구간', en: 'Range' })}</span>
-          <SegmentedControl size="sm" value={form.rangeMode} onChange={(mode) => update({ rangeMode: mode as ExtractForm['rangeMode'] })} items={[{ value: 'full', label: t({ ko: '영상 전체', en: 'Whole video' }) }, { value: 'common', label: t({ ko: '공통 구간', en: 'Same range' }) }]} ariaLabel={t({ ko: '구간', en: 'Range' })} />
-        </div>
-        <span className={cn('font-mono text-xs', tooMany ? 'text-destructive' : 'text-muted-foreground')}>{t({ ko: '이 영상 예상 {count}컷', en: '~{count} frames here' }, { count: frameCount })}</span>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SegmentedControl size="sm" value={form.rangeMode} onChange={(mode) => update({ rangeMode: mode as ExtractForm['rangeMode'] })} items={[{ value: 'full', label: t({ ko: '영상 전체', en: 'Whole video' }) }, { value: 'common', label: t({ ko: '공통 구간', en: 'Same range' }) }]} ariaLabel={t({ ko: '구간', en: 'Range' })} />
+        <Tip content={t({ ko: '이 영상에서 뽑힐 예상 컷 수', en: 'Estimated frames from this video' })}>
+          <span className={cn('font-mono text-xs', tooMany ? 'text-destructive' : 'text-muted-foreground')} tabIndex={0}>{t({ ko: '~{count}컷', en: '~{count} frames' }, { count: frameCount })}</span>
+        </Tip>
       </div>
       {form.rangeMode === 'common' ? (
         <div className="grid gap-3 sm:grid-cols-2">

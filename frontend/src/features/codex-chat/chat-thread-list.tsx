@@ -14,6 +14,7 @@ import { GroupAvatarStack } from './chat-group'
 import { ChatDeleteDialog } from './chat-delete-dialog'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { UnreadCount } from './chat-unread-count'
+import { ChatTaskRing } from './chat-task-ui'
 
 export type ChatListPatch = { title?: string; pinned?: boolean; archived?: boolean }
 export type ChatBulkAction = 'archive' | 'unarchive' | 'delete'
@@ -136,6 +137,7 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
             {/* Time on top, the unread count under it (side by side in the dense list). */}
             <span className={cn('flex shrink-0', dense ? 'items-center gap-2' : 'flex-col items-end gap-1')}>
               <span className="flex items-center gap-2">
+                {entry.task ? <ChatTaskRing summary={entry.task} /> : null}
                 {runningThreadIds.has(entry.id) ? <span role="img" aria-label={t({ ko: '답변 중', en: 'Replying' })} className="size-1.5 rounded-full bg-success motion-safe:animate-pulse" /> : null}
                 {Number.isNaN(movedAt.getTime()) ? null : <time className="text-2xs tabular-nums text-muted-foreground" dateTime={movedAt.toISOString()}>{whenLabel(movedAt)}</time>}
               </span>

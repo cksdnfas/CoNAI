@@ -5,6 +5,7 @@ import { Inset } from '@/components/ui/inset'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { Tip } from '@/components/ui/tooltip'
 import { ImageAttachmentPickerButton } from '@/features/image-generation/components/image-attachment-picker'
 import { TextSegmentSpreadsheetInput } from '@/features/image-generation/components/text-segment-spreadsheet-input'
 import { WildcardInlinePickerField } from '@/features/image-generation/components/wildcard-inline-picker-field'
@@ -198,14 +199,18 @@ export function TypedFieldInput({
         />
         {imageDraft && !imageUploadOnly ? (
           <Inset className="space-y-2 p-3">
-            {imageDraft.fileName ? <div className="text-xs text-muted-foreground">{imageDraft.fileName}</div> : null}
-            <InlineMediaPreview
-              src={imageDraft.dataUrl}
-              mimeType={imageDraft.mimeType}
-              fileName={imageDraft.fileName || undefined}
-              alt={imageModalTitle ?? ''}
-              frameClassName="p-3"
-            />
+            {/* The file name lives in the preview's tooltip instead of a caption line. */}
+            <Tip content={imageDraft.fileName || null}>
+              <div>
+                <InlineMediaPreview
+                  src={imageDraft.dataUrl}
+                  mimeType={imageDraft.mimeType}
+                  fileName={imageDraft.fileName || undefined}
+                  alt={imageModalTitle ?? ''}
+                  frameClassName="p-3"
+                />
+              </div>
+            </Tip>
             {imageRemovable ? (
               <div className="flex justify-end">
                 <IconButton size="icon-sm" variant="ghost" onClick={() => void onImageChange?.()} label={t({ ko: '이미지 제거', en: 'Remove image' })}>

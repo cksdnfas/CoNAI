@@ -34,6 +34,9 @@ import {
   type ChatToolPreset,
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
+import { CHAT_JUDGE_PRESETS_QUERY_KEY, listChatJudgePresets, type ChatJudgePreset } from '@/lib/api-chat-judge'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { pageAction, pageChoice, pageNumber, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { ChatBlockEditorModal } from './chat-block-editor-modal'
 import { readChatBlockFile } from './chat-block-file'
 import { ChatGenerationPresetEditorModal } from './chat-generation-preset-editor-modal'
@@ -84,6 +87,7 @@ export function ChatSettingsResources() {
   const [presetEditor, setPresetEditor] = useState<{ preset: ChatToolPreset | null } | null>(null)
   const presetImportRef = useRef<HTMLInputElement>(null)
   const [generationEditor, setGenerationEditor] = useState<{ preset: ChatGenerationPreset | null } | null>(null)
+  const [judgeEditor, setJudgeEditor] = useState<{ preset: ChatJudgePreset | null } | null>(null)
   const generationImportRef = useRef<HTMLInputElement>(null)
 
   const lorebooksQuery = useQuery({ queryKey: CHAT_LOREBOOKS_QUERY_KEY, queryFn: listChatLorebooks })
@@ -91,6 +95,41 @@ export function ChatSettingsResources() {
   const blocksQuery = useQuery({ queryKey: CHAT_BLOCKS_QUERY_KEY, queryFn: listChatBlocks })
   const presetsQuery = useQuery({ queryKey: CHAT_TOOL_PRESETS_QUERY_KEY, queryFn: listChatToolPresets })
   const generationPresetsQuery = useQuery({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY, queryFn: listChatGenerationPresets })
+  const judgePresetsQuery = useQuery({ queryKey: CHAT_JUDGE_PRESETS_QUERY_KEY, queryFn: listChatJudgePresets })
+
+  // A connected chat opens the editors listed here (view); each editor registers what it may fill and save.
+  const listed = {
+    lorebook: [...(lorebooksQuery.data ?? []), ...(ownLorebooksQuery.data ?? [])].map((book) => ({ id: book.id, name: book.name, kind: book.kind ?? 'global' })),
+    generation_preset: (generationPresetsQuery.data ?? []).map((preset) => ({ id: preset.id, name: preset.name, kind: preset.kind })),
+    judge_preset: (judgePresetsQuery.data ?? []).map((preset) => ({ id: preset.id, name: preset.name })),
+    block: (blocksQuery.data ?? []).map((shared) => ({ id: shared.id, name: shared.name })),
+    tool_preset: (presetsQuery.data ?? []).map((preset) => ({ id: preset.id, name: preset.name })),
+  }
+  useChatPageRegistration({
+    kind: 'settings', title: t({ ko: '설정 · 채팅 자원', en: 'Settings · Chat resources' }), resourceId: 'chat-resources', priority: 5, fields: [],
+    data: { section: 'chat', view: 'resources', ...listed },
+    actions: [pageAction('resource.open', t({ ko: '자원 편집기 열기', en: 'Open resource editor' }), t({ ko: '로어북(lorebook)·생성 프리셋(generation_preset)·판단 프리셋(judge_preset)·표시 블록(block)·도구 프리셋(tool_preset) 편집기를 열어. id를 빼면 새로 만들기, 있으면 data의 목록 id. 새 로어북은 kind=account면 내 계정 로어북이야.', en: 'Open an editor for a lorebook, generation preset, judge preset, display block or tool preset. Without id: a new one; with id: one from the lists in data. A new lorebook with kind=account is your own.' }), pageObject({ kind: pageChoice(['lorebook', 'generation_preset', 'judge_preset', 'block', 'tool_preset']), id: pageNumber(1, undefined, true), lorebookKind: pageChoice(['global', 'account']) }, ['kind']))],
+    apply: () => {},
+    applyAction: (id, args, assertCurrent) => {
+      assertCurrent()
+      if (id !== 'resource.open') throw new Error('자원 목록에 없는 작업이야.')
+      const kind = String(args.kind) as keyof typeof listed
+      const target = args.id === undefined ? null : Number(args.id)
+      const find = <T extends { id: number }>(items: T[] | undefined) => {
+        if (target === null) return null
+        const item = (items ?? []).find((entry) => entry.id === target)
+        if (!item) throw new Error('목록에 없는 자원이야.')
+        return item
+      }
+      if (kind === 'lorebook') {
+        const books: Array<ChatLorebook | OwnedChatLorebook> = [...(lorebooksQuery.data ?? []), ...(ownLorebooksQuery.data ?? [])]
+        setLorebookEditor({ lorebook: find(books), kind: args.lorebookKind === 'account' ? 'account' : 'global' })
+      } else if (kind === 'generation_preset') setGenerationEditor({ preset: find(generationPresetsQuery.data) })
+      else if (kind === 'judge_preset') setJudgeEditor({ preset: find(judgePresetsQuery.data) })
+      else if (kind === 'block') setBlockEditor({ shared: find(blocksQuery.data) })
+      else setPresetEditor({ preset: find(presetsQuery.data) })
+    },
+  }, { preserveOnSearchChange: true })
 
   const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' })
   const onDuplicateError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '복제하지 못했어.', en: 'Could not duplicate.' })), tone: 'error' })
@@ -263,7 +302,7 @@ export function ChatSettingsResources() {
         {generationPresetsQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(generationPresetsQuery.error, t({ ko: '생성 프리셋을 불러오지 못했어.', en: 'Could not load generation presets.' }))}</p> : null}
       </RowGroup>
 
-      <ChatJudgePresetGroup />
+      <ChatJudgePresetGroup editor={judgeEditor} setEditor={setJudgeEditor} />
 
       <RowGroup
         headingClassName={KIND_CLASS.block}

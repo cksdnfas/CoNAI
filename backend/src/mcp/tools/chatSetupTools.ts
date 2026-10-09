@@ -10,7 +10,7 @@ import { modelLabelOf } from '../../services/codex-chat/chatModelRoles';
 import { normalizeBlock } from '../../services/codex-chat/chatStyle';
 import type { McpRequestContext } from '../context';
 import { proposeProfileAssets } from '../../services/codex-chat/chatAssetProposals';
-import { chatAssetBatchInputSchema } from '../../services/codex-chat/chatAssetBatches';
+import { chatAssetBatchInputSchema, getChatAssetBatch, latestChatAssetBatchId } from '../../services/codex-chat/chatAssetBatches';
 import { ChatGenerationPresetStore, resolvePresetWorkflow } from '../../services/codex-chat/chatGenerationPresets';
 import { PromptPresetModel } from '../../models/PromptPreset';
 import { parseMcpMarkedFields } from './mcpComfyWorkflowService';
@@ -28,7 +28,7 @@ const PROPOSAL_NOTE = 'The card is shown to the user; nothing is saved until the
 const NO_CHAT_ERROR = 'Proposals need an active chat reply.';
 
 /** Profile fields a chat may propose changing. Engine, tool grants, allowlists, presets and provider/model pairs are not among them. */
-const PROPOSABLE_KEYS = ['name', 'tagline', 'systemPrompt', 'promptSections', 'greeting', 'alternateGreetings', 'authorNote', 'modelSlotId', 'summarySlotId', 'translationSlotId', 'suggestSlotId', 'lorebookIds', 'blockIds'] as const;
+const PROPOSABLE_KEYS = ['name', 'tagline', 'systemPrompt', 'promptSections', 'greeting', 'alternateGreetings', 'authorNote', 'appearance', 'modelSlotId', 'summarySlotId', 'translationSlotId', 'suggestSlotId', 'lorebookIds', 'blockIds'] as const;
 type ProposableKey = typeof PROPOSABLE_KEYS[number];
 
 const KEY_ALIASES: Record<string, ProposableKey> = {
@@ -97,14 +97,15 @@ function profileGuide() {
     `- prompt_sections (max ${limits.sections}): [{ "title": "World", "content": "...", "enabled": true }]. Title max ${limits.sectionTitle}, content max ${limits.text}. Plain sections are appended after the system prompt as "## title". Optional kind "dialogue" marks example conversation (lines starting with {{user}}: / {{char}}: become real turns).`,
     `- greeting (max ${limits.text}) and alternate_greetings (max ${limits.alternateGreetings}): the first message of a new chat is picked at random among them.`,
     `- author_note (max ${limits.authorNote}): scene direction added near the end of every request.`,
-    '- model_slot: model slot name or id (the chat model). Omit to let the user pick.',
+    `- appearance (max ${limits.text}): the character's look as image-prompt tags (hair, eyes, outfit…). Character image generation puts it in front of every asset prompt.`,
+    '- model_slot: model id or `connection · model` label (the chat model). Omit to start on the default model.',
     `- lorebook_ids (max ${PROFILE_MAX_LOREBOOKS}) and block_ids (max ${PROFILE_MAX_BLOCKS}): link existing shared lorebooks / display blocks by id.`,
     '- typeface: "sans" | "serif" | "mono".',
     `Numeric profile settings are clamped by the app and are not proposable (for reference: context turns ${CHAT_PROFILE_LIMITS.contextTurns.min}-${CHAT_PROFILE_LIMITS.contextTurns.max}, tool rounds ${CHAT_PROFILE_LIMITS.maxToolRounds.min}-${CHAT_PROFILE_LIMITS.maxToolRounds.max}).`,
     '',
-    'propose_profile_update patch keys: name, tagline, systemPrompt, promptSections, greeting, alternateGreetings, authorNote, modelSlotId (or model_slot), summarySlotId, translationSlotId, suggestSlotId, lorebookIds, blockIds (snake_case also accepted). Engine, tool scopes, tool allowlists, presets and provider/model pairs can never be proposed. Values equal to the current ones are dropped.',
+    'propose_profile_update patch keys: name, tagline, systemPrompt, promptSections, greeting, alternateGreetings, authorNote, appearance, modelSlotId (or model_slot), summarySlotId, translationSlotId, suggestSlotId, lorebookIds, blockIds (snake_case also accepted). Engine, tool scopes, tool allowlists, presets and provider/model pairs can never be proposed. Values equal to the current ones are dropped.',
     '',
-    `Model slots: ${slots.length ? slots.map((slot) => `#${slot.id} "${slot.name}"${slot.isDefault ? ' (default)' : ''}`).join(', ') : '(none yet)'}`,
+    `Models (connection · model): ${slots.length ? slots.filter((slot) => slot.providerType !== 'decision_typesafe').map((slot) => `#${slot.id} "${slot.label}"${slot.isDefault ? ' (default)' : ''}`).join(', ') : '(none yet)'}`,
     `Lorebooks: ${lorebooks.length ? lorebooks.map((book) => `#${book.id} "${book.name}"`).join(', ') : '(none)'}`,
     `Shared display blocks: ${blocks.length ? blocks.map((block) => `#${block.id} "${block.name}" (\`${block.block.key}\`)`).join(', ') : '(none)'}`,
     '',
@@ -122,13 +123,14 @@ function limitedText(label: string, value: unknown, maxLength: number, options: 
   return trimmed;
 }
 
-/** A slot id from a number, a numeric string, or a case-insensitive slot name; null clears. */
+/** A model row id from a number, a numeric string, a `connection · model` label or a model id (case-insensitive); null clears. */
 function resolveSlot(label: string, value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null;
-  const slots = ModelSlotStore.list();
-  const known = `Known model slots: ${slots.map((slot) => slot.name).join(', ') || '(none)'}`;
+  const slots = ModelSlotStore.list().filter((slot) => slot.providerType !== 'decision_typesafe');
+  const known = `Known models: ${slots.map((slot) => slot.label).join(', ') || '(none)'}`;
   if (typeof value === 'string') {
-    const byName = slots.find((slot) => slot.name.toLowerCase() === value.trim().toLowerCase());
+    const wanted = value.trim().toLowerCase();
+    const byName = slots.find((slot) => slot.label.toLowerCase() === wanted) ?? slots.find((slot) => slot.model.toLowerCase() === wanted);
     if (byName) return byName.id;
   }
   const id = ModelSlotStore.existing(value);
@@ -174,6 +176,7 @@ function normalizeProposedField(key: ProposableKey, value: unknown): unknown {
     case 'systemPrompt': return limitedText('systemPrompt', value, CHAT_PROFILE_TEXT_LIMITS.text);
     case 'greeting': return limitedText('greeting', value, CHAT_PROFILE_TEXT_LIMITS.text);
     case 'authorNote': return limitedText('authorNote', value, CHAT_PROFILE_TEXT_LIMITS.authorNote);
+    case 'appearance': return limitedText('appearance', value, CHAT_PROFILE_TEXT_LIMITS.text);
     case 'promptSections': return resolveSections(value);
     case 'alternateGreetings': return resolveGreetings(value);
     case 'modelSlotId':
@@ -230,6 +233,7 @@ export type ProfileProposalArgs = {
   greeting?: string;
   alternate_greetings?: string[];
   author_note?: string;
+  appearance?: string;
   model_slot?: string | number;
   lorebook_ids?: number[];
   block_ids?: number[];
@@ -245,6 +249,7 @@ export function buildProfileProposal(args: ProfileProposalArgs) {
     greeting: normalizeProposedField('greeting', args.greeting ?? ''),
     alternateGreetings: normalizeProposedField('alternateGreetings', args.alternate_greetings ?? []),
     authorNote: normalizeProposedField('authorNote', args.author_note ?? ''),
+    appearance: normalizeProposedField('appearance', args.appearance ?? ''),
     modelSlotId: normalizeProposedField('modelSlotId', args.model_slot ?? null),
     lorebookIds: normalizeProposedField('lorebookIds', args.lorebook_ids ?? []),
     blockIds: normalizeProposedField('blockIds', args.block_ids ?? []),
@@ -319,6 +324,7 @@ export function profileSetupView(profile: ChatProfile) {
     greeting: profile.greeting,
     alternateGreetings: profile.alternateGreetings,
     authorNote: profile.authorNote,
+    appearance: profile.appearance,
     modelSlotId: profile.modelSlotId,
     summarySlotId: profile.summarySlotId,
     translationSlotId: profile.translationSlotId,
@@ -350,9 +356,32 @@ function profileAssetsGuide(context: McpRequestContext) {
 
 /** Chat setup tools (scope `configure`, chat accounts with admin rights only): read the setup, propose changes as cards. */
 export function registerChatSetupTools(server: McpServer, context: McpRequestContext): void {
+  server.tool('get_asset_batch', 'Read a character asset batch: each slot with its status (waiting, queued, processing, completed, failed, blocked), chosen candidate and candidates with review results (expression match, hair/eye match with the reference, judge pick). Without batch_id: the newest batch of the profile (default: your speaking profile). Use it to follow generation and choose candidates for propose_profile_assets(action=apply, picks).', {
+    batch_id: z.number().int().positive().optional(), profile_id: z.number().int().positive().optional(),
+  }, async ({ batch_id, profile_id }) => {
+    try {
+      if (!context.chatContext || !context.requester) throw new Error(NO_CHAT_ERROR);
+      const profileId = profile_id ?? context.chatContext.profileId;
+      const id = batch_id ?? latestChatAssetBatchId(profileId);
+      if (!id) return textResult({ batch: null, note: 'This profile has no asset batch yet.' });
+      const batch = getChatAssetBatch(context.requester, id, batch_id ? undefined : profileId);
+      return textResult({
+        id: batch.id, profileId: batch.profileId, createdAt: batch.createdAt,
+        slots: batch.slots.map((slot) => ({
+          slotKey: slot.slotKey, kind: slot.kind, status: slot.status, chosen: slot.chosenHash,
+          candidates: slot.attempts.flatMap((attempt) => attempt.candidates.map((candidate) => ({
+            compositeHash: candidate.compositeHash,
+            ...(candidate.review ? { review: { expressionMatches: candidate.review.expression?.matches ?? null, hairMatches: candidate.review.hair.matches, eyesMatches: candidate.review.eyes.matches, judge: candidate.review.judge ?? null, similarTo: candidate.review.similarSlots.map((entry) => entry.slotKey) } } : {}),
+          }))).slice(-8),
+          failure: slot.attempts.at(-1)?.failureCode ?? null,
+        })),
+      });
+    } catch (error) { return errorResult(error); }
+  });
   server.tool('propose_profile_assets', 'Propose character asset generation (action=create), or application of already chosen batch candidates (action=apply), as separate approval cards. Read get_chat_setup_guide(topic=profile_assets) first for real preset IDs and ComfyUI prompt fields. Administrators must approve each card; this tool starts no jobs and changes no profile or group. For create, input uses presetId, expressionPresetId (prompt preset descriptions are emotion keywords), optional expressions and slots; ComfyUI needs promptField. For apply, give batch_id. Default target is your speaking profile.', {
     action: z.enum(['create', 'apply']).optional(), profile_id: z.number().int().positive().optional(),
     input: chatAssetBatchInputSchema.omit({ idempotencyKey: true }).optional(), batch_id: z.number().int().positive().optional(),
+    picks: z.record(z.string().max(40), z.string().max(200)).optional().describe('apply only: slotKey → compositeHash of a candidate from get_asset_batch to choose for that slot.'),
     avatarCrop: z.object({ x: z.number(), y: z.number(), scale: z.number().positive() }).nullable().optional(),
   }, async (args) => {
     try {
@@ -457,6 +486,7 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
       greeting: z.string().optional(),
       alternate_greetings: z.array(z.string()).optional(),
       author_note: z.string().optional(),
+      appearance: z.string().optional().describe('Look as image-prompt tags; used for character image generation'),
       model_slot: z.union([z.string(), z.number()]).optional().describe('Model slot name or id'),
       lorebook_ids: z.array(z.number().int().positive()).optional(),
       block_ids: z.array(z.number().int().positive()).optional(),
@@ -474,7 +504,7 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
 
   server.tool(
     'propose_profile_update',
-    'Propose changes to an existing chat profile (default: the one you speak as) as a before/after card. Nothing is saved until the user presses 저장. patch accepts only: name, tagline, systemPrompt, promptSections, greeting, alternateGreetings, authorNote, modelSlotId (or model_slot), summarySlotId, translationSlotId, suggestSlotId, lorebookIds, blockIds. Engine, tool grants, allowlists, presets and provider/model pairs are never proposable.',
+    'Propose changes to an existing chat profile (default: the one you speak as) as a before/after card. Nothing is saved until the user presses 저장. patch accepts only: name, tagline, systemPrompt, promptSections, greeting, alternateGreetings, authorNote, appearance, modelSlotId (or model_slot), summarySlotId, translationSlotId, suggestSlotId, lorebookIds, blockIds. Engine, tool grants, allowlists, presets and provider/model pairs are never proposable.',
     {
       profile_id: z.number().int().positive().optional(),
       patch: z.record(z.string(), z.unknown()),

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Text } from '@/components/ui/text'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type {
   GraphExecutionArtifactRecord,
@@ -73,8 +74,8 @@ export function SelectedExecutionSummary({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="font-medium">{t({ ko: 'LLM 응답 로그', en: 'LLM response log' })}</span>
-              {llmResponseDiagnostic.failedLog ? <Badge variant="destructive" title={llmResponseDiagnostic.failedLog.event_type}>{getGraphExecutionLogEventLabel(llmResponseDiagnostic.failedLog.event_type, t)}</Badge> : null}
-              {llmResponseDiagnostic.providerLog ? <Badge variant="outline" title={llmResponseDiagnostic.providerLog.event_type}>{getGraphExecutionLogEventLabel(llmResponseDiagnostic.providerLog.event_type, t)}</Badge> : null}
+              {llmResponseDiagnostic.failedLog ? <Tip content={llmResponseDiagnostic.failedLog.event_type}><Badge variant="destructive">{getGraphExecutionLogEventLabel(llmResponseDiagnostic.failedLog.event_type, t)}</Badge></Tip> : null}
+              {llmResponseDiagnostic.providerLog ? <Tip content={llmResponseDiagnostic.providerLog.event_type}><Badge variant="outline">{getGraphExecutionLogEventLabel(llmResponseDiagnostic.providerLog.event_type, t)}</Badge></Tip> : null}
             </div>
           </div>
           {llmResponseDiagnostic.textPreview ? (

@@ -6,6 +6,7 @@ import {
   applyGenerationQueueInputRefs,
 } from './generationQueueSchema';
 import { migrateLlmConnectionGenerationDefaults } from './llmConnectionDefaultsMigration';
+import { migrateLlmModelRows } from './llmModelRowsMigration';
 import { DEFAULT_JUDGE_PRESETS } from '../services/codex-chat/chatJudgeDefaults';
 
 /** Bootstrap core user-settings tables, indexes, and simple column backfills. */
@@ -544,12 +545,20 @@ export function createUserSettingsSchema(db: Database.Database): void {
   if (judgePresetsExisted && !(db.prepare('PRAGMA table_info(chat_judge_presets)').all() as Array<{ name: string }>).some((column) => column.name === 'options')) {
     db.exec("ALTER TABLE chat_judge_presets ADD COLUMN options TEXT NOT NULL DEFAULT '{}'");
   }
+  // The judge and escalation models (llm_model_slots rows; no foreign keys, like the profile slots). The provider/model
+  // columns above are the older pairs, moved onto rows by migrateLlmModelRows.
+  for (const column of ['model_slot_id', 'escalation_slot_id']) {
+    if (!(db.prepare('PRAGMA table_info(chat_judge_presets)').all() as Array<{ name: string }>).some((entry) => entry.name === column)) {
+      db.exec(`ALTER TABLE chat_judge_presets ADD COLUMN ${column} INTEGER`);
+    }
+  }
   if (!judgePresetsExisted) {
     const insertJudgePreset = db.prepare('INSERT INTO chat_judge_presets (name, items, follow_up, options) VALUES (?, ?, ?, ?)');
     for (const preset of DEFAULT_JUDGE_PRESETS) insertJudgePreset.run(preset.name, JSON.stringify(preset.items), JSON.stringify(preset.followUp), JSON.stringify(preset.options));
   }
 
-  // Model slots: a named LLM connection + model; chat profiles and workflow nodes reference them by id per role.
+  // Model rows: one model of an LLM connection each (`name` is a leftover unique token); profiles, judge presets, user
+  // profiles and chats reference them by id.
   db.exec(`
     CREATE TABLE IF NOT EXISTS llm_model_slots (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -907,7 +916,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['suggest_enabled', 'INTEGER'],
     ['suggest_provider_name', 'TEXT'],
     ['suggest_model', 'TEXT'],
-    // Model slots (llm_model_slots) per role; null: the direct provider/model columns apply. No foreign keys on purpose.
+    // Model rows (llm_model_slots) per role; null: the default row (chat) or the chat's model / off. No foreign keys on purpose.
+    // The provider/model pair columns are the older form, moved onto rows by migrateLlmModelRows.
     ['model_slot_id', 'INTEGER'],
     ['summary_slot_id', 'INTEGER'],
     ['translation_slot_id', 'INTEGER'],
@@ -922,6 +932,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['judge_preset_id', 'INTEGER'],
     ['judge_provider_name', 'TEXT'],
     ['judge_model', 'TEXT'],
+    // The judge model instead of the preset's (llm_model_slots); the pair above is the older form (migrateLlmModelRows).
+    ['judge_slot_id', 'INTEGER'],
   ];
   for (const [columnName, definition] of chatProfileColumns) {
     if (!hasColumn('llm_chat_profiles', columnName)) {
@@ -1473,6 +1485,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
 
   // Generation defaults move from LLM connections to the profiles that use them (no-op once done).
   migrateLlmConnectionGenerationDefaults(db);
+  migrateLlmModelRows(db);
 
   // Pinned chat memories become "always on" entries of each chat's lorebook (no-op once every row is NULL).
   if (db.prepare('SELECT 1 FROM codex_chat_threads WHERE memories IS NOT NULL LIMIT 1').get()) {

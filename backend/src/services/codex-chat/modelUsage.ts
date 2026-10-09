@@ -1,21 +1,10 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
-import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { resolveProfileModel } from './chatModelRoles'
 import { ChatProfileStore } from './chatProfiles'
-import { MODEL_ROLES, ModelSlotStore, type ModelRole } from './modelSlots'
-
-type UsedBy = Array<{ id: number; name: string; roles: ModelRole[] }>
 
 export type ModelUsage = {
-  connections: Array<{
-    providerName: string
-    slots: Array<{ id: number; name: string }>
-    /** Profiles that name the connection themselves (a role with no slot). */
-    directProfiles: UsedBy
-    /** Saved workflow LLM nodes whose profile chats through this connection. */
-    workflowNodes: number
-  }>
-  slots: Array<{ id: number; name: string; profiles: UsedBy; workflowNodes: number }>
+  /** Saved workflow LLM nodes per model row: nodes reach a row through the profile they chat as. */
+  slots: Array<{ id: number; workflowNodes: number }>
 }
 
 /** Saved graph-workflow LLM nodes (system.call_llm) per chat profile id; the graphs are JSON documents, so they are parsed. */
@@ -43,41 +32,15 @@ function workflowNodesByProfile(): Map<number, number> {
   return counts
 }
 
-/** Where each LLM connection and model slot is used: by slots, by profiles (per role) and by saved workflow nodes. */
+/** Where each model row is used by saved workflow nodes (the rest of a row's usage comes with the row itself). */
 export function buildModelUsage(): ModelUsage {
-  const profiles = ChatProfileStore.list()
-  const slots = ModelSlotStore.list()
   const nodesByProfile = workflowNodesByProfile()
-
   const slotNodes = new Map<number, number>()
-  const connectionNodes = new Map<string, number>()
-  const directByConnection = new Map<string, Map<number, { id: number; name: string; roles: ModelRole[] }>>()
-  for (const profile of profiles) {
+  for (const profile of ChatProfileStore.list()) {
     const nodes = nodesByProfile.get(profile.id) ?? 0
-    const chat = profile.engine === 'llm' ? resolveProfileModel(profile, 'chat') : null
-    if (chat && nodes > 0) {
-      connectionNodes.set(chat.providerName, (connectionNodes.get(chat.providerName) ?? 0) + nodes)
-      if (chat.slotId !== null) slotNodes.set(chat.slotId, (slotNodes.get(chat.slotId) ?? 0) + nodes)
-    }
-    for (const role of MODEL_ROLES) {
-      const resolved = resolveProfileModel(profile, role)
-      if (!resolved || resolved.via !== 'direct') continue
-      const byProfile = directByConnection.get(resolved.providerName) ?? new Map()
-      const entry = byProfile.get(profile.id) ?? { id: profile.id, name: profile.name, roles: [] }
-      entry.roles.push(role)
-      byProfile.set(profile.id, entry)
-      directByConnection.set(resolved.providerName, byProfile)
-    }
+    if (nodes === 0 || profile.engine !== 'llm') continue
+    const slotId = resolveProfileModel(profile, 'chat')?.slotId ?? null
+    if (slotId !== null) slotNodes.set(slotId, (slotNodes.get(slotId) ?? 0) + nodes)
   }
-
-  const llmConnections = ExternalApiProvider.findAll().filter((provider) => provider.provider_type === 'llm_openai_compatible' || provider.provider_type === 'llm_ollama')
-  return {
-    connections: llmConnections.map((provider) => ({
-      providerName: provider.provider_name,
-      slots: slots.filter((slot) => slot.providerName === provider.provider_name).map(({ id, name }) => ({ id, name })),
-      directProfiles: [...(directByConnection.get(provider.provider_name)?.values() ?? [])],
-      workflowNodes: connectionNodes.get(provider.provider_name) ?? 0,
-    })),
-    slots: slots.map((slot) => ({ id: slot.id, name: slot.name, profiles: slot.profiles, workflowNodes: slotNodes.get(slot.id) ?? 0 })),
-  }
+  return { slots: [...slotNodes].map(([id, workflowNodes]) => ({ id, workflowNodes })) }
 }

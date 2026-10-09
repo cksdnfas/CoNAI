@@ -3,6 +3,7 @@ import { useI18n, type AppLanguage } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
+import { Tip } from '@/components/ui/tooltip'
 
 /** Native names so each option is recognisable whatever language is active. */
 const LANGUAGE_NATIVE_NAMES: Record<AppLanguage, string> = {
@@ -14,14 +15,14 @@ const DEFAULT_OPTION_VALUE = 'default'
 
 const LANGUAGE_OPTIONS: Array<AppLanguage | null> = [null, 'ko', 'en']
 
-/** Label + hover title for one option; `null` follows the server default. */
+/** Label + tooltip for one option; `null` follows the server default. Native names need no tooltip. */
 function useLanguageOptionText() {
   const { t, defaultLanguage } = useI18n()
   return {
     label: (option: AppLanguage | null) => option === null ? t({ ko: '기본', en: 'Default' }) : LANGUAGE_NATIVE_NAMES[option],
-    title: (option: AppLanguage | null) => option === null
+    tip: (option: AppLanguage | null) => option === null
       ? t({ ko: '서버 기본 언어 따르기 ({language})', en: 'Follow the server default ({language})' }, { language: LANGUAGE_NATIVE_NAMES[defaultLanguage] })
-      : LANGUAGE_NATIVE_NAMES[option],
+      : null,
   }
 }
 
@@ -46,9 +47,11 @@ export function LanguageSwitch({ className }: { className?: string }) {
         items={LANGUAGE_OPTIONS.map((option) => ({
           value: option ?? DEFAULT_OPTION_VALUE,
           label: (
-            <span className="truncate" lang={option ?? undefined} title={optionText.title(option)}>
-              {optionText.label(option)}
-            </span>
+            <Tip content={optionText.tip(option)}>
+              <span className="truncate" lang={option ?? undefined}>
+                {optionText.label(option)}
+              </span>
+            </Tip>
           ),
         }))}
       />
@@ -66,23 +69,23 @@ export function LanguageTabs({ className }: { className?: string }) {
       {LANGUAGE_OPTIONS.map((option) => {
         const isSelected = languageOverride === option
         return (
-          <Button
-            key={option ?? DEFAULT_OPTION_VALUE}
-            type="button"
-            variant="ghost"
-            size="sm"
-            role="radio"
-            aria-checked={isSelected}
-            lang={option ?? undefined}
-            title={optionText.title(option)}
-            onClick={() => setLanguageOverride(option)}
-            className={cn(
-              'h-7 shrink-0 rounded-none border-b-2 px-0.5 font-normal hover:bg-transparent',
-              isSelected ? 'border-primary font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {optionText.label(option)}
-          </Button>
+          <Tip key={option ?? DEFAULT_OPTION_VALUE} content={optionText.tip(option)}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              role="radio"
+              aria-checked={isSelected}
+              lang={option ?? undefined}
+              onClick={() => setLanguageOverride(option)}
+              className={cn(
+                'h-7 shrink-0 rounded-none border-b-2 px-0.5 font-normal hover:bg-transparent',
+                isSelected ? 'border-primary font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {optionText.label(option)}
+            </Button>
+          </Tip>
         )
       })}
     </div>

@@ -6,6 +6,7 @@ import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Tip } from '@/components/ui/tooltip'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
@@ -70,11 +71,14 @@ export function SendToAudioDialog({ files, onClose }: { files: Array<{ id: strin
             {(groups.data ?? []).filter((group) => !group.is_inbox).map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
           </Select>
         </Field>
-        {projects.isSuccess && projects.data.length === 0 ? <p className="text-xs text-destructive">{t({ ko: '오디오 탭에서 프로젝트를 먼저 만들어줘.', en: 'Create a project in the Audio tab first.' })}</p> : null}
       </ModalBody>
       <ModalFooter>
         <span className="flex-1" />
-        <Button disabled={busy || !projectId} onClick={() => void send()}><AudioLines />{t({ ko: '{count}개 보내기', en: 'Send {count}' }, { count: files?.length ?? 0 })}</Button>
+        <Tip content={projects.isSuccess && projects.data.length === 0 ? t({ ko: '오디오 탭에서 프로젝트를 먼저 만들어줘.', en: 'Create a project in the Audio tab first.' }) : null}>
+          <span className="inline-flex" tabIndex={projects.isSuccess && projects.data.length === 0 ? 0 : undefined}>
+            <Button disabled={busy || !projectId} onClick={() => void send()}><AudioLines />{t({ ko: '{count}개 보내기', en: 'Send {count}' }, { count: files?.length ?? 0 })}</Button>
+          </span>
+        </Tip>
       </ModalFooter>
     </Modal>
   )

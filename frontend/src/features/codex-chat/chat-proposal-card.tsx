@@ -51,6 +51,8 @@ type ProfileProposal = Extract<Proposal, { kind: 'profile' }>
 type UpdateProposal = Extract<Proposal, { kind: 'profile_update' }>
 type LoreProposal = Extract<Proposal, { kind: 'lore' }>
 
+import { TaskPlanCard } from './chat-task-ui'
+
 const CARD_CLASS = 'space-y-2.5 rounded-md border border-line px-3 py-2.5'
 const DEFAULTS_QUERY_KEY = ['codex-chat-profile-defaults'] as const
 const LONG_TEXT = 160
@@ -82,6 +84,7 @@ function ProposalCard({ proposal, threadId }: { proposal: Proposal; threadId?: n
   if (proposal.kind === 'profile') return <ProfileProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'lore') return <LoreProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'profile_update') return <ProfileUpdateCard proposal={proposal} threadId={threadId} />
+  if (proposal.kind === 'task_plan') return <TaskPlanCard proposal={proposal} threadId={threadId} />
   return null
 }
 
@@ -249,7 +252,7 @@ function ProfileProposalCard({ proposal, threadId }: { proposal: ProfileProposal
   const defaultsQuery = useQuery({ queryKey: DEFAULTS_QUERY_KEY, queryFn: getChatProfileDefaults, staleTime: Infinity, enabled: admin })
   const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled: admin })
   const slots = slotsQuery.data
-  const slotName = input.modelSlotId != null ? slots?.find((slot) => slot.id === input.modelSlotId)?.name : t({ ko: '기본 모델', en: 'Default model' })
+  const slotName = input.modelSlotId != null ? slots?.find((slot) => slot.id === input.modelSlotId)?.label : t({ ko: '기본 모델', en: 'Default model' })
   const initialDraft = useMemo<ChatProfileInput>(() => ({ ...(proposal.input as ChatProfileInput), engine: 'llm', mcpEnabled: false }), [proposal.input])
 
   const saveMutation = useMutation({
@@ -302,6 +305,7 @@ const UPDATE_LABELS: Record<string, { ko: string; en: string }> = {
   greeting: { ko: '첫 인사말', en: 'Greeting' },
   alternateGreetings: { ko: '추가 인사말', en: 'Alternate greetings' },
   authorNote: { ko: '작가 노트', en: 'Author note' },
+  appearance: { ko: '외형', en: 'Appearance' },
   modelSlotId: { ko: '대화 모델', en: 'Chat model' },
   summarySlotId: { ko: '요약 모델', en: 'Summary model' },
   translationSlotId: { ko: '번역 모델', en: 'Translation model' },
@@ -348,7 +352,7 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
   const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled: admin })
   const defaultsQuery = useQuery({ queryKey: DEFAULTS_QUERY_KEY, queryFn: getChatProfileDefaults, staleTime: Infinity, enabled: admin })
   const profilesQuery = useQuery({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, queryFn: listChatAdminProfiles, enabled: admin && editorOpen })
-  const slotNames = useMemo(() => new Map((slotsQuery.data ?? []).map((slot) => [slot.id, slot.name])), [slotsQuery.data])
+  const slotNames = useMemo(() => new Map((slotsQuery.data ?? []).map((slot) => [slot.id, slot.label])), [slotsQuery.data])
   const current = profilesQuery.data?.find((profile) => profile.id === proposal.profileId) ?? null
   const keys = Object.keys(proposal.patch)
   const editorProfile = useMemo(() => current ? ({ ...current, ...proposal.patch } as ChatProfile) : null, [current, proposal.patch])

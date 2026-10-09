@@ -16,7 +16,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   restore_prompt_data: 'prompts.edit', search_wildcards: 'wildcards.view',
   list_workflows: 'workflows.view', get_workflow_details: 'workflows.view', list_comfyui_servers: 'workflows.view',
   list_custom_dropdown_lists: 'workflows.view', search_custom_dropdown_items: 'workflows.view',
-  get_workflow_editor: 'workflows.view', list_workflow_modules: 'workflows.view', propose_workflow_changes: 'workflows.view',
+  get_workflow_editor: 'workflows.view', list_workflow_modules: 'workflows.view', workflow_edit: 'workflows.view',
   list_graph_workflows: 'workflows.view', get_graph_workflow_details: 'workflows.view',
   get_graph_workflow_execution: ['workflows.view', 'images.view'], export_workflow_definition: 'workflows.view',
   import_workflow_definition: 'workflows.edit', restore_deleted_workflow: 'workflows.edit',
@@ -49,11 +49,24 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   list_audio_workflows: 'audio.view', get_audio_order: 'audio.view',
   order_audio: ['audio.view', 'audio.edit', 'generation.execute'], wait_audio_order: 'audio.view',
   cancel_audio_order: ['audio.view', 'audio.edit'], retry_audio_order_job: ['audio.view', 'audio.edit', 'generation.execute'],
-  chat_reply_to: [], room_call_member: [], room_history_search: [], room_history_read: [], read_lore_file: [], save_lore: [],
-  get_current_page: [], propose_page_changes: [], read_page_data: [], propose_page_action: [],
+  chat_reply_to: [], room_call_member: [], task_propose: [], task_status: [], task_update: [], task_wait: [], task_finish: [], get_proposal_status: [], room_history_search: [], room_history_read: [], read_lore_file: [], save_lore: [],
+  get_current_page: [], page_fill: [], page_act: [], read_page_data: [], propose_page_action: [],
   get_chat_setup_guide: [], list_chat_profiles: [], get_chat_profile: [], list_display_blocks: [], get_display_block: [],
-  propose_display_block: [], propose_chat_profile: [], propose_profile_update: [], propose_profile_assets: [],
+  propose_display_block: [], propose_chat_profile: [], propose_profile_update: [], propose_profile_assets: [], get_asset_batch: [],
 };
+
+const PAGE_SAFE_SCOPES = new Set(['read', 'configure']);
+const PAGE_PRIVATE_FILE_TOOLS = new Set(['list_files', 'get_file_info', 'read_file_text']);
+
+/**
+ * Page text may steer the reply, so a connected page keeps only tools that change nothing by themselves: library and
+ * catalog reads, and the setup proposals that merely show a card for an administrator to save. Private file contents
+ * stay out, and a public workflow page (written by someone else) keeps nothing beyond its own page tools.
+ */
+function pageKeepsTool(path: string, toolName: string) {
+  if (path.startsWith('/public/')) return false;
+  return PAGE_SAFE_SCOPES.has(getMcpToolScope(toolName) ?? '') && !PAGE_PRIVATE_FILE_TOOLS.has(toolName);
+}
 
 function requiredToolKeys(toolName: string): readonly string[] {
   const required = isChatGenerationTool(toolName) ? 'generation.execute' : TOOL_FEATURE_PERMISSIONS[toolName] ?? [];
@@ -102,7 +115,7 @@ export function isContextToolAllowed(context: McpRequestContext, toolName: strin
   if (accountChecks && context.requester && !accountHoldsTool(context, toolName)) return false;
   if (CHAT_ROOM_TOOLS.has(toolName)) return Boolean(context.chatContext) && (!GROUP_ONLY_CHAT_TOOLS.has(toolName) || context.chatContext?.kind === 'group');
   if (isConnectedChatPageTool(context, toolName)) return true;
-  if (context.chatContext?.page && !isChatGenerationTool(toolName)) return false;
+  if (context.chatContext?.page && !isChatGenerationTool(toolName) && !pageKeepsTool(context.chatContext.page.path, toolName)) return false;
   if (context.toolAllowlist && !context.toolAllowlist.includes(toolName)) return false;
   const presetMode = (context.generationPresetIds?.length ?? 0) > 0;
   if (isChatGenerationTool(toolName)) return presetMode && context.scopes.includes('generate');

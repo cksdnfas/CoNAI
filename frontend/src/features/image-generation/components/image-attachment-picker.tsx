@@ -7,6 +7,7 @@ import { MediaFileDropSurface } from '@/components/media/media-file-drop-surface
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -493,19 +494,16 @@ export function ImageAttachmentPickerButton({
           onDragLeave={uploadDropZone.handleDragLeave}
           actions={selectedImage ? (
             <>
-              <Button
-                type="button"
+              <IconButton
                 variant="secondary"
                 size="icon-sm"
                 disabled={uploadDisabled}
                 onClick={() => inputRef.current?.click()}
-                aria-label={t('uploadPageSections.replaceSelectedImage')}
-                title={t('uploadPageSections.replaceSelectedImage')}
+                label={t('uploadPageSections.replaceSelectedImage')}
               >
                 <RefreshCw />
-              </Button>
-              <Button
-                type="button"
+              </IconButton>
+              <IconButton
                 variant="destructive"
                 size="icon-sm"
                 disabled={uploadDisabled}
@@ -517,11 +515,10 @@ export function ImageAttachmentPickerButton({
 
                   onSelect()
                 }}
-                aria-label={t('uploadPageSections.removeSelectedImage')}
-                title={t('uploadPageSections.removeSelectedImage')}
+                label={t('uploadPageSections.removeSelectedImage')}
               >
                 <Trash2 />
-              </Button>
+              </IconButton>
             </>
           ) : undefined}
         >
@@ -546,10 +543,9 @@ export function ImageAttachmentPickerButton({
   return (
     <>
       {hideTrigger ? null : (
-        <Button type="button" variant="secondary" disabled={disabled} onClick={() => setIsOpen(true)}>
-          <ImagePlus className="h-4 w-4" />
-          {label}
-        </Button>
+        <IconButton variant="secondary" disabled={disabled} onClick={() => setIsOpen(true)} label={label}>
+          <ImagePlus />
+        </IconButton>
       )}
 
       <Modal

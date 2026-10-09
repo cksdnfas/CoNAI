@@ -4,7 +4,6 @@ import { CheckCheck, FolderMinus, FolderPlus, Play, Plus, RotateCcw, Trash2 } fr
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ErrorState } from '@/components/ui/error-state'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -244,10 +243,9 @@ export function GroupPage() {
           >
             <Play />
           </IconButton>
-          <Button type="button" size="sm" onClick={handleOpenCreateModal}>
+          <IconButton label={t('groups.group.page.new.group')} variant="ghost" size="icon-sm" onClick={handleOpenCreateModal}>
             <Plus />
-            {t('groups.group.page.new.group')}
-          </Button>
+          </IconButton>
         </>
       ) : (
         <IconButton

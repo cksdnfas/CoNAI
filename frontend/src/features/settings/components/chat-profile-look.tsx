@@ -48,7 +48,7 @@ function ColorField({ label, value, fallback, onChange }: { label: string; value
 }
 
 /** The profile's look: typeface, background, roleplay colours, with a sample line rendered as the chat would. */
-export function ChatProfileLook({ style, defaults, backgroundUrl, onStyleChange, onBackgroundChange, characterName, hasBackground, onBackgroundHashChange, onBusyChange, busy }: {
+export function ChatProfileLook({ style, defaults, backgroundUrl, onStyleChange, onBackgroundChange, characterName, hasBackground, onBackgroundHashChange, onBusyChange, busy, backgroundActions }: {
   style: ChatStyle
   defaults: ChatStyle | undefined
   /** What the background shows now (saved image, or a newly picked one); null when there is none. */
@@ -61,6 +61,8 @@ export function ChatProfileLook({ style, defaults, backgroundUrl, onStyleChange,
   busy: boolean
   /** Clear the legacy image alongside its library hash. */
   onBackgroundChange: (background: string | null) => void
+  /** Extra controls after the background's inputs (the profile editor's generate button). */
+  backgroundActions?: ReactNode
 }) {
   const { t } = useI18n()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -108,7 +110,10 @@ export function ChatProfileLook({ style, defaults, backgroundUrl, onStyleChange,
                 <X />
               </IconButton>
             ) : null}
-            <ChatProfileAssetInput characterName={characterName} onChange={onBackgroundHashChange} onBusyChange={onBusyChange} busy={busy} uploadRef={fileInputRef} />
+            <div className="flex items-center">
+              <ChatProfileAssetInput characterName={characterName} onChange={onBackgroundHashChange} onBusyChange={onBusyChange} busy={busy} uploadRef={fileInputRef} />
+              {backgroundActions}
+            </div>
           </div>
         </Group>
         {backgroundUrl ? (

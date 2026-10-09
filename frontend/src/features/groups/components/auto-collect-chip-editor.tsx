@@ -254,8 +254,6 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
                     onSelectMetadataSuggestion={(value) => appendChip(createAutoCollectChip(searchScope, 'OR', value))}
                     onSelectRatingTier={(tier) => appendChip(createRatingSearchChip(tier, { operator: 'OR' }))}
                     onSelectAIToolSuggestion={(tool) => appendChip(createAIToolSearchChip(tool, { operator: 'OR' }))}
-                    emptyRatingText={t('groups.components.auto.collect.chip.editor.no.rating.tiers.available')}
-                    idlePromptText={t('groups.components.auto.collect.chip.editor.enter.a.search.term')}
                   />
                 </div>
               </div>

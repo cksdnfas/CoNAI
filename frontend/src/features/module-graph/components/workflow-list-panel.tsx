@@ -293,10 +293,9 @@ export function WorkflowListPanel({
             </>
           ) : null}
           {onCreateWorkflow ? (
-            <Button type="button" size="sm" variant="secondary" className="ml-1" onClick={onCreateWorkflow} disabled={!canUpdateWorkflows}>
-              <Plus className="size-4" />
-              {t({ ko: '새로 만들기', en: 'New' })}
-            </Button>
+            <IconButton size="icon-sm" variant="secondary" onClick={onCreateWorkflow} disabled={!canUpdateWorkflows} label={t({ ko: '새 워크플로', en: 'New workflow' })}>
+              <Plus />
+            </IconButton>
           ) : null}
         </div>
       ) : null}

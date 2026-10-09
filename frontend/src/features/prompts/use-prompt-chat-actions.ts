@@ -16,7 +16,7 @@ export function usePromptChatActions(type: PromptTypeFilter, items: PromptCollec
   const input = { type: pageChoice([type]), prompt: pageText(), synonyms: pageArray(pageText(), 100), group_id: pageChoice([0, ...groups.filter((group) => group.id !== 0 && !isLockedPromptGroup(group, groupMap)).map((group) => group.id)].slice(0, 512)) }
   const required = ['type', 'prompt', 'synonyms', 'group_id']
   const actions = [
-    ...(items.length ? [pageAction('prompt.select', t({ ko: '프롬프트 선택', en: 'Select prompt' }), t({ ko: '현재 목록의 프롬프트를 선택해. 선택 뒤 새 요청으로 수정할 수 있어.', en: 'Select a current list item; request an edit after applying the selection.' }), pageObject({ id: pageChoice(items.map((item) => item.id)) }, ['id']))] : []),
+    ...(items.length ? [pageAction('prompt.select', t({ ko: '프롬프트 선택', en: 'Select prompt' }), t({ ko: '현재 목록의 프롬프트를 선택해. 선택한 화면이 바로 돌아오니 이어서 수정할 수 있어.', en: 'Select a current list item; the new screen comes back so you can edit it next.' }), pageObject({ id: pageChoice(items.map((item) => item.id)) }, ['id']))] : []),
     ...(permissions.canCreatePrompts ? [pageAction('prompt.create', t({ ko: '프롬프트 생성', en: 'Create prompt' }), t({ ko: '새 본문과 동의어·그룹을 프롬프트 보관함에 저장해. group_id 0은 미분류야.', en: 'Save a new prompt, synonyms and group. group_id 0 means ungrouped.' }), pageObject(input, required), 'save')] : []),
     ...(permissions.canUpdatePrompts && detail.data && selected && !isLockedPromptItem(selected, groupMap) ? [pageAction('prompt.update', t({ ko: '선택 프롬프트 수정', en: 'Edit selected prompt' }), t({ ko: '선택한 프롬프트의 본문·동의어·그룹을 수정해. 사용 횟수는 보존해.', en: 'Edit the selected prompt, synonyms and group while preserving usage counts.' }), pageObject({ id: pageChoice([selected.id]), ...input }, ['id', ...required]), 'save')] : []),
   ]

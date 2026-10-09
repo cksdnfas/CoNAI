@@ -2,6 +2,7 @@ import { SEARCH_AI_TOOL_OPTIONS } from '@/features/search/search-constants'
 import type { PromptCollectionItem } from '@/types/prompt'
 import type { RatingTierRecord, SearchAiToolGroup, SearchMetadataSuggestion, SearchScope } from '@/features/search/search-types'
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/loading-state'
 import { useI18n } from '@/i18n'
 
 interface SearchSuggestionListProps {
@@ -20,13 +21,19 @@ interface SearchSuggestionListProps {
   onSelectMetadataSuggestion: (value: string) => void
   onSelectRatingTier: (tier: RatingTierRecord) => void
   onSelectAIToolSuggestion: (tool: SearchAiToolGroup) => void
-  emptyPromptText?: string
-  emptyRatingText?: string
-  idlePromptText?: string
 }
 
 /** Edge-to-edge list row: nav tone and hover, with the trailing count pushed right. */
 const suggestionRowClassName = 'h-auto justify-between gap-4 rounded-none px-4 py-3'
+
+/** Loading row: a centred spinner, its text only for assistive tech. */
+function SuggestionLoadingRow({ label }: { label: string }) {
+  return (
+    <div className="flex justify-center px-4 py-3 text-muted-foreground">
+      <Spinner size="sm" label={label} />
+    </div>
+  )
+}
 
 function SuggestionActionRow({ label, onClick }: { label: string; onClick: () => void }) {
   return (
@@ -53,14 +60,8 @@ export function SearchSuggestionList({
   onSelectMetadataSuggestion,
   onSelectRatingTier,
   onSelectAIToolSuggestion,
-  emptyPromptText,
-  emptyRatingText,
-  idlePromptText,
 }: SearchSuggestionListProps) {
   const { t, formatNumber } = useI18n()
-  const resolvedEmptyPromptText = emptyPromptText ?? t('search.components.search.suggestion.list.no.matching.prompt.suggestions')
-  const resolvedEmptyRatingText = emptyRatingText ?? t('search.components.search.suggestion.list.no.rating.tiers.available')
-  const resolvedIdlePromptText = idlePromptText ?? t('search.components.search.suggestion.list.enter.a.search.term')
   const trimmedInput = searchInput.trim()
 
   if (searchScope === 'positive' || searchScope === 'negative' || searchScope === 'auto') {
@@ -68,9 +69,7 @@ export function SearchSuggestionList({
       <>
         {trimmedInput.length > 0 ? <SuggestionActionRow label={t({ ko: '"{value}" 추가', en: 'Add "{value}"' }, { value: trimmedInput })} onClick={onSubmitInput} /> : null}
 
-        {suggestionsLoading ? <div className="px-4 py-4 text-sm text-muted-foreground">{t('search.components.search.suggestion.list.loading.suggestions')}</div> : null}
-        {!suggestionsLoading && trimmedInput.length === 0 ? <div className="px-4 py-4 text-sm text-muted-foreground">{resolvedIdlePromptText}</div> : null}
-        {!suggestionsLoading && trimmedInput.length > 0 && promptSuggestions.length === 0 ? <div className="px-4 py-4 text-sm text-muted-foreground">{resolvedEmptyPromptText}</div> : null}
+        {suggestionsLoading ? <SuggestionLoadingRow label={t('search.components.search.suggestion.list.loading.suggestions')} /> : null}
         {!suggestionsLoading && promptSuggestions.length > 0
           ? promptSuggestions.map((item) => (
               <Button
@@ -91,8 +90,7 @@ export function SearchSuggestionList({
   if (searchScope === 'rating') {
     return (
       <>
-        {ratingTiersLoading ? <div className="px-4 py-4 text-sm text-muted-foreground">{t('search.components.search.suggestion.list.loading.rating.tiers')}</div> : null}
-        {!ratingTiersLoading && filteredRatingTiers.length === 0 ? <div className="px-4 py-4 text-sm text-muted-foreground">{resolvedEmptyRatingText}</div> : null}
+        {ratingTiersLoading ? <SuggestionLoadingRow label={t('search.components.search.suggestion.list.loading.rating.tiers')} /> : null}
         {!ratingTiersLoading && filteredRatingTiers.length > 0
           ? filteredRatingTiers.map((tier) => (
               <Button
@@ -127,15 +125,11 @@ export function SearchSuggestionList({
   const metadataSuggestions = searchScope === 'model' ? modelSuggestions : loraSuggestions
   const metadataLoading = searchScope === 'model' ? modelSuggestionsLoading : loraSuggestionsLoading
   const metadataLabel = searchScope === 'model' ? t('search.components.search.suggestion.list.model') : 'LoRA'
-  const metadataEmptyText = trimmedInput.length > 0
-    ? t({ ko: '일치하는 {metadataLabel}이 없어.', en: 'No matching {metadataLabel}.' }, { metadataLabel })
-    : t({ ko: '추천 {metadataLabel}이 아직 없어.', en: 'Suggested {metadataLabel} are not available yet.' }, { metadataLabel })
 
   return (
     <>
       {trimmedInput.length > 0 ? <SuggestionActionRow label={t({ ko: '"{value}" 추가', en: 'Add "{value}"' }, { value: trimmedInput })} onClick={onSubmitInput} /> : null}
-      {metadataLoading ? <div className="px-4 py-4 text-sm text-muted-foreground">{t({ ko: '{metadataLabel} 추천을 불러오는 중…', en: 'Loading {metadataLabel} suggestions…' }, { metadataLabel })}</div> : null}
-      {!metadataLoading && metadataSuggestions.length === 0 ? <div className="px-4 py-4 text-sm text-muted-foreground">{metadataEmptyText}</div> : null}
+      {metadataLoading ? <SuggestionLoadingRow label={t({ ko: '{metadataLabel} 추천을 불러오는 중…', en: 'Loading {metadataLabel} suggestions…' }, { metadataLabel })} /> : null}
       {!metadataLoading && metadataSuggestions.length > 0
         ? metadataSuggestions.map((item) => (
             <Button

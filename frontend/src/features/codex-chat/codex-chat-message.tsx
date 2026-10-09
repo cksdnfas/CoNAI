@@ -26,6 +26,7 @@ import { ChatErrorChip } from './chat-error-chip'
 import { ChatMarkdown, type ChatEmoticonMap } from './chat-markdown'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatProposalCards } from './chat-proposal-card'
+import { ChatPageOperationChips } from './chat-page-operation-chips'
 import { ChatReferenceButton, ChatThumbOverlay } from './chat-reference'
 import { MENTION_CLASS, splitMentions } from './chat-mentions'
 
@@ -682,6 +683,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
       {canViewImages ? <CodexChatToolMedia calls={toolCalls.filter((call) => !isAudioWorkspaceCall(call))} size={appearance.imageSize} layout={appearance.imageLayout} media={media} /> : null}
       <ChatAudioCards calls={toolCalls} />
       <ChatProposalCards calls={toolCalls} threadId={threadId} />
+      <ChatPageOperationChips calls={toolCalls} />
       {ownText ? markdown(ownText) : null}
     </div>
   )
@@ -693,9 +695,11 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
       {status === 'interrupted' ? <p className="text-xs text-muted-foreground">{t({ ko: '중단됨', en: 'Stopped' })}</p> : null}
       {status === 'failed' ? <ChatErrorChip error={error ?? null} /> : null}
       {truncated ? (
-        <p className="flex items-center gap-1 text-xs text-muted-foreground" title={t({ ko: '최대 출력 토큰에 닿아서 답변이 여기서 끊겼어. ⋯ → 컨텍스트에서 한도를 올릴 수 있어.', en: 'The reply hit the max output tokens. Raise the cap under ⋯ → Context.' })}>
-          <Scissors className="size-3" aria-hidden />{t({ ko: '길이 제한에서 잘림', en: 'Cut at the length limit' })}
-        </p>
+        <Tip content={t({ ko: '최대 출력 토큰에 닿아서 답변이 여기서 끊겼어. ⋯ → 컨텍스트에서 한도를 올릴 수 있어.', en: 'The reply hit the max output tokens. Raise the cap under ⋯ → Context.' })} side="bottom" align="start">
+          <p tabIndex={0} className="flex w-fit cursor-help items-center gap-1 rounded-sm text-xs text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+            <Scissors className="size-3" aria-hidden />{t({ ko: '길이 제한에서 잘림', en: 'Cut at the length limit' })}
+          </p>
+        </Tip>
       ) : null}
     </div>
   ) : null

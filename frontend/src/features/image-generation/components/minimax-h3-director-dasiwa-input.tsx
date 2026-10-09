@@ -1,13 +1,16 @@
 import { useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react'
 import { applyMiniMaxDirectorResolutionBounds } from '@conai/shared'
-import { Film, ImageIcon, Music2, Plus, RotateCcw } from 'lucide-react'
+import { Film, ImageIcon, ImagePlus, Link2, Music2, Plus, RotateCcw } from 'lucide-react'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Inset } from '@/components/ui/inset'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import {
   buildWorkflowInputAssetUrl,
@@ -550,13 +553,17 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           onKeyboardMove={(direction) => moveTimelineItem(item, direction)}
         >
         {item.type === 'video' ? (
-          <div className="flex flex-wrap gap-1">
-            {([['video', 'V'], ['audio', 'A'], ['video_audio', 'V+A']] as Array<[MiniMaxH3DirectorVideoMode, string]>).map(([videoMode, videoLabel]) => (
-              <Button key={videoMode} type="button" size="sm" variant={(item.media_mode ?? 'video') === videoMode ? 'default' : 'secondary'} className="h-7 px-2 text-2xs" onClick={() => changeVideoMode(item, videoMode)}>
-                {videoLabel}
-              </Button>
-            ))}
-          </div>
+          <SegmentedControl
+            size="xs"
+            ariaLabel={t({ ko: '영상 사용 방식', en: 'Video usage' })}
+            value={item.media_mode ?? 'video'}
+            onChange={(videoMode) => changeVideoMode(item, videoMode as MiniMaxH3DirectorVideoMode)}
+            items={[
+              { value: 'video', label: 'V', ariaLabel: t({ ko: 'V: 영상만 참조', en: 'V: video only' }) },
+              { value: 'audio', label: 'A', ariaLabel: t({ ko: 'A: 소리만 오디오 참조로', en: 'A: audio track only' }) },
+              { value: 'video_audio', label: 'V+A', ariaLabel: t({ ko: 'V+A: 영상과 소리 둘 다 참조', en: 'V+A: video and audio' }) },
+            ]}
+          />
         ) : null}
 
         {item.type !== 'image' && asset ? (
@@ -625,30 +632,25 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
-            <FormField label={t({ ko: '시작', en: 'Start' })}>
-              <NumberStepperInput min={0} max={Math.max(0, trimEnd - 2)} step={0.25} value={String(trimStart)} onValueCommit={(nextValue) => {
+              <NumberStepperInput aria-label={t({ ko: '시작(초)', en: 'Start (seconds)' })} min={0} max={Math.max(0, trimEnd - 2)} step={0.25} value={String(trimStart)} onValueCommit={(nextValue) => {
                 const nextStart = Math.max(0, Math.min(trimEnd - 2, Number(nextValue)))
                 updateTimelineItem(item.id, { trim_start: nextStart, duration: trimEnd - nextStart })
               }} />
-            </FormField>
-            <FormField label={t({ ko: '끝', en: 'End' })}>
-              <NumberStepperInput min={trimStart + 2} max={sourceDuration} step={0.25} value={String(trimEnd)} onValueCommit={(nextValue) => {
+              <NumberStepperInput aria-label={t({ ko: '끝(초)', en: 'End (seconds)' })} min={trimStart + 2} max={sourceDuration} step={0.25} value={String(trimEnd)} onValueCommit={(nextValue) => {
                 const nextEnd = Math.min(sourceDuration, Math.max(trimStart + 2, Number(nextValue)))
                 updateTimelineItem(item.id, { trim_end: nextEnd, duration: nextEnd - trimStart })
               }} />
-            </FormField>
             </div>
           </div>
         ) : null}
 
-        <FormField label={t({ ko: '미디어 프롬프트', en: 'Media prompt' })}>
-          <Textarea
-            rows={3}
-            value={String(item.prompt ?? '')}
-            placeholder={t({ ko: '역할·속성·동작', en: 'Role, attributes, motion' })}
-            onChange={(event) => updateTimelineItem(item.id, { prompt: event.target.value })}
-          />
-        </FormField>
+        <Textarea
+          rows={3}
+          value={String(item.prompt ?? '')}
+          aria-label={t({ ko: '미디어 프롬프트', en: 'Media prompt' })}
+          placeholder={t({ ko: '역할·속성·동작', en: 'Role, attributes, motion' })}
+          onChange={(event) => updateTimelineItem(item.id, { prompt: event.target.value })}
+        />
         </MiniMaxH3DirectorMediaCard>
       </div>
     )
@@ -662,7 +664,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           type="button"
           variant="subtle"
           disabled={isUploading}
-          className="h-auto min-h-36 w-full min-w-0 flex-col gap-2 px-3 text-xs whitespace-normal"
+          className="h-auto min-h-24 w-full min-w-0 flex-col gap-2 px-3 text-xs whitespace-normal"
           onClick={() => {
             requestedFrameSlotRef.current = slot
             visualInputRef.current?.click()
@@ -670,8 +672,8 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => { event.stopPropagation(); handleLaneDrop(event, 'image', slot) }}
         >
+          <ImagePlus className="size-5 text-muted-foreground" />
           <span className="font-medium text-foreground">{label}</span>
-          <span>{t({ ko: '이미지를 추가하거나 놓아줘.', en: 'Add or drop an image.' })}</span>
         </Button>
       </div>
     )
@@ -696,6 +698,28 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         ? [{ slot: 1, label: t({ ko: '끝 프레임', en: 'End frame' }) }]
         : []
   const baseFrameCapacityReached = !isReferenceMediaMode && visualItems.length >= frameSlots.length
+  const modeHints: Record<MiniMaxH3DirectorMode, string> = {
+    T2VA: t({ ko: '텍스트만으로 영상', en: 'Text to video' }),
+    I2VA: t({ ko: '시작 프레임에서 영상', en: 'Start frame to video' }),
+    FL2VA: t({ ko: '시작·끝 프레임 사이 영상', en: 'Video between first and last frames' }),
+    L2VA: t({ ko: '끝 프레임으로 끝나는 영상', en: 'Video ending on the last frame' }),
+    REF2VA: t({ ko: '참조 이미지·영상·오디오로 영상', en: 'Video from reference images, video and audio' }),
+    'Image Inpaint': t({ ko: '이미지 한 장 인페인트', en: 'Inpaint a single image' }),
+  }
+  const hasImageLaneItems = timeline.items.some((item) => getMediaLane(item) === 'image')
+  const hasAudioLaneItems = timeline.items.some(hasMiniMaxDirectorAudio)
+  const renderLaneIcon = (icon: ReactNode, label: string) => (
+    <Tip content={label}>
+      <span role="img" aria-label={label} className="inline-flex text-foreground">{icon}</span>
+    </Tip>
+  )
+  const renderDropZone = (label: string, icon: ReactNode, onClick: () => void, disabled?: boolean) => (
+    <Tip content={label}>
+      <Button type="button" variant="subtle" aria-label={label} disabled={disabled} className="h-10 w-full text-muted-foreground" onClick={onClick}>
+        {icon}
+      </Button>
+    </Tip>
+  )
 
   return (
     <div className="space-y-4" tabIndex={0} onPaste={handlePaste} onClick={() => setMenuItemId(null)}>
@@ -709,24 +733,24 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="text-sm font-semibold text-foreground">MiniMax H3 Director</div>
-          <Badge variant="outline">DaSiWa</Badge>
           {mode === 'REF2VA' && !ref2vaModelConnected ? <Badge variant="destructive">{t({ ko: 'REF2VA 미연결', en: 'REF2VA missing' })}</Badge> : null}
           {mode && mode !== 'REF2VA' && !fl2vaModelConnected ? <Badge variant="destructive">{t({ ko: '기본 모델 미연결', en: 'Base model missing' })}</Badge> : null}
           {mode === null && (!fl2vaModelConnected || !ref2vaModelConnected) ? <Badge variant="destructive">{t({ ko: '동적 모드 모델 확인', en: 'Check dynamic-mode models' })}</Badge> : null}
         </div>
-        <div className="flex flex-wrap gap-1">
-          {isFieldVisible('mode')
-            ? MINIMAX_H3_DIRECTOR_MODES.map((nextMode) => (
-                <Button key={nextMode} type="button" size="sm" variant={mode === nextMode ? 'default' : 'secondary'} onClick={() => changeMode(nextMode)}>
-                  {nextMode}
-                </Button>
-              ))
-            : null}
+        <div className="flex flex-wrap items-center gap-1">
+          {isFieldVisible('mode') ? (
+            <SegmentedControl
+              size="xs"
+              ariaLabel={t({ ko: '생성 모드', en: 'Generation mode' })}
+              value={mode ?? ''}
+              onChange={(nextMode) => changeMode(nextMode as MiniMaxH3DirectorMode)}
+              items={MINIMAX_H3_DIRECTOR_MODES.map((nextMode) => ({ value: nextMode, label: nextMode, ariaLabel: `${nextMode} · ${modeHints[nextMode]}` }))}
+            />
+          ) : null}
           {canReset ? (
-            <Button type="button" size="icon-sm" variant="ghost" onClick={clearTimeline} aria-label={t({ ko: 'Director 초기화', en: 'Reset Director' })} title={t({ ko: '전체 초기화', en: 'Reset all' })}>
+            <IconButton size="icon-sm" variant="ghost" onClick={clearTimeline} label={t({ ko: 'Director 전체 초기화 (미디어·프롬프트)', en: 'Reset Director (media and prompt)' })}>
               <RotateCcw className="h-4 w-4" />
-            </Button>
+            </IconButton>
           ) : null}
           <MiniMaxH3DirectorPackPanel value={nodeValue} onChange={(next) => onChange(applyMiniMaxDirectorResolutionBounds(next, numericBounds))} allowFiles={isFieldVisible('timeline_data')} allowPrompt={isFieldVisible('prompt')} allowMode={isFieldVisible('mode')} disabled={isUploading} />
         </div>
@@ -846,18 +870,22 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
       ) : null}
 
       {isFieldVisible('timeline_data') ? <>
-      <div className={cn('ui-tone-plinth space-y-3 rounded-sm p-3 transition-shadow', selectedLane === 'image' && 'ring-1 ring-inset ring-primary/45')} onClick={() => setSelectedLane('image')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleLaneDrop(event, 'image')}>
+      {/* T2VA takes no frames: the image lane only stays while leftover images still need clearing. */}
+      {mode !== 'T2VA' || hasImageLaneItems ? (
+      <div className={cn('ui-tone-plinth space-y-3 rounded-sm p-3 transition-shadow', mode === 'T2VA' ? 'opacity-60' : selectedLane === 'image' && 'ring-1 ring-inset ring-primary/45')} onClick={() => setSelectedLane('image')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleLaneDrop(event, 'image')}>
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs font-medium text-foreground"><ImageIcon className="h-4 w-4" />{isReferenceMediaMode ? t({ ko: '이미지', en: 'Images' }) : t({ ko: '키 프레임', en: 'Key frames' })}</div>
+          {renderLaneIcon(<ImageIcon className="h-4 w-4" />, isReferenceMediaMode ? t({ ko: '이미지 참조', en: 'Image references' }) : t({ ko: '키 프레임', en: 'Key frames' }))}
           <div className="flex items-center gap-1">
-            {timeline.items.some((item) => getMediaLane(item) === 'image') ? (
-              <Button type="button" size="icon-sm" variant="ghost" onClick={() => clearLane('image')} aria-label={t({ ko: '이미지 초기화', en: 'Clear image lane' })} title={t({ ko: '이미지 초기화', en: 'Clear image lane' })}>
+            {hasImageLaneItems ? (
+              <IconButton size="icon-sm" variant="ghost" onClick={() => clearLane('image')} label={t({ ko: '이미지 모두 비우기', en: 'Clear all images' })}>
                 <RotateCcw className="h-4 w-4" />
-              </Button>
+              </IconButton>
             ) : null}
-            <Button type="button" size="icon-sm" variant="secondary" disabled={isUploading || baseFrameCapacityReached} onClick={() => visualInputRef.current?.click()} aria-label={t({ ko: '이미지 추가', en: 'Add image' })} title={t({ ko: '추가', en: 'Add' })}>
-              <Plus className="h-4 w-4" />
-            </Button>
+            {mode !== 'T2VA' ? (
+              <IconButton size="icon-sm" variant="secondary" disabled={isUploading || baseFrameCapacityReached} onClick={() => visualInputRef.current?.click()} label={isReferenceMediaMode ? t({ ko: '참조 이미지 추가', en: 'Add reference image' }) : t({ ko: '키 프레임 이미지 추가', en: 'Add key frame image' })}>
+                <Plus className="h-4 w-4" />
+              </IconButton>
+            ) : null}
           </div>
           <input ref={visualInputRef} type="file" accept="image/*" multiple={isReferenceMediaMode || mode === 'FL2VA'} hidden onChange={(event) => {
             const requestedFrameSlot = requestedFrameSlotRef.current
@@ -879,68 +907,79 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
                 : renderEmptyFrameSlot(descriptor.slot, descriptor.label, inputKey)
             })}
           </div>
-        ) : mode === 'T2VA' ? (
-          <div className="flex min-h-28 items-center justify-center rounded-sm bg-foreground/4 px-3 text-center text-xs text-muted-foreground">{t({ ko: '입력 프레임 없음', en: 'No input frames' })}</div>
-        ) : visualItems.length > 0 ? (
+        ) : mode === 'T2VA' ? null : visualItems.length > 0 ? (
           <div className="grid items-start gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 14rem), 1fr))' }}>
             {visualItems.map((item) => renderMediaCard(item, visualItems.filter((candidate) => candidate.type === item.type && candidate.slot <= item.slot).length))}
           </div>
-        ) : (
-          <Button type="button" variant="subtle" className="h-auto min-h-28 w-full px-3 text-xs whitespace-normal" onClick={() => visualInputRef.current?.click()}>
-            {mode === null ? t({ ko: '참조 미디어 추가', en: 'Add reference media' }) : t({ ko: '이미지 추가', en: 'Add image' })}
-          </Button>
+        ) : renderDropZone(
+          t({ ko: '참조 이미지 추가 (여기에 끌어다 놓아도 돼)', en: 'Add reference images (or drop them here)' }),
+          <ImagePlus className="h-4 w-4" />,
+          () => visualInputRef.current?.click(),
         )}
       </div>
+      ) : null}
 
       {isReferenceMediaMode ? (
         <div className={cn('ui-tone-plinth space-y-3 rounded-sm p-3 transition-shadow', selectedLane === 'video' && 'ring-1 ring-inset ring-primary/45')} onClick={() => setSelectedLane('video')} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleLaneDrop(event, 'video')}>
           <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-xs font-medium"><Film className="h-4 w-4" />{t({ ko: '영상', en: 'Video' })}</div>
+            {renderLaneIcon(<Film className="h-4 w-4" />, t({ ko: '영상 참조', en: 'Video references' }))}
             <div className="flex items-center gap-1">
-              {videoItems.length > 0 ? <Button type="button" size="icon-sm" variant="ghost" disabled={isUploading} onClick={() => clearLane('video')} aria-label={t({ ko: '영상 초기화', en: 'Clear video lane' })}><RotateCcw className="h-4 w-4" /></Button> : null}
-              <Button type="button" size="icon-sm" variant="secondary" disabled={isUploading} onClick={() => videoInputRef.current?.click()} aria-label={t({ ko: '영상 추가', en: 'Add video' })}><Plus className="h-4 w-4" /></Button>
+              {videoItems.length > 0 ? <IconButton size="icon-sm" variant="ghost" disabled={isUploading} onClick={() => clearLane('video')} label={t({ ko: '영상 모두 비우기', en: 'Clear all videos' })}><RotateCcw className="h-4 w-4" /></IconButton> : null}
+              <IconButton size="icon-sm" variant="secondary" disabled={isUploading} onClick={() => videoInputRef.current?.click()} label={t({ ko: '참조 영상 추가', en: 'Add reference video' })}><Plus className="h-4 w-4" /></IconButton>
             </div>
             <input ref={videoInputRef} type="file" accept="video/*" multiple hidden onChange={(event) => { void handleFiles(Array.from(event.target.files ?? []), 'video'); event.target.value = '' }} />
           </div>
           {renderInputPort?.('reference_video')}
           {videoItems.length > 0 ? <div className="grid items-start gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 14rem), 1fr))' }}>{videoItems.map((item, index) => renderMediaCard(item, index + 1))}</div>
-            : <Button type="button" variant="subtle" disabled={isUploading} className="h-auto min-h-20 w-full px-3 text-xs whitespace-normal" onClick={() => videoInputRef.current?.click()}>{t({ ko: '영상을 추가하거나 끌어다 놓아 줘.', en: 'Add or drop a video.' })}</Button>}
+            : renderDropZone(
+                t({ ko: '참조 영상 추가 (여기에 끌어다 놓아도 돼)', en: 'Add reference video (or drop it here)' }),
+                <Film className="h-4 w-4" />,
+                () => videoInputRef.current?.click(),
+                isUploading,
+              )}
         </div>
       ) : null}
 
+      {/* Audio references only exist in reference-media mode; the lane stays elsewhere only to clear leftovers. */}
+      {isReferenceMediaMode || hasAudioLaneItems ? (
       <div className={cn('ui-tone-plinth space-y-3 rounded-sm p-3 transition-shadow', !isReferenceMediaMode ? 'opacity-60' : selectedLane === 'audio' && 'ring-1 ring-inset ring-primary/45')} onClick={() => { if (isReferenceMediaMode) setSelectedLane('audio') }} onDragOver={(event) => { if (isReferenceMediaMode) event.preventDefault() }} onDrop={(event) => isReferenceMediaMode ? handleLaneDrop(event, 'audio') : event.preventDefault()}>
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs font-medium text-foreground"><Music2 className="h-4 w-4" />{t({ ko: '오디오', en: 'Audio' })}</div>
+          {renderLaneIcon(<Music2 className="h-4 w-4" />, t({ ko: '오디오 참조', en: 'Audio references' }))}
           <div className="flex items-center gap-1">
-            {timeline.items.some(hasMiniMaxDirectorAudio) ? (
-              <Button type="button" size="icon-sm" variant="ghost" onClick={() => clearLane('audio')} aria-label={t({ ko: '오디오 초기화', en: 'Clear audio lane' })} title={t({ ko: '오디오 초기화', en: 'Clear audio lane' })}>
+            {hasAudioLaneItems ? (
+              <IconButton size="icon-sm" variant="ghost" onClick={() => clearLane('audio')} label={t({ ko: '오디오 모두 비우기', en: 'Clear all audio' })}>
                 <RotateCcw className="h-4 w-4" />
-              </Button>
+              </IconButton>
             ) : null}
-            <Button type="button" size="icon-sm" variant="secondary" disabled={!isReferenceMediaMode || isUploading} onClick={() => audioInputRef.current?.click()} aria-label={t({ ko: '오디오 추가', en: 'Add audio' })} title={t({ ko: '추가', en: 'Add' })}>
-              <Plus className="h-4 w-4" />
-            </Button>
+            {isReferenceMediaMode ? (
+              <IconButton size="icon-sm" variant="secondary" disabled={isUploading} onClick={() => audioInputRef.current?.click()} label={t({ ko: '참조 오디오 추가', en: 'Add reference audio' })}>
+                <Plus className="h-4 w-4" />
+              </IconButton>
+            ) : null}
           </div>
           <input ref={audioInputRef} type="file" accept="audio/*,video/*" multiple hidden onChange={(event) => { void handleFiles(Array.from(event.target.files ?? []), 'audio'); event.target.value = '' }} />
         </div>
         {isReferenceMediaMode ? renderInputPort?.('reference_audio') : null}
-        {!isReferenceMediaMode ? (
-          <div className="flex min-h-20 items-center justify-center rounded-sm bg-foreground/4 px-3 text-center text-xs text-muted-foreground">{t({ ko: '오디오 참조 없음', en: 'No audio references' })}</div>
-        ) : audioItems.length > 0 ? (
+        {!isReferenceMediaMode ? null : audioItems.length > 0 ? (
           <div className="grid items-start gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 14rem), 1fr))' }}>
             {audioItems.map((item, index) => getMediaLane(item) === 'audio'
               ? renderMediaCard(item, index + 1, `Audio ${index + 1}`)
-              : <div key={`${item.id}-audio`} className="rounded-sm bg-foreground/4 p-3 text-xs">
+              : <div key={`${item.id}-audio`} className="flex items-center gap-2 rounded-sm bg-foreground/4 p-3 text-xs">
                   <span className="font-medium">Audio {index + 1}</span>
-                  <span className="ml-2 text-muted-foreground">{t({ ko: 'Video {index}와 연결됨 · 동일 구간 사용', en: 'Linked to Video {index} · shared trim' }, { index: videoItems.findIndex((video) => video.id === item.id) + 1 })}</span>
+                  <Tip content={t({ ko: 'Video {index}와 연결됨 · 동일 구간 사용', en: 'Linked to Video {index} · shared trim' }, { index: videoItems.findIndex((video) => video.id === item.id) + 1 })}>
+                    <span role="img" tabIndex={0} aria-label={t({ ko: 'Video {index}와 연결됨 · 동일 구간 사용', en: 'Linked to Video {index} · shared trim' }, { index: videoItems.findIndex((video) => video.id === item.id) + 1 })} className="inline-flex text-muted-foreground">
+                      <Link2 className="h-3.5 w-3.5" />
+                    </span>
+                  </Tip>
                 </div>)}
           </div>
-        ) : (
-          <Button type="button" variant="subtle" className="h-auto min-h-20 w-full px-3 text-xs whitespace-normal" onClick={() => audioInputRef.current?.click()}>
-            {t({ ko: '오디오를 추가하거나 여기에 놓아줘.', en: 'Add audio or drop it here.' })}
-          </Button>
+        ) : renderDropZone(
+          t({ ko: '참조 오디오 추가 (여기에 끌어다 놓아도 돼)', en: 'Add reference audio (or drop it here)' }),
+          <Music2 className="h-4 w-4" />,
+          () => audioInputRef.current?.click(),
         )}
       </div>
+      ) : null}
 
       </> : null}
 

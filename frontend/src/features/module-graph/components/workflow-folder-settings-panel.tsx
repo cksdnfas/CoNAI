@@ -1,4 +1,4 @@
-import { Folder, FolderOpen, PenSquare, Plus, Save, Trash2 } from 'lucide-react'
+import { Folder, FolderInput, FolderOpen, FolderPlus, PenSquare, Save, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Button } from '@/components/ui/button'
@@ -156,14 +156,12 @@ export function WorkflowFolderSettingsPanel({
             <Input value={childFolderName} onChange={(event) => setChildFolderName(event.target.value)} placeholder={t({ ko: '새 폴더 이름', en: 'New folder name' })} />
             <Textarea rows={3} value={childFolderDescription} onChange={(event) => setChildFolderDescription(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" onClick={() => void handleCreateChildFolder(false)} disabled={!childFolderName.trim()}>
-                <Plus className="h-4 w-4" />
-                {t({ ko: '폴더 생성', en: 'Create folder' })}
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => void handleCreateChildFolder(true)} disabled={!childFolderName.trim()}>
-                <Plus className="h-4 w-4" />
-                {t({ ko: '생성 후 할당', en: 'Create and assign' })}
-              </Button>
+              <IconButton variant="secondary" onClick={() => void handleCreateChildFolder(false)} disabled={!childFolderName.trim()} label={t({ ko: '폴더 생성', en: 'Create folder' })}>
+                <FolderPlus className="h-4 w-4" />
+              </IconButton>
+              <IconButton variant="secondary" onClick={() => void handleCreateChildFolder(true)} disabled={!childFolderName.trim()} label={t({ ko: '폴더 만들고 이 워크플로 할당', en: 'Create folder and assign this workflow' })}>
+                <FolderInput className="h-4 w-4" />
+              </IconButton>
             </div>
           </Inset>
         </div>
@@ -178,15 +176,8 @@ export function WorkflowFolderSettingsPanel({
 
           {!isRootSelected ? (
             <div className="space-y-3">
-              <div className="space-y-2">
-                <div className="text-sm font-medium text-foreground">{t({ ko: '폴더 이름', en: 'Folder name' })}</div>
-                <Input value={folderName} onChange={(event) => setFolderName(event.target.value)} placeholder={t({ ko: '폴더 이름', en: 'Folder name' })} />
-              </div>
-
-              <div className="space-y-2">
-                <div className="text-sm font-medium text-foreground">{t({ ko: '설명', en: 'Description' })}</div>
-                <Textarea rows={3} value={folderDescription} onChange={(event) => setFolderDescription(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
-              </div>
+              <Input value={folderName} onChange={(event) => setFolderName(event.target.value)} aria-label={t({ ko: '폴더 이름', en: 'Folder name' })} placeholder={t({ ko: '폴더 이름', en: 'Folder name' })} />
+              <Textarea rows={3} value={folderDescription} onChange={(event) => setFolderDescription(event.target.value)} aria-label={t({ ko: '설명', en: 'Description' })} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
 
               <div className="space-y-2">
                 <div className="text-sm font-medium text-foreground">{t({ ko: '부모 폴더', en: 'Parent folder' })}</div>
@@ -220,10 +211,9 @@ export function WorkflowFolderSettingsPanel({
             <div className="text-sm font-medium text-foreground">{t({ ko: '폴더 생성', en: 'Create folder' })}</div>
             <Input value={childFolderName} onChange={(event) => setChildFolderName(event.target.value)} placeholder={t({ ko: '새 폴더 이름', en: 'New folder name' })} />
             <Textarea rows={3} value={childFolderDescription} onChange={(event) => setChildFolderDescription(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
-            <Button type="button" onClick={() => void handleCreateChildFolder(false)} disabled={!childFolderName.trim()}>
-              <Plus className="h-4 w-4" />
-              {t({ ko: '폴더 생성', en: 'Create folder' })}
-            </Button>
+            <IconButton variant="secondary" onClick={() => void handleCreateChildFolder(false)} disabled={!childFolderName.trim()} label={t({ ko: '폴더 생성', en: 'Create folder' })}>
+              <FolderPlus className="h-4 w-4" />
+            </IconButton>
           </Inset>
         </div>
       )}

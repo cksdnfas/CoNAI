@@ -1,7 +1,6 @@
 import { Copy } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { AutoTestTaggerResult } from '@/lib/api-settings-tagger'
 import { copyTextToClipboard } from '@/lib/clipboard'
@@ -49,15 +48,13 @@ export function WDTaggerResultBlock({ result, title, onAddSearchFilter }: WDTagg
       </div>
 
       {ratingEntries.length > 0 ? (
-        <div className="mt-4 space-y-3">
-          <Text as="div" variant="overline" className="font-semibold">{t({ ko: '등급 요약', en: 'Rating overview' })}</Text>
+        <div className="mt-4">
           <RatingPromptSection entries={ratingEntries} />
         </div>
       ) : null}
 
       {characterEntries.length > 0 || generalEntries.length > 0 ? (
-        <div className="mt-4 space-y-3">
-          <Text as="div" variant="overline" className="font-semibold">{t({ ko: '상세 점수', en: 'Detailed scores' })}</Text>
+        <div className="mt-4">
           <div className="grid gap-3 grid-cols-1">
             <CharacterPromptSection entries={characterEntries} />
             <GeneralPromptSection

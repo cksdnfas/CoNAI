@@ -34,7 +34,7 @@ export type GenerateActionBarProps = {
   isGenerating?: boolean
   /** Label while `isGenerating` ("큐 등록 중…"). Defaults to `generateLabel`. */
   generatingLabel?: string
-  /** Queue repeat stepper ("반복 / Repeat"). Omit to hide it. */
+  /** Queue repeat stepper (no visible caption; the meaning lives in its tooltip). Omit to hide it. */
   repeat?: GenerateActionBarRepeat
   onReset?: () => void
   resetLabel?: string
@@ -173,8 +173,7 @@ export function GenerateActionBar({
   })
 
   const visibleLabel = !canExecuteGeneration ? t({ ko: '생성 권한 필요', en: 'Generation permission required' }) : isGenerating ? (generatingLabel ?? generateLabel) : generateLabel
-  const repeatLabel = t({ ko: '반복', en: 'Repeat' })
-  const repeatHint = t({ ko: '큐에 넣을 작업 수', en: 'Jobs to add to the queue' })
+  const repeatHint = t({ ko: '반복: 한 번 누를 때 큐에 넣을 작업 수', en: 'Repeat: jobs to queue per click' })
   const resolvedResetLabel = resetLabel ?? t({ ko: '초기화', en: 'Reset' })
   const messageClassName = messageTone === 'error'
     ? 'text-destructive-soft-foreground'
@@ -202,25 +201,22 @@ export function GenerateActionBar({
   )
 
   const repeatStepper = repeat ? (
-    <div className="flex shrink-0 items-center gap-1.5">
-      {!isSticky ? (
-        <Tip content={repeatHint}>
-          <span className="text-xs text-muted-foreground">{repeatLabel}</span>
-        </Tip>
-      ) : null}
-      <NumberStepperInput
-        min={repeat.min ?? 1}
-        max={repeat.max}
-        step={1}
-        variant="detail"
-        className={cn('shrink-0', isSticky ? 'w-28 min-w-28' : 'w-32')}
-        value={repeat.value}
-        onValueCommit={repeat.onChange}
-        disabled={isGenerating || repeat.disabled}
-        aria-label={t({ ko: '반복 (큐 작업 수)', en: 'Repeat (queue jobs)' })}
-        inputMode="numeric"
-      />
-    </div>
+    <Tip content={repeatHint}>
+      <div className="flex shrink-0 items-center">
+        <NumberStepperInput
+          min={repeat.min ?? 1}
+          max={repeat.max}
+          step={1}
+          variant="detail"
+          className="w-32 min-w-32 shrink-0 sm:w-28 sm:min-w-28"
+          value={repeat.value}
+          onValueCommit={repeat.onChange}
+          disabled={isGenerating || repeat.disabled}
+          aria-label={repeatHint}
+          inputMode="numeric"
+        />
+      </div>
+    </Tip>
   ) : null
 
   const resetButton = onReset ? (
@@ -230,20 +226,11 @@ export function GenerateActionBar({
   ) : null
 
   const groupPicker = targetGroupStorageKey ? (
-    isSticky ? (
-      <GenerationTargetGroupControl
-        storageKey={targetGroupStorageKey}
-        variant="icon"
-        disabled={isGenerating}
-        className={cn('rounded-sm border-0', STICKY_ICON_SIZE)}
-      />
-    ) : (
-      <GenerationTargetGroupControl
-        storageKey={targetGroupStorageKey}
-        disabled={isGenerating}
-        className="max-w-full [&_[data-size=icon-sm]]:size-9 [&_[data-size=sm]]:h-9"
-      />
-    )
+    <GenerationTargetGroupControl
+      storageKey={targetGroupStorageKey}
+      disabled={isGenerating}
+      className={isSticky ? STICKY_ICON_SIZE : undefined}
+    />
   ) : null
 
   if (isSticky) {

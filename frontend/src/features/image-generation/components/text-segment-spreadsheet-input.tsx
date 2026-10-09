@@ -1,6 +1,5 @@
 import { Fragment, useRef, useState } from 'react'
 import { BookmarkPlus, Plus, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Separator } from '@/components/ui/separator'
 import { useI18n } from '@/i18n'
@@ -136,15 +135,14 @@ export function TextSegmentSpreadsheetInput({
         ))}
       </div>
 
-      <Button
-        type="button"
-        size="xs"
+      <IconButton
+        size="icon-xs"
         variant="ghost"
         onClick={handleAddRow}
+        label={t({ ko: '행 추가', en: 'Add row' })}
       >
         <Plus />
-        {t({ ko: '행 추가', en: 'Add row' })}
-      </Button>
+      </IconButton>
     </div>
   )
 }

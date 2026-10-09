@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { ChevronDown, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
@@ -32,24 +33,26 @@ export function CompactGenerationControllerActionBar({
   return (
     <div className={cn('pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[86] flex justify-start px-3', className)}>
       <div className={cn('pointer-events-auto flex w-full items-center gap-2', innerClassName)}>
-        <Button
-          type="button"
-          size={isExpanded ? 'icon-sm' : 'sm'}
-          className={cn(
-            'shrink-0',
-            isExpanded ? 'w-10 px-0' : 'min-w-0 max-w-[min(16rem,calc(100vw-1.5rem))] px-3',
-          )}
-          onClick={onToggle}
-          aria-label={isExpanded ? expandedLabel : collapsedLabel}
-          title={isExpanded ? expandedLabel : collapsedLabel}
-        >
-          {isExpanded ? <ChevronDown className="h-4 w-4" /> : (
-            <>
-              <SlidersHorizontal className="h-4 w-4" />
-              <span className="truncate">{collapsedLabel}</span>
-            </>
-          )}
-        </Button>
+        {/* Collapsed it shows its text, so only the icon-only expanded state needs the tooltip. */}
+        <Tip content={isExpanded ? expandedLabel : null}>
+          <Button
+            type="button"
+            size={isExpanded ? 'icon-sm' : 'sm'}
+            className={cn(
+              'shrink-0',
+              isExpanded ? 'w-10 px-0' : 'min-w-0 max-w-[min(16rem,calc(100vw-1.5rem))] px-3',
+            )}
+            onClick={onToggle}
+            aria-label={isExpanded ? expandedLabel : collapsedLabel}
+          >
+            {isExpanded ? <ChevronDown className="h-4 w-4" /> : (
+              <>
+                <SlidersHorizontal className="h-4 w-4" />
+                <span className="truncate">{collapsedLabel}</span>
+              </>
+            )}
+          </Button>
+        </Tip>
 
         <div className={cn('h-px flex-1 transition-opacity duration-200', isExpanded ? 'bg-outline-subtle opacity-100' : 'bg-transparent opacity-0')} />
 

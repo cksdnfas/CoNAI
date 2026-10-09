@@ -406,7 +406,7 @@ export function SystemFolderBrowser({ location, onNavigate, sidebar }: {
         storageKey="files"
         sidebarLabel={t({ ko: '파일 보관함', en: 'Files' })}
         sidebar={sidebar}
-        toolbar={<PageToolbar sticky title={t({ ko: '파일 보관함', en: 'Files' })} start={breadcrumbs} actions={actions} />}
+        toolbar={<PageToolbar sticky start={breadcrumbs} actions={actions} />}
       >
         <div className="min-h-72 space-y-3">
           {list}

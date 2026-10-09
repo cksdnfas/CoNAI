@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Section } from '@/components/ui/section'
@@ -25,8 +24,6 @@ type NaiVibesEditorProps = {
   /** Section starts collapsed on the generation page; inline editors (module graph) open it. */
   defaultOpen?: boolean
   description?: ReactNode
-  /** Shown when there are no rows; omit to render nothing. */
-  emptyLabel?: string
   /**
    * True when a vibe with an image but no encoding gets encoded on submit (generation page).
    * False (module graph) marks such rows as needing an encoding, since nothing encodes them later.
@@ -56,7 +53,6 @@ export function NaiVibesEditor({
   vibes,
   defaultOpen = false,
   description,
-  emptyLabel,
   encodesOnSubmit = false,
   onAddImage,
   onRemove,
@@ -185,8 +181,6 @@ export function NaiVibesEditor({
             />
           ))}
         </div>
-      ) : emptyLabel ? (
-        <EmptyState size="compact" title={emptyLabel} />
       ) : null}
     </Section>
   )

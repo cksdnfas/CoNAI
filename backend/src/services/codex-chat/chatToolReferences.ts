@@ -1,3 +1,4 @@
+import type { ChatPageOperation } from '@conai/shared'
 const TOOL_SUMMARY_LENGTH = 600
 const MAX_REFERENCES_PER_CALL = 24
 
@@ -131,5 +132,14 @@ export function readMcpToolResult(result: McpToolResult, toolName?: string) {
     }
   }
 
-  return { texts, historyIds: [...historyIds], compositeHashes: [...compositeHashes], jobIds: [...jobIds], pendingJobIds: [...pendingJobIds], audioCandidateIds: [...audioCandidateIds] }
+  return { texts, historyIds: [...historyIds], compositeHashes: [...compositeHashes], jobIds: [...jobIds], pendingJobIds: [...pendingJobIds], audioCandidateIds: [...audioCandidateIds], pageOperation: readPageOperation(result?.structuredContent) }
+}
+
+/** The page operation a page_act/page_fill result names; its screen snapshot is never kept on the stored call. */
+function readPageOperation(value: unknown): ChatPageOperation | undefined {
+  const operation = value && typeof value === 'object' ? (value as { pageOperation?: unknown }).pageOperation : undefined
+  if (!operation || typeof operation !== 'object') return undefined
+  const { commandId, tier, label } = operation as Record<string, unknown>
+  if (typeof commandId !== 'string' || (tier !== 'view' && tier !== 'draft') || typeof label !== 'string') return undefined
+  return { commandId: commandId.slice(0, 80), tier, label: label.slice(0, 200) }
 }

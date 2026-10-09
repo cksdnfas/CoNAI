@@ -5,11 +5,12 @@ import { HierarchyNav, type HierarchyNavItemState } from '@/components/common/hi
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { Tip } from '@/components/ui/tooltip'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { buildComfyModelThumbnailUrl } from '@/lib/api-image-generation-workflows'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
-import { resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
+import { getFloatingDropdownStyle, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
 
 const PATH_RANDOM_OPTION_VALUE = '__random__'
 const MODEL_PREVIEW_HOVER_DELAY_MS = 150
@@ -343,20 +344,22 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
     <>
       <div ref={triggerRef} className="flex min-w-0 gap-2">
         {/* Select-style trigger: same input surface + outline as Select / Input, not a tonal action button. */}
-        <Button
-          type="button"
-          variant="ghost"
-          className="theme-input-surface h-auto min-h-9 min-w-0 flex-1 justify-between gap-3 border px-3 py-2 text-left font-normal text-foreground hover:bg-surface-low hover:text-foreground"
-          onClick={() => setIsOpen((current) => !current)}
-          aria-haspopup="tree"
-          aria-expanded={isOpen}
-          title={value || undefined}
-        >
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm">{selectedLabel}</span>
-          </span>
-          <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', isOpen && 'rotate-180')} />
-        </Button>
+        {/* The tooltip carries the full path; the trigger shows only the truncated label. Hidden while the tree is open. */}
+        <Tip content={!isOpen && value ? value : null} align="start">
+          <Button
+            type="button"
+            variant="ghost"
+            className="theme-input-surface h-auto min-h-9 min-w-0 flex-1 justify-between gap-3 border px-3 py-2 text-left font-normal text-foreground hover:bg-surface-low hover:text-foreground"
+            onClick={() => setIsOpen((current) => !current)}
+            aria-haspopup="tree"
+            aria-expanded={isOpen}
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm">{selectedLabel}</span>
+            </span>
+            <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', isOpen && 'rotate-180')} />
+          </Button>
+        </Tip>
 
         {onRefresh ? (
           <IconButton
@@ -378,7 +381,7 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
               id={menuId}
               data-surface="high"
               className="fixed z-popover overflow-auto rounded-md bg-surface-high p-2 shadow-elevation-2"
-              style={{ left: menuRect.left, top: menuRect.top, width: menuRect.width, maxHeight: menuRect.maxHeight }}
+              style={getFloatingDropdownStyle(menuRect)}
             >
               <div className="relative mb-2">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />

@@ -21,6 +21,7 @@ import { describeChatWorkflowModule } from '../../shared/src/utils/chatWorkflow'
 import { requireChatWorkflowInputs } from '../src/mcp/tools/mcpComfyWorkflowService'
 import { claudeChatArgs, claudeChatInput, verifyClaudeTools } from '../src/services/codex-chat/claudeChatCompletion'
 import { claudeLoginUrl, claudeModelOptions } from '../src/services/claudeCli'
+import { mockModelRows } from './modelRowMocks'
 
 test('Claude chat rejects unexpected host tools, keeps vision data and restricts OAuth links', () => {
   const tools = [{ type: 'function' as const, function: { name: 'search_images', parameters: { type: 'object' } } }]
@@ -184,8 +185,9 @@ test('image budget does not tokenize base64 transport bytes as text', () => {
   assert.ok(estimate(1000) > 0)
 })
 
-test('multiple status fences share the reply-start value for turn limits', () => {
-  const profile = ChatProfileStore.draft({ name: 'Character', providerName: 'test' })
+test('multiple status fences share the reply-start value for turn limits', (t) => {
+  mockModelRows(t, { 1: ['test', 'test'] }, 1)
+  const profile = ChatProfileStore.draft({ name: 'Character' })
   // Resolved profiles carry linked shared blocks; draft() no longer accepts inline blocks.
   profile.style = normalizeChatStyle({ blocks: [{ key: 'status', enabled: true, template: '{{hp}}', example: '{"hp":20}', fields: [{ name: 'hp', step: 5, min: 0, max: 100 }] }] })
   const messages = [
@@ -198,7 +200,8 @@ test('multiple status fences share the reply-start value for turn limits', () =>
 })
 
 test('summary includes tool schema cost before old turns leave the request', async (t) => {
-  const profile = ChatProfileStore.draft({ name: 'Character', providerName: 'test', model: 'test', contextTurns: 50, maxTokens: 100, summaryEnabled: true, summaryTriggerTurns: 1, mcpEnabled: true })
+  mockModelRows(t, { 1: ['test', 'test'] }, 1)
+  const profile = ChatProfileStore.draft({ name: 'Character', contextTurns: 50, maxTokens: 100, summaryEnabled: true, summaryTriggerTurns: 1, mcpEnabled: true })
   const thread = { id: 123, account_id: null, user_profile_id: null, context_turns: null, max_tokens: null, summary_enabled: null, summary: null, summary_until_message_id: null, context_revision: 0, block_edits: null, author_note: null, author_note_depth: null } as CodexChatThreadRecord
   const messages = Array.from({ length: 21 }, (_, index) => ({ id: index + 1, role: index % 2 === 0 ? 'user' : 'assistant', content: `message-${index + 1}: ${'a'.repeat(400)}`, tool_calls: [] })) as CodexChatMessageRecord[]
   const tools: ChatCompletionTool[] = [{ type: 'function', function: { name: 'read', description: 'schema '.repeat(1800), parameters: {} } }]
@@ -228,8 +231,9 @@ test('summary includes tool schema cost before old turns leave the request', asy
   assert.ok(estimateMessagesTokens(profile.id, sent, tools) + 100 <= profile.contextTokens)
 })
 
-test('group history fits the member token budget while retaining the latest message', () => {
-  const profile = ChatProfileStore.draft({ name: 'Character', providerName: 'test', maxTokens: 100 }, 7)
+test('group history fits the member token budget while retaining the latest message', (t) => {
+  mockModelRows(t, { 1: ['test', 'test'] }, 1)
+  const profile = ChatProfileStore.draft({ name: 'Character', maxTokens: 100 }, 7)
   const thread = { id: 456, account_id: null, user_profile_id: null, profile_id: 7, title: 'Room', block_edits: null, author_note: null, author_note_depth: null } as CodexChatThreadRecord
   const messages = Array.from({ length: 15 }, (_, index) => ({ id: index + 1, role: 'user', content: `message-${index + 1}: ${'a'.repeat(400)}`, tool_calls: [] })) as CodexChatMessageRecord[]
   const params = { profile, thread, members: [profile], messages, windowLimit: 20, withTools: false, tools: [], maxTokens: 100 }
@@ -241,8 +245,9 @@ test('group history fits the member token budget while retaining the latest mess
   assert.ok(!JSON.stringify(fitted).includes('message-1:'))
 })
 
-test('prompt preview uses the same author note and block state as a new direct request', () => {
-  const profile = ChatProfileStore.draft({ name: 'Character', providerName: 'test', authorNote: 'Keep the scene short.' })
+test('prompt preview uses the same author note and block state as a new direct request', (t) => {
+  mockModelRows(t, { 1: ['test', 'test'] }, 1)
+  const profile = ChatProfileStore.draft({ name: 'Character', authorNote: 'Keep the scene short.' })
   profile.style = normalizeChatStyle({ blocks: [{ key: 'status', enabled: true, template: '{{hp}}', example: '{"hp":20}' }] })
   const thread = { id: 789, account_id: null, user_profile_id: null, context_turns: null, max_tokens: null, summary_enabled: null, summary: null, summary_until_message_id: null, block_edits: null, author_note: null, author_note_depth: null } as CodexChatThreadRecord
   const preview = buildChatPromptPreview(profile, [])
@@ -300,7 +305,8 @@ test("no reasoning goes out the way the connection's thinking switch says", () =
 })
 
 test('a summary on an enable_thinking connection sends chat_template_kwargs and keeps the 2048 cap', async (t) => {
-  const profile = ChatProfileStore.draft({ name: 'Character', providerName: 'test', model: 'test' })
+  mockModelRows(t, { 1: ['test', 'test'] }, 1)
+  const profile = ChatProfileStore.draft({ name: 'Character' })
   t.mock.method(ExternalApiProvider, 'findByName', () => ({ provider_name: 'test', display_name: 'Test', is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid/v1', additional_config: { thinking_switch: 'enable_thinking' } }))
   t.mock.method(ExternalApiProvider, 'getDecryptedKey', () => null)
   const bodies: Record<string, unknown>[] = []
@@ -353,8 +359,9 @@ test('a round that restates the text before its tool call takes its place', () =
   assert.equal(roundSeparator('앞 문단'), '\n\n')
 })
 
-test('a tool round that does not fit is retried with the tool result cut shorter, then fails', () => {
-  const profile = ChatProfileStore.draft({ name: 'Character', providerName: 'test', maxTokens: 100 })
+test('a tool round that does not fit is retried with the tool result cut shorter, then fails', (t) => {
+  mockModelRows(t, { 1: ['test', 'test'] }, 1)
+  const profile = ChatProfileStore.draft({ name: 'Character', maxTokens: 100 })
   const messages: ChatCompletionMessage[] = [
     { role: 'system', content: 'sys' },
     { role: 'user', content: 'read it' },
@@ -376,8 +383,9 @@ test('a tool round that does not fit is retried with the tool result cut shorter
   assert.ok(estimateMessagesTokens(profile.id, messages) + 100 > expected)
 })
 
-test('the summary transcript leaves out the chat\'s own tools, quoted lore files and address labels', () => {
-  const profile = ChatProfileStore.draft({ name: '카이', providerName: 'test' }, 1)
+test('the summary transcript leaves out the chat\'s own tools, quoted lore files and address labels', (t) => {
+  mockModelRows(t, { 1: ['test', 'test'] }, 1)
+  const profile = ChatProfileStore.draft({ name: '카이' }, 1)
   const call = (tool: string, summary: string) => ({ id: tool, tool, status: 'completed' as const, arguments: {}, summary, historyIds: [], compositeHashes: [] })
   const lineOf = groupTranscript([profile], { name: '한별', persona: '' } as never)
   const reply = {
@@ -392,8 +400,9 @@ test('the summary transcript leaves out the chat\'s own tools, quoted lore files
   assert.equal(lineOf({ ...reply, content: '', tool_calls: [call('save_lore', '제안으로 올렸어.')] } as CodexChatMessageRecord), '')
 })
 
-test('a generation is summarized by the scene the model asked for, and replays with its outcome, not the queued job JSON', () => {
-  const profile = ChatProfileStore.draft({ name: '카이', providerName: 'test' }, 1)
+test('a generation is summarized by the scene the model asked for, and replays with its outcome, not the queued job JSON', (t) => {
+  mockModelRows(t, { 1: ['test', 'test'] }, 1)
+  const profile = ChatProfileStore.draft({ name: '카이' }, 1)
   const lineOf = groupTranscript([profile], { name: '한별', persona: '' } as never)
   const queued = JSON.stringify({ id: 12, status: 'queued', request_summary: '채팅 프리셋 · 기본' })
   const call = (id: string, tool: string, args: unknown) => ({ id, tool, status: 'completed' as const, arguments: args, summary: queued, output: queued, jobIds: [12], historyIds: [], compositeHashes: [] })

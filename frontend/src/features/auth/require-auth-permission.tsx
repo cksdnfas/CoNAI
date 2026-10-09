@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { AlertTriangle, RotateCw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import { hasAuthPermission } from './auth-permissions'
 import { useAuthPermissionRedirect } from './use-auth-permission-redirect'
@@ -28,10 +28,9 @@ export function AuthStatusErrorState({ error, isRetrying, onRetry }: { error: un
           </div>
         </div>
         <div className="flex justify-end">
-          <Button type="button" size="sm" variant="secondary" onClick={onRetry} disabled={isRetrying}>
+          <IconButton size="icon-sm" variant="secondary" onClick={onRetry} disabled={isRetrying} label={isRetrying ? t('requireAuthPermission.retrying') : t('requireAuthPermission.retry')}>
             <RotateCw className={isRetrying ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-            {isRetrying ? t('requireAuthPermission.retrying') : t('requireAuthPermission.retry')}
-          </Button>
+          </IconButton>
         </div>
       </div>
     </div>

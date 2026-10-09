@@ -2,6 +2,7 @@ import { Handle, Position } from '@xyflow/react'
 import { Plus, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { ModulePortDataType } from '@/lib/api-module-graph'
 import { buildHandleId, getPortTypeColor } from '../module-graph-shared'
@@ -113,24 +114,25 @@ export function ModuleGraphKeyValueListInput({
         return (
           <div key={index} className={`relative ${connectionKey ? 'pl-4' : ''}`}>
             {nodeId && connectionKey ? (
-              <Handle
-                id={buildHandleId('in', connectionKey)}
-                type="target"
-                position={Position.Left}
-                style={{
-                  top: '50%',
-                  left: -7,
-                  transform: 'translateY(-50%)',
-                  width: 12,
-                  height: 12,
-                  borderRadius: 999,
-                  background: connectionColor,
-                  border: '2px solid var(--surface-container)',
-                  boxShadow: `0 0 0 2px ${connectionColor}22`,
-                }}
-                title={t({ ko: '{key} 값 연결', en: 'Connect {key} value' }, { key: entry.key.trim() })}
-                onMouseDown={connected ? () => onDisconnectInput?.(nodeId, connectionKey) : undefined}
-              />
+              <Tip content={t({ ko: '{key} 값 연결', en: 'Connect {key} value' }, { key: entry.key.trim() })}>
+                <Handle
+                  id={buildHandleId('in', connectionKey)}
+                  type="target"
+                  position={Position.Left}
+                  style={{
+                    top: '50%',
+                    left: -7,
+                    transform: 'translateY(-50%)',
+                    width: 12,
+                    height: 12,
+                    borderRadius: 999,
+                    background: connectionColor,
+                    border: '2px solid var(--surface-container)',
+                    boxShadow: `0 0 0 2px ${connectionColor}22`,
+                  }}
+                  onMouseDown={connected ? () => onDisconnectInput?.(nodeId, connectionKey) : undefined}
+                />
+              </Tip>
             ) : null}
 
             <div className={rowClassName}>

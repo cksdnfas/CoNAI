@@ -5,8 +5,8 @@ import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Info } from 'lucide-
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
+import { IconButton } from '@/components/ui/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -570,7 +570,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
       />
 
       {shouldShowRelatedEmptyState ? (
-        <EmptyState title={t({ ko: '표시할 유사/중복 이미지가 없어.', en: 'No similar or duplicate images to show.' })} />
+        <EmptyState size="compact" title={t({ ko: '유사·중복 이미지 없어', en: 'No similar or duplicate images' })} />
       ) : null}
     </div>
   )
@@ -604,17 +604,15 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
             </div>
 
             {!isModalInfoViewerOpen && canUseDesktopModalLayout ? (
-              <Button
-                type="button"
+              <IconButton
                 size="icon-sm"
                 variant="secondary"
                 className="image-detail-modal-info-reopen-desktop"
                 onClick={() => setIsModalInfoViewerOpen(true)}
-                aria-label={modalInfoToggleLabel}
-                title={modalInfoToggleLabel}
+                label={modalInfoToggleLabel}
               >
                 <ChevronLeft className="h-4 w-4" />
-              </Button>
+              </IconButton>
             ) : null}
 
             <div className="image-detail-modal-stage">
@@ -645,7 +643,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
               {!imageQuery.isLoading && !imageQuery.isError && image && !activeTabIsCurrent ? (
                 <div className="image-detail-modal-related-pane image-detail-scroll-pane">
                   {!canLoadRelatedImages ? (
-                    <EmptyState title={t({ ko: '이미지 파일만 유사 이미지 검사를 사용할 수 있어.', en: 'Similarity checks are available for image files only.' })} />
+                    <EmptyState size="compact" title={t({ ko: '유사 검사는 이미지 파일만 돼', en: 'Image files only' })} />
                   ) : isSecondaryContentReady ? relatedImagesContent : (
                     <div className="space-y-4">
                       <Skeleton className="h-10 w-48 rounded-sm" />
@@ -660,17 +658,15 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
           {/* Flat column: one hairline against the stage, page background, no shadow (the phone sheet keeps its lift). */}
           <aside className="image-detail-modal-info-pane border-line bg-background min-[920px]:shadow-none">
             {canUseDesktopModalLayout ? (
-              <Button
-                type="button"
+              <IconButton
                 size="icon-sm"
                 variant="secondary"
                 className="image-detail-modal-info-toggle-desktop"
                 onClick={() => setIsModalInfoViewerOpen(false)}
-                aria-label={modalInfoToggleLabel}
-                title={modalInfoToggleLabel}
+                label={modalInfoToggleLabel}
               >
                 <ChevronRight className="h-4 w-4" />
-              </Button>
+              </IconButton>
             ) : null}
 
             {/* eslint-disable-next-line no-restricted-syntax -- index.css toggles this row's display per breakpoint; Button's inline-flex would override it */}

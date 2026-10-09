@@ -94,13 +94,10 @@ export type ChatJudgeAssetSettings = { enabled: boolean }
 export type ChatJudgePreset = {
   id: number
   name: string
-  /** The judge connection (TypeSafe or an LLM connection); null leaves it to each profile's override. */
-  providerName: string | null
-  /** Empty uses the connection's default model. */
-  model: string
-  /** The LLM asked again for uncertain answers set to `llm`; null asks the chat's own connection. */
-  escalationProviderName: string | null
-  escalationModel: string
+  /** The judge model (a model row of a TypeSafe or LLM connection); null leaves it to each profile's override. */
+  modelSlotId: number | null
+  /** The LLM model asked again for uncertain answers set to `llm`; null asks the chat's own model. */
+  escalationSlotId: number | null
   items: ChatJudgeItem[]
   followUp: ChatJudgeFollowUp
   room: ChatJudgeRoomSettings
@@ -115,7 +112,16 @@ export type ChatJudgePreset = {
   updatedDate: string
 }
 
-export type ChatJudgePresetInput = Partial<Omit<ChatJudgePreset, 'id' | 'profiles' | 'rooms' | 'createdDate' | 'updatedDate'>>
+/**
+ * Older inputs named the judge and escalation models as a connection + model pair (empty model: the connection's
+ * primary model); saving lands them on that connection's model row.
+ */
+export type ChatJudgePresetInput = Partial<Omit<ChatJudgePreset, 'id' | 'profiles' | 'rooms' | 'createdDate' | 'updatedDate'>> & {
+  providerName?: string | null
+  model?: string | null
+  escalationProviderName?: string | null
+  escalationModel?: string | null
+}
 
 /** One item's answer in a run. */
 export type ChatJudgeItemResult = {

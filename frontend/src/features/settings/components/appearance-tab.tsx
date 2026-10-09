@@ -1,6 +1,5 @@
 import { useRef } from 'react'
 import { Check, Download, Eye, RotateCcw, Undo2, Upload } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { InstantApplyHint, SectionDirtyBadge } from './settings-section-status'
 import { AppearanceBadgeColorRows, AppearanceThemeRows } from './appearance-color-editor-content'
@@ -88,22 +87,22 @@ export function AppearanceTab({
       />
 
       {importPreviewFileName ? (
-        <div role="status" className="flex flex-col gap-3 rounded-sm bg-primary/12 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 gap-3">
-            <Eye className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-            <div className="min-w-0 space-y-0.5">
-              <div className="text-sm font-semibold text-foreground">{t({ ko: '가져온 테마 미리보기 중', en: 'Previewing an imported theme' })}</div>
-              <div className="truncate text-xs text-muted-foreground">{importPreviewFileName}</div>
-            </div>
+        <div
+          role="status"
+          aria-label={t({ ko: '가져온 테마 미리보기 중', en: 'Previewing an imported theme' })}
+          className="flex items-center justify-between gap-3 rounded-sm bg-primary/12 py-2 pr-2 pl-4"
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <Eye className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+            <div className="min-w-0 truncate text-sm text-foreground">{importPreviewFileName}</div>
           </div>
-          <div className="flex shrink-0 gap-2">
-            <IconButton size="icon-sm" variant="secondary" onClick={onRevertImportPreview} label={t({ ko: '되돌리기', en: 'Revert' })}>
+          <div className="flex shrink-0 gap-1">
+            <IconButton size="icon-sm" variant="secondary" onClick={onRevertImportPreview} label={t({ ko: '미리보기 되돌리기', en: 'Revert the preview' })}>
               <Undo2 className="h-4 w-4" />
             </IconButton>
-            <Button type="button" size="sm" onClick={onApplyImportPreview}>
+            <IconButton size="icon-sm" onClick={onApplyImportPreview} label={t({ ko: '가져온 테마 적용', en: 'Apply the imported theme' })}>
               <Check className="h-4 w-4" />
-              {t({ ko: '적용', en: 'Apply' })}
-            </Button>
+            </IconButton>
           </div>
         </div>
       ) : null}

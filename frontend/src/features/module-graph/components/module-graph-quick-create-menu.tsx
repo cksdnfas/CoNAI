@@ -6,6 +6,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Text } from '@/components/ui/text'
+import { Tip } from '@/components/ui/tooltip'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useI18n } from '@/i18n'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
@@ -32,6 +33,7 @@ type ModuleGroup = {
 export function ModuleGraphQuickCreateMenu({
   mode,
   anchor,
+  align = 'start',
   modules,
   recommendedModules,
   onSelectModule,
@@ -40,6 +42,7 @@ export function ModuleGraphQuickCreateMenu({
 }: {
   mode: 'pane' | 'connect'
   anchor: { x: number; y: number }
+  align?: 'start' | 'center'
   modules: ModuleDefinitionRecord[]
   recommendedModules: RecommendedModuleMatch[]
   onSelectModule: (module: ModuleDefinitionRecord) => void
@@ -184,9 +187,10 @@ export function ModuleGraphQuickCreateMenu({
       <PopoverAnchor virtualRef={anchorRef} />
       <PopoverContent
         side="bottom"
-        align="start"
+        align={align}
         sideOffset={0}
-        className="w-[360px] max-w-[calc(100vw-24px)] p-0"
+        collisionPadding={12}
+        className="flex max-h-(--radix-popover-content-available-height) w-[360px] max-w-[calc(100vw-24px)] flex-col overflow-hidden p-0"
         aria-label={t({ ko: '노드 빠른 생성 메뉴', en: 'Quick node creation menu' })}
         onOpenAutoFocus={(event) => {
           event.preventDefault()
@@ -222,7 +226,7 @@ export function ModuleGraphQuickCreateMenu({
           </IconButton>
         </div>
 
-        <div className="space-y-3 p-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
           <div className="flex flex-wrap gap-2">
             {tabOptions.map((tabOption) => (
               <Button
@@ -245,7 +249,7 @@ export function ModuleGraphQuickCreateMenu({
             placeholder={activeTab === 'recommended' ? t({ ko: '추천 노드 검색', en: 'Search recommended nodes' }) : t({ ko: '노드 검색', en: 'Search nodes' })}
           />
 
-          <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
+          <div className="max-h-[420px] min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
             {groupedModules.length === 0 ? (
               <EmptyState size="compact" title={emptyMessage} />
             ) : groupedModules.map((group) => (
@@ -264,19 +268,19 @@ export function ModuleGraphQuickCreateMenu({
                       .join('\n')
 
                     return (
-                      <Button
-                        key={module.id}
-                        type="button"
-                        variant="nav"
-                        data-active={isActive}
-                        className="px-3 text-foreground"
-                        onMouseEnter={() => setActiveModuleId(module.id)}
-                        onClick={() => onSelectModule(module)}
-                        title={itemTitle || undefined}
-                      >
-                        {activeTab === 'recommended' ? <Sparkles className="size-3.5" aria-hidden /> : null}
-                        <span className="truncate">{getModuleBaseDisplayName(module)}</span>
-                      </Button>
+                      <Tip key={module.id} content={itemTitle} className="whitespace-pre-line" side="right">
+                        <Button
+                          type="button"
+                          variant="nav"
+                          data-active={isActive}
+                          className="px-3 text-foreground"
+                          onMouseEnter={() => setActiveModuleId(module.id)}
+                          onClick={() => onSelectModule(module)}
+                        >
+                          {activeTab === 'recommended' ? <Sparkles className="size-3.5" aria-hidden /> : null}
+                          <span className="truncate">{getModuleBaseDisplayName(module)}</span>
+                        </Button>
+                      </Tip>
                     )
                   })}
                 </div>

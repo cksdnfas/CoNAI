@@ -199,13 +199,14 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
                   <IconButton size="icon-sm" variant="ghost" label={t({ ko: '더 보기', en: 'More' })}><Ellipsis /></IconButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    disabled={testState?.isLoading === true}
-                    onSelect={() => onTestServer(server.id)}
-                    title={isModalServer ? t({ ko: 'Modal 서버 테스트는 원격 endpoint를 호출해서 비용이 발생할 수 있어.', en: 'Testing a Modal server may call the remote endpoint and incur costs.' }) : undefined}
-                  >
-                    <Play />{t({ ko: '테스트', en: 'Test' })}
-                  </DropdownMenuItem>
+                  <Tip side="left" content={isModalServer ? t({ ko: 'Modal 서버 테스트는 원격 endpoint를 호출해서 비용이 발생할 수 있어.', en: 'Testing a Modal server may call the remote endpoint and incur costs.' }) : null}>
+                    <DropdownMenuItem
+                      disabled={testState?.isLoading === true}
+                      onSelect={() => onTestServer(server.id)}
+                    >
+                      <Play />{t({ ko: '테스트', en: 'Test' })}
+                    </DropdownMenuItem>
+                  </Tip>
                   <DropdownMenuItem disabled={!isAdmin} onSelect={() => onEditServer(server.id)}><Pencil />{t({ ko: '수정', en: 'Edit' })}</DropdownMenuItem>
                   <DropdownMenuItem variant="destructive" disabled={!isAdmin} onSelect={() => onDeleteServer(server.id)}><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
                 </DropdownMenuContent>

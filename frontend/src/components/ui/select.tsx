@@ -8,7 +8,7 @@ const selectVariants = cva(
     variants: {
       variant: {
         default: 'theme-input-surface h-9 border px-3',
-        settings: 'theme-settings-control theme-input-surface h-10 border',
+        settings: 'theme-settings-control theme-input-surface h-9 border',
         detail: 'theme-input-surface h-10 border px-3',
         detailNested: 'theme-input-surface h-10 border px-3',
       },

@@ -115,14 +115,16 @@ export function ImageEditorToolbar({
         <Tip content={t({ ko: '브러시 색상', en: 'Brush color' })}>
           <Input type="color" aria-label={t({ ko: '브러시 색상', en: 'Brush color' })} value={brushColor} onChange={(event) => onBrushColorChange(event.target.value)} className="h-8 w-10 p-1" />
         </Tip>
-        <label className="flex items-center gap-1.5 pl-1 text-xs text-muted-foreground">
-          {t({ ko: '브러시 크기', en: 'Brush size' })}
-          <NumberStepperInput min={1} max={256} value={brushSize} onValueCommit={(nextValue) => onBrushSizeChange(Math.max(1, Number(nextValue) || 1))} className="h-8 w-20" />
-        </label>
-        <label className="flex items-center gap-1.5 pl-1 text-xs text-muted-foreground">
-          {t({ ko: '불투명도', en: 'Opacity' })}
-          <NumberStepperInput min={0} max={100} value={brushOpacity} onValueCommit={(nextValue) => onBrushOpacityChange(Math.max(0, Math.min(100, Number(nextValue) || 0)))} className="h-8 w-20" />
-        </label>
+        <Tip content={t({ ko: '브러시 크기 (px)', en: 'Brush size (px)' })}>
+          <span className="inline-flex pl-1">
+            <NumberStepperInput min={1} max={256} value={brushSize} aria-label={t({ ko: '브러시 크기', en: 'Brush size' })} onValueCommit={(nextValue) => onBrushSizeChange(Math.max(1, Number(nextValue) || 1))} className="h-8 w-20" />
+          </span>
+        </Tip>
+        <Tip content={t({ ko: '불투명도 (%)', en: 'Opacity (%)' })}>
+          <span className="inline-flex pl-1">
+            <NumberStepperInput min={0} max={100} value={brushOpacity} aria-label={t({ ko: '불투명도', en: 'Opacity' })} onValueCommit={(nextValue) => onBrushOpacityChange(Math.max(0, Math.min(100, Number(nextValue) || 0)))} className="h-8 w-20" />
+          </span>
+        </Tip>
       </ToolbarGroup>
 
       <ToolbarGroup>

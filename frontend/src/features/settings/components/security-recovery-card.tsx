@@ -1,6 +1,6 @@
 import { RefreshCcw } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { FieldInfo } from '@/components/ui/field'
 import { useI18n } from '@/i18n'
 import type { AuthDatabaseInfoRecord } from '@/lib/api-auth'
@@ -27,10 +27,9 @@ export function SecurityRecoveryCard({ databaseInfo, isError, isRetrying, onRetr
         <Alert variant="destructive">
           <AlertTitle>{t({ ko: '복구 정보를 불러오지 못했어', en: 'Could not load recovery info' })}</AlertTitle>
           <AlertDescription>
-            <Button type="button" size="sm" variant="secondary" className="mt-2" onClick={onRetry} disabled={isRetrying}>
+            <IconButton size="icon-sm" variant="secondary" className="mt-2" onClick={onRetry} disabled={isRetrying} label={t({ ko: '다시 시도', en: 'Try again' })}>
               <RefreshCcw className={isRetrying ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-              {t({ ko: '다시 시도', en: 'Try again' })}
-            </Button>
+            </IconButton>
           </AlertDescription>
         </Alert>
       ) : (

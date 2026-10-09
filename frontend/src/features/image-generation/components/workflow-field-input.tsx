@@ -6,6 +6,7 @@ import { FormField, type SelectedImageDraft, type WorkflowFieldDraftValue } from
 import { PowerLoraLoaderInput } from './power-lora-loader-input'
 import { MiniMaxH3DirectorDasiwaInput } from './minimax-h3-director-dasiwa-input'
 import { PathOptionTreeSelect } from './path-option-tree-select'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 
 function shouldUsePathTreeSelect(options: string[]) {
@@ -45,13 +46,15 @@ export function WorkflowFieldInput({ field, value, hideLabel = false, loraOption
   const { t } = useI18n()
   const fieldLabel = field.required ? `${field.label} *` : field.label
   const labelAccessory = field.description ? (
-    <span
-      className="inline-flex cursor-help text-muted-foreground"
-      title={field.description}
-      aria-label={t({ ko: '{label} 설명', en: '{label} description' }, { label: field.label })}
-    >
-      <CircleQuestionMark className="h-3.5 w-3.5" />
-    </span>
+    <Tip content={field.description}>
+      <span
+        className="inline-flex cursor-help text-muted-foreground"
+        tabIndex={0}
+        aria-label={t({ ko: '{label} 설명', en: '{label} description' }, { label: field.label })}
+      >
+        <CircleQuestionMark className="h-3.5 w-3.5" />
+      </span>
+    </Tip>
   ) : null
 
   const wrapField = (children: ReactNode) => {

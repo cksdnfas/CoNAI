@@ -26,19 +26,21 @@ import { CHAT_ADMIN_PROFILES_QUERY_KEY, listCodexChatThreads } from '@/lib/api-c
 import { getErrorMessage } from '@/lib/error-message'
 import { GROW_TEXTAREA } from './chat-profile-editor-fields'
 import { CollapsibleRow } from './chat-profile-sections'
-import { JudgeConnectionSelect } from './chat-judge-connection-select'
+import { JudgeModelSelect, useModelLabel } from './chat-judge-connection-select'
 import { ChatJudgeItemRow } from './chat-judge-item-editor'
 import { ChatJudgeScopeSections } from './chat-judge-scope-sections'
+import { CHAT_DOCK_INSET, useSettingsEditorChatPage } from './use-settings-editor-chat-page'
+import { ChatFilledLabel } from '@/features/codex-chat/chat-page-context'
 
-type PresetDraft = Required<ChatJudgePresetInput>
+type PresetDraft = Required<Omit<ChatJudgePresetInput, 'providerName' | 'model' | 'escalationProviderName' | 'escalationModel'>>
 
 const FOLLOW_UP_DEFAULTS: ChatJudgeFollowUp = { maxConsecutive: 1, delaySeconds: 8, directive: '' }
-const EMPTY: PresetDraft = { name: '', providerName: null, model: '', escalationProviderName: null, escalationModel: '', items: [], followUp: FOLLOW_UP_DEFAULTS, ...JUDGE_OPTION_DEFAULTS }
+const EMPTY: PresetDraft = { name: '', modelSlotId: null, escalationSlotId: null, items: [], followUp: FOLLOW_UP_DEFAULTS, ...JUDGE_OPTION_DEFAULTS }
 const TEST_TURNS = [4, 6, 10, 20]
 
 function draftOf(preset: ChatJudgePreset): PresetDraft {
   return {
-    name: preset.name, providerName: preset.providerName, model: preset.model, escalationProviderName: preset.escalationProviderName, escalationModel: preset.escalationModel,
+    name: preset.name, modelSlotId: preset.modelSlotId, escalationSlotId: preset.escalationSlotId,
     items: preset.items, followUp: preset.followUp, room: preset.room, context: preset.context, fields: preset.fields, assets: preset.assets,
   }
 }
@@ -70,6 +72,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState<PresetDraft>(EMPTY)
+  const escalationLabel = useModelLabel(open, draft.escalationSlotId)
   const [openItem, setOpenItem] = useState<string | null>(null)
   const [testThreadId, setTestThreadId] = useState<number | null>(null)
   const [testTurnCount, setTestTurnCount] = useState(6)
@@ -145,6 +148,17 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
   const patchFollowUp = (patch: Partial<ChatJudgeFollowUp>) => setDraft((current) => ({ ...current, followUp: { ...current.followUp, ...patch } }))
 
   const nameMissing = draft.name.trim().length === 0
+  // A connected chat reads the preset and fills its name; the questions themselves stay with the person.
+  useSettingsEditorChatPage({
+    open,
+    title: preset ? t({ ko: '판단 프리셋 편집 · {name}', en: 'Edit judge preset · {name}' }, { name: preset.name }) : t({ ko: '판단 프리셋 추가', en: 'Add judge preset' }),
+    resourceId: `judge-preset:${preset?.id ?? 'new'}`,
+    dirty: JSON.stringify(draft) !== JSON.stringify(preset ? draftOf(preset) : { ...EMPTY, ...initial }),
+    fields: [{ id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: draft.name }],
+    data: { items: draft.items.map((item) => ({ id: item.id, name: item.name, enabled: item.enabled, stage: item.stage, kind: item.kind })), selected: { name: draft.name, items: draft.items.length } },
+    apply: (patch) => { if (patch.name !== undefined) setDraft((current) => ({ ...current, name: String(patch.name) })) },
+    save: nameMissing ? undefined : () => saveMutation.mutateAsync(),
+  })
   const hasAfterItems = draft.items.some((item) => item.stage === 'after')
   const testControls = (
     <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -159,25 +173,24 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
       </Select>
       {testMutation.isPending
         ? <IconButton size="icon-sm" variant="ghost" onClick={() => testAbort.current?.abort()} label={t({ ko: '멈추기', en: 'Stop' })}><Square /></IconButton>
-        : <IconButton size="icon-sm" variant="ghost" disabled={!testThreadId || draft.items.length === 0 || (!draft.providerName && !preset?.profiles.length)} onClick={() => testMutation.mutate()} label={t({ ko: '테스트 실행', en: 'Run test' })}><Play /></IconButton>}
+        : <IconButton size="icon-sm" variant="ghost" disabled={!testThreadId || draft.items.length === 0 || (draft.modelSlotId === null && !preset?.profiles.length)} onClick={() => testMutation.mutate()} label={t({ ko: '테스트 실행', en: 'Run test' })}><Play /></IconButton>}
     </div>
   )
 
   return (
-    <Modal open={open} onClose={onClose} title={preset ? t({ ko: '판단 프리셋 편집', en: 'Edit judge preset' }) : t({ ko: '판단 프리셋 추가', en: 'Add judge preset' })} widthClassName="max-w-3xl">
+    <Modal open={open} onClose={onClose} title={preset ? t({ ko: '판단 프리셋 편집', en: 'Edit judge preset' }) : t({ ko: '판단 프리셋 추가', en: 'Add judge preset' })} widthClassName="max-w-3xl" sidePanelInset={CHAT_DOCK_INSET}>
       <ModalBody className="space-y-5">
         <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-          <Field label={t({ ko: '이름', en: 'Name' })}>
+          <Field label={<ChatFilledLabel fieldId="name">{t({ ko: '이름', en: 'Name' })}</ChatFilledLabel>}>
             <Input variant="settings" value={draft.name} maxLength={80} autoFocus onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
           </Field>
-          <Field label={t({ ko: '판단 연결', en: 'Judge connection' })}>
-            <JudgeConnectionSelect
+          <Field label={t({ ko: '판단 모델', en: 'Judge model' })}>
+            <JudgeModelSelect
               enabled={open}
-              ariaLabel={t({ ko: '판단 연결', en: 'Judge connection' })}
-              providerName={draft.providerName}
-              model={draft.model}
+              ariaLabel={t({ ko: '판단 모델', en: 'Judge model' })}
+              slotId={draft.modelSlotId}
               emptyLabel={t({ ko: '프로필에서 정함', en: 'Set per profile' })}
-              onChange={({ providerName, model }) => setDraft({ ...draft, providerName, model })}
+              onChange={(modelSlotId) => setDraft({ ...draft, modelSlotId })}
             />
           </Field>
         </div>
@@ -227,17 +240,16 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
         <div className="border-t border-line">
           <CollapsibleRow
             title={t({ ko: '고급', en: 'Advanced' })}
-            meta={draft.escalationProviderName ?? undefined}
+            meta={escalationLabel ?? undefined}
           >
             <Field label={t({ ko: '애매할 때 다시 물을 LLM', en: 'LLM asked again when unsure' })}>
-              <JudgeConnectionSelect
+              <JudgeModelSelect
                 enabled={open}
                 llmOnly
                 ariaLabel={t({ ko: '재판단 LLM', en: 'Re-judge LLM' })}
-                providerName={draft.escalationProviderName}
-                model={draft.escalationModel}
+                slotId={draft.escalationSlotId}
                 emptyLabel={t({ ko: '대화 모델 그대로', en: 'Same as chat' })}
-                onChange={({ providerName, model }) => setDraft({ ...draft, escalationProviderName: providerName, escalationModel: model })}
+                onChange={(escalationSlotId) => setDraft({ ...draft, escalationSlotId })}
               />
             </Field>
           </CollapsibleRow>

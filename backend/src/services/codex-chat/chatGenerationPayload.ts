@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { resolvePresetWorkflow, type ChatGenerationPreset } from './chatGenerationPresets';
+import { comfyAssetFields, resolvePresetWorkflow, type ChatGenerationPreset } from './chatGenerationPresets';
 import type { ChatProfile } from './chatProfiles';
 import { resolveProfileAsset } from './chatProfileAssets';
 import { parseMcpMarkedFields } from '../../mcp/tools/mcpComfyWorkflowService';
@@ -59,17 +59,24 @@ export async function buildChatGenerationPresetJob(preset: ChatGenerationPreset,
   }
   const config = preset.comfyui;
   if (!config) throw new Error('ComfyUI 프리셋 설정을 찾을 수 없어.');
-  const supplied: Record<string, unknown> = {};
-  for (const id of config.exposedFieldIds) if (id !== config.referenceField && args[id] !== undefined) supplied[id] = args[id];
-  const inputs = { ...config.fixedInputs, ...supplied };
-  if (options.forceReference && !options.omitReference && !config.referenceField) throw new Error('자산 생성에는 ComfyUI 기준 이미지 필드를 지정해줘.');
-  if (options.omitReference && config.referenceField) delete inputs[config.referenceField];
-  if (config.referenceField && !options.omitReference) {
+  // Character assets also find the image field on their own when the workflow has only one; chat tools use the chosen one.
+  let referenceField = config.referenceField;
+  if (options.forceReference) {
     const { workflow, problem } = resolvePresetWorkflow(config);
     if (!workflow) throw new Error(problem ?? '워크플로를 찾을 수 없어.');
-    if (!parseMcpMarkedFields(workflow).some((field) => field.id === config.referenceField && field.type === 'image')) throw new Error('기준 이미지 필드가 변경됐어. 프리셋을 다시 저장해줘.');
+    referenceField = comfyAssetFields(config, parseMcpMarkedFields(workflow)).referenceField;
+  }
+  const supplied: Record<string, unknown> = {};
+  for (const id of config.exposedFieldIds) if (id !== referenceField && args[id] !== undefined) supplied[id] = args[id];
+  const inputs = { ...config.fixedInputs, ...supplied };
+  if (options.forceReference && !options.omitReference && !referenceField) throw new Error('이 워크플로에는 기준 이미지를 받을 이미지 필드가 없어.');
+  if (options.omitReference && referenceField) delete inputs[referenceField];
+  if (referenceField && !options.omitReference) {
+    const { workflow, problem } = resolvePresetWorkflow(config);
+    if (!workflow) throw new Error(problem ?? '워크플로를 찾을 수 없어.');
+    if (!parseMcpMarkedFields(workflow).some((field) => field.id === referenceField && field.type === 'image')) throw new Error('기준 이미지 필드가 변경됐어. 프리셋을 다시 저장해줘.');
     reference();
-    inputs[config.referenceField] = { composite_hash: profile!.referenceHash };
+    inputs[referenceField] = { composite_hash: profile!.referenceHash };
   }
   return { service_type: 'comfyui' as const, workflow_id: config.workflowId, server_id: config.serverId ?? undefined, server_tag: config.serverTag ?? undefined, inputs, request_summary: summary };
 }

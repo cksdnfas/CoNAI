@@ -1,10 +1,13 @@
 import type { ComponentProps, ReactNode } from 'react'
+import { FieldInfo } from '@/components/ui/field'
 import { cn } from '@/lib/utils'
 
 interface SettingRowProps extends Omit<ComponentProps<'div'>, 'children'> {
   /** Setting name, left side. */
   label: ReactNode
-  /** Optional small line under the label. The flat UI keeps copy minimal, so leave it out unless it is essential. */
+  /** Explanation shown in an ⓘ tooltip after the label (no visible helper line). */
+  info?: ReactNode
+  /** @deprecated Same as `info`: rendered as the ⓘ tooltip, never as a visible line. */
   description?: ReactNode
   /** Id of the control, so clicking the label focuses / toggles it. */
   htmlFor?: string
@@ -24,6 +27,7 @@ interface SettingRowProps extends Omit<ComponentProps<'div'>, 'children'> {
  */
 function SettingRow({
   label,
+  info,
   description,
   htmlFor,
   children,
@@ -34,6 +38,7 @@ function SettingRow({
   ...props
 }: SettingRowProps) {
   const LabelElement = htmlFor ? 'label' : 'div'
+  const infoContent = info ?? description
 
   return (
     <div
@@ -46,8 +51,14 @@ function SettingRow({
       {...props}
     >
       <div className={cn('min-w-0', !stacked && 'flex-[1_1_14rem]', !stacked && align === 'start' && 'pt-1.5')}>
-        <LabelElement htmlFor={htmlFor} className="block text-sm text-foreground">{label}</LabelElement>
-        {description ? <div className="mt-0.5 text-xs text-muted-foreground">{description}</div> : null}
+        {infoContent ? (
+          <div className="flex items-center gap-1">
+            <LabelElement htmlFor={htmlFor} className="min-w-0 text-sm text-foreground">{label}</LabelElement>
+            <FieldInfo>{infoContent}</FieldInfo>
+          </div>
+        ) : (
+          <LabelElement htmlFor={htmlFor} className="block text-sm text-foreground">{label}</LabelElement>
+        )}
       </div>
       {children ? (
         <div

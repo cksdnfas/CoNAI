@@ -1,10 +1,10 @@
-import { ArrowDown, ArrowDownToLine, ArrowUp, CopyPlus, Eye, EyeOff, Layers, Lock, Plus, Trash2, Unlock } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { ArrowDown, ArrowDownToLine, ArrowUp, Brush, CopyPlus, Eye, EyeOff, Highlighter, ImageIcon, Layers, Lock, Plus, Trash2, Unlock } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { Tip } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import type { ImageEditorLayer } from './image-editor-types'
 
@@ -63,12 +63,17 @@ export function ImageEditorLayerPanel({
             return (
               <div key={layer.id} className={`space-y-2 border-b border-line py-3 last:border-b-0 ${isActive ? 'bg-primary/8 px-2 shadow-[inset_2px_0_0_var(--primary)]' : ''}`}>
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <Button type="button" variant="nav" size="xs" className="-mx-1.5 w-[calc(100%+0.75rem)]" onClick={() => onSetActiveLayerId(layer.id)}>
-                      {layer.type === 'draw'
-                        ? t({ ko: '드로우 · {count} 스트로크', en: 'Draw · {count} stroke' }, { count: layer.lines.length })
-                        : t({ ko: '비트맵 붙여넣기', en: 'Paste bitmap' })}
-                    </Button>
+                  <div className="flex min-w-0 flex-1 items-center gap-1">
+                    <IconButton
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => onSetActiveLayerId(layer.id)}
+                      label={layer.type === 'draw'
+                        ? t({ ko: '드로우 · {count} 스트로크 (눌러서 선택)', en: 'Draw · {count} stroke (click to select)' }, { count: layer.lines.length })
+                        : t({ ko: '비트맵 붙여넣기 (눌러서 선택)', en: 'Paste bitmap (click to select)' })}
+                    >
+                      {layer.type === 'draw' ? <Brush className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
+                    </IconButton>
                     <Input
                       value={layer.name}
                       onChange={(event) => onRenameLayer(layer.id, event.target.value)}
@@ -79,7 +84,7 @@ export function ImageEditorLayerPanel({
                           event.currentTarget.blur()
                         }
                       }}
-                      className="h-8"
+                      className="h-8 min-w-0 flex-1"
                       aria-label={t({ ko: '레이어 이름 {index}', en: 'Layer name {index}' }, { index: index + 1 })}
                     />
                   </div>
@@ -113,9 +118,17 @@ export function ImageEditorLayerPanel({
         </div>
 
         {enableMaskEditing ? (
-          <div className="flex min-h-11 items-center justify-between border-t border-line pt-2">
-            <div className="text-sm font-medium text-foreground">{t({ ko: '마스크 레이어', en: 'Mask layer' })}</div>
-            <Badge variant={hasVisibleMask ? 'secondary' : 'outline'}>{hasVisibleMask ? t({ ko: '보임', en: 'Visible' }) : t({ ko: '비어 있음', en: 'Empty' })}</Badge>
+          <div className="flex items-center border-t border-line pt-2">
+            <Tip content={hasVisibleMask ? t({ ko: '마스크 레이어: 보임', en: 'Mask layer: visible' }) : t({ ko: '마스크 레이어: 비어 있음', en: 'Mask layer: empty' })}>
+              <span
+                className="inline-flex size-8 items-center justify-center"
+                role="img"
+                tabIndex={0}
+                aria-label={hasVisibleMask ? t({ ko: '마스크 레이어: 보임', en: 'Mask layer: visible' }) : t({ ko: '마스크 레이어: 비어 있음', en: 'Mask layer: empty' })}
+              >
+                <Highlighter className={cn('h-4 w-4', hasVisibleMask ? 'text-primary' : 'text-muted-foreground/60')} />
+              </span>
+            </Tip>
           </div>
         ) : null}
     </section>

@@ -2,7 +2,6 @@ import { useCallback, useMemo, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { prepareImageSourceState } from '@/features/images/image-source-navigation'
@@ -134,9 +133,7 @@ export function RelatedImageGallerySection({
       ) : null}
 
       {!isLoading && !errorMessage && items.length === 0 && emptyMessage ? (
-        <Card >
-          <CardContent className="text-sm text-muted-foreground">{emptyMessage}</CardContent>
-        </Card>
+        <p className="text-xs text-muted-foreground">{emptyMessage}</p>
       ) : null}
     </section>
   )

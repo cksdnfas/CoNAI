@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Copy, Eye, Plus, Sparkles } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Text } from '@/components/ui/text'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -76,49 +77,45 @@ export function MiniMaxH3DirectorPromptBuilder({
   return <>
     <section className="ui-tone-plinth space-y-4 rounded-sm p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <Text as="div" variant="title">{t({ ko: '프롬프트 빌더', en: 'Prompt builder' })}</Text>
-          <div className="mt-1 text-2xs text-muted-foreground">{state.mode}</div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" variant="secondary" onClick={() => setShotNumberDraft('1')}>
-            <Plus className="h-3.5 w-3.5" />[Shot N]
-          </Button>
+        <Text as="div" variant="title">{t({ ko: '프롬프트 빌더', en: 'Prompt builder' })}</Text>
+        <div className="flex flex-wrap gap-1">
+          <IconButton size="icon-sm" variant="secondary" label={t({ ko: '샷 마커 삽입 [Shot N]', en: 'Insert shot marker [Shot N]' })} onClick={() => setShotNumberDraft('1')}>
+            <Plus className="h-3.5 w-3.5" />
+          </IconButton>
           {state.mode === 'REF2VA' ? (
-            <Button type="button" size="sm" variant="secondary" onClick={() => onChange(prefillMiniMaxH3DirectorRefBuilder(state, items))}>
-              <Sparkles className="h-3.5 w-3.5" />{t({ ko: '라벨·요약 채우기', en: 'Prefill labels & summary' })}
-            </Button>
+            <IconButton size="icon-sm" variant="secondary" label={t({ ko: '라벨·요약 자동 채우기', en: 'Auto-fill labels & summary' })} onClick={() => onChange(prefillMiniMaxH3DirectorRefBuilder(state, items))}>
+              <Sparkles className="h-3.5 w-3.5" />
+            </IconButton>
           ) : null}
-          <Button type="button" size="sm" variant="secondary" onClick={() => setPreviewOpen(true)}>
-            <Eye className="h-3.5 w-3.5" />{t({ ko: '프롬프트 미리보기', en: 'Preview prompt' })}
-          </Button>
+          <IconButton size="icon-sm" variant="secondary" label={t({ ko: '최종 프롬프트 미리보기', en: 'Preview final prompt' })} onClick={() => setPreviewOpen(true)}>
+            <Eye className="h-3.5 w-3.5" />
+          </IconButton>
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         {renderInputPort?.('prompt.mode')}
-        <span className="text-xs font-medium text-muted-foreground">{t({ ko: '프롬프트 모드', en: 'Prompt mode' })}</span>
         <SegmentedControl
           size="xs"
+          ariaLabel={t({ ko: '프롬프트 모드', en: 'Prompt mode' })}
           value={state.prompt_mode}
           items={[
-            { value: 'simple', label: t({ ko: '간단', en: 'Simple' }) },
-            { value: 'structured', label: t({ ko: '구조화', en: 'Structured' }) },
+            { value: 'simple', label: t({ ko: '간단', en: 'Simple' }), ariaLabel: t({ ko: '간단: 프롬프트 한 칸에 전부 적기', en: 'Simple: write the whole prompt in one box' }) },
+            { value: 'structured', label: t({ ko: '구조화', en: 'Structured' }), ariaLabel: t({ ko: '구조화: 항목별로 나눠 적으면 합쳐 줘', en: 'Structured: fill sections that get merged' }) },
           ]}
           onChange={setPromptMode}
         />
       </div>
 
       {state.prompt_mode === 'simple' ? (
-        renderPortedField('prompt.simple_prompt', <FormField label={t({ ko: '프롬프트', en: 'Prompt' })}>
-          <Textarea
-            rows={10}
-            value={state.simple_prompt}
-            placeholder={t({ ko: '전체 프롬프트', en: 'Full prompt' })}
-            className={cn(invalid && 'border-destructive')}
-            onChange={(event) => patchState({ simple_prompt: event.target.value })}
-          />
-        </FormField>)
+        renderPortedField('prompt.simple_prompt', <Textarea
+          rows={10}
+          value={state.simple_prompt}
+          aria-label={t({ ko: '프롬프트', en: 'Prompt' })}
+          placeholder={t({ ko: '전체 프롬프트', en: 'Full prompt' })}
+          className={cn(invalid && 'border-destructive')}
+          onChange={(event) => patchState({ simple_prompt: event.target.value })}
+        />)
       ) : state.mode === 'REF2VA' ? (
         <div className="grid gap-4">
           {renderPortedField('prompt.subject_definitions', <FormField label="subject_definitions">
@@ -162,19 +159,18 @@ export function MiniMaxH3DirectorPromptBuilder({
     <Modal
       open={previewOpen}
       title={t({ ko: '프롬프트 미리보기', en: 'Prompt preview' })}
-      description={state.mode}
       widthClassName="max-w-3xl"
       onClose={() => setPreviewOpen(false)}
     >
       <div className="space-y-3">
-        <Textarea rows={18} readOnly value={preview} className="font-mono text-xs" />
+        <Textarea rows={18} readOnly value={preview} aria-label={t({ ko: '최종 프롬프트', en: 'Final prompt' })} className="font-mono text-xs" />
         <ModalFooter>
-          <Button type="button" variant="secondary" onClick={() => void navigator.clipboard.writeText(preview).then(
+          <IconButton variant="secondary" label={t({ ko: '프롬프트 복사', en: 'Copy prompt' })} onClick={() => void navigator.clipboard.writeText(preview).then(
             () => onStatus(t({ ko: '프롬프트를 복사했어.', en: 'Prompt copied.' })),
             () => onStatus(t({ ko: '프롬프트 복사에 실패했어.', en: 'Failed to copy prompt.' })),
           )}>
-            <Copy className="h-4 w-4" />{t({ ko: '복사', en: 'Copy' })}
-          </Button>
+            <Copy className="h-4 w-4" />
+          </IconButton>
           <Button type="button" onClick={() => setPreviewOpen(false)}>{t({ ko: '완료', en: 'Done' })}</Button>
         </ModalFooter>
       </div>

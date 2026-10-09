@@ -5,6 +5,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
+import { Tip } from '@/components/ui/tooltip'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { audioCandidateFileUrl, previewAudioEdit, saveAudioEdit, setAudioReview, type AudioCandidate, type AudioEditParams } from '@/lib/api-audio'
@@ -233,16 +234,13 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '페이드 인', en: 'Fade in' })}
           <Input className="font-mono" type="number" step="0.005" min={0} max={5} value={params.fade_in} onChange={(event) => set({ fade_in: Number(event.target.value) })} />
         </label>
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '페이드 아웃', en: 'Fade out' })}
           <Input className="font-mono" type="number" step="0.005" min={0} max={5} value={params.fade_out} onChange={(event) => set({ fade_out: Number(event.target.value) })} />
         </label>
-        <div className="flex flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '결과 길이', en: 'Result' })}
-          <span className="flex h-9 items-center font-mono text-sm text-foreground">{length > 0 ? `${length.toFixed(2)}s` : '—'}</span>
-        </div>
       </div>
       {problem ? <p className="text-xs text-destructive">{problem}</p> : null}
 
@@ -251,6 +249,9 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
         {canEdit ? <IconButton variant="secondary" size="icon-sm" label={t({ ko: '편집 미리듣기', en: 'Preview edit' })} disabled={Boolean(problem) || busy !== null} onClick={() => void playPreview()}><Headphones /></IconButton> : null}
         <IconButton variant="ghost" size="icon-sm" label={t({ ko: '되돌리기', en: 'Reset' })} disabled={!changed} onClick={() => setParams(defaultParams(duration))}><RotateCcw /></IconButton>
         <span className="flex-1" />
+        <Tip content={t({ ko: '결과 길이', en: 'Result length' })}>
+          <span className="font-mono text-xs text-muted-foreground" tabIndex={0}>{length > 0 ? `${length.toFixed(2)}s` : '—'}</span>
+        </Tip>
         {canEdit ? (
           <Button size="sm" disabled={Boolean(problem) || !changed || busy !== null} onClick={() => void save()}>
             <Save />{t({ ko: '편집본 저장', en: 'Save edit' })}

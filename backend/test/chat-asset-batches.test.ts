@@ -20,6 +20,8 @@ test('character asset batches: durable jobs, dependencies, review and approved a
   auth.initializeAuthDb()
   const images = await import('../src/database/init')
   await images.initializeDatabase()
+  ;(await import('../src/models/ExternalApiProvider')).ExternalApiProvider.create({ provider_name: 'test', display_name: 'test', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
+  ;(await import('../src/models/ExternalApiProvider')).ExternalApiProvider.create({ provider_name: 'vision-test', display_name: 'vision-test', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
   const batches = await import('../src/services/codex-chat/chatAssetBatches')
   const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
   const { ChatGenerationPresetStore } = await import('../src/services/codex-chat/chatGenerationPresets')
@@ -127,7 +129,9 @@ test('character asset batches: durable jobs, dependencies, review and approved a
       const job = GenerationQueueModel.findById(slot.attempts[0].jobId)!
       assert.equal(job.requested_group_id, group.groupId)
       assert.equal(payload(batch, slot.slotKey).n_samples, 1)
-      assert.match(payload(batch, slot.slotKey).character_refs[0].image, /^data:image\/png;base64,/)
+      // Backgrounds are scenery: they never take the character reference.
+      if (slot.kind === 'background') assert.equal(payload(batch, slot.slotKey).character_refs, undefined)
+      else assert.match(payload(batch, slot.slotKey).character_refs[0].image, /^data:image\/png;base64,/)
       assert.match(payload(batch, slot.slotKey).prompt, /quality, blue hair, blue eyes/)
       assert.equal(db().prepare('SELECT idempotency_key FROM generation_queue_idempotency WHERE job_id = ?').get(job.id)?.idempotency_key, `asset:${batch.id}:${slot.slotKey}:1`)
       requireQueuedChatGenerationAccess(job)
@@ -165,15 +169,15 @@ test('character asset batches: durable jobs, dependencies, review and approved a
 
   await t.test('reference failure blocks followers; only successful explicit selection submits them once', async () => {
     const fresh = ChatProfileStore.create({ name: '기준 먼저', engine: 'codex' })
-    let pending = await batches.createChatAssetBatch(requester, fresh.id, { idempotencyKey: 'reference-first', presetId: preset.id, slots: [{ slotKey: '기준', kind: 'reference', prompt: 'portrait' }, { slotKey: '배경', kind: 'background', prompt: 'garden' }] })
+    let pending = await batches.createChatAssetBatch(requester, fresh.id, { idempotencyKey: 'reference-first', presetId: preset.id, slots: [{ slotKey: '기준', kind: 'reference', prompt: 'portrait' }, { slotKey: '아바타', kind: 'avatar', prompt: 'portrait' }] })
     assert.equal(pending.slots[1].attempts.length, 0)
     const jobId = pending.slots[0].attempts[0].jobId
     assert.equal(payload(pending, '기준').n_samples, 1)
     assert.equal(payload(pending, '기준').character_refs, undefined)
     db().prepare("UPDATE generation_queue_jobs SET status = 'failed' WHERE id = ?").run(jobId)
     assert.equal(batches.getChatAssetBatch(requester, pending.id).slots[1].status, 'blocked')
-    await assert.rejects(batches.regenerateChatAssetSlot(requester, pending.id, '배경', { attempt: 1 }), /먼저/)
-    await assert.rejects(batches.cancelChatAssetSlot(requester, pending.id, '배경'), /아직 제출/)
+    await assert.rejects(batches.regenerateChatAssetSlot(requester, pending.id, '아바타', { attempt: 1 }), /먼저/)
+    await assert.rejects(batches.cancelChatAssetSlot(requester, pending.id, '아바타'), /아직 제출/)
     await assert.rejects(batches.chooseChatAssetSlot(requester, pending.id, '기준', other), /성공/)
     pending = await batches.regenerateChatAssetSlot(requester, pending.id, '기준', { attempt: 2 })
     finish(pending, '기준', reference)
@@ -256,7 +260,7 @@ test('character asset batches: durable jobs, dependencies, review and approved a
     assert.equal(GroupPathService.getPathLabel(result.applied.backgroundGroupId!), '채팅 캐릭터/루나/배경')
   })
 
-  await t.test('in-group keyword conflicts roll back new members and all profile fields with an explicit receipt', async () => {
+  await t.test('a newer expression pick replaces the image that held the emotion before', async () => {
     const conflictProfile = ChatProfileStore.create({ name: '키워드 충돌', engine: 'codex', referenceHash: reference })
     let conflict = await batches.createChatAssetBatch(requester, conflictProfile.id, { idempotencyKey: 'conflict', presetId: preset.id, expressionPresetId: expressionPreset.id, expressions: ['기쁨'], slots: [{ slotKey: '아바타', kind: 'avatar', prompt: 'portrait' }] })
     finish(conflict, '기쁨'); finish(conflict, '아바타')
@@ -264,10 +268,17 @@ test('character asset batches: durable jobs, dependencies, review and approved a
     conflict = await batches.chooseChatAssetSlot(requester, conflict.id, '아바타', candidate)
     const group = GroupPathService.resolveOrCreate('채팅 캐릭터/키워드 충돌/표정').groupId
     EmoticonService.addImages(group, [{ compositeHash: other, keywords: ['기쁨'] }])
-    assert.throws(() => batches.applyChatAssetBatch(requester, conflict.id), (error: any) => error.status === 409 && error.details.rolledBack === true && error.details.applied.profileFields.length === 0)
-    assert.equal(ChatProfileStore.find(conflictProfile.id)!.avatarHash, null)
-    assert.ok(!images.db.prepare('SELECT 1 FROM image_groups WHERE group_id = ? AND composite_hash = ?').get(group, candidate))
-    assert.equal(EmoticonService.findGroup(group)!.emoticon_enabled, 0)
+    batches.applyChatAssetBatch(requester, conflict.id)
+    assert.equal(ChatProfileStore.find(conflictProfile.id)!.avatarHash, candidate)
+    assert.deepEqual(EmoticonService.listEntries(group).map((entry) => [entry.compositeHash, entry.keywords]), [[candidate, ['기쁨']]])
+    assert.equal(EmoticonService.findGroup(group)!.emoticon_enabled, 1)
+    // The editor fills and empties one emotion directly.
+    const { setProfileExpression, clearProfileExpression } = await import('../src/services/codex-chat/chatProfileExpressions')
+    setProfileExpression(requester, conflictProfile.id, '기쁨', other)
+    assert.deepEqual(EmoticonService.listEntries(group).map((entry) => [entry.compositeHash, entry.keywords]), [[other, ['기쁨']]])
+    assert.equal(ChatProfileStore.find(conflictProfile.id)!.style.emoticonGroupIds[0], group)
+    clearProfileExpression(requester, conflictProfile.id, '기쁨')
+    assert.equal(EmoticonService.listEntries(group).length, 0)
   })
 
   await t.test('cancel uses queue cancellation; profile deletion cascades batches and dispatch rechecks live authority', async (sub) => {
@@ -295,7 +306,24 @@ test('character asset batches: durable jobs, dependencies, review and approved a
     assert.notEqual(payload(result, '전신').prompt_data.seed, 42)
     const regenerated = await batches.regenerateChatAssetSlot(requester, result.id, '전신', { attempt: 2 })
     assert.notEqual(payload(regenerated, '전신').prompt_data.seed, payload(result, '전신').prompt_data.seed)
-    await assert.rejects(batches.createChatAssetBatch(requester, profile.id, { idempotencyKey: 'bad-comfy', presetId: comfy.id, slots: [{ slotKey: '전신', kind: 'full', prompt: 'full body' }] }), /promptField/)
+    // Unset fields are found on their own: the only image field takes the reference, the only exposed text field the prompt.
+    const auto = ChatGenerationPresetStore.create({ name: 'Comfy 자동', kind: 'comfyui', comfyui: { workflowId: workflow, exposedFieldIds: ['positive'], fixedInputs: { seed: 42 }, referenceField: null } })
+    const found = await batches.createChatAssetBatch(requester, profile.id, { idempotencyKey: 'comfy-auto', presetId: auto.id, slots: [{ slotKey: '전신', kind: 'full', prompt: 'full body' }, { slotKey: '배경', kind: 'background', prompt: 'scenery' }] })
+    assert.deepEqual(payload(found, '전신').prompt_data.ref, { composite_hash: reference })
+    assert.match(payload(found, '전신').prompt_data.positive, /current appearance, full body/)
+    assert.equal(payload(found, '배경').prompt_data.ref, undefined)
+    // A text-to-image workflow draws every slot from the appearance text.
+    const t2iWorkflow = WorkflowModel.create({ name: '자산 t2i', workflow_json: '{}', marked_fields: [fields[0], fields[2]] as any })
+    const t2i = ChatGenerationPresetStore.create({ name: 'Comfy t2i', kind: 'comfyui', comfyui: { workflowId: t2iWorkflow, exposedFieldIds: [], fixedInputs: { positive: 'quality' }, referenceField: null } })
+    const drawn = await batches.createChatAssetBatch(requester, profile.id, { idempotencyKey: 'comfy-t2i', presetId: t2i.id, slots: [{ slotKey: '전신', kind: 'full', prompt: 'full body' }] })
+    assert.equal(payload(drawn, '전신').prompt_data.ref, undefined)
+    assert.match(payload(drawn, '전신').prompt_data.positive, /^quality, current appearance, full body/)
+    assert.equal(ChatGenerationPresetStore.listWithAssetSupport().find((entry) => entry.id === t2i.id)?.assetSupport.mode, 'appearance')
+    assert.equal(ChatGenerationPresetStore.listWithAssetSupport().find((entry) => entry.id === auto.id)?.assetSupport.mode, 'reference')
+    // Two unnamed text fields: the prompt field has to be chosen.
+    const twoTexts = WorkflowModel.create({ name: '자산 모호', workflow_json: '{}', marked_fields: [{ id: 'a', label: 'A', type: 'text', jsonPath: '1.inputs.a' }, { id: 'b', label: 'B', type: 'text', jsonPath: '1.inputs.b' }, fields[2]] as any })
+    const unclear = ChatGenerationPresetStore.create({ name: 'Comfy 모호', kind: 'comfyui', comfyui: { workflowId: twoTexts, exposedFieldIds: [], fixedInputs: {}, referenceField: null } })
+    await assert.rejects(batches.createChatAssetBatch(requester, profile.id, { idempotencyKey: 'bad-comfy', presetId: unclear.id, slots: [{ slotKey: '전신', kind: 'full', prompt: 'full body' }] }), /promptField/)
   })
 
   await t.test('slot wildcard expansion stays in the existing generation preprocessor', async () => {
@@ -336,6 +364,18 @@ test('character asset batches: durable jobs, dependencies, review and approved a
       await applyProfileAssetsProposal(requester, applying.id)
       assert.equal(ChatProfileStore.find(profile.id)!.avatarHash, other)
       await assert.rejects(applyProfileAssetsProposal(requester, applying.id), /이미 승인/)
+
+      // The chat can pick a candidate itself: the card names it, and only approving the card picks and applies it.
+      const pickContext = { ...context, replyId: 'asset-pick-proposal' }
+      const stopPick = registerChatReply(pickContext, new AbortController().signal, () => ({ replyTo: null, recipients: [] }))
+      assert.throws(() => proposeProfileAssets(requester, pickContext, { action: 'apply', batch_id: made.id, picks: { 아바타: 'f'.repeat(64) } }), /성공한 후보/)
+      const picking = proposeProfileAssets(requester, pickContext, { action: 'apply', batch_id: made.id, picks: { 아바타: candidate } })
+      stopPick()
+      assert.ok(picking.kind === 'profile_assets' && picking.action === 'apply')
+      assert.deepEqual(picking.chosenHashes, { 아바타: candidate })
+      assert.equal(batches.getChatAssetBatch(requester, made.id).slots.find((slot) => slot.slotKey === '아바타')!.chosenHash, other, 'nothing is picked before approval')
+      await applyProfileAssetsProposal(requester, picking.id)
+      assert.equal(ChatProfileStore.find(profile.id)!.avatarHash, candidate)
     } finally { unregister() }
   })
 

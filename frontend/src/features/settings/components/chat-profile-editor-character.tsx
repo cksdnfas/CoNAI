@@ -1,48 +1,40 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { Eye, ImageDown, Plus, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { ToggleChip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { useI18n } from '@/i18n'
-import { uploadChatProfileAsset, type ChatLorebook, type ChatProfile } from '@/lib/api-codex-chat'
+import type { ChatProfile } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
-import { EditorGroup, GROW_TEXTAREA, SwitchLine, type Draft, type PatchDraft } from './chat-profile-editor-fields'
+import { EditorGroup, GROW_TEXTAREA, type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { draftProfileAssetUrl } from './chat-profile-images'
-import { PROFILE_IMAGE_ACCEPT, useChatProfileAssetImport } from './chat-profile-asset-input'
 import { ChatProfileMediaRow, useChatMediaLocalize, useLastTextarea } from './chat-profile-media'
 import { ChatProfilePresetMenu } from './chat-profile-preset-menu'
 import { ChatPromptSectionsEditor, CollapsibleRow } from './chat-profile-sections'
+import { ASSIST_FILLED_CLASS, useProfileAssist } from './use-profile-editor-chat-page'
 
 /**
- * Who the profile is: avatar, name, the prompt (system prompt, sections, greetings, the images they show) and the
- * lorebooks it reads.
+ * Who the profile is: name and tagline (the avatar is changed under Appearance), then the prompt: system prompt,
+ * sections, greetings, the author's note and the images they show.
  */
-export function ChatProfileCharacterPanel({ open, draft, patch, lorebooks, onPreview, profile, onBusyChange, busy }: {
+export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profile, onOpenAppearance }: {
   open: boolean
   draft: Draft
   patch: PatchDraft
-  /** The shared lorebooks; undefined until they load. */
-  lorebooks: ChatLorebook[] | undefined
   onPreview: () => void
   profile: ChatProfile | null
-  onBusyChange: (busy: boolean) => void
-  busy: boolean
+  onOpenAppearance: () => void
 }) {
   const { t } = useI18n()
+  const { filled } = useProfileAssist()
   const confirm = useConfirm()
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const localize = useChatMediaLocalize(draft, patch)
   const lastTextarea = useLastTextarea()
   const [mediaOpen, setMediaOpen] = useState(false)
-
-  const avatarImport = useChatProfileAssetImport((avatarHash) => patch({ avatarHash, avatarCrop: null, avatar: avatarHash === (profile?.avatarHash ?? draft.avatarHash) ? profile?.avatar ?? draft.avatar : null }), onBusyChange)
 
   const applySystemPromptPreset = async (content: string) => {
     if (draft.systemPrompt.trim() && draft.systemPrompt.trim() !== content.trim()) {
@@ -66,26 +58,17 @@ export function ChatProfileCharacterPanel({ open, draft, patch, lorebooks, onPre
     <div className="space-y-4" onFocusCapture={lastTextarea.onFocusCapture}>
       <EditorGroup>
         <div className="flex items-center gap-4">
-          <Tip content={t({ ko: '아바타 바꾸기', en: 'Change avatar' })}>
+          <Tip content={t({ ko: '외형에서 바꾸기', en: 'Change under Appearance' })}>
             {/* eslint-disable-next-line no-restricted-syntax -- the avatar itself is the control; Button padding would crop it */}
-            <button type="button" className="shrink-0 cursor-pointer rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40" disabled={busy || avatarImport.isPending} onClick={() => fileInputRef.current?.click()} aria-label={t({ ko: '아바타 바꾸기', en: 'Change avatar' })}>
+            <button type="button" className="shrink-0 cursor-pointer rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40" onClick={onOpenAppearance} aria-label={t({ ko: '외형에서 바꾸기', en: 'Change under Appearance' })}>
               <ChatProfileAvatar name={draft.name || '?'} avatar={draft.avatar} imageUrl={draftProfileAssetUrl(draft, profile, 'avatar')} avatarCrop={draft.avatarHash ? draft.avatarCrop : null} engine={draft.engine} size="xl" />
             </button>
           </Tip>
-          <input ref={fileInputRef} type="file" accept={PROFILE_IMAGE_ACCEPT} className="hidden" disabled={busy || avatarImport.isPending} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file && !busy) avatarImport.mutate(() => uploadChatProfileAsset(file, draft.name)) }} />
-          <Field label={t({ ko: '이름', en: 'Name' })} className="min-w-0 flex-1">
-            <Input variant="settings" value={draft.name} maxLength={60} onChange={(event) => patch({ name: event.target.value })} />
-          </Field>
-          <div className="flex h-10 items-center self-end">
-            <Switch checked={draft.isEnabled} onCheckedChange={(isEnabled) => patch({ isEnabled })} aria-label={t({ ko: '사용', en: 'On' })} />
+          <div className="min-w-0 flex-1 space-y-2">
+            <Input variant="settings" className={cn(filled('name') && ASSIST_FILLED_CLASS)} value={draft.name} maxLength={60} placeholder={t({ ko: '이름', en: 'Name' })} aria-label={t({ ko: '이름', en: 'Name' })} onChange={(event) => patch({ name: event.target.value })} />
+            <Input variant="settings" className={cn(filled('tagline') && ASSIST_FILLED_CLASS)} value={draft.tagline} maxLength={200} placeholder={t({ ko: '짧은 소개', en: 'Tagline' })} aria-label={t({ ko: '짧은 소개', en: 'Tagline' })} onChange={(event) => patch({ tagline: event.target.value })} />
           </div>
         </div>
-        {draft.avatar || draft.avatarHash ? (
-          <Button variant="link" size="xs" disabled={busy} className="px-0 text-muted-foreground" onClick={() => patch({ avatar: null, avatarHash: null, avatarCrop: null })}>{t({ ko: '아바타 지우기', en: 'Remove avatar' })}</Button>
-        ) : null}
-        <Field label={t({ ko: '짧은 소개', en: 'Tagline' })}>
-          <Input variant="settings" value={draft.tagline} maxLength={200} onChange={(event) => patch({ tagline: event.target.value })} />
-        </Field>
       </EditorGroup>
 
       <EditorGroup
@@ -107,12 +90,12 @@ export function ChatProfileCharacterPanel({ open, draft, patch, lorebooks, onPre
         )}
       >
         <Field label={t({ ko: '시스템 프롬프트', en: 'System prompt' })}>
-          <Textarea variant="settings" rows={5} className={GROW_TEXTAREA} value={draft.systemPrompt} onChange={(event) => patch({ systemPrompt: event.target.value })} />
+          <Textarea variant="settings" rows={5} className={cn(GROW_TEXTAREA, filled('systemPrompt') && ASSIST_FILLED_CLASS)} value={draft.systemPrompt} onChange={(event) => patch({ systemPrompt: event.target.value })} />
         </Field>
         <ChatPromptSectionsEditor sections={draft.promptSections} onChange={(promptSections) => patch({ promptSections })} />
         <div className="border-t border-line">
           <CollapsibleRow title={t({ ko: '첫 인사말', en: 'Greeting' })} meta={greetingMeta}>
-            <Textarea variant="settings" rows={3} className={GROW_TEXTAREA} value={draft.greeting} onChange={(event) => patch({ greeting: event.target.value })} aria-label={t({ ko: '첫 인사말', en: 'Greeting' })} />
+            <Textarea variant="settings" rows={3} className={cn(GROW_TEXTAREA, filled('greeting') && ASSIST_FILLED_CLASS)} value={draft.greeting} onChange={(event) => patch({ greeting: event.target.value })} aria-label={t({ ko: '첫 인사말', en: 'Greeting' })} />
             {alternates.map((text, index) => (
               <div key={index} className="flex items-start gap-1">
                 <Textarea
@@ -128,31 +111,21 @@ export function ChatProfileCharacterPanel({ open, draft, patch, lorebooks, onPre
                 </IconButton>
               </div>
             ))}
-            <Button variant="secondary" size="sm" onClick={() => patch({ alternateGreetings: [...alternates, ''] })}>
+            <IconButton variant="secondary" size="icon-sm" onClick={() => patch({ alternateGreetings: [...alternates, ''] })} label={t({ ko: '추가 인사말 넣기', en: 'Add an alternate greeting' })}>
               <Plus />
-              {t({ ko: '추가 인사말', en: 'Alternate greeting' })}
-            </Button>
+            </IconButton>
+          </CollapsibleRow>
+          <CollapsibleRow
+            title={t({ ko: '작가 노트', en: "Author's note" })}
+            info={t({ ko: '모든 채팅에 매 요청 들어가는 장면 지시. 대화 끝쪽에 들어가. 채팅마다 ⋯ → 컨텍스트에서 따로 쓰면 그쪽이 우선이야.', en: "A scene instruction added to every request in every chat, near the end of the conversation. A note written per chat under ⋯ → Context takes precedence." })}
+            meta={draft.authorNote.trim() ? null : t({ ko: '없음', en: 'none' })}
+          >
+            <Textarea variant="settings" rows={3} className={cn(GROW_TEXTAREA, filled('authorNote') && ASSIST_FILLED_CLASS)} value={draft.authorNote} aria-label={t({ ko: '작가 노트', en: "Author's note" })} onChange={(event) => patch({ authorNote: event.target.value })} />
           </CollapsibleRow>
           <ChatProfileMediaRow draft={draft} patch={patch} localize={localize} lastTextarea={lastTextarea.ref} open={mediaOpen} onOpenChange={setMediaOpen} />
         </div>
       </EditorGroup>
 
-      <EditorGroup label={t({ ko: '로어북', en: 'Lorebooks' })}>
-        <div className="flex flex-wrap gap-1.5">
-          {(lorebooks ?? []).map((lorebook) => {
-            const linked = draft.lorebookIds.includes(lorebook.id)
-            return (
-              <ToggleChip key={lorebook.id} pressed={linked} onClick={() => patch({ lorebookIds: linked ? draft.lorebookIds.filter((id) => id !== lorebook.id) : [...draft.lorebookIds, lorebook.id] })}>
-                {lorebook.name}
-                {lorebook.kind === 'account' ? <span className="opacity-60">{t({ ko: '계정', en: 'Account' })}</span> : null}
-                <span className="opacity-60">{lorebook.entries.length}</span>
-              </ToggleChip>
-            )
-          })}
-          {lorebooks && lorebooks.length === 0 ? <span className="text-sm text-muted-foreground">{t({ ko: '가져온 로어북이 없어.', en: 'No lorebooks yet.' })}</span> : null}
-        </div>
-        <SwitchLine label={t({ ko: '로어 제안 허용', en: 'Allow lore proposals' })} checked={draft.allowLoreProposals} onCheckedChange={(allowLoreProposals) => patch({ allowLoreProposals })} />
-      </EditorGroup>
     </div>
   )
 }

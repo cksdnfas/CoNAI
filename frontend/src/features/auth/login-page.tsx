@@ -262,17 +262,13 @@ export function LoginPage() {
           }}
         >
           <ModalBody>
-            <Field label={t({ ko: '아이디', en: 'Username' })}>
+            <Field label={t({ ko: '아이디', en: 'Username' })} info={t({ ko: '게스트 계정은 언제든 초기화될 수 있어.', en: 'Guest accounts may be reset at any time.' })}>
               <Input value={guestUsername} onChange={(event) => setGuestUsername(event.target.value)} autoComplete="username" />
             </Field>
 
             <Field label={t({ ko: '비밀번호', en: 'Password' })}>
               <Input type="password" value={guestPassword} onChange={(event) => setGuestPassword(event.target.value)} autoComplete="new-password" />
             </Field>
-
-            <p className="text-sm text-muted-foreground">
-              {t({ ko: '게스트 계정은 언제든 초기화될 수 있어.', en: 'Guest accounts may be reset at any time.' })}
-            </p>
 
             <ModalFooter>
               <Button type="button" variant="ghost" onClick={() => setIsGuestModalOpen(false)} disabled={guestSignupMutation.isPending}>

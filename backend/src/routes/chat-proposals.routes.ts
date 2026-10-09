@@ -16,6 +16,7 @@ import { chatPageNativeActionRevision } from '../services/codex-chat/chatPageNat
 import { applyProfileAssetsProposal } from '../services/codex-chat/chatAssetProposals'
 import { ChatAssetError } from '../services/codex-chat/chatAssetAccess'
 import { hasAdminAccess } from '../middleware/authMiddleware'
+import { ChatTaskRunner } from '../services/codex-chat/chatTasks'
 
 const router = express.Router()
 
@@ -26,10 +27,11 @@ function pageProposal(req: Request, res: Response, receipt = false): Extract<Cha
   try {
     const proposal = ChatProposalStore.find(id)
     if (proposal?.kind !== 'page_fields' && proposal?.kind !== 'workflow_graph' && proposal?.kind !== 'page_action') throw new ChatPageContextError('페이지 편집 제안이 아니야.')
-    const tool = proposal.kind === 'workflow_graph' ? 'propose_workflow_changes' : proposal.kind === 'page_action' ? 'propose_page_action' : 'propose_page_changes'
+    // Cards made before the graph edit ran right away (workflow_graph) are checked against the tool that replaced it.
+    const tool = proposal.kind === 'workflow_graph' ? 'workflow_edit' : proposal.kind === 'page_action' ? 'propose_page_action' : 'page_fill'
     const thread = CodexChatStore.findThread(ChatProposalStore.threadIdOf(id)!, getRequesterAccountId(req))!
     const profile = thread.profile_id === null ? null : ChatProfileStore.find(thread.profile_id)
-    if (!profile?.isEnabled || !profile.mcpEnabled || !profile.mcpScopes.includes('read') || (profile.toolAllowlist && !profile.toolAllowlist.includes(tool))) throw new ChatPageContextError('프로필의 페이지 편집 도구 권한이 변경됐어.', 403)
+    if (!profile?.isEnabled || !profile.mcpEnabled || !profile.mcpScopes.includes('read') || (profile.toolAllowlist && !profile.toolAllowlist.includes(tool) && !(tool === 'page_fill' && profile.toolAllowlist.includes('propose_page_changes')) && !(tool === 'workflow_edit' && profile.toolAllowlist.includes('propose_workflow_changes')))) throw new ChatPageContextError('프로필의 페이지 편집 도구 권한이 변경됐어.', 403)
     const requester = { accountId: getRequesterAccountId(req), accountType: getRequesterAccountType(req) }
     requireChatMcpAccountAccess({ requester, scopes: ['read'], source: thread.engine === 'codex' ? 'codex-chat' : 'llm-chat', chatContext: { threadId: thread.id, profileId: profile.id, kind: 'direct' } }, tool)
     requireChatPageAccess(requester, proposal.page)
@@ -156,6 +158,23 @@ router.post('/:proposalId/undo', asyncHandler(async (req: Request, res: Response
 }))
 
 /** POST /:proposalId/dismiss — a person set the proposal aside (무시); a dismissed lore title is not proposed again. */
+/** POST /:proposalId/task-approve — the person approved a task plan card; the task starts. */
+router.post('/:proposalId/task-approve', (req: Request, res: Response) => {
+  const proposalId = visibleProposalId(req, res)
+  if (proposalId === null) return
+  const proposal = ChatProposalStore.find(proposalId)
+  if (proposal?.kind !== 'task_plan' || proposal.dismissed || proposal.savedId !== undefined) {
+    res.status(409).json({ success: false, error: '승인할 수 있는 플랜이 아니야.' })
+    return
+  }
+  try {
+    ChatTaskRunner.approve(proposal.taskId)
+    res.json({ success: true, data: ChatProposalStore.markSaved(proposalId, proposal.taskId) })
+  } catch (error) {
+    res.status(409).json({ success: false, error: error instanceof Error ? error.message : '플랜을 승인하지 못했어.' })
+  }
+})
+
 router.post('/:proposalId/dismiss', asyncHandler(async (req: Request, res: Response) => {
   const proposalId = visibleProposalId(req, res)
   if (proposalId === null) return

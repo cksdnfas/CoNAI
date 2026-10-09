@@ -2,13 +2,16 @@ import assert from 'node:assert/strict'
 import { test, type TestContext } from 'node:test'
 import { ExternalApiProvider } from '../src/models/ExternalApiProvider'
 import { translateReply, translateUserInput, translatorOf } from '../src/services/codex-chat/chatTranslation'
-import { ChatProfileStore } from '../src/services/codex-chat/chatProfiles'
+import type { ChatProfile } from '../src/services/codex-chat/chatProfiles'
+import { mockModelRows } from './modelRowMocks'
 
-const translating = { translationProviderName: 'translator', translationModel: 'small' }
+// Model rows: 1 the translator's small model, 2 a model whose connection is gone, 3 a chat model.
+const translating = { translationSlotId: 1 }
 
 /** The translation connection answers `reply`; `requests` collects what was sent to it. */
 function mockTranslator(t: TestContext, reply: string | (() => Response)) {
   const requests: Array<{ model: string; messages: Array<{ role: string; content: string }> }> = []
+  mockModelRows(t, { 1: ['translator', 'small'], 2: ['gone', 'x'], 3: ['test', 'test'] })
   t.mock.method(ExternalApiProvider, 'findByName', (name: string) => name === 'translator'
     ? { provider_name: 'translator', display_name: 'Translator', is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', additional_config: {} }
     : undefined)
@@ -33,10 +36,10 @@ test('user input: Korean goes to the model in English with the translation model
 test('no translation model, or a missing connection, leaves messages untranslated', async (t) => {
   t.mock.method(console, 'warn', () => {})
   const requests = mockTranslator(t, 'unused')
-  assert.equal(await translateUserInput({ translationProviderName: null, translationModel: '' }, '안녕'), null)
+  assert.equal(await translateUserInput({ translationSlotId: null }, '안녕'), null)
   assert.equal(await translateUserInput(null, '안녕'), null)
-  assert.equal(await translateUserInput({ translationProviderName: 'gone', translationModel: '' }, '안녕'), null)
-  assert.equal(await translateReply({ translationProviderName: 'gone', translationModel: '' }, 'Hello'), null)
+  assert.equal(await translateUserInput({ translationSlotId: 2 }, '안녕'), null)
+  assert.equal(await translateReply({ translationSlotId: 2 }, 'Hello'), null)
   assert.equal(requests.length, 0)
 })
 
@@ -70,13 +73,12 @@ test('a failed or empty translation falls back to the original without throwing'
   assert.equal(await translateReply(translating, 'Hello'), null)
 })
 
-test('group rooms translate the user with the first member that has a translation model', () => {
-  const plain = ChatProfileStore.draft({ name: 'A', providerName: 'test', model: 'test' }, 1)
-  const translator = ChatProfileStore.draft({ name: 'B', providerName: 'test', model: 'test', translationProviderName: 'translator', translationModel: 'small' }, 2)
+test('group rooms translate the user with the first member that has a translation model', (t) => {
+  mockTranslator(t, 'unused')
+  const plain = { id: 1, name: 'A', engine: 'llm', modelSlotId: 3, translationSlotId: null } as unknown as ChatProfile
+  const translator = { ...plain, id: 2, name: 'B', translationSlotId: 1 } as ChatProfile
   assert.equal(translatorOf([plain, translator])?.id, 2)
   assert.equal(translatorOf([plain]), null)
-  assert.equal(translator.translationProviderName, 'translator')
-  assert.equal(translator.translationModel, 'small')
 })
 
 test('an address label the model copied from history is cut from its reply, so the translator sees only the text', async (t) => {

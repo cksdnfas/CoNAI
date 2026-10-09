@@ -37,6 +37,7 @@ export function KaloscopeResultBlock({ result, title, onAddSearchFilter }: Kalos
           tags={artistEntries.map(([tag]) => tag)}
           entries={artistEntries}
           collapsibleScores={false}
+          hideLabels
           getTagHref={(tag) => buildArtistPromptTagUrl(tag, artistLinkUrlTemplate)}
           onAddSearchFilter={onAddSearchFilter}
         />

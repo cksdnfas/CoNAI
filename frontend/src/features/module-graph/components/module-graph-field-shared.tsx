@@ -1,4 +1,5 @@
 import { CircleHelp } from 'lucide-react'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { TranslationDictionary } from '@/i18n/resources/types'
 import type { ModulePortDefinition } from '@/lib/api-module-graph'
@@ -25,8 +26,10 @@ export function getModuleGraphPortTypeLabel(t: ReturnType<typeof useI18n>['t'], 
 /** Render a compact tooltip icon for internal node, edge, and port references. */
 export function TechnicalReferenceHint({ title, label }: { title: string; label: string }) {
   return (
-    <span className="inline-flex cursor-help text-muted-foreground" title={title} aria-label={label}>
-      <CircleHelp className="h-3.5 w-3.5" />
-    </span>
+    <Tip content={title} className="whitespace-pre-line">
+      <span className="inline-flex cursor-help text-muted-foreground" tabIndex={0} aria-label={label}>
+        <CircleHelp className="h-3.5 w-3.5" />
+      </span>
+    </Tip>
   )
 }

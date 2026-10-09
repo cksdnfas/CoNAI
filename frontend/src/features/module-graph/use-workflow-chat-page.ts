@@ -12,7 +12,7 @@ import { buildWorkflowRunInputDefaults, deriveWorkflowExposedInputsFromNodes, is
 
 type Draft = { name: string; description: string; nodes: ModuleGraphNode[]; edges: ModuleGraphEdge[]; runInputs: Record<string, unknown> }
 type Params = Draft & {
-  enabled: boolean; editorSessionId: string; selectedGraphId: number | null; debugMode: boolean; modules: ModuleDefinitionRecord[]
+  enabled: boolean; dirty: boolean; editorSessionId: string; selectedGraphId: number | null; debugMode: boolean; modules: ModuleDefinitionRecord[]
   setNodes: Dispatch<SetStateAction<ModuleGraphNode[]>>; setEdges: Dispatch<SetStateAction<ModuleGraphEdge[]>>
   setName: Dispatch<SetStateAction<string>>; setDescription: Dispatch<SetStateAction<string>>
   setRunInputs: Dispatch<SetStateAction<Record<string, unknown>>>; setExposedInputs: Dispatch<SetStateAction<GraphWorkflowExposedInput[]>>
@@ -110,6 +110,6 @@ export function useWorkflowChatPage(params: Params) {
 
   useChatPageRegistration(snapshot ? {
     title: t({ ko: '노드 워크플로 편집기', en: 'Node workflow editor' }), kind: 'workflow', resourceId: `workflow:${params.selectedGraphId ?? 'draft'}:${params.editorSessionId}`,
-    fields: [], workflow: snapshot, apply: () => {}, applyWorkflow,
+    fields: [], workflow: snapshot, dirty: params.dirty, apply: () => {}, applyWorkflow,
   } : null)
 }

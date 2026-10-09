@@ -10,8 +10,10 @@ import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { pageAction } from '@/features/codex-chat/page-action-helpers'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { ImageDetailMedia } from '@/features/images/components/detail/image-detail-media'
 import { useImageSourceBack } from '@/features/images/image-source-navigation'
@@ -131,7 +133,7 @@ export function ImageMetadataEditPage() {
   const busy = downloadMutation.isPending || saveMutation.isPending
 
   useChatPageRegistration(compositeHash && draftImageHash === compositeHash && image?.composite_hash === compositeHash && isEditableImage && draft && !busy && !imageQuery.isError ? {
-    kind: 'metadata', title: t({ ko: '이미지 메타데이터 초안', en: 'Image metadata draft' }), resourceId: compositeHash,
+    kind: 'metadata', title: t({ ko: '이미지 메타데이터 초안', en: 'Image metadata draft' }), resourceId: compositeHash, dirty: hasUnsavedChanges,
     fields: [
       { id: 'prompt', label: t({ ko: '프롬프트', en: 'Prompt' }), type: 'text', value: draft.prompt },
       { id: 'negativePrompt', label: t({ ko: '네거티브 프롬프트', en: 'Negative prompt' }), type: 'text', value: draft.negativePrompt },
@@ -140,7 +142,15 @@ export function ImageMetadataEditPage() {
       { id: 'model', label: t({ ko: '모델', en: 'Model' }), type: 'text', value: draft.model },
       { id: 'format', label: t({ ko: '다운로드 형식', en: 'Download format' }), type: 'select', value: draft.format, options: ['png', 'jpeg', 'webp'] },
     ],
+    data: { selected: { prompt: draft.prompt.slice(0, 200), negativePrompt: draft.negativePrompt.slice(0, 200), steps: draft.steps, sampler: draft.sampler, model: draft.model } },
+    // Saving rewrites the file, so it is a card the person applies (in place of the page's own confirm).
+    actions: canEditMetadata && hasUnsavedChanges && !draftValidationError ? [pageAction('metadata.save', t({ ko: '메타데이터 저장', en: 'Save metadata' }), t({ ko: '초안의 메타데이터를 이미지 파일에 써.', en: 'Write the draft metadata into the image file.' }), undefined, 'save')] : [],
     apply: (patch) => setDraft((current) => current ? { ...current, ...patch as Partial<RewriteMetadataDraft> } : current),
+    applyAction: async (id, _args, assertCurrent) => {
+      assertCurrent()
+      if (id !== 'metadata.save' || !draft) throw new Error('메타데이터 편집기에 없는 작업이야.')
+      await saveMutation.mutateAsync(draft)
+    },
   } : null)
 
   if (!compositeHash) {
@@ -214,15 +224,15 @@ export function ImageMetadataEditPage() {
             <IconButton size="icon-sm" variant="ghost" onClick={handleDownload} disabled={!canEditMetadata || !draft || busy || !isEditableImage || Boolean(draftValidationError)} label={t({ ko: '다운로드', en: 'Download' })}>
               <Download className="size-4" />
             </IconButton>
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={!canSave}
-              title={draft && isEditableImage && !hasUnsavedChanges ? t({ ko: '바뀐 게 없어', en: 'No changes to save' }) : undefined}
-            >
-              <Save className="size-4" />
-              {t({ ko: '저장', en: 'Save' })}
-            </Button>
+            <Tip content={draft && isEditableImage && !hasUnsavedChanges ? t({ ko: '바뀐 게 없어', en: 'No changes to save' }) : null}>
+              {/* The span carries the tooltip: a disabled button gets no pointer events. */}
+              <span className="inline-flex" tabIndex={draft && isEditableImage && !hasUnsavedChanges ? 0 : undefined}>
+                <Button size="sm" onClick={handleSave} disabled={!canSave}>
+                  <Save className="size-4" />
+                  {t({ ko: '저장', en: 'Save' })}
+                </Button>
+              </span>
+            </Tip>
           </>
         )}
       />
@@ -257,7 +267,6 @@ export function ImageMetadataEditPage() {
             {!isEditableImage ? (
               <Alert variant="destructive">
                 <AlertTitle>{t('metadata.image.metadata.edit.page.this.file.cannot.be.edited.in.place')}</AlertTitle>
-                <AlertDescription>{t('metadata.image.metadata.edit.page.only.static.image.files.support.metadata.saving')}</AlertDescription>
               </Alert>
             ) : null}
 

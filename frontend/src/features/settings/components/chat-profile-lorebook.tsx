@@ -1,7 +1,6 @@
 import { useId, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookPlus, Trash2, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
@@ -193,9 +192,9 @@ export function ChatLorebookEditor({ entries, onChange, filePlace = { kind: 'glo
       <Switch checked={entry.enabled} onCheckedChange={(enabled) => update(entry.id, { enabled })} aria-label={t({ ko: '로어 사용', en: 'Enable lore' })} />
       <IconButton size="icon-sm" variant="ghost" label={t({ ko: '로어 삭제', en: 'Delete lore' })} onClick={() => onChange(entries.filter((item) => item.id !== entry.id))}><Trash2 /></IconButton>
     </>}><ChatLoreEntryFields entry={entry} filePlace={filePlace} onChange={(patch) => update(entry.id, patch)} /></CollapsibleRow>)}
-    <Button variant="secondary" size="sm" disabled={entries.length >= 500} onClick={() => {
+    <IconButton variant="secondary" size="icon-sm" label={t({ ko: '로어 설정 추가', en: 'Add lore entry' })} disabled={entries.length >= 500} onClick={() => {
       const entry = newLoreEntry(entries.length)
       onChange([...entries, entry]); setOpenId(entry.id)
-    }}><BookPlus />{t({ ko: '설정 추가', en: 'Add entry' })}</Button>
+    }}><BookPlus /></IconButton>
   </div>
 }

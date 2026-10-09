@@ -20,6 +20,7 @@ test('chat profile assets: library migration, access, imports and generation ref
   process.env.RUNTIME_TEMP_DIR = path.join(root, 'temp')
   const settings = await import('../src/database/userSettingsDb')
   settings.initializeUserSettingsDb()
+  ;(await import('../src/models/ExternalApiProvider')).ExternalApiProvider.create({ provider_name: 'test', display_name: 'test', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
   ;(await import('../src/database/apiGenerationDb')).initializeApiGenerationDb()
   const auth = await import('../src/database/authDb')
   auth.initializeAuthDb()
@@ -254,7 +255,7 @@ test('chat profile assets: library migration, access, imports and generation ref
       return Buffer.concat([header, data, checksum])
     }
     const card = Buffer.concat([png.subarray(0, -12), chunk('chara'), chunk('ccv3'), png.subarray(-12)])
-    const imported = await importChatCard(card, 'test')
+    const imported = await importChatCard(card, null)
     assert.equal(imported.avatarHash, hash)
     assert.equal(imported.referenceHash, hash)
     assert.match(imported.avatar!, /^data:image\/webp;base64,/)
@@ -263,7 +264,7 @@ test('chat profile assets: library migration, access, imports and generation ref
     assert.ok(copy)
     assert.deepEqual({ ...PngExtractor.extractTextChunks(copy, ['chara', 'ccv3']) }, { chara: encoded, ccv3: encoded })
     const count = files.length
-    await importChatCard(card, 'test')
+    await importChatCard(card, null)
     assert.equal((images.db.prepare('SELECT COUNT(*) AS n FROM image_files WHERE composite_hash = ?').get(hash) as { n: number }).n, count)
     assert.ok(images.db.prepare('SELECT 1 FROM image_groups WHERE group_id = ? AND composite_hash = ?').get(GroupPathService.resolveOrCreate('채팅 카드/원본 카드').groupId, hash))
   })
@@ -335,7 +336,8 @@ test('chat profile assets: library migration, access, imports and generation ref
       requests.push(JSON.parse(options.body as string))
       return Response.json({ choices: [{ message: { content: 'blue hair, green eyes' }, finish_reason: 'stop' }] })
     })
-    const input = { name: '외형 초안', engine: 'llm' as const, providerName: 'chat', model: 'large', summaryProviderName: 'summary', summaryModel: 'small', referenceHash: hash, promptSections: [{ id: 'character', title: '캐릭터 설명', content: '파란 머리, 초록 눈', kind: 'text' as const, enabled: true }] }
+    const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
+    const input = { name: '외형 초안', engine: 'llm' as const, modelSlotId: ModelSlotStore.ensure('chat', 'large'), summarySlotId: ModelSlotStore.ensure('summary', 'small'), referenceHash: hash, promptSections: [{ id: 'character', title: '캐릭터 설명', content: '파란 머리, 초록 눈', kind: 'text' as const, enabled: true }] }
     const before = ChatProfileStore.find(first.id)
     const plain = await call('/admin/profiles/appearance-draft', {}, { method: 'post', body: { profile: input } })
     assert.equal(plain.status, 200, JSON.stringify(plain.body))
@@ -366,7 +368,8 @@ test('chat profile assets: library migration, access, imports and generation ref
     const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
     sub.mock.method(ExternalApiProvider, 'findByName', () => ({ provider_name: 'source-test', display_name: 'Source test', is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', additional_config: { default_model: 'small' } }))
     sub.mock.method(ExternalApiProvider, 'getDecryptedKey', () => null)
-    await assert.rejects(draftChatAppearance({ accountId: null, accountType: 'admin' }, { name: '설명 없음', providerName: 'source-test' }), /캐릭터 설명/)
+    const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
+    await assert.rejects(draftChatAppearance({ accountId: null, accountType: 'admin' }, { name: '설명 없음', modelSlotId: ModelSlotStore.ensure('source-test', 'small') }), /캐릭터 설명/)
     assert.equal((await call('/admin/profiles/appearance-draft', {}, { method: 'post', body: {} })).status, 400)
     const bootstrap = AuthAccessControlService.resolveBootstrapAccess()
     sub.mock.method(AuthAccessControlService, 'resolveBootstrapAccess', () => ({ ...bootstrap, permissionKeys: bootstrap.permissionKeys.filter((key) => key !== 'images.view') }))

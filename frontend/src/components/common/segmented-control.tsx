@@ -38,7 +38,7 @@ export function SegmentedControl({
   onChange,
   className,
   fullWidth = false,
-  size = 'md',
+  size = 'sm',
   semantics = 'toggle',
   ariaLabel,
 }: SegmentedControlProps) {

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
+import { Tip } from '@/components/ui/tooltip'
 import { Input } from '@/components/ui/input'
 import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
@@ -227,10 +228,9 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
       ) : null}
 
       {!isError && activeTab === 'system' && finalResultModule ? (
-        <Button type="button" size="sm" variant="secondary" onClick={() => onAddModule(finalResultModule)}>
-          <Plus className="size-4" />
-          {t({ ko: '최종 결과 노드 추가', en: 'Add a final result node' })}
-        </Button>
+        <IconButton size="icon-sm" variant="secondary" onClick={() => onAddModule(finalResultModule)} label={t({ ko: '최종 결과 노드 추가', en: 'Add a final result node' })}>
+          <Plus />
+        </IconButton>
       ) : null}
 
       {modules.length === 0 ? (
@@ -283,12 +283,14 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
                         data-engine={module.engine_type}
                         className="flex min-h-9 items-center justify-between gap-3 border-b border-line px-2 py-1 last:border-b-0"
                       >
-                        <div className={cn('flex min-w-0 items-center gap-2', module.description ? 'cursor-help' : undefined)} title={getModuleHoverTitle(module)}>
-                          <span className="truncate text-sm text-foreground">{getModuleBaseDisplayName(module)}</span>
-                          {isFinalResult ? <Badge variant="secondary">{t({ ko: '최종 결과', en: 'Final result' })}</Badge> : null}
-                        </div>
+                        <Tip content={getModuleHoverTitle(module)} className="whitespace-pre-line" side="right">
+                          <div className={cn('flex min-w-0 items-center gap-2', module.description ? 'cursor-help' : undefined)}>
+                            <span className="truncate text-sm text-foreground">{getModuleBaseDisplayName(module)}</span>
+                            {isFinalResult ? <Badge variant="secondary">{t({ ko: '최종 결과', en: 'Final result' })}</Badge> : null}
+                          </div>
+                        </Tip>
 
-                        <IconButton size="icon-xs" variant="ghost" onClick={() => onAddModule(module)} label={t({ ko: '추가', en: 'Add' })}>
+                        <IconButton size="icon-xs" variant="ghost" onClick={() => onAddModule(module)} label={t({ ko: '{name} 노드 추가', en: 'Add {name} node' }, { name: getModuleBaseDisplayName(module) })}>
                           <Plus />
                         </IconButton>
                       </div>

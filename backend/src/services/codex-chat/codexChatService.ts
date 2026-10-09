@@ -9,6 +9,7 @@ import { chatContentWithAttachments, inlineTextsForChat, validateChatAttachments
 import { spawn } from 'child_process'
 import { PORTS, isCodexReasoningEffort, type CodexReasoningEffort } from '@conai/shared'
 import type { McpRequester } from '../../mcp/context'
+import { CHAT_PAGE_KIND_TOOLS } from '../../mcp/context'
 import { onBeforeCodexCliUpdate, isCodexCliUpdating } from '../codexCliMaintenance'
 import { resolveCodexCommand } from '../codexGenerationExecutor'
 import { getCodexModelSuggestions } from '../codexGenerationOptions'
@@ -17,7 +18,10 @@ import { prepareChatRuntime, parseChatFeatureInventory, chatRuntimeArgs, chatTur
 import { ChatProfileStore, chatGreetings, pickChatGreeting, type ChatProfile } from './chatProfiles'
 import { loadChatSettings, type ChatScope } from './chatSettings'
 import { canUseChatProfile, resolveChatProfileToolGrant, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken, setCodexChatExecution } from './codexChatAccess'
-import { chatPageReference, parseChatPageContext } from './chatPageContext'
+import { chatPageReference, parseChatPageContext, proposalOutcomeNote } from './chatPageContext'
+import type { ChatSendOptions } from './chatTasks'
+import { rememberChatPage } from './chatPageBridge'
+import { notifyChatUserSend } from './chatSendEvents'
 import { attachJobResults, collectCodexChatMedia, pendingGenerationOutcomes } from './codexChatMedia'
 import { canRequesterViewImages } from '../../middleware/imageAccess'
 import { buildEmoticonGuidance } from './chatEmoticons'
@@ -154,7 +158,8 @@ function sessionKey(requester: McpRequester, scopes: ChatScope[], toolAllowlist:
   const presets = ChatGenerationPresetStore.signature(generationPresetIds)
   // Tools are offered from the account's grants, so a changed grant or role needs a process with a fresh tool list.
   const grants = createHash('sha1').update(JSON.stringify([isRequesterAdmin(requester), [...requesterPermissionKeys(requester)].sort()])).digest('hex').slice(0, 12)
-  const pageTools = chatContext?.page ? `|page:${createHash('sha1').update(JSON.stringify({ kind: chatContext.page.kind, resourceId: chatContext.page.resourceId, fields: chatContext.page.fields.filter((field) => field.editable !== false).map((field) => ({ id: field.id, type: field.type, options: field.options })), actions: chatContext.page.actions, dataKeys: Object.keys(chatContext.page.data ?? {}) })).digest('hex').slice(0, 12)}` : ''
+  // Page tool schemas do not depend on the screen, so only a page kind that brings its own tools changes the tool list.
+  const pageTools = chatContext?.page ? `|page:${CHAT_PAGE_KIND_TOOLS[chatContext.page.kind] ? chatContext.page.kind : 'any'}` : ''
   return `${requester.accountId === null ? 'bootstrap' : `account:${requester.accountId}`}|${[...scopes].sort().join(',')}|${tools}${presets ? `|gen:${presets}` : ''}${chatContext ? `|chat:${chatContext.threadId}:${chatContext.profileId}` : ''}${pageTools}|grants:${grants}`
 }
 
@@ -281,14 +286,15 @@ function toToolCall(item: Record<string, unknown>): CodexChatToolCall {
   const result = item.result as { content?: unknown[]; structuredContent?: unknown } | null | undefined
   const error = item.error as { message?: string } | null | undefined
   const tool = String(item.tool ?? '')
-  const { texts, historyIds, compositeHashes, jobIds, pendingJobIds, audioCandidateIds } = readMcpToolResult(result, tool)
+  const { texts, historyIds, compositeHashes, jobIds, pendingJobIds, audioCandidateIds, pageOperation } = readMcpToolResult(result, tool)
 
   return {
     id: String(item.id ?? ''),
     tool: String(item.tool ?? ''),
     status,
     arguments: item.arguments ?? null,
-    summary: error?.message ? truncateToolSummary(error.message) : texts.length > 0 ? truncateToolSummary(texts.join('\n')) : null,
+    summary: error?.message ? truncateToolSummary(error.message) : pageOperation ? pageOperation.label : texts.length > 0 ? truncateToolSummary(texts.join('\n')) : null,
+    ...(pageOperation ? { pageOperation } : {}),
     historyIds,
     compositeHashes,
     ...(jobIds.length > 0 ? { jobIds, pendingJobIds } : {}),
@@ -1094,10 +1100,10 @@ export const CodexChatService = {
    * Send one user message and stream the turn to `listener`. Resolves with the stored assistant message.
    * The turn keeps running (and is stored) when the listener goes away, e.g. the browser closes the stream.
    */
-  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown, replyToMessageId?: unknown, pageContext?: unknown) {
+  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown, replyToMessageId?: unknown, pageContext?: unknown, options: ChatSendOptions = {}) {
     const thread = requireThread(requester, threadId)
     if (thread.engine === 'llm') {
-      return LlmChatService.sendMessage(requester, thread, text, listener, fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext)
+      return LlmChatService.sendMessage(requester, thread, text, listener, fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext, options)
     }
     assertChatAvailable(requester)
     const attachments = validateChatAttachments(requester, fileIds)
@@ -1116,7 +1122,9 @@ export const CodexChatService = {
       const profile = requireCodexProfile(thread.profile_id, requester)
       if (pageContext != null && !profile.pageAssist) throw new CodexChatError('이 프로필은 페이지 어시스턴트가 꺼져 있어.', 400)
       const page = parseChatPageContext(pageContext, requester)
-      const routing = userReplyRouting(thread, replyToMessageId)
+      rememberChatPage(requester, page, threadId)
+      if (!options.task) notifyChatUserSend(threadId, Boolean(page))
+      const routing = { ...userReplyRouting(thread, replyToMessageId), ...(options.task ? { task: options.task } : {}) }
       const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
       const session = await ensureSession(requester, scopes, toolAllowlist, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct', page })
       const run = resolveCodexRun(session, profile)
@@ -1183,7 +1191,7 @@ export const CodexChatService = {
         const directive = [buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile, user)), postHistoryText(profile, user), turn.judged?.directive ?? ''].filter(Boolean).join('\n\n')
         const reference = referenceBlock([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text])
         const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user) : ''
-        const input = [recap, reference, REPLY_GUIDANCE, buildReplyContext(history, routing), chatPageReference(page), chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }])), directive].filter(Boolean).join('\n\n')
+        const input = [recap, reference, REPLY_GUIDANCE, buildReplyContext(history, routing), chatPageReference(page), proposalOutcomeNote(threadId), chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }])), directive].filter(Boolean).join('\n\n')
         const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys]
         turn.contextMeta = codexInputMeta(profile, [userMessage], lore, input, keys, [
           ...contextSource('user-persona', persona.text), ...contextSource('lore-index', lore.index.keys.length ? lore.selected.index : ''), ...contextSource('constant-lore', lore.index.keys.length ? lore.selected.constant : ''),

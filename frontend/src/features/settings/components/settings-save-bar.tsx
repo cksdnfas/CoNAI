@@ -1,5 +1,6 @@
-import { Check, CircleDot, LoaderCircle } from 'lucide-react'
+import { Check, CircleDot, LoaderCircle, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useI18n } from '@/i18n'
 import type { SettingsDraftSection } from '../settings-draft-sections'
@@ -61,9 +62,9 @@ export function SettingsSaveBar({ dirtySections, isSaving, onSave, onDiscard, on
           </div>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          <Button type="button" size="sm" variant="ghost" disabled={isSaving || dirtySections.length === 0} onClick={() => void handleDiscard()}>
-            {t({ ko: '취소', en: 'Cancel' })}
-          </Button>
+          <IconButton size="icon-sm" variant="ghost" disabled={isSaving || dirtySections.length === 0} onClick={() => void handleDiscard()} label={t({ ko: '변경 취소', en: 'Discard changes' })}>
+            <Undo2 className="h-4 w-4" />
+          </IconButton>
           <Button type="button" size="sm" disabled={isSaving || dirtySections.length === 0} onClick={onSave}>
             {isSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
             {isSaving ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '저장', en: 'Save' })}

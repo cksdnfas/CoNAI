@@ -73,7 +73,8 @@ test('sprite page connection: sprite tools stay listed on /sprite, hidden on oth
   const onSprite = await list(spritePage)
   for (const tool of CHAT_PAGE_KIND_TOOLS.sprite!) assert.ok(onSprite.has(tool), `${tool} is offered on the connected sprite page`)
   assert.ok(onSprite.has('get_current_page'), 'the ordinary page tools stay')
-  assert.ok(!onSprite.has('list_workflows') && !onSprite.has('generate_comfyui'), 'unrelated tools stay hidden')
+  assert.ok(!onSprite.has('move_files') && !onSprite.has('generate_comfyui'), 'unrelated tools that change things stay hidden')
+  assert.ok(onSprite.has('list_workflows') && onSprite.has('get_chat_setup_guide'), 'reads and setup proposals stay offered')
   assert.ok(!onSprite.has('wait_sprite_job'), 'blocking waits stay out of chat')
 
   const onPrompts = await list(promptsPage)

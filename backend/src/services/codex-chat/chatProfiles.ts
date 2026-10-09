@@ -8,8 +8,8 @@ import { ChatSharedBlockStore, normalizeBlockIds } from './chatDisplayBlocks'
 import { ChatProfileError } from './chatProfileError'
 import { AuthPermissionGroup } from '../../models/AuthPermissionGroup'
 import { ChatGenerationPresetStore, normalizeGenerationPresetIds } from './chatGenerationPresets'
-import { ModelSlotStore } from './modelSlots'
-import { ChatJudgePresetStore, existingJudgeConnection, judgeConnectionName } from './chatJudgePresets'
+import { LLM_CONNECTION_TYPES, MODEL_CONNECTION_TYPES, ModelSlotStore } from './modelSlots'
+import { ChatJudgePresetStore } from './chatJudgePresets'
 import { fileProfileAssetsUnderGroup, normalizeAvatarCrop, normalizeProfileAssetHash, type ChatAvatarCrop } from './chatProfileAssets'
 
 const NAME_MAX_LENGTH = 60
@@ -93,9 +93,7 @@ export type ChatProfile = {
   avatarCrop: ChatAvatarCrop | null
   backgroundHash: string | null
   engine: ChatProfileEngine
-  /** LLM: `external_api_providers.provider_name`. Empty for Codex. */
-  providerName: string
-  /** Empty uses the connection's (LLM) or the CLI's (Codex) default model. */
+  /** Codex / Claude Code: the engine's own model (empty: its default). API LLM profiles use `modelSlotId`. */
   model: string
   /** Codex: the CLI effort. API LLM: none / low / medium / high (sent as reasoning_effort). Empty: not set. */
   reasoningEffort: CodexReasoningEffort | ''
@@ -128,15 +126,6 @@ export type ChatProfile = {
   summaryTriggerTurns: number
   /** Empty uses DEFAULT_CHAT_SUMMARY_PROMPT. */
   summaryPrompt: string
-  /** Null summarizes with the chat's own connection/model. */
-  summaryProviderName: string | null
-  summaryModel: string
-  /**
-   * Translation model: user messages go to the chat model in English and replies are shown in Korean, with the
-   * other text kept for the reader. Null: no translation. Empty model uses the connection's default.
-   */
-  translationProviderName: string | null
-  translationModel: string
   /**
    * Notes the translation model follows when it puts this profile's replies into Korean: the character's voice, how it
    * addresses the user, a glossary. `{{char}}` / `{{user}}` are filled. The user's messages are translated without it.
@@ -144,15 +133,13 @@ export type ChatProfile = {
   translationInstructions: string
   /**
    * Reply suggestions: the composer's sparkle button asks a model for a few things the user might say next.
-   * Null provider uses the chat's own connection (a Codex profile: its Codex model, in a one-shot run). Empty model
-   * uses the connection's default.
+   * With no model of its own (`suggestSlotId`) it uses the chat's (a Codex profile: its Codex model, in a one-shot run).
    */
   suggestEnabled: boolean
-  suggestProviderName: string | null
-  suggestModel: string
   /**
-   * Model slots (llm_model_slots) per role. A slot wins over the role's direct connection + model above; null keeps the
-   * direct pair. A slot that went missing reads as null. Codex profiles have no chat slot.
+   * Model rows (llm_model_slots, a connection's model) per role. Chat null: the default row. Summary / suggestions
+   * null: the chat's model. Translation null: no translation (user messages go to the chat model in English and
+   * replies are shown in Korean when set). A row that went missing reads as null. Codex profiles have no chat row.
    */
   modelSlotId: number | null
   summarySlotId: number | null
@@ -181,9 +168,8 @@ export type ChatProfile = {
    * judge). A preset that went missing reads as null.
    */
   judgePresetId: number | null
-  /** The judge connection instead of the preset's own; null keeps the preset's. Empty model: the connection's default. */
-  judgeProviderName: string | null
-  judgeModel: string
+  /** The judge model (a model row, TypeSafe or LLM) instead of the preset's own; null keeps the preset's. */
+  judgeSlotId: number | null
   /** Typeface, roleplay colours, background dimming. */
   style: ChatStyle
   /** Chat background as a data URL; served on its own route, never inside profile lists. */
@@ -194,7 +180,32 @@ export type ChatProfile = {
   updatedDate: string
 }
 
-export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate'>>
+/**
+ * The older way to name a role's model: a connection + model pair (empty model: the connection's primary model). Still
+ * accepted from API callers, MCP and card import; saving lands it on that connection's model row (created if missing).
+ */
+export type LegacyModelPairs = {
+  providerName?: string | null
+  summaryProviderName?: string | null
+  summaryModel?: string | null
+  translationProviderName?: string | null
+  translationModel?: string | null
+  suggestProviderName?: string | null
+  suggestModel?: string | null
+  judgeProviderName?: string | null
+  judgeModel?: string | null
+}
+
+export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate'>> & LegacyModelPairs
+
+/** Each role's slot field and the legacy pair keys that stand for it. */
+const LEGACY_PAIR_KEYS: Array<[keyof ChatProfileInput, keyof LegacyModelPairs, keyof ChatProfileInput]> = [
+  ['modelSlotId', 'providerName', 'model'],
+  ['summarySlotId', 'summaryProviderName', 'summaryModel'],
+  ['translationSlotId', 'translationProviderName', 'translationModel'],
+  ['suggestSlotId', 'suggestProviderName', 'suggestModel'],
+  ['judgeSlotId', 'judgeProviderName', 'judgeModel'],
+]
 
 type ProfileRow = {
   id: number
@@ -261,6 +272,7 @@ type ProfileRow = {
   judge_preset_id: number | null
   judge_provider_name: string | null
   judge_model: string | null
+  judge_slot_id: number | null
   is_enabled: number
   sort_order: number
   created_date: string
@@ -365,8 +377,7 @@ function toProfile(row: ProfileRow): ChatProfile {
     avatarCrop,
     backgroundHash: row.background_hash ?? null,
     engine: row.engine === 'codex' ? 'codex' : row.engine === 'claude' ? 'claude' : 'llm',
-    providerName: row.provider_name,
-    model: row.model ?? '',
+    model: row.engine === 'codex' || row.engine === 'claude' ? row.model ?? '' : '',
     reasoningEffort: isCodexReasoningEffort(row.reasoning_effort) ? row.reasoning_effort : '',
     reasoningBudgetTokens: row.reasoning_budget_tokens,
     extraParams: row.extra_params ?? '',
@@ -387,15 +398,9 @@ function toProfile(row: ProfileRow): ChatProfile {
     summaryEnabled: row.summary_enabled === 1,
     summaryTriggerTurns: row.summary_trigger_turns ?? CHAT_PROFILE_DEFAULTS.summaryTriggerTurns,
     summaryPrompt: row.summary_prompt ?? '',
-    summaryProviderName: row.summary_provider_name,
-    summaryModel: row.summary_model ?? '',
-    translationProviderName: row.translation_provider_name,
-    translationModel: row.translation_model ?? '',
     translationInstructions: row.translation_instructions ?? '',
     suggestEnabled: row.suggest_enabled === 1,
-    suggestProviderName: row.suggest_provider_name,
-    suggestModel: row.suggest_model ?? '',
-    // A slot that no longer exists reads as unset (the next save clears the column).
+    // A row that no longer exists reads as unset (the next save clears the column).
     modelSlotId: ModelSlotStore.existing(row.model_slot_id),
     summarySlotId: ModelSlotStore.existing(row.summary_slot_id),
     translationSlotId: ModelSlotStore.existing(row.translation_slot_id),
@@ -407,8 +412,7 @@ function toProfile(row: ProfileRow): ChatProfile {
     pageAssist: row.page_assist === 1,
     allowLoreProposals: row.allow_lore_proposals !== 0,
     judgePresetId: ChatJudgePresetStore.existing(row.judge_preset_id),
-    judgeProviderName: existingJudgeConnection(row.judge_provider_name),
-    judgeModel: row.judge_model ?? '',
+    judgeSlotId: ModelSlotStore.existing(row.judge_slot_id),
     // Display blocks live in chat_display_blocks; the profile only links them (the style column's own list is legacy).
     style: { ...normalizeChatStyle(row.chat_style), blocks: ChatSharedBlockStore.blocksOf(blockIds) },
     background: row.background_image,
@@ -472,23 +476,24 @@ function judgePresetId(value: unknown) {
   return id
 }
 
-function toColumns(input: ChatProfileInput) {
+/** `draft`: a preview of an unsaved profile, which must not create model rows for legacy pairs. */
+function toColumns(input: ChatProfileInput, options: { draft?: boolean } = {}) {
   const name = text(input.name, NAME_MAX_LENGTH)
   if (!name) {
     throw new ChatProfileError('프로필 이름이 필요해.')
   }
   const engine: ChatProfileEngine = input.engine === 'codex' ? 'codex' : input.engine === 'claude' ? 'claude' : 'llm'
-  const providerName = engine === 'llm' ? text(input.providerName, 200) : ''
-  const slotId = (value: unknown) => {
-    if (value === null || value === undefined || value === '') return null
-    const id = ModelSlotStore.existing(value)
-    if (id === null) throw new ChatProfileError('모델을 찾을 수 없어.')
-    return id
+  // A role's row: its id, or a legacy connection + model pair, which lands on that connection's row.
+  const roleSlot = (slotId: unknown, providerName: unknown, model: unknown, kinds: readonly string[] = LLM_CONNECTION_TYPES) => {
+    if (slotId !== null && slotId !== undefined && slotId !== '') return ModelSlotStore.checked(slotId, kinds)
+    if (typeof providerName !== 'string' || !providerName.trim()) return null
+    const id = ModelSlotStore.ensure(providerName, model, { create: options.draft !== true })
+    return id === null ? null : ModelSlotStore.checked(id, kinds)
   }
-  // Codex has no connection, so no chat slot; its helper roles (summary, translation, suggestions) still use slots.
-  const modelSlotId = engine === 'llm' ? slotId(input.modelSlotId) : null
-  if (engine === 'llm' && !providerName && modelSlotId === null) {
-    throw new ChatProfileError('LLM 연결을 골라줘.')
+  // Codex has no connection, so no chat row; its helper roles (summary, translation, suggestions) still use rows.
+  const modelSlotId = engine === 'llm' ? roleSlot(input.modelSlotId, input.providerName, input.model) : null
+  if (engine === 'llm' && modelSlotId === null && !ModelSlotStore.defaultTarget()) {
+    throw new ChatProfileError('모델을 골라줘. 설정 › LLM에서 연결에 모델을 먼저 추가해야 해.')
   }
   const avatar = typeof input.avatar === 'string' && input.avatar ? input.avatar : null
   if (avatar && (avatar.length > AVATAR_MAX_LENGTH || !AVATAR_PATTERN.test(avatar))) {
@@ -527,8 +532,9 @@ function toColumns(input: ChatProfileInput) {
     avatar_crop: input.avatarCrop == null ? null : JSON.stringify(normalizeAvatarCrop(input.avatarCrop)),
     background_hash: normalizeProfileAssetHash(input.backgroundHash),
     engine,
-    provider_name: providerName,
-    model: text(input.model, MODEL_MAX_LENGTH) || null,
+    // The pair columns are the older form of the model rows (see LegacyModelPairs); a save clears them.
+    provider_name: '',
+    model: engine === 'llm' ? null : text(input.model, MODEL_MAX_LENGTH) || null,
     reasoning_effort: input.reasoningEffort || null,
     reasoning_budget_tokens: engine === 'llm' ? optionalNumber(input.reasoningBudgetTokens, { min: 1, max: 1_000_000 }, true) : null,
     extra_params: extraParams || null,
@@ -555,18 +561,18 @@ function toColumns(input: ChatProfileInput) {
     summary_enabled: input.summaryEnabled ? 1 : 0,
     summary_trigger_turns: optionalNumber(input.summaryTriggerTurns, CHAT_PROFILE_LIMITS.summaryTriggerTurns, true) ?? CHAT_PROFILE_DEFAULTS.summaryTriggerTurns,
     summary_prompt: text(input.summaryPrompt, 4000),
-    summary_provider_name: text(input.summaryProviderName, 200) || null,
-    summary_model: text(input.summaryModel, MODEL_MAX_LENGTH) || null,
-    translation_provider_name: text(input.translationProviderName, 200) || null,
-    translation_model: text(input.translationModel, MODEL_MAX_LENGTH) || null,
+    summary_provider_name: null,
+    summary_model: null,
+    translation_provider_name: null,
+    translation_model: null,
     translation_instructions: text(input.translationInstructions, TRANSLATION_INSTRUCTIONS_MAX_LENGTH) || null,
     suggest_enabled: input.suggestEnabled ? 1 : 0,
-    suggest_provider_name: text(input.suggestProviderName, 200) || null,
-    suggest_model: text(input.suggestModel, MODEL_MAX_LENGTH) || null,
+    suggest_provider_name: null,
+    suggest_model: null,
     model_slot_id: modelSlotId,
-    summary_slot_id: slotId(input.summarySlotId),
-    translation_slot_id: slotId(input.translationSlotId),
-    suggest_slot_id: slotId(input.suggestSlotId),
+    summary_slot_id: roleSlot(input.summarySlotId, input.summaryProviderName, input.summaryModel),
+    translation_slot_id: roleSlot(input.translationSlotId, input.translationProviderName, input.translationModel),
+    suggest_slot_id: roleSlot(input.suggestSlotId, input.suggestProviderName, input.suggestModel),
     suggest_profile_id: optionalNumber(input.suggestProfileId, { min: 1, max: Number.MAX_SAFE_INTEGER }, true),
     suggest_user_profile_id: input.suggestProfileId ? null : optionalNumber(input.suggestUserProfileId, { min: 1, max: Number.MAX_SAFE_INTEGER }, true),
     max_tool_rounds: optionalNumber(input.maxToolRounds, CHAT_PROFILE_LIMITS.maxToolRounds, true) ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
@@ -575,8 +581,9 @@ function toColumns(input: ChatProfileInput) {
     allow_lore_proposals: input.allowLoreProposals === false ? 0 : 1,
     // Every engine can be judged (a Codex chat gets the directives and status fields only, see chatJudge).
     judge_preset_id: judgePresetId(input.judgePresetId),
-    judge_provider_name: judgeConnectionName(input.judgeProviderName),
-    judge_model: text(input.judgeModel, MODEL_MAX_LENGTH) || null,
+    judge_provider_name: null,
+    judge_model: null,
+    judge_slot_id: roleSlot(input.judgeSlotId, input.judgeProviderName, input.judgeModel, MODEL_CONNECTION_TYPES),
     chat_style: JSON.stringify({ ...normalizeChatStyle(input.style), blocks: [] }),
     background_image: background,
     is_enabled: input.isEnabled === false ? 0 : 1,
@@ -588,7 +595,7 @@ export const ChatProfileStore = {
   /** A profile as it would be saved, without saving it (prompt preview of an unsaved draft). */
   draft(input: ChatProfileInput, profileId = 0): ChatProfile {
     const now = new Date().toISOString()
-    return toProfile({ ...toColumns(input), id: profileId, created_date: now, updated_date: now } as ProfileRow)
+    return toProfile({ ...toColumns(input, { draft: true }), id: profileId, created_date: now, updated_date: now } as ProfileRow)
   },
 
   list(options: { enabledOnly?: boolean } = {}) {
@@ -618,7 +625,11 @@ export const ChatProfileStore = {
     if (!current) {
       return null
     }
-    const merged = { ...current, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) }
+    const merged: ChatProfileInput = { ...current, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) }
+    // A legacy pair in the patch replaces the role's current row unless the patch names a row too.
+    for (const [slotKey, providerKey] of LEGACY_PAIR_KEYS) {
+      if (typeof patch[providerKey] === 'string' && patch[providerKey] && patch[slotKey] === undefined) delete merged[slotKey]
+    }
     // The current editor still writes legacy images; changing one invalidates its migrated hash.
     if (patch.avatar !== undefined && patch.avatar !== current.avatar && (patch.avatarHash === undefined || patch.avatarHash === current.avatarHash)) merged.avatarHash = null
     if (patch.background !== undefined && patch.background !== current.background && (patch.backgroundHash === undefined || patch.backgroundHash === current.backgroundHash)) merged.backgroundHash = null

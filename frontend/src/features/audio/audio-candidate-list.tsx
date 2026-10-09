@@ -99,7 +99,7 @@ export function ReviewPill({ review }: { review: AudioReview }) {
   const { t } = useI18n()
   if (review === 'selected') return <span className="inline-flex items-center gap-1 text-xs font-semibold text-success"><Check className="size-3.5" />{t({ ko: '채택', en: 'Adopted' })}</span>
   if (review === 'rejected') return <span className="text-xs text-muted-foreground line-through decoration-muted-foreground/40">{t({ ko: '보류', en: 'Rejected' })}</span>
-  return <span className="text-xs text-muted-foreground">{t({ ko: '미검수', en: 'Unreviewed' })}</span>
+  return null
 }
 
 const ROW_GRID = 'grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 sm:grid-cols-[2rem_10rem_minmax(0,1fr)_3.5rem_4.5rem_auto]'

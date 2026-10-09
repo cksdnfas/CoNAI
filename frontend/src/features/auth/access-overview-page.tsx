@@ -8,6 +8,7 @@ import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Text } from '@/components/ui/text'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { getPublicGenerationWorkflows } from '@/lib/api-public-workflows'
 import { cn } from '@/lib/utils'
@@ -22,25 +23,25 @@ interface AccessEntryCardProps {
   icon: LucideIcon
 }
 
-/** One cell of the flat access grid: icon, label, arrow; hairline below, hover wash. */
+/** One cell of the flat access grid: icon, label, arrow; hairline below, hover wash. The description is the row's tooltip. */
 function AccessEntryCard({ label, description, href, icon: Icon }: AccessEntryCardProps) {
   return (
-    <Link
-      to={href}
-      className={cn(
-        'group flex min-h-14 items-center gap-3 border-b border-line px-2 py-2.5 transition-colors',
-        'hover:bg-fill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40',
-      )}
-    >
-      <Icon className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden />
+    <Tip content={description || null} side="bottom" align="start">
+      <Link
+        to={href}
+        aria-description={description || undefined}
+        className={cn(
+          'group flex min-h-12 items-center gap-3 border-b border-line px-2 py-2.5 transition-colors',
+          'hover:bg-fill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40',
+        )}
+      >
+        <Icon className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden />
 
-      <div className="min-w-0 flex-1 space-y-0.5">
-        <Text as="div" variant="title" className="truncate">{label}</Text>
-        {description ? <Text as="div" variant="caption" className="truncate">{description}</Text> : null}
-      </div>
+        <Text as="div" variant="title" className="min-w-0 flex-1 truncate">{label}</Text>
 
-      <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-    </Link>
+        <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+      </Link>
+    </Tip>
   )
 }
 

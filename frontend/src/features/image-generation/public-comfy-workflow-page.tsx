@@ -5,12 +5,10 @@ import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-route
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ArrowLeft, RotateCcw } from 'lucide-react'
 import { BottomDrawerNotice, BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
 import { LoadingState } from '@/components/ui/loading-state'
-import { Text } from '@/components/ui/text'
+import { Tip } from '@/components/ui/tooltip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -351,24 +349,15 @@ export function PublicComfyWorkflowPage() {
 
   const desktopControllerHeaderContent = workflow ? (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-3">
-          <Button asChild type="button" variant="ghost" size="sm" className="w-fit">
-            <Link to="/access">
-              <ArrowLeft className="h-4 w-4" />
-              {t({ ko: '뒤로가기', en: 'Back' })}
-            </Link>
-          </Button>
-
-          <div>
-            <Heading level={3} as="div">{workflow.name}</Heading>
-            {workflow.description ? <Text variant="muted" className="mt-1">{workflow.description}</Text> : null}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-1.5">
-          <Badge variant="outline">{t({ ko: '필드 {count}', en: 'Fields {count}' }, { count: workflowFields.length })}</Badge>
-        </div>
+      <div className="flex min-w-0 items-center gap-2">
+        <IconButton asChild size="icon-sm" variant="ghost" label={t({ ko: '공개 워크플로 목록으로', en: 'Back to public workflows' })}>
+          <Link to="/access">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+        </IconButton>
+        <Tip content={workflow.description} className="whitespace-pre-line">
+          <Heading level={3} as="div" className="min-w-0 truncate">{workflow.name}</Heading>
+        </Tip>
       </div>
 
       {desktopControllerActions}

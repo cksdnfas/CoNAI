@@ -1,4 +1,4 @@
-import type { ChatWorkflowSnapshot } from './chatWorkflow'
+import type { ChatWorkflowModule, ChatWorkflowOperation, ChatWorkflowSnapshot } from './chatWorkflow'
 import type { ChatPageAction, ChatPageData } from './chatPageAction'
 
 /** Only explicitly registered CoNAI form state is shared with a chat. */
@@ -31,6 +31,8 @@ export type ChatPageSnapshot = {
   revision?: string
   actions?: ChatPageAction[]
   data?: Record<string, ChatPageData>
+  /** The active editor holds unsaved changes; actions that leave it are refused until the person saves or discards. */
+  dirty?: true
 }
 
 export type ChatPageTarget = Pick<ChatPageSnapshot, 'instanceId' | 'connectionId' | 'path' | 'title' | 'kind' | 'resourceId'>
@@ -49,3 +51,13 @@ export type ChatPageProposal = {
   expiresAt: number
   saved?: boolean
 }
+
+/** One page operation the chat runs in the connected browser tab (see backend chatPageBridge). Saves never travel this way. */
+export type ChatPageCommand =
+  | { type: 'capture' }
+  | { type: 'action'; actionId: string; label: string; tier: 'view' | 'draft'; arguments: Record<string, ChatPageData> }
+  | { type: 'fields'; changes: ChatPageChange[] }
+  /** A node-graph transaction already checked against the editor's revision; the editor re-checks it before writing. */
+  | { type: 'workflow'; revision: string; operations: ChatWorkflowOperation[]; modules: ChatWorkflowModule[]; label: string }
+
+export type ChatPageCommandEvent = ChatPageCommand & { commandId: string; connectionId: string; instanceId: string; threadId: number; expiresAt: number }

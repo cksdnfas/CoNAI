@@ -29,8 +29,14 @@ function resolvePromptSyntaxPopupPosition(anchor: HTMLElement): PromptSyntaxPopu
   const viewportPadding = 12
   const popupGap = 8
   const popupWidth = Math.min(300, window.innerWidth - viewportPadding * 2)
-  const estimatedPopupHeight = 112
-  const shouldOpenAbove = rect.bottom + popupGap + estimatedPopupHeight > window.innerHeight - viewportPadding && rect.top > estimatedPopupHeight + popupGap
+  // The preview list can be long, so the popup gets a capped height and scrolls; open on the roomier side
+  // only when the space below can't fit a useful slice of it.
+  const preferredMaxHeight = 360
+  const minUsableHeight = 160
+  const availableBelow = Math.max(0, window.innerHeight - rect.bottom - popupGap - viewportPadding)
+  const availableAbove = Math.max(0, rect.top - popupGap - viewportPadding)
+  const shouldOpenAbove = availableBelow < minUsableHeight && availableAbove > availableBelow
+  const maxHeight = Math.max(96, Math.min(preferredMaxHeight, shouldOpenAbove ? availableAbove : availableBelow))
 
   let left = rect.left + rect.width / 2 - popupWidth / 2
   left = Math.max(viewportPadding, Math.min(left, window.innerWidth - viewportPadding - popupWidth))
@@ -39,6 +45,7 @@ function resolvePromptSyntaxPopupPosition(anchor: HTMLElement): PromptSyntaxPopu
     top: shouldOpenAbove ? rect.top - popupGap : rect.bottom + popupGap,
     left,
     width: popupWidth,
+    maxHeight,
     placement: shouldOpenAbove ? 'top' : 'bottom',
   }
 }

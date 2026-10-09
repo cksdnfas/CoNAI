@@ -4,6 +4,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioG
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { SidebarItem, SidebarNav } from '@/components/ui/sidebar'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { AudioGroup, AudioGroupFilter, AudioProject } from '@/lib/api-audio'
 import { cn } from '@/lib/utils'
@@ -176,25 +177,25 @@ export function AudioSidebar({
                     />
                   ) : null}
                   {effects.map((group) => (
-                    <SidebarItem
-                      key={group.id}
-                      depth={1}
-                      active={group.id === activeGroupId}
-                      className={cn(dropTarget === group.id && 'bg-primary/10')}
-                      label={group.name}
-                      title={group.label ?? undefined}
-                      count={<EffectCounts group={group} />}
-                      onClick={() => onSelectGroup(group)}
-                      {...dropProps(
-                        group.id,
-                        (event) => hasFiles(event) || (canEdit && group.id !== activeGroupId && event.dataTransfer.types.includes(audioDragType(group.project_id))),
-                        (event) => {
-                          const ids = readAudioDrag(event, group.project_id)
-                          if (ids.length > 0) onDropCandidates(group, ids)
-                          else onDropFiles({ groupId: group.id }, Array.from(event.dataTransfer.files))
-                        },
-                      )}
-                    />
+                    <Tip key={group.id} content={group.label ? t({ ko: '내보낼 파일명: {label}', en: 'Export file name: {label}' }, { label: group.label }) : null} side="right">
+                      <SidebarItem
+                        depth={1}
+                        active={group.id === activeGroupId}
+                        className={cn(dropTarget === group.id && 'bg-primary/10')}
+                        label={group.name}
+                        count={<EffectCounts group={group} />}
+                        onClick={() => onSelectGroup(group)}
+                        {...dropProps(
+                          group.id,
+                          (event) => hasFiles(event) || (canEdit && group.id !== activeGroupId && event.dataTransfer.types.includes(audioDragType(group.project_id))),
+                          (event) => {
+                            const ids = readAudioDrag(event, group.project_id)
+                            if (ids.length > 0) onDropCandidates(group, ids)
+                            else onDropFiles({ groupId: group.id }, Array.from(event.dataTransfer.files))
+                          },
+                        )}
+                      />
+                    </Tip>
                   ))}
                   {canEdit && adding === project.id ? (
                     <div className="py-0.5 pr-1 pl-[calc(0.625rem+1rem)]">

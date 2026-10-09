@@ -3,7 +3,8 @@ import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
 import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers'
 import { ChatAssetError } from '../services/codex-chat/chatAssetAccess'
-import { createChatAssetBatch, getChatAssetBatch, regenerateChatAssetSlot, cancelChatAssetSlot, chooseChatAssetSlot, applyChatAssetBatch, assertChatAssetBatchProfile } from '../services/codex-chat/chatAssetBatches'
+import { createChatAssetBatch, getChatAssetBatch, regenerateChatAssetSlot, cancelChatAssetSlot, chooseChatAssetSlot, applyChatAssetBatch, applyChatAssetSlot, assertChatAssetBatchProfile } from '../services/codex-chat/chatAssetBatches'
+import { clearProfileExpression, setProfileExpression } from '../services/codex-chat/chatProfileExpressions'
 import { reviewChatAssetVision } from '../services/codex-chat/chatAssetVision'
 
 const router = express.Router({ mergeParams: true })
@@ -41,6 +42,13 @@ router.post('/:batchId/slots/:slotKey/regenerate', handle((req, requester) => re
 router.post('/:batchId/slots/:slotKey/cancel', handle((req, requester) => cancelChatAssetSlot(requester, idOf(req.params.batchId), String(req.params.slotKey))))
 router.post('/:batchId/slots/:slotKey/choose', handle((req, requester) => chooseChatAssetSlot(requester, idOf(req.params.batchId), String(req.params.slotKey), req.body?.compositeHash)))
 router.post('/:batchId/slots/:slotKey/vision-review', handle((req, requester, profileId, signal) => reviewChatAssetVision(requester, profileId, idOf(req.params.batchId), String(req.params.slotKey), req.body ?? {}, signal)))
+router.post('/:batchId/slots/:slotKey/apply', handle((req, requester) => applyChatAssetSlot(requester, idOf(req.params.batchId), String(req.params.slotKey), req.body?.compositeHash)))
 router.post('/:batchId/apply', handle((req, requester) => applyChatAssetBatch(requester, idOf(req.params.batchId), req.body ?? {})))
 
 export default router
+
+/** One emotion of the profile's expression group, filled from the library or emptied (the editor's expression slots). */
+export const chatProfileExpressionsRouter = express.Router({ mergeParams: true })
+chatProfileExpressionsRouter.use(requireAdmin)
+chatProfileExpressionsRouter.put('/:name', handle((req, requester, profileId) => setProfileExpression(requester, profileId, String(req.params.name), req.body?.compositeHash)))
+chatProfileExpressionsRouter.delete('/:name', handle((req, requester, profileId) => clearProfileExpression(requester, profileId, String(req.params.name))))

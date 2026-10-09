@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 
-test('model slots: store, per-role resolution, adoption, deletion, usage', { timeout: 60000 }, async (t) => {
+test('model rows: connection ▸ models, legacy pairs, resolution, sync, deletion, migration, usage', { timeout: 60000 }, async (t) => {
   // Load runtime modules only after isolating every data path. Never open the user's databases.
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-slots-test-'))
   process.env.RUNTIME_BASE_PATH = root
@@ -24,20 +24,37 @@ test('model slots: store, per-role resolution, adoption, deletion, usage', { tim
   const db = dbModule.getUserSettingsDb()
   const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
   const { ChatProfileStore, ChatProfileError, profileGenerationOptions } = await import('../src/services/codex-chat/chatProfiles')
-  const { ModelSlotStore, modelReferencesOfConnection } = await import('../src/services/codex-chat/modelSlots')
+  const { ChatJudgePresetStore } = await import('../src/services/codex-chat/chatJudgePresets')
+  const { ModelSlotStore, modelReferencesOfConnection, deleteModelsOfConnection, primaryModelOf } = await import('../src/services/codex-chat/modelSlots')
   const { resolveProfileModel, hasTranslation, modelLabelOf } = await import('../src/services/codex-chat/chatModelRoles')
   const { buildModelUsage } = await import('../src/services/codex-chat/modelUsage')
+  const { migrateLlmModelRows } = await import('../src/database/llmModelRowsMigration')
 
-  for (const [name, type] of [['conn-a', 'llm_openai_compatible'], ['conn-b', 'llm_ollama'], ['plain', 'general']] as const) {
-    ExternalApiProvider.create({ provider_name: name, display_name: `Display ${name}`, provider_type: type, base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: `${name}-default` } })
+  const connections = [['conn-a', 'llm_openai_compatible'], ['conn-b', 'llm_ollama'], ['plain', 'general'], ['jev', 'decision_typesafe']] as const
+  for (const [name, type] of connections) {
+    ExternalApiProvider.create({ provider_name: name, display_name: `Display ${name}`, provider_type: type, base_url: 'http://unused.invalid', is_enabled: true, additional_config: name === 'jev' ? {} : { default_model: `${name}-default`, request_timeout_ms: 5000 } })
   }
-  const llmProfile = (name: string, extra: Record<string, unknown> = {}) => ChatProfileStore.create({ name, engine: 'llm', providerName: 'conn-a', ...extra })
-  const asLegacy = (profile: ReturnType<typeof ChatProfileStore.create>) => ({ ...profile, modelSlotId: null, summarySlotId: null, translationSlotId: null, suggestSlotId: null })
+  const rowOf = (providerName: string, model: string) => ModelSlotStore.ensure(providerName, model, { create: false })
+  const configOf = (name: string) => JSON.parse((db.prepare('SELECT additional_config FROM external_api_providers WHERE provider_name = ?').get(name) as { additional_config: string }).additional_config)
+
+  await t.test('a connection saved with a default model gets it as its first row and keeps no model key', () => {
+    assert.ok(rowOf('conn-a', 'conn-a-default'))
+    assert.ok(rowOf('conn-b', 'conn-b-default'))
+    assert.throws(() => rowOf('plain', 'plain-default'), /연결을 찾을 수 없어/, 'only model connections hold rows')
+    assert.equal((db.prepare("SELECT COUNT(*) AS n FROM llm_model_slots WHERE provider_name = 'plain'").get() as { n: number }).n, 0)
+    assert.deepEqual(configOf('conn-a'), { request_timeout_ms: 5000 })
+    const defaults = ModelSlotStore.list().filter((slot) => slot.isDefault)
+    assert.deepEqual(defaults.map((slot) => slot.model), ['conn-a-default'], 'the first LLM row becomes the one default')
+    assert.equal(defaults[0].label, 'Display conn-a · conn-a-default')
+    ExternalApiProvider.update('conn-b', { additional_config: { default_model: 'conn-b-second' } })
+    assert.ok(rowOf('conn-b', 'conn-b-second'), 'an update with a default model adds it too')
+    assert.deepEqual(configOf('conn-b'), {})
+    assert.equal(primaryModelOf('conn-b'), 'conn-b-default')
+  })
 
   await t.test('Claude profiles persist their engine without an API connection and use the Claude transport', () => {
     const profile = ChatProfileStore.create({ name: 'Claude', engine: 'claude', model: 'sonnet', providerName: 'conn-a' })
     assert.equal(ChatProfileStore.find(profile.id)?.engine, 'claude')
-    assert.equal(profile.providerName, '')
     assert.equal(profile.modelSlotId, null)
     assert.equal(resolveProfileModel(profile, 'chat')?.providerName, '__conai_claude_code__')
     assert.equal(modelLabelOf(profile), 'Claude Code · sonnet')
@@ -49,219 +66,131 @@ test('model slots: store, per-role resolution, adoption, deletion, usage', { tim
     assert.equal(profileGenerationOptions(profile).reasoningEffort, 'max')
     ChatProfileStore.delete(profile.id)
     assert.throws(() => ChatProfileStore.create({ name: 'Claude none', engine: 'claude', model: 'opus', reasoningEffort: 'none' }), ChatProfileError)
-    assert.throws(() => llmProfile('API xhigh', { reasoningEffort: 'xhigh' }), ChatProfileError)
+    assert.throws(() => ChatProfileStore.create({ name: 'API xhigh', engine: 'llm', reasoningEffort: 'xhigh' }), ChatProfileError)
   })
 
-  await t.test('profiles with no slot ids resolve exactly like the old direct expressions', () => {
-    assert.equal(ModelSlotStore.list().length, 0)
-    const legacy = {
-      chat: (p: any) => p.engine === 'llm' && p.providerName ? { providerName: p.providerName, model: p.model || null } : null,
-      summary: (p: any) => {
-        const providerName = p.summaryProviderName || p.providerName
-        return providerName ? { providerName, model: p.summaryProviderName ? p.summaryModel || null : p.summaryModel || p.model || null } : null
-      },
-      suggest: (p: any) => {
-        const providerName = p.suggestProviderName || (p.engine === 'llm' ? p.providerName : '')
-        return providerName ? { providerName, model: p.suggestProviderName ? p.suggestModel || null : p.suggestModel || p.model || null } : null
-      },
-      translation: (p: any) => (p.translationProviderName ? { providerName: p.translationProviderName, model: p.translationModel || null } : null),
-    }
-    const inputs: Array<Record<string, unknown>> = []
-    for (const engine of ['llm', 'codex'] as const) {
-      for (const model of ['', 'chat-model']) {
-        for (const aux of [
-          {},
-          { summaryModel: 'sum-model' },
-          { summaryProviderName: 'conn-b' },
-          { summaryProviderName: 'conn-b', summaryModel: 'sum-model' },
-          { translationProviderName: 'conn-b' },
-          { translationProviderName: 'conn-b', translationModel: 'tr-model' },
-          { translationModel: 'orphan-model' },
-          { suggestModel: 'sg-model' },
-          { suggestProviderName: 'conn-b', suggestModel: 'sg-model' },
-        ]) {
-          inputs.push({ engine, model, ...(engine === 'llm' ? { providerName: 'conn-a' } : {}), ...aux })
-        }
-      }
-    }
-    inputs.forEach((input, index) => {
-      const profile = ChatProfileStore.create({ name: `legacy-${index}`, ...input })
-      for (const role of ['chat', 'summary', 'suggest', 'translation'] as const) {
-        const expected = legacy[role](profile)
-        const actual = resolveProfileModel(profile, role)
-        assert.deepEqual(actual && { providerName: actual.providerName, model: actual.model }, expected, `${JSON.stringify(input)} ${role}`)
-      }
-      assert.equal(hasTranslation(profile), Boolean(profile.translationProviderName))
-      ChatProfileStore.delete(profile.id)
-    })
+  await t.test('a legacy connection + model pair lands on that connection\'s row; a draft never creates one', () => {
+    const before = ModelSlotStore.list().length
+    const profile = ChatProfileStore.create({ name: 'legacy', engine: 'llm', providerName: 'conn-a', summaryProviderName: 'conn-b', summaryModel: 'small', judgeProviderName: 'jev' })
+    assert.equal(profile.modelSlotId, rowOf('conn-a', 'conn-a-default'), 'an empty model is the connection\'s primary model')
+    assert.equal(profile.summarySlotId, rowOf('conn-b', 'small'))
+    assert.equal(profile.judgeSlotId, rowOf('jev', 'jev-latest'), 'a TypeSafe connection without models asks its default model')
+    assert.equal(ModelSlotStore.list().length, before + 2)
+    const stored = db.prepare('SELECT provider_name, model, summary_provider_name, judge_provider_name FROM llm_chat_profiles WHERE id = ?').get(profile.id)
+    assert.deepEqual(stored, { provider_name: '', model: null, summary_provider_name: null, judge_provider_name: null }, 'the pair columns are cleared')
+
+    const draft = ChatProfileStore.draft({ name: 'draft', engine: 'llm', providerName: 'conn-a', model: 'never-saved' })
+    assert.equal(draft.modelSlotId, null)
+    assert.equal(rowOf('conn-a', 'never-saved'), null)
+
+    const patched = ChatProfileStore.update(profile.id, { providerName: 'conn-b', model: 'patched' })!
+    assert.equal(patched.modelSlotId, rowOf('conn-b', 'patched'), 'a pair in a patch replaces the current row')
+    assert.throws(() => ChatProfileStore.create({ name: 'bad', engine: 'llm', providerName: 'nope' }), /연결을 찾을 수 없어/)
+    assert.throws(() => ChatProfileStore.create({ name: 'bad', engine: 'llm', providerName: 'plain' }), /연결을 찾을 수 없어/)
+    ChatProfileStore.delete(profile.id)
   })
 
-  await t.test('slot CRUD: validation, unique name, single default', () => {
-    const { slot: chat } = ModelSlotStore.create({ name: '대화', providerName: 'conn-a', model: 'big', isDefault: true })
-    assert.equal(chat.isDefault, true)
-    assert.equal(ModelSlotStore.findDefault()?.id, chat.id)
-    assert.throws(() => ModelSlotStore.create({ name: '대화', providerName: 'conn-a', model: 'x' }), { message: '같은 이름의 모델이 이미 있어.' })
-    assert.throws(() => ModelSlotStore.create({ name: '  대화', providerName: 'conn-a', model: 'x' }), { message: '같은 이름의 모델이 이미 있어.' })
-    assert.throws(() => ModelSlotStore.create({ name: 'ABC'.toLowerCase(), providerName: 'nope', model: 'x' }), { message: 'LLM 연결을 찾을 수 없어.' })
-    assert.throws(() => ModelSlotStore.create({ name: 'abc', providerName: 'plain', model: 'x' }), { message: 'LLM 연결을 찾을 수 없어.' })
-    assert.throws(() => ModelSlotStore.create({ name: 'abc', providerName: 'conn-a', model: '' }), ChatProfileError)
-    assert.throws(() => ModelSlotStore.create({ name: '', providerName: 'conn-a', model: 'x' }), ChatProfileError)
-    assert.throws(() => ModelSlotStore.create({ name: 'x'.repeat(81), providerName: 'conn-a', model: 'x' }), ChatProfileError)
-    assert.throws(() => ModelSlotStore.create({ name: 'abc', providerName: 'conn-a', model: 'm'.repeat(201) }), ChatProfileError)
-    assert.equal(ModelSlotStore.list().length, 1, 'failed creates leave nothing behind')
-
-    const { slot: aux } = ModelSlotStore.create({ name: 'Aux', providerName: 'conn-b', model: 'small' })
-    assert.equal(aux.isDefault, false)
-    assert.throws(() => ModelSlotStore.update(aux.id, { name: '대화' }), { message: '같은 이름의 모델이 이미 있어.' })
-    assert.throws(() => ModelSlotStore.update(aux.id, { name: 'aux2' }) && ModelSlotStore.update(aux.id, { name: 'AUX' }) && ModelSlotStore.create({ name: 'aux', providerName: 'conn-a', model: 'x' }), { message: '같은 이름의 모델이 이미 있어.' })
-    assert.equal(ModelSlotStore.update(aux.id, { name: 'Aux' })?.slot.name, 'Aux', 'renaming to its own name (any case) is allowed')
-    ModelSlotStore.update(aux.id, { isDefault: true })
-    assert.deepEqual(ModelSlotStore.list().filter((slot) => slot.isDefault).map((slot) => slot.name), ['Aux'])
-    ModelSlotStore.setDefault(chat.id)
-    assert.deepEqual(ModelSlotStore.list().filter((slot) => slot.isDefault).map((slot) => slot.name), ['대화'])
-    assert.equal(ModelSlotStore.update(9999, { name: 'x' }), null)
-    assert.equal(ModelSlotStore.setDefault(9999), null)
-    assert.equal(ModelSlotStore.update(aux.id, { model: 'smaller' })?.slot.model, 'smaller')
-    assert.equal(ModelSlotStore.find(aux.id)?.providerName, 'conn-b', 'fields left out keep their value')
-    // Deleting the default leaves no default.
-    assert.equal(ModelSlotStore.delete(chat.id), true)
-    assert.equal(ModelSlotStore.findDefault(), null)
-    assert.equal(ModelSlotStore.delete(chat.id), false)
-    ModelSlotStore.delete(aux.id)
-    assert.equal(ModelSlotStore.list().length, 0)
+  await t.test('row validation: chat roles take LLM models only, the judge also TypeSafe ones; the default is an LLM model', () => {
+    const jevRow = rowOf('jev', 'jev-latest')!
+    assert.throws(() => ChatProfileStore.create({ name: 'x', engine: 'llm', modelSlotId: jevRow }), /채팅에 쓸 수 없어/)
+    assert.throws(() => ChatProfileStore.create({ name: 'x', engine: 'llm', summarySlotId: jevRow }), /채팅에 쓸 수 없어/)
+    assert.throws(() => ChatProfileStore.create({ name: 'x', engine: 'llm', modelSlotId: 99999 }), /모델을 찾을 수 없어/)
+    const judged = ChatProfileStore.create({ name: 'judged', engine: 'llm', judgeSlotId: jevRow })
+    assert.equal(judged.judgeSlotId, jevRow)
+    assert.throws(() => ModelSlotStore.setDefault(jevRow), /LLM 연결의 모델만/)
+    assert.throws(() => ChatJudgePresetStore.create({ name: 'p', items: [], escalationSlotId: jevRow }), /판단에 쓸 수 없는|채팅에 쓸 수 없어/)
+    ChatProfileStore.delete(judged.id)
   })
 
-  await t.test('profile validation of slot ids and the slot-only llm profile', () => {
-    assert.throws(() => ChatProfileStore.create({ name: 'bad', engine: 'llm', providerName: 'conn-a', modelSlotId: 999 }), { message: '모델을 찾을 수 없어.' })
-    assert.throws(() => ChatProfileStore.create({ name: 'bad', engine: 'llm', providerName: 'conn-a', summarySlotId: 999 }), { message: '모델을 찾을 수 없어.' })
-    assert.throws(() => ChatProfileStore.create({ name: 'bad', engine: 'llm' }), { message: 'LLM 연결을 골라줘.' })
-    const { slot } = ModelSlotStore.create({ name: 'Chat', providerName: 'conn-a', model: 'big' })
-    const slotOnly = ChatProfileStore.create({ name: 'slot-only', engine: 'llm', modelSlotId: slot.id })
-    assert.equal(slotOnly.providerName, '')
-    assert.equal(slotOnly.modelSlotId, slot.id)
-    const codex = ChatProfileStore.create({ name: 'codex', engine: 'codex', modelSlotId: slot.id, translationSlotId: slot.id })
-    assert.equal(codex.modelSlotId, null, 'codex has no chat slot')
-    assert.equal(codex.translationSlotId, slot.id, 'but its helper roles may use slots')
+  await t.test('resolution: the role\'s row, else the chat model (summary, suggestions) or nothing (translation); chat falls back to the default', () => {
+    const fast = ModelSlotStore.ensure('conn-b', 'fast')!
+    const profile = ChatProfileStore.create({ name: 'roles', engine: 'llm', modelSlotId: fast, translationSlotId: fast })
+    const chat = resolveProfileModel(profile, 'chat')!
+    assert.deepEqual([chat.providerName, chat.model, chat.via, chat.label], ['conn-b', 'fast', 'slot', 'Display conn-b · fast'])
+    assert.deepEqual([resolveProfileModel(profile, 'summary')?.model, resolveProfileModel(profile, 'summary')?.via], ['fast', 'inherit'])
+    assert.equal(resolveProfileModel(profile, 'suggest')?.via, 'inherit')
+    assert.equal(hasTranslation(profile), true)
+    assert.equal(hasTranslation({ ...profile, translationSlotId: null }), false)
+    const loose = { ...profile, modelSlotId: null }
+    assert.deepEqual([resolveProfileModel(loose, 'chat')?.model, resolveProfileModel(loose, 'chat')?.via], ['conn-a-default', 'default'])
+    const codex = { ...profile, engine: 'codex' as const, model: 'gpt-5.5', translationSlotId: null }
     assert.equal(resolveProfileModel(codex, 'chat'), null)
-    assert.equal(resolveProfileModel(codex, 'translation')?.via, 'slot')
-    assert.equal(resolveProfileModel(codex, 'summary'), null, 'codex has no chat connection to inherit')
-    assert.equal(resolveProfileModel(codex, 'suggest'), null)
-    ChatProfileStore.delete(slotOnly.id)
-    ChatProfileStore.delete(codex.id)
-    ModelSlotStore.delete(slot.id)
+    assert.equal(resolveProfileModel(codex, 'summary'), null, 'Codex helpers need a row of their own')
+    assert.equal(resolveProfileModel({ ...codex, suggestSlotId: fast }, 'suggest')?.model, 'fast')
+    assert.equal(modelLabelOf(codex), 'Codex · gpt-5.5')
+    assert.equal(modelLabelOf(profile), 'Display conn-b · fast')
+    ChatProfileStore.delete(profile.id)
   })
 
-  await t.test('resolution precedence for every role, including inherit and default fallback', () => {
-    const chatSlot = ModelSlotStore.create({ name: 'chat', providerName: 'conn-a', model: 'big' }).slot
-    const auxSlot = ModelSlotStore.create({ name: 'aux', providerName: 'conn-b', model: 'small' }).slot
-    const pick = (resolved: ReturnType<typeof resolveProfileModel>) => resolved && [resolved.via, resolved.providerName, resolved.model, resolved.slotId]
+  await t.test('sync sets a connection\'s models in order, never dropping one in use; changing a row reaches its users', () => {
+    const used = ModelSlotStore.ensure('conn-b', 'keep-me')!
+    const profile = ChatProfileStore.create({ name: '세라', engine: 'llm', modelSlotId: used })
+    assert.throws(() => ModelSlotStore.syncConnection('conn-b', ['conn-b-default']), /쓰는 곳이 있어서 뺄 수 없어: keep-me \(세라\)/)
+    const synced = ModelSlotStore.syncConnection('conn-b', ['new-one', 'keep-me'])
+    assert.deepEqual(synced.map((slot) => slot.model), ['new-one', 'keep-me'], 'unused rows go, missing ones come, in list order')
+    assert.equal(synced.find((slot) => slot.model === 'keep-me')?.id, used, 'a kept model keeps its row')
+    assert.deepEqual(synced.find((slot) => slot.id === used)?.profiles, [{ id: profile.id, name: '세라', roles: ['chat'] }])
+    assert.throws(() => ModelSlotStore.syncConnection('plain', ['x']), /연결을 찾을 수 없어/)
 
-    // chat: slot > direct > default slot > null
-    const slotted = llmProfile('p-slot', { model: 'direct-model', modelSlotId: chatSlot.id })
-    assert.deepEqual(pick(resolveProfileModel(slotted, 'chat')), ['slot', 'conn-a', 'big', chatSlot.id])
-    const direct = llmProfile('p-direct', { model: 'direct-model' })
-    assert.deepEqual(pick(resolveProfileModel(direct, 'chat')), ['direct', 'conn-a', 'direct-model', null])
-    assert.deepEqual(pick(resolveProfileModel(llmProfile('p-direct-empty'), 'chat')), ['direct', 'conn-a', null, null])
-    const bare = { ...asLegacy(direct), providerName: '', model: '' }
-    assert.equal(resolveProfileModel(bare, 'chat'), null, 'no slot, no connection, no default slot')
-    ModelSlotStore.setDefault(auxSlot.id)
-    assert.deepEqual(pick(resolveProfileModel(bare, 'chat')), ['default', 'conn-b', 'small', auxSlot.id])
-    assert.deepEqual(pick(resolveProfileModel({ ...bare, modelSlotId: 12345 }, 'chat')), ['default', 'conn-b', 'small', auxSlot.id], 'a missing slot id counts as unset')
-
-    // summary / suggest: slot > direct > inherit chat (own model overrides)
-    const mixed = llmProfile('p-mixed', { model: 'chat-model', summarySlotId: auxSlot.id, suggestProviderName: 'conn-b', suggestModel: 'sg' })
-    assert.deepEqual(pick(resolveProfileModel(mixed, 'summary')), ['slot', 'conn-b', 'small', auxSlot.id])
-    assert.deepEqual(pick(resolveProfileModel(mixed, 'suggest')), ['direct', 'conn-b', 'sg', null])
-    const inheriting = llmProfile('p-inherit', { model: 'chat-model', summaryModel: 'sum-only' })
-    assert.deepEqual(pick(resolveProfileModel(inheriting, 'summary')), ['inherit', 'conn-a', 'sum-only', null])
-    assert.deepEqual(pick(resolveProfileModel(inheriting, 'suggest')), ['inherit', 'conn-a', 'chat-model', null])
-    const viaSlot = llmProfile('p-inherit-slot', { modelSlotId: chatSlot.id })
-    assert.deepEqual(pick(resolveProfileModel(viaSlot, 'summary')), ['inherit', 'conn-a', 'big', chatSlot.id])
-    assert.equal(resolveProfileModel(inheriting, 'summary')?.slotName, null)
-
-    // translation: slot > direct > off
-    assert.equal(resolveProfileModel(inheriting, 'translation'), null)
-    assert.equal(hasTranslation(inheriting), false)
-    assert.deepEqual(pick(resolveProfileModel(llmProfile('p-tr', { translationSlotId: auxSlot.id }), 'translation')), ['slot', 'conn-b', 'small', auxSlot.id])
-    assert.deepEqual(pick(resolveProfileModel(llmProfile('p-tr2', { translationProviderName: 'conn-b', translationModel: 'tm' }), 'translation')), ['direct', 'conn-b', 'tm', null])
-    assert.equal(hasTranslation(llmProfile('p-tr3', { translationSlotId: auxSlot.id })), true)
-
-    // a slot's model change reaches every role that uses it at once
-    ModelSlotStore.update(chatSlot.id, { model: 'bigger' })
-    assert.equal(resolveProfileModel(ChatProfileStore.find(slotted.id)!, 'chat')?.model, 'bigger')
-    assert.equal(resolveProfileModel(ChatProfileStore.find(viaSlot.id)!, 'summary')?.model, 'bigger')
-
-    // the line the chat UI shows
-    assert.equal(modelLabelOf(ChatProfileStore.find(slotted.id)!), 'chat · bigger')
-    assert.equal(modelLabelOf(direct), 'Display conn-a · direct-model')
-    assert.equal(modelLabelOf(llmProfile('p-label')), 'Display conn-a · conn-a-default')
-    assert.equal(modelLabelOf(ChatProfileStore.create({ name: 'cx', engine: 'codex' })), 'Codex · 기본 모델')
-    for (const profile of ChatProfileStore.list()) ChatProfileStore.delete(profile.id)
-    for (const slot of ModelSlotStore.list()) ModelSlotStore.delete(slot.id)
+    ModelSlotStore.update(used, { model: 'renamed' })
+    assert.equal(resolveProfileModel(ChatProfileStore.find(profile.id)!, 'chat')?.model, 'renamed')
+    assert.throws(() => ModelSlotStore.update(used, { model: 'new-one' }), /같은 모델이 이미 있어/)
+    assert.throws(() => ModelSlotStore.delete(used), /쓰는 곳이 있어서 지울 수 없어: 세라/)
+    ChatProfileStore.delete(profile.id)
+    assert.equal(ModelSlotStore.delete(used), true)
   })
 
-  await t.test('adoptProfiles binds only exact direct matches with no slot yet', () => {
-    const exact = llmProfile('exact', { model: 'm1', summaryProviderName: 'conn-a', summaryModel: 'm1', translationProviderName: 'conn-a', translationModel: 'm1', suggestProviderName: 'conn-a', suggestModel: 'm1' })
-    const otherModel = llmProfile('other-model', { model: 'm2' })
-    const otherConn = ChatProfileStore.create({ name: 'other-conn', engine: 'llm', providerName: 'conn-b', model: 'm1' })
-    const emptyModel = llmProfile('empty-model', { model: '' })
-    const codex = ChatProfileStore.create({ name: 'codex', engine: 'codex', model: 'm1', summaryProviderName: 'conn-a', summaryModel: 'm1' })
-    const preSlotted = ModelSlotStore.create({ name: 'pre', providerName: 'conn-b', model: 'zzz' }).slot
-    const alreadySlotted = llmProfile('already', { model: 'm1', modelSlotId: preSlotted.id })
+  await t.test('the default moves to another LLM row when its row goes; a connection with used models cannot be deleted', () => {
+    const conn = ModelSlotStore.ofConnection('conn-a')
+    const defaultRow = conn.find((slot) => slot.isDefault)!
+    ModelSlotStore.syncConnection('conn-a', ['conn-a-other'])
+    assert.equal(ModelSlotStore.find(defaultRow.id), null)
+    const defaults = ModelSlotStore.list().filter((slot) => slot.isDefault)
+    assert.equal(defaults.length, 1)
+    assert.notEqual(defaults[0].providerType, 'decision_typesafe')
 
-    const plain = ModelSlotStore.create({ name: 'no-adopt', providerName: 'conn-a', model: 'm1' })
-    assert.deepEqual(plain.adopted, { chat: 0, summary: 0, translation: 0, suggest: 0 })
-    assert.equal(ChatProfileStore.find(exact.id)?.modelSlotId, null)
-
-    const { slot, adopted } = ModelSlotStore.update(plain.slot.id, { adoptProfiles: true })!
-    // chat: exact only (not other model/connection, not empty model, not codex, not the already-slotted one); the helper roles also count codex.
-    assert.deepEqual(adopted, { chat: 1, summary: 2, translation: 1, suggest: 1 })
-    const adoptedExact = ChatProfileStore.find(exact.id)!
-    assert.deepEqual([adoptedExact.modelSlotId, adoptedExact.summarySlotId, adoptedExact.translationSlotId, adoptedExact.suggestSlotId], [slot.id, slot.id, slot.id, slot.id])
-    assert.equal(ChatProfileStore.find(otherModel.id)?.modelSlotId, null)
-    assert.equal(ChatProfileStore.find(otherConn.id)?.modelSlotId, null)
-    assert.equal(ChatProfileStore.find(emptyModel.id)?.modelSlotId, null, 'an empty model is the connection default, not a named model')
-    assert.equal(ChatProfileStore.find(codex.id)?.modelSlotId, null)
-    assert.equal(ChatProfileStore.find(codex.id)?.summarySlotId, slot.id)
-    assert.equal(ChatProfileStore.find(alreadySlotted.id)?.modelSlotId, preSlotted.id)
-    assert.deepEqual(slot.profiles.find((profile) => profile.id === exact.id)?.roles, ['chat', 'summary', 'translation', 'suggest'])
-
-    // creating with the option adopts too, and a second run adopts nothing new
-    const created = ModelSlotStore.create({ name: 'adopt-on-create', providerName: 'conn-a', model: 'm2', adoptProfiles: true })
-    assert.equal(created.adopted.chat, 1)
-    assert.equal(ChatProfileStore.find(otherModel.id)?.modelSlotId, created.slot.id)
-    assert.deepEqual(ModelSlotStore.update(created.slot.id, { adoptProfiles: true })!.adopted, { chat: 0, summary: 0, translation: 0, suggest: 0 })
+    const row = rowOf('conn-a', 'conn-a-other')!
+    const preset = ChatJudgePresetStore.create({ name: '판정', items: [], modelSlotId: rowOf('jev', 'jev-latest'), escalationSlotId: row })
+    assert.match(modelReferencesOfConnection('conn-a').models.join(), /conn-a-other \(판단 프리셋 판정\)/)
+    ChatJudgePresetStore.delete(preset.id)
+    assert.deepEqual(modelReferencesOfConnection('conn-a'), { models: [] })
+    deleteModelsOfConnection('conn-a')
+    assert.deepEqual(ModelSlotStore.ofConnection('conn-a'), [])
   })
 
-  await t.test('deleting a slot nulls profile references; connection references block deletion', () => {
-    const slot = ModelSlotStore.find(ModelSlotStore.list().find((entry) => entry.name === 'no-adopt')!.id)!
-    const users = slot.profiles.map((profile) => profile.id)
-    assert.ok(users.length >= 2)
-    assert.equal(ModelSlotStore.delete(slot.id), true)
-    for (const id of users) {
-      const profile = ChatProfileStore.find(id)!
-      assert.deepEqual([profile.modelSlotId, profile.summarySlotId, profile.translationSlotId, profile.suggestSlotId], [null, null, null, null])
-      assert.equal(db.prepare('SELECT model_slot_id, summary_slot_id, translation_slot_id, suggest_slot_id FROM llm_chat_profiles WHERE id = ?').get(id) !== undefined, true)
-    }
-    const raw = db.prepare('SELECT COUNT(*) AS count FROM llm_chat_profiles WHERE model_slot_id = ? OR summary_slot_id = ? OR translation_slot_id = ? OR suggest_slot_id = ?').get(slot.id, slot.id, slot.id, slot.id) as { count: number }
-    assert.equal(raw.count, 0, 'the columns themselves are cleared')
-    // direct pairs survive the slot, so the profile keeps working as before
-    assert.equal(resolveProfileModel(ChatProfileStore.find(users[0])!, 'chat')?.via, 'direct')
+  await t.test('migration: default models, direct pairs, inherited summary models, judges and duplicate rows land on rows', () => {
+    db.prepare("UPDATE external_api_providers SET additional_config = ? WHERE provider_name = 'conn-a'").run(JSON.stringify({ default_model: 'legacy-default', thinking_switch: 'none' }))
+    const dupA = Number(db.prepare("INSERT INTO llm_model_slots (name, provider_name, model) VALUES ('대화', 'conn-b', 'dup')").run().lastInsertRowid)
+    const dupB = Number(db.prepare("INSERT INTO llm_model_slots (name, provider_name, model, is_default) VALUES ('요약', 'conn-b', 'dup', 0)").run().lastInsertRowid)
+    const insert = db.prepare(`
+      INSERT INTO llm_chat_profiles (name, engine, provider_name, model, summary_provider_name, summary_model, translation_slot_id, judge_provider_name, judge_model, system_prompt, greeting)
+      VALUES (@name, @engine, @provider_name, @model, @summary_provider_name, @summary_model, @translation_slot_id, @judge_provider_name, @judge_model, '', '')
+    `)
+    const direct = Number(insert.run({ name: 'direct', engine: 'llm', provider_name: 'conn-a', model: '', summary_provider_name: null, summary_model: 'tiny', translation_slot_id: dupB, judge_provider_name: 'jev', judge_model: '' }).lastInsertRowid)
+    const codex = Number(insert.run({ name: 'codex', engine: 'codex', provider_name: '', model: 'gpt-5.5', summary_provider_name: 'conn-b', summary_model: 'sum', translation_slot_id: null, judge_provider_name: null, judge_model: null }).lastInsertRowid)
+    const preset = Number(db.prepare("INSERT INTO chat_judge_presets (name, provider_name, model, escalation_provider_name, escalation_model) VALUES ('old', 'jev', 'jev-2', 'conn-b', '')").run().lastInsertRowid)
 
-    // a stale slot id written behind the store's back reads as unset, and a save clears it
-    const victim = llmProfile('stale')
-    db.prepare('UPDATE llm_chat_profiles SET model_slot_id = 424242 WHERE id = ?').run(victim.id)
-    assert.equal(ChatProfileStore.find(victim.id)?.modelSlotId, null)
-    ChatProfileStore.update(victim.id, { tagline: 'saved' })
-    assert.equal((db.prepare('SELECT model_slot_id FROM llm_chat_profiles WHERE id = ?').get(victim.id) as { model_slot_id: number | null }).model_slot_id, null)
+    migrateLlmModelRows(db)
+    migrateLlmModelRows(db)
 
-    const refs = modelReferencesOfConnection('conn-b')
-    assert.ok(refs.slots.includes('pre'))
-    assert.ok(refs.profiles.includes('other-conn'))
-    assert.deepEqual(modelReferencesOfConnection('plain'), { slots: [], profiles: [] })
+    const rows = ModelSlotStore.list()
+    assert.equal(rows.filter((slot) => slot.providerName === 'conn-b' && slot.model === 'dup').length, 1, 'duplicates merged')
+    const p = ChatProfileStore.find(direct)!
+    assert.equal(p.modelSlotId, rowOf('conn-a', 'legacy-default'))
+    assert.equal(p.summarySlotId, rowOf('conn-a', 'tiny'), 'a summary model alone ran on the chat connection')
+    assert.equal(p.translationSlotId, dupA, 'references move to the kept duplicate')
+    assert.equal(p.judgeSlotId, rowOf('jev', 'jev-latest'))
+    const c = ChatProfileStore.find(codex)!
+    assert.deepEqual([c.model, c.modelSlotId, c.summarySlotId], ['gpt-5.5', null, rowOf('conn-b', 'sum')])
+    const migratedPreset = ChatJudgePresetStore.find(preset)!
+    assert.deepEqual([migratedPreset.modelSlotId, migratedPreset.escalationSlotId], [rowOf('jev', 'jev-2'), rowOf('conn-b', 'conn-b-default')])
+    assert.deepEqual(configOf('conn-a'), { thinking_switch: 'none' })
+    assert.equal(rows.filter((slot) => slot.isDefault).length, 1)
+    const cleared = db.prepare('SELECT provider_name, model, summary_model, judge_provider_name FROM llm_chat_profiles WHERE id = ?').get(direct)
+    assert.deepEqual(cleared, { provider_name: '', model: null, summary_model: null, judge_provider_name: null })
   })
 
-  await t.test('usage lists slots, direct profiles per connection and saved workflow LLM nodes', () => {
+  await t.test('usage counts saved workflow LLM nodes per row through the profile they chat as', () => {
     let moduleId = (db.prepare("SELECT id FROM module_definitions WHERE internal_fixed_values LIKE '%system.call_llm%' LIMIT 1").get() as { id: number } | undefined)?.id
     if (moduleId === undefined) {
       moduleId = Number(db.prepare(`
@@ -269,32 +198,18 @@ test('model slots: store, per-role resolution, adoption, deletion, usage', { tim
         VALUES ('test llm', 'system', 'manual', '{}', '[]', '[]', '{"operation_key":"system.call_llm"}')
       `).run().lastInsertRowid)
     }
-    const slot = ModelSlotStore.create({ name: 'wf', providerName: 'conn-a', model: 'wf-model' }).slot
-    const viaSlot = llmProfile('wf-slot-profile', { modelSlotId: slot.id })
-    const viaDirect = ChatProfileStore.create({ name: 'wf-direct-profile', engine: 'llm', providerName: 'conn-b', model: 'x' })
+    const row = ModelSlotStore.ensure('conn-b', 'wf-model')!
+    const viaRow = ChatProfileStore.create({ name: 'wf-profile', engine: 'llm', modelSlotId: row })
     const graph = {
       nodes: [
-        { id: 'a', module_id: moduleId, input_values: { profile_id: viaSlot.id } },
-        { id: 'b', module_id: moduleId, input_values: { profile_id: viaSlot.id } },
-        { id: 'c', module_id: moduleId, input_values: { profile_id: viaDirect.id } },
-        { id: 'd', module_id: moduleId, input_values: { provider_name: 'conn-a' } },
-        { id: 'e', module_id: moduleId + 1000, input_values: { profile_id: viaSlot.id } },
+        { id: 'a', module_id: moduleId, input_values: { profile_id: viaRow.id } },
+        { id: 'b', module_id: moduleId, input_values: { profile_id: viaRow.id } },
+        { id: 'd', module_id: moduleId, input_values: { provider_name: 'conn-b' } },
+        { id: 'e', module_id: moduleId + 1000, input_values: { profile_id: viaRow.id } },
       ],
       edges: [],
     }
     db.prepare('INSERT INTO graph_workflows (name, graph_json) VALUES (?, ?)').run('wf test', JSON.stringify(graph))
-
-    const usage = buildModelUsage()
-    const slotUsage = usage.slots.find((entry) => entry.id === slot.id)!
-    assert.deepEqual(slotUsage.profiles, [{ id: viaSlot.id, name: 'wf-slot-profile', roles: ['chat'] }])
-    assert.equal(slotUsage.workflowNodes, 2)
-    const connA = usage.connections.find((entry) => entry.providerName === 'conn-a')!
-    const connB = usage.connections.find((entry) => entry.providerName === 'conn-b')!
-    assert.equal(usage.connections.some((entry) => entry.providerName === 'plain'), false, 'only LLM connections')
-    assert.ok(connA.slots.some((entry) => entry.id === slot.id))
-    assert.equal(connA.workflowNodes, 2, 'nodes whose profile chats through the connection, via slot')
-    assert.equal(connB.workflowNodes, 1)
-    assert.ok(connB.directProfiles.some((entry) => entry.id === viaDirect.id && entry.roles.join() === 'chat'))
-    assert.equal(connA.directProfiles.some((entry) => entry.id === viaSlot.id), false, 'a slot-backed role is not direct use')
+    assert.deepEqual(buildModelUsage().slots.find((entry) => entry.id === row), { id: row, workflowNodes: 2 })
   })
 })

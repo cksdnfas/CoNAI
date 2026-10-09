@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FileUp, Link2, ListChecks, Plus, Scale } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
@@ -14,12 +14,11 @@ import { ChatJudgePresetEditorModal } from './chat-judge-preset-editor-modal'
 import { readChatToolPresetFile } from './chat-tool-preset-file'
 
 /** Settings › Chat › 자원: the judge presets (questions a decision model answers about chat turns, group rooms, status fields and assets). */
-export function ChatJudgePresetGroup() {
+export function ChatJudgePresetGroup({ editor, setEditor }: { editor: { preset: ChatJudgePreset | null } | null; setEditor: (editor: { preset: ChatJudgePreset | null } | null) => void }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const importRef = useRef<HTMLInputElement>(null)
-  const [editor, setEditor] = useState<{ preset: ChatJudgePreset | null } | null>(null)
   const presetsQuery = useQuery({ queryKey: CHAT_JUDGE_PRESETS_QUERY_KEY, queryFn: listChatJudgePresets })
   const presets = presetsQuery.data ?? []
 
@@ -31,14 +30,14 @@ export function ChatJudgePresetGroup() {
     mutationFn: async (file: File) => importChatJudgePresets(await readChatToolPresetFile(file)),
     onSuccess: async (created) => {
       await refresh()
-      showSnackbar({ message: t({ ko: '판단 프리셋 {count}개 가져왔어. 판단 연결을 골라줘.', en: 'Imported {count} judge presets. Pick their judge connection.' }, { count: created.length }), tone: 'info' })
+      showSnackbar({ message: t({ ko: '판단 프리셋 {count}개 가져왔어. 판단 모델을 골라줘.', en: 'Imported {count} judge presets. Pick their judge model.' }, { count: created.length }), tone: 'info' })
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '판단 프리셋을 가져오지 못했어.', en: 'Could not import the judge presets.' })), tone: 'error' }),
   })
   const duplicateMutation = useMutation({
     mutationFn: (preset: ChatJudgePreset) => createChatJudgePreset({
       name: t({ ko: '{name} 복사', en: '{name} copy' }, { name: preset.name }),
-      providerName: preset.providerName, model: preset.model, escalationProviderName: preset.escalationProviderName, escalationModel: preset.escalationModel,
+      modelSlotId: preset.modelSlotId, escalationSlotId: preset.escalationSlotId,
       items: preset.items, followUp: preset.followUp,
     }),
     onSuccess: async (created) => {
@@ -75,7 +74,7 @@ export function ChatJudgePresetGroup() {
             name={preset.name}
             extra={(() => {
               const missing = [
-                preset.providerName ? null : t({ ko: '판단 연결 없음', en: 'No judge connection' }),
+                preset.modelSlotId ? null : t({ ko: '판단 모델 없음', en: 'No judge model' }),
                 preset.profiles.length === 0 && preset.rooms.length === 0 ? t({ ko: '쓰는 프로필·방 없음', en: 'No profile or room uses it' }) : null,
               ].filter(Boolean)
               return missing.length > 0 ? <ResourceRowStatus tip={missing.join(' · ')}>{t({ ko: '미연결', en: 'Not linked' })}</ResourceRowStatus> : null

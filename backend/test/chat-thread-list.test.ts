@@ -12,6 +12,7 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
   process.env.RUNTIME_SAVE_DIR = path.join(root, 'save')
   const dbModule = await import('../src/database/userSettingsDb')
   dbModule.initializeUserSettingsDb()
+  ;(await import('../src/models/ExternalApiProvider')).ExternalApiProvider.create({ provider_name: 'test', display_name: 'test', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
   t.after(async () => {
     dbModule.closeUserSettingsDb()
     ;(await import('../src/database/init')).closeDatabase()

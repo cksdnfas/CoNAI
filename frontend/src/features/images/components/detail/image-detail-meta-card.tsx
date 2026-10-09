@@ -463,6 +463,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
             tags={artistPromptSection.tags}
             entries={artistPromptSection.entries}
             collapsibleScores
+            hideLabels
             getTagHref={(tag) => buildArtistPromptTagUrl(tag, artistLinkUrlTemplate)}
             onAddSearchFilter={handleAddAutoPromptSearchFilter}
           />

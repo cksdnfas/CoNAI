@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { LayoutGrid, RotateCcw } from 'lucide-react'
-import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
+import { AnchoredPopup, anchoredPopupBodyClassName } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
@@ -31,7 +31,7 @@ export function ImageListColumnFloatingControl({
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const { t, formatNumber } = useI18n()
-  const resolvedTitle = title ?? t({ ko: '한 줄 카드 수', en: 'Cards per row' })
+  const resolvedTitle = title ?? t({ ko: '목록 한 줄 개수 설정', en: 'Set list columns' })
   const options = Array.from({ length: Math.max(0, max - min + 1) }, (_, index) => min + index)
 
   return (
@@ -39,12 +39,8 @@ export function ImageListColumnFloatingControl({
     <div ref={containerRef} className={cn('pointer-events-none fixed bottom-6 right-[calc(1rem+var(--chat-dock-width,0px))] z-50', className)}>
       <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="top" closeOnBack>
         <div className={`w-[220px] space-y-3 ${anchoredPopupBodyClassName}`}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1">
-              <div className={anchoredPopupLabelClassName}>{resolvedTitle}</div>
-              <div className="text-sm font-semibold text-foreground">{t({ ko: '현재 {count}개', en: 'Current: {count}' }, { count: formatNumber(value) })}</div>
-            </div>
-            {onReset ? (
+          {onReset ? (
+            <div className="flex justify-end">
               <IconButton
                 size="icon-xs"
                 variant="ghost"
@@ -56,8 +52,8 @@ export function ImageListColumnFloatingControl({
               >
                 <RotateCcw className="h-3.5 w-3.5" />
               </IconButton>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
 
           <div className="grid grid-cols-4 gap-2">
             {options.map((option) => {
@@ -82,14 +78,14 @@ export function ImageListColumnFloatingControl({
         </div>
       </AnchoredPopup>
 
-      <Tip content={t({ ko: '목록 한 줄 개수 설정', en: 'Set list columns' })} side="left">
+      <Tip content={resolvedTitle} side="left">
         {/* ghost keeps the floating glass surface visible underneath; the glass comes from theme-floating-panel. */}
         <Button
           type="button"
           variant="ghost"
           onClick={() => setIsOpen((current) => !current)}
           className="theme-floating-panel pointer-events-auto text-foreground"
-          aria-label={t({ ko: '목록 한 줄 개수 설정', en: 'Set list columns' })}
+          aria-label={resolvedTitle}
           aria-haspopup="dialog"
           aria-expanded={isOpen}
         >

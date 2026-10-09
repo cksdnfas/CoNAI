@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
+import { UserMinus, UserPlus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -207,14 +209,14 @@ export function SecurityPermissionGroupEditorModal({
                   </Field>
 
                   <div className="flex items-end">
-                    <Button
-                      type="button"
+                    <IconButton
                       variant="secondary"
                       onClick={onAddMember}
                       disabled={selectedAddMemberAccountId === null || isAddingMember || isBusy}
+                      label={t({ ko: '고른 계정을 멤버로 추가', en: 'Add the selected account as a member' })}
                     >
-                      {t({ ko: '추가', en: 'Add' })}
-                    </Button>
+                      <UserPlus className="h-4 w-4" />
+                    </IconButton>
                   </div>
                 </div>
               ) : null}
@@ -234,15 +236,15 @@ export function SecurityPermissionGroupEditorModal({
                   isUpdatingAccountPassword={isUpdatingAccountPassword}
                   isDeletingAccount={isDeletingAccount}
                   renderExtraActions={(account) => canManageMembers ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
+                    <IconButton
+                      size="icon-sm"
+                      variant="ghost"
                       disabled={isRemovingMember || isBusy}
                       onClick={() => onRemoveMember(account.id)}
+                      label={t({ ko: '이 그룹에서 멤버 제거', en: 'Remove member from this group' })}
                     >
-                      {t({ ko: '멤버 제거', en: 'Remove member' })}
-                    </Button>
+                      <UserMinus className="h-4 w-4" />
+                    </IconButton>
                   ) : null}
                   onAccountGroupChange={onAccountGroupChange}
                   onAccountPasswordChange={onAccountPasswordChange}

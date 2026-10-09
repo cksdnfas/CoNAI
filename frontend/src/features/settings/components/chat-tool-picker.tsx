@@ -1,7 +1,7 @@
 import { useId, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Search } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { CheckCheck, Search, X } from 'lucide-react'
+import { IconButton } from '@/components/ui/icon-button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -66,9 +66,14 @@ export function ChatToolPicker({ groups, scopes, allowlist, onChange, loading = 
               <div key={scope} className="space-y-2">
                 <div className="flex items-center justify-between gap-2 border-b border-line pb-1 text-xs font-semibold">
                   <span>{getChatScopeCopy(scope, t).label} <span className="font-normal text-muted-foreground">{scopeCount} / {scopeNames.length}</span></span>
-                  <Button type="button" variant="ghost" size="xs" onClick={() => setMany(scopeNames, scopeCount < scopeNames.length)}>
-                    {scopeCount < scopeNames.length ? t({ ko: '전부', en: 'All' }) : t({ ko: '없음', en: 'None' })}
-                  </Button>
+                  <IconButton
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={() => setMany(scopeNames, scopeCount < scopeNames.length)}
+                    label={scopeCount < scopeNames.length ? t({ ko: '이 권한의 도구 전부 고르기', en: 'Select every tool in this scope' }) : t({ ko: '이 권한의 도구 전부 빼기', en: 'Clear every tool in this scope' })}
+                  >
+                    {scopeCount < scopeNames.length ? <CheckCheck /> : <X />}
+                  </IconButton>
                 </div>
                 {scopeGroups.map((group) => {
                   const tools = needle
@@ -81,9 +86,14 @@ export function ChatToolPicker({ groups, scopes, allowlist, onChange, loading = 
                     <div key={group.id} className="space-y-1 pl-3">
                       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                         <span>{group.label} <span className="opacity-70">{groupCount} / {groupNames.length}</span></span>
-                        <Button type="button" variant="ghost" size="xs" onClick={() => setMany(groupNames, groupCount < groupNames.length)}>
-                          {groupCount < groupNames.length ? t({ ko: '전부', en: 'All' }) : t({ ko: '없음', en: 'None' })}
-                        </Button>
+                        <IconButton
+                          variant="ghost"
+                          size="icon-xs"
+                          onClick={() => setMany(groupNames, groupCount < groupNames.length)}
+                          label={groupCount < groupNames.length ? t({ ko: '이 묶음 전부 고르기', en: 'Select the whole group' }) : t({ ko: '이 묶음 전부 빼기', en: 'Clear the whole group' })}
+                        >
+                          {groupCount < groupNames.length ? <CheckCheck /> : <X />}
+                        </IconButton>
                       </div>
                       <div className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
                         {tools.map((tool) => (

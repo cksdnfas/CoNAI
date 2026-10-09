@@ -1,7 +1,6 @@
 import { useId, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
-import { ChevronDown, Dices, Plus, Trash2 } from 'lucide-react'
+import { Brush, ChevronDown, Dices, Plus, Trash2 } from 'lucide-react'
 import type { StoredNaiCharacterReferenceAsset, StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -9,6 +8,7 @@ import { Select } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Text } from '@/components/ui/text'
 import { ToggleRow } from '@/components/ui/toggle-row'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import {
@@ -149,21 +149,35 @@ export function NaiGenerationEditorSections({
         actions={(
           <>
             <span className="px-1 text-xs tabular-nums text-muted-foreground">{naiForm.characters.length}</span>
-            <IconButton
-              size="icon-sm"
-              variant="ghost"
-              onClick={handleAddCharacterPrompt}
-              disabled={!supportsCharacterPrompts}
-              label={t('image-generation.components.nai.generation.editor.sections.add.character')}
-            >
-              <Plus className="h-4 w-4" />
-            </IconButton>
+            {supportsCharacterPrompts ? (
+              <IconButton
+                size="icon-sm"
+                variant="ghost"
+                onClick={handleAddCharacterPrompt}
+                label={t('image-generation.components.nai.generation.editor.sections.add.character')}
+              >
+                <Plus className="h-4 w-4" />
+              </IconButton>
+            ) : (
+              // A disabled button swallows hover, so the span carries the "why" tooltip.
+              <Tip content={t('image-generation.components.nai.generation.editor.sections.character.prompt.is.not.available.for.the')}>
+                <span className="inline-flex" tabIndex={0}>
+                  <IconButton
+                    size="icon-sm"
+                    variant="ghost"
+                    disabled
+                    tooltip={false}
+                    label={t('image-generation.components.nai.generation.editor.sections.add.character')}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </IconButton>
+                </span>
+              </Tip>
+            )}
           </>
         )}
       >
-        {!supportsCharacterPrompts ? (
-          <Text variant="caption" className="text-destructive">{t('image-generation.components.nai.generation.editor.sections.character.prompt.is.not.available.for.the')}</Text>
-        ) : (
+        {!supportsCharacterPrompts ? null : (
           <>
             <ToggleRow variant="detail" className="justify-between">
               <span className="font-medium">AI's Choice</span>
@@ -205,10 +219,7 @@ export function NaiGenerationEditorSections({
                     onClick={() => setSelectedCharacterIndex(index)}
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Text as="div" variant="label">Character {index + 1}</Text>
-                        <Badge variant="outline">{useCharacterPositions ? `${character.centerX} · ${character.centerY}` : "AI's Choice"}</Badge>
-                      </div>
+                      <Text as="div" variant="label">Character {index + 1}</Text>
                       <IconButton
                         size="icon-sm"
                         variant="ghost"
@@ -260,15 +271,26 @@ export function NaiGenerationEditorSections({
                     allowSaveDialog={false}
                     onSelect={(image) => handleNaiImageChange('sourceImage', image)}
                   />
-                  <Button type="button" variant="secondary" onClick={handleOpenImageEditor} disabled={!naiForm.sourceImage}>
-                    {naiForm.action === 'infill'
-                      ? t('image-generation.components.nai.generation.editor.sections.edit.source.mask')
-                      : t('image-generation.components.nai.generation.editor.sections.edit.source')}
-                  </Button>
                   {naiForm.sourceImage ? (
-                    <Button type="button" variant="ghost" onClick={() => void handleNaiImageChange('sourceImage')}>
-                      {t('image-generation.components.nai.common.remove')}
-                    </Button>
+                    <>
+                      <IconButton
+                        variant="secondary"
+                        onClick={handleOpenImageEditor}
+                        label={naiForm.action === 'infill'
+                          ? t('image-generation.components.nai.generation.editor.sections.edit.source.mask')
+                          : t('image-generation.components.nai.generation.editor.sections.edit.source')}
+                      >
+                        <Brush />
+                      </IconButton>
+                      <IconButton
+                        variant="ghost"
+                        className="hover:text-destructive"
+                        onClick={() => void handleNaiImageChange('sourceImage')}
+                        label={t({ ko: '원본 이미지 제거', en: 'Remove source image' })}
+                      >
+                        <Trash2 />
+                      </IconButton>
+                    </>
                   ) : null}
                 </div>
                 {naiForm.sourceImage ? <NaiSelectedImageCard image={naiForm.sourceImage} alt="NAI source" /> : null}
@@ -288,9 +310,14 @@ export function NaiGenerationEditorSections({
                       onSelect={(image) => handleNaiImageChange('maskImage', image)}
                     />
                     {naiForm.maskImage ? (
-                      <Button type="button" variant="ghost" onClick={() => void handleNaiImageChange('maskImage')}>
-                        {t('image-generation.components.nai.common.remove')}
-                      </Button>
+                      <IconButton
+                        variant="ghost"
+                        className="hover:text-destructive"
+                        onClick={() => void handleNaiImageChange('maskImage')}
+                        label={t({ ko: '마스크 이미지 제거', en: 'Remove mask image' })}
+                      >
+                        <Trash2 />
+                      </IconButton>
                     ) : null}
                   </div>
                   {naiForm.maskImage ? <NaiSelectedImageCard image={naiForm.maskImage} alt="NAI mask" /> : null}
@@ -299,7 +326,6 @@ export function NaiGenerationEditorSections({
             ) : null}
 
             <NaiControllerInsetBlock className="space-y-4">
-              <Text variant="label">{t({ ko: '이미지 옵션', en: 'Image Options' })}</Text>
               <div className="grid gap-4 @sm:grid-cols-2">
                 <FormField label={t({ ko: '강도', en: 'Strength' })}>
                   <NumberStepperInput min={0} max={1} step={0.01} value={naiForm.strength} onValueCommit={(value) => handleNaiFieldChange('strength', value)} />
@@ -413,7 +439,6 @@ function NaiSwitchField({ label, checked, onCheckedChange }: { label: string, ch
 function NaiSeedField({ seed, onSeedChange }: { seed: string, onSeedChange: (value: string) => void }) {
   const { t } = useI18n()
   const labelId = useId()
-  const randomId = useId()
   const isRandom = seed.trim().length === 0
   // Remember the last fixed seed so switching "random" off restores it instead of rolling a new one.
   const [lastFixedSeed, setLastFixedSeed] = useState<string | null>(isRandom ? null : seed)
@@ -427,15 +452,14 @@ function NaiSeedField({ seed, onSeedChange }: { seed: string, onSeedChange: (val
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <span id={labelId} className="shrink-0 text-sm font-medium whitespace-nowrap text-foreground">{seedLabel}</span>
-        <div className="inline-flex items-center gap-2 text-xs whitespace-nowrap text-muted-foreground">
-          <label htmlFor={randomId} className="cursor-pointer">{t({ ko: '매번 랜덤', en: 'Random each time' })}</label>
+        <Tip content={t({ ko: '매번 랜덤: 켜면 생성할 때마다 새 시드를 써', en: 'Random each time: a new seed on every generation' })}>
           <Switch
-            id={randomId}
             size="sm"
+            aria-label={t({ ko: '매번 랜덤', en: 'Random each time' })}
             checked={isRandom}
             onCheckedChange={(checked) => onSeedChange(checked ? '' : (lastFixedSeed ?? rollNaiSeed()))}
           />
-        </div>
+        </Tip>
       </div>
       <div className="flex items-stretch gap-2">
         <NumberStepperInput
@@ -550,21 +574,20 @@ function NaiSettingsSection({
         </div>
 
         <div>
-          <Button
-            type="button"
-            variant="nav"
-            size="sm"
-            className="-mx-2 w-[calc(100%+1rem)] gap-2"
-            aria-expanded={isAdvancedOpen}
-            aria-controls={advancedRegionId}
-            onClick={toggleAdvancedOpen}
-          >
-            <ChevronDown className={cn('transition-transform', !isAdvancedOpen && '-rotate-90')} aria-hidden />
-            <span className="shrink-0 text-xs font-semibold uppercase tracking-overline">{t({ ko: '고급', en: 'Advanced' })}</span>
-            {!isAdvancedOpen ? (
-              <span className="min-w-0 truncate text-xs">{advancedSummary}</span>
-            ) : null}
-          </Button>
+          <Tip content={isAdvancedOpen ? null : advancedSummary} side="top" align="start">
+            <Button
+              type="button"
+              variant="nav"
+              size="sm"
+              className="-mx-2 w-[calc(100%+1rem)] gap-2"
+              aria-expanded={isAdvancedOpen}
+              aria-controls={advancedRegionId}
+              onClick={toggleAdvancedOpen}
+            >
+              <ChevronDown className={cn('transition-transform', !isAdvancedOpen && '-rotate-90')} aria-hidden />
+              <span className="shrink-0 text-xs font-semibold uppercase tracking-overline">{t({ ko: '고급', en: 'Advanced' })}</span>
+            </Button>
+          </Tip>
 
           {isAdvancedOpen ? (
             <div id={advancedRegionId} className="mt-3 grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-4">

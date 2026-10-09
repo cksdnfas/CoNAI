@@ -112,7 +112,7 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     assert.equal(judgeSetupOf(plain), null)
     assert.equal(judgeSetupOf(judged)?.providerName, 'jev')
     assert.throws(() => ChatProfileStore.create({ name: 'bad', engine: 'llm', providerName: 'chat', judgePresetId: 99999 }), /판단 프리셋/)
-    assert.throws(() => ChatProfileStore.create({ name: 'bad', engine: 'llm', providerName: 'chat', judgeProviderName: 'nope' }), /판단 연결/)
+    assert.throws(() => ChatProfileStore.create({ name: 'bad', engine: 'llm', providerName: 'chat', judgeProviderName: 'nope' }), /연결을 찾을 수 없어/)
     const spare = ChatJudgePresetStore.create({ name: '임시', items: [] })
     const user = ChatProfileStore.create({ name: '임시 프로필', engine: 'llm', providerName: 'chat', judgePresetId: spare.id })
     assert.deepEqual(ChatJudgePresetStore.find(spare.id)?.profiles.map((entry) => entry.id), [user.id])

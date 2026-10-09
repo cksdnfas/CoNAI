@@ -43,11 +43,12 @@ const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
 const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }> = {
   get_current_page: { group: 'pages', label: { ko: '현재 페이지 읽기', en: 'Read current page' }, ko: '네가 연결한 CoNAI 페이지와 등록된 입력값을 읽어.' },
   read_page_data: { group: 'pages', label: { ko: '페이지 목록·선택 내용 읽기', en: 'Read page contents' }, ko: '현재 페이지에 등록된 목록과 선택 항목을 읽어.' },
-  propose_page_action: { group: 'pages', label: { ko: '페이지 작업 제안', en: 'Propose page operation' }, ko: '생성·수정·이미지 입력·워크플로 등록 등 등록된 작업을 제안해. 검토 후 네가 적용해.' },
-  propose_page_changes: { group: 'pages', label: { ko: '필드 입력 제안', en: 'Propose input changes' }, ko: '연결된 페이지의 필드 변경안을 보여줘. 네가 적용을 눌러야 입력값이 바뀌어.' },
+  page_act: { group: 'pages', label: { ko: '페이지 이동·조작', en: 'Move and operate pages' }, ko: '페이지·탭 이동, 항목 선택, 편집기 열기, 입력 초안 같은 등록된 작업을 바로 실행해. 저장은 하지 않아.' },
+  page_fill: { group: 'pages', label: { ko: '입력 채우기', en: 'Fill inputs' }, ko: '연결된 페이지의 입력값을 바로 채워. 저장은 하지 않고 네가 되돌릴 수 있어.' },
+  propose_page_action: { group: 'pages', label: { ko: '저장 작업 제안', en: 'Propose save' }, ko: '생성·수정·등록 같은 저장 작업을 카드로 제안해. 검토 후 네가 적용해.' },
   get_workflow_editor: { group: 'pages', label: { ko: '노드 편집기 읽기', en: 'Read workflow editor' }, ko: '연결한 워크플로 초안의 노드와 연결을 읽어.' },
   list_workflow_modules: { group: 'pages', label: { ko: '워크플로 모듈 조회', en: 'List workflow modules' }, ko: '등록된 활성 모듈의 입력과 출력 포트를 확인해.' },
-  propose_workflow_changes: { group: 'pages', label: { ko: '노드 워크플로 제안', en: 'Propose workflow edits' }, ko: '노드 추가·삭제·입력·연결 변경안을 만들고 네가 초안에 적용해.' },
+  workflow_edit: { group: 'pages', label: { ko: '노드 워크플로 편집', en: 'Edit node workflow' }, ko: '열린 노드 편집기에 노드 추가·삭제·입력·연결을 바로 반영해. 저장은 네가 해.' },
   search_images: { group: 'images', label: { ko: '이미지 검색', en: 'Search images' }, ko: '프롬프트 글, 도구, 모델, 크기, 날짜, 그룹으로 이미지·영상을 찾아.' },
   search_images_by_tags: { group: 'images', label: { ko: '태그로 이미지 검색', en: 'Search by tags' }, ko: '자동 태그(WD Tagger)로 이미지를 찾아. 캐릭터·등급 필터도 돼.' },
   get_image_metadata: { group: 'images', label: { ko: '이미지 정보', en: 'Image metadata' }, ko: '이미지 하나의 프롬프트·모델·크기 같은 상세 정보를 읽어.' },
@@ -148,6 +149,8 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   propose_display_block: { group: 'configure', label: { ko: '표시 블록 제안', en: 'Propose display block' }, ko: '새 표시 블록을 제안해. 저장은 답변 밑 카드에서 네가 눌러.' },
   propose_chat_profile: { group: 'configure', label: { ko: '프로필 제안', en: 'Propose profile' }, ko: '새 프로필을 제안해. 저장은 답변 밑 카드에서 네가 눌러.' },
   propose_profile_update: { group: 'configure', label: { ko: '프로필 수정 제안', en: 'Propose profile update' }, ko: '기존 프로필의 수정을 제안해. 저장은 답변 밑 카드에서 네가 눌러.' },
+  propose_profile_assets: { group: 'configure', label: { ko: '캐릭터 이미지 제안', en: 'Propose character images' }, ko: '캐릭터 이미지 생성이나 고른 후보 적용을 제안해. 저장은 답변 밑 카드에서 네가 눌러.' },
+  get_asset_batch: { group: 'configure', label: { ko: '캐릭터 이미지 진행 읽기', en: 'Read character image batch' }, ko: '캐릭터 이미지 생성 진행과 후보·검토 결과를 읽어.' },
 }
 
 export type ChatToolEntry = {

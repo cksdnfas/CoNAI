@@ -147,7 +147,7 @@ export function ChatSuggestTray({ suggestions, buttonRef, onPick }: {
 
   if (!open) return null
   return (
-    <div ref={trayRef} role="group" aria-label={t({ ko: '답장 추천', en: 'Reply suggestions' })} className="absolute bottom-full left-0 z-10 mb-1.5 w-[22rem] max-w-full animate-in fade-in-0 zoom-in-95 rounded-lg border border-line bg-background/90 shadow-lg backdrop-blur-md motion-reduce:animate-none">
+    <div ref={trayRef} role="group" aria-label={t({ ko: '답장 추천', en: 'Reply suggestions' })} className="absolute bottom-full left-0 z-10 mb-1.5 max-h-80 w-[22rem] max-w-full overflow-y-auto animate-in fade-in-0 zoom-in-95 rounded-lg border border-line bg-background/90 shadow-lg backdrop-blur-md motion-reduce:animate-none">
       <div className="flex flex-col divide-y divide-line" aria-busy={loading}>
         {loading && items.length === 0 ? (
           Array.from({ length: 3 }, (_, index) => (

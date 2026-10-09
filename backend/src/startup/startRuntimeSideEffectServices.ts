@@ -106,6 +106,8 @@ export async function startRuntimeSideEffectServices(
   GenerationQueueService.start()
   const { ChatGenerationReactionService } = await import('../services/codex-chat/chatGenerationReactions')
   ChatGenerationReactionService.start()
+  const { ChatTaskRunner } = await import('../services/codex-chat/chatTasks')
+  ChatTaskRunner.start()
   try {
     // Audio orders whose rows were stored but not queued before the last shutdown/crash.
     const { reconcileAllAudioOrders } = await import('../services/audio/audioOrders')
