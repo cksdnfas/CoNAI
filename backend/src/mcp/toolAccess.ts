@@ -34,6 +34,8 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   normalize_sprite_sheets: ['images.edit', 'images.upload'], create_sprite_animation: ['images.edit', 'images.upload'],
   resize_images: ['images.edit', 'images.upload'],
   list_files: 'files.view', get_file_info: 'files.view', read_file_text: 'files.view', search_files: 'files.view',
+  posts_categories: 'posts.view', posts_search: 'posts.view', posts_read: 'posts.view',
+  posts_create: ['posts.view', 'posts.write'], posts_update: ['posts.view', 'posts.write'], post_comment: ['posts.view', 'posts.comment'],
   create_file_folder: ['files.view', 'files.edit'], rename_file: ['files.view', 'files.edit'], move_files: ['files.view', 'files.edit'], delete_files: ['files.view', 'files.delete'],
   generate_nai: 'generation.execute', generate_comfyui: 'generation.execute', generate_comfyui_all_servers: 'generation.execute',
   submit_generation_job: 'generation.execute', cancel_generation_job: 'generation.execute', execute_graph_workflow: 'generation.execute',

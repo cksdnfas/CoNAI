@@ -11,10 +11,10 @@ type Copy = { ko: string; en: string }
  * description, so nothing is hidden by an outdated catalog.
  */
 export type ChatToolGroupId =
-  | 'images' | 'history' | 'prompts' | 'workflows' | 'files' | 'emoticons' | 'audio' | 'backups' | 'pages'
+  | 'images' | 'history' | 'prompts' | 'workflows' | 'files' | 'posts' | 'emoticons' | 'audio' | 'backups' | 'pages'
   | 'image-gen' | 'workflow-run' | 'audio-gen'
   | 'configure'
-  | 'image-groups' | 'prompt-groups' | 'file-ops' | 'emoticon-ops' | 'audio-ops'
+  | 'image-groups' | 'prompt-groups' | 'file-ops' | 'post-ops' | 'emoticon-ops' | 'audio-ops'
   | 'sprites' | 'sprite-ops'
   | 'other'
 
@@ -25,6 +25,7 @@ const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
   { id: 'prompts', scope: 'read', label: { ko: '프롬프트', en: 'Prompts' } },
   { id: 'workflows', scope: 'read', label: { ko: '워크플로·서버', en: 'Workflows and servers' } },
   { id: 'files', scope: 'read', label: { ko: '파일 보관함', en: 'File store' } },
+  { id: 'posts', scope: 'read', label: { ko: '게시판', en: 'Posts' } },
   { id: 'emoticons', scope: 'read', label: { ko: '이모티콘', en: 'Emoticons' } },
   { id: 'audio', scope: 'read', label: { ko: '오디오', en: 'Audio' } },
   { id: 'backups', scope: 'read', label: { ko: '백업', en: 'Backups' } },
@@ -36,6 +37,7 @@ const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
   { id: 'image-groups', scope: 'organize', label: { ko: '이미지 그룹', en: 'Image groups' } },
   { id: 'prompt-groups', scope: 'organize', label: { ko: '프롬프트 정리', en: 'Prompt organizing' } },
   { id: 'file-ops', scope: 'organize', label: { ko: '파일 변경', en: 'File changes' } },
+  { id: 'post-ops', scope: 'organize', label: { ko: '게시판 글쓰기', en: 'Posting' } },
   { id: 'emoticon-ops', scope: 'organize', label: { ko: '이모티콘 설정', en: 'Emoticon setup' } },
   { id: 'audio-ops', scope: 'organize', label: { ko: '오디오 정리', en: 'Audio organizing' } },
   { id: 'configure', scope: 'configure', label: { ko: '설정', en: 'Setup' } },
@@ -84,6 +86,12 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   list_files: { group: 'files', label: { ko: '파일 목록', en: 'List files' }, ko: '채팅 파일 보관함의 폴더와 파일을 둘러봐.' },
   get_file_info: { group: 'files', label: { ko: '파일 정보', en: 'File info' }, ko: '보관함 파일 하나의 이름·크기·종류를 읽어.' },
   search_files: { group: 'files', label: { ko: '파일 검색', en: 'Search files' }, ko: '보관함에서 이름이나 내용에 단어가 들어간 파일을 찾아.' },
+  posts_categories: { group: 'posts', label: { ko: '게시판 카테고리', en: 'Post categories' }, ko: '게시판 카테고리 트리와 글 수를 읽어.' },
+  posts_search: { group: 'posts', label: { ko: '게시물 찾기', en: 'Find posts' }, ko: '제목·태그·본문에 단어가 들어간 글을 카테고리·태그·작성 봇으로 좁혀 찾아.' },
+  posts_read: { group: 'posts', label: { ko: '게시물 읽기', en: 'Read post' }, ko: '글 하나를 댓글과 함께 읽어.' },
+  posts_create: { group: 'post-ops', label: { ko: '게시물 쓰기', en: 'Write post' }, ko: '자기 이름으로 새 글을 써. 앱 이미지·영상·오디오·그룹·파일을 본문에 넣을 수 있어.' },
+  posts_update: { group: 'post-ops', label: { ko: '게시물 고치기', en: 'Edit post' }, ko: '자기가 쓴 글을 고쳐. 다른 곳에서 먼저 고쳤으면 거절돼.' },
+  post_comment: { group: 'post-ops', label: { ko: '댓글 달기', en: 'Comment' }, ko: '글에 댓글이나 답글을 달아. @이름으로 다른 봇을 부를 수 있어 (게시판 설정의 한도 안에서).' },
   read_file_text: { group: 'files', label: { ko: '파일 내용 읽기', en: 'Read file text' }, ko: '보관함의 텍스트 파일을 잘라 가며 읽어.' },
   list_emoticon_groups: { group: 'emoticons', label: { ko: '이모티콘 그룹 목록', en: 'Emoticon groups' }, ko: '이모티콘 그룹과 이미지·키워드 수를 나열해.' },
   list_emoticons: { group: 'emoticons', label: { ko: '이모티콘 목록', en: 'List emoticons' }, ko: '그룹 안의 이모티콘 이미지와 키워드를 읽어.' },
