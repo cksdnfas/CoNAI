@@ -81,6 +81,7 @@ export const CHAT_PAGE_ACTION_PERMISSIONS: Record<string, string | null> = {
   'chat.open': 'chat.use', 'chat.prepare': 'chat.use',
   'audio.open': 'audio.view', 'audio.filter': 'audio.view', 'audio.select': 'audio.view',
   'sprite.select': null,
+  'posts.open': 'posts.view', 'posts.category': 'posts.view',
   'wallpaper.select': null, 'wallpaper.open_preset': null, 'wallpaper.add_widget': null, 'wallpaper.save': null,
   'metadata.save': 'images.edit',
 }
@@ -93,7 +94,7 @@ export const CHAT_PAGE_ACTION_PERMISSIONS: Record<string, string | null> = {
 export type ChatPageActionTier = 'view' | 'draft' | 'commit'
 const COMMIT_ACTIONS = new Set(['prompt.create', 'prompt.update', 'preset.create', 'preset.update', 'wildcard.create', 'wildcard.update', 'comfy.save', 'comfy.register', 'group.create', 'group.update', 'group.auto_collect', 'profile.save', 'profile.assets', 'resource.save', 'wallpaper.save', 'metadata.save'])
 const VIEW_ACTIONS = new Set(['page.navigate', 'page.refresh', 'prompt.select', 'preset.select', 'wildcard.select', 'comfy.select', 'comfy.refresh', 'comfy.open_create', 'comfy.open_edit', 'workflow.select', 'group.select', 'profile.open_create', 'profile.open_edit', 'profile.section', 'library.search', 'library.open', 'library.select', 'files.open', 'files.preview',
-  'resource.open', 'chat.open', 'chat.prepare', 'audio.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'wallpaper.open_preset'])
+  'resource.open', 'chat.open', 'chat.prepare', 'audio.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'wallpaper.open_preset', 'posts.open', 'posts.category'])
 /** View operations that stay inside the open editor, so unsaved changes there do not block them. */
 const IN_PLACE_VIEW_ACTIONS = new Set(['profile.section', 'library.select', 'resource.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select'])
 export function chatPageActionTier(id: string): ChatPageActionTier {
@@ -113,6 +114,7 @@ export function chatPageActionAllowed(path: string, id: string): boolean {
   if (id.startsWith('chat.')) return path === '/chat'
   if (id.startsWith('audio.')) return path === '/audio'
   if (id.startsWith('sprite.')) return path === '/sprite'
+  if (id.startsWith('posts.')) return path === '/posts'
   if (id.startsWith('wallpaper.')) return path === '/wallpaper'
   if (id.startsWith('metadata.')) return /^\/images\/[\w.-]+\/metadata$/.test(path)
   if (id.startsWith('prompt.') || id === 'preset.create' || id === 'preset.update' || id === 'preset.select' || id === 'preset.draft') return path === '/prompts'

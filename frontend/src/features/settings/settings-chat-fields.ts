@@ -65,6 +65,7 @@ const HEADER_NAVIGATION_LABELS: Record<HeaderNavigationItemKey, TranslationDicti
   prompts: { ko: '프롬프트', en: 'Prompts' },
   generation: { ko: '생성', en: 'Generation' },
   audio: { ko: '오디오', en: 'Audio' },
+  posts: { ko: '게시판', en: 'Posts' },
   sprite: { ko: '스프라이트', en: 'Sprites' },
   chat: { ko: '채팅', en: 'Chat' },
   upload: { ko: '업로드', en: 'Upload' },

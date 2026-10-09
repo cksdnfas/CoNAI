@@ -73,6 +73,7 @@ const routeModuleLoaders = {
   ),
   'files-page': () => import('@/features/files/files-page'),
   'audio-page': () => import('@/features/audio/audio-page'),
+  'posts-page': () => import('@/features/posts/posts-page'),
   'sprite-page': () => import('@/features/sprite/sprite-page'),
   'wallpaper-editor-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/wallpaper/wallpaper-editor-page'),
@@ -182,6 +183,10 @@ function getRouteModuleLoader(to: string): RouteModuleLoader | null {
 
   if (pathname === '/audio') {
     return routeModuleLoaders['audio-page']
+  }
+
+  if (pathname === '/posts') {
+    return routeModuleLoaders['posts-page']
   }
 
   if (pathname === '/sprite') {
@@ -300,6 +305,15 @@ const AudioPageLazy = lazy(async () => {
 
 export function AudioRoute() {
   return withSuspense(<AudioPageLazy />)
+}
+
+const PostsPageLazy = lazy(async () => {
+  const module = await loadLazyRoute('posts-page', routeModuleLoaders['posts-page'])
+  return { default: module.PostsPage }
+})
+
+export function PostsRoute() {
+  return withSuspense(<PostsPageLazy />)
 }
 
 const SpritePageLazy = lazy(async () => {

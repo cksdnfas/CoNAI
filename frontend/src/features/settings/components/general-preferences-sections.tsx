@@ -1,6 +1,6 @@
 import { ChatFilledMark } from '@/features/codex-chat/chat-page-context'
 import { ChatFilledLabel } from './settings-filled-label'
-import { Archive, AudioLines, CircleUserRound, Film, FolderTree, Images, LayoutGrid, ListTodo, Map as MapIcon, MessageSquare, MessageSquareText, Search, Settings2, Sparkles, Upload, type LucideIcon } from 'lucide-react'
+import { Archive, AudioLines, CircleUserRound, Film, FolderTree, Images, LayoutGrid, ListTodo, Map as MapIcon, MessageSquare, MessageSquareText, Newspaper, Search, Settings2, Sparkles, Upload, type LucideIcon } from 'lucide-react'
 import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
 import { RowGroup } from '@/components/ui/row-group'
@@ -35,6 +35,7 @@ const HEADER_NAVIGATION_OPTIONS: Array<{ key: HeaderNavigationItemKey; icon: Luc
   { key: 'prompts', icon: MessageSquareText, label: { ko: '프롬프트', en: 'Prompts' } },
   { key: 'generation', icon: Sparkles, label: { ko: '생성', en: 'Generation' } },
   { key: 'audio', icon: AudioLines, label: { ko: '오디오', en: 'Audio' } },
+  { key: 'posts', icon: Newspaper, label: { ko: '게시판', en: 'Posts' } },
   { key: 'sprite', icon: Film, label: { ko: '스프라이트', en: 'Sprites' } },
   { key: 'chat', icon: MessageSquare, label: { ko: '채팅', en: 'Chat' } },
   { key: 'upload', icon: Upload, label: { ko: '업로드', en: 'Upload' } },

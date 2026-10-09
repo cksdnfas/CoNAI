@@ -3,6 +3,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
 import type { QueueJobEventPayload, QueueJobProgressEventPayload, RuntimeEventEnvelope, RuntimeJobHintPayload } from '@/lib/runtime-events-types'
 import { AUDIO_QUERY_KEY } from '@/lib/api-audio'
+import { POSTS_QUERY_KEY } from '@/lib/api-posts'
 import { RUNTIME_JOB_QUERY_KEY } from '@/lib/use-runtime-job'
 
 /**
@@ -270,6 +271,11 @@ export function useRuntimeEventQueryBridge() {
         )
         return
       }
+      case 'posts.changed': {
+        // A post, comment or bot call changed somewhere: the open list, post and comments refetch.
+        scheduleInvalidate([POSTS_QUERY_KEY], 400)
+        return
+      }
       case 'job.status': {
         // 힌트에는 진행률 수치가 없다(정본은 `GET /api/jobs/:jobId`). 해당 잡 쿼리만 무효화한다.
         const payload = envelope.payload as RuntimeJobHintPayload
@@ -293,6 +299,7 @@ export function useRuntimeEventQueryBridge() {
       GRAPH_BROWSE_CONTENT_QUERY_KEY_PREFIX,
       GRAPH_RESERVATION_QUERY_KEY_PREFIX,
       RUNTIME_JOB_QUERY_KEY,
+      POSTS_QUERY_KEY,
     ].forEach((prefix) => {
       void queryClient.invalidateQueries({ queryKey: [prefix], refetchType: 'active' })
     })

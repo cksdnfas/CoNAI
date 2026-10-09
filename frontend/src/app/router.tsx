@@ -19,6 +19,7 @@ import {
   FilesRoute,
   SpriteRoute,
   AudioRoute,
+  PostsRoute,
   UploadRoute,
   WallpaperEditorRoute,
   WallpaperRuntimeRoute,
@@ -95,6 +96,10 @@ export const appRouter = createHashRouter([
       {
         path: 'audio',
         element: <RequireAuthPermission permissionKey="page.audio.view"><AudioRoute /></RequireAuthPermission>,
+      },
+      {
+        path: 'posts',
+        element: <RequireAuthPermission permissionKey="page.posts.view"><PostsRoute /></RequireAuthPermission>,
       },
       {
         path: 'sprite',
