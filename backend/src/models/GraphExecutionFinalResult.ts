@@ -2,6 +2,23 @@ import { getUserSettingsDb } from '../database/userSettingsDb'
 import { GraphExecutionFinalResultRecord } from '../types/moduleGraph'
 import { chunkSqliteValues, compareNewestFirst, sqliteInPlaceholders } from '../utils/sqliteBatch'
 
+let coverCache: { newestId: number; covers: Record<number, string> } | null = null
+
+/** The library image an artifact's metadata points at (the keys the executor and older rows use). */
+function readCompositeHash(metadata: string | null) {
+  if (!metadata) return null
+  try {
+    const parsed = JSON.parse(metadata) as Record<string, unknown> | null
+    for (const key of ['actualCompositeHash', 'actual_composite_hash', 'compositeHash', 'composite_hash']) {
+      const value = parsed?.[key]
+      if (typeof value === 'string' && value.trim()) return value.trim()
+    }
+  } catch {
+    // Not JSON: no library image.
+  }
+  return null
+}
+
 export class GraphExecutionFinalResultModel {
   /** List final results for an execution id set. */
   static findByExecutionIds(executionIds: number[]): GraphExecutionFinalResultRecord[] {
@@ -124,6 +141,39 @@ export class GraphExecutionFinalResultModel {
       ORDER BY fr.created_date DESC, fr.id DESC
       LIMIT ?
     `).all(...params) as GraphExecutionFinalResultRecord[]
+  }
+
+  /**
+   * Each workflow's newest image result that is in the library (a composite hash), keyed by workflow id: the face the
+   * workflow pickers and autorun lists show. Rebuilt only when a final result was added since the last call.
+   */
+  static findLatestImageCovers(): Record<number, string> {
+    const db = getUserSettingsDb()
+    const newestId = (db.prepare('SELECT MAX(id) AS id FROM graph_execution_final_results').get() as { id: number | null }).id ?? 0
+    if (coverCache && coverCache.newestId === newestId) return coverCache.covers
+
+    // A few candidates per workflow: the newest result may be a file that never reached the library.
+    const rows = db.prepare(`
+      SELECT workflow_id, metadata FROM (
+        SELECT ge.graph_workflow_id AS workflow_id, ga.metadata,
+          ROW_NUMBER() OVER (PARTITION BY ge.graph_workflow_id ORDER BY fr.id DESC) AS rank
+        FROM graph_execution_final_results fr
+        INNER JOIN graph_execution_artifacts ga ON ga.id = fr.source_artifact_id
+        INNER JOIN graph_executions ge ON ge.id = fr.execution_id
+        WHERE fr.artifact_type = 'image'
+      )
+      WHERE rank <= 5
+      ORDER BY workflow_id, rank
+    `).all() as Array<{ workflow_id: number; metadata: string | null }>
+
+    const covers: Record<number, string> = {}
+    for (const row of rows) {
+      if (covers[row.workflow_id]) continue
+      const hash = readCompositeHash(row.metadata)
+      if (hash) covers[row.workflow_id] = hash
+    }
+    coverCache = { newestId, covers }
+    return covers
   }
 
   static create(data: {

@@ -1,6 +1,7 @@
 import { requirePermission } from '../../middleware/authMiddleware';
 import { Router, type Request, type Response } from 'express'
 import { GraphExecutionModel } from '../../models/GraphExecution'
+import { GraphExecutionFinalResultModel } from '../../models/GraphExecutionFinalResult'
 import { GraphWorkflowModel } from '../../models/GraphWorkflow'
 import { GraphWorkflowScheduleModel } from '../../models/GraphWorkflowSchedule'
 import { ModuleDefinitionModel } from '../../models/ModuleDefinition'
@@ -259,6 +260,16 @@ export function createGraphWorkflowCrudRoutes() {
     } catch (error) {
       console.error('Error getting graph workflow reservations:', error)
       return res.status(500).json({ success: false, error: 'Failed to get graph workflow reservations' } as ModuleGraphResponse)
+    }
+  }))
+
+  // Each workflow's newest library image result (workflow id → composite hash), for the faces in pickers and autorun lists.
+  router.get('/covers', asyncHandler(async (_req: Request, res: Response) => {
+    try {
+      return res.json({ success: true, data: GraphExecutionFinalResultModel.findLatestImageCovers() } as ModuleGraphResponse)
+    } catch (error) {
+      console.error('Error getting graph workflow covers:', error)
+      return res.status(500).json({ success: false, error: 'Failed to get graph workflow covers' } as ModuleGraphResponse)
     }
   }))
 

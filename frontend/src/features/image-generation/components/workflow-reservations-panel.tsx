@@ -9,7 +9,6 @@ import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
-import { Section } from '@/components/ui/section'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
@@ -267,31 +266,9 @@ function WorkflowReservationsPanelContent() {
     }
   }
 
-  return (
-    <section className="space-y-6">
-      <Section
-        variant="settings"
-        heading={t({ ko: '예약작업', en: 'Reservation jobs' })}
-        actions={(
-          <div className="flex items-center gap-2">
-            {automationSwitchQuery.data?.paused ? <Badge variant="warning">{t({ ko: '전체 멈춤 중', en: 'All stopped' })}</Badge> : null}
-            <IconButton size="icon-sm" variant="ghost" onClick={() => void handleRefresh()} label={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })}>
-              <RefreshCw />
-            </IconButton>
-          </div>
-        )}
-      >
-        {reservationsQuery.isError ? (
-          <ErrorState
-            title={t({ ko: '예약작업을 불러오지 못했어', en: 'Could not load reservation jobs' })}
-            description={getErrorMessage(reservationsQuery.error, t({ ko: '예약작업 조회 실패', en: 'Failed to load reservation jobs' }))}
-          />
-        ) : null}
-
-        {!reservationsQuery.isError && reservationsQuery.isPending ? <LoadingState variant="inline" label={t({ ko: '예약작업 불러오는 중…', en: 'Loading reservation jobs…' })} /> : null}
-      </Section>
-
-      {/* Active/running/queued counts ride on the tab labels instead of a separate stat row. */}
+  // The view tabs lead each view's header row, with refresh beside them (no separate page heading).
+  const toolbar = (
+    <>
       <SegmentedTabBar
         size="xs"
         value={activeView}
@@ -314,10 +291,31 @@ function WorkflowReservationsPanelContent() {
           },
         ]}
       />
+      {automationSwitchQuery.data?.paused ? <Badge variant="warning">{t({ ko: '전체 멈춤 중', en: 'All stopped' })}</Badge> : null}
+      <IconButton size="icon-sm" variant="ghost" onClick={() => void handleRefresh()} label={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })}>
+        <RefreshCw />
+      </IconButton>
+    </>
+  )
+
+  return (
+    <section className="space-y-6">
+      {!reservationContent ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">{toolbar}</div>
+          {reservationsQuery.isError ? (
+            <ErrorState
+              title={t({ ko: '예약작업을 불러오지 못했어', en: 'Could not load reservation jobs' })}
+              description={getErrorMessage(reservationsQuery.error, t({ ko: '예약작업 조회 실패', en: 'Failed to load reservation jobs' }))}
+            />
+          ) : <LoadingState variant="inline" label={t({ ko: '예약작업 불러오는 중…', en: 'Loading reservation jobs…' })} />}
+        </div>
+      ) : null}
 
       {reservationContent ? (
         <ModuleWorkflowEmptyRunsTab
           view={activeView}
+          toolbar={toolbar}
           schedules={schedules}
           workflows={workflows}
           queueExecutions={reservationExecutions}

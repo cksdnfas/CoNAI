@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, type SyntheticEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { MessageSquare, Pause, Play, Plus, Rocket, SquarePen, Trash2 } from 'lucide-react'
 import { CHAT_ROUTINE_LIMITS } from '@conai/shared'
-import { Badge } from '@/components/ui/badge'
+import { FieldTabs, FramedField } from '@/components/common/field-tabs'
+import { ScheduleField, shortRunLabel, toDateTimeLocal, type ScheduleValue } from '@/components/common/schedule-field'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -11,33 +12,28 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
-import { Select } from '@/components/ui/select'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Switch } from '@/components/ui/switch'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n, type TranslationInput } from '@/i18n'
 import {
   AUTOMATION_SWITCH_QUERY_KEY, CHAT_ROUTINES_QUERY_KEY, createChatRoutine, deleteChatRoutine, getAutomationSwitch, listChatRoutines,
   runChatRoutine, setAutomationSwitch, setChatRoutineActive, updateChatRoutine,
-  type ChatRoutineInput, type ChatRoutineScheduleType, type ChatRoutineTarget, type ChatRoutineView,
+  type ChatRoutineInput, type ChatRoutineTarget, type ChatRoutineView,
 } from '@/lib/api-chat-routines'
 import { CHAT_PROFILES_QUERY_KEY, listChatProfiles, listCodexChatThreads } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { ChatProfileAvatar } from './chat-profile-avatar'
+import { ChatProfilePicker, ChatRoomFace, ChatRoomPicker } from './chat-room-picker'
 import { CODEX_CHAT_THREADS_QUERY_KEY, useCodexChat } from './codex-chat-context'
 
 /**
  * Chat routines: wake a chat on a schedule (Settings › 채팅 › 루틴, and 채팅 메뉴 › 루틴 for the open room).
  * Administrators make them; each runs as the account that saved it.
  */
-
-/** Text tabs in the header row of a field's own frame (the field switches in place). */
-const FIELD_TAB_LIST_CLASS = 'flex h-auto w-full justify-start gap-4 rounded-none border-b border-line bg-transparent px-3 pt-2 pb-0'
-const FIELD_TAB_TRIGGER_CLASS = 'relative flex-none rounded-none px-0 pb-1.5 pt-0 text-xs font-semibold text-muted-foreground hover:bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-primary after:opacity-0 data-[state=active]:after:opacity-100'
 
 type Translate = (input: TranslationInput, values?: Record<string, string | number>) => string
 
@@ -53,31 +49,28 @@ export function useRoutineThreadIds() {
   return useMemo(() => new Set((query.data ?? []).filter((routine) => routine.status !== 'completed' && routine.threadId !== null).map((routine) => routine.threadId as number)), [query.data])
 }
 
-function statusBadge(routine: ChatRoutineView, t: Translate) {
-  if (routine.status === 'active') return <Badge variant="success">{t({ ko: '활성', en: 'Active' })}</Badge>
-  if (routine.status === 'error_stopped') return <Badge variant="destructive">{t({ ko: '오류로 중지', en: 'Stopped on errors' })}</Badge>
-  if (routine.status === 'completed') return <Badge variant="secondary">{t({ ko: '완료', en: 'Done' })}</Badge>
-  return <Badge variant="secondary">{t({ ko: '일시정지', en: 'Paused' })}</Badge>
+function statusLabel(routine: ChatRoutineView, t: Translate) {
+  if (routine.status === 'active') return t({ ko: '활성', en: 'Active' })
+  if (routine.status === 'error_stopped') return t({ ko: '오류로 중지', en: 'Stopped on errors' })
+  if (routine.status === 'completed') return t({ ko: '완료', en: 'Done' })
+  return t({ ko: '일시정지', en: 'Paused' })
 }
 
-function scheduleLabel(routine: ChatRoutineView, t: Translate, formatDateTime: (value: string) => string) {
-  if (routine.scheduleType === 'once') return t({ ko: '1회 · {time}', en: 'Once · {time}' }, { time: routine.runAt ? formatDateTime(routine.runAt) : '-' })
+/** The status as a dot before the name (its label is the dot's name). */
+function StatusDot({ routine, t }: { routine: ChatRoutineView; t: Translate }) {
+  const tone = routine.status === 'active' ? 'bg-success' : routine.status === 'error_stopped' ? 'bg-destructive' : 'bg-surface-highest ring-1 ring-inset ring-muted-foreground/60'
+  return <span role="img" aria-label={statusLabel(routine, t)} className={cn('size-1.5 shrink-0 rounded-full', tone)} />
+}
+
+function scheduleLabel(routine: ChatRoutineView, t: Translate, formatDate: (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string) {
+  if (routine.scheduleType === 'once') return t({ ko: '1회 · {time}', en: 'Once · {time}' }, { time: routine.runAt ? shortRunLabel(routine.runAt, t, formatDate) : '-' })
   if (routine.scheduleType === 'interval') return t({ ko: '{count}분마다', en: 'Every {count} min' }, { count: routine.intervalMinutes ?? 0 })
   return t({ ko: '매일 {time}', en: 'Daily {time}' }, { time: routine.dailyTime ?? '' })
 }
 
-/** `roomProfileName`: an untitled room goes by its character, as the chat list does. */
-function targetLabel(routine: ChatRoutineView, t: Translate, roomProfileName?: string) {
-  if (routine.target === 'dedicated') return [routine.profileName ?? t({ ko: '없는 캐릭터', en: 'Missing character' }), t({ ko: '전용 방', en: 'Own room' })]
-  const room = routine.roomTitle?.trim() || roomProfileName || t({ ko: '채팅 {id}', en: 'Chat {id}' }, { id: routine.threadId ?? '-' })
-  return routine.roomKind === 'group'
-    ? [room, t({ ko: '그룹방', en: 'Group' }), ...(routine.chainLimit !== null ? [t({ ko: '이어 부르기 {count}', en: 'Chain {count}' }, { count: routine.chainLimit })] : [])]
-    : [room, t({ ko: '고른 방', en: 'Picked room' })]
-}
-
 function lastResultLabel(routine: ChatRoutineView, t: Translate) {
   if (routine.running) return <span className="text-primary">{t({ ko: '실행 중', en: 'Running' })}</span>
-  if (routine.lastResult === 'ok') return <span className="text-success">{t({ ko: '최근 성공', en: 'Last ok' })}</span>
+  if (routine.lastResult === 'ok') return <span>{t({ ko: '최근 성공', en: 'Last ok' })}</span>
   if (routine.lastResult === 'skipped') return <span>{t({ ko: '최근 건너뜀', en: 'Last skipped' })}</span>
   if (routine.lastResult === 'failed') return <span className="text-destructive">{t({ ko: '최근 실패', en: 'Last failed' })}</span>
   return null
@@ -85,13 +78,16 @@ function lastResultLabel(routine: ChatRoutineView, t: Translate) {
 
 /** The rows of a routine list, with their actions. `onEdit` opens the editor. */
 export function ChatRoutineRows({ routines, onEdit }: { routines: ChatRoutineView[]; onEdit: (routine: ChatRoutineView) => void }) {
-  const { t, formatDateTime } = useI18n()
+  const { t, formatDate } = useI18n()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const confirm = useConfirm()
   const chat = useCodexChat()
+  const myAccountId = useAuthStatusQuery().data?.accountId ?? null
   const profilesQuery = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000 })
+  const threadsQuery = useQuery({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY, queryFn: listCodexChatThreads, staleTime: 10_000 })
   const profilesById = useMemo(() => new Map((profilesQuery.data ?? []).map((profile) => [profile.id, profile])), [profilesQuery.data])
+  const threadsById = useMemo(() => new Map((threadsQuery.data ?? []).map((thread) => [thread.id, thread])), [threadsQuery.data])
   const refresh = () => queryClient.invalidateQueries({ queryKey: CHAT_ROUTINES_QUERY_KEY })
   const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '처리하지 못했어.', en: 'Could not do that.' })), tone: 'error' })
   const action = useMutation({
@@ -123,29 +119,55 @@ export function ChatRoutineRows({ routines, onEdit }: { routines: ChatRoutineVie
   return (
     <div>
       {routines.map((routine) => {
-        const avatarProfileId = routine.target === 'dedicated' ? routine.profileId : routine.roomProfileId
-        const profile = avatarProfileId === null ? undefined : profilesById.get(avatarProfileId)
+        const thread = routine.threadId !== null ? threadsById.get(routine.threadId) : undefined
+        const dedicatedProfile = routine.target === 'dedicated' && routine.profileId !== null ? profilesById.get(routine.profileId) : undefined
+        const roomProfile = routine.roomProfileId !== null ? profilesById.get(routine.roomProfileId) : undefined
         const reason = routine.status !== 'active' ? routine.stopReason : routine.lastResult === 'failed' ? routine.lastError : null
         const busy = action.isPending && action.variables?.routine.id === routine.id
+        const isGroup = routine.roomKind === 'group'
+        const roomName = routine.target === 'dedicated'
+          ? t({ ko: '전용 방', en: 'Own room' })
+          : routine.roomTitle?.trim() || roomProfile?.name || t({ ko: '채팅 {id}', en: 'Chat {id}' }, { id: routine.threadId ?? '-' })
+        const who = routine.target === 'dedicated'
+          ? routine.profileName ?? t({ ko: '없는 캐릭터', en: 'Missing character' })
+          : isGroup ? null : roomProfile?.name ?? null
+        // A dedicated room shows before its first run made it: the character's face stands in.
+        const faceProfile = dedicatedProfile ?? roomProfile
+        const face = thread
+          ? <ChatRoomFace thread={thread} profilesById={profilesById} ringClassName="ring-background" />
+          : faceProfile
+            ? <ChatProfileAvatar name={faceProfile.name} profile={faceProfile} engine={faceProfile.engine} size="md" />
+            : <span className="size-8 shrink-0 rounded-full bg-surface-highest" aria-hidden="true" />
+        const runs = routine.maxRunCount !== null
+          ? t({ ko: '{count} / {max}회', en: '{count} / {max} runs' }, { count: routine.runCount, max: routine.maxRunCount })
+          : t({ ko: '{count}회', en: '{count} runs' }, { count: routine.runCount })
         return (
           <div key={routine.id} className="border-b border-line py-2.5 last:border-b-0">
             <div className="flex items-start gap-3">
-              {profile
-                ? <ChatProfileAvatar name={profile.name} profile={profile} engine={profile.engine} size="md" />
-                : <span className="size-8 shrink-0 rounded-full bg-surface-highest" aria-hidden="true" />}
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="truncate text-sm font-medium text-foreground">{routine.name}</div>
-                  {statusBadge(routine, t)}
-                  <Badge variant="outline">{scheduleLabel(routine, t, formatDateTime)}</Badge>
+              <span className="flex w-8 shrink-0 justify-center pt-0.5">{face}</span>
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <StatusDot routine={routine} t={t} />
+                  <span className="truncate text-sm font-semibold text-foreground">{routine.name}</span>
+                  <span className="text-xs font-semibold tabular-nums text-secondary-text">{scheduleLabel(routine, t, formatDate)}</span>
                 </div>
-                <div className="text-xs text-muted-foreground">{[...targetLabel(routine, t, routine.roomProfileId !== null ? profilesById.get(routine.roomProfileId)?.name : undefined), routine.accountName].filter(Boolean).join(' · ')}</div>
-                <div className="flex flex-wrap items-center gap-x-2 text-2xs text-muted-foreground tabular-nums">
-                  <span>{t({ ko: '{count}회 실행', en: '{count} runs' }, { count: routine.runCount })}{routine.maxRunCount !== null ? ` / ${routine.maxRunCount}` : ''}</span>
-                  {routine.status === 'active' && routine.nextRunAt ? <span>{t({ ko: '· 다음 {time}', en: '· Next {time}' }, { time: formatDateTime(routine.nextRunAt) })}</span> : null}
-                  {lastResultLabel(routine, t) ? <span>·</span> : null}
-                  {lastResultLabel(routine, t)}
+                <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+                  <span className="truncate">{roomName}</span>
+                  {isGroup ? <span className="shrink-0 rounded-[3px] bg-surface-high px-1 text-2xs font-semibold">{t({ ko: '그룹 {count}', en: 'Group {count}' }, { count: thread?.member_profile_ids?.length ?? 0 })}</span> : null}
+                  {who ? <><span aria-hidden="true">·</span><span className="truncate">{who}</span></> : null}
+                  {isGroup && routine.chainLimit !== null ? <><span aria-hidden="true">·</span><span>{t({ ko: '이어 부르기 {count}', en: 'Chain {count}' }, { count: routine.chainLimit })}</span></> : null}
+                  {routine.accountName && routine.accountId !== myAccountId ? <><span aria-hidden="true">·</span><span>{routine.accountName}</span></> : null}
                 </div>
+                <div className="flex flex-wrap items-center gap-x-1.5 text-2xs tabular-nums text-muted-foreground">
+                  <span>{runs}</span>
+                  {lastResultLabel(routine, t) ? <><span aria-hidden="true">·</span>{lastResultLabel(routine, t)}</> : null}
+                </div>
+              </div>
+              <div className="hidden shrink-0 flex-col items-end pt-0.5 text-2xs tabular-nums text-muted-foreground sm:flex">
+                {routine.status === 'active' && routine.nextRunAt ? <>
+                  <span>{t({ ko: '다음', en: 'Next' })}</span>
+                  <span className="text-xs font-semibold text-foreground">{shortRunLabel(routine.nextRunAt, t, formatDate)}</span>
+                </> : <span className={cn(routine.status === 'error_stopped' && 'text-destructive')}>{statusLabel(routine, t)}</span>}
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 <IconButton size="icon-sm" variant="ghost" disabled={routine.threadId === null || !chat} onClick={() => routine.threadId !== null && openRoom(routine.threadId)} label={t({ ko: '방 열기', en: 'Open room' })}><MessageSquare /></IconButton>
@@ -171,34 +193,27 @@ type Draft = {
   profileId: string
   threadId: string
   message: string
-  scheduleType: ChatRoutineScheduleType
-  runAt: string
-  intervalMinutes: number
-  dailyTime: string
-  maxRunCount: number
+  schedule: ScheduleValue
   chainLimit: number
   active: boolean
-}
-
-function localDateTimeInput(value: string | null) {
-  const date = value ? new Date(value) : new Date(Date.now() + 3600_000)
-  if (Number.isNaN(date.getTime())) return ''
-  const pad = (part: number) => String(part).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 function draftOf(routine: ChatRoutineView | null, presetThreadId: number | null): Draft {
   if (!routine) {
     return {
-      name: '', target: presetThreadId !== null ? 'room' : 'dedicated', profileId: '', threadId: presetThreadId !== null ? String(presetThreadId) : '',
-      message: '', scheduleType: 'daily', runAt: localDateTimeInput(null), intervalMinutes: 60, dailyTime: '09:00', maxRunCount: -1, chainLimit: 3, active: true,
+      name: '', target: presetThreadId !== null ? 'room' : 'dedicated', profileId: '', threadId: presetThreadId !== null ? String(presetThreadId) : '', message: '',
+      schedule: { type: 'daily', runAt: toDateTimeLocal(null), intervalMinutes: 60, dailyTime: '09:00', maxRuns: null },
+      chainLimit: 3, active: true,
     }
   }
   return {
     name: routine.name, target: routine.target, profileId: routine.profileId !== null ? String(routine.profileId) : '',
     threadId: routine.target === 'room' && routine.threadId !== null ? String(routine.threadId) : '', message: routine.message,
-    scheduleType: routine.scheduleType, runAt: localDateTimeInput(routine.runAt), intervalMinutes: routine.intervalMinutes ?? 60,
-    dailyTime: routine.dailyTime ?? '09:00', maxRunCount: routine.maxRunCount ?? -1, chainLimit: routine.chainLimit ?? 3, active: routine.status === 'active',
+    schedule: {
+      type: routine.scheduleType, runAt: toDateTimeLocal(routine.runAt), intervalMinutes: routine.intervalMinutes ?? 60,
+      dailyTime: routine.dailyTime ?? '09:00', maxRuns: routine.maxRunCount,
+    },
+    chainLimit: routine.chainLimit ?? 3, active: routine.status === 'active',
   }
 }
 
@@ -218,25 +233,26 @@ export function ChatRoutineEditor({ open, routine, presetThreadId = null, onClos
   const profilesQuery = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000, enabled: open })
   const threadsQuery = useQuery({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY, queryFn: listCodexChatThreads, staleTime: 10_000, enabled: open })
   const profiles = useMemo(() => profilesQuery.data ?? [], [profilesQuery.data])
-  const profileNames = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile.name])), [profiles])
-  const threads = threadsQuery.data ?? []
+  const profilesById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles])
+  const threads = useMemo(() => threadsQuery.data ?? [], [threadsQuery.data])
   const pickedThread = threads.find((thread) => String(thread.id) === draft.threadId)
   const isGroup = draft.target === 'room' && pickedThread?.kind === 'group'
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((current) => ({ ...current, [key]: value }))
 
   const save = useMutation({
     mutationFn: () => {
+      const { schedule } = draft
       const input: ChatRoutineInput = {
         name: draft.name,
         target: draft.target,
         profileId: draft.target === 'dedicated' && draft.profileId ? Number(draft.profileId) : null,
         threadId: draft.target === 'room' && draft.threadId ? Number(draft.threadId) : null,
         message: draft.message,
-        scheduleType: draft.scheduleType,
-        runAt: draft.scheduleType === 'once' && draft.runAt ? new Date(draft.runAt).toISOString() : null,
-        intervalMinutes: draft.scheduleType === 'interval' ? draft.intervalMinutes : null,
-        dailyTime: draft.scheduleType === 'daily' ? draft.dailyTime : null,
-        maxRunCount: draft.maxRunCount > 0 ? draft.maxRunCount : null,
+        scheduleType: schedule.type,
+        runAt: schedule.type === 'once' && schedule.runAt ? new Date(schedule.runAt).toISOString() : null,
+        intervalMinutes: schedule.type === 'interval' ? schedule.intervalMinutes : null,
+        dailyTime: schedule.type === 'daily' ? schedule.dailyTime : null,
+        maxRunCount: schedule.type !== 'once' ? schedule.maxRuns : null,
         chainLimit: isGroup ? draft.chainLimit : null,
         active: draft.active,
       }
@@ -249,12 +265,12 @@ export function ChatRoutineEditor({ open, routine, presetThreadId = null, onClos
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '루틴을 저장하지 못했어.', en: 'Could not save the routine.' })), tone: 'error' }),
   })
   const dirty = JSON.stringify(draft) !== baseline
-  const canSave = !save.isPending && Boolean(draft.name.trim() && draft.message.trim() && (draft.target === 'room' ? draft.threadId : draft.profileId)) && (dirty || !routine)
+  const scheduleReady = draft.schedule.type === 'once' ? Boolean(draft.schedule.runAt) : draft.schedule.type === 'daily' ? /^\d{2}:\d{2}$/.test(draft.schedule.dailyTime) : draft.schedule.intervalMinutes > 0
+  const canSave = !save.isPending && Boolean(draft.name.trim() && draft.message.trim() && (draft.target === 'room' ? draft.threadId : draft.profileId)) && scheduleReady && (dirty || !routine)
   const submit = (event?: SyntheticEvent) => {
     event?.preventDefault()
     if (canSave) save.mutate()
   }
-  const roomLabel = (thread: (typeof threads)[number]) => thread.title.trim() || (thread.profile_id !== null ? profileNames.get(thread.profile_id) : undefined) || t({ ko: '채팅 {id}', en: 'Chat {id}' }, { id: thread.id })
 
   return (
     <Modal
@@ -269,59 +285,36 @@ export function ChatRoutineEditor({ open, routine, presetThreadId = null, onClos
         <Field label={t({ ko: '이름', en: 'Name' })}>
           <Input variant="settings" value={draft.name} maxLength={CHAT_ROUTINE_LIMITS.name} onChange={(event) => set('name', event.target.value)} disabled={save.isPending} />
         </Field>
-        <Field label={t({ ko: '보낼 곳', en: 'Send to' })}>
-          <div className="theme-input-surface rounded-sm border">
-            <Tabs value={draft.target} onValueChange={(value) => set('target', value === 'room' ? 'room' : 'dedicated')}>
-              <TabsList aria-label={t({ ko: '보낼 곳', en: 'Send to' })} className={FIELD_TAB_LIST_CLASS}>
-                <TabsTrigger value="dedicated" disabled={save.isPending} className={FIELD_TAB_TRIGGER_CLASS}>{t({ ko: '전용 방', en: 'Own room' })}</TabsTrigger>
-                <TabsTrigger value="room" disabled={save.isPending} className={FIELD_TAB_TRIGGER_CLASS}>{t({ ko: '고른 방', en: 'Picked room' })}</TabsTrigger>
-              </TabsList>
-            </Tabs>
-            {draft.target === 'dedicated' ? (
-              <Select aria-label={t({ ko: '캐릭터', en: 'Character' })} className="border-0 bg-transparent focus:ring-0" value={draft.profileId} onChange={(event) => set('profileId', event.target.value)} disabled={save.isPending}>
-                <option value="">{t({ ko: '캐릭터 고르기', en: 'Pick a character' })}</option>
-                {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
-              </Select>
-            ) : (
-              <Select aria-label={t({ ko: '채팅방', en: 'Room' })} className="border-0 bg-transparent focus:ring-0" value={draft.threadId} onChange={(event) => set('threadId', event.target.value)} disabled={save.isPending}>
-                <option value="">{t({ ko: '채팅방 고르기', en: 'Pick a room' })}</option>
-                {threads.map((thread) => <option key={thread.id} value={thread.id}>{roomLabel(thread)}</option>)}
-              </Select>
-            )}
-          </div>
-        </Field>
+        <FramedField label={t({ ko: '보낼 곳', en: 'Send to' })}>
+          <FieldTabs
+            value={draft.target}
+            onChange={(value) => set('target', value)}
+            disabled={save.isPending}
+            ariaLabel={t({ ko: '보낼 곳', en: 'Send to' })}
+            items={[
+              { value: 'dedicated', label: t({ ko: '전용 방', en: 'Own room' }) },
+              { value: 'room', label: t({ ko: '고른 방', en: 'Picked room' }) },
+            ]}
+          />
+          {draft.target === 'dedicated'
+            ? <ChatProfilePicker profiles={profiles} value={draft.profileId} onChange={(value) => set('profileId', value)} disabled={save.isPending} />
+            : <ChatRoomPicker threads={threads} profilesById={profilesById} value={draft.threadId} onChange={(value) => set('threadId', value)} disabled={save.isPending} />}
+        </FramedField>
         <Field label={t({ ko: '지시', en: 'Instruction' })}>
           <Textarea variant="settings" rows={5} value={draft.message} maxLength={CHAT_ROUTINE_LIMITS.message} onChange={(event) => set('message', event.target.value)} disabled={save.isPending} />
         </Field>
-        <div className="grid gap-3 md:grid-cols-2">
-          <Field label={t({ ko: '일정 방식', en: 'Schedule' })}>
-            <Select variant="settings" value={draft.scheduleType} onChange={(event) => set('scheduleType', event.target.value as ChatRoutineScheduleType)} disabled={save.isPending}>
-              <option value="once">{t({ ko: '1회 실행', en: 'Once' })}</option>
-              <option value="interval">{t({ ko: 'N분마다', en: 'Every N minutes' })}</option>
-              <option value="daily">{t({ ko: '매일', en: 'Daily' })}</option>
-            </Select>
+        <ScheduleField
+          value={draft.schedule}
+          minIntervalMinutes={CHAT_ROUTINE_LIMITS.minIntervalMinutes}
+          disabled={save.isPending}
+          onChange={(patch) => setDraft((current) => ({ ...current, schedule: { ...current.schedule, ...patch } }))}
+        />
+        {isGroup ? (
+          <Field label={t({ ko: '이어 부르기', en: 'Chain' })} className="md:w-1/2">
+            <NumberStepperInput variant="settings" min={0} max={CHAT_ROUTINE_LIMITS.chain} value={draft.chainLimit} onValueCommit={(value) => set('chainLimit', Math.max(0, Number(value) || 0))} disabled={save.isPending} />
           </Field>
-          {draft.scheduleType === 'once' ? (
-            <Field label={t({ ko: '실행 시각', en: 'Run at' })}>
-              <Input variant="settings" type="datetime-local" value={draft.runAt} onChange={(event) => set('runAt', event.target.value)} disabled={save.isPending} />
-            </Field>
-          ) : draft.scheduleType === 'interval' ? (
-            <Field label={t({ ko: '반복 간격(분)', en: 'Interval (min)' })}>
-              <NumberStepperInput variant="settings" min={CHAT_ROUTINE_LIMITS.minIntervalMinutes} value={draft.intervalMinutes} onValueCommit={(value) => set('intervalMinutes', Number(value) || CHAT_ROUTINE_LIMITS.minIntervalMinutes)} disabled={save.isPending} />
-            </Field>
-          ) : (
-            <Field label={t({ ko: '실행 시각', en: 'Run at' })}>
-              <Input variant="settings" type="time" value={draft.dailyTime} onChange={(event) => set('dailyTime', event.target.value)} disabled={save.isPending} />
-            </Field>
-          )}
-          <Field label={t({ ko: '최대 실행 횟수', en: 'Max runs' })}>
-            <NumberStepperInput variant="settings" min={-1} value={draft.maxRunCount} onValueCommit={(value) => set('maxRunCount', Number(value) > 0 ? Number(value) : -1)} disabled={save.isPending} />
-          </Field>
-          <Field label={t({ ko: '이어 부르기', en: 'Chain' })}>
-            <NumberStepperInput variant="settings" min={0} max={CHAT_ROUTINE_LIMITS.chain} value={draft.chainLimit} onValueCommit={(value) => set('chainLimit', Math.max(0, Number(value) || 0))} disabled={save.isPending || !isGroup} />
-          </Field>
-        </div>
-        <div className="border-y border-line">
+        ) : null}
+        <div className="border-t border-line">
           <SettingsSwitchRow label={t({ ko: '활성', en: 'Active' })} checked={draft.active} disabled={save.isPending} onCheckedChange={(checked) => set('active', checked)} />
         </div>
         <EditorFooter saveSubmit canSave={canSave} saving={save.isPending} saveLabel={routine ? t({ ko: '저장', en: 'Save' }) : t({ ko: '추가', en: 'Add' })} />

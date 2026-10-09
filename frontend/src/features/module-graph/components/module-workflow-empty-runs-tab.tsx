@@ -1,18 +1,20 @@
+import type { ReactNode } from 'react'
 import { Square, SquareCheckBig, Trash2, XCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
-import { Section } from '@/components/ui/section'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { GraphExecutionRecord, GraphWorkflowNameRecord, GraphWorkflowScheduleRecord } from '@/lib/api-module-graph'
 import { getGraphExecutionStatusLabel, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
 import { ModuleWorkflowSchedulesPanel } from './module-workflow-schedules-panel'
+import { useWorkflowCovers, WorkflowCover } from './workflow-picker'
 import { EmptyState } from '@/components/ui/empty-state'
 
-/** Render workflow reservations plus empty-run management content. */
+/** Render workflow reservations plus empty-run management content. `toolbar` leads each view's header row (the view tabs). */
 export function ModuleWorkflowEmptyRunsTab({
   view,
+  toolbar,
   schedules,
   workflows,
   queueExecutions,
@@ -33,6 +35,7 @@ export function ModuleWorkflowEmptyRunsTab({
   onRunScheduleNow,
 }: {
   view: 'schedules' | 'executions'
+  toolbar: ReactNode
   schedules: GraphWorkflowScheduleRecord[]
   workflows: GraphWorkflowNameRecord[]
   queueExecutions: GraphExecutionRecord[]
@@ -74,10 +77,13 @@ export function ModuleWorkflowEmptyRunsTab({
   onRunScheduleNow: (scheduleId: number) => Promise<void> | void
 }) {
   const { t, formatNumber, formatDateTime } = useI18n()
+  const covers = useWorkflowCovers()
 
   return (
     <div className="space-y-4">
       {view === 'schedules' ? <ModuleWorkflowSchedulesPanel
+        toolbar={toolbar}
+        covers={covers}
         schedules={schedules}
         workflows={workflows}
         workflowNameById={workflowNameById}
@@ -90,11 +96,10 @@ export function ModuleWorkflowEmptyRunsTab({
         onRunNow={onRunScheduleNow}
       /> : null}
 
-      {view === 'executions' ? <Section
-        variant="settings"
-        heading={t({ ko: '예약 실행 현황', en: 'Reservation run status' })}
-        actions={(
-          <div className="flex flex-wrap items-center justify-end gap-2">
+      {view === 'executions' ? <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {toolbar}
+          <span className="flex-1" />
             <IconButton
               size="icon-sm"
               variant="ghost"
@@ -104,9 +109,7 @@ export function ModuleWorkflowEmptyRunsTab({
             >
               {allQueueSelected ? <SquareCheckBig className="h-4 w-4" /> : <Square className="h-4 w-4" />}
             </IconButton>
-          </div>
-        )}
-      >
+        </div>
         {queueExecutions.length === 0 ? (
           <EmptyState title={t({ ko: '이 범위에는 빈 실행이나 출력 없는 실행이 없어.', en: 'No empty or outputless runs in this scope.' })} />
         ) : (
@@ -118,13 +121,16 @@ export function ModuleWorkflowEmptyRunsTab({
               return (
                 <div key={execution.id} data-selected={isSelected} className={cn('border-b border-line py-2.5 last:border-b-0 px-2', isSelected && 'bg-primary/8')}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
+                    <div className="flex min-w-0 items-center gap-3">
+                    <WorkflowCover hash={covers[execution.graph_workflow_id]} />
+                    <div className="min-w-0">
                       <Text as="div" variant="label">
                         {workflowNameById.get(execution.graph_workflow_id) ?? t({ ko: '워크플로우 #{id}', en: 'Workflow #{id}' }, { id: execution.graph_workflow_id })}
                       </Text>
                       <div className="mt-1 text-xs text-muted-foreground">
                         {t({ ko: '실행 #{id} · 생성 {time}', en: 'Run #{id} · Created {time}' }, { id: execution.id, time: formatDateTime(execution.created_date) })}
                       </div>
+                    </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant={execution.status === 'failed' ? 'destructive' : 'outline'}>{getGraphExecutionStatusLabel(execution.status, t)}</Badge>
@@ -159,7 +165,7 @@ export function ModuleWorkflowEmptyRunsTab({
             })}
           </div>
         )}
-      </Section> : null}
+      </div> : null}
     </div>
   )
 }

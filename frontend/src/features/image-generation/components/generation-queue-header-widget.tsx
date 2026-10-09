@@ -25,7 +25,7 @@ import {
 } from './generation-queue-ui'
 import { GenerationQueueJobsTab, type QueueFilterValue } from './generation-queue-jobs-tab'
 import { GenerationQueueReservationsTab } from './generation-queue-reservations-tab'
-import { sortWorkflowReservationSchedules } from './workflow-reservations-ui'
+import { getActiveWorkflowReservationScheduleCount, sortWorkflowReservationSchedules } from './workflow-reservations-ui'
 
 const POPUP_LIST_CLASS_NAME = 'max-h-[min(24rem,calc(100vh-var(--theme-shell-header-height)-5rem))] space-y-3 overflow-y-auto px-3 py-3 sm:max-h-[min(28rem,calc(100vh-var(--theme-shell-header-height)-2rem))] sm:px-4'
 const ACTIVE_QUEUE_STATUSES: Array<GenerationQueueJobRecord['status']> = ['queued', 'dispatching', 'running']
@@ -365,7 +365,14 @@ export function GenerationQueueHeaderWidget() {
             items={[
               { value: 'jobs', label: t('image-generation.components.generation.queue.header.widget.job.queue') },
               ...(canViewWorkflows
-                ? [{ value: 'reservations', label: t('image-generation.components.generation.queue.header.widget.reservations') }]
+                ? [{
+                    value: 'reservations',
+                    // The active count rides on the label (the tab has no summary row).
+                    label: [
+                      t('image-generation.components.generation.queue.header.widget.reservations'),
+                      reservationSchedules.length > 0 ? t({ ko: '활성 {count}', en: 'Active {count}' }, { count: formatNumber(getActiveWorkflowReservationScheduleCount(reservationSchedules)) }) : null,
+                    ].filter(Boolean).join(' · '),
+                  }]
                 : []),
             ]}
             onChange={(nextTab) => setActiveTab(nextTab as HeaderPopupTab)}

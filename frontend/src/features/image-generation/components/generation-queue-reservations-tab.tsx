@@ -1,18 +1,8 @@
-import { useMemo } from 'react'
-import { Badge } from '@/components/ui/badge'
-import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowScheduleRecord } from '@/lib/api-module-graph'
-import { getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } from '@/features/module-graph/module-graph-shared'
+import { useWorkflowCovers } from '@/features/module-graph/components/workflow-picker'
+import { WorkflowScheduleRow } from '@/features/module-graph/components/workflow-schedule-row'
 import { getErrorMessage } from '../image-generation-shared'
-import {
-  formatReservationTimestamp,
-  getActiveWorkflowReservationScheduleCount,
-  getReservationRunAtLabel,
-  getReservationRunSummaryLabel,
-  getReservationStatusVariant,
-  getReservationTypeLabel,
-} from './workflow-reservations-ui'
 import { EmptyState } from '@/components/ui/empty-state'
 import { LoadingState } from '@/components/ui/loading-state'
 import { ErrorState } from '@/components/ui/error-state'
@@ -28,7 +18,7 @@ type GenerationQueueReservationsTabProps = {
   listClassName: string
 }
 
-/** Render the header queue popup's reservations tab: a summary strip and the schedule list. The widget owns the queries. */
+/** Render the header queue popup's reservations tab: short read-only schedule rows. The widget owns the queries. */
 export function GenerationQueueReservationsTab({
   schedules,
   workflowNameById,
@@ -37,68 +27,34 @@ export function GenerationQueueReservationsTab({
   error,
   listClassName,
 }: GenerationQueueReservationsTabProps) {
-  const { t, locale, formatNumber } = useI18n()
-  const activeReservationCount = useMemo(() => getActiveWorkflowReservationScheduleCount(schedules), [schedules])
+  const { t } = useI18n()
+  const covers = useWorkflowCovers()
 
   return (
-    <>
-      <div className="space-y-3 px-3 py-3 sm:px-4">
-        <div className="flex items-center justify-between gap-3">
-          <Text as="div" variant="overline" className="font-semibold">{t('image-generation.components.generation.queue.header.widget.summary')}</Text>
-          <Badge variant={schedules.length > 0 ? 'secondary' : 'outline'} className="w-fit max-w-full">{t({ ko: '예약작업 · {count}', en: 'Reservations · {count}' }, { count: formatNumber(schedules.length) })}</Badge>
+    <div className={listClassName}>
+      {isError ? (
+        <ErrorState size="compact" title={getErrorMessage(error, t('image-generation.components.generation.queue.header.widget.could.not.load.reservations'))} />
+      ) : null}
+
+      {!isError && isPending ? <LoadingState variant="inline" label={t('image-generation.components.generation.queue.header.widget.loading.reservations')} /> : null}
+
+      {!isPending && !isError && schedules.length === 0 ? (
+        <EmptyState size="compact" title={t({ ko: '등록된 예약작업이 아직 없어.', en: 'No reservations have been registered yet.' })} />
+      ) : null}
+
+      {schedules.length > 0 ? (
+        <div>
+          {schedules.map((schedule) => (
+            <WorkflowScheduleRow
+              key={schedule.id}
+              compact
+              schedule={schedule}
+              cover={covers[schedule.graph_workflow_id]}
+              workflowName={workflowNameById.get(schedule.graph_workflow_id) ?? t('image-generation.components.generation.queue.header.widget.workflow.value', { id: schedule.graph_workflow_id })}
+            />
+          ))}
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Badge variant={activeReservationCount > 0 ? 'secondary' : 'outline'}>{t({ ko: '활성 {count}', en: 'Active {count}' }, { count: formatNumber(activeReservationCount) })}</Badge>
-        </div>
-      </div>
-
-      <div className={listClassName}>
-        {isError ? (
-          <ErrorState size="compact" title={getErrorMessage(error, t('image-generation.components.generation.queue.header.widget.could.not.load.reservations'))} />
-        ) : null}
-
-        {!isError && isPending ? <LoadingState variant="inline" label={t('image-generation.components.generation.queue.header.widget.loading.reservations')} /> : null}
-
-        {!isPending && !isError && schedules.length === 0 ? (
-          <EmptyState size="compact" title={t({ ko: '등록된 예약작업이 아직 없어.', en: 'No reservations have been registered yet.' })} />
-        ) : null}
-
-        {schedules.length > 0 ? (
-          <div>
-            {schedules.map((schedule) => {
-              const nextRunAt = formatReservationTimestamp(schedule.next_run_at, locale)
-              const lastEnqueuedAt = formatReservationTimestamp(schedule.last_enqueued_at, locale)
-              const runSummaryLabel = getReservationRunSummaryLabel(schedule, t, formatNumber)
-              const runAtLabel = getReservationRunAtLabel(schedule, t, (value) => formatReservationTimestamp(value, locale))
-              const stopReasonLabel = getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message, t)
-              return (
-                <div key={schedule.id} className="border-b border-line py-3 last:border-b-0">
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Text as="div" variant="label" className="truncate">{schedule.name}</Text>
-                      <Badge variant={getReservationStatusVariant(schedule.status)}>{getGraphWorkflowScheduleStatusLabel(schedule.status, t)}</Badge>
-                      <Badge variant="outline">{getReservationTypeLabel(schedule, t, formatNumber)}</Badge>
-                    </div>
-                    <div className="text-2xs text-muted-foreground">
-                      {workflowNameById.get(schedule.graph_workflow_id) ?? t('image-generation.components.generation.queue.header.widget.workflow.value', { id: schedule.graph_workflow_id })}{runAtLabel ? ` · ${runAtLabel}` : ''}
-                    </div>
-                    <div className="flex flex-wrap gap-3 text-2xs text-muted-foreground">
-                      <span>{runSummaryLabel}</span>
-                      {nextRunAt ? <span>{t('image-generation.components.generation.queue.header.widget.next.enqueue.attempt.value', { nextRunAt })}</span> : null}
-                      {lastEnqueuedAt ? <span>{t('image-generation.components.generation.queue.header.widget.last.queued.value', { lastEnqueuedAt })}</span> : null}
-                    </div>
-                    {stopReasonLabel ? (
-                      <div className="text-2xs text-warning">
-                        {stopReasonLabel}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        ) : null}
-      </div>
-    </>
+      ) : null}
+    </div>
   )
 }

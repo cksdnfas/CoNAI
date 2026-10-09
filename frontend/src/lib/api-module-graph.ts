@@ -449,6 +449,13 @@ export async function getGraphWorkflowReservations() {
   return requestApiData<GraphWorkflowReservationContentRecord>('/api/graph-workflows/reservations')
 }
 
+export const GRAPH_WORKFLOW_COVERS_QUERY_KEY = ['graph-workflow-covers'] as const
+
+/** Each workflow's newest library image result: workflow id → composite hash (workflows without one are left out). */
+export async function getGraphWorkflowCovers() {
+  return requestApiData<Record<string, string>>('/api/graph-workflows/covers')
+}
+
 /** Copy selected generated workflow artifacts into one watched folder target. */
 export async function copyGraphWorkflowArtifactsToFolder(payload: {
   folder_id: number
