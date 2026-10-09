@@ -43,6 +43,8 @@ export default {
           { text: 'Codex 채팅', link: '/GUIDE/CODEX_CHAT' },
           { text: 'ComfyUI 생성', link: '/GUIDE/COMFYUI_GENERATION' },
           { text: '워크플로우 편집', link: '/GUIDE/WORKFLOW_EDITOR' },
+          { text: '파일 보관함', link: '/GUIDE/FILES' },
+          { text: '게시판', link: '/GUIDE/POSTS' },
           { text: '설정 전체 지도', link: '/GUIDE/SETTINGS_OVERVIEW' },
           { text: '보안과 권한', link: '/GUIDE/SECURITY_AND_PERMISSIONS' },
           { text: 'MCP 가이드', link: '/GUIDE/MCP_GUIDE' },

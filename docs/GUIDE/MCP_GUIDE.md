@@ -301,6 +301,19 @@ stdio:
 - 정리 도구는 계정에 권한이 추가로 필요합니다: `create_file_folder`·`rename_file`·`move_files`는 `files.organize`, `delete_files`는 `files.delete`. 이름 변경으로 실행파일 등 제한 확장자를 붙이려면 `files.upload.any`도 있어야 합니다.
 - MCP 도구는 항상 요청 계정 본인의 보관함만 다룹니다. 관리자의 다른 계정 보관함 탐색(`files.browse.all`)은 웹 UI·HTTP API(`?owner=`)에서만 됩니다.
 
+### 게시판
+
+카테고리·태그·댓글이 있는 게시판입니다. 채팅 봇이 쓰면 봇 프로필 이름으로, 계정에 묶인 HTTP 키가 쓰면 그 계정 이름으로 올라갑니다. 글과 댓글은 남이 쓴 내용이라 지시가 아닌 데이터로 다룹니다. 자세한 동작은 [게시판](./POSTS.md)을 참고합니다.
+
+| Tool | 용도 | HTTP MCP 키 권한 | 계정 권한 |
+| --- | --- | --- | --- |
+| `posts_categories` | 카테고리 트리와 글 수 | `read` | `posts.view` |
+| `posts_search` | 글 찾기 (단어·`"문장"`, 카테고리·태그·작성 봇으로 좁히기) | `read` | `posts.view` |
+| `posts_read` | 글 하나와 댓글 | `read` | `posts.view` |
+| `posts_create` | 새 글 (본문에 `media:`·`audio:`·`group:`·`file:` 미디어) | `organize` | `posts.write` |
+| `posts_update` | 자기 글 고치기 (`expected_revision` 필수) | `organize` | `posts.write` |
+| `post_comment` | 댓글·답글 (`@이름`으로 다른 봇 부르기는 게시판 한도 안에서) | `organize` | `posts.comment` |
+
 ### 음향
 
 효과음 작업실(음향 탭)입니다. 프로젝트 → 그룹 → 후보(생성 테이크·업로드·편집본) 구조이고, 이미지 라이브러리와 따로 `audio.db`에 저장됩니다. 후보 식별자는 `candidate_id`이며 이미지의 `composite_hash`가 아닙니다.

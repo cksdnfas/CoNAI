@@ -69,16 +69,18 @@ CoNAI는 로컬 계정과 권한 그룹으로 페이지 접근과 주요 작업�
 | `generation.execute` | NAI·ComfyUI·워크플로 생성 실행 |
 | `workflows.view` / `workflows.edit` | 워크플로·그래프 보기 / 편집·예약 |
 | `files.view` / `files.edit` / `files.delete` | 내 파일 보관함 보기 / 올리기·정리 / 삭제 |
+| `posts.view` / `posts.comment` / `posts.write` | 게시판 보기 / 댓글 / 글 쓰기 (자기 글·댓글 고치기·지우기 포함) |
+| `posts.summon` | 댓글에서 `@`로 봇 부르기 (부른 계정으로 실행·사용량) |
 | `chat.use` | API 모델 프로필로 채팅 |
 | `chat.agent.use` | 서버 계정을 쓰는 Codex·Claude Code 프로필로 채팅 (서버 사용량 공유) |
 | `chat.diagnostics.view` | 내 답변이 어떻게 구성됐는지 진단 보기 (관리자 프롬프트 원문은 관리자만) |
 | `auth.guest.create` | 로그인 화면에서 게스트 가입 (익명 그룹 전용) |
 
-관리자 전용: 설정 전체, 계정·권한 그룹, 외부 연결·자격 증명, ComfyUI 서버·커스텀 노드, 채팅 프로필·프리셋 관리, 채팅 설정 제안 도구, 다른 계정의 파일 보관함, 실행 파일 같은 제한 형식 업로드, Civitai·파일 검증·캐시 관리.
+관리자 전용: 설정 전체, 계정·권한 그룹, 게시판 카테고리·글 숨김·댓글 숨김, 외부 연결·자격 증명, ComfyUI 서버·커스텀 노드, 채팅 프로필·프리셋 관리, 채팅 설정 제안 도구, 다른 계정의 파일 보관함, 실행 파일 같은 제한 형식 업로드, Civitai·파일 검증·캐시 관리.
 
 ### 페이지는 권한을 따로 주지 않습니다
 
-메뉴와 페이지는 보여 주는 기능의 권한을 따라 열립니다. 예를 들어 `prompts.view`가 있으면 프롬프트 페이지가, `images.view`가 있으면 홈·그룹·이미지 상세가 열립니다. 생성 페이지는 `generation.execute`나 `workflows.view` 중 하나, 채팅 페이지는 `chat.use`나 `chat.agent.use` 중 하나, 설정은 관리자일 때 열립니다. 페이지를 숨기려면 그 기능 권한을 빼면 됩니다. 헤더 메뉴 표시 여부는 설정의 헤더 메뉴에서 따로 고릅니다.
+메뉴와 페이지는 보여 주는 기능의 권한을 따라 열립니다. 예를 들어 `prompts.view`가 있으면 프롬프트 페이지가, `images.view`가 있으면 홈·그룹·이미지 상세가 열립니다. 게시판은 `posts.view`, 생성 페이지는 `generation.execute`나 `workflows.view` 중 하나, 채팅 페이지는 `chat.use`나 `chat.agent.use` 중 하나, 설정은 관리자일 때 열립니다. 페이지를 숨기려면 그 기능 권한을 빼면 됩니다. 헤더 메뉴 표시 여부는 설정의 헤더 메뉴에서 따로 고릅니다.
 
 ### 익명·게스트
 
