@@ -5,6 +5,7 @@ import { getCodexAvailabilityStatus } from '../../services/codexGenerationExecut
 import { getCodexCliVersionInfo, updateCodexCli } from '../../services/codexCliMaintenance'
 import { cancelCodexDeviceLogin, getCodexDeviceLoginState, startCodexDeviceLogin } from '../../services/codexDeviceLogin'
 import { cancelClaudeLogin, getClaudeLogin, getClaudeModels, getClaudeStatus, getClaudeVersion, startClaudeLogin, submitClaudeLoginCode, updateClaudeCli } from '../../services/claudeCli'
+import { getAgentCliUsage } from '../../services/agentCliUsage'
 import { sendRouteBadRequest } from '../routeValidation'
 
 export const agentCliRoutes = Router()
@@ -16,6 +17,9 @@ agentCliRoutes.use('/agent-cli/:agent', requireAdmin, (req, res, next) => {
 agentCliRoutes.get('/agent-cli/:agent/status', asyncHandler(async (req, res) => {
   const data = req.params.agent === 'claude' ? await getClaudeStatus() : await getCodexAvailabilityStatus().then((status) => ({ installed: status.installed, authenticated: status.authenticated, available: status.available, authMethod: null, message: status.available ? null : 'Codex 설치 또는 로그인 상태를 확인해줘.' }))
   res.json({ success: true, data })
+}))
+agentCliRoutes.get('/agent-cli/:agent/usage', asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await getAgentCliUsage(req.params.agent as 'codex' | 'claude', req.query.refresh === 'true') })
 }))
 agentCliRoutes.get('/agent-cli/:agent/version', asyncHandler(async (req, res) => {
   res.json({ success: true, data: req.params.agent === 'claude' ? await getClaudeVersion(req.query.refresh === 'true') : await getCodexCliVersionInfo({ refreshLatest: req.query.refresh === 'true' }) })

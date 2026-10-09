@@ -17,6 +17,23 @@ export type AgentCliVersion = {
   message: string | null
 }
 
+/** One subscription rate-limit window: `session` is the short rolling one (5 hours), `weekly` the 7-day one, optionally per model. */
+export type AgentCliUsageWindow = {
+  id: string
+  window: 'session' | 'weekly'
+  minutes: number | null
+  /** Model the window is scoped to (e.g. `Fable`); null for the account-wide window. */
+  model: string | null
+  usedPercent: number
+  resetsAt: string | null
+}
+
+export type AgentCliUsage = {
+  windows: AgentCliUsageWindow[]
+  checkedAt: string
+  message: string | null
+}
+
 export type ClaudeLoginState = {
   status: 'idle' | 'starting' | 'pending' | 'succeeded' | 'failed' | 'cancelled'
   verificationUrl: string | null
