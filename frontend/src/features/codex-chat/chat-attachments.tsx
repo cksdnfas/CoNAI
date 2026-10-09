@@ -65,8 +65,11 @@ export function ChatAttachButton({ chat, disabled }: { chat: CodexChatApi; disab
 /** Files the server reads as UTF-8 text (fileStoreService TEXT_EXTENSIONS). */
 const TEXT_FILE_PATTERN = /\.(txt|md|markdown|json|jsonl|csv|tsv|ya?ml|xml|html?|svg|css|m?js|cjs|jsx|tsx?|py|sh|sql|log|ini|toml|srt|vtt)$/i
 
-/** `inlinesText`: a chat that gets text files' contents when it cannot read them itself (direct chats; rooms do not). */
-export function ChatDraftAttachments({ chat, disabled, canReadText, inlinesText = true }: { chat: CodexChatApi; disabled: boolean; canReadText: boolean; inlinesText?: boolean }) {
+/**
+ * `inlinesText`: a chat that gets text files' contents when it cannot read them itself (direct chats; rooms do not).
+ * Removal stays available while a reply runs: the draft belongs to the next message (and "참조" edits it then too).
+ */
+export function ChatDraftAttachments({ chat, canReadText, inlinesText = true }: { chat: CodexChatApi; canReadText: boolean; inlinesText?: boolean }) {
   const { t } = useI18n()
   if (chat.draftAttachments.length === 0 && chat.draftMediaAttachments.length === 0 && !chat.attachmentsUploading) return null
   const unreadableLabel = inlinesText
@@ -75,13 +78,13 @@ export function ChatDraftAttachments({ chat, disabled, canReadText, inlinesText 
 
   return (
     <>
-      <ChatMediaAttachments items={chat.draftMediaAttachments} onRemove={chat.removeMediaAttachment} disabled={disabled} />
+      <ChatMediaAttachments items={chat.draftMediaAttachments} onRemove={chat.removeMediaAttachment} />
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         {chat.draftAttachments.map((file) => (
           <span key={file.id} className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-sm bg-surface-high pl-2 text-xs">
             <File className="size-3.5 shrink-0 text-muted-foreground" />
             <span className="max-w-48 truncate" title={file.name}>{file.name}</span>
-            <IconButton variant="ghost" size="icon-xs" disabled={disabled} label={t({ ko: '첨부 빼기', en: 'Remove' })} onClick={() => chat.removeAttachment(file.id)}>
+            <IconButton variant="ghost" size="icon-xs" label={t({ ko: '첨부 빼기', en: 'Remove' })} onClick={() => chat.removeAttachment(file.id)}>
               <X />
             </IconButton>
           </span>

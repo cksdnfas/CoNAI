@@ -1126,7 +1126,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           </Button>
         </Tip>
       ) : null}
-      <ChatDraftAttachments chat={chat} disabled={isBusy} canReadText={profile?.canReadFileText === true} />
+      <ChatDraftAttachments chat={chat} canReadText={profile?.canReadFileText === true} />
       {!isGroup && activeThreadId !== null ? <ChatTaskStrip threadId={activeThreadId} /> : null}
       {!isGroup && profile?.pageAssist ? <ChatPageConnectionNotice /> : null}
       {picks.length > 0 ? (
