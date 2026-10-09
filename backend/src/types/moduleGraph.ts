@@ -55,6 +55,10 @@ export interface ModuleUiFieldDefinition {
     label: string
     lora?: string
   }>
+  /** Pick the value from a live list (model rows, chat profiles, presets…) served by GET /api/graph-workflows/node-options/:source. */
+  options_source?: string
+  /** A new node starts on this entry of `options_source`: `first` (lists put the newest first) or the list's `default`. */
+  initial_option?: 'first' | 'default'
 }
 
 export interface ModuleDefinitionRecord {
@@ -318,6 +322,8 @@ export interface GraphExecutionRecord {
   completed_at?: string | null
   failed_node_id?: string | null
   error_message?: string | null
+  /** The account that started a manual run (null: a scheduled run, or no accounts configured). */
+  requested_by_account_id?: number | null
   queue_position?: number | null
   cancel_requested?: boolean
   created_date: string

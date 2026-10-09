@@ -7,7 +7,7 @@ import type { McpRequester } from '../../mcp/context'
 import type { LlmGenerationOptions } from '../llmGenerationOptions'
 import { retryLlmRequest } from '../llmRequestRetry'
 import { profileGenerationOptions } from './chatProfiles'
-import { inlineTextsForChat, validateChatAttachments } from './chatAttachments'
+import { inlineTextsForChat, loadAttachedImages, validateChatAttachments } from './chatAttachments'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
@@ -29,7 +29,7 @@ import { chatPageReference, NO_PAGE_NOTE, parseChatPageContext, proposalOutcomeN
 import type { ChatSendOptions } from './chatTasks'
 import { rememberChatPage } from './chatPageBridge'
 import { notifyChatUserSend } from './chatSendEvents'
-import { contextPartsOf, contextSections, limitContextMeta, markContextMessage, markContextParts, legacyContextMeta } from './chatContextDiagnostics'
+import { contextContentText, contextPartsOf, contextSections, limitContextMeta, markContextMessage, markContextParts, legacyContextMeta } from './chatContextDiagnostics'
 import { redactChatRequestBody, saveChatRequestCapture } from './chatRequestCaptures'
 import { ChatGroupStore, groupLimitsOf } from './chatGroupStore'
 import { buildGroupLlmMessages } from './groupChatContext'
@@ -238,6 +238,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     await turn.translation
     const history = listMessages()
     const attachmentTexts = await inlineTextsForChat(turn.reaction ? { ...profile, mcpEnabled: false } : profile, requester.accountId, history)
+    const attachedImages = await loadAttachedImages(profile, requester, history)
     // Continuing: the cut reply as the model's own turn, then the request to carry on from its last word — room for
     // both is kept before the window is chosen.
     const continuation: ChatCompletionMessage[] = turn.continuing === undefined ? [] : [markContextMessage({ role: 'assistant', content: turn.continuing }, 'continuation'), markContextMessage({ role: 'user', content: CONTINUE_DIRECTIVE }, 'continuation')]
@@ -247,24 +248,24 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     const reactionMessages = turn.reaction ? [turn.reaction.result] : []
     const extraTokens = estimateMessagesTokens(profile.id, [...continuation, ...pageMessages, ...reactionMessages])
     if (config.summaryEnabled && !turn.reaction) {
-      await whileWaiting(turn, 'summary', fitThreadSummary(thread.id, profile, history, turn.controller.signal, tools, { attachmentTexts, extraTokens }))
+      await whileWaiting(turn, 'summary', fitThreadSummary(thread.id, profile, history, turn.controller.signal, tools, { attachmentTexts, attachedImages, extraTokens }))
     }
-    return { history, attachmentTexts, continuation, reference, reactionMessages, extraTokens }
+    return { history, attachmentTexts, attachedImages, continuation, reference, reactionMessages, extraTokens }
   }
   const prepare = (tools: ChatCompletionTool[]) => (preparing ??= prepareRequest(tools))
   return streamReply(turn, requester, profile, async (tools, judged) => {
-    const { history, attachmentTexts, continuation, reference, reactionMessages, extraTokens } = await prepare(tools)
+    const { history, attachmentTexts, attachedImages, continuation, reference, reactionMessages, extraTokens } = await prepare(tools)
     if (turn.reaction && thread.kind === 'group') {
       const members = ChatGroupStore.members(thread.id).flatMap((member) => ChatProfileStore.find(member.profile_id) ?? [])
       const messages = buildGroupLlmMessages({ profile, thread, members, messages: history, routing: turn.delivery!.routing,
         windowLimit: groupLimitsOf(thread).window, tools: [], maxTokens: config.maxTokens, withTools: false, extraTokens: estimateMessagesTokens(profile.id, [turn.reaction.result]),
-        segments: thread.summary_enabled === 1 ? ChatSummaryStore.list(thread.id) : undefined, attachmentTexts,
+        segments: thread.summary_enabled === 1 ? ChatSummaryStore.list(thread.id) : undefined, attachmentTexts, attachedImages,
         onMeta: (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(profile, 'chat')?.model ?? null } } })
       return [...messages, turn.reaction.result]
     }
     const current = CodexChatStore.findThreadById(thread.id) ?? thread
     const request = buildChatMessages({
-      profile, thread: current, messages: history, config, tools, segments: config.summaryEnabled ? ChatSummaryStore.list(thread.id) : [], attachmentTexts, extraTokens, judged,
+      profile, thread: current, messages: history, config, tools, segments: config.summaryEnabled ? ChatSummaryStore.list(thread.id) : [], attachmentTexts, attachedImages, extraTokens, judged,
       onMeta: (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(profile, 'chat')?.model ?? null } },
     })
     const final = [...withPageReference(request, reference), ...continuation, ...reactionMessages]
@@ -285,7 +286,7 @@ export function withPageReference(messages: ChatCompletionMessage[], reference: 
   if (latestUser < 0) return [...messages, markContextMessage({ role: 'user', content: reference }, 'page')]
   return messages.map((message, index) => (index === latestUser && message.role === 'user' ? markContextParts({ ...message, content: prefixUserContent(message.content, reference) }, [
     { kind: 'page', text: reference },
-    ...(contextPartsOf(message).length ? contextPartsOf(message) : [{ kind: 'window' as const, text: typeof message.content === 'string' ? message.content : JSON.stringify(message.content) }]),
+    ...(contextPartsOf(message).length ? contextPartsOf(message) : [{ kind: 'window' as const, text: contextContentText(message.content) }]),
   ]) : message))
 }
 

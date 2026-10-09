@@ -38,6 +38,9 @@ import {
   executeBase64DecodeNode,
   executeBase64EncodeNode,
 } from './system-api-operations'
+import { CHAT_NODE_HANDLERS } from './system-chat-node-handlers'
+import { LLM_NODE_HANDLERS } from './system-llm-node-handlers'
+import type { SystemOperationHandler } from './system-operation-handler'
 import {
   executeLogicAndNode,
   executeLogicCompareNode,
@@ -49,13 +52,6 @@ import {
   executeLogicValuePresenceNode,
   executeWorkflowStopNode,
 } from './system-logic-operations'
-
-type SystemOperationHandler = (
-  context: ExecutionContext,
-  node: GraphWorkflowNode,
-  moduleDefinition: ParsedModuleDefinition,
-  resolvedInputs: Record<string, any>,
-) => Promise<void> | void
 
 const SYSTEM_OPERATION_HANDLERS: Record<string, SystemOperationHandler> = {
   'system.constant_text': executeConstantTextNode,
@@ -97,6 +93,8 @@ const SYSTEM_OPERATION_HANDLERS: Record<string, SystemOperationHandler> = {
   'system.logic_if_branch': executeLogicIfBranchNode,
   'system.workflow_stop': executeWorkflowStopNode,
   'system.final_result': executeFinalResultNode,
+  ...LLM_NODE_HANDLERS,
+  ...CHAT_NODE_HANDLERS,
 }
 
 /** List the built-in system operation keys that the workflow executor can run. */

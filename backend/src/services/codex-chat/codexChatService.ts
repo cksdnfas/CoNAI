@@ -5,7 +5,7 @@ import { beginDirectReply, userReplyRouting, requireReplyTarget, REPLY_GUIDANCE 
 import { buildReplyContext } from './chatReplyContext'
 import { createHash } from 'crypto'
 import { isRequesterAdmin, requesterPermissionKeys } from '../../middleware/featureAccess'
-import { chatContentWithAttachments, inlineTextsForChat, validateChatAttachments } from './chatAttachments'
+import { attachedImagesOf, chatContentWithAttachments, inlineTextsForChat, loadAttachedImages, validateChatAttachments, type AttachedImages } from './chatAttachments'
 import { spawn } from 'child_process'
 import { PORTS, isCodexReasoningEffort, type CodexReasoningEffort } from '@conai/shared'
 import type { McpRequester } from '../../mcp/context'
@@ -746,6 +746,11 @@ function pendingLore(thread: CodexChatThreadRecord | null, profile: ChatProfile,
   return { keyed: lore.keyed, keyedKeys: lore.keyedKeys, index: pendingLoreIndex(loreIndexText(lore), sent), selected: lore }
 }
 
+/** A turn's input: the text, then the attached images as images (Codex keeps them in its memory like the text). */
+export function codexTurnInput(text: string, images: string[]) {
+  return [{ type: 'text' as const, text, text_elements: [] }, ...images.map((url) => ({ type: 'image' as const, url }))]
+}
+
 /** Only CoNAI's input is observable; Codex's accumulated/compacted context is opaque. */
 export function codexInputMeta(profile: ChatProfile, messages: CodexChatMessageRecord[], lore: ReturnType<typeof pendingLore>, input: string, keys: string[], sources: ContextSource[], droppedTurns = 0): ChatContextMeta {
   const decisions = lore.selected.decisions.map((decision) => decision.reason === 'constant' && !lore.index.keys.length ? { ...decision, selected: false, reason: 'codex-sent' } : decision)
@@ -838,6 +843,8 @@ export async function runCodexGroupReply(params: {
   messages: CodexChatMessageRecord[]
   windowLimit: number
   buildInput: (lore: string) => string
+  /** The attached images the input shows (see loadAttachedImages); those of the messages it shows go in as images. */
+  attachedImages?: AttachedImages
   signal: AbortSignal
   emit: (event: CodexChatStreamEvent) => void
   persist: (reply: GroupReplyResult) => Promise<CodexChatMessageRecord>
@@ -909,7 +916,7 @@ export async function runCodexGroupReply(params: {
           ...chatTurnRestrictions(session.runtime.cwd),
           model: run.model,
           effort: run.effort,
-          input: [{ type: 'text', text: input, text_elements: [] }],
+          input: codexTurnInput(input, shown.filter((message) => message.role === 'user').flatMap((message) => attachedImagesOf(message, params.attachedImages))),
         }
         if (loadChatSettings().diagnostics.enabled && loadChatSettings().diagnostics.captureRaw) turn.requestCapture = redactChatRequestBody(body)
         turn.requestSent = true
@@ -1269,7 +1276,8 @@ export const CodexChatService = {
         const directive = [buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile, user)), postHistoryText(profile, user), turn.judged?.directive ?? ''].filter(Boolean).join('\n\n')
         const reference = referenceBlock([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text])
         const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user) : ''
-        const input = [recap, reference, replyGuide.text, buildReplyContext(history, routing), pageReference.text, cards.text, chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }])), directive].filter(Boolean).join('\n\n')
+        const images = await loadAttachedImages(profile, requester, [{ attachments, mediaAttachments }])
+        const input = [recap, reference, replyGuide.text, buildReplyContext(history, routing), pageReference.text, cards.text, chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }]), images), directive].filter(Boolean).join('\n\n')
         const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys, ...replyGuide.keys, ...pageReference.keys, ...cards.keys]
         turn.contextMeta = codexInputMeta(profile, [userMessage], lore, input, keys, [
           ...contextSource('user-persona', persona.text), ...contextSource('lore-index', lore.index.keys.length ? lore.selected.index : ''), ...contextSource('constant-lore', lore.index.keys.length ? lore.selected.constant : ''),
@@ -1287,7 +1295,7 @@ export const CodexChatService = {
           ...chatTurnRestrictions(session.runtime.cwd),
           model: run.model,
           effort: run.effort,
-          input: [{ type: 'text', text: input, text_elements: [] }],
+          input: codexTurnInput(input, attachedImagesOf({ attachments, mediaAttachments }, images)),
         }
         if (loadChatSettings().diagnostics.enabled && loadChatSettings().diagnostics.captureRaw) turn.requestCapture = redactChatRequestBody(body)
         turn.requestSent = true

@@ -30,6 +30,7 @@ import {
 } from '@/features/image-generation/components/workflow-reservations-ui'
 import { getGraphWorkflowScheduleStatusLabel, getGraphWorkflowStopReasonLabel } from '../module-graph-shared'
 import { WorkflowInputFields } from './workflow-input-fields'
+import { toWorkflowImageValue } from '../module-graph-image-values'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { EmptyState } from '@/components/ui/empty-state'
 
@@ -440,13 +441,15 @@ export function ModuleWorkflowSchedulesPanel({
                   return next
                 })}
                 onInputImageChange={async (inputId: string, image?: SelectedImageDraft) => {
+                  // A library ref when the image can go into the library; the inline image still works if it cannot.
+                  const value = image ? await toWorkflowImageValue(image).catch(() => image.dataUrl) : undefined
                   setDraftInputValues((current) => {
                     const next = { ...current }
-                    if (!image) {
+                    if (value === undefined) {
                       delete next[inputId]
                       return next
                     }
-                    next[inputId] = image.dataUrl
+                    next[inputId] = value
                     return next
                   })
                 }}

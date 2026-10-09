@@ -64,6 +64,8 @@ export type ExecutionContext = {
   graphIndex?: ExecutionGraphIndex
   /** 실행 단위 기본 결과 그룹. 최종 결과 노드의 그룹 경로가 비었을 때 쓴다. */
   outputGroupId?: number | null
+  /** The account that started the run; null for scheduled runs and while no accounts are configured. */
+  requestedByAccountId?: number | null
 }
 
 /** Build once per execution and reuse node/edge lookup maps for hot-loop graph traversal. */

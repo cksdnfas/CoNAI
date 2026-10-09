@@ -439,6 +439,14 @@ function optionalNumber(value: unknown, range: { min: number; max: number }, int
   return integer ? Math.round(clamped) : clamped
 }
 
+/**
+ * Whether the profile's model sees images: Codex models always do (its editor has no switch, so a stored
+ * `visionEnabled` there is only left over from another engine); LLM and Claude follow the profile's switch.
+ */
+export function profileSeesImages(profile: Pick<ChatProfile, 'engine' | 'visionEnabled'>) {
+  return profile.engine === 'codex' || profile.visionEnabled
+}
+
 /** What an API LLM profile asks of each request (unset options are not sent). */
 export function profileGenerationOptions(profile: ChatProfile): LlmGenerationOptions {
   let extraParams: Record<string, unknown> | null = null

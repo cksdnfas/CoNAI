@@ -8,7 +8,7 @@ import { LlmRequestError, retryLlmRequest } from './llmRequestRetry'
 import { isCallerAbort, rawTokenEstimate, readUsageCounts, recordLlmUsage } from './llmUsage'
 import { primaryModelOf } from './codex-chat/modelSlots'
 
-type LlmResponseMode = 'text' | 'json'
+export type LlmResponseMode = 'text' | 'json'
 type LlmJsonParseStrategy = 'none' | 'strict' | 'markdown_fence' | 'embedded_json' | 'invalid_escape_repaired'
 
 export type LlmDebugEvent = {
@@ -163,7 +163,7 @@ function stringifyDebugValue(value: unknown) {
   }
 }
 
-function normalizeStructuredOutputJson(value: unknown) {
+export function normalizeStructuredOutputJson(value: unknown) {
   if (typeof value !== 'string') {
     return null
   }
@@ -180,7 +180,7 @@ function normalizeStructuredOutputJson(value: unknown) {
   }
 }
 
-function buildJsonInstruction(responseMode: LlmResponseMode, structuredOutputJson: string | null) {
+export function buildJsonInstruction(responseMode: LlmResponseMode, structuredOutputJson: string | null) {
   if (responseMode !== 'json' && !structuredOutputJson) {
     return null
   }
@@ -196,7 +196,7 @@ function buildJsonInstruction(responseMode: LlmResponseMode, structuredOutputJso
   ].join('\n\n')
 }
 
-function buildUserPrompt(prompt: string, contextValue: string | null) {
+export function buildUserPrompt(prompt: string, contextValue: string | null) {
   if (!contextValue) {
     return prompt
   }
@@ -204,7 +204,7 @@ function buildUserPrompt(prompt: string, contextValue: string | null) {
   return `Context:\n${contextValue}\n\nUser request:\n${prompt}`
 }
 
-function parseImageDataUrl(value: unknown) {
+export function parseImageDataUrl(value: unknown) {
   if (typeof value !== 'string') {
     return null
   }
@@ -222,7 +222,7 @@ function parseImageDataUrl(value: unknown) {
   }
 }
 
-async function normalizeVisionImageDataUrl(value: unknown) {
+export async function normalizeVisionImageDataUrl(value: unknown) {
   const parsed = parseImageDataUrl(value)
   if (!parsed) {
     return null

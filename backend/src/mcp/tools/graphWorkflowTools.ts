@@ -183,7 +183,7 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
         const graph = parseGraphDocument(workflow.graph_json)
         const runtimeInputs = validateGraphInputs(graph.metadata?.exposed_inputs ?? [], input_values as Record<string, unknown>)
         const outputGroupId = resolveMcpTargetGroup(group_id, group_path)
-        const result = await GraphWorkflowExecutor.execute(workflow_id, { runtimeInputValues: runtimeInputs, outputGroupId: outputGroupId ?? null })
+        const result = await GraphWorkflowExecutor.execute(workflow_id, { runtimeInputValues: runtimeInputs, outputGroupId: outputGroupId ?? null, requestedByAccountId: context.requester?.accountId ?? null })
         const compactResult = await compactGraphExecution(result.executionId, context)
         return { content: [{ type: 'text' as const, text: JSON.stringify(compactResult) }] }
       } catch (error) {

@@ -8,6 +8,8 @@ import type { ModuleGraphEdge, ModuleGraphNode } from './module-graph-shared'
 import { useModuleGraphBrowseActions } from './use-module-graph-browse-actions'
 import { useModuleGraphEditorInteractions } from './use-module-graph-editor-interactions'
 import { useModuleGraphExecutionActions } from './use-module-graph-execution-actions'
+import { applyNodeImageReplacements } from './module-graph-image-values'
+import { GRAPH_FIT_VIEW_OPTIONS } from './module-graph-viewport'
 
 /** Own the browse/editor/execution action-hook wiring for the module-graph page. */
 export function useModuleGraphPageActions({
@@ -49,8 +51,8 @@ export function useModuleGraphPageActions({
   setWorkflowExposedInputs,
   setWorkflowRunInputValues,
   setLastSavedSnapshot,
+  onEditorGraphReplaced,
   setWorkflowView,
-  setIsModuleLibraryOpen,
   setIsEditorSupportOpen,
   setActiveEditorSupportSection,
   setIsBrowseManageModalOpen,
@@ -103,8 +105,9 @@ export function useModuleGraphPageActions({
   setWorkflowExposedInputs: Dispatch<SetStateAction<GraphWorkflowExposedInput[]>>
   setWorkflowRunInputValues: Dispatch<SetStateAction<Record<string, unknown>>>
   setLastSavedSnapshot: Dispatch<SetStateAction<string>>
+  /** Another workflow or a fresh draft replaced the editor graph. */
+  onEditorGraphReplaced: () => void
   setWorkflowView: Dispatch<SetStateAction<'browse' | 'edit'>>
-  setIsModuleLibraryOpen: Dispatch<SetStateAction<boolean>>
   setIsEditorSupportOpen: Dispatch<SetStateAction<boolean>>
   setActiveEditorSupportSection: Dispatch<SetStateAction<EditorSupportSectionKey>>
   setIsBrowseManageModalOpen: Dispatch<SetStateAction<boolean>>
@@ -137,7 +140,6 @@ export function useModuleGraphPageActions({
     isValidConnection,
     handleConnect,
     handleAddModuleNode,
-    handleAddModuleFromLibrary,
     handleDuplicateNodeById,
     handleDuplicateSelectedNode,
     handleCopySelectedNodesToClipboard,
@@ -179,11 +181,11 @@ export function useModuleGraphPageActions({
     setWorkflowExposedInputs,
     setWorkflowRunInputValues,
     setLastSavedSnapshot,
-    setIsModuleLibraryOpen,
+    onEditorGraphReplaced,
     confirmDiscardUnsavedChanges,
     fitViewAfterAutoLayout: () => {
       requestAnimationFrame(() => {
-        void reactFlow.fitView({ padding: 0.2, duration: 200 })
+        void reactFlow.fitView({ ...GRAPH_FIT_VIEW_OPTIONS, duration: 200 })
       })
     },
     showSnackbar,
@@ -228,6 +230,7 @@ export function useModuleGraphPageActions({
     setWorkflowExposedInputs,
     setWorkflowRunInputValues,
     setLastSavedSnapshot,
+    onEditorGraphReplaced,
     setWorkflowView,
     setIsEditorSupportOpen,
     setActiveEditorSupportSection,
@@ -275,6 +278,7 @@ export function useModuleGraphPageActions({
     onNodeSelected: setSelectedNodeId,
     onEdgeCleared: () => setSelectedEdgeId(null),
     onSnapshotSaved: setLastSavedSnapshot,
+    onNodeImagesMoved: (replacements) => setNodes((currentNodes) => applyNodeImageReplacements(currentNodes, replacements)),
     refetchGraphWorkflows,
     refetchGraphExecutions,
     refetchExecutionDetail,
@@ -291,7 +295,6 @@ export function useModuleGraphPageActions({
     isValidConnection,
     handleConnect,
     handleAddModuleNode,
-    handleAddModuleFromLibrary,
     handleDuplicateNodeById,
     handleDuplicateSelectedNode,
     handleCopySelectedNodesToClipboard,

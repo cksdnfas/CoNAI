@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import { addEdge, MarkerType, type Connection } from '@xyflow/react'
+import { useQueryClient } from '@tanstack/react-query'
+import { addEdge, type Connection } from '@xyflow/react'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import type { GraphWorkflowExposedInput, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { copyTextToClipboard } from '@/lib/clipboard'
@@ -22,6 +23,8 @@ import {
   type ModuleGraphNode,
 } from './module-graph-shared'
 import { getActiveModuleInputPorts } from './module-graph-minimax-director-ports'
+import { toWorkflowImageValue } from './module-graph-image-values'
+import { resolveInitialOptionValues } from './module-graph-node-option-values'
 
 /** Own local canvas/editor interactions for the module-graph page. */
 export function useModuleGraphEditorInteractions({
@@ -45,7 +48,7 @@ export function useModuleGraphEditorInteractions({
   setWorkflowExposedInputs,
   setWorkflowRunInputValues,
   setLastSavedSnapshot,
-  setIsModuleLibraryOpen,
+  onEditorGraphReplaced,
   confirmDiscardUnsavedChanges,
   fitViewAfterAutoLayout,
   showSnackbar,
@@ -70,11 +73,12 @@ export function useModuleGraphEditorInteractions({
   setWorkflowExposedInputs: Dispatch<SetStateAction<GraphWorkflowExposedInput[]>>
   setWorkflowRunInputValues: Dispatch<SetStateAction<Record<string, unknown>>>
   setLastSavedSnapshot: Dispatch<SetStateAction<string>>
-  setIsModuleLibraryOpen: Dispatch<SetStateAction<boolean>>
+  onEditorGraphReplaced: () => void
   confirmDiscardUnsavedChanges: () => Promise<boolean>
   fitViewAfterAutoLayout: () => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
+  const queryClient = useQueryClient()
   const lastCopiedSelectionRef = useRef<string | null>(null)
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes])
 
@@ -127,25 +131,21 @@ export function useModuleGraphEditorInteractions({
     const targetHandle = parseHandleId(connection.targetHandle)
     const sourcePort = findNodePort(sourceNode, 'out', sourceHandle?.portKey)
     const targetPort = findNodePort(targetNode, 'in', targetHandle?.portKey)
-    const compatibility = getModulePortCompatibility(sourcePort?.data_type, targetPort?.data_type)
 
     setEdges((currentEdges) => {
-      const nextConnection = {
+      const nextConnection: ModuleGraphEdge = {
+        id: createModuleGraphEdgeId(),
         ...connection,
-        markerEnd: { type: MarkerType.ArrowClosed },
         ...buildModuleEdgePresentation(sourcePort, targetPort),
       }
 
+      // A single input takes one link: the new one replaces whatever was plugged in.
       const trimmedEdges = targetPort?.multiple
         ? currentEdges
         : currentEdges.filter((edge) => !(edge.target === connection.target && edge.targetHandle === connection.targetHandle))
 
       return addEdge(nextConnection, trimmedEdges)
     })
-
-    if (compatibility === 'string-bridge') {
-      showSnackbar({ message: 'text ↔ prompt 연결은 허용돼. 이런 브리지 연결은 점선으로 표시해둘게.', tone: 'info' })
-    }
   }, [isValidConnection, nodeById, setEdges, showSnackbar])
 
   /** Add one new module node to the graph canvas, optionally pre-connecting it from one dragged port. */
@@ -177,6 +177,14 @@ export function useModuleGraphEditorInteractions({
       },
     ])
 
+    // Live picks (the Codex node's newest model) land once their list arrives; anything set meanwhile wins.
+    void resolveInitialOptionValues(queryClient, module).then((initialValues) => {
+      if (Object.keys(initialValues).length === 0) return
+      setNodes((current) => current.map((node) => (node.id === nodeId
+        ? { ...node, data: { ...node.data, inputValues: { ...initialValues, ...node.data.inputValues } } }
+        : node)))
+    })
+
     const connectionStart = options?.connectionStart
     if (connectionStart) {
       const existingNode = nodeById.get(connectionStart.nodeId)
@@ -202,7 +210,6 @@ export function useModuleGraphEditorInteractions({
                 {
                   id: createModuleGraphEdgeId(),
                   ...nextConnection,
-                  markerEnd: { type: MarkerType.ArrowClosed },
                   ...buildModuleEdgePresentation(sourcePort, compatibleTargetPort),
                 },
                 currentEdges,
@@ -228,7 +235,6 @@ export function useModuleGraphEditorInteractions({
                 {
                   id: createModuleGraphEdgeId(),
                   ...nextConnection,
-                  markerEnd: { type: MarkerType.ArrowClosed },
                   ...buildModuleEdgePresentation(compatibleSourcePort, targetPort),
                 },
                 targetPort.multiple
@@ -243,13 +249,7 @@ export function useModuleGraphEditorInteractions({
 
     setSelectedEdgeId(null)
     setSelectedNodeId(nodeId)
-  }, [isValidConnection, nodeById, nodes.length, setEdges, setNodes, setSelectedEdgeId, setSelectedNodeId])
-
-  /** Add one library module and close the library modal immediately after. */
-  const handleAddModuleFromLibrary = useCallback((module: ModuleDefinitionRecord) => {
-    handleAddModuleNode(module)
-    setIsModuleLibraryOpen(false)
-  }, [handleAddModuleNode, setIsModuleLibraryOpen])
+  }, [isValidConnection, nodeById, nodes.length, queryClient, setEdges, setNodes, setSelectedEdgeId, setSelectedNodeId])
 
   /** Duplicate one node by id with copied input values. */
   const handleDuplicateNodeById = useCallback((nodeId: string) => {
@@ -403,7 +403,6 @@ export function useModuleGraphEditorInteractions({
         target: targetNodeId,
         sourceHandle: copiedEdge.sourceHandle,
         targetHandle: copiedEdge.targetHandle,
-        markerEnd: { type: MarkerType.ArrowClosed },
         ...buildModuleEdgePresentation(sourcePort, targetPort),
       }]
     })
@@ -507,15 +506,19 @@ export function useModuleGraphEditorInteractions({
     )
   }, [setNodes])
 
-  /** Store one selected image as a node input data URL. */
+  /** Store one selected image as a node input: a library image ref (uploads go into the library first). */
   const handleNodeImageChange = useCallback(async (nodeId: string, portKey: string, image?: SelectedImageDraft) => {
     if (!image) {
       handleNodeValueClear(nodeId, portKey)
       return
     }
 
-    handleNodeValueChange(nodeId, portKey, image.dataUrl)
-  }, [handleNodeValueChange, handleNodeValueClear])
+    try {
+      handleNodeValueChange(nodeId, portKey, await toWorkflowImageValue(image))
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '이미지를 라이브러리에 넣지 못했어.', tone: 'error' })
+    }
+  }, [handleNodeValueChange, handleNodeValueClear, showSnackbar])
 
   /** Update one workflow-run exposed input value. */
   const handleWorkflowRunInputChange = useCallback((inputId: string, value: unknown) => {
@@ -534,15 +537,19 @@ export function useModuleGraphEditorInteractions({
     })
   }, [setWorkflowRunInputValues])
 
-  /** Store one selected image as a workflow-run input data URL. */
+  /** Store one selected image as a workflow-run input: a library image ref (uploads go into the library first). */
   const handleWorkflowRunInputImageChange = useCallback(async (inputId: string, image?: SelectedImageDraft) => {
     if (!image) {
       handleWorkflowRunInputClear(inputId)
       return
     }
 
-    handleWorkflowRunInputChange(inputId, image.dataUrl)
-  }, [handleWorkflowRunInputChange, handleWorkflowRunInputClear])
+    try {
+      handleWorkflowRunInputChange(inputId, await toWorkflowImageValue(image))
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '이미지를 라이브러리에 넣지 못했어.', tone: 'error' })
+    }
+  }, [handleWorkflowRunInputChange, handleWorkflowRunInputClear, showSnackbar])
 
   /** Auto-layout the current graph and refit the viewport afterwards. */
   const handleAutoLayout = useCallback(() => {
@@ -552,8 +559,7 @@ export function useModuleGraphEditorInteractions({
 
     setNodes((currentNodes) => buildAutoLayoutedNodes(currentNodes, edges))
     fitViewAfterAutoLayout()
-    showSnackbar({ message: '그래프를 자동 정렬했어.', tone: 'info' })
-  }, [edges, fitViewAfterAutoLayout, nodes.length, setNodes, showSnackbar])
+  }, [edges, fitViewAfterAutoLayout, nodes.length, setNodes])
 
   /** Disconnect all incoming edges from one concrete node input port. */
   const handleDisconnectNodeInput = useCallback((nodeId: string, portKey: string) => {
@@ -647,6 +653,7 @@ export function useModuleGraphEditorInteractions({
 
   /** Reset the editor draft back to an empty workflow rooted in the selected folder. */
   const resetEmptyWorkflowDraft = useCallback(() => {
+    onEditorGraphReplaced()
     setNodes([])
     setEdges([])
     setSelectedGraphId(null)
@@ -671,7 +678,7 @@ export function useModuleGraphEditorInteractions({
         },
       }),
     )
-  }, [selectedFolderId, setDraftWorkflowFolderId, setEdges, setLastSavedSnapshot, setNodes, setSelectedEdgeId, setSelectedExecutionId, setSelectedGraphId, setSelectedNodeId, setWorkflowDebugMode, setWorkflowDescription, setWorkflowExposedInputs, setWorkflowName, setWorkflowRunInputValues])
+  }, [onEditorGraphReplaced, selectedFolderId, setDraftWorkflowFolderId, setEdges, setLastSavedSnapshot, setNodes, setSelectedEdgeId, setSelectedExecutionId, setSelectedGraphId, setSelectedNodeId, setWorkflowDebugMode, setWorkflowDescription, setWorkflowExposedInputs, setWorkflowName, setWorkflowRunInputValues])
 
   /** Reset the full editor canvas after confirmation when needed. */
   const handleResetCanvas = useCallback(async () => {
@@ -686,7 +693,6 @@ export function useModuleGraphEditorInteractions({
     isValidConnection,
     handleConnect,
     handleAddModuleNode,
-    handleAddModuleFromLibrary,
     handleDuplicateNodeById,
     handleDuplicateSelectedNode,
     handleCopySelectedNodesToClipboard,

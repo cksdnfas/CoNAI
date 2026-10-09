@@ -16,6 +16,11 @@ import type { ModuleGraphResponse } from '../../types/moduleGraph'
 import { parseGraphExecutionInputValues, parseGraphRouteInteger } from './route-helpers'
 import { GenerationTargetGroupService } from '../../services/generationTargetGroupService'
 
+/** The signed-in account that starts a run (null while no accounts are configured). */
+function sessionAccountId(req: Request) {
+  return typeof req.session?.accountId === 'number' ? req.session.accountId : null
+}
+
 /**
  * 실행 단위 기본 결과 그룹(output_group_id | output_group_path)을 해석한다.
  * 실패하면 응답을 보내고 undefined 를 돌려준다.
@@ -192,7 +197,7 @@ export function createGraphWorkflowExecutionRoutes() {
       if (!outputGroup) {
         return
       }
-      const result = GraphWorkflowExecutionQueue.enqueue(id, inputValues, undefined, false, { outputGroupId: outputGroup.groupId })
+      const result = GraphWorkflowExecutionQueue.enqueue(id, inputValues, undefined, false, { outputGroupId: outputGroup.groupId, requestedByAccountId: sessionAccountId(req) })
       return res.status(201).json({ success: true, data: result } as ModuleGraphResponse)
     } catch (error) {
       console.error('Error executing graph workflow:', error)
@@ -228,7 +233,7 @@ export function createGraphWorkflowExecutionRoutes() {
       if (!outputGroup) {
         return
       }
-      const result = GraphWorkflowExecutionQueue.enqueue(id, inputValues, nodeId, forceRerun, { outputGroupId: outputGroup.groupId })
+      const result = GraphWorkflowExecutionQueue.enqueue(id, inputValues, nodeId, forceRerun, { outputGroupId: outputGroup.groupId, requestedByAccountId: sessionAccountId(req) })
       return res.status(201).json({ success: true, data: result } as ModuleGraphResponse)
     } catch (error) {
       console.error('Error executing graph node:', error)

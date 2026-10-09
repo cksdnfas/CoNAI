@@ -1,432 +1,268 @@
-import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { memo, useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { useUpdateNodeInternals, type NodeProps } from '@xyflow/react'
-import { GripVertical, Play, RotateCcw } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { NodeToolbar, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react'
+import { Copy, Ellipsis, Play, Power, RotateCcw, Trash2 } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
-import { Input } from '@/components/ui/input'
 import { Tip } from '@/components/ui/tooltip'
-import { MiniMaxH3DirectorDasiwaInput } from '@/features/image-generation/components/minimax-h3-director-dasiwa-input'
-import type { MiniMaxH3DirectorGraphInputKey } from '@/features/image-generation/components/minimax-h3-director-dasiwa-utils'
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useI18n } from '@/i18n'
-import { PowerLoraLoaderInput, hasPowerLoraLoaderEntries, isPowerLoraLoaderUiField } from './power-lora-loader-input'
-import { WORKFLOW_INPUT_ENABLED_KEY, isWorkflowInputSourceModule } from '../module-graph-workflow-inputs'
-import {
-  InlineWorkflowInputEditor,
-  NodeArtifactOutputs,
-} from './module-graph-node-card-layouts'
-import {
-  MODULE_GRAPH_INLINE_CONTROL_CLASS,
-  PortCell,
-  SourceNodeOutputPorts,
-  buildModuleUiFieldMap,
-  getInputPortState,
-  stopNodeActionEvent,
-  stopNodeInteraction,
-} from './module-graph-port-cells'
+import { cn } from '@/lib/utils'
+import { getModuleNodeKindVisual } from '../module-graph-node-kind'
+import { isWorkflowInputSourceModule } from '../module-graph-workflow-inputs'
 import {
   getModuleBaseDisplayName,
-  getModuleColor,
   getModuleNodeDisplayLabelFromData,
+  getModulePortCompatibility,
   getVisibleModuleOutputPorts,
   isAdvancedOutputPortsEnabled,
   isFinalResultModule,
   type ModuleGraphNode,
 } from '../module-graph-shared'
-import { ModuleGraphNodeCustomControls, useModuleGraphNodeCustomControls } from './module-graph-node-custom-controls'
-import { resolveModuleGraphNodeDynamicInputPortKeys, resolveModuleGraphNodeLayout } from './module-graph-node-card-operation-registry'
-import { ModuleGraphNodeLayoutRenderer } from './module-graph-node-layout-renderer'
-import {
-  getMiniMaxDirectorInputPort,
-  isMiniMaxDirectorInputPort,
-  isMiniMaxDirectorInputPortActive,
-} from '../module-graph-minimax-director-ports'
+import { hasMeaningfulValue } from './module-graph-field-shared'
+import { useModuleGraphCanvasContext, useModuleGraphExecutionLock, useModuleGraphNodeActions } from './module-graph-canvas-context'
+import { NODE_CONTROL_CLASS, stopNodeEvent } from './module-graph-node-controls'
+import { NodeArtifactOutputs } from './module-graph-node-card-layouts/node-artifact-outputs'
+import { ModuleGraphNodeBody } from './module-graph-node-layout-renderer'
 
-function normalizeBooleanFlag(value: unknown) {
-  if (typeof value === 'boolean') {
-    return value
-  }
+type NodeStatus = { tone: 'success' | 'destructive' | 'warning' | 'muted' | 'info'; label: string; detail: string } | null
 
-  if (typeof value === 'string') {
-    const normalizedValue = value.trim().toLowerCase()
-    if (normalizedValue === 'true') return true
-    if (normalizedValue === 'false') return false
-  }
-
-  return false
-}
-
-/** Normalize one composite module field value for its node-native editor. */
-function normalizeCompositeNodeValue(value: unknown) {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {}
-}
-
-/** Render a cleaner module graph node card with source-node specific layout. */
-function ModuleGraphNodeCardComponent({ id, data, selected }: NodeProps<ModuleGraphNode>) {
+/** Status shown as one dot in the header (and a border tint for failures and missing inputs). */
+function useNodeStatus(data: ModuleGraphNode['data'], missingRequiredCount: number): NodeStatus {
   const { t } = useI18n()
-  const { canExecuteGeneration } = useFeaturePermissions()
-  const { module } = data
-  const updateNodeInternals = useUpdateNodeInternals()
-  const uiFieldByKey = useMemo(() => buildModuleUiFieldMap(module.ui_schema), [module.ui_schema])
-  const powerLoraUiFields = (module.ui_schema ?? []).filter((field) => (
-    isPowerLoraLoaderUiField(field) || hasPowerLoraLoaderEntries(data.inputValues?.[field.key] ?? field.default_value)
-  ))
-  const powerLoraUiFieldKeys = new Set(powerLoraUiFields.map((field) => field.key))
-  const miniMaxDirectorUiFields = (module.ui_schema ?? []).filter((field) => field.node_editor === 'minimax_h3_director_dasiwa')
-  const miniMaxDirectorUiFieldKeys = new Set(miniMaxDirectorUiFields.map((field) => field.key))
-  const miniMaxDirectorInputPorts = (module.exposed_inputs ?? []).filter(isMiniMaxDirectorInputPort)
-  const activeMiniMaxDirectorInputPorts = miniMaxDirectorInputPorts.filter((port) => (
-    isMiniMaxDirectorInputPortActive(module, data.inputValues, port)
-  ))
-  const inputPorts = (module.exposed_inputs ?? []).filter((port) => {
-    const uiField = uiFieldByKey.get(port.key)
-    const value = data.inputValues?.[port.key] ?? port.default_value ?? uiField?.default_value
-    return !powerLoraUiFieldKeys.has(port.key)
-      && !miniMaxDirectorUiFieldKeys.has(port.key)
-      && !isMiniMaxDirectorInputPort(port)
-      && !isPowerLoraLoaderUiField(uiField)
-      && !hasPowerLoraLoaderEntries(value)
-  })
-  const outputPorts = module.output_ports ?? []
-  const accentColor = getModuleColor(module)
-  const executionStatus = data.executionStatus || 'idle'
-  const connectedInputKeys = new Set(data.connectedInputKeys ?? [])
-  const connectedOutputKeys = new Set(data.connectedOutputKeys ?? [])
-  const isWorkflowInputSource = isWorkflowInputSourceModule(module)
-  const isWorkflowInputWaiting = isWorkflowInputSource
-    && normalizeBooleanFlag(data.inputValues?.[WORKFLOW_INPUT_ENABLED_KEY])
-    && inputPorts.some((port) => getInputPortState(data, port, connectedInputKeys).requiredMissing)
-  const sourceOutputPorts = isWorkflowInputSource ? outputPorts : []
-  const statusInputPorts = [...inputPorts, ...activeMiniMaxDirectorInputPorts]
-  const missingRequiredInputCount = statusInputPorts.filter((port) => getInputPortState(data, port, connectedInputKeys).requiredMissing).length
-
-  const nodeDisplayLabel = getModuleNodeDisplayLabelFromData(data)
-  const moduleBaseLabel = getModuleBaseDisplayName(module)
-  const nodeTitleTooltip = [
-    nodeDisplayLabel,
-    t({ ko: '기본 타입: {label}', en: 'Base type: {label}' }, { label: moduleBaseLabel }),
-    t({ ko: '모듈 ID: {id}', en: 'Module ID: {id}' }, { id: module.id }),
-    module.description,
-    selected ? t({ ko: '클릭해서 이름 변경', en: 'Click to rename' }) : null,
-  ].filter(Boolean).join('\n')
-  const [isEditingLabel, setIsEditingLabel] = useState(false)
-  const [labelDraft, setLabelDraft] = useState(data.label ?? '')
-  const missingStatusLabel = isWorkflowInputWaiting
-    ? t({ ko: '실행 입력 대기', en: 'Runtime input waiting' })
-    : isWorkflowInputSource ? t({ ko: '값 필요', en: 'Value required' }) : t({ ko: '입력 필요', en: 'Input required' })
-  useEffect(() => {
-    if (!isEditingLabel) {
-      setLabelDraft(data.label ?? '')
-    }
-  }, [data.label, isEditingLabel])
-
-  useEffect(() => {
-    if (!selected) {
-      setIsEditingLabel(false)
-    }
-  }, [selected])
-
-  const statusLabel =
-    data.disabled === true
-      ? t({ ko: '비활성', en: 'Disabled' })
-      : executionStatus === 'completed'
-      ? t({ ko: '완료', en: 'Completed' })
-      : executionStatus === 'failed'
-        ? t({ ko: '실패', en: 'Failed' })
-        : executionStatus === 'blocked'
-          ? t({ ko: '차단됨', en: 'Blocked' })
-          : executionStatus === 'skipped'
-            ? t({ ko: '건너뜀', en: 'Skipped' })
-          : missingRequiredInputCount > 0
-            ? missingStatusLabel
-            : null
-  const skippedReasonLabel =
-    data.executionSkipReason === 'disabled'
-      ? t({ ko: '비활성 건너뜀', en: 'Disabled skip' })
+  const executionStatus = data.executionStatus ?? 'idle'
+  if (data.disabled === true) {
+    return { tone: 'muted', label: t({ ko: '꺼짐', en: 'Off' }), detail: t({ ko: '실행할 때 건너뛰고 출력도 꺼져.', en: 'Skipped when running; its outputs are off.' }) }
+  }
+  if (executionStatus === 'failed') {
+    return { tone: 'destructive', label: t({ ko: '실패', en: 'Failed' }), detail: t({ ko: '선택한 실행에서 여기서 멈췄어.', en: 'The selected run stopped here.' }) }
+  }
+  if (executionStatus === 'blocked') {
+    return { tone: 'warning', label: t({ ko: '차단됨', en: 'Blocked' }), detail: t({ ko: '앞 노드가 실패해서 실행되지 않았어.', en: 'An earlier node failed, so this one did not run.' }) }
+  }
+  if (executionStatus === 'skipped') {
+    const reason = data.executionSkipReason === 'disabled'
+      ? t({ ko: '꺼져 있어서 건너뛰었어.', en: 'Skipped because it was off.' })
       : data.executionSkipReason === 'source-node-skipped'
-        ? t({ ko: '상위 건너뜀', en: 'Upstream skipped' })
+        ? t({ ko: '앞 노드가 건너뛰어져서 실행되지 않았어.', en: 'An earlier node was skipped.' })
         : data.executionSkipReason === 'source-output-disabled'
-          ? t({ ko: '출력 차단', en: 'Output blocked' })
-          : data.executionSkipReason === 'inactive-branch'
-            ? t({ ko: '비활성 분기', en: 'Inactive branch' })
-            : t({ ko: '건너뜀', en: 'Skipped' })
-  const activationLabel =
-    data.disabled === true
-      ? t({ ko: '비활성', en: 'Disabled' })
-      : executionStatus === 'failed'
-        ? t({ ko: '실패 지점', en: 'Failed node' })
-        : executionStatus === 'blocked'
-          ? t({ ko: '이후 차단', en: 'Blocked downstream' })
-          : executionStatus === 'skipped'
-            ? skippedReasonLabel
-          : isWorkflowInputWaiting
-            ? t({ ko: '실행 입력 대기', en: 'Runtime input waiting' })
-            : missingRequiredInputCount > 0
-            ? t({ ko: '입력 {count}개 필요', en: '{count} inputs needed' }, { count: missingRequiredInputCount })
-            : data.activationHint === 'conditional-input'
-              ? t({ ko: '조건 입력', en: 'Conditional input' })
-              : t({ ko: '실행 가능', en: 'Runnable' })
-  const activationTitle =
-    data.disabled === true
-      ? t({ ko: '이 노드는 실행 중 건너뛰고 출력도 비활성 처리돼.', en: 'This node is skipped during execution and its outputs are disabled.' })
-      : isWorkflowInputWaiting
-        ? t({ ko: '저장된 워크플로우 실행 때 이 값을 입력받도록 노출돼 있어. 실행 전 입력값을 확인해야 해.', en: 'This value is exposed for saved-workflow runs. Confirm the runtime input before execution.' })
-        : missingRequiredInputCount > 0
-        ? t({ ko: '필수 입력이 비어 있거나 연결되지 않아 실행 전 확인이 필요해.', en: 'One or more required inputs are empty or unconnected and need review before execution.' })
-        : executionStatus === 'skipped'
-          ? data.executionSkipReason === 'disabled'
-            ? t({ ko: '이전 실행에서 이 노드는 비활성 상태라 실행하지 않고 모든 출력을 비활성 처리했어.', en: 'In the selected run this node was disabled, so execution skipped it and disabled all outputs.' })
-            : data.executionSkipReason === 'source-node-skipped'
-              ? t({ ko: '이전 실행에서 상위 노드가 먼저 건너뛰어져 이 노드도 실행되지 않았어.', en: 'In the selected run an upstream node was skipped first, so this node did not run.' })
-              : data.executionSkipReason === 'source-output-disabled'
-                ? t({ ko: '이전 실행에서 연결된 상위 출력이 비활성 처리되어 이 노드가 실행되지 않았어.', en: 'In the selected run a connected upstream output was disabled, so this node did not run.' })
-                : t({ ko: '이전 실행에서 IF 분기 결과가 이 노드로 이어지지 않아 건너뛰었어.', en: 'In the selected run the IF branch result did not lead to this node, so it was skipped.' })
-        : data.activationHint === 'conditional-input'
-          ? t({ ko: 'IF 분기 출력이 연결되어 실행 때 조건 결과에 따라 건너뛸 수 있어.', en: 'An IF branch output feeds this node, so execution may skip it depending on the branch result.' })
-          : t({ ko: '현재 연결과 값 기준으로 실행 경로에 들어갈 수 있어.', en: 'Current wiring and values allow this node to enter the execution path.' })
+          ? t({ ko: '연결된 앞 출력이 꺼져 있었어.', en: 'A connected earlier output was off.' })
+          : t({ ko: 'IF 분기가 이쪽으로 오지 않았어.', en: 'The IF branch did not lead here.' })
+    return { tone: 'muted', label: t({ ko: '건너뜀', en: 'Skipped' }), detail: reason }
+  }
+  if (executionStatus === 'running') {
+    return { tone: 'info', label: t({ ko: '실행 중', en: 'Running' }), detail: t({ ko: '선택한 실행이 지금 이 노드를 처리하고 있어.', en: 'The selected run is working on this node.' }) }
+  }
+  if (missingRequiredCount > 0) {
+    return { tone: 'warning', label: t({ ko: '입력 {count}개 필요', en: '{count} inputs needed' }, { count: missingRequiredCount }), detail: t({ ko: '필수 입력이 비어 있거나 연결되지 않았어.', en: 'Required inputs are empty or not linked.' }) }
+  }
+  if (executionStatus === 'completed') {
+    return {
+      tone: 'success',
+      label: data.executionReuseState === 'reused' ? t({ ko: '완료 (캐시)', en: 'Done (cached)' }) : t({ ko: '완료', en: 'Done' }),
+      detail: data.executionReuseState === 'reused' ? t({ ko: '이전 결과를 다시 썼어.', en: 'Reused an earlier result.' }) : t({ ko: '선택한 실행에서 완료됐어.', en: 'Finished in the selected run.' }),
+    }
+  }
+  return null
+}
 
-  // Status tokens (not fixed hexes) so the outline reads on both the dark and the light canvas.
-  const statusBorderColor =
-    data.disabled === true
-      ? 'var(--muted-foreground)'
-      : executionStatus === 'completed'
-      ? 'var(--success)'
-      : executionStatus === 'failed'
-        ? 'var(--destructive)'
-        : executionStatus === 'blocked'
-          ? 'var(--warning)'
-          : executionStatus === 'skipped'
-            ? 'var(--muted-foreground)'
-          : missingRequiredInputCount > 0
-            ? 'var(--warning)'
-            : `${accentColor}66`
-  const isFinalResult = isFinalResultModule(module)
-  const nodeLayoutKey = resolveModuleGraphNodeLayout(module)
-  const customControlState = useModuleGraphNodeCustomControls({ connectedInputKeys, data, id, inputPorts, uiFieldByKey })
+const STATUS_DOT_CLASS: Record<NonNullable<NodeStatus>['tone'], string> = {
+  success: 'bg-success',
+  destructive: 'bg-destructive',
+  warning: 'bg-warning',
+  muted: 'bg-muted-foreground',
+  info: 'bg-info animate-pulse',
+}
+
+/** Width of one node: most nodes 260px, request builders and multi-editor nodes a little wider. */
+function getNodeWidth(data: ModuleGraphNode['data']) {
+  const hasComposite = (data.module.ui_schema ?? []).some((field) => field.node_editor === 'minimax_h3_director_dasiwa')
+  return hasComposite ? 290 : 260
+}
+
+/** A node card: a header (kind icon, name, status), its ports and values, and the latest output. */
+function ModuleGraphNodeCardComponent({ id, data, selected, dragging }: NodeProps<ModuleGraphNode>) {
+  const { t } = useI18n()
+  const actions = useModuleGraphNodeActions()
+  const executionLocked = useModuleGraphExecutionLock()
+  const { canExecuteGeneration, canUpdateWorkflows } = useFeaturePermissions()
+  const { drag, debugMode, liftedLink } = useModuleGraphCanvasContext()
+  const updateNodeInternals = useUpdateNodeInternals()
+  const { module } = data
+  const visual = getModuleNodeKindVisual(module)
+  const KindIcon = visual.icon
+  // A lifted link still counts as plugged in at both ends until it is dropped, so ports and rows stay put.
+  const liftedInputKey = liftedLink?.targetNodeId === id ? liftedLink.targetPortKey : null
+  const liftedOutputKey = liftedLink?.sourceNodeId === id ? liftedLink.sourcePortKey : null
+  const connectedInputKeys = useMemo(() => {
+    const keys = new Set(data.connectedInputKeys ?? [])
+    if (liftedInputKey) keys.add(liftedInputKey)
+    return keys
+  }, [data.connectedInputKeys, liftedInputKey])
+  const connectedOutputKeys = useMemo(() => {
+    const keys = new Set(data.connectedOutputKeys ?? [])
+    if (liftedOutputKey) keys.add(liftedOutputKey)
+    return keys
+  }, [data.connectedOutputKeys, liftedOutputKey])
   const visibleOutputPorts = getVisibleModuleOutputPorts(module, data.inputValues, {
     includeAdvanced: isAdvancedOutputPortsEnabled(data.inputValues),
     connectedInputKeys,
     connectedOutputKeys,
   })
-  const visibleOutputPortKeys = new Set(visibleOutputPorts.map((port) => port.key))
-  const visibleInputPorts = inputPorts.filter((port) => !customControlState.hiddenInputPortKeys.has(port.key))
-  const usesRegisteredLayout = nodeLayoutKey !== 'default'
-  const renderedInputPorts = isWorkflowInputSource
-    ? []
-    : (usesRegisteredLayout ? inputPorts : visibleInputPorts)
-  const renderedOutputPorts = isWorkflowInputSource
-    ? sourceOutputPorts
-    : (usesRegisteredLayout ? outputPorts : visibleOutputPorts)
-  const renderedHandleSignature = [
-    ...renderedInputPorts.map((port) => `in:${port.key}`),
-    ...activeMiniMaxDirectorInputPorts.map((port) => `in:${port.key}`),
-    ...resolveModuleGraphNodeDynamicInputPortKeys(module, data).map((portKey) => `in:${portKey}`),
-    ...renderedOutputPorts.map((port) => `out:${port.key}`),
-  ].join('|')
+  const missingRequiredCount = isWorkflowInputSourceModule(module)
+    ? 0
+    : (module.exposed_inputs ?? []).filter((port) => (
+        port.required
+        && !connectedInputKeys.has(port.key)
+        && !hasMeaningfulValue(data.inputValues?.[port.key])
+        && !hasMeaningfulValue(port.default_value)
+      )).length
+  const status = useNodeStatus(data, missingRequiredCount)
+  const nodeLabel = getModuleNodeDisplayLabelFromData(data)
+  const baseLabel = getModuleBaseDisplayName(module)
+  const [isRenaming, setIsRenaming] = useState(false)
+  const [labelDraft, setLabelDraft] = useState(data.label ?? '')
 
   useEffect(() => {
+    if (!isRenaming) setLabelDraft(data.label ?? '')
+  }, [data.label, isRenaming])
+
+  // Rows come and go with values (modes, toggles, links): re-measure the connection points after each change.
+  useEffect(() => {
     updateNodeInternals(id)
-  }, [id, renderedHandleSignature, updateNodeInternals])
+  }, [data, id, updateNodeInternals])
+
+  // While a link is dragged, nodes without any port that could take it step back.
+  const dimmedForDrag = useMemo(() => {
+    if (!drag || drag.nodeId === id) return false
+    if (drag.handleType === 'source') {
+      return !(module.exposed_inputs ?? []).some((port) => getModulePortCompatibility(drag.dataType, port.data_type) !== 'incompatible')
+    }
+    return !visibleOutputPorts.some((port) => getModulePortCompatibility(port.data_type, drag.dataType) !== 'incompatible')
+  }, [drag, id, module.exposed_inputs, visibleOutputPorts])
+
+  const commitLabel = () => {
+    actions.changeLabel(id, labelDraft)
+    setIsRenaming(false)
+  }
+
+  const borderColor = selected
+    ? 'var(--primary)'
+    : status?.tone === 'destructive'
+      ? 'color-mix(in srgb, var(--destructive) 70%, transparent)'
+      : status?.tone === 'warning' && missingRequiredCount > 0
+        ? 'color-mix(in srgb, var(--warning) 45%, transparent)'
+        : 'color-mix(in srgb, var(--foreground) 10%, transparent)'
 
   return (
     <div
-      className={`${miniMaxDirectorUiFields.length > 0 ? 'w-[560px] max-w-[560px]' : 'w-[340px] max-w-[340px]'} rounded-sm border bg-surface-container px-2.5 py-2 text-foreground shadow-elevation-1 ${data.disabled === true ? 'opacity-60 grayscale' : ''}`}
+      className={cn(
+        'rounded-[7px] border bg-surface-container text-foreground shadow-elevation-1 transition-opacity',
+        data.disabled === true && 'opacity-55 grayscale',
+        dimmedForDrag && 'opacity-30',
+      )}
       style={{
-        borderColor: selected ? accentColor : statusBorderColor,
-        boxShadow: selected ? `0 0 0 2px ${accentColor}66, 0 0 0 1px ${accentColor}22` : `0 0 0 1px ${accentColor}22`,
+        width: getNodeWidth(data),
+        borderColor,
+        boxShadow: selected ? '0 0 0 1px var(--primary)' : undefined,
       } as CSSProperties}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-2">
-          <div className="module-graph-drag-handle flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm bg-surface-high text-muted-foreground active:cursor-grabbing">
-            <GripVertical className="h-4 w-4" />
-          </div>
-          <div className="min-w-0">
-            {isEditingLabel ? (
-              <Input
-                value={labelDraft}
-                autoFocus
-                onChange={(event) => setLabelDraft(event.target.value)}
-                onMouseDown={stopNodeInteraction}
-                onClick={stopNodeInteraction}
-                onBlur={() => {
-                  data.onNodeLabelChange?.(id, labelDraft)
-                  setIsEditingLabel(false)
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    data.onNodeLabelChange?.(id, labelDraft)
-                    setIsEditingLabel(false)
-                  }
-                  if (event.key === 'Escape') {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    setLabelDraft(data.label ?? '')
-                    setIsEditingLabel(false)
-                  }
-                }}
-                placeholder={moduleBaseLabel}
-                className={`nodrag nowheel h-8 text-sm ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
-              />
-            ) : (
-              <Tip content={nodeTitleTooltip} className="whitespace-pre-line" side="top" align="start">
-                <Button
-                  type="button"
-                  variant="link"
-                  className="block h-auto max-w-full truncate p-0 text-left text-sm font-semibold text-foreground"
-                  onClick={(event) => {
-                    if (!selected) {
-                      return
-                    }
-                    stopNodeActionEvent(event)
-                    setIsEditingLabel(true)
-                  }}
-                >
-                  {nodeDisplayLabel}
-                </Button>
-              </Tip>
-            )}
-          </div>
+      <NodeToolbar isVisible={selected && !dragging ? undefined : false} position={Position.Top} offset={8}>
+        <div className="nodrag flex items-center gap-0.5 rounded-lg bg-surface-high p-0.5 shadow-elevation-2">
+          <IconButton size="icon-xs" variant="ghost" className="text-primary" disabled={!canExecuteGeneration || executionLocked} onClick={() => actions.execute(id, false)} label={t({ ko: '이 노드까지 실행', en: 'Run up to this node' })}>
+            <Play />
+          </IconButton>
+          <IconButton size="icon-xs" variant="ghost" disabled={!canExecuteGeneration || executionLocked} onClick={() => actions.execute(id, true)} label={t({ ko: '캐시 무시하고 다시 실행', en: 'Rerun, ignoring the cache' })}>
+            <RotateCcw />
+          </IconButton>
+          <span className="mx-0.5 h-4 w-px bg-line" aria-hidden />
+          <IconButton size="icon-xs" variant="ghost" disabled={!canUpdateWorkflows} onClick={() => actions.duplicate(id)} label={t({ ko: '복제 (Ctrl+D)', en: 'Duplicate (Ctrl+D)' })}>
+            <Copy />
+          </IconButton>
+          <IconButton size="icon-xs" variant="ghost" active={data.disabled === true} disabled={!canUpdateWorkflows} onClick={() => actions.toggleDisabled(id)} label={data.disabled === true ? t({ ko: '켜기', en: 'Turn on' }) : t({ ko: '끄기', en: 'Turn off' })}>
+            <Power />
+          </IconButton>
+          <IconButton size="icon-xs" variant="destructive-ghost" disabled={!canUpdateWorkflows} onClick={() => actions.remove(id)} label={t({ ko: '삭제 (Delete)', en: 'Delete (Delete)' })}>
+            <Trash2 />
+          </IconButton>
+          <IconButton
+            size="icon-xs"
+            variant="ghost"
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect()
+              actions.openMenu(id, { x: rect.left + rect.width / 2, y: rect.bottom + 4 })
+            }}
+            label={t({ ko: '더 보기', en: 'More' })}
+          >
+            <Ellipsis />
+          </IconButton>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-          {data.plannedExecutionOrder ? (
-            <Tip content={t({ ko: '계획 실행 순서', en: 'Planned execution order' })}>
-              <Badge variant="outline">#{data.plannedExecutionOrder}</Badge>
-            </Tip>
-          ) : null}
-          <Tip content={activationTitle}>
-            <Badge variant="outline">{activationLabel}</Badge>
+      </NodeToolbar>
+
+      <div className="module-graph-drag-handle flex h-9 items-center gap-2 border-b border-line pr-2.5 pl-3">
+        <span className="grid size-[18px] shrink-0 place-items-center rounded-[5px]" style={{ background: `color-mix(in srgb, ${visual.color} 16%, transparent)`, color: visual.color }} aria-hidden>
+          <KindIcon className="size-3" strokeWidth={2.25} />
+        </span>
+        {isRenaming ? (
+          <input
+            autoFocus
+            value={labelDraft}
+            aria-label={t({ ko: '노드 이름', en: 'Node name' })}
+            placeholder={baseLabel}
+            onChange={(event) => setLabelDraft(event.target.value)}
+            onMouseDown={stopNodeEvent}
+            onBlur={commitLabel}
+            onKeyDown={(event) => {
+              event.stopPropagation()
+              if (event.key === 'Enter') commitLabel()
+              if (event.key === 'Escape') {
+                setLabelDraft(data.label ?? '')
+                setIsRenaming(false)
+              }
+            }}
+            className={cn(NODE_CONTROL_CLASS, 'h-7 flex-1 text-sm font-semibold')}
+          />
+        ) : (
+          <span
+            className="min-w-0 flex-1 truncate text-sm font-semibold"
+            title={nodeLabel === baseLabel ? nodeLabel : `${nodeLabel}\n${baseLabel}`}
+            onDoubleClick={(event) => {
+              event.stopPropagation()
+              if (canUpdateWorkflows) setIsRenaming(true)
+            }}
+          >
+            {nodeLabel}
+          </span>
+        )}
+        {debugMode && data.plannedExecutionOrder ? (
+          <Tip content={t({ ko: '실행 순서', en: 'Run order' })}>
+            <span className="shrink-0 font-mono text-2xs text-muted-foreground">#{data.plannedExecutionOrder}</span>
           </Tip>
-          {isFinalResult ? <Badge variant="secondary">{t({ ko: '최종 결과', en: 'Final result' })}</Badge> : null}
-          {data.executionReuseState === 'reused' ? <Badge variant="outline">{t({ ko: '캐시', en: 'Cache' })}</Badge> : null}
-          {statusLabel && statusLabel !== activationLabel ? <Badge variant="secondary">{statusLabel}</Badge> : null}
-        </div>
+        ) : null}
+        {status ? (
+          <Tip content={`${status.label}\n${status.detail}`} className="whitespace-pre-line text-left">
+            <span role="img" aria-label={status.label} className={cn('size-2 shrink-0 rounded-full', STATUS_DOT_CLASS[status.tone])} />
+          </Tip>
+        ) : null}
       </div>
 
-      {(data.onExecuteNode || data.onForceExecuteNode) ? (
-        <div className="nodrag nowheel mt-2 flex flex-wrap gap-1.5">
-          {data.onExecuteNode ? (
-            <IconButton
-              size="icon-sm"
-              variant="default"
-              className="h-7 w-7"
-              disabled={!canExecuteGeneration || data.executeNodeDisabled}
-              onMouseDown={stopNodeActionEvent}
-              onClick={(event) => {
-                stopNodeActionEvent(event)
-                data.onExecuteNode?.()
-              }}
-              label={t({ ko: '이 노드까지 실행', en: 'Run up to this node' })}
-            >
-              <Play className="h-3.5 w-3.5" />
-            </IconButton>
-          ) : null}
-          {data.onForceExecuteNode ? (
-            <IconButton
-              size="icon-sm"
-              variant="secondary"
-              className="h-7 w-7"
-              disabled={!canExecuteGeneration || data.executeNodeDisabled}
-              onMouseDown={stopNodeActionEvent}
-              onClick={(event) => {
-                stopNodeActionEvent(event)
-                data.onForceExecuteNode?.()
-              }}
-              label={t({ ko: '재실행 (캐시 무시)', en: 'Rerun (ignore cache)' })}
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-            </IconButton>
-          ) : null}
-        </div>
-      ) : null}
-
-      <ModuleGraphNodeCustomControls data={data} state={customControlState} />
-
-      {miniMaxDirectorUiFields.length > 0 ? (
-        <div
-          className="nodrag nowheel mt-3 space-y-3"
-          onMouseDown={stopNodeInteraction}
-          onClick={stopNodeInteraction}
-        >
-          {miniMaxDirectorUiFields.map((field) => (
-            <div key={field.key} className="space-y-2">
-              <MiniMaxH3DirectorDasiwaInput
-                value={normalizeCompositeNodeValue(data.inputValues?.[field.key] ?? field.default_value)}
-                visibleFields={field.node_visible_fields}
-                hiddenControls={field.node_hidden_controls}
-                numericBounds={field.node_numeric_bounds}
-                onChange={(nextValue) => data.onNodeValueChange?.(id, field.key, nextValue)}
-                renderInputPort={(inputKey: MiniMaxH3DirectorGraphInputKey) => {
-                  const port = getMiniMaxDirectorInputPort(module, data.inputValues, field.key, inputKey)
-                  if (!port) return null
-                  const portState = getInputPortState(data, port, connectedInputKeys)
-                  return (
-                    <PortCell
-                      nodeId={id}
-                      port={port}
-                      side="input"
-                      accentColor={accentColor}
-                      connected={portState.connected}
-                      satisfied={portState.satisfied}
-                      requiredMissing={portState.requiredMissing}
-                      onDisconnectInput={data.onDisconnectNodeInput}
-                    />
-                  )
-                }}
-              />
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      {isWorkflowInputSource ? <SourceNodeOutputPorts nodeId={id} ports={sourceOutputPorts} connectedOutputKeys={connectedOutputKeys} accentColor={accentColor} /> : null}
-      {isWorkflowInputSource ? <InlineWorkflowInputEditor id={id} data={data} /> : null}
-
-      {!isWorkflowInputSource ? (
-        <ModuleGraphNodeLayoutRenderer
+      <div className="py-1">
+        <ModuleGraphNodeBody
           id={id}
           data={data}
-          layoutKey={nodeLayoutKey}
-          accentColor={accentColor}
           connectedInputKeys={connectedInputKeys}
           connectedOutputKeys={connectedOutputKeys}
-          uiFieldByKey={uiFieldByKey}
-          visibleInputPorts={visibleInputPorts}
           visibleOutputPorts={visibleOutputPorts}
         />
-      ) : null}
-
-      {powerLoraUiFields.length > 0 ? (
-        <div className="nodrag nowheel mt-2.5 space-y-1" onMouseDown={stopNodeInteraction} onClick={stopNodeInteraction}>
-          {powerLoraUiFields.map((field) => {
-            const value = data.inputValues?.[field.key] ?? field.default_value
-            return (
-              <PowerLoraLoaderInput
-                key={field.key}
-                field={field}
-                value={value}
-                variant="compact"
-                onChange={(nextValue) => data.onNodeValueChange?.(id, field.key, nextValue)}
-              />
-            )
-          })}
-        </div>
-      ) : null}
+      </div>
 
       <NodeArtifactOutputs
         data={data}
-        moduleName={module.name}
-        isFinalResult={isFinalResult}
-        visibleOutputPortKeys={visibleOutputPortKeys}
+        moduleName={nodeLabel}
+        isFinalResult={isFinalResultModule(module)}
+        visibleOutputPortKeys={new Set(visibleOutputPorts.map((port) => port.key))}
       />
     </div>
   )
 }
 
-/** Memoized so position-only canvas updates skip re-rendering unchanged node cards. */
+/** Memoized: dragging another node or editing another node's value leaves this card alone. */
 export const ModuleGraphNodeCard = memo(ModuleGraphNodeCardComponent)

@@ -1,7 +1,7 @@
 import { AuthAccount } from '../models/AuthAccount';
 import { hasConfiguredAuth } from '../routes/auth-route-helpers';
 import { isRequesterAdmin, requesterPermissionKeys, requireRequesterPermission } from '../middleware/featureAccess';
-import { ChatProfileStore } from '../services/codex-chat/chatProfiles';
+import { ChatProfileStore, profileSeesImages } from '../services/codex-chat/chatProfiles';
 import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess';
 import { requireActiveChatReply } from '../services/codex-chat/chatReplyRegistry';
 import { validateMcpToolArguments } from './requestSecurity';
@@ -97,7 +97,7 @@ function accountHoldsTool(context: McpRequestContext, toolName: string): boolean
   const { keys, admin, profile } = factsFor(context);
   if (!requiredToolKeys(toolName).every((key) => keys.has(key))) return false;
   if (getMcpToolScope(toolName) === 'configure' && !admin) return false;
-  if (profile && toolName === 'view_images' && !profile.visionEnabled) return false;
+  if (profile && toolName === 'view_images' && !profileSeesImages(profile)) return false;
   if (profile && toolName === 'save_lore' && !profile.allowLoreProposals) return false;
   return true;
 }

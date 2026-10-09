@@ -8,7 +8,7 @@ import { AuthAccessControlService, isActiveAdminRecord } from '../authAccessCont
 import type { McpHttpAuthentication } from '../mcpHttpSettingsService'
 import { isDirectLoopbackRequest } from '../../utils/bootstrapAccess'
 import { CHAT_SCOPES, loadChatSettings, type ChatScope } from './chatSettings'
-import { ChatProfileStore, type ChatProfile } from './chatProfiles'
+import { ChatProfileStore, profileSeesImages, type ChatProfile } from './chatProfiles'
 import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { CodexChatStore } from './codexChatStore'
 import { ChatGroupStore } from './chatGroupStore'
@@ -129,7 +129,7 @@ export function requireChatMcpAccountAccess(context: McpRequestContext, toolName
     if (grant.toolAllowlist && !grant.toolAllowlist.includes(toolName)) throw new Error('프로필에서 이 도구를 더 이상 허용하지 않아.')
     if (!grant.scopes.includes(scope as ChatScope)) throw new Error('프로필의 도구 사용 설정이 변경됐어.')
   }
-  if (toolName === 'view_images' && !profile.visionEnabled) throw new Error('프로필의 이미지 조회가 꺼져 있어.')
+  if (toolName === 'view_images' && !profileSeesImages(profile)) throw new Error('프로필의 이미지 조회가 꺼져 있어.')
   if (toolName === 'save_lore' && !profile.allowLoreProposals) throw new Error('프로필의 로어 제안이 꺼져 있어.')
   if (profile.generationPresetIds.length > 0 && GENERATION_PRESET_BLOCKED_TOOLS.has(toolName)) throw new Error('생성 프리셋만 사용할 수 있어.')
   if (isChatGenerationTool(toolName)) {

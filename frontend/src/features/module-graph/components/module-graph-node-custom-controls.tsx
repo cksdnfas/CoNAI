@@ -1,18 +1,17 @@
 import type { ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import type { ComfyUIServer } from '@/lib/api-image-generation-types'
 import type { LlmPresetOptionCollections, LlmPresetOptionRecord } from '@/lib/api-settings-llm'
-import { Select } from '@/components/ui/select'
-import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import type { ModuleGraphNode } from '../module-graph-shared'
 import { normalizeOptionalString, parsePositiveIntegerish } from '../module-graph-shared'
 import {
-    getLlmProfileSelectOptions,
   getSelectOptionValue,
   normalizeSelectOptions,
   resolveModelSelectValue,
 } from './module-graph-node-card-options'
-import { MODULE_GRAPH_INLINE_CONTROL_CLASS, stopNodeInteraction } from './module-graph-port-cells'
+import { useModuleGraphNodeActions } from './module-graph-canvas-context'
+import { NodeSelectControl } from './module-graph-node-controls'
+import { NodeRow } from './module-graph-node-rows'
 import { resolveModuleGraphNodeCustomControls } from './module-graph-node-card-operation-registry'
 import { useModuleGraphNodeCardQueries } from './use-module-graph-node-card-queries'
 
@@ -93,32 +92,17 @@ export function useModuleGraphNodeCustomControls({
 }: UseModuleGraphNodeCustomControlsOptions) {
   const { module } = data
   const controlKeys = resolveModuleGraphNodeCustomControls(module)
-  const needsLlmModelOptions = controlKeys.has('llm-model')
   const needsLlmPresetOptions = controlKeys.has('llm-preset')
   const comfyWorkflowId = module.engine_type === 'comfyui'
     ? parsePositiveIntegerish(module.source_workflow_id ?? module.template_defaults?.workflow_id)
     : null
-  const canConfigureComfyTarget = Boolean(controlKeys.has('comfy-target') && comfyWorkflowId && data.onNodeValueChange)
+  const canConfigureComfyTarget = Boolean(controlKeys.has('comfy-target') && comfyWorkflowId)
   const queries = useModuleGraphNodeCardQueries({
     canConfigureComfyTarget,
     comfyWorkflowId,
-    needsLlmModelOptions,
     needsLlmPresetOptions,
   })
 
-  const llmModelOptions = needsLlmModelOptions ? getLlmProfileSelectOptions(queries.llmProfilesQuery.data) : []
-  const llmSelectedProfileId = data.inputValues?.profile_id === undefined || data.inputValues?.profile_id === null ? '' : String(data.inputValues.profile_id)
-  // Nodes saved before profiles name a bare connection; it shows until a profile is picked.
-  const llmLegacyProviderName = llmSelectedProfileId ? '' : normalizeOptionalString(data.inputValues?.provider_name) ?? ''
-  const codexModelPort = controlKeys.has('codex-model') ? inputPorts.find((port) => port.key === 'model') : null
-  const codexModelUiField = controlKeys.has('codex-model') ? uiFieldByKey.get('model') ?? null : null
-  const codexModelOptions = normalizeSelectOptions(codexModelUiField?.data_type === 'select' ? codexModelUiField.options : null)
-  const codexModelValue = resolveModelSelectValue({
-    currentValue: normalizeOptionalString(data.inputValues?.model),
-    port: codexModelPort,
-    uiField: codexModelUiField,
-    options: codexModelOptions,
-  })
   const naiModelPort = controlKeys.has('nai-model') ? inputPorts.find((port) => port.key === 'model') : null
   const naiModelUiField = controlKeys.has('nai-model') ? uiFieldByKey.get('model') ?? null : null
   const naiModelOptions = normalizeSelectOptions(naiModelUiField?.data_type === 'select' ? naiModelUiField.options : null)
@@ -128,10 +112,8 @@ export function useModuleGraphNodeCustomControls({
     uiField: naiModelUiField,
     options: naiModelOptions,
   })
-  const canConfigureLlmModel = Boolean(needsLlmModelOptions && data.onNodeValueChange)
-  const canConfigureCodexModel = Boolean(controlKeys.has('codex-model') && codexModelOptions.length > 0 && data.onNodeValueChange)
-  const canConfigureNaiModel = Boolean(controlKeys.has('nai-model') && naiModelOptions.length > 0 && data.onNodeValueChange && !connectedInputKeys.has('model'))
-  const canConfigureLlmPreset = Boolean(needsLlmPresetOptions && data.onNodeValueChange)
+  const canConfigureNaiModel = controlKeys.has('nai-model') && naiModelOptions.length > 0 && !connectedInputKeys.has('model')
+  const canConfigureLlmPreset = needsLlmPresetOptions
   const llmPresetType = normalizeLlmPresetType(data.inputValues?.preset_type)
   const llmPresetEntries = getLlmPresetEntries(queries.llmPresetsQuery.data, llmPresetType)
   const llmPresetName = normalizeOptionalString(data.inputValues?.preset_name) ?? ''
@@ -154,39 +136,20 @@ export function useModuleGraphNodeCustomControls({
     hiddenInputPortKeys.add('preset_type')
     hiddenInputPortKeys.add('preset_name')
   }
-  if (needsLlmModelOptions) {
-    hiddenInputPortKeys.add('provider_name')
-    hiddenInputPortKeys.add('profile_id')
-    hiddenInputPortKeys.add('model')
-    hiddenInputPortKeys.add('system_prompt_preset_name')
-    hiddenInputPortKeys.add('prompt_preset_name')
-    hiddenInputPortKeys.add('structured_output_json_preset_name')
-    hiddenInputPortKeys.add('response_mode')
-  }
-  if (controlKeys.has('codex-model')) {
-    hiddenInputPortKeys.add('response_mode')
-  }
-  if (canConfigureLlmModel || canConfigureCodexModel || canConfigureNaiModel) {
+  if (canConfigureNaiModel) {
     hiddenInputPortKeys.add('model')
   }
 
   return {
-    canConfigureCodexModel,
     canConfigureComfyTarget,
-    canConfigureLlmModel,
     canConfigureLlmPreset,
     canConfigureNaiModel,
     candidateComfyServers,
-    codexModelOptions,
-    codexModelValue,
     comfyRoutingTags,
     comfyTargetValue,
     hasKnownComfyTargetValue: knownComfyTargetValues.has(comfyTargetValue),
     hiddenInputPortKeys,
     id,
-    llmModelOptions,
-    llmSelectedProfileId,
-    llmLegacyProviderName,
     llmPresetEntries,
     llmPresetName,
     llmPresetType,
@@ -199,89 +162,84 @@ export function useModuleGraphNodeCustomControls({
 
 type ModuleGraphNodeCustomControlsState = ReturnType<typeof useModuleGraphNodeCustomControls>
 
+/** Node-specific choices (ComfyUI server, NovelAI model, LLM preset) as ordinary node rows. */
 export function ModuleGraphNodeCustomControls({ data, state }: { data: ModuleGraphNode['data']; state: ModuleGraphNodeCustomControlsState }) {
   const { t } = useI18n()
-  // Picking a profile replaces a legacy connection; temperature / output limit go back to the profile's values.
-  const applyLlmProfile = (profileId: string) => {
-    if (!data.onNodeValueChange) return
-    data.onNodeValueChange(state.id, 'profile_id', profileId ? Number(profileId) : '')
-    data.onNodeValueChange(state.id, 'provider_name', '')
-    data.onNodeValueChange(state.id, 'model', '')
-    data.onNodeValueChange(state.id, 'temperature', '')
-    data.onNodeValueChange(state.id, 'max_tokens', '')
-  }
+  const actions = useModuleGraphNodeActions()
+  const change = (key: string, value: unknown) => actions.changeValue(state.id, key, value)
   const applyComfyTargetValue = (nextValue: string) => {
-    if (!data.onNodeValueChange) return
     if (nextValue === 'auto') {
-      data.onNodeValueChange(state.id, GRAPH_COMFY_TARGET_MODE_KEY, 'auto')
-      data.onNodeValueChange(state.id, GRAPH_COMFY_TARGET_TAG_KEY, '')
-      data.onNodeValueChange(state.id, GRAPH_COMFY_TARGET_SERVER_ID_KEY, '')
+      change(GRAPH_COMFY_TARGET_MODE_KEY, 'auto')
+      change(GRAPH_COMFY_TARGET_TAG_KEY, '')
+      change(GRAPH_COMFY_TARGET_SERVER_ID_KEY, '')
       return
     }
     if (nextValue.startsWith('tag:')) {
-      data.onNodeValueChange(state.id, GRAPH_COMFY_TARGET_MODE_KEY, 'tag')
-      data.onNodeValueChange(state.id, GRAPH_COMFY_TARGET_TAG_KEY, nextValue.slice('tag:'.length))
-      data.onNodeValueChange(state.id, GRAPH_COMFY_TARGET_SERVER_ID_KEY, '')
+      change(GRAPH_COMFY_TARGET_MODE_KEY, 'tag')
+      change(GRAPH_COMFY_TARGET_TAG_KEY, nextValue.slice('tag:'.length))
+      change(GRAPH_COMFY_TARGET_SERVER_ID_KEY, '')
       return
     }
     if (nextValue.startsWith('server:')) {
-      data.onNodeValueChange(state.id, GRAPH_COMFY_TARGET_MODE_KEY, 'server')
-      data.onNodeValueChange(state.id, GRAPH_COMFY_TARGET_TAG_KEY, '')
-      data.onNodeValueChange(state.id, GRAPH_COMFY_TARGET_SERVER_ID_KEY, nextValue.slice('server:'.length))
+      change(GRAPH_COMFY_TARGET_MODE_KEY, 'server')
+      change(GRAPH_COMFY_TARGET_TAG_KEY, '')
+      change(GRAPH_COMFY_TARGET_SERVER_ID_KEY, nextValue.slice('server:'.length))
     }
   }
+
+  const comfyTargetOptions = [
+    ...(!state.hasKnownComfyTargetValue ? [{ value: state.comfyTargetValue, label: t({ ko: '찾을 수 없음 ({label})', en: 'Not found ({label})' }, { label: resolveComfyTargetBadgeLabel(t, data.inputValues) }) }] : []),
+    { value: 'auto', label: t({ ko: '자동 분산', en: 'Auto routing' }) },
+    ...state.comfyRoutingTags.map((tag) => ({ value: `tag:${tag}`, label: `#${tag}` })),
+    ...state.candidateComfyServers.map((server) => ({ value: `server:${server.id}`, label: server.name })),
+  ]
+  const toModelOptions = (options: ReturnType<typeof normalizeSelectOptions>) => options.map((option) => ({ value: getSelectOptionValue(option), label: typeof option === 'string' ? option : option.label }))
 
   return (
     <>
       {state.canConfigureComfyTarget ? (
-        <div className="nodrag nowheel mt-2">
-          <Select value={state.comfyTargetValue} onMouseDown={stopNodeInteraction} onClick={stopNodeInteraction} onChange={(event) => { stopNodeInteraction(event); applyComfyTargetValue(event.target.value) }} className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}>
-            {!state.hasKnownComfyTargetValue ? <option value={state.comfyTargetValue} disabled>{t({ ko: '외부 설정을 찾을 수 없음 ({label})', en: 'Could not find external configuration ({label})' }, { label: resolveComfyTargetBadgeLabel(t, data.inputValues) })}</option> : null}
-            <option value="auto">{t({ ko: '자동 분산', en: 'Auto routing' })}</option>
-            {state.comfyRoutingTags.length > 0 ? <optgroup label={t({ ko: '태그', en: 'Tags' })}>{state.comfyRoutingTags.map((tag) => <option key={tag} value={`tag:${tag}`}>#{tag}</option>)}</optgroup> : null}
-            {state.candidateComfyServers.length > 0 ? <optgroup label={t({ ko: '서버', en: 'Servers' })}>{state.candidateComfyServers.map((server) => <option key={server.id} value={`server:${server.id}`}>{server.name}</option>)}</optgroup> : null}
-          </Select>
-        </div>
+        <NodeRow label={t({ ko: '서버', en: 'Server' })}>
+          <NodeSelectControl ariaLabel={t({ ko: 'ComfyUI 서버', en: 'ComfyUI server' })} value={state.comfyTargetValue} options={comfyTargetOptions} onChange={applyComfyTargetValue} className="w-full" />
+        </NodeRow>
       ) : null}
 
-      {state.canConfigureNaiModel ? <ModelSelect label={t({ ko: '모델', en: 'Model' })} value={state.naiModelValue} options={state.naiModelOptions} onChange={(value) => data.onNodeValueChange?.(state.id, 'model', value)} /> : null}
-
-      {state.canConfigureLlmModel ? (
-        <div className="nodrag nowheel mt-2 space-y-1">
-          <Text as="div" variant="overline" className="px-0.5 font-medium">{t({ ko: 'LLM 프로필', en: 'LLM profile' })}</Text>
-          <Select value={state.llmSelectedProfileId} onMouseDown={stopNodeInteraction} onClick={stopNodeInteraction} onChange={(event) => { stopNodeInteraction(event); applyLlmProfile(event.target.value) }} className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}>
-            <option value="">{state.llmLegacyProviderName ? t({ ko: '연결: {name} (이전 방식)', en: 'Connection: {name} (legacy)' }, { name: state.llmLegacyProviderName }) : t({ ko: 'LLM 프로필 선택', en: 'Select LLM profile' })}</option>
-            {state.llmModelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </Select>
-        </div>
+      {state.canConfigureNaiModel ? (
+        <NodeRow label={t({ ko: '모델', en: 'Model' })}>
+          <NodeSelectControl ariaLabel={t({ ko: '모델', en: 'Model' })} value={state.naiModelValue} options={toModelOptions(state.naiModelOptions)} onChange={(value) => change('model', value)} className="w-full" />
+        </NodeRow>
       ) : null}
-
-      {state.canConfigureCodexModel ? <ModelSelect label={t({ ko: '모델', en: 'Model' })} value={state.codexModelValue} options={state.codexModelOptions} onChange={(value) => data.onNodeValueChange?.(state.id, 'model', value)} /> : null}
 
       {state.canConfigureLlmPreset ? (
-        <div className="nodrag nowheel mt-2 space-y-1.5">
-          <Text as="div" variant="overline" className="px-0.5 font-medium">{t({ ko: '프리셋', en: 'Preset' })}</Text>
-          <Select value={state.llmPresetType} onMouseDown={stopNodeInteraction} onClick={stopNodeInteraction} onChange={(event) => { stopNodeInteraction(event); data.onNodeValueChange?.(state.id, 'preset_type', event.target.value); data.onNodeValueChange?.(state.id, 'preset_name', '') }} className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}>
-            {getLlmPresetTypeOptions(t).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </Select>
-          <Select value={state.llmPresetName} onMouseDown={stopNodeInteraction} onClick={stopNodeInteraction} onChange={(event) => { stopNodeInteraction(event); data.onNodeValueChange?.(state.id, 'preset_name', event.target.value) }} className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}>
-            <option value="">{state.llmPresetsLoading ? t({ ko: '불러오는 중', en: 'Loading' }) : t({ ko: '프리셋 선택', en: 'Select preset' })}</option>
-            {state.llmPresetEntries.map((preset) => <option key={preset.id || preset.name} value={preset.name}>{preset.name}</option>)}
-          </Select>
-          {state.selectedLlmPreset ? <div className="rounded-sm bg-surface-lowest px-2.5 py-2"><Text as="div" variant="overline" className="mb-1 font-medium">{t({ ko: '선택 내용', en: 'Selected content' })}</Text><div className="max-h-24 overflow-auto whitespace-pre-wrap break-words text-2xs leading-4 text-foreground">{summarizeLlmPresetContent(state.selectedLlmPreset.content)}</div></div> : null}
-        </div>
+        <>
+          <NodeRow label={t({ ko: '종류', en: 'Kind' })}>
+            <NodeSelectControl
+              ariaLabel={t({ ko: '프리셋 종류', en: 'Preset kind' })}
+              value={state.llmPresetType}
+              options={getLlmPresetTypeOptions(t)}
+              onChange={(value) => {
+                change('preset_type', value)
+                change('preset_name', '')
+              }}
+              className="w-full"
+            />
+          </NodeRow>
+          <NodeRow label={t({ ko: '프리셋', en: 'Preset' })} missing={!state.llmPresetName}>
+            <NodeSelectControl
+              ariaLabel={t({ ko: '프리셋', en: 'Preset' })}
+              value={state.llmPresetName}
+              options={state.llmPresetEntries.map((preset) => preset.name)}
+              onChange={(value) => change('preset_name', value)}
+              emptyLabel={state.llmPresetsLoading ? t({ ko: '불러오는 중', en: 'Loading' }) : t({ ko: '선택', en: 'Select' })}
+              className="w-full"
+            />
+          </NodeRow>
+          {state.selectedLlmPreset ? (
+            <div className="px-3 pb-1.5">
+              <div className="line-clamp-3 rounded-[5px] bg-surface-high px-2 py-1.5 text-xs leading-[1.45] break-words whitespace-pre-wrap text-muted-foreground">{summarizeLlmPresetContent(state.selectedLlmPreset.content)}</div>
+            </div>
+          ) : null}
+        </>
       ) : null}
     </>
-  )
-}
-
-function ModelSelect({ label, onChange, options, value }: { label: string; onChange: (value: string) => void; options: ReturnType<typeof normalizeSelectOptions>; value: string }) {
-  return (
-    <div className="nodrag nowheel mt-2 space-y-1">
-      <Text as="div" variant="overline" className="px-0.5 font-medium">{label}</Text>
-      <Select value={value} onMouseDown={stopNodeInteraction} onClick={stopNodeInteraction} onChange={(event) => { stopNodeInteraction(event); onChange(event.target.value) }} className={`h-8 text-xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}>
-        {options.map((option) => { const optionValue = getSelectOptionValue(option); const optionLabel = typeof option === 'string' ? option : option.label; return <option key={optionValue} value={optionValue}>{optionLabel}</option> })}
-      </Select>
-    </div>
   )
 }

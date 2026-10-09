@@ -2,7 +2,7 @@ import { summaryGenerationOptions, thinkingIsOff } from '../llmGenerationOptions
 import { loadChatSettings } from './chatSettings'
 import { resolveChatAccess } from './codexChatAccess'
 import { replyTranslationPrompt, userTranslationPrompt } from './chatTranslation'
-import { contextHash, contextSections, contextSource, limitContextMeta, loreDiagnostics, markContextMessage, markContextParts, contextPartsOf, type ChatDiagnosticsFields, type ChatContextSectionKind, type ContextSource } from './chatContextDiagnostics'
+import { contextContentText, contextHash, contextSections, contextSource, limitContextMeta, loreDiagnostics, markContextMessage, markContextParts, contextPartsOf, type ChatDiagnosticsFields, type ChatContextSectionKind, type ContextSource } from './chatContextDiagnostics'
 import { buildReplyContext } from './chatReplyContext'
 import { isCodexChatCreationTool, stripEchoedAddresses } from '@conai/shared'
 import { messageAddress, REPLY_GUIDANCE } from './chatReplies'
@@ -14,7 +14,7 @@ import { resolveProfileModel } from './chatModelRoles'
 import { ChatProfileStore, profileGenerationOptions, resolveSummaryPrompt, type ChatProfile } from './chatProfiles'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
-import { chatContentWithAttachments } from './chatAttachments'
+import { attachedImagesOf, chatContentWithAttachments, type AttachedImages } from './chatAttachments'
 import type { LoreHistoryMessage, SelectedLore } from './chatLorebook'
 import { booksForRequest, loreIndexText, READ_LORE_FILE_TOOL, selectRequestLore, type AttachedLoreBook, type ChatLore } from './chatLoreContext'
 import { rejectedLoreLine, SAVE_LORE_TOOL } from './chatLoreProposals'
@@ -243,9 +243,12 @@ const NO_BLOCKS: ReadonlySet<string> = new Set()
 
 /** `blockKeys`: display blocks whose fences are left out of replies (their values travel with the state instead). */
 /** `toolOutputLength`: how much of each tool result is replayed (older replies of a long chat get their summary only). */
-export function toCompletionMessages(message: CodexChatMessageRecord, blockKeys: ReadonlySet<string> = NO_BLOCKS, inlineTexts?: ReadonlyMap<string, string>, toolOutputLength = REPLAYED_TOOL_OUTPUT_LENGTH): ChatCompletionMessage[] {
+/** `images`: the attached images the request shows (see loadAttachedImages); a user message carrying some sends them as image parts. */
+export function toCompletionMessages(message: CodexChatMessageRecord, blockKeys: ReadonlySet<string> = NO_BLOCKS, inlineTexts?: ReadonlyMap<string, string>, toolOutputLength = REPLAYED_TOOL_OUTPUT_LENGTH, images?: AttachedImages): ChatCompletionMessage[] {
   if (message.role === 'user') {
-    return [{ role: 'user', content: `[${messageAddress(message)}; from=user]\n${chatContentWithAttachments(message.content, message.attachments, message.mediaAttachments, inlineTexts)}` }]
+    const text = `[${messageAddress(message)}; from=user]\n${chatContentWithAttachments(message.content, message.attachments, message.mediaAttachments, inlineTexts, images)}`
+    const shown = attachedImagesOf(message, images)
+    return [{ role: 'user', content: shown.length ? [{ type: 'text', text }, ...shown.map((url) => ({ type: 'image_url' as const, image_url: { url } }))] : text }]
   }
 
   const calls = message.tool_calls.filter((call) => call.id && call.tool)
@@ -273,7 +276,7 @@ export function toCompletionMessages(message: CodexChatMessageRecord, blockKeys:
  * turns as fit beside the fixed part (system prompt, summary, tool schemas) and the reply reserve. The newest turn is
  * always kept.
  */
-function selectWindow(profile: Pick<ChatProfile, 'id' | 'style'>, turns: CodexChatMessageRecord[][], config: LlmChatContextConfig, fixedTokens: number, maxTurns = config.contextTurns, inlineTexts?: ReadonlyMap<string, string>) {
+function selectWindow(profile: Pick<ChatProfile, 'id' | 'style'>, turns: CodexChatMessageRecord[][], config: LlmChatContextConfig, fixedTokens: number, maxTurns = config.contextTurns, inlineTexts?: ReadonlyMap<string, string>, images?: AttachedImages) {
   const blockKeys = usableBlockKeys(profile.style.blocks)
   const candidates = maxTurns > 0 ? turns.slice(-maxTurns) : []
   if (config.contextTokens === null) {
@@ -282,7 +285,7 @@ function selectWindow(profile: Pick<ChatProfile, 'id' | 'style'>, turns: CodexCh
   let remaining = config.contextTokens - config.replyReserveTokens - fixedTokens
   const kept: CodexChatMessageRecord[][] = []
   for (let index = candidates.length - 1; index >= 0; index -= 1) {
-    const cost = estimateMessagesTokens(profile.id, candidates[index].flatMap((message) => toCompletionMessages(message, blockKeys, inlineTexts)))
+    const cost = estimateMessagesTokens(profile.id, candidates[index].flatMap((message) => toCompletionMessages(message, blockKeys, inlineTexts, undefined, images)))
     if (kept.length > 0 && cost > remaining) {
       break
     }
@@ -445,7 +448,7 @@ export function insertAtDepth(messages: ChatCompletionMessage[], depth: number, 
   const target = userIndices[Math.max(0, userIndices.length - 1 - Math.max(0, Math.floor(depth)))]
   return messages.map((message, index) => (index === target && message.role === 'user' ? markContextParts({ ...message, content: prefixUserContent(message.content, block) }, [
     { kind: 'reference', text: block },
-    ...(contextPartsOf(message).length ? contextPartsOf(message) : [{ kind: 'window' as const, text: typeof message.content === 'string' ? message.content : JSON.stringify(message.content) }]),
+    ...(contextPartsOf(message).length ? contextPartsOf(message) : [{ kind: 'window' as const, text: contextContentText(message.content) }]),
   ]) : message))
 }
 
@@ -518,6 +521,13 @@ export function appendUserDirective(messages: ChatCompletionMessage[], directive
   if (last?.role === 'user' && typeof last.content === 'string') return [...messages.slice(0, -1), markContextParts({ ...last, content: `${last.content}\n\n${directive}` }, [
     ...(contextPartsOf(last).length ? contextPartsOf(last) : [{ kind: 'window' as const, text: last.content }]), { kind, text: directive },
   ])]
+  // A user turn with attached images: the directive goes in as one more text part after them.
+  if (last?.role === 'user' && Array.isArray(last.content)) {
+    const text = last.content.flatMap((part) => part.type === 'text' ? [part.text] : []).join('\n\n')
+    return [...messages.slice(0, -1), markContextParts({ ...last, content: [...last.content, { type: 'text', text: `\n\n${directive}` }] }, [
+      ...(contextPartsOf(last).length ? contextPartsOf(last) : [{ kind: 'window' as const, text }]), { kind, text: directive },
+    ])]
+  }
   return [...messages, markContextMessage({ role: 'user', content: directive }, kind)]
 }
 
@@ -719,6 +729,8 @@ export function buildChatMessages(params: {
   segments?: ChatSummarySegment[]
   /** A chat that cannot read files itself: text attachments' contents, by file id (see loadInlineAttachmentTexts). */
   attachmentTexts?: ReadonlyMap<string, string>
+  /** The attached images the request shows (see loadAttachedImages). */
+  attachedImages?: AttachedImages
   /** Told what the request carries (see ChatContextMeta). */
   onMeta?: (meta: ChatContextMeta) => void
   /** Tokens the caller adds after the request (a continuation), kept free when the window is chosen. */
@@ -734,11 +746,11 @@ export function buildChatMessages(params: {
   const maxChars = Math.max(256, Math.min(6000, Math.floor((config.contextTokens ?? 24000) / 4)))
   const replyContext = buildReplyContext(params.messages, routing, { maxChars })
   const turns = splitTurns(sendableMessages(unsummarizedMessages(params.messages, thread, config)))
-  const fit = selectWindow(profile, turns, config, fixedTokens + estimateTokens(profile.id, replyContext) + 40 + (params.extraTokens ?? 0), config.contextTurns, params.attachmentTexts).length
+  const fit = selectWindow(profile, turns, config, fixedTokens + estimateTokens(profile.id, replyContext) + 40 + (params.extraTokens ?? 0), config.contextTurns, params.attachmentTexts, params.attachedImages).length
   const window = anchoredWindowFor(thread.id, turns, fit, (turn) => turn[0].id)
   const blockKeys = usableBlockKeys(profile.style.blocks)
   const shortBefore = shortToolOutputsBefore(thread.id, window)
-  const conversation = insertDepthBlocks(window.flat().flatMap((message) => toCompletionMessages(message, blockKeys, params.attachmentTexts, message.id < shortBefore ? SHORT_TOOL_OUTPUT_LENGTH : undefined)), blocks)
+  const conversation = insertDepthBlocks(window.flat().flatMap((message) => toCompletionMessages(message, blockKeys, params.attachmentTexts, message.id < shortBefore ? SHORT_TOOL_OUTPUT_LENGTH : undefined, params.attachedImages)), blocks)
   const reference = buildReplyContext(params.messages, routing, { maxChars, visibleIds: new Set(window.flat().map((message) => message.id)) })
   // A direct chat has no room tools, so the request names no room id.
   const request = appendUserDirective([...system, ...conversation], [reference, directive].filter(Boolean).join('\n\n'))
@@ -820,7 +832,7 @@ export function turnsToFold(pending: number, fit: number, batch: number) {
 type FoldMode = 'ahead' | 'overflow' | 'all'
 
 /** What the request adds beyond the conversation that planning must count too (see buildChatMessages). */
-type RequestExtras = { attachmentTexts?: ReadonlyMap<string, string>; extraTokens?: number }
+type RequestExtras = { attachmentTexts?: ReadonlyMap<string, string>; attachedImages?: AttachedImages; extraTokens?: number }
 
 function planFold(profile: ChatProfile, thread: CodexChatThreadRecord, config: LlmChatContextConfig, messages: CodexChatMessageRecord[], turns: CodexChatMessageRecord[][], mode: FoldMode, tools: ChatCompletionTool[], segments: ChatSummarySegment[], extras: RequestExtras = {}) {
   if (mode === 'all' || turns.length === 0) {
@@ -828,8 +840,8 @@ function planFold(profile: ChatProfile, thread: CodexChatThreadRecord, config: L
   }
   const ahead = mode === 'ahead'
   const fixedTokens = buildRequestContext(profile, thread, messages, config, tools, segments).fixedTokens + (extras.extraTokens ?? 0)
-    + (ahead ? estimateMessagesTokens(profile.id, turns[turns.length - 1].flatMap((message) => toCompletionMessages(message, usableBlockKeys(profile.style.blocks), extras.attachmentTexts))) : 0)
-  const fit = selectWindow(profile, turns, config, fixedTokens, config.contextTurns - (ahead ? 1 : 0), extras.attachmentTexts).length
+    + (ahead ? estimateMessagesTokens(profile.id, turns[turns.length - 1].flatMap((message) => toCompletionMessages(message, usableBlockKeys(profile.style.blocks), extras.attachmentTexts, undefined, extras.attachedImages))) : 0)
+  const fit = selectWindow(profile, turns, config, fixedTokens, config.contextTurns - (ahead ? 1 : 0), extras.attachmentTexts, extras.attachedImages).length
   return turnsToFold(turns.length, fit, config.summaryTriggerTurns)
 }
 

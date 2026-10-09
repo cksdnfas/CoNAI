@@ -2,12 +2,11 @@ import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
-import { Text } from '@/components/ui/text'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { NodeArtifactPreviewBody } from '../module-graph-node-artifact-preview'
 import type { ModuleGraphNode } from '../../module-graph-shared'
-import { stopNodeActionEvent } from '../module-graph-port-cells'
+import { stopNodeEvent as stopNodeActionEvent } from '../module-graph-node-controls'
 
 export function NodeArtifactOutputs({
   data,
@@ -32,8 +31,7 @@ export function NodeArtifactOutputs({
   return (
     <>
       {hasStandaloneArtifactPreview ? (
-        <div className="mt-2 border-t border-outline-subtle pt-1.5">
-          <Text as="div" variant="overline" className="px-1">{isFinalResult ? 'result' : 'output'}</Text>
+        <div className="border-t border-line px-2 py-1.5">
           <NodeArtifactPreviewBody
             previewUrl={data.latestArtifactPreviewUrl}
             previewAlt={data.latestArtifactLabel || `${moduleName} output`}
@@ -51,12 +49,12 @@ export function NodeArtifactOutputs({
       ) : null}
 
       {hasOutputGroups ? (
-        <div className="mt-2 border-t border-outline-subtle pt-1.5">
+        <div className="border-t border-line px-2 py-1">
           {outputGroups.map((group) => {
             const isExpanded = expandedOutputGroupKeySet.has(group.portKey)
 
             return (
-              <div key={group.portKey} className="border-b border-outline-subtle py-0.5 last:border-b-0">
+              <div key={group.portKey} className="py-0.5">
                 <Tip content={isExpanded ? t({ ko: '{label} 출력 접기', en: 'Collapse {label} output' }, { label: group.portLabel }) : t({ ko: '{label} 출력 펼치기', en: 'Expand {label} output' }, { label: group.portLabel })}>
                   <Button
                     type="button"

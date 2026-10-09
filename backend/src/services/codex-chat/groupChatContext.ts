@@ -2,7 +2,7 @@ import type { ChatProfile } from './chatProfiles'
 import { isCodexChatCreationTool, type ChatMessageRouting } from '@conai/shared'
 import { buildReplyContext } from './chatReplyContext'
 import { messageAddress } from './chatReplies'
-import { chatContentWithAttachments } from './chatAttachments'
+import { attachedImagesOf, chatContentWithAttachments, type AttachedImages } from './chatAttachments'
 import { generationPromptOf } from './chatToolReferences'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
 import type { ChatCompletionMessage, ChatCompletionTool } from './llmChatCompletion'
@@ -30,8 +30,8 @@ function speakerName(message: CodexChatMessageRecord, names: Map<number, string>
 }
 
 /** Someone else's message as one transcript line: their name, the text, and a note of the tools they used. */
-function transcriptLine(message: CodexChatMessageRecord, names: Map<number, string>, user: ChatUserPersona, inlineTexts?: ReadonlyMap<string, string>) {
-  const text = message.role === 'user' ? chatContentWithAttachments(message.content, message.attachments, message.mediaAttachments, inlineTexts) : message.content
+function transcriptLine(message: CodexChatMessageRecord, names: Map<number, string>, user: ChatUserPersona, inlineTexts?: ReadonlyMap<string, string>, images?: AttachedImages) {
+  const text = message.role === 'user' ? chatContentWithAttachments(message.content, message.attachments, message.mediaAttachments, inlineTexts, images) : message.content
   const tools = message.tool_calls.map((call) => {
     // Another member's generation: the scene they asked for and what became of it, not the job JSON.
     const prompt = isCodexChatCreationTool(call.tool) ? generationPromptOf(call) : null
@@ -130,6 +130,8 @@ type GroupLlmContext = {
   segments?: ChatSummarySegment[]
   /** A member that cannot read files itself: text attachments' contents, by file id (see inlineTextsForChat). */
   attachmentTexts?: ReadonlyMap<string, string>
+  /** The attached images the request shows (see loadAttachedImages). */
+  attachedImages?: AttachedImages
   /** The member's lore books, already resolved (default: booksForRequest for the room and the member). */
   books?: AttachedLoreBook[]
   /** Lore entries and past episodes the judge chose for this reply (see chatJudgeContext). */
@@ -203,10 +205,12 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
       conversation.push(...toCompletionMessages(message, blockKeys))
       continue
     }
-    const line = transcriptLine(message, names, user, params.attachmentTexts)
+    const line = transcriptLine(message, names, user, params.attachmentTexts, params.attachedImages)
+    const images = message.role === 'user' ? attachedImagesOf(message, params.attachedImages).map((url) => ({ type: 'image_url' as const, image_url: { url } })) : []
     const previous = conversation[conversation.length - 1]
-    if (previous?.role === 'user' && typeof previous.content === 'string') previous.content = `${previous.content}\n\n${line}`
-    else conversation.push({ role: 'user', content: line })
+    if (previous?.role === 'user' && typeof previous.content === 'string' && !images.length) previous.content = `${previous.content}\n\n${line}`
+    else if (previous?.role === 'user') previous.content = [...(typeof previous.content === 'string' ? [{ type: 'text' as const, text: previous.content }] : previous.content), { type: 'text', text: `\n\n${line}` }, ...images]
+    else conversation.push({ role: 'user', content: images.length ? [{ type: 'text', text: line }, ...images] : line })
   }
   // The flags the user had on for the message this run answers reach every member answering it; the request ends
   // with the exact handles, where small models actually look before writing a mention.
@@ -237,6 +241,8 @@ export function buildGroupCodexInput(params: {
   directive: string
   /** A member that cannot read files itself: text attachments' contents, by file id. */
   attachmentTexts?: ReadonlyMap<string, string>
+  /** The attached images the turn shows (see loadAttachedImages; the turn input adds them as images). */
+  attachedImages?: AttachedImages
 }) {
   const { thread, members, self, lastSeenMessageId, windowLimit, lore, directive } = params
   const user = userPersonaForThread(thread)
@@ -249,7 +255,7 @@ export function buildGroupCodexInput(params: {
     hiddenHistoryNote(thread, missed.length - shown.length),
     buildReplyContext(params.messages, params.routing, { group: true, visibleIds: new Set(shown.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) }),
     lore ? `[참고 설정]\n${lore}\n[/참고 설정]` : '',
-    `[${lastSeenMessageId === null ? '지금까지의 대화' : '네가 마지막으로 말한 뒤의 대화'}]\n${shown.map((message) => transcriptLine(message, names, user, params.attachmentTexts)).join('\n\n')}`,
+    `[${lastSeenMessageId === null ? '지금까지의 대화' : '네가 마지막으로 말한 뒤의 대화'}]\n${shown.map((message) => transcriptLine(message, names, user, params.attachmentTexts, params.attachedImages)).join('\n\n')}`,
     directive,
     [`이제 ${self.name}로서 답해.`, mentionReminder(members, self)].filter(Boolean).join(' '),
   ].filter(Boolean).join('\n\n')

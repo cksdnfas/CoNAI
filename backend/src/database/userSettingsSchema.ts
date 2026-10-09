@@ -7,6 +7,7 @@ import {
 } from './generationQueueSchema';
 import { migrateLlmConnectionGenerationDefaults } from './llmConnectionDefaultsMigration';
 import { migrateLlmModelRows } from './llmModelRowsMigration';
+import { migrateWorkflowLlmNodes } from './workflowLlmNodeMigration';
 import { DEFAULT_JUDGE_PRESETS } from '../services/codex-chat/chatJudgeDefaults';
 
 /** Bootstrap core user-settings tables, indexes, and simple column backfills. */
@@ -1175,6 +1176,11 @@ export function createUserSettingsSchema(db: Database.Database): void {
     console.log('  Migrating graph_executions: adding schedule_id column');
     db.exec('ALTER TABLE graph_executions ADD COLUMN schedule_id INTEGER');
   }
+  // Who started a manual run: nodes that touch an account's chat data (rooms, account lorebooks) check it.
+  if (!hasColumn('graph_executions', 'requested_by_account_id')) {
+    console.log('  Migrating graph_executions: adding requested_by_account_id column');
+    db.exec('ALTER TABLE graph_executions ADD COLUMN requested_by_account_id INTEGER');
+  }
 
   // Migrate graph_workflow_schedules table
   if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='graph_workflow_schedules'").get()) {
@@ -1513,6 +1519,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
   // Generation defaults move from LLM connections to the profiles that use them (no-op once done).
   migrateLlmConnectionGenerationDefaults(db);
   migrateLlmModelRows(db);
+  // Saved LLM nodes that name a connection pick its model row instead (no-op once none does).
+  migrateWorkflowLlmNodes(db);
 
   // Pinned chat memories become "always on" entries of each chat's lorebook (no-op once every row is NULL).
   if (db.prepare('SELECT 1 FROM codex_chat_threads WHERE memories IS NOT NULL LIMIT 1').get()) {

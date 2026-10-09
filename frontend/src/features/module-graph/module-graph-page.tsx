@@ -36,6 +36,7 @@ import { useModuleGraphEditorShell } from './use-module-graph-editor-shell'
 import { useModuleGraphPageEditorPanels } from './use-module-graph-page-editor-panels'
 import { useModuleGraphPageActions } from './use-module-graph-page-actions'
 import { useWorkflowChatPage } from './use-workflow-chat-page'
+import { useModuleGraphHistory } from './use-module-graph-history'
 
 const ModuleWorkflowOutputManagementPanelLazy = lazy(async () => {
   const module = await import('./components/module-workflow-output-management-panel')
@@ -64,12 +65,15 @@ function WorkflowPageFallback() {
 
 function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceProps) {
   const { t, formatNumber } = useI18n()
+  const { isAdmin } = useFeaturePermissions()
   const { showSnackbar } = useSnackbar()
   const reactFlow = useReactFlow()
   const [searchParams, setSearchParams] = useSearchParams()
   const [narrowView, setNarrowView] = useState<NarrowView>('edit')
   const [resultsTab, setResultsTab] = useState<ResultsTab>('results')
   const [quickCreateRequest, setQuickCreateRequest] = useState(0)
+  // "Edit in the panel" from a node: the dock opens on the node tab and scrolls to that field.
+  const [panelFocus, setPanelFocus] = useState<{ key: string | null; nonce: number } | null>(null)
   const unsavedChangesConfirmMessage = t('module-graph.module.graph.page.you.have.unsaved.changes.continuing.may.discard')
   const {
     editorSessionId,
@@ -99,10 +103,10 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
     setSelectedValidationPortKey,
     lastSavedSnapshot,
     setLastSavedSnapshot,
+    historyEpoch,
+    bumpHistoryEpoch,
     workflowView,
     setWorkflowView,
-    isModuleLibraryOpen,
-    setIsModuleLibraryOpen,
     isCustomNodeManagerOpen,
     setIsCustomNodeManagerOpen,
     isBrowseManageModalOpen,
@@ -220,7 +224,6 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
     isValidConnection,
     handleConnect,
     handleAddModuleNode,
-    handleAddModuleFromLibrary,
     handleDuplicateNodeById,
     handleCopySelectedNodesToClipboard,
     handlePasteNodesFromClipboard,
@@ -232,7 +235,6 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
     handleWorkflowRunInputClear,
     handleWorkflowRunInputImageChange,
     handleAutoLayout,
-    handleDisconnectNodeInput,
     handleDisconnectAllNodeConnections,
     handleToggleNodeDisabled,
     handleRemoveNodeById,
@@ -297,8 +299,8 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
     setWorkflowExposedInputs,
     setWorkflowRunInputValues,
     setLastSavedSnapshot,
+    onEditorGraphReplaced: bumpHistoryEpoch,
     setWorkflowView,
-    setIsModuleLibraryOpen,
     setIsEditorSupportOpen,
     setActiveEditorSupportSection,
     setIsBrowseManageModalOpen,
@@ -311,6 +313,15 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
     enterWorkflowEditor,
     showSnackbar,
   })
+
+  const history = useModuleGraphHistory({ nodes, edges, setNodes, setEdges, resetKey: historyEpoch })
+
+  const editNodeInPanel = useCallback((nodeId: string, key?: string) => {
+    setSelectedNodeId(nodeId)
+    setSelectedEdgeId(null)
+    setSelectedValidationPortKey(null)
+    setPanelFocus({ key: key ?? null, nonce: Date.now() })
+  }, [setSelectedEdgeId, setSelectedNodeId, setSelectedValidationPortKey])
 
   useWorkflowChatPage({
     enabled: workflowView === 'edit' && !modulesQuery.isLoading && !isSavingGraph && executingGraphId === null && !isWorkflowSaveModalOpen && executionList[0]?.status !== 'running' && executionList[0]?.status !== 'queued',
@@ -474,7 +485,7 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
     isWorkflowSaveModalOpen,
     fitViewKey: 1,
     quickCreateRequest,
-    onOpenModuleLibrary: () => setIsModuleLibraryOpen(true),
+    onOpenCustomNodeManager: isAdmin ? () => setIsCustomNodeManagerOpen(true) : undefined,
     onCloseWorkflowSaveModal: () => setIsWorkflowSaveModalOpen(false),
     onNodesChange,
     onEdgesChange,
@@ -483,7 +494,6 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
     onDraftChildFolderDescriptionChange: setDraftChildFolderDescription,
     onCreateWorkflowFolder: handleCreateWorkflowFolder,
     onDuplicateNodeById: handleDuplicateNodeById,
-    onDisconnectNodeInput: handleDisconnectNodeInput,
     onDisconnectAllNodeConnections: handleDisconnectAllNodeConnections,
     onToggleNodeDisabled: handleToggleNodeDisabled,
     onRemoveNodeById: handleRemoveNodeById,
@@ -496,6 +506,7 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
     onNodeValueClear: handleNodeValueClear,
     onNodeImageChange: handleNodeImageChange,
     onExecuteNodeById: (nodeId, force) => void handleExecuteNodeById(nodeId, force),
+    onEditNodeInPanel: editNodeInPanel,
     onNodeSelect: (nodeId) => {
       setSelectedNodeId(nodeId)
       setSelectedEdgeId(null)
@@ -535,6 +546,9 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
     onCopySelection: handleCopySelectedNodesToClipboard,
     onPasteSelection: handlePasteNodesFromClipboard,
     isValidConnection,
+    onUndo: history.undo,
+    onRedo: history.redo,
+    onAutoLayout: handleAutoLayout,
   })
 
   const openGraph = (graph: GraphWorkflowSummaryRecord) => {
@@ -574,11 +588,7 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
         selectedGraphRecord={selectedGraphRecord}
         selectedFolderRecord={selectedFolderRecord}
         folderDeleteTarget={folderDeleteTarget}
-        isModuleLibraryOpen={isModuleLibraryOpen}
         isCustomNodeManagerOpen={isCustomNodeManagerOpen}
-        modules={modules}
-        modulesErrorMessage={modulesQuery.error instanceof Error ? modulesQuery.error.message : t('module-graph.module.graph.page.failed.to.load.the.module.list')}
-        modulesIsError={modulesQuery.isError}
         onCloseBrowseManage={() => setIsBrowseManageModalOpen(false)}
         onAssignWorkflowFolder={(folderId) => handleAssignSelectedWorkflowFolder(folderId)}
         onCreateFolder={(input) => handleCreateWorkflowFolder(input)}
@@ -596,11 +606,8 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
         onConfirmDeleteFolder={(mode) => {
           void handleConfirmDeleteFolder(mode)
         }}
-        onCloseModuleLibrary={() => setIsModuleLibraryOpen(false)}
-        onOpenCustomNodeManager={() => setIsCustomNodeManagerOpen(true)}
         onCloseCustomNodeManager={() => setIsCustomNodeManagerOpen(false)}
         onRefreshModules={modulesQuery.refetch}
-        onAddModule={handleAddModuleFromLibrary}
       />
     </Suspense>
   )
@@ -621,6 +628,7 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
           inputsCount={editorExposedInputs.length}
           runsCount={selectedGraphId !== null ? runCount : 0}
           selectionKey={selectionKey}
+          panelFocusNonce={panelFocus?.nonce ?? null}
           graphCanvas={graphCanvas}
           nodePanel={selectedNode || selectedEdge ? (
             <NodeInspectorPanel
@@ -633,14 +641,15 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
               onNodeValueChange={handleNodeValueChange}
               onNodeValueClear={handleNodeValueClear}
               onNodeImageChange={handleNodeImageChange}
-              onExecuteSelectedNode={selectedNode ? () => void handleExecuteNodeById(selectedNode.id, false) : undefined}
-              onForceExecuteSelectedNode={selectedNode ? () => void handleExecuteNodeById(selectedNode.id, true) : undefined}
-              executeSelectedNodeDisabled={executingGraphId !== null || selectedNode === null}
               highlightedPortKey={selectedValidationPortKey}
+              focusFieldKey={panelFocus?.key ?? null}
+              focusNonce={panelFocus?.nonce ?? null}
               showHeader={false}
             />
-          ) : (
+          ) : null}
+          settingsPanel={(
             <WorkflowSettingsPanel
+              showName={false}
               workflowName={workflowName}
               workflowDescription={workflowDescription}
               folders={folders}
@@ -684,6 +693,10 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
           onBack={() => void handleLeaveWorkflowEditor()}
           onAddNode={() => setQuickCreateRequest((value) => value + 1)}
           onAutoLayout={handleAutoLayout}
+          canUndo={history.canUndo}
+          canRedo={history.canRedo}
+          onUndo={history.undo}
+          onRedo={history.redo}
           onFitView={() => void reactFlow.fitView({ ...GRAPH_FIT_VIEW_OPTIONS, duration: 200 })}
           onWorkflowDebugModeToggle={() => setWorkflowDebugMode((enabled) => !enabled)}
           onTestRun={() => void handleTestRunCurrentGraph()}

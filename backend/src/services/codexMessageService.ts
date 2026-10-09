@@ -5,6 +5,7 @@ import { spawn } from 'child_process'
 import { runtimePaths } from '../config/runtimePaths'
 import { normalizeOptionalString } from '../utils/valueNormalization'
 import { assertCodexAvailable, resolveCodexCommand, resolveCodexSandboxMode } from './codexGenerationExecutor'
+import { rawTokenEstimate, recordLlmUsage, type LlmTokenCounts, type LlmUsageTag } from './llmUsage'
 
 const CODEX_MESSAGE_JOB_ROOT = path.join(runtimePaths.tempDir, 'codex-message-jobs')
 const CODEX_CANCELLED_MESSAGE = '__CODEX_MESSAGE_CANCELLED__'
@@ -28,6 +29,8 @@ export type ExecuteCodexMessageRequest = {
   structuredOutputJson?: string | null
   shouldCancel?: () => boolean
   timeoutMs?: number
+  /** When set, the run goes into the LLM usage ledger under this tag. */
+  usage?: LlmUsageTag
 }
 
 export type ExecuteCodexMessageResponse = {
@@ -62,6 +65,28 @@ function normalizeStructuredOutputJson(value: unknown) {
   } catch {
     throw new Error('구조화 출력 JSON 양식이 올바른 JSON이 아니야')
   }
+}
+
+/** Tokens `codex exec --json` reported for its turns (`turn.completed` events), summed; null when it reported none. */
+export function readCodexExecUsage(jsonl: string): LlmTokenCounts | null {
+  let found = false
+  const total: LlmTokenCounts = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }
+  const count = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0)
+  for (const line of jsonl.split(/\r?\n/)) {
+    if (!line.includes('turn.completed')) continue
+    let event: { type?: unknown; usage?: Record<string, unknown> }
+    try {
+      event = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (event.type !== 'turn.completed' || !event.usage || typeof event.usage !== 'object') continue
+    found = true
+    total.inputTokens += count(event.usage.input_tokens)
+    total.cachedInputTokens += count(event.usage.cached_input_tokens)
+    total.outputTokens += count(event.usage.output_tokens)
+  }
+  return found ? total : null
 }
 
 function parseCodexSessionId(output: string) {
@@ -333,17 +358,30 @@ export async function executeCodexMessageRequest(request: ExecuteCodexMessageReq
   })
 
   const reasoningEffort = normalizeOptionalString(request.reasoningEffort)
-  const result = await runCodexExec({
-    workDir,
-    prompt: codexPrompt,
-    model,
-    reasoningEffort: reasoningEffort && /^[a-z]+$/.test(reasoningEffort) ? reasoningEffort : null,
-    imagePaths: attachedImagePaths,
-    shouldCancel: request.shouldCancel,
-    timeoutMs,
-  }).finally(() => {
+  const startedAt = Date.now()
+  const meter = (ok: boolean, tokens: LlmTokenCounts | null, estimated = false) => {
+    if (request.usage) recordLlmUsage({ ...request.usage, engine: 'codex', providerName: 'codex', model: model ?? '', tokens, estimated, latencyMs: Date.now() - startedAt, ok })
+  }
+  let result: Awaited<ReturnType<typeof runCodexExec>>
+  try {
+    result = await runCodexExec({
+      workDir,
+      prompt: codexPrompt,
+      model,
+      reasoningEffort: reasoningEffort && /^[a-z]+$/.test(reasoningEffort) ? reasoningEffort : null,
+      imagePaths: attachedImagePaths,
+      shouldCancel: request.shouldCancel,
+      timeoutMs,
+    })
+  } catch (error) {
+    if (!(error instanceof Error && error.message === CODEX_CANCELLED_MESSAGE)) meter(false, null)
+    throw error
+  } finally {
     if (request.cleanup) void fs.promises.rm(workDir, { recursive: true, force: true }).catch(() => undefined)
-  })
+  }
+  // A CLI that reports no usage gets our estimate from the prompt and the answer.
+  const reported = readCodexExecUsage(result.stdout)
+  meter(true, reported ?? { inputTokens: rawTokenEstimate(codexPrompt), cachedInputTokens: 0, outputTokens: rawTokenEstimate(result.lastMessage ?? '') }, !reported)
 
   const text = normalizeOptionalString(result.lastMessage) ?? normalizeOptionalString(result.stdout) ?? null
   if (!text) {

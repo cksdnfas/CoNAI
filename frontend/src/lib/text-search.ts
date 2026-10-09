@@ -23,10 +23,10 @@ export function normalizeSearchText(text: string) {
 }
 
 /** Whether a typed char stands for a text char; `last` lets an unfinished syllable match what it can become. */
-function charMatches(typed: string, text: string, last: boolean) {
+function charMatches(typed: string, text: string, last: boolean, initials: boolean) {
   if (typed === text) return true
   const initial = INITIALS.indexOf(typed)
-  if (initial >= 0) return syllableParts(text)?.initial === initial
+  if (initial >= 0) return initials && syllableParts(text)?.initial === initial
   if (!last) return false
   const want = syllableParts(typed)
   const have = syllableParts(text)
@@ -34,28 +34,33 @@ function charMatches(typed: string, text: string, last: boolean) {
 }
 
 /** Whether `query` (already normalized) occurs in `text` (already normalized) at `at`. */
-function matchesAt(text: string, query: string, at: number) {
+function matchesAt(text: string, query: string, at: number, initials: boolean) {
   for (let index = 0; index < query.length; index += 1) {
-    if (!charMatches(query[index], text[at + index], index === query.length - 1)) return false
+    const last = index === query.length - 1
+    // In prose a lone consonant only counts as the start of the syllable being typed after a whole one ("이미ㅈ").
+    if (!charMatches(query[index], text[at + index], last, initials || (last && index > 0))) return false
   }
   return true
 }
 
-function matchesNormalized(text: string, query: string) {
+function matchesNormalized(text: string, query: string, initials: boolean): boolean {
   for (let at = 0; at + query.length <= text.length; at += 1) {
-    if (matchesAt(text, query, at)) return true
+    if (matchesAt(text, query, at, initials)) return true
   }
   // The last syllable typed so far may hold the next syllable's initial as its final ("로엊" on the way to "로어저").
   const tail = syllableParts(query[query.length - 1] ?? '')
   const carried = tail && tail.final > 0 ? INITIALS.indexOf(FINALS[tail.final]) : -1
   if (carried < 0 || !tail) return false
   const open = String.fromCharCode(SYLLABLE_FIRST + tail.initial * 588 + tail.medial * 28)
-  return matchesNormalized(text, query.slice(0, -1) + open + INITIALS[carried])
+  return matchesNormalized(text, query.slice(0, -1) + open + INITIALS[carried], initials)
 }
 
-/** Whether any of `texts` holds `query`; an empty query matches everything. */
-export function matchesSearch(texts: string | readonly string[], query: string) {
+/**
+ * Whether any of `texts` holds `query`; an empty query matches everything. Pass `initials: false` for long prose
+ * (descriptions), where lone consonants would match almost anything.
+ */
+export function matchesSearch(texts: string | readonly string[], query: string, { initials = true }: { initials?: boolean } = {}) {
   const needle = normalizeSearchText(query)
   if (!needle) return true
-  return (typeof texts === 'string' ? [texts] : texts).some((text) => matchesNormalized(normalizeSearchText(text), needle))
+  return (typeof texts === 'string' ? [texts] : texts).some((text) => matchesNormalized(normalizeSearchText(text), needle, initials))
 }

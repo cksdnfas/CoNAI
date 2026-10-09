@@ -13,12 +13,14 @@ import type { PromptWildcardTool } from '@/features/image-generation/components/
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { useI18n } from '@/i18n'
+import { getImageValueSrc, isLibraryImageRef } from '@/lib/library-image-ref'
 import { cn } from '@/lib/utils'
 import type { PromptTypeFilter } from '@/types/prompt'
 
 export type TypedFieldKind = 'text' | 'prompt' | 'json' | 'number' | 'boolean' | 'select' | 'image'
 
-export type TypedFieldOption = string | { value: string; label: string }
+/** `disabled`: shown but not pickable (a value already saved on it still displays). */
+export type TypedFieldOption = string | { value: string; label: string; disabled?: boolean }
 
 /**
  * How the empty `""` option of a select/boolean behaves:
@@ -141,7 +143,7 @@ export function TypedFieldInput({
       <Select value={toSelectValue(value)} onChange={(event) => onChange(event.target.value)} className={controlClassName} {...invalidProps}>
         {renderEmptyOption(emptyOption ?? 'auto', hasRandomOption)}
         {resolvedOptions.map((option) => (
-          <option key={option.value} value={option.value}>
+          <option key={option.value} value={option.value} disabled={option.disabled}>
             {option.value === TYPED_FIELD_RANDOM_OPTION_VALUE && option.label === option.value ? t({ ko: '랜덤 선택', en: 'Random pick' }) : option.label}
           </option>
         ))}
@@ -181,9 +183,12 @@ export function TypedFieldInput({
   }
 
   if (kind === 'image') {
+    const libraryImageSrc = isLibraryImageRef(value) ? getImageValueSrc(value) : null
     const imageDraft = isSelectedImageDraft(value)
       ? value
-      : typeof value === 'string' && value.startsWith('data:') ? { dataUrl: value, fileName: '' } : null
+      : typeof value === 'string' && value.startsWith('data:')
+        ? { dataUrl: value, fileName: '' }
+        : libraryImageSrc ? { dataUrl: libraryImageSrc, fileName: '' } : null
     const hasImage = imageDraft !== null || (typeof value === 'string' && value.trim() !== '')
 
     return (

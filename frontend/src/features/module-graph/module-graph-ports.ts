@@ -101,19 +101,12 @@ export function getModulePortCompatibility(sourceType?: ModulePortDataType | nul
   return isStringBridge ? 'string-bridge' as const : 'incompatible' as const
 }
 
-/** Build a minimal colored edge style so graph wiring stays readable without extra labels. */
-export function buildModuleEdgePresentation(sourcePort: ModulePortDefinition | null, targetPort: ModulePortDefinition | null) {
+/** Every link is a solid line in its source port's type color (text→prompt included); the module edge draws it. */
+export function buildModuleEdgePresentation(sourcePort: ModulePortDefinition | null, targetPort: ModulePortDefinition | null): { type: string; style: { stroke: string } } {
   const dataType = sourcePort?.data_type ?? targetPort?.data_type ?? null
-  const accentColor = dataType ? getPortTypeColor(dataType) : '#94a3b8'
-  const compatibility = getModulePortCompatibility(sourcePort?.data_type, targetPort?.data_type)
 
   return {
-    label: '',
-    style: {
-      stroke: accentColor,
-      strokeWidth: compatibility === 'string-bridge' ? 3 : 2.5,
-      strokeDasharray: compatibility === 'string-bridge' ? '7 5' : undefined,
-      opacity: compatibility === 'string-bridge' ? 0.9 : 1,
-    },
+    type: 'module',
+    style: { stroke: dataType ? getPortTypeColor(dataType) : '#94a3b8' },
   }
 }

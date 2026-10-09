@@ -41,8 +41,10 @@ export function useModuleGraphPageState() {
     storeLastSavedSnapshot(next)
     setEditorSessionId(createRandomUuid())
   }, [])
+  // Bumped when another workflow or a fresh draft replaces the editor graph: undo history starts over.
+  const [historyEpoch, setHistoryEpoch] = useState(0)
+  const bumpHistoryEpoch = useCallback(() => setHistoryEpoch((value) => value + 1), [])
   const [workflowView, setWorkflowView] = useState<'browse' | 'edit'>('browse')
-  const [isModuleLibraryOpen, setIsModuleLibraryOpen] = useState(false)
   const [isCustomNodeManagerOpen, setIsCustomNodeManagerOpen] = useState(false)
   const [isBrowseManageModalOpen, setIsBrowseManageModalOpen] = useState(false)
   const [folderDeleteTarget, setFolderDeleteTarget] = useState<GraphWorkflowFolderRecord | null>(null)
@@ -106,10 +108,10 @@ export function useModuleGraphPageState() {
     setSelectedValidationPortKey,
     lastSavedSnapshot,
     setLastSavedSnapshot,
+    historyEpoch,
+    bumpHistoryEpoch,
     workflowView,
     setWorkflowView,
-    isModuleLibraryOpen,
-    setIsModuleLibraryOpen,
     isCustomNodeManagerOpen,
     setIsCustomNodeManagerOpen,
     isBrowseManageModalOpen,

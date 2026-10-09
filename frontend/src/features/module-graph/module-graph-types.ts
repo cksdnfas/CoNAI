@@ -1,5 +1,4 @@
 import type { Edge, Node } from '@xyflow/react'
-import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import type {
   ModuleDefinitionRecord,
   ModulePortDataType,
@@ -17,7 +16,7 @@ export type NodeArtifactGroupPreview = {
 }
 
 export type ModuleGraphConditionalOutputState = 'active' | 'inactive'
-export type ModuleGraphExecutionStatus = 'idle' | 'completed' | 'failed' | 'blocked' | 'skipped'
+export type ModuleGraphExecutionStatus = 'idle' | 'running' | 'completed' | 'failed' | 'blocked' | 'skipped'
 export type ModuleGraphExecutionSkipReason = 'disabled' | 'inactive-branch' | 'source-node-skipped' | 'source-output-disabled' | 'unknown'
 
 export type ModuleGraphNodeData = {
@@ -37,14 +36,6 @@ export type ModuleGraphNodeData = {
   latestArtifactTextPreview?: string | null
   latestArtifactTextValue?: string | null
   executionOutputGroups?: NodeArtifactGroupPreview[]
-  executeNodeDisabled?: boolean
-  onExecuteNode?: () => void
-  onForceExecuteNode?: () => void
-  onDisconnectNodeInput?: (nodeId: string, portKey: string) => void
-  onNodeValueChange?: (nodeId: string, portKey: string, value: unknown) => void
-  onNodeValueClear?: (nodeId: string, portKey: string) => void
-  onNodeLabelChange?: (nodeId: string, label: string) => void
-  onNodeImageChange?: (nodeId: string, portKey: string, image?: SelectedImageDraft) => Promise<void> | void
   connectedInputKeys?: string[]
   connectedOutputKeys?: string[]
 }

@@ -161,8 +161,8 @@ export type ChatToolEntry = {
   label: string
   /** Tooltip, in the UI language (English falls back to the server's own description). */
   description: string
-  /** Name, labels and descriptions in both languages, so a search finds a tool in either. */
-  search: string[]
+  /** What a search reads, in both languages: the name and labels (initials match), and the descriptions. */
+  search: { keys: string[]; prose: string[] }
 }
 
 export type ChatToolGroup = { id: ChatToolGroupId; scope: ChatScope; label: string; tools: ChatToolEntry[] }
@@ -177,7 +177,7 @@ export function groupChatTools(tools: ChatToolInfo[], t: TranslateFn): ChatToolG
     const entry = TOOLS[tool.name]
     const label = entry ? t(entry.label) : tool.name
     const description = entry ? t({ ko: entry.ko, en: tool.description || entry.label.en }) : tool.description
-    const search = entry ? [tool.name, entry.label.ko, entry.label.en, entry.ko, tool.description] : [tool.name, tool.description]
+    const search = { keys: entry ? [tool.name, entry.label.ko, entry.label.en] : [tool.name], prose: entry ? [entry.ko, tool.description] : [tool.description] }
     const target = entry && groups.get(entry.group)?.scope === tool.scope ? groups.get(entry.group) : null
     if (target) {
       target.tools.push({ name: tool.name, scope: tool.scope, label, description, search })
@@ -205,9 +205,9 @@ export function chatToolLabel(name: string, t: TranslateFn) {
   return entry ? t(entry.label) : name
 }
 
-/** Whether a picker search finds this tool (Korean-aware: spacing, 초성 and half-typed syllables). */
+/** Whether a picker search finds this tool (Korean-aware: spacing, 초성 on names and labels, half-typed syllables). */
 export function matchesChatTool(tool: Pick<ChatToolEntry, 'search'>, query: string) {
-  return matchesSearch(tool.search, query)
+  return matchesSearch(tool.search.keys, query) || matchesSearch(tool.search.prose, query, { initials: false })
 }
 
 /** One tool, or a `prefix*` pattern, a judge item can offer or withhold. */
@@ -239,7 +239,7 @@ const IMAGE_GEN_PATTERNS: FixedTool[] = [
 ]
 
 function fixedEntry(tool: FixedTool, t: TranslateFn): JudgeToolEntry {
-  return { name: tool.name, label: t(tool.label), description: t(tool.description), search: [tool.name, tool.label.ko, tool.label.en, tool.description.ko, tool.description.en], pattern: tool.name.endsWith('*') }
+  return { name: tool.name, label: t(tool.label), description: t(tool.description), search: { keys: [tool.name, tool.label.ko, tool.label.en], prose: [tool.description.ko, tool.description.en] }, pattern: tool.name.endsWith('*') }
 }
 
 /**

@@ -1,8 +1,7 @@
-import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { ProviderIcon } from '@/components/common/provider-icons'
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, ChevronDown, ChevronRight, Eraser, MousePointerClick, Play, RotateCcw } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronRight, Eraser, MousePointerClick } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -13,12 +12,11 @@ import { Text } from '@/components/ui/text'
 import { Tip } from '@/components/ui/tooltip'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { useI18n, type TranslationInput } from '@/i18n'
-import { getLlmProfileOptions } from '@/lib/api-external-api'
 import { getLlmPresetOptions } from '@/lib/api-settings-llm'
 import type { GraphExecutionArtifactRecord, ModuleEngineType, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import { ModuleGraphKeyValueListInput } from './module-graph-key-value-list-input'
-import { formatModuleGraphDefaultOptionLabel, type ModuleGraphSelectOption } from './module-graph-simple-value-input'
+import { formatModuleGraphDefaultOptionLabel } from './module-graph-simple-value-input'
 import { PowerLoraLoaderInput, hasPowerLoraLoaderEntries, isPowerLoraLoaderUiField } from './power-lora-loader-input'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
@@ -45,6 +43,11 @@ import { getModuleBaseDisplayName, getModuleOperationKey, normalizeModulePortDes
 import { EmptyState } from '@/components/ui/empty-state'
 import type { PromptWildcardTool } from '@/features/image-generation/components/wildcard-inline-picker-helpers'
 import { TypedFieldInput, type TypedFieldKind } from '@/features/shared-fields/typed-field-input'
+import { MiniMaxH3DirectorDasiwaInput } from '@/features/image-generation/components/minimax-h3-director-dasiwa-input'
+import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
+import { isEditedOnNodeCard } from '../module-graph-node-field-placement'
+import { resolveModuleGraphNodeLayout } from './module-graph-node-card-operation-registry'
+import { OptionSourceFieldInput } from './module-graph-node-option-source'
 
 const MODULE_ENGINE_LABELS: Record<ModuleEngineType, TranslationInput> = {
   nai: 'NovelAI',
@@ -77,12 +80,10 @@ type NodeInspectorPanelProps = {
   onNodeValueChange: (nodeId: string, portKey: string, value: unknown) => void
   onNodeValueClear: (nodeId: string, portKey: string) => void
   onNodeImageChange: (nodeId: string, portKey: string, image?: SelectedImageDraft) => Promise<void> | void
-  onExecuteSelectedNode?: () => void
-  onForceExecuteSelectedNode?: () => void
-  executeSelectedNodeDisabled?: boolean
-  executeSelectedNodeLabel?: string
-  forceExecuteSelectedNodeLabel?: string
   highlightedPortKey?: string | null
+  /** Field a node asked to edit here: scrolled into view and focused when `focusNonce` changes. */
+  focusFieldKey?: string | null
+  focusNonce?: number | null
   showHeader?: boolean
 }
 
@@ -97,50 +98,26 @@ export function NodeInspectorPanel({
   onNodeValueChange,
   onNodeValueClear,
   onNodeImageChange,
-  onExecuteSelectedNode,
-  onForceExecuteSelectedNode,
-  executeSelectedNodeDisabled = false,
-  executeSelectedNodeLabel,
-  forceExecuteSelectedNodeLabel,
   highlightedPortKey = null,
+  focusFieldKey = null,
+  focusNonce = null,
   showHeader = true,
 }: NodeInspectorPanelProps) {
   const { t, formatNumber } = useI18n()
-  const { canExecuteGeneration } = useFeaturePermissions()
-  const resolvedExecuteSelectedNodeLabel = executeSelectedNodeLabel ?? t({ ko: '이 노드까지 실행', en: 'Run up to this node' })
-  const resolvedForceExecuteSelectedNodeLabel = forceExecuteSelectedNodeLabel ?? t({ ko: '강제 재실행', en: 'Force rerun' })
+  // Phones edit everything here: node controls are too small to work with fingers.
+  const isCoarsePointer = useIsCoarsePointer()
+  const panelRef = useRef<HTMLDivElement | null>(null)
   const [collapsedOutputGroupKeys, setCollapsedOutputGroupKeys] = useState<string[]>([])
   const collapsedOutputGroupKeySet = useMemo(() => new Set(collapsedOutputGroupKeys), [collapsedOutputGroupKeys])
   const selectedNodeOperationKey = selectedNode ? getModuleOperationKey(selectedNode.data.module) : null
   const isSystemCallLlmNode = selectedNodeOperationKey === 'system.call_llm'
-  const isSystemCallCodexMessageNode = selectedNodeOperationKey === 'system.call_codex_message'
   const isSystemLoadLlmPresetNode = selectedNodeOperationKey === 'system.load_llm_preset'
-  const llmProfilesQuery = useQuery({
-    queryKey: ['llm-profile-options', 'node-inspector-panel'],
-    queryFn: () => getLlmProfileOptions(),
-    enabled: isSystemCallLlmNode,
-    staleTime: 30_000,
-  })
   const llmPresetsQuery = useQuery({
     queryKey: ['llm-preset-options', 'node-inspector-panel'],
     queryFn: () => getLlmPresetOptions(),
     enabled: isSystemLoadLlmPresetNode,
     staleTime: 30_000,
   })
-  // The LLM node runs on a chat profile (connection, model, reasoning, extra parameters); its own temperature and
-  // output limit stay empty unless they should override the profile.
-  const llmProfileOptions = (llmProfilesQuery.data ?? []).map((profile) => ({
-    value: String(profile.id),
-    label: profile.model ? `${profile.name} · ${profile.model}` : profile.name,
-  })) satisfies ModuleGraphSelectOption[]
-  const applyLlmProfile = (node: ModuleGraphNode, profileId: string) => {
-    onNodeValueChange(node.id, 'profile_id', profileId ? Number(profileId) : '')
-    onNodeValueChange(node.id, 'provider_name', '')
-    onNodeValueChange(node.id, 'model', '')
-    onNodeValueChange(node.id, 'temperature', '')
-    onNodeValueChange(node.id, 'max_tokens', '')
-  }
-
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
       setCollapsedOutputGroupKeys([])
@@ -150,6 +127,17 @@ export function NodeInspectorPanel({
       window.cancelAnimationFrame(frameId)
     }
   }, [selectedNode?.id, selectedExecutionId])
+
+  useEffect(() => {
+    if (focusNonce === null || !focusFieldKey) return
+    const frameId = window.requestAnimationFrame(() => {
+      const target = panelRef.current?.querySelector<HTMLElement>(`[data-field-key="${CSS.escape(focusFieldKey)}"]`)
+      if (!target) return
+      target.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      target.querySelector<HTMLElement>('textarea, input:not([type="hidden"]), select, [contenteditable="true"]')?.focus({ preventScroll: true })
+    })
+    return () => window.cancelAnimationFrame(frameId)
+  }, [focusFieldKey, focusNonce])
 
   const renderPortInput = (node: ModuleGraphNode, port: ModulePortDefinition) => {
     const rawValue = node.data.inputValues?.[port.key]
@@ -165,11 +153,9 @@ export function NodeInspectorPanel({
       : isSystemCallLlmNode && port.key === 'max_tokens'
         ? 128
         : uiField?.min
-    const numberPlaceholder = isSystemCallLlmNode && port.key === 'temperature'
-      ? '0.7'
-      : isSystemCallLlmNode && port.key === 'max_tokens'
-        ? '1024'
-        : (uiField?.placeholder || port.label)
+    const numberPlaceholder = isSystemCallLlmNode && (port.key === 'temperature' || port.key === 'max_tokens')
+      ? t({ ko: '기본', en: 'Default' })
+      : (uiField?.placeholder || port.label)
     const hasExplicitValue = hasMeaningfulValue(rawValue)
     const missingRequired = Boolean(port.required && !isNodeInputSatisfied(node, port))
     const isHighlightedPort = highlightedPortKey === port.key
@@ -181,7 +167,7 @@ export function NodeInspectorPanel({
         ? ({ boxShadow: 'inset 2px 0 0 var(--warning)', paddingLeft: '0.625rem' } as CSSProperties)
         : undefined
     const renderPortCard = (children: ReactNode) => (
-      <div key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
+      <div key={port.key} data-field-key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
         <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
         {children}
       </div>
@@ -232,34 +218,15 @@ export function NodeInspectorPanel({
       )
     }
 
-    if (isSystemCallLlmNode && (port.key === 'provider_name' || port.key === 'model')) {
-      return null
-    }
-
-    if (
-      isSystemCallLlmNode
-      && ['system_prompt_preset_name', 'prompt_preset_name', 'structured_output_json_preset_name', 'response_mode'].includes(port.key)
-    ) {
-      return null
-    }
-
-    if (isSystemCallCodexMessageNode && port.key === 'response_mode') {
-      return null
-    }
-
-    if (isSystemCallLlmNode && port.key === 'profile_id') {
-      const currentProfileId = rawValue === undefined || rawValue === null || rawValue === '' ? '' : String(rawValue)
-      // Nodes saved before profiles name a bare connection; show it until a profile is picked.
-      const legacyProvider = normalizeOptionalString(node.data.inputValues?.provider_name)
+    if (uiField?.options_source) {
       return renderPortCard(
-        <TypedFieldInput
-          kind="select"
-          value={llmProfileOptions.some((option) => option.value === currentProfileId) ? currentProfileId : ''}
-          onChange={(value) => applyLlmProfile(node, String(value))}
-          options={llmProfileOptions}
-          emptyLabel={!currentProfileId && legacyProvider
-            ? t({ ko: '연결: {name} (이전 방식)', en: 'Connection: {name} (legacy)' }, { name: legacyProvider })
-            : t({ ko: 'LLM 프로필 선택', en: 'Select LLM profile' })}
+        <OptionSourceFieldInput
+          source={uiField.options_source}
+          value={rawValue}
+          onChange={changePortValue}
+          numeric={port.data_type === 'number' || uiField.data_type === 'number'}
+          required={port.required}
+          defaultValue={port.default_value ?? uiField.default_value}
         />,
       )
     }
@@ -283,33 +250,28 @@ export function NodeInspectorPanel({
     }
 
     const selectOptions = uiField?.data_type === 'select' && Array.isArray(uiField.options) ? uiField.options : []
-    const isCodexModelPort = isSystemCallCodexMessageNode && port.key === 'model'
 
     if (selectOptions.length > 0) {
       const defaultSelectValue = port.default_value ?? uiField?.default_value
+      // A list that spells out its own empty choice (e.g. "기본") names the empty option with it.
+      const explicitEmpty = selectOptions.find((option) => typeof option !== 'string' && option.value === '')
 
       return renderPortCard(
         <TypedFieldInput
           kind="select"
-          value={rawValue ?? defaultSelectValue ?? (isCodexModelPort ? selectOptions[0] : '')}
+          value={rawValue ?? defaultSelectValue ?? ''}
           onChange={changePortValue}
-          options={selectOptions}
-          emptyLabel={hasMeaningfulValue(defaultSelectValue) ? formatModuleGraphDefaultOptionLabel(t, defaultSelectValue) : undefined}
-          emptyOption={isCodexModelPort ? 'none' : 'auto'}
+          options={selectOptions.filter((option) => (typeof option === 'string' ? option : option.value) !== '')}
+          emptyLabel={explicitEmpty && typeof explicitEmpty !== 'string'
+            ? explicitEmpty.label
+            : hasMeaningfulValue(defaultSelectValue) ? formatModuleGraphDefaultOptionLabel(t, defaultSelectValue) : undefined}
+          emptyOption={explicitEmpty ? 'selectable' : 'auto'}
         />,
       )
     }
 
     if (uiField?.ui_hint === 'key_value_entries') {
       return renderPortCard(<ModuleGraphKeyValueListInput value={rawValue ?? uiField.default_value ?? port.default_value} onChange={changePortValue} />)
-    }
-
-    if (port.data_type === 'any') {
-      return renderPortCard(
-        <div className="text-sm text-muted-foreground">
-          {t({ ko: '이 포트는 연결된 업스트림 값을 그대로 받아. 직접 편집은 지원하지 않아.', en: 'This port uses the connected upstream value as-is. Direct editing is not supported.' })}
-        </div>,
-      )
     }
 
     const kind = resolveInspectorFieldKind(port.data_type)
@@ -338,6 +300,31 @@ export function NodeInspectorPanel({
     const clearFieldValue = () => onNodeValueClear(node.id, field.key)
 
     const renderFieldInput = () => {
+      if (field.node_editor === 'minimax_h3_director_dasiwa') {
+        const directorValue = rawValue ?? field.default_value
+        return (
+          <MiniMaxH3DirectorDasiwaInput
+            value={directorValue && typeof directorValue === 'object' && !Array.isArray(directorValue) ? directorValue as Record<string, unknown> : {}}
+            visibleFields={field.node_visible_fields}
+            hiddenControls={field.node_hidden_controls}
+            numericBounds={field.node_numeric_bounds}
+            onChange={(value) => onNodeValueChange(node.id, field.key, value)}
+          />
+        )
+      }
+
+      if (field.options_source) {
+        return (
+          <OptionSourceFieldInput
+            source={field.options_source}
+            value={rawValue}
+            onChange={(value) => onNodeValueChange(node.id, field.key, value)}
+            numeric={field.data_type === 'number'}
+            defaultValue={field.default_value}
+          />
+        )
+      }
+
       const powerLoraLoaderValue = rawValue ?? field.default_value
       const isSelect = field.data_type === 'select' && Array.isArray(field.options) && field.options.length > 0
 
@@ -367,7 +354,7 @@ export function NodeInspectorPanel({
     }
 
     return (
-      <div key={field.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS}>
+      <div key={field.key} data-field-key={field.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-1">
@@ -393,12 +380,37 @@ export function NodeInspectorPanel({
     ? resolveEdgeEndpoint(nodes, selectedEdge.target, selectedEdge.targetHandle, 'in')
     : null
   const selectedEdgeType = sourceEndpoint?.port?.data_type ?? targetEndpoint?.port?.data_type ?? null
-  const selectedNodeInputPorts = selectedNode ? getEditableNodeInputPorts(selectedNode) : []
+  // Values the node card edits itself stay off the panel (phones keep everything here).
+  const selectedNodeHasLayout = selectedNode ? resolveModuleGraphNodeLayout(selectedNode.data.module) !== 'default' : false
+  const selectedNodeConnectedInputKeys = new Set(selectedNode?.data.connectedInputKeys ?? [])
+  const isPanelPort = (node: ModuleGraphNode, port: ModulePortDefinition) => {
+    // A linked input takes its value from the link (the card names the source), and `any` ports only take links.
+    if (selectedNodeConnectedInputKeys.has(port.key) || port.data_type === 'any') return false
+    // Ports that stand for a part of a composite editor (MiniMax Director) are edited through that editor.
+    if (port.node_binding?.node_editor) return false
+    if (isCoarsePointer) return true
+    const uiField = findNodeUiField(node, port.key)
+    if (uiField?.ui_hint === 'key_value_entries' && selectedNodeHasLayout) return false
+    return !isEditedOnNodeCard(node, port, uiField)
+  }
+  const isPanelField = (field: ModuleUiFieldDefinition) => {
+    if (isCoarsePointer || field.node_editor) return true
+    // A live-list pick that is not an input port has no row on the default card, so it lives here.
+    if (field.options_source) return !selectedNodeHasLayout
+    if (selectedNodeHasLayout) return field.data_type === 'json' || field.data_type === 'prompt'
+    return !(field.data_type === 'select' || field.data_type === 'number' || field.data_type === 'boolean')
+  }
+  const selectedNodeAllInputPorts = selectedNode ? getEditableNodeInputPorts(selectedNode) : []
+  const selectedNodeInputPorts = selectedNode ? selectedNodeAllInputPorts.filter((port) => isPanelPort(selectedNode, port)) : []
   const missingRequiredInputs = selectedNode
-    ? selectedNodeInputPorts.filter((port) => port.required && !isNodeInputSatisfied(selectedNode, port))
+    ? selectedNodeAllInputPorts.filter((port) => port.required && !isNodeInputSatisfied(selectedNode, port))
     : []
   const selectedNodeWorkflowInputPort = selectedNode ? getWorkflowInputSourcePort(selectedNode) : null
-  const selectedNodeStandaloneUiFields = selectedNode ? getStandaloneNodeUiFields(selectedNode) : []
+  const selectedNodeStandaloneUiFields = selectedNode ? getStandaloneNodeUiFields(selectedNode).filter(isPanelField) : []
+  // A value node's card previews long text and edits numbers, switches and images itself; long values open here.
+  const showWorkflowInputValue = Boolean(selectedNodeWorkflowInputPort && (
+    isCoarsePointer || ['text', 'prompt', 'json'].includes(selectedNodeWorkflowInputPort.data_type)
+  ))
   const sortedSelectedNodeInputs = selectedNode && !selectedNodeWorkflowInputPort
     ? [...selectedNodeInputPorts].sort((left, right) => {
         const leftHighlighted = left.key === highlightedPortKey ? 1 : 0
@@ -437,6 +449,7 @@ export function NodeInspectorPanel({
   }
 
   return (
+    <div ref={panelRef} className="contents">
     <Section heading={showHeader ? t({ ko: '노드 인스펙터', en: 'Node Inspector' }) : undefined}>
       {!selectedNode && !selectedEdge ? (
         <EmptyState size="compact" icon={MousePointerClick} title={t({ ko: '노드나 엣지를 선택해.', en: 'Select a node or edge.' })} />
@@ -469,18 +482,6 @@ export function NodeInspectorPanel({
               />
               <Badge variant="outline" className="gap-1"><ProviderIcon provider={selectedNode.data.module.engine_type === 'nai' ? 'novelai' : selectedNode.data.module.engine_type} className="size-3" />{t(MODULE_ENGINE_LABELS[selectedNode.data.module.engine_type] ?? selectedNode.data.module.engine_type)}</Badge>
               <TechnicalReferenceHint title={`node ${selectedNode.id}`} label={t({ ko: '노드 내부 식별자 보기', en: 'Show internal node identifier' })} />
-              {onExecuteSelectedNode ? (
-                <div className="flex gap-1">
-                  <IconButton size="icon-sm" variant="secondary" onClick={onExecuteSelectedNode} disabled={!canExecuteGeneration || executeSelectedNodeDisabled} label={resolvedExecuteSelectedNodeLabel}>
-                    <Play />
-                  </IconButton>
-                  {onForceExecuteSelectedNode ? (
-                    <IconButton size="icon-sm" variant="secondary" onClick={onForceExecuteSelectedNode} disabled={!canExecuteGeneration || executeSelectedNodeDisabled} label={resolvedForceExecuteSelectedNodeLabel}>
-                      <RotateCcw />
-                    </IconButton>
-                  ) : null}
-                </div>
-              ) : null}
             </div>
           </div>
 
@@ -536,8 +537,11 @@ export function NodeInspectorPanel({
           ) : null}
 
           {selectedNodeInputPorts.length === 0 || selectedNodeWorkflowInputPort ? (
-            selectedNodeStandaloneUiFields.length > 0 ? (
-              <div className="space-y-4">{selectedNodeStandaloneUiFields.map((field) => renderStandaloneUiField(selectedNode, field))}</div>
+            showWorkflowInputValue || selectedNodeStandaloneUiFields.length > 0 ? (
+              <div className="space-y-4">
+                {showWorkflowInputValue && selectedNodeWorkflowInputPort ? renderPortInput(selectedNode, selectedNodeWorkflowInputPort) : null}
+                {selectedNodeStandaloneUiFields.map((field) => renderStandaloneUiField(selectedNode, field))}
+              </div>
             ) : null
           ) : (
             <div className="space-y-4">
@@ -548,5 +552,6 @@ export function NodeInspectorPanel({
         </>
       ) : null}
     </Section>
+    </div>
   )
 }

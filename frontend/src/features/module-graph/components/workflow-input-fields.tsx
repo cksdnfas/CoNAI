@@ -8,6 +8,7 @@ import { TypedFieldInput } from '@/features/shared-fields/typed-field-input'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowExposedInput } from '@/lib/api-module-graph'
 import { normalizeModulePortDescription } from '../module-graph-shared'
+import { formatWorkflowInputLabel } from '../module-graph-workflow-inputs'
 import { hasMeaningfulValue } from './module-graph-field-shared'
 import { formatModuleGraphDefaultOptionLabel } from './module-graph-simple-value-input'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
@@ -141,7 +142,7 @@ export function WorkflowInputFields({
         <div className="flex items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <Tip content={normalizedDescription}>
-              <div className="text-sm font-medium text-foreground">{inputDefinition.label}</div>
+              <div className="text-sm font-medium text-foreground">{formatWorkflowInputLabel(inputDefinition.label)}</div>
             </Tip>
             {inputDefinition.required ? <Badge variant="outline">{t({ ko: '필수', en: 'Required' })}</Badge> : null}
           </div>

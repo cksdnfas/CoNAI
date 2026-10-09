@@ -369,6 +369,28 @@ export function useModuleGraphWorkspaceSync({
     }
 
     lastNodePreviewSyncSignatureRef.current = syncSignature
+    // While a run is in progress, a planned node whose sources all finished is the one working right now.
+    const baseExecutionStatusByNode = new Map(orderedNodeIds.map((nodeId) => [nodeId, getNodeExecutionStatus({
+      nodeId,
+      orderedNodeIds,
+      nodeOrderIndex,
+      artifactNodeIds,
+      skippedNodeReasons,
+      executionStatus: executionDetail.execution.status,
+      failedNodeId: executionDetail.execution.failed_node_id,
+    })]))
+    const runningNodeIds = new Set<string>()
+    if (executionDetail.execution.status === 'running') {
+      for (const [nodeId, status] of baseExecutionStatusByNode) {
+        if (status !== 'idle') continue
+        const sourcesDone = edges.every((edge) => {
+          if (edge.target !== nodeId) return true
+          const sourceStatus = baseExecutionStatusByNode.get(edge.source)
+          return sourceStatus === undefined || sourceStatus === 'completed' || sourceStatus === 'skipped'
+        })
+        if (sourcesDone) runningNodeIds.add(nodeId)
+      }
+    }
     setNodes((currentNodes) =>
       currentNodes.map((node) => {
         const nodeArtifacts = artifactsByNode[node.id] ?? []
@@ -391,7 +413,9 @@ export function useModuleGraphWorkspaceSync({
           executionStatus: executionDetail.execution.status,
           failedNodeId: executionDetail.execution.failed_node_id,
         })
-        const executionStatus = nodeArtifacts.length > 0 || orderedNodeIdSet.has(node.id)
+        const executionStatus = runningNodeIds.has(node.id)
+          ? 'running'
+          : nodeArtifacts.length > 0 || orderedNodeIdSet.has(node.id)
           ? selectedExecutionStatus
           : fallbackPreview
             ? 'completed'

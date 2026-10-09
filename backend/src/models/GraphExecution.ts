@@ -193,6 +193,7 @@ export class GraphExecutionModel {
     schedule_id?: number | null
     execution_plan?: string | null
     started_at?: string | null
+    requested_by_account_id?: number | null
   }): number {
     const db = getUserSettingsDb()
     const status = data.status ?? 'running'
@@ -205,8 +206,8 @@ export class GraphExecutionModel {
 
     const info = db.prepare(`
       INSERT INTO graph_executions (
-        graph_workflow_id, graph_version, status, trigger_type, schedule_id, execution_plan, started_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        graph_workflow_id, graph_version, status, trigger_type, schedule_id, execution_plan, started_at, requested_by_account_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.graph_workflow_id,
       data.graph_version,
@@ -215,6 +216,7 @@ export class GraphExecutionModel {
       data.schedule_id ?? null,
       data.execution_plan ?? null,
       startedAt,
+      data.requested_by_account_id ?? null,
     )
 
     const executionId = info.lastInsertRowid as number

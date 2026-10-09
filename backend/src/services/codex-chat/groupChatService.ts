@@ -4,7 +4,7 @@ import type { ChatExecutionContext, ChatMessageRouting, ChatRecipient } from '@c
 import { automaticReplyRouting, messageSender, quoteMessage, requireReplyTarget, userReplyRouting } from './chatReplies'
 import { registerChatReply, skipThreadGenerationReactions } from './chatReplyRegistry'
 import type { McpRequester } from '../../mcp/context'
-import { inlineTextsForChat, validateChatAttachments } from './chatAttachments'
+import { inlineTextsForChat, loadAttachedImages, validateChatAttachments } from './chatAttachments'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { foldGroupBlockState, parseBlockEdits } from './chatBlockState'
 import { GROUP_LIMITS, GROUP_MEMBER_MAX, ChatGroupStore, groupLimitsOf } from './chatGroupStore'
@@ -308,6 +308,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
   try {
     // A member that cannot read files itself gets text attachments' contents in the transcript.
     const attachmentTexts = await inlineTextsForChat(profile, requester.accountId, messages)
+    const attachedImages = await loadAttachedImages(profile, requester, messages)
     if (profile.engine === 'codex') {
       message = await runCodexGroupReply({
         requester,
@@ -316,7 +317,8 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         chatContext: context,
         messages,
         windowLimit: limits.window,
-        buildInput: (lore) => buildGroupCodexInput({ thread, members, self: profile, messages, routing: active.routing, lastSeenMessageId: ChatGroupStore.member(run.threadId, profile.id)?.last_seen_message_id ?? null, windowLimit: limits.window, lore, directive: [flagDirectiveFor(messages, profile, userPersonaForThread(thread)), postHistoryText(profile, userPersonaForThread(thread))].filter(Boolean).join('\n\n') , attachmentTexts }),
+        buildInput: (lore) => buildGroupCodexInput({ thread, members, self: profile, messages, routing: active.routing, lastSeenMessageId: ChatGroupStore.member(run.threadId, profile.id)?.last_seen_message_id ?? null, windowLimit: limits.window, lore, directive: [flagDirectiveFor(messages, profile, userPersonaForThread(thread)), postHistoryText(profile, userPersonaForThread(thread))].filter(Boolean).join('\n\n') , attachmentTexts, attachedImages }),
+        attachedImages,
         signal: controller.signal,
         emit: forward,
         persist,
@@ -329,7 +331,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         profile,
         // The CoNAI tool guidance is for the profile's own tools, not the room tools every member gets.
         chatContext: context,
-        buildMessages: (tools, onMeta, judged) => buildGroupLlmMessages({ profile, thread, members, messages, routing: active.routing, windowLimit: limits.window, tools, maxTokens, withTools: tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)), segments: groupSummaryOn(thread) ? ChatSummaryStore.list(run.threadId) : undefined , attachmentTexts, onMeta, judged }),
+        buildMessages: (tools, onMeta, judged) => buildGroupLlmMessages({ profile, thread, members, messages, routing: active.routing, windowLimit: limits.window, tools, maxTokens, withTools: tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)), segments: groupSummaryOn(thread) ? ChatSummaryStore.list(run.threadId) : undefined , attachmentTexts, attachedImages, onMeta, judged }),
         // The member's own cap, else the room's, else the profile's (a Codex member has no hard cap).
         generation: { maxTokens },
         signal: controller.signal,

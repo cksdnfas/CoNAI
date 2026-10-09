@@ -68,8 +68,9 @@ export function buildWorkflowInputDefinitionFromNode(node: ModuleGraphNode): Gra
 
   const uiField = node.data.module.ui_schema?.find((field) => field.key === sourcePort.key)
   const nodeDisplayLabel = getModuleNodeDisplayLabel(node)
-  const label = normalizeOptionalString(node.data.inputValues?.[WORKFLOW_INPUT_LABEL_KEY])
-    ?? `${nodeDisplayLabel} · ${sourcePort.label}`
+  // A value node has one port, so its name says it all; older saves stored "<node> · <port>" as the label.
+  const savedLabel = normalizeOptionalString(node.data.inputValues?.[WORKFLOW_INPUT_LABEL_KEY])
+  const label = savedLabel && savedLabel !== `${nodeDisplayLabel} · ${sourcePort.label}` ? savedLabel : nodeDisplayLabel
   const description = normalizeOptionalString(node.data.inputValues?.[WORKFLOW_INPUT_DESCRIPTION_KEY])
     ?? normalizeModulePortDescription(sourcePort.description)
     ?? undefined
@@ -89,6 +90,12 @@ export function buildWorkflowInputDefinitionFromNode(node: ModuleGraphNode): Gra
     module_id: node.data.module.id,
     module_name: getModuleBaseDisplayName(node.data.module),
   }
+}
+
+/** A run input's label for display: saved labels like "텍스트 · 텍스트" (node and port named alike) show once. */
+export function formatWorkflowInputLabel(label: string) {
+  const parts = label.split(' · ')
+  return parts.length === 2 && parts[0] === parts[1] ? parts[0] : label
 }
 
 /** Derive the complete workflow-run input definition list directly from configured graph nodes. */

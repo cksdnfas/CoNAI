@@ -3,16 +3,11 @@ import { Button } from '@/components/ui/button'
 import { Modal, ModalFooter } from '@/components/ui/modal'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
+import type { GraphWorkflowFolderRecord, GraphWorkflowRecord } from '@/lib/api-module-graph'
 
 const WorkflowFolderSettingsPanelLazy = lazy(async () => {
   const module = await import('./workflow-folder-settings-panel')
   return { default: module.WorkflowFolderSettingsPanel }
-})
-
-const ModuleLibraryPanelLazy = lazy(async () => {
-  const module = await import('./module-library-panel')
-  return { default: module.ModuleLibraryPanel }
 })
 
 const CustomNodeManagementPanelLazy = lazy(async () => {
@@ -24,7 +19,7 @@ function WorkspaceModalFallback() {
   return <div className="min-h-[16rem] animate-pulse rounded-sm bg-fill" />
 }
 
-/** Render the browse/manage, folder-delete, and module-library modals for the module-graph page. */
+/** Render the browse/manage, folder-delete and custom-node modals for the module-graph page. */
 export function ModuleGraphWorkspaceModals({
   workflowView,
   isBrowseManageModalOpen,
@@ -33,11 +28,7 @@ export function ModuleGraphWorkspaceModals({
   selectedGraphRecord,
   selectedFolderRecord,
   folderDeleteTarget,
-  isModuleLibraryOpen,
   isCustomNodeManagerOpen,
-  modules,
-  modulesErrorMessage,
-  modulesIsError,
   onCloseBrowseManage,
   onAssignWorkflowFolder,
   onCreateFolder,
@@ -47,11 +38,8 @@ export function ModuleGraphWorkspaceModals({
   onDeleteWorkflow,
   onCloseFolderDelete,
   onConfirmDeleteFolder,
-  onCloseModuleLibrary,
-  onOpenCustomNodeManager,
   onCloseCustomNodeManager,
   onRefreshModules,
-  onAddModule,
 }: {
   workflowView: 'browse' | 'edit'
   isBrowseManageModalOpen: boolean
@@ -60,11 +48,7 @@ export function ModuleGraphWorkspaceModals({
   selectedGraphRecord: GraphWorkflowRecord | null
   selectedFolderRecord: GraphWorkflowFolderRecord | null
   folderDeleteTarget: GraphWorkflowFolderRecord | null
-  isModuleLibraryOpen: boolean
   isCustomNodeManagerOpen: boolean
-  modules: ModuleDefinitionRecord[]
-  modulesErrorMessage: string
-  modulesIsError: boolean
   onCloseBrowseManage: () => void
   onAssignWorkflowFolder: (folderId: number | null) => void
   onCreateFolder: (input: { name: string; description?: string; parent_id?: number | null; assignToWorkflow?: boolean }) => void
@@ -74,11 +58,8 @@ export function ModuleGraphWorkspaceModals({
   onDeleteWorkflow: () => Promise<void>
   onCloseFolderDelete: () => void
   onConfirmDeleteFolder: (mode: 'move_children' | 'delete_tree') => void
-  onCloseModuleLibrary: () => void
-  onOpenCustomNodeManager: () => void
   onCloseCustomNodeManager: () => void
   onRefreshModules: () => Promise<unknown> | void
-  onAddModule: (module: ModuleDefinitionRecord) => void
 }) {
   const { t } = useI18n()
 
@@ -130,27 +111,6 @@ export function ModuleGraphWorkspaceModals({
             </Button>
           </Tip>
         </ModalFooter>
-      </Modal>
-
-      <Modal
-        open={isModuleLibraryOpen}
-        title={t({ ko: '모듈 추가', en: 'Add module' })}
-        onClose={onCloseModuleLibrary}
-        size="wide"
-        height="tall"
-      >
-        {isModuleLibraryOpen ? (
-          <Suspense fallback={<WorkspaceModalFallback />}>
-            <ModuleLibraryPanelLazy
-              modules={modules}
-              isError={modulesIsError}
-              errorMessage={modulesErrorMessage}
-              onAddModule={onAddModule}
-              onOpenCustomNodeManager={onOpenCustomNodeManager}
-              surface="plain"
-            />
-          </Suspense>
-        ) : null}
       </Modal>
 
       <Modal

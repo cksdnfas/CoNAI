@@ -57,11 +57,17 @@ export function markContextMessage<T extends ChatCompletionMessage>(message: T, 
   return message
 }
 
+/** A message's content as text for estimates and hashes: an image part stands as a short marker, not its base64. */
+export function contextContentText(content: ChatCompletionMessage['content']) {
+  if (typeof content === 'string') return content
+  return JSON.stringify(Array.isArray(content) ? content.map((part) => part.type === 'image_url' ? { type: 'image_url', image_url: { url: '(image)' } } : part) : content ?? '')
+}
+
 /** Compute from the final messages, including page/continuation and the definitions sent beside them. */
 export function contextSections(messages: ChatCompletionMessage[], tools: ChatCompletionTool[], estimate: (text: string) => number): ContextSection[] {
   return [
     ...messages.map((message, position) => {
-      const text = typeof message.content === 'string' ? message.content : JSON.stringify(message.content ?? '')
+      const text = contextContentText(message.content)
       const body = message.role === 'assistant' && message.tool_calls ? `${text}\n${JSON.stringify(message.tool_calls)}` : text
       const kind = messageKinds.get(message) ?? (message.role === 'system' ? 'persona' : message.role === 'tool' ? 'tool-result' : text.includes('[참고 설정]') ? 'reference' : 'window')
       const parts = messageParts.get(message)

@@ -1,11 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import { getLlmProfileOptions } from '@/lib/api-external-api'
 import { getGenerationComfyUIServers, getGenerationWorkflowServers } from '@/lib/api-image-generation-workflows'
 import { getLlmPresetOptions } from '@/lib/api-settings-llm'
 
 interface ModuleGraphNodeCardQueryEnablementOptions {
   canConfigureComfyTarget: boolean
-  needsLlmModelOptions: boolean
   needsLlmPresetOptions: boolean
 }
 
@@ -15,13 +13,11 @@ interface UseModuleGraphNodeCardQueriesOptions extends ModuleGraphNodeCardQueryE
 
 export function resolveModuleGraphNodeCardQueryEnablement({
   canConfigureComfyTarget,
-  needsLlmModelOptions,
   needsLlmPresetOptions,
 }: ModuleGraphNodeCardQueryEnablementOptions) {
   return {
     comfyServers: canConfigureComfyTarget,
     llmPresets: needsLlmPresetOptions,
-    llmProviders: needsLlmModelOptions,
     workflowServers: canConfigureComfyTarget,
   }
 }
@@ -30,19 +26,11 @@ export function resolveModuleGraphNodeCardQueryEnablement({
 export function useModuleGraphNodeCardQueries({
   canConfigureComfyTarget,
   comfyWorkflowId,
-  needsLlmModelOptions,
   needsLlmPresetOptions,
 }: UseModuleGraphNodeCardQueriesOptions) {
   const enabled = resolveModuleGraphNodeCardQueryEnablement({
     canConfigureComfyTarget,
-    needsLlmModelOptions,
     needsLlmPresetOptions,
-  })
-  const llmProfilesQuery = useQuery({
-    queryKey: ['llm-profile-options', 'module-graph-node-card'],
-    queryFn: () => getLlmProfileOptions(),
-    enabled: enabled.llmProviders,
-    staleTime: 30_000,
   })
   const llmPresetsQuery = useQuery({
     queryKey: ['llm-preset-options', 'module-graph-node-card'],
@@ -66,7 +54,6 @@ export function useModuleGraphNodeCardQueries({
   return {
     comfyServersQuery,
     llmPresetsQuery,
-    llmProfilesQuery,
     workflowServersQuery,
   }
 }

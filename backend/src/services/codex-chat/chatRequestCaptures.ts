@@ -2,12 +2,13 @@ import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { loadChatSettings } from './chatSettings'
 import type { ChatCompletionTarget } from './llmChatCompletion'
 
-/** Remove custom request fields and connection secrets recursively, including echoed values. */
+/** Remove custom request fields and connection secrets recursively, including echoed values; images become a marker. */
 export function redactChatRequestBody(body: unknown, target?: ChatCompletionTarget): string {
   const extra = target?.generation.extraParams ?? {}
   const secrets = [target?.apiKey, target?.endpoint].filter((value): value is string => !!value)
   const redact = (value: unknown, key = ''): unknown => {
     if (Object.prototype.hasOwnProperty.call(extra, key) || /^(?:extra_?params|headers|authorization|api_?key|endpoint|base_?url)$/i.test(key)) return '[가림]'
+    if (typeof value === 'string' && /^data:image\//.test(value)) return `[이미지 ${value.length}자]`
     if (typeof value === 'string') return secrets.reduce((text, secret) => text.split(secret).join('[가림]'), value)
     if (Array.isArray(value)) return value.map((item) => redact(item))
     if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, redact(item, name)]))

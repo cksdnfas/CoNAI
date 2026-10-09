@@ -11,6 +11,7 @@ import {
 } from '@/lib/api-module-graph'
 import { buildGraphEditorSnapshot, buildGraphPayload, getModuleNodeDisplayLabel, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
 import { deriveWorkflowExposedInputsFromNodes } from './module-graph-workflow-inputs'
+import { applyNodeImageReplacements, moveNodeImageDataUrlsToLibrary, type NodeImageReplacement } from './module-graph-image-values'
 import { buildGraphWorkflowTargetGroupKey, readGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
 
 /** Own graph save and execution actions for the module-graph page. */
@@ -35,6 +36,7 @@ export function useModuleGraphExecutionActions({
   onNodeSelected,
   onEdgeCleared,
   onSnapshotSaved,
+  onNodeImagesMoved,
   refetchGraphWorkflows,
   refetchGraphExecutions,
   refetchExecutionDetail,
@@ -60,6 +62,8 @@ export function useModuleGraphExecutionActions({
   onNodeSelected: (nodeId: string) => void
   onEdgeCleared: () => void
   onSnapshotSaved: (snapshot: string) => void
+  /** Inline images were moved into the library while saving; swap the editor values for their refs. */
+  onNodeImagesMoved: (replacements: NodeImageReplacement[]) => void
   refetchGraphWorkflows: () => Promise<unknown>
   refetchGraphExecutions: () => Promise<unknown>
   refetchExecutionDetail: () => Promise<unknown>
@@ -82,8 +86,11 @@ export function useModuleGraphExecutionActions({
     }
 
     const resolvedName = resolveWorkflowDisplayName(workflowName, selectedGraphRecord?.name)
-    const nodeDerivedWorkflowExposedInputs = deriveWorkflowExposedInputsFromNodes(nodes)
-    const graph = buildGraphPayload(nodes, edges, {
+    // Inline images left from older saves move into the library; the graph keeps their refs.
+    const imageReplacements = await moveNodeImageDataUrlsToLibrary(nodes)
+    const savedNodes = applyNodeImageReplacements(nodes, imageReplacements)
+    const nodeDerivedWorkflowExposedInputs = deriveWorkflowExposedInputsFromNodes(savedNodes)
+    const graph = buildGraphPayload(savedNodes, edges, {
       exposed_inputs: nodeDerivedWorkflowExposedInputs,
       debug_mode: workflowDebugMode,
     })
@@ -116,10 +123,14 @@ export function useModuleGraphExecutionActions({
       created = true
     }
 
+    if (imageReplacements.length > 0) {
+      onNodeImagesMoved(imageReplacements)
+    }
+
     const savedSnapshot = buildGraphEditorSnapshot({
       name: resolvedName,
       description: workflowDescription,
-      nodes,
+      nodes: savedNodes,
       edges,
       workflowMetadata: {
         exposed_inputs: nodeDerivedWorkflowExposedInputs,
@@ -142,7 +153,7 @@ export function useModuleGraphExecutionActions({
       created,
       name: resolvedName,
     }
-  }, [draftWorkflowFolderId, edges, formatNumber, nodes, onExecutionSelected, onGraphSelected, onSnapshotSaved, onWorkflowNameResolved, refetchGraphWorkflows, selectedGraphId, selectedGraphRecord?.name, showSnackbar, t, workflowDebugMode, workflowDescription, workflowName])
+  }, [draftWorkflowFolderId, edges, formatNumber, nodes, onExecutionSelected, onGraphSelected, onNodeImagesMoved, onSnapshotSaved, onWorkflowNameResolved, refetchGraphWorkflows, selectedGraphId, selectedGraphRecord?.name, showSnackbar, t, workflowDebugMode, workflowDescription, workflowName])
 
   /** Save the current graph workflow draft and show one user-facing result message. */
   const handleSaveGraph = useCallback(async () => {

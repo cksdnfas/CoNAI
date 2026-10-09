@@ -1,193 +1,50 @@
-import { useMemo, type CSSProperties } from 'react'
-import { Handle, Position } from '@xyflow/react'
-import { Plus, X } from 'lucide-react'
-import { IconButton } from '@/components/ui/icon-button'
-import { Input } from '@/components/ui/input'
-import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { ModuleGraphSimpleValueInput } from '../module-graph-simple-value-input'
-import { normalizeKeyValueEntries } from '../module-graph-key-value-list-input'
-import type { ModulePortDataType, ModulePortDefinition } from '@/lib/api-module-graph'
-import { hasMeaningfulValue } from '../module-graph-field-shared'
-import { buildHandleId, getPortTypeColor, type ModuleGraphNode } from '../../module-graph-shared'
-import {
-  MODULE_GRAPH_INLINE_CONTROL_CLASS,
-  PortCell,
-  buildModuleUiFieldMap,
-  buildHandleStyle,
-  buildPortTooltip,
-  stopNodeActionEvent,
-  stopNodeInteraction,
-  type ModuleUiFieldMap,
-} from '../module-graph-port-cells'
+import type { ModulePortDataType } from '@/lib/api-module-graph'
+import { normalizeKeyValueEntries, type KeyValueEntry } from '../module-graph-key-value-list-input'
+import { NodeFieldRow, NodeRowDivider } from '../module-graph-node-rows'
+import type { ModuleGraphNodeLayoutProps } from '../module-graph-node-layout-renderer'
 import { getRandomTextChoiceFieldValue } from './api-request-node-layout'
-import { getInlineUiFieldValue, renderCompactUiField } from './layout-common'
+import { NodeOutputRows } from './default-port-rows'
+import { KeyValueEntryRows } from './key-value-entry-rows'
+import { getFieldValue } from './text-node-layouts'
 
 type RandomChoiceOutputType = Extract<ModulePortDataType, 'text' | 'number' | 'boolean' | 'json' | 'any'>
-type RandomChoiceEntry = {
-  key: string
-  value: unknown
+
+function normalizeOutputType(value: unknown): RandomChoiceOutputType {
+  return value === 'number' || value === 'boolean' || value === 'json' || value === 'any' ? value : 'text'
 }
 
-function normalizeRandomChoiceOutputType(value: unknown): RandomChoiceOutputType {
-  return value === 'number'
-    || value === 'boolean'
-    || value === 'json'
-    || value === 'any'
-    ? value
-    : 'text'
-}
-
-function getRandomChoiceInlineInputType(outputType: RandomChoiceOutputType) {
-  return outputType === 'number' || outputType === 'boolean' ? outputType : 'text'
-}
-
-/** Render an expandable random text selector with API-node-style rows. */
-export function RandomTextChoiceNodeLayout({
-  id,
-  data,
-  accentColor,
-  connectedInputKeys,
-  connectedOutputKeys,
-  uiFieldByKey,
-}: {
-  id: string
-  data: ModuleGraphNode['data']
-  accentColor: string
-  connectedInputKeys: Set<string>
-  connectedOutputKeys: Set<string>
-  uiFieldByKey?: ModuleUiFieldMap
-}) {
+/** Random choice: output type, output, then the candidates (each one can also take a link). */
+export function RandomTextChoiceNodeLayout({ id, data, uiFieldByKey, visibleOutputPorts }: ModuleGraphNodeLayoutProps) {
   const { t } = useI18n()
   const parentPort = data.module.exposed_inputs?.find((port) => port.key === 'options')
-  const outputPort = data.module.output_ports[0]
-  const fallbackUiFieldByKey = useMemo(() => buildModuleUiFieldMap(data.module.ui_schema), [data.module.ui_schema])
-  const resolvedUiFieldByKey = uiFieldByKey ?? fallbackUiFieldByKey
-  const outputTypeField = resolvedUiFieldByKey.get('output_type')
-  const outputType = normalizeRandomChoiceOutputType(getInlineUiFieldValue(data.inputValues?.output_type, outputTypeField))
-  const entries: RandomChoiceEntry[] = normalizeKeyValueEntries(getRandomTextChoiceFieldValue(data))
-  const visibleEntries = entries.length > 0 ? entries : [
-    { key: 'text_1', value: '' },
-    { key: 'text_2', value: '' },
-  ]
-  const inlineInputType = getRandomChoiceInlineInputType(outputType)
-
-  const updateEntry = (index: number, nextEntry: RandomChoiceEntry) => {
-    data.onNodeValueChange?.('' + id, 'options', visibleEntries.map((entry, entryIndex) => (entryIndex === index ? nextEntry : entry)))
-  }
-
-  const removeEntry = (index: number) => {
-    const nextEntries = visibleEntries.filter((_, entryIndex) => entryIndex !== index)
-    data.onNodeValueChange?.(id, 'options', nextEntries.length > 0 ? nextEntries : [])
-  }
-
-  const appendEntry = () => {
-    const usedKeys = new Set(visibleEntries.map((entry) => entry.key.trim()).filter(Boolean))
-    let nextIndex = visibleEntries.length + 1
-    while (usedKeys.has(`text_${nextIndex}`)) {
-      nextIndex += 1
-    }
-    data.onNodeValueChange?.(id, 'options', [...visibleEntries, { key: `text_${nextIndex}`, value: '' }])
-  }
-
-  const buildDynamicTextPort = (entryKey: string): ModulePortDefinition | null => {
-    const trimmedKey = entryKey.trim()
-    if (!parentPort || !trimmedKey) {
-      return null
-    }
-
-    return {
-      ...parentPort,
-      key: `options.${trimmedKey}`,
-      label: trimmedKey,
-      data_type: 'any',
-      required: false,
-      multiple: false,
-      default_value: undefined,
-      description: t({ ko: '랜덤 선택 후보 값', en: 'Random item candidate' }),
-    }
-  }
+  const outputTypeField = uiFieldByKey.get('output_type')
+  const outputType = normalizeOutputType(getFieldValue(data, outputTypeField))
+  const stored = normalizeKeyValueEntries(getRandomTextChoiceFieldValue(data))
+  const entries: KeyValueEntry[] = stored.length > 0 ? stored : [{ key: 'text_1', value: '' }, { key: 'text_2', value: '' }]
 
   return (
-    <div className="mt-2 grid gap-1">
-      {outputTypeField ? (
-        <div className="px-0.5 pb-1">
-          {renderCompactUiField({ id, data, field: outputTypeField, value: outputType, allowEmptyOption: false, t })}
-        </div>
-      ) : null}
-
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
-        <div aria-hidden="true" />
-        <PortCell
-          nodeId={id}
-          port={outputPort}
-          side="output"
-          accentColor={accentColor}
-          connected={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
-          satisfied={Boolean(outputPort && connectedOutputKeys.has(outputPort.key))}
-          requiredMissing={false}
-          outputState={outputPort ? data.conditionalOutputStates?.[outputPort.key] ?? null : null}
-        />
-      </div>
-
-      <div className="grid gap-1">
-        {visibleEntries.map((entry, index) => {
-          const dynamicPort = buildDynamicTextPort(entry.key)
-          const connectionKey = dynamicPort?.key ?? null
-          const connected = Boolean(connectionKey && connectedInputKeys.has(connectionKey))
-          const portTypeColor = getPortTypeColor(outputType === 'any' ? 'any' : outputType)
-          const statusLabel = connected ? t({ ko: '연결됨', en: 'Connected' }) : hasMeaningfulValue(entry.value) ? t({ ko: '설정됨', en: 'Configured' }) : t({ ko: '대기', en: 'Waiting' })
-          const borderColor = connected ? `${portTypeColor}88` : `${accentColor}26`
-
-          return (
-            <div key={`${entry.key || 'option'}-${index}`} className="relative min-h-[28px] border-b py-1 pl-4 pr-1" style={{ borderColor } as CSSProperties}>
-              {dynamicPort ? (
-                <Tip content={buildPortTooltip(t, dynamicPort, statusLabel)}>
-                  <Handle
-                    id={buildHandleId('in', dynamicPort.key)}
-                    type="target"
-                    position={Position.Left}
-                    style={buildHandleStyle({ side: 'input', color: portTypeColor })}
-                    onMouseDown={connected ? () => data.onDisconnectNodeInput?.(id, dynamicPort.key) : undefined}
-                  />
-                </Tip>
-              ) : null}
-              <div className="nodrag nowheel grid grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)_auto] gap-1" onMouseDown={stopNodeInteraction}>
-                <Input
-                  value={entry.key}
-                  onChange={(event) => updateEntry(index, { ...entry, key: event.target.value })}
-                  placeholder={t({ ko: '이름', en: 'Name' })}
-                  className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
-                />
-                {connected ? (
-                  <Input
-                    value={t({ ko: '연결됨', en: 'Linked' })}
-                    onChange={() => undefined}
-                    className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
-                    disabled
-                  />
-                ) : (
-                  <ModuleGraphSimpleValueInput
-                    dataType={inlineInputType}
-                    value={entry.value}
-                    onChange={(nextValue) => updateEntry(index, { ...entry, value: nextValue })}
-                    placeholder={outputType === 'json' ? '{ "key": "value" }' : t({ ko: '값', en: 'Value' })}
-                    emptyLabel={t({ ko: '선택', en: 'Select' })}
-                    className={`h-7 text-2xs ${MODULE_GRAPH_INLINE_CONTROL_CLASS}`}
-                    allowEmptyOption
-                  />
-                )}
-                <IconButton size="icon-sm" variant="ghost" className="h-7 w-7" onMouseDown={stopNodeActionEvent} onClick={() => removeEntry(index)} label={t({ ko: '삭제', en: 'Remove' })}>
-                  <X />
-                </IconButton>
-              </div>
-            </div>
-          )
-        })}
-        <IconButton size="icon-sm" variant="secondary" className="nodrag nowheel h-7 w-7" onMouseDown={stopNodeActionEvent} onClick={appendEntry} label={t({ ko: '항목 추가', en: 'Add item' })}>
-          <Plus />
-        </IconButton>
-      </div>
-    </div>
+    <>
+      <NodeOutputRows id={id} data={data} ports={visibleOutputPorts} />
+      <NodeRowDivider />
+      {outputTypeField ? <NodeFieldRow nodeId={id} data={data} field={outputTypeField} allowEmpty={false} /> : null}
+      <KeyValueEntryRows
+        nodeId={id}
+        fieldKey="options"
+        parentPort={parentPort}
+        entries={entries}
+        portDataType="any"
+        valueKind={outputType === 'number' || outputType === 'boolean' ? outputType : 'text'}
+        keyPlaceholder={t({ ko: '이름', en: 'Name' })}
+        valuePlaceholder={outputType === 'json' ? '{ "key": "value" }' : t({ ko: '값', en: 'Value' })}
+        describePort={t({ ko: '랜덤 선택 후보 값', en: 'Random item candidate' })}
+        createEntry={(current) => {
+          const used = new Set(current.map((entry) => entry.key.trim()))
+          let index = current.length + 1
+          while (used.has(`text_${index}`)) index += 1
+          return { key: `text_${index}`, value: '' }
+        }}
+      />
+    </>
   )
 }

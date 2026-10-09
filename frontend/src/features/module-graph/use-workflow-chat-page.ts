@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, type Dispatch, type SetStateAction } from 'react'
-import { MarkerType, useReactFlow } from '@xyflow/react'
+import { useReactFlow } from '@xyflow/react'
 import { applyChatWorkflowOperations, describeChatWorkflowModule, normalizeChatWorkflowSnapshot, sanitizeChatWorkflowInputs, type ChatWorkflowSnapshot } from '@conai/shared'
 import { useChatPageRegistration, type WorkflowPageProposal } from '@/features/codex-chat/chat-page-context'
 import { useI18n } from '@/i18n'
@@ -84,7 +84,7 @@ export function useWorkflowChatPage(params: Params) {
       const target = findNodePort(nodeMap.get(edge.target_node_id), 'in', edge.target_port_key)
       // Native port activation rules (including mode-dependent ports) are checked before any setter.
       if (!source || !target || getModulePortCompatibility(source.data_type, target.data_type) === 'incompatible') throw new Error('현재 노드 설정에서 사용할 수 없는 포트 연결이 있어.')
-      return { id: edge.id, source: edge.source_node_id, target: edge.target_node_id, sourceHandle: buildHandleId('out', edge.source_port_key), targetHandle: buildHandleId('in', edge.target_port_key), markerEnd: { type: MarkerType.ArrowClosed }, ...buildModuleEdgePresentation(source, target) }
+      return { id: edge.id, source: edge.source_node_id, target: edge.target_node_id, sourceHandle: buildHandleId('out', edge.source_port_key), targetHandle: buildHandleId('in', edge.target_port_key), ...buildModuleEdgePresentation(source, target) }
     })
     const exposed = deriveWorkflowExposedInputsFromNodes(nodes)
     const defaults = buildWorkflowRunInputDefaults(exposed)

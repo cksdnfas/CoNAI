@@ -21,6 +21,7 @@ type QueuedExecutionJob = {
   triggerType: 'manual' | 'schedule'
   scheduleId?: number | null
   outputGroupId?: number | null
+  requestedByAccountId?: number | null
 }
 
 type EnqueueExecutionMetadata = {
@@ -28,6 +29,8 @@ type EnqueueExecutionMetadata = {
   scheduleId?: number | null
   /** 최종 결과를 넣을 기본 이미지 그룹 */
   outputGroupId?: number | null
+  /** The account that started the run; nodes that touch an account's chat data check it. */
+  requestedByAccountId?: number | null
 }
 
 type CancelExecutionResult = {
@@ -70,6 +73,7 @@ function buildQueuedJobFromExecution(execution: NonNullable<ReturnType<typeof Gr
     outputGroupId: metadata.outputGroupId ?? null,
     triggerType: execution.trigger_type === 'schedule' ? 'schedule' : 'manual',
     scheduleId: execution.schedule_id ?? null,
+    requestedByAccountId: execution.requested_by_account_id ?? null,
   }
 }
 
@@ -212,7 +216,7 @@ export class GraphWorkflowExecutionQueue {
     executionMeta?: EnqueueExecutionMetadata,
   ) {
     const triggerType = executionMeta?.triggerType ?? 'manual'
-    const job = { executionId: 0, workflowId: workflow.id, graphVersion: workflow.version, inputValues, targetNodeId, forceRerun, triggerType, scheduleId: executionMeta?.scheduleId ?? null, outputGroupId: executionMeta?.outputGroupId ?? null }
+    const job = { executionId: 0, workflowId: workflow.id, graphVersion: workflow.version, inputValues, targetNodeId, forceRerun, triggerType, scheduleId: executionMeta?.scheduleId ?? null, outputGroupId: executionMeta?.outputGroupId ?? null, requestedByAccountId: executionMeta?.requestedByAccountId ?? null }
     const executionId = GraphExecutionModel.create({
       graph_workflow_id: workflow.id,
       graph_version: workflow.version,
@@ -221,6 +225,7 @@ export class GraphWorkflowExecutionQueue {
       schedule_id: executionMeta?.scheduleId ?? null,
       execution_plan: encodeQueuedExecutionMetadata(job),
       started_at: null,
+      requested_by_account_id: executionMeta?.requestedByAccountId ?? null,
     })
     job.executionId = executionId
 
@@ -733,6 +738,7 @@ export class GraphWorkflowExecutionQueue {
         targetNodeId: job.targetNodeId,
         forceRerun: job.forceRerun,
         outputGroupId: job.outputGroupId ?? null,
+        requestedByAccountId: job.requestedByAccountId ?? null,
         shouldCancel: () => this.cancelRequestedExecutionIds.has(job.executionId),
       })
     } catch (error) {

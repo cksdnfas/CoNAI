@@ -16,8 +16,6 @@ export type ModuleGraphNodeLayoutKey =
   | 'api-request'
 
 export type ModuleGraphNodeCustomControlKey =
-  | 'llm-model'
-  | 'codex-model'
   | 'llm-preset'
   | 'nai-model'
   | 'comfy-target'
@@ -46,8 +44,6 @@ export const MODULE_GRAPH_NODE_LAYOUT_REGISTRY: Readonly<Record<string, ModuleGr
 }
 
 export const MODULE_GRAPH_NODE_CUSTOM_CONTROL_REGISTRY: Readonly<Record<string, readonly ModuleGraphNodeCustomControlKey[]>> = {
-  'system.call_llm': ['llm-model'],
-  'system.call_codex_message': ['codex-model'],
   'system.load_llm_preset': ['llm-preset'],
   'system.generate_image_nai': ['nai-model'],
 }

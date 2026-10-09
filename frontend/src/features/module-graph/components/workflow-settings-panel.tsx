@@ -6,8 +6,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord } from '@/lib/api-module-graph'
 
-/** The editor dock's node tab when nothing is selected: the workflow's own name, description and save folder. */
+/** The workflow's own name, description and save folder (the editor bar keeps the name, so it can leave it out). */
 export function WorkflowSettingsPanel({
+  showName = true,
   workflowName,
   workflowDescription,
   folders,
@@ -16,6 +17,7 @@ export function WorkflowSettingsPanel({
   onWorkflowDescriptionChange,
   onFolderChange,
 }: {
+  showName?: boolean
   workflowName: string
   workflowDescription: string
   folders: GraphWorkflowFolderRecord[]
@@ -28,9 +30,11 @@ export function WorkflowSettingsPanel({
 
   return (
     <div className="space-y-4">
-      <Field label={t({ ko: '이름', en: 'Name' })} className="gap-1.5">
-        <Input value={workflowName} onChange={(event) => onWorkflowNameChange(event.target.value)} />
-      </Field>
+      {showName ? (
+        <Field label={t({ ko: '이름', en: 'Name' })} className="gap-1.5">
+          <Input value={workflowName} onChange={(event) => onWorkflowNameChange(event.target.value)} />
+        </Field>
+      ) : null}
       <Field label={t({ ko: '설명', en: 'Description' })} className="gap-1.5">
         <Textarea value={workflowDescription} rows={3} onChange={(event) => onWorkflowDescriptionChange(event.target.value)} />
       </Field>

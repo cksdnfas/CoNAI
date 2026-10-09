@@ -46,6 +46,10 @@ export interface ModuleUiFieldDefinition {
     label: string
     lora?: string
   }>
+  /** Pick the value from a live list (model rows, chat profiles, presets…) served by GET /api/graph-workflows/node-options/:source. */
+  options_source?: string
+  /** A new node starts on this entry of `options_source`: `first` (lists put the newest first) or the list's `default`. */
+  initial_option?: 'first' | 'default'
 }
 
 export interface ModuleDefinitionRecord {

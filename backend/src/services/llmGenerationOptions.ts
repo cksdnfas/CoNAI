@@ -2,7 +2,7 @@
  * One place for what an LLM connection holds (how to reach it) and what a request asks for (how to generate). Chat and
  * the workflow LLM node both build their requests from here, so the same profile behaves the same in both.
  *
- * A connection keeps: default model, request timeout, concurrent requests, how its server turns thinking off. Generation options (temperature, output limit, reasoning, extra
+ * A connection keeps: request timeout, concurrent requests, how its server turns thinking off (its models are model rows). Generation options (temperature, output limit, reasoning, extra
  * provider parameters) belong to the chat profile or the workflow node; an unset option is not sent at all, so the
  * server's own default applies.
  */

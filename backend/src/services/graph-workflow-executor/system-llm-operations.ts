@@ -1,10 +1,7 @@
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
-import { ChatProfileStore, profileGenerationOptions } from '../codex-chat/chatProfiles'
-import { resolveProfileModel } from '../codex-chat/chatModelRoles'
-import type { LlmGenerationOptions } from '../llmGenerationOptions'
-import { executeLlmTextRequest } from '../llmProviderService'
 import { throwIfExecutionAborted } from './execution-abort'
 import { buildRuntimeArtifact } from './system-module-artifacts'
+import { runWorkflowLlmText, type WorkflowLlmResult } from './workflow-llm-runtime'
 import {
   normalizeOptionalString,
   writeExecutionLog,
@@ -13,7 +10,7 @@ import {
   type RuntimeArtifact,
 } from './shared'
 
-function normalizeOptionalNumber(value: unknown) {
+export function normalizeOptionalNumber(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value
   }
@@ -28,6 +25,12 @@ function normalizeOptionalNumber(value: unknown) {
   return null
 }
 
+/** A positive integer id from a node value (selects store numbers; older values may be numeric strings). */
+export function normalizeOptionalId(value: unknown) {
+  const number = normalizeOptionalNumber(value)
+  return number !== null && Number.isSafeInteger(number) && number > 0 ? number : null
+}
+
 function resolveOptionalJsonText(value: unknown) {
   if (typeof value === 'string') {
     return value.trim().length > 0 ? value : null
@@ -40,44 +43,27 @@ function resolveOptionalJsonText(value: unknown) {
   return null
 }
 
+/** Run one node request; a request cut by cancelling the run becomes the run's abort, not a node failure. */
+export async function runNodeLlmRequest<T>(context: ExecutionContext, node: GraphWorkflowNode, run: () => Promise<T>) {
+  throwIfExecutionAborted(context, node.id)
+  try {
+    return await run()
+  } catch (error) {
+    throwIfExecutionAborted(context, node.id)
+    throw error
+  }
+}
+
 export async function executeCallLlmNode(
   context: ExecutionContext,
   node: GraphWorkflowNode,
   moduleDefinition: ParsedModuleDefinition,
   resolvedInputs: Record<string, any>,
 ) {
-  // A chat profile carries the connection, model and generation options; the node's temperature / output limit, when
-  // filled, override it. Nodes saved before profiles keep their bare connection (and now honour their model field).
-  const profileId = normalizeOptionalNumber(resolvedInputs.profile_id)
-  const nodeTemperature = normalizeOptionalNumber(resolvedInputs.temperature)
-  const nodeMaxTokens = normalizeOptionalNumber(resolvedInputs.max_tokens)
-  let providerName: string | null
-  let model: string | null
-  let generation: LlmGenerationOptions
-  if (profileId !== null) {
-    const profile = ChatProfileStore.find(profileId)
-    if (!profile) {
-      throw new Error(`LLM 프로필을 찾을 수 없어: ${profileId}`)
-    }
-    if (profile.engine !== 'llm') {
-      throw new Error(`API LLM 프로필만 쓸 수 있어: ${profile.name}`)
-    }
-    const resolved = resolveProfileModel(profile, 'chat')
-    if (!resolved) {
-      throw new Error(`LLM 프로필에 모델이 없어: ${profile.name}`)
-    }
-    providerName = resolved.providerName
-    model = resolved.model
-    generation = {
-      ...profileGenerationOptions(profile),
-      ...(nodeTemperature !== null ? { temperature: nodeTemperature } : {}),
-      ...(nodeMaxTokens !== null ? { maxTokens: nodeMaxTokens } : {}),
-    }
-  } else {
-    providerName = normalizeOptionalString(resolvedInputs.provider_name)
-    model = normalizeOptionalString(resolvedInputs.model)
-    generation = { temperature: nodeTemperature, maxTokens: nodeMaxTokens }
-  }
+  // The model row (★ default when empty) or a chat profile picks the model; the node's temperature / output limit /
+  // reasoning, when filled, win. Graphs saved before rows still name a bare connection (+ model).
+  const profileId = normalizeOptionalId(resolvedInputs.profile_id)
+  const modelSlotId = normalizeOptionalId(resolvedInputs.model_slot_id)
   const prompt = normalizeOptionalString(resolvedInputs.prompt) ?? ''
   const systemPrompt = normalizeOptionalString(resolvedInputs.system_prompt)
   const contextValue = normalizeOptionalString(resolvedInputs.context)
@@ -93,50 +79,45 @@ export async function executeCallLlmNode(
     details: {
       operationKey: 'system.call_llm',
       profileId,
-      providerName,
-      model,
+      modelSlotId,
       responseMode,
       hasStructuredOutputJson: Boolean(structuredOutputJson),
       hasImage: Boolean(imageDataUrl),
     },
   })
 
-  throwIfExecutionAborted(context, node.id)
-
-  let result: Awaited<ReturnType<typeof executeLlmTextRequest>>
+  let result: WorkflowLlmResult
   try {
-    result = await executeLlmTextRequest({
-      providerName: providerName ?? '',
-      prompt,
+    result = await runNodeLlmRequest(context, node, () => runWorkflowLlmText({
+      target: {
+        profileId,
+        modelSlotId,
+        requesterAccountId: context.requestedByAccountId ?? null,
+        legacy: { providerName: normalizeOptionalString(resolvedInputs.provider_name), model: normalizeOptionalString(resolvedInputs.model) },
+      },
       systemPrompt,
+      prompt,
       context: contextValue,
       image: imageDataUrl,
-      model,
-      generation,
-      responseMode,
       structuredOutputJson,
-      includeRawResponseMetadata: context.debugMode,
-      // 실행 abort 는 프로바이더 요청 타임아웃과 합성된다. 타임아웃 상한은 그대로 유지된다.
-      signal: context.signal,
-      onDebugEvent: (event) => {
-        writeExecutionLog({
-          executionId: context.executionId,
-          nodeId: node.id,
-          level: event.eventType === 'json_parse_failed' ? 'error' : 'info',
-          eventType: event.eventType === 'json_parse_failed' ? 'llm_json_parse_failed' : 'llm_provider_response',
-          message: event.eventType === 'json_parse_failed'
-            ? `LLM JSON parse failed: ${moduleDefinition.name}`
-            : `LLM provider response received: ${moduleDefinition.name}`,
-          details: {
-            operationKey: 'system.call_llm',
-            ...event.details,
-          },
-        })
+      overrides: {
+        temperature: normalizeOptionalNumber(resolvedInputs.temperature),
+        maxTokens: normalizeOptionalNumber(resolvedInputs.max_tokens),
+        reasoningEffort: normalizeOptionalString(resolvedInputs.reasoning_effort),
       },
-    })
+      signal: context.signal,
+    }))
   } catch (error) {
-    // 취소로 끊긴 요청은 노드 실패가 아니라 협조적 중단이다. 첫 실패 노드 힌트를 빼앗지 않도록 abort 에러로 바꾼다.
-    throwIfExecutionAborted(context, node.id)
+    if (error instanceof Error && /JSON/.test(error.message)) {
+      writeExecutionLog({
+        executionId: context.executionId,
+        nodeId: node.id,
+        level: 'error',
+        eventType: 'llm_json_parse_failed',
+        message: `LLM JSON parse failed: ${moduleDefinition.name}`,
+        details: { operationKey: 'system.call_llm', error: error.message },
+      })
+    }
     throw error
   }
 
@@ -148,29 +129,18 @@ export async function executeCallLlmNode(
     structured_output_json_length: structuredOutputJson?.length ?? 0,
     has_image: Boolean(imageDataUrl),
   }
+  const artifactMeta = { operationKey: 'system.call_llm', providerName: result.providerName, model: result.model }
 
   const nodeArtifacts: Record<string, RuntimeArtifact> = {
-    text: buildRuntimeArtifact(context.executionId, node.id, 'text', 'text', result.text, {
-      kind: 'system-llm-text',
-      operationKey: 'system.call_llm',
-      providerName: result.providerName,
-      model: result.model,
-    }),
-    metadata: buildRuntimeArtifact(context.executionId, node.id, 'metadata', 'json', metadataValue, {
-      kind: 'system-llm-metadata',
-      operationKey: 'system.call_llm',
-      providerName: result.providerName,
-      model: result.model,
-    }),
+    text: buildRuntimeArtifact(context.executionId, node.id, 'text', 'text', result.text, { kind: 'system-llm-text', ...artifactMeta }),
+    metadata: buildRuntimeArtifact(context.executionId, node.id, 'metadata', 'json', metadataValue, { kind: 'system-llm-metadata', ...artifactMeta }),
   }
 
   if (result.json !== null) {
     nodeArtifacts.json = buildRuntimeArtifact(context.executionId, node.id, 'json', 'json', result.json, {
       kind: 'system-llm-json',
-      operationKey: 'system.call_llm',
-      providerName: result.providerName,
-      model: result.model,
-      responseMode: result.responseMode,
+      ...artifactMeta,
+      responseMode,
     })
   }
 
@@ -183,10 +153,10 @@ export async function executeCallLlmNode(
     message: `LLM node completed: ${moduleDefinition.name}`,
     details: {
       operationKey: 'system.call_llm',
+      engine: result.engine,
       providerName: result.providerName,
-      providerType: result.providerType,
       model: result.model,
-      responseMode: result.responseMode,
+      responseMode,
       outputKeys: Object.keys(nodeArtifacts),
     },
   })

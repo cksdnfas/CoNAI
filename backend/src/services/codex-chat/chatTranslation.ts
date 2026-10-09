@@ -53,6 +53,26 @@ export function replyTranslationPrompt(profile: { name?: string; translationInst
   ].join('\n')
 }
 
+/**
+ * Translating a text into `language` outside a chat (workflow nodes): the same markup rules, then a profile's notes
+ * on its voice and terms and the caller's own instructions (the rules still win on markup).
+ */
+export function textTranslationPrompt(language: string, notes: { profile?: { name?: string; translationInstructions?: string } | null; instructions?: string | null } = {}) {
+  const name = notes.profile?.name?.trim()
+  const profileNotes = (notes.profile?.translationInstructions ?? '').trim()
+    .replace(/\{\{char\}\}/gi, name || 'the character')
+    .replace(/\{\{user\}\}/gi, 'the user')
+  const instructions = notes.instructions?.trim()
+  return [
+    `You translate the given text into natural, fluent ${language}.`,
+    'Preserve the meaning, tone, and register (casual stays casual, polite stays polite); keep roleplay actions in *asterisks* as actions.',
+    `If the text is already in ${language}, return it unchanged.`,
+    PRESERVE_RULES,
+    ...(profileNotes ? ['Notes on the voice and terms (follow them; the rules above still apply):', profileNotes] : []),
+    ...(instructions ? ['More instructions (follow them; the rules above still apply):', instructions] : []),
+  ].join('\n')
+}
+
 function countMatches(text: string, pattern: RegExp) {
   return (text.match(pattern) ?? []).length
 }

@@ -52,6 +52,7 @@ export function useModuleGraphBrowseActions({
   setWorkflowExposedInputs,
   setWorkflowRunInputValues,
   setLastSavedSnapshot,
+  onEditorGraphReplaced,
   setWorkflowView,
   setIsEditorSupportOpen,
   setActiveEditorSupportSection,
@@ -88,6 +89,7 @@ export function useModuleGraphBrowseActions({
   setWorkflowExposedInputs: Dispatch<SetStateAction<GraphWorkflowExposedInput[]>>
   setWorkflowRunInputValues: Dispatch<SetStateAction<Record<string, unknown>>>
   setLastSavedSnapshot: Dispatch<SetStateAction<string>>
+  onEditorGraphReplaced: () => void
   setWorkflowView: Dispatch<SetStateAction<'browse' | 'edit'>>
   setIsEditorSupportOpen: Dispatch<SetStateAction<boolean>>
   setActiveEditorSupportSection: Dispatch<SetStateAction<EditorSupportSectionKey>>
@@ -135,6 +137,7 @@ export function useModuleGraphBrowseActions({
     const defaultInputValues = buildWorkflowRunInputDefaults(exposedInputs)
     const persistedInputValues = loadPersistedWorkflowRunnerDraft(draftStorageOwner, graph.id, exposedInputs)
 
+    onEditorGraphReplaced()
     setNodes(nextNodes)
     setEdges(nextEdges)
     setSelectedGraphId(graph.id)
@@ -163,7 +166,7 @@ export function useModuleGraphBrowseActions({
         },
       }),
     )
-  }, [draftStorageOwner, modules, setDraftWorkflowFolderId, setEdges, setLastSavedSnapshot, setNodes, setSelectedEdgeId, setSelectedExecutionId, setSelectedFolderId, setSelectedGraphId, setSelectedNodeId, setWorkflowDebugMode, setWorkflowDescription, setWorkflowExposedInputs, setWorkflowName, setWorkflowRunInputValues])
+  }, [draftStorageOwner, modules, onEditorGraphReplaced, setDraftWorkflowFolderId, setEdges, setLastSavedSnapshot, setNodes, setSelectedEdgeId, setSelectedExecutionId, setSelectedFolderId, setSelectedGraphId, setSelectedNodeId, setWorkflowDebugMode, setWorkflowDescription, setWorkflowExposedInputs, setWorkflowName, setWorkflowRunInputValues])
 
   /**
    * Load one saved workflow into the editor, optionally opening editor mode immediately.

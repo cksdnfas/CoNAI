@@ -91,7 +91,7 @@ function resolveSourceWorkflowId(moduleDefinition: ParsedModuleDefinition) {
   return parsePositiveIntegerish(moduleDefinition.template_defaults?.workflow_id)
 }
 
-function buildQueuePayload(promptData: Record<string, unknown>, context: ExecutionContext) {
+export function buildQueuePayload(promptData: Record<string, unknown>, context: ExecutionContext) {
   const imageSaveSettings = settingsService.loadSettings().imageSave
   const payload: Record<string, unknown> = {
     // PAYLOAD-3: materialized upstream artifacts arrive here as base64 data URLs. Storing them
@@ -188,7 +188,7 @@ function validateQueueTarget(workflowId: number, target: GraphComfyExecutionTarg
   return workflow
 }
 
-async function resolveQueueBackedOutput(params: {
+export async function resolveQueueBackedOutput(params: {
   context: ExecutionContext
   node: GraphWorkflowNode
   moduleDefinition: ParsedModuleDefinition

@@ -2,7 +2,7 @@ import type { ChatJudgeItem } from '@conai/shared'
 import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../llmGenerationOptions'
 import { callTypesafeSystemOne, TYPESAFE_DEFAULT_MODEL, type TypesafeQuestion, type TypesafeResponse } from './typesafeClient'
-import { isCallerAbort, readUsageCounts, recordLlmUsage } from '../llmUsage'
+import { isCallerAbort, readUsageCounts, recordLlmUsage, type LlmUsageTag } from '../llmUsage'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionTarget } from '../codex-chat/llmChatCompletion'
 import { primaryModelOf } from '../codex-chat/modelSlots'
 
@@ -103,12 +103,12 @@ function answerFromDistribution(question: JudgeQuestion, distribution: Record<st
   }
 }
 
-async function askTypesafe(connection: Extract<JudgeConnection, { engine: 'typesafe' }>, state: unknown, questions: JudgeQuestion[], signal?: AbortSignal) {
+async function askTypesafe(connection: Extract<JudgeConnection, { engine: 'typesafe' }>, state: unknown, questions: JudgeQuestion[], signal?: AbortSignal, usage: LlmUsageTag = { purpose: 'judge' }) {
   const typed = Object.fromEntries(questions.map((question) => [question.id, typesafeQuestionOf(question)]))
   const request = { model: connection.model, state, questions: typed }
   const startedAt = Date.now()
   const meter = (ok: boolean, response?: TypesafeResponse) => recordLlmUsage({
-    purpose: 'judge', engine: 'typesafe', providerName: connection.providerName, model: response?.model || connection.model,
+    ...usage, engine: 'typesafe', providerName: connection.providerName, model: response?.model || connection.model,
     tokens: response ? readUsageCounts(response) : null, latencyMs: Date.now() - startedAt, ok,
   })
   let response: TypesafeResponse
@@ -155,7 +155,7 @@ export function parseJudgeJson(text: string): Record<string, unknown> | null {
   }
 }
 
-async function askLlm(connection: Extract<JudgeConnection, { engine: 'llm' }>, state: unknown, questions: JudgeQuestion[], signal?: AbortSignal) {
+async function askLlm(connection: Extract<JudgeConnection, { engine: 'llm' }>, state: unknown, questions: JudgeQuestion[], signal?: AbortSignal, usage: LlmUsageTag = { purpose: 'judge' }) {
   const asked = Object.fromEntries(questions.map((question) => [question.id, {
     question: question.instructions,
     options: Object.fromEntries(optionsOf(question).map((option) => [option.label, option.description || (option.yes ? 'yes' : 'no')])),
@@ -170,7 +170,7 @@ async function askLlm(connection: Extract<JudgeConnection, { engine: 'llm' }>, s
       { role: 'user', content: JSON.stringify({ state, questions: asked }) },
     ],
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-    usage: { purpose: 'judge' },
+    usage,
   })
   const parsed = parseJudgeJson(result.content.trim())
   if (!parsed) throw new JudgeError('판단 LLM이 JSON으로 답하지 않았어.')
@@ -184,9 +184,9 @@ async function askLlm(connection: Extract<JudgeConnection, { engine: 'llm' }>, s
   return { answers, request, model: connection.model, tokens: result.usage ? result.usage.inputTokens + result.usage.outputTokens : null }
 }
 
-/** All questions in one call. Questions the judge left unanswered are missing from `answers`. */
-export async function askJudge(connection: JudgeConnection, state: unknown, questions: JudgeQuestion[], signal?: AbortSignal) {
-  return connection.engine === 'typesafe' ? askTypesafe(connection, state, questions, signal) : askLlm(connection, state, questions, signal)
+/** All questions in one call. Questions the judge left unanswered are missing from `answers`. `usage`: who asked (chat judging by default). */
+export async function askJudge(connection: JudgeConnection, state: unknown, questions: JudgeQuestion[], signal?: AbortSignal, usage?: LlmUsageTag) {
+  return connection.engine === 'typesafe' ? askTypesafe(connection, state, questions, signal, usage) : askLlm(connection, state, questions, signal, usage)
 }
 
 /** A choice question built in code (not a preset item): `options` as [label, description, counts as yes]. */

@@ -1,11 +1,3 @@
-const CODEX_MESSAGE_MODEL_OPTIONS = [
-  'gpt-5.4',
-  'gpt-5.5',
-  'gpt-5.4-mini',
-  'gpt-5.3-codex',
-  'gpt-5.3-codex-spark',
-] as const;
-
 const NAI_IMAGE_MODEL_OPTIONS = [
   'nai-diffusion-5-curated',
   'nai-diffusion-5-full',
@@ -22,6 +14,8 @@ const IMAGE_GENERATION_ASPECT_RATIO_OPTIONS = ['random', '1:1', '4:3', '3:4', '1
 const IMAGE_GENERATION_RESOLUTION_OPTIONS = ['1024', '1536', '2048'] as const;
 
 import type { BuiltinSystemModuleDefinition } from './userSettingsBuiltinModuleDefinitions';
+import { BUILTIN_CHAT_NODE_DEFINITIONS } from './userSettingsBuiltinChatModuleDefinitionData';
+import { BUILTIN_LLM_NODE_DEFINITIONS } from './userSettingsBuiltinLlmModuleDefinitionData';
 
 export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] = [
   {
@@ -408,9 +402,27 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
   },
   {
     name: 'LLM 호출',
-    description: '채팅 프로필(API LLM)의 연결·모델·생성 옵션으로 LLM을 호출해서 텍스트나 JSON 응답을 받아와.',
+    description: '모델이나 채팅 프로필로 LLM을 호출해서 텍스트나 JSON 응답을 받아와.',
     category: 'llm',
     exposedInputs: [
+      {
+        key: 'model_slot_id',
+        label: '모델',
+        direction: 'input',
+        data_type: 'number',
+        required: false,
+        multiple: false,
+        description: '비워두면 ★ 기본 모델을 써.',
+      },
+      {
+        key: 'profile_id',
+        label: '프로필',
+        direction: 'input',
+        data_type: 'number',
+        required: false,
+        multiple: false,
+        description: '고르면 프로필의 엔진·모델·생성 옵션을 써.',
+      },
       {
         key: 'prompt',
         label: '프롬프트',
@@ -448,24 +460,6 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
         description: '비전 모델에 함께 전달할 선택 이미지야.',
       },
       {
-        key: 'provider_name',
-        label: '연결 이름',
-        direction: 'input',
-        data_type: 'text',
-        required: true,
-        multiple: false,
-        description: 'external_api_providers에 저장된 연결 이름이야.',
-      },
-      {
-        key: 'model',
-        label: '모델',
-        direction: 'input',
-        data_type: 'text',
-        required: false,
-        multiple: false,
-        description: '비워두면 연결의 기본 모델을 우선 사용해.',
-      },
-      {
         key: 'structured_output_json',
         label: '구조화 출력 JSON',
         direction: 'input',
@@ -487,6 +481,14 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
         label: '최대 토큰',
         direction: 'input',
         data_type: 'number',
+        required: false,
+        multiple: false,
+      },
+      {
+        key: 'reasoning_effort',
+        label: '추론 강도',
+        direction: 'input',
+        data_type: 'text',
         required: false,
         multiple: false,
       },
@@ -520,21 +522,16 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
     internalFixedValues: { operation_key: 'system.call_llm' },
     uiSchema: [
       {
-        key: 'profile_id',
-        label: 'LLM 프로필',
-        data_type: 'number',
-      },
-      {
-        key: 'provider_name',
-        label: '연결 이름',
-        data_type: 'text',
-        placeholder: '예: lmstudio-local / ollama-local',
-      },
-      {
-        key: 'model',
+        key: 'model_slot_id',
         label: '모델',
-        data_type: 'text',
-        placeholder: '예: qwen2.5-coder:7b / local-model',
+        data_type: 'number',
+        options_source: 'llm_model_rows',
+      },
+      {
+        key: 'profile_id',
+        label: '프로필',
+        data_type: 'number',
+        options_source: 'chat_profiles',
       },
       {
         key: 'prompt',
@@ -574,6 +571,18 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
         key: 'max_tokens',
         label: '최대 토큰',
         data_type: 'number',
+      },
+      {
+        key: 'reasoning_effort',
+        label: '추론 강도',
+        data_type: 'select',
+        options: [
+          { value: '', label: '기본' },
+          { value: 'none', label: '끔' },
+          { value: 'low', label: '낮음' },
+          { value: 'medium', label: '보통' },
+          { value: 'high', label: '높음' },
+        ],
       },
     ],
     color: '#7e57c2',
@@ -1002,6 +1011,23 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
     category: 'llm',
     exposedInputs: [
       {
+        key: 'model',
+        label: '모델',
+        direction: 'input',
+        data_type: 'text',
+        required: false,
+        multiple: false,
+        description: '새 노드는 Codex 목록의 최신 모델로 시작해. 비우면 Codex 기본 모델을 써.',
+      },
+      {
+        key: 'reasoning_effort',
+        label: '추론 강도',
+        direction: 'input',
+        data_type: 'text',
+        required: false,
+        multiple: false,
+      },
+      {
         key: 'prompt',
         label: '프롬프트',
         direction: 'input',
@@ -1036,16 +1062,6 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
         required: false,
         multiple: false,
         description: '비전 모델에 함께 전달할 선택 이미지야.',
-      },
-      {
-        key: 'model',
-        label: '모델',
-        direction: 'input',
-        data_type: 'text',
-        required: false,
-        multiple: false,
-        default_value: 'gpt-5.4',
-        description: 'Codex 메시지 모델이야. 기본값은 gpt-5.4야.',
       },
       {
         key: 'structured_output_json',
@@ -1089,8 +1105,14 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
         key: 'model',
         label: '모델',
         data_type: 'select',
-        default_value: 'gpt-5.4',
-        options: [...CODEX_MESSAGE_MODEL_OPTIONS],
+        options_source: 'codex_models',
+        initial_option: 'first',
+      },
+      {
+        key: 'reasoning_effort',
+        label: '추론 강도',
+        data_type: 'select',
+        options_source: 'codex_reasoning_efforts',
       },
       {
         key: 'prompt',
@@ -2386,4 +2408,6 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
     uiSchema: [],
     color: '#ef5350',
   },
+  ...BUILTIN_LLM_NODE_DEFINITIONS,
+  ...BUILTIN_CHAT_NODE_DEFINITIONS,
 ];

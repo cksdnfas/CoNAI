@@ -15,6 +15,7 @@ import {
   hasGraphArtifactVisualPreview,
   isEmptyLlmJsonArtifact,
 } from '../module-graph-shared'
+import { formatWorkflowInputLabel } from '../module-graph-workflow-inputs'
 import { listFinalResultLifecycleWarnings } from './workflow-execution-log-alerts'
 import type { TranslationInput, TranslationParams } from '@/i18n'
 
@@ -370,7 +371,7 @@ export function getCompactExecutionArtifactLabel(artifact: GraphExecutionArtifac
 
 /** Build a lookup map from exposed-input ids to display labels. */
 function buildInputLabelMap(inputDefinitions: GraphWorkflowExposedInput[]) {
-  return new Map(inputDefinitions.map((inputDefinition) => [inputDefinition.id, inputDefinition.label]))
+  return new Map(inputDefinitions.map((inputDefinition) => [inputDefinition.id, formatWorkflowInputLabel(inputDefinition.label)]))
 }
 
 /** Resolve the execution input entries shown in the summary/detail panels. */

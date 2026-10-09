@@ -1,9 +1,9 @@
-import { Boxes, Copy, PowerOff, SlidersHorizontal, Sparkles, Trash2, Unplug } from 'lucide-react'
-import { IconButton } from '@/components/ui/icon-button'
+import type { ReactNode } from 'react'
+import { BoxSelect, ClipboardPaste, Copy, LayoutGrid, ListPlus, Play, Plus, Power, RotateCcw, SlidersHorizontal, Trash2, Unplug } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
-import { Text } from '@/components/ui/text'
-import { useI18n } from '@/i18n'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useViewportPointAnchor } from './use-viewport-point-anchor'
 
@@ -23,10 +23,41 @@ type NodeActionMenuState = {
 
 export type ModuleGraphActionMenuState = PaneActionMenuState | NodeActionMenuState
 
-/** Render a compact horizontal quick menu for pane or node actions. */
+function MenuItem({ icon, label, shortcut, danger, disabled, onSelect }: { icon: ReactNode; label: string; shortcut?: string; danger?: boolean; disabled?: boolean; onSelect: () => void }) {
+  return (
+    <Button
+      type="button"
+      variant={danger ? 'destructive-ghost' : 'ghost'}
+      size="sm"
+      role="menuitem"
+      disabled={disabled}
+      onClick={onSelect}
+      className={cn(
+        'w-full justify-start gap-2.5 px-2.5 font-normal transition-none [&_svg:not([class*=size-])]:size-3.5',
+        danger ? '' : 'text-foreground [&_svg]:text-muted-foreground',
+      )}
+    >
+      {icon}
+      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+      {shortcut ? <kbd className="font-mono text-2xs text-muted-foreground">{shortcut}</kbd> : null}
+    </Button>
+  )
+}
+
+function MenuDivider() {
+  return <div className="my-1 h-px bg-line" aria-hidden />
+}
+
+/** Right-click menu for a node or the empty canvas: icon, name and shortcut on every row. */
 export function ModuleGraphActionMenu({
   state,
+  canRun,
+  onRunNode,
+  onRerunNode,
   onOpenNodePicker,
+  onPaste,
+  onAutoLayout,
+  onSelectAll,
   onDuplicateNode,
   onDisconnectAllConnections,
   onToggleNodeDisabled,
@@ -36,7 +67,13 @@ export function ModuleGraphActionMenu({
   onClose,
 }: {
   state: ModuleGraphActionMenuState
+  canRun: boolean
+  onRunNode: () => void
+  onRerunNode: () => void
   onOpenNodePicker: () => void
+  onPaste: () => void
+  onAutoLayout: () => void
+  onSelectAll: () => void
   onDuplicateNode: () => void
   onDisconnectAllConnections: () => void
   onToggleNodeDisabled: () => void
@@ -53,90 +90,45 @@ export function ModuleGraphActionMenu({
     <Popover open onOpenChange={(open) => { if (!open) onClose() }}>
       <PopoverAnchor virtualRef={anchorRef} />
       <PopoverContent
-        side={state.kind === 'node' ? 'top' : 'bottom'}
-        align={state.kind === 'node' ? 'center' : 'start'}
-        sideOffset={state.kind === 'node' ? 8 : 0}
-        className="w-auto min-w-[180px] p-1.5"
-        aria-label={t({ ko: '퀵 메뉴', en: 'Quick menu' })}
-        // Keep the canvas focus (and avoid opening the first tooltip) when the menu appears under the pointer.
+        side="bottom"
+        align="start"
+        sideOffset={2}
+        collisionPadding={12}
+        className="w-56 p-1"
+        role="menu"
+        aria-label={state.kind === 'node' ? state.nodeName : t({ ko: '캔버스 메뉴', en: 'Canvas menu' })}
         onOpenAutoFocus={(event) => event.preventDefault()}
         onCloseAutoFocus={(event) => event.preventDefault()}
         onFocusOutside={(event) => event.preventDefault()}
       >
-        <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-          <Text as="span" variant="caption" className="font-semibold">{t({ ko: '퀵 메뉴', en: 'Quick menu' })}</Text>
-          {state.kind === 'node' ? <Text as="span" variant="caption" className="max-w-[112px] truncate">{state.nodeName}</Text> : null}
-        </div>
-
-        <div className="mt-0.5 flex items-center gap-1">
-          {state.kind === 'pane' ? (
-            <IconButton variant="ghost" size="icon-sm" onClick={onOpenNodePicker} label={t({ ko: '노드 추가', en: 'Add node' })}>
-              <Boxes className="h-4 w-4" />
-            </IconButton>
-          ) : (
-            <>
-              <IconButton
-                variant="ghost"
-                size="icon-sm"
-                onClick={onShowRecommendedNodes}
-                label={t({ ko: '{name} 추천 연결 노드', en: '{name} recommended linked nodes' }, { name: state.nodeName })}
-              >
-                <Sparkles className="h-4 w-4" />
-              </IconButton>
-              <IconButton
-                variant="ghost"
-                size="icon-sm"
-                onClick={onDuplicateNode}
-                label={t({ ko: '{name} 복제', en: 'Duplicate {name}' }, { name: state.nodeName })}
-              >
-                <Copy className="h-4 w-4" />
-              </IconButton>
-              <IconButton
-                variant="ghost"
-                size="icon-sm"
-                onClick={onDisconnectAllConnections}
-                label={t({ ko: '{name} 모든 연결 끊기', en: 'Disconnect all connections for {name}' }, { name: state.nodeName })}
-              >
-                <Unplug className="h-4 w-4" />
-              </IconButton>
-              <IconButton
-                variant="ghost"
-                size="icon-sm"
-                aria-pressed={state.disabled === true}
-                className={cn(state.disabled && 'text-warning hover:text-warning')}
-                onClick={onToggleNodeDisabled}
-                label={state.disabled
-                  ? t({ ko: '{name} 비활성화 해제', en: 'Enable {name}' }, { name: state.nodeName })
-                  : t({ ko: '{name} 비활성화', en: 'Disable {name}' }, { name: state.nodeName })}
-              >
-                <PowerOff className="h-4 w-4" />
-              </IconButton>
-              {state.hasAdvancedOutputPorts ? (
-                <IconButton
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-pressed={state.advancedOutputPortsEnabled === true}
-                  className={cn(state.advancedOutputPortsEnabled && 'text-primary hover:text-primary')}
-                  onClick={onToggleAdvancedOutputs}
-                  label={state.advancedOutputPortsEnabled
-                    ? t({ ko: '{name} 일반 출력 모드', en: '{name} standard output mode' }, { name: state.nodeName })
-                    : t({ ko: '{name} 고급 출력 모드', en: '{name} advanced output mode' }, { name: state.nodeName })}
-                >
-                  <SlidersHorizontal className="h-4 w-4" />
-                </IconButton>
-              ) : null}
-              <IconButton
-                variant="ghost"
-                className="text-destructive hover:text-destructive"
-                size="icon-sm"
-                onClick={onRemoveNode}
-                label={t({ ko: '{name} 삭제', en: 'Delete {name}' }, { name: state.nodeName })}
-              >
-                <Trash2 className="h-4 w-4" />
-              </IconButton>
-            </>
-          )}
-        </div>
+        {state.kind === 'pane' ? (
+          <>
+            <MenuItem icon={<Plus />} label={t({ ko: '노드 추가', en: 'Add node' })} shortcut={t({ ko: '더블클릭', en: 'Dbl-click' })} onSelect={onOpenNodePicker} />
+            <MenuItem icon={<ClipboardPaste />} label={t({ ko: '붙여넣기', en: 'Paste' })} shortcut="Ctrl+V" onSelect={onPaste} />
+            <MenuDivider />
+            <MenuItem icon={<LayoutGrid />} label={t({ ko: '자동 정렬', en: 'Auto layout' })} onSelect={onAutoLayout} />
+            <MenuItem icon={<BoxSelect />} label={t({ ko: '모두 선택', en: 'Select all' })} shortcut="Ctrl+A" onSelect={onSelectAll} />
+          </>
+        ) : (
+          <>
+            <MenuItem icon={<Play />} label={t({ ko: '이 노드까지 실행', en: 'Run up to this node' })} disabled={!canRun} onSelect={onRunNode} />
+            <MenuItem icon={<RotateCcw />} label={t({ ko: '캐시 무시하고 다시 실행', en: 'Rerun, ignoring the cache' })} disabled={!canRun} onSelect={onRerunNode} />
+            <MenuDivider />
+            <MenuItem icon={<ListPlus />} label={t({ ko: '이어서 노드 추가', en: 'Add a connected node' })} onSelect={onShowRecommendedNodes} />
+            <MenuItem icon={<Copy />} label={t({ ko: '복제', en: 'Duplicate' })} shortcut="Ctrl+D" onSelect={onDuplicateNode} />
+            <MenuItem icon={<Unplug />} label={t({ ko: '연결 모두 끊기', en: 'Remove all links' })} onSelect={onDisconnectAllConnections} />
+            <MenuItem icon={<Power />} label={state.disabled ? t({ ko: '켜기', en: 'Turn on' }) : t({ ko: '끄기', en: 'Turn off' })} onSelect={onToggleNodeDisabled} />
+            {state.hasAdvancedOutputPorts ? (
+              <MenuItem
+                icon={<SlidersHorizontal />}
+                label={state.advancedOutputPortsEnabled ? t({ ko: '고급 출력 숨기기', en: 'Hide advanced outputs' }) : t({ ko: '고급 출력 보기', en: 'Show advanced outputs' })}
+                onSelect={onToggleAdvancedOutputs}
+              />
+            ) : null}
+            <MenuDivider />
+            <MenuItem icon={<Trash2 />} label={t({ ko: '삭제', en: 'Delete' })} shortcut="Del" danger onSelect={onRemoveNode} />
+          </>
+        )}
       </PopoverContent>
     </Popover>
   )

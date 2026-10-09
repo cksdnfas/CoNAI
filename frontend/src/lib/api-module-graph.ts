@@ -1,4 +1,5 @@
 import { requestApiData, requestJson } from '@/lib/api-request'
+import type { LibraryImageRef } from '@/lib/library-image-ref'
 
 import type {
   CreateCodexModuleFromSnapshotPayload,
@@ -213,6 +214,30 @@ export async function createGraphWorkflow(payload: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
+  })
+}
+
+/** One choice of a node select whose ui field names an `options_source`. */
+export type GraphNodeOption = {
+  value: string
+  label: string
+  disabled?: boolean
+  is_default?: boolean
+}
+
+/** Live choices for a node select (model rows, chat profiles, presets…). */
+export async function getGraphNodeOptions(source: string) {
+  return requestApiData<GraphNodeOption[]>(`/api/graph-workflows/node-options/${encodeURIComponent(source)}`)
+}
+
+/** Put an image for a node value or run input into the library ("워크플로 입력") and get its ref back. */
+export async function uploadWorkflowInputImage(dataUrl: string) {
+  return requestApiData<LibraryImageRef>('/api/graph-workflows/input-images', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ data_url: dataUrl }),
   })
 }
 

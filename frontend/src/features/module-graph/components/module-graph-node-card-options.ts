@@ -1,4 +1,3 @@
-import type { LlmProfileOptionRecord } from '@/lib/api-external-api'
 import type { ModuleGraphSelectOption } from './module-graph-simple-value-input'
 
 type ModelDefaultSource = {
@@ -23,14 +22,6 @@ export function normalizeSelectOptions(options: ModuleGraphSelectOption[] | null
   return Array.isArray(options)
     ? options.filter((option) => getSelectOptionValue(option).trim().length > 0)
     : []
-}
-
-/** The LLM node's choices: API LLM chat profiles, shown as "name · model". */
-export function getLlmProfileSelectOptions(profiles: LlmProfileOptionRecord[] | undefined) {
-  return (profiles ?? []).map((profile) => ({
-    value: String(profile.id),
-    label: profile.model ? `${profile.name} · ${profile.model}` : profile.name,
-  })) satisfies ModuleGraphSelectOption[]
 }
 
 export function resolveModelSelectValue(params: {

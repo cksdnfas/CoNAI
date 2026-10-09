@@ -11,6 +11,8 @@ export type SelectedImageDraft = {
   fileName: string
   dataUrl: string
   mimeType?: string
+  /** Set when a library image was picked and passed on unchanged, so callers can reference it instead of copying. */
+  compositeHash?: string
 }
 
 export type NAICharacterPromptDraft = {

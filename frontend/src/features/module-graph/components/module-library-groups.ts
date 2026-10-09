@@ -34,6 +34,8 @@ const GET_MODULE_OPERATION_KEYS = new Set([
   'system.load_image_from_reference',
   'system.random_image_from_library',
   'system.random_video_from_library',
+  'system.load_chat_profile',
+  'system.search_lorebook',
 ])
 
 function toTitleCase(rawValue: string) {
@@ -156,7 +158,8 @@ export function getSystemModuleGroup(module: ModuleDefinitionRecord): ModuleGrou
   }
 
   if (
-    category === 'image'
+    category === 'get'
+    || category === 'image'
     || category === 'video'
     || category === 'retrieval'
     || GET_MODULE_OPERATION_KEYS.has(operationKey ?? '')

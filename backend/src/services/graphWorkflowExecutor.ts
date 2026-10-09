@@ -6,6 +6,7 @@ import { GraphExecutionNodeIoModel } from '../models/GraphExecutionNodeIo'
 import { GraphWorkflowModel } from '../models/GraphWorkflow'
 import { ModuleDefinitionModel } from '../models/ModuleDefinition'
 import { getIncomingArtifacts, loadRuntimeArtifactsByNode, resolveNodeInputs } from './graph-workflow-executor/artifacts'
+import { materializeLibraryImageInputs } from './workflowInputImages'
 import { executeComfyModule } from './graph-workflow-executor/execute-comfy'
 import { executeCustomJsModule } from './graph-workflow-executor/execute-custom-js'
 import { executeNaiModule } from './graph-workflow-executor/execute-nai'
@@ -289,6 +290,8 @@ export class GraphWorkflowExecutor {
     shouldCancel?: () => boolean
     /** 최종 결과를 넣을 기본 이미지 그룹 */
     outputGroupId?: number | null
+    /** The account that started the run (null: scheduled, or no accounts configured). */
+    requestedByAccountId?: number | null
   }) {
     const workflowRecord = GraphWorkflowModel.findById(workflowId)
     if (!workflowRecord) {
@@ -358,6 +361,7 @@ export class GraphWorkflowExecutor {
         graph_version: workflow.version,
         status: 'running',
         execution_plan: executionPlanJson,
+        requested_by_account_id: options?.requestedByAccountId ?? null,
       })
     }
 
@@ -419,6 +423,7 @@ export class GraphWorkflowExecutor {
         // 기존 폴링 소비처(queue-wait, codexMessageService)를 그대로 살리려고 signal 과 OR 로 합성한다.
         shouldCancel: () => abortHandle.signal.aborted || options?.shouldCancel?.() === true,
         outputGroupId: options?.outputGroupId ?? null,
+        requestedByAccountId: options?.requestedByAccountId ?? null,
       }
 
       const { nodeById } = getExecutionGraphIndex(context)
@@ -523,7 +528,11 @@ export class GraphWorkflowExecutor {
             })
 
             const incomingArtifacts = await getIncomingArtifacts(context, node.id)
-            const resolvedInputs = resolveNodeInputs(node, moduleDefinition, incomingArtifacts)
+            const resolvedInputs = await materializeLibraryImageInputs(
+              moduleDefinition.engine_type,
+              moduleDefinition.exposed_inputs,
+              resolveNodeInputs(node, moduleDefinition, incomingArtifacts),
+            )
 
             writeExecutionLog({
               executionId,

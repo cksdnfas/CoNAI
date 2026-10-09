@@ -1,4 +1,4 @@
-import { Suspense, lazy, useMemo } from 'react'
+import { Suspense, lazy } from 'react'
 import type { Connection, OnEdgesChange, OnNodesChange } from '@xyflow/react'
 import type { GraphWorkflowFolderRecord, GraphWorkflowRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
@@ -36,7 +36,7 @@ export function useModuleGraphPageEditorPanels({
   isWorkflowSaveModalOpen,
   fitViewKey,
   quickCreateRequest,
-  onOpenModuleLibrary,
+  onOpenCustomNodeManager,
   onCloseWorkflowSaveModal,
   onNodesChange,
   onEdgesChange,
@@ -45,7 +45,6 @@ export function useModuleGraphPageEditorPanels({
   onDraftChildFolderDescriptionChange,
   onCreateWorkflowFolder,
   onDuplicateNodeById,
-  onDisconnectNodeInput,
   onDisconnectAllNodeConnections,
   onToggleNodeDisabled,
   onRemoveNodeById,
@@ -58,6 +57,7 @@ export function useModuleGraphPageEditorPanels({
   onNodeValueClear,
   onNodeImageChange,
   onExecuteNodeById,
+  onEditNodeInPanel,
   onNodeSelect,
   onEdgeSelect,
   onPaneSelect,
@@ -67,6 +67,9 @@ export function useModuleGraphPageEditorPanels({
   onCopySelection,
   onPasteSelection,
   isValidConnection,
+  onUndo,
+  onRedo,
+  onAutoLayout,
 }: {
   workflowView: 'browse' | 'edit'
   modules: ModuleDefinitionRecord[]
@@ -87,7 +90,7 @@ export function useModuleGraphPageEditorPanels({
   isWorkflowSaveModalOpen: boolean
   fitViewKey: string | number | null
   quickCreateRequest: number
-  onOpenModuleLibrary: () => void
+  onOpenCustomNodeManager?: () => void
   onCloseWorkflowSaveModal: () => void
   onNodesChange: OnNodesChange<ModuleGraphNode>
   onEdgesChange: OnEdgesChange<ModuleGraphEdge>
@@ -96,7 +99,6 @@ export function useModuleGraphPageEditorPanels({
   onDraftChildFolderDescriptionChange: (value: string) => void
   onCreateWorkflowFolder: (input: { name: string; description?: string; parent_id?: number | null }) => Promise<unknown>
   onDuplicateNodeById: (nodeId: string) => void
-  onDisconnectNodeInput: (nodeId: string, portKey: string) => void
   onDisconnectAllNodeConnections: (nodeId: string) => void
   onToggleNodeDisabled: (nodeId: string) => void
   onRemoveNodeById: (nodeId: string) => void
@@ -109,6 +111,8 @@ export function useModuleGraphPageEditorPanels({
   onNodeValueClear: (nodeId: string, portKey: string) => void
   onNodeImageChange: (nodeId: string, portKey: string, image?: SelectedImageDraft) => void
   onExecuteNodeById: (nodeId: string, force: boolean) => void
+  /** Select one node and show its panel, focusing one field when given. */
+  onEditNodeInPanel: (nodeId: string, key?: string) => void
   onNodeSelect: (nodeId: string) => void
   onEdgeSelect: (edgeId: string) => void
   onPaneSelect: () => void
@@ -118,26 +122,10 @@ export function useModuleGraphPageEditorPanels({
   onCopySelection: () => Promise<boolean>
   onPasteSelection: (options?: { position?: { x: number; y: number } }) => Promise<boolean>
   isValidConnection: (connection: Connection | ModuleGraphEdge) => boolean
+  onUndo: () => void
+  onRedo: () => void
+  onAutoLayout: () => void
 }) {
-  const graphCanvasNodes = useMemo(
-    () =>
-      nodes.map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          executeNodeDisabled: executingGraphId !== null,
-          onExecuteNode: () => onExecuteNodeById(node.id, false),
-          onForceExecuteNode: () => onExecuteNodeById(node.id, true),
-          onDisconnectNodeInput,
-          onNodeLabelChange,
-          onNodeValueChange,
-          onNodeValueClear,
-          onNodeImageChange,
-        },
-      })),
-    [executingGraphId, nodes, onDisconnectNodeInput, onExecuteNodeById, onNodeImageChange, onNodeLabelChange, onNodeValueChange, onNodeValueClear],
-  )
-
   const workflowSaveModal = workflowView === 'edit' ? (
     <ModuleGraphWorkflowSaveModal
       open={isWorkflowSaveModalOpen}
@@ -182,7 +170,7 @@ export function useModuleGraphPageEditorPanels({
   const graphCanvas = workflowView === 'edit' ? (
     <Suspense fallback={<GraphCanvasFallback />}>
       <ModuleGraphCanvasLazy
-        nodes={graphCanvasNodes}
+        nodes={nodes}
         edges={edges}
         modules={modules}
         reactFlowColorMode={reactFlowColorMode}
@@ -203,7 +191,20 @@ export function useModuleGraphPageEditorPanels({
         isValidConnection={isValidConnection}
         fitViewKey={fitViewKey}
         quickCreateRequest={quickCreateRequest}
-        onOpenModuleLibrary={onOpenModuleLibrary}
+        onOpenCustomNodeManager={onOpenCustomNodeManager}
+        nodeActions={{
+          changeValue: onNodeValueChange,
+          clearValue: onNodeValueClear,
+          changeLabel: onNodeLabelChange,
+          changeImage: onNodeImageChange,
+          execute: onExecuteNodeById,
+          editInPanel: onEditNodeInPanel,
+        }}
+        executionLocked={executingGraphId !== null}
+        debugMode={workflowDebugMode}
+        onUndo={onUndo}
+        onRedo={onRedo}
+        onAutoLayout={onAutoLayout}
       />
     </Suspense>
   ) : null

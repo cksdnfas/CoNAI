@@ -52,9 +52,11 @@ export async function executeCallCodexMessageNode(
     context: normalizeOptionalString(resolvedInputs.context),
     image: imageDataUrl,
     model,
+    reasoningEffort: normalizeOptionalString(resolvedInputs.reasoning_effort),
     responseMode,
     structuredOutputJson,
-    shouldCancel: context.shouldCancel,
+    shouldCancel: () => context.signal.aborted || context.shouldCancel?.() === true,
+    usage: { purpose: 'workflow' },
   })
 
   const metadataValue = {

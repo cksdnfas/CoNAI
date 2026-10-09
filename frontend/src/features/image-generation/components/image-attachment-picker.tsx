@@ -336,7 +336,7 @@ export function ImageAttachmentPickerButton({
   }
 
   /** Finalize one selected image source using the current image-save settings. */
-  const finalizeSelectedImage = async (fileName: string, input: ImageSaveOutputInput) => {
+  const finalizeSelectedImage = async (fileName: string, input: ImageSaveOutputInput, libraryHash?: string) => {
     if (!effectiveImageSaveSettings.applyToGenerationAttachments) {
       const sourceBlob = typeof input.source === 'string'
         ? await fetch(input.source, {
@@ -348,7 +348,9 @@ export function ImageAttachmentPickerButton({
             return response.blob()
           })
         : input.source
-      onSelect(await buildRawSelectedImageDraft(sourceBlob, fileName))
+      const draft = await buildRawSelectedImageDraft(sourceBlob, fileName)
+      // Passed on unchanged, a library image keeps its id so callers can point at it instead of copying it.
+      onSelect(libraryHash ? { ...draft, compositeHash: libraryHash } : draft)
       setIsOpen(false)
       return
     }
@@ -415,7 +417,7 @@ export function ImageAttachmentPickerButton({
   }
 
   /** Import one existing image URL and convert it back into the inline draft shape. */
-  const handleImportExistingImage = async (image: ImageRecord | null) => {
+  const handleImportExistingImage = async (image: ImageRecord | null, fromLibrary = false) => {
     if (!image) {
       return
     }
@@ -453,7 +455,7 @@ export function ImageAttachmentPickerButton({
       await finalizeSelectedImage(getImageListDisplayName(image), {
         source: blob,
         sourceMimeType: blob.type || image.mime_type || undefined,
-      })
+      }, fromLibrary ? image.composite_hash ?? undefined : undefined)
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '이미지를 가져오지 못했어.', en: 'Could not import the image.' }), tone: 'error' })
     } finally {
@@ -608,7 +610,7 @@ export function ImageAttachmentPickerButton({
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={(event) => {
                     event.stopPropagation()
-                    void handleImportExistingImage(image)
+                    void handleImportExistingImage(image, true)
                   }}
                   disabled={isImporting}
                   aria-label={t({ ko: '이미지 선택', en: 'Select image' })}

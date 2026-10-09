@@ -1062,6 +1062,50 @@
   }
 }
 
+/*
+ * Port connection points. Unlayered on purpose: React Flow's own stylesheet is unlayered, so rules inside
+ * @layer components lose to it whatever their specificity.
+ */
+.theme-graph-flow .module-graph-port-handle {
+  width: 12px;
+  height: 12px;
+  min-width: 0;
+  min-height: 0;
+  border: 2px solid var(--surface-container);
+  border-radius: 999px;
+  /* A connected input still takes the press (to lift its link) even though it does not start a new one. */
+  pointer-events: all;
+  cursor: crosshair;
+  transition: box-shadow 120ms ease, opacity 120ms ease, transform 120ms ease;
+}
+
+.theme-graph-flow .module-graph-port-handle[data-drop='ok'] {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--port-color) 38%, transparent);
+}
+
+.theme-graph-flow .module-graph-port-handle[data-drop='target'],
+.theme-graph-flow .module-graph-port-handle.connectingto.valid {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--port-color) 70%, transparent);
+}
+
+.theme-graph-flow .module-graph-port-handle.is-input[data-drop='target'],
+.theme-graph-flow .module-graph-port-handle.is-input.connectingto.valid {
+  transform: translate(-50%, -50%) scale(1.2);
+}
+
+.theme-graph-flow .module-graph-port-handle.is-output[data-drop='target'],
+.theme-graph-flow .module-graph-port-handle.is-output.connectingto.valid {
+  transform: translate(50%, -50%) scale(1.2);
+}
+
+.theme-graph-flow .module-graph-port-handle[data-drop='no'] {
+  opacity: 0.22;
+}
+
+.theme-graph-flow .react-flow__connectionline path {
+  stroke-width: 2.5;
+}
+
 /* 대문자 라벨의 자간은 라틴 문자용이다. 한글에 그대로 주면 글자가 흩어져 보인다. */
 :root {
   --overline-tracking: 0.16em;
