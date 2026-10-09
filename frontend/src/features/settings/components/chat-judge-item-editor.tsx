@@ -119,17 +119,9 @@ export function ChatJudgeItemPane({ item, onChange, onRemove, testTurns }: {
         )}
       />
       <div className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
           <Field label={t({ ko: '이름', en: 'Name' })}>
             <Input variant="settings" value={item.name} maxLength={40} onChange={(event) => onChange({ name: event.target.value })} />
-          </Field>
-          <Field label={t({ ko: '시점', en: 'When' })}>
-            <SegmentedControl
-              value={item.stage}
-              onChange={(stage) => onChange({ stage: stage as ChatJudgeItem['stage'] })}
-              items={[{ value: 'before', label: t({ ko: '답변 전', en: 'Before reply' }) }, { value: 'after', label: t({ ko: '답변 후', en: 'After reply' }) }]}
-              size="sm"
-            />
           </Field>
           <Field label={t({ ko: '종류', en: 'Kind' })}>
             <SegmentedControl

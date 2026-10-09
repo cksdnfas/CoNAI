@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { JUDGE_OPTION_DEFAULTS, type ChatJudgeFollowUp, type ChatJudgeItem, type ChatJudgeTestTurn } from '@conai/shared'
 import { Copy, Download, FlaskConical, LoaderCircle, Play, Plus, Square } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { EditorPaneHeader, EditorSplit, type EditorNavGroup } from '@/components/ui/editor-split'
@@ -49,11 +50,11 @@ function draftOf(preset: ChatJudgePreset): PresetDraft {
 }
 
 /** A free item id for a new item (the server keeps ids stable; logs and stats key on them). */
-function newItem(items: ChatJudgeItem[]): ChatJudgeItem {
+function newItem(items: ChatJudgeItem[], stage: ChatJudgeItem['stage']): ChatJudgeItem {
   let n = items.length + 1
   while (items.some((item) => item.id === `custom-${n}`)) n += 1
   return {
-    id: `custom-${n}`, name: '', enabled: true, stage: 'before', kind: 'noul', instructions: '', criteria: { yes: '', no: '' }, options: [],
+    id: `custom-${n}`, name: '', enabled: true, stage, kind: 'noul', instructions: '', criteria: { yes: '', no: '' }, options: [],
     window: 6, yesThreshold: 0.7, noThreshold: 0.3, uncertain: 'default', tools: [], directive: '',
   }
 }
@@ -149,8 +150,9 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
   }
 
   const patchItem = (id: string, patch: Partial<ChatJudgeItem>) => setDraft((current) => ({ ...current, items: current.items.map((item) => (item.id === id ? { ...item, ...patch } : item)) }))
-  const addItem = () => {
-    const item = newItem(draft.items)
+  /** Before-reply items are the judgment items; after-reply ones are the follow-up's conditions. */
+  const addItem = (stage: ChatJudgeItem['stage']) => {
+    const item = newItem(draft.items, stage)
     setDraft((current) => ({ ...current, items: [...current.items, item] }))
     setPane(`item:${item.id}`)
     setShowingList(false)
@@ -170,7 +172,10 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
     apply: (patch) => { if (patch.name !== undefined) setDraft((current) => ({ ...current, name: String(patch.name) })) },
     save: nameMissing ? undefined : () => saveMutation.mutateAsync(),
   })
-  const hasAfterItems = draft.items.some((item) => item.stage === 'after')
+  const beforeItems = draft.items.filter((item) => item.stage === 'before')
+  const afterItems = draft.items.filter((item) => item.stage === 'after')
+  // The server asks only the enabled conditions (askableJudgeItems), so off ones don't turn follow-ups on.
+  const followUpOn = draft.followUp.maxConsecutive > 0 && afterItems.some((item) => item.enabled)
   const testControls = (
     <div className="flex flex-wrap items-center gap-2 text-sm">
       <Select variant="settings" className="h-8 w-56 min-w-0 flex-1 text-xs" aria-label={t({ ko: '테스트할 대화', en: 'Chat to test on' })} value={testThreadId ?? ''} onChange={(event) => setTestThreadId(event.target.value ? Number(event.target.value) : null)}>
@@ -192,36 +197,46 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
     setPane(next)
     setShowingList(false)
   }
+  /** Falls back to a sibling of the same stage, else to the group's first section. */
   const removeItem = (id: string) => {
-    const index = draft.items.findIndex((item) => item.id === id)
-    const rest = draft.items.filter((item) => item.id !== id)
+    const stage = draft.items.find((item) => item.id === id)?.stage
+    const siblings = stage === 'after' ? afterItems : beforeItems
+    const index = siblings.findIndex((item) => item.id === id)
+    const rest = siblings.filter((item) => item.id !== id)
     setDraft((current) => ({ ...current, items: current.items.filter((entry) => entry.id !== id) }))
-    setPane(rest.length > 0 ? `item:${rest[Math.min(index, rest.length - 1)].id}` : 'base')
+    setPane(rest.length > 0 ? `item:${rest[Math.min(index, rest.length - 1)].id}` : stage === 'after' ? 'follow' : 'base')
+  }
+  const itemNav = (item: ChatJudgeItem) => {
+    const summary = testTurns ? itemTestSummary(item, testTurns) : null
+    return {
+      id: `item:${item.id}`,
+      label: item.name || t({ ko: '이름 없음', en: 'Untitled' }),
+      state: item.enabled ? 'on' as const : 'off' as const,
+      trailing: summary
+        ? <Tip content={t({ ko: '테스트: 예 {yes} / {total}', en: 'Test: yes {yes} / {total}' }, summary)}><span className="text-success">{summary.yes}/{summary.total}</span></Tip>
+        : undefined,
+    }
   }
   const navGroups: EditorNavGroup[] = [
     { id: 'base', items: [{ id: 'base', label: t({ ko: '기본', en: 'Basics' }) }] },
     {
       id: 'items',
-      label: <>{t({ ko: '판단 항목', en: 'Judgment items' })} <span className="tabular-nums">{draft.items.length}</span></>,
-      actions: <IconButton size="icon-xs" variant="ghost" disabled={draft.items.length >= 16} onClick={addItem} label={t({ ko: '항목 추가', en: 'Add item' })}><Plus /></IconButton>,
+      label: <>{t({ ko: '판단 항목', en: 'Judgment items' })} <span className="tabular-nums">{beforeItems.length}</span></>,
+      actions: <IconButton size="icon-xs" variant="ghost" disabled={draft.items.length >= 16} onClick={() => addItem('before')} label={t({ ko: '항목 추가', en: 'Add item' })}><Plus /></IconButton>,
+      items: beforeItems.map(itemNav),
+    },
+    {
+      id: 'follow',
+      label: (
+        <>
+          {t({ ko: '후속 메시지', en: 'Follow-ups' })}
+          {draft.followUp.maxConsecutive > 0 ? <span className="ml-1.5 font-normal tracking-normal normal-case tabular-nums">{t({ ko: '{n}회', en: '{n}×' }, { n: draft.followUp.maxConsecutive })}</span> : null}
+        </>
+      ),
+      actions: <IconButton size="icon-xs" variant="ghost" disabled={draft.items.length >= 16} onClick={() => addItem('after')} label={t({ ko: '조건 추가', en: 'Add condition' })}><Plus /></IconButton>,
       items: [
-        ...draft.items.map((item) => {
-          const summary = testTurns ? itemTestSummary(item, testTurns) : null
-          return {
-            id: `item:${item.id}`,
-            label: item.name || t({ ko: '이름 없음', en: 'Untitled' }),
-            state: item.enabled ? 'on' as const : 'off' as const,
-            trailing: summary
-              ? <Tip content={t({ ko: '테스트: 예 {yes} / {total}', en: 'Test: yes {yes} / {total}' }, summary)}><span className="text-success">{summary.yes}/{summary.total}</span></Tip>
-              : item.stage === 'after' ? t({ ko: '답변 후', en: 'After' }) : undefined,
-          }
-        }),
-        {
-          id: 'follow',
-          label: t({ ko: '후속 메시지', en: 'Follow-ups' }),
-          state: hasAfterItems && draft.followUp.maxConsecutive > 0 ? 'on' as const : 'off' as const,
-          trailing: draft.followUp.maxConsecutive > 0 ? t({ ko: '{n}회', en: '{n}×' }, { n: draft.followUp.maxConsecutive }) : undefined,
-        },
+        { id: 'follow', label: t({ ko: '설정', en: 'Settings' }), state: followUpOn ? 'on' as const : 'off' as const },
+        ...afterItems.map(itemNav),
       ],
     },
     {
@@ -315,8 +330,14 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
 
         {pane === 'follow' ? (
           <div>
-            <EditorPaneHeader title={t({ ko: '후속 메시지', en: 'Follow-up messages' })} info={t({ ko: '1:1 대화에서, 답변 후 항목이 예일 때 보내.', en: 'Direct chats only, when an after-reply item says yes.' })} />
+            <EditorPaneHeader title={t({ ko: '후속 메시지', en: 'Follow-up messages' })} info={t({ ko: '1:1 대화에서, 답변이 끝난 뒤 조건 중 하나라도 예면 보내.', en: 'Direct chats only: sent when any condition says yes after a reply.' })} />
             <div className="space-y-4">
+              {afterItems.length === 0 ? (
+                <div className="flex items-center justify-between gap-3 border-t border-line py-3">
+                  <span className="text-sm text-muted-foreground">{t({ ko: '보낼 조건이 없어', en: 'No conditions yet' })}</span>
+                  <Button size="sm" variant="secondary" disabled={draft.items.length >= 16} onClick={() => addItem('after')}><Plus />{t({ ko: '조건 추가', en: 'Add condition' })}</Button>
+                </div>
+              ) : null}
               <div className="border-t border-line">
                 <SettingRow label={t({ ko: '연속 최대', en: 'At most in a row' })}>
                   <NumberStepperInput variant="settings" className="w-32" min={0} max={3} step={1} value={draft.followUp.maxConsecutive} onValueCommit={(value) => patchFollowUp({ maxConsecutive: Number(value) || 0 })} aria-label={t({ ko: '연속 최대', en: 'At most in a row' })} />
@@ -325,11 +346,9 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
                   <NumberStepperInput variant="settings" className="w-32" min={0} max={600} step={1} value={draft.followUp.delaySeconds} onValueCommit={(value) => patchFollowUp({ delaySeconds: Number(value) || 0 })} aria-label={t({ ko: '보내기 전 대기 (초)', en: 'Wait before sending (s)' })} />
                 </SettingRow>
               </div>
-              {hasAfterItems ? (
-                <Field label={t({ ko: '후속 지시문', en: 'Follow-up directive' })}>
-                  <Textarea variant="settings" className={GROW_TEXTAREA} value={draft.followUp.directive} maxLength={2000} placeholder={t({ ko: '비우면 기본', en: 'Empty: default' })} onChange={(event) => patchFollowUp({ directive: event.target.value })} />
-                </Field>
-              ) : null}
+              <Field label={t({ ko: '후속 지시문', en: 'Follow-up directive' })}>
+                <Textarea variant="settings" className={GROW_TEXTAREA} value={draft.followUp.directive} maxLength={2000} placeholder={t({ ko: '비우면 기본', en: 'Empty: default' })} onChange={(event) => patchFollowUp({ directive: event.target.value })} />
+              </Field>
             </div>
           </div>
         ) : null}
