@@ -464,3 +464,13 @@ test('portrait hiding removes only its group stickers without blank rows, leavin
   assert.equal(injectChatEmoticons('앞\n\n&*기쁨*&\n\n뒤', emoticons, new Set([7])), '앞\n\n뒤')
   assert.equal(injectChatEmoticons('&*기쁨*&\n\n```text\n\n\nbody\n```', emoticons, new Set([7])), '```text\n\n\nbody\n```')
 })
+
+test('emoticons missing one star still resolve for registered keywords; other ampersands stay as written', async () => {
+  const { injectChatEmoticons, lastChatSticker } = await import('@conai/shared')
+  const emoticons = { profileId: 1, byKeyword: new Map([['28 reading', 'book'], ['기쁨', 'happy']]) }
+  assert.equal(injectChatEmoticons('&*28 reading&', emoticons), '![28 reading](emote-sticker:book)')
+  assert.equal(injectChatEmoticons('좋아 &기쁨*& 그치', emoticons), '좋아 ![기쁨](emote:happy) 그치')
+  assert.equal(injectChatEmoticons('rock & roll &*기쁨*&', emoticons), 'rock & roll ![기쁨](emote:happy)')
+  assert.equal(injectChatEmoticons('&*미등록&', emoticons), '&*미등록&')
+  assert.equal(lastChatSticker('본문\n&*28 reading&'), '28 reading')
+})

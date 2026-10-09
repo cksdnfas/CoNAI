@@ -21,7 +21,7 @@ export function buildEmoticonGuidance(style: Pick<ChatStyle, 'emoticonGroupIds'>
   if (emoticons.length === 0) return ''
   const shown = emoticons.slice(0, EMOTICON_PROMPT_BUDGET)
   return [
-    'Emoticons: writing &*keyword*& shows the matching image in the chat. On a line of its own it shows as a sticker; inside a sentence it shows small, like an emoji.',
+    'Emoticons: writing &*keyword*& (a star on both sides) shows the matching image in the chat. On a line of its own it shows as a sticker; inside a sentence it shows small, like an emoji.',
     'Use them on your own judgement where they fit the mood (not in every reply), and only with these keywords (words separated by / call up the same image):',
     ...shown.map((emoticon) => `- ${emoticon.keywords.join(' / ')}`),
     emoticons.length > shown.length ? `(${emoticons.length - shown.length} more are available through the list_emoticons tool.)` : '',

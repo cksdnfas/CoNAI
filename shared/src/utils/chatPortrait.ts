@@ -4,8 +4,10 @@ export type ChatEmoticonMap = {
   groupByKeyword?: Map<string, number>
 }
 
-const TOKEN = /&\*([^*&\n]{1,40})\*&/g
-const STICKER = /^\s*&\*([^*&\n]{1,40})\*&\s*$/
+// Models sometimes drop one star (`&*keyword&`, `&keyword*&`); those forms resolve only for registered keywords.
+const TOKEN = /&\*([^*&\n]{1,40})\*?&|&([^*&\n]{1,40})\*&/g
+const STICKER = /^\s*(?:&\*([^*&\n]{1,40})\*?&|&([^*&\n]{1,40})\*&)\s*$/
+const isCanonical = (token: string) => token.startsWith('&*') && token.endsWith('*&')
 
 /** The renderer and portrait agree on standalone stickers, leaving fenced code alone. */
 function mapLines(text: string, transform: (line: string, code: boolean) => string[]) {
@@ -25,7 +27,7 @@ export function lastChatSticker(text: string): string | null {
   let keyword: string | null = null
   mapLines(text, (line, code) => {
     const match = code ? null : STICKER.exec(line)
-    if (match) keyword = match[1].trim()
+    if (match) keyword = (match[1] ?? match[2]).trim()
     return [line]
   })
   return keyword
@@ -33,7 +35,7 @@ export function lastChatSticker(text: string): string | null {
 
 /** Hide only standalone stickers resolved to the specified groups; inline and ordinary emoticons remain. */
 export function injectChatEmoticons(text: string, emoticons: ChatEmoticonMap | null, hiddenGroupIds?: ReadonlySet<number>) {
-  if (!text.includes('&*')) return text
+  if (!text.includes('&*') && !text.includes('*&')) return text
   let removed = false
   let skipBlank = false
   const rendered = mapLines(text, (line, code) => {
@@ -41,16 +43,19 @@ export function injectChatEmoticons(text: string, emoticons: ChatEmoticonMap | n
     if (skipBlank && !line.trim()) return []
     skipBlank = false
     const solo = STICKER.exec(line)
-    const key = solo?.[1].trim().toLowerCase()
+    const word = solo ? (solo[1] ?? solo[2]).trim() : undefined
+    const key = word?.toLowerCase()
     const hash = key ? emoticons?.byKeyword.get(key) : undefined
     if (solo && hash) {
       const groupId = emoticons?.groupByKeyword?.get(key!)
       if (groupId !== undefined && hiddenGroupIds?.has(groupId)) { removed = true; skipBlank = true; return [] }
-      return [`![${solo[1].trim()}](emote-sticker:${hash})`]
+      return [`![${word}](emote-sticker:${hash})`]
     }
-    return [line.replace(TOKEN, (token, keyword: string) => {
-      const hash = emoticons?.byKeyword.get(keyword.trim().toLowerCase())
-      return hash ? `![${keyword.trim()}](emote:${hash})` : token.replace(/\*/g, '\\*')
+    return [line.replace(TOKEN, (token, starred: string | undefined, trailing: string | undefined) => {
+      const keyword = (starred ?? trailing ?? '').trim()
+      const hash = emoticons?.byKeyword.get(keyword.toLowerCase())
+      if (hash) return `![${keyword}](emote:${hash})`
+      return isCanonical(token) ? token.replace(/\*/g, '\\*') : token
     })]
   })
   return removed ? rendered.replace(/^\n+|\n+$/g, '') : rendered
