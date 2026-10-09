@@ -3,11 +3,12 @@ import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation } from 'react-router-dom'
-import { ImageIcon, Reply } from 'lucide-react'
+import { ImageIcon, Play, Reply } from 'lucide-react'
 import { useMediaHoverPreview } from '@/components/common/media-hover-preview'
 import { IconButton } from '@/components/ui/icon-button'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { useI18n } from '@/i18n'
+import { buildApiUrl } from '@/lib/api-url'
 import { getCodexChatThreadMedia, type ChatMediaAttachment, type CodexChatMediaItem } from '@/lib/api-codex-chat'
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
@@ -161,6 +162,8 @@ export function ChatThumbOverlay({ children, actions, className }: { children: R
   )
 }
 
+const REFERENCE_CHIP_LIMIT = 5
+
 function ChatReferenceChip({ item, sourceMessageId, media }: { item: ChatMediaAttachment; sourceMessageId: number | undefined; media?: CodexChatMediaItem }) {
   const { t } = useI18n()
   const { canViewImages } = useImagePermissions()
@@ -168,8 +171,11 @@ function ChatReferenceChip({ item, sourceMessageId, media }: { item: ChatMediaAt
   const viewer = useImageViewModal()
   const isVideo = item.mimeType?.startsWith('video/') === true
   const image = buildChatImageRecord(item.compositeHash, undefined, media)
-  const thumbnailUrl = image.thumbnail_url ?? ''
+  // The library thumbnail by hash: the record's history route only appears once the thread's media map arrives, so it would load twice.
+  const thumbnailUrl = buildApiUrl(`/api/images/${encodeURIComponent(item.compositeHash)}/thumbnail`)
   const fileUrl = image.image_url ?? ''
+  // A video without its poster yet answers with the video itself, which <img> cannot draw; the icon stands in until a later mount.
+  const [thumbnailFailed, setThumbnailFailed] = useState(false)
   const hoverPreview = useMediaHoverPreview(canViewImages ? { src: thumbnailUrl, fullSrc: isVideo ? null : fileUrl, videoSrc: isVideo ? fileUrl : null, caption: item.name } : null)
   const canJump = sourceMessageId !== undefined && chat !== null
   const open = () => {
@@ -181,6 +187,7 @@ function ChatReferenceChip({ item, sourceMessageId, media }: { item: ChatMediaAt
       <IconButton
         variant="subtle"
         size="icon-sm"
+        className="relative overflow-hidden p-0"
         label={canJump
           ? t({ ko: '참조 이미지: 이 이미지가 나온 메시지로 이동', en: 'Referenced image: go to the message with this image' })
           : t({ ko: '참조 이미지: {name}', en: 'Referenced image: {name}' }, { name: item.name })}
@@ -188,7 +195,10 @@ function ChatReferenceChip({ item, sourceMessageId, media }: { item: ChatMediaAt
         onClick={open}
         {...hoverPreview.triggerProps}
       >
-        <ImageIcon className="size-3.5 shrink-0" />
+        {canViewImages && !thumbnailFailed
+          ? <img src={thumbnailUrl} alt="" loading="lazy" draggable={false} className="size-full object-cover" onError={() => setThumbnailFailed(true)} />
+          : <ImageIcon className="size-3.5 shrink-0" />}
+        {isVideo ? <Play className="absolute bottom-0.5 right-0.5 size-2.5 fill-white text-white drop-shadow-[0_0_2px_rgb(0_0_0/0.8)]" /> : null}
       </IconButton>
       {hoverPreview.preview}
     </>
@@ -196,11 +206,14 @@ function ChatReferenceChip({ item, sourceMessageId, media }: { item: ChatMediaAt
 }
 
 /**
- * App media sent with a message, as labels only (the pictures already sit in the transcript): clicking one jumps to
- * the reply the image first appeared in, or opens the image when it was picked from the library; hovering shows it.
+ * App media sent with a message, as small fixed-size crops (the full pictures already sit in the transcript): clicking
+ * one jumps to the reply the image first appeared in, or opens the image when it was picked from the library; hovering
+ * shows it whole.
  */
 export function ChatReferenceChips({ items = [], threadId }: { items?: ChatMediaAttachment[]; threadId: number | null }) {
+  const { t } = useI18n()
   const { canViewImages } = useImagePermissions()
+  const [expanded, setExpanded] = useState(false)
   const mediaQuery = useQuery({
     queryKey: codexChatMediaQueryKey(threadId),
     queryFn: () => getCodexChatThreadMedia(threadId as number),
@@ -209,9 +222,17 @@ export function ChatReferenceChips({ items = [], threadId }: { items?: ChatMedia
   })
   if (!items.length) return null
   const messageIdByHash = new Map((mediaQuery.data ?? []).map((media) => [media.compositeHash, media.messageId]))
+  // One row of fixed cells; past the limit the last cell becomes "+N" and opens the rest.
+  const collapsed = !expanded && items.length > REFERENCE_CHIP_LIMIT
+  const shown = collapsed ? items.slice(0, REFERENCE_CHIP_LIMIT - 1) : items
   return (
     <div className="mt-1 flex flex-wrap justify-end gap-1">
-      {items.map((item) => <ChatReferenceChip key={item.compositeHash} item={item} sourceMessageId={messageIdByHash.get(item.compositeHash)} media={mediaQuery.data?.find((media) => media.compositeHash === item.compositeHash)} />)}
+      {shown.map((item) => <ChatReferenceChip key={item.compositeHash} item={item} sourceMessageId={messageIdByHash.get(item.compositeHash)} media={mediaQuery.data?.find((media) => media.compositeHash === item.compositeHash)} />)}
+      {collapsed ? (
+        <IconButton variant="subtle" size="icon-sm" className="text-xs tabular-nums" label={t({ ko: '참조 이미지 {count}개 더 보기', en: 'Show {count} more referenced images' }, { count: items.length - shown.length })} onClick={() => setExpanded(true)}>
+          +{items.length - shown.length}
+        </IconButton>
+      ) : null}
     </div>
   )
 }
