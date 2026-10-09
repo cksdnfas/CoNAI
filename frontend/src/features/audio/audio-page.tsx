@@ -130,7 +130,7 @@ export function AudioPage() {
   const shortcuts = useAudioShortcuts()
   const [searchParams, setSearchParams] = useSearchParams()
   const groupId = searchParams.get('group')
-  const [projectId, setProjectIdState] = useState<string | null>(() => readStored(PROJECT_STORAGE_KEY))
+  const [storedProjectId, setProjectIdState] = useState<string | null>(() => readStored(PROJECT_STORAGE_KEY))
   const [expanded, setExpanded] = useState<Set<string>>(readExpanded)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -185,13 +185,19 @@ export function AudioPage() {
   const projects = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data])
   const groupQuery = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'group', groupId], queryFn: () => getAudioGroup(groupId!), enabled: Boolean(groupId), retry: false })
   const group = groupQuery.data && groupQuery.data.id === groupId ? groupQuery.data : null
+  // The open group decides the project. The URL (?group=) updates in a router transition, a render after the
+  // remembered project, so comparing the two mid-switch would bounce the click back to the old group.
+  const projectId = group?.project_id ?? storedProjectId
 
-  // A group link (chat card, ?group=) wins over the remembered project, and opens that project in the tree.
+  // A group link (chat card, ?group=) wins over the remembered project, and opens that project in the tree — once
+  // per group, so a stale group from before a switch never overwrites the project just picked.
+  const syncedGroupRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!group) return
-    if (group.project_id !== projectId) setProjectId(group.project_id)
+    if (!group || syncedGroupRef.current === group.id) return
+    syncedGroupRef.current = group.id
+    if (group.project_id !== storedProjectId) setProjectId(group.project_id)
     if (!expanded.has(group.project_id)) expand(group.project_id, true)
-  }, [group, projectId, setProjectId, expanded, expand])
+  }, [group, storedProjectId, setProjectId, expanded, expand])
   useEffect(() => {
     if (!projectsQuery.isSuccess) return
     if (projects.length === 0) return
@@ -227,7 +233,7 @@ export function AudioPage() {
   // when picked: a project without effects shows the "add an effect" state instead.
   useEffect(() => {
     if (!projectId || !projectGroupsQuery.isSuccess || searching) return
-    const missing = !groupId || groupQuery.isError || (group !== null && group.project_id !== projectId)
+    const missing = !groupId || groupQuery.isError
     if (!missing) return
     const next = effects[0]?.id ?? null
     if (next !== groupId) setGroupId(next, true)
