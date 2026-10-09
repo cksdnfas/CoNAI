@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Check, GripVertical, Plus } from 'lucide-react'
-import type { Edge, Node, NodeProps } from '@xyflow/react'
+import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
@@ -322,7 +322,7 @@ export function parseWorkflowGraph(params: {
           id: `${inputValue[0]}-${nodeId}-${inputKey}`,
           source: String(inputValue[0]),
           target: nodeId,
-          label: inputKey,
+          data: { inputKey },
         })
         continue
       }
@@ -405,6 +405,24 @@ export function buildWorkflowMarkedFieldFromInput(
   }
 }
 
+const AUTHORING_EDGE_STROKE = 'color-mix(in srgb, var(--foreground) 22%, transparent)'
+const AUTHORING_EDGE_FOCUS_STROKE = 'var(--primary)'
+
+/** Style links; the focused node's links are highlighted and named by the input they feed. */
+export function styleAuthoringEdges(edges: AuthoringEdge[], focusNodeId: string | null): AuthoringEdge[] {
+  return edges.map((edge) => {
+    const focused = focusNodeId !== null && (edge.source === focusNodeId || edge.target === focusNodeId)
+    return {
+      ...edge,
+      zIndex: focused ? 1 : 0,
+      style: { stroke: focused ? AUTHORING_EDGE_FOCUS_STROKE : AUTHORING_EDGE_STROKE, strokeWidth: focused ? 2 : 1.5 },
+      label: focused ? String(edge.data?.inputKey ?? '') : undefined,
+      labelStyle: { fill: 'var(--foreground)', fontSize: 11 },
+      labelBgStyle: { fill: 'var(--surface-container)' },
+    }
+  })
+}
+
 /** Whether one node input matches the search text (input key or its readable label). */
 export function authoringInputMatchesQuery(input: EditableWorkflowInput, query: string) {
   const normalizedQuery = query.trim().toLowerCase()
@@ -446,6 +464,9 @@ function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
         hasSelectedInput || data.searchCurrent ? 'ring-2 ring-primary/60' : data.searchMatched ? 'ring-1 ring-primary/40' : undefined,
       )}
     >
+      {/* Link anchors only; the canvas is read-only, so they stay hidden. */}
+      <Handle type="target" position={Position.Left} isConnectable={false} className="!pointer-events-none !opacity-0" />
+      <Handle type="source" position={Position.Right} isConnectable={false} className="!pointer-events-none !opacity-0" />
       <div className="flex items-start gap-2">
         <div className="comfy-authoring-drag-handle flex h-7 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-sm bg-foreground/5 text-muted-foreground hover:text-foreground active:cursor-grabbing">
           <GripVertical className="h-4 w-4" />

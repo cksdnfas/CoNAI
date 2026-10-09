@@ -22,7 +22,7 @@ import { useI18n } from '@/i18n'
 import type { CustomDropdownList } from '@/lib/api-image-generation-types'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
-import { nodeTypes, type AuthoringEdge, type AuthoringNode } from './comfy-workflow-authoring-graph'
+import { nodeTypes, styleAuthoringEdges, type AuthoringEdge, type AuthoringNode } from './comfy-workflow-authoring-graph'
 import { ComfyWorkflowAuthoringSettings } from './comfy-workflow-authoring-settings'
 import { ComfyWorkflowMarkedFieldEditor } from './comfy-workflow-marked-field-editor'
 import { ComfyWorkflowMarkedFieldList } from './comfy-workflow-marked-field-list'
@@ -261,7 +261,7 @@ export function ComfyWorkflowAuthoringModal({
       <ReactFlow<AuthoringNode, AuthoringEdge>
         className={isCoarsePointer ? 'theme-graph-flow touch-scroll-safe' : 'theme-graph-flow'}
         nodes={graphNodes}
-        edges={parsedGraph.edges}
+        edges={styleAuthoringEdges(parsedGraph.edges, selectedFieldNodeId)}
         nodeTypes={nodeTypes}
         onInit={setAuthoringFlowInstance}
         fitViewOptions={INITIAL_AUTHORING_FIT_VIEW_OPTIONS}
