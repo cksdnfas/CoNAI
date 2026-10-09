@@ -103,7 +103,7 @@ export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, app
     }
     setSelected(new Map(ids.flatMap((id) => available.has(id) ? [[id, available.get(id)!] as const] : [])))
   }
-  return <Modal open title={title ?? t({ ko: '앱 미디어에서 고르기', en: 'Choose app media' })} onClose={onClose} widthClassName="max-w-4xl">
+  return <Modal open title={title ?? t({ ko: '앱 미디어에서 고르기', en: 'Choose app media' })} onClose={onClose} widthClassName="max-w-4xl" height="tall">
     <ModalBody className="space-y-3">
       <form className="flex flex-wrap gap-2" onSubmit={(event) => { event.preventDefault(); setSearch(input.trim()) }}>
         <Select className="max-w-full w-auto" aria-label={t({ ko: '그룹', en: 'Group' })} value={groupId ?? ''} onChange={(event) => setChosenGroupId(event.target.value ? Number(event.target.value) : null)}>

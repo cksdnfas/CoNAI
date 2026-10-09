@@ -66,7 +66,7 @@ export function WildcardPreviewModal({
           {t('image-generation.components.wildcard.generation.panel.parsing.test')}
         </span>
       )}
-      widthClassName="max-w-4xl"
+      widthClassName="max-w-4xl" height="tall"
     >
       <div className="space-y-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px]">

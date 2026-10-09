@@ -341,7 +341,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
         open={open}
         onClose={() => setOpen(false)}
         title={t({ ko: '이징 설정', en: 'Easing settings' })}
-        widthClassName="max-w-6xl"
+        widthClassName="max-w-6xl" height="tall"
       >
         <div className="space-y-4">
           <SegmentedTabBar

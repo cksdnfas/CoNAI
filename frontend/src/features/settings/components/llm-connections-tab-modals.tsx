@@ -465,7 +465,7 @@ export function LlmConnectionEditorModal({
       open={isOpen}
       onClose={onClose}
       title={isEditMode ? t('llmConnectionsTab.editLlmConnection') : t('llmConnectionsTab.addLlmConnection')}
-      widthClassName="max-w-3xl"
+      widthClassName="max-w-3xl" height="tall"
     >
       <ModalBody>
         <div className="space-y-4">

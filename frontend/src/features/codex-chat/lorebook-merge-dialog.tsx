@@ -62,7 +62,7 @@ export function LorebookMergeDialog(props: LorebookMergeDialogProps) {
       open={props.open}
       onClose={props.onClose}
       title={targetName ? t({ ko: '{name}에 병합', en: 'Merge into {name}' }, { name: targetName }) : t({ ko: '병합', en: 'Merge' })}
-      widthClassName="max-w-3xl"
+      widthClassName="max-w-3xl" height="tall"
     >
       {props.open ? <MergeBody {...props} onTargetName={setTargetName} /> : null}
     </Modal>

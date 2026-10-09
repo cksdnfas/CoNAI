@@ -252,7 +252,7 @@ export function ModuleLibraryPanel({ modules, isError, errorMessage, onAddModule
         <EmptyState size="compact" icon={Search} title={t({ ko: '검색 결과가 없어', en: 'No search results' })} />
       ) : null}
 
-      <div className="max-h-[min(68vh,760px)] space-y-3 overflow-y-auto pr-1">
+      <div className="space-y-3">
         {groupedModules.map((group) => {
           const scopedKey = `${activeTab}:${group.key}`
           const isCollapsed = collapsedGroupKeySet.has(scopedKey)

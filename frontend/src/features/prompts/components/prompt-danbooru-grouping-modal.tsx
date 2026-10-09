@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { LoadingState } from '@/components/ui/loading-state'
 import { StatTile } from '@/components/ui/stat-tile'
-import { Modal } from '@/components/ui/modal'
+import { Modal, ModalFooter } from '@/components/ui/modal'
 import { applyDanbooruPromptGrouping, getDanbooruPromptGroupingPreview } from '@/lib/api-prompts'
 import type { DanbooruPromptGroupingTypeResult } from '@/types/prompt'
 import { useI18n } from '@/i18n'
@@ -100,7 +100,7 @@ export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: 
       open={open}
       onClose={onClose}
       title={t({ ko: 'Danbooru 기준 자동 그룹 구성', en: 'Danbooru-based group setup' })}
-      widthClassName="max-w-4xl"
+      widthClassName="max-w-4xl" height="tall"
     >
       <div className="space-y-4">
         <label className="flex cursor-pointer items-center justify-between gap-4 rounded-sm bg-surface-low px-3 py-2.5 text-sm transition-colors hover:bg-surface-high">
@@ -150,17 +150,19 @@ export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: 
             <div className="grid gap-3 md:grid-cols-3">
               {preview.byType.map((item) => <TypeSummaryCard key={item.type} item={item} />)}
             </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="ghost" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-              <Button type="button" onClick={() => applyMutation.mutate()} disabled={applyMutation.isPending || !isDanbooruDbAvailable || preview.totals.matchedPrompts === 0}>
-                <WandSparkles className="h-4 w-4" />
-                {applyMutation.isPending ? t({ ko: '적용 중...', en: 'Applying...' }) : t({ ko: '자동 그룹 구성 적용', en: 'Apply auto grouping' })}
-              </Button>
-            </div>
           </>
         ) : null}
       </div>
+
+      {preview ? (
+        <ModalFooter>
+          <Button type="button" variant="ghost" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
+          <Button type="button" onClick={() => applyMutation.mutate()} disabled={applyMutation.isPending || !isDanbooruDbAvailable || preview.totals.matchedPrompts === 0}>
+            <WandSparkles className="h-4 w-4" />
+            {applyMutation.isPending ? t({ ko: '적용 중...', en: 'Applying...' }) : t({ ko: '자동 그룹 구성 적용', en: 'Apply auto grouping' })}
+          </Button>
+        </ModalFooter>
+      ) : null}
     </Modal>
   )
 }

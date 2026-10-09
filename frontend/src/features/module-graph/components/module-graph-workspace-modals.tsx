@@ -144,7 +144,7 @@ export function ModuleGraphWorkspaceModals({
         open={isModuleLibraryOpen}
         title={t({ ko: '모듈 추가', en: 'Add module' })}
         onClose={onCloseModuleLibrary}
-        widthClassName="max-w-6xl"
+        widthClassName="max-w-6xl" height="tall"
       >
         {isModuleLibraryOpen ? (
           <Suspense fallback={<WorkspaceModalFallback />}>
@@ -164,7 +164,7 @@ export function ModuleGraphWorkspaceModals({
         open={isCustomNodeManagerOpen}
         title={t({ ko: '커스텀 노드 관리', en: 'Manage custom nodes' })}
         onClose={onCloseCustomNodeManager}
-        widthClassName="max-w-6xl"
+        widthClassName="max-w-6xl" height="tall"
       >
         {isCustomNodeManagerOpen ? (
           <Suspense fallback={<WorkspaceModalFallback />}>

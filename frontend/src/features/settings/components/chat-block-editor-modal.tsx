@@ -94,7 +94,7 @@ export function ChatBlockEditorModal({ open, shared, initialName, initialBlock, 
   const keyValid = BLOCK_KEY_PATTERN.test(block.key)
 
   return (
-    <Modal open={open} onClose={onClose} title={shared ? t({ ko: '표시 블록 편집', en: 'Edit display block' }) : t({ ko: '표시 블록 추가', en: 'Add display block' })} widthClassName="max-w-4xl">
+    <Modal open={open} onClose={onClose} title={shared ? t({ ko: '표시 블록 편집', en: 'Edit display block' }) : t({ ko: '표시 블록 추가', en: 'Add display block' })} widthClassName="max-w-4xl" height="tall">
       <ModalBody className="space-y-4">
         <Field label={t({ ko: '이름', en: 'Name' })} info={t({ ko: '비우면 블록 이름을 써.', en: 'Empty uses the block name.' })}>
           <Input variant="settings" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />

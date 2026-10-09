@@ -114,7 +114,7 @@ export function SecurityAccountEditorModal({
       open={open}
       onClose={onClose}
       title={account.username}
-      widthClassName="max-w-2xl"
+      widthClassName="max-w-2xl" height="medium"
       headerContent={(
         <div className="flex flex-wrap items-center gap-2">
           {account.groupKeys.map((groupKey) => (

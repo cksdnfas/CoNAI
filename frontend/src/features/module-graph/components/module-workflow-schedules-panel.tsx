@@ -9,7 +9,7 @@ import { Select } from '@/components/ui/select'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
-import { Modal } from '@/components/ui/modal'
+import { Modal, ModalFooter } from '@/components/ui/modal'
 import { Section } from '@/components/ui/section'
 import { useI18n, type TranslationInput } from '@/i18n'
 import { getGraphWorkflow } from '@/lib/api-module-graph'
@@ -350,7 +350,7 @@ export function ModuleWorkflowSchedulesPanel({
         open={editorMode !== null}
         onClose={resetDraft}
         title={editorMode === 'edit' ? t({ ko: '자동 실행 수정', en: 'Edit autorun' }) : t({ ko: '자동 실행 추가', en: 'Add autorun' })}
-        widthClassName="max-w-5xl"
+        widthClassName="max-w-5xl" height="tall"
       >
         <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -433,7 +433,7 @@ export function ModuleWorkflowSchedulesPanel({
             </div>
           ) : null}
 
-          <div className="flex flex-wrap justify-end gap-2 pt-2">
+          <ModalFooter>
             <Button type="button" variant="secondary" onClick={resetDraft} disabled={isMutating}>
               {t({ ko: '취소', en: 'Cancel' })}
             </Button>
@@ -441,7 +441,7 @@ export function ModuleWorkflowSchedulesPanel({
               {editorMode === 'edit' ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
               {editorMode === 'edit' ? t({ ko: '저장', en: 'Save' }) : t({ ko: '추가', en: 'Add' })}
             </Button>
-          </div>
+          </ModalFooter>
         </form>
       </Modal>
     </>

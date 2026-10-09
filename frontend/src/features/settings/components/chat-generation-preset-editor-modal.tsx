@@ -320,7 +320,7 @@ export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDupli
   const kindLabel = useMemo(() => ({ nai: 'NovelAI', comfyui: 'ComfyUI' }), [])
 
   return (
-    <Modal open={open} onClose={onClose} title={preset ? t({ ko: '생성 프리셋 편집', en: 'Edit generation preset' }) : t({ ko: '생성 프리셋 추가', en: 'Add generation preset' })} widthClassName="max-w-3xl" sidePanelInset={CHAT_DOCK_INSET}>
+    <Modal open={open} onClose={onClose} title={preset ? t({ ko: '생성 프리셋 편집', en: 'Edit generation preset' }) : t({ ko: '생성 프리셋 추가', en: 'Add generation preset' })} widthClassName="max-w-3xl" height="tall" sidePanelInset={CHAT_DOCK_INSET}>
       <ModalBody className="space-y-4">
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
           <Field label={<ChatFilledLabel fieldId="name">{t({ ko: '이름', en: 'Name' })}</ChatFilledLabel>}>

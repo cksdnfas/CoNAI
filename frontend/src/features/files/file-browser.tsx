@@ -616,7 +616,7 @@ export function FilePicker({ onClose, onPick, title, pickLabel, accept, initialP
   const { t } = useI18n()
   const [parentId, setParentId] = useState<string | null>(initialParentId)
   return (
-    <Modal open title={title ?? t({ ko: '보관함에서 첨부', en: 'Attach from files' })} onClose={onClose} widthClassName="max-w-3xl">
+    <Modal open title={title ?? t({ ko: '보관함에서 첨부', en: 'Attach from files' })} onClose={onClose} widthClassName="max-w-3xl" height="tall">
       <FileBrowser key={parentId ?? 'root'} parentId={parentId} onNavigate={setParentId} onPick={onPick} pickLabel={pickLabel} accept={accept} />
     </Modal>
   )

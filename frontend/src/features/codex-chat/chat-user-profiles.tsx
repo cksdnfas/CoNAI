@@ -202,7 +202,7 @@ export function ChatUserProfileManagerModal({ open, onClose }: { open: boolean; 
         open={open}
         onClose={onClose}
         title={t({ ko: '사용자 프로필', en: 'User profiles' })}
-        widthClassName="max-w-xl"
+        widthClassName="max-w-xl" height="medium"
         headerContent={<IconButton size="icon-sm" variant="ghost" disabled={full} onClick={() => setEditor({ profile: null })} label={t({ ko: '사용자 프로필 추가', en: 'Add user profile' })}><Plus /></IconButton>}
       >
         <ModalBody>

@@ -210,7 +210,7 @@ export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = f
   const selected = batch?.slots.filter((slot) => slot.kind !== 'full' && slot.chosenHash && slot.attempts.some((attempt) => attempt.candidates.some((candidate) => candidate.compositeHash === slot.chosenHash))).length ?? 0
   const complete = batch?.slots.filter((slot) => terminal(slot.status)).length ?? 0
   const displayedPresetId = batch?.presetId ?? presetId
-  return <Modal open onClose={onClose} widthClassName="max-w-[1040px] max-sm:fixed max-sm:inset-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:rounded-none max-sm:[&_[data-slot=modal-footer]]:mt-auto" title={<>{t({ ko: '자산 만들기', en: 'Create assets' })}<span className="ml-3 text-sm font-normal text-muted-foreground">{savedProfile?.name ?? profile?.name}</span></>}>
+  return <Modal open onClose={onClose} widthClassName="max-w-[1040px] max-sm:fixed max-sm:inset-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:rounded-none" height="tall" title={<>{t({ ko: '자산 만들기', en: 'Create assets' })}<span className="ml-3 text-sm font-normal text-muted-foreground">{savedProfile?.name ?? profile?.name}</span></>}>
     <ModalBody>
       <div className="flex flex-wrap items-center gap-2 border-b border-line pb-3">
         <Select className="w-auto max-w-full" aria-label={t({ ko: '생성 프리셋', en: 'Generation preset' })} value={displayedPresetId} disabled={frozen} onChange={(event) => setPresetChoice(Number(event.target.value))}>

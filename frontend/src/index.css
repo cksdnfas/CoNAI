@@ -1060,6 +1060,36 @@ html:lang(ko) {
   --overline-tracking: 0.02em;
 }
 
+/*
+ * Fixed-height modal body: the frame stays put and this area scrolls. A form wrapping the body is flattened so its
+ * footer lines up with direct-child footers; the footer at the end is pinned to the bottom. Unlayered on purpose so the
+ * pin wins over a footer's own margin utilities.
+ */
+[data-slot="modal-scroll"] > form:has(> [data-slot="modal-footer"]) {
+  display: contents;
+}
+
+[data-slot="modal-scroll"]:has(> [data-slot="modal-footer"], > form > [data-slot="modal-footer"]) {
+  padding-bottom: 0;
+}
+
+[data-slot="modal-scroll"] > [data-slot="modal-footer"],
+[data-slot="modal-scroll"] > form > [data-slot="modal-footer"] {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  margin-top: auto;
+  background-color: var(--background);
+  padding-bottom: calc(var(--spacing) * 4);
+}
+
+@media (width >= 48rem) {
+  [data-slot="modal-scroll"] > [data-slot="modal-footer"],
+  [data-slot="modal-scroll"] > form > [data-slot="modal-footer"] {
+    padding-bottom: calc(var(--spacing) * 5);
+  }
+}
+
 /* Retain the page editor draft while the phone's full-screen side panel is in use. */
 @media (width < 1024px) {
   html[data-chat-panel-fullscreen="true"] [data-slot="modal"][data-side-panel="true"] {

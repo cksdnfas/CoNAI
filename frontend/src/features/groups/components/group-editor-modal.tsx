@@ -140,7 +140,7 @@ export function GroupEditorModal({
       open={open}
       onClose={onClose}
       title={mode === 'create' ? t('groups.components.group.editor.modal.custom.group') : t('groups.components.group.editor.modal.custom.groups.edit')}
-      widthClassName="max-w-3xl"
+      widthClassName="max-w-3xl" height="tall"
     >
       <form onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (
@@ -197,16 +197,16 @@ export function GroupEditorModal({
               <Input value={color} onChange={(event) => setColor(event.target.value)} placeholder="#7c3aed" />
             </Field>
           </div>
-
-          <ModalFooter>
-            <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-              {t({ ko: '취소', en: 'Cancel' })}
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? t('groups.components.group.editor.modal.saving') : mode === 'create' ? t('groups.components.group.editor.modal.create.group') : t('groups.components.group.editor.modal.save.changes')}
-            </Button>
-          </ModalFooter>
         </ModalBody>
+
+        <ModalFooter>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
+            {t({ ko: '취소', en: 'Cancel' })}
+          </Button>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? t('groups.components.group.editor.modal.saving') : mode === 'create' ? t('groups.components.group.editor.modal.create.group') : t('groups.components.group.editor.modal.save.changes')}
+          </Button>
+        </ModalFooter>
       </form>
     </Modal>
   )

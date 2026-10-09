@@ -162,7 +162,7 @@ function PromptPresetEditorModal({
   }
 
   return (
-    <Modal open={open} sidePanelInset="var(--chat-dock-width, 0px)" title={mode === 'create' ? t('prompts.components.prompt.preset.panel.add.preset') : t('prompts.components.prompt.preset.panel.edit.preset')} widthClassName="max-w-5xl" onClose={onClose}>
+    <Modal open={open} sidePanelInset="var(--chat-dock-width, 0px)" title={mode === 'create' ? t('prompts.components.prompt.preset.panel.add.preset') : t('prompts.components.prompt.preset.panel.edit.preset')} widthClassName="max-w-5xl" height="tall" onClose={onClose}>
       <form onSubmit={(event) => void handleSubmit(event)}>
         <ModalBody className="space-y-5">
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_18rem]">

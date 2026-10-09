@@ -132,7 +132,7 @@ export function ChatLorebookEditorModal({ open, lorebook, kind = 'global', onClo
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={lorebook ? t({ ko: '로어북 편집', en: 'Edit lorebook' }) : owned ? t({ ko: '계정 로어북 추가', en: 'Add account lorebook' }) : t({ ko: '로어북 추가', en: 'Add lorebook' })} widthClassName="max-w-3xl" sidePanelInset={CHAT_DOCK_INSET}>
+    <Modal open={open} onClose={onClose} title={lorebook ? t({ ko: '로어북 편집', en: 'Edit lorebook' }) : owned ? t({ ko: '계정 로어북 추가', en: 'Add account lorebook' }) : t({ ko: '로어북 추가', en: 'Add lorebook' })} widthClassName="max-w-3xl" height="tall" sidePanelInset={CHAT_DOCK_INSET}>
       <ModalBody className="space-y-4">
         <Field label={<ChatFilledLabel fieldId="name">{t({ ko: '이름', en: 'Name' })}</ChatFilledLabel>}>
           <Input variant="settings" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />

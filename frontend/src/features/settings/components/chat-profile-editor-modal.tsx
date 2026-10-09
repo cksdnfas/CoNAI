@@ -312,6 +312,7 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
       onClose={onClose}
       title={profile ? t({ ko: '프로필 편집', en: 'Edit profile' }) : t({ ko: '프로필 추가', en: 'Add profile' })}
       widthClassName="max-w-5xl"
+      height="tall"
       // A docked chat that fills this editor stays usable beside it.
       sidePanelInset="var(--chat-dock-width, 0px)"
       headerActions={(
@@ -329,7 +330,7 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
     >
       <ProfileAssistContext.Provider value={assist}>
       <div className="grid gap-x-6 md:grid-cols-[10.5rem_minmax(0,1fr)]">
-        <nav aria-label={t({ ko: '프로필 편집 항목', en: 'Profile sections' })} className={cn('self-start md:sticky md:top-20 md:block', !showingList && 'max-md:hidden')}>
+        <nav aria-label={t({ ko: '프로필 편집 항목', en: 'Profile sections' })} className={cn('self-start md:sticky md:top-0 md:block', !showingList && 'max-md:hidden')}>
           <ul className="space-y-0.5 max-md:divide-y max-md:divide-line">
             {sections.map((entry) => (
               <li key={entry.value}>
@@ -356,7 +357,7 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
           </ul>
         </nav>
 
-        <div className={cn('min-w-0 space-y-4 md:min-h-[min(640px,70vh)]', showingList && 'max-md:hidden')}>
+        <div className={cn('min-w-0 space-y-4', showingList && 'max-md:hidden')}>
           <div className="flex items-center gap-1 md:hidden">
             <IconButton size="icon-sm" variant="ghost" onClick={() => setShowingList(true)} label={t({ ko: '항목 목록', en: 'Sections' })}><ChevronLeft /></IconButton>
             <span className="text-sm font-semibold">{current.label}</span>

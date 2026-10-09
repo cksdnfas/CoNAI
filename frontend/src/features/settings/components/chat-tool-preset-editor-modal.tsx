@@ -102,7 +102,7 @@ export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSa
   const nameMissing = draft.name.trim().length === 0
 
   return (
-    <Modal open={open} onClose={onClose} title={preset ? t({ ko: '도구 프리셋 편집', en: 'Edit tool preset' }) : t({ ko: '도구 프리셋 추가', en: 'Add tool preset' })} widthClassName="max-w-3xl">
+    <Modal open={open} onClose={onClose} title={preset ? t({ ko: '도구 프리셋 편집', en: 'Edit tool preset' }) : t({ ko: '도구 프리셋 추가', en: 'Add tool preset' })} widthClassName="max-w-3xl" height="tall">
       <ModalBody className="space-y-4">
         <div className="grid gap-3 md:grid-cols-2">
           <Field label={t({ ko: '이름', en: 'Name' })}>

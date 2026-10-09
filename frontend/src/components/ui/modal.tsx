@@ -15,6 +15,12 @@ interface ModalProps extends PropsWithChildren {
   onClose: () => void
   widthClassName?: string
   closeOnBack?: boolean
+  /**
+   * `auto` fits the content. `medium` and `tall` open at a fixed height (up to 40rem / 64rem) for content that grows or
+   * changes while open (sections, accordions, lists): the frame stays put, the body scrolls, and a `ModalFooter` at the
+   * end of the body (or of a form wrapping it) stays pinned.
+   */
+  height?: 'auto' | 'medium' | 'tall'
   /** Reserve room for an existing desktop side panel so both surfaces remain interactive. */
   sidePanelInset?: string
 }
@@ -76,7 +82,8 @@ function preventOutsideDismiss(event: Event) {
  * Esc closes only the top-most dialog, and only when nothing handled the keydown first (`defaultPrevented`), whether in
  * the capture phase (image editor) or in content bubble handlers (inputs that revert their draft on Esc).
  */
-function Modal({ open, title, description, headerContent, headerActions, onClose, widthClassName = 'max-w-4xl', closeOnBack = true, sidePanelInset, children }: ModalProps) {
+function Modal({ open, title, description, headerContent, headerActions, onClose, widthClassName = 'max-w-4xl', closeOnBack = true, height = 'auto', sidePanelInset, children }: ModalProps) {
+  const fixedHeight = height !== 'auto'
   const { t } = useI18n()
   const contentRef = useRef<HTMLDivElement | null>(null)
   const returnFocusRef = useRef<HTMLElement | null>(null)
@@ -182,7 +189,8 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
               aria-modal={!sidePanelInset}
               aria-label={hasTitle ? undefined : t({ ko: '대화 상자', en: 'Dialog' })}
               {...(description ? {} : { 'aria-describedby': undefined })}
-              className={cn('mx-auto flex max-h-full w-full flex-col overflow-y-auto rounded-sm bg-background shadow-elevation-3 outline-none', widthClassName)}
+              data-height={height}
+              className={cn('mx-auto flex max-h-full w-full flex-col rounded-sm bg-background shadow-elevation-3 outline-none', !fixedHeight && 'overflow-y-auto', height === 'medium' && 'h-full max-h-[min(100%,40rem)]', height === 'tall' && 'h-full max-h-[min(100%,64rem)]', widthClassName)}
               onMouseDown={(event) => event.stopPropagation()}
               onKeyDown={handleContentKeyDown}
               onEscapeKeyDown={handleEscapeKeyDown}
@@ -190,7 +198,7 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
               onOpenAutoFocus={handleOpenAutoFocus}
               onCloseAutoFocus={handleCloseAutoFocus}
             >
-              <div className="sticky top-0 z-10 bg-background/96 px-4 pt-4 pb-2 backdrop-blur md:px-5">
+              <div className="sticky top-0 z-10 shrink-0 bg-background/96 px-4 pt-4 pb-2 backdrop-blur md:px-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1 space-y-1">
                     <DialogPrimitive.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">{title}</DialogPrimitive.Title>
@@ -210,7 +218,14 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
                 {headerContent ? <div className="mt-3">{headerContent}</div> : null}
               </div>
 
-              <div className="px-4 pt-2 pb-4 md:px-5 md:pb-5">{children}</div>
+              {fixedHeight ? (
+                // Footer pinning lives in index.css (`[data-slot="modal-scroll"]`).
+                <div data-slot="modal-scroll" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-2 pb-4 md:px-5 md:pb-5">
+                  {children}
+                </div>
+              ) : (
+                <div className="px-4 pt-2 pb-4 md:px-5 md:pb-5">{children}</div>
+              )}
             </DialogPrimitive.Content>
           </div>
         </DialogPrimitive.Portal>

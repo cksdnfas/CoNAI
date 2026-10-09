@@ -675,7 +675,7 @@ export function WildcardEditorModal({
       title={mode === 'create'
         ? t(wildcardEditorKey('create.tab.item'), { tab: tabLabel })
         : t(wildcardEditorKey('edit.tab.item'), { tab: tabLabel })}
-      widthClassName="max-w-4xl"
+      widthClassName="max-w-4xl" height="tall"
     >
       <form onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (
@@ -752,20 +752,20 @@ export function WildcardEditorModal({
               }))
             }}
           />
-
-          <ModalFooter>
-            <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-              {t(wildcardEditorKey('cancel'))}
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting
-                ? t(wildcardEditorKey('saving'))
-                : mode === 'create'
-                  ? t(wildcardEditorKey('create.item'))
-                  : t(wildcardEditorKey('save.changes'))}
-            </Button>
-          </ModalFooter>
         </ModalBody>
+
+        <ModalFooter>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
+            {t(wildcardEditorKey('cancel'))}
+          </Button>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting
+              ? t(wildcardEditorKey('saving'))
+              : mode === 'create'
+                ? t(wildcardEditorKey('create.item'))
+                : t(wildcardEditorKey('save.changes'))}
+          </Button>
+        </ModalFooter>
       </form>
     </Modal>
   )

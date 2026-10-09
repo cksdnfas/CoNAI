@@ -178,7 +178,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
   )
 
   return (
-    <Modal open={open} onClose={onClose} title={preset ? t({ ko: '판단 프리셋 편집', en: 'Edit judge preset' }) : t({ ko: '판단 프리셋 추가', en: 'Add judge preset' })} widthClassName="max-w-3xl" sidePanelInset={CHAT_DOCK_INSET}>
+    <Modal open={open} onClose={onClose} title={preset ? t({ ko: '판단 프리셋 편집', en: 'Edit judge preset' }) : t({ ko: '판단 프리셋 추가', en: 'Add judge preset' })} widthClassName="max-w-3xl" height="tall" sidePanelInset={CHAT_DOCK_INSET}>
       <ModalBody className="space-y-5">
         <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
           <Field label={<ChatFilledLabel fieldId="name">{t({ ko: '이름', en: 'Name' })}</ChatFilledLabel>}>

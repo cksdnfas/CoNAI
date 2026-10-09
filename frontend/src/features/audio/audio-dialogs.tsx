@@ -215,7 +215,7 @@ export function AudioCommentsDialog({ open, group, canEdit, onClose, onChanged }
   const tabs: Array<[AudioCommentStatus | 'all', string]> = [['pending', t({ ko: '대기', en: 'Pending' })], ['completed', t({ ko: '완료', en: 'Completed' })], ['all', t({ ko: '전체', en: 'All' })]]
 
   return (
-    <Modal open={open} title={t({ ko: '{name} 코멘트', en: '{name} comments' }, { name: group.name })} onClose={onClose} widthClassName="max-w-lg">
+    <Modal open={open} title={t({ ko: '{name} 코멘트', en: '{name} comments' }, { name: group.name })} onClose={onClose} widthClassName="max-w-lg" height="medium">
       <ModalBody className="space-y-3">
         <TextTabs value={status} items={tabs} onChange={setStatus} />
         <ul className="divide-y divide-line">

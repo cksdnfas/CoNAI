@@ -485,7 +485,7 @@ export function ChatFlagManagerModal({ open, onClose }: { open: boolean; onClose
         open={open}
         onClose={onClose}
         title={t({ ko: '플래그 관리', en: 'Manage flags' })}
-        widthClassName="max-w-xl"
+        widthClassName="max-w-xl" height="medium"
         headerContent={<IconButton size="icon-sm" variant="ghost" disabled={full} onClick={() => setEditor({ flag: null })} label={t({ ko: '플래그 추가', en: 'Add flag' })}><Plus /></IconButton>}
       >
         <ModalBody>

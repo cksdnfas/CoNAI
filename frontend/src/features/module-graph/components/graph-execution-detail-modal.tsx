@@ -70,7 +70,7 @@ export function GraphExecutionDetailModal({
       title={t({ ko: '실행 #{id}', en: 'Run #{id}' }, { id: executionDetail.execution.id })}
       headerContent={<TextTabs value={tab} items={tabItems} onChange={setTab} ariaLabel={t({ ko: '실행 상세', en: 'Run details' })} />}
       onClose={onClose}
-      widthClassName="max-w-6xl"
+      widthClassName="max-w-6xl" height="tall"
     >
       <div className="space-y-4">
         {tab === 'result' ? resultContent : null}
