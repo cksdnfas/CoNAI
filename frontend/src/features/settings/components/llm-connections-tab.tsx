@@ -13,6 +13,7 @@ import { RowGroup } from '@/components/ui/row-group'
 import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 import { AgentCliSettings } from './agent-cli-settings'
+import { ChatDiagnosticsSettings } from './chat-diagnostics-settings'
 import {
   LlmConnectionEditorModal,
   LlmConnectionListItem,
@@ -262,6 +263,8 @@ export function LlmConnectionsTab() {
           </RowGroup>
         )
       })}
+
+      <ChatDiagnosticsSettings />
 
       <ConnectionModelEditorModal slot={editingSlot} workflowNodes={nodesOf(editingSlot?.id)} onClose={() => setEditingSlotId(null)} />
 

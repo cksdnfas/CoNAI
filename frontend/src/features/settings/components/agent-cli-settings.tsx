@@ -69,7 +69,7 @@ function useMinuteClock() {
 }
 
 /** Subscription windows as thin gauges: name, fill, percent, then when the window resets. */
-function AgentCliUsageBars({ windows }: { windows: AgentCliUsageWindow[] }) {
+export function AgentCliUsageBars({ windows }: { windows: AgentCliUsageWindow[] }) {
   const { t } = useI18n()
   const now = useMinuteClock()
   const windowLabel = (entry: AgentCliUsageWindow) => {

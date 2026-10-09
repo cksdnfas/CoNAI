@@ -27,6 +27,7 @@ type RunRow = {
   provider_name: string
   model: string
   latency_ms: number
+  tokens: number | null
   error: string | null
   request: string | null
   tools_called: string | null
@@ -95,6 +96,7 @@ export type NewJudgeRun = {
   providerName: string
   model: string
   latencyMs: number
+  tokens?: number | null
   error: string | null
   request: unknown
   items: JudgeLogItem[]
@@ -105,9 +107,9 @@ export const ChatJudgeLogStore = {
     const db = getUserSettingsDb()
     pruneOld()
     return db.transaction(() => {
-      const result = db.prepare(`INSERT INTO chat_judge_runs (thread_id, profile_id, preset_id, stage, message_id, reply_id, engine, provider_name, model, latency_ms, error, request)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(run.threadId, run.profileId, run.presetId, run.stage, run.messageId, run.replyId, run.engine, run.providerName, run.model,
-        Math.round(run.latencyMs), run.error, run.request === undefined ? null : JSON.stringify(run.request))
+      const result = db.prepare(`INSERT INTO chat_judge_runs (thread_id, profile_id, preset_id, stage, message_id, reply_id, engine, provider_name, model, latency_ms, tokens, error, request)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(run.threadId, run.profileId, run.presetId, run.stage, run.messageId, run.replyId, run.engine, run.providerName, run.model,
+        Math.round(run.latencyMs), run.tokens ?? null, run.error, run.request === undefined ? null : JSON.stringify(run.request))
       const runId = Number(result.lastInsertRowid)
       const insert = db.prepare(`INSERT INTO chat_judge_items (run_id, item_id, name, probability, confidence, choice, verdict, decided_by, action, tools) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       for (const item of run.items) insert.run(runId, item.itemId, item.name, item.probability, item.confidence, item.choice, item.verdict, item.decidedBy, item.action, item.tools.length ? JSON.stringify(item.tools) : null)
@@ -191,7 +193,7 @@ export const ChatJudgeLogStore = {
     const byId = new Map(runs.map((run) => [run.id, run]))
     const items = db.prepare(`SELECT i.* FROM chat_judge_items i JOIN chat_judge_runs r ON r.id = i.run_id WHERE ${where.join(' AND ')} ORDER BY i.run_id DESC`).all(...values) as ItemRow[]
     const outcomes = outcomeReader()
-    type Tally = ChatJudgeItemStats & { probabilitySum: number; probabilityCount: number; latencySum: number; toolOffered: number; toolUsed: number; loreProposed: number; loreSaved: number; followUps: number; answered: number }
+    type Tally = ChatJudgeItemStats & { probabilitySum: number; probabilityCount: number; latencySum: number; tokenSum: number; tokenRuns: number; toolOffered: number; toolUsed: number; loreProposed: number; loreSaved: number; followUps: number; answered: number }
     const tallies = new Map<string, Tally>()
     for (const item of items) {
       const run = byId.get(item.run_id)
@@ -200,12 +202,13 @@ export const ChatJudgeLogStore = {
       const key = `${run.preset_id}:${run.stage}:${counted.itemId}`
       let tally = tallies.get(key)
       if (!tally) {
-        tally = { presetId: run.preset_id, itemId: counted.itemId, name: counted.name, stage: run.stage, runs: 0, yes: 0, no: 0, uncertain: 0, failed: 0, averageProbability: null, toolUseRate: null, loreSaveRate: null, followUpAnswerRate: null, averageLatencyMs: null,
-          probabilitySum: 0, probabilityCount: 0, latencySum: 0, toolOffered: 0, toolUsed: 0, loreProposed: 0, loreSaved: 0, followUps: 0, answered: 0 }
+        tally = { presetId: run.preset_id, itemId: counted.itemId, name: counted.name, stage: run.stage, runs: 0, yes: 0, no: 0, uncertain: 0, failed: 0, averageProbability: null, toolUseRate: null, loreSaveRate: null, followUpAnswerRate: null, averageLatencyMs: null, averageTokens: null,
+          probabilitySum: 0, probabilityCount: 0, latencySum: 0, tokenSum: 0, tokenRuns: 0, toolOffered: 0, toolUsed: 0, loreProposed: 0, loreSaved: 0, followUps: 0, answered: 0 }
         tallies.set(key, tally)
       }
       tally.runs += 1
       tally.latencySum += run.latency_ms
+      if (run.tokens !== null) { tally.tokenSum += run.tokens; tally.tokenRuns += 1 }
       if (item.decided_by === 'fallback') tally.failed += 1
       else tally[item.verdict] += 1
       if (item.probability !== null) { tally.probabilitySum += item.probability; tally.probabilityCount += 1 }
@@ -215,10 +218,11 @@ export const ChatJudgeLogStore = {
       if (outcome.followUp === 'sent' || outcome.followUp === 'answered') { tally.followUps += 1; if (outcome.followUp === 'answered') tally.answered += 1 }
     }
     const rate = (part: number, whole: number) => (whole > 0 ? part / whole : null)
-    return [...tallies.values()].map(({ probabilitySum, probabilityCount, latencySum, toolOffered, toolUsed, loreProposed, loreSaved, followUps, answered, ...stats }) => ({
+    return [...tallies.values()].map(({ probabilitySum, probabilityCount, latencySum, tokenSum, tokenRuns, toolOffered, toolUsed, loreProposed, loreSaved, followUps, answered, ...stats }) => ({
       ...stats,
       averageProbability: rate(probabilitySum, probabilityCount),
       averageLatencyMs: rate(latencySum, stats.runs),
+      averageTokens: rate(tokenSum, tokenRuns),
       toolUseRate: rate(toolUsed, toolOffered),
       loreSaveRate: rate(loreSaved, loreProposed),
       followUpAnswerRate: rate(answered, followUps),

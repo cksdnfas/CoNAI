@@ -85,7 +85,7 @@ async function translate(target: ChatCompletionTarget, system: string, text: str
     const translated = (await completeChat(target, [
       { role: 'system', content: system },
       { role: 'user', content: text },
-    ], signal ? AbortSignal.any([signal, timeout]) : timeout)).trim()
+    ], signal ? AbortSignal.any([signal, timeout]) : timeout, { purpose: 'translation' })).trim()
     if (!translated) return null
     if (!keepsMarkup(text, translated)) {
       console.warn('[chat-translation] translation dropped: markup changed')

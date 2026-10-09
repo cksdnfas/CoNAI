@@ -102,5 +102,5 @@ async function settleFields(setup: NonNullable<ReturnType<typeof judgeSetupOf>>,
     }
   }
   logJudgeRun({ setup, threadId: params.threadId, profileId: params.profile.id, stage: 'fields', messageId: params.messageId, replyId: message.routing?.replyId ?? null,
-    run: { connection: asked.connection, results, request: asked.request, latencyMs: asked.latencyMs, error: asked.error } })
+    run: { connection: asked.connection, results, request: asked.request, latencyMs: asked.latencyMs, tokens: asked.tokens, error: asked.error } })
 }

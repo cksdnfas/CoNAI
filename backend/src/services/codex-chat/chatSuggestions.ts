@@ -231,7 +231,7 @@ export async function suggestReplies(profile: ChatProfile, thread: CodexChatThre
     answer = await completeChat(runner.target, [
         { role: 'system', content: system },
         { role: 'user', content: prompt },
-      ], combined)
+      ], combined, { purpose: 'suggestion' })
   } catch (error) {
     if (signal?.aborted) throw new ChatSuggestError('추천을 멈췄어.', 499)
     if (timeout.aborted) throw new ChatSuggestError('추천이 너무 오래 걸려서 멈췄어.', 504)

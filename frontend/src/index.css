@@ -257,6 +257,12 @@
   --chat-diagnostics-window: #e5e2e1;
   --chat-diagnostics-reference: #b84a12;
   --chat-diagnostics-directives: #6b625e;
+  /* Categorical series for charts (LLM dashboard), fixed order, validated for CVD on this surface. */
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #d55181;
   --theme-primary-soft: #32170d;
   --theme-secondary-soft: #2f221d;
   --theme-shell-surface: rgb(19 19 19 / 0.72);
@@ -372,6 +378,11 @@
   --resource-lorebook: #6d58c4;
   --resource-judge: #2f6fb8;
   --chat-diagnostics-window: #d1ccca;
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
+  --chart-5: #e87ba4;
   --theme-shell-surface: rgb(245 242 241 / 0.72);
   --theme-floating-surface: rgb(235 225 221 / 0.88);
   --theme-shell-border: rgb(249 94 20 / 0.18);

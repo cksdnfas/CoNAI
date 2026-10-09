@@ -37,6 +37,7 @@ import { hasTranslation } from './chatModelRoles'
 import { endJudgedTurn, judgeBeforeReply, type JudgedTurn } from './chatJudge'
 import { judgeStatusFields } from './chatJudgeFields'
 import { stripEchoedAddresses } from '@conai/shared'
+import { recordLlmUsage, type LlmTokenCounts } from '../llmUsage'
 import { booksForRequest, hasLoreFiles, loreIndexText, selectRequestLore } from './chatLoreContext'
 import { rejectedLoreLine } from './chatLoreProposals'
 import { LlmChatService, type GroupReplyResult } from './llmChatService'
@@ -348,8 +349,36 @@ async function finishTurn(session: Session, turn: TurnState, status: CodexChatMe
   scheduleIdleClose(session)
 }
 
+/** Totals last seen for Codex threads no chat keeps (a chat keeps its own in codex_* columns). */
+const codexTotalsSeen = new Map<string, LlmTokenCounts>()
+
+/**
+ * Into the usage ledger: what this report added to the thread's totals since the last one. Codex reports after each
+ * model request; a total that went down (or a thread first seen) falls back to the last request's own counts.
+ */
+function recordCodexUsage(codexThreadId: string, last: LlmTokenCounts, total: LlmTokenCounts) {
+  const chatThread = CodexChatStore.findThreadByCodexId(codexThreadId)
+  const member = chatThread ? undefined : ChatGroupStore.findMemberByCodexId(codexThreadId)
+  const kept = chatThread ?? member
+  const seen = kept
+    ? (kept.codex_input_tokens === null ? undefined : { inputTokens: kept.codex_input_tokens, cachedInputTokens: kept.codex_cached_input_tokens ?? 0, outputTokens: kept.codex_output_tokens ?? 0 })
+    : codexTotalsSeen.get(codexThreadId)
+  if (!kept) codexTotalsSeen.set(codexThreadId, total)
+  const grew = seen && total.inputTokens >= seen.inputTokens && total.outputTokens >= seen.outputTokens
+  const tokens = grew
+    ? { inputTokens: total.inputTokens - seen.inputTokens, cachedInputTokens: Math.max(0, total.cachedInputTokens - seen.cachedInputTokens), outputTokens: total.outputTokens - seen.outputTokens }
+    : last
+  // The same totals again (a repeated report) added nothing.
+  if (tokens.inputTokens === 0 && tokens.outputTokens === 0) return
+  const profileId = chatThread?.profile_id ?? member?.profile_id ?? null
+  recordLlmUsage({
+    purpose: 'chat', engine: 'codex', providerName: 'codex', model: (profileId ? ChatProfileStore.find(profileId)?.model : null) || '',
+    profileId, threadId: chatThread?.id ?? member?.thread_id ?? null, tokens, latencyMs: 0, ok: true,
+  })
+}
+
 function recordTokenUsage(codexThreadId: string, value: unknown) {
-  const usage = value as { last?: { inputTokens?: number }; total?: { inputTokens?: number; cachedInputTokens?: number; outputTokens?: number }; modelContextWindow?: number | null } | undefined
+  const usage = value as { last?: { inputTokens?: number; cachedInputTokens?: number; outputTokens?: number }; total?: { inputTokens?: number; cachedInputTokens?: number; outputTokens?: number }; modelContextWindow?: number | null } | undefined
   if (!usage?.total) return
   const count = (tokens: unknown) => (typeof tokens === 'number' && Number.isFinite(tokens) ? Math.max(0, Math.round(tokens)) : 0)
   const values = {
@@ -360,6 +389,9 @@ function recordTokenUsage(codexThreadId: string, value: unknown) {
     cachedInputTokens: count(usage.total.cachedInputTokens),
     outputTokens: count(usage.total.outputTokens),
   }
+  recordCodexUsage(codexThreadId,
+    { inputTokens: count(usage.last?.inputTokens), cachedInputTokens: count(usage.last?.cachedInputTokens), outputTokens: count(usage.last?.outputTokens) },
+    { inputTokens: values.inputTokens, cachedInputTokens: values.cachedInputTokens, outputTokens: values.outputTokens })
   // A Codex thread belongs to a direct chat or to one member of a group room.
   CodexChatStore.setCodexUsage(codexThreadId, values)
   ChatGroupStore.setMemberCodexUsage(codexThreadId, values)

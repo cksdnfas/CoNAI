@@ -1,8 +1,9 @@
 import type { ChatJudgeItem } from '@conai/shared'
 import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../llmGenerationOptions'
-import { callTypesafeSystemOne, TYPESAFE_DEFAULT_MODEL, type TypesafeQuestion } from './typesafeClient'
-import { completeChat, resolveChatCompletionTarget, type ChatCompletionTarget } from '../codex-chat/llmChatCompletion'
+import { callTypesafeSystemOne, TYPESAFE_DEFAULT_MODEL, type TypesafeQuestion, type TypesafeResponse } from './typesafeClient'
+import { isCallerAbort, readUsageCounts, recordLlmUsage } from '../llmUsage'
+import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionTarget } from '../codex-chat/llmChatCompletion'
 import { primaryModelOf } from '../codex-chat/modelSlots'
 
 /**
@@ -105,7 +106,20 @@ function answerFromDistribution(question: JudgeQuestion, distribution: Record<st
 async function askTypesafe(connection: Extract<JudgeConnection, { engine: 'typesafe' }>, state: unknown, questions: JudgeQuestion[], signal?: AbortSignal) {
   const typed = Object.fromEntries(questions.map((question) => [question.id, typesafeQuestionOf(question)]))
   const request = { model: connection.model, state, questions: typed }
-  const response = await callTypesafeSystemOne({ baseUrl: connection.baseUrl, apiKey: connection.apiKey, model: connection.model, state, questions: typed, signal, timeoutMs: connection.timeoutMs })
+  const startedAt = Date.now()
+  const meter = (ok: boolean, response?: TypesafeResponse) => recordLlmUsage({
+    purpose: 'judge', engine: 'typesafe', providerName: connection.providerName, model: response?.model || connection.model,
+    tokens: response ? readUsageCounts(response) : null, latencyMs: Date.now() - startedAt, ok,
+  })
+  let response: TypesafeResponse
+  try {
+    response = await callTypesafeSystemOne({ baseUrl: connection.baseUrl, apiKey: connection.apiKey, model: connection.model, state, questions: typed, signal, timeoutMs: connection.timeoutMs })
+  } catch (error) {
+    if (!signal || !isCallerAbort(signal)) meter(false)
+    throw error
+  }
+  meter(true, response)
+  const counts = readUsageCounts(response)
   const answers = new Map<string, JudgeAnswer>()
   for (const question of questions) {
     const answer = response.answers[question.id]
@@ -118,7 +132,7 @@ async function askTypesafe(connection: Extract<JudgeConnection, { engine: 'types
       if (parsed) answers.set(question.id, { ...parsed, choice: typeof answer.choice === 'string' && question.options.some((option) => option.label === answer.choice) ? answer.choice : parsed.choice })
     }
   }
-  return { answers, request, model: response.model || connection.model }
+  return { answers, request, model: response.model || connection.model, tokens: counts ? counts.inputTokens + counts.outputTokens : null }
 }
 
 const LLM_JUDGE_PROMPT = [
@@ -149,11 +163,16 @@ async function askLlm(connection: Extract<JudgeConnection, { engine: 'llm' }>, s
   const request = { model: connection.model, state, questions: asked }
   const target = { ...connection.target, generation: { ...connection.target.generation, maxTokens: 200 + 60 * questions.length } }
   const timeout = AbortSignal.timeout(connection.target.timeoutMs ?? LLM_JUDGE_TIMEOUT_MS)
-  const reply = await completeChat(target, [
-    { role: 'system', content: LLM_JUDGE_PROMPT },
-    { role: 'user', content: JSON.stringify({ state, questions: asked }) },
-  ], signal ? AbortSignal.any([signal, timeout]) : timeout)
-  const parsed = parseJudgeJson(reply)
+  const result = await streamChatCompletion({
+    target,
+    messages: [
+      { role: 'system', content: LLM_JUDGE_PROMPT },
+      { role: 'user', content: JSON.stringify({ state, questions: asked }) },
+    ],
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    usage: { purpose: 'judge' },
+  })
+  const parsed = parseJudgeJson(result.content.trim())
   if (!parsed) throw new JudgeError('판단 LLM이 JSON으로 답하지 않았어.')
   const answers = new Map<string, JudgeAnswer>()
   for (const question of questions) {
@@ -162,7 +181,7 @@ async function askLlm(connection: Extract<JudgeConnection, { engine: 'llm' }>, s
     const answer = answerFromDistribution(question, distribution as Record<string, unknown>, null)
     if (answer) answers.set(question.id, answer)
   }
-  return { answers, request, model: connection.model }
+  return { answers, request, model: connection.model, tokens: result.usage ? result.usage.inputTokens + result.usage.outputTokens : null }
 }
 
 /** All questions in one call. Questions the judge left unanswered are missing from `answers`. */

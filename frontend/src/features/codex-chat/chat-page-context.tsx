@@ -72,9 +72,12 @@ const PAGE_VIEWS: Record<string, { param: string; values: readonly string[] }> =
   '/prompts': { param: 'tab', values: PROMPT_PAGE_VIEWS },
   '/sprite': { param: 'tab', values: ['extract', 'normalize', 'animation'] },
 }
-/** Views nested inside one of those views (settings › chat keeps its own ?view=). */
+/** Views nested inside one of those views (settings › chat and › LLM keep their own ?view=). */
 const NESTED_VIEWS: Record<string, string[]> = {
-  '/settings': ['resources', 'mine', 'judge'].map((view) => `/settings?section=chat&view=${view}`),
+  '/settings': [
+    ...['resources', 'mine'].map((view) => `/settings?section=chat&view=${view}`),
+    ...['connections', 'judge'].map((view) => `/settings?section=llm&view=${view}`),
+  ],
 }
 
 function withNavigation(editor: Editor | null, navigation: Editor | undefined): Editor | null {

@@ -5,6 +5,7 @@ import { withLlmRequestSlot } from './llmRequestScheduler'
 import { normalizeOptionalString } from '../utils/valueNormalization'
 import type { ProviderType } from '../types/externalApi'
 import { LlmRequestError, retryLlmRequest } from './llmRequestRetry'
+import { isCallerAbort, rawTokenEstimate, readUsageCounts, recordLlmUsage } from './llmUsage'
 import { primaryModelOf } from './codex-chat/modelSlots'
 
 type LlmResponseMode = 'text' | 'json'
@@ -699,39 +700,55 @@ export async function executeLlmTextRequest(request: ExecuteLlmTextRequest): Pro
   const inSlot = <T>(run: () => Promise<T>) => withLlmRequestSlot(providerName, readLlmConnectionConfig(provider.additional_config).maxConcurrentRequests, request.signal, run)
 
   let result: Awaited<ReturnType<typeof executeOpenAiCompatibleRequest>> | Awaited<ReturnType<typeof executeOllamaRequest>>
-  if (provider.provider_type === 'llm_ollama') {
-    result = await retryLlmRequest(() => inSlot(() => executeOllamaRequest({
-      baseUrl,
-      model,
-      prompt,
-      systemPrompt,
-      contextValue,
-      imageDataUrl,
-      generation,
-      responseMode,
-      structuredOutputJson,
-      timeoutMs,
-      signal: request.signal,
-    })), { signal: request.signal })
-  } else if (provider.provider_type === 'llm_openai_compatible') {
-    result = await retryLlmRequest(() => inSlot(() => executeOpenAiCompatibleRequest({
-      baseUrl,
-      apiKey,
-      model,
-      prompt,
-      systemPrompt,
-      contextValue,
-      imageDataUrl,
-      generation,
-      thinkingSwitch: readLlmConnectionConfig(provider.additional_config).thinkingSwitch,
-      responseMode,
-      structuredOutputJson,
-      timeoutMs,
-      signal: request.signal,
-    })), { signal: request.signal })
-  } else {
-    throw new Error(`이 연결은 LLM 실행용 타입이 아니야: ${provider.display_name}`)
+  const startedAt = Date.now()
+  // A server that reports no usage gets our estimate from the prompt and the reply.
+  const meter = (ok: boolean, answered?: { raw: unknown; model: string; text: string }) => {
+    const reported = answered ? readUsageCounts(answered.raw) : null
+    recordLlmUsage({
+      purpose: 'workflow', engine: 'api', providerName: provider.provider_name, model: answered?.model || model,
+      tokens: !answered ? null : reported ?? { inputTokens: rawTokenEstimate([systemPrompt, contextValue, prompt].filter(Boolean).join('\n')), cachedInputTokens: 0, outputTokens: rawTokenEstimate(answered.text) },
+      estimated: Boolean(answered && !reported), latencyMs: Date.now() - startedAt, ok,
+    })
   }
+  try {
+    if (provider.provider_type === 'llm_ollama') {
+      result = await retryLlmRequest(() => inSlot(() => executeOllamaRequest({
+        baseUrl,
+        model,
+        prompt,
+        systemPrompt,
+        contextValue,
+        imageDataUrl,
+        generation,
+        responseMode,
+        structuredOutputJson,
+        timeoutMs,
+        signal: request.signal,
+      })), { signal: request.signal })
+    } else if (provider.provider_type === 'llm_openai_compatible') {
+      result = await retryLlmRequest(() => inSlot(() => executeOpenAiCompatibleRequest({
+        baseUrl,
+        apiKey,
+        model,
+        prompt,
+        systemPrompt,
+        contextValue,
+        imageDataUrl,
+        generation,
+        thinkingSwitch: readLlmConnectionConfig(provider.additional_config).thinkingSwitch,
+        responseMode,
+        structuredOutputJson,
+        timeoutMs,
+        signal: request.signal,
+      })), { signal: request.signal })
+    } else {
+      throw new Error(`이 연결은 LLM 실행용 타입이 아니야: ${provider.display_name}`)
+    }
+  } catch (error) {
+    if (!request.signal || !isCallerAbort(request.signal)) meter(false)
+    throw error
+  }
+  meter(true, result)
 
   request.onDebugEvent?.({
     eventType: 'provider_response',

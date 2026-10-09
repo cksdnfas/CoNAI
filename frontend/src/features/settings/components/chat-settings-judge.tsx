@@ -49,7 +49,7 @@ function StatsTable({ stats, presetNames }: { stats: ChatJudgeItemStats[]; prese
   const multiplePresets = new Set(stats.map((entry) => entry.presetId)).size > 1
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[44rem] text-sm">
+      <table className="w-full min-w-[48rem] text-sm">
         <thead>
           <tr className="border-b border-line text-left text-2xs font-semibold tracking-overline text-muted-foreground uppercase">
             <th className="py-2 pr-3 font-semibold">{t({ ko: '항목', en: 'Item' })}</th>
@@ -59,6 +59,7 @@ function StatsTable({ stats, presetNames }: { stats: ChatJudgeItemStats[]; prese
             <th className="py-2 pr-3 text-right font-semibold">{t({ ko: '애매', en: 'Unsure' })}</th>
             <th className="py-2 pr-3 text-right font-semibold">{t({ ko: '실패', en: 'Failed' })}</th>
             <th className="py-2 pr-3 font-semibold">{t({ ko: '결과', en: 'Outcome' })}</th>
+            <th className="py-2 pr-3 text-right font-semibold">{t({ ko: '평균 토큰', en: 'Avg. tokens' })}</th>
             <th className="py-2 text-right font-semibold">{t({ ko: '평균 지연', en: 'Avg. latency' })}</th>
           </tr>
         </thead>
@@ -78,6 +79,7 @@ function StatsTable({ stats, presetNames }: { stats: ChatJudgeItemStats[]; prese
                 <td className={cn('py-2 pr-3 text-right tabular-nums', unsure > UNSURE_WARN && 'text-warning')}>{percent(entry.runs > 0 ? unsure : null)}</td>
                 <td className={cn('py-2 pr-3 text-right tabular-nums', entry.failed > 0 && 'text-destructive')}>{formatNumber(entry.failed)}</td>
                 <td className="py-2 pr-3 tabular-nums"><StatsOutcome stats={entry} /></td>
+                <td className="py-2 pr-3 text-right tabular-nums">{entry.averageTokens === null ? '—' : formatNumber(Math.round(entry.averageTokens))}</td>
                 <td className="py-2 text-right tabular-nums">{entry.averageLatencyMs === null ? '—' : `${formatNumber(entry.averageLatencyMs / 1000, { maximumFractionDigits: 2 })}s`}</td>
               </tr>
             )
@@ -150,7 +152,7 @@ function LogRow({ run }: { run: ChatJudgeLogRun }) {
 }
 
 /**
- * Settings › Chat › 판단: whether the judge decides well and where its thresholds need moving. Per-item stats for the
+ * Settings › LLM › 판단: whether the judge decides well and where its thresholds need moving. Per-item stats for the
  * period first, then the runs, each unfolding to the request it sent (the original conversation) and what came of it.
  */
 export function ChatSettingsJudge() {

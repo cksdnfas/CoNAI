@@ -7,6 +7,7 @@ import { CLAUDE_CHAT_PROVIDER, streamClaudeChatCompletion } from './claudeChatCo
 import type { ChatMcpToolResult } from './chatMcpBridge'
 import { primaryModelOf } from './modelSlots'
 import { createRepetitionWatch, withoutRepetition } from './repetitionGuard'
+import { isCallerAbort, rawMessagesEstimate, rawTokenEstimate, readUsageCounts, recordLlmUsage, type LlmTokenCounts, type LlmUsageTag } from '../llmUsage'
 
 export type ChatCompletionToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } }
 
@@ -49,6 +50,8 @@ export type ChatCompletionResult = {
   finishReason: string | null
   /** Prompt tokens the server reported, when it reports usage. */
   promptTokens: number | null
+  /** Everything the server reported about this request's tokens, when it reports usage. */
+  usage?: LlmTokenCounts | null
   /**
    * finishReason 'repetition': the model was looping, so the stream was stopped and this many characters were cut off
    * the end of the content (they had already gone out through onContent).
@@ -284,14 +287,12 @@ function readJsonCompletion(json: unknown): ChatCompletionResult {
     toolCalls: finalizeToolCalls(drafts),
     finishReason: typeof choice.finish_reason === 'string' ? choice.finish_reason : null,
     promptTokens: readPromptTokens(json),
+    usage: readUsageCounts(json),
   }
 }
 
-/**
- * One chat-completions request, streamed. Content and reasoning deltas are reported as they arrive; tool calls are
- * assembled from their deltas and returned once the model stops.
- */
-export async function streamChatCompletion(params: {
+/** One chat-completions request; `meter.startedAt` is set once it has its request slot. */
+async function requestChatCompletion(meter: { startedAt: number }, params: {
   target: ChatCompletionTarget
   messages: ChatCompletionMessage[]
   tools?: ChatCompletionTool[]
@@ -308,6 +309,7 @@ export async function streamChatCompletion(params: {
   stopLoops?: boolean
 }): Promise<ChatCompletionResult> {
   const release = await acquireLlmRequestSlot(params.target.providerName, params.target.maxConcurrentRequests ?? 1, params.signal)
+  meter.startedAt = Date.now()
   const controller = new AbortController()
   const signal = controller.signal
   const abort = () => controller.abort(params.signal.reason)
@@ -389,6 +391,7 @@ export async function streamChatCompletion(params: {
     let reasoning = ''
     let finishReason: string | null = null
     let promptTokens: number | null = null
+    let usage: LlmTokenCounts | null = null
     const drafts = new Map<number, ToolCallDraft>()
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
     let buffer = ''
@@ -406,6 +409,7 @@ export async function streamChatCompletion(params: {
         return
       }
       promptTokens = readPromptTokens(json) ?? promptTokens
+      usage = readUsageCounts(json) ?? usage
       if (json.error) {
         const error = json.error as { message?: string; code?: unknown; status?: unknown }
         const status = Number(error.status ?? error.code)
@@ -459,14 +463,14 @@ export async function streamChatCompletion(params: {
       if (looping) {
         await reader.cancel().catch(() => {})
         const kept = withoutRepetition(content)
-        return { content: kept, reasoning, toolCalls: [], finishReason: 'repetition', promptTokens, loopCut: content.length - kept.length }
+        return { content: kept, reasoning, toolCalls: [], finishReason: 'repetition', promptTokens, usage, loopCut: content.length - kept.length }
       }
     }
     if (buffer.trim()) {
       handleEvent(buffer.split(/\r?\n/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n'))
     }
 
-    return { content, reasoning, toolCalls: finalizeToolCalls(drafts), finishReason, promptTokens }
+    return { content, reasoning, toolCalls: finalizeToolCalls(drafts), finishReason, promptTokens, usage }
   } catch (error) {
     signal.throwIfAborted()
     throw error
@@ -478,8 +482,44 @@ export async function streamChatCompletion(params: {
   }
 }
 
+type ChatCompletionParams = Parameters<typeof requestChatCompletion>[1]
+
+/**
+ * One chat-completions request, streamed. Content and reasoning deltas are reported as they arrive; tool calls are
+ * assembled from their deltas and returned once the model stops. Every request that got to the model goes into the
+ * usage ledger under `usage` (what it was for), with estimated counts when the server reports none.
+ */
+export async function streamChatCompletion(params: ChatCompletionParams & { usage?: LlmUsageTag }): Promise<ChatCompletionResult> {
+  const meter = { startedAt: 0 }
+  const record = (result: ChatCompletionResult | null) => {
+    const estimate = result && !result.usage
+    recordLlmUsage({
+      ...(params.usage ?? { purpose: 'other' }),
+      engine: params.target.transport === 'claude-code' ? 'claude-code' : 'api',
+      providerName: params.target.providerName,
+      model: params.target.model,
+      tokens: !result ? null : result.usage ?? {
+        inputTokens: rawMessagesEstimate(params.messages, params.tools ?? []),
+        cachedInputTokens: 0,
+        outputTokens: rawTokenEstimate(result.content + result.reasoning + result.toolCalls.map((call) => call.function.name + call.function.arguments).join('')),
+      },
+      estimated: Boolean(estimate),
+      latencyMs: Date.now() - meter.startedAt,
+      ok: result !== null,
+    })
+  }
+  try {
+    const result = await requestChatCompletion(meter, params)
+    record(result)
+    return result
+  } catch (error) {
+    if (meter.startedAt && !isCallerAbort(params.signal)) record(null)
+    throw error
+  }
+}
+
 /** One non-streamed completion (summaries). */
-export async function completeChat(target: ChatCompletionTarget, messages: ChatCompletionMessage[], signal: AbortSignal) {
-  const result = await streamChatCompletion({ target, messages, signal })
+export async function completeChat(target: ChatCompletionTarget, messages: ChatCompletionMessage[], signal: AbortSignal, usage?: LlmUsageTag) {
+  const result = await streamChatCompletion({ target, messages, signal, usage })
   return result.content.trim()
 }

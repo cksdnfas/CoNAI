@@ -371,6 +371,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           allowCompatibilityFallback: !turn.reaction,
           stopLoops: true,
           maxToolRounds: profile.maxToolRounds,
+          usage: { purpose: 'chat', profileId: profile.id, threadId: turn.threadId },
           callTool: bridge ? async (name, args, id) => {
             requireProfileAccess(requester, profile)
             return (await runToolCall(turn, bridge, { id, function: { name, arguments: JSON.stringify(args) } }, profile.toolOutputLimit, [])).nativeResult

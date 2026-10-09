@@ -205,6 +205,8 @@ export type ChatJudgeItemStats = {
   /** Of the follow-ups sent: share the user answered. */
   followUpAnswerRate: number | null
   averageLatencyMs: number | null
+  /** Tokens per judge call that asked this item, where the server reported them. */
+  averageTokens: number | null
 }
 
 export type ChatJudgeTestTurn = {

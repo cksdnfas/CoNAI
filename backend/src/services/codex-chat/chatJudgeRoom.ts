@@ -65,7 +65,7 @@ export async function judgeRoute(params: { thread: CodexChatThreadRecord; member
   const probability = answer?.choice ? answer.distribution?.[answer.choice] ?? 0 : 0
   const chosen = picked && probability >= settings.minProbability ? picked : null
   logJudgeRun({ setup, threadId: params.thread.id, profileId: null, stage: 'route', messageId: params.messageId, replyId: null, run: {
-    connection: asked.connection, request: asked.request, latencyMs: asked.latencyMs, error: asked.error,
+    connection: asked.connection, request: asked.request, latencyMs: asked.latencyMs, tokens: asked.tokens, error: asked.error,
     results: [{ ...logItem('route', '답할 사람', answer, picked?.name ?? null, chosen ? 'yes' : 'uncertain', chosen ? 'route' : 'none'), probability: answer ? probability : null }],
   } })
   return chosen?.id ?? null
@@ -97,7 +97,7 @@ export async function judgeNext(params: { thread: CodexChatThreadRecord; members
     : null
   const next = goesOn ? best : null
   logJudgeRun({ setup, threadId: params.thread.id, profileId: null, stage: 'next', messageId: params.message.id, replyId: null, run: {
-    connection: asked.connection, request: asked.request, latencyMs: asked.latencyMs, error: asked.error,
+    connection: asked.connection, request: asked.request, latencyMs: asked.latencyMs, tokens: asked.tokens, error: asked.error,
     results: [logItem('next', '이어 말하기', answer, next?.name ?? (answer ? '(사용자 차례)' : null), !answer ? 'uncertain' : next ? 'yes' : 'no', next ? 'next' : 'wait')],
   } })
   return next?.id ?? null

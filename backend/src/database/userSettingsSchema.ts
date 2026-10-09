@@ -842,6 +842,26 @@ export function createUserSettingsSchema(db: Database.Database): void {
     PRIMARY KEY (run_id, item_id)
   )`);
   db.exec('CREATE INDEX IF NOT EXISTS idx_chat_judge_items_item ON chat_judge_items(item_id)');
+  const judgeRunColumns = (db.prepare('PRAGMA table_info(chat_judge_runs)').all() as Array<{ name: string }>).map((column) => column.name);
+  if (!judgeRunColumns.includes('tokens')) db.exec('ALTER TABLE chat_judge_runs ADD COLUMN tokens INTEGER');
+  // One row per model request (llmUsage.ts), for the LLM dashboard. No foreign keys: usage outlives a deleted chat.
+  db.exec(`CREATE TABLE IF NOT EXISTS llm_usage_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    purpose TEXT NOT NULL,
+    engine TEXT NOT NULL,
+    provider_name TEXT NOT NULL DEFAULT '',
+    model TEXT NOT NULL DEFAULT '',
+    profile_id INTEGER,
+    thread_id INTEGER,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    cached_input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    estimated INTEGER NOT NULL DEFAULT 0,
+    latency_ms INTEGER NOT NULL DEFAULT 0,
+    ok INTEGER NOT NULL DEFAULT 1
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_llm_usage_events_created ON llm_usage_events(created_at)');
   // LLM chat summaries by stretch of conversation: level 0 summarizes messages from..until, level 1 (at most one per
   // thread) is the plot folded from the older level-0 rows, which stay for recall. `codex_chat_threads.summary` keeps
   // the rendered text the model gets.

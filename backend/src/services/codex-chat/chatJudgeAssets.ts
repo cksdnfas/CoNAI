@@ -37,7 +37,7 @@ export async function judgeExpression(params: { profile: ChatProfile; emotions: 
     const answer = asked.answers.get('emotion')
     const picked = answer?.choice ? emotions[Number(answer.choice.slice(1)) - 1] ?? null : null
     logJudgeRun({ setup, threadId: null, profileId: params.profile.id, stage: 'asset', messageId: null, replyId: null, run: {
-      connection: asked.connection, request: asked.request, latencyMs: asked.latencyMs, error: asked.error,
+      connection: asked.connection, request: asked.request, latencyMs: asked.latencyMs, tokens: asked.tokens, error: asked.error,
       results: [{
         itemId: 'emotion', name: `표정: ${params.emotion}`.slice(0, 40), stage: 'asset', tools: [],
         probability: answer?.probability ?? null, confidence: answer?.confidence ?? null, choice: picked,

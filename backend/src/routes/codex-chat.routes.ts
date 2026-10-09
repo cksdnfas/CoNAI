@@ -37,6 +37,7 @@ import { testJudgePreset } from '../services/codex-chat/chatJudge'
 import type { ChatJudgePresetInput } from '@conai/shared'
 import { ModelSlotStore } from '../services/codex-chat/modelSlots'
 import { buildModelUsage } from '../services/codex-chat/modelUsage'
+import { buildLlmUsageSummary } from '../services/llmUsage'
 import { effectiveModelOf, modelLabelOf } from '../services/codex-chat/chatModelRoles'
 import { ChatGenerationPresetStore, readGenerationPresetFile, type ChatGenerationPresetInput } from '../services/codex-chat/chatGenerationPresets'
 import { CodexChatStore, type CodexChatMessageRecord } from '../services/codex-chat/codexChatStore'
@@ -1161,6 +1162,17 @@ router.delete('/admin/model-slots/:slotId', requireAdmin, (req: Request, res: Re
 /** Saved workflow nodes per model row (a row's other uses come with the row). */
 router.get('/admin/model-usage', requireAdmin, (_req: Request, res: Response) => {
   res.json({ success: true, data: buildModelUsage() })
+})
+
+/** GET /admin/llm-usage?days=7|30&offset=<minutes east of UTC> — the LLM dashboard: requests and tokens by day, purpose and model. */
+router.get('/admin/llm-usage', requireAdmin, (req: Request, res: Response) => {
+  const days = Number(req.query.days ?? 7)
+  const offset = Number(req.query.offset ?? 0)
+  if (!Number.isSafeInteger(days) || days < 1 || days > 90 || !Number.isSafeInteger(offset) || Math.abs(offset) > 14 * 60) {
+    sendRouteBadRequest(res, 'Invalid days or offset')
+    return
+  }
+  res.json({ success: true, data: buildLlmUsageSummary(days, offset) })
 })
 
 /** Tool presets (MCP scopes + tool allowlist). Profiles link one by id, so an edit reaches every linked profile at once. */

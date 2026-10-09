@@ -11,6 +11,7 @@ import { runtimePaths } from '../../config/runtimePaths'
 import { claudeConfigDir, claudeEnvironment, getClaudeStatus, resolveClaudeCommand, reserveClaudeRequest } from '../claudeCli'
 import { compareCodexVersions, killCodexProcessTree, scheduleCodexProcessTimeout } from '../codexGenerationExecutor'
 import { isClaudeReasoningEffort } from '../llmGenerationOptions'
+import { readUsageCounts } from '../llmUsage'
 import type { ChatMcpToolResult } from './chatMcpBridge'
 import type { ChatCompletionMessage, ChatCompletionResult, ChatCompletionTarget, ChatCompletionTool } from './llmChatCompletion'
 
@@ -169,7 +170,8 @@ export async function streamClaudeChatCompletion(params: {
           if (code !== 0 || !verified || !result || result.is_error === true || result.subtype !== 'success') throw new Error('Claude Code 요청에 실패했어. 인증 상태, 모델 및 사용량 한도를 확인해줘.')
           const finalText = typeof result.result === 'string' ? result.result : content
           if (!content && finalText) params.onContent?.(finalText)
-          resolve({ content: finalText, reasoning, toolCalls: [], finishReason, promptTokens: null })
+          // The result event totals the run (every tool round): input counts cache reads and writes too.
+          resolve({ content: finalText, reasoning, toolCalls: [], finishReason, promptTokens: null, usage: readUsageCounts(result) })
         } catch (error) { reject(error) }
       })
     })

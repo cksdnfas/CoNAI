@@ -82,8 +82,8 @@ const IntegrationToolsTabLazy = lazy(async () => {
 })
 
 const LlmSettingsTabLazy = lazy(async () => {
-  const module = await import('./components/llm-connections-tab')
-  return { default: module.LlmConnectionsTab }
+  const module = await import('./components/llm-settings-tab')
+  return { default: module.LlmSettingsTab }
 })
 
 const ChatSettingsTabLazy = lazy(async () => {

@@ -24,6 +24,7 @@ import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord
 import { ChatSummaryStore, recallText, selectRecall, splitSegments, type ChatSummarySegment } from './chatMemory'
 import type { JudgedContext } from './chatJudgeContext'
 import { REFERENCE_BLOCK_START, resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool, type ChatContentPart } from './llmChatCompletion'
+import { rawMessagesEstimate as rawUsageEstimate, rawTokenEstimate } from '../llmUsage'
 
 /** Tool output replayed to the model for turns still in the window. */
 const REPLAYED_TOOL_OUTPUT_LENGTH = 4000
@@ -185,17 +186,6 @@ export function splitTurns(messages: CodexChatMessageRecord[]) {
 /** Server-reported prompt tokens ÷ our estimate, per profile, so the estimate tracks each model's tokenizer. */
 const estimateRatios = new Map<number, number>()
 
-/** Rough tokens: ~4 ASCII characters or ~1 other character (Korean, CJK) per token. Errs high. */
-function rawTokenEstimate(text: string) {
-  let ascii = 0
-  let other = 0
-  for (const char of text) {
-    if (char.charCodeAt(0) < 128) ascii += 1
-    else other += 1
-  }
-  return Math.ceil(ascii / 4 + other)
-}
-
 export function estimateTokens(profileId: number, text: string) {
   return Math.ceil(rawTokenEstimate(text) * (estimateRatios.get(profileId) ?? 1))
 }
@@ -215,17 +205,7 @@ export function recordPromptUsage(profileId: number, rawEstimate: number, prompt
 }
 
 export function rawMessagesEstimate(messages: ChatCompletionMessage[], tools: ChatCompletionTool[] = []) {
-  // App tools supply <=512px previews. Reserve an approximate image allowance instead of
-  // counting their base64 transport encoding as text tokens; provider tokenizers differ.
-  let imageCount = 0
-  const textMessages = messages.map((message) => message.role === 'user' && Array.isArray(message.content)
-    ? { ...message, content: message.content.map((part) => {
-      if (part.type !== 'image_url') return part
-      imageCount += 1
-      return { type: 'image_url', image_url: { url: '(image)' } }
-    }) }
-    : message)
-  return rawTokenEstimate(JSON.stringify(textMessages) + (tools.length > 0 ? JSON.stringify(tools) : '')) + imageCount * 2048
+  return rawUsageEstimate(messages, tools)
 }
 
 // ---- Window ---------------------------------------------------------------------------------------------------
@@ -860,6 +840,7 @@ export async function completeSummary(profile: ChatProfile, system: string, cont
     target,
     messages: [{ role: 'system', content: system }, { role: 'user', content }],
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    usage: { purpose: 'summary', profileId: profile.id },
   })
   // A summary cut by the cap is a runaway, not a summary: keep nothing, so the next fold tries again.
   if (capped && result.finishReason === 'length') {

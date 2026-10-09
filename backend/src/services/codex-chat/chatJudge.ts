@@ -123,7 +123,14 @@ export type JudgeRun = {
   results: JudgeLogItem[]
   request: unknown
   latencyMs: number
+  /** Tokens the judge calls used, as their servers reported; null when none reported. */
+  tokens: number | null
   error: string | null
+}
+
+/** Adds a call's tokens to a run's; unknown stays unknown only while every call is. */
+function addTokens(total: number | null, more: number | null) {
+  return more === null ? total : (total ?? 0) + more
 }
 
 /** Questions built in code (not preset items) in one call: their answers by id, the request as sent, and any error. */
@@ -133,10 +140,12 @@ export async function askBuiltQuestions(setup: Pick<JudgeSetup, 'providerName' |
   const answers = new Map<string, JudgeAnswer>()
   const connection = questions.length > 0 ? connectionOf(setup, errors) : null
   let request: unknown = { state, questions: questions.map((question) => question.id) }
+  let tokens: number | null = null
   if (connection) {
     try {
       const result = await askJudge(connection, state, questions, signal)
       request = result.request
+      tokens = result.tokens
       for (const [id, answer] of result.answers) answers.set(id, answer)
       if (result.answers.size < questions.length) errors.push('판단 모델이 일부 질문에 답하지 않았어.')
     } catch (error) {
@@ -144,7 +153,7 @@ export async function askBuiltQuestions(setup: Pick<JudgeSetup, 'providerName' |
       errors.push(messageOf(error))
     }
   }
-  return { connection, answers, request, latencyMs: Date.now() - started, error: errors.length ? [...new Set(errors)].join(' / ') : null }
+  return { connection, answers, request, latencyMs: Date.now() - started, tokens, error: errors.length ? [...new Set(errors)].join(' / ') : null }
 }
 
 /**
@@ -156,6 +165,7 @@ export async function runJudgeItems(setup: JudgeSetup, profile: ChatProfile, ite
   const answers = new Map<string, JudgeAnswer>()
   const requests: unknown[] = []
   const errors: string[] = []
+  let tokens: number | null = null
   const connection = items.length > 0 ? connectionOf(setup, errors) : null
   if (connection) {
     const windows = [...new Set(items.map((item) => item.window))]
@@ -165,6 +175,7 @@ export async function runJudgeItems(setup: JudgeSetup, profile: ChatProfile, ite
       try {
         const result = await askJudge(connection, state, group, signal)
         requests.push(result.request)
+        tokens = addTokens(tokens, result.tokens)
         for (const [id, answer] of result.answers) answers.set(id, answer)
         if (result.answers.size < group.length) errors.push('판단 모델이 일부 질문에 답하지 않았어.')
       } catch (error) {
@@ -201,6 +212,7 @@ export async function runJudgeItems(setup: JudgeSetup, profile: ChatProfile, ite
         try {
           const result = await askJudge(llm, stateFor(window), group, signal)
           requests.push({ escalation: true, ...(result.request as object) })
+          tokens = addTokens(tokens, result.tokens)
           for (const item of group) {
             const answer = result.answers.get(item.id)
             const entry = results.find((candidate) => candidate.itemId === item.id)
@@ -220,7 +232,7 @@ export async function runJudgeItems(setup: JudgeSetup, profile: ChatProfile, ite
     const item = items.find((candidate) => candidate.id === entry.itemId) as ChatJudgeItem
     entry.action = entry.decidedBy === 'fallback' ? 'none' : actionOf(item, entry.verdict)
   }
-  return { connection, results, request: requests.length === 1 ? requests[0] : requests, latencyMs: Date.now() - started, error: errors.length ? [...new Set(errors)].join(' / ') : null }
+  return { connection, results, request: requests.length === 1 ? requests[0] : requests, latencyMs: Date.now() - started, tokens, error: errors.length ? [...new Set(errors)].join(' / ') : null }
 }
 
 /** One run in the judge log (best effort: a failed write never fails the turn). Returns its id, 0 when not written. */
@@ -230,7 +242,7 @@ export function logJudgeRun(params: { setup: Pick<JudgeSetup, 'preset' | 'provid
     return ChatJudgeLogStore.add({
       threadId: params.threadId, profileId: params.profileId, presetId: setup.preset.id, stage: params.stage, messageId: params.messageId, replyId: params.replyId,
       engine: run.connection?.engine ?? 'typesafe', providerName: setup.providerName, model: run.connection?.model ?? setup.model,
-      latencyMs: run.latencyMs, error: run.error, request: run.request, items: run.results,
+      latencyMs: run.latencyMs, tokens: run.tokens, error: run.error, request: run.request, items: run.results,
     })
   } catch (error) {
     console.warn('[chat-judge] log failed:', messageOf(error))
@@ -304,6 +316,7 @@ export async function judgeBeforeReply(params: { profile: ChatProfile; threadId:
         results: [...run.results, ...(settled?.results ?? [])],
         request: items.length ? [run.request, asked.request].flat() : asked.request,
         latencyMs: Math.max(run.latencyMs, asked.latencyMs),
+        tokens: addTokens(run.tokens, asked.tokens),
         error: [run.error, asked.error].filter(Boolean).join(' / ') || null,
       }
     : run

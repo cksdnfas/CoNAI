@@ -1,0 +1,3 @@
+/** Text tabs inside a settings tab (Chat, LLM): plain labels on a hairline, the active one underlined. */
+export const SETTINGS_TEXT_TAB_LIST_CLASS = 'flex w-full flex-nowrap gap-5 rounded-none border-b border-line bg-transparent p-0'
+export const SETTINGS_TEXT_TAB_TRIGGER_CLASS = 'relative rounded-none px-0 pb-2 pt-0 text-sm font-semibold text-muted-foreground hover:bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-primary after:opacity-0 data-[state=active]:after:opacity-100'
