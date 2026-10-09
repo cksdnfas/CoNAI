@@ -110,6 +110,8 @@ export async function startRuntimeSideEffectServices(
   ChatTaskRunner.start()
   const { ChatRoutineRunner } = await import('../services/codex-chat/chatRoutines')
   ChatRoutineRunner.start()
+  const { PostBotRunner } = await import('../services/posts/postBotRunner')
+  PostBotRunner.start()
   try {
     // Audio orders whose rows were stored but not queued before the last shutdown/crash.
     const { reconcileAllAudioOrders } = await import('../services/audio/audioOrders')

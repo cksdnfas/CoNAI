@@ -25,6 +25,9 @@ export class ChatWakeBusyError extends Error {
 
 /** What the model reads: the instruction, framed as the app's request rather than the person's words. */
 export function wakeInstructionText(routing: ChatRoutineRouting, instruction: string) {
+  if (routing.source === 'post') {
+    return [`[Posts board call on "${routing.name}" — sent by the app, not typed by the person]`, '', instruction.trim()].join('\n')
+  }
   const sender = routing.source === 'routine' ? `Routine "${routing.name}"` : `Workflow "${routing.name}"`
   return [
     `[${sender} — sent by the app on a schedule, not typed by the person]`,

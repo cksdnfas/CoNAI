@@ -223,7 +223,7 @@ export function ChatRoutineEventLine({ routing, text }: { routing: ChatRoutineRo
     <div className="flex items-center gap-3 py-1 text-xs text-muted-foreground">
       <span className="h-px flex-1 bg-line" />
       <span className="min-w-0 truncate">
-        {routing.source === 'routine' ? t({ ko: '루틴', en: 'Routine' }) : t({ ko: '워크플로', en: 'Workflow' })}
+        {routing.source === 'routine' ? t({ ko: '루틴', en: 'Routine' }) : routing.source === 'post' ? t({ ko: '게시판', en: 'Posts' }) : t({ ko: '워크플로', en: 'Workflow' })}
         {routing.name ? ` · ${routing.name}` : ''}
       </span>
       <span className="h-px flex-1 bg-line" />
