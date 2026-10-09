@@ -1,6 +1,6 @@
 import type { TranslationDictionary } from '@/i18n'
 
-export type SettingsTab = 'general' | 'library' | 'media' | 'auto' | 'generation' | 'chat' | 'llm' | 'accounts' | 'system' | 'maintenance'
+export type SettingsTab = 'general' | 'library' | 'media' | 'auto' | 'generation' | 'chat' | 'posts' | 'llm' | 'accounts' | 'system' | 'maintenance'
 
 export type SettingsTabGroup = 'personalization' | 'library' | 'services' | 'administration'
 
@@ -16,6 +16,7 @@ export const SETTINGS_TAB_ITEMS: SettingsTabItem[] = [
   { value: 'auto', group: 'services' },
   { value: 'generation', group: 'services' },
   { value: 'chat', group: 'services' },
+  { value: 'posts', group: 'services' },
   { value: 'llm', group: 'services' },
   { value: 'accounts', group: 'administration' },
   { value: 'system', group: 'administration' },
@@ -30,6 +31,7 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTab, TranslationDictionary> = {
   auto: { ko: '자동화 및 분석', en: 'Automation and analysis' },
   generation: { ko: '생성 및 AI', en: 'Generation and AI' },
   chat: { ko: '채팅', en: 'Chat' },
+  posts: { ko: '게시판', en: 'Posts' },
   llm: { ko: 'LLM', en: 'LLM' },
   accounts: { ko: '계정·권한', en: 'Accounts and access' },
   system: { ko: '시스템', en: 'System' },

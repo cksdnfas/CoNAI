@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { reextractAllImageMetadata, updateGenerationThrottleSettings, updateImageSaveSettings, updateMetadataSettings, updateThumbnailSettings, updateVideoOptimizationSettings } from '@/lib/api-settings'
 import { getAppSettings, updateGeneralSettings } from '@/lib/api-settings-general'
+import { getPostsSettings, updatePostsSettings } from '@/lib/api-posts'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { APP_BRAND_TOOLTIP, APP_VERSION_LABEL } from '@/lib/app-metadata'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -18,6 +19,8 @@ import type {
   GeneralSettings,
   ImageSaveSettings,
   MetadataExtractionSettings,
+  PostsSafetySettings,
+  PostsSettings,
   ThumbnailSettings,
   VideoOptimizationSettings,
 } from '@conai/shared'
@@ -88,6 +91,11 @@ const LlmSettingsTabLazy = lazy(async () => {
   return { default: module.LlmSettingsTab }
 })
 
+const PostsSettingsTabLazy = lazy(async () => {
+  const module = await import('./components/posts-settings-tab')
+  return { default: module.PostsSettingsTab }
+})
+
 const ChatSettingsTabLazy = lazy(async () => {
   const module = await import('./components/chat-settings-tab')
   return { default: module.ChatSettingsTab }
@@ -136,6 +144,7 @@ export function SettingsPage() {
   const [thumbnailDraft, setThumbnailDraft] = useState<ThumbnailSettings | null>(null)
   const [generationThrottleDraft, setGenerationThrottleDraft] = useState<GenerationThrottleSettings | null>(null)
   const [videoOptimizationDraft, setVideoOptimizationDraft] = useState<VideoOptimizationSettings | null>(null)
+  const [postsDraft, setPostsDraft] = useState<PostsSettings | null>(null)
   const [isSavingAll, setIsSavingAll] = useState(false)
   const canOpenSettings = authStatusQuery.data?.isAdmin === true || authStatusQuery.data?.hasCredentials !== true
 
@@ -175,6 +184,9 @@ export function SettingsPage() {
     enabled: canOpenSettings,
   })
 
+  // Posts keep their own settings file (config/posts.json) behind /api/posts/settings.
+  const postsSettingsQuery = useQuery({ queryKey: ['post-settings'], queryFn: getPostsSettings, enabled: canOpenSettings })
+
   const notifyInfo = (message: string) => {
     showSnackbar({ message, tone: 'info' })
   }
@@ -210,6 +222,7 @@ export function SettingsPage() {
   const effectiveThumbnailDraft = thumbnailDraft ?? settingsQuery.data?.thumbnail ?? null
   const effectiveGenerationThrottleDraft = generationThrottleDraft ?? settingsQuery.data?.generationThrottle ?? null
   const effectiveVideoOptimizationDraft = videoOptimizationDraft ?? settingsQuery.data?.videoOptimization ?? null
+  const effectivePostsDraft = postsDraft ?? postsSettingsQuery.data ?? null
   const savedAppearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
   const savedGeneral = settingsQuery.data?.general
   const isGeneralSectionDirty = (section: GeneralPreferenceSection) => Boolean(
@@ -224,6 +237,7 @@ export function SettingsPage() {
   const isImageSaveDraftDirty = Boolean(effectiveImageSaveDraft && settingsQuery.data?.imageSave && !areSettingsDraftsEqual(effectiveImageSaveDraft, settingsQuery.data.imageSave))
   const isThumbnailDraftDirty = Boolean(effectiveThumbnailDraft && settingsQuery.data?.thumbnail && !areSettingsDraftsEqual(effectiveThumbnailDraft, settingsQuery.data.thumbnail))
   const isGenerationThrottleDraftDirty = Boolean(effectiveGenerationThrottleDraft && settingsQuery.data?.generationThrottle && !areSettingsDraftsEqual(effectiveGenerationThrottleDraft, settingsQuery.data.generationThrottle))
+  const isPostsDraftDirty = Boolean(effectivePostsDraft && postsSettingsQuery.data && !areSettingsDraftsEqual(effectivePostsDraft, postsSettingsQuery.data))
   const isVideoOptimizationDraftDirty = Boolean(effectiveVideoOptimizationDraft && settingsQuery.data?.videoOptimization && !areSettingsDraftsEqual(effectiveVideoOptimizationDraft, settingsQuery.data.videoOptimization))
 
   const { tabProps: appearanceTabProps, draftSection: appearanceDraftSection } = useAppearanceSettingsTab({
@@ -312,6 +326,14 @@ export function SettingsPage() {
     },
   })
 
+  const postsMutation = useMutation({
+    mutationFn: updatePostsSettings,
+    onSuccess: (settings) => {
+      queryClient.setQueryData(['post-settings'], settings)
+      setPostsDraft(settings)
+    },
+  })
+
   const generalSectionLabels: Record<GeneralPreferenceSection, string> = {
     basic: t({ ko: '기본', en: 'Basics' }),
     appearance: t({ ko: '탐색 및 표시', en: 'Navigation and display' }),
@@ -384,6 +406,16 @@ export function SettingsPage() {
         if (effectiveGenerationThrottleDraft) await generationThrottleMutation.mutateAsync(effectiveGenerationThrottleDraft)
       },
       discard: () => setGenerationThrottleDraft(null),
+    },
+    {
+      id: 'posts',
+      label: t({ ko: '게시판', en: 'Posts' }),
+      tab: 'posts',
+      isDirty: isPostsDraftDirty,
+      save: async () => {
+        if (effectivePostsDraft) await postsMutation.mutateAsync(effectivePostsDraft)
+      },
+      discard: () => setPostsDraft(null),
     },
   ]
   const dirtySections = draftSections.filter((section) => section.isDirty)
@@ -545,6 +577,11 @@ export function SettingsPage() {
     })
   }
 
+  const patchPostsDraft = (patch: Omit<Partial<PostsSettings>, 'safety'> & { safety?: Partial<PostsSafetySettings> }) => {
+    if (!effectivePostsDraft) return
+    setPostsDraft({ ...effectivePostsDraft, ...patch, safety: { ...effectivePostsDraft.safety, ...patch.safety } })
+  }
+
   const patchVideoOptimizationDraft = (patch: Partial<VideoOptimizationSettings>) => {
     if (!effectiveVideoOptimizationDraft) return
     setVideoOptimizationDraft({ ...effectiveVideoOptimizationDraft, ...patch })
@@ -606,6 +643,10 @@ export function SettingsPage() {
               {...imageSaveTabProps}
               showGenerationThrottle={false}
             />
+          ) : null}
+
+          {activeTab === 'posts' ? (
+            <PostsSettingsTabLazy draft={effectivePostsDraft} onPatch={patchPostsDraft} dirty={isPostsDraftDirty} />
           ) : null}
 
           {activeTab === 'auto' ? (
