@@ -173,8 +173,9 @@ export function ComfyWorkflowMarkedFieldList({
                   onDragOver={dragOverField(group.key, field.id)}
                   onDrop={dropOnField(group.key, field.id)}
                   className={cn(
-                    'mx-2 flex h-9 items-center rounded-sm transition-colors',
-                    isSelected ? 'bg-fill' : 'hover:bg-fill/60',
+                    // The row, not the button, carries the selection bar and focus ring so neither lands on the label.
+                    'mx-2 flex h-9 items-center rounded-sm transition-colors has-focus-visible:ring-2 has-focus-visible:ring-ring/40 has-focus-visible:ring-inset',
+                    isSelected ? 'rounded-l-none bg-fill shadow-[inset_2px_0_0_var(--primary)]' : 'hover:bg-fill/60',
                     dropTargetKey === `field:${field.id}` && dropHighlight,
                   )}
                 >
@@ -192,9 +193,9 @@ export function ComfyWorkflowMarkedFieldList({
                     type="button"
                     variant="nav"
                     size="sm"
-                    aria-current={isSelected || undefined}
+                    aria-pressed={isSelected}
                     onClick={() => onFieldSelect(field.id)}
-                    className="h-full min-w-0 flex-1 justify-start gap-2 rounded-sm bg-transparent pr-2.5 pl-0 font-normal hover:bg-transparent"
+                    className="h-full min-w-0 flex-1 justify-start gap-2 rounded-sm bg-transparent pr-2.5 pl-0 font-normal hover:bg-transparent focus-visible:ring-0"
                   >
                     <span className={cn('min-w-0 truncate', isSelected ? 'font-bold text-secondary-text' : 'text-foreground')}>{field.label || field.id}</span>
                     {field.required ? <span role="img" className="size-1.5 shrink-0 rounded-full bg-secondary-text" aria-label={t({ ko: '필수', en: 'Required' })} /> : null}
