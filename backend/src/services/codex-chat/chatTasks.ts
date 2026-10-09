@@ -13,7 +13,8 @@ import { CodexChatStore } from './codexChatStore'
 import { ChatProfileStore } from './chatProfiles'
 
 /** Extra options of a send that the person did not type: a task continuation or an automation's wake is marked so it shows as one thin line. */
-export type ChatSendOptions = { task?: ChatTaskRouting; routine?: ChatRoutineRouting }
+/** `choice`: the request body's answer to the chat's question card, unchecked (see readChoiceAnswer). */
+export type ChatSendOptions = { task?: ChatTaskRouting; routine?: ChatRoutineRouting; choice?: unknown }
 
 type TaskRow = { id: number; thread_id: number; goal: string; steps: string; status: ChatTaskStatus; wait: ChatTaskWait | null; reason: string | null; budget: string; used: string; progress: string | null; stalled: number; active_since: string | null; created_at: string; updated_at: string }
 

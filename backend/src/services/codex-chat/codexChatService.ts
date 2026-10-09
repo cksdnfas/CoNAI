@@ -43,6 +43,7 @@ import { rejectedLoreLine } from './chatLoreProposals'
 import { LlmChatService, type GroupReplyResult } from './llmChatService'
 import { ChatGroupStore } from './chatGroupStore'
 import { buildFlagDirective, ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
+import { readChoiceAnswer } from './chatChoices'
 import { ChatUserProfileStore, userPersonaForThread, userPersonaOf, userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { CodexChatStore, type ChatBranchPurpose, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
@@ -1188,7 +1189,9 @@ export const CodexChatService = {
     assertChatAvailable(requester)
     const attachments = validateChatAttachments(requester, fileIds)
     const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length)
-    const flags = [...ChatFlagStore.resolve(requester, parseFlagIds(flagIds)), ...parsePicks(picks)]
+    const choice = readChoiceAnswer(threadId, options.choice)
+    if (choice && 'error' in choice) throw new CodexChatError(choice.error, 409)
+    const flags = [...ChatFlagStore.resolve(requester, parseFlagIds(flagIds)), ...parsePicks(picks), ...(choice?.flags ?? [])]
     const trimmed = text.trim()
     if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) {
       throw new CodexChatError('메시지를 입력해줘.')
@@ -1201,7 +1204,8 @@ export const CodexChatService = {
     try {
       const profile = requireCodexProfile(thread.profile_id, requester)
       if (pageContext != null && !profile.pageAssist) throw new CodexChatError('이 프로필은 페이지 어시스턴트가 꺼져 있어.', 400)
-      const page = parseChatPageContext(pageContext, requester)
+      // An answer that asked to go without the page sends this one message without it.
+      const page = choice?.withoutPage ? undefined : parseChatPageContext(pageContext, requester)
       rememberChatPage(requester, page, threadId)
       if (!options.task && !options.routine) notifyChatUserSend(threadId, Boolean(page))
       const routing = { ...userReplyRouting(thread, replyToMessageId), ...(options.task ? { task: options.task } : {}), ...(options.routine ? { routine: options.routine } : {}) }

@@ -9,6 +9,7 @@ import { retryLlmRequest } from '../llmRequestRetry'
 import { profileGenerationOptions } from './chatProfiles'
 import { inlineTextsForChat, loadAttachedImages, validateChatAttachments } from './chatAttachments'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
+import { readChoiceAnswer } from './chatChoices'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
@@ -709,12 +710,15 @@ export const LlmChatService = {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id, requester)
     if (pageContext != null && !profile.pageAssist) throw new LlmChatError('이 프로필은 페이지 어시스턴트가 꺼져 있어.', 400)
-    const page = parseChatPageContext(pageContext, requester)
+    const choice = readChoiceAnswer(thread.id, options.choice)
+    if (choice && 'error' in choice) throw new LlmChatError(choice.error, 409)
+    // An answer that asked to go without the page sends this one message without it.
+    const page = choice?.withoutPage ? undefined : parseChatPageContext(pageContext, requester)
     rememberChatPage(requester, page, thread.id)
     if (!options.task && !options.routine) notifyChatUserSend(thread.id, Boolean(page))
     const attachments = validateChatAttachments(requester, fileIds)
     const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length)
-    const flags = [...ChatFlagStore.resolve(requester, parseFlagIds(flagIds)), ...parsePicks(picks)]
+    const flags = [...ChatFlagStore.resolve(requester, parseFlagIds(flagIds)), ...parsePicks(picks), ...(choice?.flags ?? [])]
     const trimmed = text.trim()
     if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) {
       throw new LlmChatError('메시지를 입력해줘.')

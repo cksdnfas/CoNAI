@@ -215,7 +215,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
  * Tools over the caller's own chat (its room, its history, its attached lorebooks), offered to chat agents in a chat
  * regardless of scopes; not CoNAI actions, so they do not bring the app tool guidance along.
  */
-export const CHAT_ROOM_TOOLS = new Set(['chat_reply_to', 'room_call_member', 'room_history_search', 'room_history_read', 'read_lore_file', 'save_lore', 'task_propose', 'task_status', 'task_update', 'task_wait', 'task_finish', 'get_proposal_status']);
+export const CHAT_ROOM_TOOLS = new Set(['chat_reply_to', 'room_call_member', 'room_history_search', 'room_history_read', 'read_lore_file', 'save_lore', 'task_propose', 'task_status', 'task_update', 'task_wait', 'task_finish', 'get_proposal_status', 'offer_choices']);
 
 /**
  * The room tools only a group room offers. A direct chat keeps chat_reply_to (it quotes an earlier message of the

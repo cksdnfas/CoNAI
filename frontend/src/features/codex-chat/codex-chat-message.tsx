@@ -26,6 +26,7 @@ import { ChatErrorChip } from './chat-error-chip'
 import { ChatMarkdown, type ChatEmoticonMap } from './chat-markdown'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatProposalCards } from './chat-proposal-card'
+import { ChatChoiceLines } from './chat-choice'
 import { ChatPageOperationChips } from './chat-page-operation-chips'
 import { ChatReferenceButton, ChatThumbOverlay } from './chat-reference'
 import { MENTION_CLASS, splitMentions } from './chat-mentions'
@@ -687,6 +688,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
       <ChatProposalCards calls={toolCalls} threadId={threadId} />
       <ChatPageOperationChips calls={toolCalls} />
       {ownText ? markdown(ownText) : null}
+      <ChatChoiceLines calls={toolCalls} />
     </div>
   )
   const showOwnRow = !hasCast || Boolean(ownText || showReasoning || toolCalls.length > 0)

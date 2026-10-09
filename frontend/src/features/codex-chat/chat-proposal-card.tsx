@@ -61,7 +61,8 @@ const LONG_TEXT = 160
 export function ChatProposalCards({ calls, threadId }: { calls: CodexChatToolCall[]; threadId?: number }) {
   const { t } = useI18n()
   const items = calls.flatMap((call): Array<{ key: string; proposal: Proposal | null }> => {
-    if (call.proposal) return [{ key: call.id, proposal: call.proposal }]
+    // A question card waits above the composer and leaves its own line (ChatChoiceLines).
+    if (call.proposal) return call.proposal.kind === 'choice' ? [] : [{ key: call.id, proposal: call.proposal }]
     if (call.tool.startsWith('propose_') && call.status === 'running') return [{ key: call.id, proposal: null }]
     return []
   })

@@ -2,7 +2,7 @@ import { resolveChatPortrait } from '@conai/shared'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useIsMutating, useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
-import { Activity, AlarmClock, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Download, Eraser, Flag, FoldVertical, LayoutGrid, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, UserRound, X } from 'lucide-react'
+import { Activity, AlarmClock, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Download, Eraser, Flag, FoldVertical, LayoutGrid, ListChecks, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, UserRound, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -14,6 +14,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { ChatPageConnectButton, ChatPageConnectionNotice } from './chat-page-context'
 import { ChatTaskChecklist, ChatTaskStrip } from './chat-task-ui'
+import { ChatChoiceDock, ChatChoiceStatesContext, chatChoiceStates, findOpenChoice } from './chat-choice'
 import {
   CHAT_APPEARANCE_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
@@ -611,6 +612,16 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   }, [activeThreadId, isGroup, queryClient, showSnackbar, t])
   const { picks, togglePick, removePick } = chat
   const pickSet = useMemo(() => new Set(picks), [picks])
+  // The question card the newest reply asks; it waits above the composer until the next message answers or passes it.
+  const choiceStates = useMemo(() => chatChoiceStates(messages), [messages])
+  const openChoice = useMemo(() => (!isGroup && !isBusy ? findOpenChoice(messages) : null), [isBusy, isGroup, messages])
+  const [closedChoiceId, setClosedChoiceId] = useState<number | null>(null)
+  const choiceDraft = chat.choice && chat.choice.threadId === activeThreadId && chat.choice.proposalId === openChoice?.id ? chat.choice : null
+  const { choice: heldChoice, clearChoice } = chat
+  useEffect(() => {
+    // Answers held for a card that is no longer open (the reply was redone, another chat's card) go.
+    if (heldChoice && heldChoice.threadId === activeThreadId && !isBusy && heldChoice.proposalId !== openChoice?.id) clearChoice()
+  }, [activeThreadId, clearChoice, heldChoice, isBusy, openChoice?.id])
   const handleBlockAction = useCallback((key: string, action: BlockAction) => {
     if (action.kind === 'pick') togglePick(action.label)
     else if (panelState && !isBusy) void handleBlockEdit(key, { ...(panelState.state[key] ?? {}), [action.field]: action.value }).catch(() => undefined)
@@ -807,7 +818,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const selectedCommand = Math.min(commandIndex, matchingCommands.length - 1)
   // Group rooms: the user may cut in while members are still answering.
   const sendBlocked = isGroup ? alternativeMutation.isPending || commandPending || isCompacting || (isCommand && isBusy) || (isStreaming && !streamingHere) : isBusy
-  const canSend = (activeThreadId !== null || (pendingChat?.greeting != null && !isStartingChat)) && (Boolean(draft.trim()) || chat.draftAttachments.length > 0 || chat.draftMediaAttachments.length > 0 || picks.length > 0) && !chat.attachmentsUploading && !sendBlocked && (isCommand || (!profileMissing && !codexUnavailable))
+  const canSend = (activeThreadId !== null || (pendingChat?.greeting != null && !isStartingChat)) && (Boolean(draft.trim()) || chat.draftAttachments.length > 0 || chat.draftMediaAttachments.length > 0 || picks.length > 0 || Boolean(choiceDraft?.labels.length)) && !chat.attachmentsUploading && !sendBlocked && (isCommand || (!profileMissing && !codexUnavailable))
   const mentionQuery = isGroup && !isCommand ? mentionQueryAt(draft, caret) : null
   const mentionMatches = mentionQuery ? mentionOptions(mentionQuery.query, memberProfiles, group?.representativeId ?? null) : []
   const showMentions = mentionMatches.length > 0 && dismissedMention !== draft
@@ -900,6 +911,16 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     if (isCommand) void runCommand(draft)
     else if (activeThreadId !== null) void chat.send(activeThreadId, literal)
     else if (pendingChat) void chat.sendPending(literal ?? draft)
+  }
+
+  /** An option of the open card: a single-answer card sends at once (with any typed text); several answers wait for send. */
+  const pickChoice = (label: string) => {
+    if (!openChoice || activeThreadId === null) return
+    chat.toggleChoice(activeThreadId, openChoice, label)
+    if (openChoice.multiple) return
+    followBottomRef.current = true
+    scrollToBottom()
+    void chat.send(activeThreadId)
   }
 
   const handleDelete = async () => {
@@ -1039,7 +1060,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   ) : null
 
   const transcript = (
-    <ChatBlockChangesContext.Provider value={blockChanges}><div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto" onScroll={(event) => {
+    <ChatBlockChangesContext.Provider value={blockChanges}><ChatChoiceStatesContext.Provider value={choiceStates}><div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto" onScroll={(event) => {
       const node = event.currentTarget
       followBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100
       if (activeThreadId !== null) {
@@ -1069,7 +1090,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           return replySpeaker ? <CodexChatAssistantMessage key={reply.routing?.replyId ?? reply.profileId} content={reply.text} routing={reply.routing} toolCalls={reply.toolCalls} streaming appearance={appearance} speaker={replySpeaker} /> : null
         })}
       </div>
-    </div></ChatBlockChangesContext.Provider>
+    </div></ChatChoiceStatesContext.Provider></ChatBlockChangesContext.Provider>
   )
 
   const hidePanel = () => { if (hasPortrait) updateAppearance({ portrait: false }); setStatusLayout({ open: false }); setStripOpen(false) }
@@ -1129,7 +1150,10 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       <ChatDraftAttachments chat={chat} canReadText={profile?.canReadFileText === true} />
       {!isGroup && activeThreadId !== null ? <ChatTaskStrip threadId={activeThreadId} /> : null}
       {!isGroup && profile?.pageAssist ? <ChatPageConnectionNotice /> : null}
-      {picks.length > 0 ? (
+      {openChoice && closedChoiceId !== openChoice.id && activeThreadId !== null ? (
+        <ChatChoiceDock card={openChoice} selected={choiceDraft?.labels ?? []} disabled={sendBlocked || profileMissing || codexUnavailable} onPick={pickChoice} onClose={() => setClosedChoiceId(openChoice.id)} />
+      ) : null}
+      {picks.length > 0 || (choiceDraft && openChoice?.multiple) ? (
         <div className="mb-2 flex flex-wrap gap-1.5">
           {picks.map((label) => (
             <Button key={label} variant="ghost" size="xs" disabled={isBusy} onClick={() => removePick(label)} className="h-6 gap-1 rounded-full border border-line pl-2 pr-1.5 font-normal text-foreground/85" aria-label={t({ ko: '선택 해제: {label}', en: 'Unpick {label}' }, { label })}>
@@ -1138,6 +1162,13 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
               <X className="size-3 text-muted-foreground" />
             </Button>
           ))}
+          {openChoice?.multiple && activeThreadId !== null ? choiceDraft?.labels.map((label) => (
+            <Button key={`choice-${label}`} variant="ghost" size="xs" disabled={isBusy} onClick={() => chat.toggleChoice(activeThreadId, openChoice, label)} className="h-6 gap-1 rounded-full border border-line pl-2 pr-1.5 font-normal text-foreground/85" aria-label={t({ ko: '선택 해제: {label}', en: 'Unpick {label}' }, { label })}>
+              <ListChecks className="size-3 text-primary" />
+              <span className="max-w-48 truncate">{label}</span>
+              <X className="size-3 text-muted-foreground" />
+            </Button>
+          )) : null}
         </div>
       ) : null}
       <div className="relative">

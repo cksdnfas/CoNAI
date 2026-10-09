@@ -34,8 +34,9 @@ export type ChatFlagViewer = Pick<McpRequester, 'accountId' | 'accountType'>
 /**
  * What a message keeps of a flag, so editing or deleting the flag later does not change past messages. `pick`: not a
  * flag but an item the user chose in the status panel (`data-pick` in a block template), sent with this message.
+ * `choice`: a pick that answers the chat's question card (offer_choices) of that id.
  */
-export type ChatFlagSnapshot = Pick<ChatFlag, 'id' | 'icon' | 'name' | 'content'> & { pick?: true }
+export type ChatFlagSnapshot = Pick<ChatFlag, 'id' | 'icon' | 'name' | 'content'> & { pick?: true; choice?: { id: number; question: string } }
 
 export const CHAT_PICK_LIMITS = { perMessage: 12, length: 120 }
 const PICK_ICON = 'lucide:target'
@@ -153,10 +154,13 @@ export function parseFlagSnapshots(value: string | null | undefined): ChatFlagSn
  */
 export function buildFlagDirective(flags: ChatFlagSnapshot[], fill: (text: string) => string = (text) => text) {
   const lines = flags.filter((flag) => !flag.pick).map((flag) => fill(flag.content).trim()).filter(Boolean)
-  const picks = flags.filter((flag) => flag.pick).map((flag) => flag.content.trim()).filter(Boolean)
+  const picks = flags.filter((flag) => flag.pick && !flag.choice).map((flag) => flag.content.trim()).filter(Boolean)
+  const answers = new Map<string, string[]>()
+  for (const flag of flags) if (flag.pick && flag.choice) answers.set(flag.choice.question, [...(answers.get(flag.choice.question) ?? []), flag.content.trim()])
   return [
     lines.length > 0 ? `[사용자 지시: 이번 메시지에 적용]\n${lines.map((line) => `- ${line}`).join('\n')}` : '',
     picks.length > 0 ? `[사용자 선택: 상태창에서 고른 항목]\n${picks.map((line) => `- ${line}`).join('\n')}` : '',
+    ...[...answers].map(([question, labels]) => `[선택지 답: ${question}]\n${labels.map((line) => `- ${line}`).join('\n')}`),
   ].filter(Boolean).join('\n\n')
 }
 

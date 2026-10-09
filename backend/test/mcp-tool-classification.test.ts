@@ -29,7 +29,7 @@ const PATTERN_CLASSIFIED = 'generate_image(_N): isChatGenerationTool -> scope "g
  * - FEATURE_UNCLASSIFIED_ALLOWED: account-bound tools that may lack a TOOL_FEATURE_PERMISSIONS entry.
  * - STALE_SCOPE_ALLOWED / STALE_FEATURE_ALLOWED: map keys allowed without a registration in the contexts built below.
  */
-const CHAT_ROOM_TOOL_NAMES = ['chat_reply_to', 'room_call_member', 'room_history_search', 'room_history_read', 'read_lore_file', 'save_lore', 'task_propose', 'task_status', 'task_update', 'task_wait', 'task_finish', 'get_proposal_status']
+const CHAT_ROOM_TOOL_NAMES = ['chat_reply_to', 'room_call_member', 'room_history_search', 'room_history_read', 'read_lore_file', 'save_lore', 'task_propose', 'task_status', 'task_update', 'task_wait', 'task_finish', 'get_proposal_status', 'offer_choices']
 const UNSCOPED_ALLOWED = new Set<string>([
   // Chat room/lore tools are offered by CHAT_ROOM_TOOLS regardless of scopes (isContextToolAllowed returns before scopes).
   ...CHAT_ROOM_TOOL_NAMES,

@@ -71,11 +71,12 @@ const PROPOSAL_TOOLS: Record<ChatProposal['kind'], string> = {
   workflow_graph: 'propose_workflow_changes',
   page_action: 'propose_page_action',
   task_plan: 'task_propose',
+  choice: 'offer_choices',
 }
 
 /** Tools whose call leaves a proposal card under the reply. */
 export function isProposalTool(tool: string) {
-  return tool.startsWith('propose_') || tool === 'save_lore'
+  return tool.startsWith('propose_') || tool === 'save_lore' || tool === 'offer_choices'
 }
 
 /**

@@ -3,7 +3,7 @@ import { buildApiUrl } from '@/lib/api-url'
 import type { ChatAssetVisionReview, ChatAssetBatch, ChatAssetBatchInput, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
 export type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetKind, ChatAssetReview, ChatAssetVisionReview, ChatAssetCandidate, ChatAssetAttempt, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
 import type { ChatJudgeDiagnostics } from '@conai/shared'
-import type { ChatStreamEvent, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal, ChatTask } from '@conai/shared'
+import type { ChatStreamEvent, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal, ChatTask, ChatChoiceAnswer } from '@conai/shared'
 
 export type ChatScope = 'read' | 'generate' | 'organize' | 'configure'
 const assetBatchPath = (profileId: number, batchId?: number) => `/api/codex-chat/admin/profiles/${profileId}/asset-batches${batchId === undefined ? '' : `/${batchId}`}`
@@ -1133,12 +1133,20 @@ export interface ChatFlag {
 }
 
 export type ChatFlagInput = Pick<ChatFlag, 'icon' | 'name' | 'content'>
-/** `pick`: not a flag but an item chosen in the status panel, sent with that message. */
-export type ChatFlagSnapshot = Pick<ChatFlag, 'id' | 'icon' | 'name' | 'content'> & { pick?: true }
+/**
+ * `pick`: not a flag but an item chosen in the status panel, sent with that message. `choice`: a pick that answers
+ * the chat's question card of that id.
+ */
+export type ChatFlagSnapshot = Pick<ChatFlag, 'id' | 'icon' | 'name' | 'content'> & { pick?: true; choice?: { id: number; question: string } }
 
 /** The snapshot a status panel pick becomes (what the server stores on the message). */
 export function pickSnapshot(label: string): ChatFlagSnapshot {
   return { id: 0, icon: 'lucide:target', name: label, content: label, pick: true }
+}
+
+/** The snapshot an answer to a question card becomes. */
+export function choiceSnapshot(label: string, choice: { id: number; question: string }): ChatFlagSnapshot {
+  return { id: 0, icon: 'lucide:list-checks', name: label, content: label, pick: true, choice }
 }
 
 /** Every flag the account sees, hidden shared ones included (the tray leaves those out). */
@@ -1476,8 +1484,8 @@ export function interruptCodexChatThread(threadId: number) {
  * Send a message and read the NDJSON turn stream. No timeout: a turn with generation jobs can run for minutes.
  * Aborting only stops reading; the server finishes and stores the reply.
  */
-export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = [], picks: string[] = [], mediaHashes: string[] = [], replyToMessageId?: number, pageContext?: ChatPageSnapshot) {
-  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext }, onEvent, signal)
+export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = [], picks: string[] = [], mediaHashes: string[] = [], replyToMessageId?: number, pageContext?: ChatPageSnapshot, choice?: ChatChoiceAnswer) {
+  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext, choice }, onEvent, signal)
 }
 
 export function checkChatPageProposal<T extends Extract<ChatProposal, { kind: 'page_fields' | 'workflow_graph' | 'page_action' }>>(proposal: T, undo = false) {

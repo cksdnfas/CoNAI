@@ -1,6 +1,11 @@
 import { createContext, useContext } from 'react'
 import type { ChatFlagSnapshot, ChatMediaAttachment, CodexChatToolCall } from '@/lib/api-codex-chat'
-import type { StoredFileEntry, ChatMessageRouting, ChatReplyQuote } from '@conai/shared'
+import type { StoredFileEntry, ChatMessageRouting, ChatReplyQuote, ChatChoiceProposal } from '@conai/shared'
+
+/** A question card as stored (offer_choices). */
+export type ChatChoiceCard = ChatChoiceProposal & { id: number }
+/** What the composer holds of a card's answer until it is sent. */
+export type ChatChoiceDraft = { threadId: number; proposalId: number; question: string; labels: string[]; withoutPage: boolean }
 
 export const CODEX_CHAT_ROUTE = '/chat'
 export const CODEX_CHAT_THREADS_QUERY_KEY = ['codex-chat-threads'] as const
@@ -113,6 +118,11 @@ export interface CodexChatApi {
   picks: string[]
   togglePick: (label: string) => void
   removePick: (label: string) => void
+  /** Answers picked from the chat's open question card, sent with the next message of that chat. */
+  choice: ChatChoiceDraft | null
+  /** Pick or unpick one option (a single-answer card keeps only the latest). */
+  toggleChoice: (threadId: number, proposal: ChatChoiceCard, label: string) => void
+  clearChoice: () => void
   /**
    * The reply streaming right now, read when needed (event handlers). Components that show it use
    * useCodexChatLiveTurn: it changes with every token, and the rest of the API must not re-render the app shell then.

@@ -4,6 +4,7 @@ import type { ChatPageActionProposal } from './chatPageAction'
 import type { ChatProfileAssetsProposal } from './chatAssets'
 import type { ChatTaskPlanProposal, ChatTaskRouting } from './chatTask'
 import type { ChatRoutineRouting } from './chatRoutine'
+import type { ChatChoiceProposal } from './chatChoice'
 
 /** A recipient is a member profile, the human, or a room announcement (no automatic reply). */
 export type ChatRecipient = number | 'user' | 'room'
@@ -82,6 +83,7 @@ export type ChatProposal = { id: number; dismissed?: boolean } & (
   | ChatPageActionProposal
   | ChatProfileAssetsProposal
   | ChatTaskPlanProposal
+  | ChatChoiceProposal
   | {
       kind: 'display_block'
       /** Shared block name (defaults to the block key). */

@@ -49,7 +49,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   list_audio_workflows: 'audio.view', get_audio_order: 'audio.view',
   order_audio: ['audio.view', 'audio.edit', 'generation.execute'], wait_audio_order: 'audio.view',
   cancel_audio_order: ['audio.view', 'audio.edit'], retry_audio_order_job: ['audio.view', 'audio.edit', 'generation.execute'],
-  chat_reply_to: [], room_call_member: [], task_propose: [], task_status: [], task_update: [], task_wait: [], task_finish: [], get_proposal_status: [], room_history_search: [], room_history_read: [], read_lore_file: [], save_lore: [],
+  chat_reply_to: [], room_call_member: [], task_propose: [], task_status: [], task_update: [], task_wait: [], task_finish: [], get_proposal_status: [], offer_choices: [], room_history_search: [], room_history_read: [], read_lore_file: [], save_lore: [],
   get_current_page: [], page_fill: [], page_act: [], read_page_data: [], propose_page_action: [],
   get_chat_setup_guide: [], list_chat_profiles: [], get_chat_profile: [], list_display_blocks: [], get_display_block: [],
   propose_display_block: [], propose_chat_profile: [], propose_profile_update: [], propose_profile_assets: [], get_asset_batch: [],
