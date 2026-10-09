@@ -337,12 +337,15 @@ async function checkServer(
       result.issues.push(`노드 ${nodeId}: ${classType} 노드가 서버에 없어.`);
       continue;
     }
-    for (const [name, value] of Object.entries(node.inputs ?? {})) {
+    const inputs = node.inputs ?? {};
+    for (const [name, value] of Object.entries(inputs)) {
       if (Array.isArray(value)) continue; // a link to another node
       const spec = inputSpec(info, name);
       if (!spec) continue;
       const choices = enumChoices(spec);
-      if (choices && typeof value === 'string' && !choices.includes(value)) {
+      // An empty list is a dynamic combo (CustomCombo): its options travel as the node's own inputs, not in object_info.
+      const dynamicHit = choices?.length === 0 && Object.entries(inputs).some(([other, entry]) => other !== name && entry === value);
+      if (choices && typeof value === 'string' && !choices.includes(value) && !dynamicHit) {
         result.issues.push(`노드 ${nodeId} ${classType}.${name}: "${value}"이(가) 서버 목록에 없어.`);
         continue;
       }

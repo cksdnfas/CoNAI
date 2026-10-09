@@ -75,6 +75,8 @@ test('audio generation: workflows, orders, queue sink, REST, MCP and chat refere
     'Seed (rgthree)': { input: { required: { seed: ['INT', { min: -1125899906842624, max: 1125899906842624 }] } } },
     SaveImage: { input: { required: { images: ['IMAGE'], filename_prefix: ['STRING', {}] } } },
     EmptyImage: { input: { required: { width: ['INT', { min: 1, max: 8192 }], height: ['INT', { min: 1, max: 8192 }] } } },
+    // ComfyUI reports a CustomCombo's choices as an empty list: they travel as the node's own option inputs.
+    CustomCombo: { input: { required: { choice: ['COMBO', { multiselect: false, options: [] }] } } },
   })
   const startStub = async (models: string[]) => {
     const info = objectInfo(models)
@@ -200,6 +202,27 @@ test('audio generation: workflows, orders, queue sink, REST, MCP and chat refere
     ComfyUIServerModel.update(badServerId, { is_active: false })
     ComfyUIServerModel.update(deadServerId, { is_active: false })
     await workflows.checkAudioWorkflowCompatibility(defaultWorkflow.id, { force: true })
+  })
+
+  await t.test('compatibility: a dynamic combo is checked against its own options, not the empty server list', async () => {
+    const comboWorkflow = (choice: string) => WorkflowModel.create({
+      name: `combo ${choice}`,
+      workflow_json: JSON.stringify({ '52:43': { class_type: 'CustomCombo', inputs: { choice, index: 2, option1: 'Music', option2: 'SFX', option3: '' } } }),
+      marked_fields: [],
+      kind: 'audio',
+    })
+    const okId = comboWorkflow('SFX')
+    const badId = comboWorkflow('Speech')
+    try {
+      workflows.clearAudioObjectInfoCache()
+      const ok = await workflows.checkAudioWorkflowCompatibility(okId, { force: true })
+      assert.equal(ok.servers[0]?.status, 'ok', JSON.stringify(ok.servers))
+      const bad = await workflows.checkAudioWorkflowCompatibility(badId, { force: true })
+      assert.ok(bad.servers[0]?.issues.some((issue) => issue.includes('"Speech"')), JSON.stringify(bad.servers))
+    } finally {
+      WorkflowModel.delete(okId)
+      WorkflowModel.delete(badId)
+    }
   })
 
   // ---------------------------------------------------------------- orders
