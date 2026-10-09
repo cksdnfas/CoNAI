@@ -131,9 +131,12 @@ export function NodeInspectorPanel({
   useEffect(() => {
     if (focusNonce === null || !focusFieldKey) return
     const frameId = window.requestAnimationFrame(() => {
-      const target = panelRef.current?.querySelector<HTMLElement>(`[data-field-key="${CSS.escape(focusFieldKey)}"]`)
+      // "field#part" opens a field and goes to one part of its editor (a Director prompt, say).
+      const [fieldKey, partKey] = focusFieldKey.split('#', 2)
+      const field = panelRef.current?.querySelector<HTMLElement>(`[data-field-key="${CSS.escape(fieldKey)}"]`)
+      const target = (partKey ? field?.querySelector<HTMLElement>(`[data-panel-focus="${CSS.escape(partKey)}"]`) : null) ?? field
       if (!target) return
-      target.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      target.scrollIntoView({ block: partKey ? 'center' : 'nearest', behavior: 'smooth' })
       target.querySelector<HTMLElement>('textarea, input:not([type="hidden"]), select, [contenteditable="true"]')?.focus({ preventScroll: true })
     })
     return () => window.cancelAnimationFrame(frameId)

@@ -46,7 +46,7 @@ export function ModuleGraphNodeBody(props: ModuleGraphNodeBodyProps) {
   const plainInputPorts = (module.exposed_inputs ?? []).filter((port) => !powerLoraKeys.has(port.key) && !isMiniMaxDirectorInputPort(port))
   const customControls = useModuleGraphNodeCustomControls({ connectedInputKeys, data, id, inputPorts: plainInputPorts, uiFieldByKey })
   const controlRows = <ModuleGraphNodeCustomControls data={data} state={customControls} />
-  const loraRows = powerLoraFields.map((field) => <PowerLoraSummaryRow key={field.key} id={id} field={field} value={data.inputValues?.[field.key] ?? field.default_value} />)
+  const loraRows = powerLoraFields.map((field) => <PowerLoraSummaryRow key={field.key} id={id} module={module} field={field} value={data.inputValues?.[field.key] ?? field.default_value} />)
 
   if (isWorkflowInputSourceModule(module)) {
     return <WorkflowInputSourceBody {...layoutProps} />

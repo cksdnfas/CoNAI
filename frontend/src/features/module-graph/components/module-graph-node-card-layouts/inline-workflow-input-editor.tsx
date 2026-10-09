@@ -35,7 +35,7 @@ export function WorkflowInputSourceBody({ id, data, visibleOutputPorts }: Module
       <NodeRowDivider />
 
       {isLong ? (
-        <div className="px-3">
+        <div className="px-2.5">
           <NodeValuePreview
             nodeId={id}
             fieldKey={sourcePort.key}
@@ -47,7 +47,7 @@ export function WorkflowInputSourceBody({ id, data, visibleOutputPorts }: Module
 
       {sourcePort.data_type === 'number' ? (
         <NodeRow label={sourcePort.label}>
-          <NodeNumberControl ariaLabel={sourcePort.label} value={rawValue} onChange={(value) => actions.changeValue(id, sourcePort.key, value)} className="max-w-24" />
+          <NodeNumberControl ariaLabel={sourcePort.label} value={rawValue} onChange={(value) => actions.changeValue(id, sourcePort.key, value)} />
         </NodeRow>
       ) : null}
 

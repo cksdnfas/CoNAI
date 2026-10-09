@@ -38,6 +38,7 @@ export function ModuleGraphPortHandle({
   port,
   side,
   connected = false,
+  reveal = false,
   color,
   tooltip,
   className,
@@ -46,6 +47,8 @@ export function ModuleGraphPortHandle({
   port: ModulePortDefinition
   side: 'input' | 'output'
   connected?: boolean
+  /** A widget's point: hidden until its row is hovered, a fitting link is dragged, or it is linked. */
+  reveal?: boolean
   /** Overrides the type color (e.g. a muted inactive branch). */
   color?: string
   tooltip?: string
@@ -90,7 +93,8 @@ export function ModuleGraphPortHandle({
       isConnectableStart={!pickUpEnabled}
       onMouseDown={startPickUpWatch}
       data-drop={dropState}
-      className={cn('module-graph-port-handle', side === 'input' ? 'is-input' : 'is-output', className)}
+      data-connected={connected ? 'true' : undefined}
+      className={cn('module-graph-port-handle', side === 'input' ? 'is-input' : 'is-output', reveal && 'is-reveal', className)}
       style={style}
     />
   )

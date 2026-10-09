@@ -5,9 +5,10 @@ import { useI18n } from '@/i18n'
 import type { ModulePortDataType, ModulePortDefinition } from '@/lib/api-module-graph'
 import type { KeyValueEntry } from '../module-graph-key-value-list-input'
 import { buildInputSourceKey, useModuleGraphCanvasContext, useModuleGraphNodeActions } from '../module-graph-canvas-context'
-import { NodeNumberControl, NodeSwitchControl, NodeTextControl, stopNodeEvent } from '../module-graph-node-controls'
+import { cn } from '@/lib/utils'
+import { NodeNumberControl, NodeSwitchControl, NodeTextControl, NodeWidgetContext, stopNodeEvent } from '../module-graph-node-controls'
 import { ModuleGraphPortHandle } from '../module-graph-port-handle'
-import { buildPortTooltip } from '../module-graph-node-rows'
+import { NodeLinkedSource, buildPortTooltip } from '../module-graph-node-rows'
 
 /**
  * Editable "name → value" rows (API request values and headers, random choice candidates). A named row is also an
@@ -54,20 +55,24 @@ export function KeyValueEntryRows({
         const connected = source !== undefined
 
         return (
-          <div key={`${fieldKey}-${index}`} className="relative flex min-h-7 items-center gap-1 px-3">
-            {port ? <ModuleGraphPortHandle nodeId={nodeId} port={port} side="input" connected={connected} tooltip={buildPortTooltip(t, port)} /> : null}
-            <NodeTextControl ariaLabel={keyPlaceholder} value={entry.key} placeholder={keyPlaceholder} onChange={(key) => update(index, { ...entry, key })} className="w-[38%] flex-none" />
-            <span className="flex min-w-0 flex-1">
-              {connected ? (
-                <span className="truncate px-1 text-xs text-muted-foreground">← {source}</span>
-              ) : valueKind === 'number' ? (
-                <NodeNumberControl ariaLabel={valuePlaceholder} value={entry.value} placeholder={valuePlaceholder} onChange={(value) => update(index, { ...entry, value: String(value) })} />
-              ) : valueKind === 'boolean' ? (
-                <NodeSwitchControl ariaLabel={valuePlaceholder} checked={entry.value === 'true'} onChange={(value) => update(index, { ...entry, value: value ? 'true' : 'false' })} />
-              ) : (
-                <NodeTextControl ariaLabel={valuePlaceholder} value={entry.value} placeholder={valuePlaceholder} onChange={(value) => update(index, { ...entry, value })} />
-              )}
-            </span>
+          <div key={`${fieldKey}-${index}`} className="module-graph-widget-row relative flex items-center gap-1 py-0.5 pr-1.5 pl-2.5">
+            {port ? <ModuleGraphPortHandle nodeId={nodeId} port={port} side="input" connected={connected} reveal tooltip={buildPortTooltip(t, port)} /> : null}
+            <div className={cn('flex h-[26px] min-w-0 flex-1 items-center gap-1.5 rounded-full pr-1.5 pl-3 text-xs', connected ? 'ring-1 ring-line ring-inset' : 'bg-surface-high')}>
+              <NodeWidgetContext.Provider value>
+                <NodeTextControl ariaLabel={keyPlaceholder} value={entry.key} placeholder={keyPlaceholder} onChange={(key) => update(index, { ...entry, key })} className="w-[40%] flex-none text-left text-muted-foreground" />
+                <span className="flex min-w-0 flex-1 items-center justify-end">
+                  {connected ? (
+                    <NodeLinkedSource source={source} />
+                  ) : valueKind === 'number' ? (
+                    <NodeNumberControl ariaLabel={valuePlaceholder} value={entry.value} placeholder={valuePlaceholder} onChange={(value) => update(index, { ...entry, value: String(value) })} />
+                  ) : valueKind === 'boolean' ? (
+                    <NodeSwitchControl ariaLabel={valuePlaceholder} checked={entry.value === 'true'} onChange={(value) => update(index, { ...entry, value: value ? 'true' : 'false' })} />
+                  ) : (
+                    <NodeTextControl ariaLabel={valuePlaceholder} value={entry.value} placeholder={valuePlaceholder} onChange={(value) => update(index, { ...entry, value })} />
+                  )}
+                </span>
+              </NodeWidgetContext.Provider>
+            </div>
             <IconButton
               size="icon-xs"
               variant="ghost"

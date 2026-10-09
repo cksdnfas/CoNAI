@@ -17,6 +17,7 @@ import {
   type MiniMaxH3DirectorGraphInputKey,
   type MiniMaxH3DirectorTimelineItem,
 } from './minimax-h3-director-dasiwa-utils'
+import { setMiniMaxH3DirectorPromptMode } from './minimax-h3-director-node-state'
 
 type MiniMaxH3DirectorPromptBuilderProps = {
   state: MiniMaxH3DirectorBuilderState
@@ -44,7 +45,7 @@ export function MiniMaxH3DirectorPromptBuilder({
   const patchState = (patch: Partial<MiniMaxH3DirectorBuilderState>) => onChange({ ...state, ...patch })
   const patchRef = (patch: Partial<MiniMaxH3DirectorBuilderState['ref']>) => onChange({ ...state, ref: { ...state.ref, ...patch } })
   const renderPortedField = (inputKey: MiniMaxH3DirectorGraphInputKey, content: ReactNode) => (
-    <div className="space-y-1">
+    <div className="space-y-1" data-panel-focus={inputKey}>
       {renderInputPort?.(inputKey)}
       {content}
     </div>
@@ -63,15 +64,7 @@ export function MiniMaxH3DirectorPromptBuilder({
   const setPromptMode = (nextPromptMode: string) => {
     if (nextPromptMode !== 'simple' && nextPromptMode !== 'structured') return
     if (nextPromptMode === state.prompt_mode) return
-    if (nextPromptMode === 'simple') {
-      onChange({
-        ...state,
-        prompt_mode: 'simple',
-        simple_prompt: buildMiniMaxH3DirectorPrompt({ ...state, prompt_mode: 'structured' }),
-      })
-      return
-    }
-    patchState({ prompt_mode: 'structured' })
+    onChange(setMiniMaxH3DirectorPromptMode(state, nextPromptMode))
   }
 
   return <>

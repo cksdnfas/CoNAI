@@ -22,10 +22,8 @@ import type { WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types
 import { cn } from '@/lib/utils'
 import { FormField } from '../image-generation-shared'
 import {
-  buildMiniMaxH3DirectorNodeValue,
   createMiniMaxH3DirectorItemId,
   createMiniMaxH3DirectorBuilderState,
-  getMiniMaxH3DirectorAssets,
   getMiniMaxH3DirectorActiveItems,
   hasMiniMaxH3DirectorBuilderContent,
   inferMiniMaxH3DirectorMediaType,
@@ -36,11 +34,6 @@ import {
   MINIMAX_H3_DIRECTOR_FRAME_RATE_MIN,
   MINIMAX_H3_DIRECTOR_MODES,
   MINIMAX_H3_DIRECTOR_VISIBLE_FIELDS,
-  normalizeMiniMaxH3DirectorPostprocess,
-  normalizeMiniMaxH3DirectorResolution,
-  normalizeMiniMaxH3DirectorBuilderState,
-  normalizeMiniMaxH3DirectorNodeValue,
-  parseMiniMaxH3DirectorTimeline,
   resolveMiniMaxH3DirectorCanvas,
   validateMiniMaxH3DirectorNodeValue,
   type MiniMaxH3DirectorBuilderState,
@@ -63,7 +56,7 @@ import {
   type MiniMaxDirectorMediaLane as MediaLane,
 } from './minimax-h3-director-media'
 import { extractAudioWaveformPeaks, probeMediaDimensions, probeMediaDuration } from './minimax-h3-director-media-probe'
-const INPAINT_MODE_BACKUP_KEY = '__conai_inpaint_mode_backup'
+import { applyMiniMaxH3DirectorModeTimeline, patchMiniMaxH3DirectorValue, readMiniMaxH3DirectorState } from './minimax-h3-director-node-state'
 
 type MiniMaxH3DirectorDasiwaInputProps = {
   value: Record<string, unknown>
@@ -94,45 +87,14 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
   const [selectedLane, setSelectedLane] = useState<MediaLane>('image')
   const [status, setStatus] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
-  const boundedValue = useMemo(() => {
-    try {
-      return { value: applyMiniMaxDirectorResolutionBounds(value, numericBounds), error: null }
-    } catch (error) {
-      return { value, error: error instanceof Error ? error.message : String(error) }
-    }
-  }, [value, numericBounds])
-  const nodeValue = normalizeMiniMaxH3DirectorNodeValue(boundedValue.value)
-  const mode: MiniMaxH3DirectorMode | null = isMiniMaxH3DirectorInputLink(nodeValue.mode) ? null : nodeValue.mode
-  const parsedTimeline = parseMiniMaxH3DirectorTimeline(isMiniMaxH3DirectorInputLink(nodeValue.timeline_data) ? '' : nodeValue.timeline_data)
-  const timeline = parsedTimeline.timeline
-  const resolution = normalizeMiniMaxH3DirectorResolution(timeline.resolution)
-  const postprocess = normalizeMiniMaxH3DirectorPostprocess(timeline.postprocess)
+  const directorState = useMemo(() => readMiniMaxH3DirectorState(value, numericBounds), [value, numericBounds])
+  const { nodeValue, mode, timeline, resolution, postprocess, promptValue, builderMode, builderDuration, builderState } = directorState
+  const boundsError = directorState.boundsError
   const resolvedCanvas = resolveMiniMaxH3DirectorCanvas(timeline, resolution)
-  const promptValue = isMiniMaxH3DirectorInputLink(nodeValue.prompt) ? '' : nodeValue.prompt
   const widthValue = isMiniMaxH3DirectorInputLink(nodeValue.width) ? '' : String(nodeValue.width)
   const heightValue = isMiniMaxH3DirectorInputLink(nodeValue.height) ? '' : String(nodeValue.height)
   const durationValue = isMiniMaxH3DirectorInputLink(nodeValue.duration) ? '' : String(nodeValue.duration)
   const frameRateValue = isMiniMaxH3DirectorInputLink(nodeValue.frame_rate) ? '' : String(nodeValue.frame_rate)
-  const builderMode = mode ?? (
-    !isMiniMaxH3DirectorInputLink(nodeValue.builder_state)
-      ? (() => {
-          try {
-            const parsed = JSON.parse(nodeValue.builder_state) as { mode?: unknown }
-            return MINIMAX_H3_DIRECTOR_MODES.includes(parsed.mode as MiniMaxH3DirectorMode) ? parsed.mode as MiniMaxH3DirectorMode : 'FL2VA'
-          } catch {
-            return 'FL2VA'
-          }
-        })()
-      : 'FL2VA'
-  )
-  const builderDuration = isMiniMaxH3DirectorInputLink(nodeValue.duration) ? 5 : nodeValue.duration
-  const builderState = normalizeMiniMaxH3DirectorBuilderState(
-    isMiniMaxH3DirectorInputLink(nodeValue.builder_state) ? null : nodeValue.builder_state,
-    timeline,
-    builderMode,
-    builderDuration,
-    promptValue,
-  )
   const refImageSizeValue = isMiniMaxH3DirectorInputLink(nodeValue.ref_image_size) ? '' : nodeValue.ref_image_size
   const visibleFieldSet = useMemo(
     () => new Set<MiniMaxH3DirectorVisibleField>(
@@ -143,7 +105,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
     [visibleFields],
   )
   const isFieldVisible = (field: MiniMaxH3DirectorVisibleField) => visibleFieldSet.has(field)
-  const assets = getMiniMaxH3DirectorAssets(nodeValue)
+  const assets = directorState.assets
   const activeItems = timeline.items.filter((item) => item.enabled !== false)
   const displayedItems = sortMiniMaxDirectorMedia(getMiniMaxH3DirectorActiveItems(nodeValue))
   const visualItems = displayedItems.filter((item) => item.type === 'image')
@@ -160,19 +122,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
     nextBuilderState?: MiniMaxH3DirectorBuilderState,
   ) => {
     try {
-      if ((inputPatch.width !== undefined || inputPatch.height !== undefined)
-        && ['width', 'height', 'resolution_mp'].some((key) => numericBounds?.[key]?.min !== undefined || numericBounds?.[key]?.max !== undefined)) {
-        nextTimeline = {
-          ...(nextTimeline ?? timeline),
-          resolution: {
-            ...resolution, resolution: 'custom', custom_mode: 'fixed',
-            custom_width: Number(inputPatch.width ?? nodeValue.width),
-            custom_height: Number(inputPatch.height ?? nodeValue.height),
-          },
-        }
-      }
-      const nextValue = buildMiniMaxH3DirectorNodeValue(nodeValue, inputPatch, nextTimeline, nextAssets, nextBuilderState)
-      onChange(applyMiniMaxDirectorResolutionBounds(nextValue, numericBounds))
+      onChange(patchMiniMaxH3DirectorValue(directorState, numericBounds, inputPatch, nextTimeline, nextAssets, nextBuilderState))
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error))
     }
@@ -192,42 +142,12 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
 
   const changeMode = (nextMode: MiniMaxH3DirectorMode) => {
     if (nextMode !== 'REF2VA') setSelectedLane('image')
-    let nextTimeline = timeline
-    if (nextMode === 'Image Inpaint' && mode !== 'Image Inpaint') {
-      const selectedImageId = activeItems
-        .filter((item) => item.type === 'image')
-        .sort((left, right) => left.slot - right.slot || left.order - right.order)[0]?.id
-      nextTimeline = {
-        ...timeline,
-        items: timeline.items.map((item) => ({
-          ...item,
-          enabled: item.id === selectedImageId,
-          ...(item.id === selectedImageId ? { slot: 0, start: 0 } : {}),
-          [INPAINT_MODE_BACKUP_KEY]: {
-            enabled: item.enabled,
-            slot: item.slot,
-            start: item.start,
-          },
-        })),
-      }
-    } else if (mode === 'Image Inpaint' && nextMode !== 'Image Inpaint') {
-      nextTimeline = {
-        ...timeline,
-        items: timeline.items.map((item) => {
-          const backup = item[INPAINT_MODE_BACKUP_KEY]
-          if (!backup || typeof backup !== 'object' || Array.isArray(backup)) return item
-          const restored: MiniMaxH3DirectorTimelineItem = {
-            ...item,
-            enabled: (backup as Record<string, unknown>).enabled !== false,
-            slot: Number((backup as Record<string, unknown>).slot ?? item.slot),
-            start: Number((backup as Record<string, unknown>).start ?? item.start),
-          }
-          delete restored[INPAINT_MODE_BACKUP_KEY]
-          return restored
-        }),
-      }
-    }
-    emit({ mode: nextMode }, nextTimeline, assets, { ...builderState, mode: nextMode, version: nextMode === 'REF2VA' ? 2 : 1 })
+    emit(
+      { mode: nextMode },
+      applyMiniMaxH3DirectorModeTimeline(timeline, mode, nextMode),
+      assets,
+      { ...builderState, mode: nextMode, version: nextMode === 'REF2VA' ? 2 : 1 },
+    )
   }
 
 
@@ -756,7 +676,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         </div>
       </div>
 
-      {boundedValue.error ? <Alert variant="destructive"><AlertDescription>{boundedValue.error}</AlertDescription></Alert> : null}
+      {boundsError ? <Alert variant="destructive"><AlertDescription>{boundsError}</AlertDescription></Alert> : null}
 
       {isFieldVisible('timeline_data') && !hiddenControls?.includes('resolution') ? (
         <MiniMaxH3DirectorResolutionPanel

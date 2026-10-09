@@ -1102,6 +1102,27 @@
   opacity: 0.22;
 }
 
+/*
+ * A widget row's point (ComfyUI style): hidden until the row is hovered, a link that fits is dragged, or it is
+ * linked. It still takes drops while hidden.
+ */
+.theme-graph-flow .module-graph-port-handle.is-reveal {
+  --reveal: 0;
+  opacity: var(--reveal);
+}
+
+.theme-graph-flow .module-graph-widget-row:hover .module-graph-port-handle.is-reveal,
+.theme-graph-flow .module-graph-port-handle.is-reveal[data-connected='true'],
+.theme-graph-flow .module-graph-port-handle.is-reveal[data-drop='ok'],
+.theme-graph-flow .module-graph-port-handle.is-reveal[data-drop='target'],
+.theme-graph-flow .module-graph-port-handle.is-reveal.connectingto {
+  --reveal: 1;
+}
+
+.theme-graph-flow .module-graph-port-handle.is-reveal[data-drop='no'] {
+  opacity: calc(var(--reveal) * 0.22);
+}
+
 .theme-graph-flow .react-flow__connectionline path {
   stroke-width: 2.5;
 }
