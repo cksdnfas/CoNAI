@@ -60,6 +60,9 @@ export function markdownToPlainText(body: string): string {
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/<[^>]+>/g, ' ')
+    // Table separator rows (| --- | :-: |) and horizontal rules carry no text.
+    .replace(/^\s*\|?(?:\s*:?-+:?\s*\|)+(?:\s*:?-+:?\s*)?$/gm, ' ')
+    .replace(/^\s*(?:[-*_]\s*){3,}$/gm, ' ')
     .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+\.)\s+/gm, '')
     .replace(/[*_~`|]+/g, '')
     .replace(/\s+/g, ' ')

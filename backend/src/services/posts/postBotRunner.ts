@@ -5,6 +5,7 @@ import { AutomationSwitch } from '../automationSwitch';
 import { resolveAutomationRunAs } from '../automationRunAs';
 import { audioCandidatesByQueueJob } from '../audio/audioJobCandidates';
 import { ChatProfileStore } from '../codex-chat/chatProfiles';
+import { CodexChatStore } from '../codex-chat/codexChatStore';
 import { ChatWakeBusyError, ensureAutomationRoom, wakeChatRoom } from '../codex-chat/chatRoomWake';
 import { actorFromRequester, type PostActor } from './postActor';
 import { markdownToPlainText } from './postMedia';
@@ -167,7 +168,14 @@ async function execute(run: BotRunRow, controller: AbortController) {
   busyRetries.delete(run.id);
   if (controller.signal.aborted) return;
   const reply = result.replies.filter((message) => message.status === 'completed' && message.content.trim()).at(-1);
-  if (!reply) return setStatus(run.id, 'failed', { error: '봇이 답을 비워 뒀어.' });
+  if (!reply) {
+    // A failed turn says why (connection, model, tool); otherwise the bot answered nothing.
+    const failed = result.replies.filter((message) => message.status !== 'completed' && message.error).at(-1);
+    return setStatus(run.id, 'failed', { error: (failed?.error ?? '봇이 답을 비워 뒀어.').slice(0, 500) });
+  }
+  // The reply is read on the board; the room copy should not pile up as unread chat.
+  const lastReply = result.replies.at(-1);
+  if (lastReply) CodexChatStore.markRead(room.id, lastReply.id);
   const botActor = actorFromRequester(requester, run.profile_id);
   const comment = PostCommentStore.create(botActor, post.id, { body: reply.content.trim(), parentId: trigger.id }, { botRunId: run.id });
   setStatus(run.id, 'done', { result: comment.id });

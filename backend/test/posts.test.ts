@@ -79,6 +79,7 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
       { kind: 'media', ref: still }, { kind: 'media', ref: video }, { kind: 'audio', ref: 'cand_01' }, { kind: 'group', ref: '12' },
     ])
     assert.equal(excerptOf(`# 제목\n\n**굵게** 본문 ![](media:${still}) [링크](http://x)`), '제목 굵게 본문 링크')
+    assert.equal(excerptOf('| 조합 | 안정성 |\n| --- | :-: |\n| 노을 | 높음 |\n\n---\n끝'), '조합 안정성 노을 높음 끝', 'table rules and separators drop out')
   })
 
   let postId = 0

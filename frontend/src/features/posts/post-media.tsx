@@ -41,7 +41,8 @@ function useInView<T extends Element>(rootMargin = '200px') {
 export function libraryMediaKind(record: Pick<ImageRecord, 'mime_type' | 'file_type'> | null | undefined): 'image' | 'animated' | 'video' {
   const mime = record?.mime_type?.toLowerCase() ?? ''
   if (mime.startsWith('video/')) return 'video'
-  if (mime === 'image/gif' || mime === 'image/apng' || mime === 'image/webp' || record?.file_type === 'animated') return 'animated'
+  // WebP is stored as a still even when it moves (only GIF / APNG are typed animated); a post body loads originals, so it still plays there.
+  if (mime === 'image/gif' || mime === 'image/apng' || record?.file_type === 'animated') return 'animated'
   return 'image'
 }
 

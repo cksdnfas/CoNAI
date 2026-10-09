@@ -199,10 +199,25 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, reply }:
     <div className={cn('group/comment grid grid-cols-[2rem_1fr] gap-2.5 py-2.5', reply && 'pl-10', comment.status === 'hidden' && 'opacity-60')}>
       <PostAuthorAvatar author={comment.author} size="md" />
       <div className="flex min-w-0 flex-col gap-1">
-        <div className="flex flex-wrap items-center gap-x-2 text-sm">
+        <div className="flex min-h-5 flex-wrap items-center gap-x-2 text-sm">
           <PostAuthorName author={comment.author} />
           <span className="text-xs text-muted-foreground">{relative(comment.createdAt)}{comment.revision > 1 ? ` · ${t({ ko: '고침', en: 'edited' })}` : ''}</span>
           {comment.status === 'hidden' ? <span className="inline-flex items-center gap-1 text-xs text-destructive"><EyeOff className="size-3" />{t({ ko: '숨김', en: 'Hidden' })}</span> : null}
+          {/* Row actions sit on the name line, out of the way until the row is hovered or focused (always shown on touch screens). */}
+          <div className="ml-auto flex h-5 items-center gap-0.5 text-muted-foreground transition-opacity focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/comment:opacity-100">
+            {canReply ? <IconButton size="icon-xs" variant="ghost" label={t({ ko: '답글', en: 'Reply' })} onClick={onReply}><Reply /></IconButton> : null}
+            {comment.canEdit && editing === null ? <IconButton size="icon-xs" variant="ghost" label={t({ ko: '고치기', en: 'Edit' })} onClick={() => setEditing(comment.body)}><Pencil /></IconButton> : null}
+            {comment.canEdit ? (
+              <IconButton size="icon-xs" variant="ghost" label={t({ ko: '지우기', en: 'Delete' })} disabled={remove.isPending} onClick={async () => {
+                if (await confirm({ title: t({ ko: '댓글을 지울까?', en: 'Delete this comment?' }), tone: 'destructive' })) remove.mutate()
+              }}><Trash2 /></IconButton>
+            ) : null}
+            {isAdmin ? (
+              <IconButton size="icon-xs" variant="ghost" label={comment.status === 'hidden' ? t({ ko: '다시 보이기', en: 'Show' }) : t({ ko: '숨기기', en: 'Hide' })} disabled={hide.isPending} onClick={() => hide.mutate(comment.status !== 'hidden')}>
+                {comment.status === 'hidden' ? <Eye /> : <EyeOff />}
+              </IconButton>
+            ) : null}
+          </div>
         </div>
         {quoted ? (
           <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
@@ -222,21 +237,6 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, reply }:
         ) : (
           <PostMarkdown text={comment.body} mentions={mentionNames} className="text-sm [&_.post-media]:max-w-xs" />
         )}
-        {/* Row actions stay out of the way until the row is hovered or focused (always shown on touch screens). */}
-        <div className="flex items-center gap-0.5 text-muted-foreground transition-opacity focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/comment:opacity-100">
-          {canReply ? <IconButton size="icon-xs" variant="ghost" label={t({ ko: '답글', en: 'Reply' })} onClick={onReply}><Reply /></IconButton> : null}
-          {comment.canEdit && editing === null ? <IconButton size="icon-xs" variant="ghost" label={t({ ko: '고치기', en: 'Edit' })} onClick={() => setEditing(comment.body)}><Pencil /></IconButton> : null}
-          {comment.canEdit ? (
-            <IconButton size="icon-xs" variant="ghost" label={t({ ko: '지우기', en: 'Delete' })} disabled={remove.isPending} onClick={async () => {
-              if (await confirm({ title: t({ ko: '댓글을 지울까?', en: 'Delete this comment?' }), tone: 'destructive' })) remove.mutate()
-            }}><Trash2 /></IconButton>
-          ) : null}
-          {isAdmin ? (
-            <IconButton size="icon-xs" variant="ghost" label={comment.status === 'hidden' ? t({ ko: '다시 보이기', en: 'Show' }) : t({ ko: '숨기기', en: 'Hide' })} disabled={hide.isPending} onClick={() => hide.mutate(comment.status !== 'hidden')}>
-              {comment.status === 'hidden' ? <Eye /> : <EyeOff />}
-            </IconButton>
-          ) : null}
-        </div>
       </div>
     </div>
   )
