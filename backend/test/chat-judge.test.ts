@@ -45,6 +45,7 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
   const route = (s: { mock: typeof t.mock }, answers: (body: any) => unknown, chat: (body: any) => Response = () => reply('응, 알았어.')) => {
     const calls: Captured[] = []
     s.mock.method(globalThis, 'fetch', async (url: unknown, init?: RequestInit) => {
+      if (!init?.method || init.method === 'GET') return new Response('', { status: 404 })
       const body = init?.body ? JSON.parse(String(init.body)) : null
       calls.push({ url: String(url), body })
       if (String(url).endsWith('/v1/systemone')) {
@@ -148,8 +149,9 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     const thread = threadOf(judged.id)
     await LlmChatService.sendMessage(requester, thread, '오늘 날씨 좋다', () => {})
     const firstChat = calls.find((call) => call.url.endsWith('/chat/completions'))!
-    assert.equal(toolNames(firstChat.body).includes('save_lore'), false, 'a confident no withholds save_lore')
-    assert.ok(!lastUserText(firstChat.body).includes('[판단]'))
+    // The tool list stays the same every turn (the prompt cache); a withheld tool is named in the directive instead.
+    assert.equal(toolNames(firstChat.body).includes('save_lore'), true, 'the tool list does not change with the verdict')
+    assert.match(lastUserText(firstChat.body), /이 도구를 쓰지 마: save_lore/, 'a confident no withholds save_lore')
     const judgeCall = calls.find((call) => call.url.endsWith('/v1/systemone'))!
     assert.equal(judgeCall.url, 'https://judge.invalid/v1/systemone')
     assert.deepEqual(judgeCall.body.questions.lore, { type: 'noul', instructions: 'Lasting fact?' })

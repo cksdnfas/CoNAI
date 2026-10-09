@@ -98,7 +98,7 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
     const messages = meta.sections!.filter((section) => section.role !== 'tool-definition')
     assert.equal(messages.length, request.messages.length)
     assert.deepEqual(messages.map(({ position, role }) => [position, role]), request.messages.map((entry, index) => [index, entry.role]))
-    assert.ok(messages.some((section) => section.kind === 'page'))
+    assert.ok(messages.some((section) => section.parts?.some((part) => part.kind === 'page')), 'the page reference is a part of the latest user message')
     assert.equal(meta.promptTokens, 123)
     assert.ok(!JSON.stringify(meta).includes('ADMIN_SYSTEM_PRIVATE'))
     assert.equal(countCaptures(), 0)

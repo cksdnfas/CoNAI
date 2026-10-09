@@ -16,7 +16,7 @@ const EXCERPT_LENGTH = 240;
 type RoomMessageRow = { id: number; role: 'user' | 'assistant'; speaker_profile_id: number | null; content: string; created_date: string; routing: string | null };
 
 function textResult(value: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] };
+  return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
 }
 
 function errorResult(error: unknown) {
@@ -41,14 +41,11 @@ function speakerName(row: RoomMessageRow, names: Map<number, string>, userName: 
 
 /**
  * A direct chat's reply already answers (and quotes) the latest user message, so chat_reply_to there only quotes an
- * older one: offered once the chat has a user message before the latest. Codex keeps the first tool list of its
- * session, so it always has it.
+ * older one. It is still offered from the first message on: a tool list that grows on the second message would make a
+ * local server or a provider cache read the whole prompt again, and the tool says it is for older messages.
  */
-export function offersChatReplyTo(context: McpRequestContext) {
-  const chat = context.chatContext;
-  if (!chat || chat.kind !== 'direct' || context.source === 'codex-chat') return true;
-  const { count } = getUserSettingsDb().prepare("SELECT COUNT(*) AS count FROM codex_chat_messages WHERE thread_id = ? AND role = 'user'").get(chat.threadId) as { count: number };
-  return count > 1;
+export function offersChatReplyTo(_context: McpRequestContext) {
+  return true;
 }
 
 /** Group room tools for chat agents in a room the caller owns: call another member, and read the room's history. */

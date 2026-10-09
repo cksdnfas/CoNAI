@@ -999,6 +999,8 @@ export interface ModelSlot {
   updatedDate: string
   /** Read-only: its connection can be used. */
   ready?: boolean
+  /** Read-only: profiles that send their reply and a per-turn helper (judge, translation) to this row's connection. */
+  sharedServer?: Array<{ id: number; name: string; roles: Array<'judge' | 'translation'> }>
 }
 
 export interface ModelUsage {

@@ -48,3 +48,14 @@ test('a conversation with only the latest user message marks just the system pro
   const result = markCacheBreakpoints([{ role: 'system', content: 'sys' }, { role: 'user', content: '안녕' }])
   assert.deepEqual(marked(result), [0])
 })
+
+test('the persona and the summary behind it get their own marks, so a new summary keeps the persona cached', async () => {
+  const { markContextParts } = await import('../src/services/codex-chat/chatContextDiagnostics')
+  const summary = '## 지금까지의 대화 요약\n어제 바다에 갔다.'
+  const system = markContextParts({ role: 'system' as const, content: `너는 카이야.\n\n${summary}` }, [{ kind: 'persona', text: '너는 카이야.' }, { kind: 'summary', text: summary }])
+  const result = markCacheBreakpoints([system, { role: 'user', content: '안녕' }])
+  assert.deepEqual(result[0], { role: 'system', content: [
+    { type: 'text', text: '너는 카이야.\n\n', cache_control: MARK },
+    { type: 'text', text: summary, cache_control: MARK },
+  ] })
+})

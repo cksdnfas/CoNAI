@@ -201,10 +201,14 @@ export const ChatTaskRunner = {
       if (record.name !== 'queue.job.status') return
       const status = (record.payload as { status?: string })?.status
       if (!['completed', 'failed', 'cancelled'].includes(status ?? '')) return
-      // A waiting task resumes once its account has no generation left queued or running.
-      const rows = table().prepare("SELECT t.id, t.thread_id, c.account_id FROM chat_tasks t JOIN codex_chat_threads c ON c.id = t.thread_id WHERE t.status = 'waiting' AND t.wait = 'job'").all() as Array<{ id: number; thread_id: number; account_id: number | null }>
+      // A waiting task resumes once the generations it may be waiting on are done: those its chat started, and the
+      // account's started since the task last became active (asset batches and the like). Older or unrelated work of
+      // the account (a long workflow left running) does not hold it.
+      const rows = table().prepare("SELECT t.id, t.thread_id, c.account_id, COALESCE(t.active_since, t.created_at) AS since FROM chat_tasks t JOIN codex_chat_threads c ON c.id = t.thread_id WHERE t.status = 'waiting' AND t.wait = 'job'").all() as Array<{ id: number; thread_id: number; account_id: number | null; since: string }>
       for (const row of rows) {
-        const busy = getUserSettingsDb().prepare("SELECT COUNT(*) AS count FROM generation_queue_jobs WHERE requested_by_account_id IS ? AND status NOT IN ('completed', 'failed', 'cancelled')").get(row.account_id) as { count: number }
+        const busy = getUserSettingsDb().prepare(`SELECT COUNT(*) AS count FROM generation_queue_jobs j
+          WHERE j.status NOT IN ('completed', 'failed', 'cancelled')
+            AND (j.id IN (SELECT job_id FROM chat_generation_links WHERE thread_id = ?) OR (j.requested_by_account_id IS ? AND j.created_date >= ?))`).get(row.thread_id, row.account_id, row.since) as { count: number }
         if (busy.count > 0) continue
         ChatTaskStore.update(row.id, { status: 'running', reason: null })
         ChatTaskRunner.schedule(row.thread_id, '기다리던 생성 작업이 모두 끝났어.')
@@ -246,7 +250,11 @@ export const ChatTaskRunner = {
     return ChatTaskStore.update(task.id, { status: 'cancelled', reason: '사용자가 중단했어.' })
   },
 
-  schedule(threadId: number, event: string, delayMs = 1500) {
+  /**
+   * The next continuation, a moment after `event`: both engines release a chat's turn before they announce its end,
+   * so it need not wait long for the reply that ended; one that still finds a reply running tries again later.
+   */
+  schedule(threadId: number, event: string, delayMs = 200) {
     clearTimeout(timers.get(threadId))
     const timer = setTimeout(() => { timers.delete(threadId); void ChatTaskRunner.continue(threadId, event) }, delayMs)
     timer.unref?.()
@@ -257,6 +265,13 @@ export const ChatTaskRunner = {
     if (running.has(threadId)) return
     let task = ChatTaskStore.live(threadId)
     if (!task || task.status !== 'running') return
+    // A reply still running (the person's own, or one that just ended and has not let go yet) goes first: try again
+    // in a moment, before anything counts against the budget or the stall limit. Its end schedules a turn too.
+    const { CodexChatService } = await import('./codexChatService')
+    if (CodexChatService.isRunning(threadId)) {
+      if (!timers.has(threadId)) ChatTaskRunner.schedule(threadId, event, 1500)
+      return
+    }
     const thread = CodexChatStore.findThreadById(threadId)
     const profile = thread?.profile_id ? ChatProfileStore.find(thread.profile_id) : null
     const requester = thread ? requesterOf(thread.account_id) : null
@@ -275,12 +290,15 @@ export const ChatTaskRunner = {
     const page = profile.pageAssist ? lastChatPageForThread(requester, threadId) : undefined
     running.add(threadId)
     try {
-      const { CodexChatService } = await import('./codexChatService')
       await CodexChatService.sendMessage(requester, threadId, continuationText(task, event), () => {}, undefined, undefined, undefined, undefined, undefined, page, { task: routing })
     } catch (error) {
-      // A reply already running finishes first; its end schedules the next continuation again.
+      // A reply already running finishes first and its end schedules the next continuation; in case it ended just
+      // before, this one is given back and tried again a little later.
       const message = error instanceof Error ? error.message : String(error)
-      if (!/진행 중/.test(message)) ChatTaskStore.update(task.id, { status: 'paused', reason: `이어가지 못했어: ${clip(message, 200)}` })
+      if (/진행 중/.test(message)) {
+        ChatTaskStore.update(task.id, { used: { ...task.used, continuations: Math.max(0, task.used.continuations - 1) } })
+        if (!timers.has(threadId)) ChatTaskRunner.schedule(threadId, event, 1500)
+      } else ChatTaskStore.update(task.id, { status: 'paused', reason: `이어가지 못했어: ${clip(message, 200)}` })
     } finally {
       running.delete(threadId)
     }

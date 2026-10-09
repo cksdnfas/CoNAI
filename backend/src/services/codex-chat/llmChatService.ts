@@ -37,6 +37,7 @@ import { skipThreadGenerationReactions } from './chatReplyRegistry'
 import { cancelJudgeFollowUp, endJudgedTurn, judgeAfterReply, judgeBeforeReply, type JudgedTurn } from './chatJudge'
 import type { JudgedContext } from './chatJudgeContext'
 import { judgeStatusFields } from './chatJudgeFields'
+import { withServerContextLimit } from './serverContextLimit'
 
 type GenerationReaction = {
   result: ChatCompletionMessage
@@ -92,6 +93,8 @@ type LlmTurn = {
   offeredTools: ChatCompletionTool[]
   /** The provider's finish_reason of the last round ('length': the token cap cut the reply; 'repetition': a loop was cut off). */
   finishReason: string | null
+  /** The user message's translation for the model, running beside the judge; the reply is built once it is stored. */
+  translation?: Promise<unknown>
   /** Continuing a cut reply: its text, which `text` starts with, and the model is asked to carry on from. */
   continuing?: string
   /** …and its routing: the continuation keeps its quote and recipients, and takes over its generation jobs. */
@@ -213,28 +216,28 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
   // A later request must read its own fresh snapshot, not replay private state from an old page.
   const pageRead = ['get_current_page', 'get_workflow_editor', 'list_workflow_modules', 'read_page_data'].includes(record.tool) && record.status === 'completed'
   record.summary = pageRead ? '현재 요청에 연결한 페이지를 읽었어.' : record.pageOperation ? record.pageOperation.label : output ? truncateToolSummary(output) : null
-  record.output = pageRead ? '(Page/editor snapshot omitted; read current-request page tools again.)' : record.pageOperation ? `(Page operation done: ${record.pageOperation.label}. Screen snapshot omitted; read the current page again.)` : output.slice(0, STORED_TOOL_OUTPUT_LENGTH)
+  record.output = pageRead ? '(Page/editor snapshot omitted; use the screen in the current request, or the page tools for what it does not show.)' : record.pageOperation ? `(Page operation done: ${record.pageOperation.label}. Screen snapshot omitted; use the screen in the current request.)` : output.slice(0, STORED_TOOL_OUTPUT_LENGTH)
   emit(turn, { type: 'tool', call: { ...record } })
   const text = (output.length > outputLimit ? cutToolOutput(output, outputLimit) : output) || '(no output)'
   return { text, nativeResult: nativeResult ? { ...nativeResult, content: [{ type: 'text', text }, ...(nativeResult.content ?? []).filter((part) => (part as { type?: unknown })?.type === 'image')] } : { isError: true, content: [{ type: 'text', text }] } }
 }
 
 /** A direct chat's reply: the profile's prompt and the thread's context window (summarized first if it overflows). */
-async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile) {
+async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexChatThreadRecord, chatProfile: ChatProfile) {
+  // Without its own context length, the profile is sized to what a small local server holds.
+  const profile = withServerContextLimit(chatProfile)
   // Creation calls replay with their outcome (image attached / failed / running), not the "queued" JSON of their submission.
   const listMessages = () => withGenerationOutcomes(CodexChatStore.listMessages(thread.id).filter((message) => message.id !== turn.replacingMessageId))
   const config = resolveContextConfig(thread, profile)
   if (turn.reaction && thread.kind === 'group') config.maxTokens = ChatGroupStore.member(thread.id, profile.id)?.max_tokens ?? config.maxTokens
-  return streamReply(turn, requester, profile, async (tools, judged) => {
-    const attachmentTexts = await inlineTextsForChat(turn.reaction ? { ...profile, mcpEnabled: false } : profile, requester.accountId, listMessages())
-    if (turn.reaction && thread.kind === 'group') {
-      const members = ChatGroupStore.members(thread.id).flatMap((member) => ChatProfileStore.find(member.profile_id) ?? [])
-      const messages = buildGroupLlmMessages({ profile, thread, members, messages: listMessages(), routing: turn.delivery!.routing,
-        windowLimit: groupLimitsOf(thread).window, tools: [], maxTokens: config.maxTokens, withTools: false, extraTokens: estimateMessagesTokens(profile.id, [turn.reaction.result]),
-        segments: thread.summary_enabled === 1 ? ChatSummaryStore.list(thread.id) : undefined, attachmentTexts,
-        onMeta: (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(profile, 'chat')?.model ?? null } } })
-      return [...messages, turn.reaction.result]
-    }
+  // Everything the request needs but the judge's answers: the conversation (read once, after the user's message is
+  // translated), its attachments, the page reference and, for a long chat, the summary fitted. It runs beside the
+  // judge, whose answers only add lore, episodes and a directive.
+  let preparing: Promise<Awaited<ReturnType<typeof prepareRequest>>> | null = null
+  const prepareRequest = async (tools: ChatCompletionTool[]) => {
+    await turn.translation
+    const history = listMessages()
+    const attachmentTexts = await inlineTextsForChat(turn.reaction ? { ...profile, mcpEnabled: false } : profile, requester.accountId, history)
     // Continuing: the cut reply as the model's own turn, then the request to carry on from its last word — room for
     // both is kept before the window is chosen.
     const continuation: ChatCompletionMessage[] = turn.continuing === undefined ? [] : [markContextMessage({ role: 'assistant', content: turn.continuing }, 'continuation'), markContextMessage({ role: 'user', content: CONTINUE_DIRECTIVE }, 'continuation')]
@@ -244,11 +247,24 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     const reactionMessages = turn.reaction ? [turn.reaction.result] : []
     const extraTokens = estimateMessagesTokens(profile.id, [...continuation, ...pageMessages, ...reactionMessages])
     if (config.summaryEnabled && !turn.reaction) {
-      await whileWaiting(turn, 'summary', fitThreadSummary(thread.id, profile, listMessages(), turn.controller.signal, tools, { attachmentTexts, extraTokens }))
+      await whileWaiting(turn, 'summary', fitThreadSummary(thread.id, profile, history, turn.controller.signal, tools, { attachmentTexts, extraTokens }))
+    }
+    return { history, attachmentTexts, continuation, reference, reactionMessages, extraTokens }
+  }
+  const prepare = (tools: ChatCompletionTool[]) => (preparing ??= prepareRequest(tools))
+  return streamReply(turn, requester, profile, async (tools, judged) => {
+    const { history, attachmentTexts, continuation, reference, reactionMessages, extraTokens } = await prepare(tools)
+    if (turn.reaction && thread.kind === 'group') {
+      const members = ChatGroupStore.members(thread.id).flatMap((member) => ChatProfileStore.find(member.profile_id) ?? [])
+      const messages = buildGroupLlmMessages({ profile, thread, members, messages: history, routing: turn.delivery!.routing,
+        windowLimit: groupLimitsOf(thread).window, tools: [], maxTokens: config.maxTokens, withTools: false, extraTokens: estimateMessagesTokens(profile.id, [turn.reaction.result]),
+        segments: thread.summary_enabled === 1 ? ChatSummaryStore.list(thread.id) : undefined, attachmentTexts,
+        onMeta: (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(profile, 'chat')?.model ?? null } } })
+      return [...messages, turn.reaction.result]
     }
     const current = CodexChatStore.findThreadById(thread.id) ?? thread
     const request = buildChatMessages({
-      profile, thread: current, messages: listMessages(), config, tools, segments: config.summaryEnabled ? ChatSummaryStore.list(thread.id) : [], attachmentTexts, extraTokens, judged,
+      profile, thread: current, messages: history, config, tools, segments: config.summaryEnabled ? ChatSummaryStore.list(thread.id) : [], attachmentTexts, extraTokens, judged,
       onMeta: (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(profile, 'chat')?.model ?? null } },
     })
     const final = [...withPageReference(request, reference), ...continuation, ...reactionMessages]
@@ -256,7 +272,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
       turn.contextMeta = limitContextMeta({ ...turn.contextMeta, sections: contextSections(final, tools, (text) => estimateTokens(profile.id, text)), estimatedTokens: estimateMessagesTokens(profile.id, final, tools) })
     }
     return final
-  }, { maxTokens: config.maxTokens })
+  }, { maxTokens: config.maxTokens }, prepare)
 }
 
 /**
@@ -313,7 +329,7 @@ function settleRestatement(turn: LlmTurn, previous: TextSpan | null, roundStart:
  * Fails the reply (LlmChatError) when the output cap cut tool calls (their arguments are broken: never run, never
  * stored) or when the model answered nothing at all.
  */
-async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[], judged: JudgedContext | null) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>, generation: Partial<LlmGenerationOptions> = {}) {
+async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[], judged: JudgedContext | null) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>, generation: Partial<LlmGenerationOptions> = {}, prepare?: (tools: ChatCompletionTool[]) => Promise<unknown>) {
   requireProfileAccess(requester, profile)
   const target = resolveChatCompletionTarget(chatConnectionOf(profile), { model: resolveProfileModel(profile, 'chat')?.model ?? null, generation: { ...profileGenerationOptions(profile), ...generation } })
   if (target.transport === 'claude-code' && !resolveChatAccess(requester.accountId).claude) throw new LlmChatError('Claude Code를 사용할 권한이 없어.', 403)
@@ -327,18 +343,29 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
   try {
     // Image viewing is only offered to models the profile says can see images.
     const visible = (bridge?.tools ?? []).filter((tool) => profile.visionEnabled || tool.function.name !== 'view_images')
-    if (!turn.reaction && turn.continuing === undefined) {
-      judged = await judgeBeforeReply({ profile, threadId: turn.threadId, replyId: chatContext?.replyId ?? null, availableTools: visible.map((tool) => tool.function.name), excludeMessageId: turn.replacingMessageId, context: true, signal: turn.controller.signal })
-    }
-    const offeredTools = judged ? judged.filterTools(visible) : visible
+    // The judge reads the user's own words, so it runs while their message is translated for the model.
+    const judging = !turn.reaction && turn.continuing === undefined
+      ? judgeBeforeReply({ profile, threadId: turn.threadId, replyId: chatContext?.replyId ?? null, availableTools: visible.map((tool) => tool.function.name), excludeMessageId: turn.replacingMessageId, context: true, signal: turn.controller.signal })
+      : Promise.resolve(null)
+    judged = (await Promise.all([judging, prepare ? prepare(visible) : turn.translation]))[0]
+    // The tool list stays the profile's every turn: tool definitions open the prompt, so a list that changes with the
+    // judge's verdicts would make a local server or a provider cache read the whole prompt again. Tools the judge
+    // withholds this turn are named in the directive and refused if called.
+    const allowed = judged ? judged.filterTools(visible) : visible
+    const blocked = new Set(visible.filter((tool) => !allowed.includes(tool)).map((tool) => tool.function.name))
+    const offeredTools = visible
     turn.offeredTools = offeredTools
     const built = await buildMessages(offeredTools, judged?.context ?? null)
-    const messages = judged?.directive ? appendUserDirective(built, judged.directive, 'judge') : built
+    const directive = [judged?.directive ?? '', blocked.size > 0 ? `[판단] 이번 답변에서는 이 도구를 쓰지 마: ${[...blocked].join(', ')}` : ''].filter(Boolean).join('\n')
+    const messages = directive ? appendUserDirective(built, directive, 'judge') : built
+    const permitted = (name: string) => offeredTools.some((tool) => tool.function.name === name) && !blocked.has(name)
     if (judged && turn.contextMeta) turn.contextMeta.judge = judged.diagnostics
     let previousRound: TextSpan | null = null
     for (let round = 1; ; round += 1) {
       turn.controller.signal.throwIfAborted()
-      const tools = bridge && round <= profile.maxToolRounds ? offeredTools : []
+      // The last round keeps the same tool list (and so the cached prompt) and tells the model to answer in text.
+      const lastRound = round > profile.maxToolRounds
+      const tools = bridge ? offeredTools : []
       // A tool result that tips the request over the limit is cut shorter first; only then does the reply fail.
       const fitted = fitChatContext(profile, messages, tools, target.generation.maxTokens)
       if (fitted !== messages) messages.splice(0, messages.length, ...fitted)
@@ -367,6 +394,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           target,
           messages,
           tools,
+          ...(lastRound && tools.length > 0 ? { toolChoice: 'none' as const } : {}),
           signal: turn.controller.signal,
           allowCompatibilityFallback: !turn.reaction,
           stopLoops: true,
@@ -374,6 +402,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           usage: { purpose: 'chat', profileId: profile.id, threadId: turn.threadId },
           callTool: bridge ? async (name, args, id) => {
             requireProfileAccess(requester, profile)
+            if (blocked.has(name)) return { isError: true, content: [{ type: 'text', text: `${name} is not available in this reply.` }] }
             return (await runToolCall(turn, bridge, { id, function: { name, arguments: JSON.stringify(args) } }, profile.toolOutputLimit, [])).nativeResult
           } : undefined,
           onRequestBody: (body, actualTarget) => {
@@ -408,7 +437,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
         throw new LlmChatError(REPLY_FAILURES.toolCallsCut)
       }
       previousRound = settleRestatement(turn, previousRound, roundStart)
-      if (!bridge || tools.length === 0 || result.toolCalls.length === 0) {
+      if (!bridge || tools.length === 0 || lastRound || result.toolCalls.length === 0) {
         turn.finishReason = result.finishReason
         // Nothing to show at all (thinking ate the cap, or the model said nothing) is a failure the reader can retry.
         if (!turn.reaction && turn.continuing === undefined && turn.toolCalls.size === 0 && !replyContent(turn.text)) {
@@ -423,9 +452,9 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
         if (turn.controller.signal.aborted) {
           return
         }
-        messages.push({ role: 'tool', tool_call_id: call.id, content: tools.some((tool) => tool.function.name === call.function.name)
+        messages.push({ role: 'tool', tool_call_id: call.id, content: permitted(call.function.name)
           ? (await runToolCall(turn, bridge, call, profile.toolOutputLimit, images)).text
-          : `Unknown or not permitted tool: ${call.function.name}` })
+          : blocked.has(call.function.name) ? `${call.function.name} is not available in this reply.` : `Unknown or not permitted tool: ${call.function.name}` })
       }
       // Tool messages carry text only, so images ride in a user message right after them (this request only).
       if (images.length > 0 && profile.visionEnabled) {
@@ -694,10 +723,18 @@ export const LlmChatService = {
     cancelJudgeFollowUp(thread.id)
     if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     skipThreadGenerationReactions(thread.id)
-    // The model reads the message in English; the reader keeps their own words.
-    const modelText = await translateUserInput(profile, trimmed)
     return startReply(requester, thread, profile, listener, () => {
-      const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: modelText ?? trimmed, display_content: modelText ? trimmed : null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
+      const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: trimmed, display_content: null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
+      // The model reads the message in English; the reader keeps their own words. The message is shown right away and
+      // translated beside the judge (the turn is already reserved here, see startReply).
+      const turn = activeTurns.get(thread.id)
+      if (turn && trimmed && hasTranslation(profile)) {
+        turn.translation = translateUserInput(profile, trimmed).then((modelText) => {
+          if (modelText) CodexChatStore.setUserMessageTranslation(thread.id, userMessageId, modelText, trimmed)
+        })
+        // A turn that stops before it waits for the translation must not leave its failure unhandled.
+        turn.translation.catch(() => undefined)
+      }
       ChatFlagStore.setThreadFlags(thread.id, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       if (!thread.title) CodexChatStore.renameThread(thread.id, (trimmed || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' '))
       return { type: 'user', message: CodexChatStore.listMessages(thread.id).find((entry) => entry.id === userMessageId) as CodexChatMessageRecord }

@@ -49,15 +49,22 @@ const PageContext = createContext<PageApi | null>(null)
 export type ChatPageActivity = { id: string; threadId: number; label: string; tier: 'view' | 'draft'; at: number; state: 'done' | 'undone'; undo?: () => void }
 const ACTIVITY_LIMIT = 30
 
-/** Wait until the screen stops changing (a route or editor may still be loading), up to a few seconds. */
-async function settledSnapshot(read: () => ChatPageSnapshot | undefined) {
+/**
+ * Wait until the screen stops changing, up to a few seconds: an operation may open a route or an editor that still
+ * loads, so it gets `checks` equal reads `interval` ms apart. Filling inputs only needs the re-render (two quick
+ * checks), and a capture changes nothing, so it reads at once (a background tab's slowed timers would otherwise
+ * outlast the server's short capture wait).
+ */
+async function settledSnapshot(read: () => ChatPageSnapshot | undefined, kind: ChatPageCommandEvent['type']) {
+  if (kind === 'capture') return read()
+  const [interval, checks] = kind === 'action' ? [100, 3] : [50, 2]
   const deadline = Date.now() + 5000
   let last = ''
   let stable = 0
   while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await new Promise((resolve) => setTimeout(resolve, interval))
     const key = JSON.stringify(read() ?? null)
-    if (key !== 'null' && key === last) { stable += 1; if (stable >= 3) break }
+    if (key !== 'null' && key === last) { stable += 1; if (stable >= checks) break }
     else { stable = 0; last = key }
   }
   return read()
@@ -300,7 +307,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
           setFilled((old) => { const next = new Map(old); event.changes.forEach((change) => next.delete(`${filledOn}:${change.fieldId}`)); return next })
         } })
       }
-      const page = await settledSnapshot(() => current.current.snapshot ? normalizeChatPageSnapshot(current.current.snapshot) : undefined)
+      const page = await settledSnapshot(() => current.current.snapshot ? normalizeChatPageSnapshot(current.current.snapshot) : undefined, event.type)
       if (!page || page.connectionId !== event.connectionId) throw new Error('페이지 연결이 해제됐어.')
       await answerChatPageCommand(event.commandId, { ok: true, page })
     } catch (error) {

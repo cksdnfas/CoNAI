@@ -8,6 +8,9 @@ import type { ChatMcpToolResult } from './chatMcpBridge'
 import { primaryModelOf } from './modelSlots'
 import { createRepetitionWatch, withoutRepetition } from './repetitionGuard'
 import { isCallerAbort, rawMessagesEstimate, rawTokenEstimate, readUsageCounts, recordLlmUsage, type LlmTokenCounts, type LlmUsageTag } from '../llmUsage'
+import { learnServerContextLimit } from './serverContextLimit'
+import { contextPartsOf } from './chatContextDiagnostics'
+import { setTimeout as delay } from 'node:timers/promises'
 
 export type ChatCompletionToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } }
 
@@ -80,6 +83,29 @@ export function toolsRefusedBy(target: ChatCompletionTarget) {
   if (until !== undefined && until < Date.now()) toolsRefused.delete(toolsKey(target))
   return until !== undefined && until >= Date.now()
 }
+/**
+ * Connections that failed to connect twice in a row (within a minute): for a while every request to them fails at once
+ * instead of each waiting out its own connect timeout — the reply, the judge, the translation and the summary would
+ * otherwise wait ~10 s apiece on a server that is off. The first request after the pause tries again.
+ */
+const unreachable = new Map<string, { failures: number; last: number; until: number }>()
+const UNREACHABLE_PAUSE_MS = 30_000
+const CONNECT_FAILURES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH', 'ENETUNREACH', 'UND_ERR_CONNECT_TIMEOUT'])
+export function assertLlmReachable(target: Pick<ChatCompletionTarget, 'providerName' | 'displayName'>) {
+  const state = unreachable.get(target.providerName)
+  if (state && state.until > Date.now()) throw new LlmRequestError(`LLM 서버에 연결되지 않아서 잠시 보내지 않아: ${target.displayName} (${Math.ceil((state.until - Date.now()) / 1000)}초 뒤 다시 시도해)`)
+}
+export function noteLlmConnectFailure(target: Pick<ChatCompletionTarget, 'providerName'>, code: string | undefined) {
+  if (!code || !CONNECT_FAILURES.has(code)) return
+  const now = Date.now()
+  const previous = unreachable.get(target.providerName)
+  const failures = previous && now - previous.last < 60_000 ? previous.failures + 1 : 1
+  unreachable.set(target.providerName, { failures, last: now, until: failures >= 2 ? now + UNREACHABLE_PAUSE_MS : 0 })
+}
+
+/** Servers that refused cache marks, by connection and model (marks are an optimization: remembered, not retried). */
+const marksRefused = new Map<string, number>()
+
 /** A 400 that says the server or model cannot take tool definitions (not a broken call or schema of ours). */
 export function isToolsRefusal(errorText: string) {
   return /does not support tools|tools? (?:are|is) not supported|not support(?:ed)? (?:for )?tool|--jinja|tool[_ ]?(?:calling|use) (?:is )?not (?:supported|enabled)|unrecognized (?:request )?argument.{0,20}tools|extra_forbidden.{0,40}tools/i.test(errorText)
@@ -153,7 +179,9 @@ export function resolveChatCompletionTarget(providerName: string, overrides: { m
     timeoutMs: connectionConfig.timeoutMs,
     maxConcurrentRequests: connectionConfig.maxConcurrentRequests,
     generation: overrides.generation ?? {},
-    promptCacheMarks: connectionConfig.promptCacheMarks,
+    // Claude models (through OpenRouter, LiteLLM, …) cache only marked prefixes: on unless the connection turns it off.
+    // A server that refuses the marks gets the request again without them (streamChatCompletion).
+    promptCacheMarks: connectionConfig.promptCacheMarks || (config.prompt_cache_marks !== false && /claude/i.test(model)),
     thinkingSwitch: connectionConfig.thinkingSwitch,
   }
 }
@@ -220,6 +248,13 @@ function markableAtOrBefore(messages: ChatCompletionMessage[], index: number) {
  */
 export function markCacheBreakpoints(messages: ChatCompletionMessage[]): unknown[] {
   const wanted = new Set<number>()
+  // The system message ends with the lore index and the summary, which change now and then: the persona before them
+  // gets its own mark, so a new summary does not make the whole character prompt miss.
+  const systemIndex = messages.findIndex((message) => message.role === 'system')
+  const systemMessage = systemIndex >= 0 ? messages[systemIndex] : null
+  const systemText = systemMessage && typeof systemMessage.content === 'string' ? systemMessage.content : ''
+  const memoryAt = systemMessage ? Math.min(...contextPartsOf(systemMessage).filter((part) => ['lore-index', 'constant-lore', 'summary'].includes(part.kind) && part.text)
+    .map((part) => systemText.indexOf(part.text)).filter((index) => index > 0), Infinity) : Infinity
   const system = messages.findIndex((message) => message.role === 'system')
   if (system >= 0) wanted.add(system)
   const reference = messages.findIndex((message) => message.role === 'user' && textOf(message.content).startsWith(REFERENCE_BLOCK_START))
@@ -228,6 +263,12 @@ export function markCacheBreakpoints(messages: ChatCompletionMessage[]): unknown
   if (lastUser > 0) wanted.add(markableAtOrBefore(messages, lastUser - 1))
   wanted.delete(-1)
   return messages.map((message, index) => {
+    if (index === systemIndex && Number.isFinite(memoryAt)) {
+      return { ...message, content: [
+        { type: 'text', text: systemText.slice(0, memoryAt), cache_control: { type: 'ephemeral' } },
+        { type: 'text', text: systemText.slice(memoryAt), cache_control: { type: 'ephemeral' } },
+      ] }
+    }
     if (!wanted.has(index) || (message.role !== 'system' && message.role !== 'user')) return message
     const parts: unknown[] = typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : [...message.content]
     const last = parts[parts.length - 1] as Record<string, unknown> | undefined
@@ -241,7 +282,7 @@ export function markCacheBreakpoints(messages: ChatCompletionMessage[]): unknown
  * `streamUsage`: a streamed request asks for the usage chunk at the end (`stream_options.include_usage`; OpenAI and
  * llama.cpp send it as a last chunk with empty `choices`), so the prompt token count is known for streamed replies too.
  */
-export function buildBody(target: ChatCompletionTarget, messages: ChatCompletionMessage[], tools: ChatCompletionTool[], stream: boolean, streamUsage = stream) {
+export function buildBody(target: ChatCompletionTarget, messages: ChatCompletionMessage[], tools: ChatCompletionTool[], stream: boolean, streamUsage = stream, toolChoice?: 'none') {
   const body: Record<string, unknown> = { ...buildOpenAiGenerationFields(target.generation, target.thinkingSwitch), model: target.model, messages: target.promptCacheMarks ? markCacheBreakpoints(messages) : messages, stream }
   if (stream && streamUsage) {
     const options = body.stream_options
@@ -249,6 +290,7 @@ export function buildBody(target: ChatCompletionTarget, messages: ChatCompletion
   }
   if (tools.length > 0) {
     body.tools = tools
+    if (toolChoice) body.tool_choice = toolChoice
   }
   return body
 }
@@ -304,6 +346,8 @@ async function requestChatCompletion(meter: { startedAt: number }, params: {
   /** One-shot background reactions fail without resending compatibility fallbacks. */
   allowCompatibilityFallback?: boolean
   callTool?: (name: string, args: Record<string, unknown>, id: string) => Promise<ChatMcpToolResult>
+  /** 'none': the tools stay in the request (and the prompt cache) but the model must answer in text. */
+  toolChoice?: 'none'
   maxToolRounds?: number
   /** Hang up on a model that starts looping and cut the loop off (finishReason 'repetition', see repetitionGuard). */
   stopLoops?: boolean
@@ -328,43 +372,69 @@ async function requestChatCompletion(meter: { startedAt: number }, params: {
 
   try {
     if (params.target.transport === 'claude-code') {
-      params.onRequestBody?.({ model: params.target.model, messages: params.messages, tools: params.tools ?? [], transport: 'claude-code' }, params.target)
-      return await streamClaudeChatCompletion({ ...params, signal, onContent: (text) => { touch(); params.onContent?.(text) }, onReasoning: (text) => { touch(); params.onReasoning?.(text) } })
+      const claudeTools = params.toolChoice === 'none' ? [] : params.tools ?? []
+      params.onRequestBody?.({ model: params.target.model, messages: params.messages, tools: claudeTools, transport: 'claude-code' }, params.target)
+      return await streamClaudeChatCompletion({ ...params, tools: claudeTools, signal, onContent: (text) => { touch(); params.onContent?.(text) }, onReasoning: (text) => { touch(); params.onReasoning?.(text) } })
     }
     let streamUsage = true
-    const request = (target: ChatCompletionTarget) => {
-      const body = buildBody(target, params.messages, toolsRefusedBy(target) ? [] : params.tools ?? [], true, streamUsage)
+    let toolChoiceRefused = false
+    const request = async (target: ChatCompletionTarget) => {
+      assertLlmReachable(target)
+      const body = buildBody(target, params.messages, toolsRefusedBy(target) || (toolChoiceRefused && params.toolChoice) ? [] : params.tools ?? [], true, streamUsage, params.toolChoice)
       params.onRequestBody?.(body, target)
       return fetch(target.endpoint, {
         method: 'POST',
         headers: buildHeaders(target),
         body: JSON.stringify(body),
         signal,
-      }).catch((error: unknown) => {
+      }).then((response) => {
+        unreachable.delete(target.providerName)
+        return response
+      }, (error: unknown) => {
         if (signal.aborted) throw error
         // Node's fetch only says "fetch failed"; the cause (ECONNREFUSED, ENOTFOUND…) is what the user can act on.
         const cause = (error as { cause?: { code?: string; message?: string } })?.cause
+        noteLlmConnectFailure(target, cause?.code)
         throw new LlmRequestError(`LLM 서버에 연결하지 못했어: ${params.target.endpoint} (${cause?.code ?? cause?.message ?? (error instanceof Error ? error.message : String(error))})`, undefined, { cause: error })
       })
     }
-    let target = params.target
+    let target = (marksRefused.get(toolsKey(params.target)) ?? 0) > Date.now() ? { ...params.target, promptCacheMarks: false } : params.target
     let response: Response
+    let rateLimited = false
     for (;;) {
       signal.throwIfAborted()
       response = await request(target)
       if (response.ok) break
       const errorText = await response.text().catch(() => '')
       signal.throwIfAborted()
+      // Rate limited (OpenRouter free models and the like): wait as the server asks, once, when that is short.
+      if (params.allowCompatibilityFallback !== false && response.status === 429 && !rateLimited) {
+        const seconds = Number(response.headers.get('retry-after'))
+        const wait = Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : 2000
+        if (wait <= 10_000) {
+          rateLimited = true
+          await delay(wait, undefined, { signal })
+          touch()
+          continue
+        }
+      }
       // A server that does not know cache_control rejects the whole request; the marks are an optimization, so retry without them.
       if (params.allowCompatibilityFallback !== false && response.status === 400 && target.promptCacheMarks) {
         console.warn(`[llm-chat] ${params.target.displayName}: request with cache marks rejected (${errorText.slice(0, 200)}); retrying without`)
         target = { ...target, promptCacheMarks: false }
+        marksRefused.set(toolsKey(target), Date.now() + 60 * 60_000)
         touch()
         continue
       }
       // Likewise the usage chunk: a server that names stream_options in its refusal gets the request without it.
       if (params.allowCompatibilityFallback !== false && response.status === 400 && streamUsage && errorText.includes('stream_options')) {
         streamUsage = false
+        touch()
+        continue
+      }
+      // A server that does not take tool_choice gets the old last round: no tools at all.
+      if (params.allowCompatibilityFallback !== false && response.status === 400 && params.toolChoice && !toolChoiceRefused && errorText.includes('tool_choice')) {
+        toolChoiceRefused = true
         touch()
         continue
       }
@@ -375,6 +445,8 @@ async function requestChatCompletion(meter: { startedAt: number }, params: {
         touch()
         continue
       }
+      // A server that names its context size in a refusal sizes the next request (see serverContextLimit).
+      if (response.status === 400 && /context/i.test(errorText)) learnServerContextLimit(target, errorText)
       throw new LlmRequestError(`LLM 요청 실패 (${response.status}): ${errorText.slice(0, 500) || response.statusText}`, response.status)
     }
     if (!response.body || !(response.headers.get('content-type') ?? '').includes('text/event-stream')) {

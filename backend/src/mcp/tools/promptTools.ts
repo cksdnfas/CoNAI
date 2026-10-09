@@ -39,7 +39,7 @@ export function registerPromptTools(server: McpServer): void {
               total: result.total,
               page,
               limit,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {
@@ -65,7 +65,7 @@ export function registerPromptTools(server: McpServer): void {
         return {
           content: [{
             type: 'text' as const,
-            text: JSON.stringify(prompts, null, 2),
+            text: JSON.stringify(prompts),
           }],
         };
       } catch (error) {
@@ -92,7 +92,7 @@ export function registerPromptTools(server: McpServer): void {
         return {
           content: [{
             type: 'text' as const,
-            text: JSON.stringify(groups, null, 2),
+            text: JSON.stringify(groups),
           }],
         };
       } catch (error) {

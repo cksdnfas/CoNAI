@@ -103,7 +103,7 @@ export function registerNovelAiGenerationTools(server: McpServer, context: McpRe
                 sampler: metadata.sampler,
                 model: metadata.model,
               } } : {}),
-            }, null, 2),
+            }),
           }],
         };
       } catch (error: any) {

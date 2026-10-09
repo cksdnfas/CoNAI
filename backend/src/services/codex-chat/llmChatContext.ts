@@ -11,7 +11,7 @@ import { blockStateText, foldBlockState, parseBlockEdits, stripBlockFences, usab
 import { fillCharacterPlaceholders } from './chatPlaceholders'
 import { userPersonaForThread, userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
 import { resolveProfileModel } from './chatModelRoles'
-import { profileGenerationOptions, resolveSummaryPrompt, type ChatProfile } from './chatProfiles'
+import { ChatProfileStore, profileGenerationOptions, resolveSummaryPrompt, type ChatProfile } from './chatProfiles'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
 import { chatContentWithAttachments } from './chatAttachments'
@@ -24,7 +24,9 @@ import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord
 import { ChatSummaryStore, recallText, selectRecall, splitSegments, type ChatSummarySegment } from './chatMemory'
 import type { JudgedContext } from './chatJudgeContext'
 import { REFERENCE_BLOCK_START, resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool, type ChatContentPart } from './llmChatCompletion'
+import { inBackground } from '../llmRequestScheduler'
 import { rawMessagesEstimate as rawUsageEstimate, rawTokenEstimate } from '../llmUsage'
+import { ChatEstimateRatioStore } from './chatEstimateRatios'
 
 /** Tool output replayed to the model for turns still in the window. */
 const REPLAYED_TOOL_OUTPUT_LENGTH = 4000
@@ -184,24 +186,51 @@ export function splitTurns(messages: CodexChatMessageRecord[]) {
 // ---- Token estimate -------------------------------------------------------------------------------------------
 
 /** Server-reported prompt tokens ÷ our estimate, per profile, so the estimate tracks each model's tokenizer. */
-const estimateRatios = new Map<number, number>()
+const estimateRatios = new Map<number, { ratio: number; modelKey: string }>()
+
+/** Which model a profile's ratio belongs to: a ratio measured on another tokenizer starts over. */
+function modelKeyOf(profileId: number) {
+  try {
+    const profile = ChatProfileStore.find(profileId)
+    const chat = profile ? resolveProfileModel(profile, 'chat') : null
+    return chat ? `${chat.providerName}\u0000${chat.model}` : ''
+  } catch {
+    return ''
+  }
+}
+
+/** The ratio for a profile: this process's, else the stored one measured on the same model (once per profile). */
+function ratioOf(profileId: number) {
+  const cached = estimateRatios.get(profileId)
+  if (cached) return cached.ratio
+  const modelKey = modelKeyOf(profileId)
+  const stored = modelKey ? ChatEstimateRatioStore.load(profileId, modelKey) : null
+  estimateRatios.set(profileId, { ratio: stored ?? 1, modelKey })
+  return stored ?? 1
+}
 
 export function estimateTokens(profileId: number, text: string) {
-  return Math.ceil(rawTokenEstimate(text) * (estimateRatios.get(profileId) ?? 1))
+  return Math.ceil(rawTokenEstimate(text) * ratioOf(profileId))
 }
 
 export function estimateMessagesTokens(profileId: number, messages: ChatCompletionMessage[], tools: ChatCompletionTool[] = []) {
-  return Math.ceil(rawMessagesEstimate(messages, tools) * (estimateRatios.get(profileId) ?? 1))
+  return Math.ceil(rawMessagesEstimate(messages, tools) * ratioOf(profileId))
 }
 
-/** Feed back the prompt tokens a server reported for a request we estimated (smoothed, clamped to 0.4–2.5×). */
+/**
+ * Feed back the prompt tokens a server reported for a request we estimated (smoothed, clamped to 0.4–2.5×), and keep
+ * it for the next start. A profile now on another model starts from this measurement.
+ */
 export function recordPromptUsage(profileId: number, rawEstimate: number, promptTokens: number) {
   if (rawEstimate <= 0 || promptTokens <= 0) {
     return
   }
   const measured = Math.min(2.5, Math.max(0.4, promptTokens / rawEstimate))
+  const modelKey = modelKeyOf(profileId)
   const previous = estimateRatios.get(profileId)
-  estimateRatios.set(profileId, previous === undefined ? measured : previous * 0.7 + measured * 0.3)
+  const ratio = previous && previous.modelKey === modelKey && previous.ratio !== 1 ? previous.ratio * 0.7 + measured * 0.3 : measured
+  estimateRatios.set(profileId, { ratio, modelKey })
+  if (modelKey) ChatEstimateRatioStore.save(profileId, modelKey, ratio)
 }
 
 export function rawMessagesEstimate(messages: ChatCompletionMessage[], tools: ChatCompletionTool[] = []) {
@@ -213,7 +242,8 @@ export function rawMessagesEstimate(messages: ChatCompletionMessage[], tools: Ch
 const NO_BLOCKS: ReadonlySet<string> = new Set()
 
 /** `blockKeys`: display blocks whose fences are left out of replies (their values travel with the state instead). */
-export function toCompletionMessages(message: CodexChatMessageRecord, blockKeys: ReadonlySet<string> = NO_BLOCKS, inlineTexts?: ReadonlyMap<string, string>): ChatCompletionMessage[] {
+/** `toolOutputLength`: how much of each tool result is replayed (older replies of a long chat get their summary only). */
+export function toCompletionMessages(message: CodexChatMessageRecord, blockKeys: ReadonlySet<string> = NO_BLOCKS, inlineTexts?: ReadonlyMap<string, string>, toolOutputLength = REPLAYED_TOOL_OUTPUT_LENGTH): ChatCompletionMessage[] {
   if (message.role === 'user') {
     return [{ role: 'user', content: `[${messageAddress(message)}; from=user]\n${chatContentWithAttachments(message.content, message.attachments, message.mediaAttachments, inlineTexts)}` }]
   }
@@ -227,7 +257,8 @@ export function toCompletionMessages(message: CodexChatMessageRecord, blockKeys:
       tool_calls: calls.map((call) => ({ id: call.id, type: 'function', function: { name: call.tool, arguments: JSON.stringify(call.arguments ?? {}) } })),
     })
     for (const call of calls) {
-      result.push({ role: 'tool', tool_call_id: call.id, content: (call.output ?? call.summary ?? '').slice(0, REPLAYED_TOOL_OUTPUT_LENGTH) || '(no output)' })
+      const replayed = toolOutputLength < REPLAYED_TOOL_OUTPUT_LENGTH ? call.summary ?? call.output ?? '' : call.output ?? call.summary ?? ''
+      result.push({ role: 'tool', tool_call_id: call.id, content: replayed.slice(0, toolOutputLength) || '(no output)' })
     }
   }
   const text = stripBlockFences(message.content, blockKeys)
@@ -444,6 +475,26 @@ export function anchoredSuffix<T>(items: T[], fit: number, idOf: (item: T) => nu
   }
   const window = items.slice(-floor)
   return { window, anchorId: idOf(window[0]) }
+}
+
+/** Replies older than the last FULL_TOOL_OUTPUT_TURNS turns replay each tool result as its short summary. */
+const FULL_TOOL_OUTPUT_TURNS = 4
+const SHORT_TOOL_OUTPUT_LENGTH = 300
+const shortToolOutputs = new Map<number, { anchorId: number; before: number }>()
+
+/**
+ * The message id before which a chat's tool results are replayed short. It is set when the window start is set and
+ * kept while that start holds: shortening "everything older than four turns" anew each turn would change the
+ * conversation's beginning every turn, and a local server or a provider cache would read it all again.
+ */
+function shortToolOutputsBefore(threadId: number, window: CodexChatMessageRecord[][]) {
+  const anchorId = window[0]?.[0]?.id
+  if (anchorId === undefined) return 0
+  const known = shortToolOutputs.get(threadId)
+  if (known && known.anchorId === anchorId) return known.before
+  const before = window.length > FULL_TOOL_OUTPUT_TURNS ? window[window.length - FULL_TOOL_OUTPUT_TURNS][0].id : 0
+  shortToolOutputs.set(threadId, { anchorId, before })
+  return before
 }
 
 /** `anchoredSuffix` with the start remembered per chat (in memory: a restart only costs one cache miss). */
@@ -686,7 +737,8 @@ export function buildChatMessages(params: {
   const fit = selectWindow(profile, turns, config, fixedTokens + estimateTokens(profile.id, replyContext) + 40 + (params.extraTokens ?? 0), config.contextTurns, params.attachmentTexts).length
   const window = anchoredWindowFor(thread.id, turns, fit, (turn) => turn[0].id)
   const blockKeys = usableBlockKeys(profile.style.blocks)
-  const conversation = insertDepthBlocks(window.flat().flatMap((message) => toCompletionMessages(message, blockKeys, params.attachmentTexts)), blocks)
+  const shortBefore = shortToolOutputsBefore(thread.id, window)
+  const conversation = insertDepthBlocks(window.flat().flatMap((message) => toCompletionMessages(message, blockKeys, params.attachmentTexts, message.id < shortBefore ? SHORT_TOOL_OUTPUT_LENGTH : undefined)), blocks)
   const reference = buildReplyContext(params.messages, routing, { maxChars, visibleIds: new Set(window.flat().map((message) => message.id)) })
   // A direct chat has no room tools, so the request names no room id.
   const request = appendUserDirective([...system, ...conversation], [reference, directive].filter(Boolean).join('\n\n'))
@@ -1057,7 +1109,7 @@ export function summarizeAhead(threadId: number, profile: ChatProfile, tools: Ch
   if (summaryRuns.has(threadId)) {
     return Promise.resolve(null)
   }
-  return startFold(threadId, directPlanner(profile, 'ahead', { tools }), 'ahead')
+  return inBackground(() => startFold(threadId, directPlanner(profile, 'ahead', { tools }), 'ahead'))
 }
 
 /**

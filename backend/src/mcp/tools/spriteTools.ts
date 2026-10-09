@@ -26,7 +26,7 @@ import { refreshMcpRequester } from '../toolAccess';
  */
 
 function textResult(value: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] };
+  return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
 }
 
 function errorResult(error: unknown) {
@@ -136,7 +136,7 @@ function describeJob(job: RuntimeJobRecord) {
     ...(job.message ? { message: job.message } : {}),
     ...(job.failureMessage ? { error: job.failureMessage } : {}),
     ...(job.errors.length > 0 ? { item_errors: job.errors } : {}),
-    ...(done ? { composite_hashes: outputHashes(result), result } : { next: 'Call get_sprite_job with job_id until status is completed.' }),
+    ...(done ? { composite_hashes: outputHashes(result), result } : { next: 'Call get_sprite_job with job_id and wait_seconds (it waits for the job, up to 30 in chat) until status is completed.' }),
     ...(done && job.kind === 'sprite-extract' && result?.buildId ? { build_id: result.buildId, frames_download: 'download_sprite_frames with build_id (kept about 1 hour)' } : {}),
   };
 }
@@ -325,11 +325,13 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
 
   server.tool(
     'get_sprite_job',
-    'Get the status of a sprite job (extract, batch, normalise, animation). A completed job lists its saved composite_hashes.',
-    { job_id: z.string().uuid() },
-    async ({ job_id }) => {
+    'Get the status of a sprite job (extract, batch, normalise, animation). A completed job lists its saved composite_hashes. With wait_seconds it waits for the job to finish first (up to 30 in chat), so one call replaces repeated checks.',
+    { job_id: z.string().uuid(), wait_seconds: z.number().min(0).max(120).optional().describe('Seconds to wait for the job to finish before answering (default 0; chat max 30)') },
+    async ({ job_id, wait_seconds }) => {
       try {
-        return textResult(describeJob(requireSpriteJob(job_id, requesterOf(context))));
+        const job = requireSpriteJob(job_id, requesterOf(context));
+        if (!wait_seconds) return textResult(describeJob(job));
+        return textResult(describeJob((await waitForRuntimeJob(job_id, waitBudgetMs(context, wait_seconds))) ?? job));
       } catch (error) {
         return errorResult(error);
       }

@@ -409,6 +409,11 @@ export const CodexChatStore = {
     invalidateContext(threadId, messageId)
   },
 
+  /** The model's (English) text of a user message translated after it was stored; the reader keeps their own words. */
+  setUserMessageTranslation(threadId: number, messageId: number, content: string, displayContent: string) {
+    getUserSettingsDb().prepare("UPDATE codex_chat_messages SET content = ?, display_content = ? WHERE thread_id = ? AND id = ? AND role = 'user'").run(content, displayContent, threadId, messageId)
+  },
+
   editUserMessage(threadId: number, messageId: number, content: string, displayContent: string | null = null) {
     const db = getUserSettingsDb()
     db.transaction(() => {

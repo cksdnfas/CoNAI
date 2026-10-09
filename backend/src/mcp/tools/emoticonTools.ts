@@ -17,7 +17,7 @@ import type { McpRequestContext } from '../context';
 const VIEW_MAX_IMAGES = 6;
 
 function textResult(value: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] };
+  return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
 }
 
 function errorResult(error: unknown) {

@@ -78,6 +78,7 @@ import {
   defaultThreadId,
   PENDING_DRAFT_KEY,
   useCodexChat,
+  useCodexChatLiveTurn,
   type CodexChatApi,
 } from './codex-chat-context'
 import { CodexChatAssistantMessage, type ChatSpeaker } from './codex-chat-message'
@@ -92,6 +93,8 @@ import { ChatReplyPreview } from './chat-reply'
 import { ChatDeleteDialog } from './chat-delete-dialog'
 import { LorebookMergeDialog } from './lorebook-merge-dialog'
 import type { ChatEmoticonMap } from './chat-markdown'
+import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
+import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 
 const CodexChatContextView = lazy(async () => ({ default: (await import('./codex-chat-context-view')).CodexChatContextView }))
 const CodexEngineContextView = lazy(async () => ({ default: (await import('./codex-chat-context-view')).CodexEngineContextView }))
@@ -196,7 +199,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const hasSideList = useMinWidth(768)
   const prependHeightRef = useRef<number | null>(null)
   const followBottomRef = useRef(true)
-  const { liveTurn, selectedThreadId, selectThread, listOpen, setListOpen, view, setView, messageFocus, clearMessageFocus, prepareChat, isStartingChat, editMessage, regenerate, continueReply } = chat
+  const { selectedThreadId, selectThread, listOpen, setListOpen, view, setView, messageFocus, clearMessageFocus, prepareChat, isStartingChat, editMessage, regenerate, continueReply } = chat
+  const liveTurn = useCodexChatLiveTurn()
+  const { status: streamStatus } = useRuntimeEventStream()
 
   const profilesQuery = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000 })
   const profiles = useMemo(() => profilesQuery.data ?? [], [profilesQuery.data])
@@ -232,8 +237,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const threadsQuery = useQuery({
     queryKey: CODEX_CHAT_THREADS_QUERY_KEY,
     queryFn: listCodexChatThreads,
-    // A reply this tab is not streaming (another tab, or started before a reload): watch for it to end.
-    refetchInterval: (query) => (query.state.data?.some((entry) => entry.running && entry.id !== liveTurn?.threadId) ? RUNNING_POLL_MS * 2 : false),
+    // A reply this tab is not streaming (another tab, or started before a reload): watch for it to end. Its saved
+    // message is announced on the event stream, so while the stream is live the list waits for that instead.
+    refetchInterval: (query) => resolveStreamFallbackInterval(streamStatus, query.state.data?.some((entry) => entry.running && entry.id !== liveTurn?.threadId) ? RUNNING_POLL_MS * 2 : false),
   })
   const threads = useMemo(() => threadsQuery.data ?? [], [threadsQuery.data])
   const activeThreadId = selectedThreadId === undefined ? defaultThreadId(threads) : selectedThreadId

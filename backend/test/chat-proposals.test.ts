@@ -40,7 +40,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
   const { ALL_MCP_HTTP_SCOPES, getMcpToolScope, CHAT_PAGE_TOOLS } = await import('../src/mcp/context')
   // A connected page also keeps library/catalog reads and setup proposals; these checks look at everything else.
   // Task tools are the chat's own bookkeeping in every 1:1 chat (see assistant-agent.test.ts), so they are left out here too.
-  const pageOnly = (names: string[]) => names.filter((name) => !name.startsWith('task_') && name !== 'get_proposal_status' && (CHAT_PAGE_TOOLS.has(name) || !['read', 'configure'].includes(getMcpToolScope(name) ?? ''))).sort()
+  const pageOnly = (names: string[]) => names.filter((name) => !name.startsWith('task_') && name !== 'get_proposal_status' && name !== 'chat_reply_to' && (CHAT_PAGE_TOOLS.has(name) || !['read', 'configure'].includes(getMcpToolScope(name) ?? ''))).sort()
   const PRIVATE_FILE_TOOLS = ['list_files', 'get_file_info', 'read_file_text']
   const { openChatMcpBridge } = await import('../src/services/codex-chat/chatMcpBridge')
   const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
@@ -367,7 +367,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       assert.ok(pageOnly(broad.tools.map((tool) => tool.function.name)).every((name) => ['get_current_page', 'page_act', 'page_fill', 'propose_page_action', 'read_page_data', 'save_lore'].includes(name)), 'page mode adds nothing that changes data by itself')
       assert.ok(!broad.tools.some((tool) => PRIVATE_FILE_TOOLS.includes(tool.function.name)), 'page text cannot request private files')
       const shared = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'generate', 'organize', 'configure'], null, { chatContext: { ...context, replyId: 'page-tools', page: normalizeChatPageSnapshot({ ...page, path: '/public/workflows/example' }) } })
-      try { assert.ok(shared.tools.every((tool) => CHAT_PAGE_TOOLS.has(tool.function.name) || tool.function.name === 'save_lore' || tool.function.name === 'get_proposal_status' || tool.function.name.startsWith('task_')), 'a public workflow page written by someone else keeps only its page tools') } finally { await shared.close() }
+      try { assert.ok(shared.tools.every((tool) => CHAT_PAGE_TOOLS.has(tool.function.name) || tool.function.name === 'save_lore' || tool.function.name === 'chat_reply_to' || tool.function.name === 'get_proposal_status' || tool.function.name.startsWith('task_')), 'a public workflow page written by someone else keeps only its page tools') } finally { await shared.close() }
       assert.ok(!(await bridge.call('get_current_page', {})).isError)
       // Play the connected tab: it receives the validated change set and answers with its new screen.
       setChatPageCommandTimeout(2000)

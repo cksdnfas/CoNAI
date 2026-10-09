@@ -6,6 +6,7 @@ import type { JudgeLogItem } from './chatJudgeLogs'
 import type { ChatProfile } from './chatProfiles'
 import type { ChatBlockField, ChatDisplayBlock } from './chatStyle'
 import { CodexChatStore } from './codexChatStore'
+import { inBackground } from '../llmRequestScheduler'
 
 /**
  * Status fields settled by the judge: after a completed reply, every status block field with a fixed list of values
@@ -53,7 +54,7 @@ export function judgeStatusFields(params: { profile: ChatProfile; threadId: numb
   const blocks = usableBlocks(params.profile.style.blocks)
   if (!blocks.some((block) => block.fields.some((field) => field.values.length >= 2 && !field.readonly))) return
   running.add(params.messageId)
-  void settleFields(setup, params).catch((error: unknown) => {
+  void inBackground(() => settleFields(setup, params)).catch((error: unknown) => {
     console.warn('[chat-judge] status fields failed:', error instanceof Error ? error.message : error)
   }).finally(() => running.delete(params.messageId))
 }

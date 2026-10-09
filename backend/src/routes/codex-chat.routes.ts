@@ -69,6 +69,7 @@ import { downloadProfileAsset, importFileStoreProfileAsset, ingestProfileAsset, 
 import chatAssetBatchesRouter, { chatProfileExpressionsRouter } from './chat-asset-batches.routes'
 import { draftChatAppearance } from '../services/codex-chat/chatAppearanceDraft'
 import { ChatAssetError } from '../services/codex-chat/chatAssetAccess'
+import { sharedServerProfiles } from '../services/codex-chat/chatServerSharing'
 
 const MESSAGE_MAX_LENGTH = 20000
 
@@ -1113,8 +1114,10 @@ router.delete('/admin/blocks/:blockId', requireAdmin, (req: Request, res: Respon
  * judge presets, user profiles and chats reference rows by id, so changing a row's model reaches all of them.
  */
 router.get('/admin/model-slots', requireAdmin, (_req: Request, res: Response) => {
-  // TypeSafe decision rows are not chat targets, so their readiness is the judge's.
-  res.json({ success: true, data: ModelSlotStore.list().map((slot) => ({ ...slot, ready: slot.providerType === 'decision_typesafe' ? isJudgeConnectionReady(slot.providerName, slot.model) : isChatTargetReady(slot.providerName, slot.model) })) })
+  // TypeSafe decision rows are not chat targets, so their readiness is the judge's. `sharedServer`: the profiles that
+  // send their reply and a per-turn helper to this row's connection (the connection editor warns about them).
+  const shared = sharedServerProfiles()
+  res.json({ success: true, data: ModelSlotStore.list().map((slot) => ({ ...slot, ready: slot.providerType === 'decision_typesafe' ? isJudgeConnectionReady(slot.providerName, slot.model) : isChatTargetReady(slot.providerName, slot.model), sharedServer: shared.get(slot.providerName) ?? [] })) })
 })
 
 /** Adds one model to a connection (returns the existing row when it is already there). */

@@ -25,7 +25,7 @@ export function registerResourceTools(server: McpServer): void {
         return {
           content: [{
             type: 'text' as const,
-            text: JSON.stringify(summary, null, 2),
+            text: JSON.stringify(summary),
           }],
         };
       } catch (error) {
@@ -78,7 +78,7 @@ export function registerResourceTools(server: McpServer): void {
               total,
               page,
               limit,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {
@@ -169,7 +169,7 @@ export function registerResourceTools(server: McpServer): void {
               total,
               page: params.page,
               limit: params.limit,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {

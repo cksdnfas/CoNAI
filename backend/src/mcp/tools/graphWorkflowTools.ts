@@ -124,7 +124,7 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
     async ({ active_only }) => {
       try {
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify(GraphWorkflowModel.findAllSummaries(active_only), null, 2) }],
+          content: [{ type: 'text' as const, text: JSON.stringify(GraphWorkflowModel.findAllSummaries(active_only)) }],
         }
       } catch (error) {
         return { isError: true, content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }] }
@@ -157,7 +157,7 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
                 tool: 'execute_graph_workflow',
                 arguments: { workflow_id: workflow.id, input_values: createGraphInputTemplate(exposedInputs) },
               },
-            }, null, 2),
+            }),
           }],
         }
       } catch (error) {
@@ -185,7 +185,7 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
         const outputGroupId = resolveMcpTargetGroup(group_id, group_path)
         const result = await GraphWorkflowExecutor.execute(workflow_id, { runtimeInputValues: runtimeInputs, outputGroupId: outputGroupId ?? null })
         const compactResult = await compactGraphExecution(result.executionId, context)
-        return { content: [{ type: 'text' as const, text: JSON.stringify(compactResult, null, 2) }] }
+        return { content: [{ type: 'text' as const, text: JSON.stringify(compactResult) }] }
       } catch (error) {
         return { isError: true, content: [{ type: 'text' as const, text: `Graph workflow execution error: ${(error as Error).message}` }] }
       }
@@ -200,7 +200,7 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
       try {
         const result = await compactGraphExecution(execution_id, context)
         if (!result) throw new Error(`Graph workflow execution ${execution_id} not found`)
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] }
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] }
       } catch (error) {
         return { isError: true, content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }] }
       }

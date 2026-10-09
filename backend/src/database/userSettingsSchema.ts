@@ -842,6 +842,13 @@ export function createUserSettingsSchema(db: Database.Database): void {
     PRIMARY KEY (run_id, item_id)
   )`);
   db.exec('CREATE INDEX IF NOT EXISTS idx_chat_judge_items_item ON chat_judge_items(item_id)');
+  // Prompt-token estimate correction per chat profile and the model it was measured on (chatEstimateRatios.ts).
+  db.exec(`CREATE TABLE IF NOT EXISTS chat_estimate_ratios (
+    profile_id INTEGER PRIMARY KEY,
+    model_key TEXT NOT NULL,
+    ratio REAL NOT NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
   const judgeRunColumns = (db.prepare('PRAGMA table_info(chat_judge_runs)').all() as Array<{ name: string }>).map((column) => column.name);
   if (!judgeRunColumns.includes('tokens')) db.exec('ALTER TABLE chat_judge_runs ADD COLUMN tokens INTEGER');
   // One row per model request (llmUsage.ts), for the LLM dashboard. No foreign keys: usage outlives a deleted chat.

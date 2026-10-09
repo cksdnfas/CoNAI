@@ -1,4 +1,4 @@
-import fs from 'fs'
+import fs from 'fs'
 import path from 'path'
 import { randomBytes, randomUUID } from 'crypto'
 import { spawn } from 'child_process'
@@ -62,7 +62,7 @@ export async function streamClaudeChatCompletion(params: {
   let credentialSource: string | null = null
   let originalCredentials: string | null = null
   try {
-    const status = await getClaudeStatus()
+    const status = await getClaudeStatus(60_000)
     if (!status.available) throw new Error(status.message ?? 'Claude Code 로그인이 필요해.')
     const cli = resolveClaudeCommand()
     if (cli.version && compareCodexVersions(cli.version, '2.1.248') < 0) throw new Error('Claude Code 2.1.248 이상으로 업데이트해줘. 채팅 도구 격리에 필요한 버전이야.')

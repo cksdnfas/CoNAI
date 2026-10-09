@@ -94,7 +94,7 @@ export function useChatGenerationNotifications() {
       if (!chat?.canUse || !auth || (auth.hasCredentials && !auth.authenticated) || payload.requestedByAccountId !== accountId) return
       // The unread counts live in the chat list. A turn this tab is streaming refetches its chat when it ends; a
       // group room saves members one by one meanwhile, so its transcript is left to that.
-      if (chat.liveTurn?.threadId !== payload.threadId) void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(payload.threadId) })
+      if (chat.currentLiveTurn()?.threadId !== payload.threadId) void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(payload.threadId) })
       void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
       return
     }

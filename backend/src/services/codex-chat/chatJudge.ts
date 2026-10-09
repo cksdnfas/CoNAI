@@ -10,6 +10,7 @@ import { ModelSlotStore } from './modelSlots'
 import { userPersonaForThread } from './chatUserProfiles'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import type { ChatCompletionTool } from './llmChatCompletion'
+import { inBackground } from '../llmRequestScheduler'
 
 /**
  * The judge step of a chat turn (profiles with a judge preset only). Before the reply, the preset's questions about the
@@ -393,7 +394,7 @@ export function judgeAfterReply(params: { profile: ChatProfile; threadId: number
   const stillLatest = () => pendingFollowUps.get(params.threadId) === pending && !pending.controller.signal.aborted
     && CodexChatStore.listMessages(params.threadId).at(-1)?.id === params.message.id
 
-  void (async () => {
+  void inBackground(async () => {
     const run = await runJudgeItems(setup, params.profile, items, (window) => judgeStateOf(params.profile, thread, messages, window), pending.controller.signal)
     if (pending.controller.signal.aborted) return
     const runId = logJudgeRun({ setup, threadId: params.threadId, profileId: params.profile.id, stage: 'after', messageId: params.message.id, replyId: params.message.routing?.replyId ?? null, run })
@@ -412,7 +413,7 @@ export function judgeAfterReply(params: { profile: ChatProfile; threadId: number
         console.warn('[chat-judge] follow-up failed:', messageOf(error))
       })
     }, setup.preset.followUp.delaySeconds * 1000)
-  })().catch((error: unknown) => {
+  }).catch((error: unknown) => {
     if (pendingFollowUps.get(params.threadId) === pending) pendingFollowUps.delete(params.threadId)
     if (!pending.controller.signal.aborted) console.warn('[chat-judge] after-reply judge failed:', messageOf(error))
   })

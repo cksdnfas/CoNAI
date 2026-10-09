@@ -52,6 +52,8 @@ type ExternalApiProviderResponse = {
 type ExternalApiConnectionTestResponse = {
   success: boolean
   message: string
+  /** OpenAI-compatible LLMs: whether the saved way of turning thinking off works, and the one that does. */
+  thinking?: { model: string; current: 'none' | 'reasoning_effort' | 'enable_thinking'; found: 'none' | 'reasoning_effort' | 'enable_thinking' | null }
 }
 
 type ExternalApiLlmOptionsResponse = {

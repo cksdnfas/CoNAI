@@ -3,6 +3,7 @@ import type { ChatPageCommand, ChatPageCommandEvent, ChatPageSnapshot } from '@c
 import type { McpRequester } from '../../mcp/context'
 import { publishRuntimeEvent } from '../runtime-events/runtimeEventBus'
 import { ChatPageContextError, parseChatPageContext } from './chatPageContext'
+import { RuntimeEventBroadcaster } from '../runtime-events/runtimeEventBroadcaster'
 
 /**
  * Same-turn round trip to the person's connected page: a tool asks, the browser tab that holds the connection runs one
@@ -55,6 +56,11 @@ export function currentChatPage(requester: McpRequester, page: ChatPageSnapshot)
 export function runChatPageCommand(requester: McpRequester, page: ChatPageSnapshot, threadId: number, command: ChatPageCommand, options: { waitMs?: number; commandId?: string } = {}): Promise<ChatPageSnapshot> {
   const commandId = options.commandId ?? crypto.randomUUID()
   const waitMs = options.waitMs ?? timeoutMs
+  // No open stream for this account (the tab is closed, or hidden long enough to drop its stream): nothing would run
+  // the command, so say so now instead of after the whole wait, and send nothing a reconnecting tab could replay late.
+  if (RuntimeEventBroadcaster.reachesAccount(requester.accountId, 'generation-queue') === false) {
+    return Promise.reject(new ChatPageContextError('연결된 페이지 탭이 지금 응답할 수 없어 (닫혔거나 오래 숨겨져 있어). 그 탭을 다시 열어 화면에 띄우면 이어서 할 수 있어.', 503))
+  }
   return new Promise<ChatPageSnapshot>((resolve, reject) => {
     const timer = setTimeout(() => {
       pending.delete(commandId)

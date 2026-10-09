@@ -68,7 +68,7 @@ test('generation reactions: opt-in, one-shot recovery, user precedence and speak
 
   await t.test('default off and old links after enabling make zero model requests', async (s) => {
     let calls = 0
-    s.mock.method(globalThis, 'fetch', async () => { calls++; return replyResponse('완성됐어.') })
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => { if (!init?.method || init.method === 'GET') return new Response('', { status: 404 }); calls++; return replyResponse('완성됐어.') })
     const thread = threadOf(false)
     assert.equal(thread.reaction_enabled, 0)
     const linked = attach(thread)
@@ -86,7 +86,7 @@ test('generation reactions: opt-in, one-shot recovery, user precedence and speak
     db().prepare("INSERT INTO api_generation_history (service_type, generation_status, composite_hash, queue_job_id, requested_by_account_id) VALUES ('novelai', 'completed', 'image', ?, 1)").run(linked.jobIds[0])
     let calls = 0
     let input: any
-    s.mock.method(globalThis, 'fetch', async (_url, init) => { calls++; input = JSON.parse(String(init?.body)); return replyResponse('완성됐어.') })
+    s.mock.method(globalThis, 'fetch', async (_url, init) => { if (!init?.method || init.method === 'GET') return new Response('', { status: 404 }); calls++; input = JSON.parse(String(init?.body)); return replyResponse('완성됐어.') })
     const events: RuntimeEventRecord[] = []
     const unsubscribe = subscribeToRuntimeEvents((event) => { if (event.name === 'chat.reaction.created') events.push(event) })
     s.after(unsubscribe)
@@ -115,7 +115,7 @@ test('generation reactions: opt-in, one-shot recovery, user precedence and speak
 
   await t.test('boot reconciliation resumes pending, fails abandoned running, and never repeats done or historical links', async (s) => {
     let calls = 0
-    s.mock.method(globalThis, 'fetch', async () => { calls++; return replyResponse('완성됐어.') })
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => { if (!init?.method || init.method === 'GET') return new Response('', { status: 404 }); calls++; return replyResponse('완성됐어.') })
     const pending = attach(threadOf())
     const abandoned = attach(threadOf())
     db().prepare("INSERT INTO chat_generation_reactions (reply_id, thread_id, state) VALUES (?, ?, 'pending')").run(pending.replyId, pending.context.threadId)
@@ -255,7 +255,7 @@ test('generation reactions: opt-in, one-shot recovery, user precedence and speak
     const linked = attach(thread, ['running'], profile.id, false)
     const close = registerChatReply(linked.context, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
     let calls = 0
-    s.mock.method(globalThis, 'fetch', async () => { calls++; return replyResponse('완성됐어.') })
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => { if (!init?.method || init.method === 'GET') return new Response('', { status: 404 }); calls++; return replyResponse('완성됐어.') })
     reactions.start()
     db().prepare("UPDATE generation_queue_jobs SET status = 'completed' WHERE id = ?").run(linked.jobIds[0])
     publishRuntimeEvent({ name: 'queue.job.status', topic: 'generation-queue', payload: { job_id: linked.jobIds[0], status: 'completed' } })
@@ -272,7 +272,7 @@ test('generation reactions: opt-in, one-shot recovery, user precedence and speak
     const thread = threadOf()
     const linked = attach(thread)
     let calls = 0
-    s.mock.method(globalThis, 'fetch', async () => { calls++; return replyResponse('완성됐어.') })
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => { if (!init?.method || init.method === 'GET') return new Response('', { status: 404 }); calls++; return replyResponse('완성됐어.') })
     await reactions.reconcile(thread.id)
     const continued = randomUUID()
     CodexChatStore.moveGenerationLinks(thread.id, linked.replyId, continued)

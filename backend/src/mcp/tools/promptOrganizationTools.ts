@@ -49,7 +49,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
               groups,
               total_groups: groups.length,
               type,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {
@@ -82,7 +82,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
               page,
               limit,
               type,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {
@@ -122,7 +122,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
               page,
               limit,
               type,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {
@@ -162,7 +162,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
               group_name,
               is_new: !existing,
               type,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {
@@ -214,7 +214,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
               created: results.filter(r => r.is_new).length,
               existing: results.filter(r => !r.is_new).length,
               type,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {
@@ -258,7 +258,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
               total: prompt_ids.length,
               target_group_id,
               type,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {
@@ -315,7 +315,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
               source_group_id: source_group_id ?? null,
               target_group_id,
               type,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {
@@ -364,7 +364,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
         const resolvedBackup = resolveBackupPath(actualFilename);
         const filePath = resolvedBackup.filePath;
 
-        fs.writeFileSync(filePath, JSON.stringify(backup, null, 2), 'utf-8');
+        fs.writeFileSync(filePath, JSON.stringify(backup), 'utf-8');
 
         return {
           content: [{
@@ -373,7 +373,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
               success: true,
               filename: resolvedBackup.filename,
               metadata,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {
@@ -466,7 +466,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
               success: true,
               backup_date: backup.backup_date,
               results,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {
@@ -520,7 +520,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
             text: JSON.stringify({
               backups: files,
               total: files.length,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {

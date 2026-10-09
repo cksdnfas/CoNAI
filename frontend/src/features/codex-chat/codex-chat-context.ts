@@ -113,7 +113,11 @@ export interface CodexChatApi {
   picks: string[]
   togglePick: (label: string) => void
   removePick: (label: string) => void
-  liveTurn: CodexChatLiveTurn | null
+  /**
+   * The reply streaming right now, read when needed (event handlers). Components that show it use
+   * useCodexChatLiveTurn: it changes with every token, and the rest of the API must not re-render the app shell then.
+   */
+  currentLiveTurn: () => CodexChatLiveTurn | null
   draftAttachments: StoredFileEntry[]
   draftMediaAttachments: ChatMediaAttachment[]
   setMediaAttachments: (items: ChatMediaAttachment[]) => boolean
@@ -153,6 +157,12 @@ export type CodexChatReferenceApi = {
 }
 
 export const CodexChatReferenceContext = createContext<CodexChatReferenceApi | null>(null)
+
+/** The streaming reply on its own context: only what renders it re-renders per token. */
+export const CodexChatLiveContext = createContext<CodexChatLiveTurn | null>(null)
+export function useCodexChatLiveTurn() {
+  return useContext(CodexChatLiveContext)
+}
 
 export function useCodexChatReference() {
   return useContext(CodexChatReferenceContext)

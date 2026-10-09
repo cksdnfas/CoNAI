@@ -52,6 +52,18 @@ export class RuntimeEventBroadcaster {
   private static replayBuffer: RuntimeEventRecord[] = []
   private static isShuttingDown = false
 
+  /**
+   * Whether an owner event of `topic` for this account reaches any open stream right now; null before the
+   * broadcaster runs (tests, scripts), when nothing can be said.
+   */
+  static reachesAccount(accountId: number | null, topic: RuntimeEventTopic): boolean | null {
+    if (!this.unsubscribeFromBus) return null
+    for (const subscriber of this.subscribers.values()) {
+      if (subscriber.accountId === accountId && subscriber.topicSet.has(topic)) return true
+    }
+    return false
+  }
+
   /** Attach the broadcaster to the in-process event bus. */
   static start() {
     this.isShuttingDown = false

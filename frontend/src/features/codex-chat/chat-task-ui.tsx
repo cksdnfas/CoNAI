@@ -13,22 +13,29 @@ import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey } from './codex-c
 import { getErrorMessage } from '@/lib/error-message'
 import { createRuntimeEventStream } from '@/lib/runtime-event-stream'
 import { cn } from '@/lib/utils'
+import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
+import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 
 type PlanProposal = Extract<ChatProposal, { kind: 'task_plan' }>
 const LIVE = new Set<ChatTask['status']>(['running', 'waiting', 'paused'])
 
-/** The chat's newest task, refreshed when the server announces a change (and every few seconds while it is live). */
+/**
+ * The chat's newest task, refreshed when the server announces a change; polled every few seconds while it is live only
+ * when the event stream is down. Several parts of one screen use it, so a refresh already on its way is joined, not
+ * cancelled and sent again.
+ */
 export function useChatTask(threadId: number | null) {
   const queryClient = useQueryClient()
+  const { status: streamStatus } = useRuntimeEventStream()
   useEffect(() => {
     return createRuntimeEventStream({
       onEnvelope: (envelope) => {
         if (envelope.name !== 'chat.task.updated') return
         // Every task change moves the progress ring of its chat in the list.
-        void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+        void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }, { cancelRefetch: false })
         if ((envelope.payload as { threadId?: number })?.threadId !== threadId) return
-        void queryClient.invalidateQueries({ queryKey: chatTaskQueryKey(threadId) })
-        void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(threadId) })
+        void queryClient.invalidateQueries({ queryKey: chatTaskQueryKey(threadId) }, { cancelRefetch: false })
+        void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(threadId) }, { cancelRefetch: false })
       },
       onStatusChange: () => {}, onResync: () => {}, onSessionExpired: () => {},
     })
@@ -37,7 +44,7 @@ export function useChatTask(threadId: number | null) {
     queryKey: chatTaskQueryKey(threadId),
     queryFn: () => getChatTask(threadId as number),
     enabled: threadId !== null,
-    refetchInterval: (query) => (query.state.data && LIVE.has(query.state.data.status) ? 5000 : false),
+    refetchInterval: (query) => resolveStreamFallbackInterval(streamStatus, query.state.data && LIVE.has(query.state.data.status) ? 5000 : false),
   })
 }
 

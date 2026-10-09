@@ -251,7 +251,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
   const directChat = () => CodexChatStore.findThreadById(LlmChatService.createThread(requester, a.id))!
   type StreamEvent = Parameters<Parameters<typeof LlmChatService.sendMessage>[3]>[0]
 
-  await t.test('direct chats get no room history tools, and chat_reply_to only with an older message to quote; group rooms get all', async () => {
+  await t.test('direct chats get no room history tools and always chat_reply_to (a steady tool list); group rooms get all', async () => {
     const names = async (context: ChatExecutionContext) => {
       const bridge = await openChatMcpBridge(requester, [], null, { chatContext: context })
       try { return bridge.tools.map((tool) => tool.function.name) } finally { await bridge.close() }
@@ -261,7 +261,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     const directContext = { threadId: thread.id, profileId: a.id, kind: 'direct' as const, replyId: 'tools-direct' }
     sayUser('안녕')
     const first = await names(directContext)
-    assert.ok(!first.includes('chat_reply_to'), 'the reply already answers the only user message')
+    assert.ok(first.includes('chat_reply_to'), 'offered from the first message, so the tool list does not change on the second')
     for (const tool of ['room_history_search', 'room_history_read', 'room_call_member']) assert.ok(!first.includes(tool), tool)
     sayUser('아까 그 얘기 말인데')
     const direct = await names(directContext)

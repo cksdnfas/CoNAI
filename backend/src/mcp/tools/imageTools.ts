@@ -82,7 +82,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
               total: result.total,
               page,
               limit,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {
@@ -116,7 +116,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
         return {
           content: [{
             type: 'text' as const,
-            text: JSON.stringify(sanitizeMetadata(metadata as unknown as Record<string, unknown>, include_heavy_fields), null, 2),
+            text: JSON.stringify(sanitizeMetadata(metadata as unknown as Record<string, unknown>, include_heavy_fields)),
           }],
         };
       } catch (error) {
@@ -202,7 +202,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
               total,
               limit,
               offset,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {
@@ -315,7 +315,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
               total: result.total,
               page: params.page,
               limit: params.limit,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {

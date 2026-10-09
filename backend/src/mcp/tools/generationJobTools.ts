@@ -272,7 +272,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
       request_schema: z.toJSONSchema(codexGenerationRequestSchema),
       default_model: 'Server Codex CLI default when model is omitted or empty',
       example: { service_type: 'codex', request_payload: { prompt: 'Create a blue ceramic teapot', model: '', operation: 'generate', size: '1024x1024', count: 1 } },
-    }, null, 2) }] }),
+    }) }] }),
   );
 
   server.tool(
@@ -283,7 +283,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
       const record = HistoryQueryRepository.findAllWithMetadata({ ids: [history_id], limit: 1 })[0];
       if (!record) return { isError: true, content: [{ type: 'text' as const, text: 'Generation history not found' }] };
       requireMcpResourceOwner(context, record, true);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(buildGenerationHistoryRequestSnapshot(record), null, 2) }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(buildGenerationHistoryRequestSnapshot(record)) }] };
     },
   );
 
@@ -304,7 +304,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     },
     async (args) => {
       try {
-        return { content: [{ type: 'text' as const, text: JSON.stringify(await enqueueMcpGenerationJob(context, args), null, 2) }] };
+        return { content: [{ type: 'text' as const, text: JSON.stringify(await enqueueMcpGenerationJob(context, args)) }] };
       } catch (error) {
         return { isError: true, content: [{ type: 'text' as const, text: `Generation job error: ${(error as Error).message}` }] };
       }
@@ -341,7 +341,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
                 fixed_server: { service_type: 'comfyui', workflow_id: workflow_id ?? '<workflow_id>', server_id: '<server_id>', inputs: {} },
                 server_tag: { service_type: 'comfyui', workflow_id: workflow_id ?? '<workflow_id>', server_tag: '<routing_tag>', inputs: {} },
               },
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {
@@ -357,7 +357,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     async ({ job_id }) => {
       const job = await describeJob(job_id, context);
       return job
-        ? { content: [{ type: 'text' as const, text: JSON.stringify(job, null, 2) }] }
+        ? { content: [{ type: 'text' as const, text: JSON.stringify(job) }] }
         : { isError: true, content: [{ type: 'text' as const, text: `Queue job ${job_id} not found` }] };
     },
   );
@@ -380,7 +380,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
         const finished = WAIT_TERMINAL_STATUSES.has(record.status);
         if (finished || Date.now() >= deadline) {
           const job = await describeJob(job_id, context);
-          return { content: [{ type: 'text' as const, text: JSON.stringify({ finished, ...job }, null, 2) }] };
+          return { content: [{ type: 'text' as const, text: JSON.stringify({ finished, ...job }) }] };
         }
         await new Promise((resolve) => setTimeout(resolve, WAIT_POLL_MS));
       }
@@ -394,7 +394,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     async ({ job_id }) => {
       const job = await describeJob(job_id, context);
       return job
-        ? { content: [{ type: 'text' as const, text: JSON.stringify({ job_id, status: job.status, artifacts: job.artifacts }, null, 2) }] }
+        ? { content: [{ type: 'text' as const, text: JSON.stringify({ job_id, status: job.status, artifacts: job.artifacts }) }] }
         : { isError: true, content: [{ type: 'text' as const, text: `Queue job ${job_id} not found` }] };
     },
   );
@@ -418,7 +418,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
         throw error;
       });
       return artifact
-        ? { content: [{ type: 'text' as const, text: JSON.stringify(artifact, null, 2) }] }
+        ? { content: [{ type: 'text' as const, text: JSON.stringify(artifact) }] }
         : { isError: true, content: [{ type: 'text' as const, text: 'Artifact not found or artifact ID is invalid' }] };
     },
   );
@@ -431,7 +431,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
       try {
         requireMcpResourceOwner(context, GenerationQueueModel.findListRecordById(job_id));
         await GenerationQueueService.requestCancellation(job_id, { origin: 'user' });
-        return { content: [{ type: 'text' as const, text: JSON.stringify(await describeJob(job_id, context), null, 2) }] };
+        return { content: [{ type: 'text' as const, text: JSON.stringify(await describeJob(job_id, context)) }] };
       } catch (error) {
         return { isError: true, content: [{ type: 'text' as const, text: `Cancellation error: ${(error as Error).message}` }] };
       }

@@ -10,7 +10,7 @@ import { DEFAULT_REPLY_RESERVE_TOKENS, estimateMessagesTokens } from './llmChatC
 import { postHistoryText, buildContextMeta, recalledSegments, type ChatContextMeta } from './llmChatContext'
 import { recallText } from './chatMemory'
 import { contextSource, limitContextMeta, contextPartsOf, markContextParts } from './chatContextDiagnostics'
-import { anchoredWindowFor, appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, offersLoreFileTool, recallFor, rejectedLoreFor, resolveAuthorNote, selectChatLore, sendableMessages, threadBlockStateText, toCompletionMessages, unsummarizedMessages } from './llmChatContext'
+import { anchoredSuffix, anchoredWindowFor, appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, offersLoreFileTool, recallFor, rejectedLoreFor, resolveAuthorNote, selectChatLore, sendableMessages, threadBlockStateText, toCompletionMessages, unsummarizedMessages } from './llmChatContext'
 import { booksForRequest, type AttachedLoreBook, type ChatLore } from './chatLoreContext'
 import type { ChatSummarySegment } from './chatMemory'
 import type { JudgedContext } from './chatJudgeContext'
@@ -141,6 +141,9 @@ export function groupSummaryOn(thread: Pick<CodexChatThreadRecord, 'summary_enab
   return thread.summary_enabled === 1
 }
 
+/** Where each member's token-budgeted window of a room starts, by `room:member` (see buildGroupLlmMessages). */
+const budgetAnchors = new Map<string, number>()
+
 export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMessage[] {
   // With the room's summary on, the messages it covers stay out: the summary stands in for them.
   const sendable = sendableMessages(unsummarizedMessages(params.messages, params.thread, { summaryEnabled: groupSummaryOn(params.thread) }))
@@ -150,8 +153,23 @@ export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMe
   let context = buildGroupWindowMessages(params, window, sendable.length, lore)
   const budget = params.profile.contextTokens
   const reserve = (params.maxTokens ?? DEFAULT_REPLY_RESERVE_TOKENS) + (params.extraTokens ?? 0)
-  while (budget !== null && window.length > 1 && estimateMessagesTokens(params.profile.id, context.messages, params.tools) + reserve > budget) {
-    window = window.slice(1)
+  const fits = (messages: CodexChatMessageRecord[]) => budget === null || estimateMessagesTokens(params.profile.id, buildGroupWindowMessages(params, messages, sendable.length, lore).messages, params.tools) + reserve <= budget
+  if (budget !== null && window.length > 1 && !fits(window)) {
+    // How many of the latest messages fit, found by halving (each try rebuilds the request), then a start that holds
+    // for several turns like the direct chat's (anchoredSuffix): a start moved by one message every turn would make a
+    // local server or a provider cache read the whole conversation again each time.
+    let low = 1
+    let high = window.length - 1
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2)
+      if (fits(window.slice(-middle))) low = middle
+      else high = middle - 1
+    }
+    const key = `${params.thread.id}:${params.profile.id}`
+    const fitted = anchoredSuffix(window, low, (message) => message.id, budgetAnchors.get(key))
+    if (fitted.anchorId === undefined) budgetAnchors.delete(key)
+    else budgetAnchors.set(key, fitted.anchorId)
+    window = fitted.window
     context = buildGroupWindowMessages(params, window, sendable.length, lore)
   }
   if (params.onMeta) {

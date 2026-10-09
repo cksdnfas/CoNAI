@@ -8,6 +8,8 @@ import { resolveProfileModel } from '../services/codex-chat/chatModelRoles';
 import { deleteModelsOfConnection, modelReferencesOfConnection } from '../services/codex-chat/modelSlots';
 import { fetchOpenAiCompatibleModels, toOpenAiApiBase } from '../services/codex-chat/llmChatCompletion';
 import { listTypesafeModels } from '../services/judge/typesafeClient';
+import { checkThinkingSwitch } from '../services/codex-chat/thinkingSwitchProbe';
+import { readLlmConnectionConfig } from '../services/llmGenerationOptions';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { optionalAuth, requireAdmin, requirePermission } from '../middleware/authMiddleware';
 import { hasConfiguredAuth } from './auth-route-helpers';
@@ -371,11 +373,18 @@ router.post('/providers/:name/test', asyncHandler(async (req: Request, res: Resp
     baseUrl: provider.base_url,
   });
 
+  // An OpenAI-compatible LLM also gets its way of turning thinking off checked on its first model (nothing is saved:
+  // the editor shows the way that works and the person saves it).
+  const thinking = success && provider.provider_type === 'llm_openai_compatible'
+    ? await checkThinkingSwitch(name, readLlmConnectionConfig(provider.additional_config).thinkingSwitch).catch(() => null)
+    : null;
+
   res.json({
     success,
     message: success
       ? 'Connection test successful'
-      : 'Connection test failed - please check your API key'
+      : 'Connection test failed - please check your API key',
+    ...(thinking ? { thinking } : {}),
   });
 }));
 

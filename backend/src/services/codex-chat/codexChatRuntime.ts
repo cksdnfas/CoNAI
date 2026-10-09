@@ -85,7 +85,13 @@ export function chatRuntimeArgs(features: Set<string>, cwd: string, port: string
 }
 
 /** Verify supported effective controls and every page of MCP inventory before any model turn. */
-export async function verifyChatRuntime(client: Pick<CodexAppServerClient, 'request'>, features: Set<string>, cwd: string, port: string) {
+/**
+ * Fails closed unless the app-server's effective configuration is the chat's isolated one. `inventory`: also list the
+ * live MCP servers, which makes the server shake hands with every one of them (a fresh CoNAI tool server each time, a
+ * few hundred ms) — done once when a session starts; the configuration it checks against is fixed by the process
+ * arguments for the session's life, so each turn re-reads the configuration only.
+ */
+export async function verifyChatRuntime(client: Pick<CodexAppServerClient, 'request'>, features: Set<string>, cwd: string, port: string, inventory = true) {
   const { config } = await client.request<{ config: Record<string, unknown> }>('config/read', { includeLayers: false })
   if (!config || config.approval_policy !== 'never' || config.sandbox_mode !== 'read-only' || config.web_search !== 'disabled' || config.project_doc_max_bytes !== 0) throw new Error('Codex chat effective safety configuration could not be verified.')
   const actualFeatures = config.features as Record<string, unknown> | undefined
@@ -96,6 +102,7 @@ export async function verifyChatRuntime(client: Pick<CodexAppServerClient, 'requ
   if (!servers || Object.keys(servers).length !== 1 || servers.conai?.url !== `http://127.0.0.1:${port}/mcp` || servers.conai.command || servers.conai.http_headers_helper) throw new Error('Codex chat MCP configuration is not isolated.')
   const projects = config.projects as Record<string, { trust_level?: unknown }> | undefined
   if (projects?.[cwd]?.trust_level !== 'untrusted') throw new Error('Codex chat project isolation could not be verified.')
+  if (!inventory) return config
   let cursor: string | null = null
   const seen = new Set<string>()
   for (let page = 0; page < 20; page++) {

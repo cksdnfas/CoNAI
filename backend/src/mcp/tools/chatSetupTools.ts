@@ -16,7 +16,7 @@ import { PromptPresetModel } from '../../models/PromptPreset';
 import { parseMcpMarkedFields } from './mcpComfyWorkflowService';
 
 function textResult(value: unknown, extra: Record<string, unknown> = {}) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }], ...extra };
+  return { content: [{ type: 'text' as const, text: JSON.stringify(value) }], ...extra };
 }
 
 function errorResult(error: unknown) {
@@ -350,8 +350,9 @@ function profileAssetsGuide(context: McpRequestContext) {
       const workflow = preset.comfyui ? resolvePresetWorkflow(preset.comfyui).workflow : null;
       return { id: preset.id, name: preset.name, kind: preset.kind, instruction: preset.instruction, ...(preset.comfyui ? { referenceField: preset.comfyui.referenceField, promptFields: workflow ? parseMcpMarkedFields(workflow).filter((field) => preset.comfyui!.exposedFieldIds.includes(field.id) && ['text', 'textarea'].includes(field.type)).map((field) => ({ id: field.id, label: field.label })) : [] } : {}) };
     }),
-    expressionPresets: PromptPresetModel.findAllWithItems().map((preset) => ({ id: preset.id, name: preset.name, items: preset.items.map(({ description, value }) => ({ description, value })) })),
-  }, null, 2);
+    // Emotion names are the item descriptions; the prompt text behind them stays on the server.
+    expressionPresets: PromptPresetModel.findAllWithItems().map((preset) => ({ id: preset.id, name: preset.name, emotions: preset.items.map(({ description }) => description) })),
+  });
 }
 
 /** Chat setup tools (scope `configure`, chat accounts with admin rights only): read the setup, propose changes as cards. */
@@ -459,7 +460,7 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
 
   server.tool(
     'propose_display_block',
-    'Propose a new shared display block (status card) as a card under your reply. Nothing is saved until the user presses 저장. Read get_chat_setup_guide(display_block) first. The block is validated and normalized; warnings are returned.',
+    'Propose a new shared display block (status card) as a card under your reply. Nothing is saved until the user presses 저장. get_chat_setup_guide(display_block) has the block format; read it unless you already know it. The block is validated and normalized; warnings are returned.',
     {
       name: z.string().optional().describe('Name of the shared block (defaults to its key)'),
       block: z.record(z.string(), z.unknown()).describe('{ key, instruction, example, template, css, rules, summary, fields }'),
@@ -477,7 +478,7 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
 
   server.tool(
     'propose_chat_profile',
-    'Propose a NEW chat profile as a card under your reply. Nothing is saved until the user presses 저장. Read get_chat_setup_guide(profile) first for limits, model slots, lorebooks and blocks.',
+    'Propose a NEW chat profile as a card under your reply. Nothing is saved until the user presses 저장. get_chat_setup_guide(profile) lists limits, model slots, lorebooks and blocks: read it when you need one of them (a wrong value is refused with the allowed ones).',
     {
       name: z.string(),
       tagline: z.string().optional(),

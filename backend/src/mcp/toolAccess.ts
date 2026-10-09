@@ -5,7 +5,7 @@ import { ChatProfileStore } from '../services/codex-chat/chatProfiles';
 import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess';
 import { requireActiveChatReply } from '../services/codex-chat/chatReplyRegistry';
 import { validateMcpToolArguments } from './requestSecurity';
-import { CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
+import { CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, isPageKindTool, type McpRequestContext, type McpRequester } from './context';
 
 export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]> = {
   search_prompts: 'prompts.view', get_most_used_prompts: 'prompts.view', list_prompt_groups: 'prompts.view',
@@ -115,6 +115,9 @@ export function isContextToolAllowed(context: McpRequestContext, toolName: strin
   if (accountChecks && context.requester && !accountHoldsTool(context, toolName)) return false;
   if (CHAT_ROOM_TOOLS.has(toolName)) return Boolean(context.chatContext) && (!GROUP_ONLY_CHAT_TOOLS.has(toolName) || context.chatContext?.kind === 'group');
   if (isConnectedChatPageTool(context, toolName)) return true;
+  // The sprite and sound-effect workspace tools (about a third of every tool definition sent) come with their page;
+  // elsewhere only a profile tool list that names them offers them.
+  if (isChatMcpSource(context.source) && isPageKindTool(toolName) && !context.toolAllowlist?.includes(toolName)) return false;
   if (context.chatContext?.page && !isChatGenerationTool(toolName) && !pageKeepsTool(context.chatContext.page.path, toolName)) return false;
   if (context.toolAllowlist && !context.toolAllowlist.includes(toolName)) return false;
   const presetMode = (context.generationPresetIds?.length ?? 0) > 0;

@@ -14,6 +14,7 @@ import { LlmChatService } from './llmChatService'
 import { failureMessageOf } from './codexChatMedia'
 import { audioCandidatesByQueueJob, audioOrderGroupsByQueueJob } from '../audio/audioJobCandidates'
 import type { ChatCompletionMessage, ChatContentPart } from './llmChatCompletion'
+import { inBackground } from '../llmRequestScheduler'
 
 type ReactionState = 'pending' | 'running' | 'done' | 'skipped' | 'failed'
 type Candidate = { reply_id: string; thread_id: number }
@@ -62,7 +63,7 @@ export class ChatGenerationReactionService {
     const work = candidates.map((candidate) => {
       const existing = this.processing.get(candidate.reply_id)
       if (existing) return existing.finished
-      const work = this.react(candidate).finally(() => { this.processing.delete(candidate.reply_id) })
+      const work = inBackground(() => this.react(candidate)).finally(() => { this.processing.delete(candidate.reply_id) })
       this.processing.set(candidate.reply_id, { threadId: candidate.thread_id, finished: work })
       return work
     })

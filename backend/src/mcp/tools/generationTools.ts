@@ -93,7 +93,7 @@ function registerWorkflowListTools(server: McpServer): void {
         return {
           content: [{
             type: 'text' as const,
-            text: JSON.stringify(summary, null, 2),
+            text: JSON.stringify(summary),
           }],
         };
       } catch (error) {
@@ -119,7 +119,7 @@ function registerWorkflowListTools(server: McpServer): void {
         return {
           content: [{
             type: 'text' as const,
-            text: JSON.stringify(servers, null, 2),
+            text: JSON.stringify(servers),
           }],
         };
       } catch (error) {
@@ -242,7 +242,7 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
           requester: context.requester,
           context,
         });
-        return { content: [{ type: 'text' as const, text: JSON.stringify(await replaceOutputPathsWithArtifacts(result, context), null, 2) }] };
+        return { content: [{ type: 'text' as const, text: JSON.stringify(await replaceOutputPathsWithArtifacts(result, context)) }] };
       } catch (error) {
         return {
           isError: true,
@@ -302,7 +302,7 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
               failCount: activeServers.length - successCount,
               workflow: workflow.name,
               results: settled,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {
@@ -378,7 +378,7 @@ function registerWorkflowDetailTools(server: McpServer): void {
               routing_options: routingOptions,
               created_date: workflow.created_date,
               updated_date: workflow.updated_date,
-            }, null, 2),
+            }),
           }],
         };
       } catch (error) {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { mock, test } from 'node:test'
 import { ExternalApiProvider } from '../src/models/ExternalApiProvider'
-import { acquireLlmRequestSlot } from '../src/services/llmRequestScheduler'
+import { acquireLlmRequestSlot, inBackground } from '../src/services/llmRequestScheduler'
 import { foldBlockState } from '../src/services/codex-chat/chatBlockState'
 import { ChatProfileStore } from '../src/services/codex-chat/chatProfiles'
 import { normalizeChatStyle } from '../src/services/codex-chat/chatStyle'
@@ -78,6 +78,12 @@ test('chat runtime fails closed on unknown host capabilities, invalid inventorie
   const config = { approval_policy: 'never', sandbox_mode: 'read-only', web_search: 'disabled', project_doc_max_bytes: 0, features: chatFeatureOverrides(features), mcp_servers: { conai: { url: 'http://127.0.0.1:1666/mcp' } }, projects: { 'private-work': { trust_level: 'untrusted' } } }
   const client = (configuration: unknown, pages: unknown[]) => ({ request: async (method: string) => method === 'config/read' ? { config: configuration } : pages.shift() }) as never
   await assert.doesNotReject(verifyChatRuntime(client(config, [{ data: [{ name: 'conai' }], nextCursor: null }]), features, 'private-work', '1666'))
+  // A turn re-reads the configuration only (the MCP inventory handshake is done once per session), still failing closed.
+  let listed = 0
+  const counting = { request: async (method: string) => { if (method === 'config/read') return { config }; listed += 1; return { data: [{ name: 'conai' }], nextCursor: null } } } as never
+  await assert.doesNotReject(verifyChatRuntime(counting, features, 'private-work', '1666', false))
+  assert.equal(listed, 0)
+  await assert.rejects(verifyChatRuntime(client({ ...config, features: { ...config.features, shell_tool: true } }, []), features, 'private-work', '1666', false), /restriction/)
   await assert.rejects(verifyChatRuntime(client({ ...config, features: { ...config.features, shell_tool: true } }, []), features, 'private-work', '1666'), /restriction/)
   await assert.rejects(verifyChatRuntime(client({ ...config, mcp_servers: { conai: { ...config.mcp_servers.conai, command: 'host-tool' } } }, []), features, 'private-work', '1666'), /not isolated/)
   await assert.rejects(verifyChatRuntime(client(config, [{ data: [{ name: 'conai' }], nextCursor: 'second' }, { data: [{ name: 'external-host-tool' }], nextCursor: null }]), features, 'private-work', '1666'), /unexpected MCP/)
@@ -170,6 +176,17 @@ test('connection slots span callers, remove cancelled waiters and release idempo
   releaseSecond()
   const finalRelease = await acquireLlmRequestSlot('slots', 1)
   finalRelease()
+})
+
+test('a waiting reply goes ahead of waiting background work on the same connection', async () => {
+  const releaseFirst = await acquireLlmRequestSlot('priority', 1)
+  const order: string[] = []
+  const take = (name: string) => (release: () => void) => { order.push(name); release() }
+  const chores = [inBackground(() => acquireLlmRequestSlot('priority', 1)).then(take('summary')), inBackground(() => acquireLlmRequestSlot('priority', 1)).then(take('status'))]
+  const replies = [acquireLlmRequestSlot('priority', 1).then(take('reply')), acquireLlmRequestSlot('priority', 1).then(take('judge'))]
+  releaseFirst()
+  await Promise.all([...chores, ...replies])
+  assert.deepEqual(order, ['reply', 'judge', 'summary', 'status'])
 })
 
 test('cancelled queued chat never starts an HTTP request', async (t) => {

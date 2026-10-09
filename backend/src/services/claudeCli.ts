@@ -69,15 +69,28 @@ async function run(command: string, args: string[], timeoutMs: number, shell = f
   })
 }
 
-export async function getClaudeStatus(): Promise<AgentCliStatus> {
+/** A logged-in answer of `auth status`, reused by chat replies for a minute (each check is a CLI start, ~0.2 s+). */
+let signedIn: { authMethod: string | null; at: number } | null = null
+const SIGNED_IN_REUSE_MS = 60_000
+
+/**
+ * `maxAgeMs`: a chat reply may reuse a recent logged-in answer; a logged-out or failed answer is always checked
+ * again, and a session that ended meanwhile still fails the reply's own CLI run. Login, logout and updates check anew.
+ */
+export async function getClaudeStatus(maxAgeMs = 0): Promise<AgentCliStatus> {
+  if (maxAgeMs > 0 && signedIn && Date.now() - signedIn.at < Math.min(maxAgeMs, SIGNED_IN_REUSE_MS) && !login) {
+    return { installed: true, authenticated: true, available: !updating, authMethod: signedIn.authMethod, message: null }
+  }
   const cli = resolveClaudeCommand()
   try {
     const result = await run(cli.command, [...cli.prefixArgs, 'auth', 'status', '--json'], 15000)
     let auth: { loggedIn?: unknown; authMethod?: unknown } = {}
     try { auth = JSON.parse(result.stdout) } catch { /* fail closed */ }
     const authenticated = result.code === 0 && auth.loggedIn === true
+    signedIn = authenticated ? { authMethod: typeof auth.authMethod === 'string' ? auth.authMethod : null, at: Date.now() } : null
     return { installed: true, authenticated, available: authenticated && !updating, authMethod: typeof auth.authMethod === 'string' ? auth.authMethod : null, message: authenticated ? null : 'Claude Code 로그인이 필요하거나 인증 상태를 확인하지 못했어.' }
   } catch {
+    signedIn = null
     return { installed: false, authenticated: false, available: false, authMethod: null, message: 'Claude Code 설치 또는 실행 경로를 확인해줘.' }
   }
 }
@@ -114,7 +127,7 @@ export async function updateClaudeCli() {
     const prefix = process.env.CLAUDE_NPM_PREFIX?.trim()
     const result = await run(npm.command, [...npm.prefixArgs, 'install', '-g', ...(prefix ? ['--prefix', prefix] : []), '--no-audit', '--no-fund', `${PACKAGE}@latest`], 600000, npm.shell)
     if (result.code !== 0) throw new Error('Claude Code 설치/업데이트에 실패했어. 서버의 npm 설치 권한과 네트워크를 확인해줘.')
-  } finally { updating = false; latestCache = null; modelCache = null }
+  } finally { updating = false; latestCache = null; modelCache = null; signedIn = null }
   return getClaudeVersion()
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { FileText, FlaskConical, LoaderCircle, Plug } from 'lucide-react'
+import { FileText, FlaskConical, LoaderCircle, Plug, TriangleAlert } from 'lucide-react'
 import { Chip, ToggleChip } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
 import { IconButton } from '@/components/ui/icon-button'
@@ -47,7 +47,9 @@ import {
   type LlmPresetDraft,
   type LlmPresetModalState,
   type LlmThinkingSwitch,
+  LLM_THINKING_SWITCHES,
 } from './llm-connections-tab-utils'
+import { cn } from '@/lib/utils'
 
 /** A connection (server) row; its models are listed under it. */
 export function LlmConnectionListItem({
@@ -109,12 +111,19 @@ function useSettledValue<T>(value: T, delayMs: number) {
   return settled
 }
 
+/** How each way of turning thinking off reads in the select and in the test's note. */
+function thinkingSwitchLabel(option: LlmThinkingSwitch, t: ReturnType<typeof useI18n>['t']) {
+  return option === 'reasoning_effort' ? 'reasoning_effort: none' : option === 'enable_thinking' ? 'enable_thinking: false' : t({ ko: '보내지 않음', en: 'Send nothing' })
+}
+
 function LlmConnectionFormFields({
   draft,
   mode,
   apiKeyMasked,
   onChange,
   onEndpointModel,
+  sharedServer = [],
+  thinkingChanged = null,
 }: {
   draft: LlmConnectionDraft
   mode: 'create' | 'edit'
@@ -122,8 +131,14 @@ function LlmConnectionFormFields({
   onChange: (patch: Partial<LlmConnectionDraft>) => void
   /** A TypeSafe endpoint was picked: its model should be among the connection's models. */
   onEndpointModel: (model: string) => void
+  /** Profiles whose reply and judge or translation both go to this connection. */
+  sharedServer?: Array<{ name: string }>
+  /** The connection test replaced the way of turning thinking off: the way it replaced. */
+  thinkingChanged?: LlmThinkingSwitch | null
 }) {
   const { t } = useI18n()
+  // One slot shared by the reply and its judge or translation: each pushes the other's prompt out of the cache.
+  const sharedSlot = (Number(draft.concurrentRequests) || 1) === 1 && sharedServer.length > 0
 
   return (
     <div className="space-y-4">
@@ -214,6 +229,12 @@ function LlmConnectionFormFields({
           {draft.providerType === 'decision_typesafe' ? null : (
             <>
               <SettingRow label={t({ ko: '동시 요청', en: 'Concurrent requests' })}>
+                <div className="flex items-center gap-2">
+                {sharedSlot ? (
+                  <Tip content={t({ ko: '이 연결로 대화와 판단·번역을 같이 하는 프로필이 있어: {names}. 동시 요청 1이면 서로 캐시를 밀어내서 답변마다 프롬프트를 처음부터 다시 읽어. 서버를 슬롯 2개 이상으로 띄우고 여기 숫자를 맞춰.', en: 'Profiles send both their reply and their judge or translation here: {names}. With one request at a time they push each other out of the cache, so every reply reads its whole prompt again. Run the server with two or more slots and match this number.' }, { names: sharedServer.map((profile) => profile.name).join(', ') })} side="top">
+                    <span className="text-warning" aria-label={t({ ko: '대화와 판단이 같은 슬롯을 써', en: 'Reply and judge share one slot' })}><TriangleAlert className="size-4" aria-hidden /></span>
+                  </Tip>
+                ) : null}
                 <NumberStepperInput
                   variant="settings"
                   className="w-36"
@@ -224,18 +245,24 @@ function LlmConnectionFormFields({
                   onValueCommit={(value) => onChange({ concurrentRequests: value })}
                   aria-label={t({ ko: '동시 요청', en: 'Concurrent requests' })}
                 />
+                </div>
               </SettingRow>
-              <SettingRow label={t({ ko: '생각 끄는 방법', en: 'Turning thinking off' })}>
+              <SettingRow label={thinkingChanged ? (
+                <span className="flex items-center gap-2">
+                  {t({ ko: '생각 끄는 방법', en: 'Turning thinking off' })}
+                  <Tip content={t({ ko: '연결 테스트에서 바꿨어. {previous} 방식으론 생각이 안 꺼졌어. 저장해야 적용돼.', en: 'Changed by the connection test: {previous} did not turn thinking off. Save to apply.' }, { previous: thinkingSwitchLabel(thinkingChanged, t) })} side="top">
+                    <span className="size-1.5 rounded-full bg-primary" aria-label={t({ ko: '연결 테스트에서 바꿈', en: 'Changed by the test' })} />
+                  </Tip>
+                </span>
+              ) : t({ ko: '생각 끄는 방법', en: 'Turning thinking off' })}>
                 <Select
                   variant="settings"
-                  className="w-56 font-mono text-xs"
+                  className={cn('w-56 font-mono text-xs', thinkingChanged && 'ring-1 ring-primary')}
                   aria-label={t({ ko: '생각 끄는 방법', en: 'Turning thinking off' })}
                   value={draft.thinkingSwitch}
                   onChange={(event) => onChange({ thinkingSwitch: event.target.value as LlmThinkingSwitch })}
                 >
-                  <option value="reasoning_effort">reasoning_effort: none</option>
-                  <option value="enable_thinking">enable_thinking: false</option>
-                  <option value="none">{t({ ko: '보내지 않음', en: 'Send nothing' })}</option>
+                  {LLM_THINKING_SWITCHES.map((option) => <option key={option} value={option}>{thinkingSwitchLabel(option, t)}</option>)}
                 </Select>
               </SettingRow>
             </>
@@ -306,6 +333,8 @@ export function LlmConnectionEditorModal({
   const isEditMode = state?.mode === 'edit'
   const provider = state?.mode === 'edit' ? state.provider : null
   const [draft, setDraft] = useState<LlmConnectionDraft>(() => (provider ? buildProviderDraft(provider) : buildEmptyDraft()))
+  /** The way of turning thinking off the connection test replaced (until the editor closes). */
+  const [thinkingChanged, setThinkingChanged] = useState<LlmThinkingSwitch | null>(null)
 
   useEffect(() => {
     if (!isOpen) {
@@ -313,6 +342,7 @@ export function LlmConnectionEditorModal({
     }
 
     setDraft(provider ? buildProviderDraft(provider) : buildEmptyDraft())
+    setThinkingChanged(null)
   }, [isOpen, provider])
 
   // The server's model list follows the URL, key and type being edited; a saved key is reused when none is typed.
@@ -437,6 +467,18 @@ export function LlmConnectionEditorModal({
       return await testExternalApiProvider(provider.provider_name)
     },
     onSuccess: (result) => {
+      // The test also checks the way of turning thinking off; one that does not work is replaced in the draft.
+      const found = result.thinking?.found
+      if (result.success && found && found !== draft.thinkingSwitch) {
+        setThinkingChanged(draft.thinkingSwitch)
+        setDraft((current) => ({ ...current, thinkingSwitch: found }))
+        showSnackbar({ message: t({ ko: '연결 확인 · 생각 끄는 방법을 바꿨어', en: 'Connected · changed the way thinking is turned off' }), tone: 'info' })
+        return
+      }
+      if (result.success && result.thinking && found === null) {
+        showSnackbar({ message: t({ ko: '연결 확인 · 생각을 끄는 방법은 찾지 못했어', en: 'Connected · no way to turn thinking off was found' }), tone: 'info' })
+        return
+      }
       showSnackbar({ message: result.message || t('llmConnectionsTab.connectionTestFinished'), tone: result.success ? 'info' : 'error' })
     },
     onError: (error) => {
@@ -497,8 +539,13 @@ export function LlmConnectionEditorModal({
             draft={draft}
             mode={isEditMode ? 'edit' : 'create'}
             apiKeyMasked={provider?.api_key_masked}
-            onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
+            onChange={(patch) => {
+              if (patch.thinkingSwitch !== undefined) setThinkingChanged(null)
+              setDraft((current) => ({ ...current, ...patch }))
+            }}
             onEndpointModel={addEndpointModel}
+            sharedServer={saved[0]?.sharedServer}
+            thinkingChanged={thinkingChanged}
           />
           <ConnectionModelChecklist
             value={modelDraft}

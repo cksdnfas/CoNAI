@@ -17,7 +17,7 @@ export function registerWorkflowTransferTools(server: McpServer): void {
           : `Workflow with ID ${workflow_id} not found` }] };
       }
       const { artifact_root_path: _internalArtifactPath, deleted_at: _deletedAt, ...portable } = workflow;
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ format: 'conai-workflow', version: 1, workflow: portable }, null, 2) }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ format: 'conai-workflow', version: 1, workflow: portable }) }] };
     },
   );
 
@@ -49,7 +49,7 @@ export function registerWorkflowTransferTools(server: McpServer): void {
           artifact_directory_mode: workflow.artifact_directory_mode === 'per_run' ? 'per_run' : 'shared',
           kind: workflow.kind === 'audio' ? 'audio' : 'image',
         });
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ id, name }, null, 2) }] };
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ id, name }) }] };
       } catch (error) {
         return { isError: true, content: [{ type: 'text' as const, text: `Workflow import error: ${(error as Error).message}` }] };
       }
@@ -67,7 +67,7 @@ export function registerWorkflowTransferTools(server: McpServer): void {
           ? `복구할 수 없는 삭제된 워크플로우: ${reference.workflow_name ?? `ID ${workflow_id}`}`
           : `Deleted workflow ${workflow_id} not found` }] };
       }
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ workflow_id, restored: true }, null, 2) }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ workflow_id, restored: true }) }] };
     },
   );
 }

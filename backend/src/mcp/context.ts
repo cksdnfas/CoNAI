@@ -71,6 +71,11 @@ export const CHAT_PAGE_KIND_TOOLS: Partial<Record<string, ReadonlySet<string>>> 
 };
 
 /** Page tools are enabled by the user's explicit connection, independently of general profile tools. */
+/** A tool of one page kind's workspace (sprite, audio). */
+export function isPageKindTool(toolName: string) {
+  return Object.values(CHAT_PAGE_KIND_TOOLS).some((tools) => tools?.has(toolName));
+}
+
 export function isConnectedChatPageTool(context: McpRequestContext, toolName: string) {
   const page = context.chatContext?.page;
   return isChatMcpSource(context.source) && context.chatContext?.kind === 'direct' && !!page

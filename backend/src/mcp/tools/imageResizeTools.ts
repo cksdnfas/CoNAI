@@ -15,7 +15,7 @@ import { refreshMcpRequester } from '../toolAccess';
  */
 
 function textResult(value: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] };
+  return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
 }
 
 function errorResult(error: unknown) {
