@@ -59,6 +59,16 @@ export function resolveJudgeConnection(providerName: string, model: string | nul
   }
 }
 
+/** Whether the judge could call this connection's model (a TypeSafe decision connection or an LLM one). */
+export function isJudgeConnectionReady(providerName: string, model: string | null | undefined) {
+  try {
+    resolveJudgeConnection(providerName, model)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** Options a question offers: a choice's own, or yes / no. */
 function optionsOf(question: JudgeQuestion) {
   return question.kind === 'choice' ? question.options : [{ label: 'yes', description: question.criteria.yes, yes: true }, { label: 'no', description: question.criteria.no, yes: false }]

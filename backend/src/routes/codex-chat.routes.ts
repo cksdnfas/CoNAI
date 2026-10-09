@@ -32,7 +32,7 @@ import { ChatSharedBlockStore, readBlockFile } from '../services/codex-chat/chat
 import { ChatToolPresetStore, readToolPresetFile } from '../services/codex-chat/chatToolPresets'
 import { ChatJudgePresetStore, readJudgePresetFile } from '../services/codex-chat/chatJudgePresets'
 import { ChatJudgeLogStore } from '../services/codex-chat/chatJudgeLogs'
-import { JudgeError } from '../services/judge/judgeEngine'
+import { isJudgeConnectionReady, JudgeError } from '../services/judge/judgeEngine'
 import { testJudgePreset } from '../services/codex-chat/chatJudge'
 import type { ChatJudgePresetInput } from '@conai/shared'
 import { ModelSlotStore } from '../services/codex-chat/modelSlots'
@@ -1112,7 +1112,8 @@ router.delete('/admin/blocks/:blockId', requireAdmin, (req: Request, res: Respon
  * judge presets, user profiles and chats reference rows by id, so changing a row's model reaches all of them.
  */
 router.get('/admin/model-slots', requireAdmin, (_req: Request, res: Response) => {
-  res.json({ success: true, data: ModelSlotStore.list().map((slot) => ({ ...slot, ready: isChatTargetReady(slot.providerName, slot.model) })) })
+  // TypeSafe decision rows are not chat targets, so their readiness is the judge's.
+  res.json({ success: true, data: ModelSlotStore.list().map((slot) => ({ ...slot, ready: slot.providerType === 'decision_typesafe' ? isJudgeConnectionReady(slot.providerName, slot.model) : isChatTargetReady(slot.providerName, slot.model) })) })
 })
 
 /** Adds one model to a connection (returns the existing row when it is already there). */
