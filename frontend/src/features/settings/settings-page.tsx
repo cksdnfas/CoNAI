@@ -13,6 +13,7 @@ import { APP_BRAND_TOOLTIP, APP_VERSION_LABEL } from '@/lib/app-metadata'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import type {
+  ChatPageData,
   GenerationThrottleSettings,
   GeneralSettings,
   ImageSaveSettings,
@@ -30,6 +31,7 @@ import { useAppearanceSettingsTab } from './use-appearance-settings-tab'
 import { useAutoSettingsTab } from './use-auto-settings-tab'
 import { useUnsavedSettingsGuard } from './use-unsaved-settings-guard'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { applySettingsChatPatch, settingsChatFields, type SettingsChatSources } from './settings-chat-fields'
 
 const MaintenanceTabLazy = lazy(async () => {
   const module = await import('./components/maintenance-tab')
@@ -385,18 +387,54 @@ export function SettingsPage() {
     },
   ]
   const dirtySections = draftSections.filter((section) => section.isDirty)
+  const chatSources: SettingsChatSources = {
+    general: effectiveGeneralDraft,
+    appearance: appearanceTabProps.appearanceDraft,
+    metadata: effectiveMetadataDraft,
+    imageSave: effectiveImageSaveDraft,
+    thumbnail: effectiveThumbnailDraft,
+    videoOptimization: effectiveVideoOptimizationDraft,
+    generationThrottle: effectiveGenerationThrottleDraft,
+    tagger: autoTabProps.taggerDraft,
+    kaloscope: autoTabProps.kaloscopeDraft,
+    ratingWeights: autoTabProps.ratingWeightsDraft,
+    ratingTiers: autoTabProps.ratingTiersDraft,
+    taggerModels: autoTabProps.taggerModels.map((model) => model.name),
+  }
+  // Folder rows save on their own buttons and carry server paths, so the chat only reads names and watcher state.
+  const chatFolderData: Record<string, ChatPageData> = activeTab === 'library' ? {
+    watchedFolders: foldersTabProps.folders.map((folder) => ({
+      name: folder.folder_name || folder.folder_path.split(/[\\/]/).filter(Boolean).pop() || `#${folder.id}`,
+      active: folder.is_active === 1,
+      autoScan: folder.auto_scan === 1,
+      watcher: foldersTabProps.folderWatcherMap.get(folder.id) ?? 'stopped',
+      lastScan: folder.last_scan_status,
+    })),
+    backupSources: (foldersTabProps.backupSources ?? []).map((source) => ({
+      name: source.display_name || source.target_folder_name,
+      active: source.is_active === 1,
+      watcher: source.watcher_status,
+    })),
+  } : {}
   useChatPageRegistration(canOpenSettings ? {
     kind: 'settings', title: t({ ko: '설정 · {section}', en: 'Settings · {section}' }, { section: t(SETTINGS_TAB_LABELS[activeTab]) }), resourceId: activeTab,
-    fields: effectiveGeneralDraft && activeTab === 'general' ? [
-      { id: 'language', label: t({ ko: '언어', en: 'Language' }), type: 'select', value: effectiveGeneralDraft.language, options: ['ko', 'en'] },
-      { id: 'promptForDownloadLocation', label: t({ ko: '다운로드 위치 묻기', en: 'Ask for download location' }), type: 'boolean', value: effectiveGeneralDraft.promptForDownloadLocation },
-      { id: 'enableGallery', label: t({ ko: '갤러리 표시', en: 'Show gallery' }), type: 'boolean', value: effectiveGeneralDraft.enableGallery ?? false },
-      { id: 'showRatingBadges', label: t({ ko: '등급 배지 표시', en: 'Show rating badges' }), type: 'boolean', value: effectiveGeneralDraft.showRatingBadges ?? false },
-    ] : effectiveGeneralDraft && activeTab === 'library' ? [{ id: 'imageSimilarityCheckMode', label: t({ ko: '유사도 검사 방식', en: 'Similarity inspection mode' }), type: 'select', value: effectiveGeneralDraft.imageSimilarityCheckMode ?? 'always', options: ['manual', 'always'] }] : [],
-    data: { section: activeTab },
+    fields: settingsChatFields(activeTab, chatSources, t),
+    data: { section: activeTab, ...chatFolderData },
     // Unsaved sections keep a connected chat from navigating away and losing them.
     dirty: dirtySections.length > 0,
-    apply: (patch) => { if (effectiveGeneralDraft) setGeneralDraft({ ...effectiveGeneralDraft, ...patch } as GeneralSettings) },
+    apply: (patch) => applySettingsChatPatch(patch, chatSources, {
+      general: setGeneralDraft,
+      appearance: appearanceTabProps.onPatchAppearance,
+      metadata: setMetadataDraft,
+      imageSave: setImageSaveDraft,
+      thumbnail: setThumbnailDraft,
+      videoOptimization: setVideoOptimizationDraft,
+      generationThrottle: setGenerationThrottleDraft,
+      tagger: autoTabProps.onPatchTagger,
+      kaloscope: autoTabProps.onPatchKaloscope,
+      ratingWeights: ({ general_weight, sensitive_weight, questionable_weight, explicit_weight }) => autoTabProps.onPatchRatingWeights({ general_weight, sensitive_weight, questionable_weight, explicit_weight }),
+      ratingTier: autoTabProps.onPatchRatingTier,
+    }),
   } : null, { preserveOnSearchChange: true })
 
   const handleSaveAll = async () => {

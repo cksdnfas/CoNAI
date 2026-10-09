@@ -13,6 +13,7 @@ import {
   getShadowLabel,
   UploadedFontRow,
 } from './appearance-tab-editor-shared'
+import { ChatFilledLabel } from './settings-filled-label'
 import { SETTINGS_CONTROL_CLASS } from './settings-rows'
 import { useI18n } from '@/i18n'
 
@@ -36,7 +37,7 @@ export function AppearanceFontRows({
 
   return (
     <>
-      <SettingRow label={labels.preset} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.fontPreset">{labels.preset}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <Select
           variant="settings"
           aria-label={labels.preset}
@@ -72,7 +73,7 @@ export function AppearanceFontRows({
         </>
       ) : null}
 
-      <SettingRow label={labels.uiScale} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.fontScalePercent">{labels.uiScale}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <NumberStepperInput
           min={85}
           max={200}
@@ -84,7 +85,7 @@ export function AppearanceFontRows({
         />
       </SettingRow>
 
-      <SettingRow label={labels.textScale} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.textScalePercent">{labels.textScale}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <NumberStepperInput
           min={85}
           max={200}
@@ -96,7 +97,7 @@ export function AppearanceFontRows({
         />
       </SettingRow>
 
-      <SettingRow label={labels.body} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.bodyFontWeightPreset">{labels.body}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <Select
           variant="settings"
           aria-label={labels.body}
@@ -111,7 +112,7 @@ export function AppearanceFontRows({
         </Select>
       </SettingRow>
 
-      <SettingRow label={labels.emphasis} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.emphasisFontWeightPreset">{labels.emphasis}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <Select
           variant="settings"
           aria-label={labels.emphasis}
@@ -145,7 +146,7 @@ export function AppearanceFinishRows({
 
   return (
     <>
-      <SettingRow label={labels.columns} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.desktopPageColumnsMinWidth">{labels.columns}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <NumberStepperInput
           min={768}
           max={1800}
@@ -157,7 +158,7 @@ export function AppearanceFinishRows({
         />
       </SettingRow>
 
-      <SettingRow label={labels.radius} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.radiusPreset">{labels.radius}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <Select
           variant="settings"
           aria-label={labels.radius}
@@ -172,7 +173,7 @@ export function AppearanceFinishRows({
         </Select>
       </SettingRow>
 
-      <SettingRow label={labels.glass} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.glassPreset">{labels.glass}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <Select
           variant="settings"
           aria-label={labels.glass}
@@ -187,7 +188,7 @@ export function AppearanceFinishRows({
         </Select>
       </SettingRow>
 
-      <SettingRow label={labels.shadow} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.shadowPreset">{labels.shadow}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <Select
           variant="settings"
           aria-label={labels.shadow}
@@ -202,7 +203,7 @@ export function AppearanceFinishRows({
         </Select>
       </SettingRow>
 
-      <SettingRow label={labels.selection} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.selectionOutlineWidth">{labels.selection}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <NumberStepperInput
           min={1}
           max={8}

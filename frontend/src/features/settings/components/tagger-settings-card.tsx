@@ -7,6 +7,7 @@ import type { TaggerModelInfo, TaggerSettings } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
+import { ChatFilledLabel } from './settings-filled-label'
 import { SETTINGS_CONTROL_CLASS, SETTINGS_WIDE_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
 
 interface TaggerSettingsCardProps {
@@ -42,17 +43,17 @@ export function TaggerSettingsCard({
           <SettingsSwitchRow
             checked={taggerDraft.enabled}
             onCheckedChange={(checked) => onPatchTagger({ enabled: checked })}
-            label={t({ ko: 'WD Tagger 활성화', en: 'Enable WD Tagger' })}
+            label={<ChatFilledLabel fieldId="tagger.enabled">{t({ ko: 'WD Tagger 활성화', en: 'Enable WD Tagger' })}</ChatFilledLabel>}
           />
 
           <SettingsSwitchRow
             checked={taggerDraft.autoTagOnUpload}
             disabled={!isEnabled}
             onCheckedChange={(checked) => onPatchTagger({ autoTagOnUpload: checked })}
-            label={t({ ko: '업로드 시 자동 태깅', en: 'Auto tag on upload' })}
+            label={<ChatFilledLabel fieldId="tagger.autoTagOnUpload">{t({ ko: '업로드 시 자동 태깅', en: 'Auto tag on upload' })}</ChatFilledLabel>}
           />
 
-          <SettingRow label={labels.model} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="tagger.model">{labels.model}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <Select variant="settings" aria-label={labels.model} value={taggerDraft.model} disabled={!isEnabled} onChange={(event) => onPatchTagger({ model: event.target.value as TaggerSettings['model'] })}>
               {taggerModels.map((model) => (
                 <option key={model.name} value={model.name}>
@@ -62,7 +63,7 @@ export function TaggerSettingsCard({
             </Select>
           </SettingRow>
 
-          <SettingRow label={labels.device} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="tagger.device">{labels.device}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <Select variant="settings" aria-label={labels.device} value={taggerDraft.device} disabled={!isEnabled} onChange={(event) => onPatchTagger({ device: event.target.value as TaggerSettings['device'] })}>
               <option value="auto">{t({ ko: '자동 (GPU 우선)', en: 'Auto (GPU if available)' })}</option>
               <option value="cpu">{t({ ko: 'CPU (느림, GPU 불필요)', en: 'CPU (slower, no GPU needed)' })}</option>
@@ -70,11 +71,11 @@ export function TaggerSettingsCard({
             </Select>
           </SettingRow>
 
-          <SettingRow label={labels.general} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="tagger.generalThreshold">{labels.general}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <NumberStepperInput min={0} max={1} step={0.01} variant="settings" aria-label={labels.general} disabled={!isEnabled} value={taggerDraft.generalThreshold} onValueCommit={(nextValue) => onPatchTagger({ generalThreshold: Number(nextValue) || 0 })} />
           </SettingRow>
 
-          <SettingRow label={labels.character} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="tagger.characterThreshold">{labels.character}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <NumberStepperInput min={0} max={1} step={0.01} variant="settings" aria-label={labels.character} disabled={!isEnabled} value={taggerDraft.characterThreshold} onValueCommit={(nextValue) => onPatchTagger({ characterThreshold: Number(nextValue) || 0 })} />
           </SettingRow>
 
@@ -86,10 +87,10 @@ export function TaggerSettingsCard({
             checked={taggerDraft.keepModelLoaded}
             disabled={!isEnabled}
             onCheckedChange={(checked) => onPatchTagger({ keepModelLoaded: checked })}
-            label={t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}
+            label={<ChatFilledLabel fieldId="tagger.keepModelLoaded">{t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}</ChatFilledLabel>}
           />
 
-          <SettingRow label={labels.unload} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="tagger.autoUnloadMinutes">{labels.unload}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <NumberStepperInput min={1} variant="settings" aria-label={labels.unload} disabled={!isEnabled || taggerDraft.keepModelLoaded} value={taggerDraft.autoUnloadMinutes} onValueCommit={(nextValue) => onPatchTagger({ autoUnloadMinutes: Number(nextValue) || 1 })} />
           </SettingRow>
         </>

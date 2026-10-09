@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import type { AppearanceSettings } from '@conai/shared'
 import type { AppearanceTabColorValues } from './appearance-tab.types'
 import { SettingRow } from '@/components/ui/setting-row'
+import { ChatFilledLabel } from './settings-filled-label'
 import { SETTINGS_CONTROL_CLASS } from './settings-rows'
 import { useI18n, type TranslationInput } from '@/i18n'
 
@@ -199,15 +200,18 @@ export function getGroupExplorerCardStyleLabel(style: AppearanceSettings['groupE
 /** A 1-6 card count as a setting row (related-image grids). */
 export function RelatedImageColumnRow({
   label,
+  fieldId,
   value,
   onChange,
 }: {
   label: string
+  /** Chat page field id, for the assistant-filled dot. */
+  fieldId?: string
   value: number
   onChange: (value: number) => void
 }) {
   return (
-    <SettingRow label={label} controlClassName={SETTINGS_CONTROL_CLASS}>
+    <SettingRow label={fieldId ? <ChatFilledLabel fieldId={fieldId}>{label}</ChatFilledLabel> : label} controlClassName={SETTINGS_CONTROL_CLASS}>
       <NumberStepperInput
         min={1}
         max={6}
@@ -315,9 +319,12 @@ export function AppearanceColorControl({
 /** A color setting as a row. */
 export function AppearanceColorRow({
   label,
+  fieldId,
   ...control
 }: {
   label: string
+  /** Chat page field id, for the assistant-filled dot. */
+  fieldId?: string
   colorValue: string
   textValue: string
   placeholder: string
@@ -325,7 +332,7 @@ export function AppearanceColorRow({
   onChangeText: (value: string) => void
 }) {
   return (
-    <SettingRow label={label}>
+    <SettingRow label={fieldId ? <ChatFilledLabel fieldId={fieldId}>{label}</ChatFilledLabel> : label}>
       <AppearanceColorControl ariaLabel={label} {...control} />
     </SettingRow>
   )

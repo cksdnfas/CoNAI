@@ -7,6 +7,7 @@ import {
   getRelatedImageAspectRatioLabel,
   RelatedImageColumnRow,
 } from './appearance-tab-editor-shared'
+import { ChatFilledLabel } from './settings-filled-label'
 import { SETTINGS_CONTROL_CLASS } from './settings-rows'
 import { useI18n } from '@/i18n'
 
@@ -21,7 +22,7 @@ export function AppearanceListRows({
 
   return (
     <>
-      <SettingRow label={cardStyleLabel} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.groupExplorerCardStyle">{cardStyleLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <Select
           variant="settings"
           aria-label={cardStyleLabel}
@@ -37,18 +38,20 @@ export function AppearanceListRows({
       </SettingRow>
 
       <RelatedImageColumnRow
+        fieldId="appearance.detailRelatedImageMobileColumns"
         label={t({ ko: '유사 이미지 한 줄 카드 수 (모바일)', en: 'Similar images per row (mobile)' })}
         value={appearanceDraft.detailRelatedImageMobileColumns}
         onChange={(value) => onPatchAppearance({ detailRelatedImageMobileColumns: value })}
       />
 
       <RelatedImageColumnRow
+        fieldId="appearance.detailRelatedImageColumns"
         label={t({ ko: '유사 이미지 한 줄 카드 수 (데스크톱)', en: 'Similar images per row (desktop)' })}
         value={appearanceDraft.detailRelatedImageColumns}
         onChange={(value) => onPatchAppearance({ detailRelatedImageColumns: value })}
       />
 
-      <SettingRow label={ratioLabel} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.detailRelatedImageAspectRatio">{ratioLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <Select
           variant="settings"
           aria-label={ratioLabel}

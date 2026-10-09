@@ -13,6 +13,7 @@ import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SectionDirtyBadge } from './settings-section-status'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { SettingsLabelTip } from './settings-label-tip'
+import { ChatFilledLabel } from './settings-filled-label'
 import { SETTINGS_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
 
 const IMAGE_SAVE_SIZE_PRESETS = [
@@ -71,11 +72,14 @@ type Translate = ReturnType<typeof useI18n>['t']
 /** Rows of one provider's pacing (concurrency, window, count, distribution, min gap). */
 function ProviderPacingRows({
   value,
+  fieldPrefix,
   maxConcurrent,
   onPatch,
   t,
 }: {
   value: GenerationThrottleSettings['novelai']
+  /** Chat page field id prefix of this provider, for the assistant-filled dots. */
+  fieldPrefix: string
   maxConcurrent: number
   onPatch: (patch: Partial<GenerationThrottleSettings['novelai']>) => void
   t: Translate
@@ -90,16 +94,16 @@ function ProviderPacingRows({
 
   return (
     <>
-      <SettingRow label={labels.concurrent} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId={`${fieldPrefix}.maxConcurrentJobs`}>{labels.concurrent}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <NumberStepperInput min={1} max={maxConcurrent} variant="settings" aria-label={labels.concurrent} value={value.maxConcurrentJobs} onValueCommit={(nextValue) => onPatch({ maxConcurrentJobs: Number(nextValue) || 1 })} />
       </SettingRow>
-      <SettingRow label={labels.window} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId={`${fieldPrefix}.scheduleWindowMinutes`}>{labels.window}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <NumberStepperInput min={1} max={1440} variant="settings" aria-label={labels.window} value={value.scheduleWindowMinutes} onValueCommit={(nextValue) => onPatch({ scheduleWindowMinutes: Number(nextValue) || 1 })} />
       </SettingRow>
-      <SettingRow label={labels.count} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId={`${fieldPrefix}.scheduleJobCount`}>{labels.count}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <NumberStepperInput min={1} max={10000} variant="settings" aria-label={labels.count} value={value.scheduleJobCount} onValueCommit={(nextValue) => onPatch({ scheduleJobCount: Number(nextValue) || 1 })} />
       </SettingRow>
-      <SettingRow label={labels.mode} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId={`${fieldPrefix}.scheduleMode`}>{labels.mode}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <Select
           variant="settings"
           aria-label={labels.mode}
@@ -110,7 +114,7 @@ function ProviderPacingRows({
           <option value="random">{t({ ko: '비균등', en: 'Random' })}</option>
         </Select>
       </SettingRow>
-      <SettingRow label={labels.gap} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId={`${fieldPrefix}.minStartIntervalSeconds`}>{labels.gap}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <NumberStepperInput min={0} max={3600} variant="settings" aria-label={labels.gap} value={value.minStartIntervalSeconds} onValueCommit={(nextValue) => onPatch({ minStartIntervalSeconds: Number(nextValue) || 0 })} />
       </SettingRow>
     </>
@@ -177,10 +181,10 @@ export function ImageSaveTab({
                 </>
               )}
             >
-              <SettingRow label={labels.reservationConcurrency} controlClassName={SETTINGS_CONTROL_CLASS}>
+              <SettingRow label={<ChatFilledLabel fieldId="generationThrottle.reservations.maxConcurrentJobs">{labels.reservationConcurrency}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
                 <NumberStepperInput min={1} max={12} variant="settings" aria-label={labels.reservationConcurrency} value={generationThrottleDraft.reservations.maxConcurrentJobs} onValueCommit={(nextValue) => onPatchGenerationThrottle({ reservations: { maxConcurrentJobs: Number(nextValue) || 1 } })} />
               </SettingRow>
-              <SettingRow label={labels.userQueuePolicy} controlClassName={SETTINGS_CONTROL_CLASS}>
+              <SettingRow label={<ChatFilledLabel fieldId="generationThrottle.reservations.userQueuePolicy">{labels.userQueuePolicy}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
                 <Select
                   variant="settings"
                   aria-label={labels.userQueuePolicy}
@@ -206,7 +210,7 @@ export function ImageSaveTab({
                 </IconButton>
               )}
             >
-              <ProviderPacingRows value={generationThrottleDraft.novelai} maxConcurrent={8} onPatch={(patch) => onPatchGenerationThrottle({ novelai: patch })} t={t} />
+              <ProviderPacingRows value={generationThrottleDraft.novelai} fieldPrefix="generationThrottle.novelai" maxConcurrent={8} onPatch={(patch) => onPatchGenerationThrottle({ novelai: patch })} t={t} />
             </RowGroup>
 
             <RowGroup
@@ -222,7 +226,7 @@ export function ImageSaveTab({
                 </IconButton>
               )}
             >
-              <ProviderPacingRows value={generationThrottleDraft.codex} maxConcurrent={8} onPatch={(patch) => onPatchGenerationThrottle({ codex: patch })} t={t} />
+              <ProviderPacingRows value={generationThrottleDraft.codex} fieldPrefix="generationThrottle.codex" maxConcurrent={8} onPatch={(patch) => onPatchGenerationThrottle({ codex: patch })} t={t} />
             </RowGroup>
           </>
         ) : (
@@ -237,7 +241,7 @@ export function ImageSaveTab({
           <RowGroup heading={t({ ko: '이미지 저장', en: 'Image saving' })} actions={<SectionDirtyBadge dirty={hasImageSaveChanges} />}>
             {imageSaveDraft ? (
               <>
-                <SettingRow label={labels.format} controlClassName={SETTINGS_CONTROL_CLASS}>
+                <SettingRow label={<ChatFilledLabel fieldId="imageSave.defaultFormat">{labels.format}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
                   <Select
                     variant="settings"
                     aria-label={labels.format}
@@ -251,14 +255,14 @@ export function ImageSaveTab({
                   </Select>
                 </SettingRow>
 
-                <SettingRow label={labels.quality} controlClassName={SETTINGS_CONTROL_CLASS}>
+                <SettingRow label={<ChatFilledLabel fieldId="imageSave.quality">{labels.quality}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
                   <NumberStepperInput min={1} max={100} variant="settings" aria-label={labels.quality} value={imageSaveDraft.quality} onValueCommit={(nextValue) => onPatchImageSave({ quality: Number(nextValue) || 1 })} />
                 </SettingRow>
 
                 <SettingsSwitchRow
                   checked={imageSaveDraft.resizeEnabled}
                   onCheckedChange={(checked) => onPatchImageSave({ resizeEnabled: checked })}
-                  label={t({ ko: '저장 전에 크기 조정', en: 'Resize before saving' })}
+                  label={<ChatFilledLabel fieldId="imageSave.resizeEnabled">{t({ ko: '저장 전에 크기 조정', en: 'Resize before saving' })}</ChatFilledLabel>}
                 />
 
                 <SettingRow label={t({ ko: '크기 프리셋', en: 'Size presets' })} controlClassName="justify-start sm:justify-end">
@@ -273,15 +277,15 @@ export function ImageSaveTab({
                   ))}
                 </SettingRow>
 
-                <SettingRow label={labels.maxWidth} controlClassName={SETTINGS_CONTROL_CLASS}>
+                <SettingRow label={<ChatFilledLabel fieldId="imageSave.maxWidth">{labels.maxWidth}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
                   <NumberStepperInput min={64} max={16384} variant="settings" aria-label={labels.maxWidth} disabled={!imageSaveDraft.resizeEnabled} value={imageSaveDraft.maxWidth} onValueCommit={(nextValue) => onPatchImageSave({ maxWidth: Number(nextValue) || 64 })} />
                 </SettingRow>
 
-                <SettingRow label={labels.maxHeight} controlClassName={SETTINGS_CONTROL_CLASS}>
+                <SettingRow label={<ChatFilledLabel fieldId="imageSave.maxHeight">{labels.maxHeight}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
                   <NumberStepperInput min={64} max={16384} variant="settings" aria-label={labels.maxHeight} disabled={!imageSaveDraft.resizeEnabled} value={imageSaveDraft.maxHeight} onValueCommit={(nextValue) => onPatchImageSave({ maxHeight: Number(nextValue) || 64 })} />
                 </SettingRow>
 
-                <SettingRow label={labels.applyMode} controlClassName={SETTINGS_CONTROL_CLASS}>
+                <SettingRow label={<ChatFilledLabel fieldId="imageSave.alwaysShowDialog">{labels.applyMode}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
                   <Select
                     variant="settings"
                     aria-label={labels.applyMode}
@@ -296,27 +300,27 @@ export function ImageSaveTab({
                 <SettingsSwitchRow
                   checked={imageSaveDraft.applyToGenerationAttachments}
                   onCheckedChange={(checked) => onPatchImageSave({ applyToGenerationAttachments: checked })}
-                  label={t({ ko: '생성 첨부에 적용', en: 'Apply to generation attachments' })}
+                  label={<ChatFilledLabel fieldId="imageSave.applyToGenerationAttachments">{t({ ko: '생성 첨부에 적용', en: 'Apply to generation attachments' })}</ChatFilledLabel>}
                 />
                 <SettingsSwitchRow
                   checked={imageSaveDraft.applyToEditorSave}
                   onCheckedChange={(checked) => onPatchImageSave({ applyToEditorSave: checked })}
-                  label={t({ ko: '에디터 저장에 적용', en: 'Apply to editor saves' })}
+                  label={<ChatFilledLabel fieldId="imageSave.applyToEditorSave">{t({ ko: '에디터 저장에 적용', en: 'Apply to editor saves' })}</ChatFilledLabel>}
                 />
                 <SettingsSwitchRow
                   checked={imageSaveDraft.applyToCanvasSave}
                   onCheckedChange={(checked) => onPatchImageSave({ applyToCanvasSave: checked })}
-                  label={t({ ko: '캔버스 저장에 적용', en: 'Apply to canvas saves' })}
+                  label={<ChatFilledLabel fieldId="imageSave.applyToCanvasSave">{t({ ko: '캔버스 저장에 적용', en: 'Apply to canvas saves' })}</ChatFilledLabel>}
                 />
                 <SettingsSwitchRow
                   checked={imageSaveDraft.applyToUpload}
                   onCheckedChange={(checked) => onPatchImageSave({ applyToUpload: checked })}
-                  label={t({ ko: '업로드에 적용', en: 'Apply to uploads' })}
+                  label={<ChatFilledLabel fieldId="imageSave.applyToUpload">{t({ ko: '업로드에 적용', en: 'Apply to uploads' })}</ChatFilledLabel>}
                 />
                 <SettingsSwitchRow
                   checked={imageSaveDraft.applyToWorkflowOutputs}
                   onCheckedChange={(checked) => onPatchImageSave({ applyToWorkflowOutputs: checked })}
-                  label={t({ ko: '워크플로 출력에 적용', en: 'Apply to workflow outputs' })}
+                  label={<ChatFilledLabel fieldId="imageSave.applyToWorkflowOutputs">{t({ ko: '워크플로 출력에 적용', en: 'Apply to workflow outputs' })}</ChatFilledLabel>}
                 />
               </>
             ) : (
@@ -327,7 +331,7 @@ export function ImageSaveTab({
           <RowGroup heading={t({ ko: '썸네일', en: 'Thumbnail' })} actions={<SectionDirtyBadge dirty={hasThumbnailChanges} />}>
             {thumbnailDraft ? (
               <>
-                <SettingRow label={labels.thumbnailSize} controlClassName={SETTINGS_CONTROL_CLASS}>
+                <SettingRow label={<ChatFilledLabel fieldId="thumbnail.size">{labels.thumbnailSize}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
                   <Select
                     variant="settings"
                     aria-label={labels.thumbnailSize}
@@ -343,7 +347,7 @@ export function ImageSaveTab({
                 </SettingRow>
 
                 <SettingRow
-                  label={<SettingsLabelTip label={labels.thumbnailQuality} tip={t({ ko: '기존 썸네일은 재생성 필요. 유지보수 탭의 데이터 재매칭에서 새 품질로 다시 만들 수 있어.', en: 'Existing thumbnails need regeneration. Rebuild them from Data rematch in the Maintenance tab.' })} />}
+                  label={<ChatFilledLabel fieldId="thumbnail.quality"><SettingsLabelTip label={labels.thumbnailQuality} tip={t({ ko: '기존 썸네일은 재생성 필요. 유지보수 탭의 데이터 재매칭에서 새 품질로 다시 만들 수 있어.', en: 'Existing thumbnails need regeneration. Rebuild them from Data rematch in the Maintenance tab.' })} /></ChatFilledLabel>}
                   controlClassName={SETTINGS_CONTROL_CLASS}
                 >
                   <NumberStepperInput min={60} max={100} variant="settings" aria-label={labels.thumbnailQuality} value={thumbnailDraft.quality} onValueCommit={(nextValue) => onPatchThumbnail({ quality: Number(nextValue) || 60 })} />

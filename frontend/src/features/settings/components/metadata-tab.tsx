@@ -6,6 +6,7 @@ import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SectionDirtyBadge } from './settings-section-status'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
+import { ChatFilledLabel } from './settings-filled-label'
 import { SETTINGS_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
 
 interface MetadataTabProps {
@@ -28,10 +29,10 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, hasChanges }: Meta
           <SettingsSwitchRow
             checked={metadataDraft.enableSecondaryExtraction}
             onCheckedChange={(checked) => onPatchMetadata({ enableSecondaryExtraction: checked })}
-            label={t({ ko: 'PNG 숨은 생성 정보 찾기', en: 'Look for hidden generation info in PNGs' })}
+            label={<ChatFilledLabel fieldId="metadata.enableSecondaryExtraction">{t({ ko: 'PNG 숨은 생성 정보 찾기', en: 'Look for hidden generation info in PNGs' })}</ChatFilledLabel>}
           />
 
-          <SettingRow label={scanModeLabel} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="metadata.stealthScanMode">{scanModeLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <Select variant="settings" aria-label={scanModeLabel} value={metadataDraft.stealthScanMode} disabled={!isStealthEnabled} onChange={(event) => onPatchMetadata({ stealthScanMode: event.target.value as MetadataExtractionSettings['stealthScanMode'] })}>
               <option value="fast">{t({ ko: '빠르게 (못 찾으면 전체 검사)', en: 'Fast (falls back to full)' })}</option>
               <option value="full">{t({ ko: '전체 검사 (느림)', en: 'Full (slower)' })}</option>
@@ -39,11 +40,11 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, hasChanges }: Meta
             </Select>
           </SettingRow>
 
-          <SettingRow label={maxFileSizeLabel} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="metadata.stealthMaxFileSizeMB">{maxFileSizeLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <NumberStepperInput min={1} variant="settings" aria-label={maxFileSizeLabel} disabled={!isStealthEnabled} value={metadataDraft.stealthMaxFileSizeMB} onValueCommit={(nextValue) => onPatchMetadata({ stealthMaxFileSizeMB: Number(nextValue) || 1 })} />
           </SettingRow>
 
-          <SettingRow label={maxResolutionLabel} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="metadata.stealthMaxResolutionMP">{maxResolutionLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <NumberStepperInput min={1} variant="settings" aria-label={maxResolutionLabel} disabled={!isStealthEnabled} value={metadataDraft.stealthMaxResolutionMP} onValueCommit={(nextValue) => onPatchMetadata({ stealthMaxResolutionMP: Number(nextValue) || 1 })} />
           </SettingRow>
 
@@ -51,14 +52,14 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, hasChanges }: Meta
             checked={metadataDraft.skipStealthForComfyUI}
             disabled={!isStealthEnabled}
             onCheckedChange={(checked) => onPatchMetadata({ skipStealthForComfyUI: checked })}
-            label={t({ ko: 'ComfyUI 이미지로 확인되면 숨은 정보 찾기 생략', en: 'Skip the hidden info scan for images identified as ComfyUI' })}
+            label={<ChatFilledLabel fieldId="metadata.skipStealthForComfyUI">{t({ ko: 'ComfyUI 이미지로 확인되면 숨은 정보 찾기 생략', en: 'Skip the hidden info scan for images identified as ComfyUI' })}</ChatFilledLabel>}
           />
 
           <SettingsSwitchRow
             checked={metadataDraft.skipStealthForWebUI}
             disabled={!isStealthEnabled}
             onCheckedChange={(checked) => onPatchMetadata({ skipStealthForWebUI: checked })}
-            label={t({ ko: 'WebUI 이미지로 확인되면 숨은 정보 찾기 생략', en: 'Skip the hidden info scan for images identified as WebUI' })}
+            label={<ChatFilledLabel fieldId="metadata.skipStealthForWebUI">{t({ ko: 'WebUI 이미지로 확인되면 숨은 정보 찾기 생략', en: 'Skip the hidden info scan for images identified as WebUI' })}</ChatFilledLabel>}
           />
         </>
       ) : (

@@ -1,22 +1,18 @@
 import { Select } from '@/components/ui/select'
 import { RowGroup } from '@/components/ui/row-group'
 import { SettingRow } from '@/components/ui/setting-row'
-import { useI18n, type TranslationDictionary } from '@/i18n'
+import { useI18n } from '@/i18n'
 import type { VideoOptimizationSettings } from '@conai/shared'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SectionDirtyBadge } from './settings-section-status'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { SettingsLabelTip } from './settings-label-tip'
+import { VIDEO_OPTIMIZATION_PRESETS } from '../video-optimization-presets'
+import { ChatFilledLabel } from './settings-filled-label'
 import { SETTINGS_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
 
 /** Select value shown when CRF/audio no longer match any preset; never sent to the server. */
 const CUSTOM_PRESET_VALUE = 'custom'
-
-const VIDEO_PRESETS: Array<{ value: VideoOptimizationSettings['preset']; label: TranslationDictionary; crf: number; audioBitrateKbps: number }> = [
-  { value: 'high-quality', label: { ko: '고화질', en: 'High quality' }, crf: 22, audioBitrateKbps: 192 },
-  { value: 'balanced', label: { ko: '균형', en: 'Balanced' }, crf: 26, audioBitrateKbps: 128 },
-  { value: 'economy', label: { ko: '절약', en: 'Economy' }, crf: 30, audioBitrateKbps: 96 },
-]
 
 interface VideoOptimizationTabProps {
   videoOptimizationDraft: VideoOptimizationSettings | null
@@ -34,7 +30,7 @@ export function VideoOptimizationTab({
   const isEnabled = videoOptimizationDraft?.enabled === true
   // Editing CRF/audio by hand leaves the named preset behind, so show "Custom" instead of a stale name.
   const matchedPreset = videoOptimizationDraft
-    ? VIDEO_PRESETS.find((preset) => preset.crf === videoOptimizationDraft.crf && preset.audioBitrateKbps === videoOptimizationDraft.audioBitrateKbps)
+    ? VIDEO_OPTIMIZATION_PRESETS.find((preset) => preset.crf === videoOptimizationDraft.crf && preset.audioBitrateKbps === videoOptimizationDraft.audioBitrateKbps)
     : undefined
 
   const presetLabel = t({ ko: '프리셋', en: 'Preset' })
@@ -51,17 +47,17 @@ export function VideoOptimizationTab({
           <SettingsSwitchRow
             checked={videoOptimizationDraft.enabled}
             onCheckedChange={(checked) => onPatchVideoOptimization({ enabled: checked })}
-            label={t({ ko: '비디오 최적화 사용', en: 'Enable video optimization' })}
+            label={<ChatFilledLabel fieldId="videoOptimization.enabled">{t({ ko: '비디오 최적화 사용', en: 'Enable video optimization' })}</ChatFilledLabel>}
           />
 
-          <SettingRow label={presetLabel} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="videoOptimization.preset">{presetLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <Select
               variant="settings"
               aria-label={presetLabel}
               value={matchedPreset?.value ?? CUSTOM_PRESET_VALUE}
               disabled={!isEnabled}
               onChange={(event) => {
-                const nextPreset = VIDEO_PRESETS.find((preset) => preset.value === event.target.value)
+                const nextPreset = VIDEO_OPTIMIZATION_PRESETS.find((preset) => preset.value === event.target.value)
                 if (!nextPreset) return
                 onPatchVideoOptimization({
                   preset: nextPreset.value,
@@ -70,14 +66,14 @@ export function VideoOptimizationTab({
                 })
               }}
             >
-              {VIDEO_PRESETS.map((preset) => (
+              {VIDEO_OPTIMIZATION_PRESETS.map((preset) => (
                 <option key={preset.value} value={preset.value}>{t(preset.label)}</option>
               ))}
               {matchedPreset ? null : <option value={CUSTOM_PRESET_VALUE} disabled>{t({ ko: '사용자 지정', en: 'Custom' })}</option>}
             </Select>
           </SettingRow>
 
-          <SettingRow label={audioLabel} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="videoOptimization.audioBitrateKbps">{audioLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <NumberStepperInput
               disabled={!isEnabled}
               min={32}
@@ -89,7 +85,7 @@ export function VideoOptimizationTab({
             />
           </SettingRow>
 
-          <SettingRow label={crfLabel} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="videoOptimization.crf">{crfLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <NumberStepperInput
               disabled={!isEnabled}
               min={18}
@@ -105,19 +101,19 @@ export function VideoOptimizationTab({
             checked={videoOptimizationDraft.applyToUpload}
             disabled={!isEnabled}
             onCheckedChange={(checked) => onPatchVideoOptimization({ applyToUpload: checked })}
-            label={t({ ko: '업로드 비디오에 적용', en: 'Apply to uploaded videos' })}
+            label={<ChatFilledLabel fieldId="videoOptimization.applyToUpload">{t({ ko: '업로드 비디오에 적용', en: 'Apply to uploaded videos' })}</ChatFilledLabel>}
           />
           <SettingsSwitchRow
             checked={videoOptimizationDraft.applyToGeneratedOutputs}
             disabled={!isEnabled}
             onCheckedChange={(checked) => onPatchVideoOptimization({ applyToGeneratedOutputs: checked })}
-            label={t({ ko: '생성 결과 비디오에 적용', en: 'Apply to generated output videos' })}
+            label={<ChatFilledLabel fieldId="videoOptimization.applyToGeneratedOutputs">{t({ ko: '생성 결과 비디오에 적용', en: 'Apply to generated output videos' })}</ChatFilledLabel>}
           />
           <SettingsSwitchRow
             checked={videoOptimizationDraft.applyToBackupImports}
             disabled={!isEnabled}
             onCheckedChange={(checked) => onPatchVideoOptimization({ applyToBackupImports: checked })}
-            label={t({ ko: '백업 유입 비디오에 적용', en: 'Apply to backup-imported videos' })}
+            label={<ChatFilledLabel fieldId="videoOptimization.applyToBackupImports">{t({ ko: '백업 유입 비디오에 적용', en: 'Apply to backup-imported videos' })}</ChatFilledLabel>}
           />
         </>
       ) : (

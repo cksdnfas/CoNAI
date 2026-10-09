@@ -325,17 +325,21 @@ export function useAutoSettingsTab({
     tierId: number,
     patch: Partial<Pick<RatingTierRecord, 'tier_name' | 'min_score' | 'max_score' | 'color' | 'feed_visibility'>>,
   ) => {
-    if (!effectiveRatingTiersDraft) return
+    // Builds on the latest draft, so several tiers patched in one go (a chat fill) all land.
+    setRatingTiersDraft((currentDraft) => {
+      const baseDraft = currentDraft ?? ratingTiersQuery.data ?? null
+      if (!baseDraft) return currentDraft
 
-    const currentIndex = effectiveRatingTiersDraft.findIndex((tier) => tier.id === tierId)
-    const nextDraft = effectiveRatingTiersDraft.map((tier) => (tier.id === tierId ? { ...tier, ...patch } : tier))
+      const currentIndex = baseDraft.findIndex((tier) => tier.id === tierId)
+      const nextDraft = baseDraft.map((tier) => (tier.id === tierId ? { ...tier, ...patch } : { ...tier }))
 
-    if (currentIndex >= 0 && currentIndex < nextDraft.length - 1 && patch.max_score !== undefined) {
-      const nextTier = nextDraft[currentIndex + 1]
-      nextTier.min_score = patch.max_score === null ? nextTier.min_score : Math.max(nextDraft[currentIndex].min_score + 1, patch.max_score)
-    }
+      if (currentIndex >= 0 && currentIndex < nextDraft.length - 1 && patch.max_score !== undefined) {
+        const nextTier = nextDraft[currentIndex + 1]
+        nextTier.min_score = patch.max_score === null ? nextTier.min_score : Math.max(nextDraft[currentIndex].min_score + 1, patch.max_score)
+      }
 
-    setRatingTiersDraft(normalizeRatingTierDrafts(nextDraft))
+      return normalizeRatingTierDrafts(nextDraft)
+    })
   }
 
   const addRatingTierDraft = () => {

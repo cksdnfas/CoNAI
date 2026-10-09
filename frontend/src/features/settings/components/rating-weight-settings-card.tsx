@@ -6,6 +6,7 @@ import { RowGroup } from '@/components/ui/row-group'
 import { SettingRow } from '@/components/ui/setting-row'
 import { LoadingState } from '@/components/ui/loading-state'
 import { useI18n } from '@/i18n'
+import { ChatFilledLabel } from './settings-filled-label'
 import { SETTINGS_CONTROL_CLASS } from './settings-rows'
 
 interface RatingWeightSettingsCardProps {
@@ -99,7 +100,7 @@ export function RatingWeightSettingsCard({
 
         {ratingWeightsDraft ? (
           weightFields.map((field) => (
-            <SettingRow key={field.key} label={field.label} controlClassName={SETTINGS_CONTROL_CLASS}>
+            <SettingRow key={field.key} label={<ChatFilledLabel fieldId={`ratingWeights.${field.key}`}>{field.label}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
               <NumberStepperInput
                 min={0}
                 step={0.1}

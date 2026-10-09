@@ -1,4 +1,5 @@
 import { ChatFilledMark } from '@/features/codex-chat/chat-page-context'
+import { ChatFilledLabel } from './settings-filled-label'
 import { Archive, AudioLines, CircleUserRound, Film, FolderTree, Images, LayoutGrid, ListTodo, Map as MapIcon, MessageSquare, MessageSquareText, Search, Settings2, Sparkles, Upload, type LucideIcon } from 'lucide-react'
 import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
@@ -83,9 +84,9 @@ export function GeneralPreferencesSections({
       {visibleSections.has('basic') ? (
         <RowGroup heading={t({ ko: '기본', en: 'Basics' })} actions={<SectionDirtyBadge dirty={isSectionDirty('basic')} />}>
           <SettingRow
-            label={languageOverride
+            label={<ChatFilledLabel fieldId="language">{languageOverride
               ? <SettingsLabelTip label={languageLabel} tip={t({ ko: '이 브라우저는 계정 메뉴의 언어 선택이 우선', en: 'This browser uses its account-menu choice' })} />
-              : languageLabel}
+              : languageLabel}</ChatFilledLabel>}
             controlClassName={SETTINGS_CONTROL_CLASS}
           >
             <Select
@@ -101,7 +102,7 @@ export function GeneralPreferencesSections({
           <SettingsSwitchRow
             checked={generalDraft.promptForDownloadLocation ?? false}
             onCheckedChange={(checked) => onPatchGeneral({ promptForDownloadLocation: checked })}
-            label={<span className="inline-flex items-center gap-2">{t({ ko: '다운로드할 때 파일명과 위치 확인', en: 'Ask for file name and save location' })}<ChatFilledMark fieldId="promptForDownloadLocation" /></span>}
+            label={<ChatFilledLabel fieldId="promptForDownloadLocation">{t({ ko: '다운로드할 때 파일명과 위치 확인', en: 'Ask for file name and save location' })}</ChatFilledLabel>}
           />
         </RowGroup>
       ) : null}
@@ -111,12 +112,12 @@ export function GeneralPreferencesSections({
           <SettingsSwitchRow
             checked={generalDraft.enableGallery ?? true}
             onCheckedChange={(checked) => onPatchGeneral({ enableGallery: checked })}
-            label={<span className="inline-flex items-center gap-2">{t({ ko: '갤러리 기능 사용', en: 'Enable gallery features' })}<ChatFilledMark fieldId="enableGallery" /></span>}
+            label={<ChatFilledLabel fieldId="enableGallery">{t({ ko: '갤러리 기능 사용', en: 'Enable gallery features' })}</ChatFilledLabel>}
           />
           <SettingsSwitchRow
             checked={generalDraft.showRatingBadges ?? true}
             onCheckedChange={(checked) => onPatchGeneral({ showRatingBadges: checked })}
-            label={<span className="inline-flex items-center gap-2">{t({ ko: '등급 배지 표시', en: 'Show rating badges' })}<ChatFilledMark fieldId="showRatingBadges" /></span>}
+            label={<ChatFilledLabel fieldId="showRatingBadges">{t({ ko: '등급 배지 표시', en: 'Show rating badges' })}</ChatFilledLabel>}
           />
           <SettingRow label={t({ ko: '상단 메뉴', en: 'Header menu' })} align="start" controlClassName="justify-start sm:max-w-xl sm:justify-end">
             {HEADER_NAVIGATION_OPTIONS.map((option) => {
@@ -126,6 +127,7 @@ export function GeneralPreferencesSections({
                 <ToggleChip key={option.key} pressed={pressed} onClick={() => updateHeaderNavigationItem(option.key, !pressed)}>
                   <Icon aria-hidden />
                   {t(option.label)}
+                  <ChatFilledMark fieldId={`headerNavigation.${option.key}`} />
                 </ToggleChip>
               )
             })}
@@ -135,7 +137,7 @@ export function GeneralPreferencesSections({
 
       {visibleSections.has('library') ? (
         <RowGroup heading={t({ ko: '라이브러리 동작', en: 'Library behavior' })} actions={<SectionDirtyBadge dirty={isSectionDirty('library')} />}>
-          <SettingRow label={similarityLabel} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="imageSimilarityCheckMode">{similarityLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <Select
               variant="settings"
               aria-label={similarityLabel}
@@ -154,15 +156,15 @@ export function GeneralPreferencesSections({
           <SettingsSwitchRow
             checked={generalDraft.deleteProtection.enabled}
             onCheckedChange={(checked) => onPatchDeleteProtection({ enabled: checked })}
-            label={t({ ko: '삭제할 때 휴지통으로 보호', en: 'Protect deleted files with the recycle bin' })}
+            label={<ChatFilledLabel fieldId="deleteProtection.enabled">{t({ ko: '삭제할 때 휴지통으로 보호', en: 'Protect deleted files with the recycle bin' })}</ChatFilledLabel>}
           />
           <SettingsSwitchRow
             checked={retentionDays > 0}
             onCheckedChange={(checked) => onPatchDeleteProtection({ recycleBinRetentionDays: checked ? DEFAULT_RECYCLE_BIN_RETENTION_DAYS : 0 })}
-            label={t({ ko: '휴지통 자동 비우기', en: 'Empty the recycle bin automatically' })}
+            label={<ChatFilledLabel fieldId="deleteProtection.recycleBinRetentionDays">{t({ ko: '휴지통 자동 비우기', en: 'Empty the recycle bin automatically' })}</ChatFilledLabel>}
           />
           {retentionDays > 0 ? (
-            <SettingRow label={retentionLabel} controlClassName={SETTINGS_CONTROL_CLASS}>
+            <SettingRow label={<ChatFilledLabel fieldId="deleteProtection.recycleBinRetentionDays">{retentionLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
               <NumberStepperInput
                 variant="settings"
                 aria-label={retentionLabel}
@@ -179,7 +181,7 @@ export function GeneralPreferencesSections({
               />
             </SettingRow>
           ) : null}
-          <SettingRow label={historyMaxLabel} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="generationHistoryMaxItems">{historyMaxLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <NumberStepperInput
               variant="settings"
               aria-label={historyMaxLabel}
@@ -198,12 +200,12 @@ export function GeneralPreferencesSections({
           <SettingsSwitchRow
             checked={generalDraft.autoCleanupCanvasOnShutdown ?? false}
             onCheckedChange={(checked) => onPatchGeneral({ autoCleanupCanvasOnShutdown: checked })}
-            label={t({ ko: '종료 시 캔버스 임시 데이터 자동 정리', en: 'Clean up temporary canvas data on exit' })}
+            label={<ChatFilledLabel fieldId="autoCleanupCanvasOnShutdown">{t({ ko: '종료 시 캔버스 임시 데이터 자동 정리', en: 'Clean up temporary canvas data on exit' })}</ChatFilledLabel>}
           />
           <SettingsSwitchRow
             checked={generalDraft.applyRatingSafetyToGenerationHistory ?? false}
             onCheckedChange={(checked) => onPatchGeneral({ applyRatingSafetyToGenerationHistory: checked })}
-            label={t({ ko: '생성 히스토리에도 등급 표시 규칙 적용', en: 'Apply rating visibility rules to generation history' })}
+            label={<ChatFilledLabel fieldId="applyRatingSafetyToGenerationHistory">{t({ ko: '생성 히스토리에도 등급 표시 규칙 적용', en: 'Apply rating visibility rules to generation history' })}</ChatFilledLabel>}
           />
         </RowGroup>
       ) : null}

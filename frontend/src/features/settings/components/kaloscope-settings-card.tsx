@@ -10,6 +10,7 @@ import { DEFAULT_ARTIST_LINK_URL_TEMPLATE } from '@/lib/settings-defaults'
 import { useI18n, type TranslationInput } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
+import { ChatFilledLabel } from './settings-filled-label'
 import { SETTINGS_CONTROL_CLASS, SETTINGS_WIDE_CONTROL_CLASS, SettingsRowsSkeleton, SettingsStatLine } from './settings-rows'
 
 interface KaloscopeSettingsCardProps {
@@ -59,17 +60,17 @@ export function KaloscopeSettingsCard({
           <SettingsSwitchRow
             checked={kaloscopeDraft.enabled}
             onCheckedChange={(checked) => onPatchKaloscope({ enabled: checked })}
-            label={t({ ko: 'Kaloscope 활성화', en: 'Enable Kaloscope' })}
+            label={<ChatFilledLabel fieldId="kaloscope.enabled">{t({ ko: 'Kaloscope 활성화', en: 'Enable Kaloscope' })}</ChatFilledLabel>}
           />
 
           <SettingsSwitchRow
             checked={kaloscopeDraft.autoTagOnUpload}
             disabled={!isEnabled}
             onCheckedChange={(checked) => onPatchKaloscope({ autoTagOnUpload: checked })}
-            label={t({ ko: '새 이미지 자동 처리', en: 'Process new images automatically' })}
+            label={<ChatFilledLabel fieldId="kaloscope.autoTagOnUpload">{t({ ko: '새 이미지 자동 처리', en: 'Process new images automatically' })}</ChatFilledLabel>}
           />
 
-          <SettingRow label={labels.device} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="kaloscope.device">{labels.device}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <Select variant="settings" aria-label={labels.device} value={kaloscopeDraft.device} disabled={!isEnabled} onChange={(event) => onPatchKaloscope({ device: event.target.value as KaloscopeSettings['device'] })}>
               <option value="auto">{t({ ko: '자동 (GPU 우선)', en: 'Auto (GPU if available)' })}</option>
               <option value="cpu">{t({ ko: 'CPU (느림, GPU 불필요)', en: 'CPU (slower, no GPU needed)' })}</option>
@@ -77,7 +78,7 @@ export function KaloscopeSettingsCard({
             </Select>
           </SettingRow>
 
-          <SettingRow label={labels.topK} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="kaloscope.topK">{labels.topK}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <NumberStepperInput min={1} max={200} variant="settings" aria-label={labels.topK} disabled={!isEnabled} value={kaloscopeDraft.topK} onValueCommit={(nextValue) => onPatchKaloscope({ topK: Number(nextValue) || 1 })} />
           </SettingRow>
 
@@ -85,10 +86,10 @@ export function KaloscopeSettingsCard({
             checked={kaloscopeDraft.keepModelLoaded}
             disabled={!isEnabled}
             onCheckedChange={(checked) => onPatchKaloscope({ keepModelLoaded: checked })}
-            label={t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}
+            label={<ChatFilledLabel fieldId="kaloscope.keepModelLoaded">{t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}</ChatFilledLabel>}
           />
 
-          <SettingRow label={labels.unload} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="kaloscope.autoUnloadMinutes">{labels.unload}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <NumberStepperInput
               min={1}
               variant="settings"
@@ -99,7 +100,7 @@ export function KaloscopeSettingsCard({
             />
           </SettingRow>
 
-          <SettingRow label={labels.artistLink} controlClassName={SETTINGS_WIDE_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="kaloscope.artistLinkUrlTemplate">{labels.artistLink}</ChatFilledLabel>} controlClassName={SETTINGS_WIDE_CONTROL_CLASS}>
             <Input
               variant="settings"
               aria-label={labels.artistLink}

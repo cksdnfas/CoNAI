@@ -15,6 +15,7 @@ import {
   getSurfacePresetLabel,
   getThemeModeLabel,
 } from './appearance-tab-editor-shared'
+import { ChatFilledLabel } from './settings-filled-label'
 import { SETTINGS_CONTROL_CLASS } from './settings-rows'
 import { useI18n } from '@/i18n'
 
@@ -49,7 +50,7 @@ export function AppearanceThemeRows({
 
   return (
     <>
-      <SettingRow label={t({ ko: '모드', en: 'Mode' })}>
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.themeMode">{t({ ko: '모드', en: 'Mode' })}</ChatFilledLabel>}>
         <SegmentedControl
           size="sm"
           ariaLabel={t({ ko: '테마 모드', en: 'Theme mode' })}
@@ -63,7 +64,7 @@ export function AppearanceThemeRows({
         />
       </SettingRow>
 
-      <SettingRow label={t({ ko: '강조색', en: 'Accent' })} controlClassName="gap-1">
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.accentPreset">{t({ ko: '강조색', en: 'Accent' })}</ChatFilledLabel>} controlClassName="gap-1">
         {Object.entries(APPEARANCE_PRESETS).map(([presetKey, preset]) => (
           <Swatch
             key={presetKey}
@@ -86,6 +87,7 @@ export function AppearanceThemeRows({
       {appearanceDraft.accentPreset === 'custom' ? (
         <>
           <AppearanceColorRow
+            fieldId="appearance.customPrimaryColor"
             label={t({ ko: '기본 강조색', en: 'Primary accent' })}
             colorValue={colorValues.customPrimaryColorValue}
             textValue={appearanceDraft.customPrimaryColor}
@@ -94,6 +96,7 @@ export function AppearanceThemeRows({
             placeholder={DEFAULT_APPEARANCE_SETTINGS.customPrimaryColor}
           />
           <AppearanceColorRow
+            fieldId="appearance.customSecondaryColor"
             label={t({ ko: '보조 강조색', en: 'Secondary accent' })}
             colorValue={colorValues.customSecondaryColorValue}
             textValue={appearanceDraft.customSecondaryColor}
@@ -104,7 +107,7 @@ export function AppearanceThemeRows({
         </>
       ) : null}
 
-      <SettingRow label={t({ ko: '표면', en: 'Surfaces' })} controlClassName="gap-1">
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.surfacePreset">{t({ ko: '표면', en: 'Surfaces' })}</ChatFilledLabel>} controlClassName="gap-1">
         {Object.entries(SURFACE_PRESETS).map(([presetKey, preset]) => {
           const palette = preset.modes[paletteMode]
           return (
@@ -130,6 +133,7 @@ export function AppearanceThemeRows({
       {appearanceDraft.surfacePreset === 'custom' ? (
         <>
           <AppearanceColorRow
+            fieldId="appearance.customSurfaceBackgroundColor"
             label={t({ ko: '배경', en: 'Background' })}
             colorValue={colorValues.customSurfaceBackgroundColorValue}
             textValue={appearanceDraft.customSurfaceBackgroundColor}
@@ -138,6 +142,7 @@ export function AppearanceThemeRows({
             placeholder={DEFAULT_APPEARANCE_SETTINGS.customSurfaceBackgroundColor}
           />
           <AppearanceColorRow
+            fieldId="appearance.customSurfaceLowestColor"
             label={t({ ko: '사이드바 바탕', en: 'Sidebar background' })}
             colorValue={colorValues.customSurfaceLowestColorValue}
             textValue={appearanceDraft.customSurfaceLowestColor ?? ''}
@@ -146,6 +151,7 @@ export function AppearanceThemeRows({
             placeholder={defaultSurfaceToneColors.surfaceLowest}
           />
           <AppearanceColorRow
+            fieldId="appearance.customSurfaceContainerColor"
             label={t({ ko: '컨테이너 1', en: 'Container 1' })}
             colorValue={colorValues.customSurfaceContainerColorValue}
             textValue={appearanceDraft.customSurfaceContainerColor}
@@ -154,6 +160,7 @@ export function AppearanceThemeRows({
             placeholder={DEFAULT_APPEARANCE_SETTINGS.customSurfaceContainerColor}
           />
           <AppearanceColorRow
+            fieldId="appearance.customSurfaceLowColor"
             label={t({ ko: '컨테이너 2', en: 'Container 2' })}
             colorValue={colorValues.customSurfaceLowColorValue}
             textValue={appearanceDraft.customSurfaceLowColor ?? ''}
@@ -162,6 +169,7 @@ export function AppearanceThemeRows({
             placeholder={defaultSurfaceToneColors.surfaceLow}
           />
           <AppearanceColorRow
+            fieldId="appearance.customSurfaceHighColor"
             label={t({ ko: '호버 / 활성', en: 'Hover / active' })}
             colorValue={colorValues.customSurfaceHighColorValue}
             textValue={appearanceDraft.customSurfaceHighColor}
@@ -172,7 +180,7 @@ export function AppearanceThemeRows({
         </>
       ) : null}
 
-      <SettingRow label={densityLabel} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.density">{densityLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
         <Select
           variant="settings"
           aria-label={densityLabel}
@@ -201,6 +209,7 @@ export function AppearanceBadgeColorRows({
   return (
     <>
       <AppearanceColorRow
+        fieldId="appearance.positiveBadgeColor"
         label={t({ ko: '긍정 배지', en: 'Positive badge' })}
         colorValue={colorValues.positiveBadgeColorValue}
         textValue={appearanceDraft.positiveBadgeColor}
@@ -209,6 +218,7 @@ export function AppearanceBadgeColorRows({
         placeholder={DEFAULT_APPEARANCE_SETTINGS.positiveBadgeColor}
       />
       <AppearanceColorRow
+        fieldId="appearance.negativeBadgeColor"
         label={t({ ko: '부정 배지', en: 'Negative badge' })}
         colorValue={colorValues.negativeBadgeColorValue}
         textValue={appearanceDraft.negativeBadgeColor}
@@ -217,6 +227,7 @@ export function AppearanceBadgeColorRows({
         placeholder={DEFAULT_APPEARANCE_SETTINGS.negativeBadgeColor}
       />
       <AppearanceColorRow
+        fieldId="appearance.autoBadgeColor"
         label={t({ ko: '오토 배지', en: 'Auto badge' })}
         colorValue={colorValues.autoBadgeColorValue}
         textValue={appearanceDraft.autoBadgeColor}
@@ -225,6 +236,7 @@ export function AppearanceBadgeColorRows({
         placeholder={DEFAULT_APPEARANCE_SETTINGS.autoBadgeColor}
       />
       <AppearanceColorRow
+        fieldId="appearance.ratingBadgeColor"
         label={t({ ko: '평가 배지', en: 'Rating badge' })}
         colorValue={colorValues.ratingBadgeColorValue}
         textValue={appearanceDraft.ratingBadgeColor}

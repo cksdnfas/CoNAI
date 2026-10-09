@@ -11,6 +11,7 @@ import { SettingRow } from '@/components/ui/setting-row'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { AppearanceColorControl } from './appearance-tab-editor-shared'
+import { ChatFilledLabel } from './settings-filled-label'
 import { SETTINGS_CONTROL_CLASS } from './settings-rows'
 
 interface RatingTierSettingsCardProps {
@@ -166,7 +167,7 @@ export function RatingTierSettingsCard({
 
                 {isExpanded ? (
                   <div className="border-t border-line pb-1 pl-4 sm:pl-14">
-                    <SettingRow label={labels.name} controlClassName={SETTINGS_CONTROL_CLASS}>
+                    <SettingRow label={<ChatFilledLabel fieldId={`ratingTiers.${tier.id}.tier_name`}>{labels.name}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
                       <Input
                         variant="settings"
                         aria-label={labels.name}
@@ -176,7 +177,7 @@ export function RatingTierSettingsCard({
                       />
                     </SettingRow>
 
-                    <SettingRow label={labels.min} controlClassName={SETTINGS_CONTROL_CLASS}>
+                    <SettingRow label={<ChatFilledLabel fieldId={`ratingTiers.${tier.id}.min_score`}>{labels.min}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
                       <NumberStepperInput
                         min={0}
                         step={0.1}
@@ -204,7 +205,7 @@ export function RatingTierSettingsCard({
                       )}
                     </SettingRow>
 
-                    <SettingRow label={labels.color}>
+                    <SettingRow label={<ChatFilledLabel fieldId={`ratingTiers.${tier.id}.color`}>{labels.color}</ChatFilledLabel>}>
                       <AppearanceColorControl
                         ariaLabel={labels.color}
                         colorValue={colorValue}
@@ -215,7 +216,7 @@ export function RatingTierSettingsCard({
                       />
                     </SettingRow>
 
-                    <SettingRow label={labels.feed} controlClassName={SETTINGS_CONTROL_CLASS}>
+                    <SettingRow label={<ChatFilledLabel fieldId={`ratingTiers.${tier.id}.feed_visibility`}>{labels.feed}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
                       <Select
                         variant="settings"
                         aria-label={labels.feed}
