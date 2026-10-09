@@ -11,6 +11,7 @@ import type {
   GraphWorkflowScheduleRecord,
 } from '../types/moduleGraph'
 import { GraphWorkflowExecutionQueue } from './graphWorkflowExecutionQueue'
+import { AuthAccount } from '../models/AuthAccount'
 
 /**
  * Execution columns used by browse/reservation surfaces.
@@ -111,6 +112,12 @@ export function decorateGraphExecutionRecord(record: any) {
 export function decorateGraphWorkflowScheduleRecords(schedules: GraphWorkflowScheduleRecord[]) {
   const scheduleIds = schedules.map((schedule) => schedule.id)
   const countsByScheduleId = GraphExecutionModel.countStatusesByScheduleIds(scheduleIds)
+  const accountNames = new Map<number, string | null>()
+  const accountName = (id: number | null | undefined) => {
+    if (id === null || id === undefined) return null
+    if (!accountNames.has(id)) accountNames.set(id, AuthAccount.findById(id)?.username ?? null)
+    return accountNames.get(id) ?? null
+  }
 
   return schedules.map((schedule) => {
     const summary = countsByScheduleId.get(schedule.id) ?? {
@@ -133,6 +140,7 @@ export function decorateGraphWorkflowScheduleRecords(schedules: GraphWorkflowSch
       failed_run_count: summary.failed,
       reserved_run_count: reservedRunCount,
       remaining_run_count: remainingRunCount,
+      run_as_account_name: accountName(schedule.run_as_account_id),
     }
   })
 }

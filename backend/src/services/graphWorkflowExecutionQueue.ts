@@ -50,7 +50,7 @@ type StartupRecoverySnapshot = InterruptedExecutionRecoverySummary & {
 
 type ReservationLane = 'novelai' | 'codex' | 'comfyui' | 'other'
 
-const RUNNING_EXECUTION_RESTART_MESSAGE = 'Backend restarted while this graph execution was running. Re-run is required.'
+export const RUNNING_EXECUTION_RESTART_MESSAGE = 'Backend restarted while this graph execution was running. Re-run is required.'
 const STRANDED_RUNNING_EXECUTION_MESSAGE = 'Execution process is no longer active. Re-run is required.'
 const OTHER_PROCESS_RUNNING_EXECUTION_MESSAGE = 'Execution is running in another process. Cancel it from the worker process.'
 const QUEUE_RECHECK_INTERVAL_MS = 5000

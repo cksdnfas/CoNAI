@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Archive, ArchiveRestore, Check, ChevronDown, ChevronRight, GitBranch, ListChecks, MoreHorizontal, Pencil, Pin, PinOff, SquareCheck, Trash2, X } from 'lucide-react'
+import { AlarmClock, Archive, ArchiveRestore, Check, ChevronDown, ChevronRight, GitBranch, ListChecks, MoreHorizontal, Pencil, Pin, PinOff, SquareCheck, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -28,12 +28,14 @@ export type ChatBulkAction = 'archive' | 'unarchive' | 'delete'
  * Several chats are picked with "Select" in the row menu; while any is picked the faces turn into checks, a row click
  * ticks it, and a floating bar archives or deletes them (Esc lets go).
  */
-export function ChatThreadList({ threads, profilesById, activeThreadId, runningThreadIds, drafts, dense = false, onSelect, onUpdate, onBulk }: {
+export function ChatThreadList({ threads, profilesById, activeThreadId, runningThreadIds, routineThreadIds, drafts, dense = false, onSelect, onUpdate, onBulk }: {
   threads: CodexChatThread[]
   profilesById: Map<number, ChatProfileSummary>
   activeThreadId: number | null
   /** Chats with a reply on its way (a dot on the row). */
   runningThreadIds: ReadonlySet<number>
+  /** Chats an automation routine wakes (a small clock on the row). */
+  routineThreadIds?: ReadonlySet<number>
   /** Unsent composer text per chat, shown instead of the latest message. */
   drafts: Record<number, string>
   dense?: boolean
@@ -131,6 +133,7 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
               <span className="flex min-w-0 items-center gap-1.5">
                 <span className={cn('truncate', !dense && 'font-semibold')}>{entry.title || untitled}</span>
                 {entry.pinned ? <Pin aria-label={t({ ko: '고정됨', en: 'Pinned' })} className="size-3 shrink-0 text-muted-foreground" /> : null}
+                {routineThreadIds?.has(entry.id) ? <AlarmClock aria-label={t({ ko: '루틴', en: 'Routine' })} className="size-3 shrink-0 text-muted-foreground" /> : null}
               </span>
               {preview ? <span className="block truncate text-xs text-muted-foreground">{preview}</span> : null}
             </span>

@@ -1,4 +1,6 @@
 import {
+  Activity,
+  AlarmClock,
   AudioLines,
   BookOpen,
   Bot,
@@ -69,6 +71,8 @@ const OPERATION_ICONS: Readonly<Record<string, LucideIcon>> = {
   'system.load_chat_profile': UserRound,
   'system.search_lorebook': BookOpen,
   'system.post_to_chat_room': Send,
+  'system.wake_chat_room': AlarmClock,
+  'system.read_runtime_status': Activity,
 }
 
 /** Header icon and color: input nodes take the type of the value they hold, the rest their kind. */

@@ -3,6 +3,7 @@ import type { ChatWorkflowProposal } from './chatWorkflow'
 import type { ChatPageActionProposal } from './chatPageAction'
 import type { ChatProfileAssetsProposal } from './chatAssets'
 import type { ChatTaskPlanProposal, ChatTaskRouting } from './chatTask'
+import type { ChatRoutineRouting } from './chatRoutine'
 
 /** A recipient is a member profile, the human, or a room announcement (no automatic reply). */
 export type ChatRecipient = number | 'user' | 'room'
@@ -25,6 +26,8 @@ export type ChatMessageRouting = {
   recipients: ChatRecipient[]
   /** A request the server sent to move a task on (see ChatTask), not something the person typed. */
   task?: ChatTaskRouting
+  /** A request an automation (routine or workflow) sent, not something the person typed. */
+  routine?: ChatRoutineRouting
 }
 
 /** Server-issued MCP binding. Models cannot choose their sender, room, or active reply. */

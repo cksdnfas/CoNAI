@@ -10,6 +10,8 @@ import { decorateGraphWorkflowScheduleRecords } from '../../services/graphWorkfl
 import { asyncHandler } from '../../middleware/asyncHandler'
 import { parsePositiveInteger, sendRouteBadRequest } from '../routeValidation'
 import type { ModuleGraphResponse } from '../../types/moduleGraph'
+import { DEFAULT_SCHEDULE_TIMEZONE, resolveScheduleTimezone } from '../../services/scheduleTiming'
+import { isAdminRequest } from '../requester-session-helpers'
 import {
   findGraphWorkflowFolderOrRespond,
   findGraphWorkflowOrRespond,
@@ -27,6 +29,11 @@ import {
   parseScheduleStatus,
   parseScheduleType,
 } from './route-helpers'
+
+/** The signed-in account; a schedule runs as whoever last saved it (null while no accounts are configured). */
+function sessionAccountId(req: Request) {
+  return typeof req.session?.accountId === 'number' ? req.session.accountId : null
+}
 
 function parseStoredScheduleInputValues(value?: string | null) {
   if (!value) {
@@ -59,6 +66,7 @@ function enqueueScheduleRuns(params: {
   inputValues?: Record<string, unknown>
   requestedCount: number
   maxRunCount?: number | null
+  requestedByAccountId: number | null
 }) {
   const allowedCount = resolveAllowedScheduleEnqueueCount(params.scheduleId, params.requestedCount, params.maxRunCount)
   const executionIds = GraphWorkflowExecutionQueue.enqueueMany(
@@ -67,7 +75,7 @@ function enqueueScheduleRuns(params: {
     params.inputValues,
     undefined,
     false,
-    { triggerType: 'schedule', scheduleId: params.scheduleId },
+    { triggerType: 'schedule', scheduleId: params.scheduleId, requestedByAccountId: params.requestedByAccountId },
   ).map((result) => result.executionId)
 
   return {
@@ -122,7 +130,7 @@ export function createGraphWorkflowScheduleRoutes() {
     const rawMaxRunCount = req.body?.max_run_count
     const maxRunCount = parseScheduleMaxRunCount(rawMaxRunCount)
     const failurePolicy = parseScheduleFailurePolicy(req.body?.failure_policy) ?? 'stop'
-    const timezone = parseOptionalTrimmedString(req.body?.timezone)
+    const timezone = resolveScheduleTimezone(parseOptionalTrimmedString(req.body?.timezone) ?? DEFAULT_SCHEDULE_TIMEZONE)
     const inputValues = parseScheduleInputValues(req.body?.input_values)
     const runEnqueueCount = parseScheduleRunEnqueueCount(req.body?.run_enqueue_count)
 
@@ -174,6 +182,7 @@ export function createGraphWorkflowScheduleRoutes() {
           runAt,
           intervalMinutes,
           dailyTime,
+          timezone,
         })
         : null
 
@@ -195,6 +204,7 @@ export function createGraphWorkflowScheduleRoutes() {
         next_run_at: nextRunAt,
         stop_reason_code: status === 'active' ? null : 'manual_pause',
         stop_reason_message: status === 'active' ? null : '예약작업이 일시정지 상태로 생성됐어.',
+        run_as_account_id: sessionAccountId(req),
       })
 
       return res.status(201).json({ success: true, data: { id: scheduleId, message: '예약작업을 생성했어.' } } as ModuleGraphResponse)
@@ -226,7 +236,7 @@ export function createGraphWorkflowScheduleRoutes() {
     const rawMaxRunCount = req.body?.max_run_count
     const maxRunCount = req.body?.max_run_count !== undefined ? parseScheduleMaxRunCount(req.body.max_run_count) : undefined
     const failurePolicy = req.body?.failure_policy !== undefined ? parseScheduleFailurePolicy(req.body.failure_policy) : undefined
-    const timezone = req.body?.timezone !== undefined ? parseOptionalTrimmedString(req.body.timezone) : undefined
+    const timezone = req.body?.timezone !== undefined ? resolveScheduleTimezone(parseOptionalTrimmedString(req.body.timezone)) : undefined
     const inputValues = req.body?.input_values !== undefined ? parseScheduleInputValues(req.body.input_values) : undefined
     const runEnqueueCount = req.body?.run_enqueue_count !== undefined ? parseScheduleRunEnqueueCount(req.body.run_enqueue_count) : undefined
 
@@ -265,6 +275,7 @@ export function createGraphWorkflowScheduleRoutes() {
           runAt: finalRunAt,
           intervalMinutes: finalIntervalMinutes,
           dailyTime: finalDailyTime,
+          timezone: timezone ?? schedule.timezone,
         })
         : null
 
@@ -285,6 +296,8 @@ export function createGraphWorkflowScheduleRoutes() {
         next_run_at: nextRunAt,
         stop_reason_code: finalStatus === 'active' ? null : schedule.stop_reason_code ?? 'manual_pause',
         stop_reason_message: finalStatus === 'active' ? null : schedule.stop_reason_message ?? '예약작업이 일시정지 상태야.',
+        // Saving takes the schedule over: from now on it runs as the account that saved it.
+        run_as_account_id: sessionAccountId(req),
       })
 
       return res.json({ success: updated, data: { id: scheduleId, message: updated ? '예약작업을 업데이트했어.' : '예약작업 변경사항이 없어.' } } as ModuleGraphResponse)
@@ -333,6 +346,7 @@ export function createGraphWorkflowScheduleRoutes() {
       runAt: schedule.run_at,
       intervalMinutes: schedule.interval_minutes,
       dailyTime: schedule.daily_time,
+      timezone: schedule.timezone,
     })
 
     const updated = GraphWorkflowScheduleModel.update(scheduleId, {
@@ -358,6 +372,11 @@ export function createGraphWorkflowScheduleRoutes() {
     }
 
     const { schedule } = scheduleContext
+    // A run-now acts as the schedule's account, so only that account or an administrator may start one.
+    const runAs = schedule.run_as_account_id ?? null
+    if (runAs !== null && runAs !== sessionAccountId(req) && !isAdminRequest(req)) {
+      return res.status(403).json({ success: false, error: '이 예약은 저장한 계정이나 관리자만 바로 실행할 수 있어.' } as ModuleGraphResponse)
+    }
     const enqueueCount = parseScheduleEnqueueCount(req.body?.enqueue_count ?? 1)
     if (enqueueCount === null || enqueueCount <= 0) {
       return sendRouteBadRequest(res, `즉시 실행 수는 1부터 ${MAX_BULK_SCHEDULE_ENQUEUE_COUNT} 사이의 정수여야 해.`)
@@ -370,6 +389,8 @@ export function createGraphWorkflowScheduleRoutes() {
         inputValues: parseStoredScheduleInputValues(schedule.input_values),
         requestedCount: enqueueCount,
         maxRunCount: schedule.max_run_count,
+        // The schedule's own account, so a run-now behaves like its timed runs; older schedules use the clicker.
+        requestedByAccountId: schedule.run_as_account_id ?? sessionAccountId(req),
       })
 
       if (enqueueResult.enqueued_count > 0) {

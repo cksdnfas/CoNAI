@@ -1203,8 +1203,8 @@ export const CodexChatService = {
       if (pageContext != null && !profile.pageAssist) throw new CodexChatError('이 프로필은 페이지 어시스턴트가 꺼져 있어.', 400)
       const page = parseChatPageContext(pageContext, requester)
       rememberChatPage(requester, page, threadId)
-      if (!options.task) notifyChatUserSend(threadId, Boolean(page))
-      const routing = { ...userReplyRouting(thread, replyToMessageId), ...(options.task ? { task: options.task } : {}) }
+      if (!options.task && !options.routine) notifyChatUserSend(threadId, Boolean(page))
+      const routing = { ...userReplyRouting(thread, replyToMessageId), ...(options.task ? { task: options.task } : {}), ...(options.routine ? { routine: options.routine } : {}) }
       const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
       // The model reads the message in English; the reader keeps their own words. Translated while the session starts.
       const translating = translateUserInput(profile, trimmed)

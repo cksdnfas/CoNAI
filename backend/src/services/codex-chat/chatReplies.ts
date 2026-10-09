@@ -23,6 +23,14 @@ export function messageSender(message: CodexChatMessageRecord, thread: CodexChat
   return message.role === 'user' ? 'user' : message.speaker_profile_id ?? thread.profile_id ?? 'room'
 }
 
+/** What a quote shows of a message: an automation's wake without the frame the app adds for the model (up to the first blank line). */
+function quotedText(message: CodexChatMessageRecord) {
+  const text = (message.display_content ?? message.content).trim()
+  if (!message.routing?.routine) return text
+  const start = text.indexOf('\n\n')
+  return (start >= 0 ? text.slice(start + 2) : text).trim()
+}
+
 export function quoteMessage(thread: CodexChatThreadRecord, message: CodexChatMessageRecord): ChatReplyQuote {
   const profileId = message.role === 'assistant' ? message.speaker_profile_id ?? thread.profile_id : null
   const speakerName = message.role === 'user' ? userPersonaForThread(thread).name : (profileId && ChatProfileStore.find(profileId)?.name) || '(나간 참가자)'
@@ -40,7 +48,7 @@ export function quoteMessage(thread: CodexChatThreadRecord, message: CodexChatMe
   }
   return {
     messageId: message.id, role: message.role, speakerProfileId: profileId, speakerName,
-    excerpt: (message.display_content ?? message.content).trim().slice(0, 400) || message.attachments?.map((file) => file.name).join(', ').slice(0, 400) || (media ? '이미지' : '도구 결과'),
+    excerpt: quotedText(message).slice(0, 400) || message.attachments?.map((file) => file.name).join(', ').slice(0, 400) || (media ? '이미지' : '도구 결과'),
     alternative: message.active_alternative ?? 0,
     ...(media ? { media } : {}),
   }

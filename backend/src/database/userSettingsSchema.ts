@@ -279,6 +279,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
       last_execution_id INTEGER,
       next_run_at DATETIME,
       last_enqueued_at DATETIME,
+      run_as_account_id INTEGER,
       created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (graph_workflow_id) REFERENCES graph_workflows(id) ON DELETE CASCADE,
@@ -1207,6 +1208,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
         last_execution_id INTEGER,
         next_run_at DATETIME,
         last_enqueued_at DATETIME,
+        run_as_account_id INTEGER,
         created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (graph_workflow_id) REFERENCES graph_workflows(id) ON DELETE CASCADE,
@@ -1225,6 +1227,12 @@ export function createUserSettingsSchema(db: Database.Database): void {
     console.log('  Migrating graph_workflow_schedules: adding run_enqueue_count column');
     db.exec('ALTER TABLE graph_workflow_schedules ADD COLUMN run_enqueue_count INTEGER NOT NULL DEFAULT 1');
     db.exec('UPDATE graph_workflow_schedules SET run_enqueue_count = 1 WHERE run_enqueue_count IS NULL OR run_enqueue_count < 1');
+  }
+
+  // The account a schedule runs as (who last saved it). Existing rows stay null and keep running as before.
+  if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='graph_workflow_schedules'").get() && !hasColumn('graph_workflow_schedules', 'run_as_account_id')) {
+    console.log('  Migrating graph_workflow_schedules: adding run_as_account_id column');
+    db.exec('ALTER TABLE graph_workflow_schedules ADD COLUMN run_as_account_id INTEGER');
   }
 
   if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='generation_queue_jobs'").get()) {

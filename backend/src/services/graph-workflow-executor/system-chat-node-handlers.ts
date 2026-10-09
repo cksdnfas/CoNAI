@@ -3,6 +3,7 @@ import {
   executeLoadChatProfileNode,
   executePostToChatRoomNode,
   executeSearchLorebookNode,
+  executeWakeChatRoomNode,
 } from './system-chat-operations'
 import type { SystemOperationHandler } from './system-operation-handler'
 
@@ -12,4 +13,5 @@ export const CHAT_NODE_HANDLERS: Record<string, SystemOperationHandler> = {
   'system.generate_with_chat_preset': executeGenerateWithChatPresetNode,
   'system.search_lorebook': executeSearchLorebookNode,
   'system.post_to_chat_room': executePostToChatRoomNode,
+  'system.wake_chat_room': executeWakeChatRoomNode,
 }

@@ -40,6 +40,7 @@ import {
 } from './system-api-operations'
 import { CHAT_NODE_HANDLERS } from './system-chat-node-handlers'
 import { LLM_NODE_HANDLERS } from './system-llm-node-handlers'
+import { executeReadRuntimeStatusNode } from './system-runtime-operations'
 import type { SystemOperationHandler } from './system-operation-handler'
 import {
   executeLogicAndNode,
@@ -95,6 +96,7 @@ const SYSTEM_OPERATION_HANDLERS: Record<string, SystemOperationHandler> = {
   'system.final_result': executeFinalResultNode,
   ...LLM_NODE_HANDLERS,
   ...CHAT_NODE_HANDLERS,
+  'system.read_runtime_status': executeReadRuntimeStatusNode,
 }
 
 /** List the built-in system operation keys that the workflow executor can run. */

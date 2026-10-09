@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import { CHAT_TASK_DEFAULT_BUDGET, CHAT_TASK_LIMITS, type ChatExecutionContext, type ChatTask, type ChatTaskBudget, type ChatTaskRouting, type ChatTaskStatus, type ChatTaskStep, type ChatTaskSummary, type ChatTaskWait } from '@conai/shared'
+import { CHAT_TASK_DEFAULT_BUDGET, CHAT_TASK_LIMITS, type ChatExecutionContext, type ChatRoutineRouting, type ChatTask, type ChatTaskBudget, type ChatTaskRouting, type ChatTaskStatus, type ChatTaskStep, type ChatTaskSummary, type ChatTaskWait } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { McpRequester } from '../../mcp/context'
 import { AuthAccount } from '../../models/AuthAccount'
@@ -12,8 +12,8 @@ import { onChatUserSend } from './chatSendEvents'
 import { CodexChatStore } from './codexChatStore'
 import { ChatProfileStore } from './chatProfiles'
 
-/** Extra options of a send that the person did not type: a task continuation is marked so it shows as one thin line. */
-export type ChatSendOptions = { task?: ChatTaskRouting }
+/** Extra options of a send that the person did not type: a task continuation or an automation's wake is marked so it shows as one thin line. */
+export type ChatSendOptions = { task?: ChatTaskRouting; routine?: ChatRoutineRouting }
 
 type TaskRow = { id: number; thread_id: number; goal: string; steps: string; status: ChatTaskStatus; wait: ChatTaskWait | null; reason: string | null; budget: string; used: string; progress: string | null; stalled: number; active_since: string | null; created_at: string; updated_at: string }
 

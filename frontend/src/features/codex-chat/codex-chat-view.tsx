@@ -2,7 +2,7 @@ import { resolveChatPortrait } from '@conai/shared'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useIsMutating, useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
-import { Activity, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Download, Eraser, Flag, FoldVertical, LayoutGrid, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, UserRound, X } from 'lucide-react'
+import { Activity, AlarmClock, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Download, Eraser, Flag, FoldVertical, LayoutGrid, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, UserRound, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -10,6 +10,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
 import { Spinner } from '@/components/ui/loading-state'
 import { Modal, ModalBody } from '@/components/ui/modal'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { ChatPageConnectButton, ChatPageConnectionNotice } from './chat-page-context'
 import { ChatTaskChecklist, ChatTaskStrip } from './chat-task-ui'
@@ -68,6 +69,7 @@ import { ChatProfilePicker } from './chat-profile-picker'
 import { ChatThreadList, type ChatListPatch } from './chat-thread-list'
 import { ChatAttachButton, ChatDraftAttachments } from './chat-attachments'
 import { ChatFlagButton, ChatFlagManagerModal, ChatFlagTray, useChatFlags } from './chat-flags'
+import { ChatRoomRoutinesModal, useRoutineThreadIds } from './chat-routines'
 import { ChatSuggestButton, ChatSuggestTray, useReplySuggestions } from './chat-suggestions'
 import { ChatUserProfileManagerModal, ChatUserProfilePickModal, newChatUserProfile, useChatUserProfiles, userSpeakerOf } from './chat-user-profiles'
 import {
@@ -174,6 +176,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const [exportOpen, setExportOpen] = useState(false)
   const [flagTrayOpen, setFlagTrayOpen] = useState(false)
   const [flagManagerOpen, setFlagManagerOpen] = useState(false)
+  const [routinesOpen, setRoutinesOpen] = useState(false)
+  const routineThreadIds = useRoutineThreadIds()
+  const canManageRoutines = useAuthStatusQuery().data?.isAdmin === true
   const [userProfileManagerOpen, setUserProfileManagerOpen] = useState(false)
   /** A new chat (one profile) or room (several, the first representing it) waiting for the user to say who they are in it. */
   const [pendingStart, setPendingStart] = useState<number[] | null>(null)
@@ -981,7 +986,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     <div ref={dense ? undefined : restoreChatListScroll} onScroll={dense ? undefined : (event) => { chatListScrollTop = event.currentTarget.scrollTop }} className={cn('min-h-0 flex-1 overflow-y-auto', !dense && 'px-1')}>
       {searchText.trim()
         ? <ChatSearchResults query={searchText} disabled={false} onPick={pickSearchResult} />
-        : <ChatThreadList threads={threads} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} drafts={chat.drafts} dense={dense} onSelect={openThread} onUpdate={updateListEntry} onBulk={runBulk} />}
+        : <ChatThreadList threads={threads} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} routineThreadIds={routineThreadIds} drafts={chat.drafts} dense={dense} onSelect={openThread} onUpdate={updateListEntry} onBulk={runBulk} />}
     </div>
   </>
   const chatMenu = <ChatAppearancePopover threadId={activeThreadId} style={profile?.style} layout={layout} open={appearanceOpen} onOpenChange={setAppearanceOpen}><span className="inline-flex"><DropdownMenu>
@@ -992,6 +997,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       <DropdownMenuItem onSelect={() => { appearanceOpenRef.current = true; setAppearanceOpen(true) }}><AppearanceIcon />{t({ ko: '채팅 모양', en: 'Chat appearance' })}</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => setFlagManagerOpen(true)}><Flag />{t({ ko: '플래그 관리', en: 'Manage flags' })}</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => setUserProfileManagerOpen(true)}><UserRound />{t({ ko: '사용자 프로필', en: 'User profiles' })}</DropdownMenuItem>
+      {canManageRoutines ? <DropdownMenuItem onSelect={() => setRoutinesOpen(true)}><AlarmClock />{t({ ko: '루틴', en: 'Routines' })}</DropdownMenuItem> : null}
       <DropdownMenuSeparator />
       {isGroup ? null : <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/compact')}><FoldVertical />{t({ ko: '압축', en: 'Compact' })}</DropdownMenuItem>}
       <DropdownMenuItem onSelect={() => setExportOpen(true)}><Download />{t({ ko: '내보내기', en: 'Export' })}</DropdownMenuItem>
@@ -1217,6 +1223,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const dialogs = <>
     <ChatExportDialog threadId={activeThreadId} open={exportOpen} onClose={() => setExportOpen(false)} />
     <ChatFlagManagerModal open={flagManagerOpen} onClose={() => setFlagManagerOpen(false)} />
+    <ChatRoomRoutinesModal threadId={activeThreadId} open={routinesOpen} onClose={() => setRoutinesOpen(false)} />
     <ChatUserProfileManagerModal open={userProfileManagerOpen} onClose={() => setUserProfileManagerOpen(false)} />
     <ChatUserProfilePickModal open={pendingStart !== null} profiles={userProfiles} onClose={() => setPendingStart(null)} onPick={(userProfileId) => { const profileIds = pendingStart; setPendingStart(null); if (profileIds !== null) void startWith(profileIds, userProfileId) }} />
     <ChatDeleteDialog open={deleteTarget !== null} book={deleteTarget?.book ?? null} pending={deleteMutation.isPending} onClose={() => setDeleteTarget(null)} onConfirm={(choice) => deleteTarget && deleteMutation.mutate({ threadId: deleteTarget.threadId, ...choice })} />

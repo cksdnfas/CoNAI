@@ -153,8 +153,8 @@ export class GraphWorkflowScheduleModel {
         interval_minutes, daily_time, max_run_count, run_enqueue_count, failure_policy, input_values,
         confirmed_graph_version, confirmed_input_signature,
         stop_reason_code, stop_reason_message,
-        last_execution_id, next_run_at, last_enqueued_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        last_execution_id, next_run_at, last_enqueued_at, run_as_account_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       data.graph_workflow_id,
       data.name,
@@ -175,6 +175,7 @@ export class GraphWorkflowScheduleModel {
       data.last_execution_id ?? null,
       data.next_run_at ?? null,
       data.last_enqueued_at ?? null,
+      data.run_as_account_id ?? null,
     )
 
     const scheduleId = info.lastInsertRowid as number

@@ -15,6 +15,7 @@ const IMAGE_GENERATION_RESOLUTION_OPTIONS = ['1024', '1536', '2048'] as const;
 
 import type { BuiltinSystemModuleDefinition } from './userSettingsBuiltinModuleDefinitions';
 import { BUILTIN_CHAT_NODE_DEFINITIONS } from './userSettingsBuiltinChatModuleDefinitionData';
+import { BUILTIN_RUNTIME_NODE_DEFINITIONS } from './userSettingsBuiltinRuntimeModuleDefinitionData';
 import { BUILTIN_LLM_NODE_DEFINITIONS } from './userSettingsBuiltinLlmModuleDefinitionData';
 
 export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] = [
@@ -2410,4 +2411,5 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
   },
   ...BUILTIN_LLM_NODE_DEFINITIONS,
   ...BUILTIN_CHAT_NODE_DEFINITIONS,
+  ...BUILTIN_RUNTIME_NODE_DEFINITIONS,
 ];

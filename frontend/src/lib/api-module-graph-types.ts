@@ -257,6 +257,9 @@ export interface GraphWorkflowScheduleRecord {
   failed_run_count?: number
   reserved_run_count?: number
   remaining_run_count?: number | null
+  /** The account the schedule runs as (who last saved it); null on schedules saved before that was recorded. */
+  run_as_account_id?: number | null
+  run_as_account_name?: string | null
   created_date: string
   updated_date: string
 }

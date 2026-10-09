@@ -1,4 +1,5 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Pause, Play, Plus, Rocket, SquarePen, Trash2 } from 'lucide-react'
@@ -119,6 +120,7 @@ export function ModuleWorkflowSchedulesPanel({
 }) {
   const { canExecuteGeneration, canUpdateWorkflows } = useFeaturePermissions()
   const { t, formatNumber, formatDateTime } = useI18n()
+  const authConfigured = useAuthStatusQuery().data?.hasCredentials === true
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null)
   const [editingScheduleId, setEditingScheduleId] = useState<number | null>(null)
   const [draftWorkflowId, setDraftWorkflowId] = useState('')
@@ -319,7 +321,7 @@ export function ModuleWorkflowSchedulesPanel({
                         <Badge variant="outline">{getReservationTypeLabel(schedule, t, formatNumber)}</Badge>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {[workflowName, runAtLabel, runEnqueueCountLabel, failurePolicyLabel].filter(Boolean).join(' · ')}
+                        {[workflowName, runAtLabel, runEnqueueCountLabel, failurePolicyLabel, schedule.run_as_account_name ?? (authConfigured ? t({ ko: '실행 계정 없음', en: 'No run-as account' }) : null)].filter(Boolean).join(' · ')}
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-2xs text-muted-foreground">
                         <span>{runSummaryLabel}</span>

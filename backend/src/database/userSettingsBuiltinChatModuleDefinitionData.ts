@@ -102,4 +102,41 @@ export const BUILTIN_CHAT_NODE_DEFINITIONS: BuiltinSystemModuleDefinition[] = [
     ],
     color: '#26a69a',
   },
+  {
+    name: '채팅방 깨우기',
+    description: '채팅방에 지시를 보내서 캐릭터가 자기 도구로 일하게 해. 실행한 계정의 방에서, 프로필 권한만큼 움직여.',
+    category: 'output',
+    exposedInputs: [
+      { key: 'target', label: '보낼 곳', direction: 'input', data_type: 'text', required: false, multiple: false, default_value: 'dedicated' },
+      { key: 'profile_id', label: '캐릭터', direction: 'input', data_type: 'number', required: false, multiple: false },
+      { key: 'room_id', label: '채팅방', direction: 'input', data_type: 'number', required: false, multiple: false },
+      { key: 'message', label: '지시', direction: 'input', data_type: 'text', required: true, multiple: false },
+      { key: 'wait', label: '답장 기다리기', direction: 'input', data_type: 'boolean', required: false, multiple: false, default_value: true },
+      { key: 'chain_limit', label: '이어 부르기', direction: 'input', data_type: 'number', required: false, multiple: false },
+    ],
+    outputPorts: [
+      { key: 'text', label: '답장', direction: 'output', data_type: 'text', required: false, multiple: false },
+      { key: 'replies', label: '답장 목록', direction: 'output', data_type: 'json', required: false, multiple: false },
+      { key: 'room_id', label: '채팅방', direction: 'output', data_type: 'number', required: false, multiple: false },
+    ],
+    internalFixedValues: { operation_key: 'system.wake_chat_room' },
+    uiSchema: [
+      {
+        key: 'target',
+        label: '보낼 곳',
+        data_type: 'select',
+        default_value: 'dedicated',
+        options: [
+          { value: 'dedicated', label: '전용 방' },
+          { value: 'room', label: '고른 방' },
+        ],
+      },
+      { key: 'profile_id', label: '캐릭터', data_type: 'number', options_source: 'chat_profiles' },
+      { key: 'room_id', label: '채팅방', data_type: 'number', options_source: 'chat_rooms' },
+      { key: 'message', label: '지시', data_type: 'text' },
+      { key: 'wait', label: '답장 기다리기', data_type: 'boolean', default_value: true },
+      { key: 'chain_limit', label: '이어 부르기', data_type: 'number', min: 0, max: 10 },
+    ],
+    color: '#5c6bc0',
+  },
 ];

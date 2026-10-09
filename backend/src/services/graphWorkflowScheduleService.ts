@@ -5,11 +5,16 @@ import type {
   GraphWorkflowScheduleRecord,
   GraphWorkflowScheduleStatus,
 } from '../types/moduleGraph'
-import { GraphWorkflowExecutionQueue } from './graphWorkflowExecutionQueue'
+import { GraphWorkflowExecutionQueue, RUNNING_EXECUTION_RESTART_MESSAGE } from './graphWorkflowExecutionQueue'
 import { buildRuntimeInputSignature } from './graph-workflow-executor/shared'
+import { resolveAutomationRunAs } from './automationRunAs'
+import { AutomationSwitch } from './automationSwitch'
+import { DEFAULT_SCHEDULE_TIMEZONE, followingRunAt, initialRunAt } from './scheduleTiming'
 
 const DEFAULT_POLL_INTERVAL_MS = 15_000
-const DEFAULT_SCHEDULE_TIMEZONE = 'Asia/Seoul'
+
+/** Keys a schedule's account must still hold when it runs (the same ones it needed to save the schedule). */
+const SCHEDULE_RUN_PERMISSIONS = ['generation.execute']
 
 function parseInputValues(schedule: GraphWorkflowScheduleRecord) {
   if (!schedule.input_values) {
@@ -19,54 +24,14 @@ function parseInputValues(schedule: GraphWorkflowScheduleRecord) {
   return JSON.parse(schedule.input_values) as Record<string, unknown>
 }
 
-/** Parse one HH:mm daily schedule string into numeric hour and minute parts. */
-function parseDailyTime(dailyTime?: string | null) {
-  if (!dailyTime || !/^\d{2}:\d{2}$/.test(dailyTime)) {
-    return null
+function timingOf(schedule: GraphWorkflowScheduleRecord) {
+  return {
+    scheduleType: schedule.schedule_type,
+    runAt: schedule.run_at,
+    intervalMinutes: schedule.interval_minutes,
+    dailyTime: schedule.daily_time,
+    timezone: schedule.timezone,
   }
-
-  const [hourText, minuteText] = dailyTime.split(':')
-  const hour = Number(hourText)
-  const minute = Number(minuteText)
-  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
-    return null
-  }
-
-  return { hour, minute }
-}
-
-function buildDailyNextRunAt(dailyTime: string | null | undefined, now: Date) {
-  const parsedDailyTime = parseDailyTime(dailyTime)
-  if (!parsedDailyTime) {
-    return null
-  }
-
-  const next = new Date(now)
-  next.setHours(parsedDailyTime.hour, parsedDailyTime.minute, 0, 0)
-  if (next.getTime() <= now.getTime()) {
-    next.setDate(next.getDate() + 1)
-  }
-
-  return next.toISOString()
-}
-
-/** Build the next due timestamp for one schedule after a trigger is consumed. */
-function buildNextRunAt(schedule: GraphWorkflowScheduleRecord, now: Date) {
-  if (schedule.schedule_type === 'once') {
-    return null
-  }
-
-  if (schedule.schedule_type === 'interval') {
-    const intervalMinutes = schedule.interval_minutes ?? null
-    if (!intervalMinutes || intervalMinutes <= 0) {
-      return null
-    }
-
-    const baseTime = schedule.next_run_at ? new Date(schedule.next_run_at) : now
-    return new Date(baseTime.getTime() + intervalMinutes * 60_000).toISOString()
-  }
-
-  return buildDailyNextRunAt(schedule.daily_time, now)
 }
 
 function normalizeRunEnqueueCount(value?: number | null) {
@@ -89,28 +54,16 @@ export class GraphWorkflowScheduleService {
     return buildRuntimeInputSignature(inputValues ?? {})
   }
 
-  /** Calculate the first due timestamp for one new or resumed schedule. */
+  /** Calculate the first due timestamp for one new or resumed schedule (daily times read in its time zone). */
   static buildInitialNextRunAt(params: {
     scheduleType: GraphWorkflowScheduleRecord['schedule_type']
     runAt?: string | null
     intervalMinutes?: number | null
     dailyTime?: string | null
+    timezone?: string | null
     now?: Date
   }) {
-    const now = params.now ?? new Date()
-
-    if (params.scheduleType === 'once') {
-      return params.runAt ?? null
-    }
-
-    if (params.scheduleType === 'interval') {
-      if (!params.intervalMinutes || params.intervalMinutes <= 0) {
-        return null
-      }
-      return new Date(now.getTime() + params.intervalMinutes * 60_000).toISOString()
-    }
-
-    return buildDailyNextRunAt(params.dailyTime, now)
+    return initialRunAt(params, params.now ?? new Date())
   }
 
   /** Start the schedule polling loop once per process. */
@@ -199,6 +152,8 @@ export class GraphWorkflowScheduleService {
 
     this.isPolling = true
     try {
+      // The stop-everything switch: due schedules wait until it is off again.
+      if (AutomationSwitch.isPaused()) return
       const now = new Date()
       const dueSchedules = GraphWorkflowScheduleModel.findDueSchedules(now.toISOString())
       for (const schedule of dueSchedules) {
@@ -245,11 +200,13 @@ export class GraphWorkflowScheduleService {
     const reservedRunCount = executionSummary.completed + executionSummary.queued + executionSummary.running
     const lastExecution = schedule.last_execution_id ? GraphExecutionModel.findById(schedule.last_execution_id) : null
 
-    if (lastExecution?.status === 'failed' && (schedule.failure_policy ?? 'stop') !== 'continue') {
+    // A run cut off by a server restart is not the workflow failing; the schedule goes on.
+    const lastRunFailed = lastExecution?.status === 'failed' && lastExecution.error_message !== RUNNING_EXECUTION_RESTART_MESSAGE
+    if (lastRunFailed && (schedule.failure_policy ?? 'stop') !== 'continue') {
       GraphWorkflowScheduleModel.update(schedule.id, {
         status: 'error_stopped',
         stop_reason_code: 'execution_failed',
-        stop_reason_message: lastExecution.error_message || '예약 실행에 실패했어.',
+        stop_reason_message: lastExecution?.error_message || '예약 실행에 실패했어.',
         next_run_at: null,
       })
       return
@@ -265,14 +222,22 @@ export class GraphWorkflowScheduleService {
       return
     }
 
-    if (schedule.schedule_type !== 'once' && activeOverlapCount > 0) {
-      const deferredNextRunAt = GraphWorkflowScheduleService.buildInitialNextRunAt({
-        scheduleType: schedule.schedule_type,
-        runAt: schedule.run_at,
-        intervalMinutes: schedule.interval_minutes,
-        dailyTime: schedule.daily_time,
-        now,
+    // Saved before accounts were recorded: keeps running without one, as it always did.
+    const runAs = schedule.run_as_account_id === null || schedule.run_as_account_id === undefined
+      ? null
+      : resolveAutomationRunAs(schedule.run_as_account_id, SCHEDULE_RUN_PERMISSIONS)
+    if (runAs && !runAs.ok) {
+      GraphWorkflowScheduleModel.update(schedule.id, {
+        status: 'paused',
+        stop_reason_code: runAs.code,
+        stop_reason_message: runAs.message,
+        next_run_at: null,
       })
+      return
+    }
+
+    if (schedule.schedule_type !== 'once' && activeOverlapCount > 0) {
+      const deferredNextRunAt = GraphWorkflowScheduleService.buildInitialNextRunAt({ ...timingOf(schedule), now })
 
       GraphWorkflowScheduleModel.update(schedule.id, {
         status: 'active',
@@ -283,7 +248,7 @@ export class GraphWorkflowScheduleService {
       return
     }
 
-    const nextRunAt = buildNextRunAt(schedule, now)
+    const nextRunAt = followingRunAt(timingOf(schedule), schedule.next_run_at, now)
     const requestedEnqueueCount = normalizeRunEnqueueCount(schedule.run_enqueue_count)
     const remainingRunCount = schedule.max_run_count !== null && schedule.max_run_count !== undefined
       ? Math.max(0, schedule.max_run_count - reservedRunCount)
@@ -299,6 +264,7 @@ export class GraphWorkflowScheduleService {
       {
         triggerType: 'schedule',
         scheduleId: schedule.id,
+        requestedByAccountId: runAs?.ok ? runAs.requester.accountId : null,
       },
     ).map((enqueueResult) => enqueueResult.executionId)
 

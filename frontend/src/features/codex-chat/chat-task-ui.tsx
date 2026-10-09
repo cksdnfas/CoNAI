@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Circle, CircleCheck, CircleDot, CircleMinus, Pause, Play, Square } from 'lucide-react'
-import type { ChatProposal, ChatTask, ChatTaskRouting, ChatTaskStep, ChatTaskSummary } from '@conai/shared'
+import type { ChatProposal, ChatRoutineRouting, ChatTask, ChatTaskRouting, ChatTaskStep, ChatTaskSummary } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
@@ -207,4 +207,27 @@ export function ChatTaskEventLine({ routing }: { routing: ChatTaskRouting }) {
     </div>
   )
   return routing.event ? <Tip content={routing.event}>{line}</Tip> : line
+}
+
+/** The instruction an automation sent, without the frame the app adds for the model (everything up to the first blank line). */
+function routineInstruction(text: string) {
+  const start = text.indexOf('\n\n')
+  return (start >= 0 ? text.slice(start + 2) : text).trim()
+}
+
+/** A wake an automation (a routine or a workflow) sent: one thin line, the instruction on hover. */
+export function ChatRoutineEventLine({ routing, text }: { routing: ChatRoutineRouting; text: string }) {
+  const { t } = useI18n()
+  const instruction = routineInstruction(text)
+  const line = (
+    <div className="flex items-center gap-3 py-1 text-xs text-muted-foreground">
+      <span className="h-px flex-1 bg-line" />
+      <span className="min-w-0 truncate">
+        {routing.source === 'routine' ? t({ ko: '루틴', en: 'Routine' }) : t({ ko: '워크플로', en: 'Workflow' })}
+        {routing.name ? ` · ${routing.name}` : ''}
+      </span>
+      <span className="h-px flex-1 bg-line" />
+    </div>
+  )
+  return instruction ? <Tip content={<span className="whitespace-pre-wrap">{instruction}</span>}>{line}</Tip> : line
 }

@@ -16,6 +16,8 @@ import { fillCharacterPlaceholders } from '../codex-chat/chatPlaceholders'
 import { resolveProfileAsset, type ChatProfileAssetKind } from '../codex-chat/chatProfileAssets'
 import { ChatProfileStore, type ChatProfile } from '../codex-chat/chatProfiles'
 import { CodexChatStore } from '../codex-chat/codexChatStore'
+import { ensureAutomationRoom, wakeChatRoom, wakeReplyText, ChatWakeBusyError } from '../codex-chat/chatRoomWake'
+import { resolveAutomationRunAs } from '../automationRunAs'
 import { buildPersonaPrompt } from '../codex-chat/llmChatContext'
 import { fileOwnerKey } from '../fileStoreService'
 import { GenerationQueueService } from '../generationQueueService'
@@ -423,5 +425,71 @@ export async function executePostToChatRoomNode(
   }
   completeSystemNode(context, node, moduleDefinition, 'system.post_to_chat_room', {
     message: buildRuntimeArtifact(context.executionId, node.id, 'message', 'json', message, { kind: 'system-post-to-chat-room', room_id: thread.id }),
+  })
+}
+
+/**
+ * Wake a chat room: the instruction goes in as the run's account (a thin line in the room, not a user message) and
+ * the character answers with the tools its profile grants. "전용 방" keeps one room per node and character.
+ */
+export async function executeWakeChatRoomNode(
+  context: ExecutionContext,
+  node: GraphWorkflowNode,
+  moduleDefinition: ParsedModuleDefinition,
+  resolvedInputs: Record<string, any>,
+) {
+  const operationKey = 'system.wake_chat_room'
+  const message = optionalText(resolvedInputs.message)
+  if (!message) throw new Error('보낼 지시를 넣어줘.')
+  const runAs = resolveAutomationRunAs(runRequester(context), [])
+  if (!runAs.ok) {
+    throw new Error(runAs.code === 'run_as_missing'
+      ? '실행 계정이 없어서 채팅방을 깨울 수 없어. 예약이면 한 번 다시 저장해줘.'
+      : runAs.message)
+  }
+  const requester = runAs.requester
+
+  let threadId: number
+  if (resolvedInputs.target === 'room') {
+    threadId = requireRunRoom(context, resolvedInputs.room_id).id
+  } else {
+    const profile = requireWorkflowProfile(context, resolvedInputs.profile_id)
+    const room = await ensureAutomationRoom(requester, profile.id, `workflow:${context.workflow.id}:${node.id}`, `${context.workflow.name} · ${profile.name}`)
+    threadId = room.id
+  }
+
+  const routing = { source: 'workflow' as const, id: context.workflow.id, name: context.workflow.name }
+  const chainLimit = resolvedInputs.chain_limit === undefined || resolvedInputs.chain_limit === null || resolvedInputs.chain_limit === ''
+    ? null
+    : Math.max(0, Math.min(10, Math.floor(Number(resolvedInputs.chain_limit) || 0)))
+  const wait = resolvedInputs.wait !== false && resolvedInputs.wait !== 'false'
+  writeExecutionLog({ executionId: context.executionId, nodeId: node.id, eventType: 'node_chat_wake_sent', message: `Chat room ${threadId} woken`, details: { operationKey, threadId, wait } })
+
+  let text = ''
+  let replies: Array<{ id: number; speaker_profile_id: number | null; content: string; status: string }> = []
+  let status: 'ok' | 'skipped' | 'sent' = 'sent'
+  if (wait) {
+    try {
+      const result = await wakeChatRoom({ requester, threadId, instruction: message, routing, chainLimit, signal: context.signal })
+      text = wakeReplyText(result)
+      replies = result.replies.map((reply) => ({ id: reply.id, speaker_profile_id: reply.speaker_profile_id ?? null, content: reply.content, status: reply.status }))
+      status = 'ok'
+    } catch (error) {
+      // The room was still answering: nothing was sent, the run goes on with empty replies.
+      if (!(error instanceof ChatWakeBusyError)) throw error
+      writeExecutionLog({ executionId: context.executionId, nodeId: node.id, level: 'warn', eventType: 'node_chat_wake_skipped', message: error.message, details: { operationKey, threadId }, always: true })
+      status = 'skipped'
+    }
+  } else {
+    void wakeChatRoom({ requester, threadId, instruction: message, routing, chainLimit }).catch((error: unknown) => {
+      console.warn(`[workflow] wake of chat ${threadId} failed:`, error instanceof Error ? error.message : error)
+    })
+  }
+
+  const meta = { kind: 'system-wake-chat-room', room_id: threadId, status }
+  completeSystemNode(context, node, moduleDefinition, operationKey, {
+    text: buildRuntimeArtifact(context.executionId, node.id, 'text', 'text', text, meta),
+    replies: buildRuntimeArtifact(context.executionId, node.id, 'replies', 'json', { status, room_id: threadId, replies }, meta),
+    room_id: buildRuntimeArtifact(context.executionId, node.id, 'room_id', 'number', threadId, meta),
   })
 }

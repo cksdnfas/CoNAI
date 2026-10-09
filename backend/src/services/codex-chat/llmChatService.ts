@@ -711,7 +711,7 @@ export const LlmChatService = {
     if (pageContext != null && !profile.pageAssist) throw new LlmChatError('이 프로필은 페이지 어시스턴트가 꺼져 있어.', 400)
     const page = parseChatPageContext(pageContext, requester)
     rememberChatPage(requester, page, thread.id)
-    if (!options.task) notifyChatUserSend(thread.id, Boolean(page))
+    if (!options.task && !options.routine) notifyChatUserSend(thread.id, Boolean(page))
     const attachments = validateChatAttachments(requester, fileIds)
     const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length)
     const flags = [...ChatFlagStore.resolve(requester, parseFlagIds(flagIds)), ...parsePicks(picks)]
@@ -719,7 +719,7 @@ export const LlmChatService = {
     if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) {
       throw new LlmChatError('메시지를 입력해줘.')
     }
-    const routing = { ...userReplyRouting(thread, replyToMessageId), ...(options.task ? { task: options.task } : {}) }
+    const routing = { ...userReplyRouting(thread, replyToMessageId), ...(options.task ? { task: options.task } : {}), ...(options.routine ? { routine: options.routine } : {}) }
     LlmChatService.skipReaction(thread.id)
     cancelJudgeFollowUp(thread.id)
     if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)

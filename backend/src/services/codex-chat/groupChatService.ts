@@ -1,6 +1,6 @@
 import { validateChatMediaAttachments } from './chatMediaAttachments'
 import { randomUUID } from 'crypto'
-import type { ChatExecutionContext, ChatMessageRouting, ChatRecipient } from '@conai/shared'
+import type { ChatExecutionContext, ChatMessageRouting, ChatRecipient, ChatRoutineRouting } from '@conai/shared'
 import { automaticReplyRouting, messageSender, quoteMessage, requireReplyTarget, userReplyRouting } from './chatReplies'
 import { registerChatReply, skipThreadGenerationReactions } from './chatReplyRegistry'
 import type { McpRequester } from '../../mcp/context'
@@ -535,8 +535,10 @@ export const GroupChatService = {
   /**
    * A user message: stops whatever the room is still saying (the user cut in), then the addressed members answer
    * (together as far as their connections allow) — or the representative when no one is addressed.
+   * An automation's wake (`options.routine`) never cuts in: it fails while the room is talking, and may lower the
+   * room's chain limit for its own run.
    */
-  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, mediaHashes?: unknown, picks?: unknown, replyToMessageId?: unknown) {
+  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, mediaHashes?: unknown, picks?: unknown, replyToMessageId?: unknown, options: { routine?: ChatRoutineRouting; chainLimit?: number | null } = {}) {
     const thread = requireGroup(requester, threadId)
     assertGroupChatAvailable(requester)
     const attachments = validateChatAttachments(requester, fileIds)
@@ -544,16 +546,18 @@ export const GroupChatService = {
     const flags = [...ChatFlagStore.resolve(requester, parseFlagIds(flagIds)), ...parsePicks(picks)]
     const trimmed = text.trim()
     if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) throw new CodexChatError('메시지를 입력해줘.')
-    const routing = userReplyRouting(thread, replyToMessageId)
+    if (options.routine && GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    const routing: ChatMessageRouting = { ...userReplyRouting(thread, replyToMessageId), ...(options.routine ? { routine: options.routine } : {}) }
     routing.recipients = userRecipients(requester, thread, trimmed, routing)
     const judgeRoutes = unaddressed(thread, trimmed, routing)
     LlmChatService.skipReaction(threadId)
     skipThreadGenerationReactions(threadId)
     // The members read the message in English; the reader keeps their own words.
     const modelText = await translateUserInput(translatorOf(memberProfiles(threadId)), trimmed)
-    await GroupChatService.stop(threadId)
+    if (!options.routine) await GroupChatService.stop(threadId)
 
     await startRun(threadId, listener, async (run) => {
+      if (typeof options.chainLimit === 'number' && options.chainLimit >= 0) run.chainLimit = Math.min(run.chainLimit, Math.floor(options.chainLimit))
       if (routing.replyTo) requireReplyTarget(threadId, routing.replyTo.messageId)
       const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: modelText ?? trimmed, display_content: modelText ? trimmed : null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
       ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick).map((flag) => flag.id))

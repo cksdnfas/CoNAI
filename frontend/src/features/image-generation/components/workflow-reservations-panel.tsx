@@ -28,6 +28,8 @@ import { getErrorMessage } from '../image-generation-shared'
 import { ModuleWorkflowEmptyRunsTab } from '@/features/module-graph/components/module-workflow-empty-runs-tab'
 import { getActiveWorkflowReservationScheduleCount, isActiveReservationExecution, mergeVisibleReservationExecutions, sortWorkflowReservationSchedules } from './workflow-reservations-ui'
 import { LoadingState } from '@/components/ui/loading-state'
+import { Badge } from '@/components/ui/badge'
+import { AUTOMATION_SWITCH_QUERY_KEY, getAutomationSwitch } from '@/lib/api-chat-routines'
 import { ErrorState } from '@/components/ui/error-state'
 
 type ReservationView = 'schedules' | 'executions'
@@ -36,6 +38,7 @@ type ReservationView = 'schedules' | 'executions'
 function WorkflowReservationsPanelContent() {
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
+  const automationSwitchQuery = useQuery({ queryKey: AUTOMATION_SWITCH_QUERY_KEY, queryFn: getAutomationSwitch, staleTime: 30_000 })
   const confirm = useConfirm()
   const [selectedReservationExecutionIds, setSelectedReservationExecutionIds] = useState<number[]>([])
   const [isCleaningReservations, setIsCleaningReservations] = useState(false)
@@ -270,9 +273,12 @@ function WorkflowReservationsPanelContent() {
         variant="settings"
         heading={t({ ko: '예약작업', en: 'Reservation jobs' })}
         actions={(
-          <IconButton size="icon-sm" variant="ghost" onClick={() => void handleRefresh()} label={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })}>
-            <RefreshCw />
-          </IconButton>
+          <div className="flex items-center gap-2">
+            {automationSwitchQuery.data?.paused ? <Badge variant="warning">{t({ ko: '전체 멈춤 중', en: 'All stopped' })}</Badge> : null}
+            <IconButton size="icon-sm" variant="ghost" onClick={() => void handleRefresh()} label={t({ ko: '예약작업 새로고침', en: 'Refresh reservation jobs' })}>
+              <RefreshCw />
+            </IconButton>
+          </div>
         )}
       >
         {reservationsQuery.isError ? (

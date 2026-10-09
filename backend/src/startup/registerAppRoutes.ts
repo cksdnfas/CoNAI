@@ -22,6 +22,7 @@ import generationHistoryRoutes from '../routes/generation-history.routes';
 import generationQueueRoutes from '../routes/generation-queue.routes';
 import codexChatRoutes from '../routes/codex-chat.routes';
 import chatProposalRoutes from '../routes/chat-proposals.routes';
+import chatRoutineRoutes from '../routes/chat-routines.routes';
 import filesRoutes from '../routes/files.routes';
 import audioRoutes from '../routes/audio.routes';
 import audioLegacyImportRoutes from '../routes/audio-legacy-import.routes';
@@ -275,6 +276,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/generation-queue', requireAuth, generationQueueRoutes);
   app.use('/api/codex-chat', requireAuth, codexChatRoutes);
   app.use('/api/chat-proposals', requireAuth, chatProposalRoutes);
+  app.use('/api/chat-routines', requireAuth, chatRoutineRoutes);
   app.use('/api/files', requireAuth, (req, res, next) => {
     const limiter = req.method === 'POST' && req.path === '/upload' ? options.uploadLimiter : options.readOnlyLimiter;
     limiter(req, res, next);
