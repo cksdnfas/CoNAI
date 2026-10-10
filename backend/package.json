@@ -18,7 +18,9 @@
   },
   "dependencies": {
     "@conai/shared": "file:../shared",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/client": "^2.3.1",
+    "@modelcontextprotocol/node": "^2.1.1",
+    "@modelcontextprotocol/server": "^2.3.1",
     "@types/node-cron": "^3.0.11",
     "adm-zip": "^0.6.0",
     "archiver": "^8.0.0",

@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import fs from 'fs';
 import path from 'path';
@@ -31,13 +31,12 @@ export function registerPromptOrganizationTools(server: McpServer): void {
 
   // ─── 조회 도구 ───
 
-  server.tool(
+  server.registerTool(
     'get_prompt_group_structure',
-    'Get the complete prompt group structure including hierarchy, prompt counts, and unclassified count. Use this first to understand the current organization before making changes. Supports positive, negative, and auto prompt types.',
-    {
+    { description: 'Get the complete prompt group structure including hierarchy, prompt counts, and unclassified count. Use this first to understand the current organization before making changes. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
       type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt type'),
       include_hidden: z.boolean().default(true).describe('Include hidden groups'),
-    },
+    }) },
     async ({ type, include_hidden }) => {
       try {
         const groups = await PromptGroupService.getAllGroups(include_hidden, type);
@@ -61,14 +60,13 @@ export function registerPromptOrganizationTools(server: McpServer): void {
     }
   );
 
-  server.tool(
+  server.registerTool(
     'get_unclassified_prompts',
-    'Get prompts not assigned to any group (Unclassified). Returns a paginated batch for AI-assisted classification. Maximum 50 per request. Supports positive, negative, and auto prompt types.',
-    {
+    { description: 'Get prompts not assigned to any group (Unclassified). Returns a paginated batch for AI-assisted classification. Maximum 50 per request. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
       type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt type'),
       page: z.number().int().min(1).default(1).describe('Page number'),
       limit: z.number().int().min(1).max(50).default(50).describe('Results per page (max 50)'),
-    },
+    }) },
     async ({ type, page, limit }) => {
       try {
         const result = await PromptGroupService.getPromptsInGroup(0, type, page, limit);
@@ -94,15 +92,14 @@ export function registerPromptOrganizationTools(server: McpServer): void {
     }
   );
 
-  server.tool(
+  server.registerTool(
     'get_prompts_in_group',
-    'Get all prompts currently assigned to a specific group. Use group_id=0 for unclassified prompts. Supports positive, negative, and auto prompt types.',
-    {
+    { description: 'Get all prompts currently assigned to a specific group. Use group_id=0 for unclassified prompts. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
       group_id: z.number().int().min(0).describe('Group ID (0 for Unclassified)'),
       type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt type'),
       page: z.number().int().min(1).default(1).describe('Page number'),
       limit: z.number().int().min(1).max(100).default(50).describe('Results per page'),
-    },
+    }) },
     async ({ group_id, type, page, limit }) => {
       try {
         const result = await PromptGroupService.getPromptsInGroup(
@@ -136,16 +133,15 @@ export function registerPromptOrganizationTools(server: McpServer): void {
 
   // ─── 분류 도구 ───
 
-  server.tool(
+  server.registerTool(
     'create_prompt_group',
-    'Create a new prompt group. If a group with the same name already exists, returns the existing group ID. Use parent_id to create sub-groups in a hierarchy. Supports positive, negative, and auto prompt types.',
-    {
+    { description: 'Create a new prompt group. If a group with the same name already exists, returns the existing group ID. Use parent_id to create sub-groups in a hierarchy. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
       group_name: z.string().min(1).describe('Name for the new group'),
       type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt type'),
       display_order: z.number().int().optional().describe('Display order (auto-assigned if omitted)'),
       is_visible: z.boolean().default(true).describe('Whether the group is visible'),
       parent_id: z.number().int().optional().describe('Parent group ID for hierarchy'),
-    },
+    }) },
     async ({ group_name, type, display_order, is_visible, parent_id }) => {
       try {
         const existing = PromptGroupModel.findByName(group_name, type);
@@ -174,10 +170,9 @@ export function registerPromptOrganizationTools(server: McpServer): void {
     }
   );
 
-  server.tool(
+  server.registerTool(
     'batch_create_groups',
-    'Create multiple prompt groups at once. Each group name must be unique. Returns created/existing group IDs. Supports positive, negative, and auto prompt types.',
-    {
+    { description: 'Create multiple prompt groups at once. Each group name must be unique. Returns created/existing group IDs. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
       groups: z.array(z.object({
         group_name: z.string().min(1).describe('Group name'),
         display_order: z.number().int().optional().describe('Display order'),
@@ -185,7 +180,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
         parent_id: z.number().int().optional().describe('Parent group ID'),
       })).min(1).max(50).describe('Groups to create (max 50)'),
       type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt type'),
-    },
+    }) },
     async ({ groups, type }) => {
       try {
         const results = groups.map(group => {
@@ -226,14 +221,13 @@ export function registerPromptOrganizationTools(server: McpServer): void {
     }
   );
 
-  server.tool(
+  server.registerTool(
     'assign_prompts_to_group',
-    'Assign one or more prompts to a group by their prompt IDs. Use target_group_id=0 to move back to Unclassified. This is the primary tool for AI-assisted prompt classification. Supports positive, negative, and auto prompt types.',
-    {
+    { description: 'Assign one or more prompts to a group by their prompt IDs. Use target_group_id=0 to move back to Unclassified. This is the primary tool for AI-assisted prompt classification. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
       prompt_ids: z.array(z.number().int()).min(1).max(100).describe('Prompt IDs to assign'),
       target_group_id: z.number().int().min(0).describe('Target group ID (0 for Unclassified)'),
       type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt type'),
-    },
+    }) },
     async ({ prompt_ids, target_group_id, type }) => {
       try {
         const actualGroupId = target_group_id === 0 ? null : target_group_id;
@@ -270,15 +264,14 @@ export function registerPromptOrganizationTools(server: McpServer): void {
     }
   );
 
-  server.tool(
+  server.registerTool(
     'move_prompts_between_groups',
-    'Move prompts from one group to another. Provide specific prompt_ids OR source_group_id to move all prompts from that group. Use target_group_id=0 for Unclassified. Supports positive, negative, and auto prompt types.',
-    {
+    { description: 'Move prompts from one group to another. Provide specific prompt_ids OR source_group_id to move all prompts from that group. Use target_group_id=0 for Unclassified. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
       prompt_ids: z.array(z.number().int()).optional().describe('Specific prompt IDs to move'),
       source_group_id: z.number().int().min(0).optional().describe('Source group ID to move ALL prompts from (0 for Unclassified)'),
       target_group_id: z.number().int().min(0).describe('Target group ID (0 for Unclassified)'),
       type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt type'),
-    },
+    }) },
     async ({ prompt_ids, source_group_id, target_group_id, type }) => {
       try {
         if (!prompt_ids && source_group_id === undefined) {
@@ -329,12 +322,11 @@ export function registerPromptOrganizationTools(server: McpServer): void {
 
   // ─── 백업 도구 ───
 
-  server.tool(
+  server.registerTool(
     'backup_prompt_data',
-    'Create a full JSON backup of all prompt data (groups + prompts + settings) for all three types (positive, negative, auto). Saves to the backups directory.',
-    {
+    { description: 'Create a full JSON backup of all prompt data (groups + prompts + settings) for all three types (positive, negative, auto). Saves to the backups directory.', inputSchema: z.object({
       filename: z.string().optional().describe('Custom backup filename (auto-generated if omitted)'),
-    },
+    }) },
     async ({ filename }) => {
       try {
         ensureBackupsDir();
@@ -385,12 +377,11 @@ export function registerPromptOrganizationTools(server: McpServer): void {
     }
   );
 
-  server.tool(
+  server.registerTool(
     'restore_prompt_data',
-    'Restore prompt data from a JSON backup file. This restores group structures and prompt-group assignments. Existing prompts are updated, missing prompts are created.',
-    {
+    { description: 'Restore prompt data from a JSON backup file. This restores group structures and prompt-group assignments. Existing prompts are updated, missing prompts are created.', inputSchema: z.object({
       filename: z.string().describe('Backup filename (in the backups directory)'),
-    },
+    }) },
     async ({ filename }) => {
       try {
         const filePath = resolveBackupPath(filename).filePath;
@@ -478,10 +469,9 @@ export function registerPromptOrganizationTools(server: McpServer): void {
     }
   );
 
-  server.tool(
+  server.registerTool(
     'list_backups',
-    'List all available prompt data backup files in the backups directory.',
-    {},
+    { description: 'List all available prompt data backup files in the backups directory.', inputSchema: z.object({}) },
     async () => {
       try {
         ensureBackupsDir();

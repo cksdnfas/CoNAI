@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { getUserSettingsDb } from '../../database/userSettingsDb';
 import { linkChatGeneration, requireActiveChatReply } from '../../services/codex-chat/chatReplyRegistry';
 import { audioCandidatesByQueueJob } from '../../services/audio/audioJobCandidates';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { GenerationQueueModel } from '../../models/GenerationQueue';
 import { WorkflowModel } from '../../models/Workflow';
@@ -266,10 +266,9 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
 }
 
 export function registerGenerationJobTools(server: McpServer, context: McpRequestContext): void {
-  server.tool(
+  server.registerTool(
     'get_codex_generation_options',
-    'Get the Codex image-generation request schema and the agent models the server\'s Codex CLI offers. Use the same parameters as the Codex UI with submit_generation_job(service_type="codex"). The list may be incomplete; custom model IDs are accepted. Prompts are saved with results; use get_generation_history_request to retrieve them and create_prompt_preset to save reusable text.',
-    {},
+    { description: 'Get the Codex image-generation request schema and the agent models the server\'s Codex CLI offers. Use the same parameters as the Codex UI with submit_generation_job(service_type="codex"). The list may be incomplete; custom model IDs are accepted. Prompts are saved with results; use get_generation_history_request to retrieve them and create_prompt_preset to save reusable text.', inputSchema: z.object({}) },
     async () => ({ content: [{ type: 'text' as const, text: JSON.stringify({
       ...await getCodexModelSuggestions(),
       request_schema: z.toJSONSchema(codexGenerationRequestSchema),
@@ -278,10 +277,9 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     }) }] }),
   );
 
-  server.tool(
+  server.registerTool(
     'get_generation_history_request',
-    'Read the full saved prompt, negative prompt, selected model and request settings behind a generation result, as used by the UI reuse action. Image bytes are omitted; pruned requests may only retain result prompts.',
-    { history_id: z.number().int().positive() },
+    { description: 'Read the full saved prompt, negative prompt, selected model and request settings behind a generation result, as used by the UI reuse action. Image bytes are omitted; pruned requests may only retain result prompts.', inputSchema: z.object({ history_id: z.number().int().positive() }) },
     async ({ history_id }) => {
       const record = HistoryQueryRepository.findAllWithMetadata({ ids: [history_id], limit: 1 })[0];
       if (!record) return { isError: true, content: [{ type: 'text' as const, text: 'Generation history not found' }] };
@@ -290,10 +288,9 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     },
   );
 
-  server.tool(
+  server.registerTool(
     'submit_generation_job',
-    `Submit a durable asynchronous generation job and return immediately with a job ID. For NovelAI (service_type="novelai") pass request_payload directly, no lookups needed: { prompt (required; comma-separated Danbooru-style tags), negative_prompt, model (default "nai-diffusion-4-5-curated"; also nai-diffusion-4-5-full, nai-diffusion-5-curated, nai-diffusion-5-full), width/height (multiples of 64: 832x1216 portrait, 1216x832 landscape, 1024x1024 square), steps (default 28), scale (default 5), sampler (default k_euler_ancestral), seed, n_samples (keep 1), characters: [{ prompt, uc, center_x, center_y }] for per-character prompts }. ${isChatMcpSource(context.source) ? 'The app attaches the result to your reply by itself; do not wait for or poll the job. ' : 'After submitting, call wait_generation_job with the returned job id instead of polling get_generation_job. '}For Codex, get_codex_generation_options documents all UI-equivalent parameters including model, reference generation, editing, masks and save options. For ComfyUI: omit server_id and server_tag for automatic queue distribution, provide server_id for one fixed server, or provide server_tag for exact-tag routing.`,
-    {
+    { description: `Submit a durable asynchronous generation job and return immediately with a job ID. For NovelAI (service_type="novelai") pass request_payload directly, no lookups needed: { prompt (required; comma-separated Danbooru-style tags), negative_prompt, model (default "nai-diffusion-4-5-curated"; also nai-diffusion-4-5-full, nai-diffusion-5-curated, nai-diffusion-5-full), width/height (multiples of 64: 832x1216 portrait, 1216x832 landscape, 1024x1024 square), steps (default 28), scale (default 5), sampler (default k_euler_ancestral), seed, n_samples (keep 1), characters: [{ prompt, uc, center_x, center_y }] for per-character prompts }. ${isChatMcpSource(context.source) ? 'The app attaches the result to your reply by itself; do not wait for or poll the job. ' : 'After submitting, call wait_generation_job with the returned job id instead of polling get_generation_job. '}For Codex, get_codex_generation_options documents all UI-equivalent parameters including model, reference generation, editing, masks and save options. For ComfyUI: omit server_id and server_tag for automatic queue distribution, provide server_id for one fixed server, or provide server_tag for exact-tag routing.`, inputSchema: z.object({
       service_type: z.enum(['comfyui', 'novelai', 'codex']),
       workflow_id: z.number().int().positive().optional(),
       server_id: z.number().int().positive().optional().describe('ComfyUI only. Target one active workflow-eligible server. Cannot be combined with server_tag.'),
@@ -304,7 +301,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
       group_path: mcpGroupPathSchema,
       priority: z.number().int().min(0).max(100000).default(100),
       idempotency_key: z.string().trim().min(1).max(200).optional().describe('Optional retry key. The same MCP key and request return the original job; a different request conflicts.'),
-    },
+    }) },
     async (args) => {
       try {
         return { content: [{ type: 'text' as const, text: JSON.stringify(await enqueueMcpGenerationJob(context, args)) }] };
@@ -314,12 +311,11 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     },
   );
 
-  server.tool(
+  server.registerTool(
     'get_generation_routing_options',
-    'Explain ComfyUI queue routing rules and list the active automatic, fixed-server, and tag targets currently available, optionally scoped to one workflow.',
-    {
+    { description: 'Explain ComfyUI queue routing rules and list the active automatic, fixed-server, and tag targets currently available, optionally scoped to one workflow.', inputSchema: z.object({
       workflow_id: z.number().int().positive().optional().describe('Optional workflow ID. When supplied, explicit workflow-server links constrain the returned targets.'),
-    },
+    }) },
     async ({ workflow_id }) => {
       try {
         let workflow: { id: number; name: string; is_active: boolean } | null = null;
@@ -353,10 +349,9 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     },
   );
 
-  server.tool(
+  server.registerTool(
     'get_generation_job',
-    'Get one durable generation job, its workflow availability, history IDs, and completed artifacts.',
-    { job_id: z.number().int().positive() },
+    { description: 'Get one durable generation job, its workflow availability, history IDs, and completed artifacts.', inputSchema: z.object({ job_id: z.number().int().positive() }) },
     async ({ job_id }) => {
       const job = await describeJob(job_id, context);
       return job
@@ -365,13 +360,12 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     },
   );
 
-  server.tool(
+  server.registerTool(
     'wait_generation_job',
-    'Wait until a generation job finishes (completed, failed or cancelled) or the timeout passes, then return it with its history IDs. Use this after submit_generation_job instead of calling get_generation_job repeatedly; call it again if finished is false.',
-    {
+    { description: 'Wait until a generation job finishes (completed, failed or cancelled) or the timeout passes, then return it with its history IDs. Use this after submit_generation_job instead of calling get_generation_job repeatedly; call it again if finished is false.', inputSchema: z.object({
       job_id: z.number().int().positive(),
       timeout_seconds: z.number().int().min(5).max(180).default(90).describe('Longest wait before returning an unfinished job'),
-    },
+    }) },
     async ({ job_id, timeout_seconds }) => {
       const deadline = Date.now() + timeout_seconds * 1000;
       for (;;) {
@@ -390,10 +384,9 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     },
   );
 
-  server.tool(
+  server.registerTool(
     'get_generation_artifacts',
-    'Get downloadable artifacts for one generation job. Calling it again issues fresh signed download URLs.',
-    { job_id: z.number().int().positive() },
+    { description: 'Get downloadable artifacts for one generation job. Calling it again issues fresh signed download URLs.', inputSchema: z.object({ job_id: z.number().int().positive() }) },
     async ({ job_id }) => {
       const job = await describeJob(job_id, context);
       return job
@@ -402,10 +395,9 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     },
   );
 
-  server.tool(
+  server.registerTool(
     'refresh_artifact_download',
-    'Issue a fresh signed download URL from a stable MCP artifact ID.',
-    { artifact_id: z.string().min(1) },
+    { description: 'Issue a fresh signed download URL from a stable MCP artifact ID.', inputSchema: z.object({ artifact_id: z.string().min(1) }) },
     async ({ artifact_id }) => {
       if (!context.baseUrl) {
         return { isError: true, content: [{ type: 'text' as const, text: 'Artifact downloads require the Streamable HTTP transport' }] };
@@ -426,10 +418,9 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     },
   );
 
-  server.tool(
+  server.registerTool(
     'cancel_generation_job',
-    'Request cancellation for one generation job.',
-    { job_id: z.number().int().positive() },
+    { description: 'Request cancellation for one generation job.', inputSchema: z.object({ job_id: z.number().int().positive() }) },
     async ({ job_id }) => {
       try {
         requireMcpResourceOwner(context, GenerationQueueModel.findListRecordById(job_id));

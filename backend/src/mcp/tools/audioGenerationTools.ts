@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { isChatMcpSource, type McpRequestContext } from '../context';
 import { requireMcpResourceOwner } from '../toolAccess';
@@ -76,7 +76,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export function registerAudioGenerationTools(server: McpServer, context: McpRequestContext): void {
   const chat = isChatMcpSource(context.source);
 
-  server.tool('list_audio_workflows', 'List the ComfyUI workflows bound for audio generation, with which marked fields carry the prompt, length and seed, the default one, and the last server compatibility check (including the longest length the servers accept).', {},
+  server.registerTool('list_audio_workflows', { description: 'List the ComfyUI workflows bound for audio generation, with which marked fields carry the prompt, length and seed, the default one, and the last server compatibility check (including the longest length the servers accept).', inputSchema: z.object({}) },
     () => run(() => listAudioWorkflows().map((workflow) => ({
       workflow_id: workflow.id,
       name: workflow.name,
@@ -88,7 +88,7 @@ export function registerAudioGenerationTools(server: McpServer, context: McpRequ
       compat_checked_at: workflow.binding?.compat_checked_at ?? null,
     }))));
 
-  server.tool('order_audio', `Generate sound-effect candidates into one audio group: count (1-50) separate jobs with seeds seed, seed+1, ... (random base when omitted). Write the prompt in English as a sound description (e.g. "soft footstep on fresh snow, single step, close mic, dry"). ${chat ? 'The app attaches the finished candidates to your reply by itself; do not wait for or poll the order.' : 'Then call wait_audio_order with the returned order_id.'} A person reviews (adopts/rejects) the results in the web app.`, {
+  server.registerTool('order_audio', { description: `Generate sound-effect candidates into one audio group: count (1-50) separate jobs with seeds seed, seed+1, ... (random base when omitted). Write the prompt in English as a sound description (e.g. "soft footstep on fresh snow, single step, close mic, dry"). ${chat ? 'The app attaches the finished candidates to your reply by itself; do not wait for or poll the order.' : 'Then call wait_audio_order with the returned order_id.'} A person reviews (adopts/rejects) the results in the web app.`, inputSchema: z.object({
     audio_group_id: z.string().trim().min(1).max(64).describe('Target audio group id (list_audio_groups)'),
     text: z.string().trim().min(1).max(8000).describe('Sound description prompt in English; start from the group\'s representative prompt (list_audio_groups `prompt`), not its description'),
     seconds: z.number().min(0.1).max(1200).default(3).describe('Length in seconds'),
@@ -97,21 +97,21 @@ export function registerAudioGenerationTools(server: McpServer, context: McpRequ
     workflow_id: z.number().int().positive().optional().describe('Audio workflow; omit for the default one'),
     server_tag: z.string().trim().min(1).max(64).optional().describe('Route to servers with this exact routing tag'),
     request_key: z.string().trim().min(8).max(128).optional().describe('Retry key: the same key and request return the original order; a different request conflicts'),
-  }, ({ audio_group_id, text, seconds, count, seed, workflow_id, server_tag, request_key }) => run(async () => orderSummary(await createAudioOrder({
+  }) }, ({ audio_group_id, text, seconds, count, seed, workflow_id, server_tag, request_key }) => run(async () => orderSummary(await createAudioOrder({
     group_id: audio_group_id, text, seconds, count, seed, workflow_id, server_tag, request_key,
   }, actorOf(context, 'order_audio')))));
 
-  server.tool('get_audio_order', 'Read an audio order: per-job status, failure messages and the candidate ids made so far.', {
+  server.registerTool('get_audio_order', { description: 'Read an audio order: per-job status, failure messages and the candidate ids made so far.', inputSchema: z.object({
     order_id: z.string().trim().min(1).max(64),
-  }, ({ order_id }) => run(() => {
+  }) }, ({ order_id }) => run(() => {
     requireMcpResourceOwner(context, audioOrderOwner(order_id));
     return orderSummary(getAudioOrder(order_id));
   }));
 
-  server.tool('wait_audio_order', 'Wait until an audio order has no queued or running jobs (or the timeout passes), then return it. Re-call it to keep waiting.', {
+  server.registerTool('wait_audio_order', { description: 'Wait until an audio order has no queued or running jobs (or the timeout passes), then return it. Re-call it to keep waiting.', inputSchema: z.object({
     order_id: z.string().trim().min(1).max(64),
     timeout_seconds: z.number().int().min(5).max(180).default(90),
-  }, ({ order_id, timeout_seconds }) => run(async () => {
+  }) }, ({ order_id, timeout_seconds }) => run(async () => {
     requireMcpResourceOwner(context, audioOrderOwner(order_id));
     const deadline = Date.now() + timeout_seconds * 1000;
     let order = getAudioOrder(order_id);
@@ -122,17 +122,17 @@ export function registerAudioGenerationTools(server: McpServer, context: McpRequ
     return { finished: order.status !== 'active', ...orderSummary(order) };
   }));
 
-  server.tool('cancel_audio_order', 'Cancel every job of an audio order that has not finished. Candidates already made stay.', {
+  server.registerTool('cancel_audio_order', { description: 'Cancel every job of an audio order that has not finished. Candidates already made stay.', inputSchema: z.object({
     order_id: z.string().trim().min(1).max(64),
-  }, ({ order_id }) => run(async () => {
+  }) }, ({ order_id }) => run(async () => {
     requireMcpResourceOwner(context, audioOrderOwner(order_id));
     return orderSummary(await cancelAudioOrder(order_id));
   }));
 
-  server.tool('retry_audio_order_job', 'Run one failed or cancelled job of an audio order again with the same seed.', {
+  server.registerTool('retry_audio_order_job', { description: 'Run one failed or cancelled job of an audio order again with the same seed.', inputSchema: z.object({
     order_id: z.string().trim().min(1).max(64),
     idx: z.number().int().min(0).max(49).describe('Job index within the order (jobs[].idx)'),
-  }, ({ order_id, idx }) => run(() => {
+  }) }, ({ order_id, idx }) => run(() => {
     requireMcpResourceOwner(context, audioOrderOwner(order_id));
     return orderSummary(retryAudioOrderJob(order_id, idx, { chat: actorOf(context, 'retry_audio_order_job').chat }));
   }));

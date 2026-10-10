@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import {
   startImageBatchResizeJob,
@@ -44,10 +44,9 @@ function describeJob(job: RuntimeJobRecord | null) {
 }
 
 export function registerImageResizeTools(server: McpServer, context: McpRequestContext = { scopes: [] }) {
-  server.tool(
+  server.registerTool(
     'resize_images',
-    'Resize library images to exactly width×height (Lanczos, transparency kept) and save each result as a NEW library image in a group (default "크기 변경"). Originals stay as they are; videos and animated images are skipped. Returns the new composite_hashes when it finishes within the wait, otherwise the job_id.',
-    {
+    { description: 'Resize library images to exactly width×height (Lanczos, transparency kept) and save each result as a NEW library image in a group (default "크기 변경"). Originals stay as they are; videos and animated images are skipped. Returns the new composite_hashes when it finishes within the wait, otherwise the job_id.', inputSchema: z.object({
       composite_hashes: z.array(z.string().trim().regex(/^[0-9a-f]{32,48}$/i, 'composite_hash must be a library media hash')).min(1).max(500)
         .describe('Library image hashes (1..500, no duplicates)'),
       width: z.number().int().min(1).max(16384).describe('Output width in pixels'),
@@ -56,7 +55,7 @@ export function registerImageResizeTools(server: McpServer, context: McpRequestC
       quality: z.number().int().min(1).max(100).optional().describe('WebP quality (default 90)'),
       group_id: z.number().int().positive().optional().describe('Save into this custom image group (default: group "크기 변경")'),
       wait_seconds: z.number().min(0).max(120).optional().describe('Seconds to wait for the result before returning the job id (default 60; chat max 30)'),
-    },
+    }) },
     async ({ composite_hashes, width, height, format, quality, group_id, wait_seconds }) => {
       try {
         if (context.requester) refreshMcpRequester(context.requester);

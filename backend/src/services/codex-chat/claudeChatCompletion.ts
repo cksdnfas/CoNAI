@@ -1,12 +1,11 @@
-import fs from 'fs'
+import fs from 'fs'
 import path from 'path'
 import { randomBytes, randomUUID } from 'crypto'
 import { spawn } from 'child_process'
 import { createServer } from 'http'
 import express from 'express'
-import { Server } from '@modelcontextprotocol/sdk/server/index.js'
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
-import { CallToolRequestSchema, ListToolsRequestSchema, type CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import { createMcpHandler, Server, type CallToolResult } from '@modelcontextprotocol/server'
+import { toNodeHandler } from '@modelcontextprotocol/node'
 import { runtimePaths } from '../../config/runtimePaths'
 import { claudeConfigDir, claudeEnvironment, getClaudeStatus, resolveClaudeCommand, reserveClaudeRequest } from '../claudeCli'
 import { compareCodexVersions, killCodexProcessTree, scheduleCodexProcessTimeout } from '../codexGenerationExecutor'
@@ -107,7 +106,17 @@ export async function streamClaudeChatCompletion(params: {
   let root: string | null = null
   const tools = params.tools ?? []
   let http: ReturnType<typeof createServer> | null = null
-  const transports = new Set<StreamableHTTPServerTransport>()
+  const mcp = createMcpHandler(() => {
+    const server = new Server({ name: 'conai-claude-chat', version: '1.0.0' }, { capabilities: { tools: {} } })
+    server.setRequestHandler('tools/list', async () => ({ tools: tools.map((tool) => ({ name: tool.function.name, description: tool.function.description, inputSchema: tool.function.parameters as { type: 'object' } })) }))
+    server.setRequestHandler('tools/call', async (request) => {
+      params.signal.throwIfAborted()
+      if (!tools.some((tool) => tool.function.name === request.params.name) || !params.callTool) throw new Error('Unknown or not permitted tool')
+      return await params.callTool(request.params.name, request.params.arguments ?? {}, randomUUID()) as CallToolResult
+    })
+    return server
+  })
+  const serveMcp = toNodeHandler(mcp)
   let credentialSource: string | null = null
   let originalCredentials: string | null = null
   try {
@@ -151,17 +160,7 @@ export async function streamClaudeChatCompletion(params: {
     app.use(express.json({ limit: '16mb' }))
     app.post('/mcp', async (req, res) => {
       if (req.headers.authorization !== `Bearer ${token}` || params.signal.aborted) { res.sendStatus(401); return }
-      const server = new Server({ name: 'conai-claude-chat', version: '1.0.0' }, { capabilities: { tools: {} } })
-      server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: tools.map((tool) => ({ name: tool.function.name, description: tool.function.description, inputSchema: tool.function.parameters as { type: 'object' } })) }))
-      server.setRequestHandler(CallToolRequestSchema, async (request) => {
-        params.signal.throwIfAborted()
-        if (!tools.some((tool) => tool.function.name === request.params.name) || !params.callTool) throw new Error('Unknown or not permitted tool')
-        return await params.callTool(request.params.name, request.params.arguments ?? {}, randomUUID()) as CallToolResult
-      })
-      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })
-      transports.add(transport)
-      res.on('close', () => { transports.delete(transport); void transport.close(); void server.close() })
-      try { await server.connect(transport); await transport.handleRequest(req, res, req.body) }
+      try { await serveMcp(req, res, req.body) }
       catch { if (!res.headersSent) res.status(500).json({ jsonrpc: '2.0', id: req.body?.id ?? null, error: { code: -32603, message: 'CoNAI tool request failed' } }) }
     })
     http = createServer(app)
@@ -243,7 +242,7 @@ export async function streamClaudeChatCompletion(params: {
       })
     })
   } finally {
-    for (const transport of transports) await transport.close().catch(() => {})
+    await mcp.close().catch(() => {})
     if (http) { http.closeAllConnections(); await new Promise<void>((resolve) => http!.close(() => resolve())) }
     try { if (root) {
       // Refreshes are copied back only if another administrator has not replaced the source login in the meantime.

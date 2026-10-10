@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { GenerationHistoryService } from '../../services/generationHistoryService';
 import { executeNaiGeneration } from '../../services/naiGenerationExecutor';
@@ -9,10 +9,9 @@ import { canRequesterViewImages } from '../../middleware/imageAccess';
 
 export function registerNovelAiGenerationTools(server: McpServer, context: McpRequestContext): void {
   // NovelAI 이미지 생성
-  server.tool(
+  server.registerTool(
     'generate_nai',
-    'Compatibility synchronous NovelAI generation. Prefer submit_generation_job for durable work.',
-    {
+    { description: 'Compatibility synchronous NovelAI generation. Prefer submit_generation_job for durable work.', inputSchema: z.object({
       prompt: z.string().describe('Positive prompt for image generation'),
       negative_prompt: z.string().default('').describe('Negative prompt'),
       model: z.enum([
@@ -33,7 +32,7 @@ export function registerNovelAiGenerationTools(server: McpServer, context: McpRe
       transparent_background: z.boolean().default(false).describe('Add the NAI V5 prompt tags that request an alpha channel'),
       group_id: z.number().int().optional().describe('Optional group ID to assign generated images to'),
       group_path: mcpGroupPathSchema,
-    },
+    }) },
     async ({ prompt, negative_prompt, model, width, height, steps, scale, sampler, seed, n_samples, transparent_background, group_id, group_path }) => {
       try {
         assertChatNaiSampleCount(context, n_samples);

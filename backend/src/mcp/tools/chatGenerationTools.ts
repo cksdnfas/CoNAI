@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { ChatGenerationPresetStore, type ChatGenerationPreset } from '../../services/codex-chat/chatGenerationPresets';
 import { presetInputShape } from '../../services/codex-chat/chatGenerationInputs';
@@ -52,14 +52,13 @@ function registerInlinePreset(server: McpServer, context: McpRequestContext, pre
   const { shape, fill, workflowName, problem } = presetInputShape(preset);
   if (problem) {
     // Registered anyway so the model learns why instead of finding no generation tool at all.
-    server.tool(toolName, describe(preset, `Currently unavailable: ${problem}`), {}, async () => errorResult(problem));
+    server.registerTool(toolName, { description: describe(preset, `Currently unavailable: ${problem}`), inputSchema: z.object({}) }, async () => errorResult(problem));
     return;
   }
   const reference = usesReference(preset);
-  server.tool(
+  server.registerTool(
     toolName,
-    withGuide(describe(preset, workflowName ? `${fill} Workflow "${workflowName}".` : fill), preset),
-    shape,
+    { description: withGuide(describe(preset, workflowName ? `${fill} Workflow "${workflowName}".` : fill), preset), inputSchema: z.object(shape) },
     async (args: Record<string, unknown>) => {
       try {
         const profile = generationProfile(context, toolName, args, reference);
@@ -75,13 +74,12 @@ function registerInlinePreset(server: McpServer, context: McpRequestContext, pre
 function registerAfterPreset(server: McpServer, context: McpRequestContext, preset: ChatGenerationPreset, toolName: string) {
   const { problem } = presetInputShape(preset);
   if (problem) {
-    server.tool(toolName, describe(preset, `Currently unavailable: ${problem}`), {}, async () => errorResult(problem));
+    server.registerTool(toolName, { description: describe(preset, `Currently unavailable: ${problem}`), inputSchema: z.object({}) }, async () => errorResult(problem));
     return;
   }
-  server.tool(
+  server.registerTool(
     toolName,
-    `Ask for a picture of this reply with the preset "${preset.name}"${preset.instruction ? `: ${preset.instruction}` : ''}. The picture's prompt is written from your finished reply after you end it, and the app attaches the image to the reply by itself. Call it at most once per moment, then just continue writing; never describe the picture or say it is finished.`,
-    { focus: z.string().max(500).optional().describe('Optional: which moment of your reply to show, in a few words, when it is not the obvious one.') },
+    { description: `Ask for a picture of this reply with the preset "${preset.name}"${preset.instruction ? `: ${preset.instruction}` : ''}. The picture's prompt is written from your finished reply after you end it, and the app attaches the image to the reply by itself. Call it at most once per moment, then just continue writing; never describe the picture or say it is finished.`, inputSchema: z.object({ focus: z.string().max(500).optional().describe('Optional: which moment of your reply to show, in a few words, when it is not the obvious one.') }) },
     async (args: Record<string, unknown>) => {
       try {
         requireMcpToolAccess(context, toolName, args);

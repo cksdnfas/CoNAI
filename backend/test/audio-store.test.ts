@@ -385,8 +385,8 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
   await t.test('MCP: read tools follow audio.view, organize tools audio.edit, and no tool can review or delete', async () => {
     const { createMcpServer } = await import('../src/mcp/server')
     const { ALL_MCP_HTTP_SCOPES } = await import('../src/mcp/context')
-    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
-    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
+    const { Client } = await import('@modelcontextprotocol/client')
+    const { InMemoryTransport } = await import('@modelcontextprotocol/client')
     const connect = async (requester?: { accountId: number; accountType: 'admin' | 'guest' }) => {
       const mcp = createMcpServer({ scopes: [...ALL_MCP_HTTP_SCOPES], source: 'http', ...(requester ? { requester } : {}) })
       const client = new Client({ name: 'audio-test', version: '1' })
@@ -407,8 +407,8 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
 
     const listed = await listener.callTool({ name: 'list_audio_candidates', arguments: { group_id: snow.id } }) as { content: Array<{ text: string }> }
     assert.ok(JSON.parse(listed.content[0].text).candidates.every((candidate: Record<string, unknown>) => 'candidate_id' in candidate && !('composite_hash' in candidate)))
-    const denied = await listener.callTool({ name: 'create_audio_project', arguments: { name: 'x' } }) as { isError?: boolean }
-    assert.equal(denied.isError, true)
+    // Without audio.edit the tool is not registered; calling it is a protocol error (-32602), not a tool result.
+    await assert.rejects(listener.callTool({ name: 'create_audio_project', arguments: { name: 'x' } }), { code: -32602 })
 
     const dataUrl = `data:audio/wav;base64,${fs.readFileSync(tone('g.wav', 330)).toString('base64')}`
     const imported = await admin.callTool({ name: 'import_audio', arguments: { project_id: project.id, data_url: dataUrl, file_name: 'bot take.wav' } }) as { isError?: boolean; content: Array<{ text: string }> }

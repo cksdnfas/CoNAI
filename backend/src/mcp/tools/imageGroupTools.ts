@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { db } from '../../database/init';
 import { GroupModel, ImageGroupModel } from '../../models/Group';
@@ -138,13 +138,12 @@ function resolveParentGroup(parentId?: number, parentPath?: string): number | nu
 export function registerImageGroupTools(server: McpServer, context: McpRequestContext): void {
   const requesterAccountId = context.requester?.accountId ?? null;
 
-  server.tool(
+  server.registerTool(
     'list_image_groups',
-    "List image groups (the library's folder-like collections) with their full 'Parent/Child' paths and image counts.",
-    {
+    { description: "List image groups (the library's folder-like collections) with their full 'Parent/Child' paths and image counts.", inputSchema: z.object({
       under_path: z.string().trim().min(1).optional().describe("Only return this group and its descendants, e.g. 'ProjectName'"),
       query: z.string().trim().min(1).optional().describe('Case-insensitive substring filter on the full path'),
-    },
+    }) },
     async ({ under_path, query }) => {
       try {
         let groups = listGroupSummaries();
@@ -173,13 +172,12 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
     },
   );
 
-  server.tool(
+  server.registerTool(
     'resolve_image_group_path',
-    "Resolve group_path like 'ProjectName/Effects' to an image group id. With create=true (default) missing groups are created under their parent. Use create=false to look up an existing group without creating it. Generation tools accept group_path directly, so this step is optional before generation.",
-    {
+    { description: "Resolve group_path like 'ProjectName/Effects' to an image group id. With create=true (default) missing groups are created under their parent. Use create=false to look up an existing group without creating it. Generation tools accept group_path directly, so this step is optional before generation.", inputSchema: z.object({
       group_path: z.string().trim().min(1).max(1024).describe("Slash-separated library group path, e.g. 'ProjectName/Effects' (max 5 levels); not a filesystem path"),
       create: z.boolean().default(true).describe('Create missing groups along the path'),
-    },
+    }) },
     async ({ group_path, create }) => {
       try {
         const resolved = GroupPathService.resolve(group_path, { create });
@@ -199,14 +197,13 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
     },
   );
 
-  server.tool(
+  server.registerTool(
     'add_images_to_group',
-    'Add existing library images (by composite_hash) to a custom image group, given by group_id or group_path. Other memberships are preserved. Existing auto-collected memberships are converted to manual and survive auto-collection reruns. Missing images are reported in missing_hashes; database errors roll back the whole batch.',
-    {
+    { description: 'Add existing library images (by composite_hash) to a custom image group, given by group_id or group_path. Other memberships are preserved. Existing auto-collected memberships are converted to manual and survive auto-collection reruns. Missing images are reported in missing_hashes; database errors roll back the whole batch.', inputSchema: z.object({
       composite_hashes: compositeHashesSchema,
       group_id: z.number().int().positive().optional(),
       group_path: mcpGroupPathSchema,
-    },
+    }) },
     async ({ composite_hashes, group_id, group_path }) => {
       try {
         return textResult(db.transaction(() => {
@@ -226,10 +223,9 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
     },
   );
 
-  server.tool(
+  server.registerTool(
     'get_image_groups',
-    'List the direct custom image group memberships of an existing library image, with group IDs, full paths and manual/auto collection types. Watched-folder groups and inherited parent memberships are not included.',
-    { composite_hash: z.string().trim().min(1) },
+    { description: 'List the direct custom image group memberships of an existing library image, with group IDs, full paths and manual/auto collection types. Watched-folder groups and inherited parent memberships are not included.', inputSchema: z.object({ composite_hash: z.string().trim().min(1) }) },
     async ({ composite_hash }) => {
       try {
         const metadata = MediaMetadataModel.findByHash(composite_hash);
@@ -248,14 +244,13 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
     },
   );
 
-  server.tool(
+  server.registerTool(
     'remove_images_from_group',
-    'Remove direct memberships from one existing custom image group, without deleting files or changing other groups. This is NOT a persistent exclusion: matching images may return on auto-collection. Missing memberships are skipped; database errors roll back the whole batch.',
-    {
+    { description: 'Remove direct memberships from one existing custom image group, without deleting files or changing other groups. This is NOT a persistent exclusion: matching images may return on auto-collection. Missing memberships are skipped; database errors roll back the whole batch.', inputSchema: z.object({
       composite_hashes: compositeHashesSchema,
       group_id: z.number().int().positive().optional(),
       group_path: existingGroupPathSchema,
-    },
+    }) },
     async ({ composite_hashes, group_id, group_path }) => {
       try {
         return textResult(db.transaction(() => {
@@ -281,16 +276,15 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
     },
   );
 
-  server.tool(
+  server.registerTool(
     'move_images_between_groups',
-    'Atomically move selected direct image memberships between two different existing custom groups. Specify one ID or path per group. Only source members are moved; others are skipped. Target memberships become manual, even if already auto-collected. Other groups and files are unchanged. Source auto-collection may add the images back; this is not a persistent exclusion. Create missing target groups first with resolve_image_group_path.',
-    {
+    { description: 'Atomically move selected direct image memberships between two different existing custom groups. Specify one ID or path per group. Only source members are moved; others are skipped. Target memberships become manual, even if already auto-collected. Other groups and files are unchanged. Source auto-collection may add the images back; this is not a persistent exclusion. Create missing target groups first with resolve_image_group_path.', inputSchema: z.object({
       composite_hashes: compositeHashesSchema,
       source_group_id: z.number().int().positive().optional(),
       source_group_path: existingGroupPathSchema,
       target_group_id: z.number().int().positive().optional(),
       target_group_path: existingGroupPathSchema,
-    },
+    }) },
     async ({ composite_hashes, source_group_id, source_group_path, target_group_id, target_group_path }) => {
       try {
         return textResult(db.transaction(() => {
@@ -332,13 +326,12 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
     },
   );
 
-  server.tool(
+  server.registerTool(
     'get_image_group',
-    'Read one custom image group\'s settings: name, path, description, color, image counts and its auto-collect state and rules. Read this before changing a group with update_image_group.',
-    {
+    { description: 'Read one custom image group\'s settings: name, path, description, color, image counts and its auto-collect state and rules. Read this before changing a group with update_image_group.', inputSchema: z.object({
       group_id: z.number().int().positive().optional(),
       group_path: existingGroupPathSchema,
-    },
+    }) },
     async ({ group_id, group_path }) => {
       try {
         const group = GroupModel.findById(resolveExistingGroup(group_id, group_path));
@@ -350,17 +343,16 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
     },
   );
 
-  server.tool(
+  server.registerTool(
     'create_image_group',
-    'Create one custom image group, optionally under an existing parent (max 5 levels; sibling names are unique, case-insensitive). With auto_collect_rules the group collects matching library images: auto-collection is enabled and its first run starts right away in the background. For an empty group by path alone, resolve_image_group_path is enough.',
-    {
+    { description: 'Create one custom image group, optionally under an existing parent (max 5 levels; sibling names are unique, case-insensitive). With auto_collect_rules the group collects matching library images: auto-collection is enabled and its first run starts right away in the background. For an empty group by path alone, resolve_image_group_path is enough.', inputSchema: z.object({
       name: groupNameSchema,
       parent_id: z.number().int().positive().optional().describe('Existing parent group ID; omit both parent fields for a top-level group'),
       parent_path: existingGroupPathSchema.describe("Existing parent group path, e.g. 'Characters'. Never creates the parent."),
       description: z.string().trim().max(2000).optional(),
       color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).optional().describe('Accent color like #7c3aed'),
       auto_collect_rules: autoCollectRulesSchema.optional(),
-    },
+    }) },
     async ({ name, parent_id, parent_path, description, color, auto_collect_rules }) => {
       try {
         const parentId = resolveParentGroup(parent_id, parent_path);
@@ -379,10 +371,9 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
     },
   );
 
-  server.tool(
+  server.registerTool(
     'update_image_group',
-    'Change one custom image group\'s name, description, color or auto-collect settings. Only given fields change. auto_collect_rules replaces the whole rule list and enables auto-collection; auto_collect_enabled=false stops future collection (images already collected stay). Saving enabled rules starts a background auto-collect run. Moving or deleting groups is not available here.',
-    {
+    { description: 'Change one custom image group\'s name, description, color or auto-collect settings. Only given fields change. auto_collect_rules replaces the whole rule list and enables auto-collection; auto_collect_enabled=false stops future collection (images already collected stay). Saving enabled rules starts a background auto-collect run. Moving or deleting groups is not available here.', inputSchema: z.object({
       group_id: z.number().int().positive().optional(),
       group_path: existingGroupPathSchema,
       name: groupNameSchema.optional(),
@@ -390,7 +381,7 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
       color: z.string().trim().regex(/^(#[0-9a-fA-F]{6})?$/).optional().describe('Accent color like #7c3aed; empty string clears it'),
       auto_collect_enabled: z.boolean().optional(),
       auto_collect_rules: autoCollectRulesSchema.optional(),
-    },
+    }) },
     async ({ group_id, group_path, name, description, color, auto_collect_enabled, auto_collect_rules }) => {
       try {
         const id = resolveExistingGroup(group_id, group_path);
@@ -418,13 +409,12 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
     },
   );
 
-  server.tool(
+  server.registerTool(
     'run_group_auto_collect',
-    'Run auto-collection again for one custom group that has auto-collect enabled. It runs in the background; the result reports the job id and status. Creating or updating a group with rules already starts a run.',
-    {
+    { description: 'Run auto-collection again for one custom group that has auto-collect enabled. It runs in the background; the result reports the job id and status. Creating or updating a group with rules already starts a run.', inputSchema: z.object({
       group_id: z.number().int().positive().optional(),
       group_path: existingGroupPathSchema,
-    },
+    }) },
     async ({ group_id, group_path }) => {
       try {
         const id = resolveExistingGroup(group_id, group_path);

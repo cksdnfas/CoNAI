@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { registerPromptTools } from './tools/promptTools';
 import { registerGenerationTools } from './tools/generationTools';
 import { registerImageTools } from './tools/imageTools';
@@ -11,6 +11,7 @@ import { registerChatGenerationTools } from './tools/chatGenerationTools';
 import { registerWorkflowTransferTools } from './tools/workflowTransferTools';
 import { registerPromptPresetTools } from './tools/promptPresetTools';
 import { registerFileStoreTools } from './tools/fileStoreTools';
+import { registerChatLinkedFileTools } from './tools/chatLinkedFileTools';
 import { registerPostTools } from './tools/postTools';
 import { registerEmoticonTools } from './tools/emoticonTools';
 import { registerChatRoomTools } from './tools/chatRoomTools';
@@ -41,14 +42,14 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
     version: '2.1.0',
   });
 
-  const originalTool = server.tool.bind(server);
-  const registerDirect = (args: unknown[]) => { (originalTool as (...toolArgs: unknown[]) => unknown)(...args); };
+  const originalRegister = server.registerTool.bind(server) as (...toolArgs: unknown[]) => unknown;
+  const registerDirect = (args: unknown[]) => { originalRegister(...args); };
   // Chat agents get the app tools as a table of contents (toolCatalog.ts); other clients list every tool.
   const catalog = isChatMcpSource(context.source) ? createToolCatalog(server, registerDirect) : null;
   let category: ToolCategoryId = 'chat';
   const inCategory = (id: ToolCategoryId, register: () => void) => { category = id; register(); category = 'chat'; };
   if (isChatMcpSource(context.source) && context.generationPresetSnapshot === undefined) context.generationPresetSnapshot = JSON.stringify(ChatGenerationPresetStore.resolve(context.generationPresetIds ?? []));
-  (server as McpServer & { tool: typeof server.tool }).tool = ((...args: unknown[]) => {
+  server.registerTool = ((...args: unknown[]) => {
     const toolName = typeof args[0] === 'string' ? args[0] : '';
     if (!isContextToolAllowed(context, toolName)) return undefined;
     const handler = args[args.length - 1];
@@ -65,8 +66,8 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
       catalog.add(toolName, category, args);
       return undefined;
     }
-    return (originalTool as (...toolArgs: unknown[]) => unknown)(...args);
-  }) as typeof server.tool;
+    return originalRegister(...args);
+  }) as typeof server.registerTool;
 
   inCategory('prompts', () => {
     registerPromptTools(server);
@@ -99,6 +100,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   registerChatTaskTools(server, context);
   registerChatChoiceTools(server, context);
   registerChatLoreTools(server, context);
+  registerChatLinkedFileTools(server, context);
   inCategory('chat_setup', () => registerChatSetupTools(server, context));
   registerChatPageTools(server, context);
   inCategory('sprite', () => registerSpriteTools(server, context));

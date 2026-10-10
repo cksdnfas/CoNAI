@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import { z } from 'zod'
 import { CHAT_TASK_LIMITS, type ChatTask } from '@conai/shared'
 import type { McpRequestContext } from '../context'
@@ -26,11 +26,11 @@ export function registerChatTaskTools(server: McpServer, context: McpRequestCont
     return task
   }
 
-  server.tool('task_propose', 'Propose a multi-step task for this chat as a plan card. Use it when the person asks for something that takes several turns (e.g. "make a new character profile with images"). Nothing runs until the person approves the card; after that the app keeps sending you the next turn automatically. Steps that end in a card the person must save get approval: true. One task per chat.', {
+  server.registerTool('task_propose', { description: 'Propose a multi-step task for this chat as a plan card. Use it when the person asks for something that takes several turns (e.g. "make a new character profile with images"). Nothing runs until the person approves the card; after that the app keeps sending you the next turn automatically. Steps that end in a card the person must save get approval: true. One task per chat.', inputSchema: z.object({
     goal: z.string().max(CHAT_TASK_LIMITS.goal),
     steps: z.array(z.object({ title: z.string().max(CHAT_TASK_LIMITS.stepTitle), approval: z.boolean().optional() })).min(1).max(CHAT_TASK_LIMITS.steps),
     budget: z.object({ continuations: z.number().int().positive().max(CHAT_TASK_LIMITS.continuations).optional(), images: z.number().int().positive().max(CHAT_TASK_LIMITS.images).optional() }).optional().describe('Turns and images the task may use; defaults 30 and 16.'),
-  }, async ({ goal, steps, budget }) => {
+  }) }, async ({ goal, steps, budget }) => {
     try {
       if (!chat.replyId) throw new Error('Proposals need an active chat reply.')
       const current = ChatTaskStore.live(chat.threadId)
@@ -42,19 +42,19 @@ export function registerChatTaskTools(server: McpServer, context: McpRequestCont
     } catch (error) { return failure(error) }
   })
 
-  server.tool('get_proposal_status', 'Read what the person did with this chat\'s review cards: saved (with the new id), dismissed, or still open. Give proposal_ids, or leave them out for the latest cards.', {
+  server.registerTool('get_proposal_status', { description: 'Read what the person did with this chat\'s review cards: saved (with the new id), dismissed, or still open. Give proposal_ids, or leave them out for the latest cards.', inputSchema: z.object({
     proposal_ids: z.array(z.number().int().positive()).max(20).optional(),
-  }, async ({ proposal_ids }) => {
+  }) }, async ({ proposal_ids }) => {
     try { return result({ proposals: proposalStatuses(chat.threadId, proposal_ids) }) } catch (error) { return failure(error) }
   })
 
-  server.tool('task_status', 'Read this chat\'s current task: goal, steps with status, what it waits for, budget used.', {}, async () => {
+  server.registerTool('task_status', { description: 'Read this chat\'s current task: goal, steps with status, what it waits for, budget used.', inputSchema: z.object({}) }, async () => {
     try { return result(view(live())) } catch (error) { return failure(error) }
   })
 
-  server.tool('task_update', 'Mark one step of the current task: doing, done or skipped, with a short note.', {
+  server.registerTool('task_update', { description: 'Mark one step of the current task: doing, done or skipped, with a short note.', inputSchema: z.object({
     step: z.number().int().positive(), status: z.enum(['doing', 'done', 'skipped']), note: z.string().max(CHAT_TASK_LIMITS.note).optional(),
-  }, async ({ step, status, note }) => {
+  }) }, async ({ step, status, note }) => {
     try {
       const task = live()
       if (task.status === 'awaiting_plan') throw new Error('플랜이 아직 승인되지 않았어.')
@@ -64,9 +64,9 @@ export function registerChatTaskTools(server: McpServer, context: McpRequestCont
     } catch (error) { return failure(error) }
   })
 
-  server.tool('task_wait', 'Pause the current task until something outside your reply happens: approval (a card you made must be saved), job (generation still running), page (the person must reopen or reconnect the page), user (you need the person\'s answer). The app resumes you when it happens (user: when the person answers in the chat; page: when the person sends with the page connected, or resumes). Call it, then end your reply.', {
+  server.registerTool('task_wait', { description: 'Pause the current task until something outside your reply happens: approval (a card you made must be saved), job (generation still running), page (the person must reopen or reconnect the page), user (you need the person\'s answer). The app resumes you when it happens (user: when the person answers in the chat; page: when the person sends with the page connected, or resumes). Call it, then end your reply.', inputSchema: z.object({
     for: z.enum(['approval', 'job', 'page', 'user']), reason: z.string().max(CHAT_TASK_LIMITS.note),
-  }, async ({ for: wait, reason }) => {
+  }) }, async ({ for: wait, reason }) => {
     try {
       const task = live()
       if (task.status === 'awaiting_plan') throw new Error('플랜이 아직 승인되지 않았어.')
@@ -74,9 +74,9 @@ export function registerChatTaskTools(server: McpServer, context: McpRequestCont
     } catch (error) { return failure(error) }
   })
 
-  server.tool('task_finish', 'End the current task: done when every step is finished, failed when it cannot be completed. Give a one-line summary.', {
+  server.registerTool('task_finish', { description: 'End the current task: done when every step is finished, failed when it cannot be completed. Give a one-line summary.', inputSchema: z.object({
     outcome: z.enum(['done', 'failed']), summary: z.string().max(CHAT_TASK_LIMITS.note),
-  }, async ({ outcome, summary }) => {
+  }) }, async ({ outcome, summary }) => {
     try {
       const task = live()
       return result(view(ChatTaskStore.update(task.id, { status: outcome, reason: summary })!))

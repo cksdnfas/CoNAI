@@ -426,8 +426,8 @@ test('audio generation: workflows, orders, queue sink, REST, MCP and chat refere
   await t.test('MCP: order tools need audio.edit + generation.execute; wait is withheld from chat', async () => {
     const { createMcpServer } = await import('../src/mcp/server')
     const { ALL_MCP_HTTP_SCOPES, CHAT_BLOCKED_TOOLS } = await import('../src/mcp/context')
-    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
-    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
+    const { Client } = await import('@modelcontextprotocol/client')
+    const { InMemoryTransport } = await import('@modelcontextprotocol/client')
     const connect = async (requester: { accountId: number; accountType: 'admin' | 'guest' }) => {
       const mcp = createMcpServer({ scopes: [...ALL_MCP_HTTP_SCOPES], source: 'http', requester })
       const client = new Client({ name: 'audio-gen-test', version: '1' })
@@ -617,8 +617,8 @@ test('audio generation: workflows, orders, queue sink, REST, MCP and chat refere
     // A bot polling the job sees its sounds too.
     const { createMcpServer } = await import('../src/mcp/server')
     const { ALL_MCP_HTTP_SCOPES } = await import('../src/mcp/context')
-    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
-    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
+    const { Client } = await import('@modelcontextprotocol/client')
+    const { InMemoryTransport } = await import('@modelcontextprotocol/client')
     const mcp = createMcpServer({ scopes: [...ALL_MCP_HTTP_SCOPES], source: 'http', requester: { accountId: historyOwnerId, accountType: 'guest' } })
     const client = new Client({ name: 'mixed-job-test', version: '1' })
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()

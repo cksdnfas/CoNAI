@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import type { ChatProposal } from '@conai/shared';
 import { z } from 'zod';
 import { ChatProposalStore, type NewChatProposal } from '../../services/codex-chat/chatProposals';
@@ -357,9 +357,9 @@ function profileAssetsGuide(context: McpRequestContext) {
 
 /** Chat setup tools (scope `configure`, chat accounts with admin rights only): read the setup, propose changes as cards. */
 export function registerChatSetupTools(server: McpServer, context: McpRequestContext): void {
-  server.tool('get_asset_batch', 'Read a character asset batch: each slot with its status (waiting, queued, processing, completed, failed, blocked), chosen candidate and candidates with review results (expression match, hair/eye match with the reference, judge pick). Without batch_id: the newest batch of the profile (default: your speaking profile). Use it to follow generation and choose candidates for propose_profile_assets(action=apply, picks).', {
+  server.registerTool('get_asset_batch', { description: 'Read a character asset batch: each slot with its status (waiting, queued, processing, completed, failed, blocked), chosen candidate and candidates with review results (expression match, hair/eye match with the reference, judge pick). Without batch_id: the newest batch of the profile (default: your speaking profile). Use it to follow generation and choose candidates for propose_profile_assets(action=apply, picks).', inputSchema: z.object({
     batch_id: z.number().int().positive().optional(), profile_id: z.number().int().positive().optional(),
-  }, async ({ batch_id, profile_id }) => {
+  }) }, async ({ batch_id, profile_id }) => {
     try {
       if (!context.chatContext || !context.requester) throw new Error(NO_CHAT_ERROR);
       const profileId = profile_id ?? context.chatContext.profileId;
@@ -379,22 +379,21 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
       });
     } catch (error) { return errorResult(error); }
   });
-  server.tool('propose_profile_assets', 'Propose character asset generation (action=create), or application of already chosen batch candidates (action=apply), as separate approval cards. Read get_chat_setup_guide(topic=profile_assets) first for real preset IDs and ComfyUI prompt fields. Administrators must approve each card; this tool starts no jobs and changes no profile or group. For create, input uses presetId, expressionPresetId (prompt preset descriptions are emotion keywords), optional expressions and slots; ComfyUI needs promptField. For apply, give batch_id. Default target is your speaking profile.', {
+  server.registerTool('propose_profile_assets', { description: 'Propose character asset generation (action=create), or application of already chosen batch candidates (action=apply), as separate approval cards. Read get_chat_setup_guide(topic=profile_assets) first for real preset IDs and ComfyUI prompt fields. Administrators must approve each card; this tool starts no jobs and changes no profile or group. For create, input uses presetId, expressionPresetId (prompt preset descriptions are emotion keywords), optional expressions and slots; ComfyUI needs promptField. For apply, give batch_id. Default target is your speaking profile.', inputSchema: z.object({
     action: z.enum(['create', 'apply']).optional(), profile_id: z.number().int().positive().optional(),
     input: chatAssetBatchInputSchema.omit({ idempotencyKey: true }).optional(), batch_id: z.number().int().positive().optional(),
     picks: z.record(z.string().max(40), z.string().max(200)).optional().describe('apply only: slotKey → compositeHash of a candidate from get_asset_batch to choose for that slot.'),
     avatarCrop: z.object({ x: z.number(), y: z.number(), scale: z.number().positive() }).nullable().optional(),
-  }, async (args) => {
+  }) }, async (args) => {
     try {
       if (!context.chatContext || !context.requester) throw new Error(NO_CHAT_ERROR);
       const proposal = proposeProfileAssets(context.requester, context.chatContext, args);
       return textResult({ proposalId: proposal.id, note: 'Review and approve this card; creation and application need separate approvals.' }, { structuredContent: { proposal } });
     } catch (error) { return errorResult(error); }
   });
-  server.tool(
+  server.registerTool(
     'get_chat_setup_guide',
-    'Read the reference for writing a chat display block (status card: JSON shape, limits, template syntax, runtime behavior) or a chat profile (fields, limits, placeholders, available model slots, lorebooks and shared blocks). Read it once before proposing.',
-    { topic: z.enum(['display_block', 'profile', 'profile_assets']) },
+    { description: 'Read the reference for writing a chat display block (status card: JSON shape, limits, template syntax, runtime behavior) or a chat profile (fields, limits, placeholders, available model slots, lorebooks and shared blocks). Read it once before proposing.', inputSchema: z.object({ topic: z.enum(['display_block', 'profile', 'profile_assets']) }) },
     async ({ topic }) => {
       try {
         return { content: [{ type: 'text' as const, text: topic === 'display_block' ? DISPLAY_BLOCK_GUIDE : topic === 'profile_assets' ? profileAssetsGuide(context) : profileGuide() }] };
@@ -402,19 +401,17 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
     },
   );
 
-  server.tool(
+  server.registerTool(
     'list_chat_profiles',
-    'List the chat profiles (characters) with id, name, tagline, engine, enabled flag, model label, linked block and lorebook ids, and system prompt length.',
-    {},
+    { description: 'List the chat profiles (characters) with id, name, tagline, engine, enabled flag, model label, linked block and lorebook ids, and system prompt length.', inputSchema: z.object({}) },
     async () => {
       try { return textResult(ChatProfileStore.list().map(profileSummary)); } catch (error) { return errorResult(error); }
     },
   );
 
-  server.tool(
+  server.registerTool(
     'get_chat_profile',
-    'Read the text setup of a chat profile in full: prompts, sections, greetings, author note, model slots, linked lorebooks and blocks, style. Defaults to the profile you are speaking as. Tool grants and connection details are never included.',
-    { profile_id: z.number().int().positive().optional() },
+    { description: 'Read the text setup of a chat profile in full: prompts, sections, greetings, author note, model slots, linked lorebooks and blocks, style. Defaults to the profile you are speaking as. Tool grants and connection details are never included.', inputSchema: z.object({ profile_id: z.number().int().positive().optional() }) },
     async ({ profile_id }) => {
       try {
         const id = profile_id ?? context.chatContext?.profileId;
@@ -426,10 +423,9 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
     },
   );
 
-  server.tool(
+  server.registerTool(
     'list_display_blocks',
-    'List the shared display blocks (status cards) with id, name, key, field names, summary template and the profiles that link them.',
-    {},
+    { description: 'List the shared display blocks (status cards) with id, name, key, field names, summary template and the profiles that link them.', inputSchema: z.object({}) },
     async () => {
       try {
         return textResult(ChatSharedBlockStore.list().map((shared) => ({
@@ -444,10 +440,9 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
     },
   );
 
-  server.tool(
+  server.registerTool(
     'get_display_block',
-    'Read one shared display block in full (key, instruction, example, template, css, rules, summary, field rules).',
-    { block_id: z.number().int().positive() },
+    { description: 'Read one shared display block in full (key, instruction, example, template, css, rules, summary, field rules).', inputSchema: z.object({ block_id: z.number().int().positive() }) },
     async ({ block_id }) => {
       try {
         const shared = ChatSharedBlockStore.find(block_id);
@@ -458,14 +453,13 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
     },
   );
 
-  server.tool(
+  server.registerTool(
     'propose_display_block',
-    'Propose a new shared display block (status card) as a card under your reply. Nothing is saved until the user presses 저장. get_chat_setup_guide(display_block) has the block format; read it unless you already know it. The block is validated and normalized; warnings are returned.',
-    {
+    { description: 'Propose a new shared display block (status card) as a card under your reply. Nothing is saved until the user presses 저장. get_chat_setup_guide(display_block) has the block format; read it unless you already know it. The block is validated and normalized; warnings are returned.', inputSchema: z.object({
       name: z.string().optional().describe('Name of the shared block (defaults to its key)'),
       block: z.record(z.string(), z.unknown()).describe('{ key, instruction, example, template, css, rules, summary, fields }'),
       link_to_profile: z.boolean().default(true).describe('Offer to link the saved block to the profile you speak as'),
-    },
+    }) },
     async (args) => {
       try {
         if (!context.chatContext) throw new Error(NO_CHAT_ERROR);
@@ -476,10 +470,9 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
     },
   );
 
-  server.tool(
+  server.registerTool(
     'propose_chat_profile',
-    'Propose a NEW chat profile as a card under your reply. Nothing is saved until the user presses 저장. get_chat_setup_guide(profile) lists limits, model slots, lorebooks and blocks: read it when you need one of them (a wrong value is refused with the allowed ones).',
-    {
+    { description: 'Propose a NEW chat profile as a card under your reply. Nothing is saved until the user presses 저장. get_chat_setup_guide(profile) lists limits, model slots, lorebooks and blocks: read it when you need one of them (a wrong value is refused with the allowed ones).', inputSchema: z.object({
       name: z.string(),
       tagline: z.string().optional(),
       system_prompt: z.string(),
@@ -492,7 +485,7 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
       lorebook_ids: z.array(z.number().int().positive()).optional(),
       block_ids: z.array(z.number().int().positive()).optional(),
       typeface: z.enum(['sans', 'serif', 'mono']).optional(),
-    },
+    }) },
     async (args) => {
       try {
         if (!context.chatContext) throw new Error(NO_CHAT_ERROR);
@@ -503,13 +496,12 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
     },
   );
 
-  server.tool(
+  server.registerTool(
     'propose_profile_update',
-    'Propose changes to an existing chat profile (default: the one you speak as) as a before/after card. Nothing is saved until the user presses 저장. patch accepts only: name, tagline, systemPrompt, promptSections, greeting, alternateGreetings, authorNote, appearance, modelSlotId (or model_slot), summarySlotId, translationSlotId, suggestSlotId, lorebookIds, blockIds. Engine, tool grants, allowlists, presets and provider/model pairs are never proposable.',
-    {
+    { description: 'Propose changes to an existing chat profile (default: the one you speak as) as a before/after card. Nothing is saved until the user presses 저장. patch accepts only: name, tagline, systemPrompt, promptSections, greeting, alternateGreetings, authorNote, appearance, modelSlotId (or model_slot), summarySlotId, translationSlotId, suggestSlotId, lorebookIds, blockIds. Engine, tool grants, allowlists, presets and provider/model pairs are never proposable.', inputSchema: z.object({
       profile_id: z.number().int().positive().optional(),
       patch: z.record(z.string(), z.unknown()),
-    },
+    }) },
     async (args) => {
       try {
         if (!context.chatContext) throw new Error(NO_CHAT_ERROR);

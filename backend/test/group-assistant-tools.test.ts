@@ -26,8 +26,8 @@ test('group assistant tools: rules, page actions and MCP group create/update/run
   runtimeJobs.registerRuntimeJobHandlers()
 
   const { createMcpServer } = await import('../src/mcp/server')
-  const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
-  const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
+  const { Client } = await import('@modelcontextprotocol/client')
+  const { InMemoryTransport } = await import('@modelcontextprotocol/client')
   const server = createMcpServer({ scopes: ['read', 'organize'], source: 'http' })
   const client = new Client({ name: 'group-assistant', version: '1' })
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()

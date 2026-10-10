@@ -41,8 +41,8 @@ test('audio page: connected /audio offers the audio tools, other pages do not', 
   const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
   const { normalizeChatPageSnapshot, chatPagePermission } = await import('@conai/shared')
   const { chatPageReference } = await import('../src/services/codex-chat/chatPageContext')
-  const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
-  const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
+  const { Client } = await import('@modelcontextprotocol/client')
+  const { InMemoryTransport } = await import('@modelcontextprotocol/client')
 
   assert.equal(chatPagePermission('/audio'), 'page.audio.view')
   // Every page-kind tool is a real, classified tool, and review never is one.

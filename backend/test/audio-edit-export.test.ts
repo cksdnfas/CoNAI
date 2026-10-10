@@ -408,8 +408,8 @@ test('audio workspace: edits, exports, deletion plan and MCP tools', { timeout: 
   await t.test('MCP: edit / cleanup / export / download tools, artifact ownership, review still people-only', async () => {
     const { createMcpServer } = await import('../src/mcp/server')
     const { ALL_MCP_HTTP_SCOPES } = await import('../src/mcp/context')
-    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
-    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
+    const { Client } = await import('@modelcontextprotocol/client')
+    const { InMemoryTransport } = await import('@modelcontextprotocol/client')
     const connect = async (requester?: { accountId: number; accountType: 'admin' | 'guest' }) => {
       const mcp = createMcpServer({ scopes: [...ALL_MCP_HTTP_SCOPES], source: 'http', baseUrl: origin, ...(requester ? { requester } : {}) })
       const client = new Client({ name: 'audio-edit-test', version: '1' })
@@ -420,7 +420,11 @@ test('audio workspace: edits, exports, deletion plan and MCP tools', { timeout: 
     }
     type ToolReply = { isError?: boolean; content: Array<{ text: string }> }
     const tool = async (client: Awaited<ReturnType<typeof connect>>, name: string, args: Record<string, unknown>) => {
-      const reply = await client.callTool({ name, arguments: args }) as ToolReply
+      // A tool the caller may not use is not registered, and calling an unknown tool is a protocol error (-32602).
+      const reply = await client.callTool({ name, arguments: args }).catch((error: { code?: number; message?: string }) => {
+        if (error.code !== -32602) throw error
+        return { isError: true, content: [{ text: error.message ?? '' }] }
+      }) as ToolReply
       return { error: reply.isError === true, text: reply.content[0]?.text ?? '', json: () => JSON.parse(reply.content[0].text) }
     }
     const names = async (client: Awaited<ReturnType<typeof connect>>) => (await client.listTools()).tools.map((entry) => entry.name)

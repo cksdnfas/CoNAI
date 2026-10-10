@@ -1,6 +1,5 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { McpServer } from '@modelcontextprotocol/server';
+import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { z } from 'zod';
 import { CHAT_PAGE_KIND_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, CHAT_VISION_BUILTIN_TOOLS, isChatGenerationTool, type McpRequestContext } from './context';
 
@@ -25,7 +24,7 @@ export const TOOL_CATEGORIES: Record<ToolCategoryId, string> = {
   generation: 'Image generation: NovelAI and ComfyUI workflows, servers, routing, generation jobs',
   workflows: 'Graph workflows and workflow definitions: list, inspect, run, export/import, restore',
   prompts: 'Prompts, prompt groups and presets, wildcards and custom dropdown lists, prompt backups',
-  files: 'The private file store: list, read, search, make folders, rename, move, delete',
+  files: 'The private file store: list, search, read, write and edit text documents (Markdown, HTML, txt…), make folders, rename, move, delete',
   posts: 'The posts board: categories, search, read, write posts and comments',
   audio: 'Sound-effect (오디오) workspace: projects, effects (groups), folders (그룹 in the UI), candidates, generation orders, edits, export',
   sprite: 'Sprite workspace: video info, sprite sheet extraction, normalizing, animations, frame downloads',
@@ -74,7 +73,8 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
   const pending: PendingTool[] = [];
   return {
     add(name: string, category: ToolCategoryId, args: unknown[]) {
-      pending.push({ name, category, summary: typeof args[1] === 'string' ? firstSentence(args[1]) : '', args });
+      const description = (args[1] as { description?: unknown } | undefined)?.description;
+      pending.push({ name, category, summary: typeof description === 'string' ? firstSentence(description) : '', args });
     },
     install() {
       if (pending.length < CATALOG_MIN_TOOLS) {
@@ -82,8 +82,8 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
         return;
       }
       const inner = new McpServer({ name: 'conai-catalog', version: '1.0.0' });
-      const innerTool = inner.tool.bind(inner) as (...args: unknown[]) => unknown;
-      for (const tool of pending) innerTool(...tool.args);
+      const innerRegister = inner.registerTool.bind(inner) as (...args: unknown[]) => unknown;
+      for (const tool of pending) innerRegister(...tool.args);
       const byName = new Map(pending.map((tool) => [tool.name, tool]));
       catalogNames.set(server, pending.map((tool) => tool.name));
 
@@ -104,16 +104,16 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
 
       const categories = [...new Set(pending.map((tool) => tool.category))];
       const contents = categories.map((category) => `- ${category}: ${TOOL_CATEGORIES[category]}\n  ${pending.filter((tool) => tool.category === category).map((tool) => tool.name).join(', ')}`).join('\n');
-      registerDirect([CATALOG_OPEN_TOOL, [
+      registerDirect([CATALOG_OPEN_TOOL, { description: [
         'The CoNAI app tools beyond this list, as a table of contents (category: what it covers, then its tools).',
         'Open a category (or name tools) to read their descriptions and input schemas, then call one with run_tool.',
         'A tool named in your instructions or in earlier replies that is not in your tool list is one of these.',
         'Contents:',
         contents,
-      ].join('\n'), {
+      ].join('\n'), inputSchema: z.object({
         category: z.string().optional().describe('A category id from the contents, e.g. "audio"'),
         tools: z.array(z.string()).max(20).optional().describe('Tool names to open instead of (or besides) a category'),
-      }, async ({ category, tools }: { category?: string; tools?: string[] }) => {
+      }) }, async ({ category, tools }: { category?: string; tools?: string[] }) => {
         const wanted = new Set([
           ...(category ? pending.filter((tool) => tool.category === category).map((tool) => tool.name) : []),
           ...(tools ?? []).filter((name) => byName.has(name)),
@@ -124,14 +124,14 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
         return { content: [{ type: 'text' as const, text: JSON.stringify({ tools: opened, call_with: `${CATALOG_RUN_TOOL} {"tool": "<name>", "arguments": {…}}` }) }] };
       }]);
 
-      registerDirect([CATALOG_RUN_TOOL, 'Run one tool from the open_tools contents with its arguments. Open its category first unless you already know its exact input schema.', {
+      registerDirect([CATALOG_RUN_TOOL, { description: 'Run one tool from the open_tools contents with its arguments. Open its category first unless you already know its exact input schema.', inputSchema: z.object({
         tool: z.string().describe('The tool name, e.g. "create_audio_folder"'),
         arguments: z.record(z.string(), z.unknown()).optional().describe('The tool\'s arguments, as its input schema describes'),
-      }, async ({ tool, arguments: args }: { tool: string; arguments?: Record<string, unknown> }, extra: { signal?: AbortSignal }) => {
+      }) }, async ({ tool, arguments: args }: { tool: string; arguments?: Record<string, unknown> }, ctx: { mcpReq?: { signal?: AbortSignal } }) => {
         if (!byName.has(tool)) return errorResult(`Unknown tool: ${tool}. See the contents of ${CATALOG_OPEN_TOOL}.`);
         try {
           const connected = await client();
-          const result = await connected.callTool({ name: tool, arguments: args ?? {} }, undefined, { signal: extra?.signal, timeout: CATALOG_CALL_TIMEOUT_MS });
+          const result = await connected.callTool({ name: tool, arguments: args ?? {} }, { signal: ctx?.mcpReq?.signal, timeout: CATALOG_CALL_TIMEOUT_MS });
           const content = Array.isArray(result.content) ? result.content as Array<{ type?: string; text?: string }> : [];
           // Wrong arguments come back with the tool's schema, so the next call can be right without another lookup.
           if (result.isError && content.some((part) => part.type === 'text' && part.text?.includes('Input validation error'))) {

@@ -41,8 +41,8 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
   const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
   const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
   const { openChatMcpBridge } = await import('../src/services/codex-chat/chatMcpBridge')
-  const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
-  const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
+  const { Client } = await import('@modelcontextprotocol/client')
+  const { InMemoryTransport } = await import('@modelcontextprotocol/client')
 
   ExternalApiProvider.create({ provider_name: 'conn', display_name: 'Conn', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
   const profile = ChatProfileStore.create({ name: 'Catalog', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: [...CHAT_SCOPES] })

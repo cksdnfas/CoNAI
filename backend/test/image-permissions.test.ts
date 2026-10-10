@@ -268,8 +268,8 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     assert.equal(await status(`/api/generation-history/${own}`, accountId), 200)
     for (const suffix of ['', '/file', '/thumbnail', '/image']) assert.equal(await status(`/api/generation-history/${other}${suffix}`, accountId), 403, suffix)
     const { createMcpServer } = await import('../src/mcp/server')
-    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
-    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
+    const { Client } = await import('@modelcontextprotocol/client')
+    const { InMemoryTransport } = await import('@modelcontextprotocol/client')
     const connect = async () => {
       const server = createMcpServer({ scopes: ['read', 'organize', 'generate'], source: 'http', requester: { accountId, accountType: 'admin' } })
       const connected = new Client({ name: 'permission-regression', version: '1' })
@@ -278,21 +278,23 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
       return { server, connected }
     }
     let { server: mcp, connected: client } = await connect()
+    // A refused call is either a tool error or, for a tool the caller may not use at all (not registered), protocol error -32602.
+    const refused = (call: Promise<{ isError?: unknown }>) => call.then((result) => result.isError === true, (error: { code?: number }) => { if (error.code !== -32602) throw error; return true })
     try {
-      assert.equal((await client.callTool({ name: 'list_prompt_presets', arguments: {} })).isError, true)
-      assert.equal((await client.callTool({ name: 'submit_generation_job', arguments: { service_type: 'codex', request_payload: { prompt: 'must not execute' } } })).isError, true)
+      assert.equal(await refused(client.callTool({ name: 'list_prompt_presets', arguments: {} })), true)
+      assert.equal(await refused(client.callTool({ name: 'submit_generation_job', arguments: { service_type: 'codex', request_payload: { prompt: 'must not execute' } } })), true)
       AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view', 'prompts.view'] })
       await client.close(); await mcp.close()
       ;({ server: mcp, connected: client } = await connect())
       assert.notEqual((await client.callTool({ name: 'list_prompt_presets', arguments: {} })).isError, true)
-      assert.equal((await client.callTool({ name: 'create_prompt_preset', arguments: { name: 'denied', items: [{ description: 'denied', value: 'denied' }] } })).isError, true)
+      assert.equal(await refused(client.callTool({ name: 'create_prompt_preset', arguments: { name: 'denied', items: [{ description: 'denied', value: 'denied' }] } })), true)
       const { PromptPresetModel } = await import('../src/models/PromptPreset')
       assert.equal(PromptPresetModel.findByName('denied'), undefined)
       const result = await client.callTool({ name: 'get_generation_history', arguments: { history_id: other } })
       assert.deepEqual(JSON.parse((result.content as Array<{ text: string }>)[0].text).records, [])
-      assert.equal((await client.callTool({ name: 'resolve_image_group_path', arguments: { group_path: 'must-not-create', create: true } })).isError, true)
+      assert.equal(await refused(client.callTool({ name: 'resolve_image_group_path', arguments: { group_path: 'must-not-create', create: true } })), true)
       AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['chat.use'] })
-      assert.equal((await client.callTool({ name: 'get_image_metadata', arguments: { composite_hash: 'a'.repeat(48) } })).isError, true)
+      assert.equal(await refused(client.callTool({ name: 'get_image_metadata', arguments: { composite_hash: 'a'.repeat(48) } })), true)
     } finally {
       await client.close()
       await mcp.close()

@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { getUserSettingsDb } from '../../database/userSettingsDb';
 import { ChatProfileStore } from '../../services/codex-chat/chatProfiles';
@@ -55,13 +55,12 @@ export function registerChatRoomTools(server: McpServer, context: McpRequestCont
 }
 
 function registerChatReplyTo(server: McpServer, context: McpRequestContext): void {
-  server.tool(
+  server.registerTool(
     'chat_reply_to',
-    'Set the quote and recipients of the reply you are writing. Omit message_id to keep its current quote. to contains exact member profile IDs, "user" to finish by addressing the human, or "room" for an announcement without waking anyone. Replaces an earlier recipient selection. The app displays the quote; do not repeat it in your text. Your sender and room are server-controlled.',
-    {
+    { description: 'Set the quote and recipients of the reply you are writing. Omit message_id to keep its current quote. to contains exact member profile IDs, "user" to finish by addressing the human, or "room" for an announcement without waking anyone. Replaces an earlier recipient selection. The app displays the quote; do not repeat it in your text. Your sender and room are server-controlled.', inputSchema: z.object({
       message_id: z.number().int().positive().optional(),
       to: z.array(z.union([z.number().int().positive(), z.literal('user'), z.literal('room')])).min(1).max(6).optional(),
-    },
+    }) },
     async ({ message_id, to }) => {
       try {
         if (message_id === undefined && to === undefined) throw new Error('Choose a message_id or to recipient.');
@@ -74,13 +73,12 @@ function registerChatReplyTo(server: McpServer, context: McpRequestContext): voi
 }
 
 function registerRoomTools(server: McpServer, context: McpRequestContext): void {
-  server.tool(
+  server.registerTool(
     'room_call_member',
-    'Ask other members of the group chat room you are in to answer right after you. Use their exact names from the room header (not translated). They write their own answers; do not write them yourself.',
-    {
+    { description: 'Ask other members of the group chat room you are in to answer right after you. Use their exact names from the room header (not translated). They write their own answers; do not write them yourself.', inputSchema: z.object({
       room_id: z.number().int().positive().describe('Group room id from the room header'),
       names: z.array(z.string().trim().min(1).max(60)).min(1).max(6).describe('Member names exactly as listed in the room header'),
-    },
+    }) },
     async ({ room_id, names }) => {
       try {
         const thread = requireRoom(context, room_id);
@@ -99,14 +97,13 @@ function registerRoomTools(server: McpServer, context: McpRequestContext): void 
     },
   );
 
-  server.tool(
+  server.registerTool(
     'room_history_search',
-    'Search earlier messages of the group chat room you are in (the room id is given in the room header). Returns message ids, speakers and excerpts, newest first.',
-    {
+    { description: 'Search earlier messages of the group chat room you are in (the room id is given in the room header). Returns message ids, speakers and excerpts, newest first.', inputSchema: z.object({
       room_id: z.number().int().positive().describe('Group room id from the room header'),
       query: z.string().trim().min(1).max(200).describe('Text to find (plain substring, case-insensitive)'),
       limit: z.number().int().min(1).max(20).optional().describe('Max results (default 10)'),
-    },
+    }) },
     async ({ room_id, query, limit }) => {
       try {
         const userName = userPersonaForThread(requireRoom(context, room_id)).name;
@@ -123,15 +120,14 @@ function registerRoomTools(server: McpServer, context: McpRequestContext): void 
     },
   );
 
-  server.tool(
+  server.registerTool(
     'room_history_read',
-    'Read the group chat room conversation around one message id (from room_history_search, or the oldest one you were given), oldest first.',
-    {
+    { description: 'Read the group chat room conversation around one message id (from room_history_search, or the oldest one you were given), oldest first.', inputSchema: z.object({
       room_id: z.number().int().positive().describe('Group room id from the room header'),
       message_id: z.number().int().positive().describe('Message id to read around'),
       before: z.number().int().min(0).max(30).optional().describe('Messages before it (default 10)'),
       after: z.number().int().min(0).max(30).optional().describe('Messages after it (default 0)'),
-    },
+    }) },
     async ({ room_id, message_id, before, after }) => {
       try {
         const userName = userPersonaForThread(requireRoom(context, room_id)).name;

@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { McpServer } from '@modelcontextprotocol/server'
 import { z } from 'zod'
 import { GraphExecutionModel } from '../../models/GraphExecution'
 import { GraphExecutionArtifactModel } from '../../models/GraphExecutionArtifact'
@@ -117,10 +117,9 @@ async function compactGraphExecution(executionId: number, context: McpRequestCon
 }
 
 export function registerGraphWorkflowTools(server: McpServer, context: McpRequestContext): void {
-  server.tool(
+  server.registerTool(
     'list_graph_workflows',
-    'List user-built workflows from the /generation?tab=workflows workspace.',
-    { active_only: z.boolean().default(false).describe('Show only active graph workflows') },
+    { description: 'List user-built workflows from the /generation?tab=workflows workspace.', inputSchema: z.object({ active_only: z.boolean().default(false).describe('Show only active graph workflows') }) },
     async ({ active_only }) => {
       try {
         return {
@@ -132,10 +131,9 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
     },
   )
 
-  server.tool(
+  server.registerTool(
     'get_graph_workflow_details',
-    'Get the explicit MCP input schema for a user-built workflow from /generation?tab=workflows.',
-    { workflow_id: z.number().int().describe('Graph workflow ID') },
+    { description: 'Get the explicit MCP input schema for a user-built workflow from /generation?tab=workflows.', inputSchema: z.object({ workflow_id: z.number().int().describe('Graph workflow ID') }) },
     async ({ workflow_id }) => {
       try {
         const workflow = GraphWorkflowModel.findById(workflow_id)
@@ -166,15 +164,14 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
     },
   )
 
-  server.tool(
+  server.registerTool(
     'execute_graph_workflow',
-    'Execute a user-built workflow synchronously. Works over both stateless HTTP MCP and standalone stdio MCP.',
-    {
+    { description: 'Execute a user-built workflow synchronously. Works over both stateless HTTP MCP and standalone stdio MCP.', inputSchema: z.object({
       workflow_id: z.number().int().describe('Graph workflow ID'),
       input_values: z.record(z.string(), z.unknown()).default({}).describe('Values keyed by exposed input ID. Omitted inputs use workflow defaults.'),
       group_id: z.number().int().positive().optional().describe('Default image group for final results. A final-result node with its own group path overrides it.'),
       group_path: mcpGroupPathSchema,
-    },
+    }) },
     async ({ workflow_id, input_values, group_id, group_path }) => {
       try {
         const workflow = GraphWorkflowModel.findById(workflow_id)
@@ -192,10 +189,9 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
     },
   )
 
-  server.tool(
+  server.registerTool(
     'get_graph_workflow_execution',
-    'Get status, final results, and artifacts for a graph workflow execution.',
-    { execution_id: z.number().int().describe('Graph workflow execution ID') },
+    { description: 'Get status, final results, and artifacts for a graph workflow execution.', inputSchema: z.object({ execution_id: z.number().int().describe('Graph workflow execution ID') }) },
     async ({ execution_id }) => {
       try {
         const result = await compactGraphExecution(execution_id, context)

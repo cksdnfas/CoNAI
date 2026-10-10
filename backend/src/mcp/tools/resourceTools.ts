@@ -1,14 +1,13 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { CustomDropdownListModel } from '../../models/CustomDropdownList';
 import { WildcardModel, WildcardItemModel } from '../../models/Wildcard';
 
 export function registerResourceTools(server: McpServer): void {
   // 커스텀 드롭다운 목록 조회 (경량)
-  server.tool(
+  server.registerTool(
     'list_custom_dropdown_lists',
-    'List all custom dropdown lists (e.g. LoRA models, preprocessors, checkpoints). Returns list names and item counts without the actual items.',
-    {},
+    { description: 'List all custom dropdown lists (e.g. LoRA models, preprocessors, checkpoints). Returns list names and item counts without the actual items.', inputSchema: z.object({}) },
     async () => {
       try {
         const lists = CustomDropdownListModel.findAll();
@@ -38,15 +37,14 @@ export function registerResourceTools(server: McpServer): void {
   );
 
   // 커스텀 드롭다운 아이템 검색
-  server.tool(
+  server.registerTool(
     'search_custom_dropdown_items',
-    'Search items within a specific custom dropdown list by keyword. Useful for finding specific LoRA models, preprocessors, checkpoints, etc.',
-    {
+    { description: 'Search items within a specific custom dropdown list by keyword. Useful for finding specific LoRA models, preprocessors, checkpoints, etc.', inputSchema: z.object({
       list_name: z.string().describe('Name of the dropdown list to search in'),
       query: z.string().optional().describe('Search keyword to filter items (case-insensitive). If omitted, returns all items with pagination.'),
       page: z.number().int().min(1).default(1).describe('Page number'),
       limit: z.number().int().min(1).max(200).default(50).describe('Results per page'),
-    },
+    }) },
     async ({ list_name, query, page, limit }) => {
       try {
         const list = CustomDropdownListModel.findByName(list_name);
@@ -91,10 +89,9 @@ export function registerResourceTools(server: McpServer): void {
   );
 
   // 와일드카드 검색
-  server.tool(
+  server.registerTool(
     'search_wildcards',
-    'Search wildcards by name, browse hierarchy, or list root wildcards. Wildcards are prompt building blocks with General/ComfyUI/NAI variants.',
-    {
+    { description: 'Search wildcards by name, browse hierarchy, or list root wildcards. Wildcards are prompt building blocks with General/ComfyUI/NAI variants.', inputSchema: z.object({
       query: z.string().optional().describe('Search keyword for wildcard name (partial match)'),
       parent_id: z.number().int().optional().describe('Filter by parent wildcard ID (for hierarchy browsing)'),
       roots_only: z.boolean().default(false).describe('Only return root-level wildcards (no parent)'),
@@ -102,7 +99,7 @@ export function registerResourceTools(server: McpServer): void {
       tool: z.enum(['general', 'comfyui', 'nai']).optional().describe('When include_items=true, only return items for this tool'),
       page: z.number().int().min(1).default(1).describe('Page number'),
       limit: z.number().int().min(1).max(200).default(50).describe('Results per page'),
-    },
+    }) },
     async (params) => {
       try {
         let wildcards: any[];

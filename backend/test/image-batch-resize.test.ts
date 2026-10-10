@@ -164,8 +164,8 @@ test('image batch resize: parity, job, permissions and MCP', { timeout: 240000 }
 
   await t.test('resize_images MCP tool: listed for image editors who can upload, returns new hashes', async () => {
     const { createMcpServer } = await import('../src/mcp/server')
-    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
-    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
+    const { Client } = await import('@modelcontextprotocol/client')
+    const { InMemoryTransport } = await import('@modelcontextprotocol/client')
     const connect = async (accountId: number) => {
       const mcp = createMcpServer({ scopes: ['read', 'generate'], source: 'http', baseUrl: origin, requester: { accountId, accountType: accountId === adminId ? 'admin' : 'guest' } })
       const client = new Client({ name: 'resize-test', version: '1' })

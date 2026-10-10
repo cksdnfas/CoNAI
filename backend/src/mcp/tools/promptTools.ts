@@ -1,21 +1,20 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { PromptCollectionModel } from '../../models/PromptCollection';
 import { PromptGroupModel } from '../../models/PromptGroup';
 
 export function registerPromptTools(server: McpServer): void {
   // 프롬프트 검색
-  server.tool(
+  server.registerTool(
     'search_prompts',
-    'Search prompts stored in the system. Supports positive, negative, and auto-generated prompt types.',
-    {
+    { description: 'Search prompts stored in the system. Supports positive, negative, and auto-generated prompt types.', inputSchema: z.object({
       query: z.string().describe('Search keyword'),
       type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt type to search'),
       page: z.number().int().min(1).default(1).describe('Page number'),
       limit: z.number().int().min(1).max(100).default(20).describe('Results per page'),
       sort_by: z.enum(['usage_count', 'created_at', 'prompt']).default('usage_count').describe('Sort field'),
       sort_order: z.enum(['ASC', 'DESC']).default('DESC').describe('Sort order'),
-    },
+    }) },
     async ({ query, type, page, limit, sort_by, sort_order }) => {
       try {
         let result;
@@ -52,12 +51,11 @@ export function registerPromptTools(server: McpServer): void {
   );
 
   // 가장 많이 사용된 프롬프트 조회
-  server.tool(
+  server.registerTool(
     'get_most_used_prompts',
-    'Get the most frequently used prompts, sorted by usage count.',
-    {
+    { description: 'Get the most frequently used prompts, sorted by usage count.', inputSchema: z.object({
       limit: z.number().int().min(1).max(100).default(20).describe('Number of prompts to return'),
-    },
+    }) },
     async ({ limit }) => {
       try {
         const prompts = PromptCollectionModel.getMostUsedPrompts(limit);
@@ -78,13 +76,12 @@ export function registerPromptTools(server: McpServer): void {
   );
 
   // 프롬프트 그룹 목록 조회
-  server.tool(
+  server.registerTool(
     'list_prompt_groups',
-    'List all prompt groups with prompt counts. Supports positive, negative, and auto-generated prompt types.',
-    {
+    { description: 'List all prompt groups with prompt counts. Supports positive, negative, and auto-generated prompt types.', inputSchema: z.object({
       type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt group type'),
       include_hidden: z.boolean().default(false).describe('Include hidden groups'),
-    },
+    }) },
     async ({ type, include_hidden }) => {
       try {
         const groups = PromptGroupModel.findAllWithCounts(include_hidden, type);

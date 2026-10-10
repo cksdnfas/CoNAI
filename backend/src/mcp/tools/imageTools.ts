@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { ImageSearchModel } from '../../models/Image/ImageSearchModel';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
@@ -23,10 +23,9 @@ function sanitizeMetadata(metadata: Record<string, unknown>, includeHeavyFields:
 
 export function registerImageTools(server: McpServer, context: McpRequestContext): void {
   // 이미지 고급 검색
-  server.tool(
+  server.registerTool(
     'search_images',
-    'Search the media library (images, videos and animated GIFs) by prompt text, AI tool, model, dimensions, date range, group or media type. Each result says its media_type.',
-    {
+    { description: 'Search the media library (images, videos and animated GIFs) by prompt text, AI tool, model, dimensions, date range, group or media type. Each result says its media_type.', inputSchema: z.object({
       search_text: z.string().optional().describe('Search in positive prompts'),
       negative_text: z.string().optional().describe('Search in negative prompts'),
       ai_tool: z.string().optional().describe('Filter by AI tool (e.g., "ComfyUI", "NovelAI", "Stable Diffusion")'),
@@ -43,7 +42,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
       limit: z.number().int().min(1).max(100).default(20).describe('Results per page'),
       sort_by: z.enum(['upload_date', 'filename', 'file_size', 'width', 'height']).default('upload_date').describe('Sort field'),
       sort_order: z.enum(['ASC', 'DESC']).default('DESC').describe('Sort order'),
-    },
+    }) },
     async (params) => {
       try {
         const { page, limit, sort_by, sort_order, ...searchParams } = params;
@@ -96,12 +95,11 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
     }
   );
 
-  server.tool(
+  server.registerTool(
     'get_media_download',
-    'Download links for library media originals (saved sprite sheets, animations, any image or video) by composite hash. Links expire after about 15 minutes; call again for fresh ones.',
-    {
+    { description: 'Download links for library media originals (saved sprite sheets, animations, any image or video) by composite hash. Links expire after about 15 minutes; call again for fresh ones.', inputSchema: z.object({
       composite_hashes: z.array(z.string().trim().regex(/^(?:[0-9a-f]{48}|[0-9a-f]{32})$/, 'composite_hash must be a library media hash')).min(1).max(50),
-    },
+    }) },
     async ({ composite_hashes }) => {
       try {
         if (!context.baseUrl) throw new Error('Artifact downloads require the Streamable HTTP transport');
@@ -121,13 +119,12 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   );
 
   // 이미지 메타데이터 상세 조회
-  server.tool(
+  server.registerTool(
     'get_image_metadata',
-    'Get detailed metadata for a specific image by its composite hash.',
-    {
+    { description: 'Get detailed metadata for a specific image by its composite hash.', inputSchema: z.object({
       composite_hash: z.string().describe('The 48-character composite hash of the image'),
       include_heavy_fields: z.boolean().default(false).describe('Include histogram and raw metadata fields'),
-    },
+    }) },
     async ({ composite_hash, include_heavy_fields }) => {
       try {
         const metadata = MediaMetadataModel.findByHash(composite_hash);
@@ -155,10 +152,9 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   );
 
   // 이미지 생성 이력 조회
-  server.tool(
+  server.registerTool(
     'get_generation_history',
-    'Get image generation history records. Supports filtering by service type (comfyui/novelai) and generation status.',
-    {
+    { description: 'Get image generation history records. Supports filtering by service type (comfyui/novelai) and generation status.', inputSchema: z.object({
       service_type: z.enum(['comfyui', 'novelai', 'codex']).optional().describe('Filter by service type'),
       generation_status: z.enum(['pending', 'processing', 'completed', 'failed']).optional().describe('Filter by generation status'),
       history_id: z.number().int().positive().optional().describe('Return one history record by ID'),
@@ -168,7 +164,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
       created_before: z.string().optional().describe('Filter by inclusive creation timestamp'),
       limit: z.number().int().min(1).max(100).default(20).describe('Number of records to return'),
       offset: z.number().int().min(0).default(0).describe('Offset for pagination'),
-    },
+    }) },
     async ({ service_type, generation_status, history_id, workflow_id, workflow_name, created_after, created_before, limit, offset }) => {
       try {
         const filters: any = { limit, offset };
@@ -241,10 +237,9 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   );
 
   // 자동 태그 기반 이미지 검색
-  server.tool(
+  server.registerTool(
     'search_images_by_tags',
-    'Search images by auto-generated tags (WD Tagger). Supports tag name search, character search, rating filter, and rating score range.',
-    {
+    { description: 'Search images by auto-generated tags (WD Tagger). Supports tag name search, character search, rating filter, and rating score range.', inputSchema: z.object({
       tags: z.string().optional().describe('Comma-separated tag names to search (e.g. "long_hair, blue_eyes, school_uniform")'),
       min_tag_score: z.number().min(0).max(1).optional().describe('Minimum confidence score for tag matching (0-1)'),
       character: z.string().optional().describe('Character name to search for'),
@@ -259,7 +254,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
       limit: z.number().int().min(1).max(100).default(20).describe('Results per page'),
       sort_by: z.enum(['upload_date', 'filename', 'file_size', 'width', 'height']).default('upload_date').describe('Sort field'),
       sort_order: z.enum(['ASC', 'DESC']).default('DESC').describe('Sort order'),
-    },
+    }) },
     async (params) => {
       try {
         // 평면 파라미터 → AutoTagSearchParams 변환

@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { isChatMcpSource, type McpRequestContext } from '../context';
 import { McpArtifactService } from '../../services/mcpArtifactService';
@@ -72,7 +72,7 @@ async function describeExportJob(context: McpRequestContext, jobId: string) {
 export function registerAudioEditExportTools(server: McpServer, context: McpRequestContext): void {
   const accountId = context.requester?.accountId ?? null;
 
-  server.tool('edit_audio_candidate', 'Save a non-destructive edit of an audio candidate as a new candidate (origin "edited", child of the source, review pending). Trim uses source seconds, fades the result after speed. The source file is never changed.', {
+  server.registerTool('edit_audio_candidate', { description: 'Save a non-destructive edit of an audio candidate as a new candidate (origin "edited", child of the source, review pending). Trim uses source seconds, fades the result after speed. The source file is never changed.', inputSchema: z.object({
     candidate_id: id,
     end: z.number().positive().describe('Trim end in source seconds'),
     start: z.number().min(0).optional().describe('Trim start in source seconds (default 0)'),
@@ -82,19 +82,19 @@ export function registerAudioEditExportTools(server: McpServer, context: McpRequ
     fade_in: z.number().min(0).max(5).optional().describe('Seconds (default 0.005)'),
     fade_out: z.number().min(0).max(5).optional().describe('Seconds (default 0.01)'),
     request_key: z.string().min(8).max(128).optional().describe('Repeat-safe key: the same key returns the edit already saved'),
-  }, ({ candidate_id, request_key, ...params }) => run(async () => candidateSummary(await saveAudioEdit(candidate_id, params, { accountId, requestKey: request_key }))));
+  }) }, ({ candidate_id, request_key, ...params }) => run(async () => candidateSummary(await saveAudioEdit(candidate_id, params, { accountId, requestKey: request_key }))));
 
-  server.tool('delete_unselected_audio_candidates', 'Move unselected candidates of one audio group to the trash (restorable). Selected takes are never deleted: if any listed candidate is selected the whole call fails.', {
+  server.registerTool('delete_unselected_audio_candidates', { description: 'Move unselected candidates of one audio group to the trash (restorable). Selected takes are never deleted: if any listed candidate is selected the whole call fails.', inputSchema: z.object({
     group_id: id,
     candidate_ids: z.array(id).min(1).max(500),
-  }, ({ group_id, candidate_ids }) => run(() => deleteAudioGroupCandidates(group_id, candidate_ids, false)));
+  }) }, ({ group_id, candidate_ids }) => run(() => deleteAudioGroupCandidates(group_id, candidate_ids, false)));
 
-  server.tool('export_audio_selected', `Export the selected takes of an audio project (or one group) with the group label file names: one file stays a WAV/OGG, several become a ZIP. Options default to the saved export settings. More than ${AUDIO_EXPORT_INLINE_MAX_FILES} files run as a background job; the reply then carries export_job_id for get_audio_download.`, {
+  server.registerTool('export_audio_selected', { description: `Export the selected takes of an audio project (or one group) with the group label file names: one file stays a WAV/OGG, several become a ZIP. Options default to the saved export settings. More than ${AUDIO_EXPORT_INLINE_MAX_FILES} files run as a background job; the reply then carries export_job_id for get_audio_download.`, inputSchema: z.object({
     project_id: id,
     audio_group_id: id.optional().describe('Only this group of the project'),
     ...exportOptionShape,
     wait_seconds: z.number().min(0).max(120).optional().describe('Seconds to wait for a background export (default 60; chat max 30)'),
-  }, ({ project_id, audio_group_id, wait_seconds, ...options }) => run(async () => {
+  }) }, ({ project_id, audio_group_id, wait_seconds, ...options }) => run(async () => {
     const resolved = resolveAudioExportOptions(options);
     const plan = audioExportPlan(project_id, audio_group_id ?? null, resolved);
     const manifest = { project_name: plan.project_name, count: plan.count, files: plan.files.map(({ id: candidateId, group_name, filename }) => ({ candidate_id: candidateId, group_name, filename })), options: resolved };
@@ -107,10 +107,10 @@ export function registerAudioEditExportTools(server: McpServer, context: McpRequ
     return { manifest, ...(await describeExportJob(context, job.jobId)) };
   }));
 
-  server.tool('get_audio_download', 'Get a download for one audio candidate\'s stored file (candidate_id), or the status and download of a background export (export_job_id).', {
+  server.registerTool('get_audio_download', { description: 'Get a download for one audio candidate\'s stored file (candidate_id), or the status and download of a background export (export_job_id).', inputSchema: z.object({
     candidate_id: id.optional(),
     export_job_id: id.optional(),
-  }, ({ candidate_id, export_job_id }) => run(async () => {
+  }) }, ({ candidate_id, export_job_id }) => run(async () => {
     if (Boolean(candidate_id) === Boolean(export_job_id)) throw new AudioServiceError('candidate_id 또는 export_job_id 중 하나만 줘.');
     if (export_job_id) return describeExportJob(context, export_job_id);
     if (!context.baseUrl) return { download_path: `/api/audio/candidates/${candidate_id}/file?download=1` };

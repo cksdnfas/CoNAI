@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { createMcpHandler } from '@modelcontextprotocol/server';
+import { toNodeHandler } from '@modelcontextprotocol/node';
 import { createMcpServer } from './server';
+import type { McpRequestContext } from './context';
 import { validateMcpRequestBody } from './requestSecurity';
 import type { McpResponseLocals } from './httpAccess';
 import { appendMcpAuditRecord } from '../services/mcpAuditService';
@@ -34,13 +36,14 @@ router.use('/mcp', validateMcpRequestBody);
 /**
  * POST /mcp
  * MCP Streamable HTTP 엔드포인트 (Stateless)
- * 각 요청마다 새로운 McpServer + Transport 인스턴스를 생성한다.
+ * 2026-07-28 클라이언트(요청별 `_meta` 협상)와 2025년 클라이언트(initialize 핸드셰이크)를 같은 팩토리로 받는다.
+ * 각 요청마다 새로운 McpServer 인스턴스를 생성한다.
  */
 router.post('/mcp', async (req: Request, res: Response) => {
   const auth = (res.locals as McpResponseLocals).mcpAuth;
   try {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const server = createMcpServer({
+    const context: McpRequestContext = {
       scopes: auth?.scopes ?? [],
       keyId: auth?.keyId,
       keyName: auth?.keyName,
@@ -51,18 +54,14 @@ router.post('/mcp', async (req: Request, res: Response) => {
       generationPresetIds: auth?.generationPresetIds ?? [],
       generationPresetSnapshot: auth?.generationPresetSnapshot,
       chatContext: auth?.chatContext,
-    });
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined, // Stateless 모드
-    });
-
-    res.on('close', () => {
-      transport.close();
-      server.close();
+    };
+    const handler = createMcpHandler(() => createMcpServer(context), {
+      onerror: (error) => console.error('[MCP] Request error:', error.message),
     });
 
-    await server.connect(transport);
-    await transport.handleRequest(req, res, req.body);
+    res.on('close', () => { void handler.close(); });
+
+    await toNodeHandler(handler)(req, res, req.body);
   } catch (error) {
     console.error('[MCP] Error handling request:', error);
     if (!res.headersSent) {

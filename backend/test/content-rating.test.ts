@@ -151,8 +151,8 @@ test('content rating ceilings: what a model may be shown', { timeout: 60000 }, a
 
   await t.test('download links follow the ceiling too (a model could fetch and look at the file)', async () => {
     const { createMcpServer } = await import('../src/mcp/server')
-    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
-    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
+    const { Client } = await import('@modelcontextprotocol/client')
+    const { InMemoryTransport } = await import('@modelcontextprotocol/client')
     const download = async (contentRatingLimit: number | null) => {
       const server = createMcpServer({ scopes: ['read'], requester: admin, baseUrl: 'http://127.0.0.1:1', contentRatingLimit })
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()

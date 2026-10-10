@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { WorkflowModel } from '../../models/Workflow';
 import { ComfyUIServerModel } from '../../models/ComfyUIServer';
@@ -62,13 +62,12 @@ async function replaceOutputPathsWithArtifacts(result: Awaited<ReturnType<typeof
 
 function registerWorkflowListTools(server: McpServer): void {
   // 워크플로우 목록 조회
-  server.tool(
+  server.registerTool(
     'list_workflows',
-    'List the ComfyUI image workflows registered in the system. Audio workflows are ordered from the audio workspace (list_audio_workflows / order_audio); pass kind="audio" or "all" to see them here.',
-    {
+    { description: 'List the ComfyUI image workflows registered in the system. Audio workflows are ordered from the audio workspace (list_audio_workflows / order_audio); pass kind="audio" or "all" to see them here.', inputSchema: z.object({
       active_only: z.boolean().default(false).describe('Show only active workflows'),
       kind: z.enum(['image', 'audio', 'all']).default('image').describe('Which workflows to list: image (default), audio, or all'),
-    },
+    }) },
     async ({ active_only, kind }) => {
       try {
         const workflows = WorkflowModel.findAll(active_only, kind === 'all' ? undefined : kind);
@@ -109,12 +108,11 @@ function registerWorkflowListTools(server: McpServer): void {
   );
 
   // ComfyUI 서버 목록 조회
-  server.tool(
+  server.registerTool(
     'list_comfyui_servers',
-    'List all configured ComfyUI servers, including backend type, capacity, active state, and routing_tags. Use get_generation_routing_options for effective workflow-scoped routing rules.',
-    {
+    { description: 'List all configured ComfyUI servers, including backend type, capacity, active state, and routing_tags. Use get_generation_routing_options for effective workflow-scoped routing rules.', inputSchema: z.object({
       active_only: z.boolean().default(false).describe('Show only active servers'),
-    },
+    }) },
     async ({ active_only }) => {
       try {
         const servers = ComfyUIServerModel.findAll(active_only);
@@ -227,10 +225,9 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
     group_path: mcpGroupPathSchema,
   };
 
-  server.tool(
+  server.registerTool(
     'generate_comfyui',
-    'Compatibility synchronous ComfyUI generation. Prefer submit_generation_job for durable work that may exceed the HTTP connection lifetime.',
-    inputSchema,
+    { description: 'Compatibility synchronous ComfyUI generation. Prefer submit_generation_job for durable work that may exceed the HTTP connection lifetime.', inputSchema: z.object(inputSchema) },
     async ({ workflow_id, server_id, inputs, prompt_data, group_id, group_path }) => {
       try {
         const workflow = resolveUsableWorkflow(workflow_id);
@@ -255,16 +252,15 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
     },
   );
 
-  server.tool(
+  server.registerTool(
     'generate_comfyui_all_servers',
-    'Compatibility synchronous generation on all active ComfyUI servers. Prefer submit_generation_job for durable work.',
-    {
+    { description: 'Compatibility synchronous generation on all active ComfyUI servers. Prefer submit_generation_job for durable work.', inputSchema: z.object({
       workflow_id: z.number().int().describe('Workflow ID to use'),
       inputs: z.record(z.string(), z.unknown()).optional().describe('Workflow inputs keyed by marked field ID.'),
       prompt_data: z.record(z.string(), z.unknown()).optional().describe('Legacy alias for inputs.'),
       group_id: z.number().int().optional().describe('Optional group ID to assign generated outputs to'),
       group_path: mcpGroupPathSchema,
-    },
+    }) },
     async ({ workflow_id, inputs, prompt_data, group_id, group_path }) => {
       try {
         const workflow = resolveUsableWorkflow(workflow_id);
@@ -320,12 +316,11 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
 
 function registerWorkflowDetailTools(server: McpServer): void {
   // 워크플로우 상세 조회
-  server.tool(
+  server.registerTool(
     'get_workflow_details',
-    'Get detailed information about a specific ComfyUI workflow, including its marked fields (parameters required for generation).',
-    {
+    { description: 'Get detailed information about a specific ComfyUI workflow, including its marked fields (parameters required for generation).', inputSchema: z.object({
       workflow_id: z.number().int().describe('Workflow ID to get details for'),
-    },
+    }) },
     async ({ workflow_id }) => {
       try {
         const workflow = WorkflowModel.findByIdIncludingDeleted(workflow_id);

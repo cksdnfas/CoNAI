@@ -1,13 +1,12 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { WorkflowModel } from '../../models/Workflow';
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
 
 export function registerWorkflowTransferTools(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     'export_workflow_definition',
-    'Export one workflow as a portable CoNAI definition.',
-    { workflow_id: z.number().int().positive() },
+    { description: 'Export one workflow as a portable CoNAI definition.', inputSchema: z.object({ workflow_id: z.number().int().positive() }) },
     async ({ workflow_id }) => {
       const workflow = WorkflowModel.findByIdIncludingDeleted(workflow_id);
       if (!workflow) {
@@ -21,10 +20,9 @@ export function registerWorkflowTransferTools(server: McpServer): void {
     },
   );
 
-  server.tool(
+  server.registerTool(
     'import_workflow_definition',
-    'Import a portable CoNAI workflow definition.',
-    { workflow: z.record(z.string(), z.unknown()) },
+    { description: 'Import a portable CoNAI workflow definition.', inputSchema: z.object({ workflow: z.record(z.string(), z.unknown()) }) },
     async ({ workflow }) => {
       try {
         const name = typeof workflow.name === 'string' ? workflow.name.trim() : '';
@@ -56,10 +54,9 @@ export function registerWorkflowTransferTools(server: McpServer): void {
     },
   );
 
-  server.tool(
+  server.registerTool(
     'restore_deleted_workflow',
-    'Restore a soft-deleted workflow. Historical hard-deleted workflows cannot be restored without an exported definition.',
-    { workflow_id: z.number().int().positive() },
+    { description: 'Restore a soft-deleted workflow. Historical hard-deleted workflows cannot be restored without an exported definition.', inputSchema: z.object({ workflow_id: z.number().int().positive() }) },
     async ({ workflow_id }) => {
       if (!WorkflowModel.restore(workflow_id)) {
         const reference = HistoryQueryRepository.findWorkflowReference(workflow_id);

@@ -248,8 +248,8 @@ test('sprite REST + MCP: permissions, ownership, library save and artifacts', { 
 
   await t.test('MCP tools: listing follows the account, results carry composite hashes, frames ZIP artifact', async () => {
     const { createMcpServer } = await import('../src/mcp/server')
-    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
-    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
+    const { Client } = await import('@modelcontextprotocol/client')
+    const { InMemoryTransport } = await import('@modelcontextprotocol/client')
     const connect = async (accountId: number, source: 'http' | 'codex-chat' = 'http') => {
       const mcp = createMcpServer({ scopes: ['read', 'generate'], source, baseUrl: origin, requester: { accountId, accountType: accountId === adminId ? 'admin' : 'guest' } })
       const client = new Client({ name: 'sprite-test', version: '1' })

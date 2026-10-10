@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { McpArtifactService } from '../../services/mcpArtifactService';
 import { mediaWithinContextRating } from '../../services/codex-chat/chatContentRating';
@@ -190,10 +190,9 @@ async function startAndWait(context: McpRequestContext, start: () => RuntimeJobR
 }
 
 export function registerSpriteTools(server: McpServer, context: McpRequestContext): void {
-  server.tool(
+  server.registerTool(
     'get_video_info',
-    'Probe a library video (or animated GIF/WebP) for sprite extraction: size, fps, duration, frame count.',
-    { composite_hash: hashSchema },
+    { description: 'Probe a library video (or animated GIF/WebP) for sprite extraction: size, fps, duration, frame count.', inputSchema: z.object({ composite_hash: hashSchema }) },
     async ({ composite_hash }) => {
       try {
         return textResult(await probeLibraryVideo(composite_hash));
@@ -203,10 +202,9 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
     },
   );
 
-  server.tool(
+  server.registerTool(
     'extract_sprite_sheet',
-    'Extract frames from a library video into a sprite sheet: pick frames by interval or count, remove a key-colour background (magenta by default, optional despill), auto crop, resize and lay out. Saves the sheet to the library by default and returns its composite_hash with a download link; long runs return a job_id for get_sprite_job.',
-    {
+    { description: 'Extract frames from a library video into a sprite sheet: pick frames by interval or count, remove a key-colour background (magenta by default, optional despill), auto crop, resize and lay out. Saves the sheet to the library by default and returns its composite_hash with a download link; long runs return a job_id for get_sprite_job.', inputSchema: z.object({
       composite_hash: hashSchema.optional().describe('Library video hash'),
       data_url: z.string().optional().describe('Video as a base64 data URL (video/*, image/gif, image/webp) when it is not in the library yet; it is uploaded to group "스프라이트/원본 영상" first'),
       options: extractOptionsSchema,
@@ -215,7 +213,7 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
       group_id: groupIdSchema,
       group_path: groupPathSchema,
       wait_seconds: waitSchema,
-    },
+    }) },
     async ({ composite_hash, data_url, options, frame_indices, save, group_id, group_path, wait_seconds }) => {
       try {
         if ((composite_hash === undefined) === (data_url === undefined)) throw new Error('Specify exactly one of composite_hash or data_url');
@@ -235,16 +233,15 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
     },
   );
 
-  server.tool(
+  server.registerTool(
     'extract_sprite_sheets_batch',
-    'Extract one sprite sheet per library video with the same options and save each to the library. Returns a job_id; poll get_sprite_job. The finished job lists items in request order, each pairing video_hash (and its library video_name) with sheet_hash and a download link, or with the error; zip_download holds every sheet plus a manifest.',
-    {
+    { description: 'Extract one sprite sheet per library video with the same options and save each to the library. Returns a job_id; poll get_sprite_job. The finished job lists items in request order, each pairing video_hash (and its library video_name) with sheet_hash and a download link, or with the error; zip_download holds every sheet plus a manifest.', inputSchema: z.object({
       composite_hashes: z.array(hashSchema).min(1).max(100).describe('Library video hashes (1..100, no duplicates)'),
       options: extractOptionsSchema,
       group_id: groupIdSchema,
       group_path: groupPathSchema,
       wait_seconds: waitSchema,
-    },
+    }) },
     async ({ composite_hashes, options, group_id, group_path, wait_seconds }) => {
       try {
         const target = groupTarget(group_id, group_path);
@@ -256,10 +253,9 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
     },
   );
 
-  server.tool(
+  server.registerTool(
     'normalize_sprite_sheets',
-    'Normalise library sprite sheets: re-cut each frame to a common cell size around an anchor (bottom center by default) so frames line up. per_sheet sizes each sheet on its own, group gives all sheets one cell size. Saves the sheets to the library by default.',
-    {
+    { description: 'Normalise library sprite sheets: re-cut each frame to a common cell size around an anchor (bottom center by default) so frames line up. per_sheet sizes each sheet on its own, group gives all sheets one cell size. Saves the sheets to the library by default.', inputSchema: z.object({
       sheets: z.array(z.object({
         composite_hash: hashSchema,
         columns: z.number().int().min(1).max(256),
@@ -282,7 +278,7 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
       group_id: groupIdSchema,
       group_path: groupPathSchema,
       wait_seconds: waitSchema,
-    },
+    }) },
     async (args) => {
       try {
         const target = groupTarget(args.group_id, args.group_path);
@@ -320,10 +316,9 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
     },
   );
 
-  server.tool(
+  server.registerTool(
     'create_sprite_animation',
-    'Turn a library sprite sheet into an animation (WebP by default, GIF or MP4) by playing its cells in row order. Saves it to the library by default.',
-    {
+    { description: 'Turn a library sprite sheet into an animation (WebP by default, GIF or MP4) by playing its cells in row order. Saves it to the library by default.', inputSchema: z.object({
       composite_hash: hashSchema.describe('Library sprite sheet hash'),
       columns: z.number().int().min(1).max(256),
       rows: z.number().int().min(1).max(256),
@@ -336,7 +331,7 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
       group_id: groupIdSchema,
       group_path: groupPathSchema,
       wait_seconds: waitSchema,
-    },
+    }) },
     async (args) => {
       try {
         const target = groupTarget(args.group_id, args.group_path);
@@ -357,10 +352,9 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
     },
   );
 
-  server.tool(
+  server.registerTool(
     'get_sprite_job',
-    'Get the status of a sprite job (extract, batch, normalise, animation). A completed job lists its saved composite_hashes. With wait_seconds it waits for the job to finish first (up to 30 in chat), so one call replaces repeated checks.',
-    { job_id: z.string().uuid(), wait_seconds: z.number().min(0).max(120).optional().describe('Seconds to wait for the job to finish before answering (default 0; chat max 30)') },
+    { description: 'Get the status of a sprite job (extract, batch, normalise, animation). A completed job lists its saved composite_hashes. With wait_seconds it waits for the job to finish first (up to 30 in chat), so one call replaces repeated checks.', inputSchema: z.object({ job_id: z.string().uuid(), wait_seconds: z.number().min(0).max(120).optional().describe('Seconds to wait for the job to finish before answering (default 0; chat max 30)') }) },
     async ({ job_id, wait_seconds }) => {
       try {
         const job = requireSpriteJob(job_id, requesterOf(context));
@@ -372,10 +366,9 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
     },
   );
 
-  server.tool(
+  server.registerTool(
     'wait_sprite_job',
-    'Wait up to timeout_seconds for a sprite job to finish, then return its status.',
-    { job_id: z.string().uuid(), timeout_seconds: z.number().min(1).max(600).optional().describe('Default 120') },
+    { description: 'Wait up to timeout_seconds for a sprite job to finish, then return its status.', inputSchema: z.object({ job_id: z.string().uuid(), timeout_seconds: z.number().min(1).max(600).optional().describe('Default 120') }) },
     async ({ job_id, timeout_seconds }) => {
       try {
         requireSpriteJob(job_id, requesterOf(context));
@@ -387,16 +380,15 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
     },
   );
 
-  server.tool(
+  server.registerTool(
     'download_sprite_frames',
-    'Package the frames of a finished extract_sprite_sheet build (build_id, kept about 1 hour) as a ZIP of single-frame images and return a download link.',
-    {
+    { description: 'Package the frames of a finished extract_sprite_sheet build (build_id, kept about 1 hour) as a ZIP of single-frame images and return a download link.', inputSchema: z.object({
       build_id: z.string().uuid(),
       format: z.enum(['png', 'webp']).optional().describe('Frame image format (default png)'),
       quality: z.number().int().min(1).max(100).optional().describe('WebP quality (default 90)'),
       crop: z.object({ x: z.number().int().min(0), y: z.number().int().min(0), width: z.number().int().positive(), height: z.number().int().positive() }).optional()
         .describe('Crop inside each frame cell'),
-    },
+    }) },
     async ({ build_id, format, quality, crop }) => {
       try {
         if (!context.baseUrl) throw new Error('Artifact downloads require the Streamable HTTP transport');

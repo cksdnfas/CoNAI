@@ -12,12 +12,13 @@
  *   claude mcp add --transport stdio conai -- npx tsx backend/src/mcp/stdio.ts
  */
 
+import './stdioConsole';
 import dotenv from 'dotenv';
 import { resolveEnvPath } from '../utils/envPath';
 
 dotenv.config({ path: resolveEnvPath(__dirname), quiet: true });
 
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { createMcpServer } from './server';
 import { initializeDatabase } from '../database/init';
 import { initializeUserSettingsDb } from '../database/userSettingsDb';
@@ -37,11 +38,10 @@ async function main() {
   initializeUserSettingsDb();
   initializeApiGenerationDb();
 
-  // MCP 서버 생성 및 stdio 트랜스포트 연결
-  const server = createMcpServer();
-  const transport = new StdioServerTransport();
-
-  await server.connect(transport);
+  // MCP 서버를 stdio로 제공 (첫 교환으로 2025/2026-07-28 프로토콜을 정하고 연결 동안 인스턴스 하나를 유지)
+  serveStdio(() => createMcpServer(), {
+    onerror: (error) => console.error('[MCP] stdio error:', error.message),
+  });
   // stderr로 출력 (stdout은 JSON-RPC 통신에 사용)
   console.error('[MCP] CoNAI MCP server running on stdio');
 }
