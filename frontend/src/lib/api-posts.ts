@@ -7,6 +7,7 @@ import type {
   PostDetail,
   PostListResult,
   PostMentionableProfile,
+  PostRevision,
   PostsSettings,
   PostStatus,
   PostTag,
@@ -73,6 +74,7 @@ export function listPosts(params: PostListParams = {}) {
 export const getPost = (id: number) => requestApiData<PostDetail>(`/api/posts/${id}`)
 export const createPost = (input: PostInput) => requestApiData<PostDetail>('/api/posts', json('POST', input))
 export const updatePost = (id: number, input: PostInput) => requestApiData<PostDetail>(`/api/posts/${id}`, json('PATCH', input))
+export const listPostRevisions = (id: number) => requestApiData<PostRevision[]>(`/api/posts/${id}/revisions`)
 export const deletePost = (id: number) => requestApiData<void>(`/api/posts/${id}`, json('DELETE'))
 
 export const listPostComments = (postId: number) => requestApiData<PostCommentsResult>(`/api/posts/${postId}/comments`)

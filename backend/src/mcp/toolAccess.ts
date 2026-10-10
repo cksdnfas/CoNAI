@@ -4,6 +4,7 @@ import { isRequesterAdmin, requesterPermissionKeys, requireRequesterPermission }
 import { ChatProfileStore, isVisionTool, profileSeesImages } from '../services/codex-chat/chatProfiles';
 import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess';
 import { requireActiveChatReply } from '../services/codex-chat/chatReplyRegistry';
+import { BoardCallRooms } from '../services/posts/boardCallRooms';
 import { validateMcpToolArguments } from './requestSecurity';
 import { CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, isPageKindTool, type McpRequestContext, type McpRequester } from './context';
 
@@ -58,6 +59,12 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
 };
 
 const PAGE_SAFE_SCOPES = new Set(['read', 'configure']);
+
+/**
+ * A turn answering a posts board call reads posts and comments other people wrote: whatever they ask, it must not
+ * reach the caller's private file store.
+ */
+const BOARD_CALL_BLOCKED_TOOLS = new Set(['list_files', 'get_file_info', 'read_file_text', 'search_files', 'create_file_folder', 'rename_file', 'move_files', 'delete_files']);
 const PAGE_PRIVATE_FILE_TOOLS = new Set(['list_files', 'get_file_info', 'read_file_text', 'search_files']);
 
 /**
@@ -112,6 +119,7 @@ function accountHoldsTool(context: McpRequestContext, toolName: string): boolean
  * explicit errors.
  */
 export function isContextToolAllowed(context: McpRequestContext, toolName: string, accountChecks = true): boolean {
+  if (BOARD_CALL_BLOCKED_TOOLS.has(toolName) && context.chatContext && BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null) return false;
   if (context.requester && !isChatGenerationTool(toolName) && TOOL_FEATURE_PERMISSIONS[toolName] === undefined) return false;
   if (isChatMcpSource(context.source) && CHAT_BLOCKED_TOOLS.has(toolName)) return false;
   if (accountChecks && context.requester && !accountHoldsTool(context, toolName)) return false;

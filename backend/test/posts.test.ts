@@ -113,7 +113,14 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
     const edited = PostStore.update(alice, postId, { body: '안개가 걷혔다.', expectedRevision: 1 })
     assert.equal(edited.revision, 2)
     assert.equal(status(() => PostStore.update(alice, postId, { title: '늦은 수정', expectedRevision: 1 })), 409)
-    assert.deepEqual(PostStore.revisions(alice, postId).map((revision) => revision.revision), [1])
+    const [first] = PostStore.revisions(alice, postId)
+    assert.deepEqual([first.revision, first.editedByType, first.editedByAccountId], [1, 'account', alice.accountId])
+    assert.ok(first.editedBy, 'the editor has a name to show')
+    // Restoring is an ordinary edit back to that version: the version it replaces is kept in turn.
+    const restored = PostStore.update(alice, postId, { title: first.title, body: first.body, expectedRevision: 2 })
+    assert.deepEqual([restored.revision, restored.body], [3, first.body])
+    assert.deepEqual(PostStore.revisions(alice, postId).map((revision) => [revision.revision, revision.body]), [[2, '안개가 걷혔다.'], [1, first.body]])
+    PostStore.update(alice, postId, { body: '안개가 걷혔다.', expectedRevision: 3 })
     assert.equal(PostStore.update(admin, postId, { status: 'hidden' }).status, 'hidden')
     assert.equal(status(() => PostStore.get(bob, postId)), 404, 'hidden posts are gone for others')
     assert.equal(status(() => PostStore.update(alice, postId, { status: 'published' })), 403, 'only admins unhide')
@@ -181,11 +188,26 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
     assert.deepEqual((await PostStore.list(bob, { q: '등대지기' })).items.map((item) => item.id), [postId])
   })
 
+  await t.test('search: words all in one visible comment find its post, and say which comment', async () => {
+    const comment = PostCommentStore.create(bob, postId, { body: '방파제 끝에서 **노을** 봤어' })
+    const found = (await PostStore.list(reader, { q: '방파제 노을' })).items
+    assert.deepEqual(found.map((item) => item.id), [postId])
+    assert.equal(found[0].matchedComment?.id, comment.id)
+    assert.match(found[0].matchedComment?.excerpt ?? '', /방파제 끝에서 노을 봤어/, 'plain text, not Markdown')
+    assert.deepEqual((await PostStore.list(reader, { q: '등대지기 방파제' })).items, [], 'words split between the post and a comment do not match')
+    assert.equal((await PostStore.list(reader, { q: '등대지기' })).items[0]?.matchedComment, undefined, 'a post that matches itself points at no comment')
+    PostCommentStore.setHidden(admin, comment.id, true)
+    assert.deepEqual((await PostStore.list(reader, { q: '방파제 노을' })).items, [], 'hidden comments are not searched')
+    PostCommentStore.setHidden(admin, comment.id, false)
+    assert.deepEqual((await PostStore.list(reader, { q: '방파제 노을' })).items.map((item) => item.id), [postId], 'shown again')
+  })
+
   await t.test('deleting a post removes its comments, refs and search text', async () => {
     PostStore.remove(alice, postId)
     assert.equal((db.prepare('SELECT COUNT(*) AS count FROM post_comments WHERE post_id = ?').get(postId) as { count: number }).count, 0)
     assert.equal((db.prepare('SELECT COUNT(*) AS count FROM post_media_refs WHERE post_id = ?').get(postId) as { count: number }).count, 0)
     assert.equal((db.prepare("SELECT COUNT(*) AS count FROM search_db.search_documents WHERE source = 'post' AND source_id = ?").get(String(postId)) as { count: number }).count, 0)
+    assert.equal((db.prepare("SELECT COUNT(*) AS count FROM search_db.search_documents WHERE source = 'post_comment'").get() as { count: number }).count, 0, 'its comments too')
     assert.equal(PostCategoryStore.list().find((category) => category.id === illust)?.postCount, 0)
   })
 })

@@ -63,6 +63,22 @@ export interface PostSummary {
   updatedAt: string;
   /** The viewer may edit or delete it. */
   canEdit: boolean;
+  /** Search results only: the comment the post was found through. */
+  matchedComment?: PostCommentMatch;
+}
+
+/** An earlier version of a post, kept when an edit replaced it (the newest 20). */
+export interface PostRevision {
+  revision: number;
+  title: string;
+  body: string;
+  /** Who made the edit that replaced it. */
+  editedByType: PostAuthorType;
+  editedByAccountId: number | null;
+  editedByProfileId: number | null;
+  editedBy: string;
+  /** When it was replaced. */
+  createdAt: string;
 }
 
 /** The chat reply a post or comment was written from; shown only to the chat's owner. */
@@ -71,6 +87,13 @@ export interface PostSourceChat {
   replyId: string | null;
   /** The chat message of that reply, to scroll to (null once it is gone). */
   messageId: number | null;
+}
+
+/** In search results: the comment a post was found through (it matched only there). */
+export interface PostCommentMatch {
+  id: number;
+  author: string;
+  excerpt: string;
 }
 
 export interface PostDetail extends PostSummary {

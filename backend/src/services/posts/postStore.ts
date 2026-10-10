@@ -5,6 +5,7 @@ import {
   type PostComment,
   type PostCommentMode,
   type PostDetail,
+  type PostRevision,
   type PostSourceChat,
   type PostListResult,
   type PostMediaRef,
@@ -20,7 +21,7 @@ import { isProfileAssetHidden } from '../codex-chat/chatProfileAssets';
 import { PostError, requireKey, type PostActor } from './postActor';
 import { excerptOf, extractMediaRefs, saveMediaRefs } from './postMedia';
 import { loadPostsSettings } from './postsSettings';
-import { removePostSearchDocument, postSearchFilter, refreshPostSearchIndex, writePostSearchDocument } from './postSearch';
+import { commentMatches, removePostSearchDocument, postSearchFilter, refreshPostSearchIndex, writePostSearchDocument } from './postSearch';
 
 type CategoryRow = { id: number; parent_id: number | null; name: string; name_key: string; description: string; sort_order: number };
 export type PostRow = {
@@ -377,17 +378,22 @@ export const PostStore = {
       where.push('p.author_profile_id = ?');
       params.push(Number(query.authorProfileId));
     }
+    let terms: string[] = [];
     if (typeof query.q === 'string' && query.q.trim()) {
       await refreshPostSearchIndex();
       const filter = postSearchFilter(query.q);
       where.push(filter.sql);
       params.push(...filter.params);
+      terms = filter.terms;
     }
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const order = status === 'published' ? 'p.pinned DESC, p.published_at DESC, p.id DESC' : 'p.updated_at DESC, p.id DESC';
     const rows = db().prepare(`SELECT p.* FROM posts p ${clause} ORDER BY ${order} LIMIT ? OFFSET ?`).all(...params, limit, offset) as PostRow[];
     const { total } = db().prepare(`SELECT COUNT(*) AS total FROM posts p ${clause}`).get(...params) as { total: number };
-    return { items: summaries(actor, rows), total, offset, limit };
+    // A post found only through one of its comments says which comment.
+    const viaComment = commentMatches(rows.map((row) => row.id), terms);
+    const items = summaries(actor, rows).map((item) => (viaComment.has(item.id) ? { ...item, matchedComment: viaComment.get(item.id) } : item));
+    return { items, total, offset, limit };
   },
 
   get(actor: PostActor, postId: number): PostDetail {
@@ -463,18 +469,23 @@ export const PostStore = {
     db().transaction(() => {
       const row = requirePostRow(actor, postId);
       if (!canEditPost(actor, row)) throw new PostError('이 글을 지울 권한이 없어.', 403);
-      db().prepare('DELETE FROM posts WHERE id = ?').run(postId);
       removePostSearchDocument(postId);
+      db().prepare('DELETE FROM posts WHERE id = ?').run(postId);
     }).immediate();
     announce(postId, 'post');
   },
 
-  revisions(actor: PostActor, postId: number) {
+  /** Earlier versions (newest first): each was replaced at `createdAt` by an edit from `editedBy`. */
+  revisions(actor: PostActor, postId: number): PostRevision[] {
     const row = requirePostRow(actor, postId);
     if (!canEditPost(actor, row)) throw new PostError('이 글의 이전 판을 볼 권한이 없어.', 403);
+    const author = createAuthorResolver(actor);
     return (db().prepare('SELECT revision, title, body, edited_by_type, edited_by_account_id, edited_by_profile_id, created_at FROM post_revisions WHERE post_id = ? ORDER BY revision DESC').all(postId) as Array<{
       revision: number; title: string; body: string; edited_by_type: string; edited_by_account_id: number | null; edited_by_profile_id: number | null; created_at: string;
-    }>).map((item) => ({ revision: item.revision, title: item.title, body: item.body, editedByType: item.edited_by_type, editedByAccountId: item.edited_by_account_id, editedByProfileId: item.edited_by_profile_id, createdAt: iso(item.created_at) }));
+    }>).map((item) => ({
+      revision: item.revision, title: item.title, body: item.body, editedByType: item.edited_by_type === 'profile' ? 'profile' : 'account', editedByAccountId: item.edited_by_account_id, editedByProfileId: item.edited_by_profile_id,
+      editedBy: author({ author_type: item.edited_by_type === 'profile' ? 'profile' : 'account', author_profile_id: item.edited_by_profile_id, author_name: item.edited_by_account_id === null ? 'owner' : `#${item.edited_by_account_id}`, owner_account_id: item.edited_by_account_id }).name, createdAt: iso(item.created_at) as string,
+    }));
   },
 
   /** The store whose file a post (or one of its comments) embeds, or null when it embeds no such file. */

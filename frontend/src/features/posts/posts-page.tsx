@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import type { PostCategory, PostListLayout, PostSummary } from '@conai/shared'
-import { ArrowLeft, EyeOff, FileClock, FolderPlus, LayoutGrid, Newspaper, Pencil, PenSquare, Rows3, Search, Smartphone, Trash2, X } from 'lucide-react'
+import { ArrowLeft, EyeOff, FileClock, FolderPlus, History, LayoutGrid, Newspaper, Pencil, PenSquare, Rows3, Search, Smartphone, Trash2, X } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils'
 import { PostCategoryDialog } from './post-category-dialog'
 import { flattenCategories, PostEditor } from './post-editor'
 import { PostCards, PostFeed, PostSns } from './post-list'
+import { PostRevisionsDialog } from './post-revisions-dialog'
 import { categoryPath, PostView } from './post-view'
 import { usePostPermissions } from './use-post-permissions'
 import { usePostsLayout } from './use-posts-layout'
@@ -61,6 +62,7 @@ export function PostsPage() {
     return () => window.clearTimeout(timer)
   }, [searchInput])
   const [categoryDialog, setCategoryDialog] = useState<CategoryDialog>(null)
+  const [revisionsOpen, setRevisionsOpen] = useState(false)
 
   const settingsQuery = useQuery({ queryKey: ['post-settings'], queryFn: getPostsSettings, staleTime: 60_000 })
   const [layout, setLayout] = usePostsLayout(settingsQuery.data?.layout ?? 'feed')
@@ -86,8 +88,9 @@ export function PostsPage() {
     }
     setParams(next)
   }
-  const openList = (patch: Record<string, string | null> = {}) => update({ post: null, edit: null, ...patch })
-  const openPost = (post: Pick<PostSummary, 'id'>) => update({ post: String(post.id), edit: null })
+  const openList = (patch: Record<string, string | null> = {}) => update({ post: null, edit: null, comment: null, ...patch })
+  // A search hit found through a comment opens at that comment.
+  const openPost = (post: Pick<PostSummary, 'id' | 'matchedComment'>) => update({ post: String(post.id), edit: null, comment: post.matchedComment ? String(post.matchedComment.id) : null })
   const filterTag = (value: string) => openList({ tag: value })
   const filterCategory = (id: number | null) => openList({ category: id === null ? null : String(id), tag: null, status: null })
 
@@ -228,6 +231,7 @@ export function PostsPage() {
     )
     toolbarActions = view === 'post' && postQuery.data?.canEdit ? (
       <>
+        {postQuery.data.revision > 1 ? <IconButton variant="ghost" label={t({ ko: '이전 판', en: 'Earlier versions' })} onClick={() => setRevisionsOpen(true)}><History /></IconButton> : null}
         <IconButton variant="ghost" label={t({ ko: '고치기', en: 'Edit' })} onClick={() => update({ edit: String(postQuery.data.id) })}><Pencil /></IconButton>
         <IconButton variant="ghost" label={t({ ko: '지우기', en: 'Delete' })} disabled={removePost.isPending} onClick={async () => {
           if (await confirm({ title: t({ ko: '이 글을 지울까?', en: 'Delete this post?' }), description: t({ ko: '댓글도 함께 지워져.', en: 'Its comments go too.' }), tone: 'destructive' })) removePost.mutate(postQuery.data.id)
@@ -280,6 +284,7 @@ export function PostsPage() {
       >
         {content}
       </PageWithSidebar>
+      {revisionsOpen && view === 'post' && postQuery.data ? <PostRevisionsDialog post={postQuery.data} onClose={() => setRevisionsOpen(false)} /> : null}
       {categoryDialog ? (
         <PostCategoryDialog
           category={categoryDialog.category}

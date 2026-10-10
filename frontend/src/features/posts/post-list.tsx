@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { PostCategory, PostMediaRef, PostSummary } from '@conai/shared'
-import { EyeOff, FileClock, Images, MessageCircle, Pin } from 'lucide-react'
+import { EyeOff, FileClock, Images, MessageCircle, MessageSquare, Pin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ToggleChip } from '@/components/ui/chip'
 import { useI18n } from '@/i18n'
@@ -24,6 +24,18 @@ function coverUrl(media: PostMediaRef[]) {
   const first = media.find((item) => item.kind === 'media' || item.kind === 'group')
   if (!first) return null
   return buildApiUrl(first.kind === 'media' ? `/api/images/${first.ref}/thumbnail` : `/api/groups/${first.ref}/thumbnail`)
+}
+
+/** In search results: the comment a post was found through. */
+function MatchedComment({ post }: { post: PostSummary }) {
+  if (!post.matchedComment) return null
+  return (
+    <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+      <MessageSquare className="size-3.5 shrink-0" aria-hidden />
+      <span className="shrink-0 font-medium text-foreground">{post.matchedComment.author}</span>
+      <span className="truncate">{post.matchedComment.excerpt}</span>
+    </p>
+  )
 }
 
 function StatusMarks({ post }: { post: PostSummary }) {
@@ -80,6 +92,7 @@ export function PostFeed({ posts, categories, onOpen, onTag }: ListProps) {
               </div>
               <PostMeta post={post} categories={categories} />
               {post.excerpt ? <p className="line-clamp-2 text-sm text-muted-foreground">{post.excerpt}</p> : null}
+              <MatchedComment post={post} />
               <TagRow tags={post.tags} onTag={onTag} />
             </div>
           </div>
@@ -107,6 +120,7 @@ export function PostCards({ posts, categories, onOpen, onTag }: ListProps) {
               <span className="line-clamp-2 font-semibold">{post.title}</span>
             </div>
             <PostMeta post={post} categories={categories} />
+            <MatchedComment post={post} />
             <TagRow tags={post.tags} onTag={onTag} />
           </div>
         )

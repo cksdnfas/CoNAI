@@ -28,7 +28,7 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
   type Actor = import('../src/services/posts/postActor').PostActor
 
   updateChatSettings({ enabled: true })
-  const KEYS = ['chat.use', 'posts.view', 'posts.comment', 'posts.write', 'posts.summon', 'images.view']
+  const KEYS = ['chat.use', 'posts.view', 'posts.comment', 'posts.write', 'posts.summon', 'images.view', 'files.view']
   t.mock.method(AuthAccount, 'findById', (id: number) => ({ id, username: `user${id}`, account_type: id === 1 ? 'admin' : 'guest', status: 'active' }))
   t.mock.method(AuthAccessControlService, 'resolveForAccountId', (id: number) => ({ permissionKeys: id === 9 ? ['posts.view', 'posts.comment'] : KEYS, groupKeys: [] }))
   t.mock.method(AuthAccessControlService, 'hasPermission', () => true)
@@ -41,6 +41,7 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
   const requests: string[] = []
   /** 세라 has the board tools: reads the post, answers with post_comment (calling 카이), then says so in the room. */
   const seraRequests: Array<Array<{ role: string; content?: unknown; tool_calls?: unknown }>> = []
+  const seraTools: string[][] = []
   const toolCall = (name: string, args: unknown) => Response.json({ choices: [{ message: { content: '', tool_calls: [{ id: `call-${name}-${seraRequests.length}`, type: 'function', function: { name, arguments: JSON.stringify(args) } }] }, finish_reason: 'tool_calls' }], usage: { prompt_tokens: 10 } })
   t.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
     if (!init?.method || init.method === 'GET') return new Response('', { status: 404 })
@@ -50,6 +51,7 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
     requests.push(user)
     if (system.includes('세라')) {
       seraRequests.push(body.messages)
+      seraTools.push((body.tools ?? []).map((item: { function: { name: string } }) => item.function.name))
       const call = String(body.messages.filter((message: { role: string }) => message.role === 'user').at(-1)?.content ?? '')
       const postId = Number(/post_id (\d+)/.exec(call)?.[1])
       const replyTo = Number(/reply_to (\d+)/.exec(call)?.[1])
@@ -175,7 +177,7 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
     lunaCalls = false
     const sera = ChatProfileStore.create({
       name: '세라', engine: 'llm', providerName: 'chat', model: 'chat-model', summaryEnabled: false, systemPrompt: '너는 세라야.',
-      mcpEnabled: true, mcpScopes: ['read', 'organize'], toolAllowlist: ['posts_read', 'post_comment'],
+      mcpEnabled: true, mcpScopes: ['read', 'organize'], toolAllowlist: ['posts_read', 'post_comment', 'list_files', 'read_file_text'],
     })
     const post = PostStore.create(alice, { title: '심야 상담소', body: '본문에만 있는 문장: 등대 아래 우체통.' })
     const call = PostCommentStore.create(alice, post.id, { body: '@세라 이 글 요약해줘', mentions: [sera.id] })
@@ -189,6 +191,8 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
     assert.match(opening, /이 글 요약해줘/)
     assert.ok(!opening.includes('등대 아래 우체통'), 'the post text is not pasted into the room')
     assert.ok(seraRequests.some((messages) => JSON.stringify(messages).includes('등대 아래 우체통')), 'it came back from posts_read')
+    // Others wrote the post: the turn never offers the caller's private files, though the profile allows them.
+    assert.ok(seraTools.length > 0 && seraTools.every((names) => names.includes('posts_read') && !names.includes('list_files') && !names.includes('read_file_text')), JSON.stringify(seraTools))
 
     const comments = PostCommentStore.list(alice, post.id)
     const seraComments = comments.filter((comment) => comment.author.profileId === sera.id)
