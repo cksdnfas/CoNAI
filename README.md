@@ -5,11 +5,11 @@
 **ComfyUI · NovelAI · Stable Diffusion 결과물을 한곳에서 찾고, 정리하고, 다시 생성하는 로컬 AI 미디어 작업대**
 
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-2ea44f?style=for-the-badge)](https://cksdnfas.github.io/CoNAI/)
-[![Release](https://img.shields.io/badge/release-26.9.29-4f46e5?style=for-the-badge)](docs/RELEASE-MD/RELEASE_26.9.29.md)
+[![Release](https://img.shields.io/badge/release-26.10.10-4f46e5?style=for-the-badge)](docs/RELEASE-MD/RELEASE_26.10.10.md)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.19-339933?style=for-the-badge)](package.json)
 [![Docs Deploy](https://img.shields.io/github/actions/workflow/status/cksdnfas/CoNAI/docs-pages.yml?branch=main&label=pages&style=for-the-badge)](https://github.com/cksdnfas/CoNAI/actions/workflows/docs-pages.yml)
 
-[📘 GitHub Pages 문서](https://cksdnfas.github.io/CoNAI/) · [🚀 처음 시작하기](https://cksdnfas.github.io/CoNAI/GUIDE/START_HERE.html) · [🧩 MCP 가이드](https://cksdnfas.github.io/CoNAI/GUIDE/MCP_GUIDE.html) · [📝 26.9.29 릴리즈 노트](docs/RELEASE-MD/RELEASE_26.9.29.md)
+[📘 GitHub Pages 문서](https://cksdnfas.github.io/CoNAI/) · [🚀 처음 시작하기](https://cksdnfas.github.io/CoNAI/GUIDE/START_HERE.html) · [🧩 MCP 가이드](https://cksdnfas.github.io/CoNAI/GUIDE/MCP_GUIDE.html) · [📝 26.10.10 릴리즈 노트](docs/RELEASE-MD/RELEASE_26.10.10.md)
 
 </div>
 
@@ -25,16 +25,15 @@ CoNAI는 생성형 이미지/비디오 작업을 위한 로컬 관리 앱입니�
 
 ---
 
-## 26.9.29 릴리즈
+## 26.10.10 릴리즈
 
-- 새 플랫 UI: 테두리 대신 구분선과 여백 중심 화면, 공용 사이드바 레이아웃과 고정 툴바, 아이콘 버튼과 앱 내 대화상자
-- 갤러리: 필터 칩·정렬, 체크박스·범위 선택·드래그로 그룹 넣기, 뷰어형 상세 페이지와 바로 삭제
-- 생성: 필름스트립 결과 스테이지, 결과 그룹 지정, 이력에서 설정 불러오기, 대기열 예상 시간, 워크플로우·예약작업을 제공자 탭과 한 줄에 배치
-- ComfyUI·NAI: 최신 MiniMax H3 Director, NovelAI v5·토큰 인증·투명 배경, 공용 필드 입력기
-- MCP·운영: 설정에서 HTTP 원격 접속, 워크플로우 실행·그룹 도구, 재시작 직후 스캔 폭주 완화, GPU Docker 런타임
-- 권한: 구역별 권한 그룹 편집 창, 상속 권한 표시, 프리셋·워크플로우 편집 권한 부여
+- 채팅: 어느 페이지에서든 여는 채팅 패널, Codex·Claude Code·API LLM 엔진, 캐릭터 프로필·그룹 방·로어북, 대화 중 이미지 생성과 페이지 입력 보조
+- 오디오: 프로젝트·그룹별 효과음 생성, 듣고 채택·편집, 음량 정규화 내보내기
+- 비디오: 영상에서 스프라이트 시트 추출·일괄 처리, 채팅 모델의 영상 프레임 보기
+- LLM 연결: 서버 ▸ 모델 구조, 생성 옵션은 프로필로 이동, 역할별 모델, CLI 관리와 사용량 대시보드
+- 그 밖에: 게시판, 파일 보관함, 워크플로우 노드 편집기 개편, 18개 기능 키 권한 체계
 
-자세한 내용은 [`docs/RELEASE-MD/RELEASE_26.9.29.md`](docs/RELEASE-MD/RELEASE_26.9.29.md)에서 확인합니다.
+자세한 내용은 [`docs/RELEASE-MD/RELEASE_26.10.10.md`](docs/RELEASE-MD/RELEASE_26.10.10.md)에서 확인합니다.
 
 ---
 
@@ -49,8 +48,8 @@ CoNAI는 생성형 이미지/비디오 작업을 위한 로컬 관리 앱입니�
 | 이미지 생성 개요 | https://cksdnfas.github.io/CoNAI/GUIDE/GENERATION_OVERVIEW.html |
 | 워크플로우 편집 | https://cksdnfas.github.io/CoNAI/GUIDE/WORKFLOW_EDITOR.html |
 | MCP 가이드 | https://cksdnfas.github.io/CoNAI/GUIDE/MCP_GUIDE.html |
-| 최신 안정 릴리즈 | [GitHub Release 26.9.29](https://github.com/cksdnfas/CoNAI/releases/tag/26.9.29) |
-| 26.9.29 릴리즈 노트 | [`docs/RELEASE-MD/RELEASE_26.9.29.md`](docs/RELEASE-MD/RELEASE_26.9.29.md) |
+| 최신 안정 릴리즈 | [GitHub Release 26.10.10](https://github.com/cksdnfas/CoNAI/releases/tag/26.10.10) |
+| 26.10.10 릴리즈 노트 | [`docs/RELEASE-MD/RELEASE_26.10.10.md`](docs/RELEASE-MD/RELEASE_26.10.10.md) |
 | 전체 릴리즈 노트 | [`docs/RELEASE-MD/`](docs/RELEASE-MD) |
 
 ---
