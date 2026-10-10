@@ -3,7 +3,7 @@ import { buildApiUrl } from '@/lib/api-url'
 import type { ChatAssetVisionReview, ChatAssetBatch, ChatAssetBatchInput, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
 export type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetKind, ChatAssetReview, ChatAssetVisionReview, ChatAssetCandidate, ChatAssetAttempt, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
 import type { ChatJudgeDiagnostics } from '@conai/shared'
-import type { ChatStreamEvent, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal, ChatTask, ChatChoiceAnswer } from '@conai/shared'
+import type { ChatStreamEvent, ChatTranslationLanguage, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal, ChatTask, ChatChoiceAnswer } from '@conai/shared'
 
 export type ChatScope = 'read' | 'generate' | 'organize' | 'configure'
 const assetBatchPath = (profileId: number, batchId?: number) => `/api/codex-chat/admin/profiles/${profileId}/asset-batches${batchId === undefined ? '' : `/${batchId}`}`
@@ -612,11 +612,15 @@ export interface ChatProfile extends ChatProfileAssetFields {
   summaryPrompt: string
   /** Notes for translating this profile's replies (voice, how it addresses the user, a glossary); `{{char}}`/`{{user}}` filled. */
   translationInstructions: string
+  /** With a translation model: the language the chat model reads and writes (my messages are translated into it). */
+  translationModelLanguage: ChatTranslationLanguage
+  /** With a translation model: the language I write and read (the replies are translated into it). */
+  translationDisplayLanguage: ChatTranslationLanguage
   /** Reply suggestions on the composer's sparkle button; with no model of its own it uses the chat's (Codex: a one-shot run). */
   suggestEnabled: boolean
   /**
    * Model rows (a connection's model) per role. Chat null: the default model. Summary / suggestions null: the chat's
-   * model. Translation null: no translation (messages go to the chat model in English, replies are shown in Korean).
+   * model. Translation null: no translation (when set, messages go to the chat model in its language, replies are shown in mine).
    */
   modelSlotId: number | null
   summarySlotId: number | null

@@ -938,11 +938,15 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['page_assist', 'INTEGER'],
     ['reasoning_budget_tokens', 'INTEGER'],
     ['extra_params', 'TEXT'],
-    // Translation model (user input → English for the model, replies → Korean for display); null: no translation.
+    // Translation model (user input → the model's language, replies → the reader's); null: no translation.
     ['translation_provider_name', 'TEXT'],
     ['translation_model', 'TEXT'],
     // Notes for translating this profile's replies (voice, how it addresses the user, a glossary); null: none.
     ['translation_instructions', 'TEXT'],
+    // The languages translation works between (CHAT_TRANSLATION_LANGUAGES ids): the chat model's (user messages are
+    // translated into it) and the reader's (replies are translated into it); null: English / Korean.
+    ['translation_model_language', 'TEXT'],
+    ['translation_display_language', 'TEXT'],
     // Reply suggestions (the sparkle button next to the composer): on demand, with their own connection/model.
     ['suggest_enabled', 'INTEGER'],
     ['suggest_provider_name', 'TEXT'],

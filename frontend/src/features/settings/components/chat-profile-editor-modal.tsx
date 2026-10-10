@@ -39,6 +39,7 @@ import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { getClaudeModels } from '@/lib/api-agent-cli'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
+import { CHAT_TRANSLATION_DEFAULTS } from '@conai/shared'
 import { useProfileAssetRuns } from './chat-profile-asset-runs'
 import { ChatProfileAppearancePanel } from './chat-profile-editor-appearance'
 import { draftProfileAssetUrl } from './chat-profile-images'
@@ -97,6 +98,8 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     summaryTriggerTurns: profile?.summaryTriggerTurns ?? defaults?.summaryTriggerTurns ?? 6,
     summaryPrompt: profile?.summaryPrompt ?? '',
     translationInstructions: profile?.translationInstructions ?? '',
+    translationModelLanguage: profile?.translationModelLanguage ?? CHAT_TRANSLATION_DEFAULTS.modelLanguage,
+    translationDisplayLanguage: profile?.translationDisplayLanguage ?? CHAT_TRANSLATION_DEFAULTS.displayLanguage,
     suggestEnabled: profile?.suggestEnabled ?? false,
     modelSlotId: profile?.modelSlotId ?? null,
     summarySlotId: profile?.summarySlotId ?? null,

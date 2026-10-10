@@ -20,3 +20,4 @@ export * from './chatTask';
 export * from './chatChoice';
 export * from './chatRoutine';
 export * from './chatJudge';
+export * from './chatTranslation';

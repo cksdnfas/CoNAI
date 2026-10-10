@@ -66,7 +66,7 @@ export function resolveProfileModel(profile: ModelRoleProfile, role: ModelRole):
   return chat ? { ...chat, via: 'inherit' } : null
 }
 
-/** Whether the profile translates (user messages to English, replies to Korean). */
+/** Whether the profile translates (user messages into the model language, replies into the display language). */
 export function hasTranslation(profile: ModelRoleProfile | null | undefined) {
   return profile ? resolveProfileModel(profile, 'translation') !== null : false
 }

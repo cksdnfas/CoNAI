@@ -14,7 +14,7 @@ import { CHAT_JUDGE_PRESETS_QUERY_KEY, listChatJudgePresets } from '@/lib/api-ch
 import { thinkingMayFillCap, type ChatProfileDefaults, type ChatProfileInput, type ModelRole, type ModelSlot } from '@/lib/api-codex-chat'
 import type { CodexModelOption } from '@/lib/api-image-generation-queue'
 import { cn } from '@/lib/utils'
-import type { ClaudeModelOption } from '@conai/shared'
+import { CHAT_TRANSLATION_LANGUAGES, type ChatTranslationLanguage, type ClaudeModelOption } from '@conai/shared'
 import { ClaudeEffortSelect, ClaudeModelSelect } from './claude-model-select'
 import { JudgeModelSelect, useModelLabel } from './chat-judge-connection-select'
 import { applyRoleChoice, ModelRoleSelect, roleChoice, type SuggestWriters } from './chat-model-role-select'
@@ -82,6 +82,15 @@ function JudgeRole({ draft, patch }: { draft: Draft; patch: PatchDraft }) {
         </Field>
       ) : null}
     </RoleRow>
+  )
+}
+
+/** One of the languages the translation works between. */
+function TranslationLanguageSelect({ value, onChange, ariaLabel }: { value: ChatTranslationLanguage; onChange: (language: ChatTranslationLanguage) => void; ariaLabel: string }) {
+  return (
+    <Select variant="settings" aria-label={ariaLabel} value={value} onChange={(event) => onChange(event.target.value as ChatTranslationLanguage)}>
+      {CHAT_TRANSLATION_LANGUAGES.map((language) => <option key={language.id} value={language.id}>{language.label}</option>)}
+    </Select>
   )
 }
 
@@ -272,12 +281,22 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
           ) : null}
           <RoleRow label={t({ ko: '번역', en: 'Translation' })} select={roleSelect('translation', t({ ko: '번역 모델', en: 'Translation model' }))}>
             {translationOn ? (
-              <Field
-                label={t({ ko: '번역 지시', en: 'Translation notes' })}
-                info={t({ ko: '답변을 한국어로 옮길 때 번역 모델이 따르는 메모. 말투, 호칭, 고유명사 번역표 등. {{char}}·{{user}}는 이름으로 바뀌어. 캐릭터 이름은 비워도 알려 줘. 내 메시지 번역에는 쓰지 않아.', en: 'Notes the translation model follows when it puts replies into Korean: voice, forms of address, a glossary. {{char}} and {{user}} become the names. The character’s name is passed even when empty. Not used for your own messages.' })}
-              >
-                <Textarea variant="settings" rows={3} className={GROW_TEXTAREA} maxLength={4000} value={draft.translationInstructions} placeholder={t({ ko: '말투 · 호칭 · 고유명사', en: 'Voice · address · names' })} onChange={(event) => patch({ translationInstructions: event.target.value })} />
-              </Field>
+              <>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Field label={t({ ko: '모델 언어', en: 'Model language' })} info={t({ ko: '내 메시지를 이 언어로 옮겨 보내고, 모델도 이 언어로 답해.', en: 'Your messages are translated into this language, and the model replies in it.' })}>
+                    <TranslationLanguageSelect ariaLabel={t({ ko: '모델 언어', en: 'Model language' })} value={draft.translationModelLanguage} onChange={(translationModelLanguage) => patch({ translationModelLanguage })} />
+                  </Field>
+                  <Field label={t({ ko: '표시 언어', en: 'Display language' })} info={t({ ko: '내가 쓰고 읽는 언어. 답변을 이 언어로 옮겨 보여줘.', en: 'The language you write and read. Replies are translated into it.' })}>
+                    <TranslationLanguageSelect ariaLabel={t({ ko: '표시 언어', en: 'Display language' })} value={draft.translationDisplayLanguage} onChange={(translationDisplayLanguage) => patch({ translationDisplayLanguage })} />
+                  </Field>
+                </div>
+                <Field
+                  label={t({ ko: '번역 지시', en: 'Translation notes' })}
+                  info={t({ ko: '답변을 표시 언어로 옮길 때 번역 모델이 따르는 메모. 말투, 호칭, 고유명사 번역표 등. {{char}}·{{user}}는 이름으로 바뀌어. 캐릭터 이름은 비워도 알려 줘. 내 메시지 번역에는 쓰지 않아.', en: 'Notes the translation model follows when it puts replies into the display language: voice, forms of address, a glossary. {{char}} and {{user}} become the names. The character’s name is passed even when empty. Not used for your own messages.' })}
+                >
+                  <Textarea variant="settings" rows={3} className={GROW_TEXTAREA} maxLength={4000} value={draft.translationInstructions} placeholder={t({ ko: '말투 · 호칭 · 고유명사', en: 'Voice · address · names' })} onChange={(event) => patch({ translationInstructions: event.target.value })} />
+                </Field>
+              </>
             ) : null}
           </RoleRow>
           <RoleRow label={t({ ko: '답장 추천', en: 'Reply suggestions' })} select={roleSelect('suggest', t({ ko: '답장 추천 모델', en: 'Reply suggestion model' }))} />

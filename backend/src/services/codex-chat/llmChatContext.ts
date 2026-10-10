@@ -1,7 +1,7 @@
 import { summaryGenerationOptions, thinkingIsOff } from '../llmGenerationOptions'
 import { loadChatSettings } from './chatSettings'
 import { resolveChatAccess } from './codexChatAccess'
-import { replyTranslationPrompt, userTranslationPrompt } from './chatTranslation'
+import { modelLanguageGuidance, replyTranslationPrompt, userTranslationPrompt } from './chatTranslation'
 import { contextContentText, contextHash, contextSections, contextSource, limitContextMeta, loreDiagnostics, markContextMessage, markContextParts, contextPartsOf, type ChatDiagnosticsFields, type ChatContextSectionKind, type ContextSource } from './chatContextDiagnostics'
 import { buildReplyContext } from './chatReplyContext'
 import { isCodexChatCreationTool, stripEchoedAddresses } from '@conai/shared'
@@ -355,6 +355,7 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
     REPLY_GUIDANCE,
     buildChatStyleGuidance(profile.style, profile.name),
     buildEmoticonGuidance(profile.style),
+    modelLanguageGuidance(profile),
   ].filter(Boolean).join('\n\n')
   // The lore index, the "always on" entries and the summary follow the persona in the same system message: many chat
   // templates (Qwen's among them) reject a system message that is not the first one. Behind the persona, so the
@@ -592,7 +593,7 @@ export function promptContextSources(profile: ChatProfile, user: ChatUserPersona
 }
 
 export function fixedContextGuidance(profile: ChatProfile, withTools: boolean) {
-  return [withTools ? toolGuidance(profile.generationPresetIds.length > 0) : '', REPLY_FORMAT_GUIDANCE, REPLY_GUIDANCE, buildChatStyleGuidance(profile.style, profile.name), buildEmoticonGuidance(profile.style)].filter(Boolean).join('\n\n')
+  return [withTools ? toolGuidance(profile.generationPresetIds.length > 0) : '', REPLY_FORMAT_GUIDANCE, REPLY_GUIDANCE, buildChatStyleGuidance(profile.style, profile.name), buildEmoticonGuidance(profile.style), modelLanguageGuidance(profile)].filter(Boolean).join('\n\n')
 }
 
 /** Helper instructions are referenced separately; they are not part of the primary reply's sections. */
@@ -601,7 +602,7 @@ export function auxiliaryInstructionText(profile: ChatProfile, user: ChatUserPer
   switch (id) {
     case 'summary-segment': return custom ? `${custom}\n\n${SEGMENT_PROMPT_SUFFIX}` : SEGMENT_PROMPT
     case 'summary-plot': return `${custom || resolveSummaryPrompt({ ...profile, summaryPrompt: '' })}\n\n${PLOT_PROMPT_SUFFIX}`
-    case 'translation-user': return userTranslationPrompt()
+    case 'translation-user': return userTranslationPrompt(profile)
     case 'translation-reply': return replyTranslationPrompt(profile, user.name)
     default: return ''
   }

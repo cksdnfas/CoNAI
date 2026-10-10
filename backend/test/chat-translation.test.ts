@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test, type TestContext } from 'node:test'
 import { ExternalApiProvider } from '../src/models/ExternalApiProvider'
-import { translateReply, translateUserInput, translatorOf } from '../src/services/codex-chat/chatTranslation'
+import { modelLanguageGuidance, translateReply, translateUserInput, translatorOf } from '../src/services/codex-chat/chatTranslation'
 import type { ChatProfile } from '../src/services/codex-chat/chatProfiles'
 import { mockModelRows } from './modelRowMocks'
 
@@ -49,6 +49,29 @@ test('replies: English becomes Korean; a reply already in Korean is not sent', a
   assert.equal(requests.length, 1)
   assert.equal(await translateReply(translating, '안녕! 잘 지냈어? (ok)'), null)
   assert.equal(requests.length, 1)
+})
+
+test('the profile picks the languages: messages go into the model language, replies into the display language', async (t) => {
+  const requests = mockTranslator(t, 'translated')
+  const japaneseReader = { ...translating, translationModelLanguage: 'ko' as const, translationDisplayLanguage: 'ja' as const }
+  assert.equal(await translateUserInput(japaneseReader, 'こんにちは、元気？'), 'translated')
+  assert.match(requests[0].messages[0].content, /into natural, fluent Korean/)
+  assert.equal(await translateUserInput(japaneseReader, '안녕'), null, 'text with nothing in the display language is not sent')
+  assert.equal(await translateReply(japaneseReader, '안녕하세요, 오늘 어때?'), 'translated')
+  assert.match(requests[1].messages[0].content, /into natural, fluent Japanese/)
+  assert.ok(!requests[1].messages[0].content.includes('반말'), 'the Korean register note is only for Korean readers')
+  assert.equal(await translateReply(japaneseReader, 'こんにちは、今日はどう？'), null, 'a reply already in the display language is not sent')
+  const same = { ...translating, translationModelLanguage: 'ko' as const, translationDisplayLanguage: 'ko' as const }
+  assert.equal(await translateUserInput(same, '안녕'), null, 'one language both ways translates nothing')
+  assert.equal(requests.length, 2)
+})
+
+test('the chat model is told to write in the model language only when the profile translates', (t) => {
+  mockTranslator(t, 'unused')
+  assert.match(modelLanguageGuidance(translating), /Write every reply in English/)
+  assert.match(modelLanguageGuidance({ ...translating, translationModelLanguage: 'ja' }), /Write every reply in Japanese/)
+  assert.equal(modelLanguageGuidance({ translationSlotId: null }), '')
+  assert.equal(modelLanguageGuidance({ ...translating, translationModelLanguage: 'ko', translationDisplayLanguage: 'ko' }), '')
 })
 
 test('a translation that loses display-block fences, emoticon tokens or cast tags is dropped', async (t) => {

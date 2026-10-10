@@ -165,7 +165,8 @@ export function buildChatProfileReplyMessages(params: {
   const user: ChatUserPersona = { ...PLAIN_USER, name: params.userName ?? PLAIN_USER.name }
   const scanned = [...(history ? [{ role: 'user', content: history }] : []), { role: 'user', content: message }]
   const lore = selectChatLore(profile, scanned, user, params.useLorebooks ? {} : { books: [] })
-  const leading = buildLeadingMessages(profile, null, { summaryEnabled: false }, false, lore, user)
+  // The node returns the reply as written (no chat translation), so the model is not told to write in its chat language.
+  const leading = buildLeadingMessages({ ...profile, translationSlotId: null }, null, { summaryEnabled: false }, false, lore, user)
   const turns = history ? parseExampleDialogue(history, profile, user) : null
   const latest = history && !turns ? `${referenceBlock([`## 앞 대화\n${history}`])}\n\n${message}` : message
   const conversation = insertDepthBlocks([...(turns ?? []), { role: 'user', content: latest }], depthBlocks(lore, profile.loreDepth, resolveAuthorNote(null, profile, user)))

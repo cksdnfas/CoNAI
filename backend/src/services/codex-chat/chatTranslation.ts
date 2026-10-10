@@ -1,19 +1,49 @@
+import { CHAT_TRANSLATION_DEFAULTS, CHAT_TRANSLATION_LANGUAGES, type ChatTranslationLanguage } from '@conai/shared'
 import { hasTranslation, resolveProfileModel, type ModelRoleProfile } from './chatModelRoles'
 import type { ChatProfile } from './chatProfiles'
 import { completeChat, resolveChatCompletionTarget, type ChatCompletionTarget } from './llmChatCompletion'
 
 /**
- * Chats with a translation model talk to the chat model in English: the user's message is translated before it is
- * sent (and stored as what the model sees), and the reply is translated to Korean for the reader. The reader's text
- * is kept beside the model's on the message (`display_content`); the toggle in the transcript shows either.
+ * Chats with a translation model talk to the chat model in its language (the profile's `translationModelLanguage`,
+ * English unless set): the user's message is translated before it is sent (and stored as what the model sees), and
+ * the reply is translated into the display language (`translationDisplayLanguage`, Korean unless set) for the reader.
+ * The reader's text is kept beside the model's on the message (`display_content`); the toggle in the transcript shows
+ * either.
  *
  * Translation never blocks a chat: when it fails, times out, or would damage the markup the chat relies on, the
  * message goes through untranslated.
  */
 
 const TRANSLATION_TIMEOUT_MS = 90_000
-const HANGUL = /[ᄀ-ᇿ㄰-㆏가-힯]/g
-const LATIN = /[A-Za-z]/g
+
+/** The letters each language is written in; the Han characters Japanese borrows count for both. */
+const SCRIPTS = {
+  hangul: /[ᄀ-ᇿ㄰-㆏가-힯]/g,
+  kana: /[\u3040-\u30ff\u31f0-\u31ff\uff66-\uff9f]/g,
+  han: /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/g,
+  latin: /[A-Za-z\u00c0-\u024f]/g,
+} as const
+const LANGUAGE_SCRIPTS: Record<ChatTranslationLanguage, Array<keyof typeof SCRIPTS>> = {
+  ko: ['hangul'],
+  en: ['latin'],
+  ja: ['kana', 'han'],
+  zh: ['han'],
+}
+
+/** The languages a profile translates between (a partial profile, a test double too, falls back to English / Korean). */
+export type TranslationLanguages = { translationModelLanguage?: ChatTranslationLanguage; translationDisplayLanguage?: ChatTranslationLanguage }
+
+function languagesOf(profile: TranslationLanguages | null | undefined) {
+  return {
+    model: profile?.translationModelLanguage ?? CHAT_TRANSLATION_DEFAULTS.modelLanguage,
+    display: profile?.translationDisplayLanguage ?? CHAT_TRANSLATION_DEFAULTS.displayLanguage,
+  }
+}
+
+/** The language's English name, as the prompts name it. */
+function languageName(language: ChatTranslationLanguage) {
+  return CHAT_TRANSLATION_LANGUAGES.find((entry) => entry.id === language)?.name ?? language
+}
 
 const PRESERVE_RULES = [
   'Keep these exactly as they are, character for character, in their original positions:',
@@ -24,33 +54,44 @@ const PRESERVE_RULES = [
   'Keep the paragraph and line structure. Output only the translation, with no preface, notes, or quotation marks.',
 ].join('\n')
 
-const TO_MODEL_PROMPT = [
-  'You translate a chat user\'s message into natural, fluent English for an AI character to read.',
-  'Preserve the meaning, tone, and register (casual stays casual, polite stays polite); keep roleplay actions in *asterisks* as actions.',
-  'If the message is already in English, return it unchanged.',
-  PRESERVE_RULES,
-].join('\n')
-
-export function userTranslationPrompt() { return TO_MODEL_PROMPT }
-
-const TO_DISPLAY_PROMPT = [
-  'You translate an AI character\'s chat reply from English into natural, fluent Korean for the reader.',
-  'Match the character\'s tone and register: casual speech (반말) stays casual, polite speech stays polite; keep roleplay actions in *asterisks* as actions.',
-  'If the reply is already in Korean, return it unchanged.',
-  PRESERVE_RULES,
-].join('\n')
+export function userTranslationPrompt(profile?: TranslationLanguages | null) {
+  const language = languageName(languagesOf(profile).model)
+  return [
+    `You translate a chat user's message into natural, fluent ${language} for an AI character to read.`,
+    'Preserve the meaning, tone, and register (casual stays casual, polite stays polite); keep roleplay actions in *asterisks* as actions.',
+    `If the message is already in ${language}, return it unchanged.`,
+    PRESERVE_RULES,
+  ].join('\n')
+}
 
 /** Who is speaking, and the profile's own notes on its voice (they come after the rules, which still win on markup). */
-export function replyTranslationPrompt(profile: { name?: string; translationInstructions?: string }, userName?: string) {
+export function replyTranslationPrompt(profile: TranslationLanguages & { name?: string; translationInstructions?: string }, userName?: string) {
+  const display = languagesOf(profile).display
+  const language = languageName(display)
   const name = profile.name?.trim()
   const notes = (profile.translationInstructions ?? '').trim()
     .replace(/\{\{char\}\}/gi, name || 'the character')
     .replace(/\{\{user\}\}/gi, userName?.trim() || 'the user')
   return [
-    TO_DISPLAY_PROMPT,
+    `You translate an AI character's chat reply into natural, fluent ${language} for the reader.`,
+    `Match the character's tone and register: casual speech${display === 'ko' ? ' (반말)' : ''} stays casual, polite speech stays polite; keep roleplay actions in *asterisks* as actions.`,
+    `If the reply is already in ${language}, return it unchanged.`,
+    PRESERVE_RULES,
     ...(name ? [`The speaking character is "${name}".`] : []),
     ...(notes ? ['Notes on this character\'s voice and terms (follow them; the rules above still apply):', notes] : []),
   ].join('\n')
+}
+
+/**
+ * What the chat model is told about its language when the profile translates: it writes in the model language, whatever
+ * the language of the instructions or the greeting, so the reply comes to the translator as the profile expects.
+ */
+export function modelLanguageGuidance(profile: ModelRoleProfile & TranslationLanguages) {
+  if (!hasTranslation(profile)) return ''
+  const { model, display } = languagesOf(profile)
+  if (model === display) return ''
+  const language = languageName(model)
+  return `Write every reply in ${language}, whatever language the instructions, the greeting or earlier messages use. The user's messages reach you in ${language}; the app translates your reply for the user.`
 }
 
 /**
@@ -75,6 +116,19 @@ export function textTranslationPrompt(language: string, notes: { profile?: { nam
 
 function countMatches(text: string, pattern: RegExp) {
   return (text.match(pattern) ?? []).length
+}
+
+/** Letters of the text written in the language's scripts, and in the other scripts known here. */
+function letterCounts(text: string, language: ChatTranslationLanguage) {
+  const own = new Set(LANGUAGE_SCRIPTS[language])
+  let ownLetters = 0
+  let otherLetters = 0
+  for (const [script, pattern] of Object.entries(SCRIPTS) as Array<[keyof typeof SCRIPTS, RegExp]>) {
+    const count = countMatches(text, pattern)
+    if (own.has(script)) ownLetters += count
+    else otherLetters += count
+  }
+  return { own: ownLetters, other: otherLetters }
 }
 
 /** The connection and model a profile translates with, or null when it does not translate. */
@@ -119,26 +173,30 @@ async function translate(target: ChatCompletionTarget, system: string, text: str
 }
 
 /**
- * The user's message as the model should see it (English), or null when the chat does not translate, the text has no
- * Korean to translate, or the translation failed (the message is then sent as written).
+ * The user's message as the model should see it (in the model language), or null when the chat does not translate,
+ * both languages are the same, the text has nothing written in the display language, or the translation failed (the
+ * message is then sent as written).
  */
-export async function translateUserInput(profile: ModelRoleProfile | null | undefined, text: string, signal?: AbortSignal) {
+export async function translateUserInput(profile: (ModelRoleProfile & TranslationLanguages) | null | undefined, text: string, signal?: AbortSignal) {
   const target = profile ? translationTargetOf(profile) : null
   const trimmed = text.trim()
-  if (!target || !trimmed || countMatches(trimmed, HANGUL) === 0) return null
-  const translated = await translate(target, TO_MODEL_PROMPT, trimmed, signal)
+  const { model, display } = languagesOf(profile)
+  if (!target || !trimmed || model === display || letterCounts(trimmed, display).own === 0) return null
+  const translated = await translate(target, userTranslationPrompt(profile), trimmed, signal)
   return translated && translated !== trimmed ? translated : null
 }
 
 /**
- * The reply as the reader should see it (Korean), or null when the chat does not translate, the reply is already
- * mostly Korean, or the translation failed (the reply is then shown as written). The translator is told who speaks
- * and the profile's translation notes (`userName` fills their `{{user}}`).
+ * The reply as the reader should see it (in the display language), or null when the chat does not translate, the reply
+ * is already mostly in the display language, or the translation failed (the reply is then shown as written). The
+ * translator is told who speaks and the profile's translation notes (`userName` fills their `{{user}}`).
  */
-export async function translateReply(profile: (ModelRoleProfile & { name?: string; translationInstructions?: string }) | null | undefined, text: string, signal?: AbortSignal, userName?: string) {
+export async function translateReply(profile: (ModelRoleProfile & TranslationLanguages & { name?: string; translationInstructions?: string }) | null | undefined, text: string, signal?: AbortSignal, userName?: string) {
   const target = profile ? translationTargetOf(profile) : null
   const trimmed = text.trim()
-  if (!profile || !target || !trimmed || countMatches(trimmed, LATIN) === 0 || countMatches(trimmed, HANGUL) > countMatches(trimmed, LATIN)) return null
+  if (!profile || !target || !trimmed) return null
+  const letters = letterCounts(trimmed, languagesOf(profile).display)
+  if (letters.other === 0 || letters.own > letters.other) return null
   const translated = await translate(target, replyTranslationPrompt(profile, userName), trimmed, signal)
   return translated && translated !== trimmed ? translated : null
 }

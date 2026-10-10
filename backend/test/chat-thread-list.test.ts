@@ -189,6 +189,11 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     const saved = ChatProfileStore.create({ name: '번역', engine: 'llm', providerName: 'test', model: 'm', mcpEnabled: false, summaryEnabled: false, translationInstructions: '  말끝을 "…"로  ' })
     assert.equal(saved.translationInstructions, '말끝을 "…"로')
     assert.equal(ChatProfileStore.update(saved.id, { tagline: '바뀜' })!.translationInstructions, '말끝을 "…"로', 'a partial update keeps the notes')
+    assert.deepEqual([saved.translationModelLanguage, saved.translationDisplayLanguage], ['en', 'ko'], 'unset languages read as English / Korean')
+    const japanese = ChatProfileStore.update(saved.id, { translationModelLanguage: 'ko', translationDisplayLanguage: 'ja' })!
+    assert.deepEqual([japanese.translationModelLanguage, japanese.translationDisplayLanguage], ['ko', 'ja'])
+    assert.equal(ChatProfileStore.update(saved.id, { tagline: '또 바뀜' })!.translationDisplayLanguage, 'ja', 'a partial update keeps the languages')
+    assert.equal(ChatProfileStore.update(saved.id, { translationDisplayLanguage: 'xx' as never })!.translationDisplayLanguage, 'ko', 'an unknown language falls back')
   })
 
   await t.test('branch origin: purpose and source kept, unlinked (not deleted) when the source goes', () => {

@@ -1,4 +1,4 @@
-import { isCodexReasoningEffort, type CodexReasoningEffort } from '@conai/shared'
+import { CHAT_TRANSLATION_DEFAULTS, isChatTranslationLanguage, isCodexReasoningEffort, type ChatTranslationLanguage, type CodexReasoningEffort } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { CHAT_SCOPES, readLegacyCodexChatSettings, type ChatScope } from './chatSettings'
 import { isClaudeReasoningEffort, isLlmReasoningEffort, parseLlmExtraParams, type LlmGenerationOptions } from '../llmGenerationOptions'
@@ -130,10 +130,15 @@ export type ChatProfile = {
   /** Empty uses DEFAULT_CHAT_SUMMARY_PROMPT. */
   summaryPrompt: string
   /**
-   * Notes the translation model follows when it puts this profile's replies into Korean: the character's voice, how it
-   * addresses the user, a glossary. `{{char}}` / `{{user}}` are filled. The user's messages are translated without it.
+   * Notes the translation model follows when it puts this profile's replies into the display language: the character's
+   * voice, how it addresses the user, a glossary. `{{char}}` / `{{user}}` are filled. The user's messages are translated
+   * without it.
    */
   translationInstructions: string
+  /** With a translation model: the language the chat model reads and writes (the user's messages are translated into it). */
+  translationModelLanguage: ChatTranslationLanguage
+  /** With a translation model: the language the user writes and reads (the replies are translated into it). */
+  translationDisplayLanguage: ChatTranslationLanguage
   /**
    * Reply suggestions: the composer's sparkle button asks a model for a few things the user might say next.
    * With no model of its own (`suggestSlotId`) it uses the chat's (a Codex profile: its Codex model, in a one-shot run).
@@ -141,8 +146,8 @@ export type ChatProfile = {
   suggestEnabled: boolean
   /**
    * Model rows (llm_model_slots, a connection's model) per role. Chat null: the default row. Summary / suggestions
-   * null: the chat's model. Translation null: no translation (user messages go to the chat model in English and
-   * replies are shown in Korean when set). A row that went missing reads as null. Codex profiles have no chat row.
+   * null: the chat's model. Translation null: no translation (when set, user messages go to the chat model in its
+   * language and replies are shown in the display language). A row that went missing reads as null. Codex profiles have no chat row.
    */
   modelSlotId: number | null
   summarySlotId: number | null
@@ -264,6 +269,8 @@ type ProfileRow = {
   translation_provider_name: string | null
   translation_model: string | null
   translation_instructions: string | null
+  translation_model_language: string | null
+  translation_display_language: string | null
   suggest_enabled: number | null
   suggest_provider_name: string | null
   suggest_model: string | null
@@ -411,6 +418,8 @@ function toProfile(row: ProfileRow): ChatProfile {
     summaryTriggerTurns: row.summary_trigger_turns ?? CHAT_PROFILE_DEFAULTS.summaryTriggerTurns,
     summaryPrompt: row.summary_prompt ?? '',
     translationInstructions: row.translation_instructions ?? '',
+    translationModelLanguage: isChatTranslationLanguage(row.translation_model_language) ? row.translation_model_language : CHAT_TRANSLATION_DEFAULTS.modelLanguage,
+    translationDisplayLanguage: isChatTranslationLanguage(row.translation_display_language) ? row.translation_display_language : CHAT_TRANSLATION_DEFAULTS.displayLanguage,
     suggestEnabled: row.suggest_enabled === 1,
     // A row that no longer exists reads as unset (the next save clears the column).
     modelSlotId: ModelSlotStore.existing(row.model_slot_id),
@@ -595,6 +604,8 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean } = {}) {
     translation_provider_name: null,
     translation_model: null,
     translation_instructions: text(input.translationInstructions, TRANSLATION_INSTRUCTIONS_MAX_LENGTH) || null,
+    translation_model_language: isChatTranslationLanguage(input.translationModelLanguage) ? input.translationModelLanguage : null,
+    translation_display_language: isChatTranslationLanguage(input.translationDisplayLanguage) ? input.translationDisplayLanguage : null,
     suggest_enabled: input.suggestEnabled ? 1 : 0,
     suggest_provider_name: null,
     suggest_model: null,
