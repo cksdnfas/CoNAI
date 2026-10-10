@@ -164,6 +164,10 @@ export class RatingScoreService {
     if (orderSet.size !== tiers.length) {
       throw new Error('Tier orders must be unique');
     }
+    const ids = tiers.map(t => t.id).filter((id): id is number => typeof id === 'number');
+    if (new Set(ids).size !== ids.length) {
+      throw new Error('Tier ids must be unique');
+    }
 
     // 점수 구간 겹침 검증
     this.validateTierRanges(tiers);

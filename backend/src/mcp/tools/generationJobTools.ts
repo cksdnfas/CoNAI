@@ -12,6 +12,7 @@ import { GenerationQueueService } from '../../services/generationQueueService';
 import { codexGenerationRequestSchema, getCodexModelSuggestions, parseCodexGenerationRequest } from '../../services/codexGenerationOptions';
 import { buildGenerationHistoryRequestSnapshot } from '../../services/generationHistoryRequestSnapshot';
 import { McpArtifactService } from '../../services/mcpArtifactService';
+import { historyWithinContextRating } from '../../services/codex-chat/chatContentRating';
 import { normalizeWorkflowNumericPromptValues } from '../../services/workflowNumericFieldPolicy';
 import { parseGenerationQueueRoutingTag } from '../../services/generationQueueRouting';
 import { assertChatNaiSampleCount, isChatMcpSource, type McpRequestContext } from '../context';
@@ -66,7 +67,7 @@ async function describeJob(jobId: number, context: McpRequestContext) {
   const histories = !context.requester || canRequesterViewImages(context.requester)
     ? HistoryQueryRepository.findAllWithMetadata({ queue_job_id: jobId, limit: 100 }) : [];
   const artifacts = context.baseUrl
-    ? (await Promise.all(histories.map((history) => history.id
+    ? (await Promise.all(histories.map(async (history) => history.id && await historyWithinContextRating(context, history.id)
         ? McpArtifactService.createHistoryDescriptor(history.id, context.baseUrl as string, context.requester)
         : null))).filter(Boolean)
     : [];

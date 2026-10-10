@@ -169,28 +169,36 @@ export class RatingScoreModel {
   }
 
   /**
-   * 모든 등급 일괄 업데이트 (트랜잭션)
+   * 모든 등급 일괄 업데이트 (트랜잭션).
+   * 기존 등급(id가 DB에 있는 것)은 id를 유지한 채 수정하고, 새 등급만 추가하며, 목록에서 빠진 등급은 지운다.
+   * 모델·프로필의 허용 등급이 등급 id를 가리키므로 저장할 때마다 id가 바뀌면 안 된다.
    */
   static updateAllTiers(tiers: RatingTierInput[]): RatingTier[] {
     const transaction = db.transaction(() => {
-      // 기존 등급 모두 삭제
-      db.prepare('DELETE FROM rating_tiers').run();
+      const existing = new Set((db.prepare('SELECT id FROM rating_tiers').all() as Array<{ id: number }>).map((row) => row.id));
+      const kept = new Set(tiers.map((tier) => tier.id).filter((id): id is number => typeof id === 'number' && existing.has(id)));
+      for (const id of existing) {
+        if (!kept.has(id)) db.prepare('DELETE FROM rating_tiers WHERE id = ?').run(id);
+      }
+      // tier_order는 UNIQUE라서, 순서를 바꾸는 도중에 겹치지 않게 남은 등급을 먼저 음수 자리로 비켜 둔다.
+      db.prepare('UPDATE rating_tiers SET tier_order = -id').run();
 
-      // 새 등급들 삽입
+      const updateStmt = db.prepare(`
+        UPDATE rating_tiers SET tier_name = ?, min_score = ?, max_score = ?, tier_order = ?, color = ?, feed_visibility = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `);
       const insertStmt = db.prepare(`
         INSERT INTO rating_tiers (tier_name, min_score, max_score, tier_order, color, feed_visibility)
         VALUES (?, ?, ?, ?, ?, ?)
       `);
 
       for (const tier of tiers) {
-        insertStmt.run(
-          tier.tier_name,
-          tier.min_score,
-          tier.max_score,
-          tier.tier_order,
-          tier.color || null,
-          tier.feed_visibility || 'show'
-        );
+        const values = [tier.tier_name, tier.min_score, tier.max_score, tier.tier_order, tier.color || null, tier.feed_visibility || 'show'] as const;
+        if (typeof tier.id === 'number' && kept.has(tier.id)) {
+          updateStmt.run(...values, tier.id);
+        } else {
+          insertStmt.run(...values);
+        }
       }
     });
 

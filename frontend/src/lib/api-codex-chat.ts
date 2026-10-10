@@ -629,10 +629,10 @@ export interface ChatProfile extends ChatProfileAssetFields {
   maxToolRounds: number
   /** LLM: the model can look at images (view_images). */
   visionEnabled: boolean
-  /** Ceiling on the rating of media the model is shown: its model row's, or `contentRatingMaxTier` (Codex / Claude Code: always its own). */
+  /** Ceiling on the rating of media the model is shown: its model row's, or `contentRatingTierId` (Codex / Claude Code: always its own). */
   contentRatingMode: 'model' | 'custom'
-  /** The highest rating tier (tier_order) shown; null: no ceiling. */
-  contentRatingMaxTier: number | null
+  /** The highest rating tier (id) shown; null: no ceiling. */
+  contentRatingTierId: number | null
   pageAssist: boolean
   /** The model may propose chat lorebook entries (save_lore). */
   allowLoreProposals: boolean
@@ -1001,8 +1001,8 @@ export interface ModelSlot {
   label: string
   isDefault: boolean
   sortOrder: number
-  /** The highest rating tier (tier_order) of media this model is shown; null: no ceiling. */
-  contentRatingMaxTier: number | null
+  /** The highest rating tier (id) of media this model is shown; null: no ceiling. */
+  contentRatingTierId: number | null
   profiles: Array<{ id: number; name: string; roles: ModelUseRole[] }>
   judgePresets: Array<{ id: number; name: string }>
   userProfiles: number
@@ -1030,7 +1030,7 @@ export function syncConnectionModels(providerName: string, models: string[]) {
 }
 
 /** Changes a row's model; everything that references the row follows. */
-export function updateModelSlot(slotId: number, patch: { model?: string; isDefault?: boolean; contentRatingMaxTier?: number | null }) {
+export function updateModelSlot(slotId: number, patch: { model?: string; isDefault?: boolean; contentRatingTierId?: number | null }) {
   return requestApiData<ModelSlot>(`/api/codex-chat/admin/model-slots/${slotId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 

@@ -263,7 +263,7 @@ function flattenForCodex(messages: ChatCompletionMessage[]) {
  */
 async function assertImagesWithinRating(resolved: ResolvedWorkflowLlm, request: WorkflowLlmRequest) {
   const profile = resolved.profile
-  const limit = profile && (profile.contentRatingMode === 'custom' || profile.engine !== 'llm') ? profile.contentRatingMaxTier : slotContentLimit(resolved.modelSlotId)
+  const limit = profile && (profile.contentRatingMode === 'custom' || profile.engine !== 'llm') ? profile.contentRatingTierId : slotContentLimit(resolved.modelSlotId)
   if (limit === null) return
   // Only data URLs are ever sent (the request drops anything else).
   const images = [

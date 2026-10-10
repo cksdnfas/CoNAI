@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { McpArtifactService } from '../../services/mcpArtifactService';
+import { mediaWithinContextRating } from '../../services/codex-chat/chatContentRating';
 import { RuntimeJobStore } from '../../services/runtimeJobs/runtimeJobStore';
 import { findLibraryMedia, ingestVideoDataUrl, type SpriteGroupTarget } from '../../services/sprite/spriteLibrary';
 import {
@@ -127,7 +128,7 @@ function outputHashes(result: unknown): string[] {
 
 /** A download descriptor for a saved library file; null without the HTTP transport (no URL to give) or when it is gone. */
 async function mediaDownload(context: McpRequestContext, compositeHash: string) {
-  if (!context.baseUrl) return null;
+  if (!context.baseUrl || !await mediaWithinContextRating(context, compositeHash)) return null;
   return McpArtifactService.createMediaDescriptor(compositeHash, context.baseUrl, context.requester).catch(() => null);
 }
 

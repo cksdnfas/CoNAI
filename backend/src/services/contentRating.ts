@@ -16,9 +16,9 @@ import { settingsService } from './settingsService';
 
 /**
  * Content rating ceilings for what a model is shown. Some models refuse (or error on) sensitive media, so a model row
- * or a chat profile can cap the rating tier of the images, videos and animations sent to it. A ceiling is a position in
- * the rating tiers (rating_tiers.tier_order, the tiers the feed uses): media whose weighted rating score falls in that
- * tier or a lower one passes; null is no ceiling.
+ * or a chat profile can cap the rating tier of the images, videos and animations sent to it. A ceiling is one of the
+ * rating tiers (rating_tiers.id, the tiers the feed uses): media whose weighted rating score falls in that tier or one
+ * ordered before it passes; null is no ceiling. A ceiling whose tier was deleted lets nothing through.
  *
  * Media not rated yet (the auto-tagger has not reached it, or a private file) is rated on the spot with the tagger and
  * the score kept. Media that cannot be rated (tagger off, failed) never reaches a model with a ceiling.
@@ -34,8 +34,9 @@ const TAG_TIMEOUT_MS = 90_000;
 export function scoreWithinLimit(score: number | null | undefined, limit: ContentRatingLimit): boolean | null {
   if (limit === null) return true;
   if (typeof score !== 'number' || !Number.isFinite(score)) return null;
+  const ceiling = RatingScoreModel.getAllTiers().find((tier) => tier.id === limit);
   const tier = RatingScoreModel.getTierByScore(score);
-  return tier !== null && tier.tier_order <= limit;
+  return ceiling !== undefined && tier !== null && tier.tier_order <= ceiling.tier_order;
 }
 
 function taggerEnabled() {

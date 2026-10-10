@@ -447,6 +447,7 @@ export function useAutoSettingsTab({
     }
 
     const normalizedTiers = effectiveRatingTiersDraft.map((tier, index) => ({
+      id: tier.id,
       tier_name: tier.tier_name.trim() || `Tier ${index + 1}`,
       min_score: tier.min_score,
       max_score: index === effectiveRatingTiersDraft.length - 1 ? null : effectiveRatingTiersDraft[index + 1].min_score,

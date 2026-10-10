@@ -109,11 +109,11 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
   const { showSnackbar } = useSnackbar()
   const refresh = useRefreshModelRows()
   const [model, setModel] = useState('')
-  const [maxTier, setMaxTier] = useState<number | null>(null)
+  const [ratingTierId, setRatingTierId] = useState<number | null>(null)
   useEffect(() => {
     if (slot) {
       setModel(slot.model)
-      setMaxTier(slot.contentRatingMaxTier)
+      setRatingTierId(slot.contentRatingTierId)
     }
   }, [slot])
 
@@ -128,7 +128,7 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
   const used = slot !== null && slotUseCount(slot, workflowNodes) > 0
 
   const saveMutation = useMutation({
-    mutationFn: () => updateModelSlot(slot?.id ?? 0, { model: model.trim(), contentRatingMaxTier: maxTier }),
+    mutationFn: () => updateModelSlot(slot?.id ?? 0, { model: model.trim(), contentRatingTierId: ratingTierId }),
     onSuccess: async () => {
       showSnackbar({ message: t({ ko: '저장했어.', en: 'Saved.' }), tone: 'info' })
       await refresh()
@@ -146,7 +146,7 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
     onError: (error) => showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '지우지 못했어.', en: 'Could not delete.' }), tone: 'error' }),
   })
   const busy = saveMutation.isPending || deleteMutation.isPending
-  const changed = slot !== null && (model.trim() !== slot.model || maxTier !== slot.contentRatingMaxTier)
+  const changed = slot !== null && (model.trim() !== slot.model || ratingTierId !== slot.contentRatingTierId)
   // TypeSafe judges only read text.
   const seesMedia = slot !== null && slot.providerType !== 'decision_typesafe'
 
@@ -172,7 +172,7 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
             label={t({ ko: '허용 등급', en: 'Content rating' })}
             info={t({ ko: '이 등급을 넘는 이미지·영상은 이 모델에 보내지 않아. 프로필에서 따로 정하면 그쪽이 우선이야.', en: 'Images and videos above this rating are never sent to this model. A profile’s own setting takes precedence.' })}
           >
-            <ContentRatingSelect ariaLabel={t({ ko: '허용 등급', en: 'Content rating' })} value={maxTier} onChange={(choice) => setMaxTier(choice === 'model' ? null : choice)} />
+            <ContentRatingSelect ariaLabel={t({ ko: '허용 등급', en: 'Content rating' })} value={ratingTierId} onChange={(choice) => setRatingTierId(choice === 'model' ? null : choice)} />
           </Field>
         ) : null}
       </ModalBody>

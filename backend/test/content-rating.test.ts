@@ -42,7 +42,12 @@ test('content rating ceilings: what a model may be shown', { timeout: 60000 }, a
   updateChatSettings({ enabled: true })
   ExternalApiProvider.create({ provider_name: 'conn', display_name: 'Conn', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
 
-  // Default tiers: 1 G [0,2) · 2 Teen [2,6) · 3 SFW [6,15) · 4 NSFW [15,∞).
+  // Default tiers in order: G [0,2) · Teen [2,6) · SFW [6,15) · NSFW [15,∞). A ceiling is a tier's id.
+  const { RatingScoreModel } = await import('../src/models/RatingScore')
+  const tierId = (name: string) => RatingScoreModel.getAllTiers().find((tier) => tier.tier_name === name)!.id
+  const teen = tierId('Teen')
+  const sfw = tierId('SFW')
+  const nsfw = tierId('NSFW')
   const sharp = (await import('sharp')).default
   const folderId = Number(main.db.prepare('INSERT INTO watched_folders (folder_path, folder_name) VALUES (?, ?)').run(root, 'test').lastInsertRowid)
   const addMedia = async (hash: string, score: number | null) => {
@@ -58,10 +63,10 @@ test('content rating ceilings: what a model may be shown', { timeout: 60000 }, a
 
   await t.test('a score passes up to the ceiling tier; an unknown score is unknown', () => {
     assert.equal(rating.scoreWithinLimit(40, null), true)
-    assert.equal(rating.scoreWithinLimit(1, 2), true)
-    assert.equal(rating.scoreWithinLimit(5.9, 2), true)
-    assert.equal(rating.scoreWithinLimit(6, 2), false)
-    assert.equal(rating.scoreWithinLimit(null, 2), null)
+    assert.equal(rating.scoreWithinLimit(1, teen), true)
+    assert.equal(rating.scoreWithinLimit(5.9, teen), true)
+    assert.equal(rating.scoreWithinLimit(6, teen), false)
+    assert.equal(rating.scoreWithinLimit(null, teen), null)
   })
 
   const slotId = ModelSlotStore.ensure('conn', 'm') as number
@@ -70,18 +75,18 @@ test('content rating ceilings: what a model may be shown', { timeout: 60000 }, a
   await t.test('profiles follow their model row or set their own; Codex and Claude always set their own', () => {
     assert.equal(followsModel.contentRatingMode, 'model')
     assert.equal(profileContentLimit(followsModel), null)
-    ModelSlotStore.update(slotId, { contentRatingMaxTier: 2 })
-    assert.equal(ModelSlotStore.find(slotId)!.contentRatingMaxTier, 2)
-    assert.equal(profileContentLimit(followsModel), 2)
-    const custom = ChatProfileStore.create({ name: 'Custom', engine: 'llm', modelSlotId: slotId, systemPrompt: 'p', contentRatingMode: 'custom', contentRatingMaxTier: null })
+    ModelSlotStore.update(slotId, { contentRatingTierId: teen })
+    assert.equal(ModelSlotStore.find(slotId)!.contentRatingTierId, teen)
+    assert.equal(profileContentLimit(followsModel), teen)
+    const custom = ChatProfileStore.create({ name: 'Custom', engine: 'llm', modelSlotId: slotId, systemPrompt: 'p', contentRatingMode: 'custom', contentRatingTierId: null })
     assert.equal(profileContentLimit(custom), null, 'a custom "no ceiling" overrides the row')
-    const codex = ChatProfileStore.create({ name: 'Codex', engine: 'codex', systemPrompt: 'p', contentRatingMode: 'model', contentRatingMaxTier: 3 })
+    const codex = ChatProfileStore.create({ name: 'Codex', engine: 'codex', systemPrompt: 'p', contentRatingMode: 'model', contentRatingTierId: sfw })
     assert.equal(codex.contentRatingMode, 'custom')
-    assert.equal(profileContentLimit(codex), 3)
-    assert.throws(() => ModelSlotStore.update(slotId, { contentRatingMaxTier: 0 }), /허용 등급/)
+    assert.equal(profileContentLimit(codex), sfw)
+    assert.throws(() => ModelSlotStore.update(slotId, { contentRatingTierId: 99999 }), /허용 등급/)
     // An MCP request outside any chat has no ceiling; a chat request without a fixed one uses its profile's.
     assert.equal(contextContentLimit({ scopes: ['read'] }), null)
-    assert.equal(contextContentLimit({ scopes: ['read'], chatContext: { threadId: 1, profileId: followsModel.id, kind: 'direct' } }), 2)
+    assert.equal(contextContentLimit({ scopes: ['read'], chatContext: { threadId: 1, profileId: followsModel.id, kind: 'direct' } }), teen)
   })
 
   const admin = { accountId: null, accountType: 'admin' as const }
@@ -100,7 +105,7 @@ test('content rating ceilings: what a model may be shown', { timeout: 60000 }, a
   }
 
   await t.test('view_images withholds what is above the ceiling, unrated media included while the tagger is off', async () => {
-    const content = await viewWith(followsModel.id, { composite_hashes: [safe, explicit, unrated] }, 2)
+    const content = await viewWith(followsModel.id, { composite_hashes: [safe, explicit, unrated] }, teen)
     assert.equal(content.filter((part) => part.type === 'image').length, 1)
     const text = content.filter((part) => part.type === 'text').map((part) => part.text).join('\n')
     assert.match(text, new RegExp(`${explicit}: ${rating.CONTENT_RATING_BLOCKED}`))
@@ -124,23 +129,73 @@ test('content rating ceilings: what a model may be shown', { timeout: 60000 }, a
       calls++
       return { success: true, rating: { general: 0.05, sensitive: 0.1, questionable: 0.05, explicit: 0.8 } }
     })
-    const [first, second] = await Promise.all([rating.libraryMediaAllowed(unrated, 2), rating.libraryMediaAllowed(unrated, 2)])
+    const [first, second] = await Promise.all([rating.libraryMediaAllowed(unrated, teen), rating.libraryMediaAllowed(unrated, teen)])
     assert.equal(first, false)
     assert.equal(second, false)
     assert.equal(calls, 1, 'one tagger run for concurrent callers')
     const kept = main.db.prepare('SELECT rating_score FROM media_metadata WHERE composite_hash = ?').get(unrated) as { rating_score: number }
     assert.ok(kept.rating_score >= 15)
-    assert.equal(await rating.libraryMediaAllowed(unrated, 4), true)
+    assert.equal(await rating.libraryMediaAllowed(unrated, nsfw), true)
     assert.equal(calls, 1)
 
     // Private files are rated as they land; workflow bytes when they are sent.
     const staged = path.join(root, 'upload.png')
     await sharp({ create: { width: 8, height: 8, channels: 3, background: '#000000' } }).png().toFile(staged)
     const [entry] = FileStoreService.upload('bootstrap', null, [{ originalname: 'upload.png', path: staged, size: fs.statSync(staged).size, mimetype: 'image/png' } as Express.Multer.File])
-    assert.equal(await rating.storedFileAllowed(entry.id, 3), false)
-    assert.equal(await rating.storedFileAllowed(entry.id, 4), true)
+    assert.equal(await rating.storedFileAllowed(entry.id, sfw), false)
+    assert.equal(await rating.storedFileAllowed(entry.id, nsfw), true)
     const dataUrl = `data:image/png;base64,${(await sharp({ create: { width: 8, height: 8, channels: 3, background: '#ffffff' } }).png().toBuffer()).toString('base64')}`
-    assert.equal(await rating.imageDataUrlAllowed(dataUrl, 2), false)
+    assert.equal(await rating.imageDataUrlAllowed(dataUrl, teen), false)
     assert.equal(await rating.imageDataUrlAllowed(dataUrl, null), true)
+  })
+
+  await t.test('download links follow the ceiling too (a model could fetch and look at the file)', async () => {
+    const { createMcpServer } = await import('../src/mcp/server')
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
+    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
+    const download = async (contentRatingLimit: number | null) => {
+      const server = createMcpServer({ scopes: ['read'], requester: admin, baseUrl: 'http://127.0.0.1:1', contentRatingLimit })
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+      await server.connect(serverTransport)
+      const client = new Client({ name: 'test', version: '1.0.0' })
+      await client.connect(clientTransport)
+      try {
+        const result = await client.callTool({ name: 'get_media_download', arguments: { composite_hashes: [safe, explicit] } }) as { content: Array<{ text: string }> }
+        return JSON.parse(result.content[0].text).items as Array<{ composite_hash: string; error?: string }>
+      } finally {
+        await client.close()
+        await server.close()
+      }
+    }
+    const limited = await download(teen)
+    assert.equal(limited.find((item) => item.composite_hash === explicit)!.error, rating.CONTENT_RATING_BLOCKED)
+    assert.notEqual(limited.find((item) => item.composite_hash === safe)!.error, rating.CONTENT_RATING_BLOCKED)
+    assert.notEqual((await download(null)).find((item) => item.composite_hash === explicit)!.error, rating.CONTENT_RATING_BLOCKED)
+  })
+
+  await t.test('saving the tiers keeps their ids: ceilings follow renames and inserts; a deleted ceiling blocks all', async () => {
+    const { RatingScoreService } = await import('../src/services/ratingScoreService')
+    const before = RatingScoreModel.getAllTiers()
+    const renamed = await RatingScoreService.updateAllTiers(before.map((tier) => ({ ...tier, tier_name: tier.id === teen ? '청소년' : tier.tier_name })))
+    assert.deepEqual(renamed.map((tier) => tier.id), before.map((tier) => tier.id))
+    assert.equal(renamed.find((tier) => tier.id === teen)!.tier_name, '청소년')
+
+    // A new tier between G and 청소년 (a temporary client id): the old ids stay, the ceiling still means "up to 청소년".
+    const [g, ...rest] = renamed
+    const inserted = await RatingScoreService.updateAllTiers([
+      { ...g, max_score: 1 },
+      { id: Date.now(), tier_name: 'New', min_score: 1, max_score: 2, tier_order: 2, color: null, feed_visibility: 'show' },
+      ...rest.map((tier) => ({ ...tier, tier_order: tier.tier_order + 1 })),
+    ])
+    assert.equal(inserted.length, 5)
+    assert.ok(before.every((tier) => inserted.some((entry) => entry.id === tier.id)))
+    assert.equal(rating.scoreWithinLimit(5, teen), true)
+    assert.equal(rating.scoreWithinLimit(7, teen), false)
+
+    // Removing the ceiling's tier: nothing passes it any more.
+    const added = inserted.find((tier) => tier.tier_name === 'New')!
+    assert.equal(rating.scoreWithinLimit(0.5, added.id), true)
+    await RatingScoreService.updateAllTiers(before)
+    assert.equal(rating.scoreWithinLimit(0.5, added.id), false)
   })
 })

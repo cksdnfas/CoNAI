@@ -98,9 +98,9 @@ function ContentRatingField({ draft, patch, slots }: { draft: Draft; patch: Patc
     <Field className="md:w-1/2" label={t({ ko: '허용 등급', en: 'Content rating' })} info={t({ ko: '이 등급을 넘는 이미지·영상은 모델에 보내지 않아.', en: 'Images and videos above this rating are never sent to the model.' })}>
       <ContentRatingSelect
         ariaLabel={t({ ko: '허용 등급', en: 'Content rating' })}
-        value={isLlm && draft.contentRatingMode === 'model' ? 'model' : draft.contentRatingMaxTier}
-        followLabel={isLlm ? t({ ko: '모델 설정 따름 · {ceiling}', en: 'Model’s · {ceiling}' }, { ceiling: label(chatSlot?.contentRatingMaxTier ?? null) }) : undefined}
-        onChange={(choice) => patch(choice === 'model' ? { contentRatingMode: 'model' } : { contentRatingMode: 'custom', contentRatingMaxTier: choice })}
+        value={isLlm && draft.contentRatingMode === 'model' ? 'model' : draft.contentRatingTierId}
+        followLabel={isLlm ? t({ ko: '모델 설정 따름 · {ceiling}', en: 'Model’s · {ceiling}' }, { ceiling: label(chatSlot?.contentRatingTierId ?? null) }) : undefined}
+        onChange={(choice) => patch(choice === 'model' ? { contentRatingMode: 'model' } : { contentRatingMode: 'custom', contentRatingTierId: choice })}
       />
     </Field>
   )

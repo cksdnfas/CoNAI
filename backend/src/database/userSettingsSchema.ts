@@ -966,18 +966,18 @@ export function createUserSettingsSchema(db: Database.Database): void {
     // The judge model instead of the preset's (llm_model_slots); the pair above is the older form (migrateLlmModelRows).
     ['judge_slot_id', 'INTEGER'],
     // Content rating ceiling for media shown to the model: 'model' follows the model row's, 'custom' uses the tier below
-    // (a rating_tiers.tier_order; null: no ceiling). See chatContentRating.ts.
+    // (a rating_tiers.id; null: no ceiling). See chatContentRating.ts.
     ['content_rating_mode', 'TEXT'],
-    ['content_rating_max_tier', 'INTEGER'],
+    ['content_rating_tier_id', 'INTEGER'],
   ];
   for (const [columnName, definition] of chatProfileColumns) {
     if (!hasColumn('llm_chat_profiles', columnName)) {
       db.exec(`ALTER TABLE llm_chat_profiles ADD COLUMN ${columnName} ${definition}`);
     }
   }
-  // The highest rating tier (rating_tiers.tier_order) a model may be shown media of; null: no ceiling.
-  if (!hasColumn('llm_model_slots', 'content_rating_max_tier')) {
-    db.exec('ALTER TABLE llm_model_slots ADD COLUMN content_rating_max_tier INTEGER');
+  // The highest rating tier (rating_tiers.id) a model may be shown media of; null: no ceiling.
+  if (!hasColumn('llm_model_slots', 'content_rating_tier_id')) {
+    db.exec('ALTER TABLE llm_model_slots ADD COLUMN content_rating_tier_id INTEGER');
   }
   // The model a user profile writes reply suggestions with (llm_model_slots; no foreign key, like the profile slots).
   if (!hasColumn('chat_user_profiles', 'model_slot_id')) {

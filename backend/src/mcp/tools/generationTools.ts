@@ -19,6 +19,7 @@ import {
 import type { McpRequestContext } from '../context';
 import { registerGenerationJobTools } from './generationJobTools';
 import { McpArtifactService } from '../../services/mcpArtifactService';
+import { historyWithinContextRating } from '../../services/codex-chat/chatContentRating';
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
 import { resolveRequestBodyLimitsMb } from '../../middleware/requestBodyLimits';
 import { getMcpGenerationRoutingOptions, getMcpGenerationRoutingRules } from './generationJobRouting';
@@ -53,7 +54,9 @@ async function replaceOutputPathsWithArtifacts(result: Awaited<ReturnType<typeof
     return receipt;
   }
   if (!context.baseUrl) return isChatMcpSource(context.source) ? safeResult : result;
-  const artifacts = (await Promise.all(result.historyIds.map((id) => McpArtifactService.createHistoryDescriptor(id, context.baseUrl as string, context.requester)))).filter(Boolean);
+  const artifacts = (await Promise.all(result.historyIds.map(async (id) => await historyWithinContextRating(context, id)
+    ? McpArtifactService.createHistoryDescriptor(id, context.baseUrl as string, context.requester)
+    : null))).filter(Boolean);
   return { ...safeResult, artifacts };
 }
 

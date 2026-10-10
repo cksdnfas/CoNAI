@@ -9,6 +9,8 @@ import { AutoTagSearchParams, TagFilter } from '../../types/autoTag';
 import type { McpRequestContext } from '../context';
 import { McpArtifactService } from '../../services/mcpArtifactService';
 import { ImageSafetyService } from '../../services/imageSafetyService';
+import { CONTENT_RATING_BLOCKED, libraryMediaAllowed } from '../../services/contentRating';
+import { contextContentLimit, historyWithinContextRating } from '../../services/codex-chat/chatContentRating';
 import { AuthAccount } from '../../models/AuthAccount';
 
 function sanitizeMetadata(metadata: Record<string, unknown>, includeHeavyFields: boolean) {
@@ -104,7 +106,10 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
       try {
         if (!context.baseUrl) throw new Error('Artifact downloads require the Streamable HTTP transport');
         const baseUrl = context.baseUrl;
+        // A model that fetches the link could look at the file, so the content rating ceiling applies here too.
+        const limit = contextContentLimit(context);
         const items = await Promise.all([...new Set(composite_hashes)].map(async (hash) => {
+          if (!await libraryMediaAllowed(hash, limit)) return { composite_hash: hash, error: CONTENT_RATING_BLOCKED };
           const artifact = await McpArtifactService.createMediaDescriptor(hash, baseUrl, context.requester);
           return artifact ? { composite_hash: hash, artifact } : { composite_hash: hash, error: 'not found or not available' };
         }));
@@ -189,7 +194,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
         // 응답 크기를 줄이기 위해 핵심 필드만 추출
         const summary = await Promise.all(records.map(async (r) => {
           const workflowDeleted = r.workflow_deleted === true || r.workflow_deleted === 1;
-          const artifact = r.id && context.baseUrl
+          const artifact = r.id && context.baseUrl && await historyWithinContextRating(context, r.id)
             ? await McpArtifactService.createHistoryDescriptor(r.id, context.baseUrl)
             : null;
           return {

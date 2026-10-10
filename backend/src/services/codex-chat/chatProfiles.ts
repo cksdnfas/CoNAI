@@ -71,7 +71,7 @@ export const DEFAULT_CHAT_SUMMARY_PROMPT = [
 /** `llm`: an API LLM connection driven by CoNAI. `codex`: the server Codex CLI, which keeps its own context. */
 export type ChatProfileEngine = 'llm' | 'codex' | 'claude'
 
-/** Where a profile's content rating ceiling comes from: its model row's, or its own (`contentRatingMaxTier`). */
+/** Where a profile's content rating ceiling comes from: its model row's, or its own (`contentRatingTierId`). */
 export type ChatContentRatingMode = 'model' | 'custom'
 
 export type ChatProfile = {
@@ -163,12 +163,12 @@ export type ChatProfile = {
   /** LLM: the model can look at images (view_images results are sent to it). */
   visionEnabled: boolean
   /**
-   * The ceiling on the rating of media the model is shown: its model row's (`model`), or `contentRatingMaxTier`
+   * The ceiling on the rating of media the model is shown: its model row's (`model`), or `contentRatingTierId`
    * (`custom`). Codex / Claude Code profiles have no model row, so they always use their own.
    */
   contentRatingMode: ChatContentRatingMode
-  /** Custom ceiling: the highest rating tier (rating_tiers.tier_order) shown; null: no ceiling. */
-  contentRatingMaxTier: number | null
+  /** Custom ceiling: the highest rating tier (rating_tiers.id) shown; null: no ceiling. */
+  contentRatingTierId: number | null
   /** Page assistant: a direct chat with this profile can be connected to the current CoNAI page. */
   pageAssist: boolean
   /** The model may propose chat lorebook entries (save_lore) for the user to save. */
@@ -278,7 +278,7 @@ type ProfileRow = {
   background_image: string | null
   vision_enabled: number | null
   content_rating_mode: string | null
-  content_rating_max_tier: number | null
+  content_rating_tier_id: number | null
   page_assist: number | null
   allow_lore_proposals: number | null
   judge_preset_id: number | null
@@ -422,7 +422,7 @@ function toProfile(row: ProfileRow): ChatProfile {
     maxToolRounds: row.max_tool_rounds ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
     visionEnabled: row.vision_enabled === 1,
     contentRatingMode: row.engine !== 'codex' && row.engine !== 'claude' && row.content_rating_mode !== 'custom' ? 'model' : 'custom',
-    contentRatingMaxTier: row.content_rating_max_tier ?? null,
+    contentRatingTierId: row.content_rating_tier_id ?? null,
     pageAssist: row.page_assist === 1,
     allowLoreProposals: row.allow_lore_proposals !== 0,
     judgePresetId: ChatJudgePresetStore.existing(row.judge_preset_id),
@@ -607,7 +607,7 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean } = {}) {
     max_tool_rounds: optionalNumber(input.maxToolRounds, CHAT_PROFILE_LIMITS.maxToolRounds, true) ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
     vision_enabled: input.visionEnabled ? 1 : 0,
     content_rating_mode: engine === 'llm' && input.contentRatingMode !== 'custom' ? 'model' : 'custom',
-    content_rating_max_tier: contentRatingTier(input.contentRatingMaxTier ?? null),
+    content_rating_tier_id: contentRatingTier(input.contentRatingTierId ?? null),
     page_assist: input.pageAssist ? 1 : 0,
     allow_lore_proposals: input.allowLoreProposals === false ? 0 : 1,
     // Every engine can be judged (a Codex chat gets the directives and status fields only, see chatJudge).

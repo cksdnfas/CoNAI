@@ -14,6 +14,8 @@ import type { RatingTierRecord } from '@/features/search/search-types'
 import type { RuntimeJobRecord } from '@/types/runtime-job'
 
 export interface RatingTierUpdateInput {
+  /** An existing tier keeps its id (content rating ceilings point at it); a new draft's temporary id adds a tier. */
+  id?: number
   tier_name: string
   min_score: number
   max_score: number | null
