@@ -1,5 +1,7 @@
 # 채팅 (Codex · Claude Code · API LLM)
 
+::: v-pre
+
 채팅 프로필과 대화하면서 CoNAI를 조작합니다. 프로필마다 엔진을 고릅니다.
 
 - **Codex**: 서버에 연결된 Codex CLI. 대화 기억은 Codex가 직접 관리합니다.
@@ -416,3 +418,5 @@ API LLM은 **항상 넣기** 항목을 시스템 프롬프트 끝의 `## 설정`
 - [파일 보관함](./FILES.md)
 - [Codex 생성](./CODEX_GENERATION.md)
 - [Docker로 실행 → Codex 로그인](./DOCKER.md#codex-로그인)
+
+:::
