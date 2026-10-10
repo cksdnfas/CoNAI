@@ -30,6 +30,8 @@ export interface McpRequestContext {
    * from the chat profile, if any (chatContentRating.ts).
    */
   contentRatingLimit?: number | null;
+  /** false: a chat source lists every tool directly instead of behind open_tools / run_tool (the admin tool picker). */
+  toolCatalog?: boolean;
 }
 
 /** The tool name of the n-th generation preset a chat profile links (generate_image, generate_image_2, …). */

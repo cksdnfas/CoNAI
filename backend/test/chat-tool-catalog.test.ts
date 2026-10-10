@@ -129,6 +129,18 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
     await bridge.close()
   }
 
+  // The admin tool picker lists every tool by name, not the catalog's two entries.
+  const picker = await openChatMcpBridge(admin, [...CHAT_SCOPES], null, { toolCatalog: false })
+  try {
+    const names = picker.tools.map((tool) => tool.function.name)
+    assert.ok(names.includes('list_audio_projects'))
+    assert.ok(names.includes('submit_generation_job'))
+    assert.ok(!names.includes(CATALOG_OPEN_TOOL) && !names.includes(CATALOG_RUN_TOOL))
+    assert.equal(picker.catalogTools.size, 0)
+  } finally {
+    await picker.close()
+  }
+
   assert.deepEqual(unwrapCatalogCall(CATALOG_RUN_TOOL, { tool: 'order_audio', arguments: { count: 1 } }), { tool: 'order_audio', arguments: { count: 1 } })
   assert.deepEqual(unwrapCatalogCall('offer_choices', { a: 1 }), { tool: 'offer_choices', arguments: { a: 1 } })
 })

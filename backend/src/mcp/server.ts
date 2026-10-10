@@ -45,7 +45,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   const originalRegister = server.registerTool.bind(server) as (...toolArgs: unknown[]) => unknown;
   const registerDirect = (args: unknown[]) => { originalRegister(...args); };
   // Chat agents get the app tools as a table of contents (toolCatalog.ts); other clients list every tool.
-  const catalog = isChatMcpSource(context.source) ? createToolCatalog(server, registerDirect) : null;
+  const catalog = isChatMcpSource(context.source) && context.toolCatalog !== false ? createToolCatalog(server, registerDirect) : null;
   let category: ToolCategoryId = 'chat';
   const inCategory = (id: ToolCategoryId, register: () => void) => { category = id; register(); category = 'chat'; };
   if (isChatMcpSource(context.source) && context.generationPresetSnapshot === undefined) context.generationPresetSnapshot = JSON.stringify(ChatGenerationPresetStore.resolve(context.generationPresetIds ?? []));

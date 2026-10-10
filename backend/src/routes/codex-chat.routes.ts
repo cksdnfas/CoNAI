@@ -1497,7 +1497,8 @@ router.post('/admin/chat-media/usage', requireAdmin, (req: Request, res: Respons
 
 /** Every chat-grantable MCP tool with its scope and description, for the profile editor's tool picker (not the ones every seeing chat has). */
 router.get('/admin/tools', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
-  const bridge = await openChatMcpBridge(requesterFrom(req), [...CHAT_SCOPES])
+  // Every tool by name: the catalog would hide all but open_tools / run_tool from the picker.
+  const bridge = await openChatMcpBridge(requesterFrom(req), [...CHAT_SCOPES], null, { toolCatalog: false })
   try {
     res.json({
       success: true,
