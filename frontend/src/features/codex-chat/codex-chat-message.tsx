@@ -214,8 +214,10 @@ function ChatFoundGrid({ items }: { items: ImageRecord[] }) {
   const current = Math.min(page, pages - 1)
   const start = current * FOUND_PAGE_SIZE
 
+  // A size container counts as 0 wide to a shrink-to-fit parent (the reply bubble before any text lands), which
+  // squeezed the grid to a sliver; claim the six-across width instead and let the bubble's max width clamp it.
   return (
-    <div className="@container">
+    <div className="@container [contain-intrinsic-inline-size:36rem]">
       <div className="grid grid-cols-3 gap-1 @min-[36rem]:grid-cols-6">
         {items.slice(start, start + FOUND_PAGE_SIZE).map((image, offset) => (
           <ChatFoundTile key={image.composite_hash} image={image} onOpen={() => setLightboxIndex(start + offset)} />
