@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PostBotRun, PostComment, PostDetail, PostMentionableProfile } from '@conai/shared'
@@ -25,19 +25,27 @@ function mentionedIds(text: string, picked: Map<number, string>) {
   return [...picked].filter(([, name]) => text.includes(`@${name}`)).map(([id]) => id)
 }
 
-/** A comment box; `@` opens the list of bots the viewer may call. */
-function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, placeholder }: {
+/**
+ * What the comment boxes of the open post hold. It lives above the boxes so the connected chat (page assistant) can
+ * read and draft it: the box under the post, and the reply box open under one comment.
+ */
+export type PostCommentDraft = { top: string; reply: { to: number; text: string } | null }
+export const EMPTY_COMMENT_DRAFT: PostCommentDraft = { top: '', reply: null }
+
+/** A comment box; `@` opens the list of bots the viewer may call. Its text is held by the caller. */
+function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, placeholder, text, setText }: {
   postId: number
   parentId: number | null
   mentionable: PostMentionableProfile[]
   autoFocus?: boolean
   onDone?: () => void
   placeholder?: string
+  text: string
+  setText: (text: string) => void
 }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  const [text, setText] = useState('')
   const [picked, setPicked] = useState(() => new Map<number, string>())
   const [caret, setCaret] = useState(0)
   const [highlight, setHighlight] = useState(0)
@@ -73,6 +81,8 @@ function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, pla
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    // An Enter that commits an IME (Korean) composition is part of typing, not a command.
+    if (event.nativeEvent.isComposing) return
     if (options.length) {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault()
@@ -90,9 +100,16 @@ function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, pla
         return
       }
     }
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && text.trim() && !mutation.isPending) {
+    // Enter posts, Shift+Enter breaks the line (as in the chat composer); Esc closes an open reply box.
+    if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
-      mutation.mutate()
+      if (text.trim() && !mutation.isPending) mutation.mutate()
+      return
+    }
+    if (event.key === 'Escape' && onDone && parentId) {
+      event.preventDefault()
+      event.stopPropagation()
+      onDone()
     }
   }
 
@@ -173,6 +190,13 @@ function BotRunRow({ run }: { run: PostBotRun }) {
   )
 }
 
+/** A plain click on a comment, not on its links, media or buttons and not ending a text selection. */
+function isReplyClick(event: MouseEvent<HTMLElement>) {
+  if (event.button !== 0 || event.defaultPrevented) return false
+  if (event.target instanceof Element && event.target.closest('a, button, input, textarea, select, label, video, audio, img, [role="button"], .post-media')) return false
+  return !window.getSelection()?.toString()
+}
+
 function CommentRow({ comment, quoted, mentionNames, canReply, onReply, reply, focused = false }: {
   comment: PostComment
   /** Opened from a link to this comment: it is scrolled to and marked for a moment. */
@@ -199,8 +223,14 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, reply, f
   if (comment.status === 'deleted') {
     return <div className={cn('py-2.5 text-sm text-muted-foreground', reply && 'pl-10')}>{t({ ko: '지운 댓글이야', en: 'Deleted comment' })}</div>
   }
+  // Clicking the comment itself opens the reply box under it; the reply key on the name line stays for keyboards.
+  const replyOnClick = canReply && editing === null
   return (
-    <div id={`comment-${comment.id}`} className={cn('group/comment grid scroll-mt-20 grid-cols-[2rem_1fr] gap-2.5 rounded-sm py-2.5 transition-[background-color] duration-700', reply && 'pl-10', comment.status === 'hidden' && 'opacity-60', focused && 'bg-primary/10')}>
+    <div
+      id={`comment-${comment.id}`}
+      onClick={replyOnClick ? (event) => { if (isReplyClick(event)) onReply() } : undefined}
+      className={cn('group/comment grid scroll-mt-20 grid-cols-[2rem_1fr] gap-2.5 rounded-sm py-2.5 transition-[background-color] duration-700', reply && 'pl-10', replyOnClick && 'cursor-pointer', comment.status === 'hidden' && 'opacity-60', focused && 'bg-primary/10')}
+    >
       <PostAuthorAvatar author={comment.author} size="md" />
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex min-h-5 flex-wrap items-center gap-x-2 text-sm">
@@ -249,10 +279,11 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, reply, f
 }
 
 /** Comments two levels deep (deeper answers quote), bot calls still in progress, and the comment box. */
-export function PostComments({ post }: { post: PostDetail }) {
+export function PostComments({ post, draft, setDraft }: { post: PostDetail; draft: PostCommentDraft; setDraft: (update: (current: PostCommentDraft) => PostCommentDraft) => void }) {
   const { t } = useI18n()
   const { canComment, canSummon, isAdmin } = usePostPermissions()
-  const [replyTo, setReplyTo] = useState<number | null>(null)
+  const replyTo = draft.reply?.to ?? null
+  const setReplyTo = (id: number | null) => setDraft((current) => ({ ...current, reply: id === null ? null : { to: id, text: current.reply?.to === id ? current.reply.text : '' } }))
   const commentsQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'comments', post.id], queryFn: () => listPostComments(post.id) })
   const mentionableQuery = useQuery({ queryKey: ['post-mentionable'], queryFn: listMentionableProfiles, enabled: canSummon && canComment, staleTime: 60_000 })
   const mentionable = useMemo(() => mentionableQuery.data ?? [], [mentionableQuery.data])
@@ -282,6 +313,18 @@ export function PostComments({ post }: { post: PostDetail }) {
     return trigger && (trigger.parentId ?? trigger.id) === threadId
   })
 
+  // The reply box opens right under the comment it answers (the reply itself still lands at the end of the thread).
+  const replyTarget = replyTo !== null ? byId.get(replyTo) : undefined
+  const replyComposer = replyTarget ? (
+    <div className="pb-3 pl-10">
+      <CommentComposer key={replyTarget.id} postId={post.id} parentId={replyTarget.id} mentionable={mentionable} autoFocus onDone={() => setReplyTo(null)}
+        text={draft.reply?.text ?? ''} setText={(text) => setDraft((current) => (current.reply ? { ...current, reply: { ...current.reply, text } } : current))}
+        placeholder={replyTarget.author.type === 'profile' && canSummon
+          ? t({ ko: '@{name}에게 답글 · 봇이 답해', en: 'Reply to @{name} · the bot answers' }, { name: replyTarget.author.name })
+          : t({ ko: '@{name}에게 답글', en: 'Reply to @{name}' }, { name: replyTarget.author.name })} />
+    </div>
+  ) : null
+
   return (
     <section className="space-y-2" aria-label={t({ ko: '댓글', en: 'Comments' })}>
       <h2 className="text-sm font-semibold">{t({ ko: '댓글 {count}', en: 'Comments {count}' }, { count: post.commentCount })}</h2>
@@ -290,21 +333,20 @@ export function PostComments({ post }: { post: PostDetail }) {
         {tops.map((top) => (
           <div key={top.id}>
             <CommentRow comment={top} quoted={null} mentionNames={mentionNames} canReply={canReply} reply={false} focused={focusedId === top.id} onReply={() => setReplyTo(top.id)} />
+            {replyTo === top.id ? replyComposer : null}
             {comments.filter((comment) => comment.parentId === top.id).map((child) => (
-              <CommentRow key={child.id} comment={child} quoted={child.quoteCommentId ? byId.get(child.quoteCommentId) ?? null : null} mentionNames={mentionNames} canReply={canReply} reply focused={focusedId === child.id} onReply={() => setReplyTo(child.id)} />
+              <Fragment key={child.id}>
+                <CommentRow comment={child} quoted={child.quoteCommentId ? byId.get(child.quoteCommentId) ?? null : null} mentionNames={mentionNames} canReply={canReply} reply focused={focusedId === child.id} onReply={() => setReplyTo(child.id)} />
+                {replyTo === child.id ? replyComposer : null}
+              </Fragment>
             ))}
             {runsFor(top.id).map((run) => <div key={`run-${run.id}`} className="pl-10"><BotRunRow run={run} /></div>)}
-            {replyTo !== null && (byId.get(replyTo)?.parentId ?? replyTo) === top.id ? (
-              <div className="pb-3 pl-10">
-                <CommentComposer postId={post.id} parentId={replyTo} mentionable={mentionable} autoFocus onDone={() => setReplyTo(null)} placeholder={t({ ko: '@{name}에게 답글', en: 'Reply to @{name}' }, { name: byId.get(replyTo)?.author.name ?? '' })} />
-              </div>
-            ) : null}
           </div>
         ))}
       </div>
       {canReply ? (
         <div className="pt-2">
-          <CommentComposer postId={post.id} parentId={null} mentionable={mentionable} placeholder={mentionable.length ? t({ ko: '댓글 쓰기 · @로 봇 부르기', en: 'Write a comment · @ to call a bot' }) : t({ ko: '댓글 쓰기', en: 'Write a comment' })} />
+          <CommentComposer postId={post.id} parentId={null} mentionable={mentionable} text={draft.top} setText={(top) => setDraft((current) => ({ ...current, top }))} placeholder={mentionable.length ? t({ ko: '댓글 쓰기 · @로 봇 부르기', en: 'Write a comment · @ to call a bot' }) : t({ ko: '댓글 쓰기', en: 'Write a comment' })} />
         </div>
       ) : !open ? <p className="pt-2 text-sm text-muted-foreground">{t({ ko: '댓글이 닫힌 글이야', en: 'Comments are closed' })}</p> : null}
     </section>

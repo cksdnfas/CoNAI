@@ -163,6 +163,26 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
     assert.equal(runs(post.id).at(-1)!.status, 'cancelled', 'the runner never starts it')
   })
 
+  await t.test('a person replying to a bot\'s comment calls that bot; other replies stay plain', async () => {
+    lunaCalls = false
+    const post = PostStore.create(alice, { title: '다섯 번째 글', body: '' })
+    PostCommentStore.create(alice, post.id, { body: '@루나 그려줘', mentions: [luna.id] })
+    await settle(post.id)
+    const lunaReplyId = runs(post.id).at(-1)!.result_comment_id!
+    const answer = PostCommentStore.create(alice, post.id, { body: '음... 좀 더 밝게', parentId: lunaReplyId })
+    await settle(post.id)
+    const replyRun = runs(post.id).at(-1)!
+    assert.deepEqual([replyRun.profile_id, replyRun.status, replyRun.chain_depth], [luna.id, 'done', 1], 'no @루나 written, the reply calls her')
+
+    const before = runs(post.id).length
+    PostCommentStore.create(viewer, post.id, { body: '나도 한마디', parentId: lunaReplyId })
+    assert.equal(runs(post.id).length, before, 'without posts.summon it is a plain reply, no refused call under it')
+    PostCommentStore.create(alice, post.id, { body: '사람 댓글에 답글', parentId: answer.id })
+    assert.equal(runs(post.id).length, before, 'answering a person calls no one')
+    PostCommentStore.create({ ...alice, profileId: kai.id }, post.id, { body: '카이가 루나에게', parentId: lunaReplyId })
+    assert.equal(runs(post.id).length, before, 'a bot answering a bot still needs the @name')
+  })
+
   await t.test('one board room per (account, bot), reused across posts', () => {
     const rooms = db().prepare(`SELECT account_key, room_key, thread_id FROM chat_automation_rooms WHERE room_key LIKE 'posts:board:%'`).all() as Array<{ account_key: string; thread_id: number }>
     assert.equal(rooms.length, 2, '루나 and 카이 for account 2')

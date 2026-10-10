@@ -80,11 +80,11 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     { id: 'steps', label: 'Steps', type: 'number', value: '20', min: 1, max: 50, integer: true },
     { id: 'sampler', label: 'Sampler', type: 'select', value: 'euler', options: ['euler', 'euler_ancestral'] },
   ], apiKey: 'must-not-be-retained' })
-  const pageProfile = ChatProfileStore.create({ name: 'Page assistant', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page', 'page_fill'] })
+  const pageProfile = ChatProfileStore.create({ name: 'Page assistant', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page', 'page_fill'], pageAssist: true })
   const pageThreadId = CodexChatStore.createThread(null, 'page chat', 'llm', pageProfile.id)
   // Its own connection: the bridge keeps the newest screen per connection, and other tests report other screens.
   const workflowPage = normalizeChatPageSnapshot({ ...page, connectionId: 'connection-workflow-1', kind: 'workflow', resourceId: 'workflow:draft:session-test', fields: [], workflow: emptyWorkflow })
-  const workflowProfile = ChatProfileStore.create({ name: 'Workflow assistant', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page', 'get_workflow_editor', 'list_workflow_modules', 'workflow_edit'] })
+  const workflowProfile = ChatProfileStore.create({ name: 'Workflow assistant', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page', 'get_workflow_editor', 'list_workflow_modules', 'workflow_edit'], pageAssist: true })
   const workflowThreadId = CodexChatStore.createThread(null, 'workflow chat', 'llm', workflowProfile.id)
 
   await t.test('workflow transactions: atomic creation, rewiring/removal, protected fields and cycles', () => {
@@ -215,7 +215,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const saved = PromptPresetModel.findByIdWithItems(preset.id)!
     const action = { id: 'preset.update', label: 'Edit preset', description: 'Save reviewed preset', effect: 'save' as const, schema: { type: 'object' as const, properties: { id: { type: 'number' as const, enum: [preset.id] }, name: { type: 'string' as const }, items: { type: 'array' as const, minItems: 1, items: { type: 'object' as const, properties: { description: { type: 'string' as const }, value: { type: 'string' as const } }, required: ['description', 'value'] } } }, required: ['id', 'name', 'items'] } }
     const snapshot = normalizeChatPageSnapshot({ ...page, path: '/prompts', kind: 'presets', resourceId: String(preset.id), fields: [], revision: 'native-action-revision', actions: [action], data: { presets: [{ id: preset.id, name: preset.name }], selected: { id: preset.id, revision: nativeEditRevision(saved) } } })
-    const actionProfile = ChatProfileStore.create({ name: 'Action assistant', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page', 'read_page_data', 'propose_page_action'] })
+    const actionProfile = ChatProfileStore.create({ name: 'Action assistant', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page', 'read_page_data', 'propose_page_action'], pageAssist: true })
     const actionThreadId = CodexChatStore.createThread(null, 'action chat', 'llm', actionProfile.id)
     const context: ChatExecutionContext = { threadId: actionThreadId, profileId: actionProfile.id, kind: 'direct', replyId: 'page-action-tools', page: snapshot }
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
@@ -706,9 +706,15 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     assert.equal(ChatProposalStore.find(graphProposal.id)?.kind === 'workflow_graph' && (ChatProposalStore.find(graphProposal.id) as { saved?: boolean }).saved, true)
     assert.equal((await post(graphProposal.id, graphBinding, 'page-check')).status, 409)
     assert.equal((await post(graphProposal.id, { ...graphBinding, undo: true }, 'page-check')).status, 200)
-    ChatProfileStore.update(workflowProfile.id, { toolAllowlist: ['get_current_page'] })
-    assert.equal((await post(graphProposal.id, { ...graphBinding, undo: true }, 'page-check')).status, 403)
+    // Page tools come with the connection, as on the call side: a tool list without them (or no profile tools at all) still applies.
+    ChatProfileStore.update(workflowProfile.id, { toolAllowlist: ['posts_read'] })
+    assert.equal((await post(graphProposal.id, { ...graphBinding, undo: true }, 'page-check')).status, 200)
     ChatProfileStore.update(pageProfile.id, { mcpEnabled: false })
+    assert.equal((await post(proposed.id, { ...binding, undo: true }, 'page-check')).status, 200)
+    // Turning the page assistant off withdraws every card it made.
+    ChatProfileStore.update(workflowProfile.id, { pageAssist: false })
+    assert.equal((await post(graphProposal.id, { ...graphBinding, undo: true }, 'page-check')).status, 403)
+    ChatProfileStore.update(pageProfile.id, { pageAssist: false })
     assert.equal((await post(proposed.id, { ...binding, undo: true }, 'page-check')).status, 403)
   })
 })

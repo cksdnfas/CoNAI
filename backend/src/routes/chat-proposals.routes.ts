@@ -31,9 +31,11 @@ function pageProposal(req: Request, res: Response, receipt = false): Extract<Cha
     const tool = proposal.kind === 'workflow_graph' ? 'workflow_edit' : proposal.kind === 'page_action' ? 'propose_page_action' : 'page_fill'
     const thread = CodexChatStore.findThread(ChatProposalStore.threadIdOf(id)!, getRequesterAccountId(req))!
     const profile = thread.profile_id === null ? null : ChatProfileStore.find(thread.profile_id)
-    if (!profile?.isEnabled || !profile.mcpEnabled || !profile.mcpScopes.includes('read') || (profile.toolAllowlist && !profile.toolAllowlist.includes(tool) && !(tool === 'page_fill' && profile.toolAllowlist.includes('propose_page_changes')) && !(tool === 'workflow_edit' && profile.toolAllowlist.includes('propose_workflow_changes')))) throw new ChatPageContextError('프로필의 페이지 편집 도구 권한이 변경됐어.', 403)
+    // Page tools come with the person's connection, not the profile's tool list (isConnectedChatPageTool), so a card stays
+    // appliable exactly as long as the profile keeps its page assistant. The account check below sees the card's page the same way.
+    if (!profile?.isEnabled || !profile.pageAssist) throw new ChatPageContextError('프로필의 페이지 어시스턴트가 꺼졌어.', 403)
     const requester = { accountId: getRequesterAccountId(req), accountType: getRequesterAccountType(req) }
-    requireChatMcpAccountAccess({ requester, scopes: ['read'], source: thread.engine === 'codex' ? 'codex-chat' : 'llm-chat', chatContext: { threadId: thread.id, profileId: profile.id, kind: 'direct' } }, tool)
+    requireChatMcpAccountAccess({ requester, scopes: ['read'], source: thread.engine === 'codex' ? 'codex-chat' : 'llm-chat', chatContext: { threadId: thread.id, profileId: profile.id, kind: 'direct', page: { ...proposal.page, fields: [] } } }, tool)
     requireChatPageAccess(requester, proposal.page)
     if (proposal.kind === 'page_action') requireChatPageActionAccess(requester, proposal.page, proposal.action.id, proposal.arguments)
     const undo = req.body?.undo === true

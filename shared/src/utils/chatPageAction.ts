@@ -81,7 +81,9 @@ export const CHAT_PAGE_ACTION_PERMISSIONS: Record<string, string | null> = {
   'chat.open': 'chat.use', 'chat.prepare': 'chat.use',
   'audio.open': 'audio.view', 'audio.filter': 'audio.view', 'audio.select': 'audio.view',
   'sprite.select': null,
-  'posts.open': 'posts.view', 'posts.category': 'posts.view',
+  // Posts board: the editor and the comment box save through the board's own routes.
+  'posts.open': 'posts.view', 'posts.category': 'posts.view', 'posts.tag': 'posts.view', 'posts.back': 'posts.view',
+  'posts.new': 'posts.write', 'posts.edit': 'posts.write', 'posts.save': 'posts.write', 'posts.comment': 'posts.comment',
   'wallpaper.select': null, 'wallpaper.open_preset': null, 'wallpaper.add_widget': null, 'wallpaper.save': null,
   'metadata.save': 'images.edit',
 }
@@ -92,9 +94,9 @@ export const CHAT_PAGE_ACTION_PERMISSIONS: Record<string, string | null> = {
  * - commit: saves, registers or otherwise decides. Always a review card the person applies.
  */
 export type ChatPageActionTier = 'view' | 'draft' | 'commit'
-const COMMIT_ACTIONS = new Set(['prompt.create', 'prompt.update', 'preset.create', 'preset.update', 'wildcard.create', 'wildcard.update', 'comfy.save', 'comfy.register', 'group.create', 'group.update', 'group.auto_collect', 'profile.save', 'profile.assets', 'resource.save', 'wallpaper.save', 'metadata.save'])
+const COMMIT_ACTIONS = new Set(['prompt.create', 'prompt.update', 'preset.create', 'preset.update', 'wildcard.create', 'wildcard.update', 'comfy.save', 'comfy.register', 'group.create', 'group.update', 'group.auto_collect', 'profile.save', 'profile.assets', 'resource.save', 'wallpaper.save', 'metadata.save', 'posts.save', 'posts.comment'])
 const VIEW_ACTIONS = new Set(['page.navigate', 'page.refresh', 'prompt.select', 'preset.select', 'wildcard.select', 'comfy.select', 'comfy.refresh', 'comfy.open_create', 'comfy.open_edit', 'workflow.select', 'group.select', 'profile.open_create', 'profile.open_edit', 'profile.section', 'library.search', 'library.open', 'library.select', 'files.open', 'files.preview',
-  'resource.open', 'chat.open', 'chat.prepare', 'audio.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'wallpaper.open_preset', 'posts.open', 'posts.category'])
+  'resource.open', 'chat.open', 'chat.prepare', 'audio.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'wallpaper.open_preset', 'posts.open', 'posts.category', 'posts.tag', 'posts.back', 'posts.new', 'posts.edit'])
 /** View operations that stay inside the open editor, so unsaved changes there do not block them. */
 const IN_PLACE_VIEW_ACTIONS = new Set(['profile.section', 'library.select', 'resource.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select'])
 export function chatPageActionTier(id: string): ChatPageActionTier {

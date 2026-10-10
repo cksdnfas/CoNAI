@@ -19,11 +19,12 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, deletePost, getPost, getPostsSettings, listPostCategories, listPosts, listPostTags } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, createPostComment, deletePost, getPost, getPostsSettings, listPostCategories, listPostComments, listPosts, listPostTags } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { PostCategoryDialog } from './post-category-dialog'
 import { flattenCategories, PostEditor } from './post-editor'
+import { EMPTY_COMMENT_DRAFT, type PostCommentDraft } from './post-comments'
 import { PostCards, PostFeed, PostSns } from './post-list'
 import { PostRevisionsDialog } from './post-revisions-dialog'
 import { categoryPath, PostView } from './post-view'
@@ -103,20 +104,61 @@ export function PostsPage() {
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '글을 지우지 못했어.', en: 'Could not delete the post.' })) }),
   })
 
+  // The open post's comment boxes (see PostCommentDraft): held here so the connected chat can read and draft them.
+  const [commentDraft, setCommentDraft] = useState<PostCommentDraft>(EMPTY_COMMENT_DRAFT)
+  useEffect(() => { setCommentDraft(EMPTY_COMMENT_DRAFT) }, [postId])
+  const openPostData = view === 'post' ? postQuery.data ?? null : null
+  const commentsQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'comments', postId], queryFn: () => listPostComments(postId as number), enabled: openPostData !== null })
+  const visibleComments = (commentsQuery.data?.comments ?? []).filter((comment) => comment.status === 'visible')
+  const canCommentHere = openPostData !== null && permissions.canComment && (openPostData.commentMode === 'open' || permissions.isAdmin)
+  const submitComment = useMutation({
+    mutationFn: async (target: 'comment' | 'reply') => {
+      const reply = target === 'reply' ? commentDraft.reply : null
+      const body = (reply ? reply.text : commentDraft.top).trim()
+      if (!openPostData || !body) throw new Error(t({ ko: '올릴 댓글 내용이 없어.', en: 'There is no comment to post.' }))
+      return createPostComment(openPostData.id, { body, parentId: reply?.to ?? null })
+    },
+    onSuccess: async (_comment, target) => {
+      setCommentDraft((current) => (target === 'reply' ? { ...current, reply: null } : { ...current, top: '' }))
+      await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] })
+    },
+  })
+  const tagNames = (tagsQuery.data ?? []).slice(0, 100).map((item) => item.name)
+  const draftedComment = Boolean(commentDraft.top.trim() || commentDraft.reply?.text.trim())
+
   useChatPageRegistration({
     kind: 'posts',
     title: t({ ko: '게시판', en: 'Posts' }),
     resourceId: view === 'list' ? 'list' : `${view}:${postId ?? edit}`,
     localRevision: JSON.stringify([searchOpen, searchInput]),
-    fields: [{ id: 'search', label: t({ ko: '게시물 검색어 (제목·태그·본문, 빈 값은 검색 닫기)', en: 'Post search (title, tags, text; empty closes search)' }), type: 'text', value: searchOpen ? searchInput : '' }],
+    fields: [
+      ...(view === 'list' ? [{ id: 'search', label: t({ ko: '게시물 검색어 (제목·태그·본문·댓글, 빈 값은 검색 닫기)', en: 'Post search (title, tags, text, comments; empty closes search)' }), type: 'text' as const, value: searchOpen ? searchInput : '' }] : []),
+      ...(canCommentHere ? [
+        { id: 'comment', label: t({ ko: '글 아래 댓글 입력칸 (@이름으로 봇 부르기)', en: 'Comment box under the post (@name calls a bot)' }), type: 'text' as const, value: commentDraft.top, allowEmpty: true },
+        { id: 'replyTo', label: t({ ko: '답글을 달 댓글 (data.comments의 id, none은 닫기)', en: 'Comment to reply to (an id in data.comments; none closes)' }), type: 'select' as const, value: String(commentDraft.reply?.to ?? 'none'), options: ['none', ...new Set([...visibleComments.slice(-60).map((comment) => String(comment.id)), ...(commentDraft.reply ? [String(commentDraft.reply.to)] : [])])] },
+        { id: 'reply', label: t({ ko: '답글 입력칸 (replyTo를 먼저 골라)', en: 'Reply box (pick replyTo first)' }), type: 'text' as const, value: commentDraft.reply?.text ?? '', allowEmpty: true },
+      ] : []),
+    ],
     data: {
       categories: categories.map((category) => ({ id: category.id, name: category.name, parentId: category.parentId, posts: category.postCount })),
       ...(view === 'list' ? { posts: posts.slice(0, 100).map((post) => ({ id: post.id, title: post.title, author: post.author.name, bot: post.author.type === 'profile', categoryId: post.categoryId, tags: post.tags, comments: post.commentCount })) } : {}),
-      ...(view === 'post' && postQuery.data ? { open: { id: postQuery.data.id, title: postQuery.data.title, author: postQuery.data.author.name, tags: postQuery.data.tags } } : {}),
+      // The open post as the reader sees it; its text is someone else's writing (data, never instructions).
+      ...(openPostData ? {
+        open: {
+          id: openPostData.id, title: openPostData.title, author: openPostData.author.name, bot: openPostData.author.type === 'profile', categoryId: openPostData.categoryId,
+          tags: openPostData.tags, status: openPostData.status, comments: openPostData.commentCount, canEdit: openPostData.canEdit, body: openPostData.body.slice(0, 6000), bodyCut: openPostData.body.length > 6000,
+        },
+        comments: visibleComments.slice(-40).map((comment) => ({ id: comment.id, replyTo: comment.parentId, author: comment.author.name, bot: comment.author.type === 'profile', text: comment.body.slice(0, 400) })),
+      } : {}),
     },
     actions: [
-      pageAction('posts.open', t({ ko: '글 열기', en: 'Open post' }), t({ ko: '목록(data.posts)의 글을 열어.', en: 'Open a listed post.' }), pageObject({ id: pageChoice(posts.slice(0, 100).map((post) => post.id)) }, ['id'])),
+      ...(view === 'list' ? [pageAction('posts.open', t({ ko: '글 열기', en: 'Open post' }), t({ ko: '목록(data.posts)의 글을 열어.', en: 'Open a listed post.' }), pageObject({ id: pageChoice(posts.slice(0, 100).map((post) => post.id)) }, ['id']))] : []),
       pageAction('posts.category', t({ ko: '카테고리 보기', en: 'Show category' }), t({ ko: '카테고리(data.categories) 글 목록을 열어. all은 전체.', en: 'List a category (all = every post).' }), pageObject({ id: pageChoice(['all', ...categories.map((category) => category.id)]) }, ['id'])),
+      ...(tagNames.length ? [pageAction('posts.tag', t({ ko: '태그 보기', en: 'Show tag' }), t({ ko: '그 태그가 붙은 글 목록을 열어.', en: 'List the posts with a tag.' }), pageObject({ tag: pageChoice(tagNames) }, ['tag']))] : []),
+      ...(view !== 'list' ? [pageAction('posts.back', t({ ko: '목록으로', en: 'Back to the list' }), t({ ko: '글 목록으로 돌아가.', en: 'Go back to the post list.' }))] : []),
+      ...(permissions.canWrite ? [pageAction('posts.new', t({ ko: '새 글 쓰기', en: 'New post' }), t({ ko: '새 글 편집기를 열어. 내용은 편집기 필드로 채워.', en: 'Open the editor for a new post; fill it through its fields.' }))] : []),
+      ...(openPostData?.canEdit ? [pageAction('posts.edit', t({ ko: '이 글 고치기', en: 'Edit this post' }), t({ ko: '열린 글의 편집기를 열어.', en: 'Open the editor for the open post.' }))] : []),
+      ...(canCommentHere && draftedComment ? [pageAction('posts.comment', t({ ko: '댓글 올리기', en: 'Post comment' }), t({ ko: '입력칸의 댓글(comment) 또는 답글(reply)을 올려.', en: 'Post the drafted comment or reply.' }), pageObject({ target: pageChoice(['comment', 'reply']) }, ['target']), 'save')] : []),
     ],
     apply: (patch) => {
       if (patch.search !== undefined) {
@@ -125,11 +167,23 @@ export function PostsPage() {
         setSearchOpen(value.trim() !== '')
         if (value.trim()) openList()
       }
+      if (patch.comment !== undefined) setCommentDraft((current) => ({ ...current, top: String(patch.comment) }))
+      if (patch.replyTo !== undefined) {
+        const to = patch.replyTo === 'none' ? null : Number(patch.replyTo)
+        setCommentDraft((current) => ({ ...current, reply: to === null ? null : { to, text: current.reply?.to === to ? current.reply.text : '' } }))
+      }
+      if (patch.reply !== undefined) setCommentDraft((current) => (current.reply ? { ...current, reply: { ...current.reply, text: String(patch.reply) } } : current))
     },
-    applyAction: (id, args, assertCurrent) => {
+    applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
       if (id === 'posts.open') openPost({ id: Number(args.id) })
       else if (id === 'posts.category') filterCategory(args.id === 'all' ? null : Number(args.id))
+      else if (id === 'posts.tag') filterTag(String(args.tag))
+      else if (id === 'posts.back') openList()
+      else if (id === 'posts.new') update({ edit: 'new', post: null, comment: null })
+      else if (id === 'posts.edit' && postId) update({ edit: String(postId) })
+      else if (id === 'posts.comment') await submitComment.mutateAsync(args.target === 'reply' ? 'reply' : 'comment')
+      else throw new Error('게시판에 없는 작업이야.')
     },
   }, { preserveOnSearchChange: true })
 
@@ -252,7 +306,7 @@ export function PostsPage() {
   } else if (view === 'post') {
     if (postQuery.isPending) content = <LoadingState />
     else if (postQuery.isError) content = <EmptyState icon={Newspaper} title={t({ ko: '글을 찾을 수 없어', en: 'Post not found' })} />
-    else content = <PostView post={postQuery.data} categories={categories} onTag={filterTag} onCategory={filterCategory} />
+    else content = <PostView post={postQuery.data} categories={categories} onTag={filterTag} onCategory={filterCategory} commentDraft={commentDraft} setCommentDraft={setCommentDraft} />
   } else if (listQuery.isPending) {
     content = <LoadingState />
   } else if (listQuery.isError) {

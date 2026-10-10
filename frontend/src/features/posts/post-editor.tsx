@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { PostCategory, PostCommentMode, PostDetail, PostStatus } from '@conai/shared'
-import { POST_LIMITS } from '@conai/shared'
+import { CHAT_PAGE_LIMITS, POST_LIMITS } from '@conai/shared'
 import { AudioLines, FolderTree, Image as ImageIcon, Paperclip, X } from 'lucide-react'
 import { FieldTabs } from '@/components/common/field-tabs'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,8 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { ChatMediaPicker } from '@/features/codex-chat/chat-media-picker'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { pageAction } from '@/features/codex-chat/page-action-helpers'
 import { FilePicker } from '@/features/files/file-browser'
 import { useI18n } from '@/i18n'
 import { POSTS_QUERY_KEY, createPost, updatePost } from '@/lib/api-posts'
@@ -130,6 +132,56 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
       bodyRef.current?.setSelectionRange(caret, caret)
     })
   }
+
+  // The connected chat (page assistant) drafts into these fields; saving stays a card the person applies.
+  const categoryLabels = useMemo(() => {
+    const byId = new Map(categories.map((category) => [category.id, category]))
+    const pathOf = (category: PostCategory) => {
+      const names: string[] = []
+      for (let current: PostCategory | undefined = category; current && names.length < 8; current = current.parentId === null ? undefined : byId.get(current.parentId)) names.unshift(current.name)
+      return names.join(' › ')
+    }
+    return flat.map(({ category }) => ({ id: category.id, label: pathOf(category) }))
+  }, [categories, flat])
+  const NO_CATEGORY = t({ ko: '없음', en: 'None' })
+  const categoryLabel = categoryLabels.find((item) => item.id === categoryId)?.label ?? NO_CATEGORY
+  const assistantStatuses: PostStatus[] = isAdmin || post?.status === 'hidden' ? ['published', 'draft', 'hidden'] : ['published', 'draft']
+  // A body longer than a page field holds is shown as read-only context instead (filling it would cut the rest).
+  const bodyFits = body.length <= CHAT_PAGE_LIMITS.text
+  const dirty = post
+    ? title !== post.title || body !== post.body || categoryId !== post.categoryId || tags.join('\u0000') !== post.tags.join('\u0000') || status !== post.status || commentMode !== post.commentMode
+    : Boolean(title.trim() || body.trim())
+  useChatPageRegistration(save.isPending ? null : {
+    kind: 'posts',
+    title: post ? t({ ko: '글 고치기', en: 'Edit post' }) : t({ ko: '새 글', en: 'New post' }),
+    resourceId: `edit:${post?.id ?? 'new'}`,
+    priority: 1,
+    dirty,
+    fields: [
+      { id: 'title', label: t({ ko: '제목', en: 'Title' }), type: 'text', value: title },
+      ...(bodyFits ? [{ id: 'body', label: t({ ko: '본문 (Markdown, 미디어는 ![](media:해시) 같은 줄)', en: 'Body (Markdown; media as ![](media:hash) lines)' }), type: 'text' as const, value: body, allowEmpty: true }] : []),
+      { id: 'category', label: t({ ko: '카테고리', en: 'Category' }), type: 'select', value: categoryLabel, options: [NO_CATEGORY, ...categoryLabels.map((item) => item.label)].slice(0, CHAT_PAGE_LIMITS.options) },
+      { id: 'tags', label: t({ ko: '태그 (쉼표로 구분)', en: 'Tags (comma separated)' }), type: 'text', value: tags.join(', '), allowEmpty: true },
+      { id: 'status', label: t({ ko: '상태', en: 'Status' }), type: 'select', value: status, options: assistantStatuses },
+      { id: 'commentMode', label: t({ ko: '댓글', en: 'Comments' }), type: 'select', value: commentMode, options: ['open', 'closed'] },
+    ],
+    data: bodyFits ? {} : { bodyTooLongToEdit: true, bodyStart: body.slice(0, 2000) },
+    actions: title.trim() && dirty ? [pageAction('posts.save', post ? t({ ko: '글 저장', en: 'Save post' }) : t({ ko: '글 올리기', en: 'Publish post' }), t({ ko: '편집 중인 글을 저장해.', en: 'Save the post being edited.' }), undefined, 'save')] : [],
+    apply: (patch) => {
+      if (typeof patch.title === 'string') setTitle(patch.title.slice(0, POST_LIMITS.title))
+      if (typeof patch.body === 'string') setBody(patch.body)
+      if (typeof patch.category === 'string') setCategoryId(categoryLabels.find((item) => item.label === patch.category)?.id ?? null)
+      if (typeof patch.tags === 'string') setTags([...new Set(patch.tags.split(',').map((tag) => tag.replace(/^#+/, '').trim()).filter(Boolean))].slice(0, POST_LIMITS.tags))
+      if (typeof patch.status === 'string' && assistantStatuses.includes(patch.status as PostStatus)) setStatus(patch.status as PostStatus)
+      if (patch.commentMode === 'open' || patch.commentMode === 'closed') setCommentMode(patch.commentMode)
+      if (typeof patch.body === 'string') setTab('write')
+    },
+    applyAction: async (id, _args, assertCurrent) => {
+      assertCurrent()
+      if (id !== 'posts.save') throw new Error('글 편집기에 없는 작업이야.')
+      await save.mutateAsync()
+    },
+  })
 
   const statusOptions: Array<{ value: PostStatus; label: string }> = [
     { value: 'published', label: t({ ko: '발행', en: 'Published' }) },

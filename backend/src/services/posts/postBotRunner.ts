@@ -16,8 +16,8 @@ import { announcePostChange, PostCategoryStore, PostCommentStore, type CommentRo
 import { loadPostsSettings } from './postsSettings';
 
 /**
- * Bots called from comments. A comment's @mentions (picked ids, or @names typed) become queued runs after the safety
- * checks; each run wakes the bot once in the account's board room for that bot. The room serves every board call to
+ * Bots called from comments. A comment's @mentions (picked ids, or @names typed), and the bot a person replies to,
+ * become queued runs after the safety checks; each run wakes the bot once in the account's board room for that bot. The room serves every board call to
  * that bot, so the call names the post and comment instead of quoting them: a bot with the board tools reads the post
  * (posts_read) and answers with post_comment itself; one without them gets the post quoted and its answer is posted
  * for it. A bot's reply that calls other bots continues the chain with the first caller's account, up to the depth.
@@ -60,8 +60,16 @@ function limitReason(postId: number, profileId: number, requestedBy: number | nu
   return null;
 }
 
+/** The bot whose visible comment a person's reply answers (the quoted reply, else the thread's top comment), or null. */
+function repliedBot(comment: CommentRow) {
+  const answeredId = comment.quote_comment_id ?? comment.parent_id;
+  if (comment.author_type !== 'account' || comment.bot_run_id || answeredId === null) return null;
+  const answered = db().prepare(`SELECT author_type, author_profile_id FROM post_comments WHERE id = ? AND status = 'visible'`).get(answeredId) as Pick<CommentRow, 'author_type' | 'author_profile_id'> | undefined;
+  return answered?.author_type === 'profile' ? answered.author_profile_id : null;
+}
+
 /**
- * Turn one new comment's mentions into runs. Called for every comment; does nothing for comments that call no one.
+ * Turn one new comment's mentions (and a person's reply to a bot) into runs. Called for every comment; does nothing for comments that call no one.
  * A person's comment starts a chain (depth 1) as their account; a bot's reply inside a run continues that chain.
  */
 export function enqueueFromComment(comment: CommentRow, actor: PostActor, post: PostRow) {
@@ -76,10 +84,16 @@ export function enqueueFromComment(comment: CommentRow, actor: PostActor, post: 
   let picked: number[] = [];
   try { picked = (JSON.parse(comment.mentions) as unknown[]).filter((id): id is number => Number.isSafeInteger(id)); } catch { /* none */ }
   const typed = parseMentions(comment.body, ChatProfileStore.list({ enabledOnly: true }).map((profile) => ({ id: profile.id, name: profile.name })), comment.author_profile_id ?? undefined);
-  const targets = [...new Set([...picked, ...typed])].filter((id) => id !== comment.author_profile_id);
+  const settings = loadPostsSettings();
+  const answered = repliedBot(comment);
+  // A person answering a bot's comment calls that bot as if they had written its @name. Only when they could have:
+  // otherwise it stays a plain reply, with no refused call shown under it. Bots answering bots still need the @name,
+  // or two bots would keep answering each other up to the chain limit.
+  const callsAnswered = answered !== null && settings.safety.summonEnabled && (actor.isAdmin || actor.keys.has('posts.summon'))
+    && candidates.some((candidate) => candidate.id === answered);
+  const targets = [...new Set([...(callsAnswered ? [answered] : []), ...picked, ...typed])].filter((id) => id !== comment.author_profile_id);
   if (targets.length === 0) return;
 
-  const settings = loadPostsSettings();
   const insert = db().prepare(`INSERT INTO post_bot_runs (post_id, trigger_comment_id, profile_id, profile_name, status, run_as_account_id, requested_by_account_id, chain_root_comment_id, chain_depth, error)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   const already = db().prepare('SELECT 1 FROM post_bot_runs WHERE trigger_comment_id = ? AND profile_id = ?');
@@ -124,7 +138,7 @@ function categoryName(post: PostRow) {
 function callInstruction(post: PostRow, trigger: CommentRow) {
   const category = categoryName(post);
   return [
-    `Someone called you with @ in comment #${trigger.id} on the CoNAI posts board: post #${post.id} "${post.title}"${category ? ` in ${category}` : ''}.`,
+    `Someone called you (by @name or by replying to your comment) in comment #${trigger.id} on the CoNAI posts board: post #${post.id} "${post.title}"${category ? ` in ${category}` : ''}.`,
     SHARED_ROOM_NOTE,
     `1. Read the post and its comments with posts_read (post_id ${post.id}) unless the comment alone is enough.`,
     '2. Do what the comment asks, with your tools.',
@@ -143,7 +157,7 @@ function instructionFor(post: PostRow, trigger: CommentRow | null) {
   const line = (comment: CommentRow) => `- [${comment.id}] ${comment.author_name}${comment.author_type === 'profile' ? ' (bot)' : ''}: ${comment.body.replace(/\s+/g, ' ').slice(0, 600)}`;
   const body = markdownToPlainText(post.body);
   return [
-    `Someone called you with @ in a comment on the CoNAI posts board (post #${post.id}). Your answer becomes your reply under that comment.`,
+    `Someone called you (by @name or by replying to your comment) in a comment on the CoNAI posts board (post #${post.id}). Your answer becomes your reply under that comment.`,
     SHARED_ROOM_NOTE,
     'Write only the reply itself, in the language of the comment. Do not call post_comment for it. You may use your tools to do what the comment asks:',
     'to show a library image write ![](media:<hash>) on its own line; images you generate are attached to your reply when they finish.',

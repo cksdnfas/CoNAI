@@ -6,7 +6,7 @@ import { ToggleChip } from '@/components/ui/chip'
 import { useI18n } from '@/i18n'
 import { PostAuthorAvatar, PostAuthorName, useRelativeTime } from './post-author'
 import { PostReferenceButton, SourceChatLink } from './post-chat-links'
-import { PostComments } from './post-comments'
+import { PostComments, type PostCommentDraft } from './post-comments'
 import { mediaHashesOf, PostMarkdown } from './post-markdown'
 import { PostMediaContext } from './post-media'
 
@@ -21,7 +21,10 @@ export function categoryPath(categories: PostCategory[], id: number | null) {
 }
 
 /** One post: title, who wrote it and when, tags, the body with its media, then the comments. */
-export function PostView({ post, categories, onTag, onCategory }: { post: PostDetail; categories: PostCategory[]; onTag: (tag: string) => void; onCategory: (id: number) => void }) {
+export function PostView({ post, categories, onTag, onCategory, commentDraft, setCommentDraft }: {
+  post: PostDetail; categories: PostCategory[]; onTag: (tag: string) => void; onCategory: (id: number) => void
+  commentDraft: PostCommentDraft; setCommentDraft: (update: (current: PostCommentDraft) => PostCommentDraft) => void
+}) {
   const { t, formatDateTime } = useI18n()
   const relative = useRelativeTime()
   const mediaContext = useMemo(() => ({ postId: post.id, mediaHashes: mediaHashesOf(post.body) }), [post.id, post.body])
@@ -72,7 +75,7 @@ export function PostView({ post, categories, onTag, onCategory }: { post: PostDe
       </PostMediaContext.Provider>
       <hr className="border-line" />
       <PostMediaContext.Provider value={mediaContext}>
-        <PostComments post={post} />
+        <PostComments post={post} draft={commentDraft} setDraft={setCommentDraft} />
       </PostMediaContext.Provider>
     </article>
   )
