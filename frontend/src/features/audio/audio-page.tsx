@@ -772,7 +772,7 @@ export function AudioPage() {
             ) : null}
             <div>
               <TextTabs value={reviewTab} items={tabs} onChange={(value) => { setReviewTab(value); setSelectedId(null) }} />
-              <div role="listbox" aria-label={t({ ko: '후보', en: 'Takes' })} className="min-h-40">
+              <div role="listbox" aria-label={t({ ko: '후보', en: 'Takes' })} className="@container min-h-40">
                 {visibleOrders.map((order) => (
                   <AudioOrderRow
                     key={order.id}

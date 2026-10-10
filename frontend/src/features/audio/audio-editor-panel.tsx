@@ -258,11 +258,11 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
         ) : null}
       </div>
 
-      <dl className="grid grid-cols-[4.5rem_1fr] gap-x-3 gap-y-1.5 border-t border-line pt-3 text-xs">
+      <dl className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 border-t border-line pt-3 text-xs">
         {provenanceRows(candidate, t).map(([label, value, prose]) => (
           <div key={label} className="contents">
             <dt className="text-muted-foreground">{label}</dt>
-            <dd className={cn('min-w-0', prose ? 'break-words' : 'truncate font-mono')}>{value}</dd>
+            <dd className={cn('min-w-0', prose ? 'whitespace-pre-wrap [overflow-wrap:anywhere]' : 'truncate font-mono')}>{value}</dd>
           </div>
         ))}
       </dl>

@@ -102,8 +102,10 @@ export function ReviewPill({ review }: { review: AudioReview }) {
   return null
 }
 
-const ROW_GRID = 'grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 sm:grid-cols-[2rem_10rem_minmax(0,1fr)_3.5rem_4.5rem_auto]'
-const CHECK_ROW_GRID = 'grid grid-cols-[1.25rem_2rem_minmax(0,1fr)_auto] items-center gap-x-3 sm:grid-cols-[1.25rem_2rem_10rem_minmax(0,1fr)_3.5rem_4.5rem_auto]'
+// Columns follow the list's own width (an @container ancestor), not the screen: beside the sidebar and the editor the list
+// can be far narrower than the window. The waveform comes last, once everything else fits.
+const ROW_GRID = 'grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 @xl:grid-cols-[2rem_minmax(0,1fr)_3.5rem_4.5rem_auto] @3xl:grid-cols-[2rem_10rem_minmax(0,1fr)_3.5rem_4.5rem_auto]'
+const CHECK_ROW_GRID = 'grid grid-cols-[1.25rem_2rem_minmax(0,1fr)_auto] items-center gap-x-3 @xl:grid-cols-[1.25rem_2rem_minmax(0,1fr)_3.5rem_4.5rem_auto] @3xl:grid-cols-[1.25rem_2rem_10rem_minmax(0,1fr)_3.5rem_4.5rem_auto]'
 
 export function AudioCandidateRow({ row, selected, canEdit, onSelect, onPlay, onReview, onDownload, checked, onCheck, moveTargets, onMove, dragIds }: {
   row: AudioListRow
@@ -171,15 +173,15 @@ export function AudioCandidateRow({ row, selected, canEdit, onSelect, onPlay, on
       >
         {playing ? <Pause className="fill-current" /> : <Play className="fill-current" />}
       </IconButton>
-      <WaveformThumb candidateId={candidate.id} fileHash={candidate.file_hash} progress={progress} className="hidden sm:block" />
+      <WaveformThumb candidateId={candidate.id} fileHash={candidate.file_hash} progress={progress} className="hidden @3xl:block" />
       <div className="min-w-0">
         <p className={cn('truncate text-sm', depth > 0 && 'text-muted-foreground', selected && 'font-semibold text-foreground')}>{candidate.name}</p>
-        <p className="truncate font-mono text-2xs text-muted-foreground">{detail(candidate)}<span className="sm:hidden"> · {formatSeconds(candidate.file.duration)}</span></p>
+        <p className="truncate font-mono text-2xs text-muted-foreground">{detail(candidate)}<span className="@xl:hidden"> · {formatSeconds(candidate.file.duration)}</span></p>
       </div>
-      <span className="hidden text-right font-mono text-xs text-muted-foreground tabular-nums sm:block">{formatSeconds(candidate.file.duration)}</span>
-      <span className="hidden sm:block"><ReviewPill review={candidate.review} /></span>
+      <span className="hidden text-right font-mono text-xs text-muted-foreground tabular-nums @xl:block">{formatSeconds(candidate.file.duration)}</span>
+      <span className="hidden @xl:block"><ReviewPill review={candidate.review} /></span>
       <div className="flex items-center gap-0.5">
-        <span className="sm:hidden"><ReviewPill review={candidate.review} /></span>
+        <span className="@xl:hidden"><ReviewPill review={candidate.review} /></span>
         {canEdit && onMove ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -196,20 +198,20 @@ export function AudioCandidateRow({ row, selected, canEdit, onSelect, onPlay, on
             <IconButton
               variant="ghost"
               size="icon-sm"
-              className={cn('hidden sm:inline-flex', candidate.review === 'selected' && 'text-success')}
+              className={cn('hidden @xl:inline-flex', candidate.review === 'selected' && 'text-success')}
               label={`${t({ ko: '채택', en: 'Adopt' })} (${shortcutLabel(shortcuts.select)})`}
               onClick={(event) => { event.stopPropagation(); onReview(candidate.review === 'selected' ? 'pending' : 'selected') }}
             ><Check /></IconButton>
             <IconButton
               variant="ghost"
               size="icon-sm"
-              className={cn('hidden sm:inline-flex', candidate.review === 'rejected' && 'text-foreground')}
+              className={cn('hidden @xl:inline-flex', candidate.review === 'rejected' && 'text-foreground')}
               label={`${t({ ko: '보류', en: 'Reject' })} (${shortcutLabel(shortcuts.reject)})`}
               onClick={(event) => { event.stopPropagation(); onReview(candidate.review === 'rejected' ? 'pending' : 'rejected') }}
             ><CirclePause /></IconButton>
           </>
         ) : null}
-        <IconButton variant="ghost" size="icon-sm" className="hidden sm:inline-flex" label={t({ ko: '내보내기', en: 'Export' })} onClick={(event) => { event.stopPropagation(); onDownload() }}><Download /></IconButton>
+        <IconButton variant="ghost" size="icon-sm" className="hidden @xl:inline-flex" label={t({ ko: '내보내기', en: 'Export' })} onClick={(event) => { event.stopPropagation(); onDownload() }}><Download /></IconButton>
       </div>
     </div>
   )
@@ -235,7 +237,7 @@ export function AudioOrderRow({ order, canEdit, onCancel, onRetry, onDismiss }: 
       <span className="flex size-8 items-center justify-center text-muted-foreground">
         {active > 0 ? <LoaderCircle className="size-4 animate-spin" /> : <TriangleAlert className="size-4 text-destructive" />}
       </span>
-      <WaveformThumb candidateId="" fileHash="" ghost className="hidden sm:block" />
+      <WaveformThumb candidateId="" fileHash="" ghost className="hidden @3xl:block" />
       <div className="min-w-0">
         <p className="truncate text-sm">
           {active > 0 ? t({ ko: '생성 중 {count}개', en: 'Generating {count}' }, { count: active }) : t({ ko: '실패 {count}개', en: '{count} failed' }, { count: failed.length })}
@@ -244,8 +246,8 @@ export function AudioOrderRow({ order, canEdit, onCancel, onRetry, onDismiss }: 
           {active === 0 && failed[0]?.failure_message ? failed[0].failure_message : `${meta} · ${shortTime(order.created_at)}`}
         </p>
       </div>
-      <span className="hidden sm:block" />
-      <span className="hidden text-xs text-muted-foreground sm:block">
+      <span className="hidden @xl:block" />
+      <span className="hidden text-xs text-muted-foreground @xl:block">
         {active > 0 ? [waiting ? t({ ko: '대기 {count}', en: '{count} queued' }, { count: waiting }) : null, running ? t({ ko: '실행 {count}', en: '{count} running' }, { count: running }) : null].filter(Boolean).join(' · ') : null}
       </span>
       <div className="flex items-center gap-0.5">
