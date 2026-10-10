@@ -76,16 +76,28 @@ test('the chat model is told to write in the model language only when the profil
 
 test('a translation that loses display-block fences, emoticon tokens or cast tags is dropped', async (t) => {
   t.mock.method(console, 'warn', () => {})
-  const original = '[Mina] Hi &*smile*& there {{user}}.\n```status\n{"hp": 5}\n```'
-  let answer = '[미나] 안녕 &*smile*& {{user}}.\n{{code-block-1}}'
+  const original = '[Mina] Hi &*smile*& there {{user}}.\n```status\n{"hp": 5}\n```\nBye.'
+  let answer = '[미나] 안녕 &*smile*& {{user}}.\n{{code-block-1}}\n잘 가.'
   mockTranslator(t, () => Response.json({ choices: [{ message: { content: answer }, finish_reason: 'stop' }] }))
-  assert.equal(await translateReply(translating, original), '[미나] 안녕 &*smile*& {{user}}.\n```status\n{"hp": 5}\n```')
-  answer = '[미나] 안녕 &*smile*& {{user}}.\n상태: hp 5'
+  assert.equal(await translateReply(translating, original), '[미나] 안녕 &*smile*& {{user}}.\n```status\n{"hp": 5}\n```\n잘 가.')
+  answer = '[미나] 안녕 &*smile*& {{user}}.\n상태: hp 5\n잘 가.'
   assert.equal(await translateReply(translating, original), null, 'block placeholder removed')
-  answer = '[미나] 안녕 (웃음) {{user}}.\n{{code-block-1}}'
+  answer = '[미나] 안녕 (웃음) {{user}}.\n{{code-block-1}}\n잘 가.'
   assert.equal(await translateReply(translating, original), null, 'emoticon token translated away')
-  answer = '미나: 안녕 &*smile*& {{user}}.\n{{code-block-1}}'
+  answer = '미나: 안녕 &*smile*& {{user}}.\n{{code-block-1}}\n잘 가.'
   assert.equal(await translateReply(translating, original), null, 'cast tag rewritten')
+})
+
+test('a status block ending the reply is held back from the translator, so losing its placeholder cannot drop it', async (t) => {
+  t.mock.method(console, 'warn', () => {})
+  const vitals = '```vitals\n{"mood": 32}\n```'
+  // A translator that forgets the last placeholder used to get the whole reply shown untranslated.
+  const requests = mockTranslator(t, '*베이스가 바닥을 타고 올라온다.*')
+  assert.equal(await translateReply(translating, `*The bassline crawls through the floor.*\n\n${vitals}`), `*베이스가 바닥을 타고 올라온다.*\n\n${vitals}`)
+  assert.equal(requests[0].messages.at(-1)?.content, '*The bassline crawls through the floor.*')
+  // A translator that invents the held-back placeholder doubles the block: dropped.
+  mockTranslator(t, '*베이스가 올라온다.*\n{{code-block-1}}')
+  assert.equal(await translateReply(translating, `*The bassline crawls.*\n${vitals}`), null)
 })
 
 test('code blocks never reach the translator and come back untouched', async (t) => {
@@ -103,10 +115,10 @@ test('code blocks never reach the translator and come back untouched', async (t)
   // Only code: nothing to translate.
   assert.equal(await translateReply(translating, code), null)
   // ~~~ fences, an unclosed fence, and a user message with code are masked too.
-  assert.equal(await translateUserInput(translating, '이 태그 고쳐줘\n~~~\n1girl, 안경\n~~~'), '태그 목록 (NAI v5):\n\n~~~\n1girl, 안경\n~~~\n\n더 추가해 줄까?')
-  assert.equal(requests.at(-1)?.messages.at(-1)?.content, '이 태그 고쳐줘\n{{code-block-1}}')
+  assert.equal(await translateUserInput(translating, '이 태그 고쳐줘\n~~~\n1girl, 안경\n~~~\n어때?'), '태그 목록 (NAI v5):\n\n~~~\n1girl, 안경\n~~~\n\n더 추가해 줄까?')
+  assert.equal(requests.at(-1)?.messages.at(-1)?.content, '이 태그 고쳐줘\n{{code-block-1}}\n어때?')
   await translateReply(translating, 'Here:\n```\nunclosed, tags')
-  assert.equal(requests.at(-1)?.messages.at(-1)?.content, 'Here:\n{{code-block-1}}', 'an unclosed fence runs to the end')
+  assert.equal(requests.at(-1)?.messages.at(-1)?.content, 'Here:', 'an unclosed fence runs to the end (and, ending the text, is held back)')
   assert.equal(requests.length, 3)
 })
 

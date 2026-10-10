@@ -192,15 +192,27 @@ export function restoreCodeBlocks(text: string, blocks: string[]): string | null
   return result
 }
 
+/**
+ * The masked text split before the code blocks it ends with (a reply's status block): those placeholders are not sent
+ * at all, so a translator that drops or rewrites the last line cannot cost the whole translation.
+ */
+function splitTrailingBlocks(masked: string) {
+  const match = /(?:\s*\{\{code-block-\d+\}\})+\s*$/.exec(masked)
+  return match ? { body: masked.slice(0, match.index), tail: masked.slice(match.index) } : { body: masked, tail: '' }
+}
+
 async function translate(target: ChatCompletionTarget, system: string, text: string, signal?: AbortSignal) {
   const timeout = AbortSignal.timeout(TRANSLATION_TIMEOUT_MS)
   try {
     const masked = maskCodeBlocks(text)
-    const output = (await completeChat(target, [
+    const { body, tail } = splitTrailingBlocks(masked.text)
+    if (!body.trim()) return null
+    const answer = (await completeChat(target, [
       { role: 'system', content: system },
-      { role: 'user', content: masked.text },
+      { role: 'user', content: body },
     ], signal ? AbortSignal.any([signal, timeout]) : timeout, { purpose: 'translation' })).trim()
-    if (!output) return null
+    if (!answer) return null
+    const output = answer + tail
     const translated = keepsMarkup(masked.text, output) ? restoreCodeBlocks(output, masked.blocks) : null
     if (translated === null) {
       console.warn('[chat-translation] translation dropped: markup changed')
