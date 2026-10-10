@@ -70,6 +70,7 @@ export const CHAT_PAGE_KIND_TOOLS: Partial<Record<string, ReadonlySet<string>>> 
   audio: new Set([
     'list_audio_projects', 'list_audio_groups', 'list_audio_candidates', 'get_audio_candidate', 'list_audio_group_comments',
     'create_audio_project', 'update_audio_project', 'create_audio_group', 'update_audio_group', 'move_audio_candidates', 'import_audio',
+    'list_audio_folders', 'create_audio_folder', 'update_audio_folder',
     'set_audio_group_comment_status', 'list_audio_workflows', 'order_audio', 'get_audio_order', 'cancel_audio_order', 'retry_audio_order_job',
     'edit_audio_candidate', 'delete_unselected_audio_candidates', 'export_audio_selected', 'get_audio_download',
   ]),
@@ -199,6 +200,9 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   update_audio_project: 'organize',
   create_audio_group: 'organize',
   update_audio_group: 'organize',
+  list_audio_folders: 'read',
+  create_audio_folder: 'organize',
+  update_audio_folder: 'organize',
   move_audio_candidates: 'organize',
   import_audio: 'organize',
   set_audio_group_comment_status: 'organize',

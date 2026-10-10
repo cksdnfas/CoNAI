@@ -9,6 +9,7 @@ import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Select } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -27,6 +28,7 @@ import {
   updateAudioProject,
   type AudioComment,
   type AudioCommentStatus,
+  type AudioFolder,
   type AudioGroup,
   type AudioProject,
 } from '@/lib/api-audio'
@@ -84,12 +86,14 @@ export function AudioProjectDialog({ open, project, onClose, onSaved }: {
 /* ------------------------------------------------------------------------------------------------ effect */
 
 /**
- * Edit an effect (an audio group): name, prompt and file name. The file name follows the name (`이름_[00]`) until it
- * is typed over; the link button ties it back. 받은 파일 only has a name.
+ * Edit an effect (an audio group): name, folder (그룹), description, representative prompt and file name. The file
+ * name follows the name (`이름_[00]`) until it is typed over; the link button ties it back. 받은 파일 only has a name.
  */
-export function AudioGroupDialog({ open, group, takenLabels, onClose, onSaved, onDelete }: {
+export function AudioGroupDialog({ open, group, folders, takenLabels, onClose, onSaved, onDelete }: {
   open: boolean
   group: AudioGroup | null
+  /** Folders of the effect's project. */
+  folders: AudioFolder[]
   /** File names of the other effects in the project, so a followed name stays unique. */
   takenLabels: Array<string | null>
   onClose: () => void
@@ -102,6 +106,8 @@ export function AudioGroupDialog({ open, group, takenLabels, onClose, onSaved, o
   const [label, setLabel] = useState('')
   const [follows, setFollows] = useState(true)
   const [description, setDescription] = useState('')
+  const [prompt, setPrompt] = useState('')
+  const [folderId, setFolderId] = useState('')
   const [busy, setBusy] = useState(false)
   /** The fields as the dialog opened (null until the opened values have rendered), to tell unsaved edits. */
   const [openedSnapshot, setOpenedSnapshot] = useState<string | null>(null)
@@ -111,11 +117,13 @@ export function AudioGroupDialog({ open, group, takenLabels, onClose, onSaved, o
     setLabel(group.label ?? '')
     setFollows(group.label ? followsAudioName(group.label, group.name) : true)
     setDescription(group.description)
+    setPrompt(group.prompt)
+    setFolderId(group.folder_id ?? '')
     setOpenedSnapshot(null)
   }, [open, group])
   const inbox = group?.is_inbox === true
   const effectiveLabel = follows ? autoAudioLabel(name, takenLabels) : label
-  const snapshot = JSON.stringify([name, effectiveLabel, description])
+  const snapshot = JSON.stringify([name, effectiveLabel, description, prompt, folderId])
   useEffect(() => {
     if (open && group && openedSnapshot === null) setOpenedSnapshot(snapshot)
   }, [group, open, openedSnapshot, snapshot])
@@ -127,7 +135,7 @@ export function AudioGroupDialog({ open, group, takenLabels, onClose, onSaved, o
     if (!group || !canSave) return
     setBusy(true)
     try {
-      onSaved(await updateAudioGroup(group.id, inbox ? { name } : { name, label: effectiveLabel, description }))
+      onSaved(await updateAudioGroup(group.id, inbox ? { name } : { name, label: effectiveLabel, description, prompt, folder_id: folderId || null }))
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '실패했어.', en: 'Failed.' })), tone: 'error' })
     } finally {
@@ -142,7 +150,14 @@ export function AudioGroupDialog({ open, group, takenLabels, onClose, onSaved, o
           <Field label={t({ ko: '이름', en: 'Name' })}><Input variant="settings" autoFocus value={name} maxLength={120} onChange={(event) => setName(event.target.value)} /></Field>
           {!inbox ? (
             <>
-              <Field label={t({ ko: '프롬프트', en: 'Prompt' })}><Textarea variant="settings" rows={3} value={description} maxLength={4000} onChange={(event) => setDescription(event.target.value)} /></Field>
+              <Field label={t({ ko: '그룹', en: 'Group' })}>
+                <Select variant="settings" value={folderId} onChange={(event) => setFolderId(event.target.value)}>
+                  <option value="">{t({ ko: '없음', en: 'None' })}</option>
+                  {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+                </Select>
+              </Field>
+              <Field label={t({ ko: '설명', en: 'Description' })}><Textarea variant="settings" rows={2} value={description} maxLength={4000} onChange={(event) => setDescription(event.target.value)} /></Field>
+              <Field label={t({ ko: '대표 프롬프트', en: 'Representative prompt' })}><Textarea variant="settings" rows={3} value={prompt} maxLength={8000} onChange={(event) => setPrompt(event.target.value)} /></Field>
               <Field label={t({ ko: '파일명', en: 'File name' })} info={t({ ko: '채택본을 내보낼 때의 파일 이름. [00]은 번호 자리야.', en: 'File name of exported takes. [00] is the number slot.' })}>
                 <div className="flex items-center gap-1">
                   <Input

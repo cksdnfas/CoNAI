@@ -51,7 +51,12 @@ export interface AudioGroup {
   project_id: string;
   name: string;
   label: string | null;
+  /** What the sound is for, in a person's words. */
   description: string;
+  /** The representative generation prompt (the generate bar starts from it). */
+  prompt: string;
+  /** The folder (그룹 in the UI) the effect sits in; null = directly under the project. */
+  folder_id: string | null;
   is_inbox: boolean;
   created_at: string;
   updated_at: string;
@@ -61,6 +66,15 @@ export interface AudioGroup {
   comment_count: number;
   pending_comment_count: number;
   completed_comment_count: number;
+}
+
+export interface AudioFolder {
+  id: string;
+  project_id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  group_count: number;
 }
 
 export interface AudioCandidate {
@@ -229,7 +243,7 @@ export function listAudioGroups(projectId: string, options: { search?: unknown; 
   const search = typeof options.search === 'string' ? options.search.trim().toLowerCase() : '';
   const rows = (db().prepare(`${GROUP_SELECT} WHERE g.project_id = ? ORDER BY g.is_inbox DESC, g.created_at, g.id`).all(project.id) as GroupRow[]).map(toGroup);
   return rows.filter((group) => {
-    if (search && !group.name.toLowerCase().includes(search) && !(group.label ?? '').toLowerCase().includes(search)) return false;
+    if (search && ![group.name, group.label ?? '', group.description].some((value) => value.toLowerCase().includes(search))) return false;
     switch (filter as AudioGroupFilter | null) {
       case 'unselected': return group.candidate_count > 0 && group.selected_count === 0;
       case 'has_comments': return group.comment_count > 0;
@@ -260,16 +274,26 @@ export function getAudioInboxGroup(projectId: string): AudioGroup {
   return getAudioGroup(row.id);
 }
 
-export function createAudioGroup(projectId: string, input: { name?: unknown; label?: unknown; description?: unknown }): AudioGroup {
+/** A folder of the same project, or null; an empty value takes the effect out of its folder. */
+function folderOf(projectId: string, value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  const folder = getAudioFolder(String(value));
+  if (folder.project_id !== projectId) throw new AudioServiceError('다른 프로젝트의 그룹으로는 옮길 수 없어.');
+  return folder.id;
+}
+
+export function createAudioGroup(projectId: string, input: { name?: unknown; label?: unknown; description?: unknown; prompt?: unknown; folder_id?: unknown }): AudioGroup {
   const project = getAudioProject(projectId);
   const name = text(input.name, '효과음 이름', 120);
   const label = validateAudioLabel(text(input.label, '파일명 규칙', 120));
   const description = text(input.description, '설명', 4000, false);
+  const prompt = text(input.prompt, '대표 프롬프트', 8000, false);
+  const folderId = folderOf(project.id, input.folder_id);
   const id = newId();
   const at = now();
   try {
-    db().prepare(`INSERT INTO audio_groups (id, project_id, name, label, description, is_inbox, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)`)
-      .run(id, project.id, name, label, description, at, at);
+    db().prepare(`INSERT INTO audio_groups (id, project_id, name, label, description, prompt, folder_id, is_inbox, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`)
+      .run(id, project.id, name, label, description, prompt, folderId, at, at);
   } catch (error) {
     if (isUniqueViolation(error)) throw new AudioServiceError('이 프로젝트에 같은 파일명의 효과음이 이미 있어.', 409);
     throw error;
@@ -277,21 +301,81 @@ export function createAudioGroup(projectId: string, input: { name?: unknown; lab
   return getAudioGroup(id);
 }
 
-export function updateAudioGroup(id: string, input: { name?: unknown; label?: unknown; description?: unknown }): AudioGroup {
+export function updateAudioGroup(id: string, input: { name?: unknown; label?: unknown; description?: unknown; prompt?: unknown; folder_id?: unknown }): AudioGroup {
   const current = getAudioGroup(id);
   if (current.is_inbox && input.label !== undefined && input.label !== null) {
     throw new AudioServiceError('받은 파일에는 파일명을 붙일 수 없어.');
   }
+  if (current.is_inbox && input.folder_id !== undefined && input.folder_id !== null && input.folder_id !== '') {
+    throw new AudioServiceError('받은 파일은 그룹에 넣을 수 없어.');
+  }
   const name = input.name === undefined ? current.name : text(input.name, '효과음 이름', 120);
   const label = current.is_inbox ? null : input.label === undefined ? current.label : validateAudioLabel(text(input.label, '파일명 규칙', 120));
   const description = input.description === undefined ? current.description : text(input.description, '설명', 4000, false);
+  const prompt = input.prompt === undefined ? current.prompt : text(input.prompt, '대표 프롬프트', 8000, false);
+  const folderId = input.folder_id === undefined ? current.folder_id : folderOf(current.project_id, input.folder_id);
   try {
-    db().prepare('UPDATE audio_groups SET name = ?, label = ?, description = ?, updated_at = ? WHERE id = ?').run(name, label, description, now(), current.id);
+    db().prepare('UPDATE audio_groups SET name = ?, label = ?, description = ?, prompt = ?, folder_id = ?, updated_at = ? WHERE id = ?')
+      .run(name, label, description, prompt, folderId, now(), current.id);
   } catch (error) {
     if (isUniqueViolation(error)) throw new AudioServiceError('이 프로젝트에 같은 파일명의 효과음이 이미 있어.', 409);
     throw error;
   }
   return getAudioGroup(current.id);
+}
+
+/* ---------------------------------------------------------------- folders */
+
+const FOLDER_SELECT = `
+  SELECT f.*, (SELECT count(*) FROM audio_groups g WHERE g.folder_id = f.id) AS group_count
+  FROM audio_folders f`;
+
+export function listAudioFolders(projectId: string): AudioFolder[] {
+  const project = getAudioProject(projectId);
+  return db().prepare(`${FOLDER_SELECT} WHERE f.project_id = ? ORDER BY f.name COLLATE NOCASE, f.id`).all(project.id) as AudioFolder[];
+}
+
+export function getAudioFolder(id: string): AudioFolder {
+  const row = db().prepare(`${FOLDER_SELECT} WHERE f.id = ?`).get(String(id)) as AudioFolder | undefined;
+  if (!row) throw new AudioServiceError('그룹을 찾을 수 없어.', 404);
+  return row;
+}
+
+export function createAudioFolder(projectId: string, input: { name?: unknown }): AudioFolder {
+  const project = getAudioProject(projectId);
+  const name = text(input.name, '그룹 이름', 120);
+  const id = newId();
+  const at = now();
+  try {
+    db().prepare('INSERT INTO audio_folders (id, project_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(id, project.id, name, at, at);
+  } catch (error) {
+    if (isUniqueViolation(error)) throw new AudioServiceError('이 프로젝트에 같은 이름의 그룹이 이미 있어.', 409);
+    throw error;
+  }
+  return getAudioFolder(id);
+}
+
+export function updateAudioFolder(id: string, input: { name?: unknown }): AudioFolder {
+  const current = getAudioFolder(id);
+  const name = input.name === undefined ? current.name : text(input.name, '그룹 이름', 120);
+  try {
+    db().prepare('UPDATE audio_folders SET name = ?, updated_at = ? WHERE id = ?').run(name, now(), current.id);
+  } catch (error) {
+    if (isUniqueViolation(error)) throw new AudioServiceError('이 프로젝트에 같은 이름의 그룹이 이미 있어.', 409);
+    throw error;
+  }
+  return getAudioFolder(current.id);
+}
+
+/** Delete a folder; its effects stay, directly under the project. */
+export function deleteAudioFolder(id: string): { deleted: true; released_groups: number } {
+  const folder = getAudioFolder(id);
+  let released = 0;
+  db().transaction(() => {
+    released = db().prepare('UPDATE audio_groups SET folder_id = NULL, updated_at = ? WHERE folder_id = ?').run(now(), folder.id).changes;
+    db().prepare('DELETE FROM audio_folders WHERE id = ?').run(folder.id);
+  }).immediate();
+  return { deleted: true, released_groups: released };
 }
 
 /** Queued or running generation of these groups' orders stops before the order rows cascade away. */

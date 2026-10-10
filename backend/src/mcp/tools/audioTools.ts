@@ -3,17 +3,20 @@ import { z } from 'zod';
 import type { McpRequestContext } from '../context';
 import { requireFileStoreOwner } from '../../services/fileStoreAccess';
 import {
+  createAudioFolder,
   createAudioGroup,
   createAudioProject,
   getAudioCandidate,
   importAudioDataUrl,
   importAudioFromFileStore,
   listAudioCandidates,
+  listAudioFolders,
   listAudioGroupComments,
   listAudioGroups,
   listAudioProjects,
   moveAudioCandidates,
   setAudioGroupCommentStatus,
+  updateAudioFolder,
   updateAudioGroup,
   updateAudioProject,
   type AudioCandidate,
@@ -72,9 +75,9 @@ export function registerAudioTools(server: McpServer, context: McpRequestContext
   server.tool('list_audio_projects', 'List sound-effect projects in the audio workspace with their group and candidate counts and the id of each project\'s 받은 파일 (inbox) group.', {},
     () => run(() => listAudioProjects()));
 
-  server.tool('list_audio_groups', 'List the sound groups of one audio project (the 오디오 tab calls a group a 효과음, "effect": one sound with one prompt and one file name). Each group\'s label is its export file-name rule (e.g. footstep_snow_[00]); counts include candidates, selected takes and pending/completed comments.', {
+  server.tool('list_audio_groups', 'List the sound groups of one audio project (the 오디오 tab calls a group a 효과음, "effect": one sound with one prompt and one file name). Each group has a description (what the sound is for, in a person\'s words), a prompt (its representative generation prompt), a folder_id (the folder it is sorted into, null = directly under the project) and a label (its export file-name rule, e.g. footstep_snow_[00]); counts include candidates, selected takes and pending/completed comments.', {
     project_id: id,
-    search: z.string().max(120).optional().describe('Match group name or label'),
+    search: z.string().max(120).optional().describe('Match group name, label or description'),
     filter: z.enum(['unselected', 'has_comments', 'pending_comments', 'completed_comments']).optional(),
   }, ({ project_id, search, filter }) => run(() => listAudioGroups(project_id, { search, filter })));
 
@@ -115,15 +118,33 @@ export function registerAudioTools(server: McpServer, context: McpRequestContext
     project_id: id,
     name: z.string().trim().min(1).max(120),
     label: z.string().trim().min(1).max(120),
-    description: z.string().max(4000).optional().describe('The group\'s generation prompt; the 오디오 tab shows and edits it in the generate bar'),
-  }, ({ project_id, name, label, description }) => run(() => createAudioGroup(project_id, { name, label, description })));
+    description: z.string().max(4000).optional().describe('What the sound is for, written for people (any language); never sent to the generator'),
+    prompt: z.string().max(8000).optional().describe('Representative generation prompt in English; the 오디오 tab\'s generate bar starts from it'),
+    folder_id: id.optional().describe('Folder of the same project to sort it into (list_audio_folders)'),
+  }, ({ project_id, name, label, description, prompt, folder_id }) => run(() => createAudioGroup(project_id, { name, label, description, prompt, folder_id })));
 
-  server.tool('update_audio_group', 'Change an audio group\'s name, label (file-name rule) or description. The 받은 파일 inbox group has no label.', {
+  server.tool('update_audio_group', 'Change an audio group\'s name, label (file-name rule), description, representative prompt or folder. The 받은 파일 inbox group has no label and no folder.', {
     group_id: id,
     name: z.string().trim().min(1).max(120).optional(),
     label: z.string().trim().min(1).max(120).optional(),
-    description: z.string().max(4000).optional(),
-  }, ({ group_id, name, label, description }) => run(() => updateAudioGroup(group_id, { name, label, description })));
+    description: z.string().max(4000).optional().describe('What the sound is for, written for people; never sent to the generator'),
+    prompt: z.string().max(8000).optional().describe('Representative generation prompt in English'),
+    folder_id: id.nullable().optional().describe('Folder of the same project (list_audio_folders); null takes it out of its folder'),
+  }, ({ group_id, name, label, description, prompt, folder_id }) => run(() => updateAudioGroup(group_id, { name, label, description, prompt, folder_id })));
+
+  server.tool('list_audio_folders', 'List the folders of one audio project (the 오디오 tab calls a folder a 그룹, e.g. UI, BGM). Folders only sort sound groups (effects), one level deep; group_count is how many effects each holds.', {
+    project_id: id,
+  }, ({ project_id }) => run(() => listAudioFolders(project_id)));
+
+  server.tool('create_audio_folder', 'Create a folder (그룹 in the UI) in an audio project to sort its sound groups; then set folder_id with update_audio_group.', {
+    project_id: id,
+    name: z.string().trim().min(1).max(120),
+  }, ({ project_id, name }) => run(() => createAudioFolder(project_id, { name })));
+
+  server.tool('update_audio_folder', 'Rename an audio folder (그룹 in the UI).', {
+    folder_id: id,
+    name: z.string().trim().min(1).max(120),
+  }, ({ folder_id, name }) => run(() => updateAudioFolder(folder_id, { name })));
 
   server.tool('move_audio_candidates', 'Move sound candidates to another group of the same audio project (e.g. out of the 받은 파일 inbox).', {
     candidate_ids: z.array(id).min(1).max(500),

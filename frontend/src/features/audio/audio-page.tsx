@@ -35,12 +35,15 @@ import {
   audioCandidateExportUrl,
   audioExportDownloadUrl,
   cancelAudioOrder,
+  createAudioFolder,
   createAudioGroup,
+  deleteAudioFolder,
   deleteAudioGroup,
   deleteAudioProject,
   downloadAttachment,
   getAudioGroup,
   listAudioCandidates,
+  listAudioFolders,
   listAudioGroups,
   listAudioOrders,
   listAudioProjects,
@@ -49,10 +52,13 @@ import {
   saveBlob,
   setAudioReview,
   startAudioExport,
+  updateAudioFolder,
+  updateAudioGroup,
   uploadAudioFiles,
   type AudioCandidate,
   type AudioCandidatePage,
   type AudioExportResult,
+  type AudioFolder,
   type AudioGroup,
   type AudioProject,
   type AudioReview,
@@ -72,7 +78,7 @@ import { AudioSettingsDialog } from './audio-settings-dialog'
 import { AudioSidebar, AudioSidebarFooter, type AudioSidebarFilter } from './audio-sidebar'
 
 const PROJECT_STORAGE_KEY = 'conai:audio:project'
-const EXPANDED_STORAGE_KEY = 'conai:audio:expanded'
+const FOLDERS_STORAGE_KEY = 'conai:audio:folders'
 const PAGE_SIZE = 200
 /** Failed orders stay listed (with retry) for a day. */
 const FAILED_ORDER_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -98,7 +104,7 @@ function writeStored(key: string, value: string) {
 
 function readExpanded(): Set<string> {
   try {
-    const value = JSON.parse(readStored(EXPANDED_STORAGE_KEY) ?? '[]') as unknown
+    const value = JSON.parse(readStored(FOLDERS_STORAGE_KEY) ?? '[]') as unknown
     return new Set(Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [])
   } catch {
     return new Set()
@@ -119,7 +125,7 @@ function useAudioPermissions() {
   }
 }
 
-/** /audio — the sound-effect workspace: projects ▸ effects (audio groups), takes, review, editing, generation and export. */
+/** /audio — the sound-effect workspace: projects ▸ folders (그룹) ▸ effects (audio groups), takes, review, editing, generation and export. */
 export function AudioPage() {
   const { t } = useI18n()
   const queryClient = useQueryClient()
@@ -174,7 +180,7 @@ export function AudioPage() {
       const next = new Set(current)
       if (open ?? !next.has(id)) next.add(id)
       else next.delete(id)
-      writeStored(EXPANDED_STORAGE_KEY, JSON.stringify([...next]))
+      writeStored(FOLDERS_STORAGE_KEY, JSON.stringify([...next]))
       return next
     })
   }, [])
@@ -189,45 +195,47 @@ export function AudioPage() {
   // remembered project, so comparing the two mid-switch would bounce the click back to the old group.
   const projectId = group?.project_id ?? storedProjectId
 
-  // A group link (chat card, ?group=) wins over the remembered project, and opens that project in the tree — once
-  // per group, so a stale group from before a switch never overwrites the project just picked.
+  // A group link (chat card, ?group=) wins over the remembered project, and opens its folder in the tree — once per
+  // group, so a stale group from before a switch never overwrites the project just picked.
   const syncedGroupRef = useRef<string | null>(null)
   useEffect(() => {
     if (!group || syncedGroupRef.current === group.id) return
     syncedGroupRef.current = group.id
     if (group.project_id !== storedProjectId) setProjectId(group.project_id)
-    if (!expanded.has(group.project_id)) expand(group.project_id, true)
+    if (group.folder_id && !expanded.has(group.folder_id)) expand(group.folder_id, true)
   }, [group, storedProjectId, setProjectId, expanded, expand])
   useEffect(() => {
     if (!projectsQuery.isSuccess) return
     if (projects.length === 0) return
     if (!projectId || !projects.some((project) => project.id === projectId)) {
-      if (!groupId || groupQuery.isError) {
-        setProjectId(projects[0].id)
-        expand(projects[0].id, true)
-      }
+      if (!groupId || groupQuery.isError) setProjectId(projects[0].id)
     }
-  }, [projectsQuery.isSuccess, projects, projectId, groupId, groupQuery.isError, setProjectId, expand])
+  }, [projectsQuery.isSuccess, projects, projectId, groupId, groupQuery.isError, setProjectId])
   const project = projects.find((entry) => entry.id === projectId) ?? null
 
   const projectGroupsQuery = useQuery({ queryKey: projectGroupsKey(projectId), queryFn: () => listAudioGroups(projectId!), enabled: Boolean(projectId) })
   const projectGroups = useMemo(() => projectGroupsQuery.data ?? [], [projectGroupsQuery.data])
   const effects = useMemo(() => projectGroups.filter((entry) => !entry.is_inbox), [projectGroups])
 
-  // The tree loads the open projects; a search or filter looks through every project.
-  const treeProjectIds = searching ? projects.map((entry) => entry.id) : projects.map((entry) => entry.id).filter((id) => expanded.has(id) || id === projectId)
-  const treeQueries = useQueries({
-    queries: treeProjectIds.map((id) => ({
-      queryKey: searching ? [AUDIO_QUERY_KEY, 'groups', id, debouncedSearch, filter] : projectGroupsKey(id),
-      queryFn: () => listAudioGroups(id, searching ? { search: debouncedSearch, filter } : {}),
+  const foldersQuery = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'folders', projectId], queryFn: () => listAudioFolders(projectId!), enabled: Boolean(projectId) })
+  const folders = useMemo(() => foldersQuery.data ?? [], [foldersQuery.data])
+  const folder = group?.folder_id ? folders.find((entry) => entry.id === group.folder_id) ?? null : null
+
+  // The tree shows the open project; a search or filter looks through every project.
+  const searchProjectIds = useMemo(() => (searching ? projects.map((entry) => entry.id) : []), [searching, projects])
+  const searchQueries = useQueries({
+    queries: searchProjectIds.map((id) => ({
+      queryKey: [AUDIO_QUERY_KEY, 'groups', id, debouncedSearch, filter],
+      queryFn: () => listAudioGroups(id, { search: debouncedSearch, filter }),
       placeholderData: (previous: AudioGroup[] | undefined) => previous,
     })),
   })
-  const groupsByProject = useMemo(() => {
+  const searchResults = useMemo(() => {
+    if (!searching) return null
     const map: Record<string, AudioGroup[] | undefined> = {}
-    treeProjectIds.forEach((id, index) => { map[id] = treeQueries[index]?.data })
+    searchProjectIds.forEach((id, index) => { map[id] = searchQueries[index]?.data })
     return map
-  }, [treeProjectIds, treeQueries])
+  }, [searching, searchProjectIds, searchQueries])
 
   // Without a group in the URL (or after it was deleted), open the first effect of the project. 받은 파일 opens only
   // when picked: a project without effects shows the "add an effect" state instead.
@@ -285,6 +293,7 @@ export function AudioPage() {
 
   const refreshCounts = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: [AUDIO_QUERY_KEY, 'groups'] })
+    void queryClient.invalidateQueries({ queryKey: [AUDIO_QUERY_KEY, 'folders'] })
     void queryClient.invalidateQueries({ queryKey: [AUDIO_QUERY_KEY, 'group'] })
     void queryClient.invalidateQueries({ queryKey: [AUDIO_QUERY_KEY, 'projects'] })
   }, [queryClient])
@@ -348,10 +357,10 @@ export function AudioPage() {
 
   /* ---------------------------------------------------------------------------------------------- projects / effects */
 
-  const createEffect = async (targetProjectId: string, name: string) => {
-    const siblings = queryClient.getQueryData<AudioGroup[]>(projectGroupsKey(targetProjectId)) ?? groupsByProject[targetProjectId] ?? []
+  const createEffect = async (targetProjectId: string, name: string, folderId: string | null = null) => {
+    const siblings = queryClient.getQueryData<AudioGroup[]>(projectGroupsKey(targetProjectId)) ?? []
     try {
-      const created = await createAudioGroup(targetProjectId, { name, label: autoAudioLabel(name, siblings.map((entry) => entry.label)), description: '' })
+      const created = await createAudioGroup(targetProjectId, { name, label: autoAudioLabel(name, siblings.map((entry) => entry.label)), folder_id: folderId })
       setProjectId(targetProjectId)
       setFreshGroupId(created.id)
       setGroupId(created.id)
@@ -361,6 +370,53 @@ export function AudioPage() {
       fail(error)
       return false
     }
+  }
+  const createFolder = async (targetProjectId: string, name: string) => {
+    try {
+      await createAudioFolder(targetProjectId, { name })
+      refreshCounts()
+      return true
+    } catch (error) {
+      fail(error)
+      return false
+    }
+  }
+  const renameFolder = async (target: AudioFolder, name: string) => {
+    try {
+      await updateAudioFolder(target.id, { name })
+      refreshCounts()
+      return true
+    } catch (error) {
+      fail(error)
+      return false
+    }
+  }
+  const removeFolder = async (target: AudioFolder) => {
+    const inside = projectGroups.filter((entry) => entry.folder_id === target.id).length
+    const ok = await confirm({
+      title: t({ ko: '그룹 삭제', en: 'Delete group' }),
+      description: inside > 0
+        ? t({ ko: '"{name}" 그룹만 지워. 안의 효과음 {count}개는 그룹 밖으로 나와.', en: 'Only the group "{name}" goes; its {count} effects move out of it.' }, { name: target.name, count: inside })
+        : t({ ko: '"{name}" 그룹을 지워.', en: 'Delete the group "{name}".' }, { name: target.name }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
+    if (!ok) return
+    try {
+      await deleteAudioFolder(target.id)
+    } catch (error) {
+      fail(error)
+    }
+    refreshCounts()
+  }
+  const moveEffect = async (target: AudioGroup, folderId: string | null) => {
+    try {
+      await updateAudioGroup(target.id, { folder_id: folderId })
+      if (folderId) expand(folderId, true)
+    } catch (error) {
+      fail(error)
+    }
+    refreshCounts()
   }
   const removeProject = async (target: AudioProject) => {
     const ok = await confirm({
@@ -460,8 +516,9 @@ export function AudioPage() {
 
   /* ---------------------------------------------------------------------------------------------- chat */
 
-  // The chat moves around the tree (groups of the loaded projects), the review tabs and the takes; reviewing stays here.
-  const chatGroups = Object.values(groupsByProject).flatMap((entries) => entries ?? []).slice(0, 200)
+  // The chat moves around the tree (the open project's groups, or the search results), the review tabs and the takes;
+  // reviewing stays here.
+  const chatGroups = (searchResults ? Object.values(searchResults).flatMap((entries) => entries ?? []) : projectGroups).slice(0, 200)
   const chatTakes = rows.slice(0, 200).map((row) => row.candidate)
   useChatPageRegistration({
     kind: 'audio',
@@ -470,7 +527,7 @@ export function AudioPage() {
     fields: [],
     data: {
       project: project ? { id: project.id, name: project.name } : null,
-      group: group ? { id: group.id, name: group.name, label: group.label, description: group.description, isInbox: group.is_inbox } : null,
+      group: group ? { id: group.id, name: group.name, label: group.label, folder: folder?.name ?? null, description: group.description, prompt: group.prompt, isInbox: group.is_inbox } : null,
       reviewFilter: reviewTab,
       selectedCandidateIds: selected ? [selected.id] : [],
       groups: chatGroups.map((entry) => ({ id: entry.id, projectId: entry.project_id, name: entry.name, isInbox: entry.is_inbox })),
@@ -510,7 +567,9 @@ export function AudioPage() {
     ['rejected', t({ ko: '보류', en: 'Rejected' }), Math.max(0, group.candidate_count - group.selected_count - group.pending_review_count)],
   ] : []
   const inbox = group?.is_inbox === true
-  const groupTitle = group ? (inbox ? t({ ko: '받은 파일', en: 'Inbox' }) : group.name) : project?.name ?? t({ ko: '오디오', en: 'Audio' })
+  const groupTitle = group
+    ? (inbox ? t({ ko: '받은 파일', en: 'Inbox' }) : folder ? <><span className="font-normal text-muted-foreground">{folder.name} / </span>{group.name}</> : group.name)
+    : project?.name ?? t({ ko: '오디오', en: 'Audio' })
   // Takes move within their project: to its effects, or back to its 받은 파일.
   const moveTargets = group ? projectGroups.filter((entry) => entry.id !== group.id && (!entry.is_inbox || !inbox)) : []
   const inboxEffects = moveTargets.filter((entry) => !entry.is_inbox)
@@ -591,9 +650,17 @@ export function AudioPage() {
       sidebar={(
         <AudioSidebar
           projects={projects}
-          groupsByProject={groupsByProject}
-          expanded={expanded}
-          onToggleProject={(id) => expand(id)}
+          project={project}
+          onSelectProject={(id) => {
+            if (id === projectId) return
+            setProjectId(id)
+            setGroupId(null)
+          }}
+          groups={projectGroups}
+          folders={folders}
+          searchResults={searchResults}
+          expandedFolders={expanded}
+          onToggleFolder={expand}
           activeGroupId={groupId}
           onSelectGroup={(entry) => {
             setProjectId(entry.project_id)
@@ -605,10 +672,15 @@ export function AudioPage() {
           onFilterChange={setFilter}
           canEdit={permissions.canEdit}
           exporting={exportBusy}
+          onNewProject={() => setDialog('project-new')}
           onEditProject={(entry) => { setEditingProject(entry); setDialog('project-edit') }}
           onExportProject={(entry) => void runExport({ projectId: entry.id })}
           onDeleteProject={(entry) => void removeProject(entry)}
           onCreateGroup={createEffect}
+          onCreateFolder={createFolder}
+          onRenameFolder={renameFolder}
+          onDeleteFolder={(entry) => void removeFolder(entry)}
+          onMoveGroup={(entry, folderId) => void moveEffect(entry, folderId)}
           onDropCandidates={(target, ids) => void moveTakes(ids, target)}
           onDropFiles={(target, files) => void upload(target, files)}
         />
@@ -679,6 +751,7 @@ export function AudioPage() {
             onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false) }}
             onDrop={onDrop}
           >
+            {!inbox && group.description ? <p className="text-sm whitespace-pre-wrap break-words text-muted-foreground">{group.description}</p> : null}
             {!inbox && permissions.canEdit ? (
               <AudioGenerateBar
                 key={group.id}
@@ -779,7 +852,6 @@ export function AudioPage() {
           refreshCounts()
           if (created) {
             setProjectId(saved.id)
-            expand(saved.id, true)
             setGroupId(null)
           }
         }}
@@ -787,6 +859,7 @@ export function AudioPage() {
       <AudioGroupDialog
         open={dialog === 'group-edit'}
         group={group}
+        folders={folders}
         takenLabels={projectGroups.filter((entry) => entry.id !== group?.id).map((entry) => entry.label)}
         onClose={() => setDialog(null)}
         onSaved={() => {

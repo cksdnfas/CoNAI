@@ -319,12 +319,13 @@ stdio:
 
 ### 음향
 
-효과음 작업실(음향 탭)입니다. 프로젝트 → 그룹 → 후보(생성 테이크·업로드·편집본) 구조이고, 이미지 라이브러리와 따로 `audio.db`에 저장됩니다. 후보 식별자는 `candidate_id`이며 이미지의 `composite_hash`가 아닙니다.
+효과음 작업실(음향 탭)입니다. 프로젝트 → 그룹 → 후보(생성 테이크·업로드·편집본) 구조이고, 이미지 라이브러리와 따로 `audio.db`에 저장됩니다. 후보 식별자는 `candidate_id`이며 이미지의 `composite_hash`가 아닙니다. 도구의 "그룹"(audio group)은 화면의 효과음 하나이고, 화면에서 "그룹"이라 부르는 분류(UI, BGM 등)는 도구에서 폴더(`folder_id`)입니다. 효과음의 `description`은 사람이 읽는 설명이고, 생성 프롬프트는 `prompt`(대표 프롬프트)입니다.
 
 | Tool | 용도 | HTTP MCP 키 권한 | 계정 권한 |
 | --- | --- | --- | --- |
 | `list_audio_projects` | 프로젝트와 그룹·후보 수, 프로젝트별 받은 파일 그룹 ID | `read` | `audio.view` |
-| `list_audio_groups` | 프로젝트의 그룹, 파일명 규칙(`label`), 채택·코멘트 수 | `read` | `audio.view` |
+| `list_audio_groups` | 프로젝트의 그룹, 설명·대표 프롬프트, 폴더, 파일명 규칙(`label`), 채택·코멘트 수 | `read` | `audio.view` |
+| `list_audio_folders` | 프로젝트의 폴더(화면의 그룹)와 폴더별 효과음 수 | `read` | `audio.view` |
 | `list_audio_candidates` | 그룹의 후보 목록(검수 상태, 길이, 출처) | `read` | `audio.view` |
 | `get_audio_candidate` | 후보 하나의 출처(프롬프트, seed, 워크플로, 서버)와 검수 메모 | `read` | `audio.view` |
 | `list_audio_group_comments` | 그룹에 남긴 작업 요청 코멘트(리비전 포함) | `read` | `audio.view` |
@@ -332,7 +333,8 @@ stdio:
 | `list_audio_workflows` | 음향 생성에 연결된 워크플로, 역할 필드, 호환성 검사 결과 | `read` | `audio.view` |
 | `get_audio_order` | 생성 주문의 잡별 상태와 만들어진 후보 ID | `read` | `audio.view` |
 | `create_audio_project` / `update_audio_project` | 프로젝트 만들기(받은 파일 그룹이 같이 생김)·수정 | `organize` | `audio.edit` |
-| `create_audio_group` / `update_audio_group` | 그룹 만들기·수정(`label`이 내보내기 파일명 규칙) | `organize` | `audio.edit` |
+| `create_audio_group` / `update_audio_group` | 그룹 만들기·수정(`label`이 내보내기 파일명 규칙, `folder_id`로 폴더 이동, `null`이면 폴더 밖) | `organize` | `audio.edit` |
+| `create_audio_folder` / `update_audio_folder` | 폴더 만들기·이름 바꾸기(삭제는 웹에서, 안의 효과음은 남음) | `organize` | `audio.edit` |
 | `move_audio_candidates` | 후보를 같은 프로젝트의 다른 그룹으로 이동 | `organize` | `audio.edit` |
 | `import_audio` | `data_url`(audio/*, 최대 50MB) 또는 내 파일 `file_id`(복사)를 후보로 추가 | `organize` | `audio.edit` (+`files.view`) |
 | `set_audio_group_comment_status` | 작업 요청 완료 처리·되돌리기(읽은 `revision` 필요) | `organize` | `audio.edit` |

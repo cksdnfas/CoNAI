@@ -45,6 +45,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   get_audio_candidate: 'audio.view', list_audio_group_comments: 'audio.view',
   create_audio_project: ['audio.view', 'audio.edit'], update_audio_project: ['audio.view', 'audio.edit'],
   create_audio_group: ['audio.view', 'audio.edit'], update_audio_group: ['audio.view', 'audio.edit'],
+  list_audio_folders: 'audio.view', create_audio_folder: ['audio.view', 'audio.edit'], update_audio_folder: ['audio.view', 'audio.edit'],
   move_audio_candidates: ['audio.view', 'audio.edit'], import_audio: ['audio.view', 'audio.edit'],
   set_audio_group_comment_status: ['audio.view', 'audio.edit'],
   edit_audio_candidate: ['audio.view', 'audio.edit'], delete_unselected_audio_candidates: ['audio.view', 'audio.edit'],

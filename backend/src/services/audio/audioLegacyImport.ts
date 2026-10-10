@@ -5,6 +5,7 @@ import AdmZip from 'adm-zip';
 import Database from 'better-sqlite3';
 import { runtimePaths } from '../../config/runtimePaths';
 import { getAudioDb } from '../../database/audioDb';
+import { splitAudioGroupText } from '../../database/audioSchema';
 import { WorkflowModel } from '../../models/Workflow';
 import type { MarkedField } from '../../types/workflow';
 import { ingestAudioCopy, isAllowedAudioExtension, normalizeAudioExtension } from './audioStore';
@@ -465,7 +466,7 @@ export async function runLegacyAudioImport(params: LegacyImportParams, hooks: Le
         continue;
       }
       try {
-        const created = createAudioGroup(projectId, { name: group.name, label: group.label, description: group.description ?? '' });
+        const created = createAudioGroup(projectId, { name: group.name, label: group.label, ...splitAudioGroupText(group.description) });
         groupIds.set(group.id, created.id);
         remember('group', group.id, created.id);
         result.groups.created += 1;

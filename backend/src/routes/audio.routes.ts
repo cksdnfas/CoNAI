@@ -16,10 +16,12 @@ import {
 import {
   AudioServiceError,
   audioCandidateFile,
+  createAudioFolder,
   createAudioGroup,
   createAudioGroupComment,
   createAudioProject,
   deleteAudioCandidates,
+  deleteAudioFolder,
   deleteAudioGroup,
   deleteAudioGroupComment,
   deleteAudioProject,
@@ -29,6 +31,7 @@ import {
   importAudioFromFileStore,
   importAudioUpload,
   listAudioCandidates,
+  listAudioFolders,
   listAudioGroupComments,
   listAudioGroups,
   listAudioProjects,
@@ -36,6 +39,7 @@ import {
   restoreAudioCandidates,
   setAudioCandidateReview,
   setAudioGroupCommentStatus,
+  updateAudioFolder,
   updateAudioGroup,
   updateAudioGroupComment,
   updateAudioProject,
@@ -112,6 +116,15 @@ router.patch('/projects/:projectId', edit, (req, res) => res.json({ success: tru
 router.delete('/projects/:projectId', edit, asyncHandler(async (req, res) => {
   res.json({ success: true, data: await deleteAudioProject(param(req, 'projectId')) });
 }));
+
+/* ------------------------------------------------------------------ folders (그룹 in the UI) */
+
+router.get('/projects/:projectId/folders', (req, res) => res.json({ success: true, data: listAudioFolders(param(req, 'projectId')) }));
+router.post('/projects/:projectId/folders', edit, (req, res) => {
+  res.status(201).json({ success: true, data: createAudioFolder(param(req, 'projectId'), req.body ?? {}) });
+});
+router.patch('/folders/:folderId', edit, (req, res) => res.json({ success: true, data: updateAudioFolder(param(req, 'folderId'), req.body ?? {}) }));
+router.delete('/folders/:folderId', edit, (req, res) => res.json({ success: true, data: deleteAudioFolder(param(req, 'folderId')) }));
 
 /* ------------------------------------------------------------------ groups */
 

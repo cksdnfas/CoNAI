@@ -90,7 +90,7 @@ export function registerAudioGenerationTools(server: McpServer, context: McpRequ
 
   server.tool('order_audio', `Generate sound-effect candidates into one audio group: count (1-50) separate jobs with seeds seed, seed+1, ... (random base when omitted). Write the prompt in English as a sound description (e.g. "soft footstep on fresh snow, single step, close mic, dry"). ${chat ? 'The app attaches the finished candidates to your reply by itself; do not wait for or poll the order.' : 'Then call wait_audio_order with the returned order_id.'} A person reviews (adopts/rejects) the results in the web app.`, {
     audio_group_id: z.string().trim().min(1).max(64).describe('Target audio group id (list_audio_groups)'),
-    text: z.string().trim().min(1).max(8000).describe('Sound description prompt'),
+    text: z.string().trim().min(1).max(8000).describe('Sound description prompt in English; start from the group\'s representative prompt (list_audio_groups `prompt`), not its description'),
     seconds: z.number().min(0.1).max(1200).default(3).describe('Length in seconds'),
     count: z.number().int().min(1).max(50).default(4),
     seed: z.number().int().min(-1).max(Number.MAX_SAFE_INTEGER).optional().describe('Base seed; omit or -1 for random'),

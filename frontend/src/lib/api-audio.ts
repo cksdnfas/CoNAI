@@ -27,7 +27,12 @@ export interface AudioGroup {
   project_id: string
   name: string
   label: string | null
+  /** What the sound is for, in a person's words. */
   description: string
+  /** Representative generation prompt; the generate bar starts from it. */
+  prompt: string
+  /** Folder (그룹 in the UI); null = directly under the project. */
+  folder_id: string | null
   is_inbox: boolean
   created_at: string
   updated_at: string
@@ -37,6 +42,16 @@ export interface AudioGroup {
   comment_count: number
   pending_comment_count: number
   completed_comment_count: number
+}
+
+/** A folder of effects; the UI calls it 그룹 (UI, BGM, ...). */
+export interface AudioFolder {
+  id: string
+  project_id: string
+  name: string
+  created_at: string
+  updated_at: string
+  group_count: number
 }
 
 export interface AudioEditParams {
@@ -194,9 +209,15 @@ export const listAudioGroups = (projectId: string, options: { search?: string; f
   return requestApiData<AudioGroup[]>(`/api/audio/projects/${enc(projectId)}/groups${query ? `?${query}` : ''}`)
 }
 export const getAudioGroup = (id: string) => requestApiData<AudioGroup>(`/api/audio/groups/${enc(id)}`)
-export const createAudioGroup = (projectId: string, input: { name: string; label: string; description?: string }) => requestApiData<AudioGroup>(`/api/audio/projects/${enc(projectId)}/groups`, body(input))
-export const updateAudioGroup = (id: string, input: { name?: string; label?: string; description?: string }) => requestApiData<AudioGroup>(`/api/audio/groups/${enc(id)}`, body(input, 'PATCH'))
+export const createAudioGroup = (projectId: string, input: { name: string; label: string; description?: string; prompt?: string; folder_id?: string | null }) => requestApiData<AudioGroup>(`/api/audio/projects/${enc(projectId)}/groups`, body(input))
+export const updateAudioGroup = (id: string, input: { name?: string; label?: string; description?: string; prompt?: string; folder_id?: string | null }) => requestApiData<AudioGroup>(`/api/audio/groups/${enc(id)}`, body(input, 'PATCH'))
 export const deleteAudioGroup = (id: string) => requestApiData<unknown>(`/api/audio/groups/${enc(id)}`, { method: 'DELETE' })
+
+/* folders (그룹 in the UI) */
+export const listAudioFolders = (projectId: string) => requestApiData<AudioFolder[]>(`/api/audio/projects/${enc(projectId)}/folders`)
+export const createAudioFolder = (projectId: string, input: { name: string }) => requestApiData<AudioFolder>(`/api/audio/projects/${enc(projectId)}/folders`, body(input))
+export const updateAudioFolder = (id: string, input: { name: string }) => requestApiData<AudioFolder>(`/api/audio/folders/${enc(id)}`, body(input, 'PATCH'))
+export const deleteAudioFolder = (id: string) => requestApiData<unknown>(`/api/audio/folders/${enc(id)}`, { method: 'DELETE' })
 
 /* candidates */
 export interface AudioCandidatePage { items: AudioCandidate[]; total: number; limit: number; offset: number }

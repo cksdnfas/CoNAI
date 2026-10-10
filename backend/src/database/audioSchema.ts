@@ -166,5 +166,45 @@ export function ensureAudioSchema(db: Database.Database): void {
       registered_workflow_id INTEGER,
       imported_at TEXT NOT NULL
     );
+
+    -- Folders sort a project's effects (UI, BGM, ...); the UI calls them 그룹, one level deep.
+    CREATE TABLE IF NOT EXISTS audio_folders (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES audio_projects(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_audio_folders_name ON audio_folders(project_id, name COLLATE NOCASE);
   `);
+
+  const groupColumns = new Set((db.prepare('PRAGMA table_info(audio_groups)').all() as Array<{ name: string }>).map((column) => column.name));
+  if (!groupColumns.has('folder_id')) db.exec('ALTER TABLE audio_groups ADD COLUMN folder_id TEXT REFERENCES audio_folders(id) ON DELETE SET NULL');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_audio_groups_folder ON audio_groups(folder_id)');
+  if (!groupColumns.has('prompt')) {
+    // `description` used to be the generation prompt. Split it once: prompt-like text moves to `prompt`; text a person
+    // wrote as a note stays the description and the prompt comes from the group's latest order.
+    db.transaction(() => {
+      db.exec(`ALTER TABLE audio_groups ADD COLUMN prompt TEXT NOT NULL DEFAULT ''`);
+      const rows = db.prepare(`
+        SELECT g.id, g.description,
+          (SELECT o.text FROM audio_orders o WHERE o.group_id = g.id ORDER BY o.created_at DESC LIMIT 1) AS last_prompt
+        FROM audio_groups g WHERE g.is_inbox = 0
+      `).all() as Array<{ id: string; description: string; last_prompt: string | null }>;
+      const update = db.prepare('UPDATE audio_groups SET description = ?, prompt = ? WHERE id = ?');
+      for (const row of rows) {
+        const split = splitAudioGroupText(row.description);
+        update.run(split.description, split.prompt || (row.last_prompt ?? '').trim(), row.id);
+      }
+    })();
+  }
+}
+
+/**
+ * Old single-field text of an effect (the SFX manager's and this app's former `description`): prompt-like text (no
+ * Hangul) becomes the prompt, anything else stays the description.
+ */
+export function splitAudioGroupText(value: string | null | undefined): { description: string; prompt: string } {
+  const text = (value ?? '').trim();
+  return /[ㄱ-ㆎ가-힣]/.test(text) ? { description: text, prompt: '' } : { description: '', prompt: text };
 }

@@ -72,7 +72,7 @@ type Readiness =
   | { kind: 'ready' }
 
 /**
- * Inline generation for one effect: its prompt (saved back to the effect on generate), length, count and seed, and a
+ * Inline generation for one effect: its representative prompt (saved back to the effect on generate), length, count and seed, and a
  * status chip that says which workflow and servers will run it. When something blocks generation the chip turns
  * red or amber and the fix sits next to it; the generate button stays in place, disabled.
  */
@@ -94,19 +94,19 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
   const { showSnackbar } = useSnackbar()
   const workflows = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'workflows'], queryFn: listAudioWorkflows, enabled: canGenerate })
   const servers = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'servers'], queryFn: () => getGenerationComfyUIServers(true), enabled: canGenerate, retry: false })
-  const [text, setText] = useState(group.description)
+  const [text, setText] = useState(group.prompt)
   const [prefs, setPrefs] = useState<GroupPrefs>(() => readPrefs(groupPrefsKey(group.id), { seconds: '3', count: '4', seed: '' }))
   const [global, setGlobal] = useState<GlobalPrefs>(() => readPrefs(GLOBAL_PREFS_KEY, { workflowId: null, route: '' }))
   const [busy, setBusy] = useState<'order' | 'fix' | 'check' | null>(null)
   const [chipOpen, setChipOpen] = useState(false)
   const fail = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '실패했어.', en: 'Failed.' })), tone: 'error' })
 
-  // The prompt follows the effect while it is untouched here (an edit in the effect dialog shows up at once).
-  const syncedDescription = useRef(group.description)
+  // The prompt follows the effect's representative prompt while it is untouched here (a dialog edit shows up at once).
+  const syncedPrompt = useRef(group.prompt)
   useEffect(() => {
-    setText((current) => (current === syncedDescription.current ? group.description : current))
-    syncedDescription.current = group.description
-  }, [group.description])
+    setText((current) => (current === syncedPrompt.current ? group.prompt : current))
+    syncedPrompt.current = group.prompt
+  }, [group.prompt])
   useEffect(() => { writePrefs(groupPrefsKey(group.id), prefs) }, [group.id, prefs])
   useEffect(() => { writePrefs(GLOBAL_PREFS_KEY, global) }, [global])
 
@@ -184,9 +184,9 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
     setBusy('order')
     try {
       const prompt = text.trim()
-      if (prompt !== group.description.trim()) {
-        await updateAudioGroup(group.id, { description: prompt })
-        syncedDescription.current = prompt
+      if (prompt !== group.prompt.trim()) {
+        await updateAudioGroup(group.id, { prompt })
+        syncedPrompt.current = prompt
         onPromptSaved()
       }
       onOrdered(await createAudioOrder({
@@ -209,10 +209,10 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
 
   const savePrompt = async () => {
     const prompt = text.trim()
-    if (!prompt || prompt === group.description.trim() || busy === 'order') return
+    if (!prompt || prompt === group.prompt.trim() || busy === 'order') return
     try {
-      await updateAudioGroup(group.id, { description: prompt })
-      syncedDescription.current = prompt
+      await updateAudioGroup(group.id, { prompt })
+      syncedPrompt.current = prompt
       onPromptSaved()
     } catch (error) {
       fail(error)
@@ -287,8 +287,8 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
         autoFocus={autoFocus}
         rows={2}
         maxLength={8000}
-        aria-label={t({ ko: '프롬프트', en: 'Prompt' })}
-        placeholder={t({ ko: '프롬프트', en: 'Prompt' })}
+        aria-label={t({ ko: '대표 프롬프트', en: 'Representative prompt' })}
+        placeholder={t({ ko: '대표 프롬프트', en: 'Representative prompt' })}
         value={text}
         onChange={(event) => setText(event.target.value)}
         onBlur={() => void savePrompt()}
