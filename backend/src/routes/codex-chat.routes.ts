@@ -581,6 +581,10 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
       sendRouteBadRequest(res, 'summary must be a string or null')
       return
     }
+    if (body.loreAutoSave !== undefined && body.loreAutoSave !== null && typeof body.loreAutoSave !== 'boolean') {
+      sendRouteBadRequest(res, 'loreAutoSave must be a boolean or null')
+      return
+    }
     // Account lorebooks linked to this chat only (the chat owner's own books).
     if (body.lorebookIds !== undefined && body.lorebookIds !== null && !Array.isArray(body.lorebookIds)) {
       sendRouteBadRequest(res, 'lorebookIds must be a list of lorebook ids or null')
@@ -595,7 +599,7 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
         contextTurns, maxTokens, summaryEnabled: body.summaryEnabled as boolean | null | undefined,
         reactionEnabled: body.reactionEnabled as boolean | undefined, reactionModelSlotId,
         authorNote: typeof body.authorNote === 'string' ? body.authorNote.slice(0, AUTHOR_NOTE_MAX_LENGTH) : (body.authorNote as null | undefined),
-        authorNoteDepth,
+        authorNoteDepth, loreAutoSave: body.loreAutoSave as boolean | null | undefined,
       })
       if (body.lorebookIds !== undefined) OwnedLorebookStore.setThreadLinks(threadId, body.lorebookIds ?? [])
       // The whole summary at once: empty clears it, text replaces it as one plot up to where it reached.
@@ -712,8 +716,9 @@ router.get('/admin/settings', requireAdmin, (_req: Request, res: Response) => {
 })
 
 router.put('/admin/settings', requireAdmin, (req: Request, res: Response) => {
-  const { enabled, diagnostics } = req.body ?? {}
-  if ((enabled === undefined && diagnostics === undefined) || (enabled !== undefined && typeof enabled !== 'boolean')
+  const { enabled, diagnostics, loreAutoSave } = req.body ?? {}
+  if ((enabled === undefined && diagnostics === undefined && loreAutoSave === undefined) || (enabled !== undefined && typeof enabled !== 'boolean')
+    || (loreAutoSave !== undefined && typeof loreAutoSave !== 'boolean')
     || (diagnostics !== undefined && (!diagnostics || typeof diagnostics !== 'object' || Array.isArray(diagnostics)
       || (diagnostics.enabled !== undefined && typeof diagnostics.enabled !== 'boolean')
       || (diagnostics.captureRaw !== undefined && typeof diagnostics.captureRaw !== 'boolean')
@@ -721,7 +726,7 @@ router.put('/admin/settings', requireAdmin, (req: Request, res: Response) => {
     sendRouteBadRequest(res, '채팅 설정 값이 올바르지 않아.')
     return
   }
-  res.json({ success: true, data: updateChatSettings({ enabled, diagnostics }) })
+  res.json({ success: true, data: updateChatSettings({ enabled, diagnostics, loreAutoSave }) })
 })
 
 /** Values the profile editor fills in for a new profile, and the scopes it may offer. */

@@ -125,9 +125,11 @@ export type ChatProposal = { id: number; dismissed?: boolean } & (
       before?: { title: string; keys: string[]; content: string; constant: boolean; file: string | null }
       /** The chat book the entry went into. */
       savedId?: number | null
-      /** Snapshots only for undoing one applied lore replacement. */
+      /** Snapshots for undoing the saved entry: the replaced entry (replacements only) and the entry as saved. */
       undoBefore?: Record<string, unknown>
       undoAfter?: Record<string, unknown>
+      /** The 자료/ file the save made (removed again on undo while the entry still links it). */
+      createdFileId?: string
       undone?: boolean
     }
 )

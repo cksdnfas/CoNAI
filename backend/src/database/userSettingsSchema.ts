@@ -714,6 +714,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['summary_error', 'TEXT'],
     // JSON ids of the account lorebooks linked to this chat only (the owner's own books).
     ['lorebook_ids', 'TEXT'],
+    // save_lore entries saved right away in this chat (1), left as cards (0), or as the chat settings say (null).
+    ['lore_auto_save', 'INTEGER'],
     // The chat list: pinned chats come first; archived ones leave the list for the archive (nothing is deleted).
     ['pinned', 'INTEGER NOT NULL DEFAULT 0'],
     ['archived', 'INTEGER NOT NULL DEFAULT 0'],

@@ -39,7 +39,7 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
   const { previewMerge, applyMerge, draftMerge, MergeDecisionsMissingError, MERGE_DRAFT_INSTRUCTION } = await import('../src/services/codex-chat/chatLorebookMerge')
   const { ChatProposalStore } = await import('../src/services/codex-chat/chatProposals')
   const { attachProposals } = await import('../src/services/codex-chat/codexChatMedia')
-  const { SAVE_LORE_DONE } = await import('../src/mcp/tools/chatLoreTools')
+  const { SAVE_LORE_DONE, SAVE_LORE_SAVED } = await import('../src/mcp/tools/chatLoreTools')
   const { openChatMcpBridge } = await import('../src/services/codex-chat/chatMcpBridge')
   const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
   const { buildChatMessages, resolveContextConfig } = await import('../src/services/codex-chat/llmChatContext')
@@ -305,6 +305,8 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
   const textOf = (result: { content?: unknown[] }) => String((result.content?.[0] as { text?: string }).text)
   const SEAWALL = { title: '방파제 약속', keys: ['방파제', '노을'], content: '노을 질 때 방파제 끝에서 만나기로 했다.', constant: true, file: { name: '약속.md', text: '이유는 그때 말하기로 했다.' } }
 
+  // The card flow first (a person saves each card); auto-save, the default, has its own test below.
+  updateChatSettings({ loreAutoSave: false })
   let proposalId = 0
   await t.test('save_lore: validated, one per reply, stored as a lore proposal on the reply', async () => {
     await withBridge('r1', async (bridge) => {
@@ -450,5 +452,72 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     assert.deepEqual(usefulLoreKeys(['항구'], [], Array(9).fill('항구')), ['항구'])
     assert.deepEqual(usefulLoreKeys(['항구'], [], Array(10).fill('항구')), [])
     assert.deepEqual(usefulLoreKeys(['항구'], [], [...Array(4).fill('항구'), ...Array(6).fill('바다')]), ['항구'], 'at 40% it stays')
+  })
+
+  await t.test('auto-save: saved right away, undo removes a new entry and its file or restores a replaced one, a chat can turn it off', async () => {
+    updateChatSettings({ loreAutoSave: true })
+    assert.equal(updateChatSettings({}).loreAutoSave, true)
+    const threadId = CodexChatStore.createThread(null, '등대지기', 'llm', profile.id)
+    const context = (replyId: string): ChatExecutionContext => ({ threadId, profileId: profile.id, kind: 'direct', replyId })
+    const say = (role: 'user' | 'assistant', content: string, replyId?: string) => CodexChatStore.addMessage({
+      thread_id: threadId, role, content, tool_calls: [], status: 'completed', error: null,
+      ...(replyId ? { routing: { replyId, replyTo: null, recipients: ['user'] } } : {}),
+    })
+    // "기억해" lifts the spacing between proposals, so each step can propose.
+    const propose = async (replyId: string, input: Record<string, unknown>) => {
+      say('user', '이건 기억해줘.')
+      const close = registerChatReply(context(replyId), controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+      const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, [], null, { chatContext: context(replyId) })
+      try {
+        assert.match(bridge.tools.find((tool) => tool.function.name === 'save_lore')!.function.description ?? '', /saved right away/)
+        return await bridge.call('save_lore', input)
+      } finally {
+        close(); await bridge.close(); say('assistant', '응.', replyId)
+      }
+    }
+    const proposalOf = (result: { structuredContent?: unknown }) => (result.structuredContent as { proposal: { id: number; savedId?: number; replaces?: string } }).proposal
+
+    const lamp = await propose('a1', { title: '램프', keys: ['램프'], content: '등대 램프는 매주 닦는다.', file: { name: '램프.md', text: '닦는 순서.' } })
+    assert.equal(textOf(lamp), SAVE_LORE_SAVED)
+    const saved = proposalOf(lamp)
+    const chatBook = OwnedLorebookStore.chatBookOf(threadId)!
+    assert.equal(saved.savedId, chatBook.id)
+    const [entry] = chatBook.entries
+    assert.deepEqual([entry.title, entry.file], ['램프', '자료/램프.md'])
+    const fileId = entry.fileId!
+    assert.equal(readBlob(fileId), '닦는 순서.')
+
+    const undone = await call('POST', `/api/chat-proposals/${saved.id}/undo`)
+    assert.equal(undone.status, 200, JSON.stringify(undone.json))
+    assert.deepEqual([undone.json.data.proposal.undone, undone.json.data.proposal.dismissed, undone.json.data.proposal.savedId], [true, true, undefined])
+    assert.deepEqual(OwnedLorebookStore.chatBookOf(threadId)!.entries, [], 'the new entry left the book')
+    assert.equal(child(materials(chatBook).id, '램프.md'), null, 'its file went with it')
+    assert.equal((await call('POST', `/api/chat-proposals/${saved.id}/undo`)).status, 409, 'undone once')
+    assert.match(textOf(await propose('a2', { title: '램프', content: '다시.' })), /dismissed or undid/)
+
+    // A replacement saved right away; undo brings the old entry back.
+    const fog = proposalOf(await propose('a3', { title: '안개', keys: ['안개'], content: '안개 낀 날은 종을 친다.' }))
+    const replaced = await propose('a4', { title: '안개', keys: ['안개'], content: '안개 낀 날은 뿔나팔을 분다.' })
+    assert.match(textOf(replaced), /같은 제목의 항목을 고쳤어/)
+    const replacement = proposalOf(replaced)
+    assert.equal(replacement.replaces, OwnedLorebookStore.chatBookOf(threadId)!.entries[0].id)
+    assert.equal(OwnedLorebookStore.chatBookOf(threadId)!.entries[0].content, '안개 낀 날은 뿔나팔을 분다.')
+    assert.equal((await call('POST', `/api/chat-proposals/${replacement.id}/undo`)).status, 200)
+    assert.equal(OwnedLorebookStore.chatBookOf(threadId)!.entries[0].content, '안개 낀 날은 종을 친다.')
+    assert.equal(ChatProposalStore.find(fog.id)?.dismissed, undefined, 'the first save stays saved')
+
+    // The chat's own switch wins over the settings: off leaves a card.
+    const off = await call('PATCH', `/api/codex-chat/threads/${threadId}/context`, { loreAutoSave: false })
+    assert.equal(off.status, 200, JSON.stringify(off.json))
+    assert.equal(off.json.data.lore_auto_save, 0)
+    say('user', '이건 기억해줘.')
+    const close = registerChatReply(context('a5'), controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, [], null, { chatContext: context('a5') })
+    try {
+      const card = await bridge.call('save_lore', { title: '종', content: '종은 녹이 슬었다.' })
+      assert.equal(textOf(card), SAVE_LORE_DONE)
+      assert.equal(proposalOf(card).savedId, undefined)
+    } finally { close(); await bridge.close() }
+    assert.equal((await call('PATCH', `/api/codex-chat/threads/${threadId}/context`, { loreAutoSave: 'yes' })).status, 400)
   })
 })

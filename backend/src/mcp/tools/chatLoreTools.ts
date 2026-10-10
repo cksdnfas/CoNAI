@@ -5,7 +5,7 @@ import { CodexChatStore } from '../../services/codex-chat/codexChatStore';
 import { loreEntryTitle } from '../../services/codex-chat/chatLorebook';
 import { loreEntryFile } from '../../services/codex-chat/chatLorebookFiles';
 import { booksForRequest, CHAT_BOOK_LABEL, hasLoreFiles, READ_LORE_FILE_TOOL, type AttachedLoreBook } from '../../services/codex-chat/chatLoreContext';
-import { LORE_PROPOSAL_LIMITS, LORE_PROPOSAL_MAX_KEYS, proposeLore, SAVE_LORE_TOOL } from '../../services/codex-chat/chatLoreProposals';
+import { LORE_PROPOSAL_LIMITS, LORE_PROPOSAL_MAX_KEYS, loreAutoSaveOn, proposeLore, SAVE_LORE_TOOL } from '../../services/codex-chat/chatLoreProposals';
 import { FileStoreService } from '../../services/fileStoreService';
 import type { McpRequestContext } from '../context';
 
@@ -97,8 +97,9 @@ function allowsLoreProposals(profileId: number) {
   return ChatProfileStore.find(profileId)?.allowLoreProposals === true;
 }
 
-/** What the model is told once its proposal is stored. */
+/** What the model is told once its proposal is stored as a card, or saved right away (auto-save). */
 export const SAVE_LORE_DONE = '제안으로 올렸어. 사용자가 저장하면 들어가.';
+export const SAVE_LORE_SAVED = '로어북에 저장했어. 사용자가 되돌릴 수 있어.';
 
 /**
  * Chat agents' lorebook tools, scoped like the room tools (no MCP scope needed). read_lore_file: offered in a chat
@@ -136,9 +137,13 @@ export function registerChatLoreTools(server: McpServer, context: McpRequestCont
 }
 
 function registerSaveLore(server: McpServer, context: McpRequestContext): void {
+  const autoSave = context.chatContext ? loreAutoSaveOn(context.chatContext.threadId) : false;
+  const saving = autoSave
+    ? 'It is saved right away and shows under your reply, where the user can undo it.'
+    : 'It shows as a card under your reply; nothing is saved until the user presses 저장.';
   server.tool(
     SAVE_LORE_TOOL,
-    `Propose an entry for this chat's own lorebook ("${CHAT_BOOK_LABEL}"): only a fact worth keeping across sessions. Propose only when the user asks you to remember or save something, or when a clear promise, preference or identity fact comes up; never for small talk or what the conversation already holds. At most one proposal every several turns (the app refuses more), and at most one per reply. It shows as a card under your reply; nothing is saved until the user presses 저장. Do not propose a title the user dismissed, and do not repeat one already waiting. keys: a few distinctive words of the fact (at most ${LORE_PROPOSAL_MAX_KEYS}); not the user's or your own name, dates, weekdays or times. Using a title the chat book already has proposes updating that entry. constant: true sends it with every request (keep those few and short); otherwise it comes back when one of its keys appears in the conversation. file: an optional text file with longer material, kept in the book's 자료/ folder.`,
+    `Propose an entry for this chat's own lorebook ("${CHAT_BOOK_LABEL}"): only a fact worth keeping across sessions. Propose only when the user asks you to remember or save something, or when a clear promise, preference or identity fact comes up; never for small talk or what the conversation already holds. At most one proposal every several turns (the app refuses more), and at most one per reply. ${saving} Do not propose a title the user dismissed or undid, and do not repeat one already waiting. keys: a few distinctive words of the fact (at most ${LORE_PROPOSAL_MAX_KEYS}); not the user's or your own name, dates, weekdays or times. Using a title the chat book already has proposes updating that entry. constant: true sends it with every request (keep those few and short); otherwise it comes back when one of its keys appears in the conversation. file: an optional text file with longer material, kept in the book's 자료/ folder.`,
     {
       title: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.title).describe('Entry title, as the lore index will show it'),
       keys: z.array(z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.key)).max(LORE_PROPOSAL_LIMITS.keys).default([]).describe('Keywords that bring the entry back when they appear in the conversation'),
@@ -155,7 +160,9 @@ function registerSaveLore(server: McpServer, context: McpRequestContext): void {
         if (!chatContext) throw new Error('Proposals need an active chat reply.');
         if (!allowsLoreProposals(chatContext.profileId)) throw new Error('Lore proposals are turned off for this profile.');
         const proposal = proposeLore(chatContext, args);
-        return { content: [{ type: 'text' as const, text: proposal.replaces ? `${SAVE_LORE_DONE} (같은 제목의 항목을 고치는 제안이야.)` : SAVE_LORE_DONE }], structuredContent: { proposal } };
+        const saved = proposal.kind === 'lore' && proposal.savedId !== undefined;
+        const done = saved ? SAVE_LORE_SAVED : SAVE_LORE_DONE;
+        return { content: [{ type: 'text' as const, text: proposal.replaces ? `${done} (${saved ? '같은 제목의 항목을 고쳤어.' : '같은 제목의 항목을 고치는 제안이야.'})` : done }], structuredContent: { proposal } };
       } catch (error) {
         return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
       }

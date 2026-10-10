@@ -13,12 +13,14 @@ import { ChatProposalStore } from './chatProposals'
 import { userPersonaForThread } from './chatUserProfiles'
 import { CodexChatStore, type CodexChatMessageRecord } from './codexChatStore'
 import { judgeGrantsLore } from './chatJudge'
+import { loadChatSettings } from './chatSettings'
 
 /**
- * save_lore: the model proposes an entry for the chat's own lorebook; the entry goes in only when a person saves the
- * card (applyLoreProposal). One proposal per reply, none within a few replies of the last one unless the user asks
- * for something to be kept, and never a title the person already set aside or that still waits: small models
- * otherwise propose every other turn. Names, dates and times are dropped from the keywords.
+ * save_lore: the model proposes an entry for the chat's own lorebook. With auto-save (the chat settings, or the chat's
+ * own switch) it goes in right away and the card offers undo; otherwise only when a person saves the card
+ * (applyLoreProposal). One proposal per reply, none within a few replies of the last one unless the user asks for
+ * something to be kept, and never a title the person set aside, undid or that still waits: small models otherwise
+ * propose every other turn. Names, dates and times are dropped from the keywords.
  */
 
 export type LoreProposal = Extract<ChatProposal, { kind: 'lore' }>
@@ -65,6 +67,12 @@ function loreProposals(threadId: number): LoreProposal[] {
 
 function isSaved(proposal: LoreProposal) {
   return proposal.savedId !== undefined
+}
+
+/** Whether save_lore in this chat saves right away: the chat's own switch, else the chat settings. */
+export function loreAutoSaveOn(threadId: number) {
+  const own = CodexChatStore.findThreadById(threadId)?.lore_auto_save
+  return own === 0 || own === 1 ? own === 1 : loadChatSettings().loreAutoSave
 }
 
 function foldKey(value: string) {
@@ -154,11 +162,11 @@ export function proposeLore(context: ChatExecutionContext, input: SaveLoreInput)
   }
   const folded = foldLoreTitle(title)
   const earlier = loreProposals(context.threadId).filter((proposal) => foldLoreTitle(proposal.title) === folded)
-  if (earlier.some((proposal) => proposal.dismissed)) throw new LoreProposalError(`The user dismissed a lore proposal titled "${title}". Do not propose it again.`)
+  if (earlier.some((proposal) => proposal.dismissed)) throw new LoreProposalError(`The user dismissed or undid a lore entry titled "${title}". Do not propose it again.`)
   if (earlier.some((proposal) => !isSaved(proposal))) throw new LoreProposalError(`A lore proposal titled "${title}" is still waiting for the user. Do not propose it again.`)
 
   const existing = OwnedLorebookStore.chatBookOf(context.threadId)?.entries.find((entry) => foldLoreTitle(loreEntryTitle(entry)) === folded)
-  return ChatProposalStore.add(context, {
+  const proposal = ChatProposalStore.add(context, {
     kind: 'lore',
     title,
     keys: useful,
@@ -170,12 +178,21 @@ export function proposeLore(context: ChatExecutionContext, input: SaveLoreInput)
       before: { title: loreEntryTitle(existing), keys: existing.keys, content: existing.content, constant: existing.constant, file: existing.file },
     } : {}),
   }) as LoreProposal
+  if (!loreAutoSaveOn(context.threadId)) return proposal
+  // Saved right away; when that fails (a file name, the book), the card stays for a person to save.
+  try {
+    return applyLoreProposal(proposal.id).proposal as LoreProposal
+  } catch (error) {
+    console.warn('[chat-lore] Auto-save failed; left as a card:', error instanceof Error ? error.message : error)
+    return proposal
+  }
 }
 
 /**
- * A person saved a lore proposal: the entry goes into the chat's book (made with its first entry), in place of the
- * entry it replaces when that one is still there; the file, if any, into the book's 자료/ (a taken name gets a
- * suffix, unless it is the replaced entry's own file, which is rewritten). One transaction.
+ * A person (or auto-save) saved a lore proposal: the entry goes into the chat's book (made with its first entry), in
+ * place of the entry it replaces when that one is still there; the file, if any, into the book's 자료/ (a taken name
+ * gets a suffix, unless it is the replaced entry's own file, which is rewritten). The entry as saved is kept on the
+ * proposal for undo. One transaction.
  */
 export function applyLoreProposal(proposalId: number): { proposal: ChatProposal; book: OwnedLorebook } {
   const proposal = ChatProposalStore.find(proposalId)
@@ -211,8 +228,12 @@ export function applyLoreProposal(proposalId: number): { proposal: ChatProposal;
           entries: book.entries.map((entry) => (entry.id === entryId ? { ...entry, file: `${LORE_FILES_FOLDER}/${written.name}`, fileId: written.id } : entry)),
         }) as OwnedLorebook
       }
-      const saved = ChatProposalStore.markSaved(proposalId, book.id) as ChatProposal
-      const remembered = replaced ? ChatProposalStore.updateLoreUndo(proposalId, { undoBefore: { ...replaced }, undoAfter: { ...book.entries.find((entry) => entry.id === entryId)! } }) : saved
+      ChatProposalStore.markSaved(proposalId, book.id)
+      const remembered = ChatProposalStore.updateLoreUndo(proposalId, {
+        ...(replaced ? { undoBefore: { ...replaced } } : {}),
+        undoAfter: { ...book.entries.find((entry) => entry.id === entryId)! },
+        ...(created ? { createdFileId: created } : {}),
+      })
       return { proposal: remembered as ChatProposal, book }
     }).immediate()
   } catch (error) {
@@ -221,22 +242,50 @@ export function applyLoreProposal(proposalId: number): { proposal: ChatProposal;
   }
 }
 
-/** Restore one applied replacement; a later hand edit requires the person's explicit confirmation. */
+/**
+ * Undo one saved entry: a replacement gets its old entry back, a new entry leaves the book (with the file it brought,
+ * when that file is still its own). A later hand edit requires the person's explicit confirmation. An undone entry
+ * counts as set aside, so its title is not proposed again.
+ */
 export function undoLoreProposal(proposalId: number, force = false, expectedHash?: string): { proposal?: ChatProposal; book?: OwnedLorebook; changed?: boolean; currentHash?: string } {
-  return getUserSettingsDb().transaction(() => {
+  let removedFile: { owner: string; id: string } | null = null
+  const result = getUserSettingsDb().transaction(() => {
     const proposal = ChatProposalStore.find(proposalId)
-    if (proposal?.kind !== 'lore' || !proposal.replaces || !proposal.before || !isSaved(proposal) || proposal.undone) throw new LoreProposalError('되돌릴 교체 제안이 없어.', 409)
+    if (proposal?.kind !== 'lore' || !isSaved(proposal) || proposal.undone || (proposal.replaces ? !proposal.before : !proposal.undoAfter)) throw new LoreProposalError('되돌릴 저장이 없어.', 409)
     const threadId = ChatProposalStore.threadIdOf(proposalId)!
     const book = OwnedLorebookStore.chatBookOf(threadId)
-    const entry = book?.entries.find((entry) => entry.id === proposal.replaces)
-    if (!book || !entry) throw new LoreProposalError('항목이 지워져서 되돌릴 수 없어.', 409)
-    const before = normalizeLorebook([proposal.undoBefore ?? { ...entry, ...proposal.before, fileId: null, source: undefined }])[0]
+    const entryId = proposal.replaces ?? String(proposal.undoAfter!.id)
+    const entry = book?.entries.find((item) => item.id === entryId)
+    const undone = () => {
+      ChatProposalStore.updateLoreUndo(proposalId, { undone: true })
+      return ChatProposalStore.markUndone(proposalId)!
+    }
+    if (!book || !entry) {
+      if (proposal.replaces) throw new LoreProposalError('항목이 지워져서 되돌릴 수 없어.', 409)
+      return { proposal: undone(), ...(book ? { book } : {}) }
+    }
     const after = proposal.undoAfter ? normalizeLorebook([proposal.undoAfter])[0] : null
     const currentHash = createHash('sha256').update(JSON.stringify(entry)).digest('hex')
     if ((!after || JSON.stringify(entry) !== JSON.stringify(after)) && (!force || expectedHash !== currentHash)) return { changed: true, currentHash }
-    const restored = OwnedLorebookStore.saveChatBook(threadId, book.entries.map((item) => item.id === entry.id ? before : item))!
-    return { proposal: ChatProposalStore.updateLoreUndo(proposalId, { undone: true })!, book: restored }
+    if (proposal.replaces) {
+      const before = normalizeLorebook([proposal.undoBefore ?? { ...entry, ...proposal.before, fileId: null, source: undefined }])[0]
+      const restored = OwnedLorebookStore.saveChatBook(threadId, book.entries.map((item) => item.id === entry.id ? before : item))!
+      return { proposal: undone(), book: restored }
+    }
+    const remaining = OwnedLorebookStore.saveChatBook(threadId, book.entries.filter((item) => item.id !== entry.id))!
+    if (proposal.createdFileId && entry.fileId === proposal.createdFileId) {
+      const thread = getUserSettingsDb().prepare('SELECT account_id FROM codex_chat_threads WHERE id = ?').get(threadId) as { account_id: number | null } | undefined
+      if (thread) removedFile = { owner: fileOwnerKey(thread.account_id), id: proposal.createdFileId }
+    }
+    return { proposal: undone(), book: remaining }
   }).immediate()
+  // The file goes after the entry is out of the book; a file someone attached elsewhere meanwhile stays.
+  const file = removedFile as { owner: string; id: string } | null
+  if (file) {
+    try { FileStoreService.delete(file.owner, [file.id]) }
+    catch (error) { console.warn('[chat-lore] Kept the undone entry\'s file:', error instanceof Error ? error.message : error) }
+  }
+  return result
 }
 
 /**

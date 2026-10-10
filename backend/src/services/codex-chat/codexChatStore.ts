@@ -60,6 +60,8 @@ export type CodexChatThreadRecord = {
   user_profile_id: number | null
   /** JSON ids of the owner's account lorebooks linked to this chat only (see chatLorebookFiles). */
   lorebook_ids: string | null
+  /** save_lore saves right away (1), leaves a card (0), or follows the chat settings (null). */
+  lore_auto_save: 0 | 1 | null
   /** Why the last background summary failed; null once one succeeds. */
   summary_error: string | null
   /** The chat list: shown first / kept out of the list (in the archive). */
@@ -279,8 +281,11 @@ export const CodexChatStore = {
     return Number(result.lastInsertRowid)
   },
 
-  updateThreadContext(threadId: number, patch: { contextTurns?: number | null; summaryEnabled?: boolean | null; authorNote?: string | null; authorNoteDepth?: number | null; maxTokens?: number | null; reactionEnabled?: boolean; reactionModelSlotId?: number | null }) {
+  updateThreadContext(threadId: number, patch: { contextTurns?: number | null; summaryEnabled?: boolean | null; authorNote?: string | null; authorNoteDepth?: number | null; maxTokens?: number | null; reactionEnabled?: boolean; reactionModelSlotId?: number | null; loreAutoSave?: boolean | null }) {
     const db = getUserSettingsDb()
+    if (patch.loreAutoSave !== undefined) {
+      db.prepare('UPDATE codex_chat_threads SET lore_auto_save = ? WHERE id = ?').run(patch.loreAutoSave === null ? null : patch.loreAutoSave ? 1 : 0, threadId)
+    }
     if (patch.reactionEnabled !== undefined) {
       db.prepare('UPDATE codex_chat_threads SET reaction_enabled = ? WHERE id = ?').run(patch.reactionEnabled ? 1 : 0, threadId)
     }

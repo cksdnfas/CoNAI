@@ -60,6 +60,8 @@ function table() {
 function toProposal(row: ProposalRow): ChatProposal {
   let body: Record<string, unknown> = {}
   try { body = JSON.parse(row.proposal) as Record<string, unknown> } catch { body = {} }
+  // Older lore undo snapshots copied the row state into the JSON; the columns decide.
+  if (row.kind === 'lore') { delete body.savedId; delete body.dismissed }
   const merged: Record<string, unknown> = { ...body, id: row.id }
   if (row.kind === 'profile_update' || row.kind === 'page_fields' || row.kind === 'workflow_graph' || row.kind === 'page_action') {
     if (row.saved === 1) merged.saved = true
@@ -96,11 +98,13 @@ export const ChatProposalStore = {
     return row ? toProposal(row) : null
   },
 
-  /** Keep the before/after of an applied lore replacement, without adding general entry history. */
-  updateLoreUndo(id: number, patch: { undoBefore?: Record<string, unknown>; undoAfter?: Record<string, unknown>; undone?: boolean }): ChatProposal | null {
+  /** Keep what undoing an applied lore entry needs (the entry before and after, a file it created), without general entry history. */
+  updateLoreUndo(id: number, patch: { undoBefore?: Record<string, unknown>; undoAfter?: Record<string, unknown>; createdFileId?: string; undone?: boolean }): ChatProposal | null {
     const proposal = ChatProposalStore.find(id)
     if (proposal?.kind !== 'lore') return null
-    table().prepare('UPDATE chat_proposals SET proposal = ? WHERE id = ?').run(JSON.stringify({ ...proposal, ...patch }), id)
+    // Saved and set-aside come from the row's columns; the JSON keeps only the proposal itself.
+    const { id: _id, savedId: _savedId, dismissed: _dismissed, ...body } = proposal
+    table().prepare('UPDATE chat_proposals SET proposal = ? WHERE id = ?').run(JSON.stringify({ ...body, ...patch }), id)
     return ChatProposalStore.find(id)
   },
 
@@ -121,6 +125,12 @@ export const ChatProposalStore = {
     const proposal = changed > 0 ? ChatProposalStore.find(id) : null
     resolved(id, proposal)
     return proposal
+  },
+
+  /** A saved lore entry was undone: it counts as set aside from then on (not proposed again, not saved in the stats). */
+  markUndone(id: number): ChatProposal | null {
+    table().prepare('UPDATE chat_proposals SET saved = 0, saved_id = NULL, dismissed = 1 WHERE id = ?').run(id)
+    return ChatProposalStore.find(id)
   },
 
   /** A person set the proposal aside (무시); a saved one stays saved. */

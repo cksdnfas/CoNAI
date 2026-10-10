@@ -11,6 +11,8 @@ export type ChatSettings = {
   /** Master switch for every chat profile (Codex and API LLM). */
   enabled: boolean
   diagnostics: { enabled: boolean; captureRaw: boolean; captureLimit: number }
+  /** save_lore entries go into the chat's book right away (a chat can turn it off for itself); off: a person saves each card. */
+  loreAutoSave: boolean
 }
 
 export const DEFAULT_CHAT_DIAGNOSTICS = { enabled: true, captureRaw: false, captureLimit: 20 }
@@ -46,19 +48,23 @@ export function loadChatSettings(): ChatSettings {
   if (!cachedSettings) {
     const stored = readJson(CHAT_SETTINGS_FILE_PATH)
     if (stored) {
-      cachedSettings = { enabled: stored.enabled === true, diagnostics: diagnosticsOf(stored.diagnostics) }
+      cachedSettings = { enabled: stored.enabled === true, diagnostics: diagnosticsOf(stored.diagnostics), loreAutoSave: stored.loreAutoSave !== false }
     } else {
       // First run after the profile change: chat stays on if either old switch was on.
       const legacyEnabled = readJson(LEGACY_CODEX_SETTINGS_FILE_PATH)?.enabled === true || readJson(LEGACY_LLM_SETTINGS_FILE_PATH)?.enabled === true
-      cachedSettings = { enabled: legacyEnabled, diagnostics: { ...DEFAULT_CHAT_DIAGNOSTICS } }
+      cachedSettings = { enabled: legacyEnabled, diagnostics: { ...DEFAULT_CHAT_DIAGNOSTICS }, loreAutoSave: true }
     }
   }
   return { ...cachedSettings, diagnostics: { ...cachedSettings.diagnostics } }
 }
 
-export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatSettings['diagnostics']> }): ChatSettings {
+export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatSettings['diagnostics']>; loreAutoSave?: boolean }): ChatSettings {
   const current = loadChatSettings()
-  const next: ChatSettings = { enabled: typeof patch.enabled === 'boolean' ? patch.enabled : current.enabled, diagnostics: diagnosticsOf(patch.diagnostics, current.diagnostics) }
+  const next: ChatSettings = {
+    enabled: typeof patch.enabled === 'boolean' ? patch.enabled : current.enabled,
+    diagnostics: diagnosticsOf(patch.diagnostics, current.diagnostics),
+    loreAutoSave: typeof patch.loreAutoSave === 'boolean' ? patch.loreAutoSave : current.loreAutoSave,
+  }
   fs.mkdirSync(path.dirname(CHAT_SETTINGS_FILE_PATH), { recursive: true })
   fs.writeFileSync(CHAT_SETTINGS_FILE_PATH, JSON.stringify(next, null, 2), 'utf8')
   cachedSettings = next
