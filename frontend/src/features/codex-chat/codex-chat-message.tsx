@@ -13,6 +13,7 @@ import { Spinner } from '@/components/ui/loading-state'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { MediaLightbox } from '@/features/images/components/media-lightbox'
+import { useImageListColumnCount } from '@/features/images/components/image-list/use-image-list-column-count'
 import { useI18n } from '@/i18n'
 import { ChatAudioCards, isAudioWorkspaceCall } from '@/features/audio/chat-audio-cards'
 import type { ChatProfileAssetFields, ChatDisplayBlock, ChatEngine, CodexChatMediaInfo, CodexChatMessage, CodexChatToolCall } from '@/lib/api-codex-chat'
@@ -21,7 +22,7 @@ import { cn } from '@/lib/utils'
 import { getGenerationHistory } from '@/lib/api-image-generation-history'
 import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import type { ImageRecord } from '@/types/image'
-import { DEFAULT_CHAT_APPEARANCE, type ChatAppearance, type ChatImageLayout } from './chat-appearance'
+import { DEFAULT_CHAT_APPEARANCE, type ChatAppearance, type ChatImageLayout, type ChatImageSize } from './chat-appearance'
 import { ChatErrorChip } from './chat-error-chip'
 import { ChatMarkdown, type ChatEmoticonMap } from './chat-markdown'
 import { ChatPostCards, ChatPostRefChip, splitPostRefLines } from './chat-post-cards'
@@ -34,11 +35,19 @@ import { MENTION_CLASS, splitMentions } from './chat-mentions'
 
 const HISTORY_POLL_MS = 3000
 const THUMB_CLASS = 'w-auto rounded-sm object-cover'
-/** `full`: the chat's width at the image's own ratio (the original file, so it stays sharp). */
-const THUMB_SIZE_CLASS = { sm: 'h-28 max-w-[14rem]', md: 'h-40 max-w-[20rem]', full: 'block h-auto w-full object-contain' } as const
-const THUMB_PLACEHOLDER_CLASS = { sm: 'h-28 w-28', md: 'h-40 w-40', full: 'aspect-video w-full' } as const
+/**
+ * `full`: the chat's width at the image's own ratio (the original file, so it stays sharp). `tile`: a masonry column's
+ * width at the image's own ratio (the thumbnail).
+ */
+const THUMB_SIZE_CLASS = { sm: 'h-28 max-w-[14rem]', md: 'h-40 max-w-[20rem]', full: 'block h-auto w-full object-contain', tile: 'block h-auto w-full' } as const
+const THUMB_PLACEHOLDER_CLASS = { sm: 'h-28 w-28', md: 'h-40 w-40', full: 'aspect-video w-full', tile: 'aspect-square w-full' } as const
 
 export type ThumbSize = keyof typeof THUMB_SIZE_CLASS
+
+/** Sizes whose box is as wide as its container (the chat, or a masonry column). */
+function fillsWidth(size: ThumbSize) {
+  return size === 'full' || size === 'tile'
+}
 
 import { buildChatImageRecord } from './chat-image-record'
 export { buildChatImageRecord } from './chat-image-record'
@@ -49,7 +58,7 @@ export { buildChatImageRecord } from './chat-image-record'
  */
 function thumbPlaceholder(size: ThumbSize, width: number | null | undefined, height: number | null | undefined) {
   if (width && height) {
-    return { className: size === 'full' ? 'w-full' : THUMB_SIZE_CLASS[size], style: { aspectRatio: `${width} / ${height}` } }
+    return { className: fillsWidth(size) ? 'w-full' : THUMB_SIZE_CLASS[size], style: { aspectRatio: `${width} / ${height}` } }
   }
   return { className: THUMB_PLACEHOLDER_CLASS[size], style: undefined }
 }
@@ -105,7 +114,7 @@ function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: Thu
   const placeholder = thumbPlaceholder(size, image.width, image.height)
 
   return (
-    <ChatThumbOverlay className={cn('flex shrink-0', size === 'full' && 'w-full')} actions={drawn ? <ChatReferenceButton compositeHash={image.composite_hash} mimeType={image.mime_type ?? null} size="icon-xs" /> : null}>
+    <ChatThumbOverlay className={cn('flex shrink-0', fillsWidth(size) && 'w-full')} actions={drawn ? <ChatReferenceButton compositeHash={image.composite_hash} mimeType={image.mime_type ?? null} size="icon-xs" /> : null}>
       {/* eslint-disable-next-line no-restricted-syntax -- the thumbnail itself is the control; Button padding/height would crop it */}
       <button
         type="button"
@@ -113,7 +122,7 @@ function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: Thu
         // Until the image is drawn the button is the placeholder box: same footprint, spinner on top.
         className={cn(
           'relative shrink-0 overflow-hidden rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40',
-          size === 'full' && 'w-full',
+          fillsWidth(size) && 'w-full',
           drawn ? 'cursor-zoom-in' : cn('cursor-default bg-surface-high text-muted-foreground', placeholder.className),
         )}
         style={drawn ? undefined : placeholder.style}
@@ -416,11 +425,33 @@ function ToolCallsBadge({ calls }: { calls: CodexChatToolCall[] }) {
   )
 }
 
+/** The narrowest masonry column per size setting; the column count follows the transcript's width. */
+const MASONRY_MIN_COLUMN_PX: Record<ChatImageSize, number> = { sm: 120, md: 180, full: 240 }
+const MASONRY_GAP_PX = 8
+
 /**
- * Images and videos the reply's tools produced (large, at the reader's size and `layout`: side by side or one under
- * another) followed by the ones it only looked up (a compact paged grid). An image in both groups shows large only.
+ * Several results of one reply, like the library's masonry: each tile at its own ratio, in reading order across the
+ * columns (round-robin, so a placeholder turning into its image never moves the others to another column). `full`
+ * spreads a few results over the whole width; smaller sizes keep their column width and leave the rest empty.
  */
-function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { calls: CodexChatToolCall[]; size?: ThumbSize; layout?: ChatImageLayout; media?: Record<string, CodexChatMediaInfo> }) {
+function ChatMediaMasonry({ tiles, size }: { tiles: ReactNode[]; size: ChatImageSize }) {
+  const [element, setElement] = useState<HTMLDivElement | null>(null)
+  const fit = useImageListColumnCount(element, MASONRY_MIN_COLUMN_PX[size], MASONRY_GAP_PX)
+  const columnCount = Math.max(2, size === 'full' ? Math.min(fit, tiles.length) : fit)
+  const columns = Array.from({ length: columnCount }, (_, column) => tiles.filter((_, index) => index % columnCount === column))
+  return (
+    <div ref={setElement} className="flex items-start gap-2">
+      {columns.map((column, index) => <div key={index} className="flex min-w-0 flex-1 flex-col gap-2">{column}</div>)}
+    </div>
+  )
+}
+
+/**
+ * Images and videos the reply's tools produced (one at the reader's size; several as a masonry, or one under another
+ * with the `column` layout) followed by the ones it only looked up (a compact paged grid). An image in both groups
+ * shows large only.
+ */
+function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { calls: CodexChatToolCall[]; size?: ChatImageSize; layout?: ChatImageLayout; media?: Record<string, CodexChatMediaInfo> }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   // Jobs that were still queued when the message was stored, resolved to their history row on this client.
   const [resolvedJobs, setResolvedJobs] = useState<Record<number, number>>({})
@@ -469,18 +500,19 @@ function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { ca
     return null
   }
 
+  const masonry = layout === 'grid' && count > 1
+  const tileSize: ThumbSize = masonry ? 'tile' : size
+  const tiles = [
+    ...deferredCalls.map((call) => <DeferredThumb key={call.id} call={call} size={tileSize} />),
+    ...pendingJobIds.map((jobId) => <PendingJobThumb key={`j${jobId}`} jobId={jobId} size={tileSize} onResolved={resolveJob} />),
+    ...failedJobs.map((job) => <FailedJobThumb key={`f${job.jobId}`} job={job} size={tileSize} />),
+    ...historyIds.map((historyId) => <HistoryThumb key={`h${historyId}`} historyId={historyId} size={tileSize} media={media} onOpen={openLightbox} />),
+    ...compositeHashes.map((hash) => <ChatImageThumb key={hash} image={buildChatImageRecord(hash, undefined, media?.[hash])} size={tileSize} onOpen={() => openLightbox(hash)} />),
+  ]
+
   return (
     <>
-      {count > 0 ? <div className={cn(
-        'gap-2',
-        layout === 'column' ? 'flex flex-col items-start' : size === 'full' && count > 1 ? 'grid grid-cols-2' : 'flex flex-wrap',
-      )}>
-        {deferredCalls.map((call) => <DeferredThumb key={call.id} call={call} size={size} />)}
-        {pendingJobIds.map((jobId) => <PendingJobThumb key={`j${jobId}`} jobId={jobId} size={size} onResolved={resolveJob} />)}
-        {failedJobs.map((job) => <FailedJobThumb key={`f${job.jobId}`} job={job} size={size} />)}
-        {historyIds.map((historyId) => <HistoryThumb key={`h${historyId}`} historyId={historyId} size={size} media={media} onOpen={openLightbox} />)}
-        {compositeHashes.map((hash) => <ChatImageThumb key={hash} image={buildChatImageRecord(hash, undefined, media?.[hash])} size={size} onOpen={() => openLightbox(hash)} />)}
-      </div> : null}
+      {masonry ? <ChatMediaMasonry tiles={tiles} size={size} /> : count > 0 ? <div className={cn('gap-2', layout === 'column' ? 'flex flex-col items-start' : 'flex flex-wrap')}>{tiles}</div> : null}
       <ChatFoundGrid items={foundItems} />
       <MediaLightbox items={lightboxItems} index={lightboxIndex} onIndexChange={setLightboxIndex} onClose={() => setLightboxIndex(null)} renderActions={referenceAction} />
     </>

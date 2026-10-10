@@ -37,6 +37,7 @@ export type ChatUserPlacement = 'right' | 'left' | 'flat'
 /** The transcript's width on the full page (the side panel is as wide as it is). */
 export type ChatWidth = 'narrow' | 'normal' | 'wide' | 'full'
 export type ChatTimeStamps = 'off' | 'hover' | 'always'
+/** Several generated images of one reply: `grid` (stored name) is the masonry; `column` stacks them at full size. */
 export type ChatImageLayout = 'grid' | 'column'
 export type ChatBackgroundFit = 'cover' | 'contain' | 'tile'
 export type ChatFlagStyle = 'icon' | 'label'
@@ -73,7 +74,7 @@ export type ChatAppearance = {
   stickerSize: ChatStickerSize
   /** Images and videos replies bring: small / medium thumbnails, or the chat's width at their own ratio. */
   imageSize: ChatImageSize
-  /** Several images in one reply: side by side, or one under another. */
+  /** Several images in one reply: a masonry, or one under another. */
   imageLayout: ChatImageLayout
   showBackground: boolean
   /** Over the profile's dim / blur; null keeps the profile's value. */
@@ -688,7 +689,7 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
                   </AppearanceRow>
                   <AppearanceRow label={t({ ko: '여러 장', en: 'Several' })}>
                     <CompactChoice label={t({ ko: '여러 장', en: 'Several images' })} value={appearance.imageLayout} onChange={(imageLayout) => update({ imageLayout })}
-                      choices={[{ value: 'grid', label: t({ ko: '격자', en: 'Grid' }) }, { value: 'column', label: t({ ko: '세로', en: 'Stacked' }) }]} />
+                      choices={[{ value: 'grid', label: t({ ko: '메이슨리', en: 'Masonry' }) }, { value: 'column', label: t({ ko: '세로', en: 'Stacked' }) }]} />
                   </AppearanceRow>
                 </AppearanceGroup>
               </>
