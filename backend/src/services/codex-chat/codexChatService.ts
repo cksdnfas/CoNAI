@@ -43,7 +43,7 @@ import { rejectedLoreLine } from './chatLoreProposals'
 import { LlmChatService, type GroupReplyResult } from './llmChatService'
 import { ChatGroupStore } from './chatGroupStore'
 import { buildFlagDirective, ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
-import { resolveChatOrder } from './chatOrders'
+import { stopChatOrderRun } from './chatOrderRuns'
 import { readChoiceAnswer } from './chatChoices'
 import { ChatUserProfileStore, userPersonaForThread, userPersonaOf, userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
@@ -120,6 +120,8 @@ type TurnState = {
   translate?: (content: string) => Promise<string | null>
   /** Set once the turn is being stored, so a second completion signal does not store it twice. */
   finishing?: boolean
+  /** An order on an earlier reply (see runCodexOrderTurn): it holds the chat but is no reply to show while it runs. */
+  order?: true
 }
 
 type Session = {
@@ -936,6 +938,94 @@ export async function runCodexGroupReply(params: {
   }
 }
 
+/**
+ * An order on an earlier reply (see chatOrderRunner) by a Codex profile, direct or in a room. It runs in a Codex thread
+ * of its own that is dropped afterwards, so the memory the chat (or the member) keeps never holds it: the input is the
+ * conversation up to that reply, as `buildInput` writes it after the persona, lore and state given in front. The tools
+ * act in the reply's name (`chatContext.replyId`). Nothing is stored here; the text Codex writes is not kept.
+ */
+export async function runCodexOrderTurn(params: {
+  chatContext: ChatExecutionContext
+  requester: McpRequester
+  threadId: number
+  profile: ChatProfile
+  /** The reply the order is on. */
+  target: CodexChatMessageRecord
+  /** The messages the input shows, up to and with the reply (their lore and state go in front). */
+  window: CodexChatMessageRecord[]
+  buildInput: (reference: string) => string
+  signal: AbortSignal
+  emit: (event: CodexChatStreamEvent) => void
+}): Promise<GroupReplyResult> {
+  const { requester, threadId, profile } = params
+  assertChatAvailable(requester)
+  requireCodexProfile(profile.id, requester)
+  const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
+  const session = await ensureSession(requester, scopes, toolAllowlist, profile.generationPresetIds, params.chatContext)
+  setCodexChatExecution(session.token, params.chatContext)
+  const run = resolveCodexRun(session, profile)
+  const codexThreadId = await ensureCodexThread(session, null, profile, () => {})
+  let outcome: GroupReplyResult | null = null
+  let resolveFinished: (message: CodexChatMessageRecord) => void = () => {}
+  const turn: TurnState = {
+    chatThreadId: threadId,
+    codexThreadId,
+    turnId: null,
+    userMessageId: null,
+    agentMessages: new Map(),
+    commentaryItems: new Set(),
+    toolCalls: new Map(),
+    listeners: new Set([params.emit]),
+    lastError: null,
+    finished: new Promise<CodexChatMessageRecord>((resolve) => { resolveFinished = resolve }),
+    resolveFinished: (message) => resolveFinished(message),
+    persist: async (reply) => {
+      outcome = reply
+      return params.target
+    },
+    order: true,
+  }
+  session.activeTurns.set(codexThreadId, turn)
+  clearIdleTimer(session)
+  const interrupt = () => {
+    if (turn.turnId) void session.client.request('turn/interrupt', { threadId: codexThreadId, turnId: turn.turnId }).catch(() => undefined)
+  }
+  params.signal.addEventListener('abort', interrupt, { once: true })
+  try {
+    if (params.signal.aborted) {
+      void finishTurn(session, turn, 'interrupted', null)
+    } else {
+      try {
+        const thread = CodexChatStore.findThreadById(threadId) ?? null
+        const user = userPersonaForThread(thread)
+        // A fresh Codex thread holds nothing yet: persona, lore, note and state all go in.
+        const none = new Set<string>()
+        const lore = pendingLore(thread, profile, params.window, none, user)
+        const reference = referenceBlock([pendingUserPersona(user, none).text, lore.index.text, lore.keyed, pendingAuthorNote(thread, profile, none, user).text,
+          pendingBlockState(thread, profile, params.window, none, thread?.kind === 'group' ? profile.id : undefined).text])
+        assertChatAvailable(requester)
+        await verifyChatRuntime(session.client, session.features, session.runtime.cwd, process.env.PORT || String(PORTS.BACKEND_DEFAULT), false)
+        const response = await session.client.request<{ turn: { id: string } }>('turn/start', {
+          threadId: codexThreadId,
+          ...chatTurnRestrictions(session.runtime.cwd),
+          model: run.model,
+          effort: run.effort,
+          input: codexTurnInput(params.buildInput(reference), []),
+        }, THREAD_REQUEST_TIMEOUT_MS)
+        turn.turnId = response.turn.id
+        if (params.signal.aborted) interrupt()
+      } catch (error) {
+        void finishTurn(session, turn, 'failed', error instanceof Error ? error.message : 'Codex turn failed to start')
+      }
+    }
+    await turn.finished
+    return outcome ?? { content: '', tool_calls: [], status: 'failed', error: 'Codex가 지시를 끝내지 못했어.' }
+  } finally {
+    params.signal.removeEventListener('abort', interrupt)
+    deleteCodexRollout(requester, codexThreadId)
+  }
+}
+
 export const CodexChatService = {
   isRunning(threadId: number) {
     return startingThreads.has(threadId) || Boolean(findActiveTurn(threadId)) || LlmChatService.isRunning(threadId)
@@ -1100,6 +1190,7 @@ export const CodexChatService = {
     const thread = requireThread(requester, threadId)
     if (thread.engine === 'llm') return LlmChatService.running(threadId)
     const active = findActiveTurn(threadId)
+    if (active?.turn.order) return null
     return active ? {
       text: [...active.turn.agentMessages.values()].join('\n\n'),
       toolCalls: [...active.turn.toolCalls.values()],
@@ -1210,8 +1301,6 @@ export const CodexChatService = {
       rememberChatPage(requester, page, threadId)
       if (!options.task && !options.routine) notifyChatUserSend(threadId, Boolean(page))
       const routing = { ...userReplyRouting(thread, replyToMessageId), ...(options.task ? { task: options.task } : {}), ...(options.routine ? { routine: options.routine } : {}) }
-      const order = resolveChatOrder(requester.accountId, options.order, routing.replyTo, { kind: 'direct', profileId: thread.profile_id })
-      if (order) flags.push(order)
       const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
       // The model reads the message in English; the reader keeps their own words. Translated while the session starts.
       const translating = translateUserInput(profile, trimmed)
@@ -1244,7 +1333,7 @@ export const CodexChatService = {
       const modelText = await translating
       if (session.activeTurns.has(codexThreadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
       const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: modelText ?? trimmed, display_content: modelText ? trimmed : null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
-      ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick && !flag.order).map((flag) => flag.id))
+      ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       turn.userMessageId = userMessageId
       if (hasTranslation(profile)) turn.translate = (content) => translateReply(profile, content, turn.controller?.signal, userPersonaForThread(thread).name)
       session.activeTurns.set(codexThreadId, turn)
@@ -1326,6 +1415,7 @@ export const CodexChatService = {
       LlmChatService.interrupt(threadId)
       return
     }
+    void stopChatOrderRun(threadId, 0)
     const active = findActiveTurn(threadId)
     active?.turn.controller?.abort()
     if (!active?.turn.turnId) {

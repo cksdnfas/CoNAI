@@ -9,7 +9,6 @@ import { retryLlmRequest } from '../llmRequestRetry'
 import { profileGenerationOptions } from './chatProfiles'
 import { inlineTextsForChat, loadAttachedImages, validateChatAttachments } from './chatAttachments'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
-import { resolveChatOrder } from './chatOrders'
 import { readChoiceAnswer } from './chatChoices'
 import { profileContentLimit } from './chatContentRating'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
@@ -37,6 +36,7 @@ import { redactChatRequestBody, saveChatRequestCapture } from './chatRequestCapt
 import { ChatGroupStore, groupLimitsOf } from './chatGroupStore'
 import { buildGroupLlmMessages } from './groupChatContext'
 import { skipThreadGenerationReactions } from './chatReplyRegistry'
+import { isChatOrderRunning, stopChatOrderRun } from './chatOrderRuns'
 import { cancelJudgeFollowUp, endJudgedTurn, judgeAfterReply, judgeBeforeReply, judgeDirectiveText, type JudgedTurn } from './chatJudge'
 import type { JudgedContext } from './chatJudgeContext'
 import { judgeStatusFields } from './chatJudgeFields'
@@ -83,6 +83,11 @@ function chatConnectionOf(profile: ChatProfile) {
 
 type LlmTurn = {
   reaction?: GenerationReaction
+  /**
+   * An order on an earlier reply (see chatOrderRunner): no judge, no reply text needed, and the tool rounds end once a
+   * call that does the job (`done`) went through.
+   */
+  order?: { done: (call: CodexChatToolCall) => boolean }
   chatContext?: ChatExecutionContext
   page?: ChatPageSnapshot
   delivery?: ReturnType<typeof beginDirectReply>
@@ -111,6 +116,11 @@ type LlmTurn = {
 }
 
 const activeTurns = new Map<number, LlmTurn>()
+
+/** A reply (or reaction) runs, or an order holds the chat. */
+function busy(threadId: number) {
+  return activeTurns.has(threadId) || isChatOrderRunning(threadId)
+}
 
 function emit(turn: LlmTurn, event: CodexChatStreamEvent) {
   for (const listener of turn.listeners) {
@@ -348,7 +358,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     // Image viewing is only offered to models the profile says can see images.
     const visible = (bridge?.tools ?? []).filter((tool) => profile.visionEnabled || !isVisionTool(tool.function.name))
     // The judge reads the user's own words, so it runs while their message is translated for the model.
-    const judging = !turn.reaction && turn.continuing === undefined
+    const judging = !turn.reaction && !turn.order && turn.continuing === undefined
       ? judgeBeforeReply({ profile, threadId: turn.threadId, replyId: chatContext?.replyId ?? null, availableTools: visible.map((tool) => tool.function.name), excludeMessageId: turn.replacingMessageId, context: true, signal: turn.controller.signal })
       : Promise.resolve(null)
     judged = (await Promise.all([judging, prepare ? prepare(visible) : turn.translation]))[0]
@@ -446,7 +456,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
       if (!bridge || tools.length === 0 || lastRound || result.toolCalls.length === 0) {
         turn.finishReason = result.finishReason
         // Nothing to show at all (thinking ate the cap, or the model said nothing) is a failure the reader can retry.
-        if (!turn.reaction && turn.continuing === undefined && turn.toolCalls.size === 0 && !replyContent(turn.text)) {
+        if (!turn.reaction && !turn.order && turn.continuing === undefined && turn.toolCalls.size === 0 && !replyContent(turn.text)) {
           throw new LlmChatError(result.finishReason === 'length' ? REPLY_FAILURES.emptyAtCap : REPLY_FAILURES.empty)
         }
         return
@@ -462,6 +472,8 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           ? (await runToolCall(turn, bridge, call, profile.toolOutputLimit, images)).text
           : blocked.has(call.function.name) ? `${call.function.name} is not available in this reply.` : `Unknown or not permitted tool: ${call.function.name}` })
       }
+      // An order is done once its job went through: what the model would say about it is never shown.
+      if (turn.order && [...turn.toolCalls.values()].some((call) => call.status === 'completed' && turn.order!.done(call))) return
       // Tool messages carry text only, so images ride in a user message right after them (this request only).
       if (images.length > 0 && profile.visionEnabled) {
         messages.push({ role: 'user', content: [{ type: 'text', text: 'Images returned by the tools above, in order:' }, ...images.map((url) => ({ type: 'image_url' as const, image_url: { url } }))] })
@@ -549,7 +561,7 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
   prepare: null, replacingMessageId: undefined, continuing: undefined, page: undefined, reaction: GenerationReaction): Promise<CodexChatMessageRecord | null>
 function startReply(requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile, listener: (event: CodexChatStreamEvent) => void,
   prepare: (() => CodexChatStreamEvent) | null, replacingMessageId?: number, continuing?: CodexChatMessageRecord, page?: ChatPageSnapshot, reaction?: GenerationReaction) {
-  if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
+  if (busy(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
   let resolveFinished: (message: CodexChatMessageRecord | null) => void = () => {}
   let rejectFinished: (error: unknown) => void = () => {}
   const turn: LlmTurn = {
@@ -612,7 +624,7 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
 function writeFollowUp(requester: McpRequester, threadId: number, profileId: number, directive: string, signal: AbortSignal) {
   const thread = CodexChatStore.findThreadById(threadId)
   const profile = ChatProfileStore.find(profileId)
-  if (!thread || thread.profile_id !== profileId || !profile?.isEnabled || (profile.engine !== 'llm' && profile.engine !== 'claude') || activeTurns.has(threadId) || signal.aborted) return Promise.resolve(null)
+  if (!thread || thread.profile_id !== profileId || !profile?.isEnabled || (profile.engine !== 'llm' && profile.engine !== 'claude') || busy(threadId) || signal.aborted) return Promise.resolve(null)
   const onAbort = () => LlmChatService.skipReaction(threadId)
   signal.addEventListener('abort', onAbort, { once: true })
   return LlmChatService.react(requester, thread, profile, {
@@ -629,7 +641,11 @@ export type GroupReplyResult =Pick<CodexChatMessageRecord, 'content' | 'tool_cal
  * One group room member's reply (not stored here: the room stores it with its speaker). Streams `delta`,
  * `reasoning` and `tool` events to `emit`; `signal` stops it, leaving what was written as an interrupted reply.
  */
-export async function generateLlmGroupReply(params: {
+export function generateLlmGroupReply(params: HeadlessReplyParams): Promise<GroupReplyResult> {
+  return runHeadlessReply(params)
+}
+
+type HeadlessReplyParams = {
   chatContext: ChatExecutionContext
   requester: McpRequester
   threadId: number
@@ -639,7 +655,18 @@ export async function generateLlmGroupReply(params: {
   generation?: Partial<LlmGenerationOptions>
   signal: AbortSignal
   emit: (event: CodexChatStreamEvent) => void
-}): Promise<GroupReplyResult> {
+}
+
+/**
+ * An order on an earlier reply (see chatOrderRunner), by an API LLM profile: the request `buildMessages` lays out ends
+ * with the order, the tools run in the reply's name (`chatContext.replyId`), and the rounds end once a call `done`
+ * accepts went through. Nothing is stored here; the text the model writes is not kept.
+ */
+export function runLlmOrderTurn(params: HeadlessReplyParams & { done: (call: CodexChatToolCall) => boolean }): Promise<GroupReplyResult> {
+  return runHeadlessReply(params, { done: params.done })
+}
+
+async function runHeadlessReply(params: HeadlessReplyParams, order?: LlmTurn['order']): Promise<GroupReplyResult> {
   assertLlmChatAvailable(params.requester)
   const controller = new AbortController()
   const abort = () => controller.abort()
@@ -647,6 +674,7 @@ export async function generateLlmGroupReply(params: {
   params.signal.addEventListener('abort', abort, { once: true })
   const turn: LlmTurn = {
     chatContext: params.chatContext,
+    order,
     threadId: params.threadId, controller, text: '', reasoning: '', toolCalls: new Map(), finishReason: null,
     offeredTools: [], listeners: new Set([params.emit]), finished: Promise.resolve({} as CodexChatMessageRecord),
   }
@@ -703,7 +731,7 @@ export const LlmChatService = {
   },
 
   isRunning(threadId: number) {
-    return activeTurns.has(threadId)
+    return busy(threadId)
   },
 
   /**
@@ -728,11 +756,9 @@ export const LlmChatService = {
       throw new LlmChatError('메시지를 입력해줘.')
     }
     const routing = { ...userReplyRouting(thread, replyToMessageId), ...(options.task ? { task: options.task } : {}), ...(options.routine ? { routine: options.routine } : {}) }
-    const order = resolveChatOrder(requester.accountId, options.order, routing.replyTo, { kind: 'direct', profileId: thread.profile_id })
-    if (order) flags.push(order)
     LlmChatService.skipReaction(thread.id)
     cancelJudgeFollowUp(thread.id)
-    if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (busy(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     skipThreadGenerationReactions(thread.id)
     return startReply(requester, thread, profile, listener, () => {
       const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: trimmed, display_content: null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
@@ -746,7 +772,7 @@ export const LlmChatService = {
         // A turn that stops before it waits for the translation must not leave its failure unhandled.
         turn.translation.catch(() => undefined)
       }
-      ChatFlagStore.setThreadFlags(thread.id, flags.filter((flag) => !flag.pick && !flag.order).map((flag) => flag.id))
+      ChatFlagStore.setThreadFlags(thread.id, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       if (!thread.title) CodexChatStore.renameThread(thread.id, (trimmed || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' '))
       return { type: 'user', message: CodexChatStore.listMessages(thread.id).find((entry) => entry.id === userMessageId) as CodexChatMessageRecord }
     }, undefined, undefined, page)
@@ -756,7 +782,7 @@ export const LlmChatService = {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id, requester)
     cancelJudgeFollowUp(thread.id)
-    if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (busy(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     const messages = CodexChatStore.listMessages(thread.id)
     const message = messages.find((entry) => entry.id === messageId)
     if (!message) throw new LlmChatError('메시지를 찾을 수 없어.', 404)
@@ -769,7 +795,7 @@ export const LlmChatService = {
     resolveChatCompletionTarget(chatConnectionOf(profile), { model: resolveProfileModel(profile, 'chat')?.model ?? null, generation: profileGenerationOptions(profile) })
     const edited = regenerate ? null : content.trim()
     const modelText = edited ? await translateUserInput(profile, edited) : null
-    if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (busy(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     return startReply(requester, thread, profile, listener, () => {
       if (regenerate) CodexChatStore.prepareRegeneration(thread.id, messageId)
       else CodexChatStore.editUserMessage(thread.id, messageId, modelText ?? (edited as string), modelText ? edited : null)
@@ -782,7 +808,7 @@ export const LlmChatService = {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id, requester)
     cancelJudgeFollowUp(thread.id)
-    if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (busy(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     const messages = CodexChatStore.listMessages(thread.id)
     const message = messages[messages.length - 1]
     if (!message || message.id !== messageId || message.role !== 'assistant' || !messages.some((entry) => entry.role === 'user')) {
@@ -798,11 +824,13 @@ export const LlmChatService = {
 
   interrupt(threadId: number) {
     activeTurns.get(threadId)?.controller.abort()
+    void stopChatOrderRun(threadId, 0)
   },
 
   /** Stop a running reply and wait (bounded) until it is stored, e.g. before deleting the thread. */
   async stop(threadId: number) {
     cancelJudgeFollowUp(threadId)
+    await stopChatOrderRun(threadId, STOP_WAIT_MS)
     const turn = activeTurns.get(threadId)
     if (!turn) {
       return
@@ -819,7 +847,7 @@ export const LlmChatService = {
   async summarize(requester: McpRequester, thread: CodexChatThreadRecord) {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id, requester)
-    if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
+    if (busy(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     const summary = await summarizeAll(thread.id, profile)
     if (summary === null) {
       throw new LlmChatError('요약할 새 대화가 없거나 이미 요약 중이야.', 409)

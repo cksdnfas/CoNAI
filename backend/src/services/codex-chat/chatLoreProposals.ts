@@ -13,6 +13,7 @@ import { ChatProposalStore } from './chatProposals'
 import { userPersonaForThread } from './chatUserProfiles'
 import { CodexChatStore, type CodexChatMessageRecord } from './codexChatStore'
 import { judgeGrantsLore } from './chatJudge'
+import { isChatOrderReply } from './chatOrderRuns'
 import { loadChatSettings } from './chatSettings'
 
 /**
@@ -156,8 +157,8 @@ export function proposeLore(context: ChatExecutionContext, input: SaveLoreInput)
   if (ChatProposalStore.forReply(context.threadId, context.replyId, 'lore').length > 0) {
     throw new LoreProposalError('This reply already has a lore proposal (one per reply). Propose another one in a later reply if it still matters.')
   }
-  // A judge that found a lasting fact in this exchange lifts the spacing for its reply.
-  if (!judgeGrantsLore(context.replyId) && loreProposedRecently(context)) {
+  // A judge that found a lasting fact in this exchange lifts the spacing for its reply, as does the user's order to keep one.
+  if (!judgeGrantsLore(context.replyId) && !isChatOrderReply(context.threadId, context.replyId) && loreProposedRecently(context)) {
     throw new LoreProposalError(`A lore proposal was made within the last ${LORE_PROPOSAL_SPACING} replies. Propose again only when the user asks you to remember something or a lasting fact (a promise, a preference, who someone is) comes up. Just reply now.`)
   }
   const folded = foldLoreTitle(title)

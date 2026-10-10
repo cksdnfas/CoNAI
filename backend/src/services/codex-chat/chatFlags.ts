@@ -35,8 +35,8 @@ export type ChatFlagViewer = Pick<McpRequester, 'accountId' | 'accountType'>
 /**
  * What a message keeps of a flag, so editing or deleting the flag later does not change past messages. `pick`: not a
  * flag but an item the user chose in the status panel (`data-pick` in a block template), sent with this message.
- * `choice`: a pick that answers the chat's question card (offer_choices) of that id. `order`: not a flag but an
- * order given from a reply's bar (see chatOrders), read like a flag.
+ * `choice`: a pick that answers the chat's question card (offer_choices) of that id. `order`: an order from a reply's
+ * bar, on messages sent while orders still went out as messages (now they are done on the reply, see chatOrderRunner).
  */
 export type ChatFlagSnapshot = Pick<ChatFlag, 'id' | 'icon' | 'name' | 'content'> & { pick?: true; choice?: { id: number; question: string }; order?: ChatOrderKind }
 

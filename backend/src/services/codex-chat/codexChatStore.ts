@@ -540,6 +540,52 @@ export const CodexChatStore = {
     if (routing?.replyId) db.prepare('UPDATE chat_generation_links SET message_id = ? WHERE thread_id = ? AND reply_id = ?').run(messageId, threadId, routing.replyId)
   },
 
+  /**
+   * The reply id an assistant message acts under (see ChatExecutionContext.replyId), given one first when it has none
+   * (a greeting, an imported or old message): its shown variant keeps the same, so switching variants keeps it too.
+   */
+  ensureReplyId(threadId: number, messageId: number, newId: () => string) {
+    const db = getUserSettingsDb()
+    return db.transaction(() => {
+      const row = db.prepare("SELECT routing, alternatives, active_alternative FROM codex_chat_messages WHERE thread_id = ? AND id = ? AND role = 'assistant'").get(threadId, messageId) as { routing: string | null; alternatives: string | null; active_alternative: number } | undefined
+      if (!row) throw new Error('Assistant message not found')
+      const routing = parseMessageRouting(row.routing)
+      if (routing?.replyId) return routing.replyId
+      const next: ChatMessageRouting = { ...(routing ?? { replyTo: null, recipients: ['user'] }), replyId: newId() }
+      const alternatives = parseAlternatives(row.alternatives)
+      if (alternatives[row.active_alternative]) {
+        alternatives[row.active_alternative] = { ...alternatives[row.active_alternative], routing: next }
+        db.prepare('UPDATE codex_chat_messages SET alternatives = ? WHERE id = ?').run(JSON.stringify(alternatives), messageId)
+      }
+      CodexChatStore.setMessageRouting(threadId, messageId, next)
+      return next.replyId as string
+    }).immediate()
+  },
+
+  /**
+   * Tool calls an order made in a reply's name (see chatOrderRunner), added to that reply: to the message when it shows
+   * the variant with that reply id, else to that variant. False when neither is there any more. Announced like an edit.
+   */
+  appendReplyToolCalls(threadId: number, messageId: number, replyId: string, calls: CodexChatToolCall[]) {
+    const db = getUserSettingsDb()
+    const accountId = db.transaction(() => {
+      const row = db.prepare("SELECT m.routing, m.tool_calls, m.alternatives, m.active_alternative, t.account_id FROM codex_chat_messages m JOIN codex_chat_threads t ON t.id = m.thread_id WHERE m.thread_id = ? AND m.id = ? AND m.role = 'assistant'").get(threadId, messageId) as { routing: string | null; tool_calls: string | null; alternatives: string | null; active_alternative: number; account_id: number | null } | undefined
+      if (!row) return undefined
+      const alternatives = parseAlternatives(row.alternatives)
+      const shown = parseMessageRouting(row.routing)?.replyId === replyId
+      const index = shown ? row.active_alternative : alternatives.findIndex((alternative) => alternative.routing?.replyId === replyId)
+      if (!shown && index < 0) return undefined
+      if (alternatives[index]) alternatives[index] = { ...alternatives[index], tool_calls: [...alternatives[index].tool_calls, ...calls] }
+      if (shown) db.prepare('UPDATE codex_chat_messages SET tool_calls = ? WHERE id = ?').run(JSON.stringify([...parseToolCalls(row.tool_calls), ...calls]), messageId)
+      if (alternatives.length > 0) db.prepare('UPDATE codex_chat_messages SET alternatives = ? WHERE id = ?').run(JSON.stringify(alternatives), messageId)
+      return row.account_id
+    }).immediate()
+    if (accountId === undefined) return false
+    publishRuntimeEvent({ name: 'chat.message.updated', topic: 'generation-queue', visibility: 'owner', accountId,
+      payload: { threadId, messageId, requestedByAccountId: accountId } })
+    return true
+  },
+
   addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'display_content' | 'tool_calls' | 'status' | 'error' | 'flags' | 'mediaAttachments' | 'routing'> & { speaker_profile_id?: number | null; finish_reason?: string | null }, fileIds: string[] = []) {
     const db = getUserSettingsDb()
     const saved = db.transaction(() => {

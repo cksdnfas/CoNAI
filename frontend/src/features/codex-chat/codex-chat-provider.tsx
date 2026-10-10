@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildr
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread, type CodexChatThread, getCodexChatStatus, getCodexChatThread, previewChatGreeting, interruptCodexChatThread, pickSnapshot, choiceSnapshot, orderSnapshot, type ChatOrderKind, readThreadFlagIds, streamCodexChatMessage, streamChatContinue, streamChatRewrite, type ChatFlag, type ChatMediaAttachment, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread, type CodexChatThread, getCodexChatStatus, getCodexChatThread, previewChatGreeting, interruptCodexChatThread, pickSnapshot, choiceSnapshot, readThreadFlagIds, streamCodexChatMessage, streamChatContinue, streamChatRewrite, type ChatFlag, type ChatMediaAttachment, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { CHAT_PROFILES_QUERY_KEY, CHAT_STATUS_QUERY_KEY, threadLorebooksQueryKey, type ChatProfileSummary } from '@/lib/api-codex-chat'
 import { summarizeChatError } from './chat-error-chip'
-import { postLink, type ChatReplyQuote, type StoredFileEntry } from '@conai/shared'
+import { postLink, type StoredFileEntry } from '@conai/shared'
 import { getCodexChatThreadMedia } from '@/lib/api-codex-chat'
 import { FILES_QUERY_KEY, uploadStoredFiles } from '@/lib/api-files'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -330,20 +330,17 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     })
   }, [disconnectPage, setDraft, showSnackbar, switchComposer, t])
 
-  const reply = useCallback(async (threadId: number, rewrite?: { messageId: number; content?: string; continue?: boolean }, literalText?: string, order?: { kind: ChatOrderKind; quote: ChatReplyQuote }) => {
-    // An order from a reply's bar goes on its own, quoting that reply; the composer keeps what is being written.
-    const composing = !rewrite && !order
-    const replyingTo = order ? { threadId, quote: order.quote } : composing && draftReplyRef.current?.threadId === threadId ? draftReplyRef.current : null
-    const picked = composing ? picksRef.current : []
-    const chosen = composing && choiceRef.current?.threadId === threadId ? choiceRef.current : null
-    const ordered = order ? orderSnapshot(order.kind) : null
-    // Picks, answers and orders alone make a message of their own labels, so a click can be sent as is.
-    const typed = rewrite ? '' : ordered ? ordered.name : (literalText ?? draftsRef.current[threadId] ?? '').trim() || [...picked, ...(chosen?.labels ?? [])].join(', ')
+  const reply = useCallback(async (threadId: number, rewrite?: { messageId: number; content?: string; continue?: boolean }, literalText?: string) => {
+    const replyingTo = !rewrite && draftReplyRef.current?.threadId === threadId ? draftReplyRef.current : null
+    const picked = rewrite ? [] : picksRef.current
+    const chosen = !rewrite && choiceRef.current?.threadId === threadId ? choiceRef.current : null
+    // Picks and answers alone make a message of their own labels, so a click can be sent as is.
+    const typed = rewrite ? '' : (literalText ?? draftsRef.current[threadId] ?? '').trim() || [...picked, ...(chosen?.labels ?? [])].join(', ')
     // Referenced posts ride as link lines above the text (the model reads them with posts_read).
-    const postRefs = composing ? postRefsRef.current : []
+    const postRefs = rewrite ? [] : postRefsRef.current
     const text = postRefs.length ? [postRefs.map(postRefLine).join('\n'), typed].filter(Boolean).join('\n\n') : typed
-    const attachments = composing ? attachmentsRef.current : []
-    const mediaAttachments = composing ? mediaAttachmentsRef.current : []
+    const attachments = rewrite ? [] : attachmentsRef.current
+    const mediaAttachments = rewrite ? [] : mediaAttachmentsRef.current
     const sentAttachmentEpoch = attachmentEpoch.current
     if ((!rewrite && !text && attachments.length === 0 && mediaAttachments.length === 0) || uploadBusyRef.current) {
       return false
@@ -354,7 +351,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     const pageAllowed = cachedThread?.kind === 'direct' && queryClient.getQueryData<ChatProfileSummary[]>(CHAT_PROFILES_QUERY_KEY)?.find((profile) => profile.id === cachedThread?.profile_id)?.pageAssist === true
     // The chat's switched-on flags go with a new message (a rewrite replays the ones stored on the message).
     const flags = rewrite ? [] : (queryClient.getQueryData<ChatFlag[]>(CHAT_FLAGS_QUERY_KEY) ?? []).filter((flag) => readThreadFlagIds(cachedThread).includes(flag.id))
-    const shownFlags = [...flags, ...picked.map(pickSnapshot), ...(chosen ? chosen.labels.map((label) => choiceSnapshot(label, { id: chosen.proposalId, question: chosen.question })) : []), ...(ordered ? [ordered] : [])]
+    const shownFlags = [...flags, ...picked.map(pickSnapshot), ...(chosen ? chosen.labels.map((label) => choiceSnapshot(label, { id: chosen.proposalId, question: chosen.question })) : [])]
     if (streamAbortRef.current) {
       // In a group room the user may cut in: the server stops the room's reply when the new message arrives, so stop
       // reading the old stream and let it wind down first.
@@ -370,9 +367,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     const controller = new AbortController()
     streamAbortRef.current = controller
     streamThreadRef.current = sentThreadId
-    // Any message answers or sets aside the open card.
-    if (!rewrite) setChoice(null)
-    if (composing) {
+    if (!rewrite) {
       setDraftReply(null)
       setDraft(sentThreadId, '')
       setDraftAttachments([])
@@ -383,6 +378,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       attachmentsRef.current = []
       setPicks([])
       picksRef.current = []
+      // Any message answers or sets aside the open card.
+      setChoice(null)
     }
     setLiveTurn({ threadId: sentThreadId, userText: text, userRouting: replyingTo ? { replyTo: replyingTo.quote, recipients: [] } : undefined, flags: shownFlags, attachments, mediaAttachments, text: '', reasoning: '', toolCalls: new Map(), replies: isGroup ? [] : undefined })
     let accepted = false
@@ -490,11 +487,11 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       }
       if (rewrite?.continue) await streamChatContinue(sentThreadId, rewrite.messageId, onEvent, controller.signal)
       else if (rewrite) await streamChatRewrite(sentThreadId, rewrite.messageId, rewrite.content, onEvent, controller.signal)
-      else await streamCodexChatMessage(sentThreadId, text, onEvent, controller.signal, attachments.map((file) => file.id), flags.map((flag) => flag.id), picked, mediaAttachments.map((item) => item.compositeHash), replyingTo?.quote.messageId, pageAllowed && !chosen?.withoutPage ? capturePage?.() : undefined, chosen ? { proposalId: chosen.proposalId, answers: chosen.labels } : undefined, order?.kind)
+      else await streamCodexChatMessage(sentThreadId, text, onEvent, controller.signal, attachments.map((file) => file.id), flags.map((flag) => flag.id), picked, mediaAttachments.map((item) => item.compositeHash), replyingTo?.quote.messageId, pageAllowed && !chosen?.withoutPage ? capturePage?.() : undefined, chosen ? { proposalId: chosen.proposalId, answers: chosen.labels } : undefined)
     } catch (error) {
       if (!controller.signal.aborted) {
         showSnackbar({ message: summarizeChatError(getErrorMessage(error, t({ ko: '응답 실패', en: 'Reply failed' })), t), tone: 'error' })
-        if (!accepted && composing && attachmentEpoch.current === sentAttachmentEpoch) {
+        if (!accepted && !rewrite && attachmentEpoch.current === sentAttachmentEpoch) {
           if (!draftReplyRef.current) setDraftReply(replyingTo)
           setDraft(sentThreadId, (current) => current || (picked.length ? '' : typed))
           setDraftAttachments(attachments)
@@ -525,7 +522,6 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   }, [capturePage, queryClient, showSnackbar, t, setDraftReply, setDraft, setChoice])
 
   const send = useCallback(async (threadId: number, text?: string) => { await reply(threadId, undefined, text) }, [reply])
-  const order = useCallback(async (threadId: number, kind: ChatOrderKind, quote: ChatReplyQuote) => { await reply(threadId, undefined, undefined, { kind, quote }) }, [reply])
 
   const selectPendingGreeting = useCallback((index: number) => {
     const pending = pendingRef.current
@@ -624,7 +620,6 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     removeAttachment,
     uploadAttachments,
     send,
-    order,
     regenerate,
     continueReply,
     editMessage,
@@ -632,7 +627,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     messageFocus,
     focusMessage,
     clearMessageFocus,
-  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, drafts, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, currentLiveTurn, messageFocus, openPanel, picks, togglePick, removePick, choice, toggleChoice, clearChoice, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, order, regenerate, continueReply, editMessage, pendingChat, prepareChat, selectPendingGreeting, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, draftPostRefs, togglePostReference, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
+  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, drafts, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, currentLiveTurn, messageFocus, openPanel, picks, togglePick, removePick, choice, toggleChoice, clearChoice, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, pendingChat, prepareChat, selectPendingGreeting, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, draftPostRefs, togglePostReference, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
 
   const referencePanelOpen = canUse && isPanelOpen
   const referenceApi = useMemo<CodexChatReferenceApi>(() => ({ panelOpen: referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, focusMessage }), [referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, focusMessage])

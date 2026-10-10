@@ -207,30 +207,6 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     ChatFlagStore.delete(requester, flag.id)
   })
 
-  await t.test('an order on a reply reaches its character as the user\'s instruction about that reply', async (s) => {
-    const calls = route(s, (body) => (body.questions.lore ? { lore: { type: 'noul', noul: 0.1 } } : { 'follow-up': { type: 'noul', noul: 0.1 } }))
-    const thread = threadOf(judged.id)
-    const answer = await LlmChatService.sendMessage(requester, thread, '어제 아버지 얘기 들었어', () => {})
-    calls.length = 0
-    await LlmChatService.sendMessage(requester, CodexChatStore.findThreadById(thread.id)!, '로어로 남기기', () => {}, undefined, undefined, undefined, undefined, answer.id, undefined, { order: 'lore' })
-    const chat = calls.find((call) => call.url.endsWith('/chat/completions'))!
-    const text = lastUserText(chat.body)
-    assert.match(text, new RegExp(`\\[사용자 지시: 이번 메시지에 적용\\]\\n- message_id=${answer.id} 메시지에서 .*save_lore`))
-    assert.match(text, /\[우선순위\]/, 'the judge\'s no on save_lore gives way to the order')
-    const sent = CodexChatStore.listMessages(thread.id).filter((entry) => entry.role === 'user').at(-1)!
-    assert.equal(sent.flags?.[0].order, 'lore')
-    assert.equal(sent.routing?.replyTo?.messageId, answer.id)
-    assert.equal(CodexChatStore.findThreadById(thread.id)!.flag_ids, null, 'an order is not left switched on like a flag')
-
-    const latest = CodexChatStore.findThreadById(thread.id)!
-    const lastReply = CodexChatStore.listMessages(thread.id).at(-1)!
-    // The profile has no generation tools, the target must be a reply, and only known orders go through.
-    await assert.rejects(LlmChatService.sendMessage(requester, latest, '장면 그리기', () => {}, undefined, undefined, undefined, undefined, lastReply.id, undefined, { order: 'image' }), /그 도구를 쓸 수 없어/)
-    await assert.rejects(LlmChatService.sendMessage(requester, latest, '로어로 남기기', () => {}, undefined, undefined, undefined, undefined, sent.id, undefined, { order: 'lore' }), /캐릭터 답변에만/)
-    await assert.rejects(LlmChatService.sendMessage(requester, latest, '?', () => {}, undefined, undefined, undefined, undefined, lastReply.id, undefined, { order: 'dance' }), /알 수 없는 지시/)
-    await assert.rejects(LlmChatService.sendMessage(requester, latest, '다시 그리기', () => {}, undefined, undefined, undefined, undefined, lastReply.id, undefined, { order: 'redraw' }), /다시 그릴 이미지가 없어/)
-  })
-
   await t.test('a yes on a save_lore item lifts the lore spacing for its reply only', async (s) => {
     route(s, () => ({ lore: { type: 'noul', noul: 0.95 } }))
     const thread = threadOf(judged.id)

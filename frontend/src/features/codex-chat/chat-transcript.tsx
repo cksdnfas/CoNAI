@@ -1,5 +1,5 @@
 import { Fragment, memo, useMemo, useState, type MouseEvent } from 'react'
-import { Bookmark, Check, ChevronLeft, ChevronRight, Ellipsis, GitBranch, Image as ImageIcon, Languages, ListChecks, Mic, Pencil, Repeat, Reply, RotateCcw, StepForward, X, type LucideIcon } from 'lucide-react'
+import { Bookmark, Check, ChevronLeft, ChevronRight, Ellipsis, GitBranch, Image as ImageIcon, Languages, ListChecks, LoaderCircle, Mic, Pencil, Repeat, Reply, RotateCcw, StepForward, X, type LucideIcon } from 'lucide-react'
 import type { ChatMessageRouting } from '@conai/shared'
 import { IconButton } from '@/components/ui/icon-button'
 import { Textarea } from '@/components/ui/textarea'
@@ -52,9 +52,11 @@ type MessageActions = {
   /** Start a new chat holding this one up to a message. */
   canBranch: boolean
   onBranch: (id: number) => void
-  /** Orders this reply offers (a tool job for its character, sent as a message quoting it); empty for none. */
+  /** Orders this reply offers (a tool job its character does on it, adding no message); empty for none. */
   ordersFor: (message: CodexChatMessage) => ChatOrderKind[]
   onOrder: (message: CodexChatMessage, kind: ChatOrderKind) => void
+  /** The order running now, on which reply. */
+  ordering: { messageId: number; kind: ChatOrderKind } | null
 }
 
 /** A user message is saved and answered again; a reply (`reply`) is only saved. */
@@ -99,6 +101,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousCon
   const [moreOpen, setMoreOpen] = useState(false)
   const showRewriteTools = actions.canRewrite && (isUser || lastReply || editableReply || alternatives.length > 1) && actions.editingId !== message.id
   const orders = isUser ? [] : actions.ordersFor(message)
+  const ordering = actions.ordering?.messageId === message.id ? actions.ordering.kind : null
   const hasMore = (!isUser && Boolean(contextMeta)) || actions.canBranch || showRewriteTools || orders.length > 0
   // 1:1 chats show only a quote the user picked; addressing and the reply's automatic quote are room-only.
   const routing = speakerOf ? message.routing : isUser && message.routing?.replyTo ? { ...message.routing, recipients: [] } : null
@@ -130,10 +133,11 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousCon
       <IconButton size="icon-xs" variant="ghost" label={t({ ko: '답장', en: 'Reply' })} onClick={() => actions.onReply(message)}><Reply /></IconButton>
       {translated ? <IconButton size="icon-xs" variant="ghost" aria-pressed={showOriginal} className={cn(showOriginal && 'text-primary')} label={showOriginal ? t({ ko: '번역 보기', en: 'Show translation' }) : t({ ko: '원문 보기', en: 'Show original' })} onClick={() => setShowOriginal((current) => !current)}><Languages /></IconButton> : null}
       {hasMore ? <IconButton size="icon-xs" variant="ghost" aria-expanded={moreOpen} className={cn(moreOpen && 'text-primary')} label={moreOpen ? t({ ko: '접기', en: 'Less' }) : t({ ko: '더 보기', en: 'More' })} onClick={() => setMoreOpen((current) => !current)}><Ellipsis /></IconButton> : null}
-      {moreOpen ? CHAT_ORDERS.filter((entry) => orders.includes(entry.kind)).map((entry) => {
-        const Icon = ORDER_ICONS[entry.kind]
-        return <IconButton key={entry.kind} size="icon-xs" variant="ghost" disabled={actions.busy} label={t(entry.label)} onClick={() => actions.onOrder(message, entry.kind)}><Icon /></IconButton>
-      }) : null}
+      {/* The order working on this reply keeps its button, spinning, also with the row folded. */}
+      {CHAT_ORDERS.filter((entry) => orders.includes(entry.kind) && (moreOpen || entry.kind === ordering)).map((entry) => {
+        const Icon = entry.kind === ordering ? LoaderCircle : ORDER_ICONS[entry.kind]
+        return <IconButton key={entry.kind} size="icon-xs" variant="ghost" disabled={actions.busy} label={t(entry.label)} onClick={() => actions.onOrder(message, entry.kind)}><Icon className={cn(entry.kind === ordering && 'animate-spin')} /></IconButton>
+      })}
       {moreOpen && !isUser && contextMeta ? <ChatContextInfo key={message.active_alternative} meta={contextMeta} previous={previousContext} threadId={message.thread_id} messageId={message.id} alternative={message.active_alternative} segments={segments} /> : null}
       {moreOpen && actions.canBranch ? <IconButton size="icon-xs" variant="ghost" disabled={actions.busy} label={t({ ko: '여기까지로 새 채팅 분기', en: 'Branch a new chat up to here' })} onClick={() => actions.onBranch(message.id)}><GitBranch /></IconButton> : null}
       {moreOpen && showRewriteTools ? <>

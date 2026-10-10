@@ -1157,23 +1157,17 @@ export type ChatFlagInput = Pick<ChatFlag, 'icon' | 'name' | 'content'>
  */
 export type ChatFlagSnapshot = Pick<ChatFlag, 'id' | 'icon' | 'name' | 'content'> & { pick?: true; choice?: { id: number; question: string }; order?: ChatOrderKind }
 
-/** One tool job ordered from a character's reply (its bar): drawing the scene, saving lore… The server words it for the model. */
+/** One tool job ordered from a character's reply (its bar): drawing the scene, saving lore… done on that reply (runChatOrder). */
 export type ChatOrderKind = 'image' | 'redraw' | 'audio' | 'lore' | 'choices'
 
-/** In bar order; `name` matches what the server stores on the message. */
-export const CHAT_ORDERS: Array<{ kind: ChatOrderKind; icon: string; name: string; label: { ko: string; en: string } }> = [
-  { kind: 'image', icon: 'lucide:image', name: '장면 그리기', label: { ko: '이 장면 그리기', en: 'Draw this scene' } },
-  { kind: 'redraw', icon: 'lucide:repeat', name: '다시 그리기', label: { ko: '이미지 다시 그리기', en: 'Draw the image again' } },
-  { kind: 'audio', icon: 'lucide:mic', name: '소리 만들기', label: { ko: '목소리·소리 만들기', en: 'Make voice or sound' } },
-  { kind: 'lore', icon: 'lucide:bookmark', name: '로어로 남기기', label: { ko: '로어로 남기기', en: 'Save as lore' } },
-  { kind: 'choices', icon: 'lucide:list-checks', name: '선택지 만들기', label: { ko: '다음 선택지 만들기', en: 'Offer next choices' } },
+/** In bar order. */
+export const CHAT_ORDERS: Array<{ kind: ChatOrderKind; label: { ko: string; en: string } }> = [
+  { kind: 'image', label: { ko: '이 장면 그리기', en: 'Draw this scene' } },
+  { kind: 'redraw', label: { ko: '이미지 다시 그리기', en: 'Draw the image again' } },
+  { kind: 'audio', label: { ko: '목소리·소리 만들기', en: 'Make voice or sound' } },
+  { kind: 'lore', label: { ko: '로어로 남기기', en: 'Save as lore' } },
+  { kind: 'choices', label: { ko: '다음 선택지 만들기', en: 'Offer next choices' } },
 ]
-
-/** The snapshot an order shows on the message while it is sent (the server stores its own, with the model's wording). */
-export function orderSnapshot(kind: ChatOrderKind): ChatFlagSnapshot {
-  const order = CHAT_ORDERS.find((entry) => entry.kind === kind) as (typeof CHAT_ORDERS)[number]
-  return { id: 0, icon: order.icon, name: order.name, content: order.name, order: kind }
-}
 
 /** The snapshot a status panel pick becomes (what the server stores on the message). */
 export function pickSnapshot(label: string): ChatFlagSnapshot {
@@ -1520,8 +1514,20 @@ export function interruptCodexChatThread(threadId: number) {
  * Send a message and read the NDJSON turn stream. No timeout: a turn with generation jobs can run for minutes.
  * Aborting only stops reading; the server finishes and stores the reply.
  */
-export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = [], picks: string[] = [], mediaHashes: string[] = [], replyToMessageId?: number, pageContext?: ChatPageSnapshot, choice?: ChatChoiceAnswer, order?: ChatOrderKind) {
-  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext, choice, order }, onEvent, signal)
+export async function streamCodexChatMessage(threadId: number, text: string, onEvent: (event: CodexChatStreamEvent) => void, signal?: AbortSignal, fileIds: string[] = [], flagIds: number[] = [], picks: string[] = [], mediaHashes: string[] = [], replyToMessageId?: number, pageContext?: ChatPageSnapshot, choice?: ChatChoiceAnswer) {
+  return streamChatOperation(`/api/codex-chat/threads/${threadId}/messages`, 'POST', { text, fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext, choice }, onEvent, signal)
+}
+
+/**
+ * An order from a character's reply (its bar), carried out on that reply: what it makes lands in it, no message is
+ * added. Resolves once the job went through (its images may still be generating); rejects with the reason otherwise.
+ */
+export async function runChatOrder(threadId: number, messageId: number, kind: ChatOrderKind, signal?: AbortSignal) {
+  let failure: string | null = null
+  await streamChatOperation(`/api/codex-chat/threads/${threadId}/messages/${messageId}/order`, 'POST', { kind }, (event) => {
+    if (event.type === 'error') failure = event.message
+  }, signal)
+  if (failure) throw new Error(failure)
 }
 
 export function checkChatPageProposal<T extends Extract<ChatProposal, { kind: 'page_fields' | 'workflow_graph' | 'page_action' }>>(proposal: T, undo = false) {

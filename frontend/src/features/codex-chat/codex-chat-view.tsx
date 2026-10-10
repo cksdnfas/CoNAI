@@ -45,6 +45,7 @@ import {
   readThreadFlagIds,
   setChatThreadFlags,
   updateChatListState,
+  runChatOrder,
   type ChatEmoticon,
   type ChatSearchResult,
   type ChatProfileSummary,
@@ -77,6 +78,7 @@ import { ChatUserProfileManagerModal, ChatUserProfilePickModal, newChatUserProfi
 import {
   CODEX_CHAT_THREADS_QUERY_KEY,
   codexChatCompactMutationKey,
+  codexChatOrderMutationKey,
   codexChatMediaQueryKey,
   codexChatThreadQueryKey,
   defaultThreadId,
@@ -377,7 +379,21 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '답변 전환 실패', en: 'Could not switch answer' })), tone: 'error' }),
   })
-  const isBusy = isStreaming || serverRunning || alternativeMutation.isPending || commandPending || isCompacting
+  // An order works on one reply and adds no message; it holds the chat until its job went through.
+  const orderMutation = useMutation({
+    mutationKey: codexChatOrderMutationKey(activeThreadId),
+    mutationFn: ({ threadId, messageId, kind }: { threadId: number; messageId: number; kind: ChatOrderKind }) => runChatOrder(threadId, messageId, kind),
+    onSettled: async (_data, _error, { threadId }) => {
+      await queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(threadId) })
+      await queryClient.invalidateQueries({ queryKey: codexChatMediaQueryKey(threadId) })
+    },
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '지시를 처리하지 못했어.', en: 'Could not carry out the order.' })), tone: 'error' }),
+  })
+  const isOrdering = useIsMutating({ mutationKey: codexChatOrderMutationKey(activeThreadId) }) > 0
+  const ordering = isOrdering && orderMutation.variables?.threadId === activeThreadId ? orderMutation.variables : null
+  const orderingMessageId = ordering?.messageId ?? null
+  const orderingKind = ordering?.kind ?? null
+  const isBusy = isStreaming || serverRunning || alternativeMutation.isPending || commandPending || isCompacting || isOrdering
   const fileDrop = useChatFileDrop(chat, isBusy || activeThreadId === null)
   const replacingMessageId = liveTurn?.threadId === activeThreadId ? liveTurn.replacingMessageId : threadQuery.data?.running?.replacingMessageId
   const messages: CodexChatMessage[] = useMemo(() => (threadQuery.data?.messages ?? []).filter((message) => message.id !== replacingMessageId), [threadQuery.data?.messages, replacingMessageId])
@@ -461,17 +477,18 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     setDraftReply({ threadId: message.thread_id, quote: quoteOf(message) })
     composerRef.current?.focus()
   }, [setDraftReply, quoteOf])
-  // Orders a character's reply offers: what its speaker can do; drawing again needs a picture in the reply.
+  // Orders a character's reply offers: what its speaker can do; drawing again needs a picture in the reply, and a
+  // choice card (answered by the next message) only comes from the latest reply.
   const ordersFor = useCallback((message: CodexChatMessage): ChatOrderKind[] => {
     if (message.role !== 'assistant' || message.status !== 'completed') return []
     const speaker = isGroup ? (message.speaker_profile_id != null ? profilesById.get(message.speaker_profile_id) : undefined) : profile
     const drawn = message.tool_calls.some((call) => call.compositeHashes.length > 0 || call.historyIds.length > 0) || Boolean(message.mediaAttachments?.length)
-    return (speaker?.orders ?? []).filter((kind) => (kind !== 'choices' || !isGroup) && (kind !== 'redraw' || drawn))
-  }, [isGroup, profilesById, profile])
-  const sendOrder = chat.order
+    return (speaker?.orders ?? []).filter((kind) => (kind !== 'choices' || (!isGroup && message.id === latestMessageId)) && (kind !== 'redraw' || drawn))
+  }, [isGroup, profilesById, profile, latestMessageId])
+  const startOrder = orderMutation.mutate
   const handleOrder = useCallback((message: CodexChatMessage, kind: ChatOrderKind) => {
-    if (!isBusy) void sendOrder(message.thread_id, kind, quoteOf(message))
-  }, [isBusy, sendOrder, quoteOf])
+    if (!isBusy) startOrder({ threadId: message.thread_id, messageId: message.id, kind })
+  }, [isBusy, startOrder])
   const lastMessage = messages[messages.length - 1]
   // Group rooms: only API LLM members' replies can be regenerated.
   const lastReplyByCodex = isGroup && lastMessage?.speaker_profile_id != null && profilesById.get(lastMessage.speaker_profile_id)?.engine === 'codex'
@@ -537,8 +554,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const messageActions = useMemo(() => ({
     busy: isBusy, canRewrite: !isCodexThread, lastReplyId, editingId: editingMessageId, onEditingChange: setEditingMessageId, onEdit: handleEdit, onRegenerate: handleRegenerate, onAlternative: handleAlternative, onReply: handleReply,
     canEditReply, onEditReply: handleEditReply, canContinue: directLlm, onContinue: handleContinue, canBranch: true, onBranch: (id: number) => { void handleBranch(id) },
-    ordersFor, onOrder: handleOrder,
-  }), [isBusy, isCodexThread, lastReplyId, editingMessageId, handleEdit, handleRegenerate, handleAlternative, handleReply, canEditReply, directLlm, handleEditReply, handleContinue, handleBranch, ordersFor, handleOrder])
+    ordersFor, onOrder: handleOrder, ordering: orderingMessageId !== null && orderingKind ? { messageId: orderingMessageId, kind: orderingKind } : null,
+  }), [isBusy, isCodexThread, lastReplyId, editingMessageId, handleEdit, handleRegenerate, handleAlternative, handleReply, canEditReply, directLlm, handleEditReply, handleContinue, handleBranch, ordersFor, handleOrder, orderingMessageId, orderingKind])
 
   // Display block state: the panel's data and the chips in replies. A room lists every member's blocks, keyed
   // `<profileId>:<key>` so two members' `status` blocks stay apart; chips keep the plain key (a message has one speaker).

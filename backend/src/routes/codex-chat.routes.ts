@@ -62,6 +62,7 @@ import { GroupChatService } from '../services/codex-chat/groupChatService'
 import { ChatReplyError } from '../services/codex-chat/chatReplies'
 import { ChatFlagError, ChatFlagStore, parseFlagIds } from '../services/codex-chat/chatFlags'
 import { chatOrdersOf } from '../services/codex-chat/chatOrders'
+import { runChatOrder } from '../services/codex-chat/chatOrderRunner'
 import { ChatUserProfileError, ChatUserProfileStore, type ChatUserProfile } from '../services/codex-chat/chatUserProfiles'
 import { ChatAppearanceError, ChatAppearanceStore } from '../services/codex-chat/chatAppearance'
 import { validateBlockData } from '../services/codex-chat/chatBlockState'
@@ -1769,6 +1770,19 @@ router.post('/threads/:threadId/messages/:messageId/continue', requireChatAccess
   await streamChatReply(req, res, (write) => CodexChatService.continueReply(requesterFrom(req), threadId, messageId, write))
 }))
 
+/**
+ * POST /api/codex-chat/threads/:threadId/messages/:messageId/order — `{ kind }`: an order from a character's reply
+ * (draw this scene, draw again, voice, lore, choices), carried out on that reply without a new message. NDJSON: the
+ * calls it makes (`tool`), then `done` with the reply as it is now.
+ */
+router.post('/threads/:threadId/messages/:messageId/order', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  const messageId = parseId(req.params.messageId)
+  if (threadId === null) return
+  if (messageId === null) { sendRouteBadRequest(res, '메시지를 확인해줘.'); return }
+  await streamChatReply(req, res, (write) => runChatOrder(requesterFrom(req), threadId, messageId, req.body?.kind, write))
+}))
+
 /** PATCH /api/codex-chat/threads/:threadId/messages/:messageId/text — `{ content }`: rewrite a reply by hand. Returns the thread detail. */
 router.patch('/threads/:threadId/messages/:messageId/text', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
@@ -1895,8 +1909,8 @@ router.post('/threads/:threadId/messages', requireChatAccess, asyncHandler(async
     return
   }
   await streamChatReply(req, res, (write) => isGroupThread(req, threadId)
-    ? GroupChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.mediaHashes, req.body?.picks, req.body?.replyToMessageId, { order: req.body?.order })
-    : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.picks, req.body?.mediaHashes, req.body?.replyToMessageId, req.body?.pageContext, { choice: req.body?.choice, order: req.body?.order }))
+    ? GroupChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.mediaHashes, req.body?.picks, req.body?.replyToMessageId)
+    : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.picks, req.body?.mediaHashes, req.body?.replyToMessageId, req.body?.pageContext, { choice: req.body?.choice }))
 }))
 
 // ---- Chat user profiles: who the account is in a chat (name, persona, avatar), one per chat ----------------------

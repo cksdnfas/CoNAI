@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { ChatFlagSnapshot, ChatMediaAttachment, ChatOrderKind, CodexChatToolCall } from '@/lib/api-codex-chat'
+import type { ChatFlagSnapshot, ChatMediaAttachment, CodexChatToolCall } from '@/lib/api-codex-chat'
 import type { StoredFileEntry, ChatMessageRouting, ChatReplyQuote, ChatChoiceProposal } from '@conai/shared'
 
 /** A post or comment put on the next message with 참조 (sent as a `post:` link line above the text). */
@@ -26,6 +26,11 @@ export function codexChatMediaQueryKey(threadId: number | null) {
 /** Compacting (summarizing) a chat, from the menu, /compact or the context view: the chat waits until it ends. */
 export function codexChatCompactMutationKey(threadId: number | null) {
   return ['codex-chat-compact', threadId] as const
+}
+
+/** An order running on one of a chat's replies (see runChatOrder): the chat waits until it ends. */
+export function codexChatOrderMutationKey(threadId: number | null) {
+  return ['codex-chat-order', threadId] as const
 }
 
 export type CodexChatView = 'chat' | 'gallery' | 'context'
@@ -149,8 +154,6 @@ export interface CodexChatApi {
   uploadAttachments: (files: File[]) => Promise<void>
   /** Send `draft` to `threadId` and stream the reply. */
   send: (threadId: number, text?: string) => Promise<void>
-  /** An order from a character's reply (its bar): sent on its own, quoting `quote`; the composer is left as it is. */
-  order: (threadId: number, kind: ChatOrderKind, quote: ChatReplyQuote) => Promise<void>
   regenerate: (threadId: number, messageId: number) => Promise<boolean>
   /** Carry on the last reply where the token cap cut it. */
   continueReply: (threadId: number, messageId: number) => Promise<boolean>

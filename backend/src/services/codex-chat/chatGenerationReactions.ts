@@ -8,6 +8,7 @@ import { profileContentLimit } from './chatContentRating'
 import { activeMediaFile } from './chatCardAssets'
 import { isProfileAssetHidden } from './chatProfileAssets'
 import { onChatReplyFinished } from './chatReplyRegistry'
+import { isChatOrderRunning } from './chatOrderRuns'
 import { CodexChatStore } from './codexChatStore'
 import { ChatProfileStore } from './chatProfiles'
 import { ChatGroupStore } from './chatGroupStore'
@@ -79,6 +80,8 @@ export class ChatGenerationReactionService {
   }
 
   private static async react({ reply_id: replyId, thread_id: threadId }: Candidate) {
+    // An order holds the chat for a moment; its end (a reply finishing, see chatOrderRunner) tries again.
+    if (isChatOrderRunning(threadId)) return
     const db = getUserSettingsDb()
     const source = CodexChatStore.listMessages(threadId).find((message) => message.role === 'assistant' && message.routing?.replyId === replyId)
     // A fast job may finish while its requesting reply is still being written; its close hook tries again.

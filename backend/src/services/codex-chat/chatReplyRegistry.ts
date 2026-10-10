@@ -1,5 +1,6 @@
 import type { ChatExecutionContext, ChatMessageRouting, ChatRecipient } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { isChatOrderReply } from './chatOrderRuns'
 
 export type ReplyRouteInput = { messageId?: number; recipients?: ChatRecipient[] }
 type ReplyHandler = { context: ChatExecutionContext; signal: AbortSignal; route: (input: ReplyRouteInput) => ChatMessageRouting }
@@ -45,11 +46,13 @@ export function routeChatReply(context: ChatExecutionContext | undefined, input:
 }
 
 /** Called at submission, before the model can stop polling or be interrupted. Never reassign an existing job. */
+/** An order's jobs (see chatOrderRuns) land in the reply they were ordered for and never start a reaction message. */
 export function linkChatGeneration(context: ChatExecutionContext | undefined, jobId: number) {
   if (!context?.replyId) return
   const db = getUserSettingsDb()
+  const reacts = isChatOrderReply(context.threadId, context.replyId) ? 0 : 1
   db.prepare(`INSERT OR IGNORE INTO chat_generation_links (job_id, thread_id, reply_id, reaction_target)
-    VALUES (?, ?, ?, COALESCE((SELECT CASE WHEN t.reaction_enabled = 1 AND p.engine = 'llm' AND (t.kind = 'group' OR t.engine = 'llm') THEN 1 ELSE 0 END
+    VALUES (?, ?, ?, COALESCE((SELECT CASE WHEN ? = 1 AND t.reaction_enabled = 1 AND p.engine = 'llm' AND (t.kind = 'group' OR t.engine = 'llm') THEN 1 ELSE 0 END
     FROM codex_chat_threads t JOIN llm_chat_profiles p ON p.id = ? WHERE t.id = ?), 0))`)
-    .run(jobId, context.threadId, context.replyId, context.profileId, context.threadId)
+    .run(jobId, context.threadId, context.replyId, reacts, context.profileId, context.threadId)
 }
