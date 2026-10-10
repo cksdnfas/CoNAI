@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import sharp from 'sharp'
 import { buildSpriteFrames, loadBuildFrame, renderSheet, type SpriteBuildMeta } from '../src/services/sprite/spriteBuild'
 import { decodeImage, encodeStill } from '../src/services/sprite/spriteEncode'
-import { probeVideo } from '../src/services/sprite/spriteFfmpeg'
+import { ffmpegBinary, probeVideo } from '../src/services/sprite/spriteFfmpeg'
 import { ANIMATION_DEFAULTS, buildSpriteAnimation } from '../src/services/sprite/spriteAnimation'
 import { NORMALIZATION_DEFAULTS, normalizeSpriteSheets, normalizeSpriteSheetsBulk, type NormalizationSource } from '../src/services/sprite/spriteNormalize'
 import { intervalModeIndices, resolveExtractOptions, type SpriteExtractOptions, type SpriteExtractOptionsInput, type SpriteVideoInfo } from '../src/services/sprite/spriteOptions'
@@ -270,4 +270,44 @@ test('D5: web defaults', () => {
   assert.deepEqual([keyOnly.tolerance, keyOnly.softness], [0.1, 0.05])
   assert.equal(NORMALIZATION_DEFAULTS.padding, 2)
   assert.equal(ANIMATION_DEFAULTS.outputFormat, 'webp')
+})
+
+test('a decoded key that drifted past the tolerance still passes the border check and keys out', () => {
+  // #FF00FF as an H.264 decode commonly returns it: (251,13,242) is raw 0.10, past the 0.08 default tolerance.
+  const size = 32
+  const data = new Uint8Array(size * size * 4)
+  for (let index = 0; index < size * size; index += 1) {
+    const x = index % size
+    const y = Math.floor(index / size)
+    const subject = x >= 10 && x < 22 && y >= 10 && y < 22
+    const noise = (index * 7) % 3 - 1
+    data.set(subject ? [40, 160, 60, 255] : [251 + noise, 13 + noise, 242 - noise, 255], index * 4)
+  }
+  const out = despillFrame({ width: size, height: size, data }, { key: [255, 0, 255], tolerance: 0.08, softness: 0.92, edgeCleanup: true, frameNumber: 1 })
+  const alphaAt = (x: number, y: number) => out[(y * size + x) * 4 + 3]
+  for (const [x, y] of [[0, 0], [31, 0], [3, 28], [16, 4]]) assert.equal(alphaAt(x, y), 0, `background (${x},${y}) is transparent`)
+  assert.equal(alphaAt(16, 16), 255, 'the subject stays opaque')
+  assert.deepEqual([...out.subarray((16 * size + 16) * 4, (16 * size + 16) * 4 + 3)], [40, 160, 60])
+})
+
+test('an H.264 magenta background decoded with the other colour matrix keys at tolerance 0.08', { timeout: 120000 }, async () => {
+  // Encoded as BT.709 but untagged, so it decodes as BT.601: the background comes back near (233,0,243), raw 0.086.
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'sprite-drift-'))
+  try {
+    const source = path.join(work, 'drift.mp4')
+    const { spawnSync } = await import('node:child_process')
+    const made = spawnSync(ffmpegBinary(), ['-v', 'error', '-f', 'lavfi', '-i', 'color=c=0xFF00FF:s=96x96:r=4:d=2', '-vf', 'drawbox=x=32:y=32:w=32:h=32:color=0x30A040:t=fill,scale=out_color_matrix=bt709', '-c:v', 'libx264', '-crf', '30', '-pix_fmt', 'yuv420p', '-y', source])
+    assert.equal(made.status, 0, made.stderr?.toString())
+    const run = await build(source, resolveExtractOptions({ autoCrop: false }))
+    try {
+      const [frame] = frames(run.work, run.meta)
+      const alphaAt = (x: number, y: number) => frame.data[(y * frame.width + x) * 4 + 3]
+      assert.equal(alphaAt(0, 0), 0, 'the drifted background is keyed out')
+      assert.equal(alphaAt(Math.floor(frame.width / 2), Math.floor(frame.height / 2)), 255, 'the subject stays')
+    } finally {
+      fs.rmSync(run.work, { recursive: true, force: true })
+    }
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true })
+  }
 })

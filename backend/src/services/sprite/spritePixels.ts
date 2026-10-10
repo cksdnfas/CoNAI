@@ -77,6 +77,8 @@ export function applyColorKey(frame: RgbaFrame, keys: ReadonlyArray<readonly [nu
 const LUMA = [f32(0.299), f32(0.587), f32(0.114)] as const
 const SOLID_ALPHA = f32(0.9)
 const BORDER_RATIO = 0.5
+/** Raw alpha up to which a border pixel counts as the key colour in the border check (or the tolerance, if looser). */
+const BORDER_MATCH_RAW = f32(0.25)
 const BORDER_FRACTION = 0.02
 
 function dot3(r: number, g: number, b: number): number {
@@ -136,6 +138,27 @@ function keyChannelPairs(key: readonly [number, number, number]): Array<[number,
     }
   }
   return pairs
+}
+
+/** The raw alpha (formulas above) of one colour, channels 0..1, against `key` (bytes). */
+function rawKeyAlpha(kind: DespillKeyKind, key: readonly [number, number, number], color: readonly number[]): number {
+  if (kind === 'hue') {
+    let low = Infinity
+    let high = -Infinity
+    for (let channel = 0; channel < 3; channel += 1) {
+      if (key[channel] === 255) low = Math.min(low, color[channel])
+      else high = Math.max(high, color[channel])
+    }
+    return f32(1 - Math.max(f32(low - high), 0))
+  }
+  if (kind === 'difference') {
+    let amount = Infinity
+    for (const [high, low, spread] of keyChannelPairs(key)) amount = Math.min(amount, f32(f32(color[high] - color[low]) / f32(spread)))
+    return f32(1 - Math.min(Math.max(amount, 0), 1))
+  }
+  const farthest = Math.sqrt(key.reduce((sum, channel) => sum + Math.max(channel, 255 - channel) ** 2, 0))
+  const distance = Math.sqrt(color.reduce((sum, channel, index) => sum + (channel * 255 - key[index]) ** 2, 0))
+  return f32(Math.min(1, (2 * distance) / farthest))
 }
 
 export interface DespillOptions {
@@ -208,22 +231,49 @@ export function despillFrame(frame: RgbaFrame, options: DespillOptions, trace?: 
     }
   }
 
+  // The border check is not the keying tolerance: H.264 shifts the decoded key (#FF00FF comes back as e.g.
+  // (251,13,242), raw 0.10), which a 0.08 tolerance would reject as "not the key colour" before any correction.
   const border = outerBorderIndices(width, height)
+  const looseLimit = Math.max(tolerance, BORDER_MATCH_RAW)
   let matching = 0
-  for (const index of border) if (raw[index] <= tolerance) matching += 1
-  const ratio = matching / border.length
+  let loose = 0
+  for (const index of border) {
+    if (raw[index] <= tolerance) matching += 1
+    if (raw[index] <= looseLimit) loose += 1
+  }
+  const ratio = loose / border.length
   if (ratio < BORDER_RATIO) {
     const label = keyLabel(options.key)
     throw new SpriteError(`${options.frameNumber}번 프레임 외곽의 ${label.name} 배경 비율이 ${(ratio * 100).toFixed(1)}%로 너무 낮습니다. ${label.hex} 배경 영상을 확인하세요.`)
   }
 
-  // H.264 colour conversion shifts the decoded key away from the exact colour; estimate it from the matching border.
+  // H.264 colour conversion shifts the decoded key away from the exact colour; estimate it from the matching border:
+  // the pixels inside the tolerance as the original does, or the loosely matching ones when the shift put most past it.
+  const sampleLimit = matching / border.length >= BORDER_RATIO ? tolerance : looseLimit
   const channelSamples: number[][] = [[], [], []]
   for (const index of border) {
-    if (raw[index] > tolerance) continue
+    if (raw[index] > sampleLimit) continue
     for (let channel = 0; channel < 3; channel += 1) channelSamples[channel].push(rgb[index * 3 + channel])
   }
   const background = channelSamples.map((samples) => float32Median(samples)) as [number, number, number]
+
+  // A background that would not key at the tolerance itself: measure every pixel against it instead of the exact key,
+  // so the user's tolerance applies to the corrected colour. A background that keys keeps the original's numbers.
+  const backgroundRaw = rawKeyAlpha(kind, options.key, background)
+  if (backgroundRaw > tolerance) {
+    if (kind === 'distance') {
+      const farthest = Math.sqrt(background.reduce((sum, channel) => sum + Math.max(channel, 1 - channel) ** 2, 0))
+      for (let index = 0; index < pixelCount; index += 1) {
+        const dr = rgb[index * 3] - background[0]
+        const dg = rgb[index * 3 + 1] - background[1]
+        const db = rgb[index * 3 + 2] - background[2]
+        raw[index] = f32(Math.min(1, (2 * Math.sqrt(dr * dr + dg * dg + db * db)) / farthest))
+      }
+    } else {
+      const backgroundAmount = f32(1 - backgroundRaw)
+      for (let index = 0; index < pixelCount; index += 1) raw[index] = f32(1 - Math.min(f32(f32(1 - raw[index]) / backgroundAmount), 1))
+    }
+  }
   if (trace) {
     trace.borderPixelCount = border.length
     trace.borderMatchRatio = ratio
