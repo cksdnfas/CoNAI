@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 
 interface UseOverlayBackCloseOptions {
   open: boolean
@@ -18,10 +18,18 @@ function markOverlayHistoryBackBypassWindow() {
   overlayHistoryBackBypassUntil = Date.now() + OVERLAY_HISTORY_BACK_BYPASS_WINDOW_MS
 }
 
-/** Close one open overlay before browser back navigates away from the current page. */
+// The entry of an overlay that closed to make way for another one opened in the same update (see `handOff`).
+let pendingOverlayHandoff: string | null = null
+
+/**
+ * Close one open overlay before browser back navigates away from the current page.
+ * `handOff()` before closing lets an overlay opened in the same update take over this one's history entry,
+ * so the switch neither rewinds nor stacks one: back then closes the new overlay straight to the page.
+ */
 export function useOverlayBackClose({ open, onClose, enabled = true }: UseOverlayBackCloseOptions) {
   const overlayId = useId()
   const pushedRef = useRef(false)
+  const handOffRef = useRef(false)
   const programmaticBackRef = useRef(false)
   const openRef = useRef(open)
   const onCloseRef = useRef(onClose)
@@ -45,8 +53,10 @@ export function useOverlayBackClose({ open, onClose, enabled = true }: UseOverla
       const baseState = window.history.state && typeof window.history.state === 'object'
         ? window.history.state
         : {}
+      const takeOver = pendingOverlayHandoff !== null && baseState.__conaiOverlayBackClose === pendingOverlayHandoff
+      pendingOverlayHandoff = null
 
-      window.history.pushState({
+      window.history[takeOver ? 'replaceState' : 'pushState']({
         ...baseState,
         __conaiOverlayBackClose: overlayId,
       }, '', window.location.href)
@@ -57,9 +67,27 @@ export function useOverlayBackClose({ open, onClose, enabled = true }: UseOverla
 
     if (!open && pushedRef.current) {
       const currentOverlayId = window.history.state?.__conaiOverlayBackClose
+      const handingOff = handOffRef.current
+      handOffRef.current = false
       if (currentOverlayId !== overlayId) {
         pushedRef.current = false
         programmaticBackRef.current = false
+        return
+      }
+
+      if (handingOff) {
+        // The overlay opened in this update runs its effect right after (a parent's runs after its children's):
+        // it takes the entry over. Nobody did by the next task → rewind it as a plain close would.
+        pushedRef.current = false
+        programmaticBackRef.current = false
+        pendingOverlayHandoff = overlayId
+        window.setTimeout(() => {
+          if (pendingOverlayHandoff !== overlayId) return
+          pendingOverlayHandoff = null
+          if (window.history.state?.__conaiOverlayBackClose !== overlayId) return
+          markOverlayHistoryBackBypassWindow()
+          window.history.back()
+        }, 0)
         return
       }
 
@@ -114,4 +142,10 @@ export function useOverlayBackClose({ open, onClose, enabled = true }: UseOverla
       }
     }
   }, [enabled, overlayId])
+
+  const handOff = useCallback(() => {
+    handOffRef.current = true
+  }, [])
+
+  return { handOff }
 }

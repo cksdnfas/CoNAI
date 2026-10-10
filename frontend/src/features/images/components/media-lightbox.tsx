@@ -317,18 +317,16 @@ function MediaLightboxStage({ item, canViewPrevious, canViewNext, onViewPrevious
   )
 }
 
-function MediaLightboxOverlay({ items, index, onIndexChange, onClose, renderActions }: Omit<MediaLightboxProps, 'index'> & { index: number }) {
+function MediaLightboxOverlay({ items, index, onIndexChange, onClose, renderActions, onOpenDetail }: Omit<MediaLightboxProps, 'index'> & { index: number; onOpenDetail: (() => void) | null }) {
   const { t } = useI18n()
-  const imageViewModal = useImageViewModal()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const activeThumbRef = useRef<HTMLButtonElement | null>(null)
   const item = items[index]
   const count = items.length
   const canViewPrevious = index > 0
   const canViewNext = index < count - 1
-  const activeDetailHash = imageViewModal?.activeCompositeHash ?? null
   const compositeHash = item.composite_hash ?? null
-  // A docked chat panel stays usable beside the lightbox, as beside the detail modal opened over it.
+  // A docked chat panel stays usable beside the lightbox, as beside the detail modal that replaces it.
   const besideChat = useChatDockedBesidePage()
 
   const viewPrevious = useCallback(() => onIndexChange(Math.max(0, index - 1)), [index, onIndexChange])
@@ -350,12 +348,7 @@ function MediaLightboxOverlay({ items, index, onIndexChange, onClose, renderActi
     }
   }, [])
 
-  // The detail modal on top owns the keyboard until it closes.
   useEffect(() => {
-    if (activeDetailHash) {
-      return
-    }
-
     const handleKeyDown = (event: KeyboardEvent) => {
       // Keys typed in a docked chat panel beside the lightbox belong to the chat.
       if (event.defaultPrevented || (event.target instanceof Element && event.target.closest('[data-chat-dock]'))) {
@@ -375,18 +368,7 @@ function MediaLightboxOverlay({ items, index, onIndexChange, onClose, renderActi
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeDetailHash, canViewNext, canViewPrevious, onClose, viewNext, viewPrevious])
-
-  // Paging inside the detail modal moves the lightbox along, so closing it lands on the same image.
-  useEffect(() => {
-    if (!activeDetailHash) {
-      return
-    }
-    const detailIndex = items.findIndex((candidate) => candidate.composite_hash === activeDetailHash)
-    if (detailIndex >= 0 && detailIndex !== index) {
-      onIndexChange(detailIndex)
-    }
-  }, [activeDetailHash, index, items, onIndexChange])
+  }, [canViewNext, canViewPrevious, onClose, viewNext, viewPrevious])
 
   useEffect(() => {
     for (const neighbour of [items[index - 1], items[index + 1]]) {
@@ -414,21 +396,6 @@ function MediaLightboxOverlay({ items, index, onIndexChange, onClose, renderActi
     return () => window.removeEventListener(LIGHTBOX_OPEN_EVENT, closeOnNewer)
   }, [])
 
-  const handleOpenDetail = () => {
-    if (!compositeHash || !imageViewModal) {
-      return
-    }
-
-    const sourceItems = items.filter((candidate) => Boolean(candidate.composite_hash))
-    imageViewModal.openImageView({
-      compositeHash,
-      compositeHashes: sourceItems.map((candidate) => candidate.composite_hash as string),
-      sourceId: 'media-lightbox',
-      sourceItems,
-      accessOptions: { allowDetailNavigation: false },
-    })
-  }
-
   return createPortal(
     <div
       ref={containerRef}
@@ -436,14 +403,14 @@ function MediaLightboxOverlay({ items, index, onIndexChange, onClose, renderActi
       aria-modal={!besideChat}
       aria-label={t({ ko: '이미지 보기', en: 'Image viewer' })}
       tabIndex={-1}
-      // Full-bleed under the detail modal (z-[90]), taking the same page side beside a docked chat.
+      // Full-bleed, taking the same page side beside a docked chat as the detail modal (z-[90]).
       className="fixed inset-y-0 left-0 right-[var(--chat-dock-width,0px)] z-[88] flex flex-col bg-black text-white outline-none"
     >
       <div className="flex h-14 shrink-0 items-center gap-1.5 pl-4 pr-2 sm:pl-6">
         <span className="flex-1 text-sm tabular-nums text-white/70">{count > 1 ? `${index + 1} / ${count}` : null}</span>
         {renderActions?.(item, index)}
-        {compositeHash && imageViewModal ? (
-          <IconButton variant="overlay" label={t({ ko: '상세 보기', en: 'Details' })} onClick={handleOpenDetail}>
+        {onOpenDetail ? (
+          <IconButton variant="overlay" label={t({ ko: '상세 보기', en: 'Details' })} onClick={onOpenDetail}>
             <Info />
           </IconButton>
         ) : null}
@@ -499,24 +466,64 @@ function MediaLightboxOverlay({ items, index, onIndexChange, onClose, renderActi
 
 /**
  * Lightweight full-screen viewer for a short list (chat results, a chat's gallery): no metadata, just the media.
- * "Details" opens the regular image modal on top; browser back, Esc, ✕ or a click outside the media close it.
+ * "Details" swaps it for the regular image modal (it does not stack on top); while that modal shows, opening an item
+ * here moves the modal to it instead. Browser back, Esc, ✕ or a click outside the media close it.
  */
 export function MediaLightbox({ items, index, onIndexChange, onClose, renderActions }: MediaLightboxProps) {
   const { canViewImages } = useImagePermissions()
+  const imageViewModal = useImageViewModal()
+  const detailOpen = Boolean(imageViewModal?.activeCompositeHash)
   const open = canViewImages && index !== null && items.length > 0
-  useOverlayBackClose({ open, onClose })
+  const clampedIndex = index === null ? 0 : Math.min(Math.max(index, 0), items.length - 1)
+  const { handOff } = useOverlayBackClose({ open: open && !detailOpen, onClose })
 
-  if (!open) {
+  /** Show `items[target]` in the image modal, paging through this same list. */
+  const showInDetail = useCallback((target: number) => {
+    const compositeHash = items[target]?.composite_hash
+    if (!compositeHash || !imageViewModal) {
+      return false
+    }
+
+    const sourceItems = items.filter((candidate) => Boolean(candidate.composite_hash))
+    imageViewModal.openImageView({
+      compositeHash,
+      compositeHashes: sourceItems.map((candidate) => candidate.composite_hash as string),
+      sourceId: 'media-lightbox',
+      sourceItems,
+      accessOptions: { allowDetailNavigation: false },
+    })
+    return true
+  }, [imageViewModal, items])
+
+  // Opened while the image modal is showing: the modal moves to the item and the lightbox stays shut.
+  useEffect(() => {
+    if (!open || !detailOpen) {
+      return
+    }
+    showInDetail(clampedIndex)
+    onClose()
+  }, [clampedIndex, detailOpen, onClose, open, showInDetail])
+
+  if (!open || detailOpen) {
     return null
+  }
+
+  const canOpenDetail = Boolean(items[clampedIndex]?.composite_hash && imageViewModal)
+  const openDetail = () => {
+    if (showInDetail(clampedIndex)) {
+      handOff()
+      onClose()
+    }
   }
 
   return (
     <MediaLightboxOverlay
       items={items}
-      index={Math.min(Math.max(index, 0), items.length - 1)}
+      index={clampedIndex}
       onIndexChange={onIndexChange}
       onClose={onClose}
       renderActions={renderActions}
+      onOpenDetail={canOpenDetail ? openDetail : null}
     />
   )
 }
