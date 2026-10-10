@@ -65,7 +65,7 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
   const swapBounceCount = clampWallpaperFloatingCollageSwapBounceCount(widget.settings.swapBounceCount)
   const previewPoolCount = Math.max(visibleCount * 4, 16)
 
-  const previewQuery = useWallpaperGroupPreviewImagesQuery('floating-collage', groupId, includeChildren, previewPoolCount)
+  const previewQuery = useWallpaperGroupPreviewImagesQuery('floating-collage', groupId, includeChildren, previewPoolCount, widget.settings.poolRefreshMinutes ?? 0)
   const images = useMemo(() => previewQuery.data ?? [], [previewQuery.data])
   const seeds = useMemo(() => buildWallpaperFloatingCollageSeeds(visibleCount), [visibleCount])
   const initialCardStates = useMemo(
@@ -382,7 +382,7 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
         const mediaClassName = cn('h-full w-full select-none pointer-events-none', fitMode === 'contain' ? 'object-contain' : 'object-cover')
         const cardClassName = cn(
           'absolute overflow-hidden rounded-2xl border border-white/15 shadow-[0_18px_48px_rgba(0,0,0,0.30)] will-change-transform',
-          widget.settings.showBackground === true ? 'bg-surface-high' : 'bg-transparent',
+          'bg-transparent',
         )
         const easedTransitionProgress = previousImage
           ? evaluateWallpaperAnimationEasingAtTime(swapTransitionEasing, clampWallpaperMetric(card.transitionElapsedMs / Math.max(transitionDurationMs, 1), 0, 1))

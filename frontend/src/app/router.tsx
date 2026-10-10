@@ -65,6 +65,12 @@ export const appRouter = createHashRouter([
     errorElement: <RouteErrorBoundary />,
   },
   {
+    // Outside the app shell: a runtime key (`k`) opens it in logged-out kiosk browsers such as Lively.
+    path: '/wallpaper/runtime',
+    element: <WallpaperRuntimeRoute />,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
     path: '/',
     element: <ProtectedAppShell />,
     errorElement: <RouteErrorBoundary />,
@@ -144,10 +150,6 @@ export const appRouter = createHashRouter([
       {
         path: 'wallpaper',
         element: <RequireAuthPermission permissionKey="page.wallpaper.view"><WallpaperEditorRoute /></RequireAuthPermission>,
-      },
-      {
-        path: 'wallpaper/runtime',
-        element: <RequireAuthPermission permissionKey="page.wallpaper.runtime.view"><WallpaperRuntimeRoute /></RequireAuthPermission>,
       },
       {
         path: '*',

@@ -1,23 +1,24 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { getImageListMediaKind, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
-import { formatDateTime, getArtifactPreviewUrl } from '@/features/module-graph/module-graph-shared'
+import { formatDateTime } from '@/features/module-graph/module-graph-shared'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import type { WallpaperImageTransitionStyle, WallpaperWidgetInstance } from './wallpaper-types'
-import { useWallpaperBrowseContentQuery, useWallpaperGroupPreviewImagesQuery } from './wallpaper-widget-data'
+import { useWallpaperGenerationHistory, useWallpaperGroupPreviewImagesQuery } from './wallpaper-widget-data'
+import { buildPreviewImageRecord } from '@/features/images/components/inline-media-preview'
+import { buildApiUrl } from '@/lib/api-client'
+import type { WallpaperHistoryItem } from '@/lib/api-wallpaper-runtime'
 import {
   buildWallpaperImageTransitionTransform,
   type WallpaperImageTransitionFrame,
 } from './wallpaper-image-transition-utils'
 import {
-  getWallpaperArtifactPreviewImage,
   WallpaperPreviewImageSurface,
   type WallpaperWidgetPreviewImage,
 } from './wallpaper-widget-preview-surface'
 import {
-  buildWallpaperFinalResultArtifact,
   getWallpaperAnimationEasingCss,
   getWallpaperHoverMotionAmount,
   getWallpaperImageTransitionDurationMs,
@@ -132,11 +133,17 @@ function getWallpaperPreviewOpenSettings(widget: WallpaperWidgetInstance) {
   }
 }
 
-/** Render one recent-results widget using the latest graph outputs. */
+const WALLPAPER_SERVICE_LABEL: Record<string, string> = { novelai: 'NAI', comfyui: 'ComfyUI', codex: 'Codex' }
+
+function buildWallpaperHistoryImage(item: WallpaperHistoryItem): ImageRecord {
+  const base = buildPreviewImageRecord({ src: buildApiUrl(item.imageUrl), mimeType: item.mimeType, fileName: item.workflowName ?? '', alt: item.workflowName ?? '' }) as ImageRecord
+  return { ...base, id: item.compositeHash, composite_hash: item.compositeHash, thumbnail_url: buildApiUrl(item.thumbnailUrl), width: item.width ?? undefined, height: item.height ?? undefined } as ImageRecord
+}
+
+/** Latest finished generations from every service (NAI, ComfyUI, Codex, workflows). */
 export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widget: Extract<WallpaperWidgetInstance, { type: 'recent-results' }>; mode: 'editor' | 'runtime'; onOpenImage?: (image: WallpaperWidgetPreviewImage) => void }) {
   const { t } = useI18n()
-  const refreshInterval = Math.max(5, widget.settings.refreshIntervalSec) * 1000
-  const visibleCount = Math.max(1, Math.min(6, widget.settings.visibleCount))
+  const visibleCount = Math.max(1, Math.min(12, widget.settings.visibleCount))
   const displayMode = widget.settings.displayMode ?? 'grid'
   const shiftInterval = Math.max(4, widget.settings.shiftIntervalSec ?? 8) * 1000
   const imageTransitionStyle = widget.settings.imageTransitionStyle ?? 'zoom'
@@ -148,78 +155,16 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
   const stackTransitionDurationMs = getWallpaperImageTransitionDurationMs(imageTransitionSpeed, imageTransitionDurationMs)
   const stackTransitionTimingFunction = getWallpaperAnimationEasingCss(imageTransitionEasing)
 
-  const resultsQuery = useWallpaperBrowseContentQuery('recent-results', refreshInterval)
+  const resultsQuery = useWallpaperGenerationHistory(visibleCount, widget.settings.service ?? 'all', widget.settings.refreshIntervalSec)
 
-  const recentEntries = useMemo(() => {
-    const browseContent = resultsQuery.data
-    if (!browseContent) {
-      return [] as Array<{ id: string; previewImage: ImageRecord; workflowName: string; createdLabel: string; badge: string }>
-    }
-
-    const workflowById = new Map(browseContent.workflows.map((workflow) => [workflow.id, workflow]))
-    const executionById = new Map(browseContent.executions.map((execution) => [execution.id, execution]))
-    const claimedArtifactIds = new Set<number>()
-
-    const finalEntries = [...browseContent.final_results]
-      .sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
-      .flatMap((finalResult) => {
-        claimedArtifactIds.add(finalResult.source_artifact_id)
-        const artifact = buildWallpaperFinalResultArtifact(finalResult)
-        if (artifact.artifact_type !== 'image') {
-          return []
-        }
-
-        const previewUrl = getArtifactPreviewUrl(artifact)
-        if (!previewUrl) {
-          return []
-        }
-
-        const execution = executionById.get(finalResult.source_execution_id ?? finalResult.execution_id)
-        const workflowName = execution ? (workflowById.get(execution.graph_workflow_id)?.name ?? t({ ko: '워크플로', en: 'Workflow' })) : t({ ko: '워크플로', en: 'Workflow' })
-        const previewImage = getWallpaperArtifactPreviewImage(previewUrl, workflowName, finalResult.source_metadata)
-        if (!previewImage) {
-          return []
-        }
-
-        return [{
-          id: `final-${finalResult.id}`,
-          previewImage,
-          workflowName,
-          createdLabel: formatDateTime(finalResult.created_date),
-          badge: t({ ko: '최종', en: 'Final' }),
-        }]
-      })
-
-    const artifactEntries = [...browseContent.artifacts]
-      .sort((left, right) => new Date(right.created_date).getTime() - new Date(left.created_date).getTime())
-      .flatMap((artifact) => {
-        if (claimedArtifactIds.has(artifact.id) || artifact.artifact_type !== 'image') {
-          return []
-        }
-
-        const previewUrl = getArtifactPreviewUrl(artifact)
-        if (!previewUrl) {
-          return []
-        }
-
-        const execution = executionById.get(artifact.execution_id)
-        const workflowName = execution ? (workflowById.get(execution.graph_workflow_id)?.name ?? t({ ko: '워크플로', en: 'Workflow' })) : t({ ko: '워크플로', en: 'Workflow' })
-        const previewImage = getWallpaperArtifactPreviewImage(previewUrl, workflowName, artifact.metadata)
-        if (!previewImage) {
-          return []
-        }
-
-        return [{
-          id: `artifact-${artifact.id}`,
-          previewImage,
-          workflowName,
-          createdLabel: formatDateTime(artifact.created_date),
-          badge: t({ ko: '실시간', en: 'Live' }),
-        }]
-      })
-
-    return [...finalEntries, ...artifactEntries].slice(0, visibleCount)
-  }, [resultsQuery.data, t, visibleCount])
+  const recentEntries = useMemo(() => (resultsQuery.data ?? []).map((item) => ({
+    id: `history-${item.id}`,
+    previewImage: buildWallpaperHistoryImage(item),
+    workflowName: item.workflowName || WALLPAPER_SERVICE_LABEL[item.serviceType] || item.serviceType,
+    createdLabel: formatDateTime(item.completedAt ?? item.createdAt ?? ''),
+    badge: WALLPAPER_SERVICE_LABEL[item.serviceType] ?? item.serviceType,
+    aspect: item.width && item.height ? item.width / item.height : 1,
+  })), [resultsQuery.data])
 
   const stackIndex = useWallpaperRotatingIndex(recentEntries.length, shiftInterval, displayMode === 'stack' && recentEntries.length > 1)
 
@@ -325,6 +270,37 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
     )
   }
 
+  if (displayMode === 'masonry') {
+    const columnCount = visibleCount <= 2 ? visibleCount : visibleCount <= 6 ? 3 : 4
+    return (
+      <div className="h-full overflow-hidden" style={{ columnCount, columnGap: 8 }}>
+        {recentEntries.length === 0 ? (
+          <div className="flex h-full items-center justify-center px-3 text-center text-sm opacity-60">
+            {t({ ko: '아직 생성 결과가 없어.', en: 'No generations yet.' })}
+          </div>
+        ) : null}
+        {recentEntries.map((entry) => (
+          <WallpaperPreviewImageSurface
+            key={entry.id}
+            image={entry.previewImage}
+            alt={entry.workflowName}
+            onOpenImage={mode === 'runtime' && widget.settings.imageClickAction !== 'none' ? onOpenImage : undefined}
+            transitionStyle={imageTransitionStyle}
+            transitionSpeed={imageTransitionSpeed}
+            transitionDurationMs={imageTransitionDurationMs}
+            transitionEasing={imageTransitionEasing}
+            hoverMotion={imageHoverMotion}
+            hoverEasing={hoverEasing}
+            {...getWallpaperPreviewOpenSettings(widget)}
+            className="relative mb-2 block w-full break-inside-avoid overflow-hidden rounded-lg"
+            style={{ aspectRatio: String(entry.aspect) }}
+            imageClassName="h-full w-full object-cover"
+          />
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className={cn('grid h-full gap-2', visibleCount >= 4 ? 'grid-cols-2' : 'grid-cols-1')}>
       {recentEntries.length === 0 ? (
@@ -385,7 +361,7 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
   const [pointerOffset, setPointerOffset] = useState<{ x: number; y: number } | null>(null)
   const [isPointerInside, setIsPointerInside] = useState(false)
 
-  const previewQuery = useWallpaperGroupPreviewImagesQuery('group-image-view', groupId, includeChildren, previewPoolCount)
+  const previewQuery = useWallpaperGroupPreviewImagesQuery('group-image-view', groupId, includeChildren, previewPoolCount, widget.settings.poolRefreshMinutes ?? 0)
   const images = useMemo(() => previewQuery.data ?? [], [previewQuery.data])
   const rotationEnabled = images.length > visibleCount && !(widget.settings.pauseOnHover !== false && isPointerInside)
   const rotationIndex = useWallpaperRotatingIndex(images.length, slideshowInterval, rotationEnabled)
@@ -543,7 +519,7 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
   const hoverEasing = widget.settings.hoverEasing ?? 'easeOutCubic'
   const [isPointerInside, setIsPointerInside] = useState(false)
 
-  const previewQuery = useWallpaperGroupPreviewImagesQuery('image-showcase', groupId, includeChildren, previewCount)
+  const previewQuery = useWallpaperGroupPreviewImagesQuery('image-showcase', groupId, includeChildren, previewCount, widget.settings.poolRefreshMinutes ?? 0)
 
   const images = useMemo(() => previewQuery.data ?? [], [previewQuery.data])
   const rotationEnabled = playbackMode !== 'static' && images.length > 1 && !(widget.settings.pauseOnHover !== false && isPointerInside)
@@ -596,7 +572,7 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
       {...getWallpaperPreviewOpenSettings(widget)}
       className={cn(
         'relative h-full overflow-hidden rounded-xl border border-border/70',
-        widget.settings.showBackground === true ? 'bg-surface-low' : 'bg-transparent',
+        'bg-transparent',
       )}
       imageClassName={cn(
         'h-full w-full rounded-xl ease-out will-change-transform',

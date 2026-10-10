@@ -16,8 +16,22 @@ import { getWallpaperQueueAgeLabelFromAnchor, getWallpaperQueueExecutionSummary 
 import { useWallpaperBrowseContentQuery } from './wallpaper-widget-data'
 import {
   getWallpaperMotionStrengthMultiplier,
+  useWallpaperClockText,
   useWallpaperMotionTick,
 } from './wallpaper-widget-utils'
+import {
+  WallpaperGenerationProgressBody,
+  WallpaperGenerationStatsBody,
+  WallpaperLibraryStatsBody,
+  WallpaperLlmUsageBody,
+} from './wallpaper-monitor-widget-bodies'
+import {
+  WallpaperAudioPlayerBody,
+  WallpaperCharacterCardBody,
+  WallpaperChatRecentBody,
+  WallpaperPostTickerBody,
+  WallpaperPromptOfDayBody,
+} from './wallpaper-chat-media-widget-bodies'
 
 /** Render one graph execution status widget using existing browse-content APIs. */
 function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'queue-status' }> }) {
@@ -55,13 +69,13 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
 
   if (visualMode === 'bars') {
     return (
-      <div className="flex h-full flex-col justify-center gap-3 rounded-sm bg-[linear-gradient(180deg,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_55%)] px-1 py-1 text-xs sm:text-sm">
-        <div className="mb-0.5 flex items-center justify-between gap-2 rounded-sm border border-border/60 bg-background/45 px-3 py-2 backdrop-blur-sm">
+      <div className="flex h-full flex-col justify-center gap-[4cqh] text-xs sm:text-sm">
+        <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-[3cqh]">
           <div>
             <div className="text-2xs uppercase tracking-overline text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.running')}</div>
             <div className="text-sm font-semibold text-foreground">{t('wallpaper.wallpaper.widget.bodies.totalactive.tolocalestring.en.us.active', { totalActive: formatNumber(totalActive) })}</div>
           </div>
-          <div className="rounded-full border border-border/70 bg-surface-low px-2 py-0.5 text-2xs uppercase tracking-overline text-muted-foreground">
+          <div className="text-2xs uppercase tracking-overline text-muted-foreground">
             {queueSummary.failed > 0 ? t('wallpaper.wallpaper.widget.bodies.needs.attention') : t('wallpaper.wallpaper.widget.bodies.stable')}
           </div>
         </div>
@@ -69,7 +83,7 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
         {queueItems.map((item) => {
           const ratio = Math.max(0.08, item.value / maxValue)
           return (
-            <div key={item.label} className="space-y-1.5 rounded-sm border border-border/60 bg-background/35 px-3 py-2.5 backdrop-blur-sm">
+            <div key={item.label} className="space-y-1.5">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <span className="flex h-5 w-5 items-center justify-center rounded-full text-2xs font-semibold text-background" style={{ backgroundColor: item.tone }}>
@@ -108,7 +122,7 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
           const ratio = item.value / maxValue
           const degrees = Math.max(12, Math.round(ratio * 360))
           return (
-            <div key={item.label} className="relative flex flex-col items-center justify-center overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_12%,transparent),transparent_54%),var(--surface-low)] px-2 py-3">
+            <div key={item.label} className="relative flex flex-col items-center justify-center px-2 py-3">
               <div
                 className={cn('absolute inset-0 opacity-60', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}
                 style={{ background: `radial-gradient(circle at center, color-mix(in srgb, ${item.tone} 18%, transparent), transparent 62%)` }}
@@ -131,12 +145,11 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
   }
 
   return (
-    <div className="grid h-full grid-cols-2 gap-2 text-center text-xs sm:text-sm">
+    <div className="grid h-full grid-cols-2 gap-x-[6cqw] gap-y-[6cqh] text-center text-xs sm:text-sm">
       {queueItems.map((item) => (
-        <div key={item.label} className="relative overflow-hidden rounded-sm border border-border/70 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--background)_20%,transparent),transparent),var(--surface-low)] px-2 py-3">
-          <div className="absolute inset-x-0 top-0 h-0.5" style={{ background: item.tone }} />
+        <div key={item.label} className="flex min-h-0 flex-col justify-center border-t-2 pt-[2cqh]" style={{ borderColor: item.tone }}>
           <div className="text-2xs uppercase tracking-overline text-muted-foreground">{item.label}</div>
-          <div className={cn('mt-1 text-lg font-semibold text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}>
+          <div className={cn('mt-1 text-[clamp(1.125rem,13cqh,4rem)] font-semibold leading-none tabular-nums text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}>
             {formatNumber(item.value)}
           </div>
           {item.ageLabel ? <div className="mt-1 text-2xs text-muted-foreground/85">{item.ageLabel}</div> : null}
@@ -275,39 +288,104 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
   )
 }
 
-/** Render one widget body based on the widget type. */
-export function WallpaperWidgetBody({ widget, mode, onOpenImage }: { widget: WallpaperWidgetInstance; mode: 'editor' | 'runtime'; onOpenImage?: (image: WallpaperWidgetPreviewImage) => void }) {
-  if (widget.type === 'clock') {
-    return <WallpaperClockWidgetBody widget={widget} />
-  }
-
-  if (widget.type === 'queue-status') {
-    return <WallpaperQueueStatusBody widget={widget} />
-  }
-
-  if (widget.type === 'recent-results') {
-    return <WallpaperRecentResultsBody widget={widget} mode={mode} onOpenImage={onOpenImage} />
-  }
-
-  if (widget.type === 'activity-pulse') {
-    return <WallpaperActivityPulseBody widget={widget} />
-  }
-
-  if (widget.type === 'group-image-view') {
-    return <WallpaperGroupImageViewBody widget={widget} mode={mode} onOpenImage={onOpenImage} />
-  }
-
-  if (widget.type === 'image-showcase') {
-    return <WallpaperImageShowcaseBody widget={widget} mode={mode} onOpenImage={onOpenImage} />
-  }
-
-  if (widget.type === 'floating-collage') {
-    return <WallpaperFloatingCollageBody widget={widget} mode={mode} onOpenImage={onOpenImage} />
-  }
+/** This month, with today marked. */
+function WallpaperCalendarBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'calendar' }> }) {
+  const { formatDateTime } = useI18n()
+  const now = useWallpaperClockText()
+  const todayKey = now.toDateString()
+  const { weekStart, showOutsideDays } = widget.settings
+  const cells = useMemo(() => {
+    const first = new Date(now.getFullYear(), now.getMonth(), 1)
+    const lead = (first.getDay() - (weekStart === 'mon' ? 1 : 0) + 7) % 7
+    const start = new Date(first.getFullYear(), first.getMonth(), 1 - lead)
+    return Array.from({ length: 42 }, (_, index) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + index))
+    // The grid only changes with the day.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayKey, weekStart])
+  const weeks = cells[35].getMonth() === now.getMonth() ? 6 : 5
+  const weekdays = cells.slice(0, 7).map((day) => formatDateTime(day, { weekday: 'narrow' }))
 
   return (
-    <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">
-      {widget.settings.text}
+    <div className="flex h-full flex-col" style={{ fontSize: 'max(11px, min(6.5cqh, 5cqw))' }}>
+      <div className="mb-[0.6em] font-semibold">{formatDateTime(now, { year: 'numeric', month: 'long' })}</div>
+      <div className="grid flex-1 grid-cols-7 text-center" style={{ gridTemplateRows: `auto repeat(${weeks}, minmax(0, 1fr))` }}>
+        {weekdays.map((label, index) => (
+          <div key={`w-${index}`} className="pb-[0.4em] text-[0.8em] opacity-50">{label}</div>
+        ))}
+        {cells.slice(0, weeks * 7).map((day) => {
+          const inMonth = day.getMonth() === now.getMonth()
+          const isToday = day.toDateString() === todayKey
+          return (
+            <div key={day.toISOString()} className="flex items-center justify-center">
+              {inMonth || showOutsideDays ? (
+                <span
+                  className={cn(
+                    'flex aspect-square h-[1.9em] items-center justify-center rounded-full tabular-nums',
+                    isToday ? 'bg-primary font-semibold text-primary-foreground' : null,
+                    !inMonth ? 'opacity-30' : day.getDay() === 0 ? 'text-destructive' : null,
+                  )}
+                >
+                  {day.getDate()}
+                </span>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
+}
+
+function WallpaperTextNoteBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'text-note' }> }) {
+  return (
+    <div className="flex h-full items-center overflow-hidden">
+      <p className="w-full whitespace-pre-wrap leading-snug" style={{ fontSize: Math.max(8, widget.settings.fontSize || 40) }}>
+        {widget.settings.text}
+      </p>
+    </div>
+  )
+}
+
+/** Render one widget body based on the widget type. */
+export function WallpaperWidgetBody({ widget, mode, onOpenImage }: { widget: WallpaperWidgetInstance; mode: 'editor' | 'runtime'; onOpenImage?: (image: WallpaperWidgetPreviewImage) => void }) {
+  switch (widget.type) {
+    case 'clock':
+      return <WallpaperClockWidgetBody widget={widget} />
+    case 'calendar':
+      return <WallpaperCalendarBody widget={widget} />
+    case 'text-note':
+      return <WallpaperTextNoteBody widget={widget} />
+    case 'queue-status':
+      return <WallpaperQueueStatusBody widget={widget} />
+    case 'activity-pulse':
+      return <WallpaperActivityPulseBody widget={widget} />
+    case 'recent-results':
+      return <WallpaperRecentResultsBody widget={widget} mode={mode} onOpenImage={onOpenImage} />
+    case 'group-image-view':
+      return <WallpaperGroupImageViewBody widget={widget} mode={mode} onOpenImage={onOpenImage} />
+    case 'image-showcase':
+      return <WallpaperImageShowcaseBody widget={widget} mode={mode} onOpenImage={onOpenImage} />
+    case 'floating-collage':
+      return <WallpaperFloatingCollageBody widget={widget} mode={mode} onOpenImage={onOpenImage} />
+    case 'generation-progress':
+      return <WallpaperGenerationProgressBody widget={widget} />
+    case 'generation-stats':
+      return <WallpaperGenerationStatsBody widget={widget} />
+    case 'llm-usage':
+      return <WallpaperLlmUsageBody widget={widget} />
+    case 'library-stats':
+      return <WallpaperLibraryStatsBody widget={widget} />
+    case 'character-card':
+      return <WallpaperCharacterCardBody widget={widget} />
+    case 'chat-recent':
+      return <WallpaperChatRecentBody widget={widget} />
+    case 'audio-player':
+      return <WallpaperAudioPlayerBody widget={widget} />
+    case 'post-ticker':
+      return <WallpaperPostTickerBody widget={widget} />
+    case 'prompt-of-day':
+      return <WallpaperPromptOfDayBody widget={widget} />
+    default:
+      return null
+  }
 }

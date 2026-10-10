@@ -77,13 +77,30 @@ export function WallpaperStatusWidgetEditorFields({
               </Select>
             </Field>
 
+            <Field label={t({ ko: '서비스', en: 'Service' })}>
+              <Select
+                value={selectedWidget.settings.service ?? 'all'}
+                onChange={(event) => {
+                  const value = event.target.value
+                  updateWidgetSettings({ service: value === 'novelai' || value === 'comfyui' || value === 'codex' ? value : 'all' })
+                }}
+              >
+                <option value="all">{t({ ko: '전체', en: 'All' })}</option>
+                <option value="novelai">NovelAI</option>
+                <option value="comfyui">ComfyUI</option>
+                <option value="codex">Codex</option>
+              </Select>
+            </Field>
+
             <Field label={t({ ko: '배치', en: 'Arrangement' })}>
               <Select
                 value={selectedWidget.settings.displayMode ?? 'grid'}
                 onChange={(event) => {
-                  updateWidgetSettings({ displayMode: event.target.value === 'stack' ? 'stack' : 'grid' })
+                  const value = event.target.value
+                  updateWidgetSettings({ displayMode: value === 'stack' ? 'stack' : value === 'masonry' ? 'masonry' : 'grid' })
                 }}
               >
+                <option value="masonry">{t({ ko: '메이슨리', en: 'Masonry' })}</option>
                 <option value="grid">{t({ ko: '그리드', en: 'Grid' })}</option>
                 <option value="stack">{t({ ko: '스택', en: 'Stack' })}</option>
               </Select>
@@ -96,7 +113,7 @@ export function WallpaperStatusWidgetEditorFields({
                   updateWidgetSettings({ visibleCount: Number(event.target.value) })
                 }}
               >
-                {[1, 2, 3, 4, 6].map((count) => (
+                {[1, 2, 3, 4, 6, 8, 9, 12].map((count) => (
                   <option key={count} value={count}>{count}</option>
                 ))}
               </Select>

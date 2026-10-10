@@ -1,9 +1,9 @@
 import { getWallpaperCanvasPreset } from './wallpaper-canvas-presets'
-import { normalizeWallpaperLayoutPreset } from './wallpaper-layout-utils'
+import { normalizeWallpaperLayoutPreset, WALLPAPER_DEFAULT_BACKGROUND } from './wallpaper-layout-utils'
 import { createWallpaperWidgetInstance } from './wallpaper-widget-registry'
-import type { WallpaperLayoutPreset, WallpaperWidgetInstance } from './wallpaper-types'
+import type { WallpaperBackground, WallpaperLayoutPreset, WallpaperWidgetInstance, WallpaperWidgetStyle, WallpaperWidgetType } from './wallpaper-types'
 
-export type WallpaperTemplateId = 'minimal-clock' | 'daily-focus' | 'studio-status' | 'recent-gallery'
+export type WallpaperTemplateId = 'generation-monitor' | 'gallery-wall' | 'studio-dashboard' | 'character-corner' | 'minimal-clock'
 
 export interface WallpaperTemplateDefinition {
   id: WallpaperTemplateId
@@ -14,99 +14,129 @@ export interface WallpaperTemplateDefinition {
 
 export const WALLPAPER_TEMPLATES: WallpaperTemplateDefinition[] = [
   {
-    id: 'minimal-clock',
-    name: { ko: '미니멀 클록', en: 'Minimal Clock' },
-    description: { ko: '큰 클린 시계 하나로 시작하는 가장 가벼운 구성', en: 'A lightweight starting point with one large clean clock' },
-    accent: 'linear-gradient(135deg, #12151c, #283244)',
+    id: 'generation-monitor',
+    name: { ko: '생성 모니터', en: 'Generation monitor' },
+    description: { ko: '진행률 · 최근 생성 · 오늘 생성 수', en: 'Progress, recent generations and today’s count' },
+    accent: 'linear-gradient(135deg, #1b1512, #5a2a12)',
   },
   {
-    id: 'daily-focus',
-    name: { ko: '데일리 포커스', en: 'Daily Focus' },
-    description: { ko: '에디토리얼 시계와 짧은 메모를 조합한 구성', en: 'An editorial clock paired with a short note' },
-    accent: 'linear-gradient(135deg, #171717, #3b3128)',
+    id: 'gallery-wall',
+    name: { ko: '갤러리 월', en: 'Gallery wall' },
+    description: { ko: '그룹 쇼케이스와 최근 생성 메이슨리', en: 'A group showcase beside recent generations' },
+    accent: 'linear-gradient(135deg, #1f1728, #4c1d3d)',
   },
   {
-    id: 'studio-status',
-    name: { ko: '스튜디오 상태판', en: 'Studio Status' },
-    description: { ko: '시계, 워크플로 상태, 최근 결과를 한 화면에 배치', en: 'Clock, workflow status, and recent results in one view' },
+    id: 'studio-dashboard',
+    name: { ko: '작업실 대시보드', en: 'Studio dashboard' },
+    description: { ko: '생성 통계 · LLM 사용량 · 라이브러리', en: 'Generation stats, LLM usage and the library' },
     accent: 'linear-gradient(135deg, #111827, #164e63)',
   },
   {
-    id: 'recent-gallery',
-    name: { ko: '최근 갤러리', en: 'Recent Gallery' },
-    description: { ko: '최근 생성 이미지를 중심에 두고 작은 시계를 배치', en: 'Recent generated images take center stage with a compact clock' },
-    accent: 'linear-gradient(135deg, #1f1728, #4c1d3d)',
+    id: 'character-corner',
+    name: { ko: '캐릭터 코너', en: 'Character corner' },
+    description: { ko: '캐릭터 카드 · 최근 대화 · 오디오', en: 'A character, its chat and some music' },
+    accent: 'linear-gradient(135deg, #1d1a2b, #3d2a44)',
+  },
+  {
+    id: 'minimal-clock',
+    name: { ko: '미니멀', en: 'Minimal' },
+    description: { ko: '큰 시계와 달력', en: 'A large clock and a calendar' },
+    accent: 'linear-gradient(135deg, #12151c, #283244)',
   },
 ]
 
-function withFrame<T extends WallpaperWidgetInstance>(widget: T, frame: Pick<T, 'x' | 'y' | 'w' | 'h'>): T {
-  return { ...widget, ...frame }
+/** Fractions of the canvas. */
+type Spot = [x: number, y: number, w: number, h: number]
+
+interface Placement {
+  type: WallpaperWidgetType
+  landscape: Spot
+  portrait: Spot
+  settings?: Record<string, unknown>
+  style?: Partial<WallpaperWidgetStyle>
 }
 
-/** Build one safe starter layout using only existing, proven widget runtimes. */
-export function buildWallpaperTemplateLayout(templateId: WallpaperTemplateId, canvasPresetId: string, name: string): WallpaperLayoutPreset {
-  const canvas = getWallpaperCanvasPreset(canvasPresetId)
+function place(placement: Placement): Placement {
+  return placement
+}
+
+const TEMPLATE_PLACEMENTS: Record<WallpaperTemplateId, { background: WallpaperBackground; widgets: Placement[] }> = {
+  'generation-monitor': {
+    background: { kind: 'gradient', from: '#1a1412', to: '#0d0b0a', angle: 160 },
+    widgets: [
+      place({ type: 'clock', landscape: [0.05, 0.08, 0.36, 0.22], portrait: [0.08, 0.05, 0.84, 0.12], settings: { visualStyle: 'clean', showDate: true } }),
+      place({ type: 'generation-progress', landscape: [0.05, 0.62, 0.34, 0.24], portrait: [0.08, 0.2, 0.84, 0.13] }),
+      place({ type: 'generation-stats', landscape: [0.05, 0.36, 0.34, 0.22], portrait: [0.08, 0.36, 0.84, 0.12], settings: { days: 7 } }),
+      place({ type: 'recent-results', landscape: [0.45, 0.06, 0.5, 0.88], portrait: [0.05, 0.51, 0.9, 0.45], settings: { displayMode: 'masonry', visibleCount: 9 } }),
+    ],
+  },
+  'gallery-wall': {
+    background: { kind: 'theme', dim: 0, blur: 0, vignette: 30 },
+    widgets: [
+      place({ type: 'image-showcase', landscape: [0.05, 0.08, 0.38, 0.84], portrait: [0.06, 0.04, 0.88, 0.5], settings: { playbackMode: 'ken-burns' } }),
+      place({ type: 'recent-results', landscape: [0.47, 0.08, 0.48, 0.66], portrait: [0.06, 0.57, 0.88, 0.3], settings: { displayMode: 'masonry', visibleCount: 8 } }),
+      place({ type: 'clock', landscape: [0.47, 0.78, 0.3, 0.14], portrait: [0.06, 0.89, 0.6, 0.08], settings: { visualStyle: 'serif', showDate: true } }),
+    ],
+  },
+  'studio-dashboard': {
+    background: { kind: 'gradient', from: '#0f1720', to: '#0a0d12', angle: 160 },
+    widgets: [
+      place({ type: 'clock', landscape: [0.04, 0.06, 0.28, 0.16], portrait: [0.06, 0.04, 0.88, 0.1], settings: { visualStyle: 'mono', showDate: true } }),
+      place({ type: 'generation-progress', landscape: [0.04, 0.28, 0.28, 0.22], portrait: [0.06, 0.16, 0.88, 0.12] }),
+      place({ type: 'calendar', landscape: [0.04, 0.56, 0.28, 0.38], portrait: [0.06, 0.3, 0.42, 0.2] }),
+      place({ type: 'generation-stats', landscape: [0.36, 0.06, 0.29, 0.42], portrait: [0.52, 0.3, 0.42, 0.2], settings: { days: 14 } }),
+      place({ type: 'llm-usage', landscape: [0.68, 0.06, 0.28, 0.42], portrait: [0.06, 0.52, 0.88, 0.2], settings: { days: 7 } }),
+      place({ type: 'library-stats', landscape: [0.36, 0.54, 0.6, 0.4], portrait: [0.06, 0.74, 0.88, 0.22], settings: { showRatings: true } }),
+    ],
+  },
+  'character-corner': {
+    background: { kind: 'gradient', from: '#251d33', to: '#0f0c14', angle: 150 },
+    widgets: [
+      place({ type: 'clock', landscape: [0.06, 0.1, 0.34, 0.2], portrait: [0.08, 0.06, 0.84, 0.12], settings: { visualStyle: 'glow', showDate: true } }),
+      place({ type: 'character-card', landscape: [0.06, 0.62, 0.3, 0.13], portrait: [0.08, 0.6, 0.84, 0.08] }),
+      place({ type: 'chat-recent', landscape: [0.06, 0.34, 0.3, 0.26], portrait: [0.08, 0.3, 0.84, 0.28] }),
+      place({ type: 'audio-player', landscape: [0.06, 0.8, 0.3, 0.1], portrait: [0.08, 0.72, 0.84, 0.06] }),
+      place({ type: 'recent-results', landscape: [0.55, 0.1, 0.39, 0.8], portrait: [0.08, 0.81, 0.84, 0.15], settings: { displayMode: 'stack', visibleCount: 5 } }),
+    ],
+  },
+  'minimal-clock': {
+    background: { ...WALLPAPER_DEFAULT_BACKGROUND },
+    widgets: [
+      place({ type: 'clock', landscape: [0.18, 0.3, 0.64, 0.3], portrait: [0.08, 0.3, 0.84, 0.16], settings: { visualStyle: 'clean', showDate: true }, style: { textAlign: 'center' } }),
+      place({ type: 'calendar', landscape: [0.78, 0.68, 0.18, 0.28], portrait: [0.3, 0.6, 0.4, 0.2] }),
+    ],
+  },
+}
+
+/** Build one starter layout for any canvas from fractional placements. */
+export function buildWallpaperTemplateLayout(templateId: WallpaperTemplateId, canvasPresetId: string, name: string, custom?: { width: number; height: number }): WallpaperLayoutPreset {
+  const canvas = getWallpaperCanvasPreset(canvasPresetId, custom)
   const isPortrait = canvas.height > canvas.width
   const now = new Date().toISOString()
-  const clock = createWallpaperWidgetInstance('clock', canvas, 0)
+  const template = TEMPLATE_PLACEMENTS[templateId] ?? TEMPLATE_PLACEMENTS['minimal-clock']
 
-  let widgets: WallpaperWidgetInstance[]
-  switch (templateId) {
-    case 'daily-focus': {
-      const note = createWallpaperWidgetInstance('text-note', canvas, 1)
-      widgets = [
-        withFrame({ ...clock, settings: { ...clock.settings, visualStyle: 'editorial', showSeconds: false, showDate: true } }, isPortrait
-          ? { x: 2, y: 6, w: 14, h: 6 }
-          : { x: 2, y: 4, w: 14, h: 5 }),
-        withFrame({ ...note, settings: { ...note.settings, text: 'Make something worth keeping.' } }, isPortrait
-          ? { x: 3, y: 13, w: 12, h: 4 }
-          : { x: 3, y: 10, w: 10, h: 3 }),
-      ]
-      break
-    }
-    case 'studio-status': {
-      const queue = createWallpaperWidgetInstance('queue-status', canvas, 1)
-      const recentResults = createWallpaperWidgetInstance('recent-results', canvas, 2)
-      widgets = isPortrait
-        ? [
-            withFrame({ ...clock, settings: { ...clock.settings, visualStyle: 'glass', showSeconds: false, showDate: true } }, { x: 2, y: 2, w: 14, h: 5 }),
-            withFrame(queue, { x: 2, y: 9, w: 14, h: 8 }),
-            withFrame(recentResults, { x: 2, y: 19, w: 14, h: 7 }),
-          ]
-        : [
-            withFrame({ ...clock, settings: { ...clock.settings, visualStyle: 'glass', showSeconds: false, showDate: true } }, { x: 1, y: 1, w: 10, h: 4 }),
-            withFrame(queue, { x: 1, y: 6, w: 10, h: 7 }),
-            withFrame(recentResults, { x: 13, y: 3, w: 10, h: 8 }),
-          ]
-      break
-    }
-    case 'recent-gallery': {
-      const gallery = createWallpaperWidgetInstance('recent-results', canvas, 1)
-      widgets = isPortrait
-        ? [
-            withFrame({ ...clock, settings: { ...clock.settings, visualStyle: 'clean', showSeconds: false, showDate: true } }, { x: 2, y: 2, w: 14, h: 4 }),
-            withFrame(gallery, { x: 1, y: 8, w: 16, h: 18 }),
-          ]
-        : [
-            withFrame({ ...clock, settings: { ...clock.settings, visualStyle: 'clean', showSeconds: false, showDate: true } }, { x: 1, y: 1, w: 9, h: 3 }),
-            withFrame(gallery, { x: 8, y: 2, w: 15, h: 11 }),
-          ]
-      break
-    }
-    case 'minimal-clock':
-    default:
-      widgets = [withFrame({ ...clock, settings: { ...clock.settings, visualStyle: 'clean', showSeconds: false, showDate: true } }, isPortrait
-        ? { x: 2, y: 10, w: 14, h: 6 }
-        : { x: 3, y: 5, w: 16, h: 5 })]
-      break
-  }
+  const widgets = template.widgets.map((placement, index) => {
+    const [fx, fy, fw, fh] = isPortrait ? placement.portrait : placement.landscape
+    const base = createWallpaperWidgetInstance(placement.type, canvas, index + 1)
+    return {
+      ...base,
+      x: Math.round(fx * canvas.width),
+      y: Math.round(fy * canvas.height),
+      w: Math.round(fw * canvas.width),
+      h: Math.round(fh * canvas.height),
+      style: { ...base.style, ...placement.style },
+      settings: { ...(base.settings as object), ...placement.settings },
+    } as unknown as WallpaperWidgetInstance
+  })
 
   return normalizeWallpaperLayoutPreset({
     id: 'wallpaper-layout-draft',
     name,
     canvasPresetId: canvas.id,
+    ...(canvas.id === 'custom' ? { canvasWidth: canvas.width, canvasHeight: canvas.height } : {}),
+    background: { ...template.background },
     widgets,
     createdAt: now,
     updatedAt: now,
-  }, canvas)
+  })
 }

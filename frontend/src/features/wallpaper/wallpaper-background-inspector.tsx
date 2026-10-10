@@ -1,0 +1,194 @@
+import { useState } from 'react'
+import { ImagePlus } from 'lucide-react'
+import { TextTabs } from '@/components/common/text-tabs'
+import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/select'
+import { ChatMediaPicker } from '@/features/codex-chat/chat-media-picker'
+import { useI18n } from '@/i18n'
+import { buildApiUrl } from '@/lib/api-client'
+import { listWallpaperCanvasPresets, WALLPAPER_CANVAS_MAX, WALLPAPER_CANVAS_MIN, WALLPAPER_CUSTOM_CANVAS_ID } from './wallpaper-canvas-presets'
+import {
+  InspectorColor,
+  InspectorHeading,
+  InspectorNumber,
+  InspectorRow,
+  InspectorSegments,
+  InspectorSlider,
+  InspectorSwitch,
+} from './wallpaper-inspector-controls'
+import { normalizeWallpaperBackground } from './wallpaper-layout-utils'
+import type { WallpaperInspectorGroupOption } from './wallpaper-widget-inspector-editors'
+import type { WallpaperBackground, WallpaperBackgroundFit, WallpaperBackgroundKind, WallpaperLayoutPreset } from './wallpaper-types'
+
+interface WallpaperBackgroundInspectorProps {
+  layout: WallpaperLayoutPreset
+  groups: WallpaperInspectorGroupOption[]
+  onChangeBackground: (background: WallpaperBackground, key: string) => void
+  onChangeCanvas: (canvasPresetId: string, custom?: { width: number; height: number }) => void
+  onChangeThemeMode: (themeMode: 'dark' | 'light' | undefined) => void
+}
+
+/** Shown while nothing is selected: the canvas, its theme and its background. */
+export function WallpaperBackgroundInspector({ layout, groups, onChangeBackground, onChangeCanvas, onChangeThemeMode }: WallpaperBackgroundInspectorProps) {
+  const { t } = useI18n()
+  const [isPickerOpen, setIsPickerOpen] = useState(false)
+  const background = layout.background
+  const overlay = { dim: background.dim ?? 0, blur: background.blur ?? 0, vignette: background.vignette ?? 0 }
+  const isCustom = layout.canvasPresetId === WALLPAPER_CUSTOM_CANVAS_ID
+
+  const patch = (next: Partial<WallpaperBackground>, field: string) => {
+    onChangeBackground(normalizeWallpaperBackground({ ...background, ...next }), `background.${field}`)
+  }
+  const switchKind = (kind: WallpaperBackgroundKind) => {
+    if (kind === background.kind) return
+    onChangeBackground(normalizeWallpaperBackground({ ...overlay, kind }), 'background.kind')
+  }
+  const fitSegments = (fit: WallpaperBackgroundFit) => (
+    <InspectorSegments
+      label={t({ ko: '채우기', en: 'Fit' })}
+      value={fit}
+      items={[
+        { value: 'cover', label: t({ ko: '채우기', en: 'Cover' }) },
+        { value: 'contain', label: t({ ko: '맞춤', en: 'Contain' }) },
+        { value: 'blur-fill', label: t({ ko: '흐림 여백', en: 'Blur fill' }) },
+      ]}
+      onChange={(value) => patch({ fit: value } as Partial<WallpaperBackground>, 'fit')}
+      stacked
+    />
+  )
+
+  return (
+    <div className="space-y-4">
+      <div className="text-base font-semibold">{t({ ko: '캔버스', en: 'Canvas' })}</div>
+      <div className="space-y-3">
+        <InspectorRow label={t({ ko: '크기', en: 'Size' })}>
+          <Select
+            value={layout.canvasPresetId}
+            onChange={(event) => onChangeCanvas(event.target.value, event.target.value === WALLPAPER_CUSTOM_CANVAS_ID ? { width: layout.canvasWidth ?? 1920, height: layout.canvasHeight ?? 1080 } : undefined)}
+          >
+            {listWallpaperCanvasPresets().map((preset) => (
+              <option key={preset.id} value={preset.id}>{preset.name} · {preset.aspectRatioLabel}</option>
+            ))}
+            <option value={WALLPAPER_CUSTOM_CANVAS_ID}>{t({ ko: '직접 입력', en: 'Custom' })}</option>
+          </Select>
+        </InspectorRow>
+        {isCustom ? (
+          <div className="grid grid-cols-2 gap-2">
+            <InspectorNumber label="W" value={layout.canvasWidth ?? 1920} min={WALLPAPER_CANVAS_MIN} max={WALLPAPER_CANVAS_MAX} onCommit={(width) => onChangeCanvas(WALLPAPER_CUSTOM_CANVAS_ID, { width, height: layout.canvasHeight ?? 1080 })} />
+            <InspectorNumber label="H" value={layout.canvasHeight ?? 1080} min={WALLPAPER_CANVAS_MIN} max={WALLPAPER_CANVAS_MAX} onCommit={(height) => onChangeCanvas(WALLPAPER_CUSTOM_CANVAS_ID, { width: layout.canvasWidth ?? 1920, height })} />
+          </div>
+        ) : null}
+        <InspectorSegments
+          label={t({ ko: '색 테마', en: 'Theme' })}
+          value={layout.themeMode ?? 'app'}
+          items={[
+            { value: 'app', label: t({ ko: '앱 설정', en: 'App' }) },
+            { value: 'dark', label: t({ ko: '다크', en: 'Dark' }) },
+            { value: 'light', label: t({ ko: '라이트', en: 'Light' }) },
+          ]}
+          onChange={(value) => onChangeThemeMode(value === 'app' ? undefined : value)}
+        />
+      </div>
+
+      <div className="text-base font-semibold">{t({ ko: '배경', en: 'Background' })}</div>
+      <TextTabs<WallpaperBackgroundKind>
+        value={background.kind}
+        onChange={switchKind}
+        ariaLabel={t({ ko: '배경 종류', en: 'Background kind' })}
+        items={[
+          { value: 'theme', label: t({ ko: '테마', en: 'Theme' }) },
+          { value: 'color', label: t({ ko: '단색', en: 'Color' }) },
+          { value: 'gradient', label: t({ ko: '그라데이션', en: 'Gradient' }) },
+          { value: 'image', label: t({ ko: '이미지', en: 'Image' }) },
+          { value: 'video', label: t({ ko: '영상', en: 'Video' }) },
+          { value: 'group-slideshow', label: t({ ko: '그룹 슬라이드', en: 'Group slides' }) },
+        ]}
+      />
+
+      <div className="space-y-3">
+        {background.kind === 'color' ? (
+          <InspectorColor label={t({ ko: '색', en: 'Color' })} value={background.color} fallback="#131313" onChange={(value) => patch({ color: value ?? '#131313' } as Partial<WallpaperBackground>, 'color')} />
+        ) : null}
+        {background.kind === 'gradient' ? (
+          <>
+            <InspectorColor label={t({ ko: '시작', en: 'From' })} value={background.from} fallback="#2d2340" onChange={(value) => patch({ from: value ?? '#2d2340' } as Partial<WallpaperBackground>, 'from')} />
+            <InspectorColor label={t({ ko: '끝', en: 'To' })} value={background.to} fallback="#141119" onChange={(value) => patch({ to: value ?? '#141119' } as Partial<WallpaperBackground>, 'to')} />
+            <InspectorSlider label={t({ ko: '각도', en: 'Angle' })} value={background.angle} min={0} max={360} unit="°" onChange={(value) => patch({ angle: value } as Partial<WallpaperBackground>, 'angle')} />
+          </>
+        ) : null}
+        {background.kind === 'image' || background.kind === 'video' ? (
+          <>
+            {background.compositeHash ? (
+              <Button type="button" variant="ghost" className="h-auto w-full overflow-hidden rounded-md p-0" onClick={() => setIsPickerOpen(true)}>
+                <img src={buildApiUrl(`/api/images/${background.compositeHash}/thumbnail`)} alt="" className="aspect-video w-full object-cover" />
+              </Button>
+            ) : (
+              <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setIsPickerOpen(true)}>
+                <ImagePlus className="size-4" />
+                {background.kind === 'video' ? t({ ko: '라이브러리에서 영상 고르기', en: 'Pick a video from the library' }) : t({ ko: '라이브러리에서 이미지 고르기', en: 'Pick an image from the library' })}
+              </Button>
+            )}
+            {fitSegments(background.fit)}
+          </>
+        ) : null}
+        {background.kind === 'group-slideshow' ? (
+          <>
+            <InspectorRow label={t({ ko: '그룹', en: 'Group' })}>
+              <Select value={background.groupId !== null ? String(background.groupId) : ''} onChange={(event) => patch({ groupId: event.target.value ? Number(event.target.value) : null } as Partial<WallpaperBackground>, 'groupId')}>
+                <option value="">{t({ ko: '그룹 선택', en: 'Select group' })}</option>
+                {groups.map((group) => <option key={group.id} value={group.id}>{`${'　'.repeat(group.depth ?? 0)}${group.name}`}</option>)}
+              </Select>
+            </InspectorRow>
+            <InspectorSwitch label={t({ ko: '하위 그룹 포함', en: 'Include child groups' })} checked={background.includeChildren} onChange={(checked) => patch({ includeChildren: checked } as Partial<WallpaperBackground>, 'includeChildren')} />
+            <InspectorRow label={t({ ko: '간격', en: 'Interval' })}>
+              <Select value={String(background.intervalSec)} onChange={(event) => patch({ intervalSec: Number(event.target.value) } as Partial<WallpaperBackground>, 'intervalSec')}>
+                {[30, 60, 180, 300, 600, 1800, 3600].map((seconds) => (
+                  <option key={seconds} value={seconds}>{seconds < 60 ? t({ ko: '{n}초', en: '{n}s' }, { n: seconds }) : t({ ko: '{n}분', en: '{n} min' }, { n: seconds / 60 })}</option>
+                ))}
+              </Select>
+            </InspectorRow>
+            <InspectorSegments
+              label={t({ ko: '전환', en: 'Transition' })}
+              value={background.transition}
+              items={[
+                { value: 'fade', label: t({ ko: '페이드', en: 'Fade' }) },
+                { value: 'zoom', label: t({ ko: '줌', en: 'Zoom' }) },
+                { value: 'slide', label: t({ ko: '슬라이드', en: 'Slide' }) },
+              ]}
+              onChange={(value) => patch({ transition: value } as Partial<WallpaperBackground>, 'transition')}
+            />
+            {fitSegments(background.fit)}
+          </>
+        ) : null}
+
+        {background.kind !== 'theme' ? (
+          <>
+            <InspectorHeading>{t({ ko: '오버레이', en: 'Overlay' })}</InspectorHeading>
+            <InspectorSlider label={t({ ko: '어둡게', en: 'Dim' })} value={overlay.dim} min={0} max={80} unit="%" onChange={(value) => patch({ dim: value }, 'dim')} />
+            {background.kind !== 'color' && background.kind !== 'gradient' ? (
+              <InspectorSlider label={t({ ko: '흐림', en: 'Blur' })} value={overlay.blur} min={0} max={24} unit="px" onChange={(value) => patch({ blur: value }, 'blur')} />
+            ) : null}
+            <InspectorSlider label={t({ ko: '비네팅', en: 'Vignette' })} value={overlay.vignette} min={0} max={100} unit="%" onChange={(value) => patch({ vignette: value }, 'vignette')} />
+          </>
+        ) : null}
+      </div>
+
+      {isPickerOpen && (background.kind === 'image' || background.kind === 'video') ? (
+        <ChatMediaPicker
+          initial={[]}
+          maxCount={1}
+          imagesOnly={background.kind === 'image'}
+          videosOnly={background.kind === 'video'}
+          title={background.kind === 'video' ? t({ ko: '배경 영상', en: 'Background video' }) : t({ ko: '배경 이미지', en: 'Background image' })}
+          applyLabel={t({ ko: '적용', en: 'Apply' })}
+          note={null}
+          onClose={() => setIsPickerOpen(false)}
+          onPick={(items) => {
+            setIsPickerOpen(false)
+            if (items[0]) patch({ compositeHash: items[0].compositeHash } as Partial<WallpaperBackground>, 'compositeHash')
+          }}
+        />
+      ) : null}
+    </div>
+  )
+}

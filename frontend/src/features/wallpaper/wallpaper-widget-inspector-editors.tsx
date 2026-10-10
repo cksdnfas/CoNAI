@@ -1,111 +1,321 @@
-import { Switch } from '@/components/ui/switch'
+import { useMemo } from 'react'
+import { useQueries, useQuery } from '@tanstack/react-query'
+import { Field } from '@/components/ui/field'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { Field } from '@/components/ui/field'
-import { ToggleRow } from '@/components/ui/toggle-row'
+import { useI18n } from '@/i18n'
+import { listAudioGroups, listAudioProjects } from '@/lib/api-audio'
 import {
-  WallpaperInspectorSectionCard,
+  InspectorHeading,
+  InspectorRow,
+  InspectorSegments,
+  InspectorSlider,
+  InspectorSwitch,
+} from './wallpaper-inspector-controls'
+import {
+  WallpaperPreviewCloseAnimationEditorField,
+  WallpaperPreviewOpenAnimationEditorField,
+  WallpaperInspectorDisclosure,
   type WallpaperWidgetSettingsPatchUpdater,
 } from './wallpaper-widget-inspector-editor-shared'
 import { WallpaperImageWidgetEditorFields } from './wallpaper-widget-inspector-image-editor-fields'
 import { WallpaperStatusWidgetEditorFields } from './wallpaper-widget-inspector-status-editor-fields'
-import { useI18n } from '@/i18n'
-import type { WallpaperWidgetInstance } from './wallpaper-types'
+import { normalizeWallpaperClockStyle } from './wallpaper-clock-widget-body'
+import { isWallpaperGroupSourceWidget, isWallpaperPreviewableImageWidget, type WallpaperWidgetInstance } from './wallpaper-types'
+import { useWallpaperChatProfiles } from './wallpaper-widget-data'
+
+export interface WallpaperInspectorGroupOption {
+  id: number
+  name: string
+  depth?: number | null
+}
 
 interface WallpaperWidgetTypeEditorFieldsProps {
   selectedWidget: WallpaperWidgetInstance
+  groups: WallpaperInspectorGroupOption[]
   updateWidgetSettings: WallpaperWidgetSettingsPatchUpdater
 }
 
-/** Render widget-specific editor fields while keeping the main inspector focused on shared controls. */
-export function WallpaperWidgetTypeEditorFields({ selectedWidget, updateWidgetSettings }: WallpaperWidgetTypeEditorFieldsProps) {
+const DAY_OPTIONS = [1, 7, 14, 30, 90]
+
+function ServiceSelect({ value, onChange }: { value: string; onChange: (value: 'all' | 'novelai' | 'comfyui' | 'codex') => void }) {
   const { t } = useI18n()
+  return (
+    <Select value={value} onChange={(event) => {
+      const next = event.target.value
+      onChange(next === 'novelai' || next === 'comfyui' || next === 'codex' ? next : 'all')
+    }}>
+      <option value="all">{t({ ko: '전체', en: 'All' })}</option>
+      <option value="novelai">NovelAI</option>
+      <option value="comfyui">ComfyUI</option>
+      <option value="codex">Codex</option>
+    </Select>
+  )
+}
 
-  switch (selectedWidget.type) {
-    case 'clock':
-      return (
-        <WallpaperInspectorSectionCard title={t({ ko: '시계', en: 'Clock' })}>
-          <Field label={t({ ko: '스타일', en: 'Style' })}>
-            <Select
-              value={selectedWidget.settings.visualStyle === 'glow'
-                ? 'glass'
-                : selectedWidget.settings.visualStyle === 'split'
-                  ? 'editorial'
-                  : selectedWidget.settings.visualStyle === 'minimal'
-                    ? 'clean'
-                    : selectedWidget.settings.visualStyle ?? 'clean'}
-              onChange={(event) => {
-                updateWidgetSettings({
-                  visualStyle: event.target.value === 'glass' ? 'glass' : event.target.value === 'editorial' ? 'editorial' : 'clean',
-                })
-              }}
-            >
-              <option value="clean">{t({ ko: '클린', en: 'Clean' })}</option>
-              <option value="glass">{t({ ko: '글래스', en: 'Glass' })}</option>
-              <option value="editorial">{t({ ko: '에디토리얼', en: 'Editorial' })}</option>
-            </Select>
-          </Field>
-          <Field label={t({ ko: '시간 형식', en: 'Time format' })}>
-            <Select
-              value={selectedWidget.settings.timeFormat}
-              onChange={(event) => {
-                updateWidgetSettings({
-                  timeFormat: event.target.value === '12h' ? '12h' : '24h',
-                })
-              }}
-            >
-              <option value="24h">24h</option>
-              <option value="12h">12h</option>
-            </Select>
-          </Field>
-          <ToggleRow>
-            <span className="flex-1">{t({ ko: '초 표시', en: 'Show seconds' })}</span>
-            <Switch
-              checked={selectedWidget.settings.showSeconds}
-              onCheckedChange={(checked) => {
-                updateWidgetSettings({ showSeconds: checked })
-              }}
-            />
-          </ToggleRow>
-          <ToggleRow>
-            <span className="flex-1">{t({ ko: '날짜 표시', en: 'Show date' })}</span>
-            <Switch
-              checked={selectedWidget.settings.showDate !== false}
-              onCheckedChange={(checked) => {
-                updateWidgetSettings({ showDate: checked })
-              }}
-            />
-          </ToggleRow>
-        </WallpaperInspectorSectionCard>
-      )
+function DaysSelect({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  const { t } = useI18n()
+  return (
+    <Select value={String(value)} onChange={(event) => onChange(Number(event.target.value))}>
+      {DAY_OPTIONS.map((days) => (
+        <option key={days} value={days}>{days === 1 ? t({ ko: '오늘', en: 'Today' }) : t({ ko: '{days}일', en: '{days} days' }, { days })}</option>
+      ))}
+    </Select>
+  )
+}
 
-    case 'text-note':
-      return (
-        <WallpaperInspectorSectionCard title={t({ ko: '내용', en: 'Content' })}>
-          <Field label={t({ ko: '내용', en: 'Content' })}>
-            <Textarea
-              variant="settings"
-              rows={4}
-              value={selectedWidget.settings.text}
-              onChange={(event) => {
-                updateWidgetSettings({ text: event.target.value })
-              }}
-            />
-          </Field>
-        </WallpaperInspectorSectionCard>
-      )
+function CharacterSelect({ value, allowLatest, onChange }: { value: number | null; allowLatest: boolean; onChange: (value: number | null) => void }) {
+  const { t } = useI18n()
+  const profilesQuery = useWallpaperChatProfiles()
+  return (
+    <Select value={value === null ? '' : String(value)} onChange={(event) => onChange(event.target.value ? Number(event.target.value) : null)}>
+      <option value="">{allowLatest ? t({ ko: '가장 최근 대화', en: 'Latest chat' }) : t({ ko: '최근 대화의 캐릭터', en: 'Latest chat’s character' })}</option>
+      {(profilesQuery.data ?? []).map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
+    </Select>
+  )
+}
 
-    case 'queue-status':
-    case 'recent-results':
-    case 'activity-pulse':
-      return <WallpaperStatusWidgetEditorFields selectedWidget={selectedWidget} updateWidgetSettings={updateWidgetSettings} />
+/** Every audio group of every project, grouped by project. */
+function AudioGroupSelect({ value, onChange }: { value: string | null; onChange: (value: string | null) => void }) {
+  const { t } = useI18n()
+  const projectsQuery = useQuery({ queryKey: ['wallpaper-editor', 'audio-projects'], queryFn: listAudioProjects, staleTime: 60_000 })
+  const projects = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data])
+  const groupQueries = useQueries({
+    queries: projects.map((project) => ({
+      queryKey: ['wallpaper-editor', 'audio-groups', project.id],
+      queryFn: () => listAudioGroups(project.id),
+      staleTime: 60_000,
+    })),
+  })
+  return (
+    <Select value={value ?? ''} onChange={(event) => onChange(event.target.value || null)}>
+      <option value="">{t({ ko: '오디오 그룹 선택', en: 'Select an audio group' })}</option>
+      {projects.map((project, index) => (
+        <optgroup key={project.id} label={project.name}>
+          {(groupQueries[index]?.data ?? []).map((group) => <option key={group.id} value={group.id}>{group.label || group.name}</option>)}
+        </optgroup>
+      ))}
+    </Select>
+  )
+}
 
-    case 'group-image-view':
-    case 'image-showcase':
-    case 'floating-collage':
-      return <WallpaperImageWidgetEditorFields selectedWidget={selectedWidget} updateWidgetSettings={updateWidgetSettings} />
+function GroupSourceFields({ widget, groups, updateWidgetSettings }: {
+  widget: Extract<WallpaperWidgetInstance, { type: 'group-image-view' | 'image-showcase' | 'floating-collage' }>
+  groups: WallpaperInspectorGroupOption[]
+  updateWidgetSettings: WallpaperWidgetSettingsPatchUpdater
+}) {
+  const { t } = useI18n()
+  return (
+    <>
+      <Field label={t({ ko: '그룹', en: 'Group' })}>
+        <Select
+          value={widget.settings.groupId !== null ? String(widget.settings.groupId) : ''}
+          onChange={(event) => updateWidgetSettings({ groupId: event.target.value ? Number(event.target.value) : null })}
+        >
+          <option value="">{t({ ko: '그룹 선택', en: 'Select group' })}</option>
+          {groups.map((group) => (
+            <option key={group.id} value={group.id}>{`${'　'.repeat(group.depth ?? 0)}${group.name}`}</option>
+          ))}
+        </Select>
+      </Field>
+      <InspectorSwitch label={t({ ko: '하위 그룹 포함', en: 'Include child groups' })} checked={widget.settings.includeChildren !== false} onChange={(checked) => updateWidgetSettings({ includeChildren: checked })} />
+      <InspectorRow label={t({ ko: '이미지 풀', en: 'Image pool' })}>
+        <Select value={String(widget.settings.poolRefreshMinutes ?? 0)} onChange={(event) => updateWidgetSettings({ poolRefreshMinutes: Number(event.target.value) })}>
+          <option value="0">{t({ ko: '처음 뽑은 그대로', en: 'Keep the first draw' })}</option>
+          {[5, 10, 30, 60, 180].map((minutes) => (
+            <option key={minutes} value={minutes}>{t({ ko: '{minutes}분마다 새로 뽑기', en: 'Redraw every {minutes} min' }, { minutes })}</option>
+          ))}
+        </Select>
+      </InspectorRow>
+    </>
+  )
+}
 
-    default:
-      return null
-  }
+function ImagePreviewFields({ widget, updateWidgetSettings }: { widget: WallpaperWidgetInstance; updateWidgetSettings: WallpaperWidgetSettingsPatchUpdater }) {
+  const { t } = useI18n()
+  if (!isWallpaperPreviewableImageWidget(widget)) return null
+  return (
+    <WallpaperInspectorDisclosure title={t({ ko: '클릭 미리보기', en: 'Click preview' })}>
+      <Field label={t({ ko: '이미지 클릭', en: 'Image click' })}>
+        <Select value={widget.settings.imageClickAction ?? 'preview'} onChange={(event) => updateWidgetSettings({ imageClickAction: event.target.value === 'none' ? 'none' : 'preview' })}>
+          <option value="preview">{t({ ko: '확대 미리보기', en: 'Open preview' })}</option>
+          <option value="none">{t({ ko: '동작 없음', en: 'No action' })}</option>
+        </Select>
+      </Field>
+      {widget.type === 'group-image-view' || widget.type === 'image-showcase' ? (
+        <InspectorSwitch label={t({ ko: '호버 시 일시정지', en: 'Pause on hover' })} checked={widget.settings.pauseOnHover !== false} onChange={(checked) => updateWidgetSettings({ pauseOnHover: checked })} />
+      ) : null}
+      <WallpaperPreviewOpenAnimationEditorField
+        scalePercent={widget.settings.imagePreviewOpenScalePercent}
+        durationMs={widget.settings.imagePreviewOpenDurationMs}
+        easing={widget.settings.imagePreviewOpenEasing}
+        onScalePercentChange={(value) => updateWidgetSettings({ imagePreviewOpenScalePercent: value })}
+        onDurationMsChange={(value) => updateWidgetSettings({ imagePreviewOpenDurationMs: value })}
+        onEasingChange={(value) => updateWidgetSettings({ imagePreviewOpenEasing: value })}
+      />
+      <WallpaperPreviewCloseAnimationEditorField
+        scalePercent={widget.settings.imagePreviewCloseScalePercent}
+        durationMs={widget.settings.imagePreviewCloseDurationMs}
+        easing={widget.settings.imagePreviewCloseEasing}
+        onScalePercentChange={(value) => updateWidgetSettings({ imagePreviewCloseScalePercent: value })}
+        onDurationMsChange={(value) => updateWidgetSettings({ imagePreviewCloseDurationMs: value })}
+        onEasingChange={(value) => updateWidgetSettings({ imagePreviewCloseEasing: value })}
+      />
+    </WallpaperInspectorDisclosure>
+  )
+}
+
+/** The widget's own tab: what it shows and where its data comes from. */
+export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, updateWidgetSettings }: WallpaperWidgetTypeEditorFieldsProps) {
+  const { t } = useI18n()
+  const widget = selectedWidget
+
+  const body = (() => {
+    switch (widget.type) {
+      case 'clock':
+        return (
+          <>
+            <InspectorRow label={t({ ko: '모양', en: 'Look' })}>
+              <Select value={normalizeWallpaperClockStyle(widget.settings.visualStyle)} onChange={(event) => updateWidgetSettings({ visualStyle: event.target.value as typeof widget.settings.visualStyle })}>
+                <option value="clean">{t({ ko: '클린', en: 'Clean' })}</option>
+                <option value="serif">{t({ ko: '세리프', en: 'Serif' })}</option>
+                <option value="glow">{t({ ko: '글로우', en: 'Glow' })}</option>
+                <option value="split">{t({ ko: '분할', en: 'Split' })}</option>
+                <option value="analog">{t({ ko: '아날로그', en: 'Analog' })}</option>
+                <option value="mono">{t({ ko: '모노', en: 'Mono' })}</option>
+              </Select>
+            </InspectorRow>
+            <InspectorSegments label={t({ ko: '형식', en: 'Format' })} value={widget.settings.timeFormat} items={[{ value: '24h', label: '24h' }, { value: '12h', label: '12h' }]} onChange={(value) => updateWidgetSettings({ timeFormat: value })} />
+            <InspectorSwitch label={t({ ko: '초', en: 'Seconds' })} checked={widget.settings.showSeconds} onChange={(checked) => updateWidgetSettings({ showSeconds: checked })} />
+            <InspectorSwitch label={t({ ko: '날짜', en: 'Date' })} checked={widget.settings.showDate !== false} onChange={(checked) => updateWidgetSettings({ showDate: checked })} />
+          </>
+        )
+      case 'calendar':
+        return (
+          <>
+            <InspectorSegments label={t({ ko: '주 시작', en: 'Week starts' })} value={widget.settings.weekStart} items={[{ value: 'sun', label: t({ ko: '일요일', en: 'Sunday' }) }, { value: 'mon', label: t({ ko: '월요일', en: 'Monday' }) }]} onChange={(value) => updateWidgetSettings({ weekStart: value })} />
+            <InspectorSwitch label={t({ ko: '앞뒤 달 날짜', en: 'Days of other months' })} checked={widget.settings.showOutsideDays} onChange={(checked) => updateWidgetSettings({ showOutsideDays: checked })} />
+          </>
+        )
+      case 'text-note':
+        return (
+          <>
+            <Textarea variant="settings" rows={4} aria-label={t({ ko: '내용', en: 'Text' })} value={widget.settings.text} onChange={(event) => updateWidgetSettings({ text: event.target.value })} />
+            <InspectorSlider label={t({ ko: '크기', en: 'Size' })} value={widget.settings.fontSize || 40} min={10} max={240} onChange={(value) => updateWidgetSettings({ fontSize: value })} />
+          </>
+        )
+      case 'generation-progress':
+        return (
+          <>
+            <InspectorRow label={t({ ko: '서비스', en: 'Service' })}><ServiceSelect value={widget.settings.service} onChange={(value) => updateWidgetSettings({ service: value })} /></InspectorRow>
+            <InspectorSlider label={t({ ko: '작업 수', en: 'Jobs' })} value={widget.settings.maxJobs} min={1} max={8} onChange={(value) => updateWidgetSettings({ maxJobs: value })} />
+            <InspectorSwitch label={t({ ko: '노드 이름', en: 'Node name' })} checked={widget.settings.showNodeLabel} onChange={(checked) => updateWidgetSettings({ showNodeLabel: checked })} />
+            <InspectorSwitch label={t({ ko: '실행 · 대기 수', en: 'Running · queued' })} checked={widget.settings.showQueueCounts} onChange={(checked) => updateWidgetSettings({ showQueueCounts: checked })} />
+          </>
+        )
+      case 'generation-stats':
+        return (
+          <>
+            <InspectorRow label={t({ ko: '기간', en: 'Period' })}><DaysSelect value={widget.settings.days} onChange={(value) => updateWidgetSettings({ days: value })} /></InspectorRow>
+            <InspectorSegments label={t({ ko: '표시', en: 'Show' })} value={widget.settings.display} items={[{ value: 'bars', label: t({ ko: '막대', en: 'Bars' }) }, { value: 'numbers', label: t({ ko: '숫자', en: 'Numbers' }) }]} onChange={(value) => updateWidgetSettings({ display: value })} />
+          </>
+        )
+      case 'llm-usage':
+        return (
+          <>
+            <InspectorRow label={t({ ko: '기간', en: 'Period' })}><DaysSelect value={widget.settings.days} onChange={(value) => updateWidgetSettings({ days: value })} /></InspectorRow>
+            <InspectorSegments label={t({ ko: '기준', en: 'Measure' })} value={widget.settings.metric} items={[{ value: 'tokens', label: t({ ko: '토큰', en: 'Tokens' }) }, { value: 'requests', label: t({ ko: '요청', en: 'Requests' }) }]} onChange={(value) => updateWidgetSettings({ metric: value })} />
+            <InspectorSwitch label={t({ ko: '모델별', en: 'By model' })} checked={widget.settings.showModels} onChange={(checked) => updateWidgetSettings({ showModels: checked })} />
+          </>
+        )
+      case 'library-stats':
+        return (
+          <>
+            <InspectorSwitch label={t({ ko: '상위 태그', en: 'Top tags' })} checked={widget.settings.showTopTags} onChange={(checked) => updateWidgetSettings({ showTopTags: checked })} />
+            {widget.settings.showTopTags ? <InspectorSlider label={t({ ko: '태그 수', en: 'Tags' })} value={widget.settings.tagCount} min={1} max={20} onChange={(value) => updateWidgetSettings({ tagCount: value })} /> : null}
+            <InspectorSwitch label={t({ ko: '등급 분포', en: 'Ratings' })} checked={widget.settings.showRatings} onChange={(checked) => updateWidgetSettings({ showRatings: checked })} />
+          </>
+        )
+      case 'character-card':
+        return (
+          <>
+            <InspectorRow label={t({ ko: '캐릭터', en: 'Character' })}><CharacterSelect value={widget.settings.profileId} allowLatest={false} onChange={(value) => updateWidgetSettings({ profileId: value })} /></InspectorRow>
+            <InspectorSwitch label={t({ ko: '아바타', en: 'Avatar' })} checked={widget.settings.showAvatar} onChange={(checked) => updateWidgetSettings({ showAvatar: checked })} />
+            <InspectorSwitch label={t({ ko: '마지막 메시지', en: 'Last message' })} checked={widget.settings.showLastMessage} onChange={(checked) => updateWidgetSettings({ showLastMessage: checked })} />
+            <InspectorSwitch label={t({ ko: '입력 중 표시', en: 'Typing indicator' })} checked={widget.settings.showTyping} onChange={(checked) => updateWidgetSettings({ showTyping: checked })} />
+            <InspectorSwitch label={t({ ko: '안 읽은 수', en: 'Unread count' })} checked={widget.settings.showUnread} onChange={(checked) => updateWidgetSettings({ showUnread: checked })} />
+            <InspectorSwitch label={t({ ko: '캐릭터 배경', en: 'Character background' })} checked={widget.settings.showCharacterBackground} onChange={(checked) => updateWidgetSettings({ showCharacterBackground: checked })} />
+            {widget.settings.showLastMessage ? (
+              <InspectorSegments
+                label={t({ ko: '메시지 길이', en: 'Message length' })}
+                value={String(widget.settings.messageLines)}
+                items={[{ value: '1', label: t({ ko: '한 줄', en: '1 line' }) }, { value: '3', label: t({ ko: '세 줄', en: '3 lines' }) }, { value: '0', label: t({ ko: '전체', en: 'All' }) }]}
+                onChange={(value) => updateWidgetSettings({ messageLines: Number(value) as 0 | 1 | 3 })}
+              />
+            ) : null}
+          </>
+        )
+      case 'chat-recent':
+        return (
+          <>
+            <InspectorRow label={t({ ko: '대화', en: 'Chat' })}><CharacterSelect value={widget.settings.profileId} allowLatest onChange={(value) => updateWidgetSettings({ profileId: value })} /></InspectorRow>
+            <InspectorSlider label={t({ ko: '메시지 수', en: 'Messages' })} value={widget.settings.messageCount} min={1} max={12} onChange={(value) => updateWidgetSettings({ messageCount: value })} />
+          </>
+        )
+      case 'audio-player':
+        return (
+          <>
+            <InspectorRow label={t({ ko: '그룹', en: 'Group' })}><AudioGroupSelect value={widget.settings.audioGroupId} onChange={(value) => updateWidgetSettings({ audioGroupId: value })} /></InspectorRow>
+            <InspectorSwitch label={t({ ko: '자동 재생', en: 'Autoplay' })} checked={widget.settings.autoplay} onChange={(checked) => updateWidgetSettings({ autoplay: checked })} />
+            <InspectorSwitch label={t({ ko: '섞기', en: 'Shuffle' })} checked={widget.settings.shuffle} onChange={(checked) => updateWidgetSettings({ shuffle: checked })} />
+            <InspectorSlider label={t({ ko: '음량', en: 'Volume' })} value={widget.settings.volume} min={0} max={100} unit="%" onChange={(value) => updateWidgetSettings({ volume: value })} />
+          </>
+        )
+      case 'post-ticker':
+        return (
+          <>
+            <InspectorSlider label={t({ ko: '글 수', en: 'Posts' })} value={widget.settings.count} min={1} max={10} onChange={(value) => updateWidgetSettings({ count: value })} />
+            <InspectorSwitch label={t({ ko: '대표 이미지', en: 'Cover image' })} checked={widget.settings.showCover} onChange={(checked) => updateWidgetSettings({ showCover: checked })} />
+          </>
+        )
+      case 'prompt-of-day':
+        return (
+          <>
+            <Textarea variant="settings" rows={3} aria-label={t({ ko: '템플릿', en: 'Template' })} placeholder="__character__, __scene__, __light__" value={widget.settings.template} onChange={(event) => updateWidgetSettings({ template: event.target.value })} />
+            <InspectorRow label={t({ ko: '다시 뽑기', en: 'Reroll' })}>
+              <Select value={String(widget.settings.rerollMinutes)} onChange={(event) => updateWidgetSettings({ rerollMinutes: Number(event.target.value) })}>
+                <option value="0">{t({ ko: '안 함', en: 'Never' })}</option>
+                {[10, 30, 60, 180, 1440].map((minutes) => (
+                  <option key={minutes} value={minutes}>{minutes >= 60 ? t({ ko: '{hours}시간마다', en: 'Every {hours} h' }, { hours: minutes / 60 }) : t({ ko: '{minutes}분마다', en: 'Every {minutes} min' }, { minutes })}</option>
+                ))}
+              </Select>
+            </InspectorRow>
+            <InspectorSegments label={t({ ko: '글꼴', en: 'Typeface' })} value={widget.settings.typeface} items={[{ value: 'serif', label: t({ ko: '세리프', en: 'Serif' }) }, { value: 'sans', label: t({ ko: '고딕', en: 'Sans' }) }]} onChange={(value) => updateWidgetSettings({ typeface: value })} />
+          </>
+        )
+      case 'queue-status':
+      case 'recent-results':
+      case 'activity-pulse':
+        return <WallpaperStatusWidgetEditorFields selectedWidget={widget} updateWidgetSettings={updateWidgetSettings} />
+      case 'group-image-view':
+      case 'image-showcase':
+      case 'floating-collage':
+        return <WallpaperImageWidgetEditorFields selectedWidget={widget} updateWidgetSettings={updateWidgetSettings} />
+      default:
+        return null
+    }
+  })()
+
+  return (
+    <div className="space-y-3">
+      {isWallpaperGroupSourceWidget(widget) ? (
+        <>
+          <GroupSourceFields widget={widget} groups={groups} updateWidgetSettings={updateWidgetSettings} />
+          <InspectorHeading>{t({ ko: '표시', en: 'Display' })}</InspectorHeading>
+        </>
+      ) : null}
+      {body}
+      <ImagePreviewFields widget={widget} updateWidgetSettings={updateWidgetSettings} />
+    </div>
+  )
 }

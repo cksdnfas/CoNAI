@@ -1,12 +1,35 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ClipboardCopy, Copy, ExternalLink, Eye, EyeOff, FoldHorizontal, FoldVertical, GripVertical, HelpCircle, LayoutTemplate, Lock, MoreHorizontal, Plus, Redo2, Save, Trash2, Undo2, UnfoldHorizontal, UnfoldVertical } from 'lucide-react'
+import {
+  AlignCenterVertical,
+  AlignStartHorizontal,
+  AlignStartVertical,
+  BringToFront,
+  ClipboardCopy,
+  Copy,
+  CopyPlus,
+  ExternalLink,
+  Eye,
+  LayoutTemplate,
+  Lock,
+  LockOpen,
+  Magnet,
+  MonitorPlay,
+  MoreHorizontal,
+  Plus,
+  Redo2,
+  Save,
+  SendToBack,
+  Trash2,
+  Undo2,
+  ZoomIn,
+  ZoomOut,
+} from 'lucide-react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { Button } from '@/components/ui/button'
-import { RowGroup } from '@/components/ui/row-group'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -14,14 +37,14 @@ import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { getGroupsHierarchyAll } from '@/lib/api-groups'
-import { getWallpaperRuntimeSettings } from '@/lib/api-settings-appearance'
-import { updateAppearanceSettings } from '@/lib/api-settings-appearance'
+import { getWallpaperRuntimeSettings, updateAppearanceSettings } from '@/lib/api-settings-appearance'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { WALLPAPER_WIDGET_TYPES } from '@conai/shared'
-import { getWallpaperCanvasPreset, listWallpaperCanvasPresets } from './wallpaper-canvas-presets'
+import { listWallpaperCanvasPresets, WALLPAPER_CUSTOM_CANVAS_ID } from './wallpaper-canvas-presets'
 import {
+  alignWallpaperWidgets,
   appendWallpaperWidget,
   buildWallpaperDraftRuntimePath,
   buildWallpaperLayoutDraft,
@@ -30,75 +53,76 @@ import {
   clampWallpaperWidgetInstance,
   cloneWallpaperPresetToDraft,
   deleteWallpaperLayoutPreset,
+  distributeWallpaperWidgets,
+  duplicateWallpaperWidgets,
   loadWallpaperActivePresetId,
-  getWallpaperWidgetsFrontToBack,
   loadWallpaperLayoutDraft,
   loadWallpaperLayoutPresets,
-  moveWallpaperWidgetToOrder,
   normalizeWallpaperLayoutPreset,
+  nudgeWallpaperWidgets,
+  pasteWallpaperWidgets,
+  removeWallpaperWidgets,
   reorderWallpaperWidgets,
+  resizeWallpaperLayoutCanvas,
   saveWallpaperActivePresetId,
   saveWallpaperLayoutDraft,
   saveWallpaperLayoutPresets,
+  setWallpaperWidgetFrames,
+  stackWallpaperWidgets,
+  toWallpaperLayoutPresetViewModels,
+  toWallpaperLayoutPresetWireModel,
+  toWallpaperLayoutPresetWireModels,
   upsertWallpaperLayoutPreset,
 } from './wallpaper-layout-utils'
-import { WallpaperCanvasView } from './wallpaper-shared'
-import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
-import {
-  toWallpaperLayoutPresetViewModels,
-  toWallpaperLayoutPresetWireModels,
-  type WallpaperLayoutPreset,
-  type WallpaperWidgetInstance,
-  type WallpaperWidgetType,
-} from './wallpaper-types'
-import { WallpaperWidgetInspector } from './wallpaper-widget-inspector'
-import { WallpaperWidgetLibrarySidebar } from './wallpaper-widget-library-sidebar'
-import { getWallpaperWidgetDisplayTitle } from './wallpaper-widget-registry'
-import { WallpaperLivelyHelpModal } from './wallpaper-lively-help-modal'
+import { getWallpaperLayoutCanvas } from './wallpaper-canvas-presets'
+import type { WallpaperLayoutPreset, WallpaperWidgetInstance, WallpaperWidgetType } from './wallpaper-types'
+import { WALLPAPER_WIDGET_TYPE_SET } from './wallpaper-types'
+import { WallpaperWidgetInspector, type WallpaperWidgetPatch } from './wallpaper-widget-inspector'
+import { WallpaperBackgroundInspector } from './wallpaper-background-inspector'
+import { WALLPAPER_WIDGET_DRAG_TYPE, WallpaperWidgetLibrarySidebar } from './wallpaper-widget-library-sidebar'
+import { WallpaperLivelyConnectModal } from './wallpaper-lively-connect-modal'
 import { WallpaperTemplateModal } from './wallpaper-template-modal'
+import { WallpaperStage, type WallpaperStageZoom } from './wallpaper-stage'
 import { useUndoableState } from './use-undoable-state'
 import { useWallpaperLeaveGuard } from './use-wallpaper-leave-guard'
+import { useWallpaperTheme } from './use-wallpaper-theme'
 import { buildWallpaperTemplateLayout, type WallpaperTemplateDefinition } from './wallpaper-templates'
+import { WallpaperDataEnvironmentContext } from './wallpaper-widget-data'
 
-interface WallpaperWidgetInstancePatch {
-  x?: number
-  y?: number
-  w?: number
-  h?: number
-  zIndex?: number
-  locked?: boolean
-  hidden?: boolean
-  settings?: WallpaperWidgetInstance['settings']
+const ZOOM_STEPS = [0.1, 0.15, 0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2]
+const SNAP_STORAGE_KEY = 'conai.wallpaper.snap'
+const EDITOR_ENVIRONMENT = { mode: 'editor' as const, live: false }
+
+function readSnapPreference() {
+  try {
+    return window.localStorage.getItem(SNAP_STORAGE_KEY) !== 'off'
+  } catch {
+    return true
+  }
 }
 
-/** Update one selected widget with a frame patch while keeping it inside the grid. */
-function patchSelectedWidget(layoutPreset: WallpaperLayoutPreset, widgetId: string | null, patch: WallpaperWidgetInstancePatch) {
-  if (!widgetId) {
-    return layoutPreset
+/** Apply one inspector patch to a widget, merging style and settings and keeping it on the canvas. */
+function patchWidget(layout: WallpaperLayoutPreset, widgetId: string, patch: WallpaperWidgetPatch): WallpaperLayoutPreset {
+  const canvas = getWallpaperLayoutCanvas(layout)
+  return {
+    ...layout,
+    widgets: layout.widgets.map((widget) => {
+      if (widget.id !== widgetId) return widget
+      const next = {
+        ...widget,
+        ...patch,
+        style: patch.style ? { ...widget.style, ...patch.style } : widget.style,
+        settings: patch.settings ? { ...(widget.settings as object), ...patch.settings } : widget.settings,
+      } as WallpaperWidgetInstance
+      return clampWallpaperWidgetInstance(next, canvas)
+    }),
   }
-
-  const canvasPreset = getWallpaperCanvasPreset(layoutPreset.canvasPresetId)
-  return normalizeWallpaperLayoutPreset(
-    {
-      ...layoutPreset,
-      widgets: layoutPreset.widgets.map((widget) => (
-        widget.id === widgetId ? clampWallpaperWidgetInstance({ ...widget, ...patch } as WallpaperWidgetInstance, canvasPreset) : widget
-      )),
-    },
-    canvasPreset,
-  )
 }
 
-/** Remove one selected widget from the layout draft. */
-function removeSelectedWidget(layoutPreset: WallpaperLayoutPreset, widgetId: string | null) {
-  if (!widgetId) {
-    return layoutPreset
-  }
-
-  return normalizeWallpaperLayoutPreset({
-    ...layoutPreset,
-    widgets: layoutPreset.widgets.filter((widget) => widget.id !== widgetId),
-  })
+/** What saving persists, normalized so clamping or defaults never read as edits. */
+function presetSignature(preset: WallpaperLayoutPreset) {
+  const wire = toWallpaperLayoutPresetWireModel(normalizeWallpaperLayoutPreset(preset))
+  return JSON.stringify([wire.canvasPresetId, wire.canvasWidth, wire.canvasHeight, wire.themeMode, wire.background, wire.widgets])
 }
 
 export function WallpaperEditorPage() {
@@ -116,21 +140,24 @@ export function WallpaperEditorPage() {
     redo: redoLayoutEdit,
     canUndo,
     canRedo,
-  } = useUndoableState(() => loadWallpaperLayoutDraft() ?? buildWallpaperStarterLayout('landscape-1080p'), { limit: 60 })
+  } = useUndoableState(() => loadWallpaperLayoutDraft() ?? buildWallpaperStarterLayout('landscape-1080p'), { limit: 80 })
+  // A browser without its own draft (new device, cleared storage) opens the server's active preset instead.
+  const [startedWithoutDraft] = useState(() => loadWallpaperLayoutDraft() === null)
   const [savedPresets, setSavedPresets] = useState(() => loadWallpaperLayoutPresets())
   const [activePresetId, setActivePresetId] = useState<string | null>(() => loadWallpaperActivePresetId())
-  const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null)
-  const [draggedWidgetId, setDraggedWidgetId] = useState<string | null>(null)
-  const [dragOverWidgetId, setDragOverWidgetId] = useState<string | null>(null)
-  const isCoarsePointer = useIsCoarsePointer()
-  const [selectedLibraryWidgetType, setSelectedLibraryWidgetType] = useState<WallpaperWidgetType | null>(null)
-  const [isLivelyHelpOpen, setIsLivelyHelpOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [zoom, setZoom] = useState<WallpaperStageZoom>('fit')
+  const [zoomPercent, setZoomPercent] = useState(0)
+  const [snap, setSnap] = useState(readSnapPreference)
+  const [isLivelyOpen, setIsLivelyOpen] = useState(false)
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false)
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false)
   const workspaceMenuAnchorRef = useRef<HTMLButtonElement | null>(null)
+  const clipboardRef = useRef<WallpaperWidgetInstance[]>([])
+  const theme = useWallpaperTheme(layoutPreset.themeMode)
 
-  const notifyInfo = (message: string) => showSnackbar({ message, tone: 'info' })
-  const notifyError = (message: string) => showSnackbar({ message, tone: 'error' })
+  const notifyInfo = useCallback((message: string) => showSnackbar({ message, tone: 'info' }), [showSnackbar])
+  const notifyError = useCallback((message: string) => showSnackbar({ message, tone: 'error' }), [showSnackbar])
 
   const groupsQuery = useQuery({
     queryKey: ['groups-hierarchy-all', 'wallpaper-widget-editor'],
@@ -153,28 +180,14 @@ export function WallpaperEditorPage() {
     ),
   })
 
-  const canvasPreset = useMemo(() => getWallpaperCanvasPreset(layoutPreset.canvasPresetId), [layoutPreset.canvasPresetId])
   const savedPresetById = useMemo(() => new Map(savedPresets.map((preset) => [preset.id, preset])), [savedPresets])
   const widgetById = useMemo(() => new Map(layoutPreset.widgets.map((widget) => [widget.id, widget])), [layoutPreset.widgets])
-  const effectiveActivePresetId = useMemo(
-    () => (activePresetId && savedPresetById.has(activePresetId) ? activePresetId : null),
-    [activePresetId, savedPresetById],
-  )
-  const activePreset = useMemo(
-    () => (effectiveActivePresetId ? (savedPresetById.get(effectiveActivePresetId) ?? null) : null),
-    [effectiveActivePresetId, savedPresetById],
-  )
-  // Compare only what saving persists; both sides are normalized so clamping or defaults never read as edits.
+  const effectiveActivePresetId = activePresetId && savedPresetById.has(activePresetId) ? activePresetId : null
+  const activePreset = effectiveActivePresetId ? (savedPresetById.get(effectiveActivePresetId) ?? null) : null
   const hasUnsavedPresetChanges = useMemo(() => {
-    if (!activePreset) {
-      return false
-    }
-    const toSignature = (preset: WallpaperLayoutPreset) => {
-      const normalized = normalizeWallpaperLayoutPreset(preset)
-      return JSON.stringify([normalized.canvasPresetId, normalized.widgets, normalized.unsupportedWidgets ?? []])
-    }
+    if (!activePreset) return false
     const draftName = layoutPreset.name.trim() || activePreset.name
-    return draftName !== activePreset.name || toSignature(layoutPreset) !== toSignature(activePreset)
+    return draftName !== activePreset.name || presetSignature(layoutPreset) !== presetSignature(activePreset)
   }, [activePreset, layoutPreset])
   // With a saved preset, only differences from it count. Without one, the draft already lives in this browser,
   // so leaving only warns about edits made in this visit, while replacing the canvas warns whenever it has widgets.
@@ -185,23 +198,10 @@ export function WallpaperEditorPage() {
     t({ ko: '프리셋에 저장하지 않은 월페이퍼 변경이 있어. 초안은 이 브라우저에 남지만 저장된 월페이퍼에는 반영되지 않아. 나갈까?', en: 'You have wallpaper changes that are not saved to a preset. The draft stays in this browser, but the saved wallpaper does not change. Leave?' }),
   )
 
-  const effectiveSelectedWidgetId = useMemo(
-    () => (selectedWidgetId && widgetById.has(selectedWidgetId) ? selectedWidgetId : (layoutPreset.widgets[0]?.id ?? null)),
-    [layoutPreset.widgets, selectedWidgetId, widgetById],
-  )
-  const selectedWidget = useMemo(
-    () => (effectiveSelectedWidgetId ? (widgetById.get(effectiveSelectedWidgetId) ?? null) : null),
-    [effectiveSelectedWidgetId, widgetById],
-  )
-  const orderedWidgets = useMemo(
-    () => getWallpaperWidgetsFrontToBack(layoutPreset.widgets),
-    [layoutPreset.widgets],
-  )
+  const effectiveSelectedIds = useMemo(() => selectedIds.filter((id) => widgetById.has(id)), [selectedIds, widgetById])
+  const selectedWidgets = useMemo(() => effectiveSelectedIds.map((id) => widgetById.get(id)).filter((widget): widget is WallpaperWidgetInstance => Boolean(widget)), [effectiveSelectedIds, widgetById])
   const draftRuntimePath = buildWallpaperDraftRuntimePath()
   const activePresetRuntimePath = activePreset ? buildWallpaperRuntimePath(activePreset) : null
-  const activePresetRuntimeUrl = activePresetRuntimePath && typeof window !== 'undefined'
-    ? new URL(activePresetRuntimePath, window.location.origin).toString()
-    : ''
 
   useEffect(() => {
     saveWallpaperLayoutDraft(layoutPreset)
@@ -215,31 +215,13 @@ export function WallpaperEditorPage() {
     saveWallpaperActivePresetId(effectiveActivePresetId)
   }, [effectiveActivePresetId])
 
-  // Ctrl/Cmd+Z undoes widget edits, Ctrl/Cmd+Shift+Z (or Ctrl+Y) redoes; text fields keep their own undo.
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey) {
-        return
-      }
-
-      const target = event.target as HTMLElement | null
-      if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) {
-        return
-      }
-
-      const key = event.key.toLowerCase()
-      if (key === 'z' && !event.shiftKey) {
-        event.preventDefault()
-        undoLayoutEdit()
-      } else if ((key === 'z' && event.shiftKey) || key === 'y') {
-        event.preventDefault()
-        redoLayoutEdit()
-      }
+    try {
+      window.localStorage.setItem(SNAP_STORAGE_KEY, snap ? 'on' : 'off')
+    } catch {
+      // Private windows: the preference just is not kept.
     }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [redoLayoutEdit, undoLayoutEdit])
+  }, [snap])
 
   useEffect(() => {
     if (hasHydratedServerPresetsRef.current || !wallpaperSettingsQuery.data) {
@@ -254,13 +236,15 @@ export function WallpaperEditorPage() {
       return
     }
 
+    const serverActivePreset = serverPresets.find((preset) => preset.id === serverActivePresetId) ?? null
     queueMicrotask(() => {
       setSavedPresets(serverPresets)
       setActivePresetId(serverActivePresetId)
+      if (startedWithoutDraft && serverActivePreset) resetLayoutPreset(cloneWallpaperPresetToDraft(serverActivePreset))
     })
     saveWallpaperLayoutPresets(serverPresets)
     saveWallpaperActivePresetId(serverActivePresetId)
-  }, [wallpaperSettingsQuery.data])
+  }, [resetLayoutPreset, startedWithoutDraft, wallpaperSettingsQuery.data])
 
   const syncWallpaperPresetState = (
     nextPresets: WallpaperLayoutPreset[],
@@ -323,10 +307,9 @@ export function WallpaperEditorPage() {
       return
     }
 
-    const nextDraft = cloneWallpaperPresetToDraft(nextPreset)
     setActivePresetId(nextPreset.id)
-    resetLayoutPreset(nextDraft)
-    setSelectedWidgetId(nextDraft.widgets[0]?.id ?? null)
+    resetLayoutPreset(cloneWallpaperPresetToDraft(nextPreset))
+    setSelectedIds([])
     syncWallpaperPresetState(savedPresets, nextPreset.id)
   }
 
@@ -370,13 +353,13 @@ export function WallpaperEditorPage() {
   }
 
   const handleCopyRuntimeUrl = async () => {
-    if (!activePresetRuntimeUrl) {
+    if (!activePresetRuntimePath) {
       return
     }
 
     try {
-      await copyTextToClipboard(activePresetRuntimeUrl)
-      notifyInfo(t({ ko: '월페이퍼 URL을 복사했어.', en: 'Copied the wallpaper URL.' }))
+      await copyTextToClipboard(new URL(activePresetRuntimePath, window.location.origin).toString())
+      notifyInfo(t({ ko: '월페이퍼 URL을 복사했어. 로그인한 브라우저에서만 열려.', en: 'Copied the wallpaper URL. It opens only in a signed-in browser.' }))
     } catch {
       notifyError(t({ ko: '월페이퍼 URL을 복사하지 못했어.', en: 'Failed to copy the wallpaper URL.' }))
     }
@@ -387,49 +370,25 @@ export function WallpaperEditorPage() {
       return
     }
 
-    const nextLayoutPreset = buildWallpaperLayoutDraft(layoutPreset.canvasPresetId)
+    const nextLayoutPreset = {
+      ...buildWallpaperLayoutDraft(layoutPreset.canvasPresetId),
+      canvasWidth: layoutPreset.canvasWidth,
+      canvasHeight: layoutPreset.canvasHeight,
+    }
     setActivePresetId(null)
     resetLayoutPreset(nextLayoutPreset)
-    setSelectedWidgetId(null)
-    setSelectedLibraryWidgetType(null)
+    setSelectedIds([])
     syncWallpaperPresetState(savedPresets, null)
-    notifyInfo(t({ ko: '빈 신규 캔버스를 만들었어.', en: 'Created a new blank canvas.' }))
   }
 
-  const handleWidgetDrop = (targetWidgetId: string) => {
-    if (!draggedWidgetId || draggedWidgetId === targetWidgetId) {
-      setDraggedWidgetId(null)
-      setDragOverWidgetId(null)
-      return
-    }
-
-    const reorderedIds = orderedWidgets.map((widget) => widget.id)
-    const draggedIndex = reorderedIds.indexOf(draggedWidgetId)
-    const targetIndex = reorderedIds.indexOf(targetWidgetId)
-    if (draggedIndex < 0 || targetIndex < 0) {
-      setDraggedWidgetId(null)
-      setDragOverWidgetId(null)
-      return
-    }
-
-    reorderedIds.splice(draggedIndex, 1)
-    reorderedIds.splice(targetIndex, 0, draggedWidgetId)
-    setLayoutPreset((current) => reorderWallpaperWidgets(current, reorderedIds))
-    setSelectedWidgetId(draggedWidgetId)
-    setDraggedWidgetId(null)
-    setDragOverWidgetId(null)
+  const addWidget = (widgetType: WallpaperWidgetType, center?: { x: number; y: number }) => {
+    const { layout, widgetId } = appendWallpaperWidget(layoutPreset, widgetType, center)
+    setLayoutPreset(layout)
+    setSelectedIds([widgetId])
   }
 
-  const handleAddWidget = (widgetType: WallpaperWidgetType) => {
-    const nextLayoutPreset = appendWallpaperWidget(layoutPreset, widgetType)
-    setLayoutPreset(nextLayoutPreset)
-    setSelectedLibraryWidgetType(widgetType)
-    setSelectedWidgetId(nextLayoutPreset.widgets[nextLayoutPreset.widgets.length - 1]?.id ?? null)
-  }
-
-  const handleChangeCanvasPreset = (canvasPresetId: string) => {
-    const nextPreset = getWallpaperCanvasPreset(canvasPresetId)
-    setLayoutPreset((current) => normalizeWallpaperLayoutPreset({ ...current, canvasPresetId: nextPreset.id }, nextPreset))
+  const handleChangeCanvas = (canvasPresetId: string, custom?: { width: number; height: number }) => {
+    setLayoutPreset((current) => resizeWallpaperLayoutCanvas(current, canvasPresetId, custom), { coalesceKey: 'canvas' })
   }
 
   const handleApplyTemplate = async (template: WallpaperTemplateDefinition) => {
@@ -445,14 +404,90 @@ export function WallpaperEditorPage() {
       return
     }
 
-    const nextLayout = buildWallpaperTemplateLayout(template.id, layoutPreset.canvasPresetId, t(template.name))
+    const canvas = getWallpaperLayoutCanvas(layoutPreset)
+    const nextLayout = buildWallpaperTemplateLayout(template.id, layoutPreset.canvasPresetId, t(template.name), { width: canvas.width, height: canvas.height })
     setActivePresetId(null)
     resetLayoutPreset(nextLayout)
-    setSelectedWidgetId(nextLayout.widgets[0]?.id ?? null)
-    setSelectedLibraryWidgetType(null)
+    setSelectedIds([])
     setIsTemplateModalOpen(false)
     syncWallpaperPresetState(savedPresets, null)
   }
+
+  const removeSelection = useCallback(() => {
+    if (effectiveSelectedIds.length === 0) return
+    setLayoutPreset((current) => removeWallpaperWidgets(current, effectiveSelectedIds))
+    setSelectedIds([])
+  }, [effectiveSelectedIds, setLayoutPreset])
+
+  const duplicateSelection = useCallback(() => {
+    if (effectiveSelectedIds.length === 0) return
+    const result = duplicateWallpaperWidgets(layoutPreset, effectiveSelectedIds)
+    setLayoutPreset(result.layout)
+    setSelectedIds(result.widgetIds)
+  }, [effectiveSelectedIds, layoutPreset, setLayoutPreset])
+
+  const toggleLockSelection = useCallback(() => {
+    const lock = !selectedWidgets.every((widget) => widget.locked)
+    const ids = new Set(effectiveSelectedIds)
+    setLayoutPreset((current) => ({ ...current, widgets: current.widgets.map((widget) => (ids.has(widget.id) ? { ...widget, locked: lock } : widget)) }))
+  }, [effectiveSelectedIds, selectedWidgets, setLayoutPreset])
+
+  const stepZoom = (direction: 1 | -1) => {
+    const current = zoom === 'fit' ? zoomPercent / 100 : zoom
+    const next = direction > 0
+      ? ZOOM_STEPS.find((step) => step > current + 0.001)
+      : [...ZOOM_STEPS].reverse().find((step) => step < current - 0.001)
+    if (next) setZoom(next)
+  }
+
+  // Keyboard: undo/redo, delete, nudge, duplicate, copy/paste, select all, layer order.
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) {
+        return
+      }
+      if (document.querySelector('[role="dialog"]')) {
+        return
+      }
+      const mod = event.ctrlKey || event.metaKey
+      const key = event.key.toLowerCase()
+
+      if (mod && !event.altKey) {
+        if (key === 'z' && !event.shiftKey) { event.preventDefault(); undoLayoutEdit(); return }
+        if ((key === 'z' && event.shiftKey) || key === 'y') { event.preventDefault(); redoLayoutEdit(); return }
+        if (key === 'a') { event.preventDefault(); setSelectedIds(layoutPreset.widgets.map((widget) => widget.id)); return }
+        if (key === 'd') { event.preventDefault(); duplicateSelection(); return }
+        if (key === 'c' && selectedWidgets.length > 0) { clipboardRef.current = structuredClone(selectedWidgets); return }
+        if (key === 'v' && clipboardRef.current.length > 0) {
+          event.preventDefault()
+          const result = pasteWallpaperWidgets(layoutPreset, clipboardRef.current.map((widget) => ({ ...widget, x: widget.x + 24, y: widget.y + 24 })))
+          clipboardRef.current = result.layout.widgets.filter((widget) => result.widgetIds.includes(widget.id))
+          setLayoutPreset(result.layout)
+          setSelectedIds(result.widgetIds)
+          return
+        }
+        if (key === ']' || key === '[') {
+          event.preventDefault()
+          setLayoutPreset((current) => stackWallpaperWidgets(current, effectiveSelectedIds, key === ']' ? 'front' : 'back'))
+          return
+        }
+      }
+
+      if (event.key === 'Escape') { setSelectedIds([]); return }
+      if ((event.key === 'Delete' || event.key === 'Backspace') && effectiveSelectedIds.length > 0) { event.preventDefault(); removeSelection(); return }
+      const arrows: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
+      if (arrows[event.key] && effectiveSelectedIds.length > 0) {
+        event.preventDefault()
+        const step = event.shiftKey ? 10 : 1
+        const [dx, dy] = arrows[event.key]
+        setLayoutPreset((current) => nudgeWallpaperWidgets(current, effectiveSelectedIds, { x: dx * step, y: dy * step }), { coalesceKey: `nudge:${effectiveSelectedIds.join(',')}` })
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [duplicateSelection, effectiveSelectedIds, layoutPreset, redoLayoutEdit, removeSelection, selectedWidgets, setLayoutPreset, undoLayoutEdit])
 
   // A connected chat fills the name and canvas, picks and adds widgets (draft), loads a saved wallpaper and asks to save with a card.
   const layoutRef = useRef(layoutPreset)
@@ -465,8 +500,8 @@ export function WallpaperEditorPage() {
       { id: 'canvasPresetId', label: t({ ko: '캔버스 크기', en: 'Canvas size' }), type: 'select', value: layoutPreset.canvasPresetId, options: listWallpaperCanvasPresets().map((preset) => preset.id) },
     ],
     data: {
-      widgets: layoutPreset.widgets.map((widget) => ({ id: widget.id, type: widget.type })),
-      selected: { widgetId: selectedWidgetId ?? '', name: layoutPreset.name, widgets: layoutPreset.widgets.length, saveTo: activePreset?.name ?? '' },
+      widgets: layoutPreset.widgets.map((widget) => ({ id: widget.id, type: widget.type, x: widget.x, y: widget.y, w: widget.w, h: widget.h })),
+      selected: { widgetIds: effectiveSelectedIds, name: layoutPreset.name, widgets: layoutPreset.widgets.length, saveTo: activePreset?.name ?? '' },
       savedWallpapers: savedPresets.map((preset) => ({ id: preset.id, name: preset.name, active: preset.id === effectiveActivePresetId })),
     },
     actions: [
@@ -475,10 +510,13 @@ export function WallpaperEditorPage() {
       ...(savedPresets.length ? [pageAction('wallpaper.open_preset', t({ ko: '저장된 배경화면 불러오기', en: 'Load saved wallpaper' }), t({ ko: '저장된 배경화면(data.savedWallpapers)을 편집기로 불러와.', en: 'Load a saved wallpaper (data.savedWallpapers) into the editor.' }), pageObject({ presetId: pageChoice(savedPresets.map((preset) => preset.id)) }, ['presetId']))] : []),
       pageAction('wallpaper.save', t({ ko: '배경화면 저장', en: 'Save wallpaper' }), t({ ko: '편집 중인 배경화면을 저장해. asNew면 새 프리셋으로, 아니면 열린 프리셋(selected.saveTo)에 덮어써.', en: 'Save the wallpaper; asNew saves a new preset, otherwise it overwrites the open one (selected.saveTo).' }), pageObject({ asNew: { type: 'boolean' } }), 'save'),
     ],
-    apply: (patch) => { const next = { ...layoutPreset, ...patch } as typeof layoutPreset; setLayoutPreset(normalizeWallpaperLayoutPreset(next, getWallpaperCanvasPreset(next.canvasPresetId))) },
+    apply: (patch) => {
+      const next = { ...layoutPreset, ...patch } as typeof layoutPreset
+      setLayoutPreset(next.canvasPresetId !== layoutPreset.canvasPresetId ? resizeWallpaperLayoutCanvas({ ...next, canvasPresetId: layoutPreset.canvasPresetId }, next.canvasPresetId) : normalizeWallpaperLayoutPreset(next))
+    },
     applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
-      if (id === 'wallpaper.select') { setSelectedWidgetId(String(args.widgetId)); return }
+      if (id === 'wallpaper.select') { setSelectedIds([String(args.widgetId)]); return }
       if (id === 'wallpaper.open_preset') {
         if (hasDiscardableEdits) throw new Error('편집 중인 배경화면이 저장되지 않았어. 사용자가 저장하거나 버린 뒤에 다시 해.')
         await handleLoadPreset(String(args.presetId))
@@ -487,15 +525,15 @@ export function WallpaperEditorPage() {
       if (id === 'wallpaper.save') { handleSavePreset({ saveAsNew: args.asNew === true }); return }
       if (id !== 'wallpaper.add_widget') throw new Error('배경화면 편집기에 없는 작업이야.')
       const before = layoutRef.current
-      const next = appendWallpaperWidget(before, String(args.type) as WallpaperWidgetType)
+      const { layout: next, widgetId } = appendWallpaperWidget(before, String(args.type) as WallpaperWidgetType)
       setLayoutPreset(next)
-      setSelectedLibraryWidgetType(String(args.type) as WallpaperWidgetType)
-      setSelectedWidgetId(next.widgets[next.widgets.length - 1]?.id ?? null)
+      setSelectedIds([widgetId])
       return { isCurrent: () => JSON.stringify(layoutRef.current) === JSON.stringify(next), restore: () => setLayoutPreset(before) }
     },
   })
 
   const unsavedLabel = t({ ko: '저장 안 된 변경', en: 'Unsaved changes' })
+  const allSelectedLocked = selectedWidgets.length > 0 && selectedWidgets.every((widget) => widget.locked)
   const toolbar = (
     <PageToolbar
       start={(
@@ -524,10 +562,27 @@ export function WallpaperEditorPage() {
           <IconButton variant="ghost" size="icon-sm" disabled={!canRedo} onClick={redoLayoutEdit} label={t({ ko: '다시 실행 (Ctrl+Shift+Z)', en: 'Redo (Ctrl+Shift+Z)' })}>
             <Redo2 />
           </IconButton>
-          <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '미리보기', en: 'Preview' })}>
+          <IconButton variant="ghost" size="icon-sm" active={snap} aria-pressed={snap} onClick={() => setSnap((current) => !current)} label={snap ? t({ ko: '스냅 켜짐 (Alt 누르면 잠시 끔)', en: 'Snap on (hold Alt to bypass)' }) : t({ ko: '스냅 꺼짐', en: 'Snap off' })}>
+            <Magnet />
+          </IconButton>
+          <div className="flex items-center">
+            <IconButton variant="ghost" size="icon-sm" onClick={() => stepZoom(-1)} label={t({ ko: '축소', en: 'Zoom out' })}>
+              <ZoomOut />
+            </IconButton>
+            <Button type="button" variant="ghost" size="sm" className="h-8 min-w-12 px-1 font-mono text-xs tabular-nums" onClick={() => setZoom('fit')} aria-label={t({ ko: '화면에 맞추기', en: 'Fit to screen' })} title={t({ ko: '화면에 맞추기', en: 'Fit to screen' })}>
+              {zoomPercent}%
+            </Button>
+            <IconButton variant="ghost" size="icon-sm" onClick={() => stepZoom(1)} label={t({ ko: '확대', en: 'Zoom in' })}>
+              <ZoomIn />
+            </IconButton>
+          </div>
+          <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '실행 미리보기', en: 'Live preview' })}>
             <a href={draftRuntimePath} target="_blank" rel="noreferrer">
               <Eye />
             </a>
+          </IconButton>
+          <IconButton variant="ghost" size="icon-sm" disabled={!isAdmin} onClick={() => setIsLivelyOpen(true)} label={t({ ko: 'Lively 연결', en: 'Connect Lively' })}>
+            <MonitorPlay />
           </IconButton>
           <IconButton
             ref={workspaceMenuAnchorRef}
@@ -539,13 +594,10 @@ export function WallpaperEditorPage() {
           >
             <MoreHorizontal />
           </IconButton>
-          <IconButton variant="ghost" size="icon-sm" onClick={() => setIsLivelyHelpOpen(true)} label={t({ ko: 'Lively 연결 도움말', en: 'Lively connection help' })}>
-            <HelpCircle />
-          </IconButton>
           {activePreset && hasUnsavedPresetChanges ? (
             <span className="ml-1 size-2 shrink-0 rounded-full bg-primary" role="status" aria-label={unsavedLabel} title={unsavedLabel} />
           ) : null}
-          <IconButton variant="default" size="icon-sm" className="ml-1" disabled={!(isAdmin) || (wallpaperPresetMutation.isPending)} onClick={() => handleSavePreset()} aria-busy={wallpaperPresetMutation.isPending || undefined} label={t({ ko: '저장', en: 'Save' })}>
+          <IconButton variant="default" size="icon-sm" className="ml-1" disabled={!isAdmin || wallpaperPresetMutation.isPending} onClick={() => handleSavePreset()} aria-busy={wallpaperPresetMutation.isPending || undefined} label={t({ ko: '저장', en: 'Save' })}>
             <Save />
           </IconButton>
         </>
@@ -569,236 +621,141 @@ export function WallpaperEditorPage() {
         aria-label={t({ ko: '캔버스', en: 'Canvas' })}
         className="h-8 w-40 shrink-0"
         value={layoutPreset.canvasPresetId}
-        onChange={(event) => handleChangeCanvasPreset(event.target.value)}
+        onChange={(event) => handleChangeCanvas(event.target.value, event.target.value === WALLPAPER_CUSTOM_CANVAS_ID ? { width: getWallpaperLayoutCanvas(layoutPreset).width, height: getWallpaperLayoutCanvas(layoutPreset).height } : undefined)}
       >
         {listWallpaperCanvasPresets().map((preset) => (
           <option key={preset.id} value={preset.id}>{preset.name} · {preset.aspectRatioLabel}</option>
         ))}
+        <option value={WALLPAPER_CUSTOM_CANVAS_ID}>{t({ ko: '직접 입력', en: 'Custom' })}</option>
       </Select>
     </PageToolbar>
   )
 
+  const selectionToolbar = selectedWidgets.length > 0 ? (
+    <>
+      <IconButton variant="ghost" size="icon-xs" label={t({ ko: '복제 (Ctrl+D)', en: 'Duplicate (Ctrl+D)' })} onClick={duplicateSelection}><CopyPlus /></IconButton>
+      <IconButton variant="ghost" size="icon-xs" label={t({ ko: '왼쪽 정렬', en: 'Align left' })} onClick={() => setLayoutPreset((current) => alignWallpaperWidgets(current, effectiveSelectedIds, 'left'))}><AlignStartVertical /></IconButton>
+      <IconButton variant="ghost" size="icon-xs" label={t({ ko: '가운데 정렬', en: 'Center' })} onClick={() => setLayoutPreset((current) => alignWallpaperWidgets(current, effectiveSelectedIds, 'hcenter'))}><AlignCenterVertical /></IconButton>
+      <IconButton variant="ghost" size="icon-xs" label={t({ ko: '위 정렬', en: 'Align top' })} onClick={() => setLayoutPreset((current) => alignWallpaperWidgets(current, effectiveSelectedIds, 'top'))}><AlignStartHorizontal /></IconButton>
+      <span className="mx-0.5 h-4 w-px bg-line" />
+      <IconButton variant="ghost" size="icon-xs" label={t({ ko: '맨 앞으로 (Ctrl+])', en: 'Bring to front (Ctrl+])' })} onClick={() => setLayoutPreset((current) => stackWallpaperWidgets(current, effectiveSelectedIds, 'front'))}><BringToFront /></IconButton>
+      <IconButton variant="ghost" size="icon-xs" label={t({ ko: '맨 뒤로 (Ctrl+[)', en: 'Send to back (Ctrl+[)' })} onClick={() => setLayoutPreset((current) => stackWallpaperWidgets(current, effectiveSelectedIds, 'back'))}><SendToBack /></IconButton>
+      <IconButton variant="ghost" size="icon-xs" active={allSelectedLocked} label={allSelectedLocked ? t({ ko: '잠금 해제', en: 'Unlock' }) : t({ ko: '잠금', en: 'Lock' })} onClick={toggleLockSelection}>{allSelectedLocked ? <Lock /> : <LockOpen />}</IconButton>
+      <IconButton variant="ghost" size="icon-xs" className="text-destructive hover:bg-destructive-soft hover:text-destructive-soft-foreground" label={t({ ko: '삭제 (Delete)', en: 'Delete (Delete)' })} onClick={removeSelection}><Trash2 /></IconButton>
+    </>
+  ) : null
+
   return (
-    <PageWithSidebar
-      storageKey="wallpaper"
-      sidebar={(
-        <WallpaperWidgetLibrarySidebar
-          selectedWidgetType={selectedLibraryWidgetType}
-          onAddWidget={handleAddWidget}
-        />
-      )}
-      sidebarLabel={t({ ko: '위젯 라이브러리', en: 'Widget library' })}
-      toolbar={toolbar}
-    >
-      <AnchoredPopup
-        open={isWorkspaceMenuOpen}
-        anchorRef={workspaceMenuAnchorRef}
-        onClose={() => setIsWorkspaceMenuOpen(false)}
-        className="w-64 p-2"
-      >
-        {[
-          { icon: Plus, label: t({ ko: '새 캔버스', en: 'New canvas' }), disabled: false, action: () => void handleCreateBlankCanvas() },
-          { icon: Copy, label: t({ ko: '다른 이름으로 저장', en: 'Save as new' }), disabled: !isAdmin || wallpaperPresetMutation.isPending, action: () => handleSavePreset({ saveAsNew: true }) },
-          { icon: ClipboardCopy, label: t({ ko: 'Lively URL 복사', en: 'Copy Lively URL' }), disabled: !activePresetRuntimeUrl, action: () => void handleCopyRuntimeUrl() },
-          { icon: ExternalLink, label: t({ ko: '저장 월페이퍼 열기', en: 'Open saved wallpaper' }), disabled: !activePresetRuntimePath, action: () => activePresetRuntimePath && window.open(activePresetRuntimePath, '_blank', 'noopener,noreferrer') },
-          { icon: Trash2, label: t({ ko: '프리셋 삭제', en: 'Delete preset' }), disabled: !isAdmin || !activePreset || wallpaperPresetMutation.isPending, action: handleDeletePreset, destructive: true },
-        ].map(({ icon: Icon, label, disabled, action, destructive }) => (
-          <Button
-            key={label}
-            type="button"
-            variant="nav"
-            disabled={disabled}
-            className={destructive ? 'gap-3 text-destructive hover:bg-destructive-soft hover:text-destructive-soft-foreground' : 'gap-3 text-foreground'}
-            onClick={() => {
-              setIsWorkspaceMenuOpen(false)
-              action()
-            }}
-          >
-            <Icon className="h-4 w-4" />
-            {label}
-          </Button>
-        ))}
-      </AnchoredPopup>
-
-      <div className="grid gap-8 pt-2 xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-0">
-        <div className="min-w-0 space-y-8 xl:pr-8">
-          <WallpaperCanvasView
-            canvasPreset={canvasPreset}
-            layoutPreset={layoutPreset}
-            mode="editor"
-            selectedWidgetId={effectiveSelectedWidgetId}
-            onSelectWidget={setSelectedWidgetId}
-            onUpdateWidgetFrame={(widgetId, patch) => {
-              setLayoutPreset((current) => patchSelectedWidget(current, widgetId, patch))
-            }}
+    <WallpaperDataEnvironmentContext.Provider value={EDITOR_ENVIRONMENT}>
+      <PageWithSidebar
+        storageKey="wallpaper"
+        sidebar={(
+          <WallpaperWidgetLibrarySidebar
+            widgets={layoutPreset.widgets}
+            selectedIds={effectiveSelectedIds}
+            onAddWidget={(type) => addWidget(type)}
+            onSelect={setSelectedIds}
+            onReorder={(ids) => setLayoutPreset((current) => reorderWallpaperWidgets(current, ids))}
+            onToggleHidden={(widget) => setLayoutPreset((current) => patchWidget(current, widget.id, { hidden: !widget.hidden }))}
+            onToggleLocked={(widget) => setLayoutPreset((current) => patchWidget(current, widget.id, { locked: !widget.locked }))}
           />
+        )}
+        sidebarLabel={t({ ko: '위젯 라이브러리', en: 'Widget library' })}
+        toolbar={toolbar}
+      >
+        <AnchoredPopup
+          open={isWorkspaceMenuOpen}
+          anchorRef={workspaceMenuAnchorRef}
+          onClose={() => setIsWorkspaceMenuOpen(false)}
+          className="w-64 p-2"
+        >
+          {[
+            { icon: Plus, label: t({ ko: '새 캔버스', en: 'New canvas' }), disabled: false, action: () => void handleCreateBlankCanvas() },
+            { icon: Copy, label: t({ ko: '다른 이름으로 저장', en: 'Save as new' }), disabled: !isAdmin || wallpaperPresetMutation.isPending, action: () => handleSavePreset({ saveAsNew: true }) },
+            { icon: ClipboardCopy, label: t({ ko: '월페이퍼 URL 복사', en: 'Copy wallpaper URL' }), disabled: !activePresetRuntimePath, action: () => void handleCopyRuntimeUrl() },
+            { icon: ExternalLink, label: t({ ko: '저장 월페이퍼 열기', en: 'Open saved wallpaper' }), disabled: !activePresetRuntimePath, action: () => activePresetRuntimePath && window.open(activePresetRuntimePath, '_blank', 'noopener,noreferrer') },
+            { icon: Trash2, label: t({ ko: '프리셋 삭제', en: 'Delete preset' }), disabled: !isAdmin || !activePreset || wallpaperPresetMutation.isPending, action: handleDeletePreset, destructive: true },
+          ].map(({ icon: Icon, label, disabled, action, destructive }) => (
+            <Button
+              key={label}
+              type="button"
+              variant="nav"
+              disabled={disabled}
+              className={destructive ? 'gap-3 text-destructive hover:bg-destructive-soft hover:text-destructive-soft-foreground' : 'gap-3 text-foreground'}
+              onClick={() => {
+                setIsWorkspaceMenuOpen(false)
+                action()
+              }}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </Button>
+          ))}
+        </AnchoredPopup>
 
-          {/* Selected widget: one row of 1-cell nudges (position, then size) and delete. Hidden while nothing is selected. */}
-          {selectedWidget ? (
-            <div className="flex flex-wrap items-center gap-0.5">
-              {[
-                { key: 'left', icon: <ArrowLeft />, label: t({ ko: '왼쪽으로 1칸 ({value})', en: 'Move left 1 cell ({value})' }, { value: selectedWidget.x }), patch: { x: selectedWidget.x - 1 } },
-                { key: 'right', icon: <ArrowRight />, label: t({ ko: '오른쪽으로 1칸 ({value})', en: 'Move right 1 cell ({value})' }, { value: selectedWidget.x }), patch: { x: selectedWidget.x + 1 } },
-                { key: 'up', icon: <ArrowUp />, label: t({ ko: '위로 1칸 ({value})', en: 'Move up 1 cell ({value})' }, { value: selectedWidget.y }), patch: { y: selectedWidget.y - 1 } },
-                { key: 'down', icon: <ArrowDown />, label: t({ ko: '아래로 1칸 ({value})', en: 'Move down 1 cell ({value})' }, { value: selectedWidget.y }), patch: { y: selectedWidget.y + 1 } },
-                { key: 'w-', icon: <FoldHorizontal />, label: t({ ko: '너비 1칸 줄이기 ({value})', en: 'Width −1 cell ({value})' }, { value: selectedWidget.w }), patch: { w: selectedWidget.w - 1 } },
-                { key: 'w+', icon: <UnfoldHorizontal />, label: t({ ko: '너비 1칸 늘리기 ({value})', en: 'Width +1 cell ({value})' }, { value: selectedWidget.w }), patch: { w: selectedWidget.w + 1 } },
-                { key: 'h-', icon: <FoldVertical />, label: t({ ko: '높이 1칸 줄이기 ({value})', en: 'Height −1 cell ({value})' }, { value: selectedWidget.h }), patch: { h: selectedWidget.h - 1 } },
-                { key: 'h+', icon: <UnfoldVertical />, label: t({ ko: '높이 1칸 늘리기 ({value})', en: 'Height +1 cell ({value})' }, { value: selectedWidget.h }), patch: { h: selectedWidget.h + 1 } },
-              ].map(({ key, icon, label, patch }) => (
-                <IconButton
-                  key={key}
-                  variant="ghost"
-                  size="icon-xs"
-                  label={label}
-                  disabled={selectedWidget.locked}
-                  onClick={() => {
-                    setLayoutPreset((current) => patchSelectedWidget(current, selectedWidget.id, patch))
-                  }}
-                >
-                  {icon}
-                </IconButton>
-              ))}
-              <span className="flex-1" />
-              <IconButton
-                variant="ghost"
-                size="icon-xs"
-                className="text-destructive hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                label={t({ ko: '위젯 삭제', en: 'Delete widget' })}
-                onClick={() => {
-                  setLayoutPreset((current) => removeSelectedWidget(current, selectedWidget.id))
-                  notifyInfo(t({ ko: '위젯을 삭제했어. 실행 취소(Ctrl+Z)로 되돌릴 수 있어.', en: 'Widget deleted. Undo (Ctrl+Z) brings it back.' }))
+        <div className="grid gap-6 pt-2 xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-0">
+          <div className="min-w-0 xl:pr-6">
+            <div className="h-[min(78dvh,calc(100dvh-var(--theme-shell-header-height)-8rem))] min-h-[320px] rounded-md bg-fill">
+              <WallpaperStage
+                layout={layoutPreset}
+                mode="editor"
+                zoom={zoom}
+                onZoomPercentChange={setZoomPercent}
+                selectedIds={effectiveSelectedIds}
+                onSelectionChange={setSelectedIds}
+                onCommitFrames={(frames) => setLayoutPreset((current) => setWallpaperWidgetFrames(current, frames))}
+                snap={snap}
+                themeClassName={theme.className}
+                themeStyle={theme.style}
+                selectionToolbar={selectionToolbar}
+                emptyHint={t({ ko: '왼쪽에서 위젯을 끌어다 놓거나 눌러서 추가해.', en: 'Drag a widget from the left, or click one to add it.' })}
+                dropType={WALLPAPER_WIDGET_DRAG_TYPE}
+                onDropWidget={(type, point) => {
+                  if (WALLPAPER_WIDGET_TYPE_SET.has(type)) addWidget(type as WallpaperWidgetType, point)
                 }}
-              >
-                <Trash2 />
-              </IconButton>
+              />
             </div>
-          ) : null}
+          </div>
 
-          {orderedWidgets.length > 0 ? (
-            <RowGroup heading={t({ ko: '위젯 순서', en: 'Widget order' })}>
-              <div className="max-h-[320px] overflow-auto pr-1">
-                {orderedWidgets.map((widget, index) => {
-                  const isSelected = effectiveSelectedWidgetId === widget.id
-                  const isDragOver = dragOverWidgetId === widget.id && draggedWidgetId !== widget.id
-                  return (
-                    <div
-                      key={widget.id}
-                      className={`flex w-full items-center gap-1 border-b border-line pr-2 transition-colors last:border-b-0 ${isSelected ? 'bg-primary/8' : ''} ${isDragOver ? 'ring-1 ring-inset ring-primary/60' : ''}`}
-                      draggable={!isCoarsePointer}
-                      onDragStart={() => {
-                        if (isCoarsePointer) {
-                          return
-                        }
-                        setDraggedWidgetId(widget.id)
-                        setDragOverWidgetId(widget.id)
-                      }}
-                      onDragOver={(event) => {
-                        if (isCoarsePointer) {
-                          return
-                        }
-                        event.preventDefault()
-                        if (draggedWidgetId !== widget.id) {
-                          setDragOverWidgetId(widget.id)
-                        }
-                      }}
-                      onDrop={(event) => {
-                        if (isCoarsePointer) {
-                          return
-                        }
-                        event.preventDefault()
-                        handleWidgetDrop(widget.id)
-                      }}
-                      onDragEnd={() => {
-                        setDraggedWidgetId(null)
-                        setDragOverWidgetId(null)
-                      }}
-                    >
-                      <Button
-                        type="button"
-                        variant="nav"
-                        className="h-auto min-w-0 flex-1 gap-3 rounded-none px-2 py-2"
-                        aria-current={isSelected ? 'true' : undefined}
-                        onClick={() => setSelectedWidgetId(widget.id)}
-                      >
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <GripVertical className="h-4 w-4" />
-                          <span className="w-5 text-center text-xs font-semibold">{index + 1}</span>
-                        </div>
-                        <div className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{getWallpaperWidgetDisplayTitle(widget, t)}</div>
-                      </Button>
-                      <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
-                        {isCoarsePointer ? (
-                          <>
-                            <IconButton
-                              variant="ghost"
-                              size="icon-sm"
-                              className="touch-none"
-                              label={t({ ko: '앞으로 이동', en: 'Move forward' })}
-                              tooltip={false}
-                              disabled={index === 0}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                setLayoutPreset((current) => moveWallpaperWidgetToOrder(current, widget.id, index))
-                                setSelectedWidgetId(widget.id)
-                              }}
-                            >
-                              <ArrowUp className="h-4 w-4" />
-                            </IconButton>
-                            <IconButton
-                              variant="ghost"
-                              size="icon-sm"
-                              className="touch-none"
-                              label={t({ ko: '뒤로 이동', en: 'Move backward' })}
-                              tooltip={false}
-                              disabled={index === orderedWidgets.length - 1}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                setLayoutPreset((current) => moveWallpaperWidgetToOrder(current, widget.id, index + 2))
-                                setSelectedWidgetId(widget.id)
-                              }}
-                            >
-                              <ArrowDown className="h-4 w-4" />
-                            </IconButton>
-                          </>
-                        ) : null}
-                        {widget.hidden ? <EyeOff className="h-3.5 w-3.5" /> : null}
-                        {widget.locked ? <Lock className="h-3.5 w-3.5" /> : null}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </RowGroup>
-          ) : null}
+          {/* Inspector: a right column split from the canvas by one hairline (stacks under it below xl). */}
+          <aside
+            aria-label={t({ ko: '위젯 설정', en: 'Widget settings' })}
+            className="min-w-0 self-start xl:sticky xl:top-(--theme-shell-header-height) xl:max-h-[calc(100dvh-var(--theme-shell-header-height))] xl:overflow-y-auto xl:border-l xl:border-line xl:pt-2 xl:pb-6 xl:pl-6"
+          >
+            {selectedWidgets.length > 0 ? (
+              <WallpaperWidgetInspector
+                selectedWidgets={selectedWidgets}
+                groups={groupsQuery.data ?? []}
+                onPatchWidget={(widgetId, patch, key) => setLayoutPreset((current) => patchWidget(current, widgetId, patch), { coalesceKey: key })}
+                onAlign={(mode) => setLayoutPreset((current) => alignWallpaperWidgets(current, effectiveSelectedIds, mode))}
+                onDistribute={(axis) => setLayoutPreset((current) => distributeWallpaperWidgets(current, effectiveSelectedIds, axis))}
+              />
+            ) : (
+              <WallpaperBackgroundInspector
+                layout={layoutPreset}
+                groups={groupsQuery.data ?? []}
+                onChangeBackground={(background, key) => setLayoutPreset((current) => ({ ...current, background }), { coalesceKey: key })}
+                onChangeCanvas={handleChangeCanvas}
+                onChangeThemeMode={(themeMode) => setLayoutPreset((current) => ({ ...current, themeMode }))}
+              />
+            )}
+          </aside>
         </div>
 
-        {/* Inspector: a right column split from the canvas by one hairline (stacks under it below xl). */}
-        <aside
-          aria-label={t({ ko: '위젯 설정', en: 'Widget settings' })}
-          className="min-w-0 space-y-4 self-start xl:sticky xl:top-(--theme-shell-header-height) xl:max-h-[calc(100dvh-var(--theme-shell-header-height))] xl:overflow-y-auto xl:border-l xl:border-line xl:pt-2 xl:pb-6 xl:pl-6"
-        >
-          <WallpaperWidgetInspector
-            selectedWidget={selectedWidget}
-            groups={groupsQuery.data ?? []}
-            onPatchWidget={(widgetId, patch) => {
-              setLayoutPreset((current) => patchSelectedWidget(current, widgetId, patch), { coalesceKey: `settings:${widgetId}` })
-            }}
+        {isLivelyOpen ? (
+          <WallpaperLivelyConnectModal
+            open
+            onClose={() => setIsLivelyOpen(false)}
+            presets={savedPresets}
+            activePresetId={effectiveActivePresetId}
           />
-        </aside>
-      </div>
-
-      <WallpaperLivelyHelpModal
-        open={isLivelyHelpOpen}
-        runtimeUrl={activePresetRuntimeUrl}
-        onClose={() => setIsLivelyHelpOpen(false)}
-        onCopyRuntimeUrl={() => void handleCopyRuntimeUrl()}
-      />
-      <WallpaperTemplateModal
-        open={isTemplateModalOpen}
-        onClose={() => setIsTemplateModalOpen(false)}
-        onApply={handleApplyTemplate}
-      />
-    </PageWithSidebar>
+        ) : null}
+        <WallpaperTemplateModal
+          open={isTemplateModalOpen}
+          onClose={() => setIsTemplateModalOpen(false)}
+          onApply={handleApplyTemplate}
+        />
+      </PageWithSidebar>
+    </WallpaperDataEnvironmentContext.Provider>
   )
 }

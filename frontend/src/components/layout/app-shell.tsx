@@ -115,7 +115,6 @@ function AppShellLayout() {
   const visibleNavItems = navItems.filter((item) => headerNavigation[item.id] !== false
     && (item.permissionKey === null || hasAuthPermission(permissionKeys, item.permissionKey)))
   const logoTarget = '/access'
-  const isWallpaperRuntime = location.pathname === '/wallpaper/runtime'
   const shouldShowGenerationQueueWidget = headerNavigation.queue !== false && (authStatusQuery.data?.hasCredentials !== true || authStatusQuery.data?.authenticated === true)
   const shouldShowHeaderSearch = headerNavigation.search !== false && !isAnonymousSession
   const shouldShowAccountMenu = headerNavigation.account !== false
@@ -135,15 +134,6 @@ function AppShellLayout() {
     handlePointerLeave,
     handleItemClick: handleNavItemClick,
   } = useHorizontalDragScroll(location.pathname)
-
-  if (isWallpaperRuntime) {
-    return (
-      <div className="min-h-screen bg-background text-foreground overflow-hidden">
-        <Outlet />
-        {shouldUseGlobalScrollRestoration ? <ScrollRestoration getKey={(location) => `${location.pathname}${location.search}`} /> : null}
-      </div>
-    )
-  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">

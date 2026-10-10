@@ -1,134 +1,150 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '@/i18n'
-import { cn } from '@/lib/utils'
 import type { WallpaperClockVisualStyle, WallpaperWidgetInstance } from './wallpaper-types'
 import { useWallpaperClockText } from './wallpaper-widget-utils'
 
 type ClockWidget = Extract<WallpaperWidgetInstance, { type: 'clock' }>
+type ClockStyle = 'clean' | 'serif' | 'glow' | 'split' | 'analog' | 'mono'
 
-function clampMetric(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value))
-}
-
-function normalizeClockStyle(style: WallpaperClockVisualStyle | undefined): 'clean' | 'glass' | 'editorial' {
-  if (style === 'glass' || style === 'glow') {
-    return 'glass'
+/** Map the version-1 style names onto the six current looks. */
+export function normalizeWallpaperClockStyle(style: WallpaperClockVisualStyle | undefined): ClockStyle {
+  switch (style) {
+    case 'serif':
+    case 'editorial':
+      return 'serif'
+    case 'glow':
+    case 'glass':
+      return 'glow'
+    case 'split':
+    case 'analog':
+    case 'mono':
+      return style
+    default:
+      return 'clean'
   }
-  if (style === 'editorial' || style === 'split') {
-    return 'editorial'
-  }
-  return 'clean'
 }
 
-function useClockContainerSize(widget: ClockWidget) {
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const [size, setSize] = useState({ width: widget.w * 72, height: widget.h * 56 })
+const pad = (value: number) => String(value).padStart(2, '0')
+const FLEX_ALIGN = { left: 'flex-start', center: 'center', right: 'flex-end' } as const
 
-  useEffect(() => {
-    const element = containerRef.current
-    if (!element) {
-      return
-    }
-
-    const updateSize = () => setSize({ width: element.clientWidth, height: element.clientHeight })
-    updateSize()
-
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', updateSize)
-      return () => window.removeEventListener('resize', updateSize)
-    }
-
-    const observer = new ResizeObserver(updateSize)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [widget.h, widget.w])
-
-  return { containerRef, size }
+function AnalogFace({ now, showSeconds }: { now: Date; showSeconds: boolean }) {
+  const seconds = now.getSeconds()
+  const minutes = now.getMinutes() + seconds / 60
+  const hours = (now.getHours() % 12) + minutes / 60
+  const hand = (angle: number, length: number, width: number, opacity = 1) => (
+    <line
+      x1="50"
+      y1="50"
+      x2={50 + length * Math.sin((angle * Math.PI) / 180)}
+      y2={50 - length * Math.cos((angle * Math.PI) / 180)}
+      stroke="currentColor"
+      strokeWidth={width}
+      strokeLinecap="round"
+      opacity={opacity}
+    />
+  )
+  return (
+    <svg viewBox="0 0 100 100" className="h-full max-h-full w-auto max-w-full" role="img" aria-label={`${pad(now.getHours())}:${pad(now.getMinutes())}`}>
+      <circle cx="50" cy="50" r="47" fill="none" stroke="currentColor" strokeWidth="1" opacity="0.35" />
+      {Array.from({ length: 12 }, (_, index) => {
+        const angle = (index * 30 * Math.PI) / 180
+        const inner = index % 3 === 0 ? 38 : 41
+        return (
+          <line
+            key={index}
+            x1={50 + inner * Math.sin(angle)}
+            y1={50 - inner * Math.cos(angle)}
+            x2={50 + 44 * Math.sin(angle)}
+            y2={50 - 44 * Math.cos(angle)}
+            stroke="currentColor"
+            strokeWidth={index % 3 === 0 ? 1.6 : 0.8}
+            opacity={0.7}
+          />
+        )
+      })}
+      {hand(hours * 30, 24, 3)}
+      {hand(minutes * 6, 35, 2)}
+      {showSeconds ? <g className="text-primary">{hand(seconds * 6, 39, 0.8)}</g> : null}
+      <circle cx="50" cy="50" r="2" fill="currentColor" />
+    </svg>
+  )
 }
 
-/** Responsive clock rebuilt for both editor cards and full-screen Lively runtime. */
+/** Live clock in one of six looks; sizes follow the widget box (container units). */
 export function WallpaperClockWidgetBody({ widget }: { widget: ClockWidget }) {
-  const currentTime = useWallpaperClockText()
-  const { locale, formatDate } = useI18n()
-  const { containerRef, size } = useClockContainerSize(widget)
-  const showSeconds = widget.settings.showSeconds
+  const { formatDateTime, language } = useI18n()
+  const now = useWallpaperClockText()
+  const style = normalizeWallpaperClockStyle(widget.settings.visualStyle)
+  const { showSeconds, timeFormat } = widget.settings
   const showDate = widget.settings.showDate !== false
-  const style = normalizeClockStyle(widget.settings.visualStyle)
-  const isCompact = size.width < 380 || size.height < 170
 
-  const formattedTime = useMemo(() => {
-    const parts = new Intl.DateTimeFormat(locale, {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: showSeconds ? '2-digit' : undefined,
-      hour12: widget.settings.timeFormat === '12h',
-    }).formatToParts(currentTime)
-    const getPart = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ''
+  const rawHours = now.getHours()
+  const hours = timeFormat === '12h' ? (rawHours % 12) || 12 : rawHours
+  const period = timeFormat === '12h' ? (language === 'ko' ? (rawHours < 12 ? '오전' : '오후') : (rawHours < 12 ? 'AM' : 'PM')) : null
+  const hh = timeFormat === '12h' ? String(hours) : pad(hours)
+  const mm = pad(now.getMinutes())
+  const ss = pad(now.getSeconds())
+  const dateLabel = formatDateTime(now, { month: 'long', day: 'numeric', weekday: 'long' })
+  // Leave room for the date line and for seconds.
+  const timeSize = `min(${showDate ? 62 : 82}cqh, ${showSeconds ? 19 : 27}cqw)`
+  const dateSize = `max(12px, min(13cqh, 6cqw))`
 
-    return {
-      hour: getPart('hour'),
-      minute: getPart('minute'),
-      second: getPart('second'),
-      dayPeriod: getPart('dayPeriod'),
-    }
-  }, [currentTime, locale, showSeconds, widget.settings.timeFormat])
-
-  const dateText = formatDate(currentTime, { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })
-  const timeSize = clampMetric(Math.min(size.width / (showSeconds ? 4.8 : 3.8), size.height * (showDate ? 0.46 : 0.62)), 30, 150)
-  const dateSize = clampMetric(Math.min(size.width * 0.034, size.height * 0.105), 11, 22)
-  const secondSize = clampMetric(timeSize * 0.34, 13, 36)
-  const time = `${formattedTime.hour}:${formattedTime.minute}`
-
-  if (style === 'editorial') {
+  if (style === 'analog') {
     return (
-      <div
-        ref={containerRef}
-        className={cn(
-          'flex h-full min-h-0 overflow-hidden rounded-[inherit] text-foreground',
-          isCompact ? 'flex-col justify-center gap-1' : 'items-stretch',
-        )}
-      >
-        {!isCompact && showDate ? (
-          <div className="flex w-[30%] min-w-[118px] flex-col justify-between border-r border-foreground/15 py-1 pr-4">
-            <span className="text-2xs font-semibold tracking-[0.24em] text-secondary-text uppercase">CoNAI</span>
-            <span className="text-pretty font-medium leading-snug text-foreground/72" style={{ fontSize: dateSize }}>{dateText}</span>
-          </div>
-        ) : null}
-        <div className={cn('flex min-w-0 flex-1 flex-col justify-center', !isCompact && 'pl-5')}>
-          <div className="flex min-w-0 items-baseline gap-[0.08em] font-medium tracking-[-0.075em] tabular-nums" style={{ fontSize: timeSize, lineHeight: 0.86 }}>
-            <span>{time}</span>
-            {showSeconds ? <span className="tracking-[-0.04em] text-secondary-text" style={{ fontSize: secondSize }}>{formattedTime.second}</span> : null}
-            {formattedTime.dayPeriod ? <span className="ml-1 tracking-[0.08em] text-foreground/52 uppercase" style={{ fontSize: dateSize }}>{formattedTime.dayPeriod}</span> : null}
-          </div>
-          {isCompact && showDate ? <div className="mt-2 truncate font-medium text-foreground/60" style={{ fontSize: dateSize }}>{dateText}</div> : null}
+      <div className="flex h-full flex-col items-center justify-center gap-[4cqh]">
+        <div className="flex min-h-0 w-full flex-1 items-center justify-center">
+          <AnalogFace now={now} showSeconds={showSeconds} />
         </div>
+        {showDate ? <div className="shrink-0 opacity-75" style={{ fontSize: `max(12px, min(9cqh, 7cqw))` }}>{dateLabel}</div> : null}
       </div>
     )
   }
 
-  if (style === 'glass') {
+  if (style === 'split') {
+    const tile = (value: string) => (
+      <span className="flex items-center justify-center rounded-[0.12em] bg-[color-mix(in_srgb,var(--foreground)_9%,transparent)] px-[0.12em] tabular-nums">
+        {value}
+      </span>
+    )
     return (
-      // eslint-disable-next-line no-restricted-syntax -- wallpaper widget art: the glass clock tints the desktop behind it, not a scrim
-      <div ref={containerRef} className="relative flex h-full min-h-0 flex-col justify-center overflow-hidden rounded-[inherit] border border-white/14 bg-black/18 px-[5%] py-[4%] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_20px_70px_rgba(0,0,0,0.16)] backdrop-blur-md">
-        <div className="pointer-events-none absolute -top-1/2 right-[-8%] aspect-square h-[150%] rounded-full bg-secondary/13 blur-3xl" />
-        <div className="relative flex items-baseline gap-[0.1em] font-semibold tracking-[-0.07em] tabular-nums drop-shadow-[0_3px_18px_rgba(0,0,0,0.3)]" style={{ fontSize: timeSize, lineHeight: 0.9 }}>
-          <span>{time}</span>
-          {showSeconds ? <span className="text-secondary-text" style={{ fontSize: secondSize }}>{formattedTime.second}</span> : null}
-          {formattedTime.dayPeriod ? <span className="ml-1 tracking-[0.1em] text-white/55 uppercase" style={{ fontSize: dateSize }}>{formattedTime.dayPeriod}</span> : null}
+      <div className="flex h-full flex-col justify-center gap-[3cqh]" style={{ alignItems: FLEX_ALIGN[widget.style.textAlign] }}>
+        <div className="flex items-stretch gap-[0.08em] font-semibold leading-none tracking-[-0.03em]" style={{ fontSize: `min(${showDate ? 56 : 72}cqh, ${showSeconds ? 16 : 23}cqw)` }}>
+          {tile(pad(hours))}
+          {tile(mm)}
+          {showSeconds ? tile(ss) : null}
+          {period ? <span className="self-end pb-[0.1em] text-[0.24em] font-medium opacity-70">{period}</span> : null}
         </div>
-        {showDate ? <div className="relative mt-2 truncate font-medium tracking-[0.02em] text-white/66" style={{ fontSize: dateSize }}>{dateText}</div> : null}
+        {showDate ? <div className="opacity-70" style={{ fontSize: dateSize }}>{dateLabel}</div> : null}
       </div>
     )
   }
+
+  const timeClass = {
+    clean: 'font-extralight tracking-[-0.05em]',
+    serif: "font-normal tracking-[-0.02em] [font-family:'Noto_Serif_KR',ui-serif,Georgia,serif]",
+    glow: 'font-light tracking-[-0.04em]',
+    mono: 'font-mono font-medium tracking-[-0.02em]',
+  }[style]
+  const glow = style === 'glow'
+    ? { textShadow: '0 0 0.18em color-mix(in srgb, var(--primary) 70%, transparent), 0 0 0.55em color-mix(in srgb, var(--primary) 35%, transparent)' }
+    : undefined
 
   return (
-    <div ref={containerRef} className="flex h-full min-h-0 flex-col justify-center overflow-hidden rounded-[inherit] text-foreground">
-      <div className="flex items-baseline gap-[0.08em] font-medium tracking-[-0.075em] tabular-nums" style={{ fontSize: timeSize, lineHeight: 0.88 }}>
-        <span>{time}</span>
-        {showSeconds ? <span className="font-normal text-foreground/42" style={{ fontSize: secondSize }}>{formattedTime.second}</span> : null}
-        {formattedTime.dayPeriod ? <span className="ml-1 tracking-[0.08em] text-foreground/45 uppercase" style={{ fontSize: dateSize }}>{formattedTime.dayPeriod}</span> : null}
+    <div className="flex h-full flex-col justify-center">
+      <div className={`whitespace-nowrap leading-[0.92] tabular-nums ${timeClass}`} style={{ fontSize: timeSize, ...glow }}>
+        {hh}
+        <span className={style === 'mono' ? 'animate-pulse' : 'opacity-60'}>:</span>
+        {mm}
+        {showSeconds ? <span className="opacity-55">{style === 'mono' ? ':' : ' '}{ss}</span> : null}
+        {period ? <span className="ml-[0.15em] text-[0.26em] font-medium tracking-normal opacity-70">{period}</span> : null}
       </div>
-      {showDate ? <div className="mt-2 truncate font-medium text-foreground/55" style={{ fontSize: dateSize }}>{dateText}</div> : null}
+      {showDate ? (
+        <div
+          className={style === 'serif' ? 'mt-[0.4em] italic opacity-75' : style === 'mono' ? 'mt-[0.5em] font-mono uppercase tracking-[0.12em] opacity-60' : 'mt-[0.5em] opacity-70'}
+          style={{ fontSize: dateSize }}
+        >
+          {dateLabel}
+        </div>
+      ) : null}
     </div>
   )
 }
