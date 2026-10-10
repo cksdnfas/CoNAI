@@ -98,6 +98,23 @@ export function createAuthTables(db: Database.Database): void {
     )
   `);
 
+  // Read-only wallpaper runtime keys: a device (e.g. Lively) trades one for a session that only the
+  // /api/wallpaper-runtime routes honor, reading as the issuing account. Only the SHA-256 is stored.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wallpaper_runtime_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      token_prefix TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      account_id INTEGER,
+      preset_id TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_used_at DATETIME,
+      revoked_at DATETIME,
+      FOREIGN KEY (account_id) REFERENCES auth_accounts(id) ON DELETE CASCADE
+    )
+  `);
+
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_auth_accounts_status ON auth_accounts(status)
   `);

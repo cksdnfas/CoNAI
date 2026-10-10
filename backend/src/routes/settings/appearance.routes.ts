@@ -6,6 +6,7 @@ import { sendRouteBadRequest } from '../routeValidation'
 import { asyncHandler } from '../../middleware/asyncHandler'
 import { runtimePaths, publicUrls } from '../../config/runtimePaths'
 import { settingsService } from '../../services/settingsService'
+import { WALLPAPER_BACKGROUND_KINDS, WALLPAPER_WIDGET_TYPES } from '@conai/shared'
 import type {
   AppearancePresetSlot,
   AppearanceSettings,
@@ -26,7 +27,7 @@ const validBodyFontWeightPresets = ['regular', 'medium']
 const validEmphasisFontWeightPresets = ['standard', 'bold']
 const validGroupExplorerCardStyles = ['compact-row', 'media-tile']
 const validAppearancePresetSlotIds = ['slot-1', 'slot-2', 'slot-3']
-const validWallpaperWidgetTypes: WallpaperWidgetType[] = ['clock', 'queue-status', 'recent-results', 'activity-pulse', 'group-image-view', 'image-showcase', 'floating-collage', 'text-note']
+const validWallpaperWidgetTypes: readonly WallpaperWidgetType[] = WALLPAPER_WIDGET_TYPES
 const appearanceFontDir = path.join(runtimePaths.uploadsDir, 'theme-fonts')
 const allowedFontExtensions = new Set(['.ttf', '.otf', '.woff', '.woff2'])
 const allowedFontMimeTypes = new Set([
@@ -273,6 +274,14 @@ function validateWallpaperWidget(widget: unknown, path: string): string | null {
     return `${path}.settings must be an object`
   }
 
+  if (record.style !== undefined && (record.style === null || typeof record.style !== 'object' || Array.isArray(record.style))) {
+    return `${path}.style must be an object`
+  }
+
+  if (record.rotation !== undefined && (typeof record.rotation !== 'number' || !Number.isFinite(record.rotation))) {
+    return `${path}.rotation must be a number`
+  }
+
   return null
 }
 
@@ -305,6 +314,28 @@ function validateWallpaperLayoutPresets(layoutPresets: unknown): string | null {
 
     if (typeof record.createdAt !== 'string' || typeof record.updatedAt !== 'string') {
       return `wallpaperLayoutPresets[${index}] must include createdAt and updatedAt strings`
+    }
+
+    if (record.version !== undefined && !Number.isInteger(record.version)) {
+      return `wallpaperLayoutPresets[${index}].version must be an integer`
+    }
+
+    for (const field of ['canvasWidth', 'canvasHeight'] as const) {
+      const value = record[field]
+      if (value !== undefined && (!Number.isInteger(value) || Number(value) < 320 || Number(value) > 7680)) {
+        return `wallpaperLayoutPresets[${index}].${field} must be an integer between 320 and 7680`
+      }
+    }
+
+    if (record.themeMode !== undefined && record.themeMode !== 'dark' && record.themeMode !== 'light') {
+      return `wallpaperLayoutPresets[${index}].themeMode must be dark or light`
+    }
+
+    if (record.background !== undefined) {
+      const background = record.background as Record<string, unknown> | null
+      if (!background || typeof background !== 'object' || Array.isArray(background) || !(WALLPAPER_BACKGROUND_KINDS as readonly unknown[]).includes(background.kind)) {
+        return `wallpaperLayoutPresets[${index}].background.kind must be one of: ${WALLPAPER_BACKGROUND_KINDS.join(', ')}`
+      }
     }
 
     for (const [widgetIndex, widget] of record.widgets.entries()) {

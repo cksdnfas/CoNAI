@@ -9,6 +9,9 @@ import {
 } from '../routes/auth-route-helpers';
 import { AuthAccessControlService, getResolvedAuthAccessEpoch, isActiveAdminAccount, isActiveAdminRecord } from '../services/authAccessControlService';
 import { isDirectLoopbackRequest } from '../utils/bootstrapAccess';
+import { wallpaperRuntimeSessionGrantsImageView } from '../services/wallpaperRuntimeAccess';
+
+const IMAGE_VIEW_PERMISSION_KEY = 'images.view';
 
 /** Keep trusted bootstrap mode on the local console only. */
 function allowLocalBootstrapOrReject(req: Request, res: Response, next: NextFunction): void {
@@ -158,13 +161,29 @@ function refreshAnonymousSessionAccess(req: Request): string[] {
   return resolvedAccess.permissionKeys;
 }
 
+/**
+ * A wallpaper runtime key session (e.g. Lively, not logged in) may read the library images its widgets
+ * show; only image reads, and only while the key and its account still allow them.
+ */
+function withWallpaperRuntimeImageView(req: Request, permissionKeys: string[]): string[] {
+  if (
+    req.session?.wallpaperRuntimeTokenId === undefined
+    || (req.method !== 'GET' && req.method !== 'HEAD')
+    || permissionKeys.includes(IMAGE_VIEW_PERMISSION_KEY)
+    || !wallpaperRuntimeSessionGrantsImageView(req)
+  ) {
+    return permissionKeys;
+  }
+  return [...permissionKeys, IMAGE_VIEW_PERMISSION_KEY];
+}
+
 /** Resolve the current request as bootstrap, authenticated, or anonymous access. */
 function resolveRequestPermissionKeys(req: Request): { permissionKeys: string[]; authenticated: boolean } {
   const hasCredentials = hasConfiguredAuth();
 
   if (!hasCredentials) {
     if (!isDirectLoopbackRequest(req)) {
-      return { permissionKeys: [], authenticated: false };
+      return { permissionKeys: withWallpaperRuntimeImageView(req, []), authenticated: false };
     }
 
     const resolvedAccess = AuthAccessControlService.resolveBootstrapAccess();
@@ -177,7 +196,7 @@ function resolveRequestPermissionKeys(req: Request): { permissionKeys: string[];
     return { permissionKeys, authenticated: req.session.authenticated === true };
   }
 
-  return { permissionKeys: refreshAnonymousSessionAccess(req), authenticated: false };
+  return { permissionKeys: withWallpaperRuntimeImageView(req, refreshAnonymousSessionAccess(req)), authenticated: false };
 }
 
 /**

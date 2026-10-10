@@ -12,6 +12,7 @@ import {
   LlmPresetRecord,
   TaggerModel,
   TaggerDevice,
+  WallpaperBackground,
   WallpaperLayoutPreset,
   WallpaperWidgetInstance,
 } from '@conai/shared';
@@ -176,10 +177,20 @@ function normalizeWallpaperLayoutPresets(rawPresets: unknown): WallpaperLayoutPr
 
     const widgets = record.widgets.map((widget) => normalizeWallpaperWidget(widget)).filter((widget): widget is WallpaperWidgetInstance => widget !== null);
 
+    const isCanvasSize = (value: unknown): value is number => Number.isInteger(value) && Number(value) >= 320 && Number(value) <= 7680;
+    const background = record.background && typeof record.background === 'object' && !Array.isArray(record.background)
+      && typeof (record.background as Record<string, unknown>).kind === 'string'
+      ? { ...(record.background as WallpaperBackground) }
+      : undefined;
+
     return [{
       id: record.id,
       name: record.name,
       canvasPresetId: record.canvasPresetId,
+      ...(Number.isInteger(record.version) ? { version: Number(record.version) } : {}),
+      ...(isCanvasSize(record.canvasWidth) && isCanvasSize(record.canvasHeight) ? { canvasWidth: record.canvasWidth, canvasHeight: record.canvasHeight } : {}),
+      ...(record.themeMode === 'dark' || record.themeMode === 'light' ? { themeMode: record.themeMode } : {}),
+      ...(background ? { background } : {}),
       widgets,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,

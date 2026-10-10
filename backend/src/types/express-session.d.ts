@@ -13,5 +13,7 @@ declare module 'express-session' {
     accessCacheUpdatedAt?: number;
     /** Access epoch captured when groupKeys/permissionKeys were last cached into the session. */
     accessCacheEpoch?: number;
+    /** Wallpaper runtime key traded for this session; only /api/wallpaper-runtime reads honor it. */
+    wallpaperRuntimeTokenId?: number;
   }
 }

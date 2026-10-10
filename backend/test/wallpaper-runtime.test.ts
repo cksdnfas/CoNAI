@@ -1,0 +1,174 @@
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import http from 'node:http'
+import os from 'node:os'
+import path from 'node:path'
+import { test } from 'node:test'
+
+/**
+ * Wallpaper runtime keys: a logged-out device (Lively) trades a key for a session that reads the
+ * /api/wallpaper-runtime feeds as the issuing account, library images included, and nothing else.
+ */
+test('wallpaper runtime keys, access scope and feeds', { timeout: 120000 }, async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-wallpaper-runtime-'))
+  process.env.RUNTIME_BASE_PATH = root
+  for (const part of ['DATABASE', 'UPLOADS', 'LOGS', 'TEMP', 'SAVE', 'CANVAS', 'ARTIFACTS', 'MODELS', 'CUSTOM_NODES', 'RECYCLE_BIN']) {
+    process.env[`RUNTIME_${part}_DIR`] = path.join(root, part.toLowerCase())
+  }
+  process.env.FRONTEND_DIST_PATH = path.join(root, 'no-frontend')
+
+  const express = (await import('express')).default
+  const authModule = await import('../src/database/authDb')
+  authModule.initializeAuthDb()
+  const auth = authModule.getAuthDb()
+  const main = await import('../src/database/init')
+  await main.initializeDatabase()
+  const userDb = await import('../src/database/userSettingsDb')
+  userDb.initializeUserSettingsDb()
+  ;(await import('../src/database/apiGenerationDb')).initializeApiGenerationDb()
+  const { invalidateConfiguredAuthCache } = await import('../src/routes/auth-route-helpers')
+  const { registerAppRoutes } = await import('../src/startup/registerAppRoutes')
+  const { WallpaperRuntimeToken } = await import('../src/models/WallpaperRuntimeToken')
+  const { AuthAccount } = await import('../src/models/AuthAccount')
+  t.after(async () => {
+    auth.close()
+    userDb.closeUserSettingsDb()
+    main.closeDatabase()
+    await new Promise<void>(async (resolve) => (await import('../src/utils/logger')).logger.close(resolve))
+    assert.ok(path.basename(root).startsWith('conai-wallpaper-runtime-'))
+    await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
+  })
+
+  const adminId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('admin', 'unused', 'admin')").run().lastInsertRowid)
+  const guestId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('guest', 'unused', 'guest')").run().lastInsertRowid)
+  const adminGroup = auth.prepare("SELECT id FROM auth_permission_groups WHERE group_key = 'admin'").get() as { id: number }
+  auth.prepare('INSERT OR IGNORE INTO auth_account_group_memberships (account_id, group_id) VALUES (?, ?)').run(adminId, adminGroup.id)
+  invalidateConfiguredAuthCache()
+
+  // One session object per "browser"; the header picks it so a test can be the logged-out kiosk or a login.
+  const sessions: Record<string, Record<string, unknown>> = {
+    kiosk: {},
+    admin: { authenticated: true, accountId: adminId, accountType: 'admin' },
+    guest: { authenticated: true, accountId: guestId, accountType: 'guest' },
+  }
+  const app = express()
+  app.use(express.json())
+  app.use((req, _res, next) => {
+    const name = String(req.headers['x-test-session'] ?? 'kiosk')
+    Object.assign(req, { sessionID: name, session: sessions[name] })
+    next()
+  })
+  const pass = (_req: unknown, _res: unknown, next: () => void) => next()
+  registerAppRoutes(app, { uploadsDir: path.join(root, 'uploads'), tempDir: path.join(root, 'temp'), saveDir: path.join(root, 'save'), mcpLimiter: pass, readOnlyLimiter: pass, uploadLimiter: pass })
+  const server = http.createServer(app)
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  t.after(() => new Promise<void>((resolve) => server.close(() => resolve())))
+  const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`
+  const call = async (method: string, url: string, session = 'kiosk', body?: unknown) => {
+    const response = await fetch(origin + url, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'x-test-session': session },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+    const text = await response.text()
+    let json: any = null
+    try { json = JSON.parse(text) } catch { /* binary or empty */ }
+    return { status: response.status, json }
+  }
+
+  await t.test('keys are issued by admins only, stored hashed, and listed without the secret', async () => {
+    assert.equal((await call('POST', '/api/wallpaper-runtime/tokens', 'guest', { name: 'x' })).status, 403)
+    const created = await call('POST', '/api/wallpaper-runtime/tokens', 'admin', { name: '거실 PC', presetId: 'living' })
+    assert.equal(created.status, 201)
+    assert.match(created.json.data.token, /^wpk_/)
+    const stored = auth.prepare('SELECT token_hash, account_id FROM wallpaper_runtime_tokens WHERE id = ?').get(created.json.data.id) as { token_hash: string; account_id: number }
+    assert.notEqual(stored.token_hash, created.json.data.token)
+    assert.equal(stored.account_id, adminId)
+    const listed = await call('GET', '/api/wallpaper-runtime/tokens', 'admin')
+    assert.equal(listed.json.data.length, 1)
+    assert.equal(listed.json.data[0].token, undefined)
+  })
+
+  await t.test('a logged-out browser reads nothing until it trades a live key', async () => {
+    assert.equal((await call('GET', '/api/wallpaper-runtime/settings')).status, 401)
+    assert.equal((await call('GET', '/api/images/count')).status, 401)
+    assert.equal((await call('POST', '/api/wallpaper-runtime/session', 'kiosk', { token: 'wpk_wrong' })).status, 401)
+
+    const { token, record } = WallpaperRuntimeToken.create({ name: 'kiosk', accountId: adminId, presetId: 'living' })
+    const traded = await call('POST', '/api/wallpaper-runtime/session', 'kiosk', { token })
+    assert.equal(traded.status, 200)
+    assert.equal(traded.json.data.presetId, 'living')
+    assert.equal(sessions.kiosk.wallpaperRuntimeTokenId, record.id)
+    assert.equal(sessions.kiosk.authenticated, undefined, 'a key never logs the browser in')
+
+    const settings = await call('GET', '/api/wallpaper-runtime/settings')
+    assert.equal(settings.status, 200)
+    assert.equal(settings.json.data.tokenPresetId, 'living')
+    assert.equal((await call('GET', '/api/wallpaper-runtime/llm-usage')).status, 200, 'reads as the issuing admin')
+    assert.equal((await call('GET', '/api/wallpaper-runtime/generation/queue')).status, 200)
+    // Library image reads open up, writes and other features do not.
+    assert.equal((await call('GET', '/api/images/count')).status, 200)
+    assert.equal((await call('GET', '/api/generation-queue')).status, 401)
+    assert.equal((await call('PUT', '/api/settings/appearance', 'kiosk', { wallpaperLayoutPresets: [] })).status, 401)
+
+    WallpaperRuntimeToken.revoke(record.id)
+    assert.equal((await call('GET', '/api/wallpaper-runtime/settings')).status, 401)
+    assert.equal((await call('GET', '/api/images/count')).status, 401)
+  })
+
+  await t.test('a key stops working when its account is disabled', async () => {
+    const { token } = WallpaperRuntimeToken.create({ name: 'kiosk 2', accountId: adminId, presetId: null })
+    sessions.kiosk = {}
+    await call('POST', '/api/wallpaper-runtime/session', 'kiosk', { token })
+    assert.equal((await call('GET', '/api/wallpaper-runtime/settings')).status, 200)
+    auth.prepare("UPDATE auth_accounts SET status = 'disabled' WHERE id = ?").run(adminId)
+    assert.equal((await call('GET', '/api/wallpaper-runtime/settings')).status, 401)
+    auth.prepare("UPDATE auth_accounts SET status = 'active' WHERE id = ?").run(adminId)
+    assert.ok(AuthAccount.findById(adminId))
+  })
+
+  await t.test('generation feeds are scoped to the reader', async () => {
+    const db = userDb.getUserSettingsDb()
+    const insert = db.prepare(`INSERT INTO api_generation_history (service_type, generation_status, composite_hash, requested_by_account_id, requested_by_account_type) VALUES (?, 'completed', ?, ?, ?)`)
+    insert.run('novelai', 'a'.repeat(64), adminId, 'admin')
+    insert.run('comfyui', 'b'.repeat(64), guestId, 'guest')
+    db.prepare(`INSERT INTO api_generation_history (service_type, generation_status, requested_by_account_id) VALUES ('novelai', 'failed', ?)`).run(guestId)
+
+    const adminHistory = await call('GET', '/api/wallpaper-runtime/generation/history', 'admin')
+    assert.equal(adminHistory.json.data.length, 2)
+    assert.equal(adminHistory.json.data[0].thumbnailUrl, `/api/images/${'b'.repeat(64)}/thumbnail`)
+
+    // A guest with the runtime page sees only its own generations and never admin data.
+    const guestGroup = auth.prepare("SELECT id FROM auth_permission_groups WHERE group_key = 'guest'").get() as { id: number }
+    auth.prepare('INSERT OR IGNORE INTO auth_account_group_memberships (account_id, group_id) VALUES (?, ?)').run(guestId, guestGroup.id)
+    const permission = auth.prepare("SELECT id FROM auth_permissions WHERE permission_key = 'images.view'").get() as { id: number }
+    auth.prepare('INSERT OR REPLACE INTO auth_group_permissions (group_id, permission_id, allowed) VALUES (?, ?, 1)').run(guestGroup.id, permission.id)
+    ;(await import('../src/services/authAccessControlService')).invalidateResolvedAuthAccessCache()
+    const guestHistory = await call('GET', '/api/wallpaper-runtime/generation/history', 'guest')
+    assert.equal(guestHistory.status, 200)
+    assert.deepEqual(guestHistory.json.data.map((item: { serviceType: string }) => item.serviceType), ['comfyui'])
+    const guestStats = await call('GET', '/api/wallpaper-runtime/generation/stats?days=3', 'guest')
+    assert.equal(guestStats.json.data.totals.total, 2)
+    assert.equal(guestStats.json.data.totals.failed, 1)
+    assert.equal((await call('GET', '/api/wallpaper-runtime/llm-usage', 'guest')).status, 403)
+  })
+
+  await t.test('saved layouts keep version 2 fields and reject unknown backgrounds', async () => {
+    const preset = {
+      id: 'living', name: '거실', canvasPresetId: 'custom', version: 2, canvasWidth: 2560, canvasHeight: 1080, themeMode: 'dark',
+      background: { kind: 'group-slideshow', groupId: 3, intervalSec: 300 },
+      widgets: [{ id: 'w1', type: 'generation-progress', x: 40, y: 60, w: 480, h: 120, zIndex: 1, locked: false, hidden: false, rotation: 0, style: { variant: 'glass' }, settings: {} }],
+      createdAt: '2026-10-11T00:00:00Z', updatedAt: '2026-10-11T00:00:00Z',
+    }
+    const bad = await call('PUT', '/api/settings/appearance', 'admin', { wallpaperLayoutPresets: [{ ...preset, background: { kind: 'webcam' } }] })
+    assert.equal(bad.status, 400)
+    const saved = await call('PUT', '/api/settings/appearance', 'admin', { wallpaperLayoutPresets: [preset], wallpaperActivePresetId: 'living' })
+    assert.equal(saved.status, 200, JSON.stringify(saved.json))
+    const read = await call('GET', '/api/wallpaper-runtime/settings', 'admin')
+    const stored = read.json.data.wallpaperLayoutPresets[0]
+    assert.equal(stored.version, 2)
+    assert.equal(stored.canvasWidth, 2560)
+    assert.deepEqual(stored.background, preset.background)
+    assert.deepEqual(stored.widgets[0].style, { variant: 'glass' })
+  })
+})

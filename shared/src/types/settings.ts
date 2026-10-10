@@ -174,9 +174,34 @@ export const WALLPAPER_WIDGET_TYPES = [
   'image-showcase',
   'floating-collage',
   'text-note',
+  'calendar',
+  'generation-progress',
+  'generation-stats',
+  'llm-usage',
+  'library-stats',
+  'character-card',
+  'chat-recent',
+  'audio-player',
+  'post-ticker',
+  'prompt-of-day',
 ] as const;
 
 export type WallpaperWidgetType = (typeof WALLPAPER_WIDGET_TYPES)[number];
+
+/**
+ * Layout version 2 places widgets in canvas pixels (free placement). Version 1 (absent) stored grid
+ * cells of the canvas preset; clients convert those once when they load the preset.
+ */
+export const WALLPAPER_LAYOUT_VERSION = 2;
+
+export const WALLPAPER_BACKGROUND_KINDS = ['theme', 'color', 'gradient', 'image', 'video', 'group-slideshow'] as const;
+export type WallpaperBackgroundKind = (typeof WALLPAPER_BACKGROUND_KINDS)[number];
+
+/** Canvas background; media come from the library (image hash / group), never side files. */
+export interface WallpaperBackground {
+  kind: WallpaperBackgroundKind;
+  [key: string]: unknown;
+}
 
 export interface WallpaperWidgetSize {
   w: number;
@@ -195,6 +220,10 @@ export interface WallpaperWidgetInstance extends WallpaperWidgetFrame {
   zIndex: number;
   locked: boolean;
   hidden: boolean;
+  /** Degrees, layout version 2. */
+  rotation?: number;
+  /** Shared frame look (variant, colors, radius, type); kept open like settings. */
+  style?: Record<string, unknown>;
   settings: Record<string, unknown>;
 }
 
@@ -202,6 +231,13 @@ export interface WallpaperLayoutPreset {
   id: string;
   name: string;
   canvasPresetId: string;
+  /** WALLPAPER_LAYOUT_VERSION when widget frames are canvas pixels; absent = grid cells. */
+  version?: number;
+  /** Canvas size for canvasPresetId 'custom'. */
+  canvasWidth?: number;
+  canvasHeight?: number;
+  themeMode?: 'dark' | 'light';
+  background?: WallpaperBackground;
   widgets: WallpaperWidgetInstance[];
   createdAt: string;
   updatedAt: string;

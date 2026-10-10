@@ -195,13 +195,9 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/events', runtimeEventStreamRoutes);
   app.use('/api/external-api', optionalAuth, externalApiRoutes);
   app.use('/api/civitai', options.readOnlyLimiter, optionalAuth, civitaiRoutes);
-  app.use('/api/wallpaper-runtime', options.readOnlyLimiter, (req, res, next) => {
-    if (req.path === '/browse-content' || /^\/groups\/[^/]+\/preview-images$/.test(req.path)) {
-      allowImagesView(req, res, next);
-      return;
-    }
-    next(); // Sanitized wallpaper settings are public runtime preferences.
-  }, wallpaperRuntimeRoutes);
+  // The runtime router resolves its own reader (login, runtime key session or anonymous) per route;
+  // its event stream must not pass through session-writing middleware.
+  app.use('/api/wallpaper-runtime', options.readOnlyLimiter, wallpaperRuntimeRoutes);
   app.use('/api/images', options.readOnlyLimiter, (req, res, next) => {
     if (isImageUploadPayloadRequest(req)) {
       options.uploadLimiter(req, res, next);
