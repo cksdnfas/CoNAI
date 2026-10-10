@@ -3,7 +3,7 @@ import { acquireLlmRequestSlot } from '../llmRequestScheduler'
 import { buildOpenAiGenerationFields, readLlmConnectionConfig, type LlmGenerationOptions, type LlmThinkingSwitch } from '../llmGenerationOptions'
 import { normalizeOptionalString } from '../../utils/valueNormalization'
 import { LlmRequestError } from '../llmRequestRetry'
-import { CLAUDE_CHAT_PROVIDER, streamClaudeChatCompletion } from './claudeChatCompletion'
+import { CLAUDE_CHAT_PROVIDER, streamClaudeChatCompletion, type ClaudeChatSession } from './claudeChatCompletion'
 import type { ChatMcpToolResult } from './chatMcpBridge'
 import { primaryModelOf } from './modelSlots'
 import { createRepetitionWatch, withoutRepetition } from './repetitionGuard'
@@ -39,6 +39,8 @@ export type ChatCompletionTarget = {
   /** Put `cache_control` breakpoints on the stable parts of the request (Anthropic through LiteLLM; off by default). */
   promptCacheMarks: boolean
   transport?: 'claude-code'
+  /** Claude Code chats that keep their memory: the session this request continues (see ClaudeChatSession). */
+  claudeSession?: ClaudeChatSession
   /** How `reasoningEffort: 'none'` reaches the server (the connection's setting; default `reasoning_effort`). */
   thinkingSwitch?: LlmThinkingSwitch
 }

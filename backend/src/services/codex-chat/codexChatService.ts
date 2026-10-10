@@ -1,7 +1,7 @@
 import { validateChatMediaAttachments } from './chatMediaAttachments'
 import type { ChatExecutionContext } from '@conai/shared'
 import { isCodexChatCreationTool } from '@conai/shared'
-import { beginDirectReply, userReplyRouting, requireReplyTarget, REPLY_GUIDANCE } from './chatReplies'
+import { beginDirectReply, userReplyRouting, requireReplyTarget } from './chatReplies'
 import { buildReplyContext } from './chatReplyContext'
 import { createHash } from 'crypto'
 import { isRequesterAdmin, requesterPermissionKeys } from '../../middleware/featureAccess'
@@ -19,7 +19,7 @@ import { prepareChatRuntime, parseChatFeatureInventory, chatRuntimeArgs, chatTur
 import { ChatProfileStore, chatGreetings, pickChatGreeting, type ChatProfile } from './chatProfiles'
 import { loadChatSettings, type ChatScope } from './chatSettings'
 import { canUseChatProfile, resolveChatProfileToolGrant, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken, setCodexChatExecution } from './codexChatAccess'
-import { OUTCOME_KEY, PAGE_VIEW_KEY, parseChatPageContext, pendingPageReference, pendingProposalOutcomes } from './chatPageContext'
+import { parseChatPageContext, pendingPageReference, pendingProposalOutcomes } from './chatPageContext'
 import type { ChatSendOptions } from './chatTasks'
 import { rememberChatPage } from './chatPageBridge'
 import { notifyChatUserSend } from './chatSendEvents'
@@ -28,10 +28,10 @@ import { pendingGeneratedImages } from './chatGenerationPrompting'
 import { canRequesterViewImages } from '../../middleware/imageAccess'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
-import { BLOCK_EDITS_MAX, blockStateHash, blockStateText, foldBlockState, parseBlockEdits, usableBlocks } from './chatBlockState'
-import { authorNoteText, postHistoryText, buildPersonaPrompt, estimateTokens, fillCharacterPlaceholders, flagDirectiveFor, referenceBlock, resolveAuthorNote, sendableMessages, splitTurns, REPLY_FORMAT_GUIDANCE, GENERATION_GUIDANCE, type ChatContextMeta } from './llmChatContext'
+import { BLOCK_EDITS_MAX, foldBlockState, parseBlockEdits, usableBlocks } from './chatBlockState'
+import { postHistoryText, buildPersonaPrompt, fillCharacterPlaceholders, flagDirectiveFor, referenceBlock, resolveAuthorNote, sendableMessages, splitTurns, REPLY_FORMAT_GUIDANCE, GENERATION_GUIDANCE, type ChatContextMeta } from './llmChatContext'
 import { visibleContextMessages } from './chatDiagnostics'
-import { contextSections, contextSource, limitContextMeta, loreDiagnostics, legacyContextMeta, type ContextSource } from './chatContextDiagnostics'
+import { contextSource, limitContextMeta, legacyContextMeta } from './chatContextDiagnostics'
 import { redactChatRequestBody, saveChatRequestCapture } from './chatRequestCaptures'
 import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { translateReply, translateUserInput } from './chatTranslation'
@@ -40,27 +40,25 @@ import { endJudgedTurn, judgeBeforeReply, judgeDirectiveText, type JudgedTurn } 
 import { judgeStatusFields } from './chatJudgeFields'
 import { stripEchoedAddresses } from '@conai/shared'
 import { recordLlmUsage, type LlmTokenCounts } from '../llmUsage'
-import { booksForRequest, hasLoreFiles, loreIndexText, selectRequestLore } from './chatLoreContext'
-import { rejectedLoreLine } from './chatLoreProposals'
 import { LlmChatService, type GroupReplyResult } from './llmChatService'
 import { ChatGroupStore } from './chatGroupStore'
 import { buildFlagDirective, ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { stopChatOrderRun } from './chatOrderRuns'
 import { readChoiceAnswer } from './chatChoices'
-import { ChatUserProfileStore, userPersonaForThread, userPersonaOf, userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
+import { ChatUserProfileStore, userPersonaForThread, userPersonaOf } from './chatUserProfiles'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
-import { CodexChatStore, type ChatBranchPurpose, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
+import { CodexChatStore, type ChatBranchPurpose, type CodexChatMessageRecord, type CodexChatToolCall } from './codexChatStore'
 import { ChatSummaryStore } from './chatMemory'
 import { branchChatThread } from './chatBranch'
 import { addChatGreeting } from './chatGreeting'
+import { deleteClaudeSessions, isClaudeSessionValue } from './claudeChatSessions'
+import { codexHistoryRecap, codexInputMeta, nextLoreSent, pendingAuthorNote, pendingBlockState, pendingLore, pendingRejectedLore, pendingReplyGuidance, pendingUserPersona, readLoreSent } from './chatSessionMemory'
 import { logger } from '../../utils/logger'
 import type { ChatStreamEvent } from '@conai/shared'
 
 const SESSION_IDLE_MS = 15 * 60 * 1000
 const THREAD_REQUEST_TIMEOUT_MS = 2 * 60 * 1000
 const COMPACT_TIMEOUT_MS = 5 * 60 * 1000
-/** Lore keys remembered per chat; more than this only means some lore may be given again. */
-const LORE_SENT_MAX_KEYS = 500
 const CLI_PROBE_TIMEOUT_MS = 20 * 1000
 const MCP_SERVER_NAME = 'conai'
 const MCP_TOKEN_ENV = 'CONAI_CHAT_MCP_TOKEN'
@@ -660,153 +658,9 @@ async function ensureCodexThread(session: Session, codexThreadId: string | null,
   return started.thread.id
 }
 
-function readLoreSent(value: string | null) {
-  try {
-    const parsed: unknown = JSON.parse(value || '[]')
-    return new Set(Array.isArray(parsed) ? parsed.filter((key): key is string => typeof key === 'string') : [])
-  } catch {
-    return new Set<string>()
-  }
-}
-
-/**
- * The author's note to put in this turn's input: Codex keeps every input in its memory, so the note goes in once and
- * again only when its text changes (or after a compaction clears the sent keys) — tracked like lore, as `note:<hash>`.
- */
-function pendingAuthorNote(thread: Pick<CodexChatThreadRecord, 'author_note' | 'author_note_depth'> | null, profile: ChatProfile, sent: Set<string>, user: ChatUserPersona) {
-  const text = authorNoteText(resolveAuthorNote(thread, profile, user))
-  if (!text) return { text: '', keys: [] as string[] }
-  const key = `note:${createHash('sha1').update(text).digest('hex').slice(0, 10)}`
-  return sent.has(key) ? { text: '', keys: [] } : { text, keys: [key] }
-}
-
-const RECAP_MESSAGES = 40
-const RECAP_CHARS = 16_000
-
-/**
- * What a new Codex thread is told of a chat it did not take part in (a branch, an import, a chat whose Codex memory was
- * reset): its summary and its last messages, once. Empty when there is no conversation yet (a greeting alone).
- */
-export function codexHistoryRecap(thread: Pick<CodexChatThreadRecord, 'summary'> | null, earlier: CodexChatMessageRecord[], profile: ChatProfile, user: ChatUserPersona) {
-  const messages = earlier.filter((message) => message.content.trim())
-  if (!messages.some((message) => message.role === 'user')) return ''
-  let transcript = messages.slice(-RECAP_MESSAGES).map((message) => `${message.role === 'user' ? user.name : profile.name}: ${message.content.trim()}`).join('\n\n')
-  if (transcript.length > RECAP_CHARS) transcript = `…${transcript.slice(-RECAP_CHARS)}`
-  const summary = thread?.summary?.trim()
-  return [
-    '[이전 기록] 이 대화는 아래에서 이어져. 네 기억에는 없지만 실제로 나눈 대화야. 이어서 자연스럽게 답해.',
-    summary ? `## 그 전의 요약\n${summary}` : '',
-    `## 최근 대화\n${transcript}`,
-    '[/이전 기록]',
-  ].filter(Boolean).join('\n\n')
-}
-
-const LORE_INDEX_KEY = 'lore-index:'
-/** Pinned memories as Codex was given them before they became chat book entries. */
-const OLD_MEMORY_KEY = 'memory:'
-
-/**
- * The lore index with the "always on" entries (see loreIndexText), given to Codex the same way as the note: once, and
- * again when it changes (or after a compaction), tracked as `lore-index:<hash>`. Codex may still hold an earlier index,
- * or pinned memories from before they moved into the chat book: this one replaces them.
- */
-function pendingLoreIndex(text: string, sent: Set<string>) {
-  const replacing = [...sent].some((key) => key.startsWith(LORE_INDEX_KEY) || key.startsWith(OLD_MEMORY_KEY))
-  if (!text && !replacing) return { text: '', keys: [] as string[] }
-  const key = `${LORE_INDEX_KEY}${text ? createHash('sha1').update(text).digest('hex').slice(0, 10) : 'none'}`
-  if (sent.has(key)) return { text: '', keys: [] as string[] }
-  const body = text
-    ? (replacing ? `${text}\n(로어북 목차와 상시 항목이 바뀌었어. 이전에 받은 목차·상시 항목·고정 기억 대신 이걸 따라.)` : text)
-    : '## 로어북 목차\n(붙은 로어북이 없어. 이전에 받은 목차·상시 항목·고정 기억은 따르지 마.)'
-  return { text: body, keys: [key] }
-}
-
-/**
- * The sent keys after this turn: an index given now supersedes every earlier one (and old pinned memories); the screen
- * and the card outcomes are "the latest one given", so a newer one replaces the older key.
- */
-function nextLoreSent(sent: Set<string>, keys: string[]) {
-  const superseded = keys.some((key) => key.startsWith(LORE_INDEX_KEY))
-  const replaces = [PAGE_VIEW_KEY, OUTCOME_KEY].filter((prefix) => keys.some((key) => key.startsWith(prefix)))
-  const kept = [...sent].filter((key) => !(superseded && (key.startsWith(LORE_INDEX_KEY) || key.startsWith(OLD_MEMORY_KEY))) && !replaces.some((prefix) => key.startsWith(prefix)))
-  return [...kept, ...keys].slice(-LORE_SENT_MAX_KEYS)
-}
-
-const REPLY_GUIDE_KEY = 'reply-guide:'
-/** The reply-metadata rules: fixed text, so Codex is given it once (and again after a compaction). */
-function pendingReplyGuidance(sent: Set<string>) {
-  const key = `${REPLY_GUIDE_KEY}${createHash('sha1').update(REPLY_GUIDANCE).digest('hex').slice(0, 10)}`
-  return sent.has(key) ? { text: '', keys: [] as string[] } : { text: REPLY_GUIDANCE, keys: [key] }
-}
-
-/**
- * The lore of one Codex turn: the books the chat and the profile attach (a room's: the room's books and the member's
- * own), keyword entries not yet given (files only through read_lore_file, which a Codex session always has), and the
- * index to give if it changed.
- */
-function pendingLore(thread: CodexChatThreadRecord | null, profile: ChatProfile, messages: CodexChatMessageRecord[], sent: Set<string>, user: ChatUserPersona) {
-  const books = booksForRequest({ thread, profile })
-  const lore = selectRequestLore(profile, books, messages, (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile, user), {
-    toolOffered: hasLoreFiles(books),
-    inlineFiles: false,
-    skip: (key) => sent.has(key),
-  })
-  return { keyed: lore.keyed, keyedKeys: lore.keyedKeys, index: pendingLoreIndex(loreIndexText(lore), sent), selected: lore }
-}
-
 /** A turn's input: the text, then the attached images as images (Codex keeps them in its memory like the text). */
 export function codexTurnInput(text: string, images: string[]) {
   return [{ type: 'text' as const, text, text_elements: [] }, ...images.map((url) => ({ type: 'image' as const, url }))]
-}
-
-/** Only CoNAI's input is observable; Codex's accumulated/compacted context is opaque. */
-export function codexInputMeta(profile: ChatProfile, messages: CodexChatMessageRecord[], lore: ReturnType<typeof pendingLore>, input: string, keys: string[], sources: ContextSource[], droppedTurns = 0): ChatContextMeta {
-  const decisions = lore.selected.decisions.map((decision) => decision.reason === 'constant' && !lore.index.keys.length ? { ...decision, selected: false, reason: 'codex-sent' } : decision)
-  const meta: ChatContextMeta = {
-    model: profile.model || null, windowFromMessageId: messages[0]?.id ?? null, sentMessages: messages.length,
-    summaryUntilMessageId: null, recalledSegments: 0, lore: decisions.filter((decision) => decision.selected).map((decision) => decision.title),
-    memories: decisions.filter((decision) => decision.selected && decision.reason === 'constant').length, estimatedTokens: estimateTokens(profile.id, input),
-  }
-  if (!loadChatSettings().diagnostics.enabled) return limitContextMeta(meta)
-  return limitContextMeta({ ...meta, version: 2, engine: 'codex', opaqueContext: true, profileId: profile.id,
-    sections: contextSections([{ role: 'user', content: input }], [], (text) => estimateTokens(profile.id, text)),
-    sources, codexKeys: keys, ...loreDiagnostics(decisions, lore.selected.unmatched),
-    recall: [], window: { fromId: meta.windowFromMessageId, sent: messages.length, droppedTurns }, toolRounds: 0,
-  })
-}
-
-/**
- * Who the user is (the chat's user profile), given to Codex the same way as the note: once, and again when the
- * profile changes or after a compaction. Codex's fixed instructions are frozen at thread start, so it cannot go there.
- */
-function pendingUserPersona(user: ChatUserPersona, sent: Set<string>) {
-  const text = userPersonaPrompt(user)
-  if (!text) return { text: '', keys: [] as string[] }
-  const key = `user:${createHash('sha1').update(text).digest('hex').slice(0, 10)}`
-  return sent.has(key) ? { text: '', keys: [] } : { text, keys: [key] }
-}
-
-/**
- * The display block state to put in this turn's input: given again only when it changed since it was last given
- * (or after a compaction), tracked as `state:<hash>` beside the lore keys.
- */
-function pendingBlockState(thread: Pick<CodexChatThreadRecord, 'block_edits'> | null, profile: ChatProfile, messages: CodexChatMessageRecord[], sent: Set<string>, speakerId?: number) {
-  const folded = foldBlockState(profile, messages, parseBlockEdits(thread?.block_edits), speakerId)
-  const text = folded ? blockStateText(profile.style.blocks, folded.state) : ''
-  if (!text) return { text: '', keys: [] as string[] }
-  const key = `state:${blockStateHash(text)}`
-  return sent.has(key) ? { text: '', keys: [] } : { text, keys: [key] }
-}
-
-/**
- * The lore titles a person set aside in this chat (see rejectedLoreLine), for a profile that may propose lore: given
- * again only when the list changed (or after a compaction), tracked as `rejected-lore:<hash>`.
- */
-function pendingRejectedLore(threadId: number, profile: ChatProfile, sent: Set<string>) {
-  const text = profile.allowLoreProposals ? rejectedLoreLine(threadId) : ''
-  if (!text) return { text: '', keys: [] as string[] }
-  const key = `rejected-lore:${createHash('sha1').update(text).digest('hex').slice(0, 10)}`
-  return sent.has(key) ? { text: '', keys: [] } : { text, keys: [key] }
 }
 
 /**
@@ -814,7 +668,8 @@ function pendingRejectedLore(threadId: number, profile: ChatProfile, sent: Set<s
  * background: any chat process can delete it (they share CODEX_HOME), and one is started only when none is running.
  */
 export function deleteCodexRollout(requester: McpRequester, codexThreadId: string | null) {
-  if (!codexThreadId) return
+  // A Claude Code chat keeps its session in the same column; its folder goes with the chat instead (deleteClaudeSessions).
+  if (!codexThreadId || isClaudeSessionValue(codexThreadId)) return
   void (async () => {
     for (const session of sessions.values()) session.loadedThreads.delete(codexThreadId)
     const session = [...sessions.values()].find((entry) => entry.client.isAlive && entry.requester.accountId === requester.accountId) ?? await ensureSession(requester, [], [])
@@ -1042,6 +897,7 @@ export const CodexChatService = {
     const profile = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
     CodexChatStore.clearThread(threadId, profile ? fillCharacterPlaceholders(pickChatGreeting(profile), profile, userPersonaForThread(thread)) : '')
     deleteCodexRollout(requester, thread.codex_thread_id)
+    deleteClaudeSessions(threadId)
     return CodexChatService.getThread(requester, threadId)
   },
 
@@ -1263,6 +1119,7 @@ export const CodexChatService = {
       await LlmChatService.stop(threadId)
       if (LlmChatService.isRunning(threadId)) throw new CodexChatError('답변 중단을 처리 중이야. 잠시 후 다시 삭제해줘.', 409)
       CodexChatStore.deleteThread(threadId)
+      deleteClaudeSessions(threadId)
       return
     }
     const active = findActiveTurn(threadId)
@@ -1446,3 +1303,5 @@ onBeforeCodexCliUpdate(() => {
   catalogs.clear()
   return CodexChatService.stopAllSessions('CLI 업데이트')
 })
+
+export { codexHistoryRecap, codexInputMeta } from './chatSessionMemory'

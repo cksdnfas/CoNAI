@@ -23,6 +23,9 @@ import { loadChatSettings } from './chatSettings'
 import { canUseChatProfile, resolveChatProfileToolGrant, resolveChatAccess } from './codexChatAccess'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import { withGenerationOutcomes } from './codexChatMedia'
+import { GENERATED_IMAGE_TOKENS, loadInlineGeneratedImages, withGeneratedImages } from './chatGenerationPrompting'
+import { buildClaudeSessionTurn } from './claudeChatSessions'
+import type { ClaudeChatSession } from './claudeChatCompletion'
 import type { CodexChatStreamEvent } from './codexChatService'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 import { ChatSummaryStore } from './chatMemory'
@@ -112,6 +115,8 @@ type LlmTurn = {
   contextMeta?: ChatContextMeta & { model: string | null; promptTokens?: number | null }
   requestCapture?: string
   requestSent?: boolean
+  /** A Claude Code direct reply that continues the chat's session (see claudeChatSessions): set while the request is built. */
+  claudeSession?: ClaudeChatSession
   listeners: Set<(event: CodexChatStreamEvent) => void>
   finished: Promise<CodexChatMessageRecord | null>
 }
@@ -256,6 +261,9 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
   const listMessages = () => withGenerationOutcomes(CodexChatStore.listMessages(thread.id).filter((message) => message.id !== turn.replacingMessageId))
   const config = resolveContextConfig(thread, profile)
   if (turn.reaction && thread.kind === 'group') config.maxTokens = ChatGroupStore.member(thread.id, profile.id)?.max_tokens ?? config.maxTokens
+  // A Claude Code direct reply continues the chat's session: it sends only what is new, and the session (not the
+  // context window or the summary) holds the conversation. A continuation of a cut reply stays a one-off request.
+  const inSession = profile.engine === 'claude' && thread.kind === 'direct' && !turn.reaction && turn.continuing === undefined
   // Everything the request needs but the judge's answers: the conversation (read once, after the user's message is
   // translated), its attachments, the page reference and, for a long chat, the summary fitted. It runs beside the
   // judge, whose answers only add lore, episodes and a directive.
@@ -265,6 +273,8 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     const history = listMessages()
     const attachmentTexts = await inlineTextsForChat(turn.reaction ? { ...profile, mcpEnabled: false } : profile, requester.accountId, history)
     const attachedImages = await loadAttachedImages(profile, requester, history)
+    // The chat's latest pictures, for presets that let the chat model see them (a reaction carries its own).
+    const generatedImages = turn.reaction || inSession ? [] : await loadInlineGeneratedImages(profile, requester, thread.id)
     // Continuing: the cut reply as the model's own turn, then the request to carry on from its last word — room for
     // both is kept before the window is chosen.
     const continuation: ChatCompletionMessage[] = turn.continuing === undefined ? [] : [markContextMessage({ role: 'assistant', content: turn.continuing }, 'continuation'), markContextMessage({ role: 'user', content: CONTINUE_DIRECTIVE }, 'continuation')]
@@ -272,15 +282,21 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     const reference = [turn.page ? chatPageReference(turn.page, requester) : tools.length > 0 ? NO_PAGE_NOTE : '', proposalOutcomeNote(thread.id)].filter(Boolean).join('\n\n')
     const pageMessages: ChatCompletionMessage[] = reference ? [markContextMessage({ role: 'user', content: reference }, 'page')] : []
     const reactionMessages = turn.reaction ? [turn.reaction.result] : []
-    const extraTokens = estimateMessagesTokens(profile.id, [...continuation, ...pageMessages, ...reactionMessages])
-    if (config.summaryEnabled && !turn.reaction) {
+    const extraTokens = estimateMessagesTokens(profile.id, [...continuation, ...pageMessages, ...reactionMessages]) + generatedImages.length * GENERATED_IMAGE_TOKENS
+    if (config.summaryEnabled && !turn.reaction && !inSession) {
       await whileWaiting(turn, 'summary', fitThreadSummary(thread.id, profile, history, turn.controller.signal, tools, { attachmentTexts, attachedImages, extraTokens }))
     }
-    return { history, attachmentTexts, attachedImages, continuation, reference, reactionMessages, extraTokens }
+    return { history, attachmentTexts, attachedImages, generatedImages, continuation, reference, reactionMessages, extraTokens }
   }
   const prepare = (tools: ChatCompletionTool[]) => (preparing ??= prepareRequest(tools))
   return streamReply(turn, requester, profile, async (tools, judged) => {
-    const { history, attachmentTexts, attachedImages, continuation, reference, reactionMessages, extraTokens } = await prepare(tools)
+    const { history, attachmentTexts, attachedImages, generatedImages, continuation, reference, reactionMessages, extraTokens } = await prepare(tools)
+    if (inSession) {
+      const sessionTurn = await buildClaudeSessionTurn({ requester, threadId: thread.id, profile, history, page: turn.page, withTools: tools.length > 0 })
+      turn.claudeSession = sessionTurn.session
+      turn.contextMeta = { ...sessionTurn.contextMeta, model: resolveProfileModel(profile, 'chat')?.model ?? null }
+      return sessionTurn.messages
+    }
     if (turn.reaction && thread.kind === 'group') {
       const members = ChatGroupStore.members(thread.id).flatMap((member) => ChatProfileStore.find(member.profile_id) ?? [])
       const messages = buildGroupLlmMessages({ profile, thread, members, messages: history, routing: turn.delivery!.routing,
@@ -294,7 +310,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
       profile, thread: current, messages: history, config, tools, segments: config.summaryEnabled ? ChatSummaryStore.list(thread.id) : [], attachmentTexts, attachedImages, extraTokens, judged,
       onMeta: (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(profile, 'chat')?.model ?? null } },
     })
-    const final = [...withPageReference(request, reference), ...continuation, ...reactionMessages]
+    const final = withGeneratedImages([...withPageReference(request, reference), ...continuation, ...reactionMessages], generatedImages)
     if (turn.contextMeta?.version === 2) {
       turn.contextMeta = limitContextMeta({ ...turn.contextMeta, sections: contextSections(final, tools, (text) => estimateTokens(profile.id, text)), estimatedTokens: estimateMessagesTokens(profile.id, final, tools) })
     }
@@ -390,6 +406,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     const offeredTools = visible
     turn.offeredTools = offeredTools
     const built = await buildMessages(offeredTools, judged?.context ?? null)
+    if (turn.claudeSession) target.claudeSession = turn.claudeSession
     const directive = judgeDirectiveText(judged, withheld)
     const messages = directive ? appendUserDirective(built, directive, 'judge') : built
     const offeredNames = new Set([...offeredTools.map((tool) => tool.function.name), ...catalogued])

@@ -231,7 +231,7 @@ export function ChatContextInfo({ meta, previous, threadId, messageId, alternati
             {selectedTab === 'composition' ? <>
               {meta.engine === 'codex' ? <div className="space-y-2">
                 <div className="flex justify-between"><span>{t({ ko: '보낸 입력', en: 'Sent input' })}</span><span className="tabular-nums">{t({ ko: '키 {n}개', en: '{n} keys' }, { n: meta.codexKeys?.length ?? 0 })}</span></div>
-                <Tip content={t({ ko: 'Codex가 압축하고 보관한 내부 문맥은 볼 수 없어', en: 'Codex’s compacted and stored internal context is unavailable' })}><span tabIndex={0} className="flex items-center gap-1.5 text-muted-foreground"><LockKeyhole className="size-3" />{t({ ko: 'Codex 내부 문맥', en: 'Codex internal context' })}</span></Tip>
+                <Tip content={t({ ko: '세션이 압축하고 보관한 내부 문맥은 볼 수 없어', en: 'The session’s compacted and stored internal context is unavailable' })}><span tabIndex={0} className="flex items-center gap-1.5 text-muted-foreground"><LockKeyhole className="size-3" />{t({ ko: '세션 내부 문맥', en: 'Session internal context' })}</span></Tip>
               </div> : <div className="space-y-2">
                 <div className="flex h-2.5 gap-px overflow-hidden rounded-sm" aria-hidden="true">
                   {GROUPS.map((group, index) => totals[index] > 0 ? <span key={group.id} style={{ flex: `${totals[index]} 1 0%`, backgroundColor: `var(--chat-diagnostics-${group.id})` }} /> : null)}
@@ -242,7 +242,7 @@ export function ChatContextInfo({ meta, previous, threadId, messageId, alternati
               </div>}
               {(meta.loreEntries?.length ?? 0) > 0 || (meta.loreSkipped?.length ?? 0) > 0 || (meta.loreUnmatched ?? 0) > 0 ? <div className="space-y-2 border-t border-line pt-3">
                 <div className="flex justify-between"><strong>{t({ ko: '로어 {n}', en: 'Lore {n}' }, { n: meta.loreEntries?.length ?? 0 })}</strong><span className="text-muted-foreground">{t({ ko: '안 걸림 {n}', en: 'Unmatched {n}' }, { n: meta.loreUnmatched ?? 0 })}</span></div>
-                {(meta.loreEntries ?? []).map((entry) => <div key={loreKey(entry)} className="flex flex-wrap items-center gap-1.5"><span className="break-words">{entry.title}</span><Chip size="sm" tone="muted" className="whitespace-normal">{loreReason(entry.reason, entry.matched, t, entry.remaining)}</Chip>{isNewLore(entry) ? <Chip size="sm" tone="success">{t({ ko: '새로', en: 'New' })}</Chip> : null}</div>)}
+                {(meta.loreEntries ?? []).map((entry) => <div key={loreKey(entry)} className="flex flex-wrap items-center gap-1.5"><span className="break-words">{entry.title}</span><Chip size="sm" tone="muted" className="whitespace-normal">{loreReason(entry.reason, entry.matched, t, entry.remaining, entry.via)}</Chip>{isNewLore(entry) ? <Chip size="sm" tone="success">{t({ ko: '새로', en: 'New' })}</Chip> : null}</div>)}
                 {(meta.loreSkipped ?? []).map((entry) => <div key={loreKey(entry)} className="flex flex-wrap items-center gap-1.5"><span className="break-words text-muted-foreground line-through">{entry.title}</span><Chip size="sm" tone="warning">{loreReason(entry.reason, [], t)}</Chip></div>)}
               </div> : null}
               {(meta.recall?.length ?? 0) > 0 ? <div className="space-y-2 border-t border-line pt-3">
