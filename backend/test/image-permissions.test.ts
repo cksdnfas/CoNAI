@@ -542,8 +542,15 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
       assert.equal((await bridge.call('get_generation_history_request', { history_id: history })).isError, true)
       assert.equal((await bridge.call('refresh_artifact_download', { artifact_id: 'forged' })).isError, true)
       assert.equal(refresh.mock.callCount(), 0)
+      // Codex goes through the same queue as the website's generation tab, carrying the chat grant that is rechecked at dispatch.
+      const codex = await bridge.call('submit_generation_job', { service_type: 'codex', request_payload: { prompt: 'queued, never dispatched' } })
+      assert.notEqual(codex.isError, true)
+      const codexJob = GenerationQueueModel.findById(JSON.parse((codex.content as Array<{ text: string }>)[0].text).id)!
+      assert.equal(codexJob.service_type, 'codex')
+      const { requireQueuedChatGenerationAccess } = await import('../src/services/generation-queue/queueJobExecutors')
+      assert.doesNotThrow(() => requireQueuedChatGenerationAccess(codexJob))
+      dispatch.mock.resetCalls()
       const before = db.prepare('SELECT COUNT(*) AS count FROM generation_queue_jobs').get() as { count: number }
-      assert.equal((await bridge.call('submit_generation_job', { service_type: 'codex', request_payload: { prompt: 'must not execute' } })).isError, true)
       assert.equal((await bridge.call('execute_graph_workflow', { workflow_id: 1 })).isError, true)
       for (const payload of [{ nested: { filePath: 'C:\\private\\secret' } }, { timeline_data: '{"assets":{"x":{"storagePath":"C:\\\\private\\\\secret"}}}' }, { __ref: 'queue-input', sha256: 'a'.repeat(64) }]) {
         assert.equal((await bridge.call('submit_generation_job', { service_type: 'comfyui', workflow_id: 1, inputs: payload })).isError, true)

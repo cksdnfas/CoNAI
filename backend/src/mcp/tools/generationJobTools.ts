@@ -123,7 +123,6 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
   const { service_type, workflow_id, server_id, server_tag, inputs, request_payload, group_id, group_path, priority = 100, idempotency_key, request_summary } = input;
   let usesImages = false;
   const requireManagedMedia = () => { usesImages = true; requireRequesterPermission(context.requester, 'images.view'); };
-  if (isChatMcpSource(context.source) && service_type === 'codex') throw new Error('Codex generation is unavailable from chat because its host capabilities cannot be isolated. Use the website generation controls.');
   if (context.requester && service_type === 'comfyui') requireRequesterPermission(context.requester, 'workflows.view');
   if (isChatMcpSource(context.source)) validateMcpToolArguments(input, requireManagedMedia);
   const normalizedServerTag = parseGenerationQueueRoutingTag(server_tag, 'server_tag');

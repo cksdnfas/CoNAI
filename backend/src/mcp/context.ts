@@ -58,7 +58,7 @@ export function isChatMcpSource(source: McpRequestContext['source']) {
  * Withheld from chat agents: a chat reply must not block on a generation job (Codex jobs can run for minutes).
  * The job is linked to the reply at submission and the app attaches the result when it lands.
  */
-export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'wait_audio_order', 'execute_graph_workflow', 'get_codex_generation_options', 'import_workflow_definition', 'wait_sprite_job']);
+export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'wait_audio_order', 'execute_graph_workflow', 'import_workflow_definition', 'wait_sprite_job']);
 /** A page grants a bounded input task; explicitly linked generation presets keep their independent grant. */
 export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'page_fill', 'page_act', 'get_workflow_editor', 'list_workflow_modules', 'workflow_edit', 'read_page_data', 'propose_page_action']);
 

@@ -131,7 +131,7 @@ export function requireQueuedChatGenerationAccess(job: GenerationQueueJobRecord)
   const grant = parseStoredRequestPayload(job).__conaiChatGrant as { toolName?: string; context?: McpRequestContext; usesImages?: boolean } | undefined
   if (!grant && getUserSettingsDb().prepare('SELECT 1 FROM chat_generation_links WHERE job_id = ?').get(job.id)) throw new Error('This older chat generation job has no current authorization binding. Resubmit it from chat.')
   if (grant) {
-    if (!grant.context || !isChatMcpSource(grant.context.source) || !grant.toolName || job.service_type === 'codex') throw new Error('Invalid or unsafe chat generation grant.')
+    if (!grant.context || !isChatMcpSource(grant.context.source) || !grant.toolName) throw new Error('Invalid or unsafe chat generation grant.')
     const authority = { ...grant.context, requester: { accountId: job.requested_by_account_id ?? null, accountType: null } }
     requireMcpToolAccess(authority, grant.toolName, { group_id: job.requested_group_id }, 'queued')
     if (job.service_type === 'comfyui' && !isAudioOrderChatJob(job.id, grant.toolName)) requireRequesterPermission(authority.requester, 'workflows.view')
