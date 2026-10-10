@@ -6,7 +6,7 @@ import { contextContentText, contextHash, contextSections, contextSource, limitC
 import { buildReplyContext } from './chatReplyContext'
 import { isCodexChatCreationTool, stripEchoedAddresses } from '@conai/shared'
 import { messageAddress, REPLY_GUIDANCE } from './chatReplies'
-import { CHAT_ROOM_TOOLS } from '../../mcp/context'
+import { CHAT_ROOM_TOOLS, isChatOwnTool } from '../../mcp/context'
 import { blockStateText, foldBlockState, parseBlockEdits, stripBlockFences, usableBlockKeys } from './chatBlockState'
 import { fillCharacterPlaceholders } from './chatPlaceholders'
 import { userPersonaForThread, userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
@@ -627,7 +627,7 @@ export function buildContextMeta(profile: ChatProfile, thread: CodexChatThreadRe
       ...(resolveProfileModel(profile, 'translation') ? ['translation-user', 'translation-reply'].flatMap((id) => contextSource('translation-instruction', auxiliaryInstructionText(profile, user, id), id)) : []),
     ],
     sources: [
-      ...promptContextSources(profile, user, tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name))),
+      ...promptContextSources(profile, user, tools.some((tool) => !isChatOwnTool(tool.function.name))),
       ...contextSource('lore-index', lore.index), ...contextSource('constant-lore', lore.constant),
       ...contextSource('summary', summary),
       ...contextSource('author-note', resolveAuthorNote(thread, profile, user).text),
@@ -650,7 +650,7 @@ export function buildContextMeta(profile: ChatProfile, thread: CodexChatThreadRe
 function buildRequestContext(profile: ChatProfile, thread: CodexChatThreadRecord | null, messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'summaryEnabled'> & Partial<Pick<LlmChatContextConfig, 'contextTokens'>>, tools: ChatCompletionTool[], segments: ChatSummarySegment[] = [], books?: AttachedLoreBook[], judged?: JudgedContext | null) {
   const user = userPersonaForThread(thread)
   const lore = selectChatLore(profile, messages, user, { thread, books, toolOffered: offersLoreFileTool(tools), judged: judged?.loreKeys })
-  const system = buildLeadingMessages(profile, thread, config, tools.some((tool) => !CHAT_ROOM_TOOLS.has(tool.function.name)), lore, user)
+  const system = buildLeadingMessages(profile, thread, config, tools.some((tool) => !isChatOwnTool(tool.function.name)), lore, user)
   const recalled = config.summaryEnabled ? recalledSegments(profile, segments, messages, { contextTokens: config.contextTokens ?? null }, judged?.recallKeep) : []
   const recall = recallText(recalled)
   const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread ?? { block_edits: null }, messages), recall, rejectedLoreFor(thread?.id, tools))

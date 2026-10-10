@@ -9,6 +9,7 @@ import { EmoticonService, originalNameFromPath } from '../emoticonService'
 import { FileStoreError } from '../fileStoreService'
 import { ImageSafetyService } from '../imageSafetyService'
 import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibilityService'
+import { MEDIA_HASH_PATTERN } from './chatMediaLinks'
 
 /** A reference to existing library media, never a copy into the private file store. */
 export type ChatMediaAttachment = { compositeHash: string; name: string; mimeType: string | null }
@@ -26,7 +27,7 @@ function requireChatMediaAccess(requester: McpRequester) {
 export function validateChatMediaAttachments(requester: McpRequester, hashes: unknown, fileCount: number): ChatMediaAttachment[] {
   if (hashes === undefined || (Array.isArray(hashes) && hashes.length === 0)) return []
   requireChatMediaAccess(requester)
-  if (!Array.isArray(hashes) || hashes.some((hash) => typeof hash !== 'string' || !/^[a-f0-9]{48}$/.test(hash))) {
+  if (!Array.isArray(hashes) || hashes.some((hash) => typeof hash !== 'string' || !MEDIA_HASH_PATTERN.test(hash))) {
     throw new FileStoreError('앱 미디어 목록에서 첨부할 항목을 다시 선택해줘.', 400)
   }
   if (hashes.length + fileCount > 20) {
@@ -44,7 +45,7 @@ export function validateChatMediaAttachments(requester: McpRequester, hashes: un
 export function parseChatMediaAttachments(value: string | null): ChatMediaAttachment[] {
   try {
     const parsed: unknown = JSON.parse(value || '[]')
-    return Array.isArray(parsed) ? parsed.filter((item): item is ChatMediaAttachment => item && typeof item.compositeHash === 'string' && /^[a-f0-9]{48}$/.test(item.compositeHash) && typeof item.name === 'string' && (item.mimeType === null || typeof item.mimeType === 'string')).slice(0, 20) : []
+    return Array.isArray(parsed) ? parsed.filter((item): item is ChatMediaAttachment => item && typeof item.compositeHash === 'string' && MEDIA_HASH_PATTERN.test(item.compositeHash) && typeof item.name === 'string' && (item.mimeType === null || typeof item.mimeType === 'string')).slice(0, 20) : []
   } catch {
     return []
   }

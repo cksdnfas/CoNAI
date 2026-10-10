@@ -57,6 +57,7 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   get_image_metadata: { group: 'images', label: { ko: '이미지 정보', en: 'Image metadata' }, ko: '이미지 하나의 프롬프트·모델·크기 같은 상세 정보를 읽어.' },
   get_media_download: { group: 'images', label: { ko: '원본 다운로드 링크', en: 'Media download links' }, ko: '저장된 스프라이트 시트·애니메이션 같은 라이브러리 원본의 다운로드 링크를 만들어.' },
   view_images: { group: 'images', label: { ko: '이미지 보기', en: 'View images' }, ko: '이미지나 보관함 파일을 작은 미리보기로 실제로 봐. 비전 모델에서만 의미 있어.' },
+  view_media_frames: { group: 'images', label: { ko: '영상·움짤 프레임 보기', en: 'View media frames' }, ko: '영상이나 움직이는 GIF·WebP를 시간대별 프레임으로 쪼개서, 번호 붙인 프레임 몇 장씩 한 그림으로 묶어 봐. 구간을 좁혀 자세히 볼 수도 있어. 비전 모델에서만 의미 있어.' },
   list_image_groups: { group: 'images', label: { ko: '이미지 그룹 목록', en: 'List image groups' }, ko: '라이브러리의 그룹(폴더)과 경로, 이미지 수를 나열해.' },
   get_image_group: { group: 'images', label: { ko: '그룹 설정 보기', en: 'Group settings' }, ko: '그룹 하나의 설명·이미지 수·자동수집 조건을 읽어.' },
   get_image_groups: { group: 'images', label: { ko: '이미지가 속한 그룹', en: 'Groups of an image' }, ko: '이미지 하나가 어느 그룹에 들어 있는지 알려줘.' },
@@ -240,6 +241,7 @@ const CHAT_TOOLS: FixedTool[] = [
   { name: 'task_wait', label: { ko: '작업 잠시 멈추기', en: 'Pause task' }, description: { ko: '승인·생성·답을 기다리는 동안 작업을 멈춰.', en: 'Pauses the task until something outside the reply happens.' } },
   { name: 'task_finish', label: { ko: '작업 끝내기', en: 'Finish task' }, description: { ko: '작업을 완료나 실패로 끝내.', en: 'Ends the task as done or failed.' } },
   { name: 'get_proposal_status', label: { ko: '카드 처리 결과 읽기', en: 'Proposal status' }, description: { ko: '제안 카드를 저장했는지, 넘겼는지 읽어.', en: 'Reads what happened to review cards.' } },
+  { name: 'view_media_frames', label: { ko: '영상·움짤 프레임 보기', en: 'View media frames' }, description: { ko: '이미지를 볼 수 있는 모델이면 항상 있어. 영상·움짤을 번호 붙인 프레임 묶음으로 봐.', en: 'Every chat whose model sees images has it. Watches videos and animations as numbered frame sheets.' } },
 ]
 
 /** Tools whose names vary, picked as a pattern: one generate_image tool per preset a profile links. */

@@ -139,7 +139,7 @@ export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, app
     <ModalFooter>
       <span className="mr-auto flex items-center gap-1 text-sm text-muted-foreground">
         {t({ ko: '{count}개 선택', en: '{count} selected' }, { count: selected.size })}
-        {note === null ? null : <FieldInfo>{note ?? t({ ko: '원본을 참조해 첨부해. 이미지 이해에는 이미지 보기 도구와 비전 모델이 필요하고, 영상·오디오 내용 분석은 지원하지 않아.', en: 'Attachments reference the originals. Image understanding requires the image tool and a vision model; video/audio analysis is not supported.' })}</FieldInfo>}
+        {note === null ? null : <FieldInfo>{note ?? t({ ko: '원본을 참조해 첨부해. 이미지·영상·움짤을 보려면 이미지 보기·프레임 보기 도구와 비전 모델이 필요하고, 오디오 내용 분석은 지원하지 않아.', en: 'Attachments reference the originals. Seeing images, videos and animations requires the image/frame tools and a vision model; audio analysis is not supported.' })}</FieldInfo>}
       </span>
       <IconButton variant="ghost" disabled={!selected.size} label={t({ ko: '선택 해제', en: 'Clear selection' })} onClick={() => setSelected(new Map())}><X /></IconButton>
       <Button disabled={selected.size > maxCount || (kindOnly && !selected.size)} onClick={() => onPick([...selected.values()])}>{applyLabel ?? t({ ko: '첨부 적용', en: 'Apply attachments' })}</Button>

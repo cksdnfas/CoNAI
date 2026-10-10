@@ -1,11 +1,11 @@
 import { AuthAccount } from '../models/AuthAccount';
 import { hasConfiguredAuth } from '../routes/auth-route-helpers';
 import { isRequesterAdmin, requesterPermissionKeys, requireRequesterPermission } from '../middleware/featureAccess';
-import { ChatProfileStore, profileSeesImages } from '../services/codex-chat/chatProfiles';
+import { ChatProfileStore, isVisionTool, profileSeesImages } from '../services/codex-chat/chatProfiles';
 import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess';
 import { requireActiveChatReply } from '../services/codex-chat/chatReplyRegistry';
 import { validateMcpToolArguments } from './requestSecurity';
-import { CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, isPageKindTool, type McpRequestContext, type McpRequester } from './context';
+import { CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, isPageKindTool, type McpRequestContext, type McpRequester } from './context';
 
 export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]> = {
   search_prompts: 'prompts.view', get_most_used_prompts: 'prompts.view', list_prompt_groups: 'prompts.view',
@@ -23,7 +23,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   get_generation_routing_options: 'workflows.view', get_generation_history_request: 'images.view',
   refresh_artifact_download: 'images.view', get_media_download: 'images.view',
   search_images: 'images.view', get_image_metadata: 'images.view', get_generation_history: 'images.view',
-  search_images_by_tags: 'images.view', view_images: 'images.view', list_emoticons: 'images.view',
+  search_images_by_tags: 'images.view', view_images: 'images.view', view_media_frames: [], list_emoticons: 'images.view',
   list_emoticon_groups: 'images.view', list_image_groups: 'images.view', get_image_groups: 'images.view', get_image_group: 'images.view',
   add_images_to_group: 'images.edit', remove_images_from_group: 'images.edit', move_images_between_groups: 'images.edit',
   create_image_group: 'images.edit', update_image_group: 'images.edit', run_group_auto_collect: 'images.edit',
@@ -99,7 +99,7 @@ function accountHoldsTool(context: McpRequestContext, toolName: string): boolean
   const { keys, admin, profile } = factsFor(context);
   if (!requiredToolKeys(toolName).every((key) => keys.has(key))) return false;
   if (getMcpToolScope(toolName) === 'configure' && !admin) return false;
-  if (profile && toolName === 'view_images' && !profileSeesImages(profile)) return false;
+  if (profile && isVisionTool(toolName) && !profileSeesImages(profile)) return false;
   if (profile && toolName === 'save_lore' && !profile.allowLoreProposals) return false;
   return true;
 }
@@ -116,6 +116,7 @@ export function isContextToolAllowed(context: McpRequestContext, toolName: strin
   if (isChatMcpSource(context.source) && CHAT_BLOCKED_TOOLS.has(toolName)) return false;
   if (accountChecks && context.requester && !accountHoldsTool(context, toolName)) return false;
   if (CHAT_ROOM_TOOLS.has(toolName)) return Boolean(context.chatContext) && (!GROUP_ONLY_CHAT_TOOLS.has(toolName) || context.chatContext?.kind === 'group');
+  if (CHAT_VISION_BUILTIN_TOOLS.has(toolName) && context.chatContext) return true;
   if (isConnectedChatPageTool(context, toolName)) return true;
   // The sprite and sound-effect workspace tools (about a third of every tool definition sent) come with their page;
   // elsewhere only a profile tool list that names them offers them.

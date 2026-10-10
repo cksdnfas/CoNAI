@@ -61,7 +61,7 @@ export class VideoProcessor {
   /**
    * Get FFprobe binary path (bundled or system)
    */
-  private static getFFprobePath(): string {
+  static getFFprobePath(): string {
     return ffprobeStatic.path || 'ffprobe';
   }
 

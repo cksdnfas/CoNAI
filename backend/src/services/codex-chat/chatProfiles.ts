@@ -447,6 +447,13 @@ export function profileSeesImages(profile: Pick<ChatProfile, 'engine' | 'visionE
   return profile.engine === 'codex' || profile.visionEnabled
 }
 
+/** Tools that answer with pictures: offered only to a profile whose model sees images (profileSeesImages). */
+const VISION_TOOLS = new Set(['view_images', 'view_media_frames'])
+
+export function isVisionTool(toolName: string) {
+  return VISION_TOOLS.has(toolName)
+}
+
 /** What an API LLM profile asks of each request (unset options are not sent). */
 export function profileGenerationOptions(profile: ChatProfile): LlmGenerationOptions {
   let extraParams: Record<string, unknown> | null = null

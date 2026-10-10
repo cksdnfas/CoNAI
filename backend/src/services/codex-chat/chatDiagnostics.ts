@@ -1,5 +1,5 @@
 import type { McpRequester } from '../../mcp/context'
-import { CHAT_ROOM_TOOLS } from '../../mcp/context'
+import { isChatOwnTool } from '../../mcp/context'
 import { FileStoreService, fileOwnerKey } from '../fileStoreService'
 import { backupDateOf, backupFileName } from './chatBackup'
 import { contextHash, legacyContextMeta, limitContextMeta, metadataOnly, type ContextSource } from './chatContextDiagnostics'
@@ -136,7 +136,7 @@ export async function getChatDiagnostics(requester: McpRequester, threadId: numb
           text = section ? render(section.kind === 'post' ? section.content.trim() : section.content) : undefined
           break
         }
-        case 'guidance': text = fixedContextGuidance(profile, meta.sources?.some((item) => item.kind === 'tool-definition' && !CHAT_ROOM_TOOLS.has(String(item.id))) ?? false); break
+        case 'guidance': text = fixedContextGuidance(profile, meta.sources?.some((item) => item.kind === 'tool-definition' && !isChatOwnTool(String(item.id))) ?? false); break
         case 'tool-definition': text = definitions?.get(String(source.id)); break
         case 'group-header': text = buildGroupHeader({ thread, members: profiles, self: profile, user }); break
         case 'summary-instruction': case 'translation-instruction': text = auxiliaryInstructionText(profile, user, String(source.id)); break

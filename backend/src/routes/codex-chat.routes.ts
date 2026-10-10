@@ -10,7 +10,7 @@ import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
 import type { McpRequester } from '../mcp/context'
-import { AUTHOR_NOTE_MAX_LENGTH, CHAT_PROFILE_DEFAULTS, ChatProfileError, ChatProfileStore, DEFAULT_CHAT_SUMMARY_PROMPT, ensureCodexProfileMigrated, type ChatProfile, type ChatProfileInput } from '../services/codex-chat/chatProfiles'
+import { AUTHOR_NOTE_MAX_LENGTH, CHAT_PROFILE_DEFAULTS, ChatProfileError, ChatProfileStore, DEFAULT_CHAT_SUMMARY_PROMPT, ensureCodexProfileMigrated, isVisionTool, type ChatProfile, type ChatProfileInput } from '../services/codex-chat/chatProfiles'
 import { CHAT_SCOPES, MAX_CHAT_CAPTURE_LIMIT, loadChatSettings, updateChatSettings } from '../services/codex-chat/chatSettings'
 import { ChatDiagnosticsError, exportChatDiagnostics, getChatDiagnostics, visibleContextMessages } from '../services/codex-chat/chatDiagnostics'
 import { DEFAULT_CHAT_STYLE } from '../services/codex-chat/chatStyle'
@@ -20,7 +20,7 @@ import { serveThumbnailOrOriginal, streamCacheableFile, streamRangeFile } from '
 import { ImageFileModel } from '../models/Image/ImageFileModel'
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel'
 import { canUseChatProfile, resolveChatAccess, resolveChatProfileToolGrant } from '../services/codex-chat/codexChatAccess'
-import { getMcpToolScope } from '../mcp/context'
+import { CHAT_VISION_BUILTIN_TOOLS, getMcpToolScope } from '../mcp/context'
 import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
 import { buildCodexInstructions, CODEX_COMPACT_TOKENS, CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
 import { buildChatPromptPreview, estimateTokens, isSummarizing, referenceBlock, selectChatLore } from '../services/codex-chat/llmChatContext'
@@ -1407,13 +1407,13 @@ router.post('/admin/chat-media/usage', requireAdmin, (req: Request, res: Respons
   if (hashes) res.json({ success: true, data: chatMediaUsage(hashes) })
 })
 
-/** Every chat-grantable MCP tool with its scope and description, for the profile editor's tool picker. */
+/** Every chat-grantable MCP tool with its scope and description, for the profile editor's tool picker (not the ones every seeing chat has). */
 router.get('/admin/tools', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const bridge = await openChatMcpBridge(requesterFrom(req), [...CHAT_SCOPES])
   try {
     res.json({
       success: true,
-      data: bridge.tools.map((tool) => ({ name: tool.function.name, description: tool.function.description ?? '', scope: getMcpToolScope(tool.function.name) })),
+      data: bridge.tools.filter((tool) => !CHAT_VISION_BUILTIN_TOOLS.has(tool.function.name)).map((tool) => ({ name: tool.function.name, description: tool.function.description ?? '', scope: getMcpToolScope(tool.function.name) })),
     })
   } finally {
     await bridge.close()
@@ -1435,7 +1435,7 @@ router.post('/admin/profiles/preview', requireAdmin, asyncHandler(async (req: Re
       ? await openChatMcpBridge(requesterFrom(req), scopes, toolAllowlist, { generationPresetIds: profile.generationPresetIds })
       : null
     try {
-      const tools = (bridge?.tools ?? []).filter((tool) => profile.engine === 'codex' || profile.visionEnabled || tool.function.name !== 'view_images')
+      const tools = (bridge?.tools ?? []).filter((tool) => profile.engine === 'codex' || profile.visionEnabled || !isVisionTool(tool.function.name))
       const messages = profile.engine === 'codex'
         ? [{ role: 'developer', content: buildCodexInstructions(profile) }]
         : buildChatPromptPreview(profile, tools)

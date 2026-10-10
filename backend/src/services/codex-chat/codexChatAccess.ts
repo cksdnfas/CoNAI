@@ -1,14 +1,14 @@
 import crypto from 'crypto'
 import type { ChatExecutionContext } from '@conai/shared'
 import type { Request } from 'express'
-import { getMcpToolScope, isChatGenerationTool, isConnectedChatPageTool, chatGenerationToolName, CHAT_ROOM_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, type McpRequester, type McpRequestContext } from '../../mcp/context'
+import { getMcpToolScope, isChatGenerationTool, isConnectedChatPageTool, chatGenerationToolName, CHAT_ROOM_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, type McpRequester, type McpRequestContext } from '../../mcp/context'
 import { AuthAccount } from '../../models/AuthAccount'
 import { hasConfiguredAuth } from '../../routes/auth-route-helpers'
 import { AuthAccessControlService, isActiveAdminRecord } from '../authAccessControlService'
 import type { McpHttpAuthentication } from '../mcpHttpSettingsService'
 import { isDirectLoopbackRequest } from '../../utils/bootstrapAccess'
 import { CHAT_SCOPES, loadChatSettings, type ChatScope } from './chatSettings'
-import { ChatProfileStore, profileSeesImages, type ChatProfile } from './chatProfiles'
+import { ChatProfileStore, isVisionTool, profileSeesImages, type ChatProfile } from './chatProfiles'
 import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { CodexChatStore } from './codexChatStore'
 import { ChatGroupStore } from './chatGroupStore'
@@ -113,7 +113,8 @@ export function requireChatMcpAccountAccess(context: McpRequestContext, toolName
   if (context.source === 'codex-chat' ? !access.codex : profileEngine === 'claude' ? !access.claude : !access.llm) throw new Error('채팅 권한이 변경됐어.')
   const scope = isChatGenerationTool(toolName) ? 'generate' : getMcpToolScope(toolName)
   const pageTool = isConnectedChatPageTool(context, toolName)
-  if (!pageTool && !CHAT_ROOM_TOOLS.has(toolName) && (!scope || !access.scopes.includes(scope as ChatScope))) throw new Error('이 도구를 사용할 권한이 변경됐어.')
+  const builtin = CHAT_ROOM_TOOLS.has(toolName) || CHAT_VISION_BUILTIN_TOOLS.has(toolName)
+  if (!pageTool && !builtin && (!scope || !access.scopes.includes(scope as ChatScope))) throw new Error('이 도구를 사용할 권한이 변경됐어.')
   const chat = context.chatContext
   const profile = chat ? ChatProfileStore.find(chat.profileId) : null
   const thread = chat ? CodexChatStore.findThread(chat.threadId, context.requester.accountId) : null
@@ -123,13 +124,13 @@ export function requireChatMcpAccountAccess(context: McpRequestContext, toolName
   }
   if (pageTool) {
     requireChatPageAccess(context.requester, chat.page!)
-  } else if (!CHAT_ROOM_TOOLS.has(toolName)) {
-    // The chat's own tools (reply, room, lorebook) are always there; everything else follows the profile.
+  } else if (!builtin) {
+    // The chat's own tools (reply, room, lorebook, frame viewing) are always there; everything else follows the profile.
     const grant = resolveChatProfileToolGrant(profile, access)
     if (grant.toolAllowlist && !grant.toolAllowlist.includes(toolName)) throw new Error('프로필에서 이 도구를 더 이상 허용하지 않아.')
     if (!grant.scopes.includes(scope as ChatScope)) throw new Error('프로필의 도구 사용 설정이 변경됐어.')
   }
-  if (toolName === 'view_images' && !profileSeesImages(profile)) throw new Error('프로필의 이미지 조회가 꺼져 있어.')
+  if (isVisionTool(toolName) && !profileSeesImages(profile)) throw new Error('프로필의 이미지 조회가 꺼져 있어.')
   if (toolName === 'save_lore' && !profile.allowLoreProposals) throw new Error('프로필의 로어 제안이 꺼져 있어.')
   if (profile.generationPresetIds.length > 0 && GENERATION_PRESET_BLOCKED_TOOLS.has(toolName)) throw new Error('생성 프리셋만 사용할 수 있어.')
   if (isChatGenerationTool(toolName)) {

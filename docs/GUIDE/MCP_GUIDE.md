@@ -279,9 +279,11 @@ stdio:
 | `list_emoticon_groups` | 이모티콘 그룹과 이미지·키워드 수 조회 | `read` |
 | `list_emoticons` | 그룹의 이미지별 키워드, 파일명, 상위 태그 조회 (`explicit: false`는 파일명 키워드) | `read` |
 | `view_images` | 이미지(composite hash) 또는 파일 보관함 이미지(file id)를 최대 6개까지 작은 미리보기로 받아 보기 | `read` |
+| `view_media_frames` | 영상이나 움직이는 GIF·WebP 하나(composite hash 또는 file id)를 시간대별 프레임으로 받아 보기. 기본 8장, 최대 16장을 전체 또는 `start_seconds`~`end_seconds` 구간에 고르게 뽑아 그림 한 장에 최대 4프레임씩(`frames_per_image`, 기본 4) 번호를 붙여 묶어 줌. 프레임별 시각은 텍스트로 함께 줌 | `read` |
 | `set_emoticon_keywords` | 이미지별 키워드 지정 (`null`은 파일명으로 되돌림, `[]`은 키워드 없음). 겹치는 키워드는 건너뛰고 `conflicts`로 알림 | `organize` |
 | `set_emoticon_group` | 커스텀 그룹을 이모티콘 그룹으로 켜고 끄기 | `organize` |
 
+- `view_media_frames`는 채팅 자체 도구라서 **이미지를 볼 수 있는 모델**(Codex, 또는 비전을 켠 API LLM·Claude)이면 프로필의 도구 사용 설정·도구 목록과 상관없이 항상 제공됩니다. 라이브러리 미디어를 열 때는 계정의 이미지 보기 권한, 보관함 파일은 본인 파일인지만 확인합니다.
 - 채팅에서 `view_images`는 프로필에 **이미지를 볼 수 있는 모델**이 켜져 있을 때만 API LLM에 제공됩니다. 꺼져 있으면 모델은 파일명과 태그로 판단합니다.
 
 ### 파일 보관함

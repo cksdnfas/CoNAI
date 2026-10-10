@@ -12,7 +12,7 @@ import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { readChoiceAnswer } from './chatChoices'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
-import { ChatProfileStore, type ChatProfile } from './chatProfiles'
+import { ChatProfileStore, isVisionTool, type ChatProfile } from './chatProfiles'
 import { translateReply, translateUserInput } from './chatTranslation'
 import { hasTranslation, resolveProfileModel } from './chatModelRoles'
 import { stripEchoedAddresses } from '@conai/shared'
@@ -344,7 +344,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
   let judged: JudgedTurn | null = null
   try {
     // Image viewing is only offered to models the profile says can see images.
-    const visible = (bridge?.tools ?? []).filter((tool) => profile.visionEnabled || tool.function.name !== 'view_images')
+    const visible = (bridge?.tools ?? []).filter((tool) => profile.visionEnabled || !isVisionTool(tool.function.name))
     // The judge reads the user's own words, so it runs while their message is translated for the model.
     const judging = !turn.reaction && turn.continuing === undefined
       ? judgeBeforeReply({ profile, threadId: turn.threadId, replyId: chatContext?.replyId ?? null, availableTools: visible.map((tool) => tool.function.name), excludeMessageId: turn.replacingMessageId, context: true, signal: turn.controller.signal })

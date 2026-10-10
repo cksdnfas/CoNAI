@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import type { StoredFileEntry } from '@conai/shared'
 import { attachedImageKey, attachedImagesOf, chatContentWithAttachments } from '../src/services/codex-chat/chatAttachments'
 import { contextContentText } from '../src/services/codex-chat/chatContextDiagnostics'
+import { parseChatMediaAttachments } from '../src/services/codex-chat/chatMediaAttachments'
 import { profileSeesImages } from '../src/services/codex-chat/chatProfiles'
 import { redactChatRequestBody } from '../src/services/codex-chat/chatRequestCaptures'
 import { codexTurnInput } from '../src/services/codex-chat/codexChatService'
@@ -55,4 +56,11 @@ test('an LLM user turn with attached images is text plus image parts, and the di
 test('a Codex turn carries the attached images as image inputs', () => {
   assert.deepEqual(codexTurnInput('hi', [URL_A]), [{ type: 'text', text: 'hi', text_elements: [] }, { type: 'image', url: URL_A }])
   assert.deepEqual(codexTurnInput('hi', []), [{ type: 'text', text: 'hi', text_elements: [] }])
+})
+
+test('saved media attachments keep videos and animations (32-hex hashes) alongside still images', () => {
+  const still = { compositeHash: 'a'.repeat(48), name: 'still.png', mimeType: 'image/png' }
+  const video = { compositeHash: 'b'.repeat(32), name: 'clip.mp4', mimeType: 'video/mp4' }
+  const animation = { compositeHash: 'c'.repeat(32), name: 'loop.gif', mimeType: 'image/gif' }
+  assert.deepEqual(parseChatMediaAttachments(JSON.stringify([still, video, animation, { ...still, compositeHash: 'd'.repeat(40) }])), [still, video, animation])
 })

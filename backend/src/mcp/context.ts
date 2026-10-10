@@ -113,6 +113,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   list_emoticon_groups: 'read',
   list_emoticons: 'read',
   view_images: 'read',
+  view_media_frames: 'read',
   set_emoticon_keywords: 'organize',
   set_emoticon_group: 'organize',
   create_file_folder: 'organize',
@@ -230,6 +231,18 @@ export const CHAT_ROOM_TOOLS = new Set(['chat_reply_to', 'room_call_member', 'ro
  * chat, see offersChatReplyTo) and the lorebook tools; its context comes from the window and the summary, not the room history tools.
  */
 export const GROUP_ONLY_CHAT_TOOLS = new Set(['room_call_member', 'room_history_search', 'room_history_read']);
+
+/**
+ * Tools every chat whose model sees images has, whatever the profile's scopes and tool list and the account's chat
+ * scopes (the vision switch still applies: isVisionTool). What they open is checked item by item instead: library media
+ * needs images.view, a stored file its owner.
+ */
+export const CHAT_VISION_BUILTIN_TOOLS = new Set(['view_media_frames']);
+
+/** The chat's own tools, which do not count as the profile having tools (no tool guidance, no tool budget). */
+export function isChatOwnTool(toolName: string) {
+  return CHAT_ROOM_TOOLS.has(toolName) || CHAT_VISION_BUILTIN_TOOLS.has(toolName);
+}
 
 export function getMcpToolScope(toolName: string): McpHttpScope | null {
   if (isChatGenerationTool(toolName)) return 'generate';

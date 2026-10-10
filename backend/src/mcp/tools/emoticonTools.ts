@@ -1,6 +1,7 @@
 import fs from 'fs';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { previewImage } from '../../services/imagePreview';
+import { requireRequesterPermission } from '../../middleware/featureAccess';
 import { z } from 'zod';
 import { db } from '../../database/init';
 import { GroupModel } from '../../models/Group';
@@ -10,6 +11,7 @@ import { EMOTICON_PROMPT_BUDGET, EmoticonService } from '../../services/emoticon
 import { requireFileStoreOwner } from '../../services/fileStoreAccess';
 import { FileStoreService } from '../../services/fileStoreService';
 import { GroupPathService } from '../../services/groupPathService';
+import { FRAMES_PER_SHEET_DEFAULT, FRAMES_PER_SHEET_MAX, MEDIA_FRAMES_DEFAULT, MEDIA_FRAMES_MAX, extractMediaFrames, frameSheets } from '../../services/mediaFrames';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import { ImageSafetyService } from '../../services/imageSafetyService';
 import type { McpRequestContext } from '../context';
@@ -166,6 +168,60 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
         }
       }
       return { content };
+    },
+  );
+
+  server.tool(
+    'view_media_frames',
+    `Watch a video or an animated GIF/WebP as still frames: a library item by composite_hash or a private stored file by file_id. Takes up to ${MEDIA_FRAMES_MAX} frames spread evenly over the whole clip or over start_seconds..end_seconds and tiles them, numbered, into pictures of up to ${FRAMES_PER_SHEET_MAX} frames; the frame times come as text. Narrow the range, or use fewer frames per picture, to look closer at a moment. Only works when your model can see images.`,
+    {
+      composite_hash: z.string().trim().min(1).optional(),
+      file_id: z.string().regex(/^[a-f0-9]{32}$/).optional(),
+      count: z.number().int().min(1).max(MEDIA_FRAMES_MAX).optional().describe(`Frames to take (default ${MEDIA_FRAMES_DEFAULT})`),
+      frames_per_image: z.number().int().min(1).max(FRAMES_PER_SHEET_MAX).optional().describe(`Frames tiled into one picture (default ${FRAMES_PER_SHEET_DEFAULT}); 1 sends each frame alone and larger`),
+      start_seconds: z.number().min(0).optional(),
+      end_seconds: z.number().positive().optional(),
+    },
+    async ({ composite_hash, file_id, count, frames_per_image, start_seconds, end_seconds }) => {
+      try {
+        if (!composite_hash === !file_id) throw new Error('Give exactly one of composite_hash or file_id');
+        let filePath: string;
+        let mimeType: string | null;
+        let label: string;
+        if (composite_hash) {
+          // The tool itself needs no permission in a chat; library media still needs what viewing it on the web needs.
+          if (context.requester) requireRequesterPermission(context.requester, 'images.view');
+          const metadata = MediaMetadataModel.findByHash(composite_hash);
+          const file = metadata && MediaPostprocessVisibilityService.isReadyRecord(metadata) && !ImageSafetyService.isHidden(metadata.rating_score) ? EmoticonService.activeFile(composite_hash) : null;
+          if (!file || !fs.existsSync(file.path)) throw new Error('not an available media item');
+          ({ path: filePath, mimeType } = file);
+          label = `composite_hash ${composite_hash}`;
+        } else {
+          const { entry, filePath: storedPath } = FileStoreService.resolveFile(requireFileStoreOwner(context.requester), file_id!);
+          filePath = storedPath;
+          mimeType = entry.mimeType;
+          label = `file_id ${file_id} (${entry.name})`;
+        }
+        const result = await extractMediaFrames(filePath, mimeType, { count, start: start_seconds, end: end_seconds });
+        const sheets = await frameSheets(result.frames, frames_per_image);
+        // The pictures carry only the frame numbers; the times (and animation frame indices) travel here as text.
+        const content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }> = [{
+          type: 'text',
+          text: `${label}: ${JSON.stringify({
+            kind: result.kind,
+            duration_seconds: result.duration,
+            total_frames: result.totalFrames,
+            frames: result.frames.map((frame, position) => ({ number: position + 1, time_seconds: frame.time, ...(frame.index === null ? {} : { animation_frame: frame.index }) })),
+          })}\nEach picture tiles numbered frames in time order, left to right then top to bottom; the number is in each frame's top-left corner.`,
+        }];
+        for (const sheet of sheets) {
+          content.push({ type: 'text', text: sheet.count === 1 ? `frame ${sheet.first}:` : `frames ${sheet.first}-${sheet.first + sheet.count - 1} (${sheet.columns}x${sheet.rows}):` });
+          content.push({ type: 'image', data: sheet.data, mimeType: 'image/jpeg' });
+        }
+        return { content };
+      } catch (error) {
+        return errorResult(error);
+      }
     },
   );
 }

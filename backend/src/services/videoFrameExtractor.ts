@@ -153,27 +153,30 @@ export class VideoFrameExtractor {
     videoPath: string,
     timestamp: number,
     outputPath: string,
-    preview = false
+    mode: 'full' | 'preview' | 'analysis' = 'full'
   ): Promise<void> {
     const seekTime = this.formatTime(timestamp);
     const errors: string[] = [];
+    // Previews and analysis frames read files users put in, so they get the hardened, time-limited run.
+    const hardened = mode !== 'full';
 
     for (const ffmpegCmd of VideoProcessor.listFFmpegPaths()) {
       try {
         await new Promise<void>((resolve, reject) => {
           const ffmpeg = spawn(ffmpegCmd, [
-            ...(preview ? ['-nostdin', '-protocol_whitelist', 'file,pipe', '-threads', '1'] : []),
+            ...(hardened ? ['-nostdin', '-protocol_whitelist', 'file,pipe', '-threads', '1'] : []),
             '-ss', seekTime,              // Seek to timestamp
             '-i', videoPath,              // Input video
             '-vframes', '1',              // Extract 1 frame
-            ...(preview ? ['-vf', 'scale=320:320:force_original_aspect_ratio=decrease', '-c:v', 'libwebp', '-quality', '78', '-threads', '1'] : []),
+            ...(mode === 'preview' ? ['-vf', 'scale=320:320:force_original_aspect_ratio=decrease', '-c:v', 'libwebp', '-quality', '78', '-threads', '1'] : []),
+            ...(mode === 'analysis' ? ['-vf', "scale='min(1024,iw)':'min(1024,ih)':force_original_aspect_ratio=decrease"] : []),
             '-f', 'image2',               // Force image format
             '-y',                         // Overwrite output
             outputPath
           ]);
 
           let stderr = '';
-          const timer = preview ? setTimeout(() => { ffmpeg.kill(); reject(new Error('Preview extraction timed out')); }, 20_000) : undefined;
+          const timer = hardened ? setTimeout(() => { ffmpeg.kill(); reject(new Error('Frame extraction timed out')); }, mode === 'preview' ? 20_000 : 30_000) : undefined;
 
           ffmpeg.stderr.on('data', (data) => {
             stderr = (stderr + data.toString()).slice(-8000);
@@ -206,10 +209,47 @@ export class VideoFrameExtractor {
   /** Private-file thumbnail at one second, falling back to frame zero for sub-second clips. */
   static async extractPreviewFrame(videoPath: string, outputPath: string): Promise<void> {
     for (const timestamp of [1, 0]) {
-      await this.extractSingleFrame(videoPath, timestamp, outputPath, true);
+      await this.extractSingleFrame(videoPath, timestamp, outputPath, 'preview');
       if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) return;
     }
     throw new Error('No video frame');
+  }
+
+  /** Running time in seconds, probed the hardened way (files users put in) and given up on after 30 seconds. */
+  static async probeDuration(videoPath: string): Promise<number> {
+    const stdout = await new Promise<string>((resolve, reject) => {
+      const ffprobe = spawn(VideoProcessor.getFFprobePath(), ['-v', 'error', '-protocol_whitelist', 'file,pipe', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', videoPath], { windowsHide: true });
+      let out = '';
+      const timer = setTimeout(() => { ffprobe.kill(); reject(new Error('Video probe timed out')); }, 30_000);
+      ffprobe.stdout.on('data', (data) => { out = (out + data.toString()).slice(-1000); });
+      ffprobe.on('close', (code) => { clearTimeout(timer); if (code === 0) resolve(out); else reject(new Error(`FFprobe failed (code ${code})`)); });
+      ffprobe.on('error', (error) => { clearTimeout(timer); reject(new Error(`Failed to spawn FFprobe: ${error.message}`)); });
+    });
+    const duration = Number.parseFloat(stdout.trim());
+    if (!Number.isFinite(duration) || duration <= 0) throw new Error('Could not read the video duration');
+    return duration;
+  }
+
+  /**
+   * Frames at `timestamps` (seconds) for a model to look at, each fit inside 1024px, three ffmpeg runs at a time.
+   * Returns temp PNG paths in the same order; the caller removes them with cleanupTempFrames.
+   */
+  static async extractAnalysisFrames(videoPath: string, timestamps: number[]): Promise<string[]> {
+    const videoTempDir = path.join(await this.ensureTempDir(), crypto.randomUUID());
+    await fs.promises.mkdir(videoTempDir, { recursive: true });
+    const framePaths = timestamps.map((_, index) => path.join(videoTempDir, `frame_${String(index + 1).padStart(3, '0')}.png`));
+    try {
+      for (let start = 0; start < timestamps.length; start += 3) {
+        await Promise.all(timestamps.slice(start, start + 3).map((timestamp, offset) => this.extractSingleFrame(videoPath, timestamp, framePaths[start + offset], 'analysis')));
+      }
+      for (const framePath of framePaths) {
+        if (!fs.existsSync(framePath)) throw new Error('Failed to extract a video frame');
+      }
+      return framePaths;
+    } catch (error) {
+      await fs.promises.rm(videoTempDir, { recursive: true, force: true }).catch(() => undefined);
+      throw error;
+    }
   }
 
   /**

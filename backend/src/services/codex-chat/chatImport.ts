@@ -10,6 +10,7 @@ import { renderSummary, type ChatSummarySegment } from './chatMemory'
 import { ChatProfileStore } from './chatProfiles'
 import { CodexChatStore, parseMessageRouting } from './codexChatStore'
 import { validateChatMediaAttachments } from './chatMediaAttachments'
+import { MEDIA_HASH_PATTERN } from './chatMediaLinks'
 
 export const CHAT_IMPORT_MAX_BYTES = 32 * 1024 * 1024
 const MAX_MESSAGES = 20_000
@@ -39,7 +40,7 @@ const STATUSES = new Set(['completed', 'failed', 'interrupted'])
 function importToolCall(value: unknown, visible: (hash: string) => boolean): ChatToolCall | null {
   const call = object(value)
   if (typeof call.id !== 'string' || typeof call.tool !== 'string') return null
-  const hashes = Array.isArray(call.compositeHashes) ? call.compositeHashes.filter((item): item is string => typeof item === 'string' && /^[a-f0-9]{48}$/.test(item)).slice(0, 100) : []
+  const hashes = Array.isArray(call.compositeHashes) ? call.compositeHashes.filter((item): item is string => typeof item === 'string' && MEDIA_HASH_PATTERN.test(item)).slice(0, 100) : []
   const args = call.arguments ?? null
   return {
     id: call.id.slice(0, 120),
@@ -184,7 +185,7 @@ export function importChatThread(requester: McpRequester, raw: Buffer, target: C
       })) : []
       const active = intOrNull(message.active_alternative, 0, Math.max(0, alternatives.length - 1)) ?? 0
       const media = Array.isArray(message.mediaAttachments) ? message.mediaAttachments.slice(0, 20).map(object)
-        .flatMap((item) => (typeof item.compositeHash === 'string' && /^[a-f0-9]{48}$/.test(item.compositeHash) && visible(item.compositeHash) ? mediaOf(item.compositeHash) ?? [] : [])) : []
+        .flatMap((item) => (typeof item.compositeHash === 'string' && MEDIA_HASH_PATTERN.test(item.compositeHash) && visible(item.compositeHash) ? mediaOf(item.compositeHash) ?? [] : [])) : []
       const copyId = Number(insert.run(
         created.id, role, textOf(message.content), nullableText(message.display_content), toolCalls.length ? JSON.stringify(toolCalls) : null,
         STATUSES.has(message.status as string) ? message.status : 'completed', nullableText(message.error, 2000),
