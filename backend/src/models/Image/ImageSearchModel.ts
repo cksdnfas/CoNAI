@@ -11,6 +11,7 @@ import {
 import { ImageSafetyService } from '../../services/imageSafetyService';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import { resolveSearchTotal } from '../../services/aggregateCache';
+import '../groupsAggregateVersion';
 import { buildIdPageResponse, normalizeIdPage, type IdPage, type IdPageResponse } from '../../utils/idPage';
 
 /**
@@ -98,7 +99,7 @@ export class ImageSearchModel {
       total = resolveSearchTotal('advancedSearch', countConditions, countParts.params, () => {
         const countRow = db.prepare(countQuery).get(...countParts.params) as any;
         return countRow.total as number;
-      });
+      }, countParts.groupJoinClause ? ['groups'] : []);
     }
 
     // 정렬 컬럼 매핑 (upload_date → first_seen_date, filename은 제거)
@@ -463,7 +464,7 @@ export class ImageSearchModel {
     const rows = db.prepare(query).all(...params, page.limit + 1, page.offset) as Array<{ id: number }>;
     return buildIdPageResponse(rows.map(row => row.id), page, () => resolveSearchTotal('searchImageFileIds', [fromWhere], params, () => (
       (db.prepare(`SELECT COUNT(*) as total ${fromWhere}`).get(...params) as { total: number }).total
-    )));
+    ), groupJoinClause ? ['groups'] : []));
   }
 
   /**

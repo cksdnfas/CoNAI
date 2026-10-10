@@ -2,6 +2,7 @@ import { db } from '../database/init';
 import { ImageSafetyService } from '../services/imageSafetyService';
 import { MediaPostprocessVisibilityService } from '../services/mediaPostprocessVisibilityService';
 import { AggregateCache, resolveSearchTotal } from '../services/aggregateCache';
+import './groupsAggregateVersion';
 import { buildIdPageResponse, normalizeIdPage, type IdPage, type IdPageResponse } from '../utils/idPage';
 import { ImageMetadataRecord, ImageWithFileView } from '../types/image';
 import { PAGINATION } from '@conai/shared';
@@ -19,17 +20,6 @@ type GroupImageListResult = {
 type GroupChildRecord = { id: number };
 type FindChildGroups = (groupId: number) => GroupChildRecord[];
 
-// Group membership / tree writes bump this row through triggers (migration 043), wherever they come from.
-let groupsVersionStatement: { get(): unknown } | null = null;
-AggregateCache.setVersionSource('groups', () => {
-  try {
-    groupsVersionStatement ??= db.prepare("SELECT version FROM aggregate_versions WHERE scope = 'groups'");
-    const row = groupsVersionStatement.get() as { version: number } | undefined;
-    return row ? row.version : null;
-  } catch {
-    return null;
-  }
-});
 
 function getVisibleGroupImageCondition(alias = 'im') {
   return ImageSafetyService.buildVisibleScoreCondition(`${alias}.rating_score`);
@@ -468,5 +458,5 @@ export function getImageFileIdsForGroupQuery(groupId: number, page: IdPage = nor
 
   return buildIdPageResponse(rows.map(row => row.id), page, () => resolveSearchTotal('groupImageFileIds', [fromWhere], [groupId], () => (
     (db.prepare(`SELECT COUNT(*) as total ${fromWhere}`).get(groupId) as { total: number }).total
-  )));
+  ), ['groups']));
 }

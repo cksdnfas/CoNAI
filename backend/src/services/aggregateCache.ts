@@ -30,19 +30,23 @@ type SearchTotalCacheEntry = {
 
 const searchTotalCache = new Map<string, SearchTotalCacheEntry>();
 
-function searchTotalCacheKey(scope: string, conditions: string[], params: unknown[]): string {
-  return JSON.stringify({ scope, conditions, params });
+/** `versionScopes`: aggregate scopes whose writes change this total (their versions join the key). */
+function searchTotalCacheKey(scope: string, conditions: string[], params: unknown[], versionScopes: readonly AggregateScope[]): string {
+  return JSON.stringify({ scope, conditions, params, versions: versionScopes.length ? AggregateCache.versionsOf(versionScopes) : null });
 }
 
 /** A still-fresh cached search total, without computing one. */
-export function peekSearchTotal(scope: string, conditions: string[], params: unknown[]): number | null {
-  const cached = searchTotalCache.get(searchTotalCacheKey(scope, conditions, params));
+export function peekSearchTotal(scope: string, conditions: string[], params: unknown[], versionScopes: readonly AggregateScope[] = []): number | null {
+  const cached = searchTotalCache.get(searchTotalCacheKey(scope, conditions, params, versionScopes));
   return cached && cached.expiresAt > Date.now() ? cached.total : null;
 }
 
-/** Resolve a search total from cache, computing it at most once per TTL. */
-export function resolveSearchTotal(scope: string, conditions: string[], params: unknown[], compute: () => number): number {
-  const cacheKey = searchTotalCacheKey(scope, conditions, params);
+/**
+ * Resolve a search total from cache, computing it at most once per TTL. A total that depends on group membership
+ * passes `['groups']`: a group gaining or losing media is then a new key, not 30 seconds of the old count.
+ */
+export function resolveSearchTotal(scope: string, conditions: string[], params: unknown[], compute: () => number, versionScopes: readonly AggregateScope[] = []): number {
+  const cacheKey = searchTotalCacheKey(scope, conditions, params, versionScopes);
   const now = Date.now();
   const cached = searchTotalCache.get(cacheKey);
   if (cached && cached.expiresAt > now) {
@@ -125,6 +129,12 @@ export class AggregateCache {
     } else {
       delete this.versionSources[scope];
     }
+  }
+
+  /** The current versions of `scopes`, for keys of values cached elsewhere. */
+  static versionsOf(scopes: readonly AggregateScope[]): number[] {
+    const current = this.currentVersions(scopes);
+    return scopes.map((scope) => current[scope]);
   }
 
   static clearAll(): void {
