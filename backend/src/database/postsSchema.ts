@@ -125,4 +125,10 @@ export function ensurePostsSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_post_bot_runs_profile ON post_bot_runs(profile_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_post_bot_runs_requester ON post_bot_runs(requested_by_account_id, created_at);
   `);
+  // The chat reply a post or comment was written from (a bot's tool call, a board call's answer).
+  for (const table of ['posts', 'post_comments']) {
+    const columns = new Set((db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((column) => column.name));
+    if (!columns.has('source_thread_id')) db.exec(`ALTER TABLE ${table} ADD COLUMN source_thread_id INTEGER`);
+    if (!columns.has('source_reply_id')) db.exec(`ALTER TABLE ${table} ADD COLUMN source_reply_id TEXT`);
+  }
 }

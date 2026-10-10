@@ -65,8 +65,15 @@ export interface PostSummary {
   canEdit: boolean;
 }
 
+/** The chat reply a post or comment was written from; shown only to the chat's owner. */
+export interface PostSourceChat {
+  threadId: number;
+  replyId: string | null;
+}
+
 export interface PostDetail extends PostSummary {
   body: string;
+  sourceChat: PostSourceChat | null;
 }
 
 export interface PostListResult {
@@ -92,6 +99,7 @@ export interface PostComment {
   status: PostCommentStatus;
   /** The bot run that wrote this comment. */
   botRunId: number | null;
+  sourceChat: PostSourceChat | null;
   revision: number;
   createdAt: string;
   updatedAt: string;
@@ -181,6 +189,16 @@ export const POST_LIMITS = {
   categoryDepth: 5,
   mediaRefs: 200,
 } as const;
+
+/**
+ * A post (or one comment of it) referenced from chat text: `[title](post:12)` or `[title](post:12#comment-45)`.
+ * The chat shows it as a link to the board; a model reads it with posts_read.
+ */
+export const POST_LINK_PATTERN = /^post:(\d+)(?:#comment-(\d+))?$/;
+
+export function postLink(postId: number, commentId?: number | null) {
+  return `post:${postId}${commentId ? `#comment-${commentId}` : ''}`;
+}
 
 /** `![caption](kind:ref)` embeds in a post or comment body. */
 export const POST_MEDIA_EMBED_PATTERN = /!\[[^\]\n]*\]\(\s*(media|audio|group|file):([^)\s]+)\s*\)/g;

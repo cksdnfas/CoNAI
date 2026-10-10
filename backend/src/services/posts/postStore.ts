@@ -5,6 +5,7 @@ import {
   type PostComment,
   type PostCommentMode,
   type PostDetail,
+  type PostSourceChat,
   type PostListResult,
   type PostMediaRef,
   type PostStatus,
@@ -26,13 +27,16 @@ export type PostRow = {
   id: number; category_id: number | null; title: string; body: string; excerpt: string; status: PostStatus;
   author_type: 'account' | 'profile'; author_profile_id: number | null; author_name: string; owner_account_id: number | null;
   source: string; comment_mode: PostCommentMode; pinned: number; revision: number; comment_count: number;
-  published_at: string | null; created_at: string; updated_at: string;
+  published_at: string | null; created_at: string; updated_at: string; source_thread_id: number | null; source_reply_id: string | null;
 };
 export type CommentRow = {
   id: number; post_id: number; parent_id: number | null; quote_comment_id: number | null; author_type: 'account' | 'profile';
   author_profile_id: number | null; author_name: string; owner_account_id: number | null; body: string; mentions: string;
   status: 'visible' | 'hidden' | 'deleted'; bot_run_id: number | null; revision: number; created_at: string; updated_at: string;
+  source_thread_id: number | null; source_reply_id: string | null;
 };
+/** The chat reply something was written from (see PostSourceChat). */
+export type PostOrigin = { threadId: number; replyId: string | null };
 
 const MAX_REVISIONS = 20;
 export const iso = (value: string | null) => (value ? `${value.replace(' ', 'T')}${value.endsWith('Z') ? '' : 'Z'}` : null);
@@ -73,6 +77,21 @@ export function createAuthorResolver(actor: PostActor) {
       };
     }
     return { type: 'account', accountId: row.owner_account_id, profileId: null, name: (row.owner_account_id !== null ? accountName(row.owner_account_id) : null) ?? row.author_name, avatarUrl: null, avatarCrop: null };
+  };
+}
+
+/** Where a post or comment was written from, for the owner of that chat only (nobody else can open it). */
+function createSourceChatResolver(actor: PostActor) {
+  const owners = new Map<number, number | null | undefined>();
+  return (row: { source_thread_id: number | null; source_reply_id: string | null }): PostSourceChat | null => {
+    const threadId = row.source_thread_id;
+    if (threadId === null) return null;
+    if (!owners.has(threadId)) {
+      const thread = db().prepare('SELECT account_id FROM codex_chat_threads WHERE id = ?').get(threadId) as { account_id: number | null } | undefined;
+      owners.set(threadId, thread ? thread.account_id : undefined);
+    }
+    const owner = owners.get(threadId);
+    return owner !== undefined && owner === actor.accountId ? { threadId, replyId: row.source_reply_id } : null;
   };
 }
 
@@ -370,11 +389,11 @@ export const PostStore = {
 
   get(actor: PostActor, postId: number): PostDetail {
     const row = requirePostRow(actor, postId);
-    return { ...summaries(actor, [row])[0], body: row.body };
+    return { ...summaries(actor, [row])[0], body: row.body, sourceChat: createSourceChatResolver(actor)(row) };
   },
 
-  /** `source`: manual (web), chat (a bot tool), routine, workflow, mention. */
-  create(actor: PostActor, input: PostInput, source = 'manual'): PostDetail {
+  /** `source`: manual (web), chat (a bot tool), routine, workflow, mention; `origin`: the chat reply it came from. */
+  create(actor: PostActor, input: PostInput, source = 'manual', origin: PostOrigin | null = null): PostDetail {
     requireKey(actor, 'posts.write');
     const title = postTitle(input.title);
     const body = postBody(input.body);
@@ -389,9 +408,9 @@ export const PostStore = {
     const author = authorSnapshot(actor);
     const refs = extractMediaRefs(body);
     const postId = db().transaction(() => {
-      const result = db().prepare(`INSERT INTO posts (category_id, title, body, excerpt, status, author_type, author_profile_id, author_name, owner_account_id, source, comment_mode, pinned, published_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'published' THEN CURRENT_TIMESTAMP END)`)
-        .run(categoryId, title, body, excerptOf(body), status, author.type, author.profileId, author.name, actor.accountId, source, commentMode, pinned, status);
+      const result = db().prepare(`INSERT INTO posts (category_id, title, body, excerpt, status, author_type, author_profile_id, author_name, owner_account_id, source, comment_mode, pinned, published_at, source_thread_id, source_reply_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'published' THEN CURRENT_TIMESTAMP END, ?, ?)`)
+        .run(categoryId, title, body, excerptOf(body), status, author.type, author.profileId, author.name, actor.accountId, source, commentMode, pinned, status, origin?.threadId ?? null, origin?.replyId ?? null);
       const id = Number(result.lastInsertRowid);
       saveTags(id, tags);
       saveMediaRefs(id, 'post', id, refs, actor.accountId);
@@ -472,13 +491,13 @@ export const PostStore = {
 type CommentListener = (comment: CommentRow, actor: PostActor, post: PostRow) => void;
 const commentListeners = new Set<CommentListener>();
 
-function toComment(actor: PostActor, row: CommentRow, author: ReturnType<typeof createAuthorResolver>): PostComment {
+function toComment(actor: PostActor, row: CommentRow, author: ReturnType<typeof createAuthorResolver>, source = createSourceChatResolver(actor)): PostComment {
   const visibleBody = row.status === 'deleted' || (row.status === 'hidden' && !actor.isAdmin && row.owner_account_id !== actor.accountId) ? '' : row.body;
   let mentions: number[] = [];
   try { mentions = (JSON.parse(row.mentions) as unknown[]).filter((id): id is number => Number.isSafeInteger(id)); } catch { /* none */ }
   return {
     id: row.id, postId: row.post_id, parentId: row.parent_id, quoteCommentId: row.quote_comment_id, author: author(row), body: visibleBody,
-    mentions, status: row.status, botRunId: row.bot_run_id, revision: row.revision, createdAt: iso(row.created_at) as string,
+    mentions, status: row.status, botRunId: row.bot_run_id, sourceChat: row.status === 'deleted' ? null : source(row), revision: row.revision, createdAt: iso(row.created_at) as string,
     updatedAt: iso(row.updated_at) as string, canEdit: row.status !== 'deleted' && canEditComment(actor, row),
   };
 }
@@ -500,10 +519,11 @@ export const PostCommentStore = {
     requirePostRow(actor, postId);
     const rows = db().prepare('SELECT * FROM post_comments WHERE post_id = ? ORDER BY created_at, id').all(postId) as CommentRow[];
     const author = createAuthorResolver(actor);
+    const source = createSourceChatResolver(actor);
     // A hidden comment shows only to administrators and its writer; others see the thread around it.
     return rows
       .filter((row) => row.status !== 'hidden' || actor.isAdmin || row.owner_account_id === actor.accountId)
-      .map((row) => toComment(actor, row, author));
+      .map((row) => toComment(actor, row, author, source));
   },
 
   get(actor: PostActor, commentId: number): PostComment {
@@ -517,7 +537,7 @@ export const PostCommentStore = {
    * Answering a reply attaches to its top-level comment and quotes the reply (comments are two levels deep).
    * `mentions` are profile ids the writer picked; the bot caller decides which of them actually run.
    */
-  create(actor: PostActor, postId: number, input: CommentInput, options: { botRunId?: number | null } = {}): PostComment {
+  create(actor: PostActor, postId: number, input: CommentInput, options: { botRunId?: number | null; origin?: PostOrigin | null } = {}): PostComment {
     requireKey(actor, 'posts.comment');
     const body = postBody(input.body, POST_LIMITS.comment).trim();
     if (!body) throw new PostError('댓글 내용을 입력해줘.');
@@ -536,8 +556,9 @@ export const PostCommentStore = {
         quoteId = parent.parent_id === null ? null : parent.id;
       }
       const author = authorSnapshot(actor);
-      const result = db().prepare(`INSERT INTO post_comments (post_id, parent_id, quote_comment_id, author_type, author_profile_id, author_name, owner_account_id, body, mentions, bot_run_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(postId, parentId, quoteId, author.type, author.profileId, author.name, actor.accountId, body, JSON.stringify(mentions), options.botRunId ?? null);
+      const result = db().prepare(`INSERT INTO post_comments (post_id, parent_id, quote_comment_id, author_type, author_profile_id, author_name, owner_account_id, body, mentions, bot_run_id, source_thread_id, source_reply_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(postId, parentId, quoteId, author.type, author.profileId, author.name, actor.accountId, body, JSON.stringify(mentions), options.botRunId ?? null,
+        options.origin?.threadId ?? null, options.origin?.replyId ?? null);
       const id = Number(result.lastInsertRowid);
       saveMediaRefs(postId, 'comment', id, refs, actor.accountId);
       refreshCommentCount(postId);

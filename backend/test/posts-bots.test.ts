@@ -39,12 +39,25 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
   /** Each bot answers by the name in its system prompt; 루나 calls 카이 while `lunaCalls` says so. */
   let lunaCalls = true
   const requests: string[] = []
+  /** 세라 has the board tools: reads the post, answers with post_comment (calling 카이), then says so in the room. */
+  const seraRequests: Array<Array<{ role: string; content?: unknown; tool_calls?: unknown }>> = []
+  const toolCall = (name: string, args: unknown) => Response.json({ choices: [{ message: { content: '', tool_calls: [{ id: `call-${name}-${seraRequests.length}`, type: 'function', function: { name, arguments: JSON.stringify(args) } }] }, finish_reason: 'tool_calls' }], usage: { prompt_tokens: 10 } })
   t.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
     if (!init?.method || init.method === 'GET') return new Response('', { status: 404 })
     const body = JSON.parse(String(init.body))
     const system = JSON.stringify(body.messages.filter((message: { role: string }) => message.role === 'system'))
     const user = JSON.stringify(body.messages.at(-1))
     requests.push(user)
+    if (system.includes('세라')) {
+      seraRequests.push(body.messages)
+      const call = String(body.messages.filter((message: { role: string }) => message.role === 'user').at(-1)?.content ?? '')
+      const postId = Number(/post_id (\d+)/.exec(call)?.[1])
+      const replyTo = Number(/reply_to (\d+)/.exec(call)?.[1])
+      const last = body.messages.at(-1) as { role: string; content?: string }
+      if (last.role === 'user') return toolCall('posts_read', { post_id: postId })
+      if (last.role === 'tool' && String(last.content).includes('"post"')) return toolCall('post_comment', { post_id: postId, reply_to: replyTo, body: '세라가 직접 단 답글. @카이 정리 부탁해' })
+      return Response.json({ choices: [{ message: { content: '답글 달았어.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10 } })
+    }
     const content = system.includes('카이') && !system.includes('루나') ? '종소리 붙였어.' : lunaCalls ? '비 오는 버전 그려볼게. @카이 효과음 부탁해' : '비 오는 버전이야.'
     return Response.json({ choices: [{ message: { content }, finish_reason: 'stop' }], usage: { prompt_tokens: 10 } })
   })
@@ -151,6 +164,44 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
   await t.test('one board room per (account, bot), reused across posts', () => {
     const rooms = db().prepare(`SELECT account_key, room_key, thread_id FROM chat_automation_rooms WHERE room_key LIKE 'posts:board:%'`).all() as Array<{ account_key: string; thread_id: number }>
     assert.equal(rooms.length, 2, '루나 and 카이 for account 2')
-    for (const room of rooms) assert.match(CodexChatStore.findThreadById(room.thread_id)!.title, /^게시판 · /)
+    for (const room of rooms) {
+      const thread = CodexChatStore.findThreadById(room.thread_id)!
+      assert.match(thread.title, /^게시판 · /)
+      assert.equal(thread.summary_enabled, 1, 'calls from many posts share the room, so its summary is on')
+    }
+  })
+
+  await t.test('a bot with the board tools reads the post and answers with post_comment itself; the answer leads back to the room', async () => {
+    lunaCalls = false
+    const sera = ChatProfileStore.create({
+      name: '세라', engine: 'llm', providerName: 'chat', model: 'chat-model', summaryEnabled: false, systemPrompt: '너는 세라야.',
+      mcpEnabled: true, mcpScopes: ['read', 'organize'], toolAllowlist: ['posts_read', 'post_comment'],
+    })
+    const post = PostStore.create(alice, { title: '심야 상담소', body: '본문에만 있는 문장: 등대 아래 우체통.' })
+    const call = PostCommentStore.create(alice, post.id, { body: '@세라 이 글 요약해줘', mentions: [sera.id] })
+    await settle(post.id)
+    const [first, second] = runs(post.id)
+    assert.deepEqual([first.profile_id, first.status, first.chain_depth], [sera.id, 'done', 1], first.error ?? '')
+
+    // Only the call is quoted; the post is read with the tool.
+    const opening = JSON.stringify(seraRequests[0].at(-1))
+    assert.match(opening, /posts_read \(post_id/)
+    assert.match(opening, /이 글 요약해줘/)
+    assert.ok(!opening.includes('등대 아래 우체통'), 'the post text is not pasted into the room')
+    assert.ok(seraRequests.some((messages) => JSON.stringify(messages).includes('등대 아래 우체통')), 'it came back from posts_read')
+
+    const comments = PostCommentStore.list(alice, post.id)
+    const seraComments = comments.filter((comment) => comment.author.profileId === sera.id)
+    assert.equal(seraComments.length, 1, 'the closing room text is not posted again')
+    const answer = seraComments[0]
+    assert.equal(first.result_comment_id, answer.id)
+    assert.deepEqual([answer.parentId, answer.botRunId, answer.body], [call.id, first.id, '세라가 직접 단 답글. @카이 정리 부탁해'])
+    const room = db().prepare(`SELECT thread_id FROM chat_automation_rooms WHERE account_key = '2' AND room_key = ?`).get(`posts:board:${sera.id}`) as { thread_id: number }
+    assert.equal(answer.sourceChat?.threadId, room.thread_id)
+    assert.ok(answer.sourceChat?.replyId, 'the reply it came from')
+    assert.equal(PostCommentStore.list(viewer, post.id).find((comment) => comment.id === answer.id)!.sourceChat, null, 'only the room owner sees where it came from')
+
+    // The @ in the tool-written answer continues the call's chain (as the caller's account), not a new one.
+    assert.deepEqual([second.profile_id, second.status, second.chain_depth, second.run_as_account_id], [kai.id, 'done', 2, 2])
   })
 })
