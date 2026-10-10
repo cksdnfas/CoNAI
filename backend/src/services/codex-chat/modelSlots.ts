@@ -35,6 +35,11 @@ export type ModelSlot = {
   label: string
   isDefault: boolean
   sortOrder: number
+  /**
+   * The highest rating tier (rating_tiers.tier_order) of media this model may be shown; null: no ceiling. Profiles
+   * that follow their model, workflow nodes and vision reviews use it (chatContentRating.ts).
+   */
+  contentRatingMaxTier: number | null
   /** Profiles that reference this row, with what they use it for. */
   profiles: Array<{ id: number; name: string; roles: ModelUseRole[] }>
   /** Judge presets that ask this model (as the judge or as the escalation LLM). */
@@ -66,6 +71,7 @@ type SlotRow = {
   model: string
   is_default: number
   sort_order: number
+  content_rating_max_tier: number | null
   created_date: string
   updated_date: string
 }
@@ -135,6 +141,7 @@ function toSlot(row: SlotRow, usage: Usage, connections: Map<string, { label: st
     label: `${connection.label} · ${row.model}`,
     isDefault: row.is_default === 1,
     sortOrder: row.sort_order,
+    contentRatingMaxTier: row.content_rating_max_tier ?? null,
     profiles: usage.profiles.get(row.id) ?? [],
     judgePresets: usage.judgePresets.get(row.id) ?? [],
     userProfiles: usage.userProfiles.get(row.id) ?? 0,
@@ -162,6 +169,14 @@ function modelName(value: unknown) {
   const model = typeof value === 'string' ? value.trim() : ''
   if (model.length < 1 || model.length > MODEL_MAX_LENGTH) throw new ChatProfileError('모델 ID를 적어줘. 200자까지 쓸 수 있어.')
   return model
+}
+
+/** A saved content rating ceiling: null (none) or a tier position (rating_tiers.tier_order). */
+export function contentRatingTier(value: unknown): number | null {
+  if (value === null || value === '') return null
+  const tier = Number(value)
+  if (!Number.isSafeInteger(tier) || tier < 1 || tier > 1000) throw new ChatProfileError('허용 등급 값이 올바르지 않아.')
+  return tier
 }
 
 function modelConnectionName(value: unknown) {
@@ -232,6 +247,13 @@ export const ModelSlotStore = {
   defaultTarget(): ModelTarget | null {
     const row = getUserSettingsDb().prepare('SELECT id FROM llm_model_slots WHERE is_default = 1 ORDER BY id ASC LIMIT 1').get() as { id: number } | undefined
     return row ? ModelSlotStore.target(row.id) : null
+  },
+
+  /** A row's content rating ceiling (see ModelSlot.contentRatingMaxTier); null for no ceiling or no such row. */
+  contentRatingMaxTier(slotId: number | null | undefined): number | null {
+    if (slotId === null || slotId === undefined) return null
+    const row = getUserSettingsDb().prepare('SELECT content_rating_max_tier FROM llm_model_slots WHERE id = ?').get(slotId) as { content_rating_max_tier: number | null } | undefined
+    return row?.content_rating_max_tier ?? null
   },
 
   /** The id when that row exists, else null. */
@@ -307,8 +329,8 @@ export const ModelSlotStore = {
     return ModelSlotStore.ofConnection(connection)
   },
 
-  /** Change a row's model; everything that references the row follows. Null when the row does not exist. */
-  update(slotId: number, input: { model?: unknown; isDefault?: unknown }) {
+  /** Change a row's model or content rating ceiling; everything that references the row follows. Null when the row does not exist. */
+  update(slotId: number, input: { model?: unknown; isDefault?: unknown; contentRatingMaxTier?: unknown }) {
     const db = getUserSettingsDb()
     const current = ModelSlotStore.target(slotId)
     if (!current) return null
@@ -317,6 +339,9 @@ export const ModelSlotStore = {
       const taken = findRowId(current.providerName, model)
       if (taken !== null && taken !== slotId) throw new ChatProfileError('이 연결에 같은 모델이 이미 있어.')
       db.prepare("UPDATE llm_model_slots SET model = ?, updated_date = datetime('now') WHERE id = ?").run(model, slotId)
+      if (input.contentRatingMaxTier !== undefined) {
+        db.prepare('UPDATE llm_model_slots SET content_rating_max_tier = ? WHERE id = ?').run(contentRatingTier(input.contentRatingMaxTier), slotId)
+      }
       if (input.isDefault === true) ModelSlotStore.setDefault(slotId)
     })()
     return ModelSlotStore.find(slotId)

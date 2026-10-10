@@ -177,6 +177,36 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     assert.equal(stats.toolUseRate, 0)
   })
 
+  await t.test('the user\'s flags come before a no: the withheld tool is only named, never refused', async (s) => {
+    const { ChatFlagStore } = await import('../src/services/codex-chat/chatFlags')
+    const flag = ChatFlagStore.create(requester, { name: '기억', content: '이번 이야기를 save_lore로 로어에 남겨' })
+    let chatCalls = 0
+    const calls = route(s, (body) => (body.questions.lore ? { lore: { type: 'noul', noul: 0.1 } } : { 'follow-up': { type: 'noul', noul: 0.1 } }), () => {
+      chatCalls += 1
+      if (chatCalls > 1) return reply('남겨 뒀어.')
+      return Response.json({ choices: [{ message: { content: null, tool_calls: [{ id: 'call-lore', type: 'function', function: { name: 'save_lore', arguments: '{}' } }] }, finish_reason: 'tool_calls' }] })
+    })
+    const thread = threadOf(judged.id)
+    await LlmChatService.sendMessage(requester, thread, '오늘 날씨 좋다', () => {}, undefined, [flag.id])
+    const chats = calls.filter((call) => call.url.endsWith('/chat/completions'))
+    const first = lastUserText(chats[0].body)
+    assert.match(first, /이 도구를 쓰지 마: save_lore/)
+    assert.match(first, /\[우선순위\]/, 'the judge says the flag wins')
+    assert.ok(first.indexOf('[사용자 지시') < first.indexOf('[판단]'))
+    const toolResult = (chats[1].body.messages as any[]).find((message) => message.role === 'tool')
+    assert.ok(toolResult, 'the tool call ran')
+    assert.doesNotMatch(JSON.stringify(toolResult.content), /not available in this reply/)
+
+    // Without a flag the same no still refuses the call.
+    chatCalls = 0
+    calls.length = 0
+    await LlmChatService.sendMessage(requester, threadOf(judged.id), '오늘 날씨 좋다', () => {})
+    const plainChats = calls.filter((call) => call.url.endsWith('/chat/completions'))
+    assert.doesNotMatch(lastUserText(plainChats[0].body), /\[우선순위\]/)
+    assert.match(JSON.stringify((plainChats[1].body.messages as any[]).find((message) => message.role === 'tool').content), /not available in this reply/)
+    ChatFlagStore.delete(requester, flag.id)
+  })
+
   await t.test('a yes on a save_lore item lifts the lore spacing for its reply only', async (s) => {
     route(s, () => ({ lore: { type: 'noul', noul: 0.95 } }))
     const thread = threadOf(judged.id)

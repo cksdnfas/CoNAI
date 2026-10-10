@@ -25,6 +25,11 @@ export interface McpRequestContext {
   generationPresetIds?: number[];
   /** Server-issued snapshot; edited presets require a fresh bridge/session before execution. */
   generationPresetSnapshot?: string;
+  /**
+   * The content rating ceiling of the model behind this request (a rating tier position; null: none). Unset: derived
+   * from the chat profile, if any (chatContentRating.ts).
+   */
+  contentRatingLimit?: number | null;
 }
 
 /** The tool name of the n-th generation preset a chat profile links (generate_image, generate_image_2, …). */

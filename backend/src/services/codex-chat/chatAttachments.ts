@@ -6,9 +6,11 @@ import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { EmoticonService } from '../emoticonService';
 import { requireFileStoreOwner } from '../fileStoreAccess';
 import { FileStoreService, fileOwnerKey } from '../fileStoreService';
+import { libraryMediaAllowed, storedFileAllowed } from '../contentRating';
 import { ImageSafetyService } from '../imageSafetyService';
 import { previewImage } from '../imagePreview';
 import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibilityService';
+import { profileContentLimit, type ContentRatingProfile } from './chatContentRating';
 import type { ChatMediaAttachment } from './chatMediaAttachments';
 import { profileSeesImages, type ChatProfile } from './chatProfiles';
 import { intersectChatScopes, resolveChatAccess } from './codexChatAccess';
@@ -85,10 +87,12 @@ function viewableMediaPath(compositeHash: string) {
 /**
  * The images attached to `messages`, loaded for a model that sees: library images (the account still holding
  * images.view) and image files of the account's file store, newest first, up to ATTACHED_IMAGE_LIMIT. Older ones stay
- * references the model can open with view_images. Null for a model that cannot see.
+ * references the model can open with view_images. Null for a model that cannot see. Images above the model's content
+ * rating ceiling stay references too (view_images refuses them the same way).
  */
-export async function loadAttachedImages(profile: Pick<ChatProfile, 'engine' | 'visionEnabled'>, requester: McpRequester, messages: ReadonlyArray<ImageCarrier>): Promise<AttachedImages> {
+export async function loadAttachedImages(profile: Pick<ChatProfile, 'visionEnabled'> & ContentRatingProfile, requester: McpRequester, messages: ReadonlyArray<ImageCarrier>): Promise<AttachedImages> {
   if (!profileSeesImages(profile)) return null;
+  const limit = profileContentLimit(profile);
   const images = new Map<string, string>();
   let mediaAllowed: boolean | undefined;
   const owner = fileOwnerKey(requester.accountId);
@@ -105,8 +109,10 @@ export async function loadAttachedImages(profile: Pick<ChatProfile, 'engine' | '
         if (item.media) {
           mediaAllowed ??= (() => { try { requireRequesterPermission(requester, IMAGE_VIEW_PERMISSION); return true; } catch { return false; } })();
           filePath = mediaAllowed ? viewableMediaPath(item.media) : null;
+          if (filePath && !await libraryMediaAllowed(item.media, limit)) filePath = null;
         } else if (item.file) {
           filePath = FileStoreService.resolveFile(owner, item.file).filePath;
+          if (!await storedFileAllowed(item.file, limit)) filePath = null;
         }
         if (filePath) images.set(item.key, `data:image/jpeg;base64,${await previewImage(filePath, ATTACHED_IMAGE_SIZE)}`);
       } catch {

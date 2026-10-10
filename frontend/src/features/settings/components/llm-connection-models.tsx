@@ -24,6 +24,7 @@ import {
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { ConnectionModelSelect } from './chat-profile-editor-fields'
+import { ContentRatingSelect } from './content-rating-select'
 
 const EMPTY_MODELS: string[] = []
 
@@ -102,14 +103,18 @@ export function ConnectionModelRow({ slot, workflowNodes, settingDefault, onSetD
   )
 }
 
-/** Change one row's model (everything using the row follows) or delete an unused row. */
+/** Change one row's model or content rating ceiling (everything using the row follows) or delete an unused row. */
 export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { slot: ModelSlot | null; workflowNodes: number; onClose: () => void }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const refresh = useRefreshModelRows()
   const [model, setModel] = useState('')
+  const [maxTier, setMaxTier] = useState<number | null>(null)
   useEffect(() => {
-    if (slot) setModel(slot.model)
+    if (slot) {
+      setModel(slot.model)
+      setMaxTier(slot.contentRatingMaxTier)
+    }
   }, [slot])
 
   const modelsQuery = useQuery({
@@ -123,7 +128,7 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
   const used = slot !== null && slotUseCount(slot, workflowNodes) > 0
 
   const saveMutation = useMutation({
-    mutationFn: () => updateModelSlot(slot?.id ?? 0, { model: model.trim() }),
+    mutationFn: () => updateModelSlot(slot?.id ?? 0, { model: model.trim(), contentRatingMaxTier: maxTier }),
     onSuccess: async () => {
       showSnackbar({ message: t({ ko: '저장했어.', en: 'Saved.' }), tone: 'info' })
       await refresh()
@@ -141,6 +146,9 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
     onError: (error) => showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '지우지 못했어.', en: 'Could not delete.' }), tone: 'error' }),
   })
   const busy = saveMutation.isPending || deleteMutation.isPending
+  const changed = slot !== null && (model.trim() !== slot.model || maxTier !== slot.contentRatingMaxTier)
+  // TypeSafe judges only read text.
+  const seesMedia = slot !== null && slot.providerType !== 'decision_typesafe'
 
   return (
     <Modal
@@ -148,8 +156,8 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
       onClose={onClose}
       title={slot ? slot.providerLabel : ''}
       size="narrow"
-      dirty={slot !== null && model.trim() !== slot.model}
-      onSave={model.trim() && model.trim() !== slot?.model && !busy ? () => saveMutation.mutate() : undefined}
+      dirty={changed}
+      onSave={model.trim() && changed && !busy ? () => saveMutation.mutate() : undefined}
     >
       <ModalBody>
         <Field
@@ -158,6 +166,15 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
         >
           <ConnectionModelSelect value={model} models={modelsQuery.data?.models ?? EMPTY_MODELS} defaultModel={slot?.model ?? null} onChange={setModel} />
         </Field>
+        {seesMedia ? (
+          <Field
+            className="mt-3"
+            label={t({ ko: '허용 등급', en: 'Content rating' })}
+            info={t({ ko: '이 등급을 넘는 이미지·영상은 이 모델에 보내지 않아. 프로필에서 따로 정하면 그쪽이 우선이야.', en: 'Images and videos above this rating are never sent to this model. A profile’s own setting takes precedence.' })}
+          >
+            <ContentRatingSelect ariaLabel={t({ ko: '허용 등급', en: 'Content rating' })} value={maxTier} onChange={(choice) => setMaxTier(choice === 'model' ? null : choice)} />
+          </Field>
+        ) : null}
       </ModalBody>
       {/* EditorFooter's shape; the delete keeps its own tooltip listing what uses the model. */}
       <ModalFooter className="mt-4 gap-1 border-t border-line pt-3">
@@ -169,7 +186,7 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
           </span>
         </Tip>
         <span className="flex-1" />
-        <IconButton size="icon-sm" onClick={() => saveMutation.mutate()} disabled={!model.trim() || model.trim() === slot?.model || busy} label={t({ ko: '저장', en: 'Save' })}>
+        <IconButton size="icon-sm" onClick={() => saveMutation.mutate()} disabled={!model.trim() || !changed || busy} label={t({ ko: '저장', en: 'Save' })}>
           {saveMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
         </IconButton>
       </ModalFooter>

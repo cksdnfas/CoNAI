@@ -2,6 +2,8 @@ import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { ChatProfileStore, profileGenerationOptions, type ChatProfile } from '../codex-chat/chatProfiles'
 import { resolveChatAccess } from '../codex-chat/codexChatAccess'
 import { resolveProfileModel } from '../codex-chat/chatModelRoles'
+import { slotContentLimit } from '../codex-chat/chatContentRating'
+import { imageDataUrlAllowed } from '../contentRating'
 import { stripThinking } from '../codex-chat/llmChatContext'
 import {
   resolveChatCompletionTarget,
@@ -255,9 +257,30 @@ function flattenForCodex(messages: ChatCompletionMessage[]) {
   return { systemPrompt: system || null, context: earlier || null, prompt: lastUser || earlier, image }
 }
 
+/**
+ * Refuses a request whose images are above the target model's content rating ceiling: the profile's own when it sets
+ * one, else the model row's. Workflow images are bytes without a library record, so they are rated here.
+ */
+async function assertImagesWithinRating(resolved: ResolvedWorkflowLlm, request: WorkflowLlmRequest) {
+  const profile = resolved.profile
+  const limit = profile && (profile.contentRatingMode === 'custom' || profile.engine !== 'llm') ? profile.contentRatingMaxTier : slotContentLimit(resolved.modelSlotId)
+  if (limit === null) return
+  // Only data URLs are ever sent (the request drops anything else).
+  const images = [
+    normalizeOptionalString(request.image),
+    ...(request.messages ?? []).flatMap((message) => Array.isArray(message.content)
+      ? message.content.filter((part): part is Extract<ChatContentPart, { type: 'image_url' }> => part.type === 'image_url').map((part) => part.image_url.url)
+      : []),
+  ].filter((url): url is string => Boolean(url && /^data:image\//i.test(url.trim())))
+  for (const image of images) {
+    if (!await imageDataUrlAllowed(image, limit)) throw new Error('이미지가 이 모델의 허용 등급을 넘어서 보낼 수 없어')
+  }
+}
+
 /** One request through the chat completion path (or Codex exec for Codex profiles). */
 export async function runWorkflowLlmText(request: WorkflowLlmRequest): Promise<WorkflowLlmResult> {
   const resolved = resolveWorkflowLlm(request.target)
+  await assertImagesWithinRating(resolved, request)
   const structuredOutputJson = structuredOutputText(request.structuredOutputJson)
   const responseMode: LlmResponseMode = structuredOutputJson ? 'json' : 'text'
   const prompt = normalizeOptionalString(request.prompt) ?? ''

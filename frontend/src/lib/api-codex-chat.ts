@@ -629,6 +629,10 @@ export interface ChatProfile extends ChatProfileAssetFields {
   maxToolRounds: number
   /** LLM: the model can look at images (view_images). */
   visionEnabled: boolean
+  /** Ceiling on the rating of media the model is shown: its model row's, or `contentRatingMaxTier` (Codex / Claude Code: always its own). */
+  contentRatingMode: 'model' | 'custom'
+  /** The highest rating tier (tier_order) shown; null: no ceiling. */
+  contentRatingMaxTier: number | null
   pageAssist: boolean
   /** The model may propose chat lorebook entries (save_lore). */
   allowLoreProposals: boolean
@@ -675,14 +679,14 @@ export interface CodexChatThread {
   id: number
   /** Chat lists: the chat's unfinished task (progress ring). */
   task?: import('@conai/shared').ChatTaskSummary | null
-  codex_thread_id: string | null
-  title: string
-  engine: ChatEngine
-  profile_id: number | null
   /** Chat lists: the automation that made this room for itself (filed under 자동화), or null. */
   automation?: import('@conai/shared').ChatAutomationRoomKind | null
   /** save_lore saves right away (1), leaves a card (0), or follows the chat settings (null). */
   lore_auto_save?: 0 | 1 | null
+  codex_thread_id: string | null
+  title: string
+  engine: ChatEngine
+  profile_id: number | null
   /** Overrides of the profile (null follows it). */
   context_turns: number | null
   summary_enabled: 0 | 1 | null
@@ -997,6 +1001,8 @@ export interface ModelSlot {
   label: string
   isDefault: boolean
   sortOrder: number
+  /** The highest rating tier (tier_order) of media this model is shown; null: no ceiling. */
+  contentRatingMaxTier: number | null
   profiles: Array<{ id: number; name: string; roles: ModelUseRole[] }>
   judgePresets: Array<{ id: number; name: string }>
   userProfiles: number
@@ -1024,7 +1030,7 @@ export function syncConnectionModels(providerName: string, models: string[]) {
 }
 
 /** Changes a row's model; everything that references the row follows. */
-export function updateModelSlot(slotId: number, patch: { model?: string; isDefault?: boolean }) {
+export function updateModelSlot(slotId: number, patch: { model?: string; isDefault?: boolean; contentRatingMaxTier?: number | null }) {
   return requestApiData<ModelSlot>(`/api/codex-chat/admin/model-slots/${slotId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 

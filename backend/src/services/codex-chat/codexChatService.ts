@@ -34,7 +34,7 @@ import { redactChatRequestBody, saveChatRequestCapture } from './chatRequestCapt
 import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { translateReply, translateUserInput } from './chatTranslation'
 import { hasTranslation } from './chatModelRoles'
-import { endJudgedTurn, judgeBeforeReply, type JudgedTurn } from './chatJudge'
+import { endJudgedTurn, judgeBeforeReply, judgeDirectiveText, type JudgedTurn } from './chatJudge'
 import { judgeStatusFields } from './chatJudgeFields'
 import { stripEchoedAddresses } from '@conai/shared'
 import { recordLlmUsage, type LlmTokenCounts } from '../llmUsage'
@@ -1277,7 +1277,7 @@ export const CodexChatService = {
           console.warn('[codex-chat] judge failed:', error instanceof Error ? error.message : error)
           return null
         })
-        const directive = [buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile, user)), postHistoryText(profile, user), turn.judged?.directive ?? ''].filter(Boolean).join('\n\n')
+        const directive = [buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile, user)), postHistoryText(profile, user), judgeDirectiveText(turn.judged)].filter(Boolean).join('\n\n')
         const reference = referenceBlock([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text])
         const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user) : ''
         const images = await loadAttachedImages(profile, requester, [{ attachments, mediaAttachments }])

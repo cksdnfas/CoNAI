@@ -19,6 +19,7 @@ import { ClaudeEffortSelect, ClaudeModelSelect } from './claude-model-select'
 import { JudgeModelSelect, useModelLabel } from './chat-judge-connection-select'
 import { applyRoleChoice, ModelRoleSelect, roleChoice, type SuggestWriters } from './chat-model-role-select'
 import { GROW_TEXTAREA, numberOrNull, SwitchLine, type Draft, type PatchDraft } from './chat-profile-editor-fields'
+import { ContentRatingSelect, useCeilingLabel } from './content-rating-select'
 import { EditorGroup } from '@/components/ui/editor-group'
 
 /**
@@ -81,6 +82,27 @@ function JudgeRole({ draft, patch }: { draft: Draft; patch: PatchDraft }) {
         </Field>
       ) : null}
     </RoleRow>
+  )
+}
+
+/**
+ * The highest rating tier of media the model is shown, for a model that sees images. An API LLM profile can follow
+ * its chat model row's ceiling; Codex and Claude Code have no row, so they set their own.
+ */
+function ContentRatingField({ draft, patch, slots }: { draft: Draft; patch: PatchDraft; slots: ModelSlot[] }) {
+  const { t } = useI18n()
+  const { label } = useCeilingLabel()
+  const isLlm = draft.engine === 'llm'
+  const chatSlot = slots.find((slot) => slot.id === draft.modelSlotId) ?? slots.find((slot) => slot.isDefault)
+  return (
+    <Field className="md:w-1/2" label={t({ ko: '허용 등급', en: 'Content rating' })} info={t({ ko: '이 등급을 넘는 이미지·영상은 모델에 보내지 않아.', en: 'Images and videos above this rating are never sent to the model.' })}>
+      <ContentRatingSelect
+        ariaLabel={t({ ko: '허용 등급', en: 'Content rating' })}
+        value={isLlm && draft.contentRatingMode === 'model' ? 'model' : draft.contentRatingMaxTier}
+        followLabel={isLlm ? t({ ko: '모델 설정 따름 · {ceiling}', en: 'Model’s · {ceiling}' }, { ceiling: label(chatSlot?.contentRatingMaxTier ?? null) }) : undefined}
+        onChange={(choice) => patch(choice === 'model' ? { contentRatingMode: 'model' } : { contentRatingMode: 'custom', contentRatingMaxTier: choice })}
+      />
+    </Field>
   )
 }
 
@@ -182,6 +204,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
               ) : null}
             </div>
             <SwitchLine label={t({ ko: '이미지를 볼 수 있는 모델', en: 'Model can see images' })} checked={draft.visionEnabled} onCheckedChange={(visionEnabled) => patch({ visionEnabled })} />
+            {draft.visionEnabled ? <ContentRatingField draft={draft} patch={patch} slots={slots} /> : null}
             {advanced ? (
               <Field label={t({ ko: '추가 파라미터 (JSON)', en: 'Extra parameters (JSON)' })}>
                 <Textarea
@@ -214,8 +237,9 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
             </Field>
           </div>
           <SwitchLine label={t({ ko: '이미지 첨부와 조회', en: 'Image attachments and viewing' })} checked={draft.visionEnabled} onCheckedChange={(visionEnabled) => patch({ visionEnabled })} />
+          {draft.visionEnabled ? <ContentRatingField draft={draft} patch={patch} slots={slots} /> : null}
         </>
-        ) : (
+        ) : (<>
           <div className="grid gap-3 md:grid-cols-2">
             <Field label={t({ ko: 'Codex 모델', en: 'Codex model' })}>
               <CodexModelSelect variant="settings" value={draft.model} models={codexModels} onChange={(model) => patch({ model })} aria-label={t({ ko: 'Codex 모델', en: 'Codex model' })} />
@@ -224,6 +248,9 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
               <CodexReasoningSelect variant="settings" value={draft.reasoningEffort} model={draft.model} models={codexModels} onChange={(reasoningEffort) => patch({ reasoningEffort })} />
             </Field>
           </div>
+          {/* Codex models always see images. */}
+          <ContentRatingField draft={draft} patch={patch} slots={slots} />
+        </>
         )}
       </EditorGroup>
 

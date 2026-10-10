@@ -3,6 +3,8 @@ import { AuthAccount } from '../../models/AuthAccount'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
 import { publishRuntimeEvent, subscribeToRuntimeEvents } from '../runtime-events/runtimeEventBus'
 import { previewImage } from '../imagePreview'
+import { libraryMediaAllowed } from '../contentRating'
+import { profileContentLimit } from './chatContentRating'
 import { activeMediaFile } from './chatCardAssets'
 import { isProfileAssetHidden } from './chatProfileAssets'
 import { onChatReplyFinished } from './chatReplyRegistry'
@@ -110,6 +112,9 @@ export class ChatGenerationReactionService {
       }
       const parts: ChatContentPart[] = []
       const lines: string[] = ['[작업 결과]']
+      // The reaction model (the chat's own reaction row, else the profile's) decides which results it may be shown.
+      const limit = profileContentLimit(thread.reaction_model_slot_id === null ? profile : { ...profile, modelSlotId: thread.reaction_model_slot_id })
+      let withheld = 0
       const audioOrderJobs = audioOrderGroupsByQueueJob(jobs.map((job) => job.id))
       for (const job of jobs) {
         const images = db.prepare("SELECT composite_hash FROM api_generation_history WHERE queue_job_id = ? AND requested_by_account_id IS ? AND generation_status = 'completed' AND composite_hash IS NOT NULL ORDER BY id")
@@ -122,9 +127,12 @@ export class ChatGenerationReactionService {
           if (isProfileAssetHidden(image.composite_hash)) continue
           const file = activeMediaFile(image.composite_hash)
           if (!file?.mimeType.startsWith('image/')) continue
+          if (!await libraryMediaAllowed(image.composite_hash, limit)) { withheld++; continue }
           try { parts.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${await previewImage(file.path)}` } }) } catch { /* A missing preview does not hide the job outcome. */ }
         }
       }
+      // Said plainly, so the model does not describe pictures it was never shown.
+      if (withheld > 0) lines.push(`(이미지 ${withheld}장은 허용 등급을 넘어서 보여주지 않음. 내용을 추측하지 말 것)`)
       // Loading previews yields to user requests; reserve only if the reaction still owns its pending record.
       if (!eligible()) { this.transition(replyId, 'pending', 'skipped'); return }
       const current = CodexChatStore.findThreadById(threadId)!

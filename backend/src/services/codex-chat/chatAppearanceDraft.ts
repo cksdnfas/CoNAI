@@ -2,7 +2,9 @@ import fs from 'fs'
 import sharp from 'sharp'
 import type { McpRequester } from '../../mcp/context'
 import { summaryGenerationOptions, type LlmGenerationOptions, type LlmThinkingSwitch } from '../llmGenerationOptions'
+import { libraryMediaAllowed } from '../contentRating'
 import { requireChatAssetAdmin, ChatAssetError } from './chatAssetAccess'
+import { profileContentLimit } from './chatContentRating'
 import { ChatProfileStore, profileGenerationOptions, type ChatProfile, type ChatProfileInput } from './chatProfiles'
 import { resolveProfileAsset } from './chatProfileAssets'
 import { MEDIA_MAX_PIXELS } from './chatMediaLinks'
@@ -55,9 +57,11 @@ export async function draftChatAppearance(requester: McpRequester, input: ChatPr
   const connection = resolveChatCompletionTarget(model.providerName, { model: model.model })
   const description = appearanceDescriptionOf(profile)
   const content: ChatContentPart[] = [{ type: 'text', text: appearanceSourceText(profile.name, description) }]
-  const image = await profileReferenceImageDataUrl(profile)
+  // A reference above the summary model's content rating stays out; the description alone still drafts.
+  const blocked = profile.visionEnabled && profile.referenceHash !== null && !await libraryMediaAllowed(profile.referenceHash, profileContentLimit(profile, 'summary'))
+  const image = blocked ? null : await profileReferenceImageDataUrl(profile)
   if (image) content.push({ type: 'image_url', image_url: { url: image } })
-  else if (!description.trim()) throw new ChatAssetError('캐릭터 설명을 쓰거나 비전을 켜고 기준 이미지를 골라줘.')
+  else if (!description.trim()) throw new ChatAssetError(blocked ? '기준 이미지가 요약 모델의 허용 등급을 넘어. 캐릭터 설명을 써줘.' : '캐릭터 설명을 쓰거나 비전을 켜고 기준 이미지를 골라줘.')
   const timeout = AbortSignal.timeout(120000)
   const appearance = stripThinking(await completeChat({ ...connection, promptCacheMarks: false, generation: appearanceGenerationOptions(profileGenerationOptions(profile), connection.thinkingSwitch) }, [
     { role: 'system', content: APPEARANCE_DRAFT_PROMPT },

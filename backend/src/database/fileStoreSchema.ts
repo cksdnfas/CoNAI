@@ -26,4 +26,8 @@ export function ensureFileStoreSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_chat_file_attachments_file ON chat_file_attachments(file_id);
   `);
+  // The tagger's weighted rating score of an image or video file (contentRating.ts); null: not rated (yet).
+  if (!(db.prepare('PRAGMA table_info(stored_file_entries)').all() as Array<{ name: string }>).some((column) => column.name === 'rating_score')) {
+    db.exec('ALTER TABLE stored_file_entries ADD COLUMN rating_score REAL');
+  }
 }

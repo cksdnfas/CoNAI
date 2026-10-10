@@ -106,6 +106,8 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     suggestUserProfileId: profile?.suggestUserProfileId ?? null,
     maxToolRounds: profile?.maxToolRounds ?? defaults?.maxToolRounds ?? 8,
     visionEnabled: profile?.visionEnabled ?? false,
+    contentRatingMode: profile?.contentRatingMode ?? 'model',
+    contentRatingMaxTier: profile?.contentRatingMaxTier ?? null,
     pageAssist: profile?.pageAssist ?? false,
     allowLoreProposals: profile?.allowLoreProposals ?? true,
     judgePresetId: profile?.judgePresetId ?? null,

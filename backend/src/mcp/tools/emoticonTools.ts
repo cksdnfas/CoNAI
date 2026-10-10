@@ -14,6 +14,8 @@ import { GroupPathService } from '../../services/groupPathService';
 import { FRAMES_PER_SHEET_DEFAULT, FRAMES_PER_SHEET_MAX, MEDIA_FRAMES_DEFAULT, MEDIA_FRAMES_MAX, extractMediaFrames, frameSheets } from '../../services/mediaFrames';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import { ImageSafetyService } from '../../services/imageSafetyService';
+import { CONTENT_RATING_BLOCKED, libraryMediaAllowed, storedFileAllowed } from '../../services/contentRating';
+import { contextContentLimit } from '../../services/codex-chat/chatContentRating';
 import type { McpRequestContext } from '../context';
 
 const VIEW_MAX_IMAGES = 6;
@@ -146,11 +148,13 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
       if (composite_hashes.length + file_ids.length === 0) return errorResult(new Error('Give composite_hashes or file_ids'));
       if (composite_hashes.length + file_ids.length > VIEW_MAX_IMAGES) return errorResult(new Error(`At most ${VIEW_MAX_IMAGES} images at a time`));
       const content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }> = [];
+      const limit = contextContentLimit(context);
       for (const hash of composite_hashes) {
         try {
           const metadata = MediaMetadataModel.findByHash(hash);
           const file = metadata && MediaPostprocessVisibilityService.isReadyRecord(metadata) && !ImageSafetyService.isHidden(metadata.rating_score) ? EmoticonService.activeFile(hash) : null;
           if (!file || !fs.existsSync(file.path) || file.mimeType?.startsWith('video/')) throw new Error('not an available image');
+          if (!await libraryMediaAllowed(hash, limit)) throw new Error(CONTENT_RATING_BLOCKED);
           content.push({ type: 'text', text: `composite_hash ${hash}:` });
           content.push({ type: 'image', data: await previewImage(file.path), mimeType: 'image/jpeg' });
         } catch (error) {
@@ -161,6 +165,7 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
         try {
           const { entry, filePath } = FileStoreService.resolveFile(requireFileStoreOwner(context.requester), id);
           if (!entry.mimeType?.startsWith('image/')) throw new Error('not an image file');
+          if (!await storedFileAllowed(id, limit)) throw new Error(CONTENT_RATING_BLOCKED);
           content.push({ type: 'text', text: `file_id ${id} (${entry.name}):` });
           content.push({ type: 'image', data: await previewImage(filePath), mimeType: 'image/jpeg' });
         } catch (error) {
@@ -194,10 +199,12 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
           const metadata = MediaMetadataModel.findByHash(composite_hash);
           const file = metadata && MediaPostprocessVisibilityService.isReadyRecord(metadata) && !ImageSafetyService.isHidden(metadata.rating_score) ? EmoticonService.activeFile(composite_hash) : null;
           if (!file || !fs.existsSync(file.path)) throw new Error('not an available media item');
+          if (!await libraryMediaAllowed(composite_hash, contextContentLimit(context))) throw new Error(CONTENT_RATING_BLOCKED);
           ({ path: filePath, mimeType } = file);
           label = `composite_hash ${composite_hash}`;
         } else {
           const { entry, filePath: storedPath } = FileStoreService.resolveFile(requireFileStoreOwner(context.requester), file_id!);
+          if (!await storedFileAllowed(file_id!, contextContentLimit(context))) throw new Error(CONTENT_RATING_BLOCKED);
           filePath = storedPath;
           mimeType = entry.mimeType;
           label = `file_id ${file_id} (${entry.name})`;

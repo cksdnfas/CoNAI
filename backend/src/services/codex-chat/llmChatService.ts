@@ -10,6 +10,7 @@ import { profileGenerationOptions } from './chatProfiles'
 import { inlineTextsForChat, loadAttachedImages, validateChatAttachments } from './chatAttachments'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { readChoiceAnswer } from './chatChoices'
+import { profileContentLimit } from './chatContentRating'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { ChatProfileStore, isVisionTool, type ChatProfile } from './chatProfiles'
@@ -35,7 +36,7 @@ import { redactChatRequestBody, saveChatRequestCapture } from './chatRequestCapt
 import { ChatGroupStore, groupLimitsOf } from './chatGroupStore'
 import { buildGroupLlmMessages } from './groupChatContext'
 import { skipThreadGenerationReactions } from './chatReplyRegistry'
-import { cancelJudgeFollowUp, endJudgedTurn, judgeAfterReply, judgeBeforeReply, type JudgedTurn } from './chatJudge'
+import { cancelJudgeFollowUp, endJudgedTurn, judgeAfterReply, judgeBeforeReply, judgeDirectiveText, type JudgedTurn } from './chatJudge'
 import type { JudgedContext } from './chatJudgeContext'
 import { judgeStatusFields } from './chatJudgeFields'
 import { withServerContextLimit } from './serverContextLimit'
@@ -337,7 +338,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
   if (target.transport === 'claude-code' && !resolveChatAccess(requester.accountId).claude) throw new LlmChatError('Claude Code를 사용할 권한이 없어.', 403)
   const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
   const chatContext = turn.chatContext ?? turn.delivery?.context
-  const bridge = !turn.reaction && (scopes.length > 0 || chatContext) ? await openChatMcpBridge(requester, scopes, toolAllowlist, { generationPresetIds: profile.generationPresetIds, chatContext }) : null
+  const bridge = !turn.reaction && (scopes.length > 0 || chatContext) ? await openChatMcpBridge(requester, scopes, toolAllowlist, { generationPresetIds: profile.generationPresetIds, chatContext, contentRatingLimit: profileContentLimit(profile) }) : null
 
   // The judge reads the conversation before the request is built: its answers decide the tools, the directive, and
   // the lore and past episodes beyond keywords. A reply carried on or a headless reaction is not judged again.
@@ -352,13 +353,15 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     judged = (await Promise.all([judging, prepare ? prepare(visible) : turn.translation]))[0]
     // The tool list stays the profile's every turn: tool definitions open the prompt, so a list that changes with the
     // judge's verdicts would make a local server or a provider cache read the whole prompt again. Tools the judge
-    // withholds this turn are named in the directive and refused if called.
+    // withholds this turn are named in the directive and refused if called, unless the user's flags are on: those
+    // come first, so a flag asking for a withheld tool still gets it.
     const allowed = judged ? judged.filterTools(visible) : visible
-    const blocked = new Set(visible.filter((tool) => !allowed.includes(tool)).map((tool) => tool.function.name))
+    const withheld = visible.filter((tool) => !allowed.includes(tool)).map((tool) => tool.function.name)
+    const blocked = new Set(judged?.userInstructed ? [] : withheld)
     const offeredTools = visible
     turn.offeredTools = offeredTools
     const built = await buildMessages(offeredTools, judged?.context ?? null)
-    const directive = [judged?.directive ?? '', blocked.size > 0 ? `[판단] 이번 답변에서는 이 도구를 쓰지 마: ${[...blocked].join(', ')}` : ''].filter(Boolean).join('\n')
+    const directive = judgeDirectiveText(judged, withheld)
     const messages = directive ? appendUserDirective(built, directive, 'judge') : built
     const permitted = (name: string) => offeredTools.some((tool) => tool.function.name === name) && !blocked.has(name)
     if (judged && turn.contextMeta) turn.contextMeta.judge = judged.diagnostics

@@ -278,9 +278,26 @@ export type JudgedTurn = {
   filterTools: (tools: ChatCompletionTool[]) => ChatCompletionTool[]
   /** Added after the user's message; empty for none. */
   directive: string
+  /**
+   * The message being answered carries the user's own instructions (flags, status panel picks). They come before the
+   * judge: a withheld tool is only named, never refused, and the judge's lines say to follow the user where they differ.
+   */
+  userInstructed: boolean
   /** Lore entries and past episodes the judge chose beyond keywords; null when it was not asked. */
   context: JudgedContext | null
   diagnostics: ChatJudgeDiagnostics
+}
+
+/** Said after the judge's lines when the user's message carries flags or picks. */
+const USER_FIRST_NOTE = '[우선순위] 위 [판단]이 [사용자 지시]·[사용자 선택]과 어긋나면 사용자 쪽을 따라. 사용자 지시가 쓰지 말라는 도구를 요구하면 그 도구를 써.'
+
+/** The judge's lines for the reply: its yes directives, the tools it withholds, and that the user's instructions win. */
+export function judgeDirectiveText(judged: JudgedTurn | null | undefined, withheld: Iterable<string> = []) {
+  if (!judged) return ''
+  const names = [...withheld]
+  const lines = [judged.directive, names.length > 0 ? `[판단] 이번 답변에서는 이 도구를 쓰지 마: ${names.join(', ')}` : ''].filter(Boolean)
+  if (lines.length > 0 && judged.userInstructed) lines.push(USER_FIRST_NOTE)
+  return lines.join('\n')
 }
 
 /**
@@ -337,6 +354,7 @@ export async function judgeBeforeReply(params: { profile: ChatProfile; threadId:
       return !withheld.some((pattern) => judgeToolMatches(pattern, name)) || kept.some((pattern) => judgeToolMatches(pattern, name))
     }),
     directive,
+    userInstructed: Boolean(latestUser?.flags?.some((flag) => flag.content.trim())),
     context: settled?.context ?? null,
     diagnostics: diagnosticsOf(setup, runId, combined),
   }

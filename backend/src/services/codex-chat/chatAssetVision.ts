@@ -2,6 +2,8 @@ import fs from 'fs'
 import type { ChatAssetVisionReview } from '@conai/shared'
 import type { McpRequester } from '../../mcp/context'
 import { previewImage } from '../imagePreview'
+import { libraryMediaAllowed } from '../contentRating'
+import { slotContentLimit } from './chatContentRating'
 import { ChatAssetError, requireChatAssetAdmin } from './chatAssetAccess'
 import { getChatAssetBatch } from './chatAssetBatches'
 import { isProfileAssetHidden } from './chatProfileAssets'
@@ -38,6 +40,10 @@ export async function reviewChatAssetVision(requester: McpRequester, profileId: 
   if (!attempt) throw new ChatAssetError('고른 후보를 더 이상 사용할 수 없어.', 409)
   const referenceHash = attempt.referenceHash ?? batch.slots.find((entry) => entry.kind === 'reference')?.chosenHash ?? batch.snapshot.referenceHash
   if (!referenceHash) throw new ChatAssetError('검수할 기준 이미지를 먼저 골라줘.')
+  const limit = slotContentLimit(id)
+  for (const compositeHash of [referenceHash, hash]) {
+    if (!await libraryMediaAllowed(compositeHash, limit)) throw new ChatAssetError('이 모델의 허용 등급을 넘는 이미지라 검수에 보낼 수 없어.')
+  }
   const content: ChatContentPart[] = []
   for (const [label, compositeHash] of [['Reference image', referenceHash], ['Candidate image', hash]]) {
     const file = isProfileAssetHidden(compositeHash) ? null : activeMediaFile(compositeHash)
