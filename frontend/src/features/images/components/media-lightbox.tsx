@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, ImageOff, Info, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
+import { useChatDockedBesidePage } from '@/features/codex-chat/chat-reference'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
@@ -25,6 +26,7 @@ const SWIPE_MIN_PX = 50
 const TAP_SLOP_PX = 10
 const DOUBLE_TAP_MS = 300
 const DRAG_SLOP_PX = 4
+const LIGHTBOX_OPEN_EVENT = 'conai:media-lightbox-open'
 
 type ContainedRect = { left: number; top: number; width: number; height: number; scale: number }
 type ZoomAnchor = { ratioX: number; ratioY: number; offsetX: number; offsetY: number; naturalWidth: number; naturalHeight: number }
@@ -325,6 +327,8 @@ function MediaLightboxOverlay({ items, index, onIndexChange, onClose, renderActi
   const canViewNext = index < count - 1
   const activeDetailHash = imageViewModal?.activeCompositeHash ?? null
   const compositeHash = item.composite_hash ?? null
+  // A docked chat panel stays usable beside the lightbox, as beside the detail modal opened over it.
+  const besideChat = useChatDockedBesidePage()
 
   const viewPrevious = useCallback(() => onIndexChange(Math.max(0, index - 1)), [index, onIndexChange])
   const viewNext = useCallback(() => onIndexChange(Math.min(count - 1, index + 1)), [count, index, onIndexChange])
@@ -353,7 +357,8 @@ function MediaLightboxOverlay({ items, index, onIndexChange, onClose, renderActi
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) {
+      // Keys typed in a docked chat panel beside the lightbox belong to the chat.
+      if (event.defaultPrevented || (event.target instanceof Element && event.target.closest('[data-chat-dock]'))) {
         return
       }
       if (event.key === 'Escape') {
@@ -396,6 +401,19 @@ function MediaLightboxOverlay({ items, index, onIndexChange, onClose, renderActi
     activeThumbRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' })
   }, [index])
 
+  // The chat beside stays clickable, so another message's image can open a second lightbox: the newest one replaces it.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  useEffect(() => {
+    const token = Symbol('media-lightbox')
+    const closeOnNewer = (event: Event) => {
+      if ((event as CustomEvent<symbol>).detail !== token) onCloseRef.current()
+    }
+    window.dispatchEvent(new CustomEvent(LIGHTBOX_OPEN_EVENT, { detail: token }))
+    window.addEventListener(LIGHTBOX_OPEN_EVENT, closeOnNewer)
+    return () => window.removeEventListener(LIGHTBOX_OPEN_EVENT, closeOnNewer)
+  }, [])
+
   const handleOpenDetail = () => {
     if (!compositeHash || !imageViewModal) {
       return
@@ -415,11 +433,11 @@ function MediaLightboxOverlay({ items, index, onIndexChange, onClose, renderActi
     <div
       ref={containerRef}
       role="dialog"
-      aria-modal="true"
+      aria-modal={!besideChat}
       aria-label={t({ ko: '이미지 보기', en: 'Image viewer' })}
       tabIndex={-1}
-      // eslint-disable-next-line no-restricted-syntax -- full-bleed lightbox under the detail modal (z-[90]); Modal adds a titled, padded card
-      className="fixed inset-0 z-[88] flex flex-col bg-black text-white outline-none"
+      // Full-bleed under the detail modal (z-[90]), taking the same page side beside a docked chat.
+      className="fixed inset-y-0 left-0 right-[var(--chat-dock-width,0px)] z-[88] flex flex-col bg-black text-white outline-none"
     >
       <div className="flex h-14 shrink-0 items-center gap-1.5 pl-4 pr-2 sm:pl-6">
         <span className="flex-1 text-sm tabular-nums text-white/70">{count > 1 ? `${index + 1} / ${count}` : null}</span>
