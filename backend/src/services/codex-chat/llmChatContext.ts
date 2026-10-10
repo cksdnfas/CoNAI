@@ -453,60 +453,25 @@ export function insertAtDepth(messages: ChatCompletionMessage[], depth: number, 
   ]) : message))
 }
 
-// ---- Window start ---------------------------------------------------------------------------------------------
-
-/** Share of what fits that is kept when the window start has to move, so it then holds for several turns. */
-export const WINDOW_KEEP_RATIO = 0.75
-
-/** Id of the first item each chat last sent, so the window start only moves when it has to. */
-const windowAnchors = new Map<number, number>()
+// ---- Window ---------------------------------------------------------------------------------------------------
 
 /**
- * The suffix of `items` to send given that at most `fit` of them fit. While everything fits, all of them. Once they
- * do not, the window does not slide by one item per request (which changes the request prefix every time) but jumps
- * forward to `WINDOW_KEEP_RATIO` of what fits and keeps that start — `anchorId` — until that no longer fits either.
- * A remembered start that would send fewer than that share (the limit was raised, items were removed) is dropped.
+ * The latest `fit` of `items`: the window the chat's setting gives (context turns, a room's window), counted back from
+ * the newest item every request, so it always holds as many as the setting says (and fit). The newest item is always
+ * sent, even when less than one fits.
  */
-export function anchoredSuffix<T>(items: T[], fit: number, idOf: (item: T) => number, anchorId: number | undefined): { window: T[]; anchorId: number | undefined } {
-  if (items.length === 0) return { window: [], anchorId: undefined }
-  const limit = Math.max(1, Math.min(items.length, Math.floor(fit)))
-  if (items.length <= limit) return { window: items, anchorId: idOf(items[0]) }
-  const floor = Math.max(1, Math.floor(limit * WINDOW_KEEP_RATIO))
-  const anchorIndex = anchorId === undefined ? -1 : items.findIndex((item) => idOf(item) === anchorId)
-  if (anchorIndex >= 0) {
-    const length = items.length - anchorIndex
-    if (length <= limit && length >= floor) return { window: items.slice(anchorIndex), anchorId }
-  }
-  const window = items.slice(-floor)
-  return { window, anchorId: idOf(window[0]) }
+export function latestWindow<T>(items: T[], fit: number): T[] {
+  if (items.length === 0) return []
+  return items.slice(-Math.max(1, Math.floor(fit)))
 }
 
 /** Replies older than the last FULL_TOOL_OUTPUT_TURNS turns replay each tool result as its short summary. */
 const FULL_TOOL_OUTPUT_TURNS = 4
 const SHORT_TOOL_OUTPUT_LENGTH = 300
-const shortToolOutputs = new Map<number, { anchorId: number; before: number }>()
 
-/**
- * The message id before which a chat's tool results are replayed short. It is set when the window start is set and
- * kept while that start holds: shortening "everything older than four turns" anew each turn would change the
- * conversation's beginning every turn, and a local server or a provider cache would read it all again.
- */
-function shortToolOutputsBefore(threadId: number, window: CodexChatMessageRecord[][]) {
-  const anchorId = window[0]?.[0]?.id
-  if (anchorId === undefined) return 0
-  const known = shortToolOutputs.get(threadId)
-  if (known && known.anchorId === anchorId) return known.before
-  const before = window.length > FULL_TOOL_OUTPUT_TURNS ? window[window.length - FULL_TOOL_OUTPUT_TURNS][0].id : 0
-  shortToolOutputs.set(threadId, { anchorId, before })
-  return before
-}
-
-/** `anchoredSuffix` with the start remembered per chat (in memory: a restart only costs one cache miss). */
-export function anchoredWindowFor<T>(threadId: number, items: T[], fit: number, idOf: (item: T) => number) {
-  const result = anchoredSuffix(items, fit, idOf, windowAnchors.get(threadId))
-  if (result.anchorId === undefined) windowAnchors.delete(threadId)
-  else windowAnchors.set(threadId, result.anchorId)
-  return result.window
+/** The message id before which the window's tool results are replayed short (0: none). */
+function shortToolOutputsBefore(window: CodexChatMessageRecord[][]) {
+  return window.length > FULL_TOOL_OUTPUT_TURNS ? window[window.length - FULL_TOOL_OUTPUT_TURNS][0].id : 0
 }
 
 /** The chat flags of the message being answered (the latest user message) as one block; '' when none were on. */
@@ -716,7 +681,7 @@ export function unsummarizedMessages(messages: CodexChatMessageRecord[], thread:
 
 /**
  * The request for one reply, laid out as described above `buildLeadingMessages`: the leading messages, the recent
- * unsummarized turns that fit (start anchored, see `anchoredSuffix`) with the keyword lore merged in `loreDepth`
+ * unsummarized turns that fit (the latest ones, see `latestWindow`) with the keyword lore merged in `loreDepth`
  * turns before the end, ending with the user message just stored plus its flags. Turns are only dropped here when
  * the summary could not keep up (off, failed or interrupted).
  */
@@ -748,9 +713,9 @@ export function buildChatMessages(params: {
   const replyContext = buildReplyContext(params.messages, routing, { maxChars })
   const turns = splitTurns(sendableMessages(unsummarizedMessages(params.messages, thread, config)))
   const fit = selectWindow(profile, turns, config, fixedTokens + estimateTokens(profile.id, replyContext) + 40 + (params.extraTokens ?? 0), config.contextTurns, params.attachmentTexts, params.attachedImages).length
-  const window = anchoredWindowFor(thread.id, turns, fit, (turn) => turn[0].id)
+  const window = latestWindow(turns, fit)
   const blockKeys = usableBlockKeys(profile.style.blocks)
-  const shortBefore = shortToolOutputsBefore(thread.id, window)
+  const shortBefore = shortToolOutputsBefore(window)
   const conversation = insertDepthBlocks(window.flat().flatMap((message) => toCompletionMessages(message, blockKeys, params.attachmentTexts, message.id < shortBefore ? SHORT_TOOL_OUTPUT_LENGTH : undefined, params.attachedImages)), blocks)
   const reference = buildReplyContext(params.messages, routing, { maxChars, visibleIds: new Set(window.flat().map((message) => message.id)) })
   // A direct chat has no room tools, so the request names no room id.

@@ -273,9 +273,9 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
         let groupMeta: ChatContextMeta | undefined
         buildChatMessages({ profile: current, thread: direct, messages: history, config: { ...resolveContextConfig(direct, current), summaryEnabled, contextTurns: narrow ? 2 : 20 }, tools: [], books: [], onMeta: (value) => { directMeta = value } })
         buildGroupLlmMessages({ profile: current, thread: { ...direct, id: direct.id + 1, kind: 'group' }, members: [current], messages: history, windowLimit: narrow ? 2 : 20, tools: [], maxTokens: null, withTools: false, books: [], onMeta: (value) => { groupMeta = value } })
-        const expected = narrow ? summaryEnabled ? 3 : 5 : 0
-        assert.equal(directMeta?.window?.droppedTurns, expected)
-        assert.equal(groupMeta?.window?.droppedTurns, expected)
+        // Two turns (direct) or two messages, one turn (room) are kept: the rest of the unsummarized turns is dropped.
+        assert.equal(directMeta?.window?.droppedTurns, narrow ? summaryEnabled ? 2 : 4 : 0)
+        assert.equal(groupMeta?.window?.droppedTurns, narrow ? summaryEnabled ? 3 : 5 : 0)
       }
     }
   })

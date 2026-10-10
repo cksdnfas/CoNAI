@@ -4,7 +4,7 @@ import type { ChatProfile } from '../src/services/codex-chat/chatProfiles'
 import { DEFAULT_CHAT_STYLE } from '../src/services/codex-chat/chatStyle'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from '../src/services/codex-chat/codexChatStore'
 import type { ChatCompletionMessage } from '../src/services/codex-chat/llmChatCompletion'
-import { anchoredSuffix, buildChatMessages, depthBlocks, insertAtDepth, resolveAuthorNote, WINDOW_KEEP_RATIO, type ChatContextMeta } from '../src/services/codex-chat/llmChatContext'
+import { buildChatMessages, depthBlocks, insertAtDepth, latestWindow, resolveAuthorNote, type ChatContextMeta } from '../src/services/codex-chat/llmChatContext'
 import { contextHash, contextSections } from '../src/services/codex-chat/chatContextDiagnostics'
 import { loadChatSettings } from '../src/services/codex-chat/chatSettings'
 import { normalizeLorebook } from '../src/services/codex-chat/chatLorebook'
@@ -53,52 +53,26 @@ test('multimodal user content gets the block as a leading text part', () => {
   assert.deepEqual(result[0], { role: 'user', content: [{ type: 'text', text: BLOCK }, { type: 'text', text: '이거 봐' }, image] })
 })
 
-// ---- Window start ---------------------------------------------------------------------------------------------
+// ---- Window ---------------------------------------------------------------------------------------------------
 
 const ids = (count: number, from = 1) => Array.from({ length: count }, (_, index) => ({ id: from + index }))
 const idOf = (item: { id: number }) => item.id
 
-test('everything is sent while it fits, anchored at the first item', () => {
-  const result = anchoredSuffix(ids(5), 20, idOf, undefined)
-  assert.equal(result.window.length, 5)
-  assert.equal(result.anchorId, 1)
-  assert.deepEqual(anchoredSuffix([], 20, idOf, 3), { window: [], anchorId: undefined })
+test('everything is sent while it fits', () => {
+  assert.equal(latestWindow(ids(5), 20).length, 5)
+  assert.deepEqual(latestWindow([], 20), [])
 })
 
-test('on overflow the window jumps to the keep share of what fits and then holds its start', () => {
-  const fit = 20
-  const keep = Math.floor(fit * WINDOW_KEEP_RATIO)
-  assert.equal(keep, 15)
-  let anchor: number | undefined
-  const starts: number[] = []
-  for (let total = 1; total <= 40; total += 1) {
-    const result = anchoredSuffix(ids(total), fit, idOf, anchor)
-    anchor = result.anchorId
-    assert.ok(result.window.length <= fit, `turn ${total}: ${result.window.length} sent`)
-    assert.ok(result.window.length >= Math.min(total, keep), `turn ${total}: only ${result.window.length} sent`)
-    assert.equal(result.window[result.window.length - 1].id, total, 'the newest item is always sent')
-    starts.push(result.window[0].id)
+test('past the setting the window always holds exactly as many as it says, the latest ones', () => {
+  // A 15-turn setting: every request carries the latest 15, moving one at a time (never fewer while there are more).
+  for (let total = 16; total <= 40; total += 1) {
+    const window = latestWindow(ids(total), 15).map(idOf)
+    assert.deepEqual(window, ids(15, total - 14).map(idOf), `turn ${total}`)
   }
-  // 1..20 fit whole; 21 jumps to 7..21 (15 items); the start then holds through 26 (20 items) and jumps again at 27.
-  assert.deepEqual(starts.slice(0, 20), Array(20).fill(1))
-  assert.deepEqual(starts.slice(20, 27), [7, 7, 7, 7, 7, 7, 13])
-  assert.equal(new Set(starts).size, 5, 'the start moved 4 times in 40 turns instead of 20')
-})
-
-test('a remembered start that would send too little (limit raised, items removed) is dropped', () => {
-  const result = anchoredSuffix(ids(21), 20, idOf, 20)
-  assert.deepEqual(result.window.map(idOf), ids(15, 7).map(idOf))
-  assert.equal(result.anchorId, 7)
-})
-
-test('an anchor that no longer exists (edited away) is recalculated', () => {
-  const result = anchoredSuffix(ids(21), 20, idOf, 999)
-  assert.equal(result.window[0].id, 7)
 })
 
 test('a fit below one still sends the newest item', () => {
-  const result = anchoredSuffix(ids(3), 0, idOf, undefined)
-  assert.deepEqual(result.window.map(idOf), [3])
+  assert.deepEqual(latestWindow(ids(3), 0).map(idOf), [3])
 })
 
 // ---- Whole request ---------------------------------------------------------------------------------------------
