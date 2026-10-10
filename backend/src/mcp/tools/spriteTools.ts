@@ -2,7 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { McpArtifactService } from '../../services/mcpArtifactService';
 import { RuntimeJobStore } from '../../services/runtimeJobs/runtimeJobStore';
-import { ingestVideoDataUrl, type SpriteGroupTarget } from '../../services/sprite/spriteLibrary';
+import { findLibraryMedia, ingestVideoDataUrl, type SpriteGroupTarget } from '../../services/sprite/spriteLibrary';
 import {
   buildFramesZip,
   isSpriteJobKind,
@@ -12,6 +12,7 @@ import {
   startExtractJob,
   startNormalizeJob,
   waitForRuntimeJob,
+  type ExtractBatchItem,
   type SpriteRequester,
 } from '../../services/sprite/spriteService';
 import type { SpriteExtractOptionsInput } from '../../services/sprite/spriteOptions';
@@ -124,7 +125,39 @@ function outputHashes(result: unknown): string[] {
     .filter((hash): hash is string => typeof hash === 'string');
 }
 
-function describeJob(job: RuntimeJobRecord) {
+/** A download descriptor for a saved library file; null without the HTTP transport (no URL to give) or when it is gone. */
+async function mediaDownload(context: McpRequestContext, compositeHash: string) {
+  if (!context.baseUrl) return null;
+  return McpArtifactService.createMediaDescriptor(compositeHash, context.baseUrl, context.requester).catch(() => null);
+}
+
+/**
+ * Downloads for a finished job's outputs. A batch pairs every source video with its sheet (or why it has none), in
+ * request order, with the video's library file name, so callers can match sheets to their own files.
+ */
+async function jobDownloads(context: McpRequestContext, job: RuntimeJobRecord, result: Record<string, unknown> | null) {
+  if (!result) return {};
+  if (job.kind === 'sprite-extract-batch') {
+    const items = Array.isArray(result.items) ? result.items as ExtractBatchItem[] : [];
+    const zip = result.zip as { workspaceId: string; fileName: string } | null | undefined;
+    return {
+      items: await Promise.all(items.map(async (item) => ({
+        video_hash: item.videoHash,
+        video_name: findLibraryMedia(item.videoHash)?.name ?? null,
+        status: item.status,
+        sheet_hash: item.compositeHash ?? null,
+        ...(item.frameCount !== undefined ? { frame_count: item.frameCount } : {}),
+        ...(item.error ? { error: item.error } : {}),
+        ...(item.compositeHash ? { download: await mediaDownload(context, item.compositeHash) } : {}),
+      }))),
+      ...(zip && context.baseUrl ? { zip_download: await McpArtifactService.createSpriteFramesDescriptor(zip.workspaceId, zip.fileName, context.baseUrl, context.requester).catch(() => null) } : {}),
+    };
+  }
+  const hashes = outputHashes(result);
+  return hashes.length ? { downloads: await Promise.all(hashes.map(async (hash) => ({ composite_hash: hash, download: await mediaDownload(context, hash) }))) } : {};
+}
+
+async function describeJob(context: McpRequestContext, job: RuntimeJobRecord) {
   const done = job.status === 'completed';
   const result = done ? job.result as Record<string, unknown> | null : null;
   return {
@@ -136,7 +169,7 @@ function describeJob(job: RuntimeJobRecord) {
     ...(job.message ? { message: job.message } : {}),
     ...(job.failureMessage ? { error: job.failureMessage } : {}),
     ...(job.errors.length > 0 ? { item_errors: job.errors } : {}),
-    ...(done ? { composite_hashes: outputHashes(result), result } : { next: 'Call get_sprite_job with job_id and wait_seconds (it waits for the job, up to 30 in chat) until status is completed.' }),
+    ...(done ? { composite_hashes: outputHashes(result), ...(await jobDownloads(context, job, result)), result } : { next: 'Call get_sprite_job with job_id and wait_seconds (it waits for the job, up to 30 in chat) until status is completed.' }),
     ...(done && job.kind === 'sprite-extract' && result?.buildId ? { build_id: result.buildId, frames_download: 'download_sprite_frames with build_id (kept about 1 hour)' } : {}),
   };
 }
@@ -152,7 +185,7 @@ function requireSpriteJob(jobId: string, requester: SpriteRequester): RuntimeJob
 async function startAndWait(context: McpRequestContext, start: () => RuntimeJobRecord | Promise<RuntimeJobRecord>, waitSeconds: number | undefined) {
   const job = await start();
   const finished = await waitForRuntimeJob(job.jobId, waitBudgetMs(context, waitSeconds));
-  return textResult(describeJob(finished ?? job));
+  return textResult(await describeJob(context, finished ?? job));
 }
 
 export function registerSpriteTools(server: McpServer, context: McpRequestContext): void {
@@ -171,7 +204,7 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
 
   server.tool(
     'extract_sprite_sheet',
-    'Extract frames from a library video into a sprite sheet: pick frames by interval or count, remove a key-colour background (magenta by default, optional despill), auto crop, resize and lay out. Saves the sheet to the library by default and returns its composite_hash; long runs return a job_id for get_sprite_job.',
+    'Extract frames from a library video into a sprite sheet: pick frames by interval or count, remove a key-colour background (magenta by default, optional despill), auto crop, resize and lay out. Saves the sheet to the library by default and returns its composite_hash with a download link; long runs return a job_id for get_sprite_job.',
     {
       composite_hash: hashSchema.optional().describe('Library video hash'),
       data_url: z.string().optional().describe('Video as a base64 data URL (video/*, image/gif, image/webp) when it is not in the library yet; it is uploaded to group "스프라이트/원본 영상" first'),
@@ -203,7 +236,7 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
 
   server.tool(
     'extract_sprite_sheets_batch',
-    'Extract one sprite sheet per library video with the same options and save each to the library. Returns a job_id; poll get_sprite_job for the composite_hashes.',
+    'Extract one sprite sheet per library video with the same options and save each to the library. Returns a job_id; poll get_sprite_job. The finished job lists items in request order, each pairing video_hash (and its library video_name) with sheet_hash and a download link, or with the error; zip_download holds every sheet plus a manifest.',
     {
       composite_hashes: z.array(hashSchema).min(1).max(100).describe('Library video hashes (1..100, no duplicates)'),
       options: extractOptionsSchema,
@@ -330,8 +363,8 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
     async ({ job_id, wait_seconds }) => {
       try {
         const job = requireSpriteJob(job_id, requesterOf(context));
-        if (!wait_seconds) return textResult(describeJob(job));
-        return textResult(describeJob((await waitForRuntimeJob(job_id, waitBudgetMs(context, wait_seconds))) ?? job));
+        if (!wait_seconds) return textResult(await describeJob(context, job));
+        return textResult(await describeJob(context, (await waitForRuntimeJob(job_id, waitBudgetMs(context, wait_seconds))) ?? job));
       } catch (error) {
         return errorResult(error);
       }
@@ -346,7 +379,7 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
       try {
         requireSpriteJob(job_id, requesterOf(context));
         const job = await waitForRuntimeJob(job_id, (timeout_seconds ?? 120) * 1000);
-        return job ? textResult(describeJob(job)) : errorResult(`Sprite job not found: ${job_id}`);
+        return job ? textResult(await describeJob(context, job)) : errorResult(`Sprite job not found: ${job_id}`);
       } catch (error) {
         return errorResult(error);
       }

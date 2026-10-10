@@ -189,6 +189,7 @@ stdio:
 | --- | --- |
 | `search_images` | 프롬프트, 모델, 크기, 날짜, 그룹 등으로 이미지 검색 |
 | `get_image_metadata` | composite hash로 이미지 메타데이터 조회 |
+| `get_media_download` | composite hash(최대 50개)로 라이브러리 원본 파일(저장된 스프라이트 시트, 애니메이션, 이미지·영상) 다운로드 링크. 링크는 약 15분 유효 |
 | `get_generation_history` | ComfyUI/NovelAI 생성 이력 조회 |
 | `search_images_by_tags` | WD Tagger 태그, 캐릭터, 등급 조건으로 검색 |
 
@@ -352,7 +353,7 @@ stdio:
 | Tool | 용도 | HTTP MCP 키 권한 | 계정 권한 |
 | --- | --- | --- | --- |
 | `get_video_info` | 영상 크기, fps, 길이, 프레임 수 | `read` | `images.view` |
-| `get_sprite_job` | 스프라이트 작업 상태와 저장된 `composite_hashes` | `read` | `images.view` |
+| `get_sprite_job` | 스프라이트 작업 상태와 저장된 `composite_hashes`, 결과 파일 다운로드 링크 | `read` | `images.view` |
 | `wait_sprite_job` | 작업이 끝날 때까지 대기(채팅에서는 제공되지 않음) | `read` | `images.view` |
 | `download_sprite_frames` | 끝난 추출의 프레임 ZIP 다운로드 링크(약 1시간 보관) | `read` | `images.view` |
 | `extract_sprite_sheet` | 구간·간격/개수로 프레임 추출, 지정색 제거(디스필 선택), 자동 크롭·리사이즈·배치 | `generate` | `images.edit` + `images.upload` |
@@ -362,6 +363,8 @@ stdio:
 
 - 지정색은 최대 8개입니다. 디스필은 색 1개일 때만 켤 수 있고, 마젠타 `#FF00FF`는 원래 도구와 같은 알고리즘입니다.
 - `extract_sprite_sheet`는 일정 시간 안에 끝나면 결과 해시를 바로 돌려주고, 길어지면 `job_id`를 돌려줍니다.
+- 끝난 작업에는 저장된 결과마다 다운로드 링크(`downloads`)가 붙습니다. 배치는 요청 순서대로 `items`에 원본 영상(`video_hash`, 라이브러리 파일명 `video_name`)과 시트(`sheet_hash`, `download`) 또는 실패 사유(`error`)를 짝지어 주고, `zip_download`로 시트 전부와 매니페스트를 한 번에 받을 수 있습니다.
+- 링크가 만료되면 `get_media_download`(시트·애니메이션) 또는 `refresh_artifact_download`로 새로 받습니다.
 
 ### 채팅 설정 (configure)
 

@@ -14,6 +14,10 @@ import { audioCandidateFile } from './audio/audioService';
 import { AUDIO_MIME_BY_EXTENSION, audioBlobPath } from './audio/audioStore';
 import { audioExportMimeType, audioExportResultFile, canAccessAudioExport, getAudioExportWorkspace } from './audio/audioExport';
 import { requireRequesterPermission } from '../middleware/featureAccess';
+import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
+import { ImageSafetyService } from './imageSafetyService';
+import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
+import { findLibraryMedia } from './sprite/spriteLibrary';
 
 const MCP_ARTIFACT_PREFIX = 'mcp_artifact_';
 const DEFAULT_ARTIFACT_URL_TTL_SECONDS = 15 * 60;
@@ -25,10 +29,13 @@ type McpArtifactPayload =
   /** One audio workspace candidate's stored file. */
   | { kind: 'audio'; id: string }
   /** The result of an audio export (single file or ZIP); expires with its export workspace. */
-  | { kind: 'audio-export'; id: string };
+  | { kind: 'audio-export'; id: string }
+  /** A library media item's original file, by composite hash (saved sprite sheets, animations, any image or video). */
+  | { kind: 'media'; id: string };
 
 const SPRITE_WORKSPACE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SPRITE_FILE_NAME = /^[^\\/:*?"<>|]{1,120}\.zip$/;
+const MEDIA_HASH = /^(?:[0-9a-f]{48}|[0-9a-f]{32})$/;
 
 type ResolvedMcpArtifact = {
   payload: McpArtifactPayload;
@@ -86,6 +93,9 @@ function decodeArtifactId(artifactId: string): McpArtifactPayload | null {
       return typeof parsed.id === 'string' && SPRITE_WORKSPACE_ID.test(parsed.id) && typeof parsed.file === 'string' && SPRITE_FILE_NAME.test(parsed.file)
         ? { kind: 'sprite-frames', id: parsed.id, file: parsed.file }
         : null;
+    }
+    if (parsed.kind === 'media') {
+      return typeof parsed.id === 'string' && MEDIA_HASH.test(parsed.id) ? { kind: 'media', id: parsed.id } : null;
     }
     if (parsed.kind === 'audio' || parsed.kind === 'audio-export') {
       return typeof parsed.id === 'string' && SPRITE_WORKSPACE_ID.test(parsed.id) ? { kind: parsed.kind, id: parsed.id } : null;
@@ -170,6 +180,16 @@ function resolveAudioExportArtifact(exportId: string): ResolvedMcpArtifact | nul
   return { payload: { kind: 'audio-export', id: exportId }, absolutePath: file.path, fileName: file.fileName, mimeType: audioExportMimeType(file.fileName) };
 }
 
+/** Only media the library would show: processed, not hidden by the safety filter, its file still on disk. */
+function resolveMediaArtifact(compositeHash: string): ResolvedMcpArtifact | null {
+  if (!MEDIA_HASH.test(compositeHash)) return null;
+  const metadata = MediaMetadataModel.findByHash(compositeHash);
+  if (!metadata || !MediaPostprocessVisibilityService.isReadyRecord(metadata) || ImageSafetyService.isHidden(metadata.rating_score)) return null;
+  const media = findLibraryMedia(compositeHash);
+  if (!media || !fs.statSync(media.filePath).isFile()) return null;
+  return { payload: { kind: 'media', id: compositeHash }, absolutePath: media.filePath, fileName: media.name, mimeType: media.mimeType || FileDiscoveryService.getMimeType(media.filePath) };
+}
+
 async function sha256File(absolutePath: string): Promise<string> {
   return await new Promise((resolve, reject) => {
     const hash = crypto.createHash('sha256');
@@ -193,6 +213,7 @@ export class McpArtifactService {
     if (payload.kind === 'sprite-frames') return resolveSpriteFramesArtifact(payload.id, payload.file);
     if (payload.kind === 'audio') return resolveAudioArtifact(payload.id);
     if (payload.kind === 'audio-export') return resolveAudioExportArtifact(payload.id);
+    if (payload.kind === 'media') return resolveMediaArtifact(payload.id);
     return payload.kind === 'history' ? resolveHistoryArtifact(payload.id) : resolveGraphArtifact(payload.id);
   }
 
@@ -263,6 +284,18 @@ export class McpArtifactService {
     return requester ? { ...descriptor, download_url: `${baseUrl.replace(/\/$/, '')}/api/audio/exports/${exportId}/download` } : descriptor;
   }
 
+  /**
+   * A library media item's original file (a saved sprite sheet, say). Account-bound callers need images.view and get
+   * the session original-download route; key callers get the signed `/mcp/artifacts` URL.
+   */
+  static async createMediaDescriptor(compositeHash: string, baseUrl: string, requester?: McpRequester): Promise<McpArtifactDescriptor | null> {
+    if (requester) requireRequesterImagePermission(requester);
+    const artifact = resolveMediaArtifact(compositeHash);
+    if (!artifact) return null;
+    const descriptor = await this.createDescriptor(artifact, baseUrl);
+    return requester ? { ...descriptor, download_url: `${baseUrl.replace(/\/$/, '')}/api/images/${compositeHash}/download/original` } : descriptor;
+  }
+
   /** Resolve a stable artifact ID and issue a fresh short-lived download URL. */
   static async refreshDescriptor(artifactId: string, baseUrl: string, requester?: McpRequester): Promise<McpArtifactDescriptor | null> {
     if (requester) {
@@ -270,6 +303,7 @@ export class McpArtifactService {
       if (identity?.kind === 'sprite-frames') return this.createSpriteFramesDescriptor(identity.id, identity.file, baseUrl, requester);
       if (identity?.kind === 'audio') return this.createAudioDescriptor(identity.id, baseUrl, requester);
       if (identity?.kind === 'audio-export') return this.createAudioExportDescriptor(identity.id, baseUrl, requester);
+      if (identity?.kind === 'media') return this.createMediaDescriptor(identity.id, baseUrl, requester);
       return identity?.kind === 'history' ? this.createHistoryDescriptor(identity.id, baseUrl, requester) : null;
     }
     const artifact = this.resolve(artifactId);

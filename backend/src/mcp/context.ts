@@ -150,6 +150,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   wait_generation_job: 'read',
   get_generation_artifacts: 'read',
   refresh_artifact_download: 'read',
+  get_media_download: 'read',
   get_video_info: 'read',
   get_sprite_job: 'read',
   wait_sprite_job: 'read',

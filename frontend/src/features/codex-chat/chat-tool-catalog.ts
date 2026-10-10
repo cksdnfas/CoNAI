@@ -55,6 +55,7 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   search_images: { group: 'images', label: { ko: '이미지 검색', en: 'Search images' }, ko: '프롬프트 글, 도구, 모델, 크기, 날짜, 그룹으로 이미지·영상을 찾아.' },
   search_images_by_tags: { group: 'images', label: { ko: '태그로 이미지 검색', en: 'Search by tags' }, ko: '자동 태그(WD Tagger)로 이미지를 찾아. 캐릭터·등급 필터도 돼.' },
   get_image_metadata: { group: 'images', label: { ko: '이미지 정보', en: 'Image metadata' }, ko: '이미지 하나의 프롬프트·모델·크기 같은 상세 정보를 읽어.' },
+  get_media_download: { group: 'images', label: { ko: '원본 다운로드 링크', en: 'Media download links' }, ko: '저장된 스프라이트 시트·애니메이션 같은 라이브러리 원본의 다운로드 링크를 만들어.' },
   view_images: { group: 'images', label: { ko: '이미지 보기', en: 'View images' }, ko: '이미지나 보관함 파일을 작은 미리보기로 실제로 봐. 비전 모델에서만 의미 있어.' },
   list_image_groups: { group: 'images', label: { ko: '이미지 그룹 목록', en: 'List image groups' }, ko: '라이브러리의 그룹(폴더)과 경로, 이미지 수를 나열해.' },
   get_image_group: { group: 'images', label: { ko: '그룹 설정 보기', en: 'Group settings' }, ko: '그룹 하나의 설명·이미지 수·자동수집 조건을 읽어.' },

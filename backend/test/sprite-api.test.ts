@@ -292,6 +292,43 @@ test('sprite REST + MCP: permissions, ownership, library save and artifacts', { 
       assert.notEqual((await maker.client.callTool({ name: 'refresh_artifact_download', arguments: { artifact_id: download.artifact.artifact_id } })).isError, true)
       assert.equal((await other.client.callTool({ name: 'download_sprite_frames', arguments: { build_id: extracted.build_id } })).isError, true)
 
+      // The saved sheet comes with a download link: the session original route for an account-bound caller.
+      const sheetHash = extracted.composite_hashes[0]
+      assert.equal(extracted.downloads[0].composite_hash, sheetHash)
+      assert.match(extracted.downloads[0].download.download_url, new RegExp(`/api/images/${sheetHash}/download/original$`))
+      const sheetBytes = await call('GET', new URL(extracted.downloads[0].download.download_url).pathname, makerId)
+      assert.equal(sheetBytes.bytes?.subarray(1, 4).toString(), 'PNG')
+      // get_media_download: any saved sheet later; a key caller (no account) gets the signed /mcp/artifacts URL.
+      const later = text(await maker.client.callTool({ name: 'get_media_download', arguments: { composite_hashes: [sheetHash, 'f'.repeat(48)] } }))
+      assert.equal(later.items[0].artifact.sha256, extracted.downloads[0].download.sha256)
+      assert.equal(later.items[1].error, 'not found or not available')
+      const keyMcp = createMcpServer({ scopes: ['read'], source: 'http', baseUrl: origin })
+      const keyClient = new Client({ name: 'sprite-key-test', version: '1' })
+      const [keyClientTransport, keyServerTransport] = InMemoryTransport.createLinkedPair()
+      await Promise.all([keyMcp.connect(keyServerTransport), keyClient.connect(keyClientTransport)])
+      try {
+        const signed = text(await keyClient.callTool({ name: 'get_media_download', arguments: { composite_hashes: [sheetHash] } }))
+        const url = new URL(signed.items[0].artifact.download_url)
+        assert.match(url.pathname, /^\/mcp\/artifacts\//)
+        const fetched = Buffer.from(await (await fetch(url)).arrayBuffer())
+        assert.equal(fetched.subarray(1, 4).toString(), 'PNG')
+      } finally {
+        await keyClient.close()
+        await keyMcp.close()
+      }
+
+      // A batch pairs each source video with its sheet or its failure, in request order.
+      const green = await saveSpriteOutputToLibrary({ bytes: fs.readFileSync(path.join(__dirname, 'fixtures/av-golden/sprite/inputs/green.mp4')), extension: 'mp4', mimeType: 'video/mp4', group: { groupPath: 'sprite-test/inputs' } })
+      const started = text(await maker.client.callTool({ name: 'extract_sprite_sheets_batch', arguments: { composite_hashes: [videoHash, green.compositeHash], options: { interval_seconds: 0.25 }, wait_seconds: 0 } }))
+      const batch = text(await maker.client.callTool({ name: 'get_sprite_job', arguments: { job_id: started.job_id, wait_seconds: 120 } }))
+      assert.equal(batch.status, 'completed', JSON.stringify(batch))
+      assert.deepEqual(batch.items.map((item: { video_hash: string; status: string }) => [item.video_hash, item.status]), [[videoHash, 'done'], [green.compositeHash, 'failed']])
+      assert.match(batch.items[0].video_name, /\.mp4$/)
+      assert.match(batch.items[0].sheet_hash, /^[0-9a-f]{48}$/)
+      assert.match(batch.items[0].download.download_url, new RegExp(`/api/images/${batch.items[0].sheet_hash}/download/original$`))
+      assert.equal(batch.items[1].sheet_hash, null)
+      assert.match(batch.items[1].error, /배경/)
+
       const fromDataUrl = text(await maker.client.callTool({ name: 'extract_sprite_sheet', arguments: {
         data_url: `data:video/mp4;base64,${fs.readFileSync(path.join(__dirname, 'fixtures/av-golden/sprite/inputs/green.mp4')).toString('base64')}`,
         options: { key_colors: ['#00FF00'], despill: false, sample_count: 3 }, save: false, wait_seconds: 60,

@@ -21,7 +21,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   get_graph_workflow_execution: ['workflows.view', 'images.view'], export_workflow_definition: 'workflows.view',
   import_workflow_definition: 'workflows.edit', restore_deleted_workflow: 'workflows.edit',
   get_generation_routing_options: 'workflows.view', get_generation_history_request: 'images.view',
-  refresh_artifact_download: 'images.view',
+  refresh_artifact_download: 'images.view', get_media_download: 'images.view',
   search_images: 'images.view', get_image_metadata: 'images.view', get_generation_history: 'images.view',
   search_images_by_tags: 'images.view', view_images: 'images.view', list_emoticons: 'images.view',
   list_emoticon_groups: 'images.view', list_image_groups: 'images.view', get_image_groups: 'images.view', get_image_group: 'images.view',

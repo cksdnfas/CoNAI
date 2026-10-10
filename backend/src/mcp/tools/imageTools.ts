@@ -94,6 +94,27 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
     }
   );
 
+  server.tool(
+    'get_media_download',
+    'Download links for library media originals (saved sprite sheets, animations, any image or video) by composite hash. Links expire after about 15 minutes; call again for fresh ones.',
+    {
+      composite_hashes: z.array(z.string().trim().regex(/^(?:[0-9a-f]{48}|[0-9a-f]{32})$/, 'composite_hash must be a library media hash')).min(1).max(50),
+    },
+    async ({ composite_hashes }) => {
+      try {
+        if (!context.baseUrl) throw new Error('Artifact downloads require the Streamable HTTP transport');
+        const baseUrl = context.baseUrl;
+        const items = await Promise.all([...new Set(composite_hashes)].map(async (hash) => {
+          const artifact = await McpArtifactService.createMediaDescriptor(hash, baseUrl, context.requester);
+          return artifact ? { composite_hash: hash, artifact } : { composite_hash: hash, error: 'not found or not available' };
+        }));
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ items }) }] };
+      } catch (error) {
+        return { isError: true, content: [{ type: 'text' as const, text: (error as Error).message }] };
+      }
+    }
+  );
+
   // 이미지 메타데이터 상세 조회
   server.tool(
     'get_image_metadata',
