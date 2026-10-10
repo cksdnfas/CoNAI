@@ -8,6 +8,7 @@ import { useI18n } from '@/i18n'
 import { stopAtPortalEdge } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 import { useOverlayBackClose } from './use-overlay-back-close'
+import { lockBodyScroll } from '@/lib/body-scroll-lock'
 
 interface ModalProps extends PropsWithChildren {
   open: boolean
@@ -146,8 +147,7 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
       return
     }
 
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const releaseScroll = lockBodyScroll()
 
     // Decide on Esc after content bubble handlers ran (React dispatches portal events at body), but before window
     // listeners of overlays underneath (image view) so closing this dialog does not also close them.
@@ -167,7 +167,7 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
 
     document.addEventListener('keydown', handleKeyDown)
     return () => {
-      document.body.style.overflow = previousOverflow
+      releaseScroll()
       document.removeEventListener('keydown', handleKeyDown)
       pendingEscapeRef.current = null
     }

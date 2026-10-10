@@ -12,6 +12,7 @@ import {
 } from './image-view-modal-context'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
 import { registerTranslationCatalog } from '@/i18n'
+import { lockBodyScroll } from '@/lib/body-scroll-lock'
 
 type ImageViewModalOverlayModule = typeof import('./image-view-modal-overlay')
 type ImageViewModalOverlayComponent = ImageViewModalOverlayModule['ImageViewModalOverlay']
@@ -443,7 +444,6 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     const scrollX = window.scrollX
     const scrollY = window.scrollY
     const previousBodyStyle = {
-      overflow: document.body.style.overflow,
       position: document.body.style.position,
       top: document.body.style.top,
       left: document.body.style.left,
@@ -477,7 +477,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       }
     }
 
-    document.body.style.overflow = 'hidden'
+    const releaseScroll = lockBodyScroll()
     document.body.style.position = 'fixed'
     document.body.style.top = `-${scrollY}px`
     document.body.style.left = `-${scrollX}px`
@@ -486,7 +486,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     window.addEventListener('keydown', handleKeyDown)
 
     return () => {
-      document.body.style.overflow = previousBodyStyle.overflow
+      releaseScroll()
       document.body.style.position = previousBodyStyle.position
       document.body.style.top = previousBodyStyle.top
       document.body.style.left = previousBodyStyle.left

@@ -11,6 +11,7 @@ import type { ImageRecord } from '@/types/image'
 import { useImageViewModal } from './detail/image-view-modal-context'
 import { ImageDownloadTriggerButton } from './image-download-trigger-button'
 import { getImageListMediaKind, getImageListPreviewUrl } from './image-list/image-list-utils'
+import { lockBodyScroll } from '@/lib/body-scroll-lock'
 
 export interface MediaLightboxProps {
   items: ImageRecord[]
@@ -337,14 +338,13 @@ function MediaLightboxOverlay({ items, index, onIndexChange, onClose, renderActi
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
     containerRef.current?.focus({ preventScroll: true })
     const root = document.documentElement
-    const previousOverflow = document.body.style.overflow
     const previousRootBackground = root.style.backgroundColor
-    document.body.style.overflow = 'hidden'
+    const releaseScroll = lockBodyScroll()
     // `scrollbar-gutter: stable` keeps the root gutter painted in the page colour beside the overlay; dropping the
     // gutter would reflow the page behind, so paint it black instead.
     root.style.backgroundColor = 'black'
     return () => {
-      document.body.style.overflow = previousOverflow
+      releaseScroll()
       root.style.backgroundColor = previousRootBackground
       opener?.focus({ preventScroll: true })
     }

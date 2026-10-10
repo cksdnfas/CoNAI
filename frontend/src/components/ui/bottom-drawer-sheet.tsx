@@ -5,6 +5,7 @@ import { stopAtPortalEdge } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 import { useOverlayBackClose } from './use-overlay-back-close'
 import { Button } from './button'
+import { lockBodyScroll } from '@/lib/body-scroll-lock'
 
 type BottomDrawerSheetProps = {
   open: boolean
@@ -63,17 +64,16 @@ export function BottomDrawerSheet({
       return
     }
 
-    const previousOverflow = document.body.style.overflow
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onClose()
       }
     }
 
-    document.body.style.overflow = 'hidden'
+    const releaseScroll = lockBodyScroll()
     window.addEventListener('keydown', handleKeyDown)
     return () => {
-      document.body.style.overflow = previousOverflow
+      releaseScroll()
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [open, onClose])

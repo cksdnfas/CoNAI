@@ -12,6 +12,7 @@ import { listCodexChatThreads } from '@/lib/api-codex-chat'
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
 import { CHAT_DOCK_MIN_WIDTH_PX, CODEX_CHAT_ROUTE, CODEX_CHAT_THREADS_QUERY_KEY, useCodexChat } from './codex-chat-context'
+import { lockBodyScroll } from '@/lib/body-scroll-lock'
 
 const DOCK_DEFAULT_WIDTH_PX = 420
 const DOCK_RESIZE_MIN_PX = 360
@@ -253,11 +254,7 @@ export function CodexChatDock() {
     if (!coversScreen) {
       return
     }
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previousOverflow
-    }
+    return lockBodyScroll()
   }, [coversScreen])
 
   if (!chat || !visible) {

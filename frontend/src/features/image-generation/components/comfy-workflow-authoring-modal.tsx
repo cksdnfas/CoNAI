@@ -34,6 +34,7 @@ import {
   type ComfyWorkflowEditorTab,
 } from './use-comfy-workflow-authoring-controller'
 import { resolveWorkflowMarkedFieldNodeSource } from '../workflow-marked-field-groups'
+import { lockBodyScroll } from '@/lib/body-scroll-lock'
 
 type ComfyWorkflowAuthoringModalProps = {
   open: boolean
@@ -187,12 +188,9 @@ export function ComfyWorkflowAuthoringModal({
   // The editor covers the page: lock its scroll and move focus in, so keyboard users start inside the editor.
   useEffect(() => {
     if (!open) return
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const releaseScroll = lockBodyScroll()
     containerRef.current?.focus({ preventScroll: true })
-    return () => {
-      document.body.style.overflow = previousOverflow
-    }
+    return releaseScroll
   }, [open])
 
   if (!open || typeof document === 'undefined') return null
