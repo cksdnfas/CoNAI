@@ -19,6 +19,7 @@ import { limitContextMeta, legacyContextMeta } from './chatContextDiagnostics'
 import { saveChatRequestCapture } from './chatRequestCaptures'
 import { canUseChatProfile, resolveChatAccess } from './codexChatAccess'
 import { CodexChatError, CodexChatService, deleteCodexRollout, runCodexGroupReply, type CodexChatStreamEvent } from './codexChatService'
+import { buildClaudeGroupSessionTurn, deleteClaudeMemberSession, deleteClaudeSessions } from './claudeChatSessions'
 import { CodexChatStore, type ChatBranchPurpose, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import { withGenerationOutcomes } from './codexChatMedia'
 import { buildGroupCodexInput, buildGroupLlmMessages, groupSummaryOn, parseMentions, resolveMemberName, trimForeignSpeakerLines } from './groupChatContext'
@@ -205,9 +206,16 @@ async function continueByJudge(run: GroupRun, requester: McpRequester) {
   }
 }
 
-/** Forget every Codex member's memory of the room (its history was rewritten or cleared). */
+/** Forget every Codex and Claude member's memory of the room (its history was rewritten or cleared). */
 function resetCodexMemory(requester: McpRequester, threadId: number) {
   for (const codexThreadId of ChatGroupStore.resetCodexMemory(threadId)) deleteCodexRollout(requester, codexThreadId)
+  deleteClaudeSessions(threadId)
+}
+
+/** Forget one member's memory of the room. */
+function resetMemberMemory(requester: McpRequester, threadId: number, profileId: number) {
+  deleteCodexRollout(requester, ChatGroupStore.resetMemberMemory(threadId, profileId))
+  deleteClaudeMemberSession(threadId, profileId)
 }
 
 /**
@@ -326,14 +334,24 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
       })
     } else {
       const maxTokens = ChatGroupStore.member(run.threadId, profile.id)?.max_tokens ?? thread.max_tokens ?? profile.maxTokens
-      const generatedImages = await loadInlineGeneratedImages(profile, requester, run.threadId)
+      // A Claude member continues its own session of the room, which keeps the pictures it was shown.
+      const inSession = profile.engine === 'claude'
+      const generatedImages = inSession ? [] : await loadInlineGeneratedImages(profile, requester, run.threadId)
       message = await persist(await generateLlmGroupReply({
         requester,
         threadId: run.threadId,
         profile,
         // The CoNAI tool guidance is for the profile's own tools, not the room tools every member gets.
         chatContext: context,
-        buildMessages: (tools, onMeta, judged) => withGeneratedImages(buildGroupLlmMessages({ profile, thread, members, messages, routing: active.routing, windowLimit: limits.window, tools, maxTokens, withTools: tools.some((tool) => !isChatOwnTool(tool.function.name)), segments: groupSummaryOn(thread) ? ChatSummaryStore.list(run.threadId) : undefined , attachmentTexts, attachedImages, onMeta, judged }), generatedImages),
+        buildMessages: async (tools, onMeta, judged, useSession) => {
+          if (inSession) {
+            const turn = await buildClaudeGroupSessionTurn({ requester, thread, members, profile, messages, routing: active.routing, windowLimit: limits.window, withTools: tools.some((tool) => !isChatOwnTool(tool.function.name)), attachmentTexts, attachedImages })
+            useSession(turn.session)
+            onMeta(turn.contextMeta)
+            return turn.messages
+          }
+          return withGeneratedImages(buildGroupLlmMessages({ profile, thread, members, messages, routing: active.routing, windowLimit: limits.window, tools, maxTokens, withTools: tools.some((tool) => !isChatOwnTool(tool.function.name)), segments: groupSummaryOn(thread) ? ChatSummaryStore.list(run.threadId) : undefined , attachmentTexts, attachedImages, onMeta, judged }), generatedImages)
+        },
         // The member's own cap, else the room's, else the profile's (a Codex member has no hard cap).
         generation: { maxTokens },
         signal: controller.signal,
@@ -590,6 +608,8 @@ export const GroupChatService = {
       await startRun(threadId, listener, async (run) => {
         run.chain = false
         CodexChatStore.prepareRegeneration(threadId, messageId)
+        // A Claude member's session holds the reply being replaced: it starts over from the room.
+        if (speaker.engine === 'claude') resetMemberMemory(requester, threadId, speaker.id)
         emit(run, { type: 'rewind', mode: 'regenerate', message })
         const sourceId = message.routing?.replyTo?.messageId ?? [...messages].reverse().find((entry) => entry.role === 'user')?.id ?? 0
         const reply = replyAs(run, requester, speaker, sourceId, messageId)
@@ -678,6 +698,7 @@ export const GroupChatService = {
     if (GroupChatService.isRunning(threadId)) throw new CodexChatError('답변 중단을 처리 중이야. 잠시 후 다시 삭제해줘.', 409)
     CodexChatStore.deleteThread(threadId)
     for (const codexThreadId of codexThreadIds) deleteCodexRollout(requester, codexThreadId)
+    deleteClaudeSessions(threadId)
   },
 
   addMembers(requester: McpRequester, threadId: number, profileIds: unknown) {
@@ -701,6 +722,7 @@ export const GroupChatService = {
     if (!members.some((member) => member.profile_id === profileId)) throw new CodexChatError('방에 없는 참가자야.', 404)
     if (members.length <= 1) throw new CodexChatError('마지막 참가자는 내보낼 수 없어.', 409)
     deleteCodexRollout(requester, ChatGroupStore.removeMember(threadId, profileId))
+    deleteClaudeMemberSession(threadId, profileId)
     return GroupChatService.getThread(requester, threadId)
   },
 

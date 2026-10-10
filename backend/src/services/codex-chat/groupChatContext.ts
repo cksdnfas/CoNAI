@@ -10,7 +10,7 @@ import { estimateMessagesTokens, replyReserveFor } from './llmChatContext'
 import { postHistoryText, buildContextMeta, recalledSegments, type ChatContextMeta } from './llmChatContext'
 import { recallText } from './chatMemory'
 import { contextSource, limitContextMeta, contextPartsOf, markContextParts } from './chatContextDiagnostics'
-import { appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, offersLoreFileTool, recallFor, rejectedLoreFor, resolveAuthorNote, selectChatLore, sendableMessages, threadBlockStateText, toCompletionMessages, unsummarizedMessages, latestWindow } from './llmChatContext'
+import { appendUserDirective, buildLeadingMessages, depthBlocks, flagDirectiveFor, insertDepthBlocks, offersLinkedFiles, offersLoreFileTool, recallFor, rejectedLoreFor, resolveAuthorNote, selectChatLore, sendableMessages, threadBlockStateText, toCompletionMessages, unsummarizedMessages, latestWindow } from './llmChatContext'
 import { booksForRequest, type AttachedLoreBook, type ChatLore } from './chatLoreContext'
 import type { ChatSummarySegment } from './chatMemory'
 import type { JudgedContext } from './chatJudgeContext'
@@ -148,7 +148,7 @@ export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMe
   const sendable = sendableMessages(unsummarizedMessages(params.messages, params.thread, { summaryEnabled: groupSummaryOn(params.thread) }))
   let window = latestWindow(sendable, params.windowLimit)
   params = { ...params, books: params.books ?? booksForRequest({ thread: params.thread, profile: params.profile }) }
-  const lore = selectChatLore(params.profile, window, userPersonaForThread(params.thread), { books: params.books, toolOffered: offersLoreFileTool(params.tools), history: params.messages, speakerProfileId: params.profile.id, judged: params.judged?.loreKeys })
+  const lore = selectChatLore(params.profile, window, userPersonaForThread(params.thread), { thread: params.thread, books: params.books, toolOffered: offersLoreFileTool(params.tools), linkedOffered: offersLinkedFiles(params.tools), history: params.messages, speakerProfileId: params.profile.id, judged: params.judged?.loreKeys })
   let context = buildGroupWindowMessages(params, window, sendable.length, lore)
   const budget = params.profile.contextTokens
   const reserve = replyReserveFor(budget, params.maxTokens) + (params.extraTokens ?? 0)
@@ -219,6 +219,16 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
  * A Codex member's turn input: the room header, then what it missed since its last reply (Codex keeps the rest in
  * its own memory), at most `windowLimit` messages; older parts are reachable with the room history tools.
  */
+/**
+ * What a member with its own memory of the room (a Codex thread, a Claude session) missed since it last spoke: its own
+ * replies are in its memory already. `shown` is the part the window lets through.
+ */
+export function groupMissedMessages(messages: CodexChatMessageRecord[], selfId: number, lastSeenMessageId: number | null, windowLimit: number) {
+  const missed = sendableMessages(messages).filter((message) => message.id > (lastSeenMessageId ?? 0)
+    && !(lastSeenMessageId !== null && message.role === 'assistant' && message.speaker_profile_id === selfId))
+  return { missed, shown: missed.slice(-windowLimit) }
+}
+
 export function buildGroupCodexInput(params: {
   routing?: ChatMessageRouting
   thread: CodexChatThreadRecord
@@ -234,15 +244,15 @@ export function buildGroupCodexInput(params: {
   attachmentTexts?: ReadonlyMap<string, string>
   /** The attached images the turn shows (see loadAttachedImages; the turn input adds them as images). */
   attachedImages?: AttachedImages
+  /** False when the room header is already in the member's fixed prompt (a Claude session). */
+  header?: boolean
 }) {
   const { thread, members, self, lastSeenMessageId, windowLimit, lore, directive } = params
   const user = userPersonaForThread(thread)
   const names = new Map(members.map((member) => [member.id, member.name]))
-  const missed = sendableMessages(params.messages).filter((message) => message.id > (lastSeenMessageId ?? 0)
-    && !(lastSeenMessageId !== null && message.role === 'assistant' && message.speaker_profile_id === self.id))
-  const shown = missed.slice(-windowLimit)
+  const { missed, shown } = groupMissedMessages(params.messages, self.id, lastSeenMessageId, windowLimit)
   return [
-    buildGroupHeader({ thread, members, self, user }),
+    params.header === false ? '' : buildGroupHeader({ thread, members, self, user }),
     hiddenHistoryNote(thread, missed.length - shown.length),
     buildReplyContext(params.messages, params.routing, { group: true, visibleIds: new Set(shown.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) }),
     lore ? `[참고 설정]\n${lore}\n[/참고 설정]` : '',

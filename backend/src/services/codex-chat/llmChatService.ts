@@ -691,7 +691,8 @@ type HeadlessReplyParams = {
   requester: McpRequester
   threadId: number
   profile: ChatProfile
-  buildMessages: (tools: ChatCompletionTool[], onMeta: (meta: ChatContextMeta) => void, judged: JudgedContext | null) => ChatCompletionMessage[]
+  /** `useSession`: a Claude member's turn continues its own session (see buildClaudeGroupSessionTurn). */
+  buildMessages: (tools: ChatCompletionTool[], onMeta: (meta: ChatContextMeta) => void, judged: JudgedContext | null, useSession: (session: ClaudeChatSession) => void) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>
   /** Overrides of the profile's generation options (the member's or room's reply cap). */
   generation?: Partial<LlmGenerationOptions>
   signal: AbortSignal
@@ -722,7 +723,7 @@ async function runHeadlessReply(params: HeadlessReplyParams, order?: LlmTurn['or
   let status: CodexChatMessageRecord['status'] = 'completed'
   let error: string | null = null
   try {
-    await streamReply(turn, params.requester, params.profile, (tools, judged) => params.buildMessages(tools, (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(params.profile, 'chat')?.model ?? null } }, judged), params.generation ?? {})
+    await streamReply(turn, params.requester, params.profile, (tools, judged) => params.buildMessages(tools, (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(params.profile, 'chat')?.model ?? null } }, judged, (session) => { turn.claudeSession = session }), params.generation ?? {})
     if (controller.signal.aborted) status = 'interrupted'
   } catch (caught) {
     status = controller.signal.aborted ? 'interrupted' : 'failed'

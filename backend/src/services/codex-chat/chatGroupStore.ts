@@ -137,6 +137,32 @@ export const ChatGroupStore = {
     getUserSettingsDb().prepare('UPDATE chat_group_members SET codex_lore_sent = ? WHERE thread_id = ? AND profile_id = ?').run(keys.length > 0 ? JSON.stringify(keys) : null, threadId, profileId)
   },
 
+  /**
+   * A Claude member's session moved on (each turn is a new session id): what it was given, and the latest message it
+   * has seen. `loreSent` null after the session folded its memory.
+   */
+  setMemberClaudeSession(threadId: number, profileId: number, value: string, loreSent: string[] | null, lastSeenMessageId: number) {
+    getUserSettingsDb().prepare('UPDATE chat_group_members SET codex_thread_id = ?, codex_lore_sent = ?, last_seen_message_id = ? WHERE thread_id = ? AND profile_id = ?')
+      .run(value, loreSent?.length ? JSON.stringify(loreSent) : null, lastSeenMessageId, threadId, profileId)
+  },
+
+  /** Forget one member's memory of the room; returns its Codex thread (or Claude session value) to delete. */
+  resetMemberMemory(threadId: number, profileId: number) {
+    const codexThreadId = ChatGroupStore.member(threadId, profileId)?.codex_thread_id ?? null
+    getUserSettingsDb().prepare(`UPDATE chat_group_members SET ${RESET_MEMBER_CODEX} WHERE thread_id = ? AND profile_id = ?`).run(threadId, profileId)
+    return codexThreadId
+  },
+
+  /**
+   * A message changed in place (another variant chosen): the members that have it in their memory forget the room —
+   * its speaker, and those that saw it before speaking. Returns the members reset.
+   */
+  resetMemoryOfMessage(threadId: number, messageId: number, speakerProfileId: number | null) {
+    return ChatGroupStore.members(threadId)
+      .filter((member) => member.codex_thread_id && (member.profile_id === speakerProfileId || (member.last_seen_message_id ?? 0) >= messageId))
+      .map((member) => ({ profileId: member.profile_id, codexThreadId: ChatGroupStore.resetMemberMemory(threadId, member.profile_id) }))
+  },
+
   /** Forget every Codex member's memory (history rewritten or cleared); returns the Codex threads to delete. */
   resetCodexMemory(threadId: number) {
     const db = getUserSettingsDb()

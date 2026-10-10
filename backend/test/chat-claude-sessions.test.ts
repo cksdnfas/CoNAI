@@ -110,4 +110,89 @@ test('claude sessions: forked turns, input once, resets and cleanup', { timeout:
     deleteClaudeSessions(threadId)
     assert.equal(fs.existsSync(claudeSessionDir(threadId)), false)
   })
+
+  await t.test('a room member keeps its own session: what it missed goes in, member changes and rewrites start over', async () => {
+    const { ChatGroupStore } = await import('../src/services/codex-chat/chatGroupStore')
+    const { buildClaudeGroupSessionTurn, claudeMemberSessionDir } = await import('../src/services/codex-chat/claudeChatSessions')
+    const requester = { accountId: 1, accountType: 'admin' as const }
+    const luna = ChatProfileStore.create({ name: '루나', engine: 'claude', model: 'haiku', systemPrompt: '너는 루나야.', authorNote: '분위기는 차분하게.' })
+    const kai = ChatProfileStore.create({ name: '카이', engine: 'claude', model: 'haiku', systemPrompt: '너는 카이야.' })
+    const mina = ChatProfileStore.create({ name: '미나', engine: 'claude', model: 'haiku', systemPrompt: '너는 미나야.' })
+    const roomId = ChatGroupStore.create(1, '방', [luna.id, kai.id], luna.id)
+    const add = (role: 'user' | 'assistant', content: string, speaker: number | null = null) =>
+      CodexChatStore.addMessage({ thread_id: roomId, role, content, tool_calls: [], status: 'completed', error: null, speaker_profile_id: speaker })
+    const build = (profileId: number) => {
+      const members = ChatGroupStore.members(roomId).map((member) => ChatProfileStore.find(member.profile_id)!)
+      return buildClaudeGroupSessionTurn({ requester, thread: CodexChatStore.findThreadById(roomId)!, members, profile: members.find((member) => member.id === profileId)!, messages: CodexChatStore.listMessages(roomId), windowLimit: 20, withTools: false })
+    }
+    const textOf = (turn: Awaited<ReturnType<typeof build>>) => String(turn.messages[1].content)
+    const finish = (turn: Awaited<ReturnType<typeof build>>, profileId: number, id: string, compacted = false) => {
+      const dir = path.join(claudeMemberSessionDir(roomId, profileId), 'home', 'projects', 'work')
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, `${id}.jsonl`), '{}\n')
+      turn.session.onDone(id, compacted)
+    }
+    add('user', '다들 안녕')
+
+    const first = await build(luna.id)
+    assert.equal(first.session.resumeId, null)
+    assert.equal(first.session.dir, claudeMemberSessionDir(roomId, luna.id))
+    assert.match(String(first.messages[0].content), /너는 루나야[\s\S]*## Group chat room/)
+    assert.doesNotMatch(textOf(first), /## Group chat room/, 'the room header is in the fixed part')
+    assert.match(textOf(first), /\[지금까지의 대화\][\s\S]*다들 안녕/)
+    assert.match(textOf(first), /분위기는 차분하게/)
+    const one = '11111111-1111-4111-8111-111111111111'
+    finish(first, luna.id, one)
+    const seen = ChatGroupStore.member(roomId, luna.id)!
+    assert.equal(readClaudeSession(seen.codex_thread_id)?.id, one)
+    assert.equal(seen.last_seen_message_id, CodexChatStore.listMessages(roomId).at(-1)!.id)
+
+    // Each member has its own session: 카이 starts its own, in its own folder.
+    const kaiTurn = await build(kai.id)
+    assert.equal(kaiTurn.session.resumeId, null)
+    assert.notEqual(kaiTurn.session.dir, first.session.dir)
+
+    add('assistant', '안녕, 다들.', luna.id)
+    add('assistant', '루나 왔네.', kai.id)
+    add('user', '루나는 오늘 뭐 했어?')
+    const second = await build(luna.id)
+    assert.equal(second.session.resumeId, one)
+    assert.match(textOf(second), /\[네가 마지막으로 말한 뒤의 대화\]/)
+    assert.doesNotMatch(textOf(second), /안녕, 다들/, 'its own reply is in its session already')
+    assert.match(textOf(second), /루나 왔네[\s\S]*오늘 뭐 했어/)
+    assert.doesNotMatch(textOf(second), /분위기는 차분하게/, 'the note was given already')
+    const two = '22222222-2222-4222-8222-222222222222'
+    finish(second, luna.id, two)
+    assert.equal((await build(luna.id)).session.resumeId, two)
+
+    // Another variant of 루나's reply: 루나 (its speaker) forgets the room; 카이, which has not seen it yet, keeps going.
+    finish(kaiTurn, kai.id, '33333333-3333-4333-8333-333333333333')
+    const lunaReply = CodexChatStore.listMessages(roomId).find((message) => message.content === '안녕, 다들.')!
+    assert.ok(ChatGroupStore.member(roomId, kai.id)!.last_seen_message_id! < lunaReply.id)
+    assert.deepEqual(ChatGroupStore.resetMemoryOfMessage(roomId, lunaReply.id, luna.id).map((member) => member.profileId), [luna.id])
+    assert.equal((await build(luna.id)).session.resumeId, null)
+    assert.equal((await build(kai.id)).session.resumeId, '33333333-3333-4333-8333-333333333333')
+    // 카이 then sees it; a variant of it would reset 카이 too.
+    ChatGroupStore.setLastSeen(roomId, kai.id, CodexChatStore.listMessages(roomId).at(-1)!.id)
+    assert.deepEqual(ChatGroupStore.resetMemoryOfMessage(roomId, lunaReply.id, luna.id).map((member) => member.profileId), [kai.id])
+    const three = '44444444-4444-4444-8444-444444444444'
+    finish(await build(luna.id), luna.id, three)
+    assert.equal((await build(luna.id)).session.resumeId, three)
+
+    // A new member changes the room header: the session starts over, given the room's recent past.
+    ChatGroupStore.addMembers(roomId, [mina.id])
+    const joined = await build(luna.id)
+    assert.equal(joined.session.resumeId, null)
+    assert.match(String(joined.messages[0].content), /미나/)
+    assert.match(textOf(joined), /\[지금까지의 대화\]/)
+    finish(joined, luna.id, three)
+    assert.equal((await build(luna.id)).session.resumeId, three)
+
+    // Clearing or rewriting the room forgets every member's session.
+    ChatGroupStore.resetCodexMemory(roomId)
+    assert.equal(ChatGroupStore.member(roomId, luna.id)!.codex_thread_id, null)
+    assert.equal((await build(luna.id)).session.resumeId, null)
+    deleteClaudeSessions(roomId)
+    assert.equal(fs.existsSync(claudeMemberSessionDir(roomId, luna.id)), false)
+  })
 })

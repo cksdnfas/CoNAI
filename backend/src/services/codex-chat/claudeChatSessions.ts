@@ -1,11 +1,12 @@
 import fs from 'fs'
 import path from 'path'
 import { createHash } from 'crypto'
-import type { ChatPageSnapshot } from '@conai/shared'
+import type { ChatMessageRouting, ChatPageSnapshot } from '@conai/shared'
 import type { McpRequester } from '../../mcp/context'
-import { attachedImagesOf, chatContentWithAttachments, inlineTextsForChat, loadAttachedImages } from './chatAttachments'
+import { attachedImagesOf, chatContentWithAttachments, inlineTextsForChat, loadAttachedImages, type AttachedImages } from './chatAttachments'
 import { contextSource } from './chatContextDiagnostics'
 import { pendingGeneratedImages } from './chatGenerationPrompting'
+import { ChatGroupStore } from './chatGroupStore'
 import { pendingPageReference, pendingProposalOutcomes } from './chatPageContext'
 import type { ChatProfile } from './chatProfiles'
 import { buildReplyContext } from './chatReplyContext'
@@ -13,7 +14,8 @@ import { codexHistoryRecap, codexInputMeta, nextLoreSent, pendingAuthorNote, pen
 import { userPersonaForThread } from './chatUserProfiles'
 import { claudeChatPrivateRoot, claudeSessionFileExists, type ClaudeChatSession } from './claudeChatCompletion'
 import { pendingGenerationOutcomes } from './codexChatMedia'
-import { CodexChatStore, type CodexChatMessageRecord } from './codexChatStore'
+import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
+import { buildGroupCodexInput, buildGroupHeader, groupMissedMessages } from './groupChatContext'
 import type { ChatCompletionMessage, ChatContentPart } from './llmChatCompletion'
 import { buildPersonaPrompt, fixedContextGuidance, flagDirectiveFor, postHistoryText, referenceBlock, resolveAuthorNote, type ChatContextMeta } from './llmChatContext'
 
@@ -42,7 +44,16 @@ export function claudeSessionDir(threadId: number) {
   return path.join(claudeChatPrivateRoot(), 'sessions', `thread-${threadId}`)
 }
 
-/** A chat that is deleted or cleared drops its sessions with it. */
+/** A group room member's own session: one per room and profile. */
+export function claudeMemberSessionDir(threadId: number, profileId: number) {
+  return path.join(claudeSessionDir(threadId), `member-${profileId}`)
+}
+
+export function deleteClaudeMemberSession(threadId: number, profileId: number) {
+  fs.rmSync(claudeMemberSessionDir(threadId, profileId), { recursive: true, force: true })
+}
+
+/** A chat that is deleted or cleared drops its sessions with it (a room's members' sessions too). */
 export function deleteClaudeSessions(threadId: number) {
   fs.rmSync(claudeSessionDir(threadId), { recursive: true, force: true })
 }
@@ -50,6 +61,14 @@ export function deleteClaudeSessions(threadId: number) {
 /** The session's fixed part, recorded on its first turn (Claude Code reuses it as is): guidance, then the persona. */
 export function claudeSessionSystem(profile: ChatProfile, withTools: boolean, user: ReturnType<typeof userPersonaForThread>) {
   return [fixedContextGuidance(profile, withTools), buildPersonaPrompt(profile, { dialogueAsText: true, user })].filter(Boolean).join('\n\n')
+}
+
+const systemHashOf = (system: string) => createHash('sha1').update(system).digest('hex').slice(0, 12)
+
+/** The session a turn continues: the stored one, unless its fixed part changed or its files are gone. */
+function resumableSession(value: string | null | undefined, systemHash: string, dir: string) {
+  const stored = readClaudeSession(value)
+  return stored && stored.systemHash === systemHash && claudeSessionFileExists(path.join(dir, 'home'), stored.id) ? stored.id : null
 }
 
 /**
@@ -69,10 +88,9 @@ export async function buildClaudeSessionTurn(params: {
   const thread = CodexChatStore.findThreadById(threadId) ?? null
   const user = userPersonaForThread(thread)
   const system = claudeSessionSystem(profile, params.withTools, user)
-  const systemHash = createHash('sha1').update(system).digest('hex').slice(0, 12)
+  const systemHash = systemHashOf(system)
   const dir = claudeSessionDir(threadId)
-  const stored = readClaudeSession(thread?.codex_thread_id)
-  const resumeId = stored && stored.systemHash === systemHash && claudeSessionFileExists(path.join(dir, 'home'), stored.id) ? stored.id : null
+  const resumeId = resumableSession(thread?.codex_thread_id, systemHash, dir)
   const sent = resumeId ? readLoreSent(thread?.codex_lore_sent ?? null) : new Set<string>()
 
   const latest = [...history].reverse().find((message) => message.role === 'user') ?? null
@@ -122,5 +140,71 @@ export async function buildClaudeSessionTurn(params: {
     ...(latest ? contextSource('window', latest.content, latest.id) : []),
     ...contextSource('flags', flagDirectiveFor(history, profile, user), latest?.id),
   ])
+  return { messages: [{ role: 'system', content: system }, { role: 'user', content }], session, contextMeta }
+}
+
+/**
+ * One Claude member's turn in a group room, in that member's own session (one per room and profile), like a Codex
+ * member's thread: the room header sits in the fixed part, and each turn sends what the member missed since it last
+ * spoke plus what its session was not given yet. A new session (first turn, memory reset, changed prompt or member
+ * list) gets the room's recent window instead. The member's sent keys, session and last seen message are kept in its
+ * room membership.
+ */
+export async function buildClaudeGroupSessionTurn(params: {
+  requester: McpRequester
+  thread: CodexChatThreadRecord
+  members: ChatProfile[]
+  profile: ChatProfile
+  /** The room up to now (the reply being replaced left out). */
+  messages: CodexChatMessageRecord[]
+  routing?: ChatMessageRouting
+  windowLimit: number
+  withTools: boolean
+  attachmentTexts?: ReadonlyMap<string, string>
+  attachedImages?: AttachedImages
+}): Promise<{ messages: ChatCompletionMessage[]; session: ClaudeChatSession; contextMeta: ChatContextMeta }> {
+  const { requester, thread, members, profile, messages } = params
+  const user = userPersonaForThread(thread)
+  const system = [claudeSessionSystem(profile, params.withTools, user), buildGroupHeader({ thread, members, self: profile, user })].join('\n\n')
+  const systemHash = systemHashOf(system)
+  const dir = claudeMemberSessionDir(thread.id, profile.id)
+  const member = ChatGroupStore.member(thread.id, profile.id)
+  const resumeId = resumableSession(member?.codex_thread_id, systemHash, dir)
+  const sent = resumeId ? readLoreSent(member?.codex_lore_sent ?? null) : new Set<string>()
+  const lastSeen = resumeId ? member?.last_seen_message_id ?? null : null
+
+  const lore = pendingLore(thread, profile, messages, sent, user)
+  const note = pendingAuthorNote(thread, profile, sent, user)
+  const state = pendingBlockState(thread, profile, messages, sent, profile.id)
+  const rejected = pendingRejectedLore(thread.id, profile, sent)
+  const outcomes = pendingGenerationOutcomes(thread.id, messages.filter((message) => message.speaker_profile_id === profile.id), sent)
+  const generated = await pendingGeneratedImages(profile, requester, thread.id, sent)
+  const flags = flagDirectiveFor(messages, profile, user)
+  const text = buildGroupCodexInput({
+    thread, members, self: profile, messages, routing: params.routing, lastSeenMessageId: lastSeen, windowLimit: params.windowLimit,
+    lore: [lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text, generated.text].filter(Boolean).join('\n\n'),
+    directive: [flags, postHistoryText(profile, user)].filter(Boolean).join('\n\n'),
+    attachmentTexts: params.attachmentTexts, attachedImages: params.attachedImages, header: false,
+  })
+  const { missed, shown } = groupMissedMessages(messages, profile.id, lastSeen, params.windowLimit)
+  const urls = [...shown.filter((message) => message.role === 'user').flatMap((message) => attachedImagesOf(message, params.attachedImages)), ...generated.urls]
+  const keys = [...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys, ...generated.keys]
+  const content: string | ChatContentPart[] = urls.length ? [{ type: 'text', text }, ...urls.map((url) => ({ type: 'image_url' as const, image_url: { url } }))] : text
+  const seen = messages.at(-1)?.id ?? 0
+
+  const session: ClaudeChatSession = {
+    dir,
+    resumeId,
+    // A folded memory lost what it was given: everything goes in again from the next turn.
+    onDone: (sessionId, compacted) => ChatGroupStore.setMemberClaudeSession(thread.id, profile.id, `${SESSION_PREFIX}${sessionId}:${systemHash}`, compacted ? null : nextLoreSent(sent, keys), seen),
+  }
+  const contextMeta = codexInputMeta(profile, shown, lore, text, keys, [
+    ...contextSource('lore-index', lore.index.keys.length ? lore.selected.index : ''),
+    ...contextSource('constant-lore', lore.index.keys.length ? lore.selected.constant : ''),
+    ...contextSource('author-note', note.text ? resolveAuthorNote(thread, profile, user).text : ''),
+    ...contextSource('state', state.text),
+    ...shown.flatMap((message) => contextSource('window', message.content, message.id)),
+    ...contextSource('flags', flags, [...messages].reverse().find((message) => message.role === 'user')?.id),
+  ], missed.length - shown.length)
   return { messages: [{ role: 'system', content: system }, { role: 'user', content }], session, contextMeta }
 }
