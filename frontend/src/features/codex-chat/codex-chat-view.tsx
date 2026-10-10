@@ -52,6 +52,7 @@ import {
   type ChatBlocksState,
   type ChatDisplayBlock,
   type CodexChatThread,
+  type ChatOrderKind,
   type CodexChatThreadDetail,
   type LoreMergePreview,
   type OwnedChatLorebook,
@@ -91,7 +92,7 @@ import { CHAT_COMMANDS, ChatCommandList, type ChatCommand } from './chat-command
 import { ChatExportDialog, ChatSearchInput, ChatSearchResults } from './chat-search-export'
 import { GROUP_MEMBER_MAX, GroupAvatarStack, GroupInviteDialog, GroupMembersPopover, GroupTurnStatus, MentionList, mentionOptions, type GroupInviteMode, type MentionOption } from './chat-group'
 import { mentionQueryAt } from './chat-mentions'
-import { parseMentions, type StoredFileEntry } from '@conai/shared'
+import { parseMentions, type ChatReplyQuote, type StoredFileEntry } from '@conai/shared'
 import { ChatReplyPreview } from './chat-reply'
 import { ChatDeleteDialog } from './chat-delete-dialog'
 import { LorebookMergeDialog } from './lorebook-merge-dialog'
@@ -450,13 +451,27 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const chooseAlternative = alternativeMutation.mutate
   const handleAlternative = useCallback((id: number, index: number) => { if (!isBusy) chooseAlternative({ id, index }) }, [chooseAlternative, isBusy])
   const setDraftReply = chat.setDraftReply
-  const handleReply = useCallback((message: CodexChatMessage) => {
+  const quoteOf = useCallback((message: CodexChatMessage): ChatReplyQuote => {
     const name = message.role === 'user' ? userSpeaker?.name ?? t({ ko: '사용자', en: 'User' }) : (message.speaker_profile_id ? profilesById.get(message.speaker_profile_id)?.name : profile?.name) ?? t({ ko: '나간 참가자', en: 'Former member' })
     const hash = message.tool_calls.flatMap((call) => call.compositeHashes)[0]
     const media = message.mediaAttachments?.[0] ?? (hash ? { compositeHash: hash, name: t({ ko: '이미지', en: 'Image' }), mimeType: null } : undefined)
-    setDraftReply({ threadId: message.thread_id, quote: { messageId: message.id, role: message.role, speakerProfileId: message.speaker_profile_id ?? (message.role === 'assistant' ? profile?.id ?? null : null), speakerName: name, excerpt: message.content.trim().slice(0, 400) || message.attachments?.map((file) => file.name).join(', ') || t({ ko: '이미지·도구 결과', en: 'Image / tool result' }), alternative: message.active_alternative, media } })
+    return { messageId: message.id, role: message.role, speakerProfileId: message.speaker_profile_id ?? (message.role === 'assistant' ? profile?.id ?? null : null), speakerName: name, excerpt: message.content.trim().slice(0, 400) || message.attachments?.map((file) => file.name).join(', ') || t({ ko: '이미지·도구 결과', en: 'Image / tool result' }), alternative: message.active_alternative, media }
+  }, [userSpeaker, profilesById, profile, t])
+  const handleReply = useCallback((message: CodexChatMessage) => {
+    setDraftReply({ threadId: message.thread_id, quote: quoteOf(message) })
     composerRef.current?.focus()
-  }, [setDraftReply, userSpeaker, profilesById, profile, t])
+  }, [setDraftReply, quoteOf])
+  // Orders a character's reply offers: what its speaker can do; drawing again needs a picture in the reply.
+  const ordersFor = useCallback((message: CodexChatMessage): ChatOrderKind[] => {
+    if (message.role !== 'assistant' || message.status !== 'completed') return []
+    const speaker = isGroup ? (message.speaker_profile_id != null ? profilesById.get(message.speaker_profile_id) : undefined) : profile
+    const drawn = message.tool_calls.some((call) => call.compositeHashes.length > 0 || call.historyIds.length > 0) || Boolean(message.mediaAttachments?.length)
+    return (speaker?.orders ?? []).filter((kind) => (kind !== 'choices' || !isGroup) && (kind !== 'redraw' || drawn))
+  }, [isGroup, profilesById, profile])
+  const sendOrder = chat.order
+  const handleOrder = useCallback((message: CodexChatMessage, kind: ChatOrderKind) => {
+    if (!isBusy) void sendOrder(message.thread_id, kind, quoteOf(message))
+  }, [isBusy, sendOrder, quoteOf])
   const lastMessage = messages[messages.length - 1]
   // Group rooms: only API LLM members' replies can be regenerated.
   const lastReplyByCodex = isGroup && lastMessage?.speaker_profile_id != null && profilesById.get(lastMessage.speaker_profile_id)?.engine === 'codex'
@@ -522,7 +537,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const messageActions = useMemo(() => ({
     busy: isBusy, canRewrite: !isCodexThread, lastReplyId, editingId: editingMessageId, onEditingChange: setEditingMessageId, onEdit: handleEdit, onRegenerate: handleRegenerate, onAlternative: handleAlternative, onReply: handleReply,
     canEditReply, onEditReply: handleEditReply, canContinue: directLlm, onContinue: handleContinue, canBranch: true, onBranch: (id: number) => { void handleBranch(id) },
-  }), [isBusy, isCodexThread, lastReplyId, editingMessageId, handleEdit, handleRegenerate, handleAlternative, handleReply, canEditReply, directLlm, handleEditReply, handleContinue, handleBranch])
+    ordersFor, onOrder: handleOrder,
+  }), [isBusy, isCodexThread, lastReplyId, editingMessageId, handleEdit, handleRegenerate, handleAlternative, handleReply, canEditReply, directLlm, handleEditReply, handleContinue, handleBranch, ordersFor, handleOrder])
 
   // Display block state: the panel's data and the chips in replies. A room lists every member's blocks, keyed
   // `<profileId>:<key>` so two members' `status` blocks stay apart; chips keep the plain key (a message has one speaker).

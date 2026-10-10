@@ -61,6 +61,7 @@ import { MEDIA_HASH_PATTERN, rewriteMediaLinks } from '../services/codex-chat/ch
 import { GroupChatService } from '../services/codex-chat/groupChatService'
 import { ChatReplyError } from '../services/codex-chat/chatReplies'
 import { ChatFlagError, ChatFlagStore, parseFlagIds } from '../services/codex-chat/chatFlags'
+import { chatOrdersOf } from '../services/codex-chat/chatOrders'
 import { ChatUserProfileError, ChatUserProfileStore, type ChatUserProfile } from '../services/codex-chat/chatUserProfiles'
 import { ChatAppearanceError, ChatAppearanceStore } from '../services/codex-chat/chatAppearance'
 import { validateBlockData } from '../services/codex-chat/chatBlockState'
@@ -210,6 +211,8 @@ router.get('/profiles', requireChatAccess, (req: Request, res: Response) => {
       ...toPublicProfile(profile, accountId),
       usable: profile.isEnabled && canUseChatProfile(access, profile),
       canReadFileText: profile.mcpEnabled && profile.mcpScopes.includes('read') && access.scopes.includes('read') && (!profile.toolAllowlist || profile.toolAllowlist.includes('read_file_text')),
+      // What a reply's bar can order this character to do (`choices` only in a direct chat).
+      orders: chatOrdersOf(profile, access, 'direct'),
     })),
   })
 })
@@ -1892,8 +1895,8 @@ router.post('/threads/:threadId/messages', requireChatAccess, asyncHandler(async
     return
   }
   await streamChatReply(req, res, (write) => isGroupThread(req, threadId)
-    ? GroupChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.mediaHashes, req.body?.picks, req.body?.replyToMessageId)
-    : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.picks, req.body?.mediaHashes, req.body?.replyToMessageId, req.body?.pageContext, { choice: req.body?.choice }))
+    ? GroupChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.mediaHashes, req.body?.picks, req.body?.replyToMessageId, { order: req.body?.order })
+    : CodexChatService.sendMessage(requesterFrom(req), threadId, text, write, req.body?.fileIds, req.body?.flagIds, req.body?.picks, req.body?.mediaHashes, req.body?.replyToMessageId, req.body?.pageContext, { choice: req.body?.choice, order: req.body?.order }))
 }))
 
 // ---- Chat user profiles: who the account is in a chat (name, persona, avatar), one per chat ----------------------

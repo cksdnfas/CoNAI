@@ -43,6 +43,7 @@ import { rejectedLoreLine } from './chatLoreProposals'
 import { LlmChatService, type GroupReplyResult } from './llmChatService'
 import { ChatGroupStore } from './chatGroupStore'
 import { buildFlagDirective, ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
+import { resolveChatOrder } from './chatOrders'
 import { readChoiceAnswer } from './chatChoices'
 import { ChatUserProfileStore, userPersonaForThread, userPersonaOf, userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
@@ -1209,6 +1210,8 @@ export const CodexChatService = {
       rememberChatPage(requester, page, threadId)
       if (!options.task && !options.routine) notifyChatUserSend(threadId, Boolean(page))
       const routing = { ...userReplyRouting(thread, replyToMessageId), ...(options.task ? { task: options.task } : {}), ...(options.routine ? { routine: options.routine } : {}) }
+      const order = resolveChatOrder(requester.accountId, options.order, routing.replyTo, { kind: 'direct', profileId: thread.profile_id })
+      if (order) flags.push(order)
       const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
       // The model reads the message in English; the reader keeps their own words. Translated while the session starts.
       const translating = translateUserInput(profile, trimmed)
@@ -1241,7 +1244,7 @@ export const CodexChatService = {
       const modelText = await translating
       if (session.activeTurns.has(codexThreadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
       const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: modelText ?? trimmed, display_content: modelText ? trimmed : null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
-      ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
+      ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick && !flag.order).map((flag) => flag.id))
       turn.userMessageId = userMessageId
       if (hasTranslation(profile)) turn.translate = (content) => translateReply(profile, content, turn.controller?.signal, userPersonaForThread(thread).name)
       session.activeTurns.set(codexThreadId, turn)

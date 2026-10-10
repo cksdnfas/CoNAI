@@ -9,6 +9,7 @@ import { retryLlmRequest } from '../llmRequestRetry'
 import { profileGenerationOptions } from './chatProfiles'
 import { inlineTextsForChat, loadAttachedImages, validateChatAttachments } from './chatAttachments'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
+import { resolveChatOrder } from './chatOrders'
 import { readChoiceAnswer } from './chatChoices'
 import { profileContentLimit } from './chatContentRating'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
@@ -727,6 +728,8 @@ export const LlmChatService = {
       throw new LlmChatError('메시지를 입력해줘.')
     }
     const routing = { ...userReplyRouting(thread, replyToMessageId), ...(options.task ? { task: options.task } : {}), ...(options.routine ? { routine: options.routine } : {}) }
+    const order = resolveChatOrder(requester.accountId, options.order, routing.replyTo, { kind: 'direct', profileId: thread.profile_id })
+    if (order) flags.push(order)
     LlmChatService.skipReaction(thread.id)
     cancelJudgeFollowUp(thread.id)
     if (activeTurns.has(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
@@ -743,7 +746,7 @@ export const LlmChatService = {
         // A turn that stops before it waits for the translation must not leave its failure unhandled.
         turn.translation.catch(() => undefined)
       }
-      ChatFlagStore.setThreadFlags(thread.id, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
+      ChatFlagStore.setThreadFlags(thread.id, flags.filter((flag) => !flag.pick && !flag.order).map((flag) => flag.id))
       if (!thread.title) CodexChatStore.renameThread(thread.id, (trimmed || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' '))
       return { type: 'user', message: CodexChatStore.listMessages(thread.id).find((entry) => entry.id === userMessageId) as CodexChatMessageRecord }
     }, undefined, undefined, page)

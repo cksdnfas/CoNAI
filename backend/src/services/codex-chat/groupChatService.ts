@@ -6,6 +6,7 @@ import { registerChatReply, skipThreadGenerationReactions } from './chatReplyReg
 import type { McpRequester } from '../../mcp/context'
 import { inlineTextsForChat, loadAttachedImages, validateChatAttachments } from './chatAttachments'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
+import { resolveChatOrder } from './chatOrders'
 import { foldGroupBlockState, parseBlockEdits } from './chatBlockState'
 import { GROUP_LIMITS, GROUP_MEMBER_MAX, ChatGroupStore, groupLimitsOf } from './chatGroupStore'
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
@@ -538,7 +539,7 @@ export const GroupChatService = {
    * An automation's wake (`options.routine`) never cuts in: it fails while the room is talking, and may lower the
    * room's chain limit for its own run.
    */
-  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, mediaHashes?: unknown, picks?: unknown, replyToMessageId?: unknown, options: { routine?: ChatRoutineRouting; chainLimit?: number | null } = {}) {
+  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, mediaHashes?: unknown, picks?: unknown, replyToMessageId?: unknown, options: { routine?: ChatRoutineRouting; chainLimit?: number | null; order?: unknown } = {}) {
     const thread = requireGroup(requester, threadId)
     assertGroupChatAvailable(requester)
     const attachments = validateChatAttachments(requester, fileIds)
@@ -548,6 +549,8 @@ export const GroupChatService = {
     if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) throw new CodexChatError('메시지를 입력해줘.')
     if (options.routine && GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     const routing: ChatMessageRouting = { ...userReplyRouting(thread, replyToMessageId), ...(options.routine ? { routine: options.routine } : {}) }
+    const order = resolveChatOrder(requester.accountId, options.order, routing.replyTo, { kind: 'group', profileId: null })
+    if (order) flags.push(order)
     routing.recipients = userRecipients(requester, thread, trimmed, routing)
     const judgeRoutes = unaddressed(thread, trimmed, routing)
     LlmChatService.skipReaction(threadId)
@@ -560,7 +563,7 @@ export const GroupChatService = {
       if (typeof options.chainLimit === 'number' && options.chainLimit >= 0) run.chainLimit = Math.min(run.chainLimit, Math.floor(options.chainLimit))
       if (routing.replyTo) requireReplyTarget(threadId, routing.replyTo.messageId)
       const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: modelText ?? trimmed, display_content: modelText ? trimmed : null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
-      ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
+      ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick && !flag.order).map((flag) => flag.id))
       if (judgeRoutes) await routeByJudge(run, requester, userMessageId, routing)
       emit(run, { type: 'user', message: findMessage(threadId, userMessageId) })
       run.queue = (routing.recipients as number[]).map((profileId) => ({ profileId, sourceMessageId: userMessageId }))

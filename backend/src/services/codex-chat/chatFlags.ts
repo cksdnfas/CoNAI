@@ -1,6 +1,7 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { McpRequester } from '../../mcp/context'
 import { AuthAccount } from '../../models/AuthAccount'
+import type { ChatOrderKind } from './chatOrders'
 
 /**
  * Chat flags: instructions an account writes once ("draw the scene with NovelAI", "answer briefly") and switches on
@@ -34,9 +35,10 @@ export type ChatFlagViewer = Pick<McpRequester, 'accountId' | 'accountType'>
 /**
  * What a message keeps of a flag, so editing or deleting the flag later does not change past messages. `pick`: not a
  * flag but an item the user chose in the status panel (`data-pick` in a block template), sent with this message.
- * `choice`: a pick that answers the chat's question card (offer_choices) of that id.
+ * `choice`: a pick that answers the chat's question card (offer_choices) of that id. `order`: not a flag but an
+ * order given from a reply's bar (see chatOrders), read like a flag.
  */
-export type ChatFlagSnapshot = Pick<ChatFlag, 'id' | 'icon' | 'name' | 'content'> & { pick?: true; choice?: { id: number; question: string } }
+export type ChatFlagSnapshot = Pick<ChatFlag, 'id' | 'icon' | 'name' | 'content'> & { pick?: true; choice?: { id: number; question: string }; order?: ChatOrderKind }
 
 export const CHAT_PICK_LIMITS = { perMessage: 12, length: 120 }
 const PICK_ICON = 'lucide:target'
