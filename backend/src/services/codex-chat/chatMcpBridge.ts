@@ -3,6 +3,7 @@ import type { ChatExecutionContext } from '@conai/shared'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import type { McpRequester } from '../../mcp/context'
 import { createMcpServer } from '../../mcp/server'
+import { CATALOG_RUN_TOOL, catalogToolNames } from '../../mcp/toolCatalog'
 import type { ChatScope } from './chatSettings'
 import type { ChatCompletionTool } from './llmChatCompletion'
 
@@ -31,11 +32,17 @@ export async function openChatMcpBridge(requester: McpRequester, scopes: ChatSco
     function: { name: tool.name, description: tool.description, parameters: tool.inputSchema },
   }))
   const toolNames = new Set(tools.map((tool) => tool.name))
+  // The tools behind the catalog (open_tools / run_tool); a model calling one by name directly is routed through it.
+  const catalogTools = new Set(catalogToolNames(server))
 
   return {
     tools: chatTools,
+    catalogTools,
     async call(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ChatMcpToolResult> {
       signal?.throwIfAborted()
+      if (catalogTools.has(name) && toolNames.has(CATALOG_RUN_TOOL)) {
+        return await client.callTool({ name: CATALOG_RUN_TOOL, arguments: { tool: name, arguments: args } }, undefined, { signal, timeout: 30 * 60_000 }) as ChatMcpToolResult
+      }
       if (!toolNames.has(name)) {
         return { isError: true, content: [{ type: 'text', text: `Unknown or not permitted tool: ${name}` }] }
       }

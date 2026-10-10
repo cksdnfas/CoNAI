@@ -5,6 +5,7 @@ import { validateMcpRequestBody } from './requestSecurity';
 import type { McpResponseLocals } from './httpAccess';
 import { appendMcpAuditRecord } from '../services/mcpAuditService';
 import { McpArtifactService } from '../services/mcpArtifactService';
+import { unwrapCatalogCall } from './toolCatalog';
 
 const router = Router();
 
@@ -13,7 +14,7 @@ router.use('/mcp', (req: Request, res: Response, next) => {
   const auth = (res.locals as McpResponseLocals).mcpAuth;
   const rpcMethod = typeof req.body?.method === 'string' ? req.body.method : null;
   const toolName = rpcMethod === 'tools/call' && typeof req.body?.params?.name === 'string'
-    ? req.body.params.name
+    ? unwrapCatalogCall(req.body.params.name, req.body.params.arguments).tool
     : null;
   res.on('finish', () => appendMcpAuditRecord({
     timestamp: new Date().toISOString(),

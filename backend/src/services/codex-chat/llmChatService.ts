@@ -12,6 +12,7 @@ import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { readChoiceAnswer } from './chatChoices'
 import { profileContentLimit } from './chatContentRating'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
+import { CATALOG_OPEN_TOOL, unwrapCatalogCall } from '../../mcp/toolCatalog'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { ChatProfileStore, isVisionTool, type ChatProfile } from './chatProfiles'
 import { translateReply, translateUserInput } from './chatTranslation'
@@ -169,6 +170,11 @@ function parseArguments(raw: string): Record<string, unknown> {
   return parsed as Record<string, unknown>
 }
 
+/** The tool a call runs: a catalog `run_tool` call counts as the tool it names. */
+function calledTool(name: string, rawArguments: string) {
+  try { return unwrapCatalogCall(name, parseArguments(rawArguments)).tool } catch { return name }
+}
+
 /** Image parts of an MCP result (e.g. view_images), as data URLs. */
 function readToolImages(result: { content?: unknown[] }) {
   return (result.content ?? []).flatMap((part) => {
@@ -196,6 +202,11 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
   let output: string
   try {
     record.arguments = parseArguments(call.function.arguments)
+    // A run_tool call is recorded as the catalogued tool it runs; the bridge routes that name through the catalog.
+    const target = unwrapCatalogCall(record.tool, record.arguments)
+    record.tool = target.tool
+    record.arguments = target.arguments
+    record.generated = isCodexChatCreationTool(record.tool)
     emit(turn, { type: 'tool', call: { ...record } })
     const result = await bridge.call(record.tool, record.arguments as Record<string, unknown>, turn.controller.signal)
     nativeResult = result
@@ -228,8 +239,10 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
 
   // A later request must read its own fresh snapshot, not replay private state from an old page.
   const pageRead = ['get_current_page', 'get_workflow_editor', 'list_workflow_modules', 'read_page_data'].includes(record.tool) && record.status === 'completed'
-  record.summary = pageRead ? '현재 요청에 연결한 페이지를 읽었어.' : record.pageOperation ? record.pageOperation.label : output ? truncateToolSummary(output) : null
-  record.output = pageRead ? '(Page/editor snapshot omitted; use the screen in the current request, or the page tools for what it does not show.)' : record.pageOperation ? `(Page operation done: ${record.pageOperation.label}. Screen snapshot omitted; use the screen in the current request.)` : output.slice(0, STORED_TOOL_OUTPUT_LENGTH)
+  // Opened tool schemas are for this reply; a later one opens them again rather than carrying them in every request.
+  const catalogRead = record.tool === CATALOG_OPEN_TOOL && record.status === 'completed'
+  record.summary = pageRead ? '현재 요청에 연결한 페이지를 읽었어.' : catalogRead ? '도구 설명을 열람했어.' : record.pageOperation ? record.pageOperation.label : output ? truncateToolSummary(output) : null
+  record.output = pageRead ? '(Page/editor snapshot omitted; use the screen in the current request, or the page tools for what it does not show.)' : catalogRead ? '(Tool schemas omitted; open them again with open_tools when needed.)' : record.pageOperation ? `(Page operation done: ${record.pageOperation.label}. Screen snapshot omitted; use the screen in the current request.)` : output.slice(0, STORED_TOOL_OUTPUT_LENGTH)
   emit(turn, { type: 'tool', call: { ...record } })
   const text = (output.length > outputLimit ? cutToolOutput(output, outputLimit) : output) || '(no output)'
   return { text, nativeResult: nativeResult ? { ...nativeResult, content: [{ type: 'text', text }, ...(nativeResult.content ?? []).filter((part) => (part as { type?: unknown })?.type === 'image')] } : { isError: true, content: [{ type: 'text', text }] } }
@@ -357,9 +370,11 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
   try {
     // Image viewing is only offered to models the profile says can see images.
     const visible = (bridge?.tools ?? []).filter((tool) => profile.visionEnabled || !isVisionTool(tool.function.name))
+    // The tools behind the catalog (open_tools / run_tool) are steered and refused by their own names too.
+    const catalogued = [...(bridge?.catalogTools ?? [])].filter((name) => profile.visionEnabled || !isVisionTool(name))
     // The judge reads the user's own words, so it runs while their message is translated for the model.
     const judging = !turn.reaction && !turn.order && turn.continuing === undefined
-      ? judgeBeforeReply({ profile, threadId: turn.threadId, replyId: chatContext?.replyId ?? null, availableTools: visible.map((tool) => tool.function.name), excludeMessageId: turn.replacingMessageId, context: true, signal: turn.controller.signal })
+      ? judgeBeforeReply({ profile, threadId: turn.threadId, replyId: chatContext?.replyId ?? null, availableTools: [...visible.map((tool) => tool.function.name), ...catalogued], excludeMessageId: turn.replacingMessageId, context: true, signal: turn.controller.signal })
       : Promise.resolve(null)
     judged = (await Promise.all([judging, prepare ? prepare(visible) : turn.translation]))[0]
     // The tool list stays the profile's every turn: tool definitions open the prompt, so a list that changes with the
@@ -367,14 +382,18 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     // withholds this turn are named in the directive and refused if called, unless the user's flags are on: those
     // come first, so a flag asking for a withheld tool still gets it.
     const allowed = judged ? judged.filterTools(visible) : visible
-    const withheld = visible.filter((tool) => !allowed.includes(tool)).map((tool) => tool.function.name)
+    const withheld = [
+      ...visible.filter((tool) => !allowed.includes(tool)).map((tool) => tool.function.name),
+      ...catalogued.filter((name) => judged !== null && judged.filterTools([{ type: 'function', function: { name, parameters: {} } }]).length === 0),
+    ]
     const blocked = new Set(judged?.userInstructed ? [] : withheld)
     const offeredTools = visible
     turn.offeredTools = offeredTools
     const built = await buildMessages(offeredTools, judged?.context ?? null)
     const directive = judgeDirectiveText(judged, withheld)
     const messages = directive ? appendUserDirective(built, directive, 'judge') : built
-    const permitted = (name: string) => offeredTools.some((tool) => tool.function.name === name) && !blocked.has(name)
+    const offeredNames = new Set([...offeredTools.map((tool) => tool.function.name), ...catalogued])
+    const permitted = (name: string) => offeredNames.has(name) && !blocked.has(name)
     if (judged && turn.contextMeta) turn.contextMeta.judge = judged.diagnostics
     let previousRound: TextSpan | null = null
     for (let round = 1; ; round += 1) {
@@ -418,7 +437,8 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           usage: { purpose: 'chat', profileId: profile.id, threadId: turn.threadId },
           callTool: bridge ? async (name, args, id) => {
             requireProfileAccess(requester, profile)
-            if (blocked.has(name)) return { isError: true, content: [{ type: 'text', text: `${name} is not available in this reply.` }] }
+            const target = unwrapCatalogCall(name, args).tool
+            if (blocked.has(target)) return { isError: true, content: [{ type: 'text', text: `${target} is not available in this reply.` }] }
             return (await runToolCall(turn, bridge, { id, function: { name, arguments: JSON.stringify(args) } }, profile.toolOutputLimit, [])).nativeResult
           } : undefined,
           onRequestBody: (body, actualTarget) => {
@@ -468,9 +488,10 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
         if (turn.controller.signal.aborted) {
           return
         }
-        messages.push({ role: 'tool', tool_call_id: call.id, content: permitted(call.function.name)
+        const target = calledTool(call.function.name, call.function.arguments)
+        messages.push({ role: 'tool', tool_call_id: call.id, content: permitted(call.function.name) && permitted(target)
           ? (await runToolCall(turn, bridge, call, profile.toolOutputLimit, images)).text
-          : blocked.has(call.function.name) ? `${call.function.name} is not available in this reply.` : `Unknown or not permitted tool: ${call.function.name}` })
+          : blocked.has(target) ? `${target} is not available in this reply.` : `Unknown or not permitted tool: ${target}` })
       }
       // An order is done once its job went through: what the model would say about it is never shown.
       if (turn.order && [...turn.toolCalls.values()].some((call) => call.status === 'completed' && turn.order!.done(call))) return

@@ -10,6 +10,7 @@ import { spawn } from 'child_process'
 import { PORTS, isCodexReasoningEffort, type CodexReasoningEffort } from '@conai/shared'
 import type { McpRequester } from '../../mcp/context'
 import { CHAT_PAGE_KIND_TOOLS } from '../../mcp/context'
+import { CATALOG_OPEN_TOOL, unwrapCatalogCall } from '../../mcp/toolCatalog'
 import { onBeforeCodexCliUpdate, isCodexCliUpdating } from '../codexCliMaintenance'
 import { resolveCodexCommand } from '../codexGenerationExecutor'
 import { getCodexModelSuggestions } from '../codexGenerationOptions'
@@ -318,15 +319,17 @@ function toToolCall(item: Record<string, unknown>): CodexChatToolCall {
   const status = item.status === 'completed' ? 'completed' : item.status === 'failed' ? 'failed' : 'running'
   const result = item.result as { content?: unknown[]; structuredContent?: unknown } | null | undefined
   const error = item.error as { message?: string } | null | undefined
-  const tool = String(item.tool ?? '')
+  // A catalog run_tool call is recorded as the tool it ran.
+  const { tool: called, arguments: calledArguments } = unwrapCatalogCall(String(item.tool ?? ''), item.arguments ?? null)
+  const tool = called
   const { texts, historyIds, compositeHashes, jobIds, pendingJobIds, audioCandidateIds, pageOperation } = readMcpToolResult(result, tool)
 
   return {
     id: String(item.id ?? ''),
-    tool: String(item.tool ?? ''),
+    tool,
     status,
-    arguments: item.arguments ?? null,
-    summary: error?.message ? truncateToolSummary(error.message) : pageOperation ? pageOperation.label : texts.length > 0 ? truncateToolSummary(texts.join('\n')) : null,
+    arguments: calledArguments ?? null,
+    summary: error?.message ? truncateToolSummary(error.message) : tool === CATALOG_OPEN_TOOL && status === 'completed' ? '도구 설명을 열람했어.' : pageOperation ? pageOperation.label : texts.length > 0 ? truncateToolSummary(texts.join('\n')) : null,
     ...(pageOperation ? { pageOperation } : {}),
     historyIds,
     compositeHashes,

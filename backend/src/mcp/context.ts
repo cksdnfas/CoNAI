@@ -63,7 +63,8 @@ export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'page_fill', 'page_a
 /**
  * Tools a connected page of one kind adds to the page tools: the sprite page works through its own engine tools, so
  * connecting it must not hide them. The audio page adds its workspace tools; reviewing or deleting a single take never has
- * a tool. The account's feature keys still apply to each call.
+ * a tool. Without the page they are offered like any app tool (through the chat's tool catalog). The account's feature
+ * keys still apply to each call.
  */
 export const CHAT_PAGE_KIND_TOOLS: Partial<Record<string, ReadonlySet<string>>> = {
   sprite: new Set(['get_video_info', 'get_sprite_job', 'extract_sprite_sheet', 'extract_sprite_sheets_batch', 'normalize_sprite_sheets', 'create_sprite_animation', 'download_sprite_frames']),
@@ -77,11 +78,6 @@ export const CHAT_PAGE_KIND_TOOLS: Partial<Record<string, ReadonlySet<string>>> 
 };
 
 /** Page tools are enabled by the user's explicit connection, independently of general profile tools. */
-/** A tool of one page kind's workspace (sprite, audio). */
-export function isPageKindTool(toolName: string) {
-  return Object.values(CHAT_PAGE_KIND_TOOLS).some((tools) => tools?.has(toolName));
-}
-
 export function isConnectedChatPageTool(context: McpRequestContext, toolName: string) {
   const page = context.chatContext?.page;
   return isChatMcpSource(context.source) && context.chatContext?.kind === 'direct' && !!page

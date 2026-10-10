@@ -32,6 +32,7 @@ test('sprite page connection: sprite tools stay listed on /sprite, hidden on oth
   })
 
   const { createMcpServer } = await import('../src/mcp/server')
+  const { catalogToolNames } = await import('../src/mcp/toolCatalog')
   const { CHAT_PAGE_KIND_TOOLS } = await import('../src/mcp/context')
   const { CHAT_SCOPES } = await import('../src/services/codex-chat/chatSettings')
   const { chatPageReference } = await import('../src/services/codex-chat/chatPageContext')
@@ -52,7 +53,7 @@ test('sprite page connection: sprite tools stay listed on /sprite, hidden on oth
   assert.equal(chatPagePermission('/sprite'), 'page.sprite.view')
   assert.throws(() => normalizeChatPageSnapshot({ ...base, path: '/prompts', title: 'Wrong', kind: 'sprite', resourceId: null }), /맞지 않아/)
 
-  const list = async (page: typeof spritePage) => {
+  const list = async (page?: typeof spritePage) => {
     const server = createMcpServer({
       scopes: [...CHAT_SCOPES] as never,
       source: 'llm-chat',
@@ -63,7 +64,7 @@ test('sprite page connection: sprite tools stay listed on /sprite, hidden on oth
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
     try {
-      return new Set((await client.listTools()).tools.map((tool) => tool.name))
+      return new Set([...(await client.listTools()).tools.map((tool) => tool.name), ...catalogToolNames(server)])
     } finally {
       await client.close()
       await server.close()
@@ -80,6 +81,7 @@ test('sprite page connection: sprite tools stay listed on /sprite, hidden on oth
   const onPrompts = await list(promptsPage)
   assert.ok(!onPrompts.has('extract_sprite_sheet'), 'another connected page hides the sprite tools')
   assert.ok(onPrompts.has('get_current_page'))
+  assert.ok((await list()).has('extract_sprite_sheet'), 'without a page the sprite tools are offered (through the catalog)')
 
   assert.match(chatPageReference(spritePage), /extract_sprite_sheet/)
   assert.doesNotMatch(chatPageReference(promptsPage), /extract_sprite_sheet/)

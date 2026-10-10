@@ -55,6 +55,7 @@ test('mcp tool classification: every registered tool has a scope and a feature p
   ;(await import('../src/database/apiGenerationDb')).initializeApiGenerationDb()
 
   const { createMcpServer } = await import('../src/mcp/server')
+  const { CATALOG_OPEN_TOOL, CATALOG_RUN_TOOL, catalogToolNames } = await import('../src/mcp/toolCatalog')
   // Take the prototype from a real instance: the test's own import of the SDK can resolve to a different build
   // (ESM vs CJS) than the one server.ts loads, and only server.ts's class matters.
   const probe = createMcpServer({ scopes: [] })
@@ -115,7 +116,10 @@ test('mcp tool classification: every registered tool has a scope and a feature p
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
     try {
-      const listed = new Set((await client.listTools()).tools.map((tool) => tool.name))
+      // A chat context offers most tools through its catalog; open_tools / run_tool themselves are not app tools.
+      const listed = new Set([...(await client.listTools()).tools.map((tool) => tool.name), ...catalogToolNames(server)])
+      listed.delete(CATALOG_OPEN_TOOL)
+      listed.delete(CATALOG_RUN_TOOL)
       for (const name of listed) assert.ok(attempted.has(name), `recorder missed listed tool ${name}`)
       return { attempted, listed }
     } finally {

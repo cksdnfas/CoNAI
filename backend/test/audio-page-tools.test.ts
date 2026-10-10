@@ -32,6 +32,7 @@ test('audio page: connected /audio offers the audio tools, other pages do not', 
   })
 
   const { createMcpServer } = await import('../src/mcp/server')
+  const { catalogToolNames } = await import('../src/mcp/toolCatalog')
   const { CHAT_PAGE_KIND_TOOLS, getMcpToolScope } = await import('../src/mcp/context')
   const { TOOL_FEATURE_PERMISSIONS } = await import('../src/mcp/toolAccess')
   const { CHAT_SCOPES } = await import('../src/services/codex-chat/chatSettings')
@@ -60,7 +61,7 @@ test('audio page: connected /audio offers the audio tools, other pages do not', 
   const filesPage = normalizeChatPageSnapshot({ ...base, path: '/files', kind: 'files', resourceId: 'self:root' })
   assert.throws(() => normalizeChatPageSnapshot({ ...base, path: '/files', kind: 'audio', resourceId: null }), /맞지 않아/)
 
-  const listTools = async (page: ChatPageSnapshot) => {
+  const listTools = async (page?: ChatPageSnapshot) => {
     const context: McpRequestContext = {
       scopes: [...CHAT_SCOPES] as McpRequestContext['scopes'],
       source: 'codex-chat',
@@ -72,7 +73,8 @@ test('audio page: connected /audio offers the audio tools, other pages do not', 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
     try {
-      return new Set((await client.listTools()).tools.map((tool) => tool.name))
+      // Offered = listed directly or behind the chat's tool catalog.
+      return new Set([...(await client.listTools()).tools.map((tool) => tool.name), ...catalogToolNames(server)])
     } finally {
       await client.close()
       await server.close()
@@ -89,6 +91,10 @@ test('audio page: connected /audio offers the audio tools, other pages do not', 
   const onFiles = await listTools(filesPage)
   assert.ok(!onFiles.has('order_audio') && !onFiles.has('edit_audio_candidate'), 'another page does not bring the audio tools that change things')
   assert.ok(onFiles.has('get_current_page'))
+
+  const noPage = await listTools()
+  assert.ok(noPage.has('order_audio') && noPage.has('create_audio_folder') && noPage.has('move_audio_candidates'), 'without a page the audio tools are offered too')
+  assert.ok(noPage.has('open_tools') && noPage.has('run_tool'), 'through the tool catalog')
 
   assert.match(chatPageReference(audioPage), /오디오/)
 })
