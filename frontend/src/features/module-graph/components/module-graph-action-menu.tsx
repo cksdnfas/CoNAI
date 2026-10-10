@@ -90,6 +90,7 @@ export function ModuleGraphActionMenu({
     <Popover open onOpenChange={(open) => { if (!open) onClose() }}>
       <PopoverAnchor virtualRef={anchorRef} />
       <PopoverContent
+        data-module-graph-menu=""
         side="bottom"
         align="start"
         sideOffset={2}

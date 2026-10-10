@@ -5,6 +5,7 @@ import { useOptionalConfirm } from './confirm-dialog'
 import { IconButton } from './icon-button'
 import { Tip } from './tooltip'
 import { useI18n } from '@/i18n'
+import { stopAtPortalEdge } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 import { useOverlayBackClose } from './use-overlay-back-close'
 
@@ -234,7 +235,8 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
         }}
       >
         <DialogPrimitive.Portal>
-          <div data-slot="modal" data-side-panel={sidePanelInset ? 'true' : undefined} className={cn('fixed inset-0 z-modal flex items-center justify-center bg-backdrop p-3 sm:p-4 md:p-6', sidePanelInset && 'lg:right-(--modal-side-inset)')} style={sidePanelInset ? { '--modal-side-inset': sidePanelInset } as CSSProperties : undefined} onMouseDown={requestClose}>
+          {/* Events still bubble up the React tree from here: clicks stop at this edge, and `nokey` keeps a modal opened inside a graph node from steering that node with its keys. */}
+          <div data-slot="modal" data-side-panel={sidePanelInset ? 'true' : undefined} className={cn('nokey fixed inset-0 z-modal flex items-center justify-center bg-backdrop p-3 sm:p-4 md:p-6', sidePanelInset && 'lg:right-(--modal-side-inset)')} style={sidePanelInset ? { '--modal-side-inset': sidePanelInset } as CSSProperties : undefined} onMouseDown={requestClose} onClick={stopAtPortalEdge()} onDoubleClick={stopAtPortalEdge()} onContextMenu={stopAtPortalEdge()}>
             <DialogPrimitive.Content
               ref={contentRef}
               aria-modal={!sidePanelInset}

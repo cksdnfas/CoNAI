@@ -7,6 +7,7 @@ import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/
 import { ImageEditAction } from '@/features/images/components/detail/image-edit-action'
 import { ChatDockReferenceButton } from '@/features/codex-chat/chat-reference'
 import { useI18n } from '@/i18n'
+import { isFromOwnDom } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import type { ImageListActivateModifiers } from './image-list-types'
@@ -149,7 +150,8 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   const soundBar = mediaKind !== 'audio' && image.audio?.length ? <HistorySoundBar sounds={image.audio} floating /> : null
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!interactive) {
+    // Keys typed in a modal a quick action opened bubble here through React; they belong to that modal.
+    if (!interactive || !isFromOwnDom(event)) {
       return
     }
 

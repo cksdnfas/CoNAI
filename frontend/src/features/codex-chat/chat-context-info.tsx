@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ChevronRight, FolderDown, LockKeyhole, ScanText } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -143,6 +143,7 @@ export function ChatContextInfo({ meta, previous, threadId, messageId, alternati
   const auth = useAuthStatusQuery()
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState('composition')
+  const anchorRef = useRef<HTMLSpanElement | null>(null)
   const changeOpen = (value: boolean) => { setOpen(value); if (!value) setTab('composition') }
   const version2 = meta.version === 2 && meta.scope !== 'none'
   const scope = version2 ? meta.scope ?? 'view' : 'none'
@@ -205,11 +206,13 @@ export function ChatContextInfo({ meta, previous, threadId, messageId, alternati
   return (
     <Popover open={open} onOpenChange={changeOpen}>
       <PopoverAnchor asChild>
-        <span className="inline-flex">
+        <span ref={anchorRef} className="inline-flex">
           <IconButton size="icon-xs" variant="ghost" aria-expanded={open} label={t({ ko: '이 답변에 들어간 문맥', en: 'What this reply was given' })} onClick={() => changeOpen(!open)}><ScanText /></IconButton>
         </span>
       </PopoverAnchor>
-      <PopoverContent align="start" side="top" className={version2 ? 'w-[420px] max-w-[calc(100vw-32px)] p-3' : 'w-72 p-3'}>
+      <PopoverContent align="start" side="top" className={version2 ? 'w-[420px] max-w-[calc(100vw-32px)] p-3' : 'w-72 p-3'}
+        // The icon is an anchor, not a trigger: left to Radix, a press on it closes the popup and the click reopens it.
+        onInteractOutside={(event) => { if (event.target instanceof Node && anchorRef.current?.contains(event.target)) event.preventDefault() }}>
         {version2 ? <>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
             <SegmentedControl size="xs" semantics="tabs" value={selectedTab} onChange={setTab} ariaLabel={t({ ko: '답변 진단', en: 'Answer diagnostics' })}

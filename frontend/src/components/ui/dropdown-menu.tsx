@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { DropdownMenu as DropdownMenuPrimitive } from 'radix-ui'
 import { Check, ChevronRight, Circle } from 'lucide-react'
+import { stopAtPortalEdge } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 
 const menuSurfaceClassName = cn(
@@ -35,13 +36,14 @@ function DropdownMenuRadioGroup(props: React.ComponentProps<typeof DropdownMenuP
 }
 
 /** Render the menu panel in a body portal, above modals. */
-function DropdownMenuContent({ className, sideOffset = 4, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+function DropdownMenuContent({ className, sideOffset = 4, onClick, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
         className={cn(menuSurfaceClassName, 'max-h-(--radix-dropdown-menu-content-available-height) origin-(--radix-dropdown-menu-content-transform-origin)', className)}
+        onClick={stopAtPortalEdge(onClick)}
         {...props}
       />
     </DropdownMenuPrimitive.Portal>
@@ -129,12 +131,13 @@ function DropdownMenuSubTrigger({ className, inset, children, ...props }: React.
   )
 }
 
-function DropdownMenuSubContent({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) {
+function DropdownMenuSubContent({ className, onClick, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) {
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.SubContent
         data-slot="dropdown-menu-sub-content"
         className={cn(menuSurfaceClassName, 'origin-(--radix-dropdown-menu-content-transform-origin)', className)}
+        onClick={stopAtPortalEdge(onClick)}
         {...props}
       />
     </DropdownMenuPrimitive.Portal>

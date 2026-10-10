@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { AlertDialog as AlertDialogPrimitive } from 'radix-ui'
 import { Button } from './button'
 import { useI18n } from '@/i18n'
+import { stopAtPortalEdge } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 
 export type ConfirmTone = 'default' | 'destructive'
@@ -44,12 +45,14 @@ function ConfirmDialog({ open, title, description, confirmLabel, cancelLabel, to
         <AlertDialogPrimitive.Overlay
           data-slot="confirm-dialog-overlay"
           className="fixed inset-0 z-modal bg-backdrop data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:animate-none"
+          onClick={stopAtPortalEdge()}
         />
         <AlertDialogPrimitive.Content
           data-slot="confirm-dialog"
           data-tone={tone}
           {...(description ? {} : { 'aria-describedby': undefined })}
           className="fixed top-1/2 left-1/2 z-modal w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-5 rounded-lg bg-surface-container p-5 text-foreground shadow-elevation-3 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 motion-reduce:animate-none sm:p-6"
+          onClick={stopAtPortalEdge()}
           onOpenAutoFocus={(event) => {
             // Radix focuses Cancel by default, which is right for destructive prompts; plain confirmations focus the action.
             if (tone !== 'destructive' && actionRef.current) {

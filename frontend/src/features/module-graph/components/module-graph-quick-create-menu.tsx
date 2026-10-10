@@ -168,6 +168,7 @@ export function ModuleGraphQuickCreateMenu({
     <Popover open onOpenChange={(open) => { if (!open) onClose() }}>
       <PopoverAnchor virtualRef={anchorRef} />
       <PopoverContent
+        data-module-graph-menu=""
         side="bottom"
         align={align}
         sideOffset={0}

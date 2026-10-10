@@ -545,7 +545,14 @@ export function ModuleGraphCanvas({
         return
       }
 
-      isCanvasActiveRef.current = canvasRoot.contains(event.target as Node)
+      const target = event.target as Node
+      // The canvas's own action and quick-create menus sit in body portals; picking from them keeps the shortcuts live.
+      if (target instanceof Element && target.closest('[data-module-graph-menu]')) {
+        isCanvasActiveRef.current = true
+        return
+      }
+
+      isCanvasActiveRef.current = canvasRoot.contains(target)
       if (isCanvasActiveRef.current) {
         rememberInteractionPoint(event)
       }

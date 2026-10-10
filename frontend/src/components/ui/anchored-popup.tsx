@@ -1,5 +1,6 @@
 import { type ComponentPropsWithoutRef, type ReactNode, type RefObject, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { stopAtPortalEdge } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 import { useOverlayBackClose } from './use-overlay-back-close'
 
@@ -47,6 +48,8 @@ export function AnchoredPopup({
   children,
 }: AnchoredPopupProps) {
   const panelRef = useRef<HTMLDivElement | null>(null)
+  // The last press that went through this popup's React tree, which also covers menus and dialogs it opened in their own portals.
+  const pressInsideRef = useRef<Event | null>(null)
   const [position, setPosition] = useState<AnchoredPopupPosition | null>(null)
 
   useOverlayBackClose({ open, onClose: onClose ?? (() => undefined), enabled: closeOnBack && Boolean(onClose) })
@@ -102,7 +105,7 @@ export function AnchoredPopup({
       if (anchorRef.current?.contains(target)) {
         return
       }
-      if (panelRef.current?.contains(target)) {
+      if (panelRef.current?.contains(target) || pressInsideRef.current === event) {
         return
       }
       onClose?.()
@@ -146,6 +149,11 @@ export function AnchoredPopup({
         visibility: position ? 'visible' : 'hidden',
       }}
       {...surfaceProps}
+      onPointerDownCapture={(event) => {
+        pressInsideRef.current = event.nativeEvent
+        surfaceProps?.onPointerDownCapture?.(event)
+      }}
+      onClick={stopAtPortalEdge(surfaceProps?.onClick)}
     >
       {children}
     </div>,

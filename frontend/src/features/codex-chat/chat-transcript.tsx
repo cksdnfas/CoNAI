@@ -5,6 +5,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import { CHAT_ORDERS, type ChatContextMeta, type ChatOrderKind, type ChatSummarySegment, type CodexChatMediaInfo, type CodexChatMessage } from '@/lib/api-codex-chat'
+import { isFromOwnDom } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 import type { ChatAppearance } from './chat-appearance'
 import { ChatFileLinks } from './chat-attachments'
@@ -104,6 +105,8 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousCon
   const recipientLabel = routing?.recipients.map((id) => typeof id === 'number' ? (speakerOf?.(id)?.name ?? look.speaker?.name ?? '') : id === 'user' ? userSpeaker?.name ?? t({ ko: '사용자', en: 'User' }) : t({ ko: '방 전체', en: 'Room' })).filter(Boolean).join(', ')
   const showBar = last || barOpen || moreOpen
   const toggleBar = (event: MouseEvent<HTMLDivElement>) => {
+    // A popup the bar opened lives in a body portal; its clicks still bubble here through React and must not fold it away.
+    if (!isFromOwnDom(event)) return
     if (last || actions.editingId === message.id || (event.target as HTMLElement).closest(MESSAGE_CONTROLS)) return
     // Display blocks live in a shadow root; their pick / set targets only show up in the composed path.
     if (event.nativeEvent.composedPath().some((node) => node instanceof HTMLElement && (node.dataset.pick !== undefined || node.dataset.set !== undefined))) return

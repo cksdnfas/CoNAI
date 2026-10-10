@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { Popover as PopoverPrimitive } from 'radix-ui'
+import { stopAtPortalEdge } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 
 function Popover(props: React.ComponentProps<typeof PopoverPrimitive.Root>) {
@@ -19,7 +20,7 @@ function PopoverClose(props: React.ComponentProps<typeof PopoverPrimitive.Close>
 }
 
 /** Render a floating panel in a body portal (above modals) on a raised tonal surface. */
-function PopoverContent({ className, align = 'center', sideOffset = 6, ...props }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+function PopoverContent({ className, align = 'center', sideOffset = 6, onClick, ...props }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
@@ -32,6 +33,7 @@ function PopoverContent({ className, align = 'center', sideOffset = 6, ...props 
           'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 motion-reduce:animate-none',
           className,
         )}
+        onClick={stopAtPortalEdge(onClick)}
         {...props}
       />
     </PopoverPrimitive.Portal>

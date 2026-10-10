@@ -129,8 +129,8 @@ export function ChatFlagTray({ flags, activeIds, open, flagStyle, buttonRef, onT
     const handlePointer = (event: PointerEvent) => {
       const target = event.target as Node
       if (trayRef.current?.contains(target) || buttonRef.current?.contains(target)) return
-      // Tooltips and the manage dialog live in portals; a click there must not count as outside.
-      if ((target as Element).closest?.('[data-radix-popper-content-wrapper], [role="dialog"]')) return
+      // Tooltips, the manage dialog and its confirms live in portals; a click there must not count as outside.
+      if ((target as Element).closest?.('[data-radix-popper-content-wrapper], [role="dialog"], [role="alertdialog"]')) return
       onClose()
     }
     const handleKey = (event: KeyboardEvent) => {

@@ -1,6 +1,7 @@
 import { useEffect, type ComponentProps, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
+import { stopAtPortalEdge } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 import { useOverlayBackClose } from './use-overlay-back-close'
 import { Button } from './button'
@@ -88,13 +89,14 @@ export function BottomDrawerSheet({
     <>
       <div
         className={open ? 'fixed inset-0 z-drawer bg-backdrop/70 transition-opacity duration-200' : 'pointer-events-none fixed inset-0 z-drawer bg-transparent transition-opacity duration-200'}
-        onClick={onClose}
+        onClick={stopAtPortalEdge(onClose)}
       />
 
       <aside
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
+        onClick={stopAtPortalEdge()}
         data-surface={useControllerSurface ? undefined : 'raised'}
         className={cn(
           open

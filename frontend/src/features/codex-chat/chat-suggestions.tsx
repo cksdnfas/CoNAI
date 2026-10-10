@@ -128,7 +128,7 @@ export function ChatSuggestTray({ suggestions, buttonRef, onPick }: {
     const handlePointer = (event: PointerEvent) => {
       const target = event.target as Node
       if (trayRef.current?.contains(target) || buttonRef.current?.contains(target)) return
-      if ((target as Element).closest?.('[data-radix-popper-content-wrapper], [role="dialog"]')) return
+      if ((target as Element).closest?.('[data-radix-popper-content-wrapper], [role="dialog"], [role="alertdialog"]')) return
       close()
     }
     const handleKey = (event: KeyboardEvent) => {
