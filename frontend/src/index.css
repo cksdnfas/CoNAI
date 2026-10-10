@@ -664,9 +664,11 @@
     scrollbar-gutter: stable both-edges;
   }
 
+  /* Sized by the overlay (which stops at a docked chat), and the layout below follows this width, not the viewport's. */
   .image-detail-modal-shell {
+    container-type: inline-size;
     height: 100dvh;
-    width: 100vw;
+    width: 100%;
     overflow: hidden;
     background: var(--background);
   }
@@ -791,7 +793,7 @@
     background: var(--background);
   }
 
-  @media (max-width: 919px) {
+  @container (max-width: 919px) {
     .image-detail-modal-layout,
     .image-detail-modal-layout.info-collapsed {
       --image-detail-modal-info-collapsed-height: 60px;

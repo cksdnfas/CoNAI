@@ -16,7 +16,7 @@ import { getImageViewerSettings } from '@/lib/api-settings'
 import { getErrorMessage } from '@/lib/error-message'
 import { useI18n } from '@/i18n'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
-import { useMinWidth } from '@/lib/use-min-width'
+import { useElementMinWidth, useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import type { SimilarImage } from '@/types/similarity'
@@ -151,8 +151,13 @@ interface ImageDetailViewProps {
 export function ImageDetailView({ compositeHash, presentation = 'page', initialImage = null, renderHeader, modalNavigation }: ImageDetailViewProps) {
   const { t } = useI18n()
   const canUseSplitPaneScroll = useMinWidth(1280)
-  const canUseDesktopModalLayout = useMinWidth(920)
-  const usesDesktopRelatedImageColumns = useMinWidth(768)
+  // The modal may share the screen with the docked chat: its own width picks the layout, not the viewport's.
+  const [modalShellElement, setModalShellElement] = useState<HTMLDivElement | null>(null)
+  const isViewportWideForModal = useMinWidth(920)
+  const isModalShellWide = useElementMinWidth(modalShellElement, 920)
+  const canUseDesktopModalLayout = isModalShellWide ?? isViewportWideForModal
+  const isViewportWideForRelatedColumns = useMinWidth(768)
+  const usesDesktopRelatedImageColumns = useElementMinWidth(modalShellElement, 768) ?? isViewportWideForRelatedColumns
   const [activeImageAreaTab, setActiveImageAreaTab] = useState<ImageDetailImageAreaTab>('current')
   const [isModalInfoViewerOpen, setIsModalInfoViewerOpen] = useState(canUseDesktopModalLayout)
   const [isPrimaryMediaReady, setIsPrimaryMediaReady] = useState(false)
@@ -584,7 +589,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
       : t({ ko: '정보 뷰어 열기', en: 'Open info viewer' })
 
     return (
-      <div className="image-detail-modal-shell">
+      <div ref={setModalShellElement} className="image-detail-modal-shell">
         <div className={cn('image-detail-modal-layout', isModalInfoViewerOpen ? 'info-open' : 'info-collapsed')}>
           <section className="image-detail-modal-image-pane group/image-pane">
             <div className="image-detail-modal-toolbar">
@@ -656,7 +661,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
           </section>
 
           {/* Flat column: one hairline against the stage, page background, no shadow (the phone sheet keeps its lift). */}
-          <aside className="image-detail-modal-info-pane border-line bg-background min-[920px]:shadow-none">
+          <aside className="image-detail-modal-info-pane border-line bg-background @min-[920px]:shadow-none">
             {canUseDesktopModalLayout ? (
               <IconButton
                 size="icon-sm"
@@ -684,7 +689,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
               {isModalInfoViewerOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
             </button>
 
-            <div className="image-detail-modal-info-content image-detail-scroll-pane min-[920px]:px-6 min-[920px]:pt-5">
+            <div className="image-detail-modal-info-content image-detail-scroll-pane @min-[920px]:px-6 @min-[920px]:pt-5">
               {imageQuery.isLoading ? (
                 <div className="space-y-3">
                   <Skeleton className="h-6 w-2/3 rounded-sm" />
