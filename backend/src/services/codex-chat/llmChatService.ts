@@ -29,7 +29,7 @@ import type { ClaudeChatSession } from './claudeChatCompletion'
 import type { CodexChatStreamEvent } from './codexChatService'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 import { ChatSummaryStore } from './chatMemory'
-import { appendUserDirective, buildChatMessages, cutToolOutput, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, prefixUserContent, rawMessagesEstimate, recordPromptUsage, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
+import { appendUserDirective, buildChatMessages, cutToolOutput, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, prefixUserContent, rawMessagesEstimate, recordPromptUsage, replyCapFor, resolveContextConfig, stripThinking, summarizeAhead, summarizeAll } from './llmChatContext'
 import { addressLabelFilter, restatement, roundSeparator } from './chatReplyText'
 import { chatPageReference, NO_PAGE_NOTE, parseChatPageContext, proposalOutcomeNote } from './chatPageContext'
 import type { ChatSendOptions } from './chatTasks'
@@ -413,14 +413,17 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     const permitted = (name: string) => offeredNames.has(name) && !blocked.has(name)
     if (judged && turn.contextMeta) turn.contextMeta.judge = judged.diagnostics
     let previousRound: TextSpan | null = null
+    const replyCap = target.generation.maxTokens
     for (let round = 1; ; round += 1) {
       turn.controller.signal.throwIfAborted()
       // The last round keeps the same tool list (and so the cached prompt) and tells the model to answer in text.
       const lastRound = round > profile.maxToolRounds
       const tools = bridge ? offeredTools : []
       // A tool result that tips the request over the limit is cut shorter first; only then does the reply fail.
-      const fitted = fitChatContext(profile, messages, tools, target.generation.maxTokens)
+      const fitted = fitChatContext(profile, messages, tools, replyCap)
       if (fitted !== messages) messages.splice(0, messages.length, ...fitted)
+      // The cap goes out cut to the room this round's prompt leaves.
+      target.generation = { ...target.generation, maxTokens: replyCapFor(profile, messages, tools, replyCap) }
       const rawEstimate = round === 1 ? rawMessagesEstimate(messages, tools) : 0
       if (turn.contextMeta?.version === 2 && round === 1) {
         turn.contextMeta = limitContextMeta({ ...turn.contextMeta, sections: contextSections(messages, tools, (text) => estimateTokens(profile.id, text)), estimatedTokens: estimateMessagesTokens(profile.id, messages, tools) })

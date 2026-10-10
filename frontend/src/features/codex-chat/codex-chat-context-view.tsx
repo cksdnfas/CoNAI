@@ -178,6 +178,7 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
           <SettingRow label={capLabel}>
             <NumberStepperInput
               allowEmpty
+              shorthand
               step={128}
               min={1}
               max={1000000}
@@ -216,6 +217,7 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
                   ) : null}
                   <NumberStepperInput
                     allowEmpty
+                    shorthand
                     step={128}
                     min={1}
                     max={1000000}
@@ -420,6 +422,7 @@ export function CodexChatContextView({ thread, profiles, segments, profileTurns,
           ) : null}
           <NumberStepperInput
             allowEmpty
+            shorthand
             step={128}
             min={1}
             max={1000000}

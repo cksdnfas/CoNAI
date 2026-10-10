@@ -16,7 +16,13 @@ const LOOKUP_TIMEOUT_MS = 2500
  */
 export const SERVER_CONTEXT_CAP = 65_536
 
-const known = new Map<string, { tokens: number | null; at: number }>()
+/**
+ * A size learned from a refusal lives shorter: behind a proxy (LiteLLM) the lookup cannot see the server, and a server
+ * restarted with a larger context must not stay sized to the old one for an hour.
+ */
+const LEARNED_MS = 10 * 60_000
+
+const known = new Map<string, { tokens: number | null; until: number }>()
 const pending = new Map<string, Promise<number | null>>()
 const keyOf = (target: Pick<ChatCompletionTarget, 'providerName' | 'model'>) => `${target.providerName}\u0000${target.model}`
 
@@ -24,7 +30,25 @@ const keyOf = (target: Pick<ChatCompletionTarget, 'providerName' | 'model'>) => 
 export function learnServerContextLimit(target: Pick<ChatCompletionTarget, 'providerName' | 'model'>, errorText: string) {
   const match = /context[^0-9]{0,60}\(?\s*(\d{3,7})\s*(?:tokens)?\)?/i.exec(errorText.replace(/request \(\d+ tokens\)/i, ''))
   const tokens = match ? Number(match[1]) : NaN
-  if (Number.isFinite(tokens) && tokens >= 512) known.set(keyOf(target), { tokens, at: Date.now() })
+  if (Number.isFinite(tokens) && tokens >= 512) known.set(keyOf(target), { tokens, until: Date.now() + LEARNED_MS })
+}
+
+/** Below this a cap cut to the room left is no reply at all: the request fails instead. */
+export const MIN_FITTED_REPLY_TOKENS = 256
+
+/**
+ * The output room a server named when it refused a prompt + max_tokens larger than its context: Strata says "at most
+ * N", or "prompt (P tokens) … context (C)"; vLLM "maximum context length is C tokens … (P in the messages". Null when
+ * the refusal does not say.
+ */
+export function replyRoomFromRefusal(errorText: string): number | null {
+  const atMost = /max_tokens[^0-9]{0,20}\(?at most (\d+)/i.exec(errorText)
+  if (atMost) return Number(atMost[1])
+  const strata = /prompt \((\d+) tokens\)[^]{0,80}?context \((\d+)\)/i.exec(errorText)
+  if (strata) return Number(strata[2]) - Number(strata[1])
+  const vllm = /maximum context length is (\d+) tokens[^]{0,200}?\((\d+) in the messages/i.exec(errorText)
+  if (vllm) return Number(vllm[1]) - Number(vllm[2])
+  return null
 }
 
 function numberOf(value: unknown) {
@@ -62,11 +86,11 @@ export async function serverContextLimit(target: ChatCompletionTarget): Promise<
   if (target.transport === 'claude-code') return null
   const key = keyOf(target)
   const cached = known.get(key)
-  if (cached && Date.now() - cached.at < CACHE_MS) return cached.tokens
+  if (cached && Date.now() < cached.until) return cached.tokens
   const running = pending.get(key)
   if (running) return running
   const request = lookup(target).catch(() => null).then((tokens) => {
-    known.set(key, { tokens, at: Date.now() })
+    known.set(key, { tokens, until: Date.now() + CACHE_MS })
     pending.delete(key)
     return tokens
   })
@@ -86,7 +110,7 @@ export function withServerContextLimit(profile: ChatProfile): ChatProfile {
     if (!chat) return profile
     const target = resolveChatCompletionTarget(chat.providerName, { model: chat.model })
     const cached = known.get(keyOf(target))
-    if (!cached || Date.now() - cached.at >= CACHE_MS) void serverContextLimit(target)
+    if (!cached || Date.now() >= cached.until) void serverContextLimit(target)
     const tokens = cached?.tokens ?? null
     return tokens !== null && tokens <= SERVER_CONTEXT_CAP ? { ...profile, contextTokens: tokens } : profile
   } catch {

@@ -194,7 +194,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
                       <span className="text-warning"><TriangleAlert className="size-4" aria-hidden /></span>
                     </Tip>
                   ) : null}
-                  <NumberStepperInput variant="settings" allowEmpty step={1024} min={1} value={draft.maxTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />
+                  <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} min={1} value={draft.maxTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />
                 </div>
               </Field>
               <Field label={t({ ko: '추론 강도', en: 'Reasoning effort' })}>
@@ -208,7 +208,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
               </Field>
               {advanced ? (
                 <Field label={t({ ko: '추론 토큰 예산', en: 'Reasoning token budget' })} info={t({ ko: 'reasoning_budget_tokens. 비우면 보내지 않아.', en: 'reasoning_budget_tokens. Not sent when empty.' })}>
-                  <NumberStepperInput variant="settings" allowEmpty step={1024} min={1} value={draft.reasoningBudgetTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ reasoningBudgetTokens: numberOrNull(value) })} />
+                  <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} min={1} value={draft.reasoningBudgetTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ reasoningBudgetTokens: numberOrNull(value) })} />
                 </Field>
               ) : null}
             </div>
@@ -242,7 +242,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
               <ClaudeEffortSelect value={draft.reasoningEffort} model={draft.model} models={claudeModels} onChange={(reasoningEffort) => patch({ reasoningEffort })} />
             </Field>
             <Field label={t({ ko: '최대 출력 토큰', en: 'Max output tokens' })}>
-              <NumberStepperInput variant="settings" allowEmpty step={1024} min={1} value={draft.maxTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />
+              <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} min={1} value={draft.maxTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />
             </Field>
           </div>
           <SwitchLine label={t({ ko: '이미지 첨부와 조회', en: 'Image attachments and viewing' })} checked={draft.visionEnabled} onCheckedChange={(visionEnabled) => patch({ visionEnabled })} />

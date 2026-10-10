@@ -8,7 +8,7 @@ import type { ChatMcpToolResult } from './chatMcpBridge'
 import { primaryModelOf } from './modelSlots'
 import { createRepetitionWatch, withoutRepetition } from './repetitionGuard'
 import { isCallerAbort, rawMessagesEstimate, rawTokenEstimate, readUsageCounts, recordLlmUsage, type LlmTokenCounts, type LlmUsageTag } from '../llmUsage'
-import { learnServerContextLimit } from './serverContextLimit'
+import { learnServerContextLimit, MIN_FITTED_REPLY_TOKENS, replyRoomFromRefusal } from './serverContextLimit'
 import { contextPartsOf } from './chatContextDiagnostics'
 import { setTimeout as delay } from 'node:timers/promises'
 
@@ -403,6 +403,7 @@ async function requestChatCompletion(meter: { startedAt: number }, params: {
     let target = (marksRefused.get(toolsKey(params.target)) ?? 0) > Date.now() ? { ...params.target, promptCacheMarks: false } : params.target
     let response: Response
     let rateLimited = false
+    let capFitted = false
     for (;;) {
       signal.throwIfAborted()
       response = await request(target)
@@ -449,6 +450,18 @@ async function requestChatCompletion(meter: { startedAt: number }, params: {
       }
       // A server that names its context size in a refusal sizes the next request (see serverContextLimit).
       if (response.status === 400 && /context/i.test(errorText)) learnServerContextLimit(target, errorText)
+      // max_tokens is a ceiling, not a booking: a cap the prompt leaves no room for goes again, once, cut to the room
+      // the server names (Strata, vLLM refuse prompt + max_tokens over the context instead of shortening it).
+      if (response.status === 400 && !capFitted && /context/i.test(errorText)) {
+        const sent = target.generation.maxTokens
+        const room = replyRoomFromRefusal(errorText)
+        if (typeof sent === 'number' && room !== null && room >= MIN_FITTED_REPLY_TOKENS && room < sent) {
+          capFitted = true
+          target = { ...target, generation: { ...target.generation, maxTokens: room } }
+          touch()
+          continue
+        }
+      }
       throw new LlmRequestError(`LLM 요청 실패 (${response.status}): ${errorText.slice(0, 500) || response.statusText}`, response.status)
     }
     if (!response.body || !(response.headers.get('content-type') ?? '').includes('text/event-stream')) {

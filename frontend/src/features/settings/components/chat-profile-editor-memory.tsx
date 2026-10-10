@@ -31,6 +31,7 @@ export function ChatProfileMemoryPanel({ draft, patch, defaults, lorebooks, adva
               <NumberStepperInput
                 variant="settings"
                 allowEmpty
+                shorthand
                 step={8000}
                 min={defaults?.codexCompactTokens.min ?? 48_000}
                 value={draft.contextTokens}
@@ -47,7 +48,7 @@ export function ChatProfileMemoryPanel({ draft, patch, defaults, lorebooks, adva
                 label={t({ ko: '컨텍스트 길이', en: 'Context length' })}
                 info={t({ ko: '토큰. 비우면 제한 없음. 정하면 시스템 프롬프트·요약·도구 설명·답변 몫을 뺀 만큼만 최근 턴을 보내.', en: 'In tokens. Empty means no limit. When set, only as many recent turns are sent as fit after the system prompt, summary, tool descriptions and the reply allowance.' })}
               >
-                <NumberStepperInput variant="settings" allowEmpty step={1024} min={1024} value={draft.contextTokens} placeholder={t({ ko: '제한 없음', en: 'No limit' })} onValueCommit={(value) => patch({ contextTokens: numberOrNull(value) })} />
+                <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} min={1024} value={draft.contextTokens} placeholder={t({ ko: '제한 없음', en: 'No limit' })} onValueCommit={(value) => patch({ contextTokens: numberOrNull(value) })} />
               </Field>
             </>
           )}

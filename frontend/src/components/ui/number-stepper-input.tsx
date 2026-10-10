@@ -4,6 +4,7 @@ import type { VariantProps } from 'class-variance-authority'
 import { Button } from '@/components/ui/button'
 import { Input, inputVariants } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
+import { parseNumberDraft } from '@/lib/number-shorthand'
 import { cn } from '@/lib/utils'
 
 type NumberStepperInputProps = {
@@ -13,6 +14,8 @@ type NumberStepperInputProps = {
   step?: number | string
   precision?: number
   allowEmpty?: boolean
+  /** Also read "260K", "1.5M" and thousands separators (token counts). */
+  shorthand?: boolean
   onValueCommit?: (value: string) => void
   onValidPreview?: (value: number) => void
 } & Omit<React.ComponentProps<'input'>, 'value' | 'onChange' | 'type' | 'min' | 'max' | 'step'>
@@ -39,6 +42,7 @@ export function NumberStepperInput({
   step = 1,
   precision,
   allowEmpty = false,
+  shorthand = false,
   onValueCommit,
   onValidPreview,
   className,
@@ -100,7 +104,7 @@ export function NumberStepperInput({
       return
     }
 
-    const parsed = Number(trimmed)
+    const parsed = parseNumberDraft(trimmed, shorthand)
     if (trimmed === '' || !Number.isFinite(parsed)) {
       setDraft(lastCommittedRef.current)
       setInvalid(trimmed !== '')
@@ -111,7 +115,7 @@ export function NumberStepperInput({
     setDraft(normalized)
     setInvalid(false)
     emitCommit(normalized)
-  }, [allowEmpty, clamp, draft, emitCommit, format])
+  }, [allowEmpty, clamp, draft, emitCommit, format, shorthand])
 
   const stepBy = React.useCallback((direction: -1 | 1) => {
     const draftValue = Number(draft)
@@ -153,7 +157,7 @@ export function NumberStepperInput({
         {...props}
         ref={inputRef}
         type="text"
-        inputMode={inputMode ?? (stepPrecision === 0 && minValue !== undefined && minValue >= 0 ? 'numeric' : 'decimal')}
+        inputMode={inputMode ?? (shorthand ? 'text' : stepPrecision === 0 && minValue !== undefined && minValue >= 0 ? 'numeric' : 'decimal')}
         value={draft}
         variant={variant}
         disabled={disabled}
@@ -164,7 +168,7 @@ export function NumberStepperInput({
           const nextDraft = event.target.value
           setDraft(nextDraft)
           setInvalid(false)
-          const preview = Number(nextDraft)
+          const preview = parseNumberDraft(nextDraft, shorthand)
           if (nextDraft.trim() !== '' && Number.isFinite(preview)) onValidPreview?.(preview)
         }}
         onFocus={(event) => {

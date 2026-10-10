@@ -34,6 +34,16 @@ const SUMMARY_TOOL_NOTE_LENGTH = 300
 /** Room kept for the reply when the profile sets no max tokens. */
 export const DEFAULT_REPLY_RESERVE_TOKENS = 2048
 
+/**
+ * The reply's share of a token budget when choosing the window. Max output tokens are a ceiling, not a booking: a cap
+ * near the whole context would leave the conversation no room, so the share stops at a quarter of the budget (never
+ * below DEFAULT_REPLY_RESERVE_TOKENS) and the request sends the cap cut to what is left (replyCapFor).
+ */
+export function replyReserveFor(contextTokens: number | null, maxTokens: number | null | undefined) {
+  const cap = maxTokens ?? DEFAULT_REPLY_RESERVE_TOKENS
+  return contextTokens === null ? cap : Math.min(cap, Math.max(DEFAULT_REPLY_RESERVE_TOKENS, Math.floor(contextTokens / 4)))
+}
+
 const EXAMPLE_NOTE = '바로 뒤에 이어지는 첫 user/assistant 대화들은 말투와 형식을 보여주는 예시일 뿐 실제로 나눈 대화가 아니야. 실제 대화는 그 다음부터야.'
 
 /**
@@ -91,7 +101,7 @@ export function resolveContextConfig(thread: CodexChatThreadRecord, profile: Cha
   return {
     contextTurns: thread.context_turns ?? profile.contextTurns,
     contextTokens: profile.contextTokens,
-    replyReserveTokens: maxTokens ?? DEFAULT_REPLY_RESERVE_TOKENS,
+    replyReserveTokens: replyReserveFor(profile.contextTokens, maxTokens),
     maxTokens,
     summaryEnabled: thread.summary_enabled !== null ? thread.summary_enabled === 1 : profile.summaryEnabled,
     summaryTriggerTurns: profile.summaryTriggerTurns,
@@ -630,13 +640,30 @@ export function buildChatPromptPreview(profile: ChatProfile, tools: ChatCompleti
   return [...system, ...insertDepthBlocks([], blocks)]
 }
 
-/** Final guard also covers tool rounds and a latest message too large to fit by itself. */
+/**
+ * Final guard also covers tool rounds and a latest message too large to fit by itself. The reply only needs a short
+ * answer's room here (the cap is cut to what is left, see replyCapFor), not the whole max output tokens.
+ */
 export function assertChatContextFits(profile: ChatProfile, messages: ChatCompletionMessage[], tools: ChatCompletionTool[], maxTokens: number | null | undefined) {
   if (profile.contextTokens === null) return
-  const needed = estimateMessagesTokens(profile.id, messages, tools) + (maxTokens ?? DEFAULT_REPLY_RESERVE_TOKENS)
+  const needed = estimateMessagesTokens(profile.id, messages, tools) + Math.min(maxTokens ?? DEFAULT_REPLY_RESERVE_TOKENS, DEFAULT_REPLY_RESERVE_TOKENS)
   if (needed > profile.contextTokens) {
-    throw new Error(`컨텍스트 한도를 넘었어 (예상 ${needed} / ${profile.contextTokens} 토큰). 메시지·도구 결과나 최대 출력 토큰을 줄이거나 컨텍스트 길이를 늘려줘.`)
+    throw new Error(`컨텍스트 한도를 넘었어 (예상 ${needed} / ${profile.contextTokens} 토큰). 메시지·도구 결과를 줄이거나 컨텍스트 길이를 늘려줘.`)
   }
+}
+
+/** Kept between the estimate and the server's own count when cutting a cap to the room left. */
+const REPLY_CAP_MARGIN = 0.03
+
+/**
+ * The max_tokens a request sends: the cap, cut to what the context has left beside the prompt (with a margin for the
+ * estimate), so a cap larger than the room never gets the request refused. Unchanged without a context length.
+ */
+export function replyCapFor(profile: ChatProfile, messages: ChatCompletionMessage[], tools: ChatCompletionTool[], maxTokens: number | null | undefined) {
+  if (maxTokens == null || profile.contextTokens === null) return maxTokens
+  const prompt = estimateMessagesTokens(profile.id, messages, tools)
+  const room = profile.contextTokens - Math.ceil(prompt * (1 + REPLY_CAP_MARGIN))
+  return Math.max(1, Math.min(maxTokens, room))
 }
 
 /** Tool output lengths tried, in order, when a request with tool results does not fit (see fitChatContext). */

@@ -6,7 +6,7 @@ import { attachedImagesOf, chatContentWithAttachments, type AttachedImages } fro
 import { generationPromptOf } from './chatToolReferences'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
 import type { ChatCompletionMessage, ChatCompletionTool } from './llmChatCompletion'
-import { DEFAULT_REPLY_RESERVE_TOKENS, estimateMessagesTokens } from './llmChatContext'
+import { estimateMessagesTokens, replyReserveFor } from './llmChatContext'
 import { postHistoryText, buildContextMeta, recalledSegments, type ChatContextMeta } from './llmChatContext'
 import { recallText } from './chatMemory'
 import { contextSource, limitContextMeta, contextPartsOf, markContextParts } from './chatContextDiagnostics'
@@ -151,7 +151,7 @@ export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMe
   const lore = selectChatLore(params.profile, window, userPersonaForThread(params.thread), { books: params.books, toolOffered: offersLoreFileTool(params.tools), history: params.messages, speakerProfileId: params.profile.id, judged: params.judged?.loreKeys })
   let context = buildGroupWindowMessages(params, window, sendable.length, lore)
   const budget = params.profile.contextTokens
-  const reserve = (params.maxTokens ?? DEFAULT_REPLY_RESERVE_TOKENS) + (params.extraTokens ?? 0)
+  const reserve = replyReserveFor(budget, params.maxTokens) + (params.extraTokens ?? 0)
   const fits = (messages: CodexChatMessageRecord[]) => budget === null || estimateMessagesTokens(params.profile.id, buildGroupWindowMessages(params, messages, sendable.length, lore).messages, params.tools) + reserve <= budget
   if (budget !== null && window.length > 1 && !fits(window)) {
     // How many of the latest messages fit, found by halving (each try rebuilds the request).
