@@ -137,7 +137,7 @@ export function PresetPromptingFields({ value, onChange }: { value: ChatPresetPr
   const { t } = useI18n()
   const patch = (next: Partial<ChatPresetPromptingInput>) => onChange({ ...value, ...next })
   return (
-    <EditorGroup label={t({ ko: '프롬프트 작성', en: 'Prompt writing' })} info={t({ ko: '답변 끝난 뒤: 답변이 끝나면 완성된 본문으로 프롬프트를 따로 써서 생성해.', en: 'After the reply: once the reply is done, the prompt is written from the finished text and generated.' })}>
+    <EditorGroup label={t({ ko: '프롬프트 작성', en: 'Prompt writing' })} info={t({ ko: '답변 끝난 뒤: 답변이 끝나면 완성된 본문으로 프롬프트를 따로 써서 생성해. 캐릭터 생김새는 프로필의 외형 설명만 보고 써. 시스템 프롬프트와 섹션은 안 봐.', en: "After the reply: once the reply is done, the prompt is written from the finished text and generated. The character's looks come only from the profile's appearance, not its system prompt or sections." })}>
       <div className="border-t border-line">
         <SettingRow label={<ChatFilledLabel fieldId="timing">{t({ ko: '작성 시점', en: 'When' })}</ChatFilledLabel>}>
           <div className="flex gap-1.5">

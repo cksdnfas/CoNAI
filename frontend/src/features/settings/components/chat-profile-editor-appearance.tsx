@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
-import { Crop, ImagePlus, Sparkles, X } from 'lucide-react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { AlertTriangle, Crop, ImagePlus, Sparkles, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
+import { Tip } from '@/components/ui/tooltip'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { ChatProfileImage } from '@/features/codex-chat/chat-profile-image'
 import { useI18n } from '@/i18n'
-import { clearChatProfileExpression, draftChatAppearance, setChatProfileExpression, type ChatProfile } from '@/lib/api-codex-chat'
+import { CHAT_GENERATION_PRESETS_QUERY_KEY, clearChatProfileExpression, draftChatAppearance, listChatGenerationPresets, setChatProfileExpression, type ChatProfile } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { ChatProfileCandidateArchive } from './chat-profile-asset-groups'
 import { ChatProfileAssetInput } from './chat-profile-asset-input'
@@ -68,6 +69,11 @@ export function ChatProfileAppearancePanel({ draft, patch, profile, onBusyChange
   const presetBlocked = !runs.preset ? t({ ko: '자산을 만들 수 있는 생성 프리셋이 없어', en: 'No generation preset can make assets' }) : null
   const nameBlocked = nameMissing ? t({ ko: '이름을 먼저 적어줘', en: 'Enter a name first' }) : null
   const expressionBlocked = presetBlocked ?? nameBlocked ?? (mode === 'reference' && !draft.referenceHash ? t({ ko: '기준 이미지를 먼저 정해줘', en: 'Set the reference image first' }) : null)
+  // An `after` preset's prompt writer sees only this text of the character (not the system prompt or sections).
+  const generationPresetsQuery = useQuery({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY, queryFn: listChatGenerationPresets, enabled: draft.mcpEnabled && draft.generationPresetIds.length > 0 })
+  const appearanceMissing = draft.mcpEnabled && !draft.appearance?.trim()
+    && (generationPresetsQuery.data ?? []).some((preset) => draft.generationPresetIds.includes(preset.id) && preset.prompting.timing === 'after')
+  const appearanceWarning = appearanceMissing ? t({ ko: '답변 끝난 뒤 이미지는 여기만 보고 캐릭터를 그려. ✨로 초안을 써줘.', en: 'After-reply pictures draw the character from this text alone. Draft it with ✨.' }) : null
 
   const setExpression = async (name: string, hash: string) => {
     try {
@@ -117,8 +123,11 @@ export function ChatProfileAppearancePanel({ draft, patch, profile, onBusyChange
               </div>
             </div>
           </div>
-          <EditorGroup label={t({ ko: '외형 설명', en: 'Appearance' })} actions={<IconButton size="icon-xs" variant="ghost" disabled={busy || appearance.isPending} label={t({ ko: '기준 이미지 보고 초안 쓰기', en: 'Draft from the reference image' })} onClick={() => void writeAppearance()}>{appearance.isPending ? <Spinner /> : <Sparkles />}</IconButton>}>
-            <Textarea variant="settings" disabled={appearance.isPending} className="min-h-[120px]" rows={5} value={draft.appearance ?? ''} maxLength={20000} aria-label={t({ ko: '외형 설명', en: 'Appearance' })} onChange={(event) => patch({ appearance: event.target.value })} />
+          <EditorGroup
+            label={<>{t({ ko: '외형 설명', en: 'Appearance' })}{appearanceWarning ? <Tip content={appearanceWarning}><span className="inline-flex normal-case tracking-normal text-warning" tabIndex={0} aria-label={appearanceWarning}><AlertTriangle className="size-3.5" /></span></Tip> : null}</>}
+            actions={<IconButton size="icon-xs" variant="ghost" disabled={busy || appearance.isPending} label={t({ ko: '기준 이미지나 프롬프트 보고 초안 쓰기', en: 'Draft from the reference image or prompt' })} onClick={() => void writeAppearance()}>{appearance.isPending ? <Spinner /> : <Sparkles />}</IconButton>}
+          >
+            <Textarea variant="settings" disabled={appearance.isPending} className="min-h-[120px]" rows={5} value={draft.appearance ?? ''} maxLength={20000} aria-invalid={appearanceMissing || undefined} aria-label={t({ ko: '외형 설명', en: 'Appearance' })} onChange={(event) => patch({ appearance: event.target.value })} />
           </EditorGroup>
         </div>
       </div>

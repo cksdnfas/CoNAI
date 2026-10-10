@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 import { FieldInfo } from './field'
 
 /** A hairline-separated group of fields inside an editor or modal; the overline names it, `actions` sit at its right. */
-export function EditorGroup({ label, info, actions, children }: { label?: string; info?: ReactNode; actions?: ReactNode; children: ReactNode }) {
+export function EditorGroup({ label, info, actions, children }: { label?: ReactNode; info?: ReactNode; actions?: ReactNode; children: ReactNode }) {
   return (
     <section className="space-y-3 border-t border-line pt-4 first:border-t-0 first:pt-0">
       {label || actions ? (
