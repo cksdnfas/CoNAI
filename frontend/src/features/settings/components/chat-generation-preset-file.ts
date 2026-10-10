@@ -3,7 +3,9 @@ import { CHAT_GENERATION_PRESET_FILE_MARK, type ChatGenerationPresetInput } from
 
 /** The export shape of one generation preset: a marker, the name and instruction, and the kind-specific setup. */
 export function chatGenerationPresetFileContents(preset: ChatGenerationPresetInput) {
-  return { [CHAT_GENERATION_PRESET_FILE_MARK]: 1, name: preset.name, instruction: preset.instruction, preset: { kind: preset.kind, nai: preset.nai, comfyui: preset.comfyui } }
+  // A linked guide document stays behind: it is a file of this server's store.
+  const prompting = preset.prompting ? { timing: preset.prompting.timing, guide: preset.prompting.guide, previousImages: preset.prompting.previousImages } : undefined
+  return { [CHAT_GENERATION_PRESET_FILE_MARK]: 1, name: preset.name, instruction: preset.instruction, preset: { kind: preset.kind, nai: preset.nai, comfyui: preset.comfyui, prompting } }
 }
 
 export function downloadChatGenerationPresetFile(preset: ChatGenerationPresetInput) {

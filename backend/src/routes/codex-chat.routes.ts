@@ -51,6 +51,7 @@ import { LlmChatError, LlmChatService } from '../services/codex-chat/llmChatServ
 import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers'
 import { sendRouteBadRequest } from './routeValidation'
 import { FileStoreError, FileStoreService, fileOwnerKey, parseFileId } from '../services/fileStoreService'
+import { requireFileStoreOwner } from '../services/fileStoreAccess'
 import { exportChatMarkdown } from '../services/codex-chat/chatExport'
 import { ExternalApiProvider } from '../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../services/llmGenerationOptions'
@@ -1360,7 +1361,7 @@ router.get('/admin/generation-presets', requireAdmin, (_req: Request, res: Respo
 
 router.post('/admin/generation-presets', requireAdmin, (req: Request, res: Response) => {
   try {
-    res.status(201).json({ success: true, data: ChatGenerationPresetStore.create((req.body ?? {}) as ChatGenerationPresetInput) })
+    res.status(201).json({ success: true, data: ChatGenerationPresetStore.create((req.body ?? {}) as ChatGenerationPresetInput, { guideOwner: () => requireFileStoreOwner(requesterFrom(req)) }) })
   } catch (error) { sendChatError(res, error) }
 })
 
@@ -1376,7 +1377,7 @@ router.put('/admin/generation-presets/:presetId', requireAdmin, (req: Request, r
   const presetId = parseId(req.params.presetId)
   if (presetId === null) { sendRouteBadRequest(res, 'Invalid preset id'); return }
   try {
-    const updated = ChatGenerationPresetStore.update(presetId, (req.body ?? {}) as ChatGenerationPresetInput)
+    const updated = ChatGenerationPresetStore.update(presetId, (req.body ?? {}) as ChatGenerationPresetInput, { guideOwner: () => requireFileStoreOwner(requesterFrom(req)) })
     if (!updated) { res.status(404).json({ success: false, error: '생성 프리셋을 찾을 수 없어.' }); return }
     res.json({ success: true, data: updated })
   } catch (error) { sendChatError(res, error) }

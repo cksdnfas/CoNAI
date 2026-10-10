@@ -562,6 +562,7 @@ export interface ChatGenerationPreset {
   kind: ChatGenerationPresetKind
   nai: ChatNaiPresetConfig | null
   comfyui: ChatComfyPresetConfig | null
+  prompting: ChatPresetPrompting
   profiles: Array<{ id: number; name: string }>
   createdDate: string
   updatedDate: string
@@ -575,7 +576,24 @@ export interface ChatGenerationPreset {
  */
 export type ChatPresetAssetSupport = { mode: 'reference' | 'appearance' | null; problem: string | null; promptChoices: Array<{ id: string; label: string }>; imageChoices: Array<{ id: string; label: string }> }
 
-export type ChatGenerationPresetInput = { name: string; instruction: string; kind: ChatGenerationPresetKind; nai: ChatNaiPresetConfig | null; comfyui: ChatComfyPresetConfig | null }
+/**
+ * How a preset's scene prompt is written. `inline`: the chat model fills the tool while it replies; `after`: it only
+ * asks for a picture, and the prompt is written from the finished reply. The writer gets the guide (text and a linked
+ * file of an administrator's file store; `path` null once that file is gone) and the chat's latest `previousImages`.
+ */
+export interface ChatPresetPrompting {
+  timing: 'inline' | 'after'
+  guide: string
+  guideFile: { owner: string; fileId: string; path: string | null; updatedAt: string | null } | null
+  previousImages: number
+}
+
+/** What the editor keeps and saves: the guide file by id (null unlinks; a new one must be in your own store), its path for display. */
+export type ChatPresetPromptingInput = Pick<ChatPresetPrompting, 'timing' | 'guide' | 'previousImages'> & { guideFileId: string | null; guideFilePath: string | null }
+
+export const CHAT_PRESET_PREVIOUS_IMAGES_MAX = 4
+
+export type ChatGenerationPresetInput = { name: string; instruction: string; kind: ChatGenerationPresetKind; nai: ChatNaiPresetConfig | null; comfyui: ChatComfyPresetConfig | null; prompting?: ChatPresetPromptingInput }
 
 /** The file a generation preset exports as; import also takes a bare preset or an array of either. */
 export const CHAT_GENERATION_PRESET_FILE_MARK = 'conai_generation_preset'

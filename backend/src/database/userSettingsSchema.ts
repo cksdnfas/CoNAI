@@ -674,6 +674,11 @@ export function createUserSettingsSchema(db: Database.Database): void {
     return pragma.some((col: any) => col.name === columnName);
   };
 
+  // How the scene prompt is written (timing, guide, previous images); see ChatPresetPrompting.
+  if (!hasColumn('chat_generation_presets', 'prompting')) {
+    db.exec("ALTER TABLE chat_generation_presets ADD COLUMN prompting TEXT NOT NULL DEFAULT '{}'");
+  }
+
   // Codex chat threads also host LLM chats: engine, profile, and per-thread context (turn window + rolling summary).
   const codexChatThreadColumns: Array<[string, string]> = [
     ['engine', "TEXT NOT NULL DEFAULT 'codex'"],
@@ -795,6 +800,22 @@ export function createUserSettingsSchema(db: Database.Database): void {
     message_id INTEGER REFERENCES codex_chat_messages(id) ON DELETE SET NULL,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`);
+  // A picture a reply asked for under an `after` generation preset: its prompt is written once the reply is finished.
+  db.exec(`CREATE TABLE IF NOT EXISTS chat_deferred_generations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER NOT NULL REFERENCES codex_chat_threads(id) ON DELETE CASCADE,
+    reply_id TEXT NOT NULL,
+    preset_id INTEGER NOT NULL,
+    tool_name TEXT NOT NULL,
+    focus TEXT NOT NULL DEFAULT '',
+    context TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('pending', 'writing', 'queued', 'failed', 'skipped')),
+    job_id INTEGER,
+    error TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_deferred_generation_reply ON chat_deferred_generations(thread_id, reply_id)');
   db.exec(`CREATE TABLE IF NOT EXISTS chat_request_captures (
     message_id INTEGER NOT NULL REFERENCES codex_chat_messages(id) ON DELETE CASCADE,
     alternative INTEGER NOT NULL DEFAULT 0,

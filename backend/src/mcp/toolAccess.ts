@@ -156,14 +156,17 @@ export function requireMcpResourceOwner(context: McpRequestContext, record: { re
     || (history && record.requested_by_account_type !== requester.accountType)))) throw new Error('Resource is not accessible to this account.');
 }
 
-/** One decision point for both in-process LLM and HTTP Codex tools, immediately before their handlers. */
-export function requireMcpToolAccess(context: McpRequestContext, toolName: string, params: Record<string, unknown> = {}, execution: 'reply' | 'queued' = 'reply'): void {
+/**
+ * One decision point for both in-process LLM and HTTP Codex tools, immediately before their handlers. `after-reply`:
+ * a picture an `after` generation preset queues once the reply that asked for it ended (chatGenerationPrompting).
+ */
+export function requireMcpToolAccess(context: McpRequestContext, toolName: string, params: Record<string, unknown> = {}, execution: 'reply' | 'after-reply' | 'queued' = 'reply'): void {
   if (!isContextToolAllowed(context, toolName, false)) throw new Error('Unknown or not permitted tool.');
   refreshMcpRequester(context.requester);
   if (isChatMcpSource(context.source)) {
     requireChatMcpAccountAccess(context, toolName);
-    if (execution === 'reply') {
-      requireActiveChatReply(context.chatContext);
+    if (execution !== 'queued') {
+      if (execution === 'reply') requireActiveChatReply(context.chatContext);
       validateMcpToolArguments(params, () => requireRequesterPermission(context.requester, 'images.view'));
     }
   }

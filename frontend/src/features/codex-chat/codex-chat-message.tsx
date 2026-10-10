@@ -306,6 +306,30 @@ function FailedJobThumb({ job, size }: { job: NonNullable<CodexChatToolCall['fai
   )
 }
 
+/**
+ * A picture an `after` generation preset asked for: its prompt is written from the finished reply first (a spinner in
+ * the image's place), or writing it failed (why, on hover). Once queued it shows as an ordinary job.
+ */
+function DeferredThumb({ call, size }: { call: CodexChatToolCall; size: ThumbSize }) {
+  const { t } = useI18n()
+  if (call.deferred?.state === 'failed') {
+    return (
+      <Tip content={call.deferred.error || t({ ko: '프롬프트를 쓰지 못했어', en: 'Could not write the prompt' })}>
+        <div className={cn('flex shrink-0 flex-col items-center justify-center gap-1.5 rounded-sm border border-destructive/22 bg-surface-low text-xs font-bold text-destructive', THUMB_PLACEHOLDER_CLASS[size])}>
+          <AlertTriangle className="size-[18px]" />
+          {t({ ko: '프롬프트 실패', en: 'Prompt failed' })}
+        </div>
+      </Tip>
+    )
+  }
+  return (
+    <div className={cn('flex shrink-0 flex-col items-center justify-center gap-2 rounded-sm bg-surface-high text-xs text-muted-foreground', THUMB_PLACEHOLDER_CLASS[size])}>
+      <Spinner size="md" />
+      {t({ ko: '장면 프롬프트 쓰는 중', en: 'Writing the prompt' })}
+    </div>
+  )
+}
+
 type ToolCallGroup = { tool: string; count: number; status: CodexChatToolCall['status']; summary: string | null }
 
 /** Agents poll (`get_generation_job` ×N); one row per tool keeps the reply readable. The last call speaks for the group. */
@@ -406,6 +430,7 @@ function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { ca
   const foundCalls = resolvedCalls.filter((call) => !(call.generated ?? isCodexChatGenerationTool(call.tool)))
   const failedJobs = [...new Map(generatedCalls.flatMap((call) => call.failedJobs ?? []).map((job) => [job.jobId, job])).values()]
   const failedJobIds = new Set(failedJobs.map((job) => job.jobId))
+  const deferredCalls = generatedCalls.filter((call) => call.deferred)
   const pendingJobIds = [...new Set(generatedCalls.flatMap((call) => call.pendingJobIds ?? []))].filter((jobId) => !failedJobIds.has(jobId) && resolvedJobs[jobId] === undefined)
   const historyIds = [...new Set([...generatedCalls.flatMap((call) => call.historyIds), ...generatedCalls.flatMap((call) => (call.pendingJobIds ?? []).flatMap((jobId) => (resolvedJobs[jobId] !== undefined ? [resolvedJobs[jobId]] : [])))])]
   const foundHistoryIds = [...new Set(foundCalls.flatMap((call) => call.historyIds))].filter((historyId) => !historyIds.includes(historyId))
@@ -439,7 +464,7 @@ function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { ca
     setLightboxIndex(index >= 0 ? index : null)
   }
 
-  const count = historyIds.length + compositeHashes.length + pendingJobIds.length + failedJobs.length
+  const count = historyIds.length + compositeHashes.length + pendingJobIds.length + failedJobs.length + deferredCalls.length
   if (count === 0 && foundItems.length === 0) {
     return null
   }
@@ -450,6 +475,7 @@ function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { ca
         'gap-2',
         layout === 'column' ? 'flex flex-col items-start' : size === 'full' && count > 1 ? 'grid grid-cols-2' : 'flex flex-wrap',
       )}>
+        {deferredCalls.map((call) => <DeferredThumb key={call.id} call={call} size={size} />)}
         {pendingJobIds.map((jobId) => <PendingJobThumb key={`j${jobId}`} jobId={jobId} size={size} onResolved={resolveJob} />)}
         {failedJobs.map((job) => <FailedJobThumb key={`f${job.jobId}`} job={job} size={size} />)}
         {historyIds.map((historyId) => <HistoryThumb key={`h${historyId}`} historyId={historyId} size={size} media={media} onOpen={openLightbox} />)}

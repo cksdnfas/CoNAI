@@ -443,6 +443,62 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
       assert.equal((await denied.call('generate_image', { prompt: 'no chat grant' })).isError, true)
     } finally { stop(); await denied.close(); AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] }) }
   })
+  await t.test('an after preset asks during the reply and queues the written prompt under the same grant once it ends', async (sub) => {
+    const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
+    const { ChatGenerationPresetStore } = await import('../src/services/codex-chat/chatGenerationPresets')
+    const { resolveChatAccess, resolveChatProfileToolGrant } = await import('../src/services/codex-chat/codexChatAccess')
+    const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
+    const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
+    const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+    const { openChatMcpBridge } = await import('../src/services/codex-chat/chatMcpBridge')
+    const { GenerationQueueModel } = await import('../src/models/GenerationQueue')
+    const { GenerationQueueService } = await import('../src/services/generationQueueService')
+    const { requireQueuedChatGenerationAccess } = await import('../src/services/generation-queue/queueJobExecutors')
+    const { ChatGenerationPromptingService } = await import('../src/services/codex-chat/chatGenerationPrompting')
+    updateChatSettings({ enabled: true })
+    sub.mock.method(GenerationQueueService, 'requestDispatch', () => {})
+    const bodies: Array<{ messages: Array<{ role: string; content: unknown }> }> = []
+    sub.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+      if (!init?.method || init.method === 'GET') return new Response('', { status: 404 })
+      bodies.push(JSON.parse(String(init.body)))
+      return Response.json({ choices: [{ message: { content: '{"prompt": "1girl, leaning on railing, sunset"}' }, finish_reason: 'stop' }] })
+    })
+    const inline = ChatGenerationPresetStore.create({ name: 'Inline guided', kind: 'nai', prompting: { guide: 'Always tag the expression.' } })
+    const after = ChatGenerationPresetStore.create({ name: 'After reply', kind: 'nai', prompting: { timing: 'after', guide: 'Wide shots only.' } })
+    const profile = ChatProfileStore.create({ name: 'After generator', engine: 'llm', providerName: 'fixture', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: [], generationPresetIds: [inline.id, after.id] })
+    const threadId = CodexChatStore.createThread(adminId, 'after preset', 'llm', profile.id)
+    const context = { threadId, profileId: profile.id, kind: 'direct' as const, replyId: 'after-reply' }
+    const controller = new AbortController()
+    const stop = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const requester = { accountId: adminId, accountType: 'admin' as const }
+    const grant = resolveChatProfileToolGrant(profile, resolveChatAccess(adminId))
+    const bridge = await openChatMcpBridge(requester, grant.scopes, grant.toolAllowlist, { chatContext: context, generationPresetIds: profile.generationPresetIds })
+    try {
+      const tools = new Map(bridge.tools.map((tool) => [tool.function.name, tool.function]))
+      assert.match(tools.get('generate_image')!.description ?? '', /Always tag the expression/)
+      assert.deepEqual(Object.keys((tools.get('generate_image_2')!.parameters as { properties: object }).properties), ['focus'])
+      const jobs = () => (user.getUserSettingsDb().prepare('SELECT COUNT(*) AS n FROM generation_queue_jobs').get() as { n: number }).n
+      const before = jobs()
+      const asked = await bridge.call('generate_image_2', { focus: 'the sunset view' })
+      assert.notEqual(asked.isError, true, JSON.stringify(asked))
+      assert.equal(JSON.parse((asked.content![0] as { text: string }).text).status, 'requested')
+      assert.equal(jobs(), before)
+    } finally { await bridge.close() }
+    CodexChatStore.addMessage({ thread_id: threadId, role: 'assistant', content: 'She leaned on the railing as the sun went down.', tool_calls: [], status: 'completed', error: null, routing: { replyId: 'after-reply', replyTo: null, recipients: ['user'] } })
+    stop()
+    await (ChatGenerationPromptingService as unknown as { process: (replyId: string) => Promise<void> }).process.call(ChatGenerationPromptingService, 'after-reply')
+    assert.equal(bodies.length, 1)
+    assert.match(String(bodies[0].messages[0].content), /Wide shots only/)
+    assert.match(String(bodies[0].messages[1].content), /leaned on the railing/)
+    const row = user.getUserSettingsDb().prepare('SELECT state, job_id, error FROM chat_deferred_generations WHERE reply_id = ?').get('after-reply') as { state: string; job_id: number | null; error: string | null }
+    assert.equal(row.state, 'queued', row.error ?? '')
+    const job = GenerationQueueModel.findById(row.job_id!)!
+    assert.equal(job.service_type, 'novelai')
+    assert.equal(job.requested_by_account_id, adminId)
+    assert.match(JSON.stringify(job.request_payload), /leaning on railing, sunset/)
+    assert.doesNotThrow(() => requireQueuedChatGenerationAccess(job))
+    assert.ok(user.getUserSettingsDb().prepare('SELECT 1 FROM chat_generation_links WHERE job_id = ? AND reply_id = ?').get(job.id, 'after-reply'))
+  })
   await t.test('chat execution intersects live domain, profile, role, ownership and host boundaries', async (sub) => {
     const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
     const { ChatToolPresetStore } = await import('../src/services/codex-chat/chatToolPresets')

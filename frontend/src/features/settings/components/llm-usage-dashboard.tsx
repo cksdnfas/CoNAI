@@ -36,7 +36,7 @@ const PURPOSE_GROUPS: Array<{ id: string; label: { ko: string; en: string }; pur
   { id: 'chat', label: { ko: '채팅 답변', en: 'Chat replies' }, purposes: ['chat'] },
   { id: 'summary', label: { ko: '요약', en: 'Summaries' }, purposes: ['summary'] },
   { id: 'judge', label: { ko: '판단', en: 'Judge' }, purposes: ['judge'] },
-  { id: 'assist', label: { ko: '보조 (번역·제안·자산)', en: 'Assist (translation, suggestions, assets)' }, purposes: ['translation', 'suggestion', 'asset_vision', 'appearance'] },
+  { id: 'assist', label: { ko: '보조 (번역·제안·자산·그림 프롬프트)', en: 'Assist (translation, suggestions, assets, picture prompts)' }, purposes: ['translation', 'suggestion', 'asset_vision', 'appearance', 'image_prompt'] },
   { id: 'workflow', label: { ko: '워크플로', en: 'Workflows' }, purposes: ['workflow'] },
   { id: 'other', label: { ko: '기타', en: 'Other' }, purposes: ['other'] },
 ]

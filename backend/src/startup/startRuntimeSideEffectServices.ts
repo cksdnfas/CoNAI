@@ -106,6 +106,8 @@ export async function startRuntimeSideEffectServices(
   GenerationQueueService.start()
   const { ChatGenerationReactionService } = await import('../services/codex-chat/chatGenerationReactions')
   ChatGenerationReactionService.start()
+  const { ChatGenerationPromptingService } = await import('../services/codex-chat/chatGenerationPrompting')
+  ChatGenerationPromptingService.start()
   const { ChatTaskRunner } = await import('../services/codex-chat/chatTasks')
   ChatTaskRunner.start()
   const { ChatRoutineRunner } = await import('../services/codex-chat/chatRoutines')

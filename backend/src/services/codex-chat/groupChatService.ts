@@ -5,6 +5,7 @@ import { automaticReplyRouting, messageSender, quoteMessage, requireReplyTarget,
 import { registerChatReply, skipThreadGenerationReactions } from './chatReplyRegistry'
 import type { McpRequester } from '../../mcp/context'
 import { inlineTextsForChat, loadAttachedImages, validateChatAttachments } from './chatAttachments'
+import { loadInlineGeneratedImages, withGeneratedImages } from './chatGenerationPrompting'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { foldGroupBlockState, parseBlockEdits } from './chatBlockState'
 import { GROUP_LIMITS, GROUP_MEMBER_MAX, ChatGroupStore, groupLimitsOf } from './chatGroupStore'
@@ -325,13 +326,14 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
       })
     } else {
       const maxTokens = ChatGroupStore.member(run.threadId, profile.id)?.max_tokens ?? thread.max_tokens ?? profile.maxTokens
+      const generatedImages = await loadInlineGeneratedImages(profile, requester, run.threadId)
       message = await persist(await generateLlmGroupReply({
         requester,
         threadId: run.threadId,
         profile,
         // The CoNAI tool guidance is for the profile's own tools, not the room tools every member gets.
         chatContext: context,
-        buildMessages: (tools, onMeta, judged) => buildGroupLlmMessages({ profile, thread, members, messages, routing: active.routing, windowLimit: limits.window, tools, maxTokens, withTools: tools.some((tool) => !isChatOwnTool(tool.function.name)), segments: groupSummaryOn(thread) ? ChatSummaryStore.list(run.threadId) : undefined , attachmentTexts, attachedImages, onMeta, judged }),
+        buildMessages: (tools, onMeta, judged) => withGeneratedImages(buildGroupLlmMessages({ profile, thread, members, messages, routing: active.routing, windowLimit: limits.window, tools, maxTokens, withTools: tools.some((tool) => !isChatOwnTool(tool.function.name)), segments: groupSummaryOn(thread) ? ChatSummaryStore.list(run.threadId) : undefined , attachmentTexts, attachedImages, onMeta, judged }), generatedImages),
         // The member's own cap, else the room's, else the profile's (a Codex member has no hard cap).
         generation: { maxTokens },
         signal: controller.signal,

@@ -67,6 +67,11 @@ export type ChatToolCall = {
   failedJobs?: Array<{ jobId: number; status: 'failed' | 'cancelled' | 'completed'; failureCode: string | null; failureMessage: string }>
   /** Results this call created; lookups retain references without claiming authorship. */
   generated?: boolean
+  /**
+   * A picture asked for under an `after` generation preset whose job is not queued yet: its prompt is being written
+   * from the finished reply, or writing it failed (`error` says why). Derived when reading the reply.
+   */
+  deferred?: { state: 'writing' | 'failed'; error: string | null }
   /** A setting the model proposed with this call (propose_* tools); the card under the reply lets a person save it. */
   proposal?: ChatProposal
 }

@@ -24,6 +24,7 @@ import type { ChatSendOptions } from './chatTasks'
 import { rememberChatPage } from './chatPageBridge'
 import { notifyChatUserSend } from './chatSendEvents'
 import { attachJobResults, collectCodexChatMedia, pendingGenerationOutcomes } from './codexChatMedia'
+import { pendingGeneratedImages } from './chatGenerationPrompting'
 import { canRequesterViewImages } from '../../middleware/imageAccess'
 import { buildEmoticonGuidance } from './chatEmoticons'
 import { buildChatStyleGuidance } from './chatStyle'
@@ -902,8 +903,9 @@ export async function runCodexGroupReply(params: {
         const state = pendingBlockState(room, profile, params.messages, sent, profile.id)
         const rejected = pendingRejectedLore(threadId, profile, sent)
         const outcomes = pendingGenerationOutcomes(threadId, params.messages.filter((message) => message.speaker_profile_id === profile.id), sent)
-        const input = params.buildInput([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text].filter(Boolean).join('\n\n'))
-        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys]
+        const generated = await pendingGeneratedImages(profile, requester, threadId, sent)
+        const input = params.buildInput([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text, generated.text].filter(Boolean).join('\n\n'))
+        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys, ...generated.keys]
         const lastSeen = ChatGroupStore.member(threadId, profile.id)?.last_seen_message_id ?? null
         const missed = sendableMessages(params.messages).filter((message) => message.id > (lastSeen ?? 0) && !(lastSeen !== null && message.role === 'assistant' && message.speaker_profile_id === profile.id))
         const shown = missed.slice(-params.windowLimit)
@@ -923,7 +925,7 @@ export async function runCodexGroupReply(params: {
           ...chatTurnRestrictions(session.runtime.cwd),
           model: run.model,
           effort: run.effort,
-          input: codexTurnInput(input, shown.filter((message) => message.role === 'user').flatMap((message) => attachedImagesOf(message, params.attachedImages))),
+          input: codexTurnInput(input, [...shown.filter((message) => message.role === 'user').flatMap((message) => attachedImagesOf(message, params.attachedImages)), ...generated.urls]),
         }
         if (loadChatSettings().diagnostics.enabled && loadChatSettings().diagnostics.captureRaw) turn.requestCapture = redactChatRequestBody(body)
         turn.requestSent = true
@@ -1376,8 +1378,9 @@ export const CodexChatService = {
         const reference = referenceBlock([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text])
         const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user) : ''
         const images = await loadAttachedImages(profile, requester, [{ attachments, mediaAttachments }])
-        const input = [recap, reference, replyGuide.text, buildReplyContext(history, routing), pageReference.text, cards.text, chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }]), images), directive].filter(Boolean).join('\n\n')
-        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys, ...replyGuide.keys, ...pageReference.keys, ...cards.keys]
+        const generated = await pendingGeneratedImages(profile, requester, threadId, sent)
+        const input = [recap, reference, replyGuide.text, buildReplyContext(history, routing), pageReference.text, cards.text, chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }]), images), directive, generated.text].filter(Boolean).join('\n\n')
+        const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys, ...replyGuide.keys, ...pageReference.keys, ...cards.keys, ...generated.keys]
         turn.contextMeta = codexInputMeta(profile, [userMessage], lore, input, keys, [
           ...contextSource('user-persona', persona.text), ...contextSource('lore-index', lore.index.keys.length ? lore.selected.index : ''), ...contextSource('constant-lore', lore.index.keys.length ? lore.selected.constant : ''),
           ...contextSource('author-note', note.text ? resolveAuthorNote(current, profile, user).text : ''), ...contextSource('state', state.text),
@@ -1394,7 +1397,7 @@ export const CodexChatService = {
           ...chatTurnRestrictions(session.runtime.cwd),
           model: run.model,
           effort: run.effort,
-          input: codexTurnInput(input, attachedImagesOf({ attachments, mediaAttachments }, images)),
+          input: codexTurnInput(input, [...attachedImagesOf({ attachments, mediaAttachments }, images), ...generated.urls]),
         }
         if (loadChatSettings().diagnostics.enabled && loadChatSettings().diagnostics.captureRaw) turn.requestCapture = redactChatRequestBody(body)
         turn.requestSent = true

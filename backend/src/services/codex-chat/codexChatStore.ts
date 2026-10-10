@@ -474,6 +474,7 @@ export const CodexChatStore = {
     const db = getUserSettingsDb()
     db.transaction(() => {
       db.prepare('DELETE FROM chat_generation_links WHERE thread_id = ?').run(threadId)
+      db.prepare('DELETE FROM chat_deferred_generations WHERE thread_id = ?').run(threadId)
       removeMessagesAfter(threadId, 0)
       ChatSummaryStore.clear(threadId)
       db.prepare(`UPDATE codex_chat_threads SET summary = NULL, summary_until_message_id = NULL, summary_updated_date = NULL, summary_error = NULL, block_edits = NULL,
@@ -518,6 +519,7 @@ export const CodexChatStore = {
         SELECT ?, thread_id, state, attempts, message_id, updated_at FROM chat_generation_reactions WHERE thread_id = ? AND reply_id = ?`)
         .run(toReplyId, threadId, fromReplyId)
       db.prepare('UPDATE chat_generation_links SET reply_id = ? WHERE thread_id = ? AND reply_id = ?').run(toReplyId, threadId, fromReplyId)
+      db.prepare('UPDATE chat_deferred_generations SET reply_id = ? WHERE thread_id = ? AND reply_id = ?').run(toReplyId, threadId, fromReplyId)
     }).immediate()
   },
 

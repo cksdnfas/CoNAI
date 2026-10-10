@@ -4,6 +4,7 @@ import { ChatProposalStore } from './chatProposals'
 import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibilityService'
 import { audioCandidatesByQueueJob, audioOrderGroupsByQueueJob } from '../audio/audioJobCandidates'
 import type { CodexChatMessageRecord } from './codexChatStore'
+import { ChatDeferredGenerationStore } from './chatDeferredGenerations'
 
 export type CodexChatMediaSource = 'generated' | 'found'
 
@@ -122,6 +123,12 @@ export function attachJobResults(messages: CodexChatMessageRecord[]) {
     links.push(...db.prepare('SELECT job_id, reply_id FROM chat_generation_links WHERE thread_id = ?').all(threadId) as Array<{ job_id: number; reply_id: string }>)
   }
   links.forEach((link) => owners.set(link.job_id, link.reply_id))
+  // Pictures asked for under an `after` preset show while their prompt is written (or why it was not) until queued.
+  const deferred = ChatDeferredGenerationStore.callsFor([...new Set(messages.map((message) => message.thread_id))])
+  if (deferred.size) messages = messages.map((message) => {
+    const calls = message.routing?.replyId ? deferred.get(message.routing.replyId) : undefined
+    return calls ? { ...message, tool_calls: [...message.tool_calls, ...calls] } : message
+  })
   // Audio-order jobs make sound candidates (audio.db), not image history rows.
   const audioOrderGroups = audioOrderGroupsByQueueJob(links.map((link) => link.job_id))
   messages = messages.map((message) => {

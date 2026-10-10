@@ -1,6 +1,6 @@
 import { requestApiData } from '@/lib/api-request'
 
-export type LlmUsagePurpose = 'chat' | 'summary' | 'judge' | 'translation' | 'suggestion' | 'asset_vision' | 'appearance' | 'workflow' | 'other'
+export type LlmUsagePurpose = 'chat' | 'summary' | 'judge' | 'translation' | 'suggestion' | 'asset_vision' | 'appearance' | 'image_prompt' | 'workflow' | 'other'
 export type LlmUsageEngine = 'api' | 'claude-code' | 'codex' | 'typesafe'
 
 export type LlmUsageTotals = {

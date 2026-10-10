@@ -33,6 +33,7 @@ import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { getErrorMessage } from '@/lib/error-message'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { downloadChatGenerationPresetFile } from './chat-generation-preset-file'
+import { EMPTY_PROMPTING, PresetPromptingFields, promptingInputOf } from './chat-generation-preset-prompting'
 import { CHAT_DOCK_INSET, useSettingsEditorChatPage } from './use-settings-editor-chat-page'
 import { ChatFilledLabel } from '@/features/codex-chat/chat-page-context'
 import type { ChatPageField, ChatPageValue } from '@conai/shared'
@@ -57,8 +58,8 @@ export const EMPTY_NAI_PRESET: ChatNaiPresetConfig = {
 
 function emptyDraft(kind: 'nai' | 'comfyui'): ChatGenerationPresetInput {
   return kind === 'nai'
-    ? { name: '', instruction: '', kind, nai: EMPTY_NAI_PRESET, comfyui: null }
-    : { name: '', instruction: '', kind, nai: null, comfyui: { workflowId: 0, serverId: null, serverTag: null, fixedInputs: {}, exposedFieldIds: [] } }
+    ? { name: '', instruction: '', kind, nai: EMPTY_NAI_PRESET, comfyui: null, prompting: EMPTY_PROMPTING }
+    : { name: '', instruction: '', kind, nai: null, comfyui: { workflowId: 0, serverId: null, serverTag: null, fixedInputs: {}, exposedFieldIds: [] }, prompting: EMPTY_PROMPTING }
 }
 
 function numberOrKeep(value: string, keep: number) {
@@ -275,7 +276,7 @@ export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDupli
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState<ChatGenerationPresetInput>(() => emptyDraft('nai'))
-  const initial = useMemo<ChatGenerationPresetInput>(() => (preset ? { name: preset.name, instruction: preset.instruction, kind: preset.kind, nai: preset.nai, comfyui: preset.comfyui } : emptyDraft('nai')), [preset])
+  const initial = useMemo<ChatGenerationPresetInput>(() => (preset ? { name: preset.name, instruction: preset.instruction, kind: preset.kind, nai: preset.nai, comfyui: preset.comfyui, prompting: promptingInputOf(preset.prompting) } : emptyDraft('nai')), [preset])
 
   useLayoutEffect(() => {
     if (open) setDraft(initial)
@@ -349,13 +350,14 @@ export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDupli
             {preset ? (
               <div className="flex h-10 items-center"><Chip size="sm" tone="muted">{kindLabel[draft.kind]}</Chip></div>
             ) : (
-              <Select variant="settings" className="px-3" value={draft.kind} onChange={(event) => setDraft({ ...emptyDraft(event.target.value as 'nai' | 'comfyui'), name: draft.name, instruction: draft.instruction })}>
+              <Select variant="settings" className="px-3" value={draft.kind} onChange={(event) => setDraft({ ...emptyDraft(event.target.value as 'nai' | 'comfyui'), name: draft.name, instruction: draft.instruction, prompting: draft.prompting })}>
                 <option value="nai">NovelAI</option>
                 <option value="comfyui">ComfyUI</option>
               </Select>
             )}
           </Field>
         </div>
+        <PresetPromptingFields value={draft.prompting ?? EMPTY_PROMPTING} onChange={(prompting) => setDraft({ ...draft, prompting })} />
         {draft.kind === 'nai' ? <NaiPresetFields config={draft.nai ?? EMPTY_NAI_PRESET} onChange={(nai) => setDraft({ ...draft, nai })} /> : null}
         {draft.kind === 'comfyui' && draft.comfyui ? <ComfyPresetFields config={draft.comfyui} onChange={(comfyui) => setDraft({ ...draft, comfyui })} /> : null}
       </ModalBody>
@@ -394,10 +396,14 @@ function useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, sav
   const { t } = useI18n()
   const workflowsQuery = useQuery({ queryKey: ['generation-workflows', 'chat-generation-preset'], queryFn: () => getGenerationWorkflows(true), staleTime: 60_000, enabled: open && draft.kind === 'comfyui' })
   const nai = draft.nai
+  const prompting = draft.prompting ?? EMPTY_PROMPTING
   const fields: ChatPageField[] = [
     { id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: draft.name },
     { id: 'instruction', label: t({ ko: '용도 (모델에게 보여줌)', en: 'Purpose (shown to the model)' }), type: 'text', value: draft.instruction },
     ...(preset ? [] : [{ id: 'kind', label: t({ ko: '종류', en: 'Kind' }), type: 'select' as const, value: draft.kind, options: ['nai', 'comfyui'] }]),
+    { id: 'timing', label: t({ ko: '프롬프트 작성 시점 (inline: 답변과 같이, after: 답변 끝난 뒤 따로 작성)', en: 'When the prompt is written (inline: with the reply, after: from the finished reply)' }), type: 'select', value: prompting.timing, options: ['inline', 'after'] },
+    { id: 'guide', label: t({ ko: '프롬프트 작성 가이드 (몇 줄)', en: 'Prompt writing guide (a few lines)' }), type: 'text', value: prompting.guide },
+    { id: 'previousImages', label: t({ ko: '이전 이미지 참고 장수', en: 'Earlier pictures shown' }), type: 'number', value: prompting.previousImages, min: 0, max: 4, integer: true },
     ...(draft.kind === 'nai' && nai ? [
       { id: 'model', label: t({ ko: '모델', en: 'Model' }), type: 'select' as const, value: nai.model, options: [...new Set([...NAI_MODEL_OPTIONS.map((option) => option.value), nai.model])] },
       { id: 'sampler', label: t({ ko: '샘플러', en: 'Sampler' }), type: 'select' as const, value: nai.sampler, options: [...new Set([...NAI_SAMPLER_OPTIONS.map((option) => option.value), nai.sampler])] },
@@ -426,8 +432,17 @@ function useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, sav
     save,
     apply: (patch: Record<string, ChatPageValue>) => setDraft((current) => {
       let next = { ...current }
-      if (patch.kind !== undefined && !preset && patch.kind !== next.kind) next = { ...emptyDraft(patch.kind as 'nai' | 'comfyui'), name: next.name, instruction: next.instruction }
+      if (patch.kind !== undefined && !preset && patch.kind !== next.kind) next = { ...emptyDraft(patch.kind as 'nai' | 'comfyui'), name: next.name, instruction: next.instruction, prompting: next.prompting }
       if (patch.name !== undefined) next.name = String(patch.name)
+      if (patch.timing !== undefined || patch.guide !== undefined || patch.previousImages !== undefined) {
+        const current = next.prompting ?? EMPTY_PROMPTING
+        next.prompting = {
+          ...current,
+          ...(patch.timing !== undefined ? { timing: patch.timing === 'after' ? 'after' as const : 'inline' as const } : {}),
+          ...(patch.guide !== undefined ? { guide: String(patch.guide) } : {}),
+          ...(patch.previousImages !== undefined ? { previousImages: Math.min(4, Math.max(0, Math.round(Number(patch.previousImages)) || 0)) } : {}),
+        }
+      }
       if (patch.instruction !== undefined) next.instruction = String(patch.instruction)
       if (next.nai) {
         const naiPatch: Partial<ChatNaiPresetConfig> = {}

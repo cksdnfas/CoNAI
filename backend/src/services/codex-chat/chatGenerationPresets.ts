@@ -1,6 +1,8 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { createHash } from 'crypto'
+import path from 'path'
 import { WorkflowModel } from '../../models/Workflow'
+import { FileStoreService, TEXT_EXTENSIONS, parseFileId } from '../fileStoreService'
 import { ChatProfileError } from './chatProfileError'
 import type { MarkedField } from '../../types/workflow'
 
@@ -51,6 +53,26 @@ export type ChatComfyPresetConfig = {
   promptField?: string | null
 }
 
+/**
+ * How the scene prompt gets written. `inline`: the chat model fills the tool while it replies. `after`: the chat
+ * model only asks for a picture (with an optional note of the moment), and once the reply is finished a separate call
+ * writes the prompt from the finished text (chatGenerationPrompting.ts). Either way the writer gets the guide (the
+ * text here and the linked file store file) and up to `previousImages` of the chat's latest generated images.
+ */
+export type ChatPresetPrompting = {
+  timing: 'inline' | 'after'
+  guide: string
+  /**
+   * A text file of an administrator's file store. `owner` is the store it lives in (the admin who linked it), kept
+   * so the file still reads when another account's chat uses the preset; `path` is where it is now (null: gone).
+   */
+  guideFile: { owner: string; fileId: string; path: string | null; updatedAt: string | null } | null
+  previousImages: number
+}
+
+export const PRESET_PREVIOUS_IMAGES_MAX = 4
+export const PRESET_GUIDE_MAX_LENGTH = 4000
+
 export type ChatGenerationPreset = {
   id: number
   name: string
@@ -59,13 +81,18 @@ export type ChatGenerationPreset = {
   kind: ChatGenerationPresetKind
   nai: ChatNaiPresetConfig | null
   comfyui: ChatComfyPresetConfig | null
+  prompting: ChatPresetPrompting
   /** Profiles that link this preset. */
   profiles: Array<{ id: number; name: string }>
   createdDate: string
   updatedDate: string
 }
 
-export type ChatGenerationPresetInput = { name?: unknown; instruction?: unknown; kind?: unknown; nai?: unknown; comfyui?: unknown }
+/** `prompting.guideFileId`: a file of the saving admin's own store (null unlinks it); the rest as ChatPresetPrompting. */
+export type ChatGenerationPresetInput = { name?: unknown; instruction?: unknown; kind?: unknown; nai?: unknown; comfyui?: unknown; prompting?: unknown }
+
+/** Where a guide file is linked from: the store of the admin saving the preset, asked only when a new file is linked. */
+export type PresetSaveOptions = { guideOwner?: () => string }
 
 export const PROFILE_MAX_GENERATION_PRESETS = 8
 const NAME_MAX_LENGTH = 80
@@ -95,7 +122,7 @@ const DEFAULT_NAI: ChatNaiPresetConfig = {
   characterReference: 'none',
 }
 
-type PresetRow = { id: number; name: string; instruction: string; kind: string; config: string; created_date: string; updated_date: string }
+type PresetRow = { id: number; name: string; instruction: string; kind: string; config: string; prompting: string | null; created_date: string; updated_date: string }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -273,6 +300,68 @@ function linkedProfiles() {
   return rows.map((row) => ({ id: row.id, name: row.name, presetIds: normalizeGenerationPresetIds(row.generation_preset_ids) }))
 }
 
+const DEFAULT_PROMPTING: ChatPresetPrompting = { timing: 'inline', guide: '', guideFile: null, previousImages: 0 }
+
+/** Where a linked guide file is now (`a/b/c.md` from the store root) and when it last changed; nulls once it is gone. */
+function guideFileAt(owner: string, fileId: string): { path: string | null; updatedAt: string | null } {
+  const lookup = getUserSettingsDb().prepare('SELECT parent_id, name, updated_at FROM stored_file_entries WHERE id = ? AND owner_key = ? AND deleted_at IS NULL')
+  const file = lookup.get(fileId, owner) as { parent_id: string | null; name: string; updated_at: string } | undefined
+  if (!file) return { path: null, updatedAt: null }
+  const names = [file.name]
+  let parentId = file.parent_id
+  while (parentId !== null && names.length < 64) {
+    const folder = lookup.get(parentId, owner) as { parent_id: string | null; name: string } | undefined
+    if (!folder) return { path: null, updatedAt: null }
+    names.unshift(folder.name)
+    parentId = folder.parent_id
+  }
+  return { path: names.join('/'), updatedAt: file.updated_at }
+}
+
+function readPrompting(value: string | null): ChatPresetPrompting {
+  let raw: unknown = null
+  try { raw = JSON.parse(value || '{}') } catch { raw = null }
+  const stored = isRecord(raw) ? raw : {}
+  const file = isRecord(stored.guideFile) && typeof stored.guideFile.owner === 'string' && typeof stored.guideFile.fileId === 'string' && /^[a-f0-9]{32}$/.test(stored.guideFile.fileId)
+    ? { owner: stored.guideFile.owner, fileId: stored.guideFile.fileId }
+    : null
+  return {
+    timing: stored.timing === 'after' ? 'after' : 'inline',
+    guide: text(stored.guide, PRESET_GUIDE_MAX_LENGTH),
+    guideFile: file ? { ...file, ...guideFileAt(file.owner, file.fileId) } : null,
+    previousImages: number(stored.previousImages, { min: 0, max: PRESET_PREVIOUS_IMAGES_MAX }, 0, true),
+  }
+}
+
+/** The prompting a save leaves: `input` over `current`; a newly linked guide file must be a text file of the saver's store. */
+function promptingOf(input: unknown, current: ChatPresetPrompting | null, options: PresetSaveOptions): ChatPresetPrompting {
+  const base = current ?? DEFAULT_PROMPTING
+  if (input === undefined || input === null) return base
+  if (!isRecord(input)) throw new ChatProfileError('프롬프트 작성 설정이 올바르지 않아.')
+  if (input.timing !== undefined && input.timing !== 'inline' && input.timing !== 'after') throw new ChatProfileError('작성 시점은 inline 또는 after여야 해.')
+  let guideFile = base.guideFile
+  if (input.guideFileId === null || input.guideFileId === '') guideFile = null
+  else if (input.guideFileId !== undefined && input.guideFileId !== base.guideFile?.fileId) {
+    const fileId = parseFileId(input.guideFileId) as string
+    if (!options.guideOwner) throw new ChatProfileError('가이드 문서는 설정 화면에서 연결해줘.')
+    const owner = options.guideOwner()
+    const { entry } = FileStoreService.resolveFile(owner, fileId)
+    if (!TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) throw new ChatProfileError('가이드 문서는 텍스트 파일만 연결할 수 있어.')
+    guideFile = { owner, fileId, ...guideFileAt(owner, fileId) }
+  }
+  return {
+    timing: input.timing === undefined ? base.timing : input.timing,
+    guide: input.guide === undefined ? base.guide : text(input.guide, PRESET_GUIDE_MAX_LENGTH),
+    guideFile,
+    previousImages: input.previousImages === undefined ? base.previousImages : number(input.previousImages, { min: 0, max: PRESET_PREVIOUS_IMAGES_MAX }, 0, true),
+  }
+}
+
+function promptingColumn(prompting: ChatPresetPrompting) {
+  const { timing, guide, guideFile, previousImages } = prompting
+  return JSON.stringify({ timing, guide, guideFile: guideFile ? { owner: guideFile.owner, fileId: guideFile.fileId } : null, previousImages })
+}
+
 function parseConfig(row: PresetRow): Pick<ChatGenerationPreset, 'kind' | 'nai' | 'comfyui'> {
   let raw: unknown = null
   try { raw = JSON.parse(row.config) } catch { raw = null }
@@ -293,13 +382,14 @@ function toPreset(row: PresetRow, profiles: ReturnType<typeof linkedProfiles>): 
     name: row.name,
     instruction: row.instruction,
     ...parseConfig(row),
+    prompting: readPrompting(row.prompting),
     profiles: profiles.filter((profile) => profile.presetIds.includes(row.id)).map(({ id, name }) => ({ id, name })),
     createdDate: row.created_date,
     updatedDate: row.updated_date,
   }
 }
 
-function columnsOf(input: ChatGenerationPresetInput, current: ChatGenerationPreset | null) {
+function columnsOf(input: ChatGenerationPresetInput, current: ChatGenerationPreset | null, options: PresetSaveOptions) {
   const kind = input.kind === undefined && current ? current.kind : kindOf(input.kind)
   const config = kind === 'nai'
     ? normalizeNaiPresetConfig(input.nai === undefined && current ? current.nai : input.nai)
@@ -309,6 +399,7 @@ function columnsOf(input: ChatGenerationPresetInput, current: ChatGenerationPres
     instruction: input.instruction === undefined && current ? current.instruction : text(input.instruction, INSTRUCTION_MAX_LENGTH),
     kind,
     config: JSON.stringify(config),
+    prompting: promptingColumn(promptingOf(input.prompting, current?.prompting ?? null, options)),
   }
 }
 
@@ -350,19 +441,19 @@ export const ChatGenerationPresetStore = {
     return createHash('sha256').update(JSON.stringify(ChatGenerationPresetStore.resolve(ids))).digest('hex')
   },
 
-  create(input: ChatGenerationPresetInput) {
-    const columns = columnsOf(input, null)
-    const result = getUserSettingsDb().prepare('INSERT INTO chat_generation_presets (name, instruction, kind, config) VALUES (?, ?, ?, ?)')
-      .run(columns.name, columns.instruction, columns.kind, columns.config)
+  create(input: ChatGenerationPresetInput, options: PresetSaveOptions = {}) {
+    const columns = columnsOf(input, null, options)
+    const result = getUserSettingsDb().prepare('INSERT INTO chat_generation_presets (name, instruction, kind, config, prompting) VALUES (?, ?, ?, ?, ?)')
+      .run(columns.name, columns.instruction, columns.kind, columns.config, columns.prompting)
     return ChatGenerationPresetStore.find(Number(result.lastInsertRowid)) as ChatGenerationPreset
   },
 
-  update(presetId: number, patch: ChatGenerationPresetInput) {
+  update(presetId: number, patch: ChatGenerationPresetInput, options: PresetSaveOptions = {}) {
     const current = ChatGenerationPresetStore.find(presetId)
     if (!current) return null
-    const columns = columnsOf(patch, current)
-    getUserSettingsDb().prepare('UPDATE chat_generation_presets SET name = ?, instruction = ?, kind = ?, config = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(columns.name, columns.instruction, columns.kind, columns.config, presetId)
+    const columns = columnsOf(patch, current, options)
+    getUserSettingsDb().prepare('UPDATE chat_generation_presets SET name = ?, instruction = ?, kind = ?, config = ?, prompting = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(columns.name, columns.instruction, columns.kind, columns.config, columns.prompting, presetId)
     return ChatGenerationPresetStore.find(presetId)
   },
 
@@ -392,7 +483,9 @@ export function readGenerationPresetFile(value: unknown): ChatGenerationPresetIn
     if (!isRecord(item)) return []
     const inner = isRecord(item.preset) ? item.preset : item
     if (inner.kind !== 'nai' && inner.kind !== 'comfyui') return []
-    return [{ name: item.name ?? inner.name ?? '생성 프리셋', instruction: item.instruction ?? inner.instruction ?? '', kind: inner.kind, nai: inner.nai, comfyui: inner.comfyui }]
+    // A guide file is a file of this server's store: an imported preset keeps the writing settings but not the link.
+    const prompting = isRecord(inner.prompting) ? { timing: inner.prompting.timing, guide: inner.prompting.guide, previousImages: inner.prompting.previousImages } : undefined
+    return [{ name: item.name ?? inner.name ?? '생성 프리셋', instruction: item.instruction ?? inner.instruction ?? '', kind: inner.kind, nai: inner.nai, comfyui: inner.comfyui, prompting }]
   })
   if (read.length === 0) throw new ChatProfileError('가져올 생성 프리셋이 없어. 내보낸 프리셋 JSON을 골라줘.')
   return read.slice(0, 20)

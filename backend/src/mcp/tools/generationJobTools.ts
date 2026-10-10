@@ -105,7 +105,8 @@ export type McpGenerationJobInput = {
  * Create one durable generation job for an MCP caller (submit_generation_job and the chat generation presets):
  * routing, ComfyUI input normalization, idempotent retries and ownership. Returns the job as the tools describe it.
  */
-export async function enqueueMcpGenerationJob(context: McpRequestContext, input: McpGenerationJobInput, toolName = 'submit_generation_job', options: { maxPayloadBytes?: number } = {}) {
+/** `afterReply`: a picture an `after` generation preset writes once its reply is finished (chatGenerationPrompting). */
+export async function enqueueMcpGenerationJob(context: McpRequestContext, input: McpGenerationJobInput, toolName = 'submit_generation_job', options: { maxPayloadBytes?: number; afterReply?: boolean } = {}) {
   return enqueueGenerationJob(context, input, toolName, options);
 }
 
@@ -115,9 +116,10 @@ export async function enqueueProfileAssetGenerationJob(requester: McpRequester, 
   return enqueueGenerationJob({ scopes: ['generate'], requester }, input, 'profile_assets', { assetProfileId: profileId, recordJob, maxPayloadBytes });
 }
 
-async function enqueueGenerationJob(context: McpRequestContext, input: McpGenerationJobInput, toolName: string, options: { maxPayloadBytes?: number; assetProfileId?: number; recordJob?: (jobId: number) => void }) {
-  if (context.chatContext) requireActiveChatReply(context.chatContext);
-  if (isChatMcpSource(context.source)) requireMcpToolAccess(context, toolName, input);
+async function enqueueGenerationJob(context: McpRequestContext, input: McpGenerationJobInput, toolName: string, options: { maxPayloadBytes?: number; assetProfileId?: number; recordJob?: (jobId: number) => void; afterReply?: boolean }) {
+  // An `after` picture is queued once its reply ended; the tool call that asked for it ran while the reply did.
+  if (context.chatContext && !options.afterReply) requireActiveChatReply(context.chatContext);
+  if (isChatMcpSource(context.source)) requireMcpToolAccess(context, toolName, input, options.afterReply ? 'after-reply' : 'reply');
   const { service_type, workflow_id, server_id, server_tag, inputs, request_payload, group_id, group_path, priority = 100, idempotency_key, request_summary } = input;
   let usesImages = false;
   const requireManagedMedia = () => { usesImages = true; requireRequesterPermission(context.requester, 'images.view'); };
@@ -217,7 +219,7 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
   const targetGroupId = resolveMcpTargetGroup(group_id, group_path);
 
   if (isChatMcpSource(context.source)) {
-    requireMcpToolAccess(context, toolName, input);
+    requireMcpToolAccess(context, toolName, input, options.afterReply ? 'after-reply' : 'reply');
     // Delayed jobs recheck this server-issued grant before dispatch, rather than retaining submission authority.
     payload = { ...payload, __conaiChatGrant: { toolName, context, usesImages } };
   }
