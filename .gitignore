@@ -180,3 +180,6 @@ graphify-out/
 coordinator/prompts/
 coordinator/worker-logs/
 worker-results/
+
+# Internal docs kept off the repo and the Pages site
+/local-docs/
