@@ -3,7 +3,7 @@ import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { CHAT_SCOPES, readLegacyCodexChatSettings, type ChatScope } from './chatSettings'
 import { isClaudeReasoningEffort, isLlmReasoningEffort, parseLlmExtraParams, type LlmGenerationOptions } from '../llmGenerationOptions'
 import { BACKGROUND_MAX_LENGTH, BACKGROUND_PATTERN, normalizeChatStyle, type ChatStyle } from './chatStyle'
-import { ChatLorebookStore, normalizeLorebookIds } from './chatLorebook'
+import { ChatLorebookStore, LORE_RECURSION_MAX_DEPTH, normalizeLorebookIds } from './chatLorebook'
 import { ChatSharedBlockStore, normalizeBlockIds } from './chatDisplayBlocks'
 import { ChatProfileError } from './chatProfileError'
 import { AuthPermissionGroup } from '../../models/AuthPermissionGroup'
@@ -31,6 +31,8 @@ export const CHAT_PROFILE_DEFAULTS = {
   loreTokenBudget: 1024,
   /** Turns before the end where keyword lore is merged in (0: the latest user message). */
   loreDepth: 4,
+  /** Recursive lore scan levels (0: off). */
+  loreRecursionDepth: 0,
   contextTurns: 20,
   summaryTriggerTurns: 6,
   maxToolRounds: 8,
@@ -86,6 +88,8 @@ export type ChatProfile = {
   loreTokenBudget: number
   /** API LLM: keyword lore goes this many turns before the end of the conversation. */
   loreDepth: number
+  /** How many times chosen lore entries' text is scanned for further entries (0: off). */
+  loreRecursionDepth: number
   /** Default author's note: scene direction every chat of this profile gets at `loreDepth` unless the chat sets its own. */
   authorNote: string
   /** Small data URL (resized in the browser). */
@@ -231,6 +235,7 @@ type ProfileRow = {
   lore_scan_depth: number
   lore_token_budget: number
   lore_depth: number | null
+  lore_recursion_depth: number | null
   author_note: string | null
   avatar: string | null
   appearance: string | null
@@ -388,6 +393,7 @@ function toProfile(row: ProfileRow): ChatProfile {
     loreScanDepth: row.lore_scan_depth ?? CHAT_PROFILE_DEFAULTS.loreScanDepth,
     loreTokenBudget: row.lore_token_budget ?? CHAT_PROFILE_DEFAULTS.loreTokenBudget,
     loreDepth: row.lore_depth ?? CHAT_PROFILE_DEFAULTS.loreDepth,
+    loreRecursionDepth: row.lore_recursion_depth ?? CHAT_PROFILE_DEFAULTS.loreRecursionDepth,
     authorNote: row.author_note ?? '',
     avatar: row.avatar,
     appearance: row.appearance ?? '',
@@ -562,6 +568,7 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean } = {}) {
     lore_scan_depth: optionalNumber(input.loreScanDepth, { min: 1, max: 100 }, true) ?? CHAT_PROFILE_DEFAULTS.loreScanDepth,
     lore_token_budget: optionalNumber(input.loreTokenBudget, { min: 0, max: 32768 }, true) ?? CHAT_PROFILE_DEFAULTS.loreTokenBudget,
     lore_depth: optionalNumber(input.loreDepth, { min: 0, max: 20 }, true) ?? CHAT_PROFILE_DEFAULTS.loreDepth,
+    lore_recursion_depth: optionalNumber(input.loreRecursionDepth, { min: 0, max: LORE_RECURSION_MAX_DEPTH }, true) ?? CHAT_PROFILE_DEFAULTS.loreRecursionDepth,
     author_note: text(input.authorNote, AUTHOR_NOTE_MAX_LENGTH) || null,
     avatar,
     appearance: text(input.appearance, TEXT_MAX_LENGTH) || null,

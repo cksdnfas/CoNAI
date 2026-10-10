@@ -5,7 +5,7 @@ import type { ChatExecutionContext, ChatProposal } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { FileStoreService, TEXT_EXTENSIONS, fileOwnerKey } from '../fileStoreService'
 import { storedFilePath } from '../fileStorePaths'
-import { loreEntryTitle, normalizeLorebook } from './chatLorebook'
+import { loreEntryKeys, loreEntryTitle, normalizeLorebook } from './chatLorebook'
 import { LORE_FILES_FOLDER, OwnedLorebookStore, foldLoreTitle, freeChildName, type OwnedLorebook } from './chatLorebookFiles'
 import { ChatGroupStore } from './chatGroupStore'
 import { ChatProfileStore } from './chatProfiles'
@@ -34,8 +34,8 @@ const REJECTED_LORE_TITLES = 10
 const LORE_PROPOSAL_SPACING = 3
 /** Words in the latest user message that ask for something to be kept; they lift that spacing. */
 const LORE_REQUEST_WORDS = /기억|저장|남겨|remember|save/i
-/** Keywords a proposal keeps, at most. */
-export const LORE_PROPOSAL_MAX_KEYS = 6
+/** Keywords a proposal keeps, at most (English and the chat's own language together). */
+export const LORE_PROPOSAL_MAX_KEYS = 8
 /**
  * Keywords that come up in nearly every exchange, so an entry keyed on them would come back all the time: dates,
  * weekdays, times of day, and the word "promise" itself.
@@ -176,7 +176,7 @@ export function proposeLore(context: ChatExecutionContext, input: SaveLoreInput)
     ...(file ? { file } : {}),
     ...(existing ? {
       replaces: existing.id,
-      before: { title: loreEntryTitle(existing), keys: existing.keys, content: existing.content, constant: existing.constant, file: existing.file },
+      before: { title: loreEntryTitle(existing), keys: loreEntryKeys(existing), content: existing.content, constant: existing.constant, file: existing.file },
     } : {}),
   }) as LoreProposal
   if (!loreAutoSaveOn(context.threadId)) return proposal
@@ -211,7 +211,8 @@ export function applyLoreProposal(proposalId: number): { proposal: ChatProposal;
       const entries = current?.entries ?? []
       const replaced = proposal.replaces ? entries.find((entry) => entry.id === proposal.replaces) : undefined
       const replyId = ChatProposalStore.replyIdOf(proposalId)!
-      const fields = { title: proposal.title, keys: proposal.keys, content: proposal.content, constant: proposal.constant, source: { threadId, replyId, proposalId } }
+      // The proposal's keywords replace both languages' lists; saving sorts them by the book's key language.
+      const fields = { title: proposal.title, keys: proposal.keys, localKeys: [], content: proposal.content, constant: proposal.constant, source: { threadId, replyId, proposalId } }
       let entryId = replaced?.id ?? `lore-p${proposal.id}`
       while (!replaced && entries.some((entry) => entry.id === entryId)) entryId += '-'
       const next = replaced

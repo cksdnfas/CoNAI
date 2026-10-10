@@ -68,6 +68,7 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     loreScanDepth: profile?.loreScanDepth ?? defaults?.loreScanDepth ?? 4,
     loreTokenBudget: profile?.loreTokenBudget ?? defaults?.loreTokenBudget ?? 1024,
     loreDepth: profile?.loreDepth ?? defaults?.loreDepth ?? 4,
+    loreRecursionDepth: profile?.loreRecursionDepth ?? defaults?.loreRecursionDepth ?? 0,
     authorNote: profile?.authorNote ?? '',
     avatar: profile?.avatar ?? null,
     appearance: profile?.appearance,

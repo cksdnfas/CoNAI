@@ -123,7 +123,7 @@ export function metadataOnly(meta: { lore: string[] } & ChatDiagnosticsFields) {
     sections: meta.sections?.map((section) => ({ ...pick(section, ['kind', 'role', 'position', 'estTokens', 'hash']), ...(section.parts ? { parts: section.parts.map((part) => pick(part, ['kind', 'role', 'position', 'estTokens', 'hash'])) } : {}) })),
     sources: meta.sources?.map((source) => pick(source, ['kind', 'id', 'hash'])),
     auxiliarySources: meta.auxiliarySources?.map((source) => pick(source, ['kind', 'id', 'hash'])),
-    loreEntries: meta.loreEntries?.map((entry) => pick(entry, ['key', 'bookId', 'bookKind', 'entryId', 'title', 'selected', 'reason', 'matched', 'hash', 'file', 'remaining'])),
+    loreEntries: meta.loreEntries?.map((entry) => pick(entry, ['key', 'bookId', 'bookKind', 'entryId', 'title', 'selected', 'reason', 'matched', 'hash', 'file', 'remaining', 'via'])),
     loreSkipped: meta.loreSkipped?.map((entry) => pick(entry, ['entryId', 'bookId', 'title', 'reason'])),
     recall: meta.recall?.map((recall) => pick(recall, ['segmentId', 'score', 'terms', 'hash'])),
     window: meta.window ? pick(meta.window, ['fromId', 'sent', 'droppedTurns']) : undefined,

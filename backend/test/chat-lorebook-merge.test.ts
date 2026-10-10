@@ -403,10 +403,10 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     })
 
     say('user', '토요일 7시에 등대에서 보자.')
-    const first = await propose('p1', { title: '등대 약속', keys: ['카이', '사용자', '토요일', '7시', '오후 3시 반', '19:30', '내일', '약속', '등대', '기어', '램프', '수리', '방파제', '노을', '갈매기'], content: '토요일 7시에 등대에서 만나기로 했다.' })
+    const first = await propose('p1', { title: '등대 약속', keys: ['카이', '사용자', '토요일', '7시', '오후 3시 반', '19:30', '내일', '약속', '등대', '기어', '램프', '수리', '방파제', '노을', '갈매기', '파도', '모래'], content: '토요일 7시에 등대에서 만나기로 했다.' })
     assert.equal(first.isError, undefined, textOf(first))
     const keys = (first.structuredContent as { proposal: { keys: string[] } }).proposal.keys
-    assert.deepEqual(keys, ['등대', '기어', '램프', '수리', '방파제', '노을'], 'no names, dates or times, at most six')
+    assert.deepEqual(keys, ['등대', '기어', '램프', '수리', '방파제', '노을', '갈매기', '파도'], 'no names, dates or times, at most eight')
     say('assistant', '좋아, 토요일에 봐.', 'p1')
 
     say('user', '그 등대 오래됐어?')

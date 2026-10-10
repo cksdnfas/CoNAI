@@ -9,7 +9,7 @@ import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import { activeMediaFile } from '../codex-chat/chatCardAssets'
 import { buildChatGenerationPresetJob } from '../codex-chat/chatGenerationPayload'
 import { ChatGenerationPresetStore, comfyAssetFields, resolvePresetWorkflow } from '../codex-chat/chatGenerationPresets'
-import { ChatLorebookStore, loreEntryMatches, loreEntryTitle, type ChatLoreEntry } from '../codex-chat/chatLorebook'
+import { ChatLorebookStore, loreEntryKeys, loreEntryMatches, loreEntryTitle, type ChatLoreEntry } from '../codex-chat/chatLorebook'
 import { OwnedLorebookStore } from '../codex-chat/chatLorebookFiles'
 import { MEDIA_MIME_TYPES } from '../codex-chat/chatMediaLinks'
 import { fillCharacterPlaceholders } from '../codex-chat/chatPlaceholders'
@@ -344,7 +344,7 @@ export async function executeSearchLorebookNode(
     book: book.name,
     entry_id: entry.id,
     title: loreEntryTitle(entry),
-    keys: entry.keys,
+    keys: loreEntryKeys(entry),
     content: render(entry.content),
   }))
   const meta = { kind: 'system-search-lorebook', lorebook_id: lorebookId, profile_id: profile?.id ?? null, matched: matched.length }

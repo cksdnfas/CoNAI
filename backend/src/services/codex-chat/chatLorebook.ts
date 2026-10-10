@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import { normalizeLoreKeyLanguage, sortLoreKeysByLanguage } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { ChatProfileError } from './chatProfileError'
 
@@ -18,6 +19,12 @@ export type ChatLoreEntry = {
   keys: string[]
   /** Checked only once a primary keyword matched; none means no further condition. */
   secondaryKeys: string[]
+  /**
+   * The same keywords in the book's key language (see ChatLorebookSettings): matched together with `keys` /
+   * `secondaryKeys` whatever the book's language, so a chat held in either language finds the entry.
+   */
+  localKeys: string[]
+  localSecondaryKeys: string[]
   secondaryLogic: LoreSecondaryLogic
   content: string
   enabled: boolean
@@ -28,6 +35,10 @@ export type ChatLoreEntry = {
   cooldown?: number
   delay?: number
   group?: string
+  /** Recursive scan (see selectLoreEntries): never pulled in by another entry's text, only by the chat's. */
+  excludeRecursion?: boolean
+  /** Recursive scan: this entry's text pulls in no other entry. */
+  preventRecursion?: boolean
   /**
    * A text file this entry points at, relative to the book's folder (`자료/x.md`); null: a plain entry. Account and
    * chat books only. `fileId` is the file store id that follows the file when it is moved or renamed; `file` is what
@@ -43,11 +54,23 @@ export type ChatLoreEntry = {
  */
 export type ChatLorebookKind = 'global' | 'account' | 'chat'
 
+/** A book's own settings. `keyLanguage`: the language its entries' `localKeys` are in besides English; null: English only. */
+export type ChatLorebookSettings = { keyLanguage: string | null }
+
+export function normalizeLorebookSettings(value: unknown): ChatLorebookSettings {
+  if (typeof value === 'string') {
+    try { value = JSON.parse(value) } catch { value = null }
+  }
+  const row = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+  return { keyLanguage: normalizeLoreKeyLanguage(row.keyLanguage) }
+}
+
 /** A shared lorebook. Profiles link it by id, so editing or re-importing it reaches every linked profile. */
 export type ChatLorebook = {
   id: number
   name: string
   kind: ChatLorebookKind
+  settings: ChatLorebookSettings
   entries: ChatLoreEntry[]
   /** Profiles that link this book. */
   profiles: Array<{ id: number; name: string }>
@@ -62,8 +85,17 @@ const LORE_TITLE_MAX_LENGTH = 80
 const LORE_FILE_MAX_LENGTH = 300
 
 /** The entry's title as the index shows it: its own, else the first keyword, else the start of its text. */
-export function loreEntryTitle(entry: Pick<ChatLoreEntry, 'title' | 'keys' | 'content'>) {
-  return entry.title || entry.keys[0] || entry.content.slice(0, 20)
+export function loreEntryTitle(entry: Pick<ChatLoreEntry, 'title' | 'keys' | 'content'> & { localKeys?: string[] }) {
+  return entry.title || entry.keys[0] || entry.localKeys?.[0] || entry.content.slice(0, 20)
+}
+
+/** Every primary keyword: the English ones, then those in the book's key language. */
+export function loreEntryKeys(entry: Pick<ChatLoreEntry, 'keys'> & { localKeys?: string[] }) {
+  return entry.localKeys?.length ? [...entry.keys, ...entry.localKeys] : entry.keys
+}
+
+function loreEntrySecondaryKeys(entry: { secondaryKeys?: string[]; localSecondaryKeys?: string[] }) {
+  return [...entry.secondaryKeys ?? [], ...entry.localSecondaryKeys ?? []]
 }
 
 /** A file path as stored: forward slashes, no leading `./`; null when empty. Safety is checked by the book (see isSafeLoreFilePath). */
@@ -133,6 +165,8 @@ export function normalizeLorebook(value: unknown): ChatLoreEntry[] {
       title: title.trim().replace(/\s+/g, ' ').slice(0, LORE_TITLE_MAX_LENGTH),
       keys: keywordList(keys),
       secondaryKeys: keywordList(secondary),
+      localKeys: keywordList(row.localKeys),
+      localSecondaryKeys: keywordList(selective ? row.localSecondaryKeys : undefined),
       secondaryLogic: secondaryLogicOf(row),
       content: content.trim().slice(0, 20_000),
       enabled: row.enabled !== false && row.disable !== true,
@@ -143,10 +177,21 @@ export function normalizeLorebook(value: unknown): ChatLoreEntry[] {
       cooldown: loreMessageCount(row.cooldown ?? extensions.cooldown),
       delay: loreMessageCount(row.delay ?? extensions.delay),
       group: typeof (row.group ?? extensions.group) === 'string' ? String(row.group ?? extensions.group).trim().slice(0, 100) : '',
+      // SillyTavern: `excludeRecursion` / `preventRecursion` on world info, `exclude_recursion` / `prevent_recursion` in a card's extensions.
+      ...((row.excludeRecursion ?? extensions.exclude_recursion) === true ? { excludeRecursion: true } : {}),
+      ...((row.preventRecursion ?? extensions.prevent_recursion) === true ? { preventRecursion: true } : {}),
       file,
       fileId: file && typeof row.fileId === 'string' && /^[a-f0-9]{32}$/.test(row.fileId) ? row.fileId : null,
     }]
   })
+}
+
+/**
+ * Keywords written in the book's key language's script go to that language's lists, however they came in (typed
+ * into the English row, imported, made by the AI). See sortLoreKeysByLanguage.
+ */
+export function sortLorebookKeys(entries: ChatLoreEntry[], settings: ChatLorebookSettings) {
+  return settings.keyLanguage ? entries.map((entry) => sortLoreKeysByLanguage(entry, settings.keyLanguage)) : entries
 }
 
 /** A global book links no files. */
@@ -166,6 +211,8 @@ export type LorebookRow = {
   id: number
   name: string
   entries: string
+  /** ChatLorebookSettings as JSON; for account and chat books, cached from lorebook.json like the entries. */
+  settings: string | null
   kind: ChatLorebookKind
   /** File store owner key (`account:<id>` / `bootstrap`); null for a global book. */
   owner_key: string | null
@@ -193,6 +240,7 @@ export function toLorebook(row: LorebookRow, profiles: ReturnType<typeof linkedP
     id: row.id,
     name: row.name,
     kind: row.kind ?? 'global',
+    settings: normalizeLorebookSettings(row.settings),
     entries: normalizeLorebook(row.entries),
     profiles: profiles.filter((profile) => profile.lorebookIds.includes(row.id)).map(({ id, name }) => ({ id, name })),
     createdDate: row.created_date,
@@ -245,18 +293,23 @@ export const ChatLorebookStore = {
     return ids.flatMap((bookId) => (byId.get(bookId) ?? []).map((entry) => ({ key: loreEntryKey(bookId, entry), entry, bookId, bookKind: 'global' as const })))
   },
 
-  create(input: { name?: unknown; entries?: unknown }) {
-    const result = getUserSettingsDb().prepare("INSERT INTO chat_lorebooks (name, entries, kind) VALUES (?, ?, 'global')").run(lorebookName(input.name), JSON.stringify(withoutFiles(normalizeLorebook(input.entries ?? []))))
+  create(input: { name?: unknown; entries?: unknown; settings?: unknown }) {
+    const settings = normalizeLorebookSettings(input.settings)
+    const entries = withoutFiles(sortLorebookKeys(normalizeLorebook(input.entries ?? []), settings))
+    const result = getUserSettingsDb().prepare("INSERT INTO chat_lorebooks (name, entries, settings, kind) VALUES (?, ?, ?, 'global')").run(lorebookName(input.name), JSON.stringify(entries), JSON.stringify(settings))
     return ChatLorebookStore.find(Number(result.lastInsertRowid)) as ChatLorebook
   },
 
   /** Global books only (null for any other): account and chat books are written through their files. */
-  update(lorebookId: number, patch: { name?: unknown; entries?: unknown }) {
+  update(lorebookId: number, patch: { name?: unknown; entries?: unknown; settings?: unknown }) {
     const current = ChatLorebookStore.find(lorebookId)
     if (!current || current.kind !== 'global') return null
-    getUserSettingsDb().prepare('UPDATE chat_lorebooks SET name = ?, entries = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(
+    const settings = patch.settings === undefined ? current.settings : normalizeLorebookSettings(patch.settings)
+    const entries = patch.entries === undefined ? current.entries : withoutFiles(normalizeLorebook(patch.entries))
+    getUserSettingsDb().prepare('UPDATE chat_lorebooks SET name = ?, entries = ?, settings = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(
       patch.name === undefined ? current.name : lorebookName(patch.name),
-      JSON.stringify(patch.entries === undefined ? current.entries : withoutFiles(normalizeLorebook(patch.entries))),
+      JSON.stringify(sortLorebookKeys(entries, settings)),
+      JSON.stringify(settings),
       lorebookId,
     )
     return ChatLorebookStore.find(lorebookId)
@@ -276,7 +329,10 @@ export const ChatLorebookStore = {
   },
 }
 
-type LoreProfile = { lorebookIds: number[]; loreScanDepth: number; loreTokenBudget: number }
+/** `loreRecursionDepth`: how many times chosen entries' text is scanned for further entries (0: never). */
+type LoreProfile = { lorebookIds: number[]; loreScanDepth: number; loreTokenBudget: number; loreRecursionDepth?: number }
+
+export const LORE_RECURSION_MAX_DEPTH = 5
 
 /** The key a caller that keeps context (Codex) remembers an entry by: `book:entry:content hash`. */
 export function loreEntryKey(bookId: number, entry: Pick<ChatLoreEntry, 'id' | 'content'>) {
@@ -293,6 +349,8 @@ export type LoreDecision = {
   key: string; bookId: number; bookKind: ChatLorebookKind; entryId: string; title: string
   selected: boolean; reason: string; matched: string[]; hash?: string
   remaining?: number
+  /** Reason `recursive`: the title of the chosen entry whose text held the keyword. */
+  via?: string
   file?: 'inline' | 'hint'
 }
 
@@ -446,9 +504,9 @@ function keywordMatches(word: string, entry: Pick<ChatLoreEntry, 'caseSensitive'
 }
 
 /** Whether a keyword entry fires on this text: a primary keyword, then its secondary condition. */
-export function loreEntryMatches(entry: Pick<ChatLoreEntry, 'keys' | 'secondaryKeys' | 'secondaryLogic' | 'caseSensitive'>, recent: string, folded = recent.toLowerCase()) {
-  if (!entry.keys.some((word) => keywordMatches(word, entry, recent, folded))) return false
-  const secondary = entry.secondaryKeys ?? []
+export function loreEntryMatches(entry: Pick<ChatLoreEntry, 'keys' | 'secondaryKeys' | 'secondaryLogic' | 'caseSensitive'> & Partial<Pick<ChatLoreEntry, 'localKeys' | 'localSecondaryKeys'>>, recent: string, folded = recent.toLowerCase()) {
+  if (!loreEntryKeys(entry).some((word) => keywordMatches(word, entry, recent, folded))) return false
+  const secondary = loreEntrySecondaryKeys(entry)
   if (secondary.length === 0) return true
   const hits = secondary.filter((word) => keywordMatches(word, entry, recent, folded)).length
   switch (entry.secondaryLogic) {
@@ -490,6 +548,8 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
   const judgedIn = new Set<string>()
   const activationAges = options.timing ? loreActivationAges(lorebook, options.timing) : new Map<string, number>()
   const sticky = new Map<string, number>()
+  /** Keyword entries the chat named none of; the recursive scan looks for them in the chosen entries' text. */
+  const unnamed: KeyedLoreEntry[] = []
   const active = lorebook.filter((item) => {
     const { key, entry } = item
     if (!entry.enabled || !entry.content.trim()) return false
@@ -512,10 +572,11 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
     }
     if (entry.constant) return true
     const skipped = messages !== undefined && options.skip?.(key)
-    const matched = messages === undefined ? [] : entry.keys.filter((word) => keywordMatches(word, entry, recent, folded))
+    const matched = messages === undefined ? [] : loreEntryKeys(entry).filter((word) => keywordMatches(word, entry, recent, folded))
     if (!matched.length) {
       if (messages !== undefined && !skipped && options.judged?.has(key)) { judgedIn.add(key); return true }
       unmatched += 1
+      unnamed.push(item)
       return false
     }
     if (skipped) { decisions.push(decisionOf(item, false, 'codex-sent', matched)); return false }
@@ -526,6 +587,35 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
     }
     return true
   })
+  // Recursive scan (SillyTavern's): the chosen entries' text is searched for the keywords of the entries the chat did
+  // not name, level by level, each level searching only the entries the one before added. Groups and the budget then
+  // treat them like any keyword entry.
+  const via = new Map<string, string>()
+  let seeds = active.filter((item) => !item.entry.preventRecursion)
+  let pending = unnamed.filter((item) => !item.entry.excludeRecursion)
+  const depth = messages === undefined ? 0 : Math.max(0, Math.min(LORE_RECURSION_MAX_DEPTH, Math.floor(profile.loreRecursionDepth ?? 0)))
+  for (let level = 0; level < depth && seeds.length > 0 && pending.length > 0; level += 1) {
+    const sources = seeds.map((item) => ({ title: loreEntryTitle(item.entry), text: render(item.entry.content) }))
+    const scanned = sources.map(({ text }) => text).join('\n').slice(-SCAN_TEXT_MAX_LENGTH)
+    const foldedScan = scanned.toLowerCase()
+    // The secondary condition reads the chat and the chosen entries together.
+    const combined = `${recent}\n${scanned}`
+    const added: KeyedLoreEntry[] = []
+    pending = pending.filter((item) => {
+      const { key, entry } = item
+      const matched = loreEntryKeys(entry).filter((word) => keywordMatches(word, entry, scanned, foldedScan))
+      if (!matched.length || !loreEntryMatches(entry, combined, combined.toLowerCase())) return true
+      unmatched -= 1
+      if (options.skip?.(key)) { decisions.push(decisionOf(item, false, 'codex-sent', matched)); return false }
+      const source = sources.find(({ text }) => keywordMatches(matched[0], entry, text, text.toLowerCase()))
+      matches.set(key, matched)
+      if (source) via.set(key, source.title)
+      added.push(item)
+      return false
+    })
+    active.push(...added)
+    seeds = added.filter((item) => !item.entry.preventRecursion)
+  }
   const groupWinners = new Map<string, KeyedLoreEntry>()
   if (options.timing) for (const item of active) {
     if (!item.entry.group) continue
@@ -558,8 +648,9 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
       if (used + cost > profile.loreTokenBudget) continue
       chosen.push({ key: item.key, entry: item.entry, rendered })
       selected = true
-      const decision = decisionOf(item, true, sticky.has(item.key) ? 'sticky' : item.entry.constant ? 'constant' : judgedIn.has(item.key) ? 'judge' : isRegexKeyword(matched[0]) ? 'regex' : `key:${matched[0]}`, matched)
+      const decision = decisionOf(item, true, sticky.has(item.key) ? 'sticky' : item.entry.constant ? 'constant' : judgedIn.has(item.key) ? 'judge' : via.has(item.key) ? 'recursive' : isRegexKeyword(matched[0]) ? 'regex' : `key:${matched[0]}`, matched)
       if (sticky.has(item.key)) decision.remaining = sticky.get(item.key)
+      if (via.has(item.key)) decision.via = via.get(item.key)
       if (file) decision.file = rendered === `${content}\n  자료 ${file.name}: "${file.text.trim()}"` ? 'inline' : 'hint'
       decisions.push(decision)
       used += cost

@@ -105,7 +105,8 @@ function contextChanges(meta: ChatContextMeta, previous: ChatContextMeta, t: T):
   return changes
 }
 
-function loreReason(reason: string, matched: string[], t: T, remaining?: number) {
+function loreReason(reason: string, matched: string[], t: T, remaining?: number, via?: string) {
+  if (reason === 'recursive') return [t({ ko: '재귀', en: 'Recursive' }), [via, matched[0]].filter(Boolean).join(' › ')].filter(Boolean).join(' · ')
   if (reason === 'constant') return t({ ko: '상시', en: 'Constant' })
   if (reason === 'regex') return t({ ko: '정규식', en: 'Regex' })
   if (reason === 'sticky') return `${t({ ko: '유지', en: 'Sticky' })} · ${remaining ?? 0}`

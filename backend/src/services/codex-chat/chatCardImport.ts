@@ -2,7 +2,7 @@ import sharp from 'sharp'
 import { unknownChatMacros } from '@conai/shared'
 import { PngExtractor } from '../metadata/extractors/pngExtractor'
 import { ChatProfileError, normalizeAlternateGreetings, type ChatProfileInput, type ChatPromptSection } from './chatProfiles'
-import { ChatLorebookStore, isRegexKeyword, LOREBOOK_MAX_ENTRIES, normalizeLorebook, type ChatLoreEntry } from './chatLorebook'
+import { ChatLorebookStore, isRegexKeyword, LOREBOOK_MAX_ENTRIES, normalizeLorebook, normalizeLorebookSettings, type ChatLoreEntry, type ChatLorebookSettings } from './chatLorebook'
 import { characterMediaGroupPath, fileLibraryMediaUnderGroup, ingestMedia, localizeImages } from './chatCardAssets'
 import { rewriteMediaLinks } from './chatMediaLinks'
 
@@ -57,7 +57,7 @@ const UNSUPPORTED_LORE_FIELDS: Array<[string, (row: Record<string, unknown>, ext
   ['발동 확률', (row, ext) => (row.useProbability === true || ext.useProbability === true) && Number(row.probability ?? ext.probability ?? 100) < 100],
   ['그룹 가중치 무시', (row, ext) => row.groupWeight !== undefined || ext.groupWeight !== undefined],
   ['그룹 점수 무시', (row, ext) => row.useGroupScoring !== undefined || ext.useGroupScoring !== undefined],
-  ['재귀 설정', (row, ext) => [row.excludeRecursion, row.preventRecursion, row.delayUntilRecursion, ext.exclude_recursion, ext.prevent_recursion].some((value) => value === true)],
+  ['재귀 단계까지 지연', (row, ext) => [row.delayUntilRecursion, ext.delay_until_recursion].some((value) => value === true || (typeof value === 'number' && value > 0))],
   ['항목별 탐색 깊이', (row, ext) => typeof row.scanDepth === 'number' || typeof ext.scan_depth === 'number'],
 ]
 
@@ -156,6 +156,7 @@ export async function importChatCard(buffer: Buffer, modelSlotId: number | null)
     lorebookIds,
     loreScanDepth: typeof book.scan_depth === 'number' && Number.isFinite(book.scan_depth) ? Math.max(1, Math.min(100, Math.round(book.scan_depth))) : 4,
     loreTokenBudget: typeof book.token_budget === 'number' && Number.isFinite(book.token_budget) ? Math.max(0, Math.min(32768, Math.round(book.token_budget))) : 1024,
+    loreRecursionDepth: book.recursive_scanning === true ? 2 : 0,
   }
 }
 
@@ -163,7 +164,7 @@ export async function importChatCard(buffer: Buffer, modelSlotId: number | null)
  * A lorebook file: SillyTavern world info, a character card (PNG or JSON) with a book, a bare card book, a NovelAI
  * lorebook, or this app's own { name, entries }. `fileName` names a book that carries no name.
  */
-export function readLorebookFile(buffer: Buffer, fileName: string): { name: string; entries: ChatLoreEntry[] } {
+export function readLorebookFile(buffer: Buffer, fileName: string): { name: string; entries: ChatLoreEntry[]; settings: ChatLorebookSettings } {
   if (buffer.length > CHAT_CARD_MAX_BYTES) throw new ChatProfileError('로어북은 8MB까지 가져올 수 있어.')
   const parsed = readJsonFile(buffer, '로어북 JSON 또는 카드 PNG를 읽지 못했어.')
   const card = parsed.spec ? object(parsed.data) : parsed
@@ -171,5 +172,5 @@ export function readLorebookFile(buffer: Buffer, fileName: string): { name: stri
   const entries = bookEntries(book)
   if (entries.length === 0) throw new ChatProfileError('가져올 로어 항목이 없어.')
   const baseName = fileName.replace(/\.[^.]+$/, '')
-  return { name: text(book.name, 80) || text(card.name, 80) || text(baseName, 80), entries }
+  return { name: text(book.name, 80) || text(card.name, 80) || text(baseName, 80), entries, settings: normalizeLorebookSettings(book.settings) }
 }

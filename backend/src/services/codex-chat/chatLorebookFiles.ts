@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import type Database from 'better-sqlite3'
-import type { StoredFileEntry } from '@conai/shared'
+import { loreKeyLanguageLabel, type StoredFileEntry } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { ensureFileStoreSchema } from '../../database/fileStoreSchema'
 import { FileStoreError, FileStoreService, TEXT_EXTENSIONS, fileOwnerKey, type FileStoreChange } from '../fileStoreService'
@@ -14,9 +14,12 @@ import {
   loreEntryTitle,
   normalizeLorebook,
   normalizeLorebookIds,
+  normalizeLorebookSettings,
+  sortLorebookKeys,
   toLorebook,
   type ChatLoreEntry,
   type ChatLorebook,
+  type ChatLorebookSettings,
   type LoreFileText,
   type LorebookRow,
 } from './chatLorebook'
@@ -145,32 +148,40 @@ function parseLorebookJson(value: unknown): ChatLoreEntry[] | null {
   return null
 }
 
-/** The book's lorebook.json: null when there is none; `entries` null when it cannot be read as a lorebook. */
-function readLorebookJson(owner: string, folderId: string): { stamp: string; entries: ChatLoreEntry[] | null } | null {
+/**
+ * The book's lorebook.json: null when there is none; `entries` null when it cannot be read as a lorebook. `settings`
+ * are this app's (`{ name, settings, entries }`); any other shape has none.
+ */
+function readLorebookJson(owner: string, folderId: string): { stamp: string; entries: ChatLoreEntry[] | null; settings: ChatLorebookSettings } | null {
   const file = FileStoreService.findChild(owner, folderId, LOREBOOK_JSON)
   if (!file || file.kind !== 'file') return null
   const stamp = stampOf(file)
-  if (file.size > LOREBOOK_JSON_MAX_BYTES) return { stamp, entries: null }
+  const none = normalizeLorebookSettings(null)
+  if (file.size > LOREBOOK_JSON_MAX_BYTES) return { stamp, entries: null, settings: none }
   try {
-    const text = fs.readFileSync(storedFilePath(owner, file.id), 'utf8').replace(/^﻿/, '')
-    return { stamp, entries: parseLorebookJson(JSON.parse(text)) }
+    const value = JSON.parse(fs.readFileSync(storedFilePath(owner, file.id), 'utf8').replace(/^﻿/, '')) as unknown
+    const settings = value && typeof value === 'object' && !Array.isArray(value) ? normalizeLorebookSettings((value as { settings?: unknown }).settings) : none
+    return { stamp, entries: parseLorebookJson(value), settings }
   } catch {
-    return { stamp, entries: null }
+    return { stamp, entries: null, settings: none }
   }
 }
 
-function renderJson(name: string, entries: ChatLoreEntry[]) {
-  return `${JSON.stringify({ name, entries }, null, 2)}\n`
+function renderJson(name: string, settings: ChatLorebookSettings, entries: ChatLoreEntry[]) {
+  return `${JSON.stringify({ name, settings, entries }, null, 2)}\n`
 }
 
 /** For people to read in the file page; the app never reads it back. */
-function renderMarkdown(name: string, entries: ChatLoreEntry[]) {
+function renderMarkdown(name: string, settings: ChatLorebookSettings, entries: ChatLoreEntry[]) {
+  const language = settings.keyLanguage ? loreKeyLanguageLabel(settings.keyLanguage) : '추가 언어'
   const lines = [`# ${name}`, '', '<!-- lorebook.json이 원본이야. 이 파일은 저장할 때마다 다시 써. -->', '']
   for (const entry of entries) {
     lines.push(`## ${loreEntryTitle(entry) || entry.id}`, '')
     const facts = [
       entry.keys.length ? `키워드: ${entry.keys.join(', ')}` : '',
+      entry.localKeys.length ? `키워드(${language}): ${entry.localKeys.join(', ')}` : '',
       entry.secondaryKeys.length ? `보조 키워드: ${entry.secondaryKeys.join(', ')}` : '',
+      entry.localSecondaryKeys.length ? `보조 키워드(${language}): ${entry.localSecondaryKeys.join(', ')}` : '',
       entry.constant ? '상시' : '',
       entry.enabled ? '' : '꺼짐',
       entry.file ? `자료: ${entry.file}` : '',
@@ -191,14 +202,15 @@ function toOwned(row: LorebookRow): OwnedLorebook {
   return { ...toLorebook(row, linkedProfiles()), threadId: row.thread_id, folderId: row.folder_id }
 }
 
-/** Write the book's files, then its cache. */
-function writeBook(row: LorebookRow, entries: ChatLoreEntry[]) {
+/** Write the book's files, then its cache. `settings`: the book's own unless given. */
+function writeBook(row: LorebookRow, value: ChatLoreEntry[], settings = normalizeLorebookSettings(row.settings)) {
   const owner = row.owner_key as string
   const folderId = row.folder_id as string
-  const json = FileStoreService.writeText(owner, folderId, LOREBOOK_JSON, renderJson(row.name, entries), { silent: true })
-  FileStoreService.writeText(owner, folderId, LOREBOOK_MARKDOWN, renderMarkdown(row.name, entries), { silent: true })
-  getUserSettingsDb().prepare('UPDATE chat_lorebooks SET entries = ?, source_stamp = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?')
-    .run(JSON.stringify(entries), stampOf(json), row.id)
+  const entries = sortLorebookKeys(value, settings)
+  const json = FileStoreService.writeText(owner, folderId, LOREBOOK_JSON, renderJson(row.name, settings, entries), { silent: true })
+  FileStoreService.writeText(owner, folderId, LOREBOOK_MARKDOWN, renderMarkdown(row.name, settings, entries), { silent: true })
+  getUserSettingsDb().prepare('UPDATE chat_lorebooks SET entries = ?, settings = ?, source_stamp = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(JSON.stringify(entries), JSON.stringify(settings), stampOf(json), row.id)
 }
 
 /**
@@ -212,13 +224,15 @@ function refreshBook(row: LorebookRow): LorebookRow {
   if (read.entries === null) console.warn(`[lorebook] Book ${row.id}: lorebook.json is not a readable lorebook; keeping the cached entries`)
   const base = read.entries === null ? normalizeLorebook(row.entries) : withSafeFiles(read.entries, `Book ${row.id}`)
   const { entries, changed } = relink(row.owner_key, row.folder_id, base)
+  const settings = read.entries === null ? normalizeLorebookSettings(row.settings) : read.settings
   if (changed && read.entries !== null) {
-    writeBook(row, entries)
+    writeBook(row, entries, settings)
   } else {
     const cached = JSON.stringify(entries)
-    if (cached !== row.entries) {
-      console.warn(`[lorebook] Book ${row.id}: the cache differed from lorebook.json; took the file`)
-      getUserSettingsDb().prepare('UPDATE chat_lorebooks SET entries = ?, source_stamp = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(cached, read.stamp, row.id)
+    const cachedSettings = JSON.stringify(settings)
+    if (cached !== row.entries || cachedSettings !== JSON.stringify(normalizeLorebookSettings(row.settings))) {
+      if (cached !== row.entries) console.warn(`[lorebook] Book ${row.id}: the cache differed from lorebook.json; took the file`)
+      getUserSettingsDb().prepare('UPDATE chat_lorebooks SET entries = ?, settings = ?, source_stamp = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(cached, cachedSettings, read.stamp, row.id)
     } else if (read.stamp !== row.source_stamp) {
       getUserSettingsDb().prepare('UPDATE chat_lorebooks SET source_stamp = ? WHERE id = ?').run(read.stamp, row.id)
     }
@@ -418,7 +432,7 @@ function preparedEntries(row: LorebookRow, value: unknown) {
   return relink(row.owner_key as string, row.folder_id as string, entries).entries
 }
 
-function createChatBook(threadId: number, entries: ChatLoreEntry[]) {
+function createChatBook(threadId: number, entries: ChatLoreEntry[], settings: ChatLorebookSettings) {
   const db = getUserSettingsDb()
   const thread = db.prepare('SELECT id, account_id, title FROM codex_chat_threads WHERE id = ?').get(threadId) as { id: number; account_id: number | null; title: string } | undefined
   if (!thread) throw new LorebookError('채팅을 찾을 수 없어.', 404)
@@ -430,7 +444,7 @@ function createChatBook(threadId: number, entries: ChatLoreEntry[]) {
     FileStoreService.createFolder(owner, folder.id, LORE_FILES_FOLDER)
     const result = db.prepare("INSERT INTO chat_lorebooks (name, entries, kind, owner_key, folder_id, thread_id) VALUES (?, '[]', 'chat', ?, ?, ?)").run(name, owner, folder.id, thread.id)
     const row = rowById(Number(result.lastInsertRowid)) as LorebookRow
-    writeBook(row, preparedEntries(row, entries))
+    writeBook(row, preparedEntries(row, entries), settings)
     return rowById(row.id) as LorebookRow
   }).immediate()
 }
@@ -461,7 +475,7 @@ export const OwnedLorebookStore = {
   },
 
   /** A new account book: `로어북/<name>/` with lorebook.json, lorebook.md and an empty 자료/. */
-  create(owner: string, input: { name?: unknown; entries?: unknown }): OwnedLorebook {
+  create(owner: string, input: { name?: unknown; entries?: unknown; settings?: unknown }): OwnedLorebook {
     const name = accountBookName(input.name)
     const db = getUserSettingsDb()
     const row = db.transaction(() => {
@@ -471,7 +485,7 @@ export const OwnedLorebookStore = {
       FileStoreService.createFolder(owner, folder.id, LORE_FILES_FOLDER)
       const result = db.prepare("INSERT INTO chat_lorebooks (name, entries, kind, owner_key, folder_id) VALUES (?, '[]', 'account', ?, ?)").run(name, owner, folder.id)
       const created = rowById(Number(result.lastInsertRowid)) as LorebookRow
-      writeBook(created, preparedEntries(created, input.entries ?? []))
+      writeBook(created, preparedEntries(created, input.entries ?? []), normalizeLorebookSettings(input.settings))
       return rowById(created.id) as LorebookRow
     }).immediate()
     return toOwned(row)
@@ -481,7 +495,7 @@ export const OwnedLorebookStore = {
    * Rename (the folder follows) and/or replace the entries: lorebook.json is written first, then the cache. A chat
    * book left empty is removed (null).
    */
-  update(bookId: number, owner: string, patch: { name?: unknown; entries?: unknown }): OwnedLorebook | null {
+  update(bookId: number, owner: string, patch: { name?: unknown; entries?: unknown; settings?: unknown }): OwnedLorebook | null {
     let row = requireOwn(bookId, owner)
     const db = getUserSettingsDb()
     return db.transaction(() => {
@@ -500,7 +514,7 @@ export const OwnedLorebookStore = {
         removeBookRow(row.id)
         return null
       }
-      writeBook(row, entries)
+      writeBook(row, entries, patch.settings === undefined ? undefined : normalizeLorebookSettings(patch.settings))
       return toOwned(rowById(row.id) as LorebookRow)
     }).immediate()
   },
@@ -569,20 +583,23 @@ export const OwnedLorebookStore = {
     return row ? toOwned(refreshIfStale(row)) : null
   },
 
-  /** Replace the chat book's entries; the book (and its folder) comes into being with its first entry. */
-  saveChatBook(threadId: number, value: unknown): OwnedLorebook | null {
+  /**
+   * Replace the chat book's entries (and its settings, when given); the book (and its folder) comes into being with
+   * its first entry.
+   */
+  saveChatBook(threadId: number, value: unknown, settings?: unknown): OwnedLorebook | null {
     const current = chatBookRow(threadId)
-    if (current) return OwnedLorebookStore.update(current.id, current.owner_key as string, { entries: value })
+    if (current) return OwnedLorebookStore.update(current.id, current.owner_key as string, { entries: value, settings })
     const entries = normalizeLorebook(value)
     if (entries.length === 0) return null
     assertEntryFiles(entries)
-    return toOwned(createChatBook(threadId, entries))
+    return toOwned(createChatBook(threadId, entries, normalizeLorebookSettings(settings)))
   },
 
   /** Copy a branch's entries and linked files into its own book folder. */
   copyChatBookEntries(source: OwnedLorebook, threadId: number, entries: ChatLoreEntry[]): OwnedLorebook {
     const owner = (getUserSettingsDb().prepare('SELECT owner_key FROM chat_lorebooks WHERE id = ?').get(source.id) as { owner_key: string }).owner_key
-    const target = OwnedLorebookStore.saveChatBook(threadId, entries.map((entry) => ({ ...entry, file: null, fileId: null })))!
+    const target = OwnedLorebookStore.saveChatBook(threadId, entries.map((entry) => ({ ...entry, file: null, fileId: null })), source.settings)!
     const links = new Map<string, { file: string; fileId: string }>()
     const next = entries.map((entry) => {
       if (!entry.file) return entry

@@ -247,6 +247,7 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
           chat?.setView('chat')
           chat?.focusMessage(messageId)
         }}
+        keyLanguage={!editing ? null : editing.book === CHAT_BOOK ? chatBook?.settings?.keyLanguage ?? null : editing.book.settings?.keyLanguage ?? null}
         filePlace={!editing ? { kind: 'global' } : editing.book === CHAT_BOOK ? { kind: 'owned', folderId: chatBook?.folderId ?? null } : editing.book.kind === 'global' ? { kind: 'global' } : { kind: 'owned', folderId: editing.book.folderId }}
         promoteLabel={editing?.book === CHAT_BOOK && !editing.isNew ? (promoteName ? t({ ko: '승격 → {name}', en: 'Promote → {name}' }, { name: promoteName }) : t({ ko: '승격', en: 'Promote' })) : null}
         saving={entriesMutation.isPending}
@@ -327,7 +328,8 @@ function EntryRow({ entry, onOpen }: { entry: ChatLoreEntry; onOpen?: () => void
 }
 
 /** B: one entry in the shared entry editor, as a modal (지우기 · 승격 · 저장). */
-function LoreEntryModal({ target, filePlace, promoteLabel, saving, onSave, onDelete, onPromote, onClose, usage, onSource }: {
+function LoreEntryModal({ target, filePlace, keyLanguage, promoteLabel, saving, onSave, onDelete, onPromote, onClose, usage, onSource }: {
+  keyLanguage: string | null
   usage?: { turnsAgo?: number; sourceMessageId?: number | null }
   onSource: (threadId: number, messageId: number) => void
   target: EditTarget | null
@@ -368,7 +370,7 @@ function LoreEntryModal({ target, filePlace, promoteLabel, saving, onSave, onDel
       {entry && target ? (
         <>
           <ModalBody>
-            <ChatLoreEntryFields entry={entry} filePlace={filePlace} onChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))} />
+            <ChatLoreEntryFields entry={entry} filePlace={filePlace} keyLanguage={keyLanguage} onChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))} />
           </ModalBody>
           <EditorFooter onDelete={target.isNew ? undefined : onDelete} deleting={saving} onSave={() => onSave(entry)} canSave={canSave} saving={saving}>
             {promoteLabel ? <IconButton size="icon-sm" variant="ghost" disabled={saving} onClick={onPromote} label={promoteLabel}><BookUp /></IconButton> : null}

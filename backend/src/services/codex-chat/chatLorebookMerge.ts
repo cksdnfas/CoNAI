@@ -2,7 +2,7 @@ import fs from 'fs'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { FileStoreService } from '../fileStoreService'
 import { storedFilePath } from '../fileStorePaths'
-import { LOREBOOK_MAX_ENTRIES, loreEntryTitle, type ChatLoreEntry } from './chatLorebook'
+import { LOREBOOK_MAX_ENTRIES, loreEntryKeys, loreEntryTitle, type ChatLoreEntry } from './chatLorebook'
 import {
   LOREBOOK_JSON,
   LOREBOOK_MARKDOWN,
@@ -75,7 +75,7 @@ function booksOf(sourceId: number, targetId: number, owner: string) {
 }
 
 function keySet(entry: ChatLoreEntry) {
-  return [...new Set(entry.keys.map((key) => key.normalize('NFC').trim().toLowerCase()).filter(Boolean))].sort()
+  return [...new Set(loreEntryKeys(entry).map((key) => key.normalize('NFC').trim().toLowerCase()).filter(Boolean))].sort()
 }
 
 /** The same title (folded), or the same non-empty keyword set (order and case aside). */
@@ -262,6 +262,7 @@ export function applyMerge(sourceId: number, targetId: number, owner: string, de
       const takeOver = (into: ChatLoreEntry, from: ChatLoreEntry, content: string) => {
         into.content = content
         into.keys = unionKeys(into.keys, from.keys)
+        into.localKeys = unionKeys(into.localKeys ?? [], from.localKeys ?? [])
         if (!into.file) Object.assign(into, linkOf(from))
       }
       let added = 0
@@ -313,7 +314,7 @@ const MERGE_INSTRUCTION_MAX_LENGTH = 2000
 export type MergeDraft = { entryId: string; content: string } | { entryId: string; error: string }
 
 function draftEntryText(entry: ChatLoreEntry) {
-  return [`제목: ${loreEntryTitle(entry)}`, entry.keys.length ? `키워드: ${entry.keys.join(', ')}` : '', '', entry.content.trim()].filter((line, index) => index === 2 || line).join('\n')
+  return [`제목: ${loreEntryTitle(entry)}`, loreEntryKeys(entry).length ? `키워드: ${loreEntryKeys(entry).join(', ')}` : '', '', entry.content.trim()].filter((line, index) => index === 2 || line).join('\n')
 }
 
 /**

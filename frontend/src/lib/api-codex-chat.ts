@@ -65,7 +65,7 @@ export type ChatDiagnosticsScope = 'none' | 'view' | 'content' | 'prompts'
 
 export type ChatContextKind = 'persona' | 'system-prompt' | 'prompt-section' | 'guidance' | 'lore-index' | 'constant-lore' | 'lore' | 'summary' | 'example' | 'window' | 'reference' | 'author-note' | 'state' | 'flags' | 'user-persona' | 'recall' | 'page' | 'continuation' | 'last-instruction' | 'tool-definition' | 'tool-result' | 'group-header' | 'summary-instruction' | 'translation-instruction' | 'judge'
 export type ChatContextPart = { kind: ChatContextKind; role: string; position: number; estTokens: number; hash: string }
-export type ChatContextLore = { key: string; bookId: number; bookKind: ChatLorebookKind; entryId: string; title: string; selected: boolean; reason: string; matched: string[]; hash?: string; file?: 'inline' | 'hint'; remaining?: number }
+export type ChatContextLore = { key: string; bookId: number; bookKind: ChatLorebookKind; entryId: string; title: string; selected: boolean; reason: string; matched: string[]; hash?: string; file?: 'inline' | 'hint'; remaining?: number; via?: string }
 
 /** Text-free request composition; old records keep the v1 fields alone. */
 export interface ChatContextMeta {
@@ -383,6 +383,9 @@ export interface ChatLoreEntry {
   /** `/pattern/flags` is a regular expression. */
   keys: string[]
   secondaryKeys?: string[]
+  /** The same keywords in the book's key language (ChatLorebookSettings); matched together with the English ones. */
+  localKeys?: string[]
+  localSecondaryKeys?: string[]
   secondaryLogic?: LoreSecondaryLogic
   content: string
   enabled: boolean
@@ -393,14 +396,23 @@ export interface ChatLoreEntry {
   cooldown?: number
   delay?: number
   group?: string
+  /** Recursive scan: only the chat's text, never another entry's, brings this entry in. */
+  excludeRecursion?: boolean
+  /** Recursive scan: this entry's text brings in no other entry. */
+  preventRecursion?: boolean
   /** A text file in the book's folder (`자료/x.md`); account and chat books only. `fileId` follows it when moved. */
   file?: string | null
   fileId?: string | null
 }
 
 /** The entry's title as the index shows it: its own, else the first keyword, else the start of its text. */
-export function loreEntryTitle(entry: Pick<ChatLoreEntry, 'title' | 'keys' | 'content'>) {
-  return entry.title?.trim() || entry.keys[0] || entry.content.slice(0, 20)
+export function loreEntryTitle(entry: Pick<ChatLoreEntry, 'title' | 'keys' | 'content' | 'localKeys'>) {
+  return entry.title?.trim() || entry.keys[0] || entry.localKeys?.[0] || entry.content.slice(0, 20)
+}
+
+/** A book's own settings. `keyLanguage`: the language besides English its entries' keywords are in (`ko`, `ja`, `zh` or a typed name); null: English only. */
+export interface ChatLorebookSettings {
+  keyLanguage: string | null
 }
 
 /** `global`: the admin's shared books. `account`: a folder under the account's 로어북/. `chat`: one chat's own book. */
@@ -411,6 +423,7 @@ export interface ChatLorebook {
   id: number
   name: string
   kind?: ChatLorebookKind
+  settings?: ChatLorebookSettings
   entries: ChatLoreEntry[]
   profiles: Array<{ id: number; name: string }>
   createdDate: string
@@ -432,6 +445,7 @@ export interface ThreadLoreBook {
   kind: ChatLorebookKind
   via: 'thread' | 'profile'
   folderId: string | null
+  settings?: ChatLorebookSettings
   entries: ChatLoreEntry[]
   profiles: Array<{ id: number; name: string }>
 }
@@ -575,6 +589,8 @@ export interface ChatProfile extends ChatProfileAssetFields {
   loreTokenBudget: number
   /** API LLM: keyword lore is merged in this many turns before the end (0: the latest message). */
   loreDepth: number
+  /** How many times chosen lore entries' text is scanned for further entries (0: off, at most 5). */
+  loreRecursionDepth: number
   /** Default author's note for the profile's chats (a chat can set its own). */
   authorNote: string
   tagline: string
@@ -667,6 +683,7 @@ export interface ChatProfileDefaults {
   loreScanDepth: number
   loreTokenBudget: number
   loreDepth: number
+  loreRecursionDepth?: number
   contextTurns: number
   summaryTriggerTurns: number
   maxToolRounds: number
@@ -925,7 +942,7 @@ export function listChatLorebooks() {
   return requestApiData<ChatLorebook[]>('/api/codex-chat/admin/lorebooks')
 }
 
-export function createChatLorebook(input: { name: string; entries?: ChatLoreEntry[] }) {
+export function createChatLorebook(input: { name: string; entries?: ChatLoreEntry[]; settings?: ChatLorebookSettings }) {
   return requestApiData<ChatLorebook>('/api/codex-chat/admin/lorebooks', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
 }
 
@@ -937,7 +954,7 @@ export function importChatLorebook(file: File, lorebookId?: number) {
   return requestApiData<ChatLorebook>(path, { method: 'POST', body })
 }
 
-export function updateChatLorebook(lorebookId: number, patch: { name?: string; entries?: ChatLoreEntry[] }) {
+export function updateChatLorebook(lorebookId: number, patch: { name?: string; entries?: ChatLoreEntry[]; settings?: ChatLorebookSettings }) {
   return requestApiData<ChatLorebook>(`/api/codex-chat/admin/lorebooks/${lorebookId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
@@ -1448,12 +1465,12 @@ export function listOwnLorebooks() {
   return requestApiData<OwnedChatLorebook[]>('/api/codex-chat/lorebooks')
 }
 
-export function createOwnLorebook(input: { name: string; entries?: ChatLoreEntry[] }) {
+export function createOwnLorebook(input: { name: string; entries?: ChatLoreEntry[]; settings?: ChatLorebookSettings }) {
   return requestApiData<OwnedChatLorebook>('/api/codex-chat/lorebooks', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
 }
 
 /** Null: an emptied chat book went away. */
-export function updateOwnLorebook(lorebookId: number, patch: { name?: string; entries?: ChatLoreEntry[] }) {
+export function updateOwnLorebook(lorebookId: number, patch: { name?: string; entries?: ChatLoreEntry[]; settings?: ChatLorebookSettings }) {
   return requestApiData<OwnedChatLorebook | null>(`/api/codex-chat/lorebooks/${lorebookId}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
@@ -1469,9 +1486,9 @@ export function getThreadLorebooks(threadId: number) {
   return requestApiData<ThreadLorebooks>(`/api/codex-chat/threads/${threadId}/lorebooks`, { cache: 'no-store' })
 }
 
-/** Replace the chat book's entries; it is made with its first entry (null once emptied). */
-export function saveThreadLorebook(threadId: number, entries: ChatLoreEntry[]) {
-  return requestApiData<OwnedChatLorebook | null>(`/api/codex-chat/threads/${threadId}/lorebook`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ entries }) })
+/** Replace the chat book's entries (and its settings, when given); it is made with its first entry (null once emptied). */
+export function saveThreadLorebook(threadId: number, entries: ChatLoreEntry[], settings?: ChatLorebookSettings) {
+  return requestApiData<OwnedChatLorebook | null>(`/api/codex-chat/threads/${threadId}/lorebook`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ entries, settings }) })
 }
 
 /** Keep the chat book as an account book, linked to this chat (the chat starts a new book with its next entry). */
@@ -1491,6 +1508,11 @@ export function mergeLorebook(targetId: number, input: { sourceId: number; decis
 /** The profile's summary model writes a merged text for each duplicate; nothing is saved. */
 export function draftLorebookMerge(targetId: number, input: { sourceId: number; profileId: number; entryIds?: string[]; instruction?: string }) {
   return requestApiData<{ drafts: LoreMergeDraft[] }>(`/api/codex-chat/lorebooks/${targetId}/merge/draft`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) }, { timeoutMs: 300_000 })
+}
+
+/** The profile's translation model (else its summary model) writes the entries' keywords in `language`; nothing is saved. */
+export function fillLoreKeys(input: { profileId: number; language: string; entries: Array<{ id: string; title: string; keys: string[]; content: string }> }) {
+  return requestApiData<{ keys: Record<string, string[]>; failed: string[] }>('/api/codex-chat/lorebooks/key-fill', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) }, { timeoutMs: 600_000 })
 }
 
 /** Save a save_lore proposal into the chat book (the server writes it). */

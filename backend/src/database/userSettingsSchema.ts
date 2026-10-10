@@ -745,6 +745,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['folder_id', 'TEXT'],
     ['thread_id', 'INTEGER'],
     ['source_stamp', 'TEXT'],
+    // The book's own settings as JSON (key language); cached from lorebook.json for account and chat books.
+    ['settings', 'TEXT'],
   ] as Array<[string, string]>) {
     if (!hasColumn('chat_lorebooks', columnName)) {
       db.exec(`ALTER TABLE chat_lorebooks ADD COLUMN ${columnName} ${definition}`);
@@ -913,6 +915,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['lore_scan_depth', 'INTEGER NOT NULL DEFAULT 4'],
     ['lore_token_budget', 'INTEGER NOT NULL DEFAULT 1024'],
     ['lore_depth', 'INTEGER NOT NULL DEFAULT 4'],
+    // How many times chosen lore entries' text is scanned for further entries (0: no recursive scan).
+    ['lore_recursion_depth', 'INTEGER NOT NULL DEFAULT 0'],
     // Default author's note (scene direction merged into the conversation at lore_depth); chats can override it.
     ['author_note', 'TEXT'],
     ['engine', "TEXT NOT NULL DEFAULT 'llm'"],

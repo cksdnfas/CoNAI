@@ -2,7 +2,7 @@ import type { ChatJudgeContextSettings } from '@conai/shared'
 import { yesNoQuestion, type JudgeAnswer, type JudgeQuestion } from '../judge/judgeEngine'
 import type { JudgeLogItem } from './chatJudgeLogs'
 import { booksForRequest, keyedLoreEntries } from './chatLoreContext'
-import { loreEntryMatches, loreEntryTitle } from './chatLorebook'
+import { loreEntryKeys, loreEntryMatches, loreEntryTitle } from './chatLorebook'
 import { ChatSummaryStore, recallTerms, selectRecall, splitSegments } from './chatMemory'
 import type { ChatProfile } from './chatProfiles'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
@@ -52,8 +52,8 @@ function loreCandidates(profile: ChatProfile, thread: CodexChatThreadRecord, mes
   if (query.size === 0) return []
   return entries
     // A primary keyword that matched already decided the entry (its secondary condition included).
-    .filter(({ entry }) => entry.enabled && !entry.constant && entry.content.trim() && !(entry.keys.length > 0 && loreEntryMatches({ ...entry, secondaryKeys: [] }, recent, folded)))
-    .map((item) => ({ item, shared: sharedTerms(query, [loreEntryTitle(item.entry), ...item.entry.keys, item.entry.content.slice(0, 1200)].join('\n')) }))
+    .filter(({ entry }) => entry.enabled && !entry.constant && entry.content.trim() && !(loreEntryKeys(entry).length > 0 && loreEntryMatches({ ...entry, secondaryKeys: [], localSecondaryKeys: [] }, recent, folded)))
+    .map((item) => ({ item, shared: sharedTerms(query, [loreEntryTitle(item.entry), ...loreEntryKeys(item.entry), item.entry.content.slice(0, 1200)].join('\n')) }))
     .filter(({ shared }) => shared >= MIN_SHARED_TERMS)
     .sort((a, b) => b.shared - a.shared || b.item.entry.order - a.item.entry.order)
     .slice(0, limit)

@@ -71,7 +71,7 @@ export function ChatProfileMemoryPanel({ draft, patch, defaults, lorebooks, adva
         </div>
         <SwitchLine label={t({ ko: '대화 중 로어 제안 받기', en: 'Allow lore proposals' })} checked={draft.allowLoreProposals} onCheckedChange={(allowLoreProposals) => patch({ allowLoreProposals })} />
         {advanced ? (
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-4">
             <Field label={t({ ko: '로어북 최근 메시지', en: 'Lorebook recent messages' })}>
               <NumberStepperInput variant="settings" min={1} max={100} value={draft.loreScanDepth} onValueCommit={(value) => patch({ loreScanDepth: numberOrNull(value) ?? 4 })} />
             </Field>
@@ -83,6 +83,9 @@ export function ChatProfileMemoryPanel({ draft, patch, defaults, lorebooks, adva
                 <NumberStepperInput variant="settings" min={0} max={20} value={draft.loreDepth} onValueCommit={(value) => patch({ loreDepth: numberOrNull(value) ?? 4 })} />
               </Field>
             ) : null}
+            <Field label={t({ ko: '재귀 단계', en: 'Recursion levels' })} info={t({ ko: '걸린 로어 내용 속 키워드로 다른 항목을 몇 단계까지 더 부를지. 0이면 꺼짐.', en: 'How many levels of entries the chosen lore’s own text can bring in. 0 turns it off.' })}>
+              <NumberStepperInput variant="settings" min={0} max={5} value={draft.loreRecursionDepth ?? 0} onValueCommit={(value) => patch({ loreRecursionDepth: numberOrNull(value) ?? 0 })} />
+            </Field>
           </div>
         ) : null}
       </EditorGroup>

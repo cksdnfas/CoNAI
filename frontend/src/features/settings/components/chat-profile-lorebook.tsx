@@ -1,4 +1,5 @@
-import { useId, useRef, useState } from 'react'
+import { useId, useRef, useState, type ReactNode } from 'react'
+import { loreKeyLanguageTag } from '@conai/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookPlus, Trash2, X } from 'lucide-react'
 import { Chip } from '@/components/ui/chip'
@@ -132,22 +133,45 @@ function KeywordChips({ keys, onChange, addLabel }: { keys: string[]; onChange: 
   </div>
 }
 
-/** One entry's fields, shared by the settings editor and the chat's context tab. */
-export function ChatLoreEntryFields({ entry, onChange, filePlace }: { entry: ChatLoreEntry; onChange: (patch: Partial<ChatLoreEntry>) => void; filePlace: LoreFilePlace }) {
+/**
+ * A book with a key language shows each keyword list as two rows in one field, English and that language; a book
+ * without one shows the one list as before.
+ */
+function LanguageKeywordRows({ language, base, local, onBase, onLocal, addLabel }: { language: string | null; base: string[]; local: string[]; onBase: (keys: string[]) => void; onLocal: (keys: string[]) => void; addLabel: string }) {
+  if (!language) return <KeywordChips keys={base} onChange={onBase} addLabel={addLabel} />
+  const tag = loreKeyLanguageTag(language)
+  const row = (label: string, chips: ReactNode) => <div className="flex min-w-0 items-start gap-2">
+    <span className="w-7 shrink-0 pt-2.5 text-2xs font-semibold tracking-overline text-muted-foreground">{label}</span>
+    <div className="min-w-0 flex-1">{chips}</div>
+  </div>
+  return <div className="flex flex-col gap-2">
+    {row('EN', <KeywordChips keys={base} onChange={onBase} addLabel={`${addLabel} (EN)`} />)}
+    {row(tag, <KeywordChips keys={local} onChange={onLocal} addLabel={`${addLabel} (${tag})`} />)}
+  </div>
+}
+
+/** A keyword entry with English keywords and none in the book's key language. */
+export function lacksLanguageKeys(entry: ChatLoreEntry, language: string | null | undefined) {
+  return Boolean(language) && !entry.constant && entry.keys.some((key) => !/^\/.+\/[a-z]*$/s.test(key)) && (entry.localKeys ?? []).length === 0
+}
+
+/** One entry's fields, shared by the settings editor and the chat's context tab. `keyLanguage`: the book's (see ChatLorebookSettings). */
+export function ChatLoreEntryFields({ entry, onChange, filePlace, keyLanguage = null }: { entry: ChatLoreEntry; onChange: (patch: Partial<ChatLoreEntry>) => void; filePlace: LoreFilePlace; keyLanguage?: string | null }) {
   const { t } = useI18n()
   const id = useId()
   const secondaryKeys = entry.secondaryKeys ?? []
+  const localSecondaryKeys = entry.localSecondaryKeys ?? []
   return <>
     <Field label={t({ ko: '제목', en: 'Title' })}>
       <Input variant="settings" value={entry.title ?? ''} maxLength={80} placeholder={loreEntryTitle({ ...entry, title: '' }) || t({ ko: '제목', en: 'Title' })} onChange={(event) => onChange({ title: event.target.value })} />
     </Field>
     <Field label={t({ ko: '키워드', en: 'Keywords' })} info={t({ ko: '/패턴/ 형태는 정규식으로 찾아.', en: '/pattern/ is matched as a regular expression.' })}>
-      <KeywordChips keys={entry.keys} onChange={(keys) => onChange({ keys })} addLabel={t({ ko: '키워드 추가', en: 'Add keyword' })} />
+      <LanguageKeywordRows language={keyLanguage} base={entry.keys} local={entry.localKeys ?? []} onBase={(keys) => onChange({ keys })} onLocal={(localKeys) => onChange({ localKeys })} addLabel={t({ ko: '키워드 추가', en: 'Add keyword' })} />
     </Field>
     <Field label={t({ ko: '보조 키워드', en: 'Secondary keywords' })}>
       <div className="flex flex-col gap-2">
-        <KeywordChips keys={secondaryKeys} onChange={(keys) => onChange({ secondaryKeys: keys })} addLabel={t({ ko: '보조 키워드 추가', en: 'Add secondary keyword' })} />
-        {secondaryKeys.length > 0 ? (
+        <LanguageKeywordRows language={keyLanguage} base={secondaryKeys} local={localSecondaryKeys} onBase={(keys) => onChange({ secondaryKeys: keys })} onLocal={(keys) => onChange({ localSecondaryKeys: keys })} addLabel={t({ ko: '보조 키워드 추가', en: 'Add secondary keyword' })} />
+        {secondaryKeys.length + localSecondaryKeys.length > 0 ? (
           <Select variant="settings" className="w-56" value={entry.secondaryLogic ?? 'andAny'} onChange={(event) => onChange({ secondaryLogic: event.target.value as LoreSecondaryLogic })} aria-label={t({ ko: '보조 키워드 조건', en: 'Secondary keyword rule' })}>
             <option value="andAny">{t({ ko: '하나라도 있을 때', en: 'Any of them present' })}</option>
             <option value="andAll">{t({ ko: '모두 있을 때', en: 'All of them present' })}</option>
@@ -173,6 +197,12 @@ export function ChatLoreEntryFields({ entry, onChange, filePlace }: { entry: Cha
     <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
       <div className="flex items-center gap-2"><Switch id={`${id}-constant`} checked={entry.constant} onCheckedChange={(constant) => onChange({ constant })} /><label htmlFor={`${id}-constant`} className="cursor-pointer">{t({ ko: '항상 넣기', en: 'Always include' })}</label></div>
       <div className="flex items-center gap-2"><Switch id={`${id}-case`} checked={entry.caseSensitive} onCheckedChange={(caseSensitive) => onChange({ caseSensitive })} /><label htmlFor={`${id}-case`} className="cursor-pointer">{t({ ko: '대소문자 구분', en: 'Case sensitive' })}</label></div>
+      <Tip content={t({ ko: '다른 로어 내용으로는 안 걸리고, 대화에 키가 나와야만 들어가', en: 'Only the chat can bring it in, never another entry’s text' })}>
+        <div className="flex items-center gap-2"><Switch id={`${id}-exclude-recursion`} checked={entry.excludeRecursion === true} onCheckedChange={(excludeRecursion) => onChange({ excludeRecursion })} /><label htmlFor={`${id}-exclude-recursion`} className="cursor-pointer">{t({ ko: '재귀로 안 걸림', en: 'Not by recursion' })}</label></div>
+      </Tip>
+      <Tip content={t({ ko: '재귀 스캔에서 이 내용 속 키워드로 다른 항목을 부를지', en: 'Whether this entry’s text brings in other entries in a recursive scan' })}>
+        <div className="flex items-center gap-2"><Switch id={`${id}-prevent-recursion`} checked={entry.preventRecursion !== true} onCheckedChange={(calls) => onChange({ preventRecursion: !calls })} /><label htmlFor={`${id}-prevent-recursion`} className="cursor-pointer">{t({ ko: '다른 항목 부르기', en: 'Brings in others' })}</label></div>
+      </Tip>
       <Field label={t({ ko: '순서', en: 'Order' })} className="w-28"><NumberStepperInput variant="settings" min={-10000} max={10000} value={entry.order} onValueCommit={(value) => onChange({ order: Number(value) || 0 })} /></Field>
     </div>
   </>
@@ -183,15 +213,16 @@ export function newLoreEntry(count: number): ChatLoreEntry {
   return { id: createRandomUuid(), title: '', keys: [], content: '', enabled: true, constant: false, order: count, caseSensitive: false, file: null, fileId: null }
 }
 
-export function ChatLorebookEditor({ entries, onChange, filePlace = { kind: 'global' } }: { entries: ChatLoreEntry[]; onChange: (entries: ChatLoreEntry[]) => void; filePlace?: LoreFilePlace }) {
+export function ChatLorebookEditor({ entries, onChange, filePlace = { kind: 'global' }, keyLanguage = null }: { entries: ChatLoreEntry[]; onChange: (entries: ChatLoreEntry[]) => void; filePlace?: LoreFilePlace; keyLanguage?: string | null }) {
   const { t } = useI18n()
   const [openId, setOpenId] = useState<string | null>(null)
   const update = (id: string, patch: Partial<ChatLoreEntry>) => onChange(entries.map((entry) => entry.id === id ? { ...entry, ...patch } : entry))
+  const missing = keyLanguage ? t({ ko: '{tag} 없음', en: 'No {tag}' }, { tag: loreKeyLanguageTag(keyLanguage) }) : ''
   return <div className="space-y-2">
-    {entries.map((entry) => <CollapsibleRow key={entry.id} title={loreEntryTitle(entry) || t({ ko: '새 설정', en: 'New entry' })} meta={entry.constant ? t({ ko: '항상', en: 'Always' }) : undefined} open={openId === entry.id} onOpenChange={(open) => setOpenId(open ? entry.id : null)} actions={<>
+    {entries.map((entry) => <CollapsibleRow key={entry.id} title={loreEntryTitle(entry) || t({ ko: '새 설정', en: 'New entry' })} meta={entry.constant ? t({ ko: '항상', en: 'Always' }) : lacksLanguageKeys(entry, keyLanguage) ? <span className="font-semibold text-warning">{missing}</span> : undefined} open={openId === entry.id} onOpenChange={(open) => setOpenId(open ? entry.id : null)} actions={<>
       <Switch checked={entry.enabled} onCheckedChange={(enabled) => update(entry.id, { enabled })} aria-label={t({ ko: '로어 사용', en: 'Enable lore' })} />
       <IconButton size="icon-sm" variant="ghost" label={t({ ko: '로어 삭제', en: 'Delete lore' })} onClick={() => onChange(entries.filter((item) => item.id !== entry.id))}><Trash2 /></IconButton>
-    </>}><ChatLoreEntryFields entry={entry} filePlace={filePlace} onChange={(patch) => update(entry.id, patch)} /></CollapsibleRow>)}
+    </>}><ChatLoreEntryFields entry={entry} filePlace={filePlace} keyLanguage={keyLanguage} onChange={(patch) => update(entry.id, patch)} /></CollapsibleRow>)}
     <IconButton variant="secondary" size="icon-sm" label={t({ ko: '로어 설정 추가', en: 'Add lore entry' })} disabled={entries.length >= 500} onClick={() => {
       const entry = newLoreEntry(entries.length)
       onChange([...entries, entry]); setOpenId(entry.id)
