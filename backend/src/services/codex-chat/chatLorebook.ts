@@ -1,7 +1,8 @@
 import { createHash } from 'crypto'
-import { normalizeLoreKeyLanguage, sortLoreKeysByLanguage } from '@conai/shared'
+import { sortLoreKeysByLanguage } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { ChatProfileError } from './chatProfileError'
+import { loadChatSettings } from './chatSettings'
 
 /**
  * How secondary keywords narrow a match on the primary ones (SillyTavern's selective logic): any of them also
@@ -20,8 +21,8 @@ export type ChatLoreEntry = {
   /** Checked only once a primary keyword matched; none means no further condition. */
   secondaryKeys: string[]
   /**
-   * The same keywords in the book's key language (see ChatLorebookSettings): matched together with `keys` /
-   * `secondaryKeys` whatever the book's language, so a chat held in either language finds the entry.
+   * The same keywords in the lore key language (ChatSettings.loreKeyLanguage): matched together with `keys` /
+   * `secondaryKeys` whatever that setting is, so a chat held in either language finds the entry.
    */
   localKeys: string[]
   localSecondaryKeys: string[]
@@ -54,23 +55,11 @@ export type ChatLoreEntry = {
  */
 export type ChatLorebookKind = 'global' | 'account' | 'chat'
 
-/** A book's own settings. `keyLanguage`: the language its entries' `localKeys` are in besides English; null: English only. */
-export type ChatLorebookSettings = { keyLanguage: string | null }
-
-export function normalizeLorebookSettings(value: unknown): ChatLorebookSettings {
-  if (typeof value === 'string') {
-    try { value = JSON.parse(value) } catch { value = null }
-  }
-  const row = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
-  return { keyLanguage: normalizeLoreKeyLanguage(row.keyLanguage) }
-}
-
 /** A shared lorebook. Profiles link it by id, so editing or re-importing it reaches every linked profile. */
 export type ChatLorebook = {
   id: number
   name: string
   kind: ChatLorebookKind
-  settings: ChatLorebookSettings
   entries: ChatLoreEntry[]
   /** Profiles that link this book. */
   profiles: Array<{ id: number; name: string }>
@@ -89,7 +78,7 @@ export function loreEntryTitle(entry: Pick<ChatLoreEntry, 'title' | 'keys' | 'co
   return entry.title || entry.keys[0] || entry.localKeys?.[0] || entry.content.slice(0, 20)
 }
 
-/** Every primary keyword: the English ones, then those in the book's key language. */
+/** Every primary keyword: the English ones, then those in the lore key language. */
 export function loreEntryKeys(entry: Pick<ChatLoreEntry, 'keys'> & { localKeys?: string[] }) {
   return entry.localKeys?.length ? [...entry.keys, ...entry.localKeys] : entry.keys
 }
@@ -187,11 +176,12 @@ export function normalizeLorebook(value: unknown): ChatLoreEntry[] {
 }
 
 /**
- * Keywords written in the book's key language's script go to that language's lists, however they came in (typed
- * into the English row, imported, made by the AI). See sortLoreKeysByLanguage.
+ * Keywords written in the lore key language's script (ChatSettings.loreKeyLanguage) go to that language's lists,
+ * however they came in (typed into the English row, imported, made by the AI). See sortLoreKeysByLanguage.
  */
-export function sortLorebookKeys(entries: ChatLoreEntry[], settings: ChatLorebookSettings) {
-  return settings.keyLanguage ? entries.map((entry) => sortLoreKeysByLanguage(entry, settings.keyLanguage)) : entries
+export function sortLorebookKeys(entries: ChatLoreEntry[]) {
+  const language = loadChatSettings().loreKeyLanguage
+  return language ? entries.map((entry) => sortLoreKeysByLanguage(entry, language)) : entries
 }
 
 /** A global book links no files. */
@@ -211,8 +201,6 @@ export type LorebookRow = {
   id: number
   name: string
   entries: string
-  /** ChatLorebookSettings as JSON; for account and chat books, cached from lorebook.json like the entries. */
-  settings: string | null
   kind: ChatLorebookKind
   /** File store owner key (`account:<id>` / `bootstrap`); null for a global book. */
   owner_key: string | null
@@ -240,7 +228,6 @@ export function toLorebook(row: LorebookRow, profiles: ReturnType<typeof linkedP
     id: row.id,
     name: row.name,
     kind: row.kind ?? 'global',
-    settings: normalizeLorebookSettings(row.settings),
     entries: normalizeLorebook(row.entries),
     profiles: profiles.filter((profile) => profile.lorebookIds.includes(row.id)).map(({ id, name }) => ({ id, name })),
     createdDate: row.created_date,
@@ -293,23 +280,20 @@ export const ChatLorebookStore = {
     return ids.flatMap((bookId) => (byId.get(bookId) ?? []).map((entry) => ({ key: loreEntryKey(bookId, entry), entry, bookId, bookKind: 'global' as const })))
   },
 
-  create(input: { name?: unknown; entries?: unknown; settings?: unknown }) {
-    const settings = normalizeLorebookSettings(input.settings)
-    const entries = withoutFiles(sortLorebookKeys(normalizeLorebook(input.entries ?? []), settings))
-    const result = getUserSettingsDb().prepare("INSERT INTO chat_lorebooks (name, entries, settings, kind) VALUES (?, ?, ?, 'global')").run(lorebookName(input.name), JSON.stringify(entries), JSON.stringify(settings))
+  create(input: { name?: unknown; entries?: unknown }) {
+    const entries = withoutFiles(sortLorebookKeys(normalizeLorebook(input.entries ?? [])))
+    const result = getUserSettingsDb().prepare("INSERT INTO chat_lorebooks (name, entries, kind) VALUES (?, ?, 'global')").run(lorebookName(input.name), JSON.stringify(entries))
     return ChatLorebookStore.find(Number(result.lastInsertRowid)) as ChatLorebook
   },
 
   /** Global books only (null for any other): account and chat books are written through their files. */
-  update(lorebookId: number, patch: { name?: unknown; entries?: unknown; settings?: unknown }) {
+  update(lorebookId: number, patch: { name?: unknown; entries?: unknown }) {
     const current = ChatLorebookStore.find(lorebookId)
     if (!current || current.kind !== 'global') return null
-    const settings = patch.settings === undefined ? current.settings : normalizeLorebookSettings(patch.settings)
     const entries = patch.entries === undefined ? current.entries : withoutFiles(normalizeLorebook(patch.entries))
-    getUserSettingsDb().prepare('UPDATE chat_lorebooks SET name = ?, entries = ?, settings = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(
+    getUserSettingsDb().prepare('UPDATE chat_lorebooks SET name = ?, entries = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(
       patch.name === undefined ? current.name : lorebookName(patch.name),
-      JSON.stringify(sortLorebookKeys(entries, settings)),
-      JSON.stringify(settings),
+      JSON.stringify(sortLorebookKeys(entries)),
       lorebookId,
     )
     return ChatLorebookStore.find(lorebookId)

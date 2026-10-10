@@ -1,6 +1,10 @@
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { LORE_KEY_LANGUAGES, LORE_KEY_LANGUAGE_MAX_LENGTH, normalizeLoreKeyLanguage } from '@conai/shared'
+import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { RowGroup } from '@/components/ui/row-group'
+import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -10,8 +14,8 @@ import { getErrorMessage } from '@/lib/error-message'
 import { SettingsRowsSkeleton } from './settings-rows'
 
 /**
- * Settings › LLM › 연결: whether save_lore saves right away (기억), and what each chat answer keeps of what it was
- * sent (진단, shown from a reply's 문맥 button).
+ * Settings › LLM › 연결: whether save_lore saves right away and the lorebooks' second key language (기억), and what
+ * each chat answer keeps of what it was sent (진단, shown from a reply's 문맥 button).
  */
 export function ChatDiagnosticsSettings() {
   const { t } = useI18n()
@@ -35,7 +39,11 @@ export function ChatDiagnosticsSettings() {
       {settingsQuery.data ? (
         <SettingsSwitchRow label={t({ ko: '로어 자동 저장', en: 'Save lore automatically' })} checked={settingsQuery.data.loreAutoSave} disabled={settingsMutation.isPending}
           onCheckedChange={(loreAutoSave) => settingsMutation.mutate({ loreAutoSave })} />
-      ) : settingsQuery.isError ? null : <SettingsRowsSkeleton rows={1} />}
+      ) : settingsQuery.isError ? null : <SettingsRowsSkeleton rows={2} />}
+      {settingsQuery.data ? (
+        <LoreKeyLanguageRow value={settingsQuery.data.loreKeyLanguage} disabled={settingsMutation.isPending}
+          onChange={(loreKeyLanguage) => settingsMutation.mutate({ loreKeyLanguage })} />
+      ) : null}
     </RowGroup>
     <RowGroup heading={t({ ko: '진단', en: 'Diagnostics' })}>
       {diagnostics ? <>
@@ -53,4 +61,40 @@ export function ChatDiagnosticsSettings() {
       ) : <SettingsRowsSkeleton rows={3} />}
     </RowGroup>
   </>
+}
+
+const CUSTOM_LANGUAGE = '\u0000custom'
+
+/** Every lorebook's keywords: English plus this language (one list per language, both matched); none: English only. */
+function LoreKeyLanguageRow({ value, disabled, onChange }: { value: string | null; disabled: boolean; onChange: (language: string | null) => void }) {
+  const { t } = useI18n()
+  const listed = value === null || LORE_KEY_LANGUAGES.some((item) => item.id === value)
+  const [custom, setCustom] = useState(!listed)
+  const [typed, setTyped] = useState(listed ? '' : value ?? '')
+  useEffect(() => {
+    if (!listed) { setCustom(true); setTyped(value ?? '') }
+  }, [listed, value])
+  const label = t({ ko: '로어북 추가 키 언어', en: 'Lorebook second key language' })
+  const commitTyped = () => {
+    const next = normalizeLoreKeyLanguage(typed)
+    if (next && next !== value) onChange(next)
+  }
+  return (
+    <SettingRow label={label} info={t({ ko: '모든 로어북이 영어 키에 더해 이 언어로도 키를 둬. 둘 다 대화에서 찾아.', en: 'Every lorebook keeps keywords in this language besides English; both are looked for in the chat.' })}>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {custom ? <Input variant="settings" className="w-36" value={typed} maxLength={LORE_KEY_LANGUAGE_MAX_LENGTH} disabled={disabled} placeholder={t({ ko: '언어 이름', en: 'Language name' })}
+          aria-label={t({ ko: '언어 이름', en: 'Language name' })} onChange={(event) => setTyped(event.target.value)} onBlur={commitTyped}
+          onKeyDown={(event) => { if (event.key === 'Enter') commitTyped() }} /> : null}
+        <Select variant="settings" className="w-40" value={custom ? CUSTOM_LANGUAGE : value ?? ''} disabled={disabled} aria-label={label} onChange={(event) => {
+          const next = event.target.value
+          setCustom(next === CUSTOM_LANGUAGE)
+          if (next !== CUSTOM_LANGUAGE) onChange(next || null)
+        }}>
+          <option value="">{t({ ko: '없음 (영어만)', en: 'None (English only)' })}</option>
+          {LORE_KEY_LANGUAGES.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+          <option value={CUSTOM_LANGUAGE}>{t({ ko: '직접 입력…', en: 'Other…' })}</option>
+        </Select>
+      </div>
+    </SettingRow>
+  )
 }

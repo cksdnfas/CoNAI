@@ -6,7 +6,7 @@ import { completeChat } from './llmChatCompletion'
 import { completeSummary, stripThinking, SUMMARY_TIMEOUT_MS } from './llmChatContext'
 
 /**
- * "빠진 키 채우기": a profile's model writes, for entries that have English keywords only, the keywords of the book's
+ * "빠진 키 채우기": a profile's model writes, for entries that have English keywords only, the keywords of the lore
  * key language (names in their usual spellings, terms translated). Its translation model when it has one, else its
  * summary model (which borrows the chat model). Nothing is saved: the editor shows the result for review.
  */

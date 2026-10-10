@@ -106,7 +106,8 @@ export interface ChatDiagnostics {
   raw?: unknown
 }
 
-export type ChatAdminSettings = { enabled: boolean; diagnostics: { enabled: boolean; captureRaw: boolean; captureLimit: number }; loreAutoSave: boolean }
+/** `loreKeyLanguage`: the one language besides English every lorebook's keywords are kept in (`ko`, `ja`, `zh` or a typed name); null: English only. */
+export type ChatAdminSettings = { enabled: boolean; diagnostics: { enabled: boolean; captureRaw: boolean; captureLimit: number }; loreAutoSave: boolean; loreKeyLanguage: string | null }
 
 export const CHAT_SCOPES: ChatScope[] = ['read', 'generate', 'organize', 'configure']
 export const CHAT_PROFILES_QUERY_KEY = ['codex-chat-profiles'] as const
@@ -125,6 +126,8 @@ export interface CodexChatStatus {
   enabled: boolean
   /** save_lore saves right away unless a chat says otherwise (see CodexChatThread.lore_auto_save). */
   loreAutoSave?: boolean
+  /** The lore key language (see ChatAdminSettings). */
+  loreKeyLanguage?: string | null
   /** This session can use at least one engine. */
   canUse: boolean
   codex: { canUse: boolean }
@@ -383,7 +386,7 @@ export interface ChatLoreEntry {
   /** `/pattern/flags` is a regular expression. */
   keys: string[]
   secondaryKeys?: string[]
-  /** The same keywords in the book's key language (ChatLorebookSettings); matched together with the English ones. */
+  /** The same keywords in the lore key language (ChatAdminSettings.loreKeyLanguage); matched together with the English ones. */
   localKeys?: string[]
   localSecondaryKeys?: string[]
   secondaryLogic?: LoreSecondaryLogic
@@ -410,11 +413,6 @@ export function loreEntryTitle(entry: Pick<ChatLoreEntry, 'title' | 'keys' | 'co
   return entry.title?.trim() || entry.keys[0] || entry.localKeys?.[0] || entry.content.slice(0, 20)
 }
 
-/** A book's own settings. `keyLanguage`: the language besides English its entries' keywords are in (`ko`, `ja`, `zh` or a typed name); null: English only. */
-export interface ChatLorebookSettings {
-  keyLanguage: string | null
-}
-
 /** `global`: the admin's shared books. `account`: a folder under the account's 로어북/. `chat`: one chat's own book. */
 export type ChatLorebookKind = 'global' | 'account' | 'chat'
 
@@ -423,7 +421,6 @@ export interface ChatLorebook {
   id: number
   name: string
   kind?: ChatLorebookKind
-  settings?: ChatLorebookSettings
   entries: ChatLoreEntry[]
   profiles: Array<{ id: number; name: string }>
   createdDate: string
@@ -445,7 +442,6 @@ export interface ThreadLoreBook {
   kind: ChatLorebookKind
   via: 'thread' | 'profile'
   folderId: string | null
-  settings?: ChatLorebookSettings
   entries: ChatLoreEntry[]
   profiles: Array<{ id: number; name: string }>
 }
@@ -454,6 +450,8 @@ export interface ThreadLorebooks {
   entryUsage?: Record<string, { turnsAgo?: number; sourceMessageId?: number | null }>
   chatBook: OwnedChatLorebook | null
   linkedIds: number[]
+  /** The linked account book save_lore writes to; null: the chat's own book. */
+  recordBookId: number | null
   books: ThreadLoreBook[]
 }
 
@@ -676,6 +674,8 @@ export interface ChatProfile extends ChatProfileAssetFields {
   pageAssist: boolean
   /** The model may propose chat lorebook entries (save_lore). */
   allowLoreProposals: boolean
+  /** File store folders and text files its characters may open (and write where allowed) in any chat of the owner. */
+  linkedFiles: LinkedFileLink[]
   /** The judge preset steering each turn (null: no judge) and a judge model instead of the preset's (null: the preset's). */
   judgePresetId: number | null
   judgeSlotId: number | null
@@ -914,7 +914,7 @@ export function getChatAdminSettings() {
   return requestApiData<ChatAdminSettings>('/api/codex-chat/admin/settings', { cache: 'no-store' })
 }
 
-export function updateChatAdminSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatAdminSettings['diagnostics']>; loreAutoSave?: boolean }) {
+export function updateChatAdminSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatAdminSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null }) {
   return requestApiData<ChatAdminSettings>('/api/codex-chat/admin/settings', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
@@ -960,7 +960,7 @@ export function listChatLorebooks() {
   return requestApiData<ChatLorebook[]>('/api/codex-chat/admin/lorebooks')
 }
 
-export function createChatLorebook(input: { name: string; entries?: ChatLoreEntry[]; settings?: ChatLorebookSettings }) {
+export function createChatLorebook(input: { name: string; entries?: ChatLoreEntry[] }) {
   return requestApiData<ChatLorebook>('/api/codex-chat/admin/lorebooks', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
 }
 
@@ -972,7 +972,7 @@ export function importChatLorebook(file: File, lorebookId?: number) {
   return requestApiData<ChatLorebook>(path, { method: 'POST', body })
 }
 
-export function updateChatLorebook(lorebookId: number, patch: { name?: string; entries?: ChatLoreEntry[]; settings?: ChatLorebookSettings }) {
+export function updateChatLorebook(lorebookId: number, patch: { name?: string; entries?: ChatLoreEntry[] }) {
   return requestApiData<ChatLorebook>(`/api/codex-chat/admin/lorebooks/${lorebookId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
@@ -1340,7 +1340,7 @@ export function editChatBlock(threadId: number, key: string, data: Record<string
   })
 }
 
-export function updateCodexChatThreadContext(threadId: number, patch: { loreAutoSave?: boolean | null; contextTurns?: number | null; maxTokens?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null; userProfileId?: number | null; lorebookIds?: number[]; reactionEnabled?: boolean; reactionModelSlotId?: number | null }) {
+export function updateCodexChatThreadContext(threadId: number, patch: { loreAutoSave?: boolean | null; contextTurns?: number | null; maxTokens?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null; userProfileId?: number | null; lorebookIds?: number[]; loreRecordBookId?: number | null; linkedFiles?: LinkedFileLink[]; reactionEnabled?: boolean; reactionModelSlotId?: number | null }) {
   return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/context`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
@@ -1478,17 +1478,51 @@ async function requestWithMergePreview<T>(path: string, init: RequestInit): Prom
 export const OWN_LOREBOOKS_QUERY_KEY = ['codex-chat-own-lorebooks'] as const
 export const threadLorebooksQueryKey = (threadId: number) => ['codex-chat-thread-lorebooks', threadId] as const
 
+/** A file store folder or text file linked to a chat or a profile; `write` lets its characters write there. */
+export type LinkedFileLink = { id: string; write: boolean }
+
+/** A link as the context tab and the profile editor show it. */
+export interface LinkedFileView {
+  id: string
+  name: string
+  kind: 'folder' | 'file' | null
+  write: boolean
+  via: 'thread' | 'profile'
+  /** The folder it sits in, from the store root, and its id (null: the top). */
+  path: string | null
+  parentId: string | null
+  /** Folders: items directly inside. */
+  count: number | null
+  size: number | null
+  /** The profiles (a room: its members) whose links bring it. */
+  profiles: Array<{ id: number; name: string }>
+  /** Gone, in the lorebooks, or another account's: requests skip it. */
+  missing: boolean
+}
+
+export const threadLinkedFilesQueryKey = (threadId: number) => ['codex-chat-thread-linked-files', threadId] as const
+
+/** The chat's own links, then those its profile (a room: every member) brings. */
+export function getThreadLinkedFiles(threadId: number) {
+  return requestApiData<LinkedFileView[]>(`/api/codex-chat/threads/${threadId}/linked-files`, { cache: 'no-store' })
+}
+
+/** Names and places of links in your own file store (the profile editor). */
+export function describeLinkedFiles(links: LinkedFileLink[]) {
+  return requestApiData<LinkedFileView[]>('/api/codex-chat/linked-files/describe', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ links }) })
+}
+
 /** The requester's account books (with entries) and the global books (count only). */
 export function listOwnLorebooks() {
   return requestApiData<OwnedChatLorebook[]>('/api/codex-chat/lorebooks')
 }
 
-export function createOwnLorebook(input: { name: string; entries?: ChatLoreEntry[]; settings?: ChatLorebookSettings }) {
+export function createOwnLorebook(input: { name: string; entries?: ChatLoreEntry[] }) {
   return requestApiData<OwnedChatLorebook>('/api/codex-chat/lorebooks', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
 }
 
 /** Null: an emptied chat book went away. */
-export function updateOwnLorebook(lorebookId: number, patch: { name?: string; entries?: ChatLoreEntry[]; settings?: ChatLorebookSettings }) {
+export function updateOwnLorebook(lorebookId: number, patch: { name?: string; entries?: ChatLoreEntry[] }) {
   return requestApiData<OwnedChatLorebook | null>(`/api/codex-chat/lorebooks/${lorebookId}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
@@ -1504,14 +1538,19 @@ export function getThreadLorebooks(threadId: number) {
   return requestApiData<ThreadLorebooks>(`/api/codex-chat/threads/${threadId}/lorebooks`, { cache: 'no-store' })
 }
 
-/** Replace the chat book's entries (and its settings, when given); it is made with its first entry (null once emptied). */
-export function saveThreadLorebook(threadId: number, entries: ChatLoreEntry[], settings?: ChatLorebookSettings) {
-  return requestApiData<OwnedChatLorebook | null>(`/api/codex-chat/threads/${threadId}/lorebook`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ entries, settings }) })
+/** Replace the chat book's entries; it is made with its first entry (null once emptied). */
+export function saveThreadLorebook(threadId: number, entries: ChatLoreEntry[]) {
+  return requestApiData<OwnedChatLorebook | null>(`/api/codex-chat/threads/${threadId}/lorebook`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ entries }) })
 }
 
-/** Keep the chat book as an account book, linked to this chat (the chat starts a new book with its next entry). */
+/** Keep the chat book as an account book, linked to this chat (and recorded into when the chat book was). */
 export function keepThreadLorebook(threadId: number) {
   return requestApiData<OwnedChatLorebook>(`/api/codex-chat/threads/${threadId}/lorebook/keep`, { method: 'POST' })
+}
+
+/** A new empty account book, linked to this chat and made the book save_lore writes to. */
+export function createThreadLorebook(threadId: number, name: string) {
+  return requestApiData<OwnedChatLorebook>(`/api/codex-chat/threads/${threadId}/lorebooks`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ name }) })
 }
 
 export function previewLorebookMerge(targetId: number, input: { sourceId: number; entryIds?: string[] }) {

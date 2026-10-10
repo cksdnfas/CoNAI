@@ -16,7 +16,7 @@ import type { McpRequestContext } from '../src/mcp/context'
  *   An empty array counts as classified ("no feature key needed"): toolAccess only checks `=== undefined`.
  *
  * Because createMcpServer drops filtered tools before they reach the SDK, tools/list alone would never show an
- * unclassified tool. The test therefore records every name handed to `server.tool(...)` BEFORE the server.ts filter
+ * unclassified tool. The test therefore records every name handed to `server.registerTool(...)` BEFORE the server.ts filter
  * runs (see recordAttempts) and uses tools/list only for the per-context counts.
  */
 
@@ -29,7 +29,7 @@ const PATTERN_CLASSIFIED = 'generate_image(_N): isChatGenerationTool -> scope "g
  * - FEATURE_UNCLASSIFIED_ALLOWED: account-bound tools that may lack a TOOL_FEATURE_PERMISSIONS entry.
  * - STALE_SCOPE_ALLOWED / STALE_FEATURE_ALLOWED: map keys allowed without a registration in the contexts built below.
  */
-const CHAT_ROOM_TOOL_NAMES = ['chat_reply_to', 'room_call_member', 'room_history_search', 'room_history_read', 'read_lore_file', 'save_lore', 'task_propose', 'task_status', 'task_update', 'task_wait', 'task_finish', 'get_proposal_status', 'offer_choices']
+const CHAT_ROOM_TOOL_NAMES = ['chat_reply_to', 'room_call_member', 'room_history_search', 'room_history_read', 'read_lore_file', 'save_lore', 'edit_lore_file', 'linked_list', 'linked_search', 'linked_read', 'linked_write', 'linked_edit', 'task_propose', 'task_status', 'task_update', 'task_wait', 'task_finish', 'get_proposal_status', 'offer_choices']
 const UNSCOPED_ALLOWED = new Set<string>([
   // Chat room/lore tools are offered by CHAT_ROOM_TOOLS regardless of scopes (isContextToolAllowed returns before scopes).
   ...CHAT_ROOM_TOOL_NAMES,
@@ -61,11 +61,11 @@ test('mcp tool classification: every registered tool has a scope and a feature p
   const probe = createMcpServer({ scopes: [] })
   const proto = Object.getPrototypeOf(probe) as Record<string, unknown>
   await probe.close()
-  const originalToolDescriptor = Object.getOwnPropertyDescriptor(proto, 'tool')!
-  assert.equal(typeof originalToolDescriptor?.value, 'function', 'McpServer.prototype.tool must be a plain method for the recorder')
+  const originalToolDescriptor = Object.getOwnPropertyDescriptor(proto, 'registerTool')!
+  assert.equal(typeof originalToolDescriptor?.value, 'function', 'McpServer.prototype.registerTool must be a plain method for the recorder')
 
   t.after(async () => {
-    Object.defineProperty(proto, 'tool', originalToolDescriptor)
+    Object.defineProperty(proto, 'registerTool', originalToolDescriptor)
     authModule.getAuthDb().close()
     user.closeUserSettingsDb()
     main.closeDatabase()
@@ -82,20 +82,20 @@ test('mcp tool classification: every registered tool has a scope and a feature p
   const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
   const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
   const { normalizeChatPageSnapshot, normalizeChatWorkflowSnapshot } = await import('@conai/shared')
-  const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
-  const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
+  const { Client } = await import('@modelcontextprotocol/client')
+  const { InMemoryTransport } = await import('@modelcontextprotocol/client')
 
   // Keep the allowlist honest: it must mirror the real room-tool set.
   assert.deepEqual([...CHAT_ROOM_TOOLS].sort(), [...CHAT_ROOM_TOOL_NAMES].sort(), 'CHAT_ROOM_TOOLS changed; update CHAT_ROOM_TOOL_NAMES in this test')
 
   /**
-   * server.ts does `originalTool = server.tool.bind(server)` and then assigns its filtering wrapper to `server.tool`.
+   * server.ts does `originalRegister = server.registerTool.bind(server)` and then assigns its filtering wrapper to `server.registerTool`.
    * An accessor on the prototype hands out the real method for the bind, and wraps the assigned filter so every name
    * is recorded before the filter can drop it.
    */
   let attempts: Set<string> | null = null
   const wrappedKey = Symbol('classification-recorder')
-  Object.defineProperty(proto, 'tool', {
+  Object.defineProperty(proto, 'registerTool', {
     configurable: true,
     get(this: Record<symbol, unknown>) { return this[wrappedKey] ?? originalToolDescriptor.value },
     set(this: Record<symbol, unknown>, filter: (...args: unknown[]) => unknown) {
@@ -162,7 +162,7 @@ test('mcp tool classification: every registered tool has a scope and a feature p
   const counts: string[] = []
   for (const { name, accountBound, context } of contexts) {
     const { attempted, listed } = await collect(context)
-    assert.ok(attempted.size > 0, `${name}: nothing was recorded; the server.tool recorder is not wired`)
+    assert.ok(attempted.size > 0, `${name}: nothing was recorded; the server.registerTool recorder is not wired`)
     for (const tool of attempted) {
       attemptedAll.add(tool)
       if (accountBound) attemptedAccountBound.add(tool)

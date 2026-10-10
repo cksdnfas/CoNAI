@@ -721,6 +721,10 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['lorebook_ids', 'TEXT'],
     // save_lore entries saved right away in this chat (1), left as cards (0), or as the chat settings say (null).
     ['lore_auto_save', 'INTEGER'],
+    // The linked account lorebook save_lore writes to in this chat (null: the chat's own book).
+    ['lore_record_book_id', 'INTEGER'],
+    // JSON [{ id, write }]: file store folders and files linked to this chat (see chatLinkedFiles).
+    ['linked_files', 'TEXT'],
     // The chat list: pinned chats come first; archived ones leave the list for the archive (nothing is deleted).
     ['pinned', 'INTEGER NOT NULL DEFAULT 0'],
     ['archived', 'INTEGER NOT NULL DEFAULT 0'],
@@ -988,6 +992,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['suggest_user_profile_id', 'INTEGER'],
     // The model may propose chat lorebook entries (save_lore).
     ['allow_lore_proposals', 'INTEGER NOT NULL DEFAULT 1'],
+    // JSON [{ id, write }]: file store folders and files the profile's characters may open in any chat of their owner.
+    ['linked_files', 'TEXT'],
     // Judge preset (chat_judge_presets; no foreign key, like the slots) and an override of its judge connection.
     ['judge_preset_id', 'INTEGER'],
     ['judge_provider_name', 'TEXT'],

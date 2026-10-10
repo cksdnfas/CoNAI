@@ -6,6 +6,7 @@ import { parseBlockEdits } from './chatBlockState'
 import { ChatFlagStore } from './chatFlags'
 import { ChatUserProfileStore } from './chatUserProfiles'
 import { OwnedLorebookStore, parsePinnedMemories, pinnedMemoryEntries } from './chatLorebookFiles'
+import { describeLinkedFiles, LinkedFileStore, normalizeLinkedFiles } from './chatLinkedFiles'
 import { renderSummary, type ChatSummarySegment } from './chatMemory'
 import { ChatProfileStore } from './chatProfiles'
 import { CodexChatStore, parseMessageRouting } from './codexChatStore'
@@ -257,7 +258,15 @@ export function importChatThread(requester: McpRequester, raw: Buffer, target: C
     }
     const books = matchOwn(OwnedLorebookStore.list(owner), Array.isArray(links.lorebooks) ? links.lorebooks : sameAccount ? idList(thread.lorebook_ids) : [])
     if (books.found.length) OwnedLorebookStore.setThreadLinks(created.id, books.found.map((book) => book.id))
+    const wantedRecord = links.loreRecordBook ?? (sameAccount && typeof thread.lore_record_book_id === 'number' ? { id: thread.lore_record_book_id } : null)
+    const record = wantedRecord ? matchOwn(books.found, [wantedRecord]).found[0] : undefined
+    if (record) OwnedLorebookStore.setRecordBook(created.id, record.id)
     if (books.missing) notes.push(`이 계정에 없는 로어북 ${books.missing}개는 연결하지 않았어.`)
+    // Linked files by id, kept only while they are in this owner's store.
+    const wantedFiles = normalizeLinkedFiles(Array.isArray(links.linkedFiles) ? links.linkedFiles : sameAccount ? thread.linked_files : [])
+    const keptFiles = wantedFiles.filter((link) => !describeLinkedFiles(owner, [link])[0].missing)
+    if (keptFiles.length) LinkedFileStore.setThreadLinks(created.id, keptFiles)
+    if (keptFiles.length < wantedFiles.length) notes.push(`이 보관함에 없는 연결 파일 ${wantedFiles.length - keptFiles.length}개는 연결하지 않았어.`)
 
     // The summary: its segments when the file has them, else the old single summary as a plot up to where it reached.
     const insertSegment = db.prepare('INSERT INTO chat_summary_segments (thread_id, level, from_message_id, until_message_id, content, backed) VALUES (?, ?, ?, ?, ?, ?)')

@@ -56,6 +56,25 @@ export function toEntry(row: FileRow): StoredFileEntry {
     size: row.size, createdAt: `${row.created_at.replace(' ', 'T')}Z`, updatedAt: `${row.updated_at.replace(' ', 'T')}Z` };
 }
 
+export type TextEdit = { old_text: string; new_text: string; replace_all?: boolean };
+
+/** Apply exact-text replacements in order; each must match once (or replace_all). Throws, saving nothing, when one fails. */
+export function applyTextEdits(text: string, edits: TextEdit[]) {
+  let replaced = 0;
+  edits.forEach((edit, index) => {
+    // Models write \n line ends; a CRLF file is matched and edited with its own.
+    const crlf = !text.includes(edit.old_text) && text.includes('\r\n');
+    const from = crlf ? edit.old_text.replace(/\r?\n/g, '\r\n') : edit.old_text;
+    const to = crlf ? edit.new_text.replace(/\r?\n/g, '\r\n') : edit.new_text;
+    const count = text.split(from).length - 1;
+    if (count === 0) throw new FileStoreError(`edits[${index}]의 old_text를 파일에서 찾지 못했어. 다시 읽고 글자 그대로 옮겨줘.`, 409);
+    if (count > 1 && !edit.replace_all) throw new FileStoreError(`edits[${index}]의 old_text가 ${count}군데 있어. 앞뒤 문장을 더 넣거나 replace_all을 켜줘.`, 409);
+    text = edit.replace_all ? text.split(from).join(to) : text.replace(from, () => to);
+    replaced += edit.replace_all ? count : 1;
+  });
+  return { text, replaced };
+}
+
 function normalizeName(value: unknown): string {
   if (typeof value !== 'string') throw new FileStoreError('이름을 입력해줘.');
   const name = value.normalize('NFC').trim();
@@ -366,6 +385,24 @@ export const FileStoreService = {
     const row = requireRow(owner, id);
     if (row.kind !== 'file') throw new FileStoreError('파일을 선택해줘.');
     return this.writeText(owner, row.parent_id, row.name, text, { replaceId: row.id });
+  },
+
+  /**
+   * Read a whole text file, transform it and save it in place. Read and write are synchronous, so no other request
+   * can save the file in between and have its change overwritten.
+   */
+  editText(owner: string, id: string, transform: (text: string) => string): StoredFileEntry {
+    const { entry, filePath } = this.resolveFile(owner, id);
+    if (!TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) throw new FileStoreError('텍스트 파일만 고칠 수 있어.', 415);
+    if (entry.size > MAX_TEXT_DOCUMENT_BYTES) throw new FileStoreError('2MB가 넘는 파일은 고칠 수 없어.', 413);
+    const data = fs.readFileSync(filePath);
+    if (data.includes(0)) throw new FileStoreError('바이너리 파일은 텍스트로 고칠 수 없어.', 415);
+    let text: string;
+    try { text = new TextDecoder('utf-8', { fatal: true }).decode(data); }
+    catch { throw new FileStoreError('UTF-8로 저장한 텍스트 파일만 고칠 수 있어.', 415); }
+    const next = transform(text);
+    if (Buffer.byteLength(next, 'utf8') > MAX_TEXT_DOCUMENT_BYTES) throw new FileStoreError('문서는 2MB까지 저장할 수 있어.', 413);
+    return this.updateText(owner, id, next);
   },
 
   /**

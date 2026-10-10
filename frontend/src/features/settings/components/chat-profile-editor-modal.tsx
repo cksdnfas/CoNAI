@@ -114,6 +114,7 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     contentRatingTierId: profile?.contentRatingTierId ?? null,
     pageAssist: profile?.pageAssist ?? false,
     allowLoreProposals: profile?.allowLoreProposals ?? true,
+    linkedFiles: profile?.linkedFiles ?? [],
     judgePresetId: profile?.judgePresetId ?? null,
     judgeSlotId: profile?.judgeSlotId ?? null,
     style: { ...FALLBACK_STYLE, ...(profile?.style ?? defaults?.style) },

@@ -151,7 +151,7 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     const [asked, found] = file.messages as unknown as Array<Record<string, unknown>>
     asked.mediaAttachments = [{ compositeHash: 'a'.repeat(48), name: 'x.png', mimeType: 'image/png' }]
     found.tool_calls = [{ id: 'c1', tool: 'search', status: 'completed', arguments: {}, summary: '2개', historyIds: [], compositeHashes: ['b'.repeat(48), 'a'.repeat(48)] }]
-    assert.deepEqual(file.links, { flags: [{ id: flag.id, name: '반말' }, { id: quiet.id, name: '짧게' }], userProfile: { id: me.id, name: '민준' }, lorebooks: [{ id: book.id, name: '세계관' }] })
+    assert.deepEqual(file.links, { flags: [{ id: flag.id, name: '반말' }, { id: quiet.id, name: '짧게' }], userProfile: { id: me.id, name: '민준' }, lorebooks: [{ id: book.id, name: '세계관' }], linkedFiles: [], loreRecordBook: null })
 
     const back = importChatThread(requester, Buffer.from(JSON.stringify(file)), target(requester))
     const restored = CodexChatStore.findThreadById(back.threadId)!

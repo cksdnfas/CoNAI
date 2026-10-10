@@ -211,10 +211,13 @@ function OwnerList({ owners, onOpen }: { owners: StoredFileOwner[]; onOpen: (own
  * With `onPick` it becomes a picker (inside a modal): only files can be chosen and nothing is changed but uploads.
  * With `owner` + `onOwnerChange`, administrators can switch to any account's store (`ALL_OWNERS` lists them).
  */
-export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, owner = null, onOwnerChange, system = null, onSystemNavigate }: {
+export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFolder, pickFolderLabel, accept, owner = null, onOwnerChange, system = null, onSystemNavigate }: {
   parentId: string | null
   onNavigate: (id: string | null) => void
   onPick?: (files: StoredFileEntry[]) => void
+  /** Picker: also choose the open folder itself (not the top). */
+  onPickFolder?: () => void
+  pickFolderLabel?: string
   /** Picker: the confirm button's text for `count` chosen files (default: attach). */
   pickLabel?: (count: number) => string
   /** Picker: only files with these extensions (lowercase, with the dot) can be chosen. */
@@ -615,6 +618,9 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
           </ModalBody>
           <ModalFooter>
             <span className="flex-1" />
+            {onPickFolder ? (
+              <Button variant="secondary" disabled={parentId === null || busy} onClick={onPickFolder}>{pickFolderLabel ?? t({ ko: '이 폴더 선택', en: 'Choose this folder' })}</Button>
+            ) : null}
             <Button disabled={pickedFiles.length === 0 || busy} onClick={() => onPick(pickedFiles)}>
               {pickLabel
                 ? pickLabel(pickedFiles.length)
@@ -700,9 +706,12 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
 }
 
 /** Choose stored files to attach (chat). */
-export function FilePicker({ onClose, onPick, title, pickLabel, accept, initialParentId = null }: {
+export function FilePicker({ onClose, onPick, onPickFolder, pickFolderLabel, title, pickLabel, accept, initialParentId = null }: {
   onClose: () => void
   onPick: (entries: StoredFileEntry[]) => void
+  /** Also choose the open folder (its id); the top of the store cannot be chosen. */
+  onPickFolder?: (folderId: string) => void
+  pickFolderLabel?: string
   title?: string
   pickLabel?: (count: number) => string
   accept?: readonly string[]
@@ -713,7 +722,7 @@ export function FilePicker({ onClose, onPick, title, pickLabel, accept, initialP
   const [parentId, setParentId] = useState<string | null>(initialParentId)
   return (
     <Modal open title={title ?? t({ ko: '보관함에서 첨부', en: 'Attach from files' })} onClose={onClose} widthClassName="max-w-3xl" height="tall">
-      <FileBrowser key={parentId ?? 'root'} parentId={parentId} onNavigate={setParentId} onPick={onPick} pickLabel={pickLabel} accept={accept} />
+      <FileBrowser key={parentId ?? 'root'} parentId={parentId} onNavigate={setParentId} onPick={onPick} pickLabel={pickLabel} onPickFolder={onPickFolder ? () => { if (parentId) onPickFolder(parentId) } : undefined} pickFolderLabel={pickFolderLabel} accept={accept} />
     </Modal>
   )
 }

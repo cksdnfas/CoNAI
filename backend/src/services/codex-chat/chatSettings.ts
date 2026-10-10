@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { normalizeLoreKeyLanguage } from '@conai/shared'
 import { runtimePaths } from '../../config/runtimePaths'
 
 const CHAT_SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'chat.json')
@@ -13,7 +14,14 @@ export type ChatSettings = {
   diagnostics: { enabled: boolean; captureRaw: boolean; captureLimit: number }
   /** save_lore entries go into the chat's book right away (a chat can turn it off for itself); off: a person saves each card. */
   loreAutoSave: boolean
+  /**
+   * The one language besides English every lorebook's keywords are kept in (entries' `localKeys`); null: English
+   * only. App-wide so chat books made mid-conversation need no setup.
+   */
+  loreKeyLanguage: string | null
 }
+
+export const DEFAULT_LORE_KEY_LANGUAGE: string | null = null
 
 export const DEFAULT_CHAT_DIAGNOSTICS = { enabled: true, captureRaw: false, captureLimit: 20 }
 export const MAX_CHAT_CAPTURE_LIMIT = 200
@@ -48,22 +56,24 @@ export function loadChatSettings(): ChatSettings {
   if (!cachedSettings) {
     const stored = readJson(CHAT_SETTINGS_FILE_PATH)
     if (stored) {
-      cachedSettings = { enabled: stored.enabled === true, diagnostics: diagnosticsOf(stored.diagnostics), loreAutoSave: stored.loreAutoSave !== false }
+      cachedSettings = { enabled: stored.enabled === true, diagnostics: diagnosticsOf(stored.diagnostics), loreAutoSave: stored.loreAutoSave !== false,
+        loreKeyLanguage: stored.loreKeyLanguage === undefined ? DEFAULT_LORE_KEY_LANGUAGE : normalizeLoreKeyLanguage(stored.loreKeyLanguage) }
     } else {
       // First run after the profile change: chat stays on if either old switch was on.
       const legacyEnabled = readJson(LEGACY_CODEX_SETTINGS_FILE_PATH)?.enabled === true || readJson(LEGACY_LLM_SETTINGS_FILE_PATH)?.enabled === true
-      cachedSettings = { enabled: legacyEnabled, diagnostics: { ...DEFAULT_CHAT_DIAGNOSTICS }, loreAutoSave: true }
+      cachedSettings = { enabled: legacyEnabled, diagnostics: { ...DEFAULT_CHAT_DIAGNOSTICS }, loreAutoSave: true, loreKeyLanguage: DEFAULT_LORE_KEY_LANGUAGE }
     }
   }
   return { ...cachedSettings, diagnostics: { ...cachedSettings.diagnostics } }
 }
 
-export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatSettings['diagnostics']>; loreAutoSave?: boolean }): ChatSettings {
+export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null }): ChatSettings {
   const current = loadChatSettings()
   const next: ChatSettings = {
     enabled: typeof patch.enabled === 'boolean' ? patch.enabled : current.enabled,
     diagnostics: diagnosticsOf(patch.diagnostics, current.diagnostics),
     loreAutoSave: typeof patch.loreAutoSave === 'boolean' ? patch.loreAutoSave : current.loreAutoSave,
+    loreKeyLanguage: patch.loreKeyLanguage === undefined ? current.loreKeyLanguage : normalizeLoreKeyLanguage(patch.loreKeyLanguage),
   }
   fs.mkdirSync(path.dirname(CHAT_SETTINGS_FILE_PATH), { recursive: true })
   fs.writeFileSync(CHAT_SETTINGS_FILE_PATH, JSON.stringify(next, null, 2), 'utf8')

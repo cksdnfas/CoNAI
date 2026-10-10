@@ -125,6 +125,9 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   create_prompt_preset: { group: 'prompt-groups', label: { ko: '프롬프트 프리셋 저장', en: 'Save prompt preset' }, ko: '프롬프트를 이름 붙여 프리셋으로 저장해. 같은 이름은 덮어쓰지 않아.' },
   assign_prompts_to_group: { group: 'prompt-groups', label: { ko: '프롬프트 그룹 지정', en: 'Assign prompts to group' }, ko: '프롬프트를 그룹에 넣거나 미분류로 되돌려.' },
   move_prompts_between_groups: { group: 'prompt-groups', label: { ko: '프롬프트 그룹 이동', en: 'Move prompts between groups' }, ko: '프롬프트를 한 그룹에서 다른 그룹으로 옮겨.' },
+  write_text_file: { group: 'file-ops', label: { ko: '문서 쓰기', en: 'Write document' }, ko: '보관함에 md·html·txt 같은 텍스트 문서를 새로 써. 덮어쓰기를 켜면 같은 이름 파일을 통째로 바꿔.' },
+  update_file_text: { group: 'file-ops', label: { ko: '문서 바꾸기·이어쓰기', en: 'Replace or append text' }, ko: '보관함 텍스트 파일의 내용을 통째로 바꾸거나 끝에 이어 써.' },
+  edit_file_text: { group: 'file-ops', label: { ko: '문서 부분 고치기', en: 'Edit document' }, ko: '보관함 텍스트 파일에서 찾은 문장만 바꿔. 전체를 다시 보내지 않아도 돼.' },
   create_file_folder: { group: 'file-ops', label: { ko: '폴더 만들기', en: 'Create folder' }, ko: '파일 보관함에 폴더를 만들어.' },
   rename_file: { group: 'file-ops', label: { ko: '이름 바꾸기', en: 'Rename file' }, ko: '보관함의 파일이나 폴더 이름을 바꿔.' },
   move_files: { group: 'file-ops', label: { ko: '파일 이동', en: 'Move files' }, ko: '보관함의 파일·폴더를 다른 폴더로 옮겨.' },
@@ -229,7 +232,13 @@ type FixedTool = { name: string; label: Copy; description: Copy }
 
 /** The chat's own tools: offered by the chat itself, not by a scope, so the server's tool list never has them. */
 const CHAT_TOOLS: FixedTool[] = [
-  { name: 'save_lore', label: { ko: '로어 저장 제안', en: 'Propose lore entry' }, description: { ko: '대화에서 나온 설정을 이 채팅 로어북에 남기자고 제안해. 저장은 네가 해.', en: "Proposes an entry for this chat's lorebook; you save it." } },
+  { name: 'save_lore', label: { ko: '로어 저장', en: 'Save lore entry' }, description: { ko: '대화에서 남길 만한 사실을 기록할 로어북(없으면 이 채팅 로어북)에 저장해. 자동 저장이 꺼져 있으면 제안 카드로 올려.', en: "Saves an entry to the chat's record lorebook; with auto-save off it leaves a card." } },
+  { name: 'edit_lore_file', label: { ko: '로어 자료 고치기', en: 'Edit lore file' }, description: { ko: '기록할 로어북 항목의 자료 파일에 이어 쓰거나 일부를 고쳐. 로어 자동 저장이 켜져 있을 때만.', en: "Appends to or edits a record lorebook entry's file; only with lore auto-save on." } },
+  { name: 'linked_list', label: { ko: '연결 파일 둘러보기', en: 'List linked files' }, description: { ko: '채팅·프로필에 연결한 폴더 안을 둘러봐.', en: 'Lists what is inside the folders linked to the chat or profile.' } },
+  { name: 'linked_search', label: { ko: '연결 파일 검색', en: 'Search linked files' }, description: { ko: '연결한 폴더·파일 안에서 이름이나 내용으로 찾아.', en: 'Searches names and text inside the linked folders and files.' } },
+  { name: 'linked_read', label: { ko: '연결 파일 읽기', en: 'Read linked file' }, description: { ko: '연결한 텍스트 파일을 나눠 읽어.', en: 'Reads a linked text file in chunks.' } },
+  { name: 'linked_write', label: { ko: '연결 폴더에 쓰기', en: 'Write in linked folder' }, description: { ko: '쓰기 허용한 연결 폴더에 새 문서를 쓰거나 덮어써.', en: 'Writes or replaces a document in a linked folder that allows writing.' } },
+  { name: 'linked_edit', label: { ko: '연결 파일 고치기', en: 'Edit linked file' }, description: { ko: '쓰기 허용한 곳의 파일에 이어 쓰거나 일부를 고쳐.', en: 'Appends to or edits a file where writing is allowed.' } },
   { name: 'read_lore_file', label: { ko: '로어 자료 읽기', en: 'Read lore file' }, description: { ko: '로어북 항목에 연결된 텍스트 파일을 읽어.', en: 'Reads the text file a lorebook entry links.' } },
   { name: 'chat_reply_to', label: { ko: '답장 대상 지정', en: 'Set reply target' }, description: { ko: '답변이 인용할 메시지와 받을 멤버를 정해.', en: 'Sets the quote and recipients of the reply.' } },
   { name: 'room_call_member', label: { ko: '멤버 부르기', en: 'Call members' }, description: { ko: '그룹 채팅에서 다른 멤버가 이어서 답하게 불러.', en: 'Asks other group members to answer next.' } },

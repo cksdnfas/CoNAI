@@ -37,7 +37,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   list_files: 'files.view', get_file_info: 'files.view', read_file_text: 'files.view', search_files: 'files.view',
   posts_categories: 'posts.view', posts_search: 'posts.view', posts_read: 'posts.view',
   posts_create: ['posts.view', 'posts.write'], posts_update: ['posts.view', 'posts.write'], post_comment: ['posts.view', 'posts.comment'],
-  create_file_folder: ['files.view', 'files.edit'], rename_file: ['files.view', 'files.edit'], move_files: ['files.view', 'files.edit'], delete_files: ['files.view', 'files.delete'],
+  create_file_folder: ['files.view', 'files.edit'], write_text_file: ['files.view', 'files.edit'], update_file_text: ['files.view', 'files.edit'], edit_file_text: ['files.view', 'files.edit'], rename_file: ['files.view', 'files.edit'], move_files: ['files.view', 'files.edit'], delete_files: ['files.view', 'files.delete'],
   generate_nai: 'generation.execute', generate_comfyui: 'generation.execute', generate_comfyui_all_servers: 'generation.execute',
   submit_generation_job: 'generation.execute', cancel_generation_job: 'generation.execute', execute_graph_workflow: 'generation.execute',
   get_codex_generation_options: 'generation.execute', resolve_image_group_path: [],
@@ -53,7 +53,8 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   list_audio_workflows: 'audio.view', get_audio_order: 'audio.view',
   order_audio: ['audio.view', 'audio.edit', 'generation.execute'], wait_audio_order: 'audio.view',
   cancel_audio_order: ['audio.view', 'audio.edit'], retry_audio_order_job: ['audio.view', 'audio.edit', 'generation.execute'],
-  chat_reply_to: [], room_call_member: [], task_propose: [], task_status: [], task_update: [], task_wait: [], task_finish: [], get_proposal_status: [], offer_choices: [], room_history_search: [], room_history_read: [], read_lore_file: [], save_lore: [],
+  chat_reply_to: [], room_call_member: [], task_propose: [], task_status: [], task_update: [], task_wait: [], task_finish: [], get_proposal_status: [], offer_choices: [], room_history_search: [], room_history_read: [], read_lore_file: [], save_lore: [], edit_lore_file: [],
+  linked_list: 'files.view', linked_search: 'files.view', linked_read: 'files.view', linked_write: ['files.view', 'files.edit'], linked_edit: ['files.view', 'files.edit'],
   get_current_page: [], page_fill: [], page_act: [], read_page_data: [], propose_page_action: [],
   get_chat_setup_guide: [], list_chat_profiles: [], get_chat_profile: [], list_display_blocks: [], get_display_block: [],
   propose_display_block: [], propose_chat_profile: [], propose_profile_update: [], propose_profile_assets: [], get_asset_batch: [],
@@ -65,7 +66,7 @@ const PAGE_SAFE_SCOPES = new Set(['read', 'configure']);
  * A turn answering a posts board call reads posts and comments other people wrote: whatever they ask, it must not
  * reach the caller's private file store.
  */
-const BOARD_CALL_BLOCKED_TOOLS = new Set(['list_files', 'get_file_info', 'read_file_text', 'search_files', 'create_file_folder', 'rename_file', 'move_files', 'delete_files']);
+const BOARD_CALL_BLOCKED_TOOLS = new Set(['list_files', 'get_file_info', 'read_file_text', 'search_files', 'write_text_file', 'update_file_text', 'edit_file_text', 'create_file_folder', 'rename_file', 'move_files', 'delete_files', 'edit_lore_file', 'linked_list', 'linked_search', 'linked_read', 'linked_write', 'linked_edit']);
 const PAGE_PRIVATE_FILE_TOOLS = new Set(['list_files', 'get_file_info', 'read_file_text', 'search_files']);
 
 /**
@@ -108,7 +109,7 @@ function accountHoldsTool(context: McpRequestContext, toolName: string): boolean
   if (!requiredToolKeys(toolName).every((key) => keys.has(key))) return false;
   if (getMcpToolScope(toolName) === 'configure' && !admin) return false;
   if (profile && isVisionTool(toolName) && !profileSeesImages(profile)) return false;
-  if (profile && toolName === 'save_lore' && !profile.allowLoreProposals) return false;
+  if (profile && (toolName === 'save_lore' || toolName === 'edit_lore_file') && !profile.allowLoreProposals) return false;
   return true;
 }
 
@@ -124,6 +125,9 @@ export function isContextToolAllowed(context: McpRequestContext, toolName: strin
   if (context.requester && !isChatGenerationTool(toolName) && TOOL_FEATURE_PERMISSIONS[toolName] === undefined) return false;
   if (isChatMcpSource(context.source) && CHAT_BLOCKED_TOOLS.has(toolName)) return false;
   if (accountChecks && context.requester && !accountHoldsTool(context, toolName)) return false;
+  // Page text may steer the reply: lore files are not rewritten from it (save_lore still leaves an undoable entry), and
+  // linked private files stay out like the file store tools.
+  if ((toolName === 'edit_lore_file' || toolName.startsWith('linked_')) && context.chatContext?.page) return false;
   if (CHAT_ROOM_TOOLS.has(toolName)) return Boolean(context.chatContext) && (!GROUP_ONLY_CHAT_TOOLS.has(toolName) || context.chatContext?.kind === 'group');
   if (CHAT_VISION_BUILTIN_TOOLS.has(toolName) && context.chatContext) return true;
   if (isConnectedChatPageTool(context, toolName)) return true;

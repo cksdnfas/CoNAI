@@ -10,7 +10,7 @@ const TITLE_MAX_LENGTH = 60
 
 /** Thread settings a branch keeps: who talks and how. Codex state and usage start empty. */
 const COPIED_THREAD_COLUMNS = ['account_id', 'engine', 'profile_id', 'kind', 'context_turns', 'summary_enabled', 'author_note', 'author_note_depth',
-  'max_tokens', 'flag_ids', 'user_profile_id', 'group_chain_limit', 'group_window_limit', 'lorebook_ids', 'lore_auto_save'] as const
+  'max_tokens', 'flag_ids', 'user_profile_id', 'group_chain_limit', 'group_window_limit', 'lorebook_ids', 'lore_auto_save', 'lore_record_book_id', 'linked_files'] as const
 
 const COPIED_MESSAGE_COLUMNS = ['role', 'content', 'display_content', 'tool_calls', 'status', 'error', 'speaker_profile_id', 'flags', 'finish_reason',
   'media_attachments', 'alternatives', 'active_alternative', 'context_meta', 'created_date'] as const

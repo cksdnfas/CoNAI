@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { BookPlus, BookUp, ChevronDown, ChevronRight, Ellipsis, FileText, FolderOpen, Merge, Plus } from 'lucide-react'
+import { BookPlus, BookUp, ChevronDown, ChevronRight, Ellipsis, FileText, FolderOpen, Merge, PenLine, Plus } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { EditorFooter } from '@/components/ui/editor-footer'
-import { Modal, ModalBody } from '@/components/ui/modal'
+import { Input } from '@/components/ui/input'
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
 import { Switch } from '@/components/ui/switch'
@@ -17,6 +18,7 @@ import {
   CHAT_LOREBOOKS_QUERY_KEY,
   CHAT_STATUS_QUERY_KEY,
   OWN_LOREBOOKS_QUERY_KEY,
+  createThreadLorebook,
   getCodexChatStatus,
   getThreadLorebooks,
   keepThreadLorebook,
@@ -65,6 +67,7 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
   const [expanded, setExpanded] = useState<Set<number | typeof CHAT_BOOK>>(() => new Set([CHAT_BOOK]))
   const [editing, setEditing] = useState<EditTarget | null>(null)
   const [merging, setMerging] = useState<MergeTarget | null>(null)
+  const [creating, setCreating] = useState(false)
 
   const booksQuery = useQuery({ queryKey: threadLorebooksQueryKey(threadId), queryFn: () => getThreadLorebooks(threadId) })
   const ownQuery = useQuery({ queryKey: OWN_LOREBOOKS_QUERY_KEY, queryFn: listOwnLorebooks })
@@ -73,6 +76,8 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
   const chatEntries = chatBook?.entries ?? []
   const books = data?.books ?? []
   const linkedIds = data?.linkedIds ?? []
+  // Where save_lore writes: a linked account book, or (null) the chat's own book.
+  const recordBookId = data?.recordBookId ?? null
   const linkable = (ownQuery.data ?? []).filter((book) => book.kind === 'account' && !books.some((attached) => attached.id === book.id))
   // 승격: into the profile's first account book (a room: the first member's that has one).
   const promoteBook = books.find((book) => book.via === 'profile' && book.kind === 'account') ?? null
@@ -108,6 +113,21 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
     onSuccess: refresh,
     onError,
   })
+  const recordMutation = useMutation({
+    mutationFn: (loreRecordBookId: number | null) => updateCodexChatThreadContext(threadId, { loreRecordBookId }),
+    onSuccess: refresh,
+    onError,
+  })
+  const createMutation = useMutation({
+    mutationFn: (name: string) => createThreadLorebook(threadId, name),
+    onSuccess: async (book) => {
+      setCreating(false)
+      setExpanded((current) => new Set(current).add(book.id))
+      await refresh()
+    },
+    onError,
+  })
+  const recordTip = t({ ko: '기록 중: AI가 남길 만한 걸 여기에 저장해', en: 'Recording: the AI saves what is worth keeping here' })
   const statusQuery = useQuery({ queryKey: CHAT_STATUS_QUERY_KEY, queryFn: getCodexChatStatus, staleTime: 60_000, retry: false })
   const autoSaveMutation = useMutation({
     mutationFn: (value: boolean | null) => updateCodexChatThreadContext(threadId, { loreAutoSave: value }),
@@ -165,13 +185,14 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
               </DropdownMenuTrigger>
             </Tip>
             <DropdownMenuContent align="end" className="min-w-48">
+              <DropdownMenuItem onSelect={() => setCreating(true)}>{t({ ko: '새 로어북 만들기…', en: 'New lorebook…' })}</DropdownMenuItem>
+              {linkable.length > 0 ? <DropdownMenuSeparator /> : null}
               {linkable.map((book) => (
                 <DropdownMenuItem key={book.id} onSelect={() => linksMutation.mutate([...linkedIds, book.id])}>
                   <span className="min-w-0 flex-1 truncate">{book.name}</span>
                   <span className="font-mono text-xs text-muted-foreground">{book.entries.length}</span>
                 </DropdownMenuItem>
               ))}
-              {linkable.length === 0 ? <DropdownMenuItem disabled>{t({ ko: '연결할 계정 로어북이 없어', en: 'No account lorebook to link' })}</DropdownMenuItem> : null}
             </DropdownMenuContent>
           </DropdownMenu>
           <IconButton variant="ghost" size="icon-sm" disabled={chatEntries.length === 0} onClick={() => setMerging({})} label={t({ ko: '계정 로어북에 병합', en: 'Merge into an account lorebook' })}><Merge /></IconButton>
@@ -202,6 +223,7 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
           count={countLabel(chatEntries)}
           open={expanded.has(CHAT_BOOK)}
           onToggle={() => toggle(CHAT_BOOK)}
+          record={recordBookId === null ? recordTip : undefined}
           actions={(
             <>
               {chatBook ? <IconButton variant="ghost" size="icon-xs" disabled={keepMutation.isPending} onClick={() => keepMutation.mutate()} label={t({ ko: '내 로어북으로 보관', en: 'Keep as my lorebook' })}><BookUp /></IconButton> : null}
@@ -221,15 +243,22 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
                 count={countLabel(book.entries)}
                 open={expanded.has(book.id)}
                 onToggle={() => toggle(book.id)}
+                record={book.id === recordBookId ? recordTip : undefined}
                 actions={book.via === 'thread' ? (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <IconButton variant="ghost" size="icon-xs" label={t({ ko: '더 보기', en: 'More' })}><Ellipsis /></IconButton>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onSelect={() => linksMutation.mutate(linkedIds.filter((id) => id !== book.id))}>{t({ ko: '연결 해제', en: 'Unlink' })}</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <>
+                    <IconButton variant="ghost" size="icon-xs" disabled={book.entries.length >= 500} onClick={() => setEditing({ book, entry: newLoreEntry(book.entries.length), isNew: true })} label={t({ ko: '항목 추가', en: 'Add entry' })}><Plus /></IconButton>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <IconButton variant="ghost" size="icon-xs" label={t({ ko: '더 보기', en: 'More' })}><Ellipsis /></IconButton>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {book.id === recordBookId
+                          ? <DropdownMenuItem disabled={recordMutation.isPending} onSelect={() => recordMutation.mutate(null)}>{t({ ko: '이 채팅에 기록', en: 'Record into this chat' })}</DropdownMenuItem>
+                          : <DropdownMenuItem disabled={recordMutation.isPending} onSelect={() => recordMutation.mutate(book.id)}>{t({ ko: '여기에 기록', en: 'Record here' })}</DropdownMenuItem>}
+                        <DropdownMenuItem onSelect={() => linksMutation.mutate(linkedIds.filter((id) => id !== book.id))}>{t({ ko: '연결 해제', en: 'Unlink' })}</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </>
                 ) : undefined}
               />
               {expanded.has(book.id) ? book.entries.map((entry) => <EntryRow key={entry.id} entry={entry} onOpen={editable ? () => setEditing({ book, entry, isNew: false }) : undefined} />) : null}
@@ -247,7 +276,7 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
           chat?.setView('chat')
           chat?.focusMessage(messageId)
         }}
-        keyLanguage={!editing ? null : editing.book === CHAT_BOOK ? chatBook?.settings?.keyLanguage ?? null : editing.book.settings?.keyLanguage ?? null}
+        keyLanguage={statusQuery.data?.loreKeyLanguage ?? null}
         filePlace={!editing ? { kind: 'global' } : editing.book === CHAT_BOOK ? { kind: 'owned', folderId: chatBook?.folderId ?? null } : editing.book.kind === 'global' ? { kind: 'global' } : { kind: 'owned', folderId: editing.book.folderId }}
         promoteLabel={editing?.book === CHAT_BOOK && !editing.isNew ? (promoteName ? t({ ko: '승격 → {name}', en: 'Promote → {name}' }, { name: promoteName }) : t({ ko: '승격', en: 'Promote' })) : null}
         saving={entriesMutation.isPending}
@@ -277,11 +306,34 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
           onClose={() => setMerging(null)}
         />
       ) : null}
+      {creating ? <NewLorebookDialog saving={createMutation.isPending} onSave={(name) => createMutation.mutate(name)} onClose={() => setCreating(false)} /> : null}
     </div>
   )
 }
 
-function BookRow({ name, kind, kindTip, accent, count, open, onToggle, actions }: {
+/** A new empty account book for this chat: linked and recorded into once made. */
+function NewLorebookDialog({ saving, onSave, onClose }: { saving: boolean; onSave: (name: string) => void; onClose: () => void }) {
+  const { t } = useI18n()
+  const [name, setName] = useState('')
+  return (
+    <Modal open onClose={onClose} title={t({ ko: '새 로어북', en: 'New lorebook' })} widthClassName="max-w-md">
+      <form onSubmit={(event) => {
+        event.preventDefault()
+        if (name.trim()) onSave(name.trim())
+      }}>
+        <ModalBody className="space-y-4">
+          <Input autoFocus value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder={t({ ko: '예: 리나 기억', en: 'e.g. Lina memories' })} aria-label={t({ ko: '로어북 이름', en: 'Lorebook name' })} />
+          <ModalFooter>
+            <Button type="button" variant="secondary" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
+            <Button type="submit" disabled={saving || !name.trim()}>{t({ ko: '만들기', en: 'Create' })}</Button>
+          </ModalFooter>
+        </ModalBody>
+      </form>
+    </Modal>
+  )
+}
+
+function BookRow({ name, kind, kindTip, accent, count, open, onToggle, actions, record }: {
   name: string
   kind: string
   kindTip?: string
@@ -290,6 +342,8 @@ function BookRow({ name, kind, kindTip, accent, count, open, onToggle, actions }
   open: boolean
   onToggle: () => void
   actions?: React.ReactNode
+  /** The book save_lore writes to: its tooltip (marked with a pen). */
+  record?: string
 }) {
   const Chevron = open ? ChevronDown : ChevronRight
   return (
@@ -297,7 +351,9 @@ function BookRow({ name, kind, kindTip, accent, count, open, onToggle, actions }
       {/* eslint-disable-next-line no-restricted-syntax -- a full-width disclosure row; Button would pad and centre it */}
       <button type="button" onClick={onToggle} aria-expanded={open} className="flex min-h-9 min-w-0 flex-1 items-center gap-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
         <Chevron className="size-3 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="min-w-0 flex-1 truncate font-semibold">{name}</span>
+        <span className="min-w-0 truncate font-semibold">{name}</span>
+        {record ? <Tip content={record}><PenLine className="size-3 shrink-0 text-primary" aria-label={record} /></Tip> : null}
+        <span className="flex-1" />
         <Tip content={kindTip}>
           <span className={cn('shrink-0 text-2xs font-bold tracking-wide', accent ? 'text-primary' : 'text-muted-foreground')}>{kind}</span>
         </Tip>

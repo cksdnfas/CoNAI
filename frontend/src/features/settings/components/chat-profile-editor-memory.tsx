@@ -6,6 +6,7 @@ import { useI18n } from '@/i18n'
 import type { ChatLorebook, ChatProfileDefaults } from '@/lib/api-codex-chat'
 import { numberOrNull, SwitchLine, type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { EditorGroup } from '@/components/ui/editor-group'
+import { ChatProfileLinkedFiles } from './chat-profile-linked-files'
 
 /**
  * What the model is given from before: how much of the conversation, and the lorebooks with how much of them.
@@ -89,6 +90,10 @@ export function ChatProfileMemoryPanel({ draft, patch, defaults, lorebooks, adva
             </Field>
           </div>
         ) : null}
+      </EditorGroup>
+
+      <EditorGroup label={t({ ko: '연결 파일', en: 'Linked files' })}>
+        <ChatProfileLinkedFiles value={draft.linkedFiles} onChange={(linkedFiles) => patch({ linkedFiles })} />
       </EditorGroup>
     </div>
   )

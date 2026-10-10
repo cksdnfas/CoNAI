@@ -408,7 +408,7 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
 }
 
 /**
- * E: a save_lore proposal — an entry for this chat's own lorebook; anyone in the chat can save or set it aside. With
+ * E: a save_lore proposal — an entry for the chat's record book (a linked account book, else its own book); anyone in the chat can save or set it aside. With
  * auto-save it arrives saved, and undo takes the entry out again (a replacement gets the old entry back).
  */
 function LoreProposalCard({ proposal, threadId }: { proposal: LoreProposal; threadId?: number }) {
@@ -460,7 +460,7 @@ function LoreProposalCard({ proposal, threadId }: { proposal: LoreProposal; thre
 
   return (
     <div className={CARD_CLASS}>
-      <Header label={saved && !undone && !proposal.undone ? t({ ko: '로어북에 남겼어', en: 'Kept in the lorebook' }) : t({ ko: '로어북에 남길까?', en: 'Keep this in the lorebook?' })} name={`save_lore · ${t({ ko: '이 채팅', en: 'this chat' })}`} />
+      <Header label={saved && !undone && !proposal.undone ? t({ ko: '로어북에 남겼어', en: 'Kept in the lorebook' }) : t({ ko: '로어북에 남길까?', en: 'Keep this in the lorebook?' })} name={`save_lore · ${proposal.bookName ?? t({ ko: '이 채팅', en: 'this chat' })}`} />
       <div className="space-y-2 text-sm">
         <div className="font-semibold">{proposal.title}</div>
         {changes.length > 0 ? (

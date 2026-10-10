@@ -10,6 +10,7 @@ import { AuthPermissionGroup } from '../../models/AuthPermissionGroup'
 import { ChatGenerationPresetStore, normalizeGenerationPresetIds } from './chatGenerationPresets'
 import { contentRatingTier, LLM_CONNECTION_TYPES, MODEL_CONNECTION_TYPES, ModelSlotStore } from './modelSlots'
 import { ChatJudgePresetStore } from './chatJudgePresets'
+import { normalizeLinkedFiles, type LinkedFileLink } from './chatLinkedFiles'
 import { fileProfileAssetsUnderGroup, normalizeAvatarCrop, normalizeProfileAssetHash, type ChatAvatarCrop } from './chatProfileAssets'
 
 const NAME_MAX_LENGTH = 60
@@ -182,6 +183,8 @@ export type ChatProfile = {
   pageAssist: boolean
   /** The model may propose chat lorebook entries (save_lore) for the user to save. */
   allowLoreProposals: boolean
+  /** File store folders and text files its characters may open (and write, where `write`) in any chat of the owner. */
+  linkedFiles: LinkedFileLink[]
   /**
    * The judge preset (chat_judge_presets) that steers each turn; null judges nothing (the chat behaves as without a
    * judge). A preset that went missing reads as null.
@@ -293,6 +296,7 @@ type ProfileRow = {
   content_rating_tier_id: number | null
   page_assist: number | null
   allow_lore_proposals: number | null
+  linked_files: string | null
   judge_preset_id: number | null
   judge_provider_name: string | null
   judge_model: string | null
@@ -440,6 +444,7 @@ function toProfile(row: ProfileRow): ChatProfile {
     contentRatingTierId: row.content_rating_tier_id ?? null,
     pageAssist: row.page_assist === 1,
     allowLoreProposals: row.allow_lore_proposals !== 0,
+    linkedFiles: normalizeLinkedFiles(row.linked_files),
     judgePresetId: ChatJudgePresetStore.existing(row.judge_preset_id),
     judgeSlotId: ModelSlotStore.existing(row.judge_slot_id),
     // Display blocks live in chat_display_blocks; the profile only links them (the style column's own list is legacy).
@@ -628,6 +633,7 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean } = {}) {
     content_rating_tier_id: contentRatingTier(input.contentRatingTierId ?? null),
     page_assist: input.pageAssist ? 1 : 0,
     allow_lore_proposals: input.allowLoreProposals === false ? 0 : 1,
+    linked_files: JSON.stringify(normalizeLinkedFiles(input.linkedFiles)),
     // Every engine can be judged (a Codex chat gets the directives and status fields only, see chatJudge).
     judge_preset_id: judgePresetId(input.judgePresetId),
     judge_provider_name: null,

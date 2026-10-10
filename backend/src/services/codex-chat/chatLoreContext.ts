@@ -4,10 +4,8 @@ import {
   loreEntryKey,
   loreEntryTitle,
   normalizeLorebook,
-  normalizeLorebookSettings,
   selectLoreEntries,
   type ChatLoreEntry,
-  type ChatLorebookSettings,
   type LoreTimingOptions,
   type ChatLorebookKind,
   type KeyedLoreEntry,
@@ -48,14 +46,15 @@ export type AttachedLoreBook = {
   /** Account and chat books: the owner's file store and the book folder (linked files are read there). */
   owner: string | null
   folderId: string | null
-  settings: ChatLorebookSettings
   entries: ChatLoreEntry[]
+  /** A linked account book save_lore writes to in this chat (the index marks it, and shows it even while empty). */
+  record?: boolean
 }
 
 type RequestThread = Pick<CodexChatThreadRecord, 'id' | 'account_id'>
 
 function ownedBook(book: OwnedLorebook, owner: string, via: AttachedLoreBook['via']): AttachedLoreBook {
-  return { id: book.id, name: book.name, label: via === 'chat' ? CHAT_BOOK_LABEL : book.name, kind: book.kind, via, owner, folderId: book.folderId, settings: book.settings, entries: book.entries }
+  return { id: book.id, name: book.name, label: via === 'chat' ? CHAT_BOOK_LABEL : book.name, kind: book.kind, via, owner, folderId: book.folderId, entries: book.entries }
 }
 
 /**
@@ -76,22 +75,24 @@ export function booksForRequest({ thread, profile }: { thread: RequestThread | n
   if (thread && owner) {
     const chat = OwnedLorebookStore.chatBookOf(thread.id)
     if (chat) add(ownedBook(chat, owner, 'chat'))
-    for (const id of OwnedLorebookStore.threadLinks(thread.id)) {
+    const links = OwnedLorebookStore.threadLinks(thread.id)
+    const record = links.length > 0 ? OwnedLorebookStore.recordBookId(thread.id) : null
+    for (const id of links) {
       const book = OwnedLorebookStore.find(id, owner)
-      if (book?.kind === 'account') add(ownedBook(book, owner, 'thread'))
+      if (book?.kind === 'account') add({ ...ownedBook(book, owner, 'thread'), ...(id === record ? { record: true } : {}) })
     }
   }
   const ids = profile.lorebookIds
   if (ids.length > 0) {
-    const rows = getUserSettingsDb().prepare(`SELECT id, name, kind, owner_key, entries, settings FROM chat_lorebooks WHERE id IN (${ids.map(() => '?').join(', ')})`)
-      .all(...ids) as Array<{ id: number; name: string; kind: ChatLorebookKind | null; owner_key: string | null; entries: string; settings: string | null }>
+    const rows = getUserSettingsDb().prepare(`SELECT id, name, kind, owner_key, entries FROM chat_lorebooks WHERE id IN (${ids.map(() => '?').join(', ')})`)
+      .all(...ids) as Array<{ id: number; name: string; kind: ChatLorebookKind | null; owner_key: string | null; entries: string }>
     const byId = new Map(rows.map((row) => [row.id, row]))
     const global: AttachedLoreBook[] = []
     for (const id of ids) {
       const row = byId.get(id)
       if (!row) continue
       if ((row.kind ?? 'global') === 'global') {
-        global.push({ id, name: row.name, label: row.name, kind: 'global', via: 'profile', owner: null, folderId: null, settings: normalizeLorebookSettings(row.settings), entries: normalizeLorebook(row.entries) })
+        global.push({ id, name: row.name, label: row.name, kind: 'global', via: 'profile', owner: null, folderId: null, entries: normalizeLorebook(row.entries) })
       } else if (row.kind === 'account' && owner && row.owner_key === owner) {
         const book = OwnedLorebookStore.find(id, owner)
         if (book) add(ownedBook(book, owner, 'profile'))
@@ -110,7 +111,6 @@ export type ThreadLoreBookView = {
   via: 'thread' | 'profile'
   /** The book folder (account books); null for a global book. */
   folderId: string | null
-  settings: ChatLorebookSettings
   entries: ChatLoreEntry[]
   /** The profiles (a room: its members) whose links bring this book; empty for one linked to the chat only. */
   profiles: Array<{ id: number; name: string }>
@@ -121,6 +121,8 @@ export type ThreadLorebooks = {
   chatBook: OwnedLorebook | null
   /** Account books linked to this chat only (`codex_chat_threads.lorebook_ids`). */
   linkedIds: number[]
+  /** The linked book save_lore writes to; null: the chat's own book. */
+  recordBookId: number | null
   /** The other attached books, as the context tab lists them: the profiles' account books, those linked to this chat, then global ones. */
   books: ThreadLoreBookView[]
 }
@@ -138,7 +140,7 @@ export function threadLorebooks(thread: RequestThread, profiles: Array<Pick<Chat
       if (book.via === 'chat') continue
       const via = book.via === 'thread' ? 'thread' : 'profile'
       const seen = byId.get(book.id)
-      const view = seen ?? { id: book.id, name: book.name, kind: book.kind, via, folderId: book.folderId, settings: book.settings, entries: book.entries, profiles: [] }
+      const view = seen ?? { id: book.id, name: book.name, kind: book.kind, via, folderId: book.folderId, entries: book.entries, profiles: [] }
       if (via === 'profile' && profile.id > 0 && !view.profiles.some((entry) => entry.id === profile.id)) view.profiles.push({ id: profile.id, name: profile.name })
       if (!seen) byId.set(book.id, view)
     }
@@ -146,7 +148,7 @@ export function threadLorebooks(thread: RequestThread, profiles: Array<Pick<Chat
   const rank = (book: ThreadLoreBookView) => (book.kind === 'global' ? 2 : book.via === 'thread' ? 1 : 0)
   const books = [...byId.values()].map((book, index) => ({ book, index })).sort((a, b) => rank(a.book) - rank(b.book) || a.index - b.index).map(({ book }) => book)
   const entryUsage = threadLoreUsage(thread, [...(chatBook ? [{ id: chatBook.id, entries: chatBook.entries }] : []), ...books])
-  return { chatBook, linkedIds: OwnedLorebookStore.threadLinks(thread.id), books, entryUsage }
+  return { chatBook, linkedIds: OwnedLorebookStore.threadLinks(thread.id), recordBookId: OwnedLorebookStore.recordBookId(thread.id), books, entryUsage }
 }
 
 /** Read only active reply metadata, once per context fetch; no transcript bodies or usage state are persisted. */
@@ -218,10 +220,11 @@ function keepRank(book: AttachedLoreBook) {
 export function buildLoreIndex(books: AttachedLoreBook[], estimate: (text: string) => number, render: (text: string) => string, toolOffered: boolean, includeGuidance = true) {
   const lines = books.flatMap((book) => {
     const entries = book.entries.filter((entry) => entry.enabled)
-    if (entries.length === 0) return []
+    const label = book.record ? `[${book.label}](기록)` : `[${book.label}]`
+    if (entries.length === 0) return book.record ? [{ book, short: `${label} 비어 있음`, full: `${label} 비어 있음` }] : []
     const titles = entries.map((entry) => `${render(loreEntryTitle(entry)).replace(/\s+/g, ' ').trim()}${entry.file && book.folderId ? '(자료)' : ''}`)
-    const short = `[${book.label}] ${entries.length}개 항목`
-    return [{ book, short, full: titles.length <= LORE_INDEX_MAX_TITLES ? `[${book.label}] ${titles.join(' · ')}` : short }]
+    const short = `${label} ${entries.length}개 항목`
+    return [{ book, short, full: titles.length <= LORE_INDEX_MAX_TITLES ? `${label} ${titles.join(' · ')}` : short }]
   })
   if (lines.length === 0) return ''
   const shown = lines.map((line) => line.full)
@@ -243,8 +246,11 @@ export function buildLoreIndexContent(books: AttachedLoreBook[], estimate: (text
   return buildLoreIndex(books, estimate, render, toolOffered, false)
 }
 
-/** One request's lore: the chosen entries (see selectLoreEntries), the index, and the books they came from. */
-export type ChatLore = SelectedLore & { index: string; books: AttachedLoreBook[] }
+/**
+ * One request's lore: the chosen entries (see selectLoreEntries), the index, the books they came from, and the index
+ * of the linked files (see chatLinkedFiles), which travels with the lore index.
+ */
+export type ChatLore = SelectedLore & { index: string; books: AttachedLoreBook[]; linked: string }
 
 /**
  * The lore of one request over `books`. `toolOffered`: read_lore_file is among the request's tools (the index and a
@@ -257,7 +263,7 @@ export function selectRequestLore(
   messages: ReadonlyArray<{ content: string; display_content?: string | null }> | undefined,
   estimate: (text: string) => number,
   render: (text: string) => string,
-  options: { toolOffered: boolean; inlineFiles?: boolean; skip?: (key: string) => boolean; timing?: LoreTimingOptions; judged?: ReadonlySet<string> },
+  options: { toolOffered: boolean; inlineFiles?: boolean; skip?: (key: string) => boolean; timing?: LoreTimingOptions; judged?: ReadonlySet<string>; linked?: string },
 ): ChatLore {
   const selected = selectLoreEntries(profile, messages, estimate, render, {
     skip: options.skip,
@@ -271,10 +277,10 @@ export function selectRequestLore(
         : `(자료 있음: ${file})`,
     },
   })
-  return { ...selected, index: buildLoreIndex(books, estimate, render, options.toolOffered), books }
+  return { ...selected, index: buildLoreIndex(books, estimate, render, options.toolOffered), books, linked: options.linked ?? '' }
 }
 
-/** The lore part of the second system message: the index, then the "always on" entries ('' for neither). */
-export function loreIndexText(lore: Pick<ChatLore, 'index' | 'constant'>) {
-  return [lore.index, lore.constant ? `## 상시 항목\n${lore.constant}` : ''].filter(Boolean).join('\n\n')
+/** The lore part of the second system message: the index, the linked files, then the "always on" entries ('' for none). */
+export function loreIndexText(lore: Pick<ChatLore, 'index' | 'constant'> & { linked?: string }) {
+  return [lore.index, lore.linked ?? '', lore.constant ? `## 상시 항목\n${lore.constant}` : ''].filter(Boolean).join('\n\n')
 }

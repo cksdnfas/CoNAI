@@ -131,7 +131,7 @@ export function requireChatMcpAccountAccess(context: McpRequestContext, toolName
     if (!grant.scopes.includes(scope as ChatScope)) throw new Error('프로필의 도구 사용 설정이 변경됐어.')
   }
   if (isVisionTool(toolName) && !profileSeesImages(profile)) throw new Error('프로필의 이미지 조회가 꺼져 있어.')
-  if (toolName === 'save_lore' && !profile.allowLoreProposals) throw new Error('프로필의 로어 제안이 꺼져 있어.')
+  if ((toolName === 'save_lore' || toolName === 'edit_lore_file') && !profile.allowLoreProposals) throw new Error('프로필의 로어 제안이 꺼져 있어.')
   if (profile.generationPresetIds.length > 0 && GENERATION_PRESET_BLOCKED_TOOLS.has(toolName)) throw new Error('생성 프리셋만 사용할 수 있어.')
   if (isChatGenerationTool(toolName)) {
     const index = (context.generationPresetIds ?? []).findIndex((_, index) => chatGenerationToolName(index) === toolName)

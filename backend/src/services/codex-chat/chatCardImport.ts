@@ -2,7 +2,7 @@ import sharp from 'sharp'
 import { unknownChatMacros } from '@conai/shared'
 import { PngExtractor } from '../metadata/extractors/pngExtractor'
 import { ChatProfileError, normalizeAlternateGreetings, type ChatProfileInput, type ChatPromptSection } from './chatProfiles'
-import { ChatLorebookStore, isRegexKeyword, LOREBOOK_MAX_ENTRIES, normalizeLorebook, normalizeLorebookSettings, type ChatLoreEntry, type ChatLorebookSettings } from './chatLorebook'
+import { ChatLorebookStore, isRegexKeyword, LOREBOOK_MAX_ENTRIES, normalizeLorebook, type ChatLoreEntry } from './chatLorebook'
 import { characterMediaGroupPath, fileLibraryMediaUnderGroup, ingestMedia, localizeImages } from './chatCardAssets'
 import { rewriteMediaLinks } from './chatMediaLinks'
 
@@ -164,7 +164,7 @@ export async function importChatCard(buffer: Buffer, modelSlotId: number | null)
  * A lorebook file: SillyTavern world info, a character card (PNG or JSON) with a book, a bare card book, a NovelAI
  * lorebook, or this app's own { name, entries }. `fileName` names a book that carries no name.
  */
-export function readLorebookFile(buffer: Buffer, fileName: string): { name: string; entries: ChatLoreEntry[]; settings: ChatLorebookSettings } {
+export function readLorebookFile(buffer: Buffer, fileName: string): { name: string; entries: ChatLoreEntry[] } {
   if (buffer.length > CHAT_CARD_MAX_BYTES) throw new ChatProfileError('로어북은 8MB까지 가져올 수 있어.')
   const parsed = readJsonFile(buffer, '로어북 JSON 또는 카드 PNG를 읽지 못했어.')
   const card = parsed.spec ? object(parsed.data) : parsed
@@ -172,5 +172,5 @@ export function readLorebookFile(buffer: Buffer, fileName: string): { name: stri
   const entries = bookEntries(book)
   if (entries.length === 0) throw new ChatProfileError('가져올 로어 항목이 없어.')
   const baseName = fileName.replace(/\.[^.]+$/, '')
-  return { name: text(book.name, 80) || text(card.name, 80) || text(baseName, 80), entries, settings: normalizeLorebookSettings(book.settings) }
+  return { name: text(book.name, 80) || text(card.name, 80) || text(baseName, 80), entries }
 }

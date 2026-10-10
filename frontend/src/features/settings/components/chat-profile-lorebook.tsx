@@ -13,7 +13,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { loreEntryTitle, type ChatLoreEntry, type LoreSecondaryLogic } from '@/lib/api-codex-chat'
+import { CHAT_STATUS_QUERY_KEY, getCodexChatStatus, loreEntryTitle, type ChatLoreEntry, type LoreSecondaryLogic } from '@/lib/api-codex-chat'
 import { createStoredFolder, listStoredFiles, uploadStoredFiles } from '@/lib/api-files'
 import { getErrorMessage } from '@/lib/error-message'
 import { createRandomUuid } from '@/lib/random-uuid'
@@ -24,7 +24,7 @@ export type LoreFilePlace = { kind: 'global' } | { kind: 'owned'; folderId: stri
 
 /** The folder a book keeps its linked files in, and the text files the model can read (the server's list). */
 const LORE_FILES_FOLDER = '자료'
-const TEXT_EXTENSIONS = ['.txt', '.md', '.markdown', '.json', '.jsonl', '.csv', '.tsv', '.yaml', '.yml', '.xml', '.html', '.htm', '.svg', '.css', '.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.py', '.sh', '.sql', '.log', '.ini', '.toml', '.srt', '.vtt']
+export const TEXT_EXTENSIONS = ['.txt', '.md', '.markdown', '.json', '.jsonl', '.csv', '.tsv', '.yaml', '.yml', '.xml', '.html', '.htm', '.svg', '.css', '.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.py', '.sh', '.sql', '.log', '.ini', '.toml', '.srt', '.vtt']
 const UPLOAD_OPTION = '\u0000upload'
 
 export function isLoreTextFile(name: string) {
@@ -134,8 +134,8 @@ function KeywordChips({ keys, onChange, addLabel }: { keys: string[]; onChange: 
 }
 
 /**
- * A book with a key language shows each keyword list as two rows in one field, English and that language; a book
- * without one shows the one list as before.
+ * With a lore key language each keyword list is two rows in one field, English and that language; without one, the
+ * one list as before.
  */
 function LanguageKeywordRows({ language, base, local, onBase, onLocal, addLabel }: { language: string | null; base: string[]; local: string[]; onBase: (keys: string[]) => void; onLocal: (keys: string[]) => void; addLabel: string }) {
   if (!language) return <KeywordChips keys={base} onChange={onBase} addLabel={addLabel} />
@@ -150,12 +150,18 @@ function LanguageKeywordRows({ language, base, local, onBase, onLocal, addLabel 
   </div>
 }
 
-/** A keyword entry with English keywords and none in the book's key language. */
+/** The lore key language every book keeps its second keyword rows in (Settings › LLM › 연결 › 기억); null: English only. */
+export function useLoreKeyLanguage() {
+  const statusQuery = useQuery({ queryKey: CHAT_STATUS_QUERY_KEY, queryFn: getCodexChatStatus, staleTime: 60_000, retry: false })
+  return statusQuery.data?.loreKeyLanguage ?? null
+}
+
+/** A keyword entry with English keywords and none in the lore key language. */
 export function lacksLanguageKeys(entry: ChatLoreEntry, language: string | null | undefined) {
   return Boolean(language) && !entry.constant && entry.keys.some((key) => !/^\/.+\/[a-z]*$/s.test(key)) && (entry.localKeys ?? []).length === 0
 }
 
-/** One entry's fields, shared by the settings editor and the chat's context tab. `keyLanguage`: the book's (see ChatLorebookSettings). */
+/** One entry's fields, shared by the settings editor and the chat's context tab. `keyLanguage`: see useLoreKeyLanguage. */
 export function ChatLoreEntryFields({ entry, onChange, filePlace, keyLanguage = null }: { entry: ChatLoreEntry; onChange: (patch: Partial<ChatLoreEntry>) => void; filePlace: LoreFilePlace; keyLanguage?: string | null }) {
   const { t } = useI18n()
   const id = useId()

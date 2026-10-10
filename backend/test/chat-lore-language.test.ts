@@ -25,6 +25,8 @@ test('lorebook key language and recursive scan', { timeout: 60000 }, async (t) =
   const { ChatLorebookStore, normalizeLorebook, selectLoreEntries, loreEntryKey } = await import('../src/services/codex-chat/chatLorebook')
   const { OwnedLorebookStore } = await import('../src/services/codex-chat/chatLorebookFiles')
   const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
+  const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
+  const { loadChatSettings, updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
   const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
   const { FileStoreService, fileOwnerKey } = await import('../src/services/fileStoreService')
   const { storedFilePath } = await import('../src/services/fileStorePaths')
@@ -94,29 +96,36 @@ test('lorebook key language and recursive scan', { timeout: 60000 }, async (t) =
     assert.deepEqual(chosen(pick([{ ...book[0], localKeys: ['앨리스'], content: '앨리스는 토끼굴에 빠졌다.' }, { ...book[1], localKeys: ['토끼굴'] }], '앨리스', 1)), ['Alice', 'Rabbit Hole'], 'language keys work in recursion too')
   })
 
-  await t.test('global book: settings are saved, keys sort into the key language on every write', () => {
-    const book = ChatLorebookStore.create({ name: 'Wonderland', settings: { keyLanguage: 'ko' }, entries: [{ keys: ['alice', '앨리스'], content: 'a' }] })
-    assert.deepEqual(book.settings, { keyLanguage: 'ko' })
-    assert.deepEqual([book.entries[0].keys, book.entries[0].localKeys], [['alice'], ['앨리스']])
-    const english = ChatLorebookStore.update(book.id, { settings: { keyLanguage: null }, entries: [{ keys: ['cat', '고양이'], content: 'c' }] })!
-    assert.deepEqual([english.settings.keyLanguage, english.entries[0].keys, english.entries[0].localKeys], [null, ['cat', '고양이'], []], 'no key language: keys stay where they are')
-    const again = ChatLorebookStore.update(book.id, { settings: { keyLanguage: 'ko' } })!
-    assert.deepEqual([again.entries[0].keys, again.entries[0].localKeys], [['cat'], ['고양이']], 'choosing a language sorts the existing keys')
-    assert.deepEqual(ChatLorebookStore.update(book.id, { name: 'renamed' })!.settings, { keyLanguage: 'ko' }, 'an edit without settings keeps them')
+  await t.test('key language is one app-wide setting: English only by default', () => {
+    assert.equal(loadChatSettings().loreKeyLanguage, null)
+    assert.equal(updateChatSettings({ loreKeyLanguage: 'ko' }).loreKeyLanguage, 'ko')
+    assert.equal(updateChatSettings({ loreAutoSave: false }).loreKeyLanguage, 'ko', 'another field leaves it alone')
+    assert.equal(updateChatSettings({ loreKeyLanguage: ' English ', loreAutoSave: true }).loreKeyLanguage, null)
   })
 
-  await t.test('account book: settings live in lorebook.json and come back from it', () => {
+  await t.test('global book: keys sort into the setting\'s language on every write', () => {
+    updateChatSettings({ loreKeyLanguage: 'ko' })
+    const book = ChatLorebookStore.create({ name: 'Wonderland', entries: [{ keys: ['alice', '앨리스'], content: 'a' }] })
+    assert.deepEqual([book.entries[0].keys, book.entries[0].localKeys], [['alice'], ['앨리스']])
+    updateChatSettings({ loreKeyLanguage: null })
+    const english = ChatLorebookStore.update(book.id, { entries: [{ keys: ['cat', '고양이'], content: 'c' }] })!
+    assert.deepEqual([english.entries[0].keys, english.entries[0].localKeys], [['cat', '고양이'], []], 'no key language: keys stay where they are')
+    updateChatSettings({ loreKeyLanguage: 'ko' })
+    const again = ChatLorebookStore.update(book.id, { name: 'renamed' })!
+    assert.deepEqual([again.entries[0].keys, again.entries[0].localKeys], [['cat'], ['고양이']], 'the next save sorts the existing keys')
+  })
+
+  await t.test('account book: lorebook.json carries no language of its own', () => {
     const owner = fileOwnerKey(1)
-    const book = OwnedLorebookStore.create(owner, { name: '이상한 나라', settings: { keyLanguage: 'ja' }, entries: [{ keys: ['alice', 'アリス'], content: 'a' }] })
-    assert.deepEqual([book.settings, book.entries[0].localKeys], [{ keyLanguage: 'ja' }, ['アリス']])
+    updateChatSettings({ loreKeyLanguage: 'ja' })
+    const book = OwnedLorebookStore.create(owner, { name: '이상한 나라', entries: [{ keys: ['alice', 'アリス'], content: 'a' }] })
+    assert.deepEqual(book.entries[0].localKeys, ['アリス'])
     const file = FileStoreService.findChild(owner, book.folderId, 'lorebook.json')!
     const json = JSON.parse(fs.readFileSync(storedFilePath(owner, file.id), 'utf8'))
-    assert.deepEqual(json.settings, { keyLanguage: 'ja' })
-    // Someone edits the file by hand: the cache follows it.
-    FileStoreService.writeText(owner, book.folderId as string, 'lorebook.json', JSON.stringify({ ...json, settings: { keyLanguage: 'ko' } }))
-    assert.deepEqual(OwnedLorebookStore.list(owner).find((item) => item.id === book.id)?.settings, { keyLanguage: 'ko' })
+    assert.deepEqual(Object.keys(json), ['name', 'entries'])
+    updateChatSettings({ loreKeyLanguage: 'ko' })
     const updated = OwnedLorebookStore.update(book.id, owner, { entries: [{ keys: ['cat', '고양이'], content: 'c' }] })!
-    assert.deepEqual([updated.settings.keyLanguage, updated.entries[0].localKeys], ['ko', ['고양이']])
+    assert.deepEqual(updated.entries[0].localKeys, ['고양이'])
   })
 
   await t.test('profile: recursion depth is saved within 0-5', () => {
@@ -124,5 +133,13 @@ test('lorebook key language and recursive scan', { timeout: 60000 }, async (t) =
     const profile = ChatProfileStore.create({ name: '카이', engine: 'llm', providerName: 'conn', loreRecursionDepth: 9 })
     assert.equal(profile.loreRecursionDepth, 5)
     assert.equal(ChatProfileStore.create({ name: '루나', engine: 'llm', providerName: 'conn' }).loreRecursionDepth, 0)
+  })
+
+  await t.test('chat book: made mid-conversation, it follows the setting with nothing to set up', () => {
+    updateChatSettings({ loreKeyLanguage: 'ko' })
+    const profile = ChatProfileStore.create({ name: '세라', engine: 'llm', providerName: 'conn' })
+    const threadId = CodexChatStore.createThread(1, 'lore chat', 'llm', profile.id)
+    const book = OwnedLorebookStore.saveChatBook(threadId, [{ title: '약속', keys: ['promise', '약속'], content: '내일 만나기로 했다.' }])!
+    assert.deepEqual([book.entries[0].keys, book.entries[0].localKeys], [['promise'], ['약속']])
   })
 })

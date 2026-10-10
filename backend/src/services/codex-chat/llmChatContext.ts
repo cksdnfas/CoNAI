@@ -18,6 +18,7 @@ import { attachedImagesOf, chatContentWithAttachments, type AttachedImages } fro
 import type { LoreHistoryMessage, SelectedLore } from './chatLorebook'
 import { booksForRequest, loreIndexText, READ_LORE_FILE_TOOL, selectRequestLore, type AttachedLoreBook, type ChatLore } from './chatLoreContext'
 import { rejectedLoreLine, SAVE_LORE_TOOL } from './chatLoreProposals'
+import { buildLinkedIndex, LINKED_TOOLS, placesForRequest } from './chatLinkedFiles'
 import { buildFlagDirective } from './chatFlags'
 import { generationPromptOf } from './chatToolReferences'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
@@ -310,13 +311,22 @@ function selectWindow(profile: Pick<ChatProfile, 'id' | 'style'>, turns: CodexCh
  * no chat and gets the global books only), unless the caller resolved `books` already. Without messages only the
  * "always on" entries are chosen. `toolOffered`: read_lore_file is among the request's tools.
  */
-export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<LoreHistoryMessage>, user?: ChatUserPersona | null, options: { thread?: Pick<CodexChatThreadRecord, 'id' | 'account_id'> | null; books?: AttachedLoreBook[]; toolOffered?: boolean; history?: ReadonlyArray<LoreHistoryMessage>; speakerProfileId?: number; judged?: ReadonlySet<string> } = {}): ChatLore {
+export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<LoreHistoryMessage>, user?: ChatUserPersona | null, options: { thread?: Pick<CodexChatThreadRecord, 'id' | 'account_id'> | null; books?: AttachedLoreBook[]; toolOffered?: boolean; history?: ReadonlyArray<LoreHistoryMessage>; speakerProfileId?: number; judged?: ReadonlySet<string>; linkedOffered?: boolean } = {}): ChatLore {
   const books = options.books ?? booksForRequest({ thread: options.thread ?? null, profile })
-  return selectRequestLore(profile, books, messages, (text) => estimateTokens(profile.id, text), (text) => fillCharacterPlaceholders(text, profile, user), {
+  const estimate = (text: string) => estimateTokens(profile.id, text)
+  // The linked files' index only beside the tools that open them.
+  const linked = options.linkedOffered && options.thread ? buildLinkedIndex(placesForRequest({ thread: options.thread, profile }), estimate) : ''
+  return selectRequestLore(profile, books, messages, estimate, (text) => fillCharacterPlaceholders(text, profile, user), {
     toolOffered: options.toolOffered ?? false,
+    linked,
     judged: options.judged,
     ...(profile.engine !== 'codex' && messages !== undefined ? { timing: { messages: options.history ?? messages, speakerProfileId: options.speakerProfileId } } : {}),
   })
+}
+
+/** Whether the linked-file tools are among these tools (their index goes with them). */
+export function offersLinkedFiles(tools: ReadonlyArray<ChatCompletionTool>) {
+  return tools.some((tool) => tool.function.name === LINKED_TOOLS.read)
 }
 
 /** Whether read_lore_file is among these tools. */
@@ -625,7 +635,7 @@ export function buildContextMeta(profile: ChatProfile, thread: CodexChatThreadRe
  */
 function buildRequestContext(profile: ChatProfile, thread: CodexChatThreadRecord | null, messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'summaryEnabled'> & Partial<Pick<LlmChatContextConfig, 'contextTokens'>>, tools: ChatCompletionTool[], segments: ChatSummarySegment[] = [], books?: AttachedLoreBook[], judged?: JudgedContext | null) {
   const user = userPersonaForThread(thread)
-  const lore = selectChatLore(profile, messages, user, { thread, books, toolOffered: offersLoreFileTool(tools), judged: judged?.loreKeys })
+  const lore = selectChatLore(profile, messages, user, { thread, books, toolOffered: offersLoreFileTool(tools), linkedOffered: offersLinkedFiles(tools), judged: judged?.loreKeys })
   const system = buildLeadingMessages(profile, thread, config, tools.some((tool) => !isChatOwnTool(tool.function.name)), lore, user)
   const recalled = config.summaryEnabled ? recalledSegments(profile, segments, messages, { contextTokens: config.contextTokens ?? null }, judged?.recallKeep) : []
   const recall = recallText(recalled)

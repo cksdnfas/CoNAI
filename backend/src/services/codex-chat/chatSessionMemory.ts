@@ -7,6 +7,7 @@ import { blockStateHash, blockStateText, foldBlockState, parseBlockEdits } from 
 import { authorNoteText, estimateTokens, fillCharacterPlaceholders, resolveAuthorNote, type ChatContextMeta } from './llmChatContext'
 import { contextSections, limitContextMeta, loreDiagnostics, type ContextSource } from './chatContextDiagnostics'
 import { booksForRequest, hasLoreFiles, loreIndexText, selectRequestLore } from './chatLoreContext'
+import { buildLinkedIndex, placesForRequest } from './chatLinkedFiles'
 import { rejectedLoreLine } from './chatLoreProposals'
 import { userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
@@ -107,10 +108,13 @@ export function pendingReplyGuidance(sent: Set<string>) {
  */
 export function pendingLore(thread: CodexChatThreadRecord | null, profile: ChatProfile, messages: CodexChatMessageRecord[], sent: Set<string>, user: ChatUserPersona) {
   const books = booksForRequest({ thread, profile })
-  const lore = selectRequestLore(profile, books, messages, (value) => estimateTokens(profile.id, value), (value) => fillCharacterPlaceholders(value, profile, user), {
+  const estimate = (value: string) => estimateTokens(profile.id, value)
+  const lore = selectRequestLore(profile, books, messages, estimate, (value) => fillCharacterPlaceholders(value, profile, user), {
     toolOffered: hasLoreFiles(books),
     inlineFiles: false,
     skip: (key) => sent.has(key),
+    // A session keeps the linked-file tools it started with; their index changes only when files come or go.
+    linked: buildLinkedIndex(placesForRequest({ thread, profile }), estimate),
   })
   return { keyed: lore.keyed, keyedKeys: lore.keyedKeys, index: pendingLoreIndex(loreIndexText(lore), sent), selected: lore }
 }

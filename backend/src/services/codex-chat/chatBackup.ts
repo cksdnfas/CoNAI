@@ -3,6 +3,7 @@ import { FileStoreService, fileOwnerKey } from '../fileStoreService'
 import { ChatFlagStore } from './chatFlags'
 import { ChatGroupStore } from './chatGroupStore'
 import { OwnedLorebookStore } from './chatLorebookFiles'
+import { describeLinkedFiles, LinkedFileStore } from './chatLinkedFiles'
 import { ChatSummaryStore } from './chatMemory'
 import { ChatProfileStore } from './chatProfiles'
 import { ChatUserProfileStore } from './chatUserProfiles'
@@ -43,6 +44,17 @@ export function exportChatJson(requester: McpRequester, threadId: number) {
         const linked = OwnedLorebookStore.find(id, owner)
         return linked ? [{ id: linked.id, name: linked.name }] : []
       }),
+      // File store folders and files linked to the chat (tied again by id in the same store).
+      linkedFiles: LinkedFileStore.threadLinks(threadId).flatMap((link) => {
+        const [view] = describeLinkedFiles(owner, [link])
+        return view.missing ? [] : [{ id: link.id, name: view.name, write: link.write }]
+      }),
+      // The linked book save_lore writes to (null: the chat's own book).
+      loreRecordBook: (() => {
+        const id = OwnedLorebookStore.recordBookId(threadId)
+        const linked = id === null ? null : OwnedLorebookStore.find(id, owner)
+        return linked ? { id: linked.id, name: linked.name } : null
+      })(),
     },
   }
 }

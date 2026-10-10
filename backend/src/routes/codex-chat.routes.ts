@@ -27,6 +27,7 @@ import { buildCodexInstructions, CODEX_COMPACT_TOKENS, CodexChatError, CodexChat
 import { buildChatPromptPreview, estimateTokens, isSummarizing, referenceBlock, selectChatLore } from '../services/codex-chat/llmChatContext'
 import { ChatLorebookStore, normalizeLorebookIds } from '../services/codex-chat/chatLorebook'
 import { LorebookError, OwnedLorebookStore } from '../services/codex-chat/chatLorebookFiles'
+import { assertLinkedFiles, describeLinkedFiles, LinkedFileError, LinkedFileStore, normalizeLinkedFiles, threadLinkedFiles } from '../services/codex-chat/chatLinkedFiles'
 import { loreIndexText, threadLorebooks } from '../services/codex-chat/chatLoreContext'
 import { applyMerge, assertMergeDecisions, draftMerge, hasDuplicates, MergeDecisionsMissingError, previewMerge, type MergeResult } from '../services/codex-chat/chatLorebookMerge'
 import { fillLoreKeys } from '../services/codex-chat/chatLoreKeyFill'
@@ -111,7 +112,7 @@ function isGroupThread(req: Request, threadId: number) {
 }
 
 function sendChatError(res: Response, error: unknown) {
-  if (error instanceof ChatDiagnosticsError || error instanceof ChatPageContextError || error instanceof CodexChatError || error instanceof LlmChatError || error instanceof FileStoreError || error instanceof ChatReplyError || error instanceof ChatSuggestError || error instanceof LorebookError) {
+  if (error instanceof ChatDiagnosticsError || error instanceof ChatPageContextError || error instanceof CodexChatError || error instanceof LlmChatError || error instanceof FileStoreError || error instanceof ChatReplyError || error instanceof ChatSuggestError || error instanceof LorebookError || error instanceof LinkedFileError) {
     res.status(error.status).json({ success: false, error: error.message })
     return
   }
@@ -192,6 +193,8 @@ router.get('/status', (req: Request, res: Response) => {
       enabled: loadChatSettings().enabled,
       // The default each chat's lore auto-save follows (shown beside the chat's own switch).
       loreAutoSave: loadChatSettings().loreAutoSave,
+      // The language besides English every lorebook's keywords are kept in (null: English only).
+      loreKeyLanguage: loadChatSettings().loreKeyLanguage,
       canUse: access.codex || access.llm || access.claude,
       codex: { canUse: access.codex },
       llm: { canUse: access.llm },
@@ -602,6 +605,16 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
       sendRouteBadRequest(res, 'lorebookIds must be a list of lorebook ids or null')
       return
     }
+    // File store folders and text files linked to this chat ([{ id, write }]).
+    if (body.linkedFiles !== undefined && body.linkedFiles !== null && !Array.isArray(body.linkedFiles)) {
+      sendRouteBadRequest(res, 'linkedFiles must be a list of { id, write } or null')
+      return
+    }
+    // The linked account book save_lore writes to (null: the chat's own book).
+    if (body.loreRecordBookId !== undefined && body.loreRecordBookId !== null && !Number.isSafeInteger(body.loreRecordBookId)) {
+      sendRouteBadRequest(res, 'loreRecordBookId must be a lorebook id or null')
+      return
+    }
     getUserSettingsDb().transaction(() => {
       if (userProfileId !== undefined) {
         if (thread.kind === 'group') GroupChatService.setUserProfile(requesterFrom(req), threadId, userProfileId)
@@ -614,6 +627,12 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
         authorNoteDepth, loreAutoSave: body.loreAutoSave as boolean | null | undefined,
       })
       if (body.lorebookIds !== undefined) OwnedLorebookStore.setThreadLinks(threadId, body.lorebookIds ?? [])
+      if (body.loreRecordBookId !== undefined) OwnedLorebookStore.setRecordBook(threadId, body.loreRecordBookId)
+      if (body.linkedFiles !== undefined) {
+        // Linking reaches the chat owner's file store: the same right the file page needs.
+        requireFileStoreOwner(requesterFrom(req))
+        LinkedFileStore.setThreadLinks(threadId, body.linkedFiles ?? [])
+      }
       // The whole summary at once: empty clears it, text replaces it as one plot up to where it reached.
       if (body.summary !== undefined) {
         const summary = typeof body.summary === 'string' ? body.summary.trim().slice(0, 20000) : ''
@@ -728,9 +747,10 @@ router.get('/admin/settings', requireAdmin, (_req: Request, res: Response) => {
 })
 
 router.put('/admin/settings', requireAdmin, (req: Request, res: Response) => {
-  const { enabled, diagnostics, loreAutoSave } = req.body ?? {}
-  if ((enabled === undefined && diagnostics === undefined && loreAutoSave === undefined) || (enabled !== undefined && typeof enabled !== 'boolean')
+  const { enabled, diagnostics, loreAutoSave, loreKeyLanguage } = req.body ?? {}
+  if ((enabled === undefined && diagnostics === undefined && loreAutoSave === undefined && loreKeyLanguage === undefined) || (enabled !== undefined && typeof enabled !== 'boolean')
     || (loreAutoSave !== undefined && typeof loreAutoSave !== 'boolean')
+    || (loreKeyLanguage !== undefined && loreKeyLanguage !== null && typeof loreKeyLanguage !== 'string')
     || (diagnostics !== undefined && (!diagnostics || typeof diagnostics !== 'object' || Array.isArray(diagnostics)
       || (diagnostics.enabled !== undefined && typeof diagnostics.enabled !== 'boolean')
       || (diagnostics.captureRaw !== undefined && typeof diagnostics.captureRaw !== 'boolean')
@@ -738,7 +758,7 @@ router.put('/admin/settings', requireAdmin, (req: Request, res: Response) => {
     sendRouteBadRequest(res, '채팅 설정 값이 올바르지 않아.')
     return
   }
-  res.json({ success: true, data: updateChatSettings({ enabled, diagnostics, loreAutoSave }) })
+  res.json({ success: true, data: updateChatSettings({ enabled, diagnostics, loreAutoSave, loreKeyLanguage }) })
 })
 
 /** Values the profile editor fills in for a new profile, and the scopes it may offer. */
@@ -823,6 +843,7 @@ router.post('/admin/profiles', requireAdmin, asyncHandler(async (req: Request, r
     }
     await assertCodexEffortSupported(input)
     ChatLorebookStore.assertProfileLinks(normalizeLorebookIds(input.lorebookIds), fileOwnerKey(getRequesterAccountId(req)))
+    assertLinkedFiles(fileOwnerKey(getRequesterAccountId(req)), normalizeLinkedFiles(input.linkedFiles))
     res.status(201).json({ success: true, data: toAdminProfile(ChatProfileStore.create(input)) })
   } catch (error) {
     sendChatError(res, error)
@@ -844,6 +865,7 @@ router.put('/admin/profiles/:profileId', requireAdmin, asyncHandler(async (req: 
     const patch = (req.body ?? {}) as ChatProfileInput
     await assertCodexEffortSupported({ ...current, ...patch })
     if (patch.lorebookIds !== undefined) ChatLorebookStore.assertProfileLinks(normalizeLorebookIds(patch.lorebookIds), fileOwnerKey(getRequesterAccountId(req)), current.lorebookIds)
+    if (patch.linkedFiles !== undefined) assertLinkedFiles(fileOwnerKey(getRequesterAccountId(req)), normalizeLinkedFiles(patch.linkedFiles), current.linkedFiles)
     res.json({ success: true, data: toAdminProfile(ChatProfileStore.update(profileId, patch)) })
   } catch (error) {
     sendChatError(res, error)
@@ -876,22 +898,22 @@ router.get('/lorebooks', requireChatAccess, (req: Request, res: Response) => {
   } catch (error) { sendChatError(res, error) }
 })
 
-/** POST /api/codex-chat/lorebooks — `{ name, entries?, settings? }`: a new account book, a folder under 로어북/ in the file store. */
+/** POST /api/codex-chat/lorebooks — `{ name, entries? }`: a new account book, a folder under 로어북/ in the file store. */
 router.post('/lorebooks', requireChatAccess, (req: Request, res: Response) => {
-  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown; settings?: unknown }
+  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown }
   try {
     res.status(201).json({ success: true, data: OwnedLorebookStore.create(lorebookOwner(req), body) })
   } catch (error) { sendChatError(res, error) }
 })
 
-/** PATCH /api/codex-chat/lorebooks/:lorebookId — `{ name?, entries?, settings? }` of an own account or chat book (null: an emptied chat book went away). */
+/** PATCH /api/codex-chat/lorebooks/:lorebookId — `{ name?, entries? }` of an own account or chat book (null: an emptied chat book went away). */
 router.patch('/lorebooks/:lorebookId', requireChatAccess, (req: Request, res: Response) => {
   const lorebookId = parseId(req.params.lorebookId)
   if (lorebookId === null) { sendRouteBadRequest(res, 'Invalid lorebook id'); return }
-  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown; settings?: unknown }
+  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown }
   if (body.entries !== undefined && !Array.isArray(body.entries)) { sendRouteBadRequest(res, 'entries must be a list'); return }
   try {
-    res.json({ success: true, data: OwnedLorebookStore.update(lorebookId, lorebookOwner(req), { name: body.name, entries: body.entries, settings: body.settings }) })
+    res.json({ success: true, data: OwnedLorebookStore.update(lorebookId, lorebookOwner(req), { name: body.name, entries: body.entries }) })
   } catch (error) { sendChatError(res, error) }
 })
 
@@ -1027,6 +1049,42 @@ router.post('/threads/:threadId/lorebook/keep', requireChatAccess, (req: Request
 })
 
 /**
+ * GET /api/codex-chat/threads/:threadId/linked-files — the context tab's linked files: the chat's own links, then
+ * those the profile (a room: every member) brings.
+ */
+router.get('/threads/:threadId/linked-files', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  try {
+    const thread = CodexChatStore.findThread(threadId, getRequesterAccountId(req))
+    if (!thread) throw new LinkedFileError('채팅을 찾을 수 없어.', 404)
+    const profileIds = thread.kind === 'group' ? ChatGroupStore.members(threadId).map((member) => member.profile_id) : thread.profile_id ? [thread.profile_id] : []
+    const profiles = profileIds.flatMap((id) => ChatProfileStore.find(id) ?? [])
+    res.json({ success: true, data: threadLinkedFiles(thread, profiles) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** POST /api/codex-chat/linked-files/describe — `{ links }`: names and places of links in the requester's own store (the profile editor). */
+router.post('/linked-files/describe', requireChatAccess, (req: Request, res: Response) => {
+  try {
+    res.json({ success: true, data: describeLinkedFiles(requireFileStoreOwner(requesterFrom(req)), normalizeLinkedFiles(req.body?.links), 'profile') })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/**
+ * POST /api/codex-chat/threads/:threadId/lorebooks — `{ name }`: a new empty account book (`로어북/<name>/`), linked to
+ * this chat and made the book save_lore writes to.
+ */
+router.post('/threads/:threadId/lorebooks', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  try {
+    if (!CodexChatStore.findThread(threadId, getRequesterAccountId(req))) throw new LorebookError('채팅을 찾을 수 없어.', 404)
+    res.status(201).json({ success: true, data: OwnedLorebookStore.createForThread(threadId, req.body?.name) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/**
  * GET /api/codex-chat/threads/:threadId/lorebooks — the context tab's books: the chat's own book (null until its
  * first entry), the account books linked to this chat, and the books the profile (a room: every member) brings.
  */
@@ -1042,15 +1100,15 @@ router.get('/threads/:threadId/lorebooks', requireChatAccess, (req: Request, res
   } catch (error) { sendChatError(res, error) }
 })
 
-/** PUT /api/codex-chat/threads/:threadId/lorebook — `{ entries, settings? }`: the chat's own book (made with its first entry; null once emptied). */
+/** PUT /api/codex-chat/threads/:threadId/lorebook — `{ entries }`: the chat's own book (made with its first entry; null once emptied). */
 router.put('/threads/:threadId/lorebook', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
-  const { entries, settings } = (req.body ?? {}) as { entries?: unknown; settings?: unknown }
+  const entries = (req.body as { entries?: unknown } | undefined)?.entries
   if (!Array.isArray(entries)) { sendRouteBadRequest(res, 'entries must be a list'); return }
   try {
     if (!CodexChatStore.findThread(threadId, getRequesterAccountId(req))) throw new LorebookError('채팅을 찾을 수 없어.', 404)
-    res.json({ success: true, data: OwnedLorebookStore.saveChatBook(threadId, entries, settings) })
+    res.json({ success: true, data: OwnedLorebookStore.saveChatBook(threadId, entries) })
   } catch (error) { sendChatError(res, error) }
 })
 
@@ -1060,7 +1118,7 @@ router.get('/admin/lorebooks', requireAdmin, (_req: Request, res: Response) => {
 })
 
 router.post('/admin/lorebooks', requireAdmin, (req: Request, res: Response) => {
-  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown; settings?: unknown }
+  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown }
   res.status(201).json({ success: true, data: ChatLorebookStore.create(body) })
 })
 
@@ -1095,8 +1153,8 @@ router.post('/admin/lorebooks/:lorebookId/import', requireAdmin, receiveLorebook
 router.put('/admin/lorebooks/:lorebookId', requireAdmin, (req: Request, res: Response) => {
   const lorebookId = parseId(req.params.lorebookId)
   if (lorebookId === null) { sendRouteBadRequest(res, 'Invalid lorebook id'); return }
-  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown; settings?: unknown }
-  const updated = ChatLorebookStore.update(lorebookId, { name: body.name, entries: body.entries, settings: body.settings })
+  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown }
+  const updated = ChatLorebookStore.update(lorebookId, { name: body.name, entries: body.entries })
   if (!updated) { res.status(404).json({ success: false, error: '로어북을 찾을 수 없어.' }); return }
   res.json({ success: true, data: updated })
 })

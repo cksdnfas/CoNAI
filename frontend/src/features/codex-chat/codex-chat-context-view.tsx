@@ -17,6 +17,7 @@ import { editChatSummarySegment, summarizeCodexChatThread, thinkingMayFillCap, u
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error-message'
 import { LorebookBlock } from './chat-lorebook-block'
+import { LinkedFilesBlock } from './chat-linked-files-block'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatUserProfileRow } from './chat-user-profiles'
 import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatCompactMutationKey, codexChatThreadQueryKey } from './codex-chat-context'
@@ -173,6 +174,7 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
       <AuthorNoteBlock thread={thread} defaults={{ note: '', depth: null }} />
       {llmMembers.length > 0 ? <GenerationReactionSettings thread={thread} /> : null}
       <LorebookBlock threadId={thread.id} loreAutoSave={thread.lore_auto_save} profiles={(group?.memberIds ?? thread.member_profile_ids ?? []).flatMap((id) => profilesById.get(id) ?? []).map(({ id, name }) => ({ id, name }))} />
+      <LinkedFilesBlock threadId={thread.id} />
       {group ? (
         <>
           <SettingRow label={capLabel}>
@@ -399,6 +401,7 @@ export function CodexChatContextView({ thread, profiles, segments, profileTurns,
       <AuthorNoteBlock thread={thread} defaults={noteDefaults} />
       <GenerationReactionSettings thread={thread} />
       <LorebookBlock threadId={thread.id} loreAutoSave={thread.lore_auto_save} profiles={profiles} />
+      <LinkedFilesBlock threadId={thread.id} />
       <SettingRow label={t({ ko: '참고할 최근 턴 수', en: 'Recent turns sent' })}>
         <NumberStepperInput
           allowEmpty
@@ -472,6 +475,7 @@ export function CodexEngineContextView({ thread, profiles, compactTokens, noteDe
       <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock thread={thread} defaults={noteDefaults} />
       <LorebookBlock threadId={thread.id} loreAutoSave={thread.lore_auto_save} profiles={profiles} />
+      <LinkedFilesBlock threadId={thread.id} />
       {/* One line: context / compaction threshold. Window and running totals live in its tooltip. */}
       <SettingRow label={t({ ko: '현재 컨텍스트', en: 'Current context' })}>
         <Tip
