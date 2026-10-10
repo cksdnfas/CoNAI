@@ -9,6 +9,7 @@ export function usePostPermissions() {
   return {
     accountId: auth?.accountId ?? null,
     isAdmin: bootstrap || auth?.isAdmin === true,
+    canView: has('posts.view'),
     canWrite: has('posts.write'),
     canComment: has('posts.comment'),
     canSummon: has('posts.summon'),

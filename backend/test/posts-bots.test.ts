@@ -199,6 +199,8 @@ test('posts bots: @ calls run as the caller, chain, limits and cancel', { timeou
     const room = db().prepare(`SELECT thread_id FROM chat_automation_rooms WHERE account_key = '2' AND room_key = ?`).get(`posts:board:${sera.id}`) as { thread_id: number }
     assert.equal(answer.sourceChat?.threadId, room.thread_id)
     assert.ok(answer.sourceChat?.replyId, 'the reply it came from')
+    const message = CodexChatStore.listMessages(room.thread_id).find((item) => item.id === answer.sourceChat?.messageId)
+    assert.equal(message?.routing?.replyId, answer.sourceChat?.replyId, 'and its message, to scroll to')
     assert.equal(PostCommentStore.list(viewer, post.id).find((comment) => comment.id === answer.id)!.sourceChat, null, 'only the room owner sees where it came from')
 
     // The @ in the tool-written answer continues the call's chain (as the caller's account), not a new one.

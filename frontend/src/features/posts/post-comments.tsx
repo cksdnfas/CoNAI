@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PostBotRun, PostComment, PostDetail, PostMentionableProfile } from '@conai/shared'
-import { CornerDownRight, Eye, EyeOff, Pencil, Reply, Send, Trash2, X } from 'lucide-react'
+import { CornerDownRight, Eye, EyeOff, MessageSquareReply, Pencil, Send, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
@@ -15,6 +16,7 @@ import { buildApiUrl } from '@/lib/api-url'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { PostAuthorAvatar, PostAuthorName, useRelativeTime } from './post-author'
+import { PostReferenceButton, SourceChatLink } from './post-chat-links'
 import { PostMarkdown } from './post-markdown'
 import { usePostPermissions } from './use-post-permissions'
 
@@ -171,8 +173,10 @@ function BotRunRow({ run }: { run: PostBotRun }) {
   )
 }
 
-function CommentRow({ comment, quoted, mentionNames, canReply, onReply, reply }: {
+function CommentRow({ comment, quoted, mentionNames, canReply, onReply, reply, focused = false }: {
   comment: PostComment
+  /** Opened from a link to this comment: it is scrolled to and marked for a moment. */
+  focused?: boolean
   quoted: PostComment | null
   mentionNames: string[]
   canReply: boolean
@@ -196,16 +200,18 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, reply }:
     return <div className={cn('py-2.5 text-sm text-muted-foreground', reply && 'pl-10')}>{t({ ko: '지운 댓글이야', en: 'Deleted comment' })}</div>
   }
   return (
-    <div className={cn('group/comment grid grid-cols-[2rem_1fr] gap-2.5 py-2.5', reply && 'pl-10', comment.status === 'hidden' && 'opacity-60')}>
+    <div id={`comment-${comment.id}`} className={cn('group/comment grid scroll-mt-20 grid-cols-[2rem_1fr] gap-2.5 rounded-sm py-2.5 transition-[background-color] duration-700', reply && 'pl-10', comment.status === 'hidden' && 'opacity-60', focused && 'bg-primary/10')}>
       <PostAuthorAvatar author={comment.author} size="md" />
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex min-h-5 flex-wrap items-center gap-x-2 text-sm">
           <PostAuthorName author={comment.author} />
           <span className="text-xs text-muted-foreground">{relative(comment.createdAt)}{comment.revision > 1 ? ` · ${t({ ko: '고침', en: 'edited' })}` : ''}</span>
+          <SourceChatLink source={comment.sourceChat} compact />
           {comment.status === 'hidden' ? <span className="inline-flex items-center gap-1 text-xs text-destructive"><EyeOff className="size-3" />{t({ ko: '숨김', en: 'Hidden' })}</span> : null}
           {/* Row actions sit on the name line, out of the way until the row is hovered or focused (always shown on touch screens). */}
           <div className="ml-auto flex h-5 items-center gap-0.5 text-muted-foreground transition-opacity focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/comment:opacity-100">
-            {canReply ? <IconButton size="icon-xs" variant="ghost" label={t({ ko: '답글', en: 'Reply' })} onClick={onReply}><Reply /></IconButton> : null}
+            {canReply ? <IconButton size="icon-xs" variant="ghost" label={t({ ko: '답글', en: 'Reply' })} onClick={onReply}><MessageSquareReply /></IconButton> : null}
+            <PostReferenceButton postId={comment.postId} commentId={comment.id} size="icon-xs" label={`${comment.author.name}: ${comment.body.replace(/\s+/g, ' ').slice(0, 40)}`} />
             {comment.canEdit && editing === null ? <IconButton size="icon-xs" variant="ghost" label={t({ ko: '고치기', en: 'Edit' })} onClick={() => setEditing(comment.body)}><Pencil /></IconButton> : null}
             {comment.canEdit ? (
               <IconButton size="icon-xs" variant="ghost" label={t({ ko: '지우기', en: 'Delete' })} disabled={remove.isPending} onClick={async () => {
@@ -252,6 +258,18 @@ export function PostComments({ post }: { post: PostDetail }) {
   const mentionable = useMemo(() => mentionableQuery.data ?? [], [mentionableQuery.data])
   const comments = useMemo(() => commentsQuery.data?.comments ?? [], [commentsQuery.data])
   const runs = commentsQuery.data?.runs ?? []
+  // A link to one comment (`?comment=45`, from a chat): scroll to it once it is loaded and mark it for a moment.
+  const [params] = useSearchParams()
+  const linkedId = Number(params.get('comment')) || null
+  const [focusedId, setFocusedId] = useState<number | null>(null)
+  const loaded = comments.some((comment) => comment.id === linkedId)
+  useEffect(() => {
+    if (!linkedId || !loaded) return
+    document.getElementById(`comment-${linkedId}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    setFocusedId(linkedId)
+    const timer = window.setTimeout(() => setFocusedId(null), 1600)
+    return () => window.clearTimeout(timer)
+  }, [linkedId, loaded])
   const byId = useMemo(() => new Map(comments.map((comment) => [comment.id, comment])), [comments])
   const mentionNames = useMemo(() => [...new Set([...mentionable.map((profile) => profile.name), ...comments.filter((comment) => comment.author.type === 'profile').map((comment) => comment.author.name)])], [mentionable, comments])
   const open = post.commentMode === 'open' || isAdmin
@@ -271,9 +289,9 @@ export function PostComments({ post }: { post: PostDetail }) {
       <div className="divide-y divide-line border-y border-line">
         {tops.map((top) => (
           <div key={top.id}>
-            <CommentRow comment={top} quoted={null} mentionNames={mentionNames} canReply={canReply} reply={false} onReply={() => setReplyTo(top.id)} />
+            <CommentRow comment={top} quoted={null} mentionNames={mentionNames} canReply={canReply} reply={false} focused={focusedId === top.id} onReply={() => setReplyTo(top.id)} />
             {comments.filter((comment) => comment.parentId === top.id).map((child) => (
-              <CommentRow key={child.id} comment={child} quoted={child.quoteCommentId ? byId.get(child.quoteCommentId) ?? null : null} mentionNames={mentionNames} canReply={canReply} reply onReply={() => setReplyTo(child.id)} />
+              <CommentRow key={child.id} comment={child} quoted={child.quoteCommentId ? byId.get(child.quoteCommentId) ?? null : null} mentionNames={mentionNames} canReply={canReply} reply focused={focusedId === child.id} onReply={() => setReplyTo(child.id)} />
             ))}
             {runsFor(top.id).map((run) => <div key={`run-${run.id}`} className="pl-10"><BotRunRow run={run} /></div>)}
             {replyTo !== null && (byId.get(replyTo)?.parentId ?? replyTo) === top.id ? (

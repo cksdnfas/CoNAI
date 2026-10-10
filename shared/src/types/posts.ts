@@ -69,6 +69,8 @@ export interface PostSummary {
 export interface PostSourceChat {
   threadId: number;
   replyId: string | null;
+  /** The chat message of that reply, to scroll to (null once it is gone). */
+  messageId: number | null;
 }
 
 export interface PostDetail extends PostSummary {

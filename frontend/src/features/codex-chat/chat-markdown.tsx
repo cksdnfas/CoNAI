@@ -1,5 +1,7 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { createContext, memo, useContext, useMemo, useState, type ComponentProps, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import { parsePostLink, postRoute } from '@/features/posts/post-links'
 import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { rehypeMentions } from './chat-mentions'
@@ -103,7 +105,15 @@ function urlTransform(url: string) {
   if (asset) return chatAssetUrl(asset[1])
   const media = MEDIA_PATTERN.exec(url)
   if (media) return chatMediaUrl(media[1], media[2])
+  if (parsePostLink(url)) return url
   return url.startsWith(EMOTE_SCHEME) || url.startsWith(STICKER_SCHEME) ? url : defaultUrlTransform(url)
+}
+
+/** Links open in a new tab, except a board link (`post:12`), which opens the post in the app. */
+function MarkdownLink({ children, href }: ComponentProps<'a'>) {
+  const post = parsePostLink(href)
+  if (post) return <Link to={postRoute(post)} className="text-primary underline underline-offset-2">{children}</Link>
+  return <a href={href} target="_blank" rel="noreferrer noopener" className="text-primary underline underline-offset-2">{children}</a>
 }
 
 function MarkdownImage({ src, alt }: ComponentProps<'img'>) {
@@ -137,7 +147,7 @@ const MARKDOWN_COMPONENTS: Components = {
   img: MarkdownImage,
   // Paragraph spacing follows the reader's chat appearance (a variable on the transcript); 0.5rem elsewhere.
   p: ({ children }) => <p className="my-(--chat-paragraph-gap,0.5rem) first:mt-0 last:mb-0">{children}</p>,
-  a: ({ children, href }) => <a href={href} target="_blank" rel="noreferrer noopener" className="text-primary underline underline-offset-2">{children}</a>,
+  a: MarkdownLink,
   ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5">{children}</ul>,
   ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 pl-5">{children}</ol>,
   li: ({ children }) => <li className="pl-0.5">{children}</li>,

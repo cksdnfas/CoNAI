@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { BookPlus, BookUp, ChevronDown, ChevronRight, Ellipsis, FileText, FolderOpen, Merge, Plus } from 'lucide-react'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -14,7 +15,9 @@ import { ChatLoreEntryFields, loreBookFilesQueryKey, newLoreEntry, type LoreFile
 import { useI18n } from '@/i18n'
 import {
   CHAT_LOREBOOKS_QUERY_KEY,
+  CHAT_STATUS_QUERY_KEY,
   OWN_LOREBOOKS_QUERY_KEY,
+  getCodexChatStatus,
   getThreadLorebooks,
   keepThreadLorebook,
   listOwnLorebooks,
@@ -30,7 +33,7 @@ import { listStoredFolders } from '@/lib/api-files'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { LorebookMergeDialog } from './lorebook-merge-dialog'
-import { useCodexChat } from './codex-chat-context'
+import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey, useCodexChat } from './codex-chat-context'
 
 const CHAT_BOOK = 'chat'
 const LOREBOOK_ROOT_FOLDER = '로어북'
@@ -47,10 +50,12 @@ function fileCount(entries: ChatLoreEntry[]) {
  * books linked to this chat, the profile's (a room: the members') books, global books — folded. An entry opens the
  * entry editor (B); a chat book entry can be promoted into an account book through the merge dialog (D).
  */
-export function LorebookBlock({ threadId, profiles }: {
+export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
   threadId: number
   /** The chat's profile, or a room's members: whose model a merge can ask, and whose account book an entry is promoted into. */
   profiles: Array<{ id: number; name: string }>
+  /** The chat's own lore auto-save switch (null: the chat settings). */
+  loreAutoSave: 0 | 1 | null | undefined
 }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -103,6 +108,21 @@ export function LorebookBlock({ threadId, profiles }: {
     onSuccess: refresh,
     onError,
   })
+  const statusQuery = useQuery({ queryKey: CHAT_STATUS_QUERY_KEY, queryFn: getCodexChatStatus, staleTime: 60_000, retry: false })
+  const autoSaveMutation = useMutation({
+    mutationFn: (value: boolean | null) => updateCodexChatThreadContext(threadId, { loreAutoSave: value }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(threadId) }),
+        queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }),
+      ])
+    },
+    onError,
+  })
+  const settingsDefault = statusQuery.data?.loreAutoSave
+  const followLabel = settingsDefault === undefined
+    ? t({ ko: '설정 따름', en: 'Settings' })
+    : t({ ko: '설정 따름 ({state})', en: 'Settings ({state})' }, { state: settingsDefault ? t({ ko: '켬', en: 'on' }) : t({ ko: '끔', en: 'off' }) })
 
   const entriesOf = (book: EditTarget['book']) => (book === CHAT_BOOK ? chatEntries : book.entries)
   const saveEntry = (target: EditTarget, entry: ChatLoreEntry) => {
@@ -157,6 +177,21 @@ export function LorebookBlock({ threadId, profiles }: {
           <IconButton variant="ghost" size="icon-sm" disabled={chatEntries.length === 0} onClick={() => setMerging({})} label={t({ ko: '계정 로어북에 병합', en: 'Merge into an account lorebook' })}><Merge /></IconButton>
           <IconButton variant="ghost" size="icon-sm" onClick={() => void openFolder()} label={t({ ko: '파일 폴더 열기', en: 'Open the files folder' })}><FolderOpen /></IconButton>
         </div>
+      </div>
+
+      <div className="flex min-h-8 items-center justify-between gap-2">
+        <span className="text-sm text-muted-foreground">{t({ ko: '로어 자동 저장', en: 'Save lore automatically' })}</span>
+        <SegmentedControl
+          size="xs"
+          value={loreAutoSave === 1 ? 'on' : loreAutoSave === 0 ? 'off' : 'settings'}
+          onChange={(mode) => autoSaveMutation.mutate(mode === 'settings' ? null : mode === 'on')}
+          ariaLabel={t({ ko: '로어 자동 저장', en: 'Save lore automatically' })}
+          items={[
+            { value: 'settings', label: followLabel, disabled: autoSaveMutation.isPending },
+            { value: 'on', label: t({ ko: '켬', en: 'On' }), disabled: autoSaveMutation.isPending },
+            { value: 'off', label: t({ ko: '끔', en: 'Off' }), disabled: autoSaveMutation.isPending },
+          ]}
+        />
       </div>
 
       <div className="flex flex-col">

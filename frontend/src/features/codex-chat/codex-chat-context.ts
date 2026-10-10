@@ -2,6 +2,9 @@ import { createContext, useContext } from 'react'
 import type { ChatFlagSnapshot, ChatMediaAttachment, CodexChatToolCall } from '@/lib/api-codex-chat'
 import type { StoredFileEntry, ChatMessageRouting, ChatReplyQuote, ChatChoiceProposal } from '@conai/shared'
 
+/** A post or comment put on the next message with 참조 (sent as a `post:` link line above the text). */
+export type ChatPostReference = { postId: number; commentId: number | null; label: string }
+
 /** A question card as stored (offer_choices). */
 export type ChatChoiceCard = ChatChoiceProposal & { id: number }
 /** What the composer holds of a card's answer until it is sent. */
@@ -41,9 +44,12 @@ export type CodexChatPendingChat = {
   greeting: { index: number | null; text: string; greetings: string[] } | null
 }
 
-/** The chat opened when none is chosen: the latest one in the list (archived chats only when nothing else is left). */
-export function defaultThreadId(threads: Array<{ id: number; archived?: 0 | 1 }>) {
-  return (threads.find((thread) => !thread.archived) ?? threads[0])?.id ?? null
+/**
+ * The chat opened when none is chosen: the latest one in the list, leaving out rooms an automation made for itself
+ * (a board call must not take over the chat) and archived chats, unless nothing else is left.
+ */
+export function defaultThreadId(threads: Array<{ id: number; archived?: 0 | 1; automation?: unknown }>) {
+  return (threads.find((thread) => !thread.archived && !thread.automation) ?? threads.find((thread) => !thread.archived) ?? threads[0])?.id ?? null
 }
 
 /** One group member's reply while it streams. */
@@ -134,6 +140,9 @@ export interface CodexChatApi {
   removeMediaAttachment: (hash: string) => void
   /** "참조" on an image in the transcript: attach it to the next message, or detach it when it already is. */
   toggleMediaAttachment: (item: ChatMediaAttachment) => void
+  /** Posts and comments referenced from the board (참조), sent as link lines with the next message. */
+  draftPostRefs: ChatPostReference[]
+  togglePostReference: (item: ChatPostReference) => void
   attachmentsUploading: boolean
   addAttachments: (files: StoredFileEntry[]) => void
   removeAttachment: (id: string) => void
@@ -163,6 +172,8 @@ export type CodexChatReferenceApi = {
   panelOpen: boolean
   draftMediaAttachments: ChatMediaAttachment[]
   toggleMediaAttachment: (item: ChatMediaAttachment) => void
+  draftPostRefs: ChatPostReference[]
+  togglePostReference: (item: ChatPostReference) => void
   focusMessage: (messageId: number) => void
 }
 

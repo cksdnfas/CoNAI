@@ -58,3 +58,6 @@ export const CHAT_ROUTINE_LIMITS = { name: 80, message: 4000, minIntervalMinutes
 /** Marks a message an automation sent (a routine or a workflow); shown as one thin line instead of a user message. */
 /** What woke a chat: a routine, a workflow node, or a call from a posts board comment (`id` = the post). */
 export type ChatRoutineRouting = { source: 'routine' | 'workflow' | 'post'; id: number | null; name: string }
+
+/** Which automation made a chat room for itself: a posts board's bot room, a routine's own room, a workflow node's. */
+export type ChatAutomationRoomKind = 'board' | 'routine' | 'workflow'

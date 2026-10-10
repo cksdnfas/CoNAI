@@ -24,6 +24,7 @@ import type { ImageRecord } from '@/types/image'
 import { DEFAULT_CHAT_APPEARANCE, type ChatAppearance, type ChatImageLayout } from './chat-appearance'
 import { ChatErrorChip } from './chat-error-chip'
 import { ChatMarkdown, type ChatEmoticonMap } from './chat-markdown'
+import { ChatPostCards, ChatPostRefChip, splitPostRefLines } from './chat-post-cards'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatProposalCards } from './chat-proposal-card'
 import { ChatChoiceLines } from './chat-choice'
@@ -493,7 +494,10 @@ export const CodexChatUserMessage = memo(function CodexChatUserMessage({ content
   speaker?: ChatUserSpeaker | null
 }) {
   const { t } = useI18n()
-  const text = mentions?.length ? splitMentions(content, mentions).map((part, index) => part.mention ? <span key={index} className={MENTION_CLASS}>{part.text}</span> : part.text) : content
+  // Posts referenced from the board ride as link lines at the top: shown as chips.
+  const { refs, text: body } = splitPostRefLines(content)
+  const text = mentions?.length ? splitMentions(body, mentions).map((part, index) => part.mention ? <span key={index} className={MENTION_CLASS}>{part.text}</span> : part.text) : body
+  const refChips = refs.length ? <div className="mb-1.5 flex flex-wrap gap-1">{refs.map((ref) => <ChatPostRefChip key={`${ref.postId}-${ref.commentId ?? 0}`} item={ref} />)}</div> : null
   const avatar = speaker && appearance.avatarSize !== 'none'
     ? <ChatProfileAvatar name={speaker.name} avatar={speaker.avatar} engine="llm" size={AVATAR_SIZE[appearance.avatarSize]} className={appearance.avatarSize === 'lg' ? 'size-14 text-lg' : undefined} />
     : null
@@ -508,12 +512,13 @@ export const CodexChatUserMessage = memo(function CodexChatUserMessage({ content
           </div>
         ) : null}
         <ChatMessageReply routing={routing} recipientLabel={recipientLabel} />
+        {refChips}
         <div className="whitespace-pre-wrap break-words text-foreground">{text}</div>
       </div>
     )
   }
   const right = appearance.userPlacement === 'right'
-  const bubble = <div className="min-w-0 max-w-[85%] break-words rounded-lg bg-surface-high px-3.5 py-2 text-foreground"><ChatMessageReply routing={routing} recipientLabel={recipientLabel} /><div className="whitespace-pre-wrap">{text}</div></div>
+  const bubble = <div className="min-w-0 max-w-[85%] break-words rounded-lg bg-surface-high px-3.5 py-2 text-foreground"><ChatMessageReply routing={routing} recipientLabel={recipientLabel} />{refChips}{body ? <div className="whitespace-pre-wrap">{text}</div> : null}</div>
   // The picture sits above the bubble with the time, so the bubble keeps the chat's full width.
   if (avatar) {
     return (
@@ -687,6 +692,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
       <ChatAudioCards calls={toolCalls} />
       <ChatProposalCards calls={toolCalls} threadId={threadId} />
       <ChatPageOperationChips calls={toolCalls} />
+      {streaming ? null : <ChatPostCards calls={toolCalls} text={content} />}
       {ownText ? markdown(ownText) : null}
       <ChatChoiceLines calls={toolCalls} />
     </div>

@@ -6,7 +6,7 @@ import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread,
 import { getErrorMessage } from '@/lib/error-message'
 import { CHAT_PROFILES_QUERY_KEY, CHAT_STATUS_QUERY_KEY, threadLorebooksQueryKey, type ChatProfileSummary } from '@/lib/api-codex-chat'
 import { summarizeChatError } from './chat-error-chip'
-import type { StoredFileEntry } from '@conai/shared'
+import { postLink, type StoredFileEntry } from '@conai/shared'
 import { getCodexChatThreadMedia } from '@/lib/api-codex-chat'
 import { FILES_QUERY_KEY, uploadStoredFiles } from '@/lib/api-files'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -22,6 +22,7 @@ import {
   PENDING_DRAFT_KEY,
   type ChatChoiceCard,
   type ChatChoiceDraft,
+  type ChatPostReference,
   type CodexChatApi,
   type CodexChatPendingChat,
   type CodexChatLiveReply,
@@ -31,7 +32,14 @@ import {
 } from './codex-chat-context'
 
 /** What a chat's composer holds besides its text, kept while another chat is open. */
-type ComposerStash = { attachments: StoredFileEntry[]; media: ChatMediaAttachment[]; reply: CodexChatApi['draftReply']; picks: string[] }
+type ComposerStash = { attachments: StoredFileEntry[]; media: ChatMediaAttachment[]; posts: ChatPostReference[]; reply: CodexChatApi['draftReply']; picks: string[] }
+
+const samePostRef = (a: ChatPostReference, b: ChatPostReference) => a.postId === b.postId && a.commentId === b.commentId
+
+/** A referenced post as the message carries it: `[label](post:12#comment-45)` on its own line. */
+function postRefLine(item: ChatPostReference) {
+  return `[${item.label.replace(/[[\]\n]/g, ' ').trim()}](${postLink(item.postId, item.commentId)})`
+}
 
 const DRAFTS_STORAGE_PREFIX = 'conai.chat.drafts.'
 
@@ -126,6 +134,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   const [draftAttachments, setDraftAttachments] = useState<StoredFileEntry[]>([])
   const [draftMediaAttachments, setDraftMediaAttachments] = useState<ChatMediaAttachment[]>([])
   const mediaAttachmentsRef = useRef(draftMediaAttachments)
+  const [draftPostRefs, setDraftPostRefs] = useState<ChatPostReference[]>([])
+  const postRefsRef = useRef(draftPostRefs)
   const [attachmentsUploading, setAttachmentsUploading] = useState(false)
   const attachmentsRef = useRef(draftAttachments)
   const uploadBusyRef = useRef(false)
@@ -150,6 +160,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
 
   attachmentsRef.current = draftAttachments
   mediaAttachmentsRef.current = draftMediaAttachments
+  postRefsRef.current = draftPostRefs
   picksRef.current = picks
   selectedRef.current = selectedThreadId
 
@@ -204,6 +215,11 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     if (mediaAttachmentsRef.current.some((existing) => existing.compositeHash === item.compositeHash)) removeMediaAttachment(item.compositeHash)
     else setMediaAttachments([...mediaAttachmentsRef.current, item])
   }, [removeMediaAttachment, setMediaAttachments])
+  const togglePostReference = useCallback((item: ChatPostReference) => {
+    const current = postRefsRef.current
+    postRefsRef.current = current.some((existing) => samePostRef(existing, item)) ? current.filter((existing) => !samePostRef(existing, item)) : [...current, item].slice(-10)
+    setDraftPostRefs(postRefsRef.current)
+  }, [])
   const uploadAttachments = useCallback(async (files: File[]) => {
     if (!files.length || uploadBusyRef.current) return
     if (attachmentsRef.current.length + mediaAttachmentsRef.current.length + files.length > 20) {
@@ -218,7 +234,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       // Another chat opened meanwhile: the files wait in the chat they were picked for.
       if (resolveThread(selectedRef.current) === startedIn) addAttachments(entries)
       else if (startedIn !== null) {
-        const stash = stashRef.current.get(startedIn) ?? { attachments: [], media: [], reply: null, picks: [] }
+        const stash = stashRef.current.get(startedIn) ?? { attachments: [], media: [], posts: [], reply: null, picks: [] }
         stashRef.current.set(startedIn, { ...stash, attachments: [...new Map([...stash.attachments, ...entries].map((file) => [file.id, file])).values()] })
       }
       await queryClient.invalidateQueries({ queryKey: FILES_QUERY_KEY })
@@ -246,8 +262,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     setSelectedThreadId(next)
     if (from === to) return
     if (from !== null) {
-      const stash = { attachments: attachmentsRef.current, media: mediaAttachmentsRef.current, reply: draftReplyRef.current, picks: picksRef.current }
-      if (stash.attachments.length || stash.media.length || stash.reply || stash.picks.length) stashRef.current.set(from, stash)
+      const stash = { attachments: attachmentsRef.current, media: mediaAttachmentsRef.current, posts: postRefsRef.current, reply: draftReplyRef.current, picks: picksRef.current }
+      if (stash.attachments.length || stash.media.length || stash.posts.length || stash.reply || stash.picks.length) stashRef.current.set(from, stash)
       else stashRef.current.delete(from)
     }
     const restored = to !== null ? stashRef.current.get(to) : undefined
@@ -257,6 +273,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     setDraftAttachments(attachmentsRef.current)
     mediaAttachmentsRef.current = restored?.media ?? []
     setDraftMediaAttachments(mediaAttachmentsRef.current)
+    postRefsRef.current = restored?.posts ?? []
+    setDraftPostRefs(postRefsRef.current)
     setDraftReply(restored?.reply ?? null)
     picksRef.current = restored?.picks ?? []
     setPicks(picksRef.current)
@@ -317,7 +335,10 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     const picked = rewrite ? [] : picksRef.current
     const chosen = !rewrite && choiceRef.current?.threadId === threadId ? choiceRef.current : null
     // Picks and answers alone make a message of their own labels, so a click can be sent as is.
-    const text = rewrite ? '' : (literalText ?? draftsRef.current[threadId] ?? '').trim() || [...picked, ...(chosen?.labels ?? [])].join(', ')
+    const typed = rewrite ? '' : (literalText ?? draftsRef.current[threadId] ?? '').trim() || [...picked, ...(chosen?.labels ?? [])].join(', ')
+    // Referenced posts ride as link lines above the text (the model reads them with posts_read).
+    const postRefs = rewrite ? [] : postRefsRef.current
+    const text = postRefs.length ? [postRefs.map(postRefLine).join('\n'), typed].filter(Boolean).join('\n\n') : typed
     const attachments = rewrite ? [] : attachmentsRef.current
     const mediaAttachments = rewrite ? [] : mediaAttachmentsRef.current
     const sentAttachmentEpoch = attachmentEpoch.current
@@ -352,6 +373,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       setDraftAttachments([])
       mediaAttachmentsRef.current = []
       setDraftMediaAttachments([])
+      postRefsRef.current = []
+      setDraftPostRefs([])
       attachmentsRef.current = []
       setPicks([])
       picksRef.current = []
@@ -470,11 +493,13 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
         showSnackbar({ message: summarizeChatError(getErrorMessage(error, t({ ko: '응답 실패', en: 'Reply failed' })), t), tone: 'error' })
         if (!accepted && !rewrite && attachmentEpoch.current === sentAttachmentEpoch) {
           if (!draftReplyRef.current) setDraftReply(replyingTo)
-          setDraft(sentThreadId, (current) => current || (picked.length ? '' : text))
+          setDraft(sentThreadId, (current) => current || (picked.length ? '' : typed))
           setDraftAttachments(attachments)
           attachmentsRef.current = attachments
           setDraftMediaAttachments(mediaAttachments)
           mediaAttachmentsRef.current = mediaAttachments
+          setDraftPostRefs(postRefs)
+          postRefsRef.current = postRefs
           setPicks(picked)
           if (chosen && !choiceRef.current) setChoice(chosen)
         }
@@ -588,6 +613,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     setMediaAttachments,
     removeMediaAttachment,
     toggleMediaAttachment,
+    draftPostRefs,
+    togglePostReference,
     attachmentsUploading,
     addAttachments,
     removeAttachment,
@@ -600,10 +627,10 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     messageFocus,
     focusMessage,
     clearMessageFocus,
-  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, drafts, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, currentLiveTurn, messageFocus, openPanel, picks, togglePick, removePick, choice, toggleChoice, clearChoice, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, pendingChat, prepareChat, selectPendingGreeting, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
+  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, drafts, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, currentLiveTurn, messageFocus, openPanel, picks, togglePick, removePick, choice, toggleChoice, clearChoice, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, pendingChat, prepareChat, selectPendingGreeting, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, draftPostRefs, togglePostReference, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
 
   const referencePanelOpen = canUse && isPanelOpen
-  const referenceApi = useMemo<CodexChatReferenceApi>(() => ({ panelOpen: referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, focusMessage }), [referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, focusMessage])
+  const referenceApi = useMemo<CodexChatReferenceApi>(() => ({ panelOpen: referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, focusMessage }), [referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, focusMessage])
 
   return (
     <CodexChatContext.Provider value={api}>

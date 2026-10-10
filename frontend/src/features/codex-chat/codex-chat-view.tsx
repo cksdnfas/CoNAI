@@ -819,7 +819,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const selectedCommand = Math.min(commandIndex, matchingCommands.length - 1)
   // Group rooms: the user may cut in while members are still answering.
   const sendBlocked = isGroup ? alternativeMutation.isPending || commandPending || isCompacting || (isCommand && isBusy) || (isStreaming && !streamingHere) : isBusy
-  const canSend = (activeThreadId !== null || (pendingChat?.greeting != null && !isStartingChat)) && (Boolean(draft.trim()) || chat.draftAttachments.length > 0 || chat.draftMediaAttachments.length > 0 || picks.length > 0 || Boolean(choiceDraft?.labels.length)) && !chat.attachmentsUploading && !sendBlocked && (isCommand || (!profileMissing && !codexUnavailable))
+  const canSend = (activeThreadId !== null || (pendingChat?.greeting != null && !isStartingChat)) && (Boolean(draft.trim()) || chat.draftAttachments.length > 0 || chat.draftMediaAttachments.length > 0 || chat.draftPostRefs.length > 0 || picks.length > 0 || Boolean(choiceDraft?.labels.length)) && !chat.attachmentsUploading && !sendBlocked && (isCommand || (!profileMissing && !codexUnavailable))
   const mentionQuery = isGroup && !isCommand ? mentionQueryAt(draft, caret) : null
   const mentionMatches = mentionQuery ? mentionOptions(mentionQuery.query, memberProfiles, group?.representativeId ?? null) : []
   const showMentions = mentionMatches.length > 0 && dismissedMention !== draft

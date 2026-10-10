@@ -6,6 +6,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { ChatPageContextError } from '../services/codex-chat/chatPageContext'
 import { resolveChatPageCommand } from '../services/codex-chat/chatPageBridge'
 import { ChatTaskRunner, ChatTaskStore } from '../services/codex-chat/chatTasks'
+import { automationRoomKinds } from '../services/codex-chat/chatRoomWake'
 import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
@@ -185,6 +186,8 @@ router.get('/status', (req: Request, res: Response) => {
     success: true,
     data: {
       enabled: loadChatSettings().enabled,
+      // The default each chat's lore auto-save follows (shown beside the chat's own switch).
+      loreAutoSave: loadChatSettings().loreAutoSave,
       canUse: access.codex || access.llm || access.claude,
       codex: { canUse: access.codex },
       llm: { canUse: access.llm },
@@ -309,6 +312,7 @@ router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
   const previews = CodexChatStore.listPreviews(threads.map((thread) => thread.id))
   const unread = CodexChatStore.countUnread(threads.map((thread) => thread.id))
   const tasks = ChatTaskStore.summaries(threads.filter((thread) => thread.kind === 'direct').map((thread) => thread.id))
+  const automation = automationRoomKinds(getRequesterAccountId(req))
   res.json({ success: true, data: threads.map((thread) => ({
     ...thread,
     ...(thread.kind === 'group' ? { member_profile_ids: members.get(thread.id) ?? [] } : {}),
@@ -317,6 +321,8 @@ router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
     // A reply on its way (this or another tab, or one started before a reload).
     running: CodexChatService.isRunning(thread.id) || GroupChatService.isRunning(thread.id),
     task: tasks.get(thread.id) ?? null,
+    // Rooms a board call, routine or workflow made for itself: the list keeps them under 자동화.
+    automation: automation.get(thread.id) ?? null,
   })) })
 })
 

@@ -13,6 +13,7 @@ import { useI18n } from '@/i18n'
 import { formatFileSize, storedFileDownloadUrl } from '@/lib/api-files'
 import type { CodexChatApi } from './codex-chat-context'
 import { ChatMediaAttachments, ChatMediaPicker } from './chat-media-picker'
+import { ChatPostRefChip } from './chat-post-cards'
 
 /** Paperclip in the composer: upload, private stored files, or references to app media. */
 export function ChatAttachButton({ chat, disabled }: { chat: CodexChatApi; disabled: boolean }) {
@@ -121,7 +122,7 @@ const TEXT_FILE_PATTERN = /\.(txt|md|markdown|json|jsonl|csv|tsv|ya?ml|xml|html?
  */
 export function ChatDraftAttachments({ chat, canReadText, inlinesText = true }: { chat: CodexChatApi; canReadText: boolean; inlinesText?: boolean }) {
   const { t } = useI18n()
-  if (chat.draftAttachments.length === 0 && chat.draftMediaAttachments.length === 0 && !chat.attachmentsUploading) return null
+  if (chat.draftAttachments.length === 0 && chat.draftMediaAttachments.length === 0 && chat.draftPostRefs.length === 0 && !chat.attachmentsUploading) return null
   const unreadableLabel = inlinesText
     ? t({ ko: '이 프로필은 텍스트가 아닌 첨부 파일을 읽지 못해', en: 'This profile cannot read attached files other than text' })
     : t({ ko: '이 프로필은 첨부 파일 내용을 읽지 못해', en: 'This profile cannot read attached files' })
@@ -130,6 +131,7 @@ export function ChatDraftAttachments({ chat, canReadText, inlinesText = true }: 
     <>
       <ChatMediaAttachments items={chat.draftMediaAttachments} onRemove={chat.removeMediaAttachment} />
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
+        {chat.draftPostRefs.map((item) => <ChatPostRefChip key={`${item.postId}-${item.commentId ?? 0}`} item={item} onRemove={() => chat.togglePostReference(item)} />)}
         {chat.draftAttachments.map((file) => (
           <span key={file.id} className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-sm bg-surface-high pl-2 text-xs">
             <File className="size-3.5 shrink-0 text-muted-foreground" />

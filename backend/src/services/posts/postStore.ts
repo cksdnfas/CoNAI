@@ -91,7 +91,10 @@ function createSourceChatResolver(actor: PostActor) {
       owners.set(threadId, thread ? thread.account_id : undefined);
     }
     const owner = owners.get(threadId);
-    return owner !== undefined && owner === actor.accountId ? { threadId, replyId: row.source_reply_id } : null;
+    if (owner === undefined || owner !== actor.accountId) return null;
+    const message = row.source_reply_id ? db().prepare(`SELECT id FROM codex_chat_messages WHERE thread_id = ? AND role = 'assistant' AND json_valid(routing)
+      AND json_extract(routing, '$.replyId') = ? ORDER BY id LIMIT 1`).get(threadId, row.source_reply_id) as { id: number } | undefined : undefined;
+    return { threadId, replyId: row.source_reply_id, messageId: message?.id ?? null };
   };
 }
 

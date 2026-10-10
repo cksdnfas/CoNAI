@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { AlarmClock, Archive, ArchiveRestore, Check, ChevronDown, ChevronRight, GitBranch, ListChecks, MoreHorizontal, Pencil, Pin, PinOff, SquareCheck, Trash2, X } from 'lucide-react'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -22,7 +23,8 @@ export type ChatBulkAction = 'archive' | 'unarchive' | 'delete'
 /**
  * The chats: pinned first, then the latest activity (as the server lists them). Each row shows the face it talks to,
  * its title, when it last moved, how many replies are unread and (roomy rows) the latest message or the unsent text. Branches kept before an edit
- * fold under the chat they came from; archived chats wait behind the archive row at the end.
+ * fold under the chat they came from; archived chats wait behind the archive row at the end. Rooms an automation made
+ * for itself (board calls, routines, workflow nodes) sit on their own 자동화 tab, shown once there is one.
  * `dense` is the page's side column; the panel's list screen uses roomier rows.
  *
  * Several chats are picked with "Select" in the row menu; while any is picked the faces turn into checks, a row click
@@ -47,6 +49,13 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
   const { t, formatDate, formatNumber } = useI18n()
   const [openBranches, setOpenBranches] = useState<ReadonlySet<number>>(() => new Set())
   const [archiveOpen, setArchiveOpen] = useState(false)
+  const hasAutomation = threads.some((entry) => entry.automation)
+  const [tab, setTab] = useState<'chats' | 'automation'>('chats')
+  // Opening a chat from elsewhere (a link, the board) shows the tab it is on.
+  const activeTab = threads.find((entry) => entry.id === activeThreadId)?.automation ? 'automation' : 'chats'
+  useEffect(() => { setTab(activeTab) }, [activeThreadId, activeTab])
+  const shownTab = hasAutomation ? tab : 'chats'
+  const inTab = threads.filter((entry) => (shownTab === 'automation') === Boolean(entry.automation))
   const [renaming, setRenaming] = useState<{ id: number; title: string } | null>(null)
   const [picked, setPicked] = useState<ReadonlySet<number>>(() => new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
@@ -74,8 +83,9 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
     ? formatDate(date, { hour: 'numeric', minute: '2-digit' })
     : formatDate(date, date.getFullYear() === today.getFullYear() ? { month: 'short', day: 'numeric' } : { dateStyle: 'medium' })
 
-  const listed = threads.filter((entry) => !entry.archived)
-  const archived = threads.filter((entry) => entry.archived)
+  const listed = inTab.filter((entry) => !entry.archived)
+  const archived = inTab.filter((entry) => entry.archived)
+  const automationCount = threads.filter((entry) => entry.automation && !entry.archived).length
 
   /** One section: its top rows (pinned first) and the kept-before-an-edit branches under each. */
   const arrange = (section: CodexChatThread[]) => {
@@ -230,6 +240,21 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
   }
 
   return <>
+    {hasAutomation ? (
+      <SegmentedControl
+        size="xs"
+        fullWidth
+        semantics="tabs"
+        className={dense ? 'mb-1' : 'mx-3 mb-1'}
+        value={shownTab}
+        onChange={(value) => { setTab(value as 'chats' | 'automation'); clearPicks() }}
+        ariaLabel={t({ ko: '채팅 종류', en: 'Chat kind' })}
+        items={[
+          { value: 'chats', label: t({ ko: '대화', en: 'Chats' }) },
+          { value: 'automation', label: <>{t({ ko: '자동화', en: 'Automation' })} <span className="tabular-nums text-muted-foreground">{formatNumber(automationCount)}</span></> },
+        ]}
+      />
+    ) : null}
     {section(listed)}
     {archived.length > 0 ? <>
       {foldRow('archive', archiveShown, () => setArchiveOpen((current) => !current), <Archive className="size-3.5" />, t({ ko: '보관함', en: 'Archive' }), archived.length)}

@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import type { ChatRoutineRouting } from '@conai/shared'
+import type { ChatAutomationRoomKind, ChatRoutineRouting } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { McpRequester } from '../../mcp/context'
 import { ChatProfileStore } from './chatProfiles'
@@ -137,4 +137,12 @@ export async function ensureAutomationRoom(requester: McpRequester, profileId: n
 /** Forget an automation's room link (the room itself stays, as an ordinary chat). */
 export function forgetAutomationRoom(accountId: number | null, key: string) {
   roomsTable().prepare('DELETE FROM chat_automation_rooms WHERE account_key = ? AND room_key = ?').run(accountKey(accountId), key)
+}
+
+/** The account's rooms an automation made for itself, by thread, with what made them (the chat list files them apart). */
+export function automationRoomKinds(accountId: number | null): Map<number, ChatAutomationRoomKind> {
+  const rows = roomsTable().prepare('SELECT room_key, thread_id FROM chat_automation_rooms WHERE account_key = ?').all(accountKey(accountId)) as Array<{ room_key: string; thread_id: number }>
+  const kinds = new Map<number, ChatAutomationRoomKind>()
+  for (const row of rows) kinds.set(row.thread_id, row.room_key.startsWith('posts:board:') ? 'board' : row.room_key.startsWith('workflow:') ? 'workflow' : 'routine')
+  return kinds
 }

@@ -106,7 +106,7 @@ export interface ChatDiagnostics {
   raw?: unknown
 }
 
-export type ChatAdminSettings = { enabled: boolean; diagnostics: { enabled: boolean; captureRaw: boolean; captureLimit: number } }
+export type ChatAdminSettings = { enabled: boolean; diagnostics: { enabled: boolean; captureRaw: boolean; captureLimit: number }; loreAutoSave: boolean }
 
 export const CHAT_SCOPES: ChatScope[] = ['read', 'generate', 'organize', 'configure']
 export const CHAT_PROFILES_QUERY_KEY = ['codex-chat-profiles'] as const
@@ -123,6 +123,8 @@ export const CHAT_STATUS_QUERY_KEY = ['codex-chat-status'] as const
 export interface CodexChatStatus {
   /** The chat master switch. */
   enabled: boolean
+  /** save_lore saves right away unless a chat says otherwise (see CodexChatThread.lore_auto_save). */
+  loreAutoSave?: boolean
   /** This session can use at least one engine. */
   canUse: boolean
   codex: { canUse: boolean }
@@ -677,6 +679,10 @@ export interface CodexChatThread {
   title: string
   engine: ChatEngine
   profile_id: number | null
+  /** Chat lists: the automation that made this room for itself (filed under 자동화), or null. */
+  automation?: import('@conai/shared').ChatAutomationRoomKind | null
+  /** save_lore saves right away (1), leaves a card (0), or follows the chat settings (null). */
+  lore_auto_save?: 0 | 1 | null
   /** Overrides of the profile (null follows it). */
   context_turns: number | null
   summary_enabled: 0 | 1 | null
@@ -863,7 +869,7 @@ export function getChatAdminSettings() {
   return requestApiData<ChatAdminSettings>('/api/codex-chat/admin/settings', { cache: 'no-store' })
 }
 
-export function updateChatAdminSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatAdminSettings['diagnostics']> }) {
+export function updateChatAdminSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatAdminSettings['diagnostics']>; loreAutoSave?: boolean }) {
   return requestApiData<ChatAdminSettings>('/api/codex-chat/admin/settings', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
@@ -1275,7 +1281,7 @@ export function editChatBlock(threadId: number, key: string, data: Record<string
   })
 }
 
-export function updateCodexChatThreadContext(threadId: number, patch: { contextTurns?: number | null; maxTokens?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null; userProfileId?: number | null; lorebookIds?: number[]; reactionEnabled?: boolean; reactionModelSlotId?: number | null }) {
+export function updateCodexChatThreadContext(threadId: number, patch: { loreAutoSave?: boolean | null; contextTurns?: number | null; maxTokens?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null; userProfileId?: number | null; lorebookIds?: number[]; reactionEnabled?: boolean; reactionModelSlotId?: number | null }) {
   return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/context`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 

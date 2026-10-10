@@ -407,7 +407,10 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
   )
 }
 
-/** E: a save_lore proposal — an entry for this chat's own lorebook; anyone in the chat can save or set it aside. */
+/**
+ * E: a save_lore proposal — an entry for this chat's own lorebook; anyone in the chat can save or set it aside. With
+ * auto-save it arrives saved, and undo takes the entry out again (a replacement gets the old entry back).
+ */
 function LoreProposalCard({ proposal, threadId }: { proposal: LoreProposal; threadId?: number }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -431,7 +434,10 @@ function LoreProposalCard({ proposal, threadId }: { proposal: LoreProposal; thre
     mutationFn: async () => {
       const result = await undoChatLoreProposal(proposal.id)
       if (!result.changed) return result
-      if (!await confirm({ title: t({ ko: '기억 되돌리기', en: 'Undo memory replacement' }), description: t({ ko: '저장한 뒤 항목이 바뀌었어. 이전 내용으로 되돌릴까?', en: 'The entry changed after saving. Restore the previous entry?' }), confirmLabel: t({ ko: '되돌리기', en: 'Undo' }), tone: 'destructive' })) return null
+      const description = proposal.replaces
+        ? t({ ko: '저장한 뒤 항목이 바뀌었어. 이전 내용으로 되돌릴까?', en: 'The entry changed after saving. Restore the previous entry?' })
+        : t({ ko: '저장한 뒤 항목이 바뀌었어. 그래도 로어북에서 뺄까?', en: 'The entry changed after saving. Remove it from the lorebook anyway?' })
+      if (!await confirm({ title: t({ ko: '저장 되돌리기', en: 'Undo save' }), description, confirmLabel: t({ ko: '되돌리기', en: 'Undo' }), tone: 'destructive' })) return null
       const restored = await undoChatLoreProposal(proposal.id, true, result.currentHash)
       if (restored.changed) throw new Error(t({ ko: '확인하는 동안 항목이 다시 바뀌었어. 다시 되돌려줘.', en: 'The entry changed again during confirmation. Try undo again.' }))
       return restored
@@ -454,7 +460,7 @@ function LoreProposalCard({ proposal, threadId }: { proposal: LoreProposal; thre
 
   return (
     <div className={CARD_CLASS}>
-      <Header label={t({ ko: '로어북에 남길까?', en: 'Keep this in the lorebook?' })} name={`save_lore · ${t({ ko: '이 채팅', en: 'this chat' })}`} />
+      <Header label={saved && !undone && !proposal.undone ? t({ ko: '로어북에 남겼어', en: 'Kept in the lorebook' }) : t({ ko: '로어북에 남길까?', en: 'Keep this in the lorebook?' })} name={`save_lore · ${t({ ko: '이 채팅', en: 'this chat' })}`} />
       <div className="space-y-2 text-sm">
         <div className="font-semibold">{proposal.title}</div>
         {changes.length > 0 ? (
@@ -473,7 +479,7 @@ function LoreProposalCard({ proposal, threadId }: { proposal: LoreProposal; thre
       {saved || dismissed ? (
         <div className="flex items-center justify-between border-t border-line pt-2 text-xs text-muted-foreground">
           <span>{undone || proposal.undone ? t({ ko: '되돌렸어', en: 'Undone' }) : saved ? t({ ko: '저장됨', en: 'Saved' }) : t({ ko: '무시함', en: 'Dismissed' })}</span>
-          {saved && proposal.replaces && !undone && !proposal.undone ? <IconButton size="icon-xs" variant="ghost" disabled={busy} label={t({ ko: '되돌리기', en: 'Undo' })} onClick={() => undoMutation.mutate()}><Undo2 /></IconButton> : null}
+          {saved && (proposal.replaces || proposal.undoAfter) && !undone && !proposal.undone ? <IconButton size="icon-xs" variant="ghost" disabled={busy} label={t({ ko: '저장 되돌리기', en: 'Undo save' })} onClick={() => undoMutation.mutate()}><Undo2 /></IconButton> : null}
         </div>
       ) : (
         <div className="flex items-center gap-2 border-t border-line pt-2">

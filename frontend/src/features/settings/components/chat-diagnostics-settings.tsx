@@ -9,7 +9,10 @@ import { CHAT_ADMIN_SETTINGS_QUERY_KEY, CHAT_STATUS_QUERY_KEY, getChatAdminSetti
 import { getErrorMessage } from '@/lib/error-message'
 import { SettingsRowsSkeleton } from './settings-rows'
 
-/** Settings › LLM › 연결: what each chat answer keeps of what it was sent (shown from a reply's 문맥 button). */
+/**
+ * Settings › LLM › 연결: whether save_lore saves right away (기억), and what each chat answer keeps of what it was
+ * sent (진단, shown from a reply's 문맥 button).
+ */
 export function ChatDiagnosticsSettings() {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -27,7 +30,13 @@ export function ChatDiagnosticsSettings() {
   })
   const diagnostics = settingsQuery.data?.diagnostics
 
-  return (
+  return <>
+    <RowGroup heading={t({ ko: '기억', en: 'Memory' })}>
+      {settingsQuery.data ? (
+        <SettingsSwitchRow label={t({ ko: '로어 자동 저장', en: 'Save lore automatically' })} checked={settingsQuery.data.loreAutoSave} disabled={settingsMutation.isPending}
+          onCheckedChange={(loreAutoSave) => settingsMutation.mutate({ loreAutoSave })} />
+      ) : settingsQuery.isError ? null : <SettingsRowsSkeleton rows={1} />}
+    </RowGroup>
     <RowGroup heading={t({ ko: '진단', en: 'Diagnostics' })}>
       {diagnostics ? <>
         <SettingsSwitchRow label={t({ ko: '답변 진단', en: 'Answer diagnostics' })} checked={diagnostics.enabled} disabled={settingsMutation.isPending}
@@ -43,5 +52,5 @@ export function ChatDiagnosticsSettings() {
         <p className="py-3 text-sm text-destructive">{getErrorMessage(settingsQuery.error, t({ ko: '설정을 불러오지 못했어.', en: 'Could not load settings.' }))}</p>
       ) : <SettingsRowsSkeleton rows={3} />}
     </RowGroup>
-  )
+  </>
 }
