@@ -153,15 +153,56 @@ function keepsMarkup(original: string, translated: string) {
   return checks.every((pattern) => countMatches(original, pattern) === countMatches(translated, pattern))
 }
 
+const codeBlockToken = (index: number) => `{{code-block-${index + 1}}}`
+
+/**
+ * Fenced code blocks (``` or ~~~, an unclosed one runs to the end) swapped for `{{code-block-N}}` lines: the
+ * translator never sees code, so it can neither translate it nor break its fences.
+ */
+export function maskCodeBlocks(text: string): { text: string; blocks: string[] } {
+  const lines = text.split('\n')
+  const kept: string[] = []
+  const blocks: string[] = []
+  for (let index = 0; index < lines.length; index++) {
+    const fence = /^[ \t]*(`{3,}|~{3,})/.exec(lines[index])?.[1]
+    if (!fence) { kept.push(lines[index]); continue }
+    const close = new RegExp(`^[ \\t]*${fence[0] === '`' ? '`' : '~'}{${fence.length},}[ \\t]*$`)
+    let end = index + 1
+    while (end < lines.length && !close.test(lines[end])) end++
+    blocks.push(lines.slice(index, end + 1).join('\n'))
+    kept.push(codeBlockToken(blocks.length - 1))
+    index = end
+  }
+  return { text: kept.join('\n'), blocks }
+}
+
+/** The text without its code blocks: code is never translated, so only the prose decides whether a text needs it. */
+function proseOf(text: string) {
+  return maskCodeBlocks(text).text.replace(/\{\{code-block-\d+\}\}/g, '')
+}
+
+/** The masked blocks put back; null when the translation lost or repeated a placeholder. */
+export function restoreCodeBlocks(text: string, blocks: string[]): string | null {
+  let result = text
+  for (const [index, block] of blocks.entries()) {
+    const parts = result.split(codeBlockToken(index))
+    if (parts.length !== 2) return null
+    result = parts.join(block)
+  }
+  return result
+}
+
 async function translate(target: ChatCompletionTarget, system: string, text: string, signal?: AbortSignal) {
   const timeout = AbortSignal.timeout(TRANSLATION_TIMEOUT_MS)
   try {
-    const translated = (await completeChat(target, [
+    const masked = maskCodeBlocks(text)
+    const output = (await completeChat(target, [
       { role: 'system', content: system },
-      { role: 'user', content: text },
+      { role: 'user', content: masked.text },
     ], signal ? AbortSignal.any([signal, timeout]) : timeout, { purpose: 'translation' })).trim()
-    if (!translated) return null
-    if (!keepsMarkup(text, translated)) {
+    if (!output) return null
+    const translated = keepsMarkup(masked.text, output) ? restoreCodeBlocks(output, masked.blocks) : null
+    if (translated === null) {
       console.warn('[chat-translation] translation dropped: markup changed')
       return null
     }
@@ -181,7 +222,7 @@ export async function translateUserInput(profile: (ModelRoleProfile & Translatio
   const target = profile ? translationTargetOf(profile) : null
   const trimmed = text.trim()
   const { model, display } = languagesOf(profile)
-  if (!target || !trimmed || model === display || letterCounts(trimmed, display).own === 0) return null
+  if (!target || !trimmed || model === display || letterCounts(proseOf(trimmed), display).own === 0) return null
   const translated = await translate(target, userTranslationPrompt(profile), trimmed, signal)
   return translated && translated !== trimmed ? translated : null
 }
@@ -195,7 +236,7 @@ export async function translateReply(profile: (ModelRoleProfile & TranslationLan
   const target = profile ? translationTargetOf(profile) : null
   const trimmed = text.trim()
   if (!profile || !target || !trimmed) return null
-  const letters = letterCounts(trimmed, languagesOf(profile).display)
+  const letters = letterCounts(proseOf(trimmed), languagesOf(profile).display)
   if (letters.other === 0 || letters.own > letters.other) return null
   const translated = await translate(target, replyTranslationPrompt(profile, userName), trimmed, signal)
   return translated && translated !== trimmed ? translated : null

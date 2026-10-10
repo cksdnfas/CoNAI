@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test, type TestContext } from 'node:test'
 import { ExternalApiProvider } from '../src/models/ExternalApiProvider'
-import { modelLanguageGuidance, translateReply, translateUserInput, translatorOf } from '../src/services/codex-chat/chatTranslation'
+import { maskCodeBlocks, modelLanguageGuidance, restoreCodeBlocks, translateReply, translateUserInput, translatorOf } from '../src/services/codex-chat/chatTranslation'
 import type { ChatProfile } from '../src/services/codex-chat/chatProfiles'
 import { mockModelRows } from './modelRowMocks'
 
@@ -77,15 +77,47 @@ test('the chat model is told to write in the model language only when the profil
 test('a translation that loses display-block fences, emoticon tokens or cast tags is dropped', async (t) => {
   t.mock.method(console, 'warn', () => {})
   const original = '[Mina] Hi &*smile*& there {{user}}.\n```status\n{"hp": 5}\n```'
-  let answer = '[미나] 안녕 &*smile*& {{user}}.\n```status\n{"hp": 5}\n```'
+  let answer = '[미나] 안녕 &*smile*& {{user}}.\n{{code-block-1}}'
   mockTranslator(t, () => Response.json({ choices: [{ message: { content: answer }, finish_reason: 'stop' }] }))
-  assert.equal(await translateReply(translating, original), answer)
+  assert.equal(await translateReply(translating, original), '[미나] 안녕 &*smile*& {{user}}.\n```status\n{"hp": 5}\n```')
   answer = '[미나] 안녕 &*smile*& {{user}}.\n상태: hp 5'
-  assert.equal(await translateReply(translating, original), null, 'fence removed')
-  answer = '[미나] 안녕 (웃음) {{user}}.\n```status\n{"hp": 5}\n```'
+  assert.equal(await translateReply(translating, original), null, 'block placeholder removed')
+  answer = '[미나] 안녕 (웃음) {{user}}.\n{{code-block-1}}'
   assert.equal(await translateReply(translating, original), null, 'emoticon token translated away')
-  answer = '미나: 안녕 &*smile*& {{user}}.\n```status\n{"hp": 5}\n```'
+  answer = '미나: 안녕 &*smile*& {{user}}.\n{{code-block-1}}'
   assert.equal(await translateReply(translating, original), null, 'cast tag rewritten')
+})
+
+test('code blocks never reach the translator and come back untouched', async (t) => {
+  t.mock.method(console, 'warn', () => {})
+  const code = '```\n1girl, school uniform, (sitting:1.2), looking at viewer\n```'
+  const original = `Tag list (NAI v5):\n\n${code}\n\nWant me to add more?`
+  // A translator that "helpfully" mangles a fence used to get the whole reply dropped.
+  const requests = mockTranslator(t, '태그 목록 (NAI v5):\n\n{{code-block-1}}\n\n더 추가해 줄까?')
+  assert.equal(await translateReply(translating, original), `태그 목록 (NAI v5):\n\n${code}\n\n더 추가해 줄까?`)
+  const sent = requests[0].messages.at(-1)?.content ?? ''
+  assert.ok(!sent.includes('1girl') && !sent.includes('```'), 'the code is not sent')
+
+  // Korean prose with long English code: the prose decides, so it is not sent at all.
+  assert.equal(await translateReply(translating, `태그 목록이야:\n${code}`), null)
+  // Only code: nothing to translate.
+  assert.equal(await translateReply(translating, code), null)
+  // ~~~ fences, an unclosed fence, and a user message with code are masked too.
+  assert.equal(await translateUserInput(translating, '이 태그 고쳐줘\n~~~\n1girl, 안경\n~~~'), '태그 목록 (NAI v5):\n\n~~~\n1girl, 안경\n~~~\n\n더 추가해 줄까?')
+  assert.equal(requests.at(-1)?.messages.at(-1)?.content, '이 태그 고쳐줘\n{{code-block-1}}')
+  await translateReply(translating, 'Here:\n```\nunclosed, tags')
+  assert.equal(requests.at(-1)?.messages.at(-1)?.content, 'Here:\n{{code-block-1}}', 'an unclosed fence runs to the end')
+  assert.equal(requests.length, 3)
+})
+
+test('masked code blocks: nested fence lengths, and a lost or doubled placeholder fails', () => {
+  const text = 'A\n````md\n```\ninner\n```\n````\nB\n```js\nx()\n```'
+  const masked = maskCodeBlocks(text)
+  assert.equal(masked.text, 'A\n{{code-block-1}}\nB\n{{code-block-2}}')
+  assert.equal(restoreCodeBlocks(masked.text, masked.blocks), text)
+  assert.equal(restoreCodeBlocks('A\nB\n{{code-block-2}}', masked.blocks), null)
+  assert.equal(restoreCodeBlocks('{{code-block-1}} {{code-block-1}} {{code-block-2}}', masked.blocks), null)
+  assert.deepEqual(maskCodeBlocks('no code here'), { text: 'no code here', blocks: [] })
 })
 
 test('a failed or empty translation falls back to the original without throwing', async (t) => {
