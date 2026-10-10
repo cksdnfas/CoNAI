@@ -19,6 +19,7 @@ import {
   type WorkflowInputAssetRef,
 } from '@/lib/api-workflow-input-assets'
 import type { WorkflowNodeNumericBounds } from '@/lib/api-image-generation-types'
+import { isFromOwnDom } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 import { FormField } from '../image-generation-shared'
 import {
@@ -386,6 +387,8 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
   }
 
   const handlePaste = (event: ClipboardEvent<HTMLDivElement>) => {
+    // A paste inside the Pack or prompt modals bubbles here through React; it belongs to that modal, not the timeline.
+    if (!isFromOwnDom(event)) return
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
     const files = Array.from(event.clipboardData.files)
     if (files.length === 0) {

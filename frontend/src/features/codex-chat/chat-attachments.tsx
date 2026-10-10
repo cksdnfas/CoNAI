@@ -11,6 +11,7 @@ import { FilePicker } from '@/features/files/file-browser'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { formatFileSize, storedFileDownloadUrl } from '@/lib/api-files'
+import { isFromOwnDom } from '@/lib/portal-events'
 import type { CodexChatApi } from './codex-chat-context'
 import { ChatMediaAttachments, ChatMediaPicker } from './chat-media-picker'
 import { ChatPostRefChip } from './chat-post-cards'
@@ -94,17 +95,20 @@ export function useChatFileDrop(chat: CodexChatApi, disabled: boolean) {
       event.preventDefault()
       upload(files)
     },
+    // A file picker opened from the composer sits in a body portal, yet its drag events bubble here through React:
+    // those are swallowed (so the browser does not open the file) but never attached.
     dropHandlers: {
-      onDragEnter: (event: DragEvent) => { if (carriesFiles(event)) { depth.current += 1; setDragging(true) } },
-      onDragLeave: (event: DragEvent) => { if (carriesFiles(event) && --depth.current <= 0) reset() },
+      onDragEnter: (event: DragEvent) => { if (carriesFiles(event) && isFromOwnDom(event)) { depth.current += 1; setDragging(true) } },
+      onDragLeave: (event: DragEvent) => { if (carriesFiles(event) && isFromOwnDom(event) && --depth.current <= 0) reset() },
       onDragOver: (event: DragEvent) => {
         if (!carriesFiles(event)) return
         event.preventDefault()
-        event.dataTransfer.dropEffect = enabled ? 'copy' : 'none'
+        event.dataTransfer.dropEffect = enabled && isFromOwnDom(event) ? 'copy' : 'none'
       },
       onDrop: (event: DragEvent) => {
         if (!carriesFiles(event)) return
         event.preventDefault()
+        if (!isFromOwnDom(event)) return
         reset()
         if (enabled && event.dataTransfer.files.length) upload(Array.from(event.dataTransfer.files))
       },
