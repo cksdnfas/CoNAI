@@ -1,7 +1,7 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AudioLines, ChevronRight, Download, File, FileText, Film, Folder, FolderInput, FolderPlus, Image as ImageIcon, LayoutGrid, List, Music, Pencil, RefreshCw, Search, Trash2, Upload, Users, X } from 'lucide-react'
+import { AudioLines, ChevronRight, Download, File, FilePlus, FileText, Film, Folder, FolderInput, FolderPlus, Image as ImageIcon, LayoutGrid, List, Music, Pencil, RefreshCw, Search, Trash2, Upload, Users, X } from 'lucide-react'
 import type { StoredFileEntry, StoredFileOwner, StoredFileSearchHit } from '@conai/shared'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
@@ -29,6 +29,7 @@ import { FILES_QUERY_KEY, createStoredFolder, deleteStoredFiles, formatFileSize,
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { FilePreview } from './file-preview'
+import { FileTextEditor } from './file-text-editor'
 import { useFileViewMode, type FileViewMode } from './file-view-mode'
 import { SystemFolderBrowser, SystemFolderSidebarGroup, type SystemFolderLocation } from './system-folder-browser'
 
@@ -252,6 +253,8 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
   const [moveOpen, setMoveOpen] = useState(false)
   const [moveTarget, setMoveTarget] = useState('')
   const [preview, setPreview] = useState<StoredFileEntry | null>(null)
+  /** The document editor: `entry` null writes a new document in this folder. */
+  const [editor, setEditor] = useState<{ entry: StoredFileEntry | null } | null>(null)
   const [audioSend, setAudioSend] = useState<StoredFileEntry[] | null>(null)
   // Only your own store: the audio import copies from the requester's files.
   const canSendAudio = useCanSendToAudio() && storeOwner === null
@@ -390,6 +393,11 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
       {canOrganize && !browsingAll ? (
         <IconButton variant="ghost" label={t({ ko: '새 폴더', en: 'New folder' })} disabled={busy} onClick={() => setNameDialog({ name: '' })}>
           <FolderPlus />
+        </IconButton>
+      ) : null}
+      {canUpload && !browsingAll && !isPicker ? (
+        <IconButton variant="ghost" label={t({ ko: '새 문서', en: 'New document' })} disabled={busy} onClick={() => setEditor({ entry: null })}>
+          <FilePlus />
         </IconButton>
       ) : null}
       {canUpload && !browsingAll ? (
@@ -676,7 +684,17 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, accept, o
       </Modal>
 
       <SendToAudioDialog files={audioSend} onClose={() => setAudioSend(null)} />
-      {preview ? <FilePreview entry={preview} owner={storeOwner} onClose={() => setPreview(null)} onNavigate={setPreview} /> : null}
+      {preview ? <FilePreview entry={preview} owner={storeOwner} onClose={() => setPreview(null)} onNavigate={setPreview} onEdit={canUpload ? (entry) => { setPreview(null); setEditor({ entry }) } : undefined} /> : null}
+      {editor ? (
+        <FileTextEditor
+          key={editor.entry?.id ?? 'new'}
+          entry={editor.entry}
+          parentId={parentId}
+          owner={storeOwner}
+          // An edit opened from the preview returns to it, showing the saved text.
+          onClose={(saved) => { const { entry } = editor; setEditor(null); if (entry) setPreview(saved ?? entry) }}
+        />
+      ) : null}
     </>
   )
 }

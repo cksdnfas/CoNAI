@@ -25,6 +25,8 @@ export const DEFAULT_UPLOAD_EXTENSIONS: ReadonlySet<string> = new Set([
   '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.hwp', '.hwpx', '.odt', '.ods', '.odp', '.rtf', '.epub',
 ]);
 const MAX_DEPTH = 64;
+/** Text written through the editor; larger documents are uploaded instead. */
+export const MAX_TEXT_DOCUMENT_BYTES = 2 * 1024 * 1024;
 export const MAX_CHAT_ATTACHMENTS = 20;
 
 export function fileOwnerKey(accountId: number | null): string {
@@ -323,9 +325,10 @@ export const FileStoreService = {
 
   /**
    * Create a UTF-8 text file, or replace one in place: the blob is swapped in one rename and the id stays, so links
-   * by id survive. `silent` keeps the change listeners out (the caller already accounts for it).
+   * by id survive. `silent` keeps the change listeners out (the caller already accounts for it). `create` refuses a
+   * name that is taken; `replaceId` refuses anything but that file still being there.
    */
-  writeText(owner: string, parentId: string | null, value: unknown, text: string, options: { silent?: boolean } = {}): StoredFileEntry {
+  writeText(owner: string, parentId: string | null, value: unknown, text: string, options: { silent?: boolean; create?: boolean; replaceId?: string } = {}): StoredFileEntry {
     const name = normalizeName(value);
     if (!TEXT_EXTENSIONS.has(path.extname(name).toLowerCase())) throw new FileStoreError('텍스트 파일만 쓸 수 있어.', 415);
     ensureFileStoreDirectories();
@@ -337,7 +340,8 @@ export const FileStoreService = {
     try {
       row = getUserSettingsDb().transaction(() => {
         const existing = this.findChild(owner, parentId, name);
-        if (existing && existing.kind !== 'file') throw new FileStoreError(`같은 이름의 항목이 있어: ${name}`, 409);
+        if (existing && (existing.kind !== 'file' || options.create)) throw new FileStoreError(`같은 이름의 항목이 있어: ${name}`, 409);
+        if (options.replaceId !== undefined && existing?.id !== options.replaceId) throw new FileStoreError('파일이 옮겨졌거나 이름이 바뀌었어. 다시 열어줘.', 409);
         const id = existing?.id ?? crypto.randomBytes(16).toString('hex');
         if (existing) {
           getUserSettingsDb().prepare('UPDATE stored_file_entries SET size = ?, mime_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(data.length, textMimeType(name), id);
@@ -355,6 +359,13 @@ export const FileStoreService = {
     fs.rmSync(fileStoreThumbnailPath(row.id), { force: true });
     if (!options.silent) notifyChange({ owner, action: 'write', entries: [changedEntry(row)] });
     return toEntry(row);
+  },
+
+  /** Replace the text of an existing text file in place (the editor's save). */
+  updateText(owner: string, id: string, text: string): StoredFileEntry {
+    const row = requireRow(owner, id);
+    if (row.kind !== 'file') throw new FileStoreError('파일을 선택해줘.');
+    return this.writeText(owner, row.parent_id, row.name, text, { replaceId: row.id });
   },
 
   /**

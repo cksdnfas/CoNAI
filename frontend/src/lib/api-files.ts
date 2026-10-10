@@ -22,7 +22,25 @@ export const readStoredFileText = (id: string, offset = 0, owner?: StoredFileOwn
 export const createStoredFolder = (parentId: string | null, name: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileEntry>(`/api/files/folders${ownerQuery(owner, true)}`, { method: 'POST', headers, body: JSON.stringify({ parentId, name }) })
 export const renameStoredFile = (id: string, name: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileEntry>(`/api/files/${encodeURIComponent(id)}${ownerQuery(owner, true)}`, { method: 'PATCH', headers, body: JSON.stringify({ name }) })
 export const moveStoredFiles = (ids: string[], parentId: string | null, owner?: StoredFileOwnerKey) => requestApiData<void>(`/api/files/move${ownerQuery(owner, true)}`, { method: 'POST', headers, body: JSON.stringify({ ids, parentId }) })
-export const deleteStoredFiles = (ids: string[], owner?: StoredFileOwnerKey) => requestApiData<void>(`/api/files/delete${ownerQuery(owner, true)}`, { method: 'POST', headers, body: JSON.stringify({ ids }) })
+/** Files the server stores and serves as UTF-8 text (fileStoreService TEXT_EXTENSIONS); the editor opens these. */
+export const TEXT_FILE_PATTERN = /\.(txt|md|markdown|json|jsonl|csv|tsv|ya?ml|xml|html?|svg|css|m?js|cjs|jsx|tsx?|py|sh|sql|log|ini|toml|srt|vtt)$/i
+/** Mirrors the server's MAX_TEXT_DOCUMENT_BYTES. */
+export const MAX_TEXT_DOCUMENT_BYTES = 2 * 1024 * 1024
+export const createStoredTextFile = (parentId: string | null, name: string, text: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileEntry>(`/api/files/text${ownerQuery(owner, true)}`, { method: 'POST', headers, body: JSON.stringify({ parentId, name, text }) })
+export const saveStoredFileText = (id: string, text: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileEntry>(`/api/files/${encodeURIComponent(id)}/text${ownerQuery(owner, true)}`, { method: 'PUT', headers, body: JSON.stringify({ text }) })
+/** The whole file as text, for editing; refuses what is not UTF-8 text so a save cannot mangle it. */
+export async function readWholeStoredFileText(id: string, owner?: StoredFileOwnerKey) {
+  const response = await fetch(storedFileViewUrl(id, owner), { credentials: 'include', cache: 'no-store' })
+  if (!response.ok) throw new Error('파일을 열지 못했어. / Could not open the file.')
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  if (bytes.includes(0)) throw new Error('바이너리 파일은 편집할 수 없어. / Binary files cannot be edited.')
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    throw new Error('UTF-8 텍스트 파일만 편집할 수 있어. / Only UTF-8 text files can be edited.')
+  }
+}
+export const deleteStoredFiles =(ids: string[], owner?: StoredFileOwnerKey) => requestApiData<void>(`/api/files/delete${ownerQuery(owner, true)}`, { method: 'POST', headers, body: JSON.stringify({ ids }) })
 
 /** Mirrors the server's default upload policy so a restricted pick fails before the bytes leave the browser. */
 export const DEFAULT_UPLOAD_EXTENSIONS = new Set([

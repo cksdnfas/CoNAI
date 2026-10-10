@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Code, Download, File, WrapText } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Code, Download, File, SquarePen, WrapText } from 'lucide-react'
 import type { StoredFileEntry } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -11,7 +11,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
 import { useI18n } from '@/i18n'
-import { FILES_QUERY_KEY, formatFileSize, getStoredFileNeighbors, readStoredFileText, storedFileDownloadUrl, storedFileViewUrl } from '@/lib/api-files'
+import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, TEXT_FILE_PATTERN, formatFileSize, getStoredFileNeighbors, readStoredFileText, storedFileDownloadUrl, storedFileViewUrl } from '@/lib/api-files'
 
 const FileCodePreview = lazy(() => import('./file-code-preview'))
 const FilePdfPreview = lazy(() => import('./file-pdf-preview'))
@@ -37,8 +37,11 @@ function tableRows(text: string, delimiter: string, complete: boolean) {
   return rows
 }
 
-/** `owner`: another account's store key when an admin browses it; null for the viewer's own store. */
-export function FilePreview({ entry, owner = null, onClose, onNavigate }: { entry: StoredFileEntry; owner?: string | null; onClose: () => void; onNavigate: (entry: StoredFileEntry) => void }) {
+/**
+ * `owner`: another account's store key when an admin browses it; null for the viewer's own store. `onEdit`: offered
+ * for text files small enough for the editor.
+ */
+export function FilePreview({ entry, owner = null, onClose, onNavigate, onEdit }: { entry: StoredFileEntry; owner?: string | null; onClose: () => void; onNavigate: (entry: StoredFileEntry) => void; onEdit?: (entry: StoredFileEntry) => void }) {
   const { t } = useI18n()
   const auth = useAuthStatusQuery()
   const { canViewImages } = useImagePermissions()
@@ -59,6 +62,7 @@ export function FilePreview({ entry, owner = null, onClose, onNavigate }: { entr
     <IconButton size="icon-sm" variant="ghost" label={t({ ko: '이전 파일', en: 'Previous file' })} disabled={!neighbors.data?.previous} onClick={() => { if (neighbors.data?.previous) onNavigate(neighbors.data.previous) }}><ChevronLeft /></IconButton>
     <IconButton size="icon-sm" variant="ghost" label={t({ ko: '다음 파일', en: 'Next file' })} disabled={!neighbors.data?.next} onClick={() => { if (neighbors.data?.next) onNavigate(neighbors.data.next) }}><ChevronRight /></IconButton>
     <span className="flex-1 text-xs text-muted-foreground">{formatFileSize(entry.size)}</span>
+    {onEdit && TEXT_FILE_PATTERN.test(entry.name) && entry.size <= MAX_TEXT_DOCUMENT_BYTES ? <IconButton variant="ghost" size="icon-sm" label={t({ ko: '편집', en: 'Edit' })} onClick={() => onEdit(entry)}><SquarePen /></IconButton> : null}
     {deniedEntryId !== entry.id && (canViewImages || (!entry.mimeType?.startsWith('image/') && !entry.mimeType?.startsWith('video/'))) ? <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '다운로드', en: 'Download' })}><a href={storedFileDownloadUrl(entry.id, owner)} download><Download /></a></IconButton> : null}
   </div>}><FilePreviewContent key={entry.id} entry={entry} owner={owner} accountKey={accountKey} onPermissionResult={(denied) => setDeniedEntryId(denied ? entry.id : null)} /></Modal>
 }

@@ -5,7 +5,7 @@ import { requireAdmin, requirePermission } from '../middleware/authMiddleware';
 import { requireImagesView } from '../middleware/imageAccess';
 import { createUploadStorage, wrapUploadMiddleware, MAX_UPLOAD_FILE_SIZE_BYTES, MAX_MULTIPLE_UPLOAD_FILES, MAX_MULTIPLE_UPLOAD_TOTAL_BYTES } from '../middleware/upload';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { FileStoreError, FileStoreService, assertFileTypeAllowed, fileOwnerKey, parseFileId, parseOwnerKey } from '../services/fileStoreService';
+import { FileStoreError, FileStoreService, MAX_TEXT_DOCUMENT_BYTES, assertFileTypeAllowed, fileOwnerKey, parseFileId, parseOwnerKey } from '../services/fileStoreService';
 import { ensureFileStoreDirectories, fileStoreIncoming } from '../services/fileStorePaths';
 import { filePreviewMime, getFileThumbnail } from '../services/fileStorePreview';
 import { searchStoredFiles } from '../services/fileStoreSearch';
@@ -33,6 +33,13 @@ const owner = (req: Request) => {
 const id = (req: Request) => parseFileId(req.params.id) as string;
 /** Restricted types (executables and the like) are for administrators; bootstrap is the local administrator. */
 const allowAnyType = (req: Request) => isAdminRequest(req);
+/** A document body from the editor. */
+const textBody = (req: Request) => {
+  const text: unknown = req.body?.text;
+  if (typeof text !== 'string') throw new FileStoreError('내용이 비었어.');
+  if (Buffer.byteLength(text, 'utf8') > MAX_TEXT_DOCUMENT_BYTES) throw new FileStoreError('문서는 2MB까지 저장할 수 있어. 더 큰 파일은 업로드해줘.', 413);
+  return text;
+};
 
 router.get('/', (req, res) => {
   res.json({ success: true, data: FileStoreService.list(owner(req), parseFileId(req.query.parentId, true), Number(req.query.offset ?? 0), Number(req.query.limit ?? 100)) });
@@ -45,6 +52,10 @@ router.get('/search', asyncHandler(async (req, res) => {
 }));
 router.post('/folders', requirePermission('files.edit'), (req, res) => {
   res.status(201).json({ success: true, data: FileStoreService.createFolder(owner(req), parseFileId(req.body?.parentId, true), req.body?.name) });
+});
+/** POST /api/files/text — a new text document (name must be free and end in a text extension). */
+router.post('/text', requirePermission('files.edit'), (req, res) => {
+  res.status(201).json({ success: true, data: FileStoreService.writeText(owner(req), parseFileId(req.body?.parentId, true), req.body?.name, textBody(req), { create: true }) });
 });
 
 const upload = wrapUploadMiddleware(multer({
@@ -96,6 +107,10 @@ router.get('/:id/text', asyncHandler(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json({ success: true, data: await FileStoreService.readText(owner(req), id(req), Number(req.query.offset ?? 0), Number(req.query.limit ?? 16000)) });
 }));
+/** PUT /api/files/:id/text — the editor's save: the whole text replaces the file in place (same id). */
+router.put('/:id/text', requirePermission('files.edit'), (req, res) => {
+  res.json({ success: true, data: FileStoreService.updateText(owner(req), id(req), textBody(req)) });
+});
 /** Safe inline media and inert text; sendFile handles single byte ranges (206/416) and HEAD. */
 router.get('/:id/view', asyncHandler(async (req, res, next) => {
   const { entry, filePath } = FileStoreService.resolveFile(owner(req), id(req));
