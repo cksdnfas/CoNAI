@@ -3,6 +3,7 @@ import { EditorGroup } from '@/components/ui/editor-group'
 import { FieldInfo } from '@/components/ui/field'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Modal, ModalBody } from '@/components/ui/modal'
+import { CHAT_DOCK_INSET } from './use-settings-editor-chat-page'
 import { useI18n } from '@/i18n'
 import { previewChatProfile, type ChatProfileInput } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
@@ -30,7 +31,7 @@ export function ChatProfilePreviewModal({ open, draft, onClose }: { open: boolea
   const overBudget = budget !== null && preview !== undefined && preview.tokens.total > budget
 
   return (
-    <Modal open={open} onClose={onClose} title={t({ ko: '프롬프트 미리보기', en: 'Prompt preview' })} size="normal">
+    <Modal open={open} onClose={onClose} title={t({ ko: '프롬프트 미리보기', en: 'Prompt preview' })} size="normal" sidePanelInset={CHAT_DOCK_INSET}>
       <ModalBody className="space-y-4">
         {previewQuery.isPending ? <LoadingState variant="inline" /> : null}
         {previewQuery.isError ? <p className="text-sm text-destructive">{getErrorMessage(previewQuery.error, t({ ko: '미리보기를 만들지 못했어.', en: 'Could not build the preview.' }))}</p> : null}

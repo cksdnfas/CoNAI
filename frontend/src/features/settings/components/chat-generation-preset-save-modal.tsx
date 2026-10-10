@@ -4,6 +4,7 @@ import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody } from '@/components/ui/modal'
+import { CHAT_DOCK_INSET } from './use-settings-editor-chat-page'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { CHAT_GENERATION_PRESETS_QUERY_KEY, createChatGenerationPreset, type ChatGenerationPresetInput } from '@/lib/api-codex-chat'
@@ -58,6 +59,7 @@ export function ChatGenerationPresetSaveModal({ open, build, summary, onClose }:
       onClose={onClose}
       title={t({ ko: '채팅 생성 프리셋으로 저장', en: 'Save as chat generation preset' })}
       size="narrow"
+      sidePanelInset={CHAT_DOCK_INSET}
       dirty={name.trim().length > 0 || instruction.trim().length > 0}
       onSave={canSave ? () => saveMutation.mutate() : undefined}
     >

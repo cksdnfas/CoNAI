@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Copy, Download } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -22,6 +22,9 @@ import {
 import { getErrorMessage } from '@/lib/error-message'
 import { BLOCK_KEY_PATTERN, ChatBlockEditor, starterBlock } from './chat-block-editor'
 import { downloadChatBlockFile } from './chat-block-file'
+import { CHAT_DOCK_INSET, useSettingsEditorChatPage } from './use-settings-editor-chat-page'
+import { ChatFilledLabel } from '@/features/codex-chat/chat-page-context'
+import { pageAction, pageArray, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 
 /** Create or edit one shared display block. Saving reaches every profile that links it. */
 export function ChatBlockEditorModal({ open, shared, initialName, initialBlock, onClose, onSaved, onDuplicate, duplicating }: {
@@ -99,6 +102,7 @@ export function ChatBlockEditorModal({ open, shared, initialName, initialBlock, 
   const keyValid = BLOCK_KEY_PATTERN.test(block.key)
   const dirty = opened !== null && JSON.stringify({ name, block }) !== JSON.stringify(opened)
   const canSave = keyValid && !saveMutation.isPending && (dirty || !shared)
+  useBlockChatPage({ open, shared, name, setName, block, setBlock, remount: () => setSession((current) => current + 1), dirty, save: () => saveMutation.mutateAsync() })
 
   return (
     <Modal
@@ -107,11 +111,12 @@ export function ChatBlockEditorModal({ open, shared, initialName, initialBlock, 
       title={shared ? t({ ko: '표시 블록 편집', en: 'Edit display block' }) : t({ ko: '표시 블록 추가', en: 'Add display block' })}
       size="wide"
       height="tall"
+      sidePanelInset={CHAT_DOCK_INSET}
       dirty={dirty}
       onSave={canSave ? () => saveMutation.mutate() : undefined}
     >
       <ModalBody className="space-y-4">
-        <Field label={t({ ko: '이름', en: 'Name' })} info={t({ ko: '비우면 블록 이름을 써.', en: 'Empty uses the block name.' })}>
+        <Field label={<ChatFilledLabel fieldId="name">{t({ ko: '이름', en: 'Name' })}</ChatFilledLabel>} info={t({ ko: '비우면 블록 이름을 써.', en: 'Empty uses the block name.' })}>
           <Input variant="settings" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
         </Field>
         <ChatBlockEditor key={session} block={block} onChange={setBlock} />
@@ -134,4 +139,74 @@ export function ChatBlockEditorModal({ open, shared, initialName, initialBlock, 
       </EditorFooter>
     </Modal>
   )
+}
+
+/** The block fields a connected chat may fill as text; the field rules go through `block.fields`. */
+const BLOCK_TEXT_KEYS = ['instruction', 'rules', 'example', 'summary', 'template', 'css'] as const
+
+/**
+ * Registers the open display block editor with a connected chat: it fills the draft, and asks to save with a card.
+ * A change to the starting values or field rules remounts the editor, whose field table is read from them once.
+ */
+function useBlockChatPage({ open, shared, name, setName, block, setBlock, remount, dirty, save }: {
+  open: boolean
+  shared: ChatSharedBlock | null
+  name: string
+  setName: (name: string) => void
+  block: ChatDisplayBlock
+  setBlock: (update: (current: ChatDisplayBlock) => ChatDisplayBlock) => void
+  remount: () => void
+  dirty: boolean
+  save: () => Promise<unknown>
+}) {
+  const { t } = useI18n()
+  const blockRef = useRef(block)
+  blockRef.current = block
+  useSettingsEditorChatPage({
+    open, dirty,
+    title: shared ? t({ ko: '표시 블록 편집 · {name}', en: 'Edit display block · {name}' }, { name: shared.name }) : t({ ko: '표시 블록 추가', en: 'Add display block' }),
+    resourceId: `display-block:${shared?.id ?? 'new'}`,
+    fields: [
+      { id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: name },
+      { id: 'key', label: t({ ko: '블록 이름 (```이름, 영소문자·숫자·_-)', en: 'Block name (```name, a-z 0-9 _-)' }), type: 'text', value: block.key },
+      { id: 'instruction', label: t({ ko: '언제 쓰는지', en: 'When to use' }), type: 'text', value: block.instruction },
+      { id: 'rules', label: t({ ko: '갱신 규칙', en: 'Update rules' }), type: 'text', value: block.rules },
+      { id: 'example', label: t({ ko: '시작 값 (JSON 객체)', en: 'Starting values (JSON object)' }), type: 'text', value: block.example },
+      { id: 'summary', label: t({ ko: '한 줄 요약 (접힌 상태창, {{필드}})', en: 'One-line summary (folded panel, {{field}})' }), type: 'text', value: block.summary },
+      { id: 'template', label: t({ ko: 'HTML 템플릿 ({{필드}}, {{#if}}, {{#each}})', en: 'HTML template ({{field}}, {{#if}}, {{#each}})' }), type: 'text', value: block.template },
+      { id: 'css', label: 'CSS', type: 'text', value: block.css },
+    ],
+    data: {
+      fields: block.fields.map((field) => ({ name: field.name, min: field.min, max: field.max, step: field.step, values: field.values, readonly: field.readonly })),
+      selected: { name, key: block.key },
+    },
+    apply: (patch) => {
+      if (patch.name !== undefined) setName(String(patch.name))
+      const next: Partial<ChatDisplayBlock> = {}
+      if (patch.key !== undefined) next.key = String(patch.key).toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32)
+      for (const key of BLOCK_TEXT_KEYS) if (patch[key] !== undefined) next[key] = String(patch[key])
+      if (Object.keys(next).length === 0) return
+      setBlock((current) => ({ ...current, ...next }))
+      if (next.example !== undefined) remount()
+    },
+    actions: [pageAction('block.fields', t({ ko: '필드 규칙 채우기', en: 'Fill field rules' }), t({ ko: '필드 규칙을 전부 바꿔. 저장하지 않아. 시작 값은 example 필드로 따로 채워. min/max/step은 숫자 필드만, values는 허용 값 목록(비우면 아무 값), readonly는 모델이 못 바꾸는 값.', en: 'Replace every field rule; nothing is saved. Starting values go in the example field. min/max/step are for numbers, values lists the allowed values (empty: any), readonly fields cannot be changed by the model.' }), pageObject({
+      fields: pageArray(pageObject({ name: pageText(60), min: pageNumber(), max: pageNumber(), step: pageNumber(0), values: pageArray(pageText(100), 40), readonly: { type: 'boolean' } }, ['name']), 40),
+    }, ['fields']))],
+    applyAction: (id, args) => {
+      if (id !== 'block.fields' || !Array.isArray(args.fields)) throw new Error('표시 블록 편집기에 없는 작업이야.')
+      const before = blockRef.current
+      const tones = new Map(before.fields.map((field) => [field.name, field.tone]))
+      const fields = args.fields.map((raw) => {
+        const field = raw as { name: string; min?: number; max?: number; step?: number; values?: string[]; readonly?: boolean }
+        const fieldName = field.name.trim()
+        const tone = tones.get(fieldName)
+        return { name: fieldName, min: field.min ?? null, max: field.max ?? null, step: field.step ?? null, values: field.values ?? [], readonly: field.readonly === true, ...(tone ? { tone } : {}) }
+      }).filter((field) => field.name)
+      const next = { ...before, fields }
+      setBlock(() => next)
+      remount()
+      return { isCurrent: () => blockRef.current === next, restore: () => { setBlock(() => before); remount() } }
+    },
+    save,
+  })
 }
