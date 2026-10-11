@@ -11,7 +11,7 @@ import { ChatGenerationPresetStore, normalizeGenerationPresetIds } from './chatG
 import { contentRatingTier, LLM_CONNECTION_TYPES, MODEL_CONNECTION_TYPES, ModelSlotStore } from './modelSlots'
 import { ChatJudgePresetStore } from './chatJudgePresets'
 import { normalizeLinkedFiles, type LinkedFileLink } from './chatLinkedFiles'
-import { fileProfileAssetsUnderGroup, normalizeAvatarCrop, normalizeProfileAssetHash, type ChatAvatarCrop } from './chatProfileAssets'
+import { chatCharacterGroupPath, fileProfileAssetsUnderGroup, renameCharacterGroup, normalizeAvatarCrop, normalizeProfileAssetHash, type ChatAvatarCrop } from './chatProfileAssets'
 
 const NAME_MAX_LENGTH = 60
 const MODEL_MAX_LENGTH = 200
@@ -694,6 +694,11 @@ export const ChatProfileStore = {
       UNION ALL SELECT 1 FROM chat_group_members WHERE profile_id = ? LIMIT 1
     `).get(profileId, profileId)) {
       throw new ChatProfileError('대화에서 사용 중인 프로필의 엔진은 바꿀 수 없어. 다른 엔진은 새 프로필로 만들어줘.')
+    }
+    // The character's library group follows the rename, unless another profile still goes by the old name.
+    const oldGroup = chatCharacterGroupPath(current.name)
+    if (columns.name !== current.name && !ChatProfileStore.list().some((profile) => profile.id !== profileId && chatCharacterGroupPath(profile.name) === oldGroup)) {
+      renameCharacterGroup(current.name, columns.name, assetDatabase)
     }
     fileProfileAssetsUnderGroup(columns.name, [columns.avatar_hash, columns.background_hash, columns.reference_hash], assetDatabase)
     getUserSettingsDb().prepare(`

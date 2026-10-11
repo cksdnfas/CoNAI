@@ -44,10 +44,12 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
   const FILLER = '가'.repeat(500)
   let failNext = false
   let failPlot = false
+  let hold: Promise<void> | null = null
   const requests: string[] = []
   t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
     const body = String(init.body)
     requests.push(body)
+    if (hold) await hold
     if (failPlot && body.includes('구간 요약')) return new Response('plot boom', { status: 500 })
     if (failNext) {
       failNext = false
@@ -202,7 +204,7 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
     assert.equal(CodexChatStore.findThreadById(noteId)!.summary, null)
   })
 
-  await t.test('a failing plot fold is recorded, turns still fold into segments, and the next success clears it', async () => {
+  await t.test('a failing plot fold is recorded, turns still fold into segments, and it waits before trying again', async () => {
     const roomId = CodexChatStore.createThread(null, 'plot-fail', 'llm', profile.id)
     const sayIn = (role: 'user' | 'assistant', content: string) => CodexChatStore.addMessage({ thread_id: roomId, role, content, tool_calls: [], status: 'completed', error: null })
     const stretchIn = (keyword: string) => { sayIn('user', `키워드:${keyword}. 가자.`); sayIn('assistant', '응.'); sayIn('user', '다음?'); sayIn('assistant', '쉬자.') }
@@ -219,9 +221,56 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
     assert.equal(split.active.length, 3, 'the turns were still folded')
     assert.ok(CodexChatStore.findThreadById(roomId)!.summary_error)
     failPlot = false
+    // Right after the failure an automatic run leaves the plot alone and keeps the error.
+    const plotCalls = () => requests.filter((body) => body.includes('구간 요약')).length
+    const before = plotCalls()
     await summarizeAhead(roomId, profile, [])
+    assert.equal(plotCalls(), before)
+    assert.equal(splitSegments(ChatSummaryStore.list(roomId)).plot, null)
+    assert.ok(CodexChatStore.findThreadById(roomId)!.summary_error)
+    // Once the wait is over it tries again, and the success clears the error.
+    const now = Date.now()
+    const clock = t.mock.method(Date, 'now', () => now + context.SUMMARY_RETRY_DELAY_MS + 1000)
+    await summarizeAhead(roomId, profile, [])
+    clock.mock.restore()
     split = splitSegments(ChatSummaryStore.list(roomId))
     assert.ok(split.plot)
+    assert.equal(CodexChatStore.findThreadById(roomId)!.summary_error, null)
+  })
+
+  await t.test('a failing segment fold waits before the next automatic try; the summarize button does not', async () => {
+    const roomId = CodexChatStore.createThread(null, 'segment-fail', 'llm', profile.id)
+    const sayIn = (role: 'user' | 'assistant', content: string) => CodexChatStore.addMessage({ thread_id: roomId, role, content, tool_calls: [], status: 'completed', error: null })
+    for (const keyword of ['일', '이', '삼', '사', '오']) { sayIn('user', `키워드:${keyword}. 가자.`); sayIn('assistant', '응.') }
+    const calls = () => requests.length
+    failNext = true
+    await assert.rejects(summarizeAhead(roomId, profile, []))
+    assert.ok(CodexChatStore.findThreadById(roomId)!.summary_error)
+    const before = calls()
+    // The failing model is not called again on every turn.
+    assert.equal(await summarizeAhead(roomId, profile, []), null)
+    assert.equal(calls(), before)
+    assert.ok(CodexChatStore.findThreadById(roomId)!.summary_error)
+    // The button still summarizes, and its success lets automatic runs go on.
+    assert.ok(await summarizeAll(roomId, profile))
+    assert.equal(CodexChatStore.findThreadById(roomId)!.summary_error, null)
+  })
+
+  await t.test('a request waits a limited time for its summary, which then finishes in the background', async () => {
+    const roomId = CodexChatStore.createThread(null, 'slow-summary', 'llm', profile.id)
+    const sayIn = (role: 'user' | 'assistant', content: string) => CodexChatStore.addMessage({ thread_id: roomId, role, content, tool_calls: [], status: 'completed', error: null })
+    for (const keyword of ['일', '이', '삼', '사', '오', '육']) { sayIn('user', `키워드:${keyword}. 가자.`); sayIn('assistant', '응.') }
+    let release!: () => void
+    hold = new Promise((resolve) => { release = resolve })
+    const before = requests.length
+    await context.fitThreadSummary(roomId, profile, CodexChatStore.listMessages(roomId), new AbortController().signal, [], {}, 50)
+    assert.ok(requests.length > before, 'the summary was asked for')
+    assert.ok(context.isSummarizing(roomId), 'and is still running')
+    assert.equal(ChatSummaryStore.list(roomId).length, 0)
+    hold = null
+    release()
+    while (context.isSummarizing(roomId)) await new Promise((resolve) => setTimeout(resolve, 10))
+    assert.ok(ChatSummaryStore.list(roomId).length > 0, 'it was kept once done')
     assert.equal(CodexChatStore.findThreadById(roomId)!.summary_error, null)
   })
 

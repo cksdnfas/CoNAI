@@ -6,6 +6,7 @@ import { MAX_UPLOAD_FILE_SIZE_BYTES } from '../../middleware/upload'
 import { ImageSafetyService } from '../imageSafetyService'
 import { requireFileStoreOwner } from '../fileStoreAccess'
 import { FileStoreService, parseFileId } from '../fileStoreService'
+import { GroupPathService } from '../groupPathService'
 import type { McpRequester } from '../../mcp/context'
 import { activeMediaFile, characterMediaGroupPath, downloadToLibrary, fileLibraryMediaUnderGroup, ingestMedia } from './chatCardAssets'
 import { MEDIA_HASH_PATTERN, MEDIA_MIME_TYPES, sniffMediaExtension } from './chatMediaLinks'
@@ -66,6 +67,19 @@ export function profileAssetFields(profile: ChatProfile, canViewImages: boolean)
     assetVersion: canViewImages ? [profile.avatarHash, profile.backgroundHash, profile.referenceHash].map((hash) => hash?.slice(0, 8) ?? '').join('-') + `-${Date.parse(profile.updatedDate) || 0}` : null,
     avatarThumbnailUrl: canViewImages && profile.avatarHash && !isProfileAssetHidden(profile.avatarHash) ? `/api/images/${profile.avatarHash}/thumbnail` : null,
   }
+}
+
+/**
+ * A renamed character takes its "채팅 캐릭터/<name>" group along: its expressions, candidates and backgrounds are found
+ * by name. Left alone when the new name already has a group (two characters' images are never merged).
+ */
+export function renameCharacterGroup(oldName: string, newName: string, database: Database.Database = imagesDb) {
+  const from = chatCharacterGroupPath(oldName)
+  const to = chatCharacterGroupPath(newName)
+  if (from === to) return
+  const group = GroupPathService.resolve(from, { create: false }, database)
+  if (!group || GroupPathService.resolve(to, { create: false }, database)) return
+  database.prepare('UPDATE groups SET name = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(to.slice(to.lastIndexOf('/') + 1), group.groupId)
 }
 
 export function fileProfileAssetsUnderGroup(name: string, hashes: Array<string | null>, database: Database.Database = imagesDb) {

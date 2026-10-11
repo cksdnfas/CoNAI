@@ -144,3 +144,48 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
   assert.deepEqual(unwrapCatalogCall(CATALOG_RUN_TOOL, { tool: 'order_audio', arguments: { count: 1 } }), { tool: 'order_audio', arguments: { count: 1 } })
   assert.deepEqual(unwrapCatalogCall('offer_choices', { a: 1 }), { tool: 'offer_choices', arguments: { a: 1 } })
 })
+
+test('the tool catalog pages complete schemas and retains a single oversized definition', async () => {
+  const { McpServer } = await import('@modelcontextprotocol/server')
+  const { Client, InMemoryTransport } = await import('@modelcontextprotocol/client')
+  const { z } = await import('zod')
+  const { createToolCatalog } = await import('../src/mcp/toolCatalog')
+  const server = new McpServer({ name: 'catalog-test', version: '1' })
+  const register = server.registerTool.bind(server) as (...args: unknown[]) => unknown
+  const catalog = createToolCatalog(server, (args) => { register(...args) })
+  const descriptions = Array.from({ length: 11 }, (_, index) => `${index}:` + 'schema'.repeat(index === 0 ? 3000 : 700))
+  descriptions.forEach((description, index) => catalog.add(`tool_${index}`, 'files', [
+    `tool_${index}`, { description: 'Read a test document.', inputSchema: z.object({ text: z.string().describe(description) }) },
+    async () => ({ content: [{ type: 'text', text: 'ok' }] }),
+  ]))
+  catalog.install()
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  const client = new Client({ name: 'catalog-test-client', version: '1' })
+  try {
+    await server.connect(serverTransport)
+    await client.connect(clientTransport)
+    let args: Record<string, unknown> = { category: 'files' }
+    const names: string[] = []
+    let pages = 0
+    for (;;) {
+      const result = await client.callTool({ name: 'open_tools', arguments: args })
+      const content = result.content as Array<{ type: string; text: string }>
+      const page = JSON.parse(content[0].text)
+      pages += 1
+      assert.ok(page.tools.length > 0)
+      for (const tool of page.tools) {
+        names.push(tool.name)
+        assert.equal(tool.input_schema.properties.text.description, descriptions[Number(tool.name.slice(5))])
+      }
+      if (page.next_offset === undefined) break
+      assert.equal(page.next_offset, names.length)
+      args = page.continue_with
+      assert.ok(pages <= descriptions.length, 'paging must make progress')
+    }
+    assert.ok(pages > 1)
+    assert.deepEqual(names, descriptions.map((_, index) => `tool_${index}`))
+  } finally {
+    await client.close()
+    await server.close()
+  }
+})

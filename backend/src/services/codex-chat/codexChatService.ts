@@ -23,7 +23,7 @@ import { parseChatPageContext, pendingPageReference, pendingProposalOutcomes } f
 import type { ChatSendOptions } from './chatTasks'
 import { rememberChatPage } from './chatPageBridge'
 import { notifyChatUserSend } from './chatSendEvents'
-import { attachJobResults, collectCodexChatMedia, pendingGenerationOutcomes } from './codexChatMedia'
+import { attachJobResults, collectCodexChatMedia, countPendingChatJobs, pendingGenerationOutcomes } from './codexChatMedia'
 import { pendingGeneratedImages } from './chatGenerationPrompting'
 import { canRequesterViewImages } from '../../middleware/imageAccess'
 import { buildEmoticonGuidance } from './chatEmoticons'
@@ -35,6 +35,7 @@ import { contextSource, limitContextMeta, legacyContextMeta } from './chatContex
 import { redactChatRequestBody, saveChatRequestCapture } from './chatRequestCaptures'
 import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { translateReply, translateUserInput } from './chatTranslation'
+import { groupMissedMessages } from './groupChatContext'
 import { hasTranslation } from './chatModelRoles'
 import { endJudgedTurn, judgeBeforeReply, judgeDirectiveText, type JudgedTurn } from './chatJudge'
 import { judgeStatusFields } from './chatJudgeFields'
@@ -54,6 +55,7 @@ import { addChatGreeting } from './chatGreeting'
 import { deleteClaudeMemberSession, deleteClaudeSessions, isClaudeSessionValue } from './claudeChatSessions'
 import { codexHistoryRecap, codexInputMeta, nextLoreSent, pendingAuthorNote, pendingBlockState, pendingLore, pendingRejectedLore, pendingReplyGuidance, pendingUserPersona, readLoreSent } from './chatSessionMemory'
 import { logger } from '../../utils/logger'
+import { externalMcpToolsSignature } from '../externalMcp/externalMcpServers'
 import type { ChatStreamEvent } from '@conai/shared'
 
 const SESSION_IDLE_MS = 15 * 60 * 1000
@@ -166,7 +168,10 @@ function sessionKey(requester: McpRequester, scopes: ChatScope[], toolAllowlist:
   const grants = createHash('sha1').update(JSON.stringify([isRequesterAdmin(requester), [...requesterPermissionKeys(requester)].sort()])).digest('hex').slice(0, 12)
   // Page tool schemas do not depend on the screen, so only a page kind that brings its own tools changes the tool list.
   const pageTools = chatContext?.page ? `|page:${CHAT_PAGE_KIND_TOOLS[chatContext.page.kind] ? chatContext.page.kind : 'any'}` : ''
-  return `${requester.accountId === null ? 'bootstrap' : `account:${requester.accountId}`}|${[...scopes].sort().join(',')}|${tools}${presets ? `|gen:${presets}` : ''}${chatContext ? `|chat:${chatContext.threadId}:${chatContext.profileId}` : ''}${pageTools}|grants:${grants}`
+  // The web tools come and go with the admin's web research setting, the external ones with their servers.
+  const web = loadChatSettings().webResearch.engine === 'off' ? '' : '|web'
+  const external = externalMcpToolsSignature()
+  return `${requester.accountId === null ? 'bootstrap' : `account:${requester.accountId}`}|${[...scopes].sort().join(',')}|${tools}${presets ? `|gen:${presets}` : ''}${chatContext ? `|chat:${chatContext.threadId}:${chatContext.profileId}` : ''}${pageTools}${web}${external ? `|ext:${external}` : ''}|grants:${grants}`
 }
 
 /** The profile's model and reasoning effort, falling back to the CLI config and then the model's default effort. */
@@ -369,7 +374,7 @@ async function finishTurn(session: Session, turn: TurnState, status: CodexChatMe
       CodexChatStore.setContextMeta(messageId, loadChatSettings().diagnostics.enabled ? limitContextMeta(turn.contextMeta) : legacyContextMeta(turn.contextMeta))
       saveChatRequestCapture(messageId, turn.requestCapture)
     }
-    message = CodexChatStore.listMessages(turn.chatThreadId).find((entry) => entry.id === messageId) as CodexChatMessageRecord
+    message = CodexChatStore.findMessage(turn.chatThreadId, messageId) as CodexChatMessageRecord
     if (turn.profile && status === 'completed') judgeStatusFields({ profile: turn.profile, threadId: turn.chatThreadId, messageId })
   }
   endJudgedTurn(turn.judged, toolCalls.map((call) => call.tool))
@@ -762,8 +767,7 @@ export async function runCodexGroupReply(params: {
         const input = params.buildInput([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text, generated.text].filter(Boolean).join('\n\n'))
         const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys, ...generated.keys]
         const lastSeen = ChatGroupStore.member(threadId, profile.id)?.last_seen_message_id ?? null
-        const missed = sendableMessages(params.messages).filter((message) => message.id > (lastSeen ?? 0) && !(lastSeen !== null && message.role === 'assistant' && message.speaker_profile_id === profile.id))
-        const shown = missed.slice(-params.windowLimit)
+        const { missed, shown } = groupMissedMessages(params.messages, profile.id, lastSeen, params.windowLimit)
         turn.contextMeta = codexInputMeta(profile, shown, lore, input, keys, [
           ...contextSource('user-persona', persona.text), ...contextSource('lore-index', lore.index.keys.length ? lore.selected.index : ''), ...contextSource('constant-lore', lore.index.keys.length ? lore.selected.constant : ''),
           ...contextSource('author-note', note.text ? resolveAuthorNote(room, profile, user).text : ''), ...contextSource('state', state.text),
@@ -952,7 +956,7 @@ export const CodexChatService = {
     if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     if (thread.engine !== 'llm') throw new CodexChatError('답변 전환은 API LLM 채팅에서만 가능해.', 409)
     // Any reply, not only the last: the history after it stays, and the summary is redone from it.
-    const message = CodexChatStore.listMessages(threadId).find((entry) => entry.id === messageId)
+    const message = CodexChatStore.findMessage(threadId, messageId)
     if (!message || message.role !== 'assistant') throw new CodexChatError('답변을 찾을 수 없어.', 404)
     if (!Number.isSafeInteger(index) || index < 0 || !message.alternatives[index]) throw new CodexChatError('답변 번호를 확인해줘.')
     CodexChatStore.selectAlternative(threadId, messageId, index)
@@ -971,7 +975,7 @@ export const CodexChatService = {
     const thread = requireThread(requester, threadId)
     if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     if (thread.engine !== 'llm' || thread.kind !== 'direct') throw new CodexChatError('답변 수정은 API LLM 1:1 채팅에서만 가능해.', 409)
-    const message = CodexChatStore.listMessages(threadId).find((entry) => entry.id === messageId)
+    const message = CodexChatStore.findMessage(threadId, messageId)
     if (!message || message.role !== 'assistant') throw new CodexChatError('답변을 찾을 수 없어.', 404)
     if (!content.trim()) throw new CodexChatError('답변 내용을 입력해줘.')
     CodexChatStore.editAssistantMessage(threadId, messageId, content.trim())
@@ -1067,19 +1071,24 @@ export const CodexChatService = {
   },
 
   /** The transcript, a reply still running, and the media kind of every image it references (for players). */
-  getThread(requester: McpRequester, threadId: number) {
+  getThread(requester: McpRequester, threadId: number, tail?: number) {
     const thread = requireThread(requester, threadId)
-    const attached = attachJobResults(CodexChatStore.listMessages(threadId))
-    const pendingJobs = attached.pendingJobs
+    const selected = CodexChatStore.listMessages(threadId, { tail })
+    const messageCount = tail === undefined ? selected.length : CodexChatStore.messageCount(threadId)
+    const partial = selected.length > 0 && messageCount > selected.length
+    const attached = attachJobResults(selected)
+    const pendingJobs = partial ? countPendingChatJobs(threadId) : attached.pendingJobs
     const messages = visibleContextMessages(thread, attached.messages, requester.accountId)
     const media = canRequesterViewImages(requester) ? Object.fromEntries(collectCodexChatMedia(messages).map((item) => [item.compositeHash, { mimeType: item.mimeType, width: item.width, height: item.height, historyId: item.historyId }])) : {}
     const profile = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
     // Display block state: direct chats only (a room's members each have their own blocks; not folded yet).
-    const blocks = profile && thread.kind === 'direct' ? foldBlockState(profile, messages, parseBlockEdits(thread.block_edits)) : null
+    const blocks = profile && thread.kind === 'direct' && usableBlocks(profile.style.blocks).length
+      ? foldBlockState(profile, partial ? CodexChatStore.listBlockMessages(threadId) : messages, parseBlockEdits(thread.block_edits)) : null
+    const page = partial ? { messagesFrom: messages[0].id, messageCount } : {}
     if (thread.engine === 'llm') {
       // Direct chats and rooms both keep their summary by stretch (a room's is the room's own, see groupSummaryOn).
       const summarySegments = ChatSummaryStore.list(threadId)
-      return { thread, messages, media, pendingJobs, blocks, summarySegments, running: LlmChatService.running(threadId) }
+      return { thread, messages, media, pendingJobs, blocks, summarySegments, ...page, running: LlmChatService.running(threadId) }
     }
     return {
       thread,
@@ -1087,6 +1096,7 @@ export const CodexChatService = {
       media,
       pendingJobs,
       blocks,
+      ...page,
       codexCompactTokens: profile ? codexCompactLimit(profile) : CODEX_COMPACT_TOKENS.default,
       running: CodexChatService.getRunning(requester, threadId),
     }
@@ -1172,7 +1182,7 @@ export const CodexChatService = {
       const routing = { ...userReplyRouting(thread, replyToMessageId), ...(options.task ? { task: options.task } : {}), ...(options.routine ? { routine: options.routine } : {}) }
       const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
       // The model reads the message in English; the reader keeps their own words. Translated while the session starts.
-      const translating = translateUserInput(profile, trimmed)
+      const translating = translateUserInput(profile, trimmed, undefined, { threadId })
       translating.catch(() => undefined)
       const session = await ensureSession(requester, scopes, toolAllowlist, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct', page })
       const run = resolveCodexRun(session, profile)
@@ -1204,13 +1214,13 @@ export const CodexChatService = {
       const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: modelText ?? trimmed, display_content: modelText ? trimmed : null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
       ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       turn.userMessageId = userMessageId
-      if (hasTranslation(profile)) turn.translate = (content) => translateReply(profile, content, turn.controller?.signal, userPersonaForThread(thread).name)
+      if (hasTranslation(profile)) turn.translate = (content) => translateReply(profile, content, turn.controller?.signal, userPersonaForThread(thread).name, { threadId })
       session.activeTurns.set(codexThreadId, turn)
       clearIdleTimer(session)
       if (!thread.title) {
         CodexChatStore.renameThread(threadId, (withoutNarrationMarks(trimmed) || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' '))
       }
-      const userMessage = CodexChatStore.listMessages(threadId).find((entry) => entry.id === userMessageId) as CodexChatMessageRecord
+      const userMessage = CodexChatStore.findMessage(threadId, userMessageId) as CodexChatMessageRecord
       emit(turn, { type: 'user', message: userMessage })
       turn.controller = new AbortController()
       turn.delivery = beginDirectReply(thread, profile.id, CodexChatStore.listMessages(threadId), userMessage, turn.controller.signal, (delivery) => emit(turn, { type: 'routing', routing: delivery }))

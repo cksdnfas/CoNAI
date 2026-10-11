@@ -164,10 +164,12 @@ function AudienceMenu({ draft, patch }: { draft: Draft; patch: PatchDraft }) {
  * one draft spans them, so switching loses nothing. The header holds who may use it, the on switch and the switch that
  * shows the advanced fields in every section.
  */
-export function ChatProfileEditorModal({ open, profile: initialProfile, initialDraft, defaults, onClose }: {
+export function ChatProfileEditorModal({ open, profile: initialProfile, initialDraft, copyOf, defaults, onClose }: {
   open: boolean
   profile: ChatProfile | null
   initialDraft?: ChatProfileInput
+  /** The profile a new one copies (initialDraft holds its settings). */
+  copyOf?: number
   defaults: ChatProfileDefaults | undefined
   onClose: () => void
 }) {
@@ -205,7 +207,7 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
   const refreshProfiles = () => Promise.all([queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }), queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY })])
   /** Saves what generation reads (name, appearance, reference); a new profile is created whole first. */
   const ensureProfile = async () => {
-    const updated = profile ? await updateChatProfile(profile.id, { name: draft.name, appearance: draft.appearance, referenceHash: draft.referenceHash }) : await createChatProfile(draft)
+    const updated = profile ? await updateChatProfile(profile.id, { name: draft.name, appearance: draft.appearance, referenceHash: draft.referenceHash }) : await createChatProfile(draft, copyOf)
     setProfile(updated)
     if (!profile) {
       setDraft(buildDraft(updated, defaults))
@@ -264,7 +266,7 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
     await Promise.all([refreshProfiles(), queryClient.invalidateQueries({ queryKey: CHAT_LOREBOOKS_QUERY_KEY })])
   }
   const saveMutation = useMutation({
-    mutationFn: () => (profile ? updateChatProfile(profile.id, draft) : createChatProfile(draft)),
+    mutationFn: () => (profile ? updateChatProfile(profile.id, draft) : createChatProfile(draft, copyOf)),
     onSuccess: async () => {
       await refresh()
       onClose()

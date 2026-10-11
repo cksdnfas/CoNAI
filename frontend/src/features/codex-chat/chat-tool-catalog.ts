@@ -16,6 +16,8 @@ export type ChatToolGroupId =
   | 'configure'
   | 'image-groups' | 'prompt-groups' | 'file-ops' | 'post-ops' | 'emoticon-ops' | 'audio-ops'
   | 'sprites' | 'sprite-ops'
+  | 'web'
+  | 'external'
   | 'other'
 
 const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
@@ -30,6 +32,7 @@ const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
   { id: 'audio', scope: 'read', label: { ko: '오디오', en: 'Audio' } },
   { id: 'backups', scope: 'read', label: { ko: '백업', en: 'Backups' } },
   { id: 'sprites', scope: 'read', label: { ko: '스프라이트', en: 'Sprite' } },
+  { id: 'web', scope: 'read', label: { ko: '웹', en: 'Web' } },
   { id: 'image-gen', scope: 'generate', label: { ko: '이미지 생성', en: 'Image generation' } },
   { id: 'workflow-run', scope: 'generate', label: { ko: '워크플로 실행', en: 'Workflow runs' } },
   { id: 'audio-gen', scope: 'generate', label: { ko: '오디오 생성', en: 'Audio generation' } },
@@ -97,6 +100,8 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   read_file_text: { group: 'files', label: { ko: '파일 내용 읽기', en: 'Read file text' }, ko: '보관함의 텍스트 파일을 잘라 가며 읽어.' },
   list_emoticon_groups: { group: 'emoticons', label: { ko: '이모티콘 그룹 목록', en: 'Emoticon groups' }, ko: '이모티콘 그룹과 이미지·키워드 수를 나열해.' },
   list_emoticons: { group: 'emoticons', label: { ko: '이모티콘 목록', en: 'List emoticons' }, ko: '그룹 안의 이모티콘 이미지와 키워드를 읽어.' },
+  web_search: { group: 'web', label: { ko: '웹 검색', en: 'Web search' }, ko: '설정한 검색 담당(Codex·Claude Code)에게 웹을 찾아보게 하고 출처가 붙은 답을 받아.' },
+  web_read: { group: 'web', label: { ko: '웹 페이지 읽기', en: 'Read web page' }, ko: '공개 웹 페이지를 글자로 나눠 읽어. 내부 주소는 못 읽어.' },
   get_video_info: { group: 'sprites', label: { ko: '영상 정보', en: 'Video info' }, ko: '라이브러리 영상의 크기·fps·길이·프레임 수를 읽어.' },
   get_sprite_job: { group: 'sprites', label: { ko: '스프라이트 작업 상태', en: 'Sprite job status' }, ko: '스프라이트 작업의 진행 상태와 저장된 결과를 읽어.' },
   wait_sprite_job: { group: 'sprites', label: { ko: '스프라이트 작업 대기', en: 'Wait for sprite job' }, ko: '스프라이트 작업이 끝날 때까지 기다려. 채팅에선 안 쓰여.' },
@@ -186,8 +191,19 @@ export function groupChatTools(tools: ChatToolInfo[], t: TranslateFn): ChatToolG
   const groups = new Map<string, ChatToolGroup>()
   for (const group of GROUPS) groups.set(group.id, { id: group.id, scope: group.scope, label: t(group.label), tools: [] })
   const other = new Map<ChatScope, ChatToolGroup>()
+  // Outside MCP servers' tools (x_<server>_<tool>) under each scope their server was given.
+  const external = new Map<ChatScope, ChatToolGroup>()
   for (const tool of tools) {
     if (tool.scope === null) continue
+    if (tool.name.startsWith('x_') && !TOOLS[tool.name]) {
+      let group = external.get(tool.scope)
+      if (!group) {
+        group = { id: 'external', scope: tool.scope, label: t({ ko: '외부 MCP', en: 'External MCP' }), tools: [] }
+        external.set(tool.scope, group)
+      }
+      group.tools.push({ name: tool.name, scope: tool.scope, label: tool.name.slice(2), description: tool.description, search: { keys: [tool.name], prose: [tool.description] } })
+      continue
+    }
     const entry = TOOLS[tool.name]
     const label = entry ? t(entry.label) : tool.name
     const description = entry ? t({ ko: entry.ko, en: tool.description || entry.label.en }) : tool.description
@@ -207,6 +223,8 @@ export function groupChatTools(tools: ChatToolInfo[], t: TranslateFn): ChatToolG
   const ordered: ChatToolGroup[] = []
   for (const scope of ['read', 'generate', 'organize', 'configure'] as ChatScope[]) {
     for (const group of groups.values()) if (group.scope === scope && group.tools.length > 0) ordered.push(group)
+    const outside = external.get(scope)
+    if (outside) ordered.push(outside)
     const fallback = other.get(scope)
     if (fallback) ordered.push(fallback)
   }

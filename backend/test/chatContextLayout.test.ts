@@ -4,7 +4,7 @@ import type { ChatProfile } from '../src/services/codex-chat/chatProfiles'
 import { DEFAULT_CHAT_STYLE } from '../src/services/codex-chat/chatStyle'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from '../src/services/codex-chat/codexChatStore'
 import type { ChatCompletionMessage } from '../src/services/codex-chat/llmChatCompletion'
-import { buildChatMessages, depthBlocks, insertAtDepth, latestWindow, resolveAuthorNote, type ChatContextMeta } from '../src/services/codex-chat/llmChatContext'
+import { buildChatMessages, depthBlocks, directContextTurns, insertAtDepth, latestWindow, resolveAuthorNote, type ChatContextMeta } from '../src/services/codex-chat/llmChatContext'
 import { contextHash, contextSections } from '../src/services/codex-chat/chatContextDiagnostics'
 import { loadChatSettings } from '../src/services/codex-chat/chatSettings'
 import { normalizeLorebook } from '../src/services/codex-chat/chatLorebook'
@@ -105,6 +105,38 @@ const books: AttachedLoreBook[] = [
   ]) },
   { id: 2, name: '항구 도시 설정', label: '항구 도시 설정', kind: 'global', via: 'profile', owner: null, folderId: null, entries: normalizeLorebook([{ keys: ['항구'], content: '항구 도시.' }]) },
 ]
+
+test('direct automatic continuations retain turn results and events while replaying the plan only once', () => {
+  const thread = { id: 7, summary: null, summary_until_message_id: null } as CodexChatThreadRecord
+  const plan = 'Full repeated task plan. '.repeat(80)
+  const task = { id: 10, step: 1, total: 3, title: 'Read sources', event: 'previous attempt failed' }
+  const messages = [
+    { ...record(1, 'user', `${plan} old budget`), routing: { replyTo: null, recipients: [], task } },
+    record(2, 'assistant', 'Source read failed: access denied.'),
+    { ...record(3, 'user', `${plan} latest budget`), routing: { replyTo: null, recipients: [], task: { ...task, step: 2, event: 'retry' } } },
+  ]
+  const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '' }
+  const result = buildChatMessages({ profile: { ...profile, promptSections: [] }, thread, messages, config, tools: [], books: [] })
+  assert.deepEqual(result.map((message) => message.role), ['system', 'user', 'assistant', 'user'])
+  assert.match(String(result[1].content), /previous attempt failed/)
+  assert.doesNotMatch(String(result[1].content), /Full repeated task plan/)
+  assert.match(String(result[2].content), /access denied/)
+  assert.match(String(result[3].content), /latest budget/)
+  assert.equal(messages[0].content, `${plan} old budget`, 'stored history remains intact for summaries and explicit references')
+  assert.deepEqual(directContextTurns(messages, thread, { ...config, contextTurns: 1 }).flat().map((message) => message.id), [3])
+  assert.deepEqual(directContextTurns(messages, { ...thread, summary_until_message_id: 2 }, { ...config, summaryEnabled: true }).flat().map((message) => message.id), [3])
+})
+
+test('different routine payloads remain intact; identical repeats keep their turn boundaries', () => {
+  const routine = { source: 'workflow' as const, id: 2, name: 'feed' }
+  const messages = ['same instruction '.repeat(40), 'new data '.repeat(40), 'same instruction '.repeat(40)]
+    .map((content, index) => ({ ...record(index + 1, 'user', content), routing: { replyTo: null, recipients: [], routine } }))
+  const turns = directContextTurns(messages, { summary_until_message_id: null }, { contextTurns: 20, summaryEnabled: false })
+  assert.equal(turns.length, 3)
+  assert.match(turns[0][0].content, /Repeated automatic instruction/)
+  assert.equal(turns[1][0].content, messages[1].content)
+  assert.equal(turns[2][0].content, messages[2].content)
+})
 
 test('diagnostic sections preserve the actual message positions and roles without storing text', () => {
   const thread = { id: 700, summary: null, summary_until_message_id: null } as CodexChatThreadRecord

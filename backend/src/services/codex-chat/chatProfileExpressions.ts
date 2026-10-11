@@ -83,6 +83,28 @@ export function setProfileExpression(requester: McpRequester, profileId: number,
   }).immediate()
 }
 
+/**
+ * A copied profile gets an expression group of its own with the same images and emotions (the images are shared, not
+ * duplicated), linked where the source's was, so changing one character's expressions leaves the other's alone.
+ * Nothing when the source has no expressions, or both names land on one group (they share it then, as before).
+ */
+export function copyProfileExpressions(source: ChatProfile, copy: ChatProfile) {
+  const database = getUserSettingsDb()
+  attachMainImagesDatabase(database)
+  return database.transaction(() => {
+    const from = expressionGroupId(source, database)
+    if (!from || chatCharacterGroupPath(source.name) === chatCharacterGroupPath(copy.name) || expressionGroupId(copy, database)) return copy
+    const group = GroupPathService.resolveOrCreate(`${chatCharacterGroupPath(copy.name)}/표정`, database)
+    database.prepare('UPDATE groups SET emoticon_enabled = 1 WHERE id = ?').run(group.groupId)
+    const entries = EmoticonService.listEntries(from, database)
+    const result = EmoticonService.addImages(group.groupId, entries.map((entry) => ({ compositeHash: entry.compositeHash, keywords: entry.explicit ? entry.keywords : undefined })), database)
+    if (result.conflicts.length) throw new ChatAssetError('표정 그룹을 복사하지 못했어.', 409, { conflicts: result.conflicts })
+    if (!copy.style.emoticonGroupIds.includes(from)) return copy
+    const emoticonGroupIds = copy.style.emoticonGroupIds.map((id) => id === from ? group.groupId : id)
+    return ChatProfileStore.update(copy.id, { style: { ...copy.style, emoticonGroupIds } }, database) ?? copy
+  }).immediate()
+}
+
 /** Empty one emotion: its image loses the keyword (and leaves the group when it has no other). */
 export function clearProfileExpression(requester: McpRequester, profileId: number, name: unknown) {
   const profile = writableProfile(requester, profileId)

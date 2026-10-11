@@ -19,6 +19,27 @@ export type ChatSettings = {
    * only. App-wide so chat books made mid-conversation need no setup.
    */
   loreKeyLanguage: string | null
+  /**
+   * Who runs the `web_search` tool for every chat profile (chatWebResearch): a Codex or Claude Code run with only its
+   * own web search, under `model` (null: the engine's default). Off: no profile gets the web tools. `dailyLimit`: searches
+   * per account in 24 hours (null: no limit; administrators have none).
+   */
+  webResearch: WebResearchSettings
+}
+
+export const WEB_RESEARCH_ENGINES = ['off', 'codex', 'claude'] as const
+export type WebResearchEngine = typeof WEB_RESEARCH_ENGINES[number]
+export type WebResearchSettings = { engine: WebResearchEngine; model: string | null; dailyLimit: number | null }
+export const DEFAULT_WEB_RESEARCH: WebResearchSettings = { engine: 'off', model: null, dailyLimit: null }
+export const WEB_RESEARCH_MAX_DAILY_LIMIT = 1000
+
+function webResearchOf(value: unknown, fallback = DEFAULT_WEB_RESEARCH): WebResearchSettings {
+  const input = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  const engine = WEB_RESEARCH_ENGINES.includes(input.engine as WebResearchEngine) ? input.engine as WebResearchEngine : fallback.engine
+  const model = input.model === undefined ? fallback.model : typeof input.model === 'string' && /^[\w.:/-]{1,100}$/.test(input.model.trim()) ? input.model.trim() : null
+  const limit = input.dailyLimit
+  const dailyLimit = limit === undefined ? fallback.dailyLimit : Number.isInteger(limit) && (limit as number) >= 1 && (limit as number) <= WEB_RESEARCH_MAX_DAILY_LIMIT ? limit as number : null
+  return { engine, model, dailyLimit }
 }
 
 export const DEFAULT_LORE_KEY_LANGUAGE: string | null = null
@@ -57,23 +78,25 @@ export function loadChatSettings(): ChatSettings {
     const stored = readJson(CHAT_SETTINGS_FILE_PATH)
     if (stored) {
       cachedSettings = { enabled: stored.enabled === true, diagnostics: diagnosticsOf(stored.diagnostics), loreAutoSave: stored.loreAutoSave !== false,
-        loreKeyLanguage: stored.loreKeyLanguage === undefined ? DEFAULT_LORE_KEY_LANGUAGE : normalizeLoreKeyLanguage(stored.loreKeyLanguage) }
+        loreKeyLanguage: stored.loreKeyLanguage === undefined ? DEFAULT_LORE_KEY_LANGUAGE : normalizeLoreKeyLanguage(stored.loreKeyLanguage),
+        webResearch: webResearchOf(stored.webResearch) }
     } else {
       // First run after the profile change: chat stays on if either old switch was on.
       const legacyEnabled = readJson(LEGACY_CODEX_SETTINGS_FILE_PATH)?.enabled === true || readJson(LEGACY_LLM_SETTINGS_FILE_PATH)?.enabled === true
-      cachedSettings = { enabled: legacyEnabled, diagnostics: { ...DEFAULT_CHAT_DIAGNOSTICS }, loreAutoSave: true, loreKeyLanguage: DEFAULT_LORE_KEY_LANGUAGE }
+      cachedSettings = { enabled: legacyEnabled, diagnostics: { ...DEFAULT_CHAT_DIAGNOSTICS }, loreAutoSave: true, loreKeyLanguage: DEFAULT_LORE_KEY_LANGUAGE, webResearch: { ...DEFAULT_WEB_RESEARCH } }
     }
   }
-  return { ...cachedSettings, diagnostics: { ...cachedSettings.diagnostics } }
+  return { ...cachedSettings, diagnostics: { ...cachedSettings.diagnostics }, webResearch: { ...cachedSettings.webResearch } }
 }
 
-export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null }): ChatSettings {
+export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null; webResearch?: Partial<WebResearchSettings> }): ChatSettings {
   const current = loadChatSettings()
   const next: ChatSettings = {
     enabled: typeof patch.enabled === 'boolean' ? patch.enabled : current.enabled,
     diagnostics: diagnosticsOf(patch.diagnostics, current.diagnostics),
     loreAutoSave: typeof patch.loreAutoSave === 'boolean' ? patch.loreAutoSave : current.loreAutoSave,
     loreKeyLanguage: patch.loreKeyLanguage === undefined ? current.loreKeyLanguage : normalizeLoreKeyLanguage(patch.loreKeyLanguage),
+    webResearch: patch.webResearch === undefined ? current.webResearch : webResearchOf(patch.webResearch, current.webResearch),
   }
   fs.mkdirSync(path.dirname(CHAT_SETTINGS_FILE_PATH), { recursive: true })
   fs.writeFileSync(CHAT_SETTINGS_FILE_PATH, JSON.stringify(next, null, 2), 'utf8')

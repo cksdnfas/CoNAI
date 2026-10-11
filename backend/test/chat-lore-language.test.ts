@@ -96,6 +96,37 @@ test('lorebook key language and recursive scan', { timeout: 60000 }, async (t) =
     assert.deepEqual(chosen(pick([{ ...book[0], localKeys: ['앨리스'], content: '앨리스는 토끼굴에 빠졌다.' }, { ...book[1], localKeys: ['토끼굴'] }], '앨리스', 1)), ['Alice', 'Rabbit Hole'], 'language keys work in recursion too')
   })
 
+  await t.test('recursive scan and groups: an entry that lost its group pulls nothing in; a settled group keeps its winner', () => {
+    // Inclusion groups apply where the timing rules do (API LLM chats).
+    const timed = (raw: unknown[], text: string, recursion: number) => {
+      const entries = normalizeLorebook(raw).map((entry) => ({ key: loreEntryKey(7, entry), entry, bookId: 7, bookKind: 'global' as const }))
+      return selectLoreEntries({ lorebookIds: [], loreScanDepth: 4, loreTokenBudget: 1000, loreRecursionDepth: recursion }, [{ content: text }], (value) => value.length, (value) => value, { entries, timing: { messages: [{ role: 'user', content: text }] } })
+    }
+    const book = [
+      { title: 'Night', keys: ['scene'], group: 'time', order: 10, content: 'It is night; the lantern is lit.' },
+      { title: 'Day', keys: ['scene'], group: 'time', order: 20, content: 'Bright noon.' },
+      { title: 'Lantern', keys: ['lantern'], content: 'An old brass lantern.' },
+    ]
+    const result = timed(book, 'the scene opens', 2)
+    assert.deepEqual(chosen(result), ['Day'], 'the loser (Night) does not pull in Lantern')
+    assert.equal(result.decisions.find((decision) => decision.title === 'Night')?.reason, 'group')
+    assert.ok(!result.decisions.some((decision) => decision.title === 'Lantern' && decision.reason === 'recursive'))
+    // The chat naming it still brings it.
+    assert.deepEqual(chosen(timed(book, 'the scene opens by the lantern', 2)), ['Day', 'Lantern'])
+    // Night wins its group, so its text still pulls Lantern in.
+    assert.deepEqual(chosen(timed(book.map((entry) => entry.title === 'Night' ? { ...entry, order: 30 } : entry), 'the scene opens', 2)), ['Lantern', 'Night'])
+    // A later level's entry of a group settled earlier loses, whatever its order.
+    const later = [
+      { title: 'Calm', keys: ['weather'], group: 'mood', order: 1, content: 'A calm sea, storm far away.' },
+      { title: 'Storm', keys: ['storm'], group: 'mood', order: 99, content: 'Thunder.' },
+    ]
+    const settled = timed(later, 'the weather', 2)
+    assert.deepEqual(chosen(settled), ['Calm'])
+    assert.equal(settled.decisions.find((decision) => decision.title === 'Storm')?.reason, 'group')
+    // Without the timing rules (Codex) groups stay off, as before.
+    assert.deepEqual(chosen(pick(book, 'the scene opens', 2)), ['Day', 'Lantern', 'Night'])
+  })
+
   await t.test('key language is one app-wide setting: English only by default', () => {
     assert.equal(loadChatSettings().loreKeyLanguage, null)
     assert.equal(updateChatSettings({ loreKeyLanguage: 'ko' }).loreKeyLanguage, 'ko')

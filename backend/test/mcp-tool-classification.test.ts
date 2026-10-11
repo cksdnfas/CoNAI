@@ -128,7 +128,9 @@ test('mcp tool classification: every registered tool has a scope and a feature p
     }
   }
 
-  // Fixtures for chat contexts: a profile that allows lore proposals, a thread, and two kinds of connected pages.
+  // Fixtures for chat contexts: a profile that allows lore proposals, a thread, and two kinds of connected pages. Web
+  // research on, so the web tools register.
+  ;(await import('../src/services/codex-chat/chatSettings')).updateChatSettings({ webResearch: { engine: 'claude' } })
   ExternalApiProvider.create({ provider_name: 'conn', display_name: 'Conn', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
   const profile = ChatProfileStore.create({ name: 'Classifier', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: [...CHAT_SCOPES], allowLoreProposals: true })
   const threadId = CodexChatStore.createThread(null, 'classification chat', 'llm', profile.id)

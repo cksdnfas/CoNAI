@@ -25,6 +25,8 @@ import { registerImageResizeTools } from './tools/imageResizeTools';
 import { registerAudioTools } from './tools/audioTools';
 import { registerAudioGenerationTools } from './tools/audioGenerationTools';
 import { registerAudioEditExportTools } from './tools/audioEditExportTools';
+import { registerWebTools } from './tools/webTools';
+import { registerExternalMcpTools } from './tools/externalMcpTools';
 import { isContextToolAllowed, requireMcpToolAccess } from './toolAccess';
 import { ChatGenerationPresetStore } from '../services/codex-chat/chatGenerationPresets';
 import { createToolCatalog, isDirectChatTool, type ToolCategoryId } from './toolCatalog';
@@ -104,6 +106,8 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   inCategory('chat_setup', () => registerChatSetupTools(server, context));
   registerChatPageTools(server, context);
   inCategory('sprite', () => registerSpriteTools(server, context));
+  inCategory('web', () => registerWebTools(server, context));
+  inCategory('external', () => registerExternalMcpTools(server, context));
   catalog?.install();
 
   return server;

@@ -514,9 +514,10 @@ export function loreEntryMatches(entry: Pick<ChatLoreEntry, 'keys' | 'secondaryK
  * most LORE_FILE_INLINE_MAX_TOKENS and the budget has room; otherwise `files.hint` stands in for it.
  *
  * `judged`: keys of keyword entries the judge found the conversation is about although no keyword named them (see
- * chatJudgeContext); they go in as if a keyword had matched, reason `judge`.
+ * chatJudgeContext); they go in as if a keyword had matched, reason `judge`. `semantic`: the same for entries close
+ * in meaning to the latest exchange (see chatSemantic), reason `semantic`.
  */
-export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<{ content: string; display_content?: string | null }> | undefined, estimate: (text: string) => number, render: (text: string) => string, options: { skip?: (key: string) => boolean; entries?: KeyedLoreEntry[]; files?: LoreFileOptions; timing?: LoreTimingOptions; judged?: ReadonlySet<string> } = {}): SelectedLore {
+export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<{ content: string; display_content?: string | null }> | undefined, estimate: (text: string) => number, render: (text: string) => string, options: { skip?: (key: string) => boolean; entries?: KeyedLoreEntry[]; files?: LoreFileOptions; timing?: LoreTimingOptions; judged?: ReadonlySet<string>; semantic?: ReadonlySet<string> } = {}): SelectedLore {
   const lorebook = options.entries ?? ChatLorebookStore.keyedEntriesOf(profile.lorebookIds)
   if (lorebook.length === 0) return { text: '', constant: '', constantCount: 0, keyed: '', keys: [], keyedKeys: [], labels: [], decisions: [], unmatched: 0 }
   const recent = (messages?.slice(-profile.loreScanDepth).map((message) => [message.content, message.display_content].filter(Boolean).join('\n')).join('\n') ?? '').slice(-SCAN_TEXT_MAX_LENGTH)
@@ -530,6 +531,7 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
   })
   const matches = new Map<string, string[]>()
   const judgedIn = new Set<string>()
+  const semanticIn = new Set<string>()
   const activationAges = options.timing ? loreActivationAges(lorebook, options.timing) : new Map<string, number>()
   const sticky = new Map<string, number>()
   /** Keyword entries the chat named none of; the recursive scan looks for them in the chosen entries' text. */
@@ -559,6 +561,7 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
     const matched = messages === undefined ? [] : loreEntryKeys(entry).filter((word) => keywordMatches(word, entry, recent, folded))
     if (!matched.length) {
       if (messages !== undefined && !skipped && options.judged?.has(key)) { judgedIn.add(key); return true }
+      if (messages !== undefined && !skipped && options.semantic?.has(key)) { semanticIn.add(key); return true }
       unmatched += 1
       unnamed.push(item)
       return false
@@ -571,11 +574,33 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
     }
     return true
   })
+  // Inclusion groups (API LLM chats only, like the other timing rules): one entry per group, the sticky one first, then
+  // the higher order (the first listed on a tie). They are settled level by level before the recursive scan reads a
+  // level's text, as SillyTavern does, so an entry that lost its group never pulls in others; a group settled on an
+  // earlier level keeps its winner, and a later level's entry of that group loses.
+  const groupWinners = new Map<string, KeyedLoreEntry>()
+  const keepGroupWinners = (items: KeyedLoreEntry[]) => {
+    if (!options.timing) return items
+    const fresh = new Map<string, KeyedLoreEntry>()
+    for (const item of items) {
+      const group = item.entry.group
+      if (!group || groupWinners.has(group)) continue
+      const winner = fresh.get(group)
+      if (!winner || Number(sticky.has(item.key)) > Number(sticky.has(winner.key)) || (sticky.has(item.key) === sticky.has(winner.key) && item.entry.order > winner.entry.order)) fresh.set(group, item)
+    }
+    for (const [group, winner] of fresh) groupWinners.set(group, winner)
+    return items.filter((item) => {
+      if (!item.entry.group || groupWinners.get(item.entry.group) === item) return true
+      decisions.push(decisionOf(item, false, 'group', matches.get(item.key) ?? []))
+      return false
+    })
+  }
+  const grouped = keepGroupWinners(active)
   // Recursive scan (SillyTavern's): the chosen entries' text is searched for the keywords of the entries the chat did
-  // not name, level by level, each level searching only the entries the one before added. Groups and the budget then
-  // treat them like any keyword entry.
+  // not name, level by level, each level searching only the entries the one before added. The budget then treats them
+  // like any keyword entry.
   const via = new Map<string, string>()
-  let seeds = active.filter((item) => !item.entry.preventRecursion)
+  let seeds = grouped.filter((item) => !item.entry.preventRecursion)
   let pending = unnamed.filter((item) => !item.entry.excludeRecursion)
   const depth = messages === undefined ? 0 : Math.max(0, Math.min(LORE_RECURSION_MAX_DEPTH, Math.floor(profile.loreRecursionDepth ?? 0)))
   for (let level = 0; level < depth && seeds.length > 0 && pending.length > 0; level += 1) {
@@ -597,20 +622,10 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
       added.push(item)
       return false
     })
-    active.push(...added)
-    seeds = added.filter((item) => !item.entry.preventRecursion)
+    const kept = keepGroupWinners(added)
+    grouped.push(...kept)
+    seeds = kept.filter((item) => !item.entry.preventRecursion)
   }
-  const groupWinners = new Map<string, KeyedLoreEntry>()
-  if (options.timing) for (const item of active) {
-    if (!item.entry.group) continue
-    const winner = groupWinners.get(item.entry.group)
-    if (!winner || Number(sticky.has(item.key)) > Number(sticky.has(winner.key)) || (sticky.has(item.key) === sticky.has(winner.key) && item.entry.order > winner.entry.order)) groupWinners.set(item.entry.group, item)
-  }
-  const grouped = active.filter((item) => {
-    if (!options.timing || !item.entry.group || groupWinners.get(item.entry.group) === item) return true
-    decisions.push(decisionOf(item, false, 'group', matches.get(item.key) ?? []))
-    return false
-  })
   // The budget keeps entries as SillyTavern does: "always on" ones first, then the higher order first.
   const byPriority = [...grouped].sort((a, b) => Number(b.entry.constant) - Number(a.entry.constant) || b.entry.order - a.entry.order)
   const chosen: Array<{ key: string; entry: ChatLoreEntry; rendered: string }> = []
@@ -632,7 +647,7 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
       if (used + cost > profile.loreTokenBudget) continue
       chosen.push({ key: item.key, entry: item.entry, rendered })
       selected = true
-      const decision = decisionOf(item, true, sticky.has(item.key) ? 'sticky' : item.entry.constant ? 'constant' : judgedIn.has(item.key) ? 'judge' : via.has(item.key) ? 'recursive' : isRegexKeyword(matched[0]) ? 'regex' : `key:${matched[0]}`, matched)
+      const decision = decisionOf(item, true, sticky.has(item.key) ? 'sticky' : item.entry.constant ? 'constant' : judgedIn.has(item.key) ? 'judge' : semanticIn.has(item.key) ? 'semantic' : via.has(item.key) ? 'recursive' : isRegexKeyword(matched[0]) ? 'regex' : `key:${matched[0]}`, matched)
       if (sticky.has(item.key)) decision.remaining = sticky.get(item.key)
       if (via.has(item.key)) decision.via = via.get(item.key)
       if (file) decision.file = rendered === `${content}\n  자료 ${file.name}: "${file.text.trim()}"` ? 'inline' : 'hint'

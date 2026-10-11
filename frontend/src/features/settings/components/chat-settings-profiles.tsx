@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileUp, Plus } from 'lucide-react'
+import { Copy, FileUp, Plus } from 'lucide-react'
 import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { ResourceRow } from '@/components/ui/resource-row'
@@ -68,12 +68,24 @@ function profileToolChip(profile: ChatProfile, t: ReturnType<typeof useI18n>['t'
   return t({ ko: '도구', en: 'Tools' })
 }
 
+/**
+ * A copy of a profile to open in the editor: every setting, under a name not taken yet. A profile that wrote its own
+ * reply suggestions leaves that to the copy's default; nothing is saved until the editor saves.
+ */
+function copyDraft(profile: ChatProfile, profiles: ChatProfile[], t: ReturnType<typeof useI18n>['t']): ChatProfileInput {
+  const base = t({ ko: '{name} 사본', en: '{name} copy' }, { name: profile.name })
+  const taken = new Set(profiles.map((entry) => entry.name))
+  let name = base
+  for (let count = 2; taken.has(name); count += 1) name = `${base} ${count}`
+  return { ...profile, name, suggestProfileId: profile.suggestProfileId === profile.id ? null : profile.suggestProfileId }
+}
+
 /** Settings › Chat › 프로필: the chat switch and the chat profiles (Codex and API LLM). */
 export function ChatSettingsProfiles() {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  const [editor, setEditor] = useState<{ profile: ChatProfile | null; draft?: ChatProfileInput } | null>(null)
+  const [editor, setEditor] = useState<{ profile: ChatProfile | null; draft?: ChatProfileInput; copyOf?: number } | null>(null)
   // A card import: what came over and what did not, shown before its draft opens.
   const [imported, setImported] = useState<{ draft: ChatProfileInput; report: ChatCardImportReport } | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
@@ -188,6 +200,9 @@ export function ChatSettingsProfiles() {
                     <span className="hidden max-w-32 shrink-0 truncate rounded-sm bg-fill px-2 py-0.5 text-xs text-muted-foreground sm:inline">{profileToolChip(profile, t)}</span>
                   </Tip>
                 ) : null}
+                <IconButton size="icon-sm" variant="ghost" onClick={() => setEditor({ profile: null, draft: copyDraft(profile, profiles, t), copyOf: profile.id })} label={t({ ko: '복사', en: 'Copy' })}>
+                  <Copy />
+                </IconButton>
                 <Switch
                   className="ml-1"
                   checked={profile.isEnabled}
@@ -210,7 +225,7 @@ export function ChatSettingsProfiles() {
           setImported(null)
         }}
       />
-      <ChatProfileEditorModal open={editor !== null} profile={editor?.profile ?? null} initialDraft={editor?.draft} defaults={defaultsQuery.data} onClose={() => setEditor(null)} />
+      <ChatProfileEditorModal open={editor !== null} profile={editor?.profile ?? null} initialDraft={editor?.draft} copyOf={editor?.copyOf} defaults={defaultsQuery.data} onClose={() => setEditor(null)} />
     </div>
   )
 }

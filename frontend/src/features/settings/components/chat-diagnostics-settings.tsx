@@ -9,13 +9,15 @@ import { SettingRow } from '@/components/ui/setting-row'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { CHAT_ADMIN_SETTINGS_QUERY_KEY, CHAT_STATUS_QUERY_KEY, getChatAdminSettings, updateChatAdminSettings } from '@/lib/api-codex-chat'
+import { getClaudeModels } from '@/lib/api-agent-cli'
+import { CHAT_ADMIN_SETTINGS_QUERY_KEY, CHAT_STATUS_QUERY_KEY, getChatAdminSettings, updateChatAdminSettings, type WebResearchSettings } from '@/lib/api-codex-chat'
+import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
 import { SettingsRowsSkeleton } from './settings-rows'
 
 /**
- * Settings › LLM › 연결: whether save_lore saves right away and the lorebooks' second key language (기억), and what
- * each chat answer keeps of what it was sent (진단, shown from a reply's 문맥 button).
+ * Settings › LLM › 연결: whether save_lore saves right away and the lorebooks' second key language (기억), who answers
+ * the chats' web search (웹), and what each chat answer keeps of what it was sent (진단, shown from a reply's 문맥 button).
  */
 export function ChatDiagnosticsSettings() {
   const { t } = useI18n()
@@ -45,6 +47,11 @@ export function ChatDiagnosticsSettings() {
           onChange={(loreKeyLanguage) => settingsMutation.mutate({ loreKeyLanguage })} />
       ) : null}
     </RowGroup>
+    <RowGroup heading={t({ ko: '웹', en: 'Web' })}>
+      {settingsQuery.data ? (
+        <WebResearchRows value={settingsQuery.data.webResearch} disabled={settingsMutation.isPending} onChange={(webResearch) => settingsMutation.mutate({ webResearch })} />
+      ) : settingsQuery.isError ? null : <SettingsRowsSkeleton rows={1} />}
+    </RowGroup>
     <RowGroup heading={t({ ko: '진단', en: 'Diagnostics' })}>
       {diagnostics ? <>
         <SettingsSwitchRow label={t({ ko: '답변 진단', en: 'Answer diagnostics' })} checked={diagnostics.enabled} disabled={settingsMutation.isPending}
@@ -60,6 +67,48 @@ export function ChatDiagnosticsSettings() {
         <p className="py-3 text-sm text-destructive">{getErrorMessage(settingsQuery.error, t({ ko: '설정을 불러오지 못했어.', en: 'Could not load settings.' }))}</p>
       ) : <SettingsRowsSkeleton rows={3} />}
     </RowGroup>
+  </>
+}
+
+/**
+ * Who answers every chat profile's web_search tool: a Codex or Claude Code run that has only its own web search. Off:
+ * no profile gets the web tools. The model list is the engine's own; empty keeps its default.
+ */
+function WebResearchRows({ value, disabled, onChange }: { value: WebResearchSettings; disabled: boolean; onChange: (next: Partial<WebResearchSettings>) => void }) {
+  const { t } = useI18n()
+  const codexModels = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 5 * 60 * 1000, enabled: value.engine === 'codex' })
+  const claudeModels = useQuery({ queryKey: ['claude-models'], queryFn: getClaudeModels, staleTime: 5 * 60 * 1000, enabled: value.engine === 'claude' })
+  const models = value.engine === 'codex' ? codexModels.data?.data.models ?? [] : value.engine === 'claude' ? claudeModels.data?.models ?? [] : []
+  const listed = value.model === null || models.some((model) => model.id === value.model)
+  const engineLabel = t({ ko: '웹 검색 담당', en: 'Web search by' })
+  const modelLabel = t({ ko: '웹 검색 모델', en: 'Web search model' })
+  const limitLabel = t({ ko: '계정당 하루 검색', en: 'Searches per account a day' })
+  return <>
+    <SettingRow label={engineLabel}>
+      <Select variant="settings" className="w-auto" aria-label={engineLabel} value={value.engine} disabled={disabled}
+        onChange={(event) => onChange({ engine: event.target.value as WebResearchSettings['engine'], model: null })}>
+        <option value="off">{t({ ko: '끄기', en: 'Off' })}</option>
+        <option value="codex">Codex</option>
+        <option value="claude">Claude Code</option>
+      </Select>
+    </SettingRow>
+    {value.engine !== 'off' ? (
+      <SettingRow label={modelLabel}>
+        <Select variant="settings" className="w-auto max-w-56" aria-label={modelLabel} value={value.model ?? ''} disabled={disabled}
+          onChange={(event) => onChange({ model: event.target.value || null })}>
+          <option value="">{t({ ko: '기본 모델', en: 'Default model' })}</option>
+          {models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+          {!listed && value.model ? <option value={value.model}>{value.model}</option> : null}
+        </Select>
+      </SettingRow>
+    ) : null}
+    {value.engine !== 'off' ? (
+      <SettingRow label={limitLabel}>
+        <NumberStepperInput variant="settings" className="w-24" min={1} max={1000} precision={0} allowEmpty value={value.dailyLimit}
+          placeholder={t({ ko: '제한 없음', en: 'No limit' })} aria-label={limitLabel} disabled={disabled}
+          onValueCommit={(text) => { const dailyLimit = text.trim() ? Number(text) : null; if (dailyLimit !== value.dailyLimit) onChange({ dailyLimit }) }} />
+      </SettingRow>
+    ) : null}
   </>
 }
 

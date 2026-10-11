@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import { findExternalMcpTool } from '../services/externalMcp/externalMcpServers';
 
 export const MCP_DECODED_MEDIA_LIMIT_BYTES = 50 * 1024 * 1024;
 export const MCP_HTTP_JSON_LIMIT_MB = 70;
@@ -61,7 +62,8 @@ function detectMediaFamilies(data: Buffer): Set<'image' | 'video' | 'audio'> {
   return families;
 }
 
-function inspectValue(value: unknown, state: { decodedBytes: number; onManagedMedia?: () => void }, depth = 0, chat = false, structured = false): void {
+// `outside`: arguments for an external MCP server's tool, where a path names something on that server, not ours.
+function inspectValue(value: unknown, state: { decodedBytes: number; onManagedMedia?: () => void; outside?: boolean }, depth = 0, chat = false, structured = false): void {
   if (depth > 40) throw new McpRequestValidationError('MCP input nesting is too deep.', 400, -32602);
   if (typeof value === 'string') {
     if (!value.startsWith('data:')) {
@@ -109,7 +111,7 @@ function inspectValue(value: unknown, state: { decodedBytes: number; onManagedMe
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
     if (chat && key === 'composite_hash' && child) state.onManagedMedia?.();
     if (chat && key === '__ref') throw new McpRequestValidationError('Chat media must use data URLs or managed image hashes, not internal storage references.', 400, -32602);
-    if (FORBIDDEN_PATH_KEYS.has(key.toLowerCase())) {
+    if (!state.outside && FORBIDDEN_PATH_KEYS.has(key.toLowerCase())) {
       throw new McpRequestValidationError(
         `MCP file path input is not allowed (${key}). Use data_url or composite_hash.`,
         400,
@@ -121,8 +123,8 @@ function inspectValue(value: unknown, state: { decodedBytes: number; onManagedMe
 }
 
 /** The same filesystem/media boundary for in-process chat tools and HTTP MCP. */
-export function validateMcpToolArguments(args: unknown, onManagedMedia?: () => void): void {
-  inspectValue(args, { decodedBytes: 0, onManagedMedia }, 0, true);
+export function validateMcpToolArguments(args: unknown, onManagedMedia?: () => void, outside = false): void {
+  inspectValue(args, { decodedBytes: 0, onManagedMedia, outside }, 0, true);
 }
 
 /** Validate decoded media totals and reject client-supplied server filesystem paths. */
@@ -133,7 +135,8 @@ export function validateMcpRequestBody(req: Request, res: Response, next: NextFu
   }
 
   try {
-    inspectValue(req.body, { decodedBytes: 0 });
+    const call = req.body?.method === 'tools/call' ? req.body.params?.name : undefined;
+    inspectValue(req.body, { decodedBytes: 0, outside: typeof call === 'string' && findExternalMcpTool(call) !== null });
     next();
   } catch (error) {
     const validationError = error instanceof McpRequestValidationError

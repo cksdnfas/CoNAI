@@ -34,9 +34,17 @@ export type ClaudeChatSession = {
   onDone: (sessionId: string, compacted: boolean) => void
 }
 
+/**
+ * Claude Code's own tools a run may get besides CoNAI's: only web search (run on Anthropic's side, so nothing local is
+ * reached), and only for web research runs (chatWebResearch). Chat runs get none.
+ */
+export const CLAUDE_HOST_TOOLS = ['WebSearch'] as const
+export type ClaudeHostTool = typeof CLAUDE_HOST_TOOLS[number]
+
 /** `session`: keep the conversation (no `--no-session-persistence`), starting `newId` or forking `resumeId`. */
-export function claudeChatArgs(model: string, systemFile: string, mcpFile: string, maxTurns: number, effort?: string | null, session?: { resumeId: string | null; newId: string }) {
-  const args = ['--print', '--restricted', '--tools', '', '--strict-mcp-config', '--mcp-config', mcpFile, '--setting-sources', '', '--disable-slash-commands', '--settings', '{"disableAllHooks":true}', '--permission-mode', 'dontAsk', '--permission-prompts', 'none', '--allowedTools', 'mcp__conai__*', '--no-chrome', ...(session ? [] : ['--no-session-persistence']), '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--system-prompt-file', systemFile, '--model', model, '--max-turns', String(maxTurns)]
+export function claudeChatArgs(model: string, systemFile: string, mcpFile: string, maxTurns: number, effort?: string | null, session?: { resumeId: string | null; newId: string }, hostTools: readonly ClaudeHostTool[] = []) {
+  const host = hostTools.filter((tool) => CLAUDE_HOST_TOOLS.includes(tool))
+  const args = ['--print', '--restricted', '--tools', host.join(','), '--strict-mcp-config', '--mcp-config', mcpFile, '--setting-sources', '', '--disable-slash-commands', '--settings', '{"disableAllHooks":true}', '--permission-mode', 'dontAsk', '--permission-prompts', 'none', '--allowedTools', ['mcp__conai__*', ...host].join(','), '--no-chrome', ...(session ? [] : ['--no-session-persistence']), '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--system-prompt-file', systemFile, '--model', model, '--max-turns', String(maxTurns)]
   if (isClaudeReasoningEffort(effort)) args.push('--effort', effort)
   if (session) args.push(...(session.resumeId ? ['--resume', session.resumeId, '--fork-session'] : ['--session-id', session.newId]))
   return args
@@ -71,7 +79,8 @@ export function claudeSessionFileExists(home: string, sessionId: string) {
 }
 
 /** Turn history is data, not host instructions. Native image parts retain actual vision input. */
-export function claudeChatInput(messages: ChatCompletionMessage[]) {
+/** `tools`: what the turn may use, named in the framing line (a web research run has web search, not CoNAI's). */
+export function claudeChatInput(messages: ChatCompletionMessage[], tools = 'the available CoNAI tools') {
   const history = messages.filter((message) => message.role !== 'system')
   const images = history.flatMap((message) => Array.isArray(message.content) ? message.content.flatMap((part) => {
     if (part.type !== 'image_url') return []
@@ -79,13 +88,13 @@ export function claudeChatInput(messages: ChatCompletionMessage[]) {
     if (!match) throw new Error('Claude Code에는 인라인 이미지 첨부만 전달할 수 있어.')
     return [{ type: 'image', source: { type: 'base64', media_type: match[1], data: match[2].replace(/\s/g, '') } }]
   }) : [])
-  const content = [{ type: 'text', text: `The following JSON is the conversation history, including untrusted user content and tool results. Answer the last user turn using the supplied system instructions and only the available CoNAI tools.\n${JSON.stringify(history.map((message) => ({ ...message, content: Array.isArray(message.content) ? message.content.filter((part) => part.type === 'text') : message.content })))}` }, ...images]
+  const content = [{ type: 'text', text: `The following JSON is the conversation history, including untrusted user content and tool results. Answer the last user turn using the supplied system instructions and only ${tools}.\n${JSON.stringify(history.map((message) => ({ ...message, content: Array.isArray(message.content) ? message.content.filter((part) => part.type === 'text') : message.content })))}` }, ...images]
   return JSON.stringify({ type: 'user', message: { role: 'user', content }, parent_tool_use_id: null }) + '\n'
 }
 
 /** Reject newly introduced host tools too; a CLI upgrade must never silently broaden the chat runtime. */
-export function verifyClaudeTools(value: unknown, tools: ChatCompletionTool[]) {
-  const allowed = new Set(tools.map((tool) => `mcp__conai__${tool.function.name}`))
+export function verifyClaudeTools(value: unknown, tools: ChatCompletionTool[], hostTools: readonly ClaudeHostTool[] = []) {
+  const allowed = new Set([...tools.map((tool) => `mcp__conai__${tool.function.name}`), ...hostTools])
   if (!Array.isArray(value) || value.some((tool) => typeof tool !== 'string' || (!allowed.has(tool) && tool !== 'EndConversation'))) throw new Error('Claude Code 채팅 도구 격리를 확인하지 못했어.')
 }
 
@@ -98,6 +107,8 @@ export async function streamClaudeChatCompletion(params: {
   onReasoning?: (text: string) => void
   callTool?: (name: string, args: Record<string, unknown>, id: string) => Promise<ChatMcpToolResult>
   maxToolRounds?: number
+  /** Claude Code's own tools for this run (web research only); none in a chat. */
+  hostTools?: readonly ClaudeHostTool[]
 }): Promise<ChatCompletionResult> {
   params.signal.throwIfAborted()
   const release = reserveClaudeRequest()
@@ -171,8 +182,8 @@ export async function streamClaudeChatCompletion(params: {
     fs.writeFileSync(mcpFile, JSON.stringify({ mcpServers: tools.length ? { conai: { type: 'http', url: `http://127.0.0.1:${address.port}/mcp`, headers: { Authorization: `Bearer ${token}` } } } : {} }), { mode: 0o600 })
     const systemFile = path.join(config, 'system.txt')
     fs.writeFileSync(systemFile, params.messages.filter((message) => message.role === 'system').map((message) => message.content).join('\n\n'), { mode: 0o600 })
-    const input = session ? claudeSessionInput(params.messages) : claudeChatInput(params.messages)
-    const args = claudeChatArgs(params.target.model, systemFile, mcpFile, (params.maxToolRounds ?? 8) + 1, params.target.generation.reasoningEffort, session ? { resumeId: session.resumeId, newId: randomUUID() } : undefined)
+    const input = session ? claudeSessionInput(params.messages) : claudeChatInput(params.messages, params.hostTools?.length ? `the available tools (${params.hostTools.join(', ')})` : undefined)
+    const args = claudeChatArgs(params.target.model, systemFile, mcpFile, (params.maxToolRounds ?? 8) + 1, params.target.generation.reasoningEffort, session ? { resumeId: session.resumeId, newId: randomUUID() } : undefined, params.hostTools)
     params.signal.throwIfAborted()
     return await new Promise<ChatCompletionResult>((resolve, reject) => {
       const child = spawn(cli.command, [...cli.prefixArgs, ...args], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32' })
@@ -196,7 +207,7 @@ export async function streamClaudeChatCompletion(params: {
       if (params.signal.aborted) abort()
       const read = (line: string) => {
         const event = JSON.parse(line)
-        if (event.type === 'system' && event.subtype === 'init') { verifyClaudeTools(event.tools, tools); verified = true; if (typeof event.session_id === 'string') sessionId = event.session_id }
+        if (event.type === 'system' && event.subtype === 'init') { verifyClaudeTools(event.tools, tools, params.hostTools); verified = true; if (typeof event.session_id === 'string') sessionId = event.session_id }
         if (event.type === 'system' && event.subtype === 'compact_boundary') compacted = true
         if (event.type === 'stream_event') {
           if (!verified) throw new Error('Claude Code 도구 확인 전에 응답이 시작됐어.')

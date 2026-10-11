@@ -14,6 +14,7 @@ import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 import { AgentCliSettings } from './agent-cli-settings'
 import { ChatDiagnosticsSettings } from './chat-diagnostics-settings'
+import { ExternalMcpSettings } from './external-mcp-settings'
 import {
   LlmConnectionEditorModal,
   LlmConnectionListItem,
@@ -265,6 +266,8 @@ export function LlmConnectionsTab() {
       })}
 
       <ChatDiagnosticsSettings />
+
+      <ExternalMcpSettings />
 
       <ConnectionModelEditorModal slot={editingSlot} workflowNodes={nodesOf(editingSlot?.id)} onClose={() => setEditingSlotId(null)} />
 

@@ -226,13 +226,22 @@ export function foldGroupBlockState(members: ChatProfile[], messages: ReadonlyAr
   return Object.keys(result).length > 0 ? result : null
 }
 
+// How to read the values: shown through behaviour on top of the character's own voice, as the present rather than
+// the whole history (a low value is not "no shared past"), one field at a time.
+const STATE_READING_TEXT = [
+  '아래 값이 지금 장면의 사실이야(이전 답변에 쓴 값보다 우선). 바뀐 값만 같은 이름의 코드 블록에 써.',
+  '- 값을 대사로 읊지 말고 행동·거리감·말의 온도로 드러내. 성격과 말버릇은 그대로 두고, `말투:`는 그 위에 얹는 지금의 태도야.',
+  '- 값은 지금의 마음과 상황이야. 낮거나 0인 값도 함께한 과거나 관계가 없다는 뜻은 아니야. 기억·요약·설정에 남은 지난 일은 그대로 있었던 일이고, 값은 지금 그걸 어떻게 느끼는지야.',
+  '- 필드는 하나씩 따로 읽어. 한 값이 다른 필드의 뜻을 바꾸지 않아.',
+].join('\n')
+
 /**
  * The state as the model reads it each request (inside `[참고 설정]`, beside the author's note): current values per
  * block and the block's update rules.
  */
 export function blockStateText(blocks: ChatDisplayBlock[], state: Record<string, BlockData>) {
   const content = blockStateContentText(blocks, state)
-  return content ? ['## 현재 상태', '아래 값이 지금 장면의 사실이야(이전 답변에 쓴 값보다 우선). 여기에 맞춰 행동하고, 바뀐 값만 같은 이름의 코드 블록에 써.', content].join('\n') : ''
+  return content ? ['## 현재 상태', STATE_READING_TEXT, content].join('\n') : ''
 }
 
 /** Public state values and rules, without the model's fixed instructions. */

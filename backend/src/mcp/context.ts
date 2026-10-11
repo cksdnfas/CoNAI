@@ -1,5 +1,6 @@
 import type { McpHttpScope, ChatExecutionContext, FileWriteSource } from '@conai/shared';
 import type { AuthAccountType } from '../types/authAccount';
+import { findExternalMcpTool } from '../services/externalMcp/externalMcpServers';
 
 /** Account that owns the jobs and history a request creates (set for Codex chat sessions). */
 export interface McpRequester {
@@ -103,6 +104,8 @@ export function assertChatNaiSampleCount(context: McpRequestContext, nSamples: u
 export const ALL_MCP_HTTP_SCOPES: McpHttpScope[] = ['read', 'generate', 'organize', 'backup', 'restore'];
 
 const TOOL_SCOPES: Record<string, McpHttpScope> = {
+  web_search: 'read',
+  web_read: 'read',
   get_current_page: 'read',
   page_fill: 'read',
   page_act: 'read',
@@ -264,10 +267,11 @@ export function isChatOwnTool(toolName: string) {
 
 export function getMcpToolScope(toolName: string): McpHttpScope | null {
   if (isChatGenerationTool(toolName)) return 'generate';
-  return TOOL_SCOPES[toolName] ?? null;
+  // An external MCP server's tools take the scope its administrator gave it.
+  return TOOL_SCOPES[toolName] ?? findExternalMcpTool(toolName)?.scope ?? null;
 }
 
 export function isMcpToolAllowed(toolName: string, scopes: readonly McpHttpScope[]): boolean {
-  const requiredScope = TOOL_SCOPES[toolName];
+  const requiredScope = TOOL_SCOPES[toolName] ?? findExternalMcpTool(toolName)?.scope;
   return requiredScope !== undefined && scopes.includes(requiredScope);
 }

@@ -7,6 +7,7 @@ import { buildReplyContext } from './chatReplyContext'
 import { isCodexChatCreationTool, stripEchoedAddresses } from '@conai/shared'
 import { messageAddress, REPLY_GUIDANCE } from './chatReplies'
 import { CHAT_ROOM_TOOLS, isChatOwnTool } from '../../mcp/context'
+import { CATALOG_OPEN_TOOL } from '../../mcp/toolCatalog'
 import { blockStateText, foldBlockState, parseBlockEdits, stripBlockFences, usableBlockKeys } from './chatBlockState'
 import { fillCharacterPlaceholders } from './chatPlaceholders'
 import { userPersonaForThread, userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
@@ -312,7 +313,7 @@ function selectWindow(profile: Pick<ChatProfile, 'id' | 'style'>, turns: CodexCh
  * no chat and gets the global books only), unless the caller resolved `books` already. Without messages only the
  * "always on" entries are chosen. `toolOffered`: read_lore_file is among the request's tools.
  */
-export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<LoreHistoryMessage>, user?: ChatUserPersona | null, options: { thread?: Pick<CodexChatThreadRecord, 'id' | 'account_id'> | null; books?: AttachedLoreBook[]; toolOffered?: boolean; history?: ReadonlyArray<LoreHistoryMessage>; speakerProfileId?: number; judged?: ReadonlySet<string>; linkedOffered?: boolean } = {}): ChatLore {
+export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<LoreHistoryMessage>, user?: ChatUserPersona | null, options: { thread?: Pick<CodexChatThreadRecord, 'id' | 'account_id'> | null; books?: AttachedLoreBook[]; toolOffered?: boolean; history?: ReadonlyArray<LoreHistoryMessage>; speakerProfileId?: number; judged?: ReadonlySet<string>; semantic?: ReadonlySet<string>; linkedOffered?: boolean } = {}): ChatLore {
   const books = options.books ?? booksForRequest({ thread: options.thread ?? null, profile })
   const estimate = (text: string) => estimateTokens(profile.id, text)
   // The linked files' index only beside the tools that open them.
@@ -321,6 +322,7 @@ export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<Lo
     toolOffered: options.toolOffered ?? false,
     linked,
     judged: options.judged,
+    semantic: options.semantic,
     ...(profile.engine !== 'codex' && messages !== undefined ? { timing: { messages: options.history ?? messages, speakerProfileId: options.speakerProfileId } } : {}),
   })
 }
@@ -522,6 +524,33 @@ export function sendableMessages(messages: CodexChatMessageRecord[]) {
   return messages.filter((message) => message.content.trim() || message.attachments?.length || message.mediaAttachments?.length || message.tool_calls.length > 0)
 }
 
+/** Keep automatic turns and their results, but replay a repeated plan only at its latest occurrence. */
+export function compactRepeatedInstructions(messages: CodexChatMessageRecord[]) {
+  const latest = new Map<string, number>()
+  const keyOf = (message: CodexChatMessageRecord) => {
+    if (message.role !== 'user') return null
+    const task = message.routing?.task
+    if (task) return `task:${task.id}`
+    const routine = message.routing?.routine
+    // Workflows can carry different data each time: only identical instructions are redundant.
+    return routine ? JSON.stringify([routine.source, routine.id ?? routine.name, message.content]) : null
+  }
+  for (const message of messages) {
+    const key = keyOf(message)
+    if (key !== null) latest.set(key, message.id)
+  }
+  return messages.map((message) => {
+    const key = keyOf(message)
+    if (key === null || latest.get(key) === message.id) return message
+    const task = message.routing?.task
+    const content = task
+      ? `[Earlier task continuation: ${JSON.stringify(task)}. Full plan is in message_id=${latest.get(key)}.]`
+      : `[Repeated automatic instruction; see message_id=${latest.get(key)}.]`
+    // Keep small messages as-is; preserve attachments, flags, turn boundaries and stored history.
+    return content.length < message.content.length ? { ...message, content } : message
+  })
+}
+
 /** Recent messages that decide what is recalled: the latest exchange. */
 const RECALL_QUERY_MESSAGES = 2
 const RECALL_MAX_TOKENS = 800
@@ -536,15 +565,16 @@ export function recallFor(profile: ChatProfile, segments: ChatSummarySegment[], 
 
 /**
  * The segments `recallFor` puts in, themselves. `keep`: the episodes the judge kept (see chatJudgeContext); only
- * those come back, ranked as usual (one word in common is enough: the judge read them).
+ * those come back, ranked as usual (one word in common is enough: the judge read them). `semantic`: episodes close in
+ * meaning to the latest exchange (see chatSemantic), ranked together with the shared words.
  */
-export function recalledSegments(profile: ChatProfile, segments: ChatSummarySegment[], messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'contextTokens'>, keep?: ReadonlySet<number> | null) {
+export function recalledSegments(profile: ChatProfile, segments: ChatSummarySegment[], messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'contextTokens'>, keep?: ReadonlySet<number> | null, semantic?: ReadonlyMap<number, number> | null) {
   const { folded } = splitSegments(segments)
   if (folded.length === 0) return []
   const query = sendableMessages(messages).slice(-RECALL_QUERY_MESSAGES).map((message) => message.content).join('\n')
   const budget = config.contextTokens ? Math.min(RECALL_MAX_TOKENS, Math.floor(config.contextTokens / 12)) : RECALL_MAX_TOKENS
-  if (keep) return selectRecall(folded.filter((segment) => keep.has(segment.id)), query, budget, (text) => estimateTokens(profile.id, text), 3, 1)
-  return selectRecall(folded, query, budget, (text) => estimateTokens(profile.id, text))
+  if (keep) return selectRecall(folded.filter((segment) => keep.has(segment.id)), query, budget, (text) => estimateTokens(profile.id, text), 3, 1, semantic)
+  return selectRecall(folded, query, budget, (text) => estimateTokens(profile.id, text), undefined, undefined, semantic)
 }
 
 /**
@@ -636,9 +666,9 @@ export function buildContextMeta(profile: ChatProfile, thread: CodexChatThreadRe
  */
 function buildRequestContext(profile: ChatProfile, thread: CodexChatThreadRecord | null, messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'summaryEnabled'> & Partial<Pick<LlmChatContextConfig, 'contextTokens'>>, tools: ChatCompletionTool[], segments: ChatSummarySegment[] = [], books?: AttachedLoreBook[], judged?: JudgedContext | null) {
   const user = userPersonaForThread(thread)
-  const lore = selectChatLore(profile, messages, user, { thread, books, toolOffered: offersLoreFileTool(tools), linkedOffered: offersLinkedFiles(tools), judged: judged?.loreKeys })
+  const lore = selectChatLore(profile, messages, user, { thread, books, toolOffered: offersLoreFileTool(tools), linkedOffered: offersLinkedFiles(tools), judged: judged?.loreKeys, semantic: judged?.semantic?.loreKeys })
   const system = buildLeadingMessages(profile, thread, config, tools.some((tool) => !isChatOwnTool(tool.function.name)), lore, user)
-  const recalled = config.summaryEnabled ? recalledSegments(profile, segments, messages, { contextTokens: config.contextTokens ?? null }, judged?.recallKeep) : []
+  const recalled = config.summaryEnabled ? recalledSegments(profile, segments, messages, { contextTokens: config.contextTokens ?? null }, judged?.recallKeep, judged?.semantic?.recall) : []
   const recall = recallText(recalled)
   const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread ?? { block_edits: null }, messages), recall, rejectedLoreFor(thread?.id, tools))
   const directive = [flagDirectiveFor(messages, profile, user), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
@@ -696,8 +726,10 @@ export function fitChatContext(profile: ChatProfile, messages: ChatCompletionMes
     return messages
   } catch (error) {
     let last = error
+    const catalogCalls = new Set(messages.flatMap((message) => message.role === 'assistant'
+      ? (message.tool_calls ?? []).filter((call) => call.function.name === CATALOG_OPEN_TOOL).map((call) => call.id) : []))
     for (const length of FIT_TOOL_OUTPUT_LENGTHS) {
-      const cut = messages.map((message) => (message.role === 'tool' && message.content.length > length ? { ...message, content: cutToolOutput(message.content, length) } : message))
+      const cut = messages.map((message) => (message.role === 'tool' && !catalogCalls.has(message.tool_call_id) && message.content.length > length ? { ...message, content: cutToolOutput(message.content, length) } : message))
       if (cut.every((message, index) => message === messages[index])) continue
       try {
         assertChatContextFits(profile, cut, tools, maxTokens)
@@ -715,6 +747,11 @@ export function fitChatContext(profile: ChatProfile, messages: ChatCompletionMes
 export function unsummarizedMessages(messages: CodexChatMessageRecord[], thread: Pick<CodexChatThreadRecord, 'summary_until_message_id'>, config: Pick<LlmChatContextConfig, 'summaryEnabled'>) {
   const until = config.summaryEnabled ? thread.summary_until_message_id ?? 0 : 0
   return until > 0 ? messages.filter((message) => message.id > until) : messages
+}
+
+/** Possible direct-request turns before token fitting; also bounds attachment preparation. */
+export function directContextTurns(messages: CodexChatMessageRecord[], thread: Pick<CodexChatThreadRecord, 'summary_until_message_id'>, config: Pick<LlmChatContextConfig, 'summaryEnabled' | 'contextTurns'>) {
+  return latestWindow(splitTurns(compactRepeatedInstructions(sendableMessages(unsummarizedMessages(messages, thread, config)))), config.contextTurns)
 }
 
 /**
@@ -749,7 +786,7 @@ export function buildChatMessages(params: {
   const routing = [...params.messages].reverse().find((message) => message.role === 'user')?.routing
   const maxChars = Math.max(256, Math.min(6000, Math.floor((config.contextTokens ?? 24000) / 4)))
   const replyContext = buildReplyContext(params.messages, routing, { maxChars })
-  const turns = splitTurns(sendableMessages(unsummarizedMessages(params.messages, thread, config)))
+  const turns = directContextTurns(params.messages, thread, config)
   const fit = selectWindow(profile, turns, config, fixedTokens + estimateTokens(profile.id, replyContext) + 40 + (params.extraTokens ?? 0), config.contextTurns, params.attachmentTexts, params.attachedImages).length
   const window = latestWindow(turns, fit)
   const blockKeys = usableBlockKeys(profile.style.blocks)
@@ -843,9 +880,12 @@ function planFold(profile: ChatProfile, thread: CodexChatThreadRecord, config: L
     return turns.length
   }
   const ahead = mode === 'ahead'
+  // Fit the same compact instructions as the reply; the original turns still feed the summary.
+  const compacted = new Map(compactRepeatedInstructions(turns.flat()).map((message) => [message.id, message]))
+  const requestTurns = turns.map((turn) => turn.map((message) => compacted.get(message.id)!))
   const fixedTokens = buildRequestContext(profile, thread, messages, config, tools, segments).fixedTokens + (extras.extraTokens ?? 0)
-    + (ahead ? estimateMessagesTokens(profile.id, turns[turns.length - 1].flatMap((message) => toCompletionMessages(message, usableBlockKeys(profile.style.blocks), extras.attachmentTexts, undefined, extras.attachedImages))) : 0)
-  const fit = selectWindow(profile, turns, config, fixedTokens, config.contextTurns - (ahead ? 1 : 0), extras.attachmentTexts, extras.attachedImages).length
+    + (ahead ? estimateMessagesTokens(profile.id, requestTurns[requestTurns.length - 1].flatMap((message) => toCompletionMessages(message, usableBlockKeys(profile.style.blocks), extras.attachmentTexts, undefined, extras.attachedImages))) : 0)
+  const fit = selectWindow(profile, requestTurns, config, fixedTokens, config.contextTurns - (ahead ? 1 : 0), extras.attachmentTexts, extras.attachedImages).length
   return turnsToFold(turns.length, fit, config.summaryTriggerTurns)
 }
 
@@ -894,7 +934,7 @@ class SummaryRunawayError extends Error {}
  * One completion on the profile's summary model (its chat model when it has none), bounded by SUMMARY_TIMEOUT_MS and
  * the output cap. Also used for merge drafts (chatLorebookMerge).
  */
-export async function completeSummary(profile: ChatProfile, system: string, content: string, signal?: AbortSignal, maxTokens = SUMMARY_MAX_TOKENS) {
+export async function completeSummary(profile: ChatProfile, system: string, content: string, signal?: AbortSignal, maxTokens = SUMMARY_MAX_TOKENS, threadId?: number) {
   const resolved = resolveProfileModel(profile, 'summary')
   if (!resolved) throw new Error('요약에 쓸 LLM 연결을 찾을 수 없어.')
   const connection = resolveChatCompletionTarget(resolved.providerName, { model: resolved.model })
@@ -908,7 +948,7 @@ export async function completeSummary(profile: ChatProfile, system: string, cont
     target,
     messages: [{ role: 'system', content: system }, { role: 'user', content }],
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-    usage: { purpose: 'summary', profileId: profile.id },
+    usage: { purpose: 'summary', profileId: profile.id, threadId },
   })
   // A summary cut by the cap is a runaway, not a summary: keep nothing, so the next fold tries again.
   if (capped && result.finishReason === 'length') {
@@ -925,7 +965,7 @@ export async function completeSummary(profile: ChatProfile, system: string, cont
  * One stretch of conversation as its own segment. The plot and the last segments go along as context when they fit
  * in a quarter of the budget (or of one summary call), so the summary keeps names and open threads straight.
  */
-async function summarizeSegment(profile: ChatProfile, config: LlmChatContextConfig, segments: ChatSummarySegment[], messages: CodexChatMessageRecord[], lineOf: TranscriptLineOf, signal?: AbortSignal) {
+async function summarizeSegment(profile: ChatProfile, config: LlmChatContextConfig, segments: ChatSummarySegment[], messages: CodexChatMessageRecord[], lineOf: TranscriptLineOf, signal?: AbortSignal, threadId?: number) {
   const { plot, active } = splitSegments(segments)
   const limit = Math.floor((config.contextTokens ?? DEFAULT_SUMMARY_CHUNK_TOKENS) / 4)
   const context: string[] = []
@@ -938,7 +978,7 @@ async function summarizeSegment(profile: ChatProfile, config: LlmChatContextConf
   }
   const custom = profile.summaryPrompt.trim()
   const transcript = messages.map(lineOf).filter(Boolean).join('\n\n')
-  return completeSummary(profile, custom ? `${custom}\n\n${SEGMENT_PROMPT_SUFFIX}` : SEGMENT_PROMPT, `## 앞선 내용\n${context.join('\n\n') || '(없음)'}\n\n## 이어진 대화\n${transcript}`, signal)
+  return completeSummary(profile, custom ? `${custom}\n\n${SEGMENT_PROMPT_SUFFIX}` : SEGMENT_PROMPT, `## 앞선 내용\n${context.join('\n\n') || '(없음)'}\n\n## 이어진 대화\n${transcript}`, signal, undefined, threadId)
 }
 
 /** The plot rides along with every request, so it is told to stay one compact story rather than grow with each fold. */
@@ -948,8 +988,8 @@ const PLOT_PROMPT_SUFFIX = '결과는 하나의 줄거리로 써. 목록보다 �
  * The plot rewritten to take in `segments` (the oldest active ones), with the profile's summary prompt. Its cap grows
  * with the summary budget: a plot is longer than any one stretch.
  */
-function summarizePlot(profile: ChatProfile, config: LlmChatContextConfig, plot: ChatSummarySegment | null, segments: ChatSummarySegment[], signal?: AbortSignal) {
-  return completeSummary(profile, `${config.summaryPrompt}\n\n${PLOT_PROMPT_SUFFIX}`, `## 이전 요약\n${plot?.content.trim() || '(없음)'}\n\n## 이어진 대화 (구간 요약)\n${segments.map((segment) => segment.content.trim()).join('\n\n')}`, signal, Math.max(SUMMARY_MAX_TOKENS, summaryBudget(config)))
+function summarizePlot(profile: ChatProfile, config: LlmChatContextConfig, plot: ChatSummarySegment | null, segments: ChatSummarySegment[], signal?: AbortSignal, threadId?: number) {
+  return completeSummary(profile, `${config.summaryPrompt}\n\n${PLOT_PROMPT_SUFFIX}`, `## 이전 요약\n${plot?.content.trim() || '(없음)'}\n\n## 이어진 대화 (구간 요약)\n${segments.map((segment) => segment.content.trim()).join('\n\n')}`, signal, Math.max(SUMMARY_MAX_TOKENS, summaryBudget(config)), threadId)
 }
 
 /** The oldest of `segments` that fit one plot call beside the plot itself (at least one), so a long backlog goes in passes. */
@@ -1030,6 +1070,42 @@ function groupPlanner(members: ChatProfile[], window: number, mode: 'ahead' | 'a
   }
 }
 
+/**
+ * After an automatic fold step (a segment, or the plot) fails, automatic runs — after a reply, before a request — skip
+ * that step for a while instead of calling the failing model again every turn; the summarize button still runs it.
+ * Each failure in a row doubles the wait, up to an hour. A history rewrite, another summary model or a success ends
+ * the wait early. Kept in memory: a restart retries.
+ */
+export const SUMMARY_RETRY_DELAY_MS = 5 * 60 * 1000
+const SUMMARY_RETRY_MAX_DELAY_MS = 60 * 60 * 1000
+type FoldStep = 'segment' | 'plot'
+const foldWaits = new Map<string, { until: number; failures: number; revision: number; model: string }>()
+
+function summaryModelKey(profile: ChatProfile) {
+  return `${profile.id}:${resolveProfileModel(profile, 'summary')?.label ?? ''}`
+}
+
+function foldWaiting(step: FoldStep, thread: CodexChatThreadRecord, profile: ChatProfile) {
+  const key = `${thread.id}:${step}`
+  const wait = foldWaits.get(key)
+  if (!wait) return false
+  if (wait.revision !== thread.context_revision || wait.model !== summaryModelKey(profile)) {
+    foldWaits.delete(key)
+    return false
+  }
+  // Past the wait the step runs again; its failure count stays until it succeeds.
+  return wait.until > Date.now()
+}
+
+function noteFoldFailure(step: FoldStep, thread: CodexChatThreadRecord, profile: ChatProfile) {
+  const key = `${thread.id}:${step}`
+  const model = summaryModelKey(profile)
+  const previous = foldWaits.get(key)
+  const failures = previous && previous.revision === thread.context_revision && previous.model === model ? previous.failures + 1 : 1
+  const delay = Math.min(SUMMARY_RETRY_MAX_DELAY_MS, SUMMARY_RETRY_DELAY_MS * 2 ** (failures - 1))
+  foldWaits.set(key, { until: Date.now() + delay, failures, revision: thread.context_revision, model })
+}
+
 async function foldIntoSummary(threadId: number, plan: FoldPlanner, mode: FoldMode, options: { signal?: AbortSignal }) {
   let folded: string | null = null
   let plotFailed = false
@@ -1044,21 +1120,26 @@ async function foldIntoSummary(threadId: number, plan: FoldPlanner, mode: FoldMo
       return folded
     }
     const { profile, config, lineOf } = pending
+    const automatic = mode !== 'all'
+    // A plot still waiting after a failure counts as failed: its error stays and segments keep folding.
+    if (automatic && !plotFailed && foldWaiting('plot', thread, profile)) plotFailed = true
     const { plot, active } = splitSegments(segments)
     const activeTokens = active.reduce((total, segment) => total + estimateTokens(profile.id, segment.content), 0)
     if (!plotFailed && active.length > KEEP_RECENT_SEGMENTS && activeTokens > summaryBudget(config)) {
       const fold = takePlotChunk(profile, config, plot, active.slice(0, -KEEP_RECENT_SEGMENTS))
       try {
-        const content = await summarizePlot(profile, config, plot, fold, options.signal)
+        const content = await summarizePlot(profile, config, plot, fold, options.signal, threadId)
         if (!ChatSummaryStore.setPlot(threadId, { from: plot?.from_message_id ?? fold[0].from_message_id, until: fold[fold.length - 1].until_message_id, content }, thread.context_revision)) {
           return folded
         }
+        foldWaits.delete(`${threadId}:plot`)
         CodexChatStore.setSummaryError(threadId, null)
         folded = content
       } catch (error) {
         // The summarize button folds everything at once: there the failure is the answer.
         if (options.signal?.aborted || mode === 'all') throw error
         plotFailed = true
+        noteFoldFailure('plot', thread, profile)
         CodexChatStore.setSummaryError(threadId, (error instanceof Error ? error.message : String(error)).slice(0, 500))
       }
       continue
@@ -1069,18 +1150,28 @@ async function foldIntoSummary(threadId: number, plan: FoldPlanner, mode: FoldMo
       if (!plotFailed) CodexChatStore.setSummaryError(threadId, null)
       return folded
     }
+    // The error that started the wait stays on the thread; a request drops its oldest turns meanwhile.
+    if (automatic && foldWaiting('segment', thread, profile)) {
+      return folded
+    }
     let content: string
     try {
-      content = await summarizeSegment(profile, config, segments, chunk, lineOf, options.signal)
+      try {
+        content = await summarizeSegment(profile, config, segments, chunk, lineOf, options.signal, threadId)
+      } catch (error) {
+        const chunkTurns = splitTurns(chunk)
+        if (!(error instanceof SummaryRunawayError) || chunkTurns.length < 2) throw error
+        chunk = chunkTurns.slice(0, Math.ceil(chunkTurns.length / 2)).flat()
+        content = await summarizeSegment(profile, config, segments, chunk, lineOf, options.signal, threadId)
+      }
     } catch (error) {
-      const chunkTurns = splitTurns(chunk)
-      if (!(error instanceof SummaryRunawayError) || chunkTurns.length < 2) throw error
-      chunk = chunkTurns.slice(0, Math.ceil(chunkTurns.length / 2)).flat()
-      content = await summarizeSegment(profile, config, segments, chunk, lineOf, options.signal)
+      if (automatic && !options.signal?.aborted) noteFoldFailure('segment', thread, profile)
+      throw error
     }
     if (!ChatSummaryStore.addSegment(threadId, { from: chunk[0].id, until: chunk[chunk.length - 1].id, content }, thread.context_revision)) {
       return folded
     }
+    foldWaits.delete(`${threadId}:segment`)
     appendMinutes(threadId, { content, firstAt: chunk[0].created_date, lastAt: chunk[chunk.length - 1].created_date })
     if (!plotFailed) CodexChatStore.setSummaryError(threadId, null)
     folded = content
@@ -1148,20 +1239,41 @@ export function summarizeGroupAll(threadId: number, members: ChatProfile[], wind
   return startFold(threadId, groupPlanner(members, window, 'all'), 'all')
 }
 
+/** How long a request waits for summaries in all before it goes on without them; they keep running meanwhile. */
+export const SUMMARY_WAIT_MS = 2 * 60 * 1000
+const WAIT_OVER = Symbol('wait over')
+
+function withinWait<T>(promise: Promise<T>, deadline: number) {
+  let timer: NodeJS.Timeout | undefined
+  const over = new Promise<typeof WAIT_OVER>((resolve) => {
+    timer = setTimeout(() => resolve(WAIT_OVER), Math.max(0, deadline - Date.now()))
+    timer.unref()
+  })
+  return Promise.race([promise, over]).finally(() => clearTimeout(timer))
+}
+
 /**
  * Before a request: wait for a summary still running, then fold whatever would still not fit, so no turn leaves the
- * window unsummarized. If summarizing fails, the request goes on and the oldest turns are dropped instead.
+ * window unsummarized. If summarizing fails, or takes longer than `waitMs`, the request goes on and the oldest turns
+ * are dropped instead; a slow summary still finishes in the background (stopping the request stops it).
  */
-export async function fitThreadSummary(threadId: number, profile: ChatProfile, messages: CodexChatMessageRecord[], signal: AbortSignal, tools: ChatCompletionTool[], extras: RequestExtras = {}) {
+export async function fitThreadSummary(threadId: number, profile: ChatProfile, messages: CodexChatMessageRecord[], signal: AbortSignal, tools: ChatCompletionTool[], extras: RequestExtras = {}, waitMs = SUMMARY_WAIT_MS) {
+  const deadline = Date.now() + waitMs
   const running = summaryRuns.get(threadId)
-  if (running) {
-    await untilAborted(running.catch(() => null), signal)
+  if (running && await untilAborted(withinWait(running.catch(() => null), deadline), signal) === WAIT_OVER) {
+    console.warn('[llm-chat] summary still running; the request goes on without it')
+    return
   }
   if (summaryRuns.has(threadId)) {
     return
   }
   try {
-    await startFold(threadId, directPlanner(profile, 'overflow', { messages, tools, extras }), 'overflow', { signal })
+    const run = startFold(threadId, directPlanner(profile, 'overflow', { messages, tools, extras }), 'overflow', { signal })
+    // A summary left running records its own failure on the thread.
+    run.catch(() => {})
+    if (await untilAborted(withinWait(run, deadline), signal) === WAIT_OVER) {
+      console.warn('[llm-chat] summary before reply is slow; the request goes on without it')
+    }
   } catch (error) {
     if (signal.aborted) {
       throw error

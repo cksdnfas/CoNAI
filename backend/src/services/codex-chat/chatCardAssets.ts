@@ -102,8 +102,13 @@ export async function resolvePublicHost(host: string) {
   return addresses[0]
 }
 
+/** What a download asks for and accepts; card media by default. */
+export type DownloadOptions = { accept?: string; maxBytes?: number; userAgent?: string; signal?: AbortSignal }
+
 /** GET a file, connecting only to the public address resolved above (redirects are checked the same way). */
-export async function download(url: string, redirectsLeft = MAX_REDIRECTS): Promise<{ buffer: Buffer; finalUrl: string }> {
+export async function download(url: string, redirectsLeft = MAX_REDIRECTS, options: DownloadOptions = {}): Promise<{ buffer: Buffer; finalUrl: string; contentType: string }> {
+  const maxBytes = options.maxBytes ?? MEDIA_MAX_BYTES
+  options.signal?.throwIfAborted()
   const target = new URL(url)
   if (target.protocol !== 'https:' && target.protocol !== 'http:') throw new Error('unsupported protocol')
   const resolved = await resolvePublicHost(target.hostname.replace(/^\[|\]$/g, ''))
@@ -111,7 +116,8 @@ export async function download(url: string, redirectsLeft = MAX_REDIRECTS): Prom
     const client = target.protocol === 'https:' ? https : http
     const request = client.get(target, {
       timeout: REQUEST_TIMEOUT_MS,
-      headers: { 'User-Agent': 'Mozilla/5.0 (CoNAI chat card import)', Accept: 'image/*,video/*' },
+      signal: options.signal,
+      headers: { 'User-Agent': options.userAgent ?? 'Mozilla/5.0 (CoNAI chat card import)', Accept: options.accept ?? 'image/*,video/*' },
       lookup: ((_host: string, options: { all?: boolean }, callback: (...args: unknown[]) => void) => {
         if (options?.all) callback(null, [resolved])
         else callback(null, resolved.address, resolved.family)
@@ -121,19 +127,19 @@ export async function download(url: string, redirectsLeft = MAX_REDIRECTS): Prom
       if (status >= 300 && status < 400 && response.headers.location) {
         response.resume()
         if (redirectsLeft <= 0) { reject(new Error('too many redirects')); return }
-        download(new URL(response.headers.location, target).toString(), redirectsLeft - 1).then(resolve, reject)
+        download(new URL(response.headers.location, target).toString(), redirectsLeft - 1, options).then(resolve, reject)
         return
       }
       if (status !== 200) { response.resume(); reject(new Error(`HTTP ${status}`)); return }
-      if (Number(response.headers['content-length'] ?? 0) > MEDIA_MAX_BYTES) { response.destroy(); reject(new Error('too large')); return }
+      if (Number(response.headers['content-length'] ?? 0) > maxBytes) { response.destroy(); reject(new Error('too large')); return }
       const chunks: Buffer[] = []
       let size = 0
       response.on('data', (chunk: Buffer) => {
         size += chunk.length
-        if (size > MEDIA_MAX_BYTES) { response.destroy(); reject(new Error('too large')); return }
+        if (size > maxBytes) { response.destroy(); reject(new Error('too large')); return }
         chunks.push(chunk)
       })
-      response.on('end', () => resolve({ buffer: Buffer.concat(chunks), finalUrl: target.toString() }))
+      response.on('end', () => resolve({ buffer: Buffer.concat(chunks), finalUrl: target.toString(), contentType: String(response.headers['content-type'] ?? '') }))
       response.on('error', reject)
     })
     request.on('timeout', () => request.destroy(new Error('timed out')))

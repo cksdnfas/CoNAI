@@ -6,6 +6,7 @@ import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAcc
 import { requireActiveChatReply } from '../services/codex-chat/chatReplyRegistry';
 import { BoardCallRooms } from '../services/posts/boardCallRooms';
 import { validateMcpToolArguments } from './requestSecurity';
+import { findExternalMcpTool } from '../services/externalMcp/externalMcpServers';
 import { CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
 
 export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]> = {
@@ -56,6 +57,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   chat_reply_to: [], room_call_member: [], task_propose: [], task_status: [], task_update: [], task_wait: [], task_finish: [], get_proposal_status: [], offer_choices: [], room_history_search: [], room_history_read: [], read_lore_file: [], save_lore: [], edit_lore_file: [],
   linked_list: 'files.view', linked_search: 'files.view', linked_read: 'files.view', linked_write: ['files.view', 'files.edit'], linked_edit: ['files.view', 'files.edit'],
   get_current_page: [], page_fill: [], page_act: [], read_page_data: [], propose_page_action: [],
+  web_search: 'chat.web.use', web_read: 'chat.web.use',
   get_chat_setup_guide: [], list_chat_profiles: [], get_chat_profile: [], list_display_blocks: [], get_display_block: [],
   propose_display_block: [], propose_chat_profile: [], propose_profile_update: [], propose_profile_assets: [], get_asset_batch: [],
 };
@@ -79,8 +81,14 @@ function pageKeepsTool(path: string, toolName: string) {
   return PAGE_SAFE_SCOPES.has(getMcpToolScope(toolName) ?? '') && !PAGE_PRIVATE_FILE_TOOLS.has(toolName);
 }
 
+/** A tool's feature keys; external MCP tools need none (their server's scope and the profile decide). Undefined: unclassified. */
+function featurePermissionOf(toolName: string): string | readonly string[] | undefined {
+  if (isChatGenerationTool(toolName)) return 'generation.execute';
+  return TOOL_FEATURE_PERMISSIONS[toolName] ?? (findExternalMcpTool(toolName) ? [] : undefined);
+}
+
 function requiredToolKeys(toolName: string): readonly string[] {
-  const required = isChatGenerationTool(toolName) ? 'generation.execute' : TOOL_FEATURE_PERMISSIONS[toolName] ?? [];
+  const required = featurePermissionOf(toolName) ?? [];
   return typeof required === 'string' ? [required] : required;
 }
 
@@ -122,7 +130,7 @@ function accountHoldsTool(context: McpRequestContext, toolName: string): boolean
  */
 export function isContextToolAllowed(context: McpRequestContext, toolName: string, accountChecks = true): boolean {
   if (BOARD_CALL_BLOCKED_TOOLS.has(toolName) && context.chatContext && BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null) return false;
-  if (context.requester && !isChatGenerationTool(toolName) && TOOL_FEATURE_PERMISSIONS[toolName] === undefined) return false;
+  if (context.requester && featurePermissionOf(toolName) === undefined) return false;
   if (isChatMcpSource(context.source) && CHAT_BLOCKED_TOOLS.has(toolName)) return false;
   if (accountChecks && context.requester && !accountHoldsTool(context, toolName)) return false;
   // Page text may steer the reply: lore files are not rewritten from it (save_lore still leaves an undoable entry), and
@@ -171,11 +179,11 @@ export function requireMcpToolAccess(context: McpRequestContext, toolName: strin
     requireChatMcpAccountAccess(context, toolName);
     if (execution !== 'queued') {
       if (execution === 'reply') requireActiveChatReply(context.chatContext);
-      validateMcpToolArguments(params, () => requireRequesterPermission(context.requester, 'images.view'));
+      validateMcpToolArguments(params, () => requireRequesterPermission(context.requester, 'images.view'), findExternalMcpTool(toolName) !== null);
     }
   }
   if (context.requester) {
-    if (!isChatGenerationTool(toolName) && TOOL_FEATURE_PERMISSIONS[toolName] === undefined) throw new Error('Unclassified account-bound tool.');
+    if (featurePermissionOf(toolName) === undefined) throw new Error('Unclassified account-bound tool.');
     for (const permission of requiredToolKeys(toolName)) requireRequesterPermission(context.requester, permission);
     if (getMcpToolScope(toolName) === 'configure' && context.requester.accountType !== 'admin') throw new Error('Administrator access required.');
     if (toolName === 'resolve_image_group_path') requireRequesterPermission(context.requester, params.create === false ? 'images.view' : 'images.edit');

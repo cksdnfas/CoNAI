@@ -25,6 +25,7 @@ export const PERMISSION_CATALOG = [
   { key: 'posts.summon', section: 'posts', label: { ko: '댓글로 봇 부르기 (부른 계정 사용량)', en: 'Call bots from comments (uses your account)' }, description: 'Call chat profiles with @ in a comment; the bot runs as your account.' },
   { key: 'chat.use', section: 'chat', label: { ko: '채팅', en: 'Chat' }, description: 'Chat with API model profiles.' },
   { key: 'chat.agent.use', section: 'chat', label: { ko: '서버 에이전트 채팅 (Codex·Claude Code, 서버 계정 사용량 공유)', en: 'Server agent chat (Codex, Claude Code; shares server account usage)' }, description: 'Chat with profiles that run on the server Codex or Claude Code account.' },
+  { key: 'chat.web.use', section: 'chat', label: { ko: '채팅 웹 검색 (Codex·Claude Code, 서버 계정 사용량 공유)', en: 'Chat web search (Codex, Claude Code; shares server account usage)' }, description: 'Let chat profiles search and read the web for you, when an administrator turned web search on.' },
   { key: 'chat.diagnostics.view', section: 'chat', label: { ko: '채팅 진단 보기', en: 'View chat diagnostics' }, description: 'Inspect how your own replies were composed.' },
   { key: 'auth.guest.create', section: 'account', anonymousOnly: true, anonymous: true, label: { ko: '게스트 가입', en: 'Guest signup' }, description: 'Create a guest account from the login page.' },
 ] as const satisfies ReadonlyArray<{

@@ -12,10 +12,11 @@ import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
 import type { McpRequester } from '../mcp/context'
 import { AUTHOR_NOTE_MAX_LENGTH, CHAT_PROFILE_DEFAULTS, ChatProfileError, ChatProfileStore, DEFAULT_CHAT_SUMMARY_PROMPT, ensureCodexProfileMigrated, isVisionTool, type ChatProfile, type ChatProfileInput } from '../services/codex-chat/chatProfiles'
-import { CHAT_SCOPES, MAX_CHAT_CAPTURE_LIMIT, loadChatSettings, updateChatSettings } from '../services/codex-chat/chatSettings'
+import { CHAT_SCOPES, MAX_CHAT_CAPTURE_LIMIT, WEB_RESEARCH_ENGINES, WEB_RESEARCH_MAX_DAILY_LIMIT, loadChatSettings, updateChatSettings } from '../services/codex-chat/chatSettings'
 import { ChatDiagnosticsError, exportChatDiagnostics, getChatDiagnostics, visibleContextMessages } from '../services/codex-chat/chatDiagnostics'
 import { DEFAULT_CHAT_STYLE } from '../services/codex-chat/chatStyle'
 import { chatExpressionGroupId, listProfileEmoticons } from '../services/codex-chat/chatEmoticons'
+import { copyProfileExpressions } from '../services/codex-chat/chatProfileExpressions'
 import { EmoticonService } from '../services/emoticonService'
 import { serveThumbnailOrOriginal, streamCacheableFile, streamRangeFile } from './images/query-file-helpers'
 import { ImageFileModel } from '../models/Image/ImageFileModel'
@@ -44,8 +45,7 @@ import { buildModelUsage } from '../services/codex-chat/modelUsage'
 import { buildLlmUsageSummary } from '../services/llmUsage'
 import { effectiveModelOf, modelLabelOf } from '../services/codex-chat/chatModelRoles'
 import { ChatGenerationPresetStore, readGenerationPresetFile, type ChatGenerationPresetInput } from '../services/codex-chat/chatGenerationPresets'
-import { CodexChatStore, type CodexChatMessageRecord } from '../services/codex-chat/codexChatStore'
-import { collectCodexChatMedia } from '../services/codex-chat/codexChatMedia'
+import { CodexChatStore } from '../services/codex-chat/codexChatStore'
 import { CHAT_IMPORT_MAX_BYTES, ChatImportError, importChatThread } from '../services/codex-chat/chatImport'
 import { ChatSummaryStore } from '../services/codex-chat/chatMemory'
 import { isChatTargetReady, listChatCompletionModels } from '../services/codex-chat/llmChatCompletion'
@@ -75,6 +75,7 @@ import { canSuggest, ChatSuggestError, profileWriterReady, suggestReplies, userW
 import { createUploadStorage, MAX_UPLOAD_FILE_SIZE_BYTES } from '../middleware/upload'
 import { downloadProfileAsset, importFileStoreProfileAsset, ingestProfileAsset, isProfileAssetHidden, profileAssetFields, resolveProfileAsset } from '../services/codex-chat/chatProfileAssets'
 import chatAssetBatchesRouter, { chatProfileExpressionsRouter } from './chat-asset-batches.routes'
+import externalMcpRouter from './external-mcp.routes'
 import { draftChatAppearance } from '../services/codex-chat/chatAppearanceDraft'
 import { ChatAssetError } from '../services/codex-chat/chatAssetAccess'
 import { sharedServerProfiles } from '../services/codex-chat/chatServerSharing'
@@ -83,6 +84,7 @@ const MESSAGE_MAX_LENGTH = 20000
 
 const router = express.Router()
 router.use('/admin/profiles/:profileId/asset-batches', chatAssetBatchesRouter)
+router.use('/admin/external-mcp', externalMcpRouter)
 router.use('/admin/profiles/:profileId/expressions', chatProfileExpressionsRouter)
 
 // The old server-wide Codex chat settings become a "Codex" profile the first time chat is used after the upgrade.
@@ -363,7 +365,7 @@ router.post('/threads/:threadId/task/:action', requireChatAccess, (req: Request,
   if (!CodexChatStore.findThread(threadId, getRequesterAccountId(req))) { res.status(404).json({ success: false, error: '채팅을 찾을 수 없어.' }); return }
   try {
     const action = String(req.params.action)
-    const task = action === 'pause' ? ChatTaskRunner.pause(threadId) : action === 'resume' ? ChatTaskRunner.resume(threadId) : action === 'cancel' ? ChatTaskRunner.cancel(threadId) : null
+    const task = action === 'pause' ? ChatTaskRunner.pause(threadId) : action === 'resume' ? ChatTaskRunner.resume(threadId, req.body?.extension) : action === 'cancel' ? ChatTaskRunner.cancel(threadId) : null
     if (!task) { sendRouteBadRequest(res, 'action must be pause, resume or cancel'); return }
     res.json({ success: true, data: task })
   } catch (error) {
@@ -754,8 +756,12 @@ router.get('/admin/settings', requireAdmin, (_req: Request, res: Response) => {
 })
 
 router.put('/admin/settings', requireAdmin, (req: Request, res: Response) => {
-  const { enabled, diagnostics, loreAutoSave, loreKeyLanguage } = req.body ?? {}
-  if ((enabled === undefined && diagnostics === undefined && loreAutoSave === undefined && loreKeyLanguage === undefined) || (enabled !== undefined && typeof enabled !== 'boolean')
+  const { enabled, diagnostics, loreAutoSave, loreKeyLanguage, webResearch } = req.body ?? {}
+  if ((enabled === undefined && diagnostics === undefined && loreAutoSave === undefined && loreKeyLanguage === undefined && webResearch === undefined) || (enabled !== undefined && typeof enabled !== 'boolean')
+    || (webResearch !== undefined && (!webResearch || typeof webResearch !== 'object' || Array.isArray(webResearch)
+      || (webResearch.engine !== undefined && !WEB_RESEARCH_ENGINES.includes(webResearch.engine))
+      || (webResearch.model !== undefined && webResearch.model !== null && typeof webResearch.model !== 'string')
+      || (webResearch.dailyLimit !== undefined && webResearch.dailyLimit !== null && !(Number.isInteger(webResearch.dailyLimit) && webResearch.dailyLimit >= 1 && webResearch.dailyLimit <= WEB_RESEARCH_MAX_DAILY_LIMIT))))
     || (loreAutoSave !== undefined && typeof loreAutoSave !== 'boolean')
     || (loreKeyLanguage !== undefined && loreKeyLanguage !== null && typeof loreKeyLanguage !== 'string')
     || (diagnostics !== undefined && (!diagnostics || typeof diagnostics !== 'object' || Array.isArray(diagnostics)
@@ -765,7 +771,7 @@ router.put('/admin/settings', requireAdmin, (req: Request, res: Response) => {
     sendRouteBadRequest(res, '채팅 설정 값이 올바르지 않아.')
     return
   }
-  res.json({ success: true, data: updateChatSettings({ enabled, diagnostics, loreAutoSave, loreKeyLanguage }) })
+  res.json({ success: true, data: updateChatSettings({ enabled, diagnostics, loreAutoSave, loreKeyLanguage, webResearch }) })
 })
 
 /** Values the profile editor fills in for a new profile, and the scopes it may offer. */
@@ -849,9 +855,16 @@ router.post('/admin/profiles', requireAdmin, asyncHandler(async (req: Request, r
       if (defaultSlot) input.modelSlotId = defaultSlot.id
     }
     await assertCodexEffortSupported(input)
-    ChatLorebookStore.assertProfileLinks(normalizeLorebookIds(input.lorebookIds), fileOwnerKey(getRequesterAccountId(req)))
-    assertLinkedFiles(fileOwnerKey(getRequesterAccountId(req)), normalizeLinkedFiles(input.linkedFiles))
-    res.status(201).json({ success: true, data: toAdminProfile(ChatProfileStore.create(input)) })
+    // A copy keeps the links its source already has; anything added on top is checked as usual.
+    const source = typeof req.body?.copyOf === 'number' ? ChatProfileStore.find(req.body.copyOf) : null
+    if (req.body?.copyOf !== undefined && !source) {
+      res.status(404).json({ success: false, error: '복사할 프로필을 찾을 수 없어.' })
+      return
+    }
+    ChatLorebookStore.assertProfileLinks(normalizeLorebookIds(input.lorebookIds), fileOwnerKey(getRequesterAccountId(req)), source?.lorebookIds)
+    assertLinkedFiles(fileOwnerKey(getRequesterAccountId(req)), normalizeLinkedFiles(input.linkedFiles), source?.linkedFiles)
+    const created = ChatProfileStore.create(input)
+    res.status(201).json({ success: true, data: toAdminProfile(source ? copyProfileExpressions(source, created) : created) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -1699,18 +1712,7 @@ router.get('/threads/:threadId/running', requireChatAccess, (req: Request, res: 
   } catch (error) { sendChatError(res, error) }
 })
 
-/**
- * Only the last `tail` messages of a thread detail (and the media they show), with where they start and how many
- * there are in all, so a poll does not resend a long transcript; the client keeps the rest from its copy.
- */
-function threadTail<T extends { messages: CodexChatMessageRecord[]; media: Record<string, unknown> }>(detail: T, tail: number) {
-  if (detail.messages.length <= tail) return detail
-  const messages = detail.messages.slice(-tail)
-  const shown = new Set(collectCodexChatMedia(messages).map((item) => item.compositeHash))
-  return { ...detail, messages, media: Object.fromEntries(Object.entries(detail.media).filter(([hash]) => shown.has(hash))), messagesFrom: messages[0].id, messageCount: detail.messages.length }
-}
-
-/** GET /api/codex-chat/threads/:threadId — the thread detail; `?tail=N` (1-500): see threadTail. */
+/** GET /api/codex-chat/threads/:threadId — `?tail=N` (1-500) reads only the latest messages, keeping global state. */
 router.get('/threads/:threadId', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
@@ -1718,8 +1720,8 @@ router.get('/threads/:threadId', requireChatAccess, (req: Request, res: Response
   if (tail !== null && (!Number.isSafeInteger(tail) || tail < 1 || tail > 500)) { sendRouteBadRequest(res, 'tail must be 1-500'); return }
   try {
     const requester = requesterFrom(req)
-    const detail = isGroupThread(req, threadId) ? GroupChatService.getThread(requester, threadId) : CodexChatService.getThread(requester, threadId)
-    res.json({ success: true, data: tail === null ? detail : threadTail(detail, tail) })
+    const detail = isGroupThread(req, threadId) ? GroupChatService.getThread(requester, threadId, tail ?? undefined) : CodexChatService.getThread(requester, threadId, tail ?? undefined)
+    res.json({ success: true, data: detail })
   } catch (error) {
     sendChatError(res, error)
   }

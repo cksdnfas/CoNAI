@@ -36,9 +36,12 @@ function isWithin(candidate: string, root: string) {
   return relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`))
 }
 
-/** Account-private state and bounded auth reuse, outside every served runtime media directory. */
-export function prepareChatRuntime(requester: McpRequester) {
-  const root = path.join(runtimePaths.basePath, 'private-codex-chat', requester.accountId === null ? 'bootstrap' : `account-${requester.accountId}`)
+/**
+ * Account-private state and bounded auth reuse, outside every served runtime media directory. `research`: a separate
+ * home for web research runs (chatWebResearch), the one place web search is on.
+ */
+export function prepareChatRuntime(requester: McpRequester, purpose: 'chat' | 'research' = 'chat') {
+  const root = path.join(runtimePaths.basePath, purpose === 'research' ? 'private-codex-research' : 'private-codex-chat', requester.accountId === null ? 'bootstrap' : `account-${requester.accountId}`)
   for (const served of [runtimePaths.uploadsDir, runtimePaths.tempDir, runtimePaths.saveDir, runtimePaths.artifactsDir]) {
     if (isWithin(path.resolve(root), path.resolve(served))) throw new Error('Codex chat state must be outside served media directories.')
   }
@@ -65,7 +68,7 @@ export function prepareChatRuntime(requester: McpRequester) {
   fs.renameSync(stagingAuth, authTarget)
   // Do not inherit user/project configuration, instructions, plugins, skills or environment credentials.
   const stagingConfig = path.join(home, `.config-${randomUUID()}`)
-  fs.writeFileSync(stagingConfig, 'approval_policy = "never"\nsandbox_mode = "read-only"\nweb_search = "disabled"\nproject_doc_max_bytes = 0\nproject_doc_fallback_filenames = []\nnotify = []\ncli_auth_credentials_store = "file"\n', { mode: 0o600 })
+  fs.writeFileSync(stagingConfig, `approval_policy = "never"\nsandbox_mode = "read-only"\nweb_search = "${purpose === 'research' ? 'live' : 'disabled'}"\nproject_doc_max_bytes = 0\nproject_doc_fallback_filenames = []\nnotify = []\ncli_auth_credentials_store = "file"\n`, { mode: 0o600 })
   fs.renameSync(stagingConfig, path.join(home, 'config.toml'))
   const env: NodeJS.ProcessEnv = {}
   for (const name of ['PATH', 'Path', 'SystemRoot', 'WINDIR', 'COMSPEC', 'PATHEXT']) if (process.env[name]) env[name] = process.env[name]
