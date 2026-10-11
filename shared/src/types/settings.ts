@@ -431,31 +431,6 @@ export interface McpHttpSettings {
   updatedAt: string;
 }
 
-export interface AppSettings {
-  general: GeneralSettings;
-  tagger: TaggerSettings;
-  kaloscope: KaloscopeSettings;
-  similarity: SimilaritySettings;
-  appearance: AppearanceSettings;
-  metadataExtraction: MetadataExtractionSettings;
-  thumbnail: ThumbnailSettings;
-  imageSave: ImageSaveSettings;
-  generationThrottle: GenerationThrottleSettings;
-  videoOptimization: VideoOptimizationSettings;
-  llm: LlmSettings;
-}
-
-export interface TaggerModelInfo {
-  name: TaggerModel;
-  label: string;
-  description: string;
-  downloaded: boolean;
-}
-
-export interface TaggerDependencyCheckResult {
-  available: boolean;
-  message: string;
-}
 /** PyTorch wheel build the app-managed Python environment is installed with. */
 export type AiTorchBackend = 'cpu' | 'cu126' | 'cu130' | 'cu132';
 export type AiTorchBackendPreference = 'auto' | AiTorchBackend;
@@ -544,12 +519,41 @@ export interface AiRuntimeStatus {
   installSupported: boolean;
 }
 
+export interface AppSettings {
+  general: GeneralSettings;
+  aiRuntime: AiRuntimeSettings;
+  tagger: TaggerSettings;
+  kaloscope: KaloscopeSettings;
+  embedding: EmbeddingSettings;
+  similarity: SimilaritySettings;
+  appearance: AppearanceSettings;
+  metadataExtraction: MetadataExtractionSettings;
+  thumbnail: ThumbnailSettings;
+  imageSave: ImageSaveSettings;
+  generationThrottle: GenerationThrottleSettings;
+  videoOptimization: VideoOptimizationSettings;
+  llm: LlmSettings;
+}
+
+export interface TaggerModelInfo {
+  name: TaggerModel;
+  label: string;
+  description: string;
+  downloaded: boolean;
+  /** Runs only on a CUDA GPU. */
+  requiresGpu?: boolean;
+  /** False when this runtime cannot run it (no usable GPU). */
+  available?: boolean;
+}
+
+export interface TaggerDependencyCheckResult {
+  available: boolean;
+  message: string;
+}
 
 export interface TaggerServerStatus {
-  aiRuntime: AiRuntimeSettings;
   isRunning: boolean;
   modelLoaded: boolean;
-  embedding: EmbeddingSettings;
   currentModel: TaggerModel | null;
   currentDevice: string | null;
   lastUsedAt: string | null;
@@ -565,10 +569,6 @@ export interface KaloscopeServerStatus {
   lastUsedAt: string | null;
   topK: number;
   keepModelLoaded: boolean;
-  /** Runs only on a CUDA GPU. */
-  requiresGpu?: boolean;
-  /** False when this runtime cannot run it (no usable GPU). */
-  available?: boolean;
   autoUnloadMinutes: number;
   scriptExists: boolean;
   modelCached: boolean;
@@ -578,6 +578,6 @@ export interface KaloscopeServerStatus {
   missingPackages: string[];
   statusMessage: string;
   installCommand?: string;
-}
   /** Library items whose artist result came from an older Kaloscope model. */
   outdatedResults?: number;
+}

@@ -434,36 +434,6 @@ function migrateLegacyModelUnloadPolicy(rawModelSettings: unknown): { keepModelL
   return { keepModelLoaded: !record.keepModelLoaded, unloadPolicyVersion: MODEL_UNLOAD_POLICY_VERSION };
 }
 
-export function getDefaultSettingsFromEnvironment(): AppSettings {
-  return {
-    general: {
-      language: 'ko',
-      promptForDownloadLocation: false,
-      deleteProtection: {
-        enabled: true,
-        recycleBinRetentionDays: 0,
-      },
-      headerNavigation: getDefaultHeaderNavigationSettings(),
-      enableGallery: true,
-      autoCleanupCanvasOnShutdown: false,
-      showRatingBadges: true,
-      imageSimilarityCheckMode: 'manual',
-      applyRatingSafetyToGenerationHistory: false,
-      generationHistoryMaxItems: normalizeGenerationHistoryMaxItems(
-        process.env.CONAI_GENERATION_RESULT_RETENTION_LIMIT,
-        DEFAULT_GENERATION_HISTORY_MAX_ITEMS,
-      ),
-    },
-    tagger: {
-      enabled: process.env.TAGGER_ENABLED === 'true',
-      autoTagOnUpload: false,
-      model: (process.env.TAGGER_MODEL as TaggerModel) || 'vit',
-      device: (process.env.TAGGER_DEVICE as TaggerDevice) || 'auto',
-      generalThreshold: parseFloat(process.env.TAGGER_GEN_THRESHOLD || '0.35'),
-      characterThreshold: parseFloat(process.env.TAGGER_CHAR_THRESHOLD || '0.75'),
-      pythonPath: process.env.PYTHON_PATH || 'python',
-      keepModelLoaded: false,
-      autoUnloadMinutes: 5,
 const AI_PYTHON_SOURCES: readonly AiPythonSource[] = ['auto', 'custom'];
 const AI_TORCH_BACKEND_PREFERENCES: readonly AiTorchBackendPreference[] = ['auto', 'cpu', 'cu126', 'cu130', 'cu132'];
 
@@ -501,6 +471,42 @@ function normalizeEmbeddingSettings(raw: any, defaults: EmbeddingSettings): Embe
   };
 }
 
+export function getDefaultSettingsFromEnvironment(): AppSettings {
+  return {
+    general: {
+      language: 'ko',
+      promptForDownloadLocation: false,
+      deleteProtection: {
+        enabled: true,
+        recycleBinRetentionDays: 0,
+      },
+      headerNavigation: getDefaultHeaderNavigationSettings(),
+      enableGallery: true,
+      autoCleanupCanvasOnShutdown: false,
+      showRatingBadges: true,
+      imageSimilarityCheckMode: 'manual',
+      applyRatingSafetyToGenerationHistory: false,
+      generationHistoryMaxItems: normalizeGenerationHistoryMaxItems(
+        process.env.CONAI_GENERATION_RESULT_RETENTION_LIMIT,
+        DEFAULT_GENERATION_HISTORY_MAX_ITEMS,
+      ),
+    },
+    aiRuntime: {
+      pythonSource: 'auto',
+      customPythonPath: process.env.PYTHON_PATH || 'python',
+      torchBackend: 'auto',
+      cpuThreads: 0,
+    },
+    tagger: {
+      enabled: process.env.TAGGER_ENABLED === 'true',
+      autoTagOnUpload: false,
+      model: (process.env.TAGGER_MODEL as TaggerModel) || 'vit',
+      device: (process.env.TAGGER_DEVICE as TaggerDevice) || 'auto',
+      generalThreshold: parseFloat(process.env.TAGGER_GEN_THRESHOLD || '0.35'),
+      characterThreshold: parseFloat(process.env.TAGGER_CHAR_THRESHOLD || '0.75'),
+      pythonPath: process.env.PYTHON_PATH || 'python',
+      keepModelLoaded: false,
+      autoUnloadMinutes: 5,
       unloadPolicyVersion: MODEL_UNLOAD_POLICY_VERSION,
     },
     kaloscope: {
@@ -512,6 +518,18 @@ function normalizeEmbeddingSettings(raw: any, defaults: EmbeddingSettings): Embe
       autoUnloadMinutes: 5,
       unloadPolicyVersion: MODEL_UNLOAD_POLICY_VERSION,
       artistLinkUrlTemplate: DEFAULT_ARTIST_LINK_URL_TEMPLATE,
+      styleVectors: true,
+    },
+    embedding: {
+      enabled: process.env.EMBEDDING_ENABLED === 'true',
+      chatRecall: true,
+      lorebook: true,
+      chatHistory: true,
+      fileSearch: true,
+      imageSearch: false,
+      keepModelLoaded: false,
+      // Chat turns come minutes apart; a short idle would reload the model (several seconds) mid-conversation.
+      autoUnloadMinutes: 30,
     },
     similarity: {
       autoGenerateHashOnUpload: true,
@@ -521,12 +539,6 @@ function normalizeEmbeddingSettings(raw: any, defaults: EmbeddingSettings): Embe
       detailSimilarWeights: {
         perceptualHash: 50,
         dHash: 30,
-    aiRuntime: {
-      pythonSource: 'auto',
-      customPythonPath: process.env.PYTHON_PATH || 'python',
-      torchBackend: 'auto',
-      cpuThreads: 0,
-    },
         aHash: 20,
         color: 0,
       },
@@ -548,18 +560,6 @@ function normalizeEmbeddingSettings(raw: any, defaults: EmbeddingSettings): Embe
         weights: {
           positive: 1,
           negative: 1,
-      styleVectors: true,
-    },
-    embedding: {
-      enabled: process.env.EMBEDDING_ENABLED === 'true',
-      chatRecall: true,
-      lorebook: true,
-      chatHistory: true,
-      fileSearch: true,
-      imageSearch: false,
-      keepModelLoaded: false,
-      // Chat turns come minutes apart; a short idle would reload the model (several seconds) mid-conversation.
-      autoUnloadMinutes: 30,
           auto: 1,
         },
         fieldThresholds: {
@@ -660,6 +660,7 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
       headerNavigation: normalizeHeaderNavigationSettings(loadedSettings.general?.headerNavigation),
       deleteProtection: normalizeDeleteProtectionSettings(loadedSettings.general?.deleteProtection, defaults.general.deleteProtection),
     },
+    aiRuntime: normalizeAiRuntimeSettings(loadedSettings.aiRuntime, loadedSettings.tagger?.pythonPath, defaults.aiRuntime),
     tagger: {
       ...defaults.tagger,
       ...loadedSettings.tagger,
@@ -674,6 +675,7 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
       ...(process.env.KALOSCOPE_DEVICE && { device: process.env.KALOSCOPE_DEVICE as 'auto' | 'cpu' | 'cuda' }),
       ...(process.env.KALOSCOPE_TOPK && { topK: Number.parseInt(process.env.KALOSCOPE_TOPK, 10) }),
     },
+    embedding: normalizeEmbeddingSettings(loadedSettings.embedding, defaults.embedding),
     similarity: {
       ...defaults.similarity,
       ...loadedSettings.similarity,
@@ -690,7 +692,6 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
         ...loadedSettings.similarity?.promptSimilarity,
         weights: {
           ...defaults.similarity.promptSimilarity.weights,
-    aiRuntime: normalizeAiRuntimeSettings(loadedSettings.aiRuntime, loadedSettings.tagger?.pythonPath, defaults.aiRuntime),
           ...loadedSettings.similarity?.promptSimilarity?.weights,
         },
         fieldThresholds: {
@@ -705,7 +706,6 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
       desktopSearchMinWidth: loadedSettings.appearance?.desktopPageColumnsMinWidth ?? defaults.appearance.desktopPageColumnsMinWidth,
       desktopNavMinWidth: loadedSettings.appearance?.desktopPageColumnsMinWidth ?? defaults.appearance.desktopPageColumnsMinWidth,
       desktopPageColumnsMinWidth: loadedSettings.appearance?.desktopPageColumnsMinWidth ?? defaults.appearance.desktopPageColumnsMinWidth,
-    embedding: normalizeEmbeddingSettings(loadedSettings.embedding, defaults.embedding),
       presetSlots: normalizeAppearancePresetSlots(loadedSettings.appearance?.presetSlots),
       wallpaperLayoutPresets: normalizeWallpaperLayoutPresets(loadedSettings.appearance?.wallpaperLayoutPresets),
       wallpaperActivePresetId: typeof loadedSettings.appearance?.wallpaperActivePresetId === 'string'
@@ -763,6 +763,12 @@ export function hasMissingSettingsFields(loaded: any, defaults: AppSettings): bo
     }
   }
 
+  for (const key of Object.keys(defaults.aiRuntime)) {
+    if (!(key in (loaded.aiRuntime || {}))) {
+      return true;
+    }
+  }
+
   for (const key of Object.keys(defaults.tagger)) {
     if (!(key in (loaded.tagger || {}))) {
       return true;
@@ -781,6 +787,12 @@ export function hasMissingSettingsFields(loaded: any, defaults: AppSettings): bo
     }
   }
 
+  for (const key of Object.keys(defaults.embedding)) {
+    if (!(key in (loaded.embedding || {}))) {
+      return true;
+    }
+  }
+
   for (const key of Object.keys(defaults.appearance)) {
     if (!(key in (loaded.appearance || {}))) {
       return true;
@@ -794,12 +806,6 @@ export function hasMissingSettingsFields(loaded: any, defaults: AppSettings): bo
   }
 
   for (const key of Object.keys(defaults.thumbnail)) {
-  for (const key of Object.keys(defaults.aiRuntime)) {
-    if (!(key in (loaded.aiRuntime || {}))) {
-      return true;
-    }
-  }
-
     if (!(key in (loaded.thumbnail || {}))) {
       return true;
     }
@@ -818,12 +824,6 @@ export function hasMissingSettingsFields(loaded: any, defaults: AppSettings): bo
   }
 
   for (const key of Object.keys(defaults.generationThrottle.codex)) {
-  for (const key of Object.keys(defaults.embedding)) {
-    if (!(key in (loaded.embedding || {}))) {
-      return true;
-    }
-  }
-
     if (!(key in (loaded.generationThrottle?.codex || {}))) {
       return true;
     }
