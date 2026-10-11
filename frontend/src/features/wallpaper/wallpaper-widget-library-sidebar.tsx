@@ -17,6 +17,7 @@ import {
   Lock,
   LockOpen,
   MessageSquareText,
+  MessagesSquare,
   Newspaper,
   Plus,
   Search,
@@ -60,6 +61,7 @@ const WIDGET_ICONS: Record<WallpaperWidgetType, typeof Clock3> = {
   'library-stats': Library,
   'character-card': UserRound,
   'chat-recent': MessageSquareText,
+  'chat-inbox': MessagesSquare,
   'audio-player': AudioLines,
   'post-ticker': Newspaper,
   'prompt-of-day': Sparkles,
@@ -131,21 +133,28 @@ function WidgetLibrary({ onAddWidget }: { onAddWidget: (widgetType: WallpaperWid
   )
 }
 
+const WALLPAPER_LAYER_DRAG_TYPE = 'application/x-conai-wallpaper-layer'
+
 function LayerList({ widgets, selectedIds, onSelect, onReorder, onToggleHidden, onToggleLocked }: Omit<WallpaperWidgetLibrarySidebarProps, 'onAddWidget'>) {
   const { t } = useI18n()
   const ordered = useMemo(() => getWallpaperWidgetsFrontToBack(widgets), [widgets])
   const [dragId, setDragId] = useState<string | null>(null)
-  const [overId, setOverId] = useState<string | null>(null)
+  // Where the dragged layer would land: above or below the hovered row (the bottom half of the last row reaches the end).
+  const [over, setOver] = useState<{ id: string; after: boolean } | null>(null)
 
   if (ordered.length === 0) {
     return <EmptyState size="compact" title={t({ ko: '아직 위젯이 없어', en: 'No widgets yet' })} />
   }
 
-  const drop = (targetId: string) => {
+  const drop = (targetId: string, after: boolean) => {
     if (!dragId || dragId === targetId) return
     const ids = ordered.map((widget) => widget.id).filter((id) => id !== dragId)
-    ids.splice(ids.indexOf(targetId), 0, dragId)
+    ids.splice(ids.indexOf(targetId) + (after ? 1 : 0), 0, dragId)
     onReorder(ids)
+  }
+  const endDrag = () => {
+    setDragId(null)
+    setOver(null)
   }
 
   return (
@@ -155,12 +164,38 @@ function LayerList({ widgets, selectedIds, onSelect, onReorder, onToggleHidden, 
         return (
           <div
             key={widget.id}
-            className={cn('flex items-center gap-0.5 rounded-md', overId === widget.id && dragId !== widget.id ? 'ring-1 ring-inset ring-primary/60' : null)}
+            className={cn(
+              'relative flex items-center gap-0.5 rounded-md',
+              dragId === widget.id ? 'opacity-50' : null,
+              over?.id === widget.id && dragId !== widget.id
+                ? cn('before:pointer-events-none before:absolute before:inset-x-1 before:h-0.5 before:rounded-full before:bg-primary', over.after ? 'before:-bottom-px' : 'before:-top-px')
+                : null,
+            )}
             draggable
-            onDragStart={() => setDragId(widget.id)}
-            onDragOver={(event) => { event.preventDefault(); setOverId(widget.id) }}
-            onDrop={(event) => { event.preventDefault(); drop(widget.id); setDragId(null); setOverId(null) }}
-            onDragEnd={() => { setDragId(null); setOverId(null) }}
+            onDragStart={(event) => {
+              // Firefox only starts a drag that carries data; a private type keeps the id out of text fields.
+              event.dataTransfer.setData(WALLPAPER_LAYER_DRAG_TYPE, widget.id)
+              event.dataTransfer.effectAllowed = 'move'
+              setDragId(widget.id)
+            }}
+            onDragOver={(event) => {
+              if (!dragId) return
+              event.preventDefault()
+              event.dataTransfer.dropEffect = 'move'
+              const rect = event.currentTarget.getBoundingClientRect()
+              const after = event.clientY > rect.top + rect.height / 2
+              if (over?.id !== widget.id || over.after !== after) setOver({ id: widget.id, after })
+            }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOver((current) => (current?.id === widget.id ? null : current))
+            }}
+            onDrop={(event) => {
+              event.preventDefault()
+              const rect = event.currentTarget.getBoundingClientRect()
+              drop(widget.id, event.clientY > rect.top + rect.height / 2)
+              endDrag()
+            }}
+            onDragEnd={endDrag}
           >
             <SidebarItem
               className={cn('min-w-0 flex-1', widget.hidden ? 'opacity-50' : null)}

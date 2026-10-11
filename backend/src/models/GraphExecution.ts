@@ -28,6 +28,19 @@ export type GraphWorkflowRuntimeExecutionSummary = {
   latest_error_message?: string | null
 }
 
+export type GraphExecutionRecentActivity = {
+  workflow_count: number
+  queued: number
+  running: number
+  completed: number
+  failed: number
+  /** Final results written inside the window. */
+  recent_results: number
+  oldest_queued_at: string | null
+  oldest_running_at: string | null
+  latest_updated_at: string | null
+}
+
 function createEmptyStatusCounts(): GraphExecutionStatusCounts {
   return {
     completed: 0,
@@ -305,6 +318,50 @@ export class GraphExecutionModel {
       latest_completed_at: row?.latest_completed_at ?? null,
       latest_failed_at: row?.latest_failed_at ?? null,
       latest_error_message: latestFailure?.error_message ?? null,
+    }
+  }
+
+  /**
+   * Status counts across active workflows for wallpaper widgets, without loading execution rows.
+   * Queued/running are current state and always count; finished runs only inside the window, so an old failure
+   * does not keep a widget in "needs attention" forever.
+   */
+  static summarizeRecentActivity(windowHours = 24): GraphExecutionRecentActivity {
+    const db = getUserSettingsDb()
+    const since = `-${Math.max(1, Math.round(windowHours))} hours`
+    const row = db.prepare(`
+      SELECT
+        COALESCE(SUM(CASE WHEN e.status = 'queued' THEN 1 ELSE 0 END), 0) as queued,
+        COALESCE(SUM(CASE WHEN e.status = 'running' THEN 1 ELSE 0 END), 0) as running,
+        COALESCE(SUM(CASE WHEN e.status = 'completed' THEN 1 ELSE 0 END), 0) as completed,
+        COALESCE(SUM(CASE WHEN e.status = 'failed' THEN 1 ELSE 0 END), 0) as failed,
+        strftime('%Y-%m-%dT%H:%M:%SZ', MIN(CASE WHEN e.status = 'queued' THEN e.created_date END)) as oldest_queued_at,
+        strftime('%Y-%m-%dT%H:%M:%SZ', MIN(CASE WHEN e.status = 'running' THEN e.started_at END)) as oldest_running_at,
+        strftime('%Y-%m-%dT%H:%M:%SZ', MAX(e.updated_date)) as latest_updated_at
+      FROM graph_executions e
+      JOIN graph_workflows w ON w.id = e.graph_workflow_id AND w.is_active = 1
+      WHERE e.status IN ('queued', 'running')
+        OR (e.status IN ('completed', 'failed') AND COALESCE(e.completed_at, e.updated_date, e.created_date) >= datetime('now', ?))
+    `).get(since) as Partial<GraphExecutionRecentActivity> | undefined
+    const results = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM graph_execution_final_results r
+      JOIN graph_executions e ON e.id = r.execution_id
+      JOIN graph_workflows w ON w.id = e.graph_workflow_id AND w.is_active = 1
+      WHERE r.created_date >= datetime('now', ?)
+    `).get(since) as { count?: number } | undefined
+    const workflows = db.prepare('SELECT COUNT(*) as count FROM graph_workflows WHERE is_active = 1').get() as { count?: number } | undefined
+
+    return {
+      workflow_count: Number(workflows?.count ?? 0),
+      queued: Number(row?.queued ?? 0),
+      running: Number(row?.running ?? 0),
+      completed: Number(row?.completed ?? 0),
+      failed: Number(row?.failed ?? 0),
+      recent_results: Number(results?.count ?? 0),
+      oldest_queued_at: row?.oldest_queued_at ?? null,
+      oldest_running_at: row?.oldest_running_at ?? null,
+      latest_updated_at: row?.latest_updated_at ?? null,
     }
   }
 

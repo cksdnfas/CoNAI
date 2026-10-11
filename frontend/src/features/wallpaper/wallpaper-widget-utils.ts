@@ -20,6 +20,34 @@ export function useWallpaperClockText() {
   return currentTime
 }
 
+/**
+ * Inner size of an element, tracked with a ResizeObserver (layout px, unaffected by the stage scale). Returns a
+ * callback ref, so it measures whenever the element mounts, also after loading/empty states rendered something else.
+ */
+export function useWallpaperElementSize<T extends HTMLElement>() {
+  const [element, setElement] = useState<T | null>(null)
+  const [size, setSize] = useState({ width: 0, height: 0 })
+
+  useEffect(() => {
+    if (!element) {
+      return
+    }
+    const updateSize = () => {
+      const nextWidth = Math.max(0, element.clientWidth)
+      const nextHeight = Math.max(0, element.clientHeight)
+      setSize((current) => (current.width === nextWidth && current.height === nextHeight ? current : { width: nextWidth, height: nextHeight }))
+    }
+    updateSize()
+    const observer = new ResizeObserver(updateSize)
+    observer.observe(element)
+    return () => {
+      observer.disconnect()
+    }
+  }, [element])
+
+  return [setElement, size] as const
+}
+
 /** Rotate through a widget image list on an interval when motion is enabled; holds while playback is paused. */
 export function useWallpaperRotatingIndex(length: number, intervalMs: number, enabled: boolean) {
   const [tick, setTick] = useState(0)

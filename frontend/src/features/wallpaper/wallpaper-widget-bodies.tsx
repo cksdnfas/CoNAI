@@ -12,8 +12,9 @@ import type { WallpaperWidgetInstance } from './wallpaper-types'
 import type { WallpaperWidgetPreviewImage } from './wallpaper-widget-preview-surface'
 
 export type { WallpaperWidgetPreviewImage } from './wallpaper-widget-preview-surface'
-import { getWallpaperQueueAgeLabelFromAnchor, getWallpaperQueueExecutionSummary } from './wallpaper-queue-status-utils'
-import { useWallpaperBrowseContentQuery } from './wallpaper-widget-data'
+import { getWallpaperQueueAgeLabelFromAnchor } from './wallpaper-queue-status-utils'
+import { useWallpaperWorkflowActivityQuery } from './wallpaper-widget-data'
+import { WallpaperWidgetErrorNote } from './wallpaper-widget-note'
 import {
   getWallpaperMotionStrengthMultiplier,
   useWallpaperClockText,
@@ -27,6 +28,7 @@ import {
 import {
   WallpaperAudioPlayerBody,
   WallpaperCharacterCardBody,
+  WallpaperChatInboxBody,
   WallpaperChatRecentBody,
   WallpaperPostTickerBody,
   WallpaperPromptOfDayBody,
@@ -38,19 +40,28 @@ import {
   WallpaperSystemMonitorBody,
 } from './wallpaper-host-widget-bodies'
 
-/** Render one graph execution status widget using existing browse-content APIs. */
+function parseTimestampMs(value: string | null | undefined) {
+  const timestamp = value ? Date.parse(value) : Number.NaN
+  return Number.isFinite(timestamp) ? timestamp : null
+}
+
+/** Workflow run counts: queued/running now, failures only from the last day so "needs attention" clears. */
 function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'queue-status' }> }) {
   const refreshInterval = Math.max(2, widget.settings.refreshIntervalSec) * 1000
   const visualMode = widget.settings.visualMode ?? 'tiles'
   const { t, formatNumber } = useI18n()
 
-  const queueQuery = useWallpaperBrowseContentQuery('queue-status', refreshInterval)
+  const queueQuery = useWallpaperWorkflowActivityQuery('queue-status', refreshInterval)
 
   const queueSummary = useMemo(() => {
-    const executions = queueQuery.data?.executions ?? []
+    const activity = queueQuery.data
     return {
-      ...getWallpaperQueueExecutionSummary(executions),
-      workflows: queueQuery.data?.scope.workflow_count ?? 0,
+      queued: activity?.counts.queued ?? 0,
+      running: activity?.counts.running ?? 0,
+      failed: activity?.counts.failed ?? 0,
+      workflows: activity?.workflowCount ?? 0,
+      oldestQueuedAnchorMs: parseTimestampMs(activity?.oldestQueuedAt),
+      oldestRunningAnchorMs: parseTimestampMs(activity?.oldestRunningAt),
     }
   }, [queueQuery.data])
 
@@ -59,7 +70,7 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
   }
 
   if (queueQuery.isError) {
-    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">{t('wallpaper.wallpaper.widget.bodies.workflow.status.failed.to.load')}</div>
+    return <WallpaperWidgetErrorNote error={queueQuery.error} />
   }
 
   const nowMs = Date.now()
@@ -73,14 +84,16 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
   const totalActive = queueSummary.queued + queueSummary.running
 
   if (visualMode === 'bars') {
+    // Em-based off a box-sized font (header + four rows ≈ 15em), so it fills large boxes and still fits the minimum;
+    // when it cannot, the last rows clip first.
     return (
-      <div className="flex h-full flex-col justify-center gap-[4cqh] text-xs sm:text-sm">
-        <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-[3cqh]">
+      <div className="flex h-full flex-col gap-[0.55em] overflow-hidden leading-tight [justify-content:safe_center]" style={{ fontSize: 'clamp(9px, min(6cqh, 4cqw), 22px)' }}>
+        <div className="flex shrink-0 items-center justify-between gap-[0.5em] border-b border-border/50 pb-[0.5em]">
           <div>
-            <div className="text-2xs uppercase tracking-overline text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.running')}</div>
-            <div className="text-sm font-semibold text-foreground">{t('wallpaper.wallpaper.widget.bodies.totalactive.tolocalestring.en.us.active', { totalActive: formatNumber(totalActive) })}</div>
+            <div className="text-[0.8em] uppercase tracking-overline text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.running')}</div>
+            <div className="text-[1.15em] font-semibold text-foreground">{t('wallpaper.wallpaper.widget.bodies.totalactive.tolocalestring.en.us.active', { totalActive: formatNumber(totalActive) })}</div>
           </div>
-          <div className="text-2xs uppercase tracking-overline text-muted-foreground">
+          <div className="text-[0.8em] uppercase tracking-overline text-muted-foreground">
             {queueSummary.failed > 0 ? t('wallpaper.wallpaper.widget.bodies.needs.attention') : t('wallpaper.wallpaper.widget.bodies.stable')}
           </div>
         </div>
@@ -88,22 +101,22 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
         {queueItems.map((item) => {
           const ratio = Math.max(0.08, item.value / maxValue)
           return (
-            <div key={item.label} className="space-y-1.5">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full text-2xs font-semibold text-background" style={{ backgroundColor: item.tone }}>
+            <div key={item.label} className="shrink-0 space-y-[0.35em]">
+              <div className="flex items-center justify-between gap-[0.75em]">
+                <div className="flex items-center gap-[0.5em]">
+                  <span className="flex size-[1.5em] items-center justify-center rounded-full text-[0.8em] font-semibold text-background" style={{ backgroundColor: item.tone }}>
                     {item.short}
                   </span>
                   <div>
-                    <div className="text-2xs uppercase tracking-overline text-muted-foreground">{item.label}</div>
-                    {item.ageLabel ? <div className="mt-0.5 text-2xs text-muted-foreground/85">{item.ageLabel}</div> : null}
+                    <div className="text-[0.8em] uppercase tracking-overline text-muted-foreground">{item.label}</div>
+                    {item.ageLabel ? <div className="text-[0.8em] text-muted-foreground/85">{item.ageLabel}</div> : null}
                   </div>
                 </div>
-                <div className={cn('text-sm font-semibold text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}>
+                <div className={cn('text-[1.15em] font-semibold text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}>
                   {formatNumber(item.value)}
                 </div>
               </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-surface-lowest/90">
+              <div className="h-[0.55em] overflow-hidden rounded-full bg-surface-lowest/90">
                 <div
                   className={cn('h-full rounded-full transition-[width] duration-700 ease-out', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}
                   style={{
@@ -121,27 +134,34 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
   }
 
   if (visualMode === 'rings') {
+    // Each ring takes its half-height cell minus the label lines (--ring); the count inside scales with the ring.
     return (
-      <div className="grid h-full grid-cols-2 gap-2 text-center text-xs sm:text-sm">
+      <div
+        className="grid h-full grid-cols-2 grid-rows-2 gap-[0.5em] text-center"
+        style={{ fontSize: 'clamp(9px, min(4.2cqh, 3.4cqw), 20px)', ['--ring' as string]: 'max(2.5em, min(calc(50cqh - 3.6em), 30cqw))' }}
+      >
         {queueItems.map((item) => {
           const ratio = item.value / maxValue
           const degrees = Math.max(12, Math.round(ratio * 360))
           return (
-            <div key={item.label} className="relative flex flex-col items-center justify-center px-2 py-3">
+            <div key={item.label} className="relative flex min-h-0 flex-col items-center justify-center overflow-hidden">
               <div
                 className={cn('absolute inset-0 opacity-60', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}
                 style={{ background: `radial-gradient(circle at center, color-mix(in srgb, ${item.tone} 18%, transparent), transparent 62%)` }}
               />
               <div
-                className={cn('relative flex h-14 w-14 items-center justify-center rounded-full border border-border/60 text-sm font-semibold text-foreground transition-transform', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}
+                className={cn('relative flex size-[var(--ring)] shrink-0 items-center justify-center rounded-full border border-border/60 font-semibold text-foreground transition-transform', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}
                 style={{ background: `conic-gradient(${item.tone} 0deg ${degrees}deg, color-mix(in srgb, var(--surface-lowest) 92%, transparent) ${degrees}deg 360deg)` }}
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-background/92 shadow-[0_0_20px_rgba(0,0,0,0.18)] backdrop-blur-sm">
+                <div
+                  className="flex size-[72%] items-center justify-center rounded-full bg-background/92 tabular-nums shadow-[0_0_20px_rgba(0,0,0,0.18)] backdrop-blur-sm"
+                  style={{ fontSize: 'calc(var(--ring) * 0.26)' }}
+                >
                   {formatNumber(item.value)}
                 </div>
               </div>
-              <div className="relative mt-2 text-2xs uppercase tracking-overline text-muted-foreground">{item.label}</div>
-              {item.ageLabel ? <div className="relative mt-1 text-2xs text-muted-foreground/85">{item.ageLabel}</div> : null}
+              <div className="relative mt-[0.4em] text-[0.8em] uppercase tracking-overline text-muted-foreground">{item.label}</div>
+              {item.ageLabel ? <div className="relative text-[0.8em] text-muted-foreground/85">{item.ageLabel}</div> : null}
             </div>
           )
         })}
@@ -173,34 +193,23 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
   )
 }
 
-/** Render one subtle graph execution pulse widget from execution and result activity. */
+/** Render one subtle graph execution pulse widget from the last day's run and result counts. */
 function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'activity-pulse' }> }) {
   const refreshInterval = Math.max(2, widget.settings.refreshIntervalSec) * 1000
   const motionStrength = getWallpaperMotionStrengthMultiplier(widget.settings.motionStrength ?? 1)
   const emphasis = widget.settings.emphasis ?? 'mixed'
   const { t, formatNumber, formatDateTime } = useI18n()
-  const activityQuery = useWallpaperBrowseContentQuery('activity-pulse', refreshInterval)
+  const activityQuery = useWallpaperWorkflowActivityQuery('activity-pulse', refreshInterval)
 
   const summary = useMemo(() => {
-    const browseContent = activityQuery.data
-    if (!browseContent) {
-      return {
-        queued: 0,
-        running: 0,
-        failed: 0,
-        completed: 0,
-        recentResults: 0,
-        lastUpdated: null as string | null,
-      }
-    }
-
-    const executionSummary = getWallpaperQueueExecutionSummary(browseContent.executions)
-    const recentResults = browseContent.final_results.length
-
+    const activity = activityQuery.data
     return {
-      ...executionSummary,
-      recentResults,
-      lastUpdated: executionSummary.latestUpdatedAt,
+      queued: activity?.counts.queued ?? 0,
+      running: activity?.counts.running ?? 0,
+      failed: activity?.counts.failed ?? 0,
+      completed: activity?.counts.completed ?? 0,
+      recentResults: activity?.recentResults ?? 0,
+      lastUpdated: activity?.latestUpdatedAt ?? null,
     }
   }, [activityQuery.data])
 
@@ -209,7 +218,7 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
   }
 
   if (activityQuery.isError) {
-    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">{t('wallpaper.wallpaper.widget.bodies.failed.to.load.activity.flow')}</div>
+    return <WallpaperWidgetErrorNote error={activityQuery.error} />
   }
 
   const emphasisWeight = emphasis === 'queue'
@@ -387,6 +396,8 @@ export function WallpaperWidgetBody({ widget, mode, onOpenImage }: { widget: Wal
       return <WallpaperCharacterCardBody widget={widget} />
     case 'chat-recent':
       return <WallpaperChatRecentBody widget={widget} />
+    case 'chat-inbox':
+      return <WallpaperChatInboxBody widget={widget} />
     case 'audio-player':
       return <WallpaperAudioPlayerBody widget={widget} />
     case 'post-ticker':

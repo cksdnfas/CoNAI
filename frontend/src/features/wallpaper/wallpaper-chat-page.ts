@@ -14,7 +14,7 @@ import { isWallpaperPreviewableImageWidget, type WallpaperBackground, type Wallp
  * #RRGGBB, an empty string clears a color or a time window, and every value is normalized like a stored preset.
  */
 
-const HEX = /^#[0-9a-fA-F]{6}$/
+const HEX = /^#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?$/
 const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/
 const FONTS = ['inherit', 'sans', 'serif', 'mono', 'display']
 
@@ -75,7 +75,7 @@ const TYPE_CHOICES: Partial<Record<WallpaperWidgetType, Record<string, string[]>
 const NUMBER_CHOICES: Record<string, number[]> = { messageLines: [0, 1, 3] }
 const NUMBER_RANGES: Record<string, [number, number]> = {
   volume: [0, 100], barCount: [8, 64], sensitivity: [50, 300], smoothing: [0, 90], fontSize: [10, 240], maxJobs: [1, 8],
-  tagCount: [1, 20], messageCount: [1, 12], count: [1, 10], visibleCount: [1, 48], days: [1, 90], motionStrength: [0, 100],
+  tagCount: [1, 20], messageCount: [1, 12], listCount: [1, 30], count: [1, 10], visibleCount: [1, 48], days: [1, 90], motionStrength: [0, 100],
   imageHoverMotion: [0, 100], refreshIntervalSec: [5, 3600], shiftIntervalSec: [1, 3600], slideshowIntervalSec: [1, 86400],
   swapIntervalSec: [1, 3600], swapBounceCount: [1, 20], poolRefreshMinutes: [0, 1440], rerollMinutes: [0, 1440],
   imageScalePercent: [10, 300], imageTransitionDurationMs: [0, 10000],
@@ -104,11 +104,14 @@ function settingType(key: string, value: unknown): 'string' | 'number' | 'boolea
 /** Optional settings every image widget reads (click and preview behaviour). */
 const IMAGE_OPTIONAL_KEYS = ['imageClickAction', 'pauseOnHover', 'imagePreviewOpenScalePercent', 'imagePreviewOpenDurationMs', 'imagePreviewOpenEasing', 'imagePreviewCloseScalePercent', 'imagePreviewCloseDurationMs', 'imagePreviewCloseEasing', 'imageTransitionDurationMs']
 
+/** Switches that let a live wallpaper act as the admin account: a person flips them in the inspector, never the chat. */
+const PERSON_ONLY_SETTINGS = new Set(['allowReply', 'allowTools'])
+
 /** Every widget's settings keys (the union; data.widgetTypes says which keys each widget reads). */
 function collectSettingKeys() {
   const keys = new Map<string, 'string' | 'number' | 'boolean'>()
   for (const definition of listWallpaperWidgetDefinitions()) {
-    for (const [key, value] of Object.entries(definition.defaultSettings)) keys.set(key, settingType(key, value))
+    for (const [key, value] of Object.entries(definition.defaultSettings)) if (!PERSON_ONLY_SETTINGS.has(key)) keys.set(key, settingType(key, value))
   }
   for (const key of IMAGE_OPTIONAL_KEYS) {
     if (!keys.has(key)) keys.set(key, key === 'pauseOnHover' ? 'boolean' : key.endsWith('Easing') || key === 'imageClickAction' ? 'string' : 'number')
@@ -144,14 +147,14 @@ export function describeWallpaperWidgetTypes(t: (input: TranslationInput) => str
     type: definition.type,
     name: t(definition.title),
     shows: t(definition.description),
-    settings: Object.keys(definition.defaultSettings),
+    settings: Object.keys(definition.defaultSettings).filter((key) => !PERSON_ONLY_SETTINGS.has(key)),
     defaultSize: { w: definition.defaultSize.w, h: definition.defaultSize.h },
   }))
 }
 
 function requireColor(value: string, key: string): string | null {
   if (value === '') return null
-  if (!HEX.test(value)) throw new Error(`${key}: 색은 #RRGGBB 형식이어야 해.`)
+  if (!HEX.test(value)) throw new Error(`${key}: 색은 #RRGGBB 또는 #RRGGBBAA 형식이어야 해.`)
   return value
 }
 
@@ -176,6 +179,7 @@ export function patchWallpaperWidgetSettings(widget: WallpaperWidgetInstance, ra
   const current = widget.settings as unknown as Record<string, unknown>
   const next: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(raw)) {
+    if (PERSON_ONLY_SETTINGS.has(key)) throw new Error(`${key}는 사람이 위젯 설정에서 직접 켜야 해. 사용자에게 안내만 해.`)
     const known = key in defaults || key in current || (isWallpaperPreviewableImageWidget(widget) && IMAGE_OPTIONAL_KEYS.includes(key))
     if (!known) throw new Error(`${widget.type} 위젯에는 ${key} 설정이 없어. data.widgetTypes에서 그 위젯의 설정을 확인해.`)
     const choices = TYPE_CHOICES[widget.type]?.[key]
@@ -325,6 +329,8 @@ export interface WallpaperChatPageInput {
   canRedo: boolean
   savedPresets: Array<{ id: string; name: string }>
   activePresetId: string | null
+  /** The saved wallpaper the live page shows (server setting); editing never changes it. */
+  livePresetId: string | null
   schedule: WallpaperSchedule | undefined
   runtimeKeys: Array<{ id: number; name: string; presetId: string | null }>
   quickRunSchedules: Array<{ id: number; name: string }>
@@ -354,7 +360,7 @@ export function buildWallpaperChatPage(input: WallpaperChatPageInput): { fields:
       options: wallpaperChatValue({ themeMode: layout.themeMode ?? 'dark', ...options }),
       widgetTypes: describeWallpaperWidgetTypes(t),
       templates: WALLPAPER_TEMPLATES.map((template) => `${template.id}: ${t(template.name)}`),
-      savedWallpapers: input.savedPresets.map((preset) => ({ id: preset.id, name: preset.name, ...(preset.id === input.activePresetId ? { open: true } : {}) })),
+      savedWallpapers: input.savedPresets.map((preset) => ({ id: preset.id, name: preset.name, ...(preset.id === input.activePresetId ? { open: true } : {}), ...(preset.id === input.livePresetId ? { live: true } : {}) })),
       ...(input.schedule && (input.schedule.enabled || input.schedule.entries.length) ? { schedule: { enabled: input.schedule.enabled, entries: input.schedule.entries.map(({ presetId, days, start, end }) => ({ presetId, days, start, end })) } } : {}),
       ...(isAdmin && input.runtimeKeys.length ? { runtimeKeys: input.runtimeKeys.map((key) => ({ id: key.id, name: key.name, ...(key.presetId ? { presetId: key.presetId } : {}) })) } : {}),
       ...(layout.widgets.some((widget) => widget.type === 'quick-run') ? { quickRunSchedules: input.quickRunSchedules } : {}),

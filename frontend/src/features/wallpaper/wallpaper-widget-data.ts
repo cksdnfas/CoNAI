@@ -12,8 +12,8 @@ import {
   getWallpaperLlmUsage,
   getWallpaperQueueSnapshot,
   getWallpaperRecentPosts,
-  getWallpaperRuntimeBrowseContent,
   getWallpaperRuntimeGroupPreviewImages,
+  getWallpaperWorkflowActivity,
   rollWallpaperPrompt,
 } from '@/lib/api-wallpaper-runtime'
 import type { ImageRecord } from '@/types/image'
@@ -65,46 +65,53 @@ function dedupeWallpaperPreviewImages(images: ImageRecord[]) {
   })
 }
 
-const WALLPAPER_BROWSE_CONTENT_QUERY_KEY = [WALLPAPER_QUERY_ROOT, 'browse-content'] as const
-const browseContentRefreshIntervals = new Map<string, number>()
-let browseContentRefreshTimer: ReturnType<typeof setInterval> | null = null
+const WALLPAPER_WORKFLOW_ACTIVITY_QUERY_KEY = [WALLPAPER_QUERY_ROOT, 'workflow-activity'] as const
+const workflowActivityRefreshIntervals = new Map<string, number>()
+let workflowActivityRefreshTimer: ReturnType<typeof setInterval> | null = null
 
-function syncBrowseContentRefreshTimer(refetch: () => void) {
-  if (browseContentRefreshTimer) {
-    clearInterval(browseContentRefreshTimer)
-    browseContentRefreshTimer = null
+function syncWorkflowActivityRefreshTimer(refetch: () => void) {
+  if (workflowActivityRefreshTimer) {
+    clearInterval(workflowActivityRefreshTimer)
+    workflowActivityRefreshTimer = null
   }
 
-  const activeIntervals = Array.from(browseContentRefreshIntervals.values())
+  const activeIntervals = Array.from(workflowActivityRefreshIntervals.values())
   if (activeIntervals.length === 0) {
     return
   }
 
-  browseContentRefreshTimer = setInterval(refetch, Math.min(...activeIntervals))
+  workflowActivityRefreshTimer = setInterval(refetch, Math.min(...activeIntervals))
 }
 
-/** Load one shared browse-content query at the shortest active widget cadence. */
-export function useWallpaperBrowseContentQuery(scope: string, refreshIntervalMs: number) {
+/**
+ * Workflow run counts shared by the queue-status and activity-pulse widgets, polled once at the shortest active
+ * widget cadence. With the live stream connected, execution events refresh it and polling drops to a safety net.
+ */
+export function useWallpaperWorkflowActivityQuery(scope: string, refreshIntervalMs: number) {
   const queryClient = useQueryClient()
+  // The execution topic needs workflows.view, so a live stream may not carry these events; keep the net fairly tight.
+  const effectiveIntervalMs = useRefetchInterval(refreshIntervalMs, 30_000)
 
   useEffect(() => {
-    browseContentRefreshIntervals.set(scope, refreshIntervalMs)
+    workflowActivityRefreshIntervals.set(scope, effectiveIntervalMs)
     const refetch = () => {
-      void queryClient.refetchQueries({ queryKey: WALLPAPER_BROWSE_CONTENT_QUERY_KEY, type: 'active' })
+      void queryClient.refetchQueries({ queryKey: WALLPAPER_WORKFLOW_ACTIVITY_QUERY_KEY, type: 'active' })
     }
-    syncBrowseContentRefreshTimer(refetch)
+    syncWorkflowActivityRefreshTimer(refetch)
 
     return () => {
-      browseContentRefreshIntervals.delete(scope)
-      syncBrowseContentRefreshTimer(refetch)
+      workflowActivityRefreshIntervals.delete(scope)
+      syncWorkflowActivityRefreshTimer(refetch)
     }
-  }, [queryClient, refreshIntervalMs, scope])
+  }, [queryClient, effectiveIntervalMs, scope])
 
   return useQuery({
-    queryKey: WALLPAPER_BROWSE_CONTENT_QUERY_KEY,
-    queryFn: () => getWallpaperRuntimeBrowseContent(),
+    queryKey: WALLPAPER_WORKFLOW_ACTIVITY_QUERY_KEY,
+    queryFn: getWallpaperWorkflowActivity,
     staleTime: 1_000,
     refetchInterval: false,
+    placeholderData: (previous) => previous,
+    retry: false,
   })
 }
 
@@ -197,10 +204,10 @@ export function useWallpaperChatProfiles() {
   })
 }
 
-export function useWallpaperChatThreads(profileId: number | null) {
+export function useWallpaperChatThreads(profileId: number | null, limit = 5) {
   return useQuery({
-    queryKey: [WALLPAPER_QUERY_ROOT, 'chat-threads', profileId],
-    queryFn: () => getWallpaperChatThreads(profileId, 5),
+    queryKey: [WALLPAPER_QUERY_ROOT, 'chat-threads', profileId, limit],
+    queryFn: () => getWallpaperChatThreads(profileId, limit),
     refetchInterval: 15_000,
     placeholderData: (previous) => previous,
     retry: false,

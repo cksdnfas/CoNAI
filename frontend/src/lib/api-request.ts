@@ -62,6 +62,19 @@ export interface ApiEnvelope<T> {
   error?: string
 }
 
+/** A non-2xx API response; `status` lets callers word permission and availability failures differently. */
+export class ApiRequestError extends Error {
+  readonly status: number
+  /** Machine-readable `code` from the error body, when the server sends one. */
+  readonly code?: string
+
+  constructor(message: string, status: number, code?: string) {
+    super(message)
+    this.status = status
+    this.code = code
+  }
+}
+
 async function readResponsePayload(response: Response): Promise<ResponsePayload> {
   const contentType = response.headers.get('content-type') ?? ''
   return contentType.includes('application/json') ? await response.json() : await response.text()
@@ -81,6 +94,15 @@ function errorMessageFromPayload(payload: ResponsePayload) {
   return (typeof error === 'string' && error) || (typeof details === 'string' && details) || undefined
 }
 
+function errorCodeFromPayload(payload: ResponsePayload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return undefined
+  }
+
+  const { code } = payload as Record<string, unknown>
+  return typeof code === 'string' && code ? code : undefined
+}
+
 /** Execute a JSON API request with a default abort timeout and surface backend error messages. */
 export async function requestJson<T>(path: string, init?: RequestInit, options: RequestJsonOptions = {}): Promise<T> {
   const response = await fetch(buildApiUrl(path), {
@@ -97,7 +119,7 @@ export async function requestJson<T>(path: string, init?: RequestInit, options: 
   const payload = await readResponsePayload(response)
 
   if (!response.ok) {
-    throw new Error(errorMessageFromPayload(payload) ?? `Request failed: ${response.status}`)
+    throw new ApiRequestError(errorMessageFromPayload(payload) ?? `Request failed: ${response.status}`, response.status, errorCodeFromPayload(payload))
   }
 
   return payload as T

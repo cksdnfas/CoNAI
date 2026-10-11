@@ -1,5 +1,5 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlignCenterVertical,
@@ -28,7 +28,21 @@ import {
   ZoomIn,
   ZoomOut,
   CalendarClock,
+  Radio,
+  ArrowDown,
+  ArrowUp,
+  BoxSelect,
+  ClipboardPaste,
+  EyeOff,
+  Maximize,
+  PaintRoller,
+  Paintbrush,
+  Scan,
+  Scissors,
+  Search,
 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
@@ -67,6 +81,7 @@ import {
   normalizeWallpaperLayoutPreset,
   nudgeWallpaperWidgets,
   pasteWallpaperWidgets,
+  getWallpaperCopyOffset,
   removeWallpaperWidgets,
   reorderWallpaperWidgets,
   resizeWallpaperLayoutCanvas,
@@ -76,16 +91,19 @@ import {
   saveWallpaperLayoutPresets,
   setWallpaperWidgetFrames,
   stackWallpaperWidgets,
+  stepWallpaperWidgets,
   toWallpaperLayoutPresetViewModels,
   toWallpaperLayoutPresetWireModel,
   toWallpaperLayoutPresetWireModels,
   upsertWallpaperLayoutPreset,
+  WALLPAPER_HEX_COLOR,
 } from './wallpaper-layout-utils'
 import { getWallpaperLayoutCanvas } from './wallpaper-canvas-presets'
-import type { WallpaperLayoutPreset, WallpaperWidgetInstance, WallpaperWidgetType } from './wallpaper-types'
+import type { WallpaperLayoutPreset, WallpaperWidgetFrame, WallpaperWidgetInstance, WallpaperWidgetStyle, WallpaperWidgetType } from './wallpaper-types'
 import { WALLPAPER_WIDGET_TYPE_SET } from './wallpaper-types'
 import { WallpaperWidgetInspector, type WallpaperWidgetPatch } from './wallpaper-widget-inspector'
 import { WallpaperBackgroundInspector } from './wallpaper-background-inspector'
+import { WallpaperColorPaletteContext } from './wallpaper-color-picker'
 import { WALLPAPER_WIDGET_DRAG_TYPE, WallpaperWidgetLibrarySidebar } from './wallpaper-widget-library-sidebar'
 import { WALLPAPER_RUNTIME_TOKENS_QUERY_KEY, WallpaperLivelyConnectModal, wallpaperIssuedKey, type WallpaperIssuedKey } from './wallpaper-lively-connect-modal'
 import { WallpaperScheduleModal } from './wallpaper-schedule-modal'
@@ -125,6 +143,26 @@ function applyChatWidgetPatch(layout: WallpaperLayoutPreset, widgetId: string, r
 }
 
 const ZOOM_STEPS = [0.1, 0.15, 0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2]
+const WIDGET_CLIPBOARD_KEY = 'conai.wallpaper.clipboard.widgets'
+const STYLE_CLIPBOARD_KEY = 'conai.wallpaper.clipboard.style'
+
+/** Copied widgets and styles last for the tab session, so a reload or another preset can still paste them. */
+function readEditorClipboard<T>(key: string): T | null {
+  try {
+    const raw = window.sessionStorage.getItem(key)
+    return raw ? JSON.parse(raw) as T : null
+  } catch {
+    return null
+  }
+}
+
+function writeEditorClipboard(key: string, value: unknown) {
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // Storage can be full or blocked; the copy still works until the tab reloads.
+  }
+}
 const SNAP_STORAGE_KEY = 'conai.wallpaper.snap'
 const EDITOR_ENVIRONMENT = { mode: 'editor' as const, live: false }
 
@@ -138,11 +176,17 @@ function readSnapPreference() {
 
 /** Apply one inspector patch to a widget, merging style and settings and keeping it on the canvas. */
 function patchWidget(layout: WallpaperLayoutPreset, widgetId: string, patch: WallpaperWidgetPatch): WallpaperLayoutPreset {
+  return patchWidgets(layout, [widgetId], patch)
+}
+
+/** The same patch onto several widgets at once (a multi-selection edit is one undo step). */
+function patchWidgets(layout: WallpaperLayoutPreset, widgetIds: readonly string[], patch: WallpaperWidgetPatch): WallpaperLayoutPreset {
   const canvas = getWallpaperLayoutCanvas(layout)
+  const targets = new Set(widgetIds)
   return {
     ...layout,
     widgets: layout.widgets.map((widget) => {
-      if (widget.id !== widgetId) return widget
+      if (!targets.has(widget.id)) return widget
       const next = {
         ...widget,
         ...patch,
@@ -154,17 +198,77 @@ function patchWidget(layout: WallpaperLayoutPreset, widgetId: string, patch: Wal
   }
 }
 
+/** Distinct colors set anywhere in the layout (widgets, background, options), most used first. */
+function collectLayoutColors(layout: WallpaperLayoutPreset): string[] {
+  const counts = new Map<string, number>()
+  const add = (value: unknown) => {
+    if (typeof value !== 'string' || !WALLPAPER_HEX_COLOR.test(value)) return
+    const color = value.toLowerCase()
+    counts.set(color, (counts.get(color) ?? 0) + 1)
+  }
+  for (const widget of layout.widgets) {
+    add(widget.style.backgroundColor)
+    add(widget.style.textColor)
+    add(widget.style.accentColor)
+    add((widget.settings as { color?: unknown }).color)
+  }
+  const background = layout.background as unknown as Record<string, unknown>
+  add(background.color)
+  add(background.from)
+  add(background.to)
+  add(layout.options?.accentColor)
+  add(layout.options?.textColor)
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([color]) => color).slice(0, 16)
+}
+
 /** What saving persists, normalized so clamping or defaults never read as edits. */
 function presetSignature(preset: WallpaperLayoutPreset) {
   const wire = toWallpaperLayoutPresetWireModel(normalizeWallpaperLayoutPreset(preset))
   return JSON.stringify([wire.canvasPresetId, wire.canvasWidth, wire.canvasHeight, wire.themeMode, normalizeWallpaperBackground(wire.background), wire.options ?? null, wire.widgets])
 }
 
+type EditorMenuItem = 'separator' | {
+  icon: ComponentType<{ className?: string }>
+  label: string
+  shortcut?: string
+  disabled?: boolean
+  destructive?: boolean
+  action: () => void
+}
+
+/** Rows of a canvas menu (right click, zoom): icon, label and the matching shortcut. */
+function EditorMenuItems({ items, onDone }: { items: EditorMenuItem[]; onDone: () => void }) {
+  return (
+    <div role="menu" className="flex flex-col">
+      {items.map((item, index) => (item === 'separator' ? (
+        <div key={`separator-${index}`} role="separator" className="mx-1 my-1 h-px bg-line" />
+      ) : (
+        <Button
+          key={item.label}
+          type="button"
+          role="menuitem"
+          variant="nav"
+          disabled={item.disabled}
+          className={cn('h-8 gap-3', item.destructive ? 'text-destructive hover:bg-destructive-soft hover:text-destructive-soft-foreground' : 'text-foreground')}
+          onClick={() => {
+            onDone()
+            item.action()
+          }}
+        >
+          <item.icon className="h-4 w-4" />
+          <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
+          {item.shortcut ? <span className="shrink-0 font-mono text-2xs text-muted-foreground">{item.shortcut}</span> : null}
+        </Button>
+      )))}
+    </div>
+  )
+}
+
 export function WallpaperEditorPage() {
   const { isAdmin } = useFeaturePermissions()
   const { t } = useI18n()
   const confirm = useConfirm()
-  const { showSnackbar } = useSnackbar()
+  const { showSnackbar, closeSnackbar } = useSnackbar()
   const hasHydratedServerPresetsRef = useRef(false)
   // Widget edits go through a bounded undo history; loading a preset, a new canvas or a template resets it.
   const {
@@ -179,7 +283,10 @@ export function WallpaperEditorPage() {
   // A browser without its own draft (new device, cleared storage) opens the server's active preset instead.
   const [startedWithoutDraft] = useState(() => loadWallpaperLayoutDraft() === null)
   const [savedPresets, setSavedPresets] = useState(() => loadWallpaperLayoutPresets())
+  // The preset being edited (this browser) and the one the live wallpaper shows (server) are separate:
+  // opening, saving or replacing the draft never moves the live wallpaper; only "make live" does.
   const [activePresetId, setActivePresetId] = useState<string | null>(() => loadWallpaperActivePresetId())
+  const [livePresetId, setLivePresetId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [zoom, setZoom] = useState<WallpaperStageZoom>('fit')
   const [zoomPercent, setZoomPercent] = useState(0)
@@ -189,8 +296,15 @@ export function WallpaperEditorPage() {
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false)
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false)
   const workspaceMenuAnchorRef = useRef<HTMLButtonElement | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ widgetId: string | null; x: number; y: number } | null>(null)
+  const contextMenuAnchorRef = useRef<HTMLDivElement | null>(null)
+  const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false)
+  const zoomMenuAnchorRef = useRef<HTMLButtonElement | null>(null)
+  const [zoomDraft, setZoomDraft] = useState('')
+  const [focusRequest, setFocusRequest] = useState<{ frame: WallpaperWidgetFrame; nonce: number } | null>(null)
   const importInputRef = useRef<HTMLInputElement | null>(null)
-  const clipboardRef = useRef<WallpaperWidgetInstance[]>([])
+  const clipboardRef = useRef<WallpaperWidgetInstance[]>(readEditorClipboard<WallpaperWidgetInstance[]>(WIDGET_CLIPBOARD_KEY) ?? [])
+  const [styleClipboard, setStyleClipboard] = useState<Partial<WallpaperWidgetStyle> | null>(() => readEditorClipboard(STYLE_CLIPBOARD_KEY))
   const theme = useWallpaperTheme(layoutPreset.themeMode)
   const queryClient = useQueryClient()
   // A key a connected chat issued through its card: shown once in the Lively dialog, never in the chat.
@@ -226,10 +340,11 @@ export function WallpaperEditorPage() {
   })
 
   const wallpaperPresetMutation = useMutation({
-    mutationFn: ({ wallpaperLayoutPresets, wallpaperActivePresetId }: { wallpaperLayoutPresets: WallpaperLayoutPreset[]; wallpaperActivePresetId: string | null }) => (
+    // `wallpaperActivePresetId` undefined leaves the server's live wallpaper as it is.
+    mutationFn: ({ wallpaperLayoutPresets, wallpaperActivePresetId }: { wallpaperLayoutPresets: WallpaperLayoutPreset[]; wallpaperActivePresetId?: string | null }) => (
       updateAppearanceSettings({
         wallpaperLayoutPresets: toWallpaperLayoutPresetWireModels(wallpaperLayoutPresets),
-        wallpaperActivePresetId,
+        ...(wallpaperActivePresetId === undefined ? {} : { wallpaperActivePresetId }),
       })
     ),
   })
@@ -238,6 +353,8 @@ export function WallpaperEditorPage() {
   const widgetById = useMemo(() => new Map(layoutPreset.widgets.map((widget) => [widget.id, widget])), [layoutPreset.widgets])
   const effectiveActivePresetId = activePresetId && savedPresetById.has(activePresetId) ? activePresetId : null
   const activePreset = effectiveActivePresetId ? (savedPresetById.get(effectiveActivePresetId) ?? null) : null
+  // With no live choice the runtime page shows the first saved preset, so the badge does too.
+  const effectiveLivePresetId = livePresetId && savedPresetById.has(livePresetId) ? livePresetId : (savedPresets[0]?.id ?? null)
   const hasUnsavedPresetChanges = useMemo(() => {
     if (!activePreset) return false
     const draftName = layoutPreset.name.trim() || activePreset.name
@@ -254,6 +371,7 @@ export function WallpaperEditorPage() {
 
   const effectiveSelectedIds = useMemo(() => selectedIds.filter((id) => widgetById.has(id)), [selectedIds, widgetById])
   const selectedWidgets = useMemo(() => effectiveSelectedIds.map((id) => widgetById.get(id)).filter((widget): widget is WallpaperWidgetInstance => Boolean(widget)), [effectiveSelectedIds, widgetById])
+  const layoutPalette = useMemo(() => collectLayoutColors(layoutPreset), [layoutPreset])
   const draftRuntimePath = buildWallpaperDraftRuntimePath()
   const activePresetRuntimePath = activePreset ? buildWallpaperRuntimePath(activePreset) : null
 
@@ -291,30 +409,40 @@ export function WallpaperEditorPage() {
     }
 
     const serverActivePreset = serverPresets.find((preset) => preset.id === serverActivePresetId) ?? null
+    // Keep editing what this browser had open when the server still has it; otherwise open the live one.
+    const editingPresetId = startedWithoutDraft || !serverPresets.some((preset) => preset.id === activePresetId) ? serverActivePresetId : activePresetId
     queueMicrotask(() => {
       setSavedPresets(serverPresets)
-      setActivePresetId(serverActivePresetId)
+      setActivePresetId(editingPresetId)
       if (startedWithoutDraft && serverActivePreset) resetLayoutPreset(cloneWallpaperPresetToDraft(serverActivePreset))
     })
     saveWallpaperLayoutPresets(serverPresets)
-    saveWallpaperActivePresetId(serverActivePresetId)
-  }, [resetLayoutPreset, startedWithoutDraft, wallpaperSettingsQuery.data])
+    saveWallpaperActivePresetId(editingPresetId)
+  }, [activePresetId, resetLayoutPreset, startedWithoutDraft, wallpaperSettingsQuery.data])
 
+  // The live wallpaper follows the server, including changes made from another browser.
+  useEffect(() => {
+    const serverLivePresetId = wallpaperSettingsQuery.data?.wallpaperActivePresetId
+    if (serverLivePresetId !== undefined) queueMicrotask(() => setLivePresetId(serverLivePresetId))
+  }, [wallpaperSettingsQuery.data?.wallpaperActivePresetId])
+
+  /** Write the saved presets; `nextLivePresetId` undefined keeps the live wallpaper where it is. */
   const syncWallpaperPresetState = (
     nextPresets: WallpaperLayoutPreset[],
-    nextActivePresetId: string | null,
+    nextLivePresetId: string | null | undefined,
     successMessage?: string,
   ) => {
     if (!isAdmin) { notifyError(t({ ko: '서버 설정 변경은 관리자 권한이 필요해.', en: 'Changing server settings requires an administrator.' })); return }
     wallpaperPresetMutation.mutate(
       {
         wallpaperLayoutPresets: nextPresets,
-        wallpaperActivePresetId: nextActivePresetId,
+        wallpaperActivePresetId: nextLivePresetId,
       },
       {
         onSuccess: (settings) => {
           setSavedPresets(toWallpaperLayoutPresetViewModels(settings.appearance.wallpaperLayoutPresets))
-          setActivePresetId(settings.appearance.wallpaperActivePresetId)
+          setLivePresetId(settings.appearance.wallpaperActivePresetId)
+          void queryClient.invalidateQueries({ queryKey: ['wallpaper-runtime-settings'] })
           if (successMessage) {
             notifyInfo(successMessage)
           }
@@ -324,6 +452,42 @@ export function WallpaperEditorPage() {
         },
       },
     )
+  }
+
+  /**
+   * Swap the whole canvas (open a preset, new canvas, template, import). The undo history starts over because its
+   * steps belong to the old canvas, so the snackbar offers one step back to it instead.
+   */
+  const replaceCanvas = (next: WallpaperLayoutPreset, nextPresetId: string | null, message: string) => {
+    const before = layoutPreset
+    const beforePresetId = activePresetId
+    setActivePresetId(nextPresetId)
+    resetLayoutPreset(next)
+    setSelectedIds([])
+    showSnackbar({
+      key: 'wallpaper-canvas-replaced',
+      message,
+      durationMs: 8000,
+      content: (
+        <span className="flex items-center gap-3">
+          <span className="min-w-0 flex-1">{message}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 shrink-0 px-2"
+            onClick={() => {
+              setActivePresetId(beforePresetId)
+              resetLayoutPreset(before)
+              setSelectedIds([])
+              closeSnackbar()
+            }}
+          >
+            {t({ ko: '되돌리기', en: 'Undo' })}
+          </Button>
+        </span>
+      ),
+    })
   }
 
   /** Ask before an action replaces the current canvas while it has unsaved edits. */
@@ -352,7 +516,6 @@ export function WallpaperEditorPage() {
 
     if (!presetId) {
       setActivePresetId(null)
-      syncWallpaperPresetState(savedPresets, null)
       return
     }
 
@@ -361,10 +524,12 @@ export function WallpaperEditorPage() {
       return
     }
 
-    setActivePresetId(nextPreset.id)
-    resetLayoutPreset(cloneWallpaperPresetToDraft(nextPreset))
-    setSelectedIds([])
-    syncWallpaperPresetState(savedPresets, nextPreset.id)
+    replaceCanvas(cloneWallpaperPresetToDraft(nextPreset), nextPreset.id, t({ ko: "'{name}'을 열었어.", en: "Opened '{name}'." }, { name: nextPreset.name }))
+  }
+
+  const handleMakeLive = () => {
+    if (!effectiveActivePresetId || hasUnsavedPresetChanges) return
+    syncWallpaperPresetState(savedPresets, effectiveActivePresetId, t({ ko: "'{name}'을 라이브 월페이퍼로 지정했어.", en: "'{name}' is now the live wallpaper." }, { name: activePreset?.name ?? '' }))
   }
 
   const handleSavePreset = (options?: { saveAsNew?: boolean }) => {
@@ -377,7 +542,7 @@ export function WallpaperEditorPage() {
     setActivePresetId(nextResult.presetId)
     syncWallpaperPresetState(
       nextResult.presets,
-      nextResult.presetId,
+      undefined,
       options?.saveAsNew
         ? t({ ko: '프리셋을 새로 저장했어.', en: 'Saved the preset as a new one.' })
         : t({ ko: '프리셋을 저장했어.', en: 'Saved the preset.' }),
@@ -402,8 +567,13 @@ export function WallpaperEditorPage() {
       return
     }
 
-    const nextPresets = deleteWallpaperLayoutPreset(savedPresets, effectiveActivePresetId)
-    syncWallpaperPresetState(nextPresets, null, t({ ko: '프리셋을 삭제했어.', en: 'Deleted the preset.' }))
+    deleteSavedPreset(effectiveActivePresetId)
+  }
+
+  /** Deleting the live preset clears the live choice (the server requires it to name a saved preset). */
+  const deleteSavedPreset = (presetId: string) => {
+    syncWallpaperPresetState(deleteWallpaperLayoutPreset(savedPresets, presetId), presetId === livePresetId ? null : undefined, t({ ko: '프리셋을 삭제했어.', en: 'Deleted the preset.' }))
+    if (presetId === effectiveActivePresetId) setActivePresetId(null)
   }
 
   const handleCopyRuntimeUrl = async () => {
@@ -429,10 +599,7 @@ export function WallpaperEditorPage() {
       canvasWidth: layoutPreset.canvasWidth,
       canvasHeight: layoutPreset.canvasHeight,
     }
-    setActivePresetId(null)
-    resetLayoutPreset(nextLayoutPreset)
-    setSelectedIds([])
-    syncWallpaperPresetState(savedPresets, null)
+    replaceCanvas(nextLayoutPreset, null, t({ ko: '새 캔버스를 만들었어.', en: 'Started a new canvas.' }))
   }
 
   const handleExportFile = () => {
@@ -449,11 +616,7 @@ export function WallpaperEditorPage() {
     if (!(await confirmDiscardEdits(t({ ko: '파일에서 가져오기', en: 'Import from file' }), t({ ko: '가져오기', en: 'Import' })))) {
       return
     }
-    setActivePresetId(null)
-    resetLayoutPreset(draft)
-    setSelectedIds([])
-    syncWallpaperPresetState(savedPresets, null)
-    notifyInfo(t({ ko: "'{name}'을 새 캔버스로 가져왔어. 저장하면 프리셋이 돼.", en: "Imported '{name}' as a new canvas. Save it to make a preset." }, { name: draft.name }))
+    replaceCanvas(draft, null, t({ ko: "'{name}'을 새 캔버스로 가져왔어. 저장하면 프리셋이 돼.", en: "Imported '{name}' as a new canvas. Save it to make a preset." }, { name: draft.name }))
   }
 
   const addWidget = (widgetType: WallpaperWidgetType, center?: { x: number; y: number }) => {
@@ -481,11 +644,8 @@ export function WallpaperEditorPage() {
 
     const canvas = getWallpaperLayoutCanvas(layoutPreset)
     const nextLayout = buildWallpaperTemplateLayout(template.id, layoutPreset.canvasPresetId, t(template.name), { width: canvas.width, height: canvas.height })
-    setActivePresetId(null)
-    resetLayoutPreset(nextLayout)
-    setSelectedIds([])
     setIsTemplateModalOpen(false)
-    syncWallpaperPresetState(savedPresets, null)
+    replaceCanvas(nextLayout, null, t({ ko: "'{name}' 템플릿을 적용했어.", en: "Applied the '{name}' template." }, { name: t(template.name) }))
   }
 
   const removeSelection = useCallback(() => {
@@ -501,11 +661,75 @@ export function WallpaperEditorPage() {
     setSelectedIds(result.widgetIds)
   }, [effectiveSelectedIds, layoutPreset, setLayoutPreset])
 
-  const toggleLockSelection = useCallback(() => {
+  // Style copy carries the look only; each widget keeps its own shown-time window.
+  const copySelectionStyle = () => {
+    const source = selectedWidgets[0]
+    if (!source) return
+    const look: Partial<WallpaperWidgetStyle> = { ...source.style }
+    delete look.showFrom
+    delete look.showUntil
+    setStyleClipboard(look)
+    writeEditorClipboard(STYLE_CLIPBOARD_KEY, look)
+    notifyInfo(t({ ko: '스타일을 복사했어.', en: 'Copied the style.' }))
+  }
+
+  const pasteSelectionStyle = () => {
+    if (!styleClipboard || effectiveSelectedIds.length === 0) return
+    const ids = new Set(effectiveSelectedIds)
+    setLayoutPreset((current) => ({ ...current, widgets: current.widgets.map((widget) => (ids.has(widget.id) ? { ...widget, style: { ...widget.style, ...styleClipboard } } : widget)) }))
+  }
+
+  const copySelection = () => {
+    if (selectedWidgets.length === 0) return
+    clipboardRef.current = structuredClone(selectedWidgets)
+    writeEditorClipboard(WIDGET_CLIPBOARD_KEY, clipboardRef.current)
+  }
+
+  const cutSelection = () => {
+    copySelection()
+    removeSelection()
+  }
+
+  // Each paste lands one step further, so repeated pastes fan out instead of stacking.
+  const pasteClipboard = () => {
+    if (clipboardRef.current.length === 0) return
+    const offset = getWallpaperCopyOffset(layoutPreset)
+    const result = pasteWallpaperWidgets(layoutPreset, clipboardRef.current.map((widget) => ({ ...widget, x: widget.x + offset.x, y: widget.y + offset.y })))
+    clipboardRef.current = result.layout.widgets.filter((widget) => result.widgetIds.includes(widget.id))
+    writeEditorClipboard(WIDGET_CLIPBOARD_KEY, clipboardRef.current)
+    setLayoutPreset(result.layout)
+    setSelectedIds(result.widgetIds)
+  }
+
+  const toggleLockSelection = () => {
     const lock = !selectedWidgets.every((widget) => widget.locked)
     const ids = new Set(effectiveSelectedIds)
     setLayoutPreset((current) => ({ ...current, widgets: current.widgets.map((widget) => (ids.has(widget.id) ? { ...widget, locked: lock } : widget)) }))
-  }, [effectiveSelectedIds, selectedWidgets, setLayoutPreset])
+  }
+
+  const toggleHiddenSelection = () => {
+    const hide = !selectedWidgets.every((widget) => widget.hidden)
+    const ids = new Set(effectiveSelectedIds)
+    setLayoutPreset((current) => ({ ...current, widgets: current.widgets.map((widget) => (ids.has(widget.id) ? { ...widget, hidden: hide } : widget)) }))
+  }
+
+  /** Layer order, Figma style: one step with Ctrl+] / [, to the end with Ctrl+Shift+] / [. */
+  const arrangeSelection = (where: 'forward' | 'backward' | 'front' | 'back') => {
+    if (effectiveSelectedIds.length === 0) return
+    setLayoutPreset((current) => (where === 'front' || where === 'back'
+      ? stackWallpaperWidgets(current, effectiveSelectedIds, where)
+      : stepWallpaperWidgets(current, effectiveSelectedIds, where)))
+  }
+
+  /** Zoom to the selection and center it (Shift+2). */
+  const fitSelection = () => {
+    if (selectedWidgets.length === 0) return
+    const left = Math.min(...selectedWidgets.map((widget) => widget.x))
+    const top = Math.min(...selectedWidgets.map((widget) => widget.y))
+    const right = Math.max(...selectedWidgets.map((widget) => widget.x + widget.w))
+    const bottom = Math.max(...selectedWidgets.map((widget) => widget.y + widget.h))
+    setFocusRequest({ frame: { x: left, y: top, w: right - left, h: bottom - top }, nonce: Date.now() })
+  }
 
   const stepZoom = (direction: 1 | -1) => {
     const current = zoom === 'fit' ? zoomPercent / 100 : zoom
@@ -515,54 +739,64 @@ export function WallpaperEditorPage() {
     if (next) setZoom(next)
   }
 
-  // Keyboard: undo/redo, delete, nudge, duplicate, copy/paste, select all, layer order.
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) {
-        return
-      }
-      if (document.querySelector('[role="dialog"]')) {
-        return
-      }
-      const mod = event.ctrlKey || event.metaKey
-      const key = event.key.toLowerCase()
+  // Keyboard: undo/redo, save, delete, nudge, duplicate, cut/copy/paste, styles, select all, layer order, zoom.
+  // The handler is rebuilt every render and read through a ref, so the listener never runs a stale closure.
+  const handleEditorKeyDown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented) return
+    const target = event.target as HTMLElement | null
+    // Focused controls own their keys: arrows move a slider or a segmented choice, not the selection.
+    if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.closest('[role="slider"],[role="radio"],[role="tab"],[role="menu"],[role="listbox"],[role="option"]'))) {
+      return
+    }
+    if (document.querySelector('[role="dialog"]')) {
+      return
+    }
+    const mod = event.ctrlKey || event.metaKey
+    const key = event.key.toLowerCase()
 
-      if (mod && !event.altKey) {
-        if (key === 'z' && !event.shiftKey) { event.preventDefault(); undoLayoutEdit(); return }
-        if ((key === 'z' && event.shiftKey) || key === 'y') { event.preventDefault(); redoLayoutEdit(); return }
-        if (key === 'a') { event.preventDefault(); setSelectedIds(layoutPreset.widgets.map((widget) => widget.id)); return }
-        if (key === 'd') { event.preventDefault(); duplicateSelection(); return }
-        if (key === 'c' && selectedWidgets.length > 0) { clipboardRef.current = structuredClone(selectedWidgets); return }
-        if (key === 'v' && clipboardRef.current.length > 0) {
-          event.preventDefault()
-          const result = pasteWallpaperWidgets(layoutPreset, clipboardRef.current.map((widget) => ({ ...widget, x: widget.x + 24, y: widget.y + 24 })))
-          clipboardRef.current = result.layout.widgets.filter((widget) => result.widgetIds.includes(widget.id))
-          setLayoutPreset(result.layout)
-          setSelectedIds(result.widgetIds)
-          return
-        }
-        if (key === ']' || key === '[') {
-          event.preventDefault()
-          setLayoutPreset((current) => stackWallpaperWidgets(current, effectiveSelectedIds, key === ']' ? 'front' : 'back'))
-          return
-        }
-      }
+    if (mod && event.altKey && event.code === 'KeyC' && selectedWidgets.length === 1) { event.preventDefault(); copySelectionStyle(); return }
+    if (mod && event.altKey && event.code === 'KeyV' && styleClipboard) { event.preventDefault(); pasteSelectionStyle(); return }
 
-      if (event.key === 'Escape') { setSelectedIds([]); return }
-      if ((event.key === 'Delete' || event.key === 'Backspace') && effectiveSelectedIds.length > 0) { event.preventDefault(); removeSelection(); return }
-      const arrows: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
-      if (arrows[event.key] && effectiveSelectedIds.length > 0) {
+    if (mod && !event.altKey) {
+      if (event.code === 'KeyS') { event.preventDefault(); if (isAdmin && !wallpaperPresetMutation.isPending) handleSavePreset({ saveAsNew: event.shiftKey }); return }
+      if (key === 'z' && !event.shiftKey) { event.preventDefault(); undoLayoutEdit(); return }
+      if ((key === 'z' && event.shiftKey) || key === 'y') { event.preventDefault(); redoLayoutEdit(); return }
+      if (key === 'a') { event.preventDefault(); setSelectedIds(layoutPreset.widgets.map((widget) => widget.id)); return }
+      if (key === 'd') { event.preventDefault(); duplicateSelection(); return }
+      if (key === 'c' && selectedWidgets.length > 0) { copySelection(); return }
+      if (key === 'x' && selectedWidgets.length > 0) { event.preventDefault(); cutSelection(); return }
+      if (key === 'v' && clipboardRef.current.length > 0) { event.preventDefault(); pasteClipboard(); return }
+      // Shift turns `]` into `}` on most layouts, so the physical key decides.
+      if (event.code === 'BracketRight' || event.code === 'BracketLeft') {
         event.preventDefault()
-        const step = event.shiftKey ? 10 : 1
-        const [dx, dy] = arrows[event.key]
-        setLayoutPreset((current) => nudgeWallpaperWidgets(current, effectiveSelectedIds, { x: dx * step, y: dy * step }), { coalesceKey: `nudge:${effectiveSelectedIds.join(',')}` })
+        const forward = event.code === 'BracketRight'
+        arrangeSelection(event.shiftKey ? (forward ? 'front' : 'back') : (forward ? 'forward' : 'backward'))
+        return
       }
+      if (event.code === 'Equal' || event.code === 'NumpadAdd') { event.preventDefault(); stepZoom(1); return }
+      if (event.code === 'Minus' || event.code === 'NumpadSubtract') { event.preventDefault(); stepZoom(-1); return }
+      if (event.code === 'Digit0' || event.code === 'Numpad0') { event.preventDefault(); setZoom(1); return }
     }
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [duplicateSelection, effectiveSelectedIds, layoutPreset, redoLayoutEdit, removeSelection, selectedWidgets, setLayoutPreset, undoLayoutEdit])
+    if (!mod && !event.altKey && event.shiftKey && event.code === 'Digit1') { event.preventDefault(); setZoom('fit'); return }
+    if (!mod && !event.altKey && event.shiftKey && event.code === 'Digit2' && effectiveSelectedIds.length > 0) { event.preventDefault(); fitSelection(); return }
+    if (event.key === 'Escape') { setSelectedIds([]); return }
+    if ((event.key === 'Delete' || event.key === 'Backspace') && effectiveSelectedIds.length > 0) { event.preventDefault(); removeSelection(); return }
+    const arrows: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
+    if (arrows[event.key] && effectiveSelectedIds.length > 0) {
+      event.preventDefault()
+      const step = event.shiftKey ? 10 : 1
+      const [dx, dy] = arrows[event.key]
+      setLayoutPreset((current) => nudgeWallpaperWidgets(current, effectiveSelectedIds, { x: dx * step, y: dy * step }), { coalesceKey: `nudge:${effectiveSelectedIds.join(',')}` })
+    }
+  }
+  const editorKeyDownRef = useRef(handleEditorKeyDown)
+  editorKeyDownRef.current = handleEditorKeyDown
+  useEffect(() => {
+    const listener = (event: KeyboardEvent) => editorKeyDownRef.current(event)
+    window.addEventListener('keydown', listener)
+    return () => window.removeEventListener('keydown', listener)
+  }, [])
 
   // A connected chat reads the whole draft and edits it (draft operations the person can undo); saving, deleting a
   // preset, the schedule and runtime keys go through a card. A key it issues is shown only in the Lively dialog.
@@ -581,6 +815,7 @@ export function WallpaperEditorPage() {
     canRedo,
     savedPresets,
     activePresetId: effectiveActivePresetId,
+    livePresetId: effectiveLivePresetId,
     schedule: wallpaperSettingsQuery.data?.wallpaperSchedule,
     runtimeKeys,
     quickRunSchedules: (quickRunSchedulesQuery.data ?? []).map((schedule) => ({ id: schedule.id, name: schedule.name })),
@@ -687,7 +922,7 @@ export function WallpaperEditorPage() {
         case 'wallpaper.save': handleSavePreset({ saveAsNew: args.asNew === true }); return
         case 'wallpaper.delete_preset': {
           const presetId = requirePresetId(args.presetId)
-          syncWallpaperPresetState(deleteWallpaperLayoutPreset(savedPresets, presetId), presetId === effectiveActivePresetId ? null : effectiveActivePresetId, t({ ko: '프리셋을 삭제했어.', en: 'Deleted the preset.' }))
+          deleteSavedPreset(presetId)
           return
         }
         case 'wallpaper.save_schedule':
@@ -699,7 +934,7 @@ export function WallpaperEditorPage() {
           const name = String(args.name).trim()
           if (!name) throw new Error('기기 이름이 필요해.')
           const token = await createWallpaperRuntimeToken({ name, presetId: args.presetId ? requirePresetId(args.presetId) : null })
-          setLivelyIssued(wallpaperIssuedKey(token, savedPresets, effectiveActivePresetId))
+          setLivelyIssued(wallpaperIssuedKey(token, savedPresets))
           setIsLivelyOpen(true)
           void queryClient.invalidateQueries({ queryKey: WALLPAPER_RUNTIME_TOKENS_QUERY_KEY })
           return
@@ -717,7 +952,7 @@ export function WallpaperEditorPage() {
   const allSelectedLocked = selectedWidgets.length > 0 && selectedWidgets.every((widget) => widget.locked)
   const toolbar = (
     <PageToolbar
-      start={(
+      start={(<>
         <Select
           aria-label={t({ ko: '프리셋', en: 'Preset' })}
           className="h-8 w-44 sm:w-52"
@@ -731,7 +966,20 @@ export function WallpaperEditorPage() {
             <option key={preset.id} value={preset.id}>{preset.name}</option>
           ))}
         </Select>
-      )}
+        {activePreset && effectiveActivePresetId === effectiveLivePresetId ? (
+          <Badge role="status" title={t({ ko: '지금 월페이퍼에 나오는 프리셋', en: 'Shown on the live wallpaper' })}>{t({ ko: '라이브', en: 'Live' })}</Badge>
+        ) : activePreset ? (
+          <IconButton
+            variant="ghost"
+            size="icon-sm"
+            disabled={!isAdmin || hasUnsavedPresetChanges || wallpaperPresetMutation.isPending}
+            onClick={handleMakeLive}
+            label={hasUnsavedPresetChanges ? t({ ko: '저장한 뒤에 라이브로 지정할 수 있어', en: 'Save first to make it live' }) : t({ ko: '라이브로 지정', en: 'Make live' })}
+          >
+            <Radio />
+          </IconButton>
+        ) : null}
+      </>)}
       actions={(
         <>
           <IconButton variant="ghost" size="icon-sm" onClick={() => setIsTemplateModalOpen(true)} label={t({ ko: '템플릿', en: 'Templates' })}>
@@ -750,7 +998,17 @@ export function WallpaperEditorPage() {
             <IconButton variant="ghost" size="icon-sm" onClick={() => stepZoom(-1)} label={t({ ko: '축소', en: 'Zoom out' })}>
               <ZoomOut />
             </IconButton>
-            <Button type="button" variant="ghost" size="sm" className="h-8 min-w-12 px-1 font-mono text-xs tabular-nums" onClick={() => setZoom('fit')} aria-label={t({ ko: '화면에 맞추기', en: 'Fit to screen' })} title={t({ ko: '화면에 맞추기', en: 'Fit to screen' })}>
+            <Button
+              ref={zoomMenuAnchorRef}
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 min-w-12 px-1 font-mono text-xs tabular-nums"
+              aria-expanded={isZoomMenuOpen}
+              onClick={() => { setZoomDraft(String(zoomPercent)); setIsZoomMenuOpen((current) => !current) }}
+              aria-label={t({ ko: '확대 비율', en: 'Zoom level' })}
+              title={t({ ko: '확대 비율 (Ctrl+휠로 확대, Space+드래그로 이동)', en: 'Zoom level (Ctrl+wheel to zoom, Space+drag to pan)' })}
+            >
               {zoomPercent}%
             </Button>
             <IconButton variant="ghost" size="icon-sm" onClick={() => stepZoom(1)} label={t({ ko: '확대', en: 'Zoom in' })}>
@@ -819,8 +1077,8 @@ export function WallpaperEditorPage() {
       <IconButton variant="ghost" size="icon-xs" label={t({ ko: '가운데 정렬', en: 'Center' })} onClick={() => setLayoutPreset((current) => alignWallpaperWidgets(current, effectiveSelectedIds, 'hcenter'))}><AlignCenterVertical /></IconButton>
       <IconButton variant="ghost" size="icon-xs" label={t({ ko: '위 정렬', en: 'Align top' })} onClick={() => setLayoutPreset((current) => alignWallpaperWidgets(current, effectiveSelectedIds, 'top'))}><AlignStartHorizontal /></IconButton>
       <span className="mx-0.5 h-4 w-px bg-line" />
-      <IconButton variant="ghost" size="icon-xs" label={t({ ko: '맨 앞으로 (Ctrl+])', en: 'Bring to front (Ctrl+])' })} onClick={() => setLayoutPreset((current) => stackWallpaperWidgets(current, effectiveSelectedIds, 'front'))}><BringToFront /></IconButton>
-      <IconButton variant="ghost" size="icon-xs" label={t({ ko: '맨 뒤로 (Ctrl+[)', en: 'Send to back (Ctrl+[)' })} onClick={() => setLayoutPreset((current) => stackWallpaperWidgets(current, effectiveSelectedIds, 'back'))}><SendToBack /></IconButton>
+      <IconButton variant="ghost" size="icon-xs" label={t({ ko: '맨 앞으로 (Ctrl+Shift+])', en: 'Bring to front (Ctrl+Shift+])' })} onClick={() => setLayoutPreset((current) => stackWallpaperWidgets(current, effectiveSelectedIds, 'front'))}><BringToFront /></IconButton>
+      <IconButton variant="ghost" size="icon-xs" label={t({ ko: '맨 뒤로 (Ctrl+Shift+[)', en: 'Send to back (Ctrl+Shift+[)' })} onClick={() => setLayoutPreset((current) => stackWallpaperWidgets(current, effectiveSelectedIds, 'back'))}><SendToBack /></IconButton>
       <IconButton variant="ghost" size="icon-xs" active={allSelectedLocked} label={allSelectedLocked ? t({ ko: '잠금 해제', en: 'Unlock' }) : t({ ko: '잠금', en: 'Lock' })} onClick={toggleLockSelection}>{allSelectedLocked ? <Lock /> : <LockOpen />}</IconButton>
       <IconButton variant="ghost" size="icon-xs" className="text-destructive hover:bg-destructive-soft hover:text-destructive-soft-foreground" label={t({ ko: '삭제 (Delete)', en: 'Delete (Delete)' })} onClick={removeSelection}><Trash2 /></IconButton>
     </>
@@ -876,6 +1134,85 @@ export function WallpaperEditorPage() {
             </Button>
           ))}
         </AnchoredPopup>
+        <AnchoredPopup
+          open={isZoomMenuOpen}
+          anchorRef={zoomMenuAnchorRef}
+          onClose={() => setIsZoomMenuOpen(false)}
+          align="center"
+          className="w-56 p-2"
+        >
+          <form
+            className="flex items-center gap-2 px-1 pb-2"
+            onSubmit={(event) => {
+              event.preventDefault()
+              const percent = Number(zoomDraft)
+              if (Number.isFinite(percent) && percent > 0) setZoom(Math.min(400, Math.max(5, percent)) / 100)
+              setIsZoomMenuOpen(false)
+            }}
+          >
+            <Input
+              inputMode="numeric"
+              aria-label={t({ ko: '확대 비율', en: 'Zoom level' })}
+              className="h-8 font-mono text-xs"
+              value={zoomDraft}
+              onChange={(event) => setZoomDraft(event.target.value)}
+            />
+            <span className="text-xs text-muted-foreground">%</span>
+          </form>
+          <EditorMenuItems
+            items={[
+              { icon: Maximize, label: t({ ko: '화면에 맞추기', en: 'Fit to screen' }), shortcut: 'Shift+1', action: () => setZoom('fit') },
+              { icon: Scan, label: t({ ko: '선택에 맞추기', en: 'Fit to selection' }), shortcut: 'Shift+2', disabled: selectedWidgets.length === 0, action: fitSelection },
+              { icon: Search, label: '50%', action: () => setZoom(0.5) },
+              { icon: Search, label: '100%', shortcut: 'Ctrl+0', action: () => setZoom(1) },
+              { icon: Search, label: '200%', action: () => setZoom(2) },
+            ]}
+            onDone={() => setIsZoomMenuOpen(false)}
+          />
+        </AnchoredPopup>
+        {/* A right click opens the menu at the pointer: an invisible fixed anchor stands in for a button. */}
+        <div ref={contextMenuAnchorRef} aria-hidden className="pointer-events-none fixed size-0" style={{ left: contextMenu?.x ?? 0, top: contextMenu?.y ?? 0 }} />
+        <AnchoredPopup
+          open={contextMenu !== null}
+          anchorRef={contextMenuAnchorRef}
+          onClose={() => setContextMenu(null)}
+          align="start"
+          sideOffset={2}
+          className="w-64 p-1.5"
+        >
+          {contextMenu?.widgetId ? (
+            <EditorMenuItems
+              items={[
+                { icon: Scissors, label: t({ ko: '잘라내기', en: 'Cut' }), shortcut: 'Ctrl+X', action: cutSelection },
+                { icon: Copy, label: t({ ko: '복사', en: 'Copy' }), shortcut: 'Ctrl+C', action: copySelection },
+                { icon: CopyPlus, label: t({ ko: '복제', en: 'Duplicate' }), shortcut: 'Ctrl+D', action: duplicateSelection },
+                'separator',
+                { icon: Paintbrush, label: t({ ko: '스타일 복사', en: 'Copy style' }), shortcut: 'Ctrl+Alt+C', disabled: selectedWidgets.length !== 1, action: copySelectionStyle },
+                { icon: PaintRoller, label: t({ ko: '스타일 붙여넣기', en: 'Paste style' }), shortcut: 'Ctrl+Alt+V', disabled: !styleClipboard, action: pasteSelectionStyle },
+                'separator',
+                { icon: ArrowUp, label: t({ ko: '앞으로', en: 'Bring forward' }), shortcut: 'Ctrl+]', action: () => arrangeSelection('forward') },
+                { icon: ArrowDown, label: t({ ko: '뒤로', en: 'Send backward' }), shortcut: 'Ctrl+[', action: () => arrangeSelection('backward') },
+                { icon: BringToFront, label: t({ ko: '맨 앞으로', en: 'Bring to front' }), shortcut: 'Ctrl+Shift+]', action: () => arrangeSelection('front') },
+                { icon: SendToBack, label: t({ ko: '맨 뒤로', en: 'Send to back' }), shortcut: 'Ctrl+Shift+[', action: () => arrangeSelection('back') },
+                'separator',
+                { icon: allSelectedLocked ? LockOpen : Lock, label: allSelectedLocked ? t({ ko: '잠금 해제', en: 'Unlock' }) : t({ ko: '잠금', en: 'Lock' }), action: toggleLockSelection },
+                { icon: selectedWidgets.every((widget) => widget.hidden) ? Eye : EyeOff, label: selectedWidgets.every((widget) => widget.hidden) ? t({ ko: '보이기', en: 'Show' }) : t({ ko: '숨기기', en: 'Hide' }), action: toggleHiddenSelection },
+                'separator',
+                { icon: Trash2, label: t({ ko: '삭제', en: 'Delete' }), shortcut: 'Del', destructive: true, action: removeSelection },
+              ]}
+              onDone={() => setContextMenu(null)}
+            />
+          ) : (
+            <EditorMenuItems
+              items={[
+                { icon: ClipboardPaste, label: t({ ko: '붙여넣기', en: 'Paste' }), shortcut: 'Ctrl+V', disabled: clipboardRef.current.length === 0, action: pasteClipboard },
+                { icon: BoxSelect, label: t({ ko: '모두 선택', en: 'Select all' }), shortcut: 'Ctrl+A', disabled: layoutPreset.widgets.length === 0, action: () => setSelectedIds(layoutPreset.widgets.map((widget) => widget.id)) },
+                { icon: Maximize, label: t({ ko: '화면에 맞추기', en: 'Fit to screen' }), shortcut: 'Shift+1', action: () => setZoom('fit') },
+              ]}
+              onDone={() => setContextMenu(null)}
+            />
+          )}
+        </AnchoredPopup>
         <input
           ref={importInputRef}
           type="file"
@@ -896,6 +1233,9 @@ export function WallpaperEditorPage() {
                 mode="editor"
                 zoom={zoom}
                 onZoomPercentChange={setZoomPercent}
+                onZoomChange={setZoom}
+                focusRequest={focusRequest}
+                onContextMenuRequest={({ widgetId, clientX, clientY }) => setContextMenu({ widgetId, x: clientX, y: clientY })}
                 selectedIds={effectiveSelectedIds}
                 onSelectionChange={setSelectedIds}
                 onCommitFrames={(frames) => setLayoutPreset((current) => setWallpaperWidgetFrames(current, frames))}
@@ -913,29 +1253,33 @@ export function WallpaperEditorPage() {
           </div>
 
           {/* Inspector: a right column split from the canvas by one hairline (stacks under it below xl). */}
-          <aside
-            aria-label={t({ ko: '위젯 설정', en: 'Widget settings' })}
-            className="min-w-0 self-start xl:sticky xl:top-(--theme-shell-header-height) xl:max-h-[calc(100dvh-var(--theme-shell-header-height))] xl:overflow-y-auto xl:border-l xl:border-line xl:pt-2 xl:pb-6 xl:pl-6"
-          >
-            {selectedWidgets.length > 0 ? (
-              <WallpaperWidgetInspector
-                selectedWidgets={selectedWidgets}
-                groups={groupsQuery.data ?? []}
-                onPatchWidget={(widgetId, patch, key) => setLayoutPreset((current) => patchWidget(current, widgetId, patch), { coalesceKey: key })}
-                onAlign={(mode) => setLayoutPreset((current) => alignWallpaperWidgets(current, effectiveSelectedIds, mode))}
-                onDistribute={(axis) => setLayoutPreset((current) => distributeWallpaperWidgets(current, effectiveSelectedIds, axis))}
-              />
-            ) : (
-              <WallpaperBackgroundInspector
-                layout={layoutPreset}
-                groups={groupsQuery.data ?? []}
-                onChangeBackground={(background, key) => setLayoutPreset((current) => ({ ...current, background }), { coalesceKey: key })}
-                onChangeCanvas={handleChangeCanvas}
-                onChangeThemeMode={(themeMode) => setLayoutPreset((current) => ({ ...current, themeMode }))}
-                onChangeOptions={(options, key) => setLayoutPreset((current) => ({ ...current, options }), { coalesceKey: key })}
-              />
-            )}
-          </aside>
+          <WallpaperColorPaletteContext.Provider value={layoutPalette}>
+            <aside
+              aria-label={t({ ko: '위젯 설정', en: 'Widget settings' })}
+              className="min-w-0 self-start xl:sticky xl:top-(--theme-shell-header-height) xl:max-h-[calc(100dvh-var(--theme-shell-header-height))] xl:overflow-y-auto xl:border-l xl:border-line xl:pt-2 xl:pb-6 xl:pl-6"
+            >
+              {selectedWidgets.length > 0 ? (
+                <WallpaperWidgetInspector
+                  selectedWidgets={selectedWidgets}
+                  groups={groupsQuery.data ?? []}
+                  onPatchWidgets={(widgetIds, patch, key) => setLayoutPreset((current) => patchWidgets(current, widgetIds, patch), { coalesceKey: key })}
+                  onAlign={(mode) => setLayoutPreset((current) => alignWallpaperWidgets(current, effectiveSelectedIds, mode))}
+                  onDistribute={(axis) => setLayoutPreset((current) => distributeWallpaperWidgets(current, effectiveSelectedIds, axis))}
+                  onCopyStyle={copySelectionStyle}
+                  onPasteStyle={styleClipboard ? pasteSelectionStyle : null}
+                />
+              ) : (
+                <WallpaperBackgroundInspector
+                  layout={layoutPreset}
+                  groups={groupsQuery.data ?? []}
+                  onChangeBackground={(background, key) => setLayoutPreset((current) => ({ ...current, background }), { coalesceKey: key })}
+                  onChangeCanvas={handleChangeCanvas}
+                  onChangeThemeMode={(themeMode) => setLayoutPreset((current) => ({ ...current, themeMode }))}
+                  onChangeOptions={(options, key) => setLayoutPreset((current) => ({ ...current, options }), { coalesceKey: key })}
+                />
+              )}
+            </aside>
+          </WallpaperColorPaletteContext.Provider>
         </div>
 
         {isLivelyOpen ? (
@@ -944,7 +1288,6 @@ export function WallpaperEditorPage() {
             open
             onClose={() => { setIsLivelyOpen(false); setLivelyIssued(null) }}
             presets={savedPresets}
-            activePresetId={effectiveActivePresetId}
             initialIssued={livelyIssued}
           />
         ) : null}

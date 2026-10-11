@@ -233,7 +233,17 @@ export const WALLPAPER_WIDGET_DEFINITIONS: WallpaperWidgetDefinition[] = [
     searchKeywords: ['chat', 'message', 'conversation', '대화'],
     defaultSize: { w: 460, h: 320 },
     minSize: { w: 220, h: 140 },
-    defaultSettings: { title: '', profileId: null, messageCount: 3 },
+    defaultSettings: { title: '', profileId: null, messageCount: 3, allowReply: false, allowTools: false, quickReplies: '' },
+  },
+  {
+    type: 'chat-inbox',
+    category: 'chat-media',
+    title: { ko: '채팅함', en: 'Chat inbox' },
+    description: { ko: '채팅 목록에서 대화로 들어갔다 나오기', en: 'A chat list that opens into a chat and back' },
+    searchKeywords: ['chat', 'inbox', 'list', 'messenger', '채팅', '목록', '메신저'],
+    defaultSize: { w: 520, h: 460 },
+    minSize: { w: 260, h: 220 },
+    defaultSettings: { title: '', profileId: null, listCount: 8, messageCount: 8, allowReply: false, allowTools: false, quickReplies: '' },
   },
   {
     type: 'audio-player',

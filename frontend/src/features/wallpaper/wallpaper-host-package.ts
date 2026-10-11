@@ -146,7 +146,8 @@ function withHostPresets(url: string, presets: WallpaperLayoutPreset[]) {
 function defaults(basePreset: WallpaperLayoutPreset | null) {
   const options = resolveWallpaperPresetOptions(basePreset?.options)
   return {
-    accent: options.accentColor ?? '#7c5cff',
+    // Host color pickers take #RRGGBB; a color's own opacity stays in the saved preset.
+    accent: (options.accentColor ?? '#7c5cff').slice(0, 7),
     dim: Math.round(basePreset?.background.dim ?? 0),
     particles: Math.max(0, PARTICLES.indexOf(options.particles)),
     particleAmount: Math.round(options.particleAmount),

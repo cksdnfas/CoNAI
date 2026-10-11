@@ -29,6 +29,9 @@ interface WallpaperBackgroundInspectorProps {
   onChangeOptions: (options: WallpaperPresetOptions, key: string) => void
 }
 
+/** Last background per kind this tab session; the inspector unmounts whenever a widget is selected. */
+const lastBackgroundByKind = new Map<WallpaperBackgroundKind, WallpaperBackground>()
+
 /** Shown while nothing is selected: the canvas, its theme and its background. */
 export function WallpaperBackgroundInspector({ layout, groups, onChangeBackground, onChangeCanvas, onChangeThemeMode, onChangeOptions }: WallpaperBackgroundInspectorProps) {
   const { t } = useI18n()
@@ -47,7 +50,9 @@ export function WallpaperBackgroundInspector({ layout, groups, onChangeBackgroun
   }
   const switchKind = (kind: WallpaperBackgroundKind) => {
     if (kind === background.kind) return
-    onChangeBackground(normalizeWallpaperBackground({ ...overlay, kind }), 'background.kind')
+    // Flipping kinds and back restores the earlier color, gradient or image instead of the defaults.
+    lastBackgroundByKind.set(background.kind, background)
+    onChangeBackground(normalizeWallpaperBackground({ ...lastBackgroundByKind.get(kind), ...overlay, kind } as WallpaperBackground), 'background.kind')
   }
   const fitSegments = (fit: WallpaperBackgroundFit) => (
     <InspectorSegments
@@ -186,11 +191,11 @@ export function WallpaperBackgroundInspector({ layout, groups, onChangeBackgroun
 
       <div className="text-base font-semibold">{t({ ko: '스타일', en: 'Style' })}</div>
       <div className="space-y-3">
-        <InspectorColor label={t({ ko: '강조색', en: 'Accent' })} value={options.accentColor} fallback="#7c5cff" nullable onChange={(value) => setOption('accentColor', value)} />
+        <InspectorColor label={t({ ko: '강조색', en: 'Accent' })} value={options.accentColor} fallback="#7c5cff" themeVariable="--primary" nullable onChange={(value) => setOption('accentColor', value)} />
         {background.kind === 'image' || background.kind === 'video' || background.kind === 'group-slideshow' ? (
           <InspectorSwitch label={t({ ko: '배경에서 강조색 뽑기', en: 'Accent from background' })} checked={options.autoAccent} onChange={(checked) => setOption('autoAccent', checked)} />
         ) : null}
-        <InspectorColor label={t({ ko: '글자색', en: 'Text' })} value={options.textColor} fallback="#f2f2f2" nullable onChange={(value) => setOption('textColor', value)} />
+        <InspectorColor label={t({ ko: '글자색', en: 'Text' })} value={options.textColor} fallback="#f2f2f2" themeVariable="--foreground" nullable onChange={(value) => setOption('textColor', value)} />
         <InspectorRow label={t({ ko: '글꼴', en: 'Font' })}>
           <Select value={options.fontFamily} onChange={(event) => setOption('fontFamily', event.target.value as WallpaperWidgetFont)}>
             <option value="inherit">{t({ ko: '앱 설정', en: 'App' })}</option>

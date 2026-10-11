@@ -221,6 +221,25 @@ export interface WallpaperChatRecentWidgetSettings extends WallpaperBaseWidgetSe
   /** null = the most recently active chat. */
   profileId: number | null
   messageCount: number
+  /** The live wallpaper may send into this chat, as the key's account. Set by a person only, never by chat. */
+  allowReply: boolean
+  /** Replies also when the chat's character can act (CoNAI tools, Codex, Claude Code). Person only. */
+  allowTools: boolean
+  /** One-tap replies, one per line. */
+  quickReplies: string
+}
+
+/** A chat list that opens into one chat and back (a small messenger). */
+export interface WallpaperChatInboxWidgetSettings extends WallpaperBaseWidgetSettings {
+  /** null = every character's chats. */
+  profileId: number | null
+  /** Chats in the list (newest first); only these can be opened or sent into. */
+  listCount: number
+  messageCount: number
+  /** Same person-only switches as chat-recent. */
+  allowReply: boolean
+  allowTools: boolean
+  quickReplies: string
 }
 
 export interface WallpaperAudioPlayerWidgetSettings extends WallpaperBaseWidgetSettings {
@@ -291,6 +310,7 @@ export interface WallpaperWidgetSettingsMap {
   'library-stats': WallpaperLibraryStatsWidgetSettings
   'character-card': WallpaperCharacterCardWidgetSettings
   'chat-recent': WallpaperChatRecentWidgetSettings
+  'chat-inbox': WallpaperChatInboxWidgetSettings
   'audio-player': WallpaperAudioPlayerWidgetSettings
   'post-ticker': WallpaperPostTickerWidgetSettings
   'prompt-of-day': WallpaperPromptOfDayWidgetSettings

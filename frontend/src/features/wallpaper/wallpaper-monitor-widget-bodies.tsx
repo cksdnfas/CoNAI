@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { WallpaperServiceType } from '@/lib/api-wallpaper-runtime'
@@ -9,21 +9,13 @@ import {
   useWallpaperLlmUsage,
   useWallpaperQueueSnapshot,
 } from './wallpaper-widget-data'
+import { WallpaperWidgetErrorNote, WallpaperWidgetNote } from './wallpaper-widget-note'
 
 const SERVICE_LABEL: Record<WallpaperServiceType, string> = { novelai: 'NAI', comfyui: 'ComfyUI', codex: 'Codex' }
 const SERVICE_COLOR: Record<WallpaperServiceType, string> = {
   novelai: 'var(--primary)',
   comfyui: 'color-mix(in srgb, var(--primary) 45%, #6f8ab0)',
   codex: 'color-mix(in srgb, var(--foreground) 55%, transparent)',
-}
-
-/** Quiet one-line state (loading, empty, no access) centered in the widget. */
-export function WallpaperWidgetNote({ children, tone = 'muted' }: { children: ReactNode; tone?: 'muted' | 'error' }) {
-  return (
-    <div className={cn('flex h-full items-center justify-center px-2 text-center text-sm', tone === 'error' ? 'text-destructive' : 'opacity-60')}>
-      {children}
-    </div>
-  )
 }
 
 function useNow(intervalMs: number, enabled: boolean) {
@@ -94,37 +86,39 @@ export function WallpaperGenerationProgressBody({ widget }: { widget: Extract<Wa
   const now = useNow(1000, hasRunning)
 
   if (query.isLoading) return <WallpaperWidgetNote>{t({ ko: '불러오는 중…', en: 'Loading…' })}</WallpaperWidgetNote>
-  if (query.isError) return <WallpaperWidgetNote>{t({ ko: '생성 대기열을 볼 수 없어.', en: 'Queue unavailable.' })}</WallpaperWidgetNote>
+  if (query.isError) return <WallpaperWidgetErrorNote error={query.error} />
 
   const counts = query.data?.counts ?? {}
   const running = (counts.running ?? 0) + (counts.dispatching ?? 0)
   const queued = counts.queued ?? 0
   const jobs = active.slice(0, Math.max(1, maxJobs))
+  // Type follows the box: each job row is about 3.2em tall, the count line about 2em; later rows clip first.
+  const rowsEm = Math.max(1, jobs.length) * 3.2 + (showQueueCounts ? 2 : 0)
 
   return (
-    <div className="flex h-full flex-col gap-3">
+    <div className="flex h-full flex-col gap-[0.75em]" style={{ fontSize: `clamp(12px, min(${(100 / rowsEm).toFixed(2)}cqh, 3.6cqw), 26px)` }}>
       {jobs.length === 0 ? (
-        <div className="flex min-h-0 flex-1 items-center gap-3 opacity-60">
-          <span className="size-2 shrink-0 rounded-full bg-current opacity-50" />
-          <span className="text-sm">{t({ ko: '생성 대기 없음', en: 'Nothing generating' })}</span>
+        <div className="flex min-h-0 flex-1 items-center gap-[0.75em] opacity-60">
+          <span className="size-[0.5em] shrink-0 rounded-full bg-current opacity-50" />
+          <span>{t({ ko: '생성 대기 없음', en: 'Nothing generating' })}</span>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col justify-center gap-3 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col gap-[0.75em] overflow-hidden [justify-content:safe_center]">
           {jobs.map((job) => {
             const percent = job.progress?.percent ?? (job.progress?.value !== null && job.progress?.value !== undefined && job.progress.max ? (job.progress.value / job.progress.max) * 100 : null)
             const label = [SERVICE_LABEL[job.serviceType] ?? job.serviceType, showNodeLabel ? (job.progress?.node_label ?? job.workflowName) : job.workflowName].filter(Boolean).join(' · ')
             const isRunning = job.status === 'running'
             return (
-              <div key={job.id} className="min-w-0">
-                <div className="mb-1.5 flex items-baseline justify-between gap-3 text-sm">
+              <div key={job.id} className="min-w-0 shrink-0">
+                <div className="mb-[0.4em] flex items-baseline justify-between gap-[0.75em]">
                   <span className="min-w-0 truncate">{label}</span>
-                  <span className="shrink-0 font-mono text-xs tabular-nums opacity-75">
+                  <span className="shrink-0 font-mono text-[0.85em] tabular-nums opacity-75">
                     {isRunning
                       ? percent !== null ? `${Math.round(percent)}%` : job.startedAt ? formatElapsed(now - Date.parse(job.startedAt)) : ''
                       : t({ ko: '대기', en: 'Queued' })}
                   </span>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--foreground)_12%,transparent)]">
+                <div className="h-[0.4em] overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--foreground)_12%,transparent)]">
                   {isRunning ? (
                     percent !== null
                       ? <div className="h-full rounded-full transition-[width] duration-700 ease-out" style={{ width: `${Math.max(2, percent)}%`, background: SERVICE_COLOR[job.serviceType] }} />
@@ -137,7 +131,7 @@ export function WallpaperGenerationProgressBody({ widget }: { widget: Extract<Wa
         </div>
       )}
       {showQueueCounts ? (
-        <div className="flex shrink-0 gap-4 text-xs opacity-70">
+        <div className="flex shrink-0 gap-[1.2em] text-[0.85em] opacity-70">
           <span>{t({ ko: '실행', en: 'Running' })} <b className="font-semibold tabular-nums">{formatNumber(running)}</b></span>
           <span>{t({ ko: '대기', en: 'Queued' })} <b className="font-semibold tabular-nums">{formatNumber(queued)}</b></span>
         </div>
@@ -157,7 +151,7 @@ export function WallpaperGenerationStatsBody({ widget }: { widget: Extract<Wallp
   }, [days, query.data])
 
   if (query.isLoading) return <WallpaperWidgetNote>{t({ ko: '불러오는 중…', en: 'Loading…' })}</WallpaperWidgetNote>
-  if (query.isError || !query.data) return <WallpaperWidgetNote>{t({ ko: '생성 통계를 볼 수 없어.', en: 'Stats unavailable.' })}</WallpaperWidgetNote>
+  if (query.isError || !query.data) return <WallpaperWidgetErrorNote error={query.error} />
   const { totals } = query.data
   const periodLabel = days === 1 ? t({ ko: '오늘', en: 'Today' }) : t({ ko: '{days}일', en: '{days} days' }, { days })
 
@@ -217,7 +211,7 @@ export function WallpaperLlmUsageBody({ widget }: { widget: Extract<WallpaperWid
   }, [days, metric, query.data])
 
   if (query.isLoading) return <WallpaperWidgetNote>{t({ ko: '불러오는 중…', en: 'Loading…' })}</WallpaperWidgetNote>
-  if (query.isError || !query.data) return <WallpaperWidgetNote>{t({ ko: 'LLM 사용량은 관리자만 볼 수 있어.', en: 'LLM usage is admin-only.' })}</WallpaperWidgetNote>
+  if (query.isError || !query.data) return <WallpaperWidgetErrorNote error={query.error} forbidden={t({ ko: 'LLM 사용량은 관리자만 볼 수 있어.', en: 'LLM usage is admin-only.' })} />
 
   const { totals, models } = query.data
   const total = metric === 'requests' ? totals.requests : totals.inputTokens + totals.outputTokens
@@ -258,41 +252,62 @@ export function WallpaperLlmUsageBody({ widget }: { widget: Extract<WallpaperWid
   )
 }
 
-const RATING_ORDER = ['general', 'sensitive', 'questionable', 'explicit']
+const RATING_ORDER = ['general', 'sensitive', 'questionable', 'explicit'] as const
 const RATING_TONE: Record<string, string> = {
   general: 'color-mix(in srgb, var(--foreground) 55%, transparent)',
   sensitive: '#8fb7ff',
   questionable: '#ffb59a',
   explicit: 'var(--destructive)',
 }
+const RATING_LABEL = {
+  general: { ko: '일반', en: 'General' },
+  sensitive: { ko: '민감', en: 'Sensitive' },
+  questionable: { ko: '의심', en: 'Questionable' },
+  explicit: { ko: '성인', en: 'Explicit' },
+} as const
 
 /** Library size, top tags and the rating mix. */
 export function WallpaperLibraryStatsBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'library-stats' }> }) {
   const { t, formatNumber } = useI18n()
   const query = useWallpaperLibraryStats()
   if (query.isLoading) return <WallpaperWidgetNote>{t({ ko: '불러오는 중…', en: 'Loading…' })}</WallpaperWidgetNote>
-  if (query.isError || !query.data) return <WallpaperWidgetNote>{t({ ko: '라이브러리를 볼 수 없어.', en: 'Library unavailable.' })}</WallpaperWidgetNote>
+  if (query.isError || !query.data) return <WallpaperWidgetErrorNote error={query.error} />
   const stats = query.data
   const ratings = RATING_ORDER.map((key) => ({ key, value: stats.ratingDistribution[key] ?? 0 })).filter((entry) => entry.value > 0)
   const ratingTotal = ratings.reduce((sum, entry) => sum + entry.value, 0)
 
+  // Small type (caption, legend, chips) is em-based off this size; the headline scales on its own.
   return (
-    <div className="flex h-full flex-col gap-3 overflow-hidden">
-      <div className="flex shrink-0 items-baseline gap-2">
-        <span className="font-semibold leading-none tracking-[-0.04em] tabular-nums" style={{ fontSize: 'min(24cqh, 16cqw)' }}>{formatNumber(stats.total)}</span>
-        <span className="text-xs opacity-60">{t({ ko: '이미지 · 캐릭터 {count}', en: 'images · {count} characters' }, { count: formatNumber(stats.characterCount) })}</span>
+    <div className="flex h-full flex-col gap-[0.8em] overflow-hidden" style={{ fontSize: 'clamp(11px, min(5.2cqh, 3.4cqw), 24px)' }}>
+      <div className="flex shrink-0 flex-wrap items-baseline gap-x-[0.6em]">
+        <span className="font-semibold leading-none tracking-[-0.04em] tabular-nums" style={{ fontSize: 'clamp(1.5rem, min(24cqh, 16cqw), 10rem)' }}>{formatNumber(stats.total)}</span>
+        <span className="opacity-60">{t({ ko: '이미지 · 캐릭터 태그 {count}장', en: 'images · {count} with character tags' }, { count: formatNumber(stats.characterCount) })}</span>
       </div>
       {widget.settings.showRatings && ratingTotal > 0 ? (
-        <div className="flex h-1.5 shrink-0 overflow-hidden rounded-full">
-          {ratings.map((entry) => <span key={entry.key} style={{ width: `${(entry.value / ratingTotal) * 100}%`, background: RATING_TONE[entry.key] }} />)}
+        <div className="shrink-0 space-y-[0.45em]">
+          <div className="flex h-[clamp(4px,0.45em,12px)] overflow-hidden rounded-full">
+            {ratings.map((entry) => <span key={entry.key} style={{ width: `${(entry.value / ratingTotal) * 100}%`, background: RATING_TONE[entry.key] }} />)}
+          </div>
+          <div className="flex flex-wrap gap-x-[1em] gap-y-[0.2em] text-[0.85em]">
+            {ratings.map((entry) => {
+              const percent = (entry.value / ratingTotal) * 100
+              return (
+                <span key={entry.key} className="flex items-center gap-[0.35em]">
+                  <span className="size-[0.6em] shrink-0 rounded-full" style={{ background: RATING_TONE[entry.key] }} />
+                  <span className="opacity-70">{t(RATING_LABEL[entry.key])}</span>
+                  <span className="tabular-nums opacity-55">{percent > 0 && percent < 1 ? '<1%' : `${Math.round(percent)}%`}</span>
+                </span>
+              )
+            })}
+          </div>
         </div>
       ) : null}
       {widget.settings.showTopTags ? (
-        <div className="flex min-h-0 flex-wrap content-start gap-1.5 overflow-hidden">
+        <div className="flex min-h-0 flex-wrap content-start gap-[0.4em] overflow-hidden">
           {stats.topTags.slice(0, Math.max(1, widget.settings.tagCount)).map((tag) => (
-            <span key={tag.tag} className="rounded-full bg-[color-mix(in_srgb,var(--foreground)_9%,transparent)] px-2 py-0.5 text-xs">
+            <span key={tag.tag} className="rounded-full bg-[color-mix(in_srgb,var(--foreground)_9%,transparent)] px-[0.65em] py-[0.15em]">
               {tag.tag.replace(/_/g, ' ')}
-              <span className="ml-1 tabular-nums opacity-55">{formatNumber(tag.count, { notation: 'compact' })}</span>
+              <span className="ml-[0.3em] tabular-nums opacity-55">{formatNumber(tag.count, { notation: 'compact' })}</span>
             </span>
           ))}
         </div>

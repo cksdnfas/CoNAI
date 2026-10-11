@@ -10,8 +10,10 @@ const EVENT_TARGETS: Record<string, string[]> = {
   'queue.job.progress': ['queue'],
   'history.record.created': ['history', 'stats'],
   'history.record.status': ['history', 'stats'],
-  'graph.execution.status': ['browse-content'],
+  'graph.execution.status': ['workflow-activity'],
   'posts.changed': ['posts'],
+  'chat.message.created': ['chat-messages', 'chat-threads'],
+  'chat.message.updated': ['chat-messages'],
 }
 
 /** Refetch each query at most this often; progress frames arrive several times a second. */

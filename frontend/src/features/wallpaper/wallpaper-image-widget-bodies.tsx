@@ -24,36 +24,13 @@ import {
   getWallpaperImageTransitionDurationMs,
   getWallpaperImageUrl,
   getWallpaperMotionStrengthMultiplier,
+  useWallpaperElementSize,
   useWallpaperRotatingIndex,
 } from './wallpaper-widget-utils'
+import { WallpaperWidgetErrorNote } from './wallpaper-widget-note'
 import { computeWallpaperPuzzleLayout } from './wallpaper-puzzle-layout'
 
 const WALLPAPER_PUZZLE_GAP = 8
-
-/** Inner size of an element, tracked with a ResizeObserver (layout px, unaffected by the stage scale). */
-function useWallpaperElementSize<T extends HTMLElement>() {
-  const [element, setElement] = useState<T | null>(null)
-  const [size, setSize] = useState({ width: 0, height: 0 })
-
-  useEffect(() => {
-    if (!element) {
-      return
-    }
-    const updateSize = () => {
-      const nextWidth = Math.max(0, element.clientWidth)
-      const nextHeight = Math.max(0, element.clientHeight)
-      setSize((current) => (current.width === nextWidth && current.height === nextHeight ? current : { width: nextWidth, height: nextHeight }))
-    }
-    updateSize()
-    const observer = new ResizeObserver(updateSize)
-    observer.observe(element)
-    return () => {
-      observer.disconnect()
-    }
-  }, [element])
-
-  return [setElement, size] as const
-}
 
 function getWallpaperBaseStackCardFrame(
   offsetX: number,
@@ -205,7 +182,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
   }
 
   if (resultsQuery.isError) {
-    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">{t({ ko: '최근 결과를 불러오지 못했어.', en: 'Failed to load recent results.' })}</div>
+    return <WallpaperWidgetErrorNote error={resultsQuery.error} />
   }
 
   if (displayMode === 'stack') {
@@ -252,7 +229,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
             </>
           )
 
-          if (mode === 'runtime' && onOpenImage) {
+          if (mode === 'runtime' && onOpenImage && widget.settings.imageClickAction !== 'none') {
             return (
               // eslint-disable-next-line no-restricted-syntax -- wallpaper runtime image card: the rendered art is the click target
               <button
@@ -601,6 +578,10 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
     return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t({ ko: '쇼케이스 불러오는 중…', en: 'Loading showcase…' })}</div>
   }
 
+  if (previewQuery.isError) {
+    return <WallpaperWidgetErrorNote error={previewQuery.error} />
+  }
+
   if (!imageUrl) {
     return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">{t({ ko: '표시할 쇼케이스 이미지가 없어.', en: 'There is no showcase image to display.' })}</div>
   }
@@ -640,7 +621,7 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
       {rotationEnabled ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_74%,transparent))] px-3 py-2">
           <div className="flex items-center gap-1.5">
-            {images.slice(0, 6).map((image, index) => (
+            {images.map((image, index) => (
               <span
                 key={String(image.composite_hash ?? image.id ?? index)}
                 className={cn(

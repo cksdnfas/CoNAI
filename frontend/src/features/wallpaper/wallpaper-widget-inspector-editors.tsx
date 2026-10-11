@@ -67,12 +67,12 @@ function DaysSelect({ value, onChange }: { value: number; onChange: (value: numb
   )
 }
 
-function CharacterSelect({ value, allowLatest, onChange }: { value: number | null; allowLatest: boolean; onChange: (value: number | null) => void }) {
+function CharacterSelect({ value, allowLatest, emptyLabel, onChange }: { value: number | null; allowLatest: boolean; emptyLabel?: string; onChange: (value: number | null) => void }) {
   const { t } = useI18n()
   const profilesQuery = useWallpaperChatProfiles()
   return (
     <Select value={value === null ? '' : String(value)} onChange={(event) => onChange(event.target.value ? Number(event.target.value) : null)}>
-      <option value="">{allowLatest ? t({ ko: '가장 최근 대화', en: 'Latest chat' }) : t({ ko: '최근 대화의 캐릭터', en: 'Latest chat’s character' })}</option>
+      <option value="">{emptyLabel ?? (allowLatest ? t({ ko: '가장 최근 대화', en: 'Latest chat' }) : t({ ko: '최근 대화의 캐릭터', en: 'Latest chat’s character' }))}</option>
       {(profilesQuery.data ?? []).map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
     </Select>
   )
@@ -288,6 +288,42 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
           <>
             <InspectorRow label={t({ ko: '대화', en: 'Chat' })}><CharacterSelect value={widget.settings.profileId} allowLatest onChange={(value) => updateWidgetSettings({ profileId: value })} /></InspectorRow>
             <InspectorSlider label={t({ ko: '메시지 수', en: 'Messages' })} value={widget.settings.messageCount} min={1} max={12} onChange={(value) => updateWidgetSettings({ messageCount: value })} />
+            <InspectorSwitch label={t({ ko: '답장 허용', en: 'Allow replies' })} checked={widget.settings.allowReply === true} onChange={(checked) => updateWidgetSettings({ allowReply: checked })} />
+            {widget.settings.allowReply ? (
+              <>
+                <InspectorSwitch label={t({ ko: '도구 쓰는 캐릭터도 허용', en: 'Also characters with tools' })} checked={widget.settings.allowTools === true} onChange={(checked) => updateWidgetSettings({ allowTools: checked })} />
+                <Textarea
+                  variant="settings"
+                  rows={3}
+                  aria-label={t({ ko: '빠른 답장', en: 'Quick replies' })}
+                  placeholder={t({ ko: '빠른 답장 (한 줄에 하나)', en: 'Quick replies (one per line)' })}
+                  value={widget.settings.quickReplies ?? ''}
+                  onChange={(event) => updateWidgetSettings({ quickReplies: event.target.value })}
+                />
+              </>
+            ) : null}
+          </>
+        )
+      case 'chat-inbox':
+        return (
+          <>
+            <InspectorRow label={t({ ko: '캐릭터', en: 'Character' })}><CharacterSelect value={widget.settings.profileId} allowLatest emptyLabel={t({ ko: '모든 캐릭터', en: 'Every character' })} onChange={(value) => updateWidgetSettings({ profileId: value })} /></InspectorRow>
+            <InspectorSlider label={t({ ko: '목록 수', en: 'Chats' })} value={widget.settings.listCount} min={1} max={30} onChange={(value) => updateWidgetSettings({ listCount: value })} />
+            <InspectorSlider label={t({ ko: '메시지 수', en: 'Messages' })} value={widget.settings.messageCount} min={1} max={12} onChange={(value) => updateWidgetSettings({ messageCount: value })} />
+            <InspectorSwitch label={t({ ko: '답장 허용', en: 'Allow replies' })} checked={widget.settings.allowReply === true} onChange={(checked) => updateWidgetSettings({ allowReply: checked })} />
+            {widget.settings.allowReply ? (
+              <>
+                <InspectorSwitch label={t({ ko: '도구 쓰는 캐릭터도 허용', en: 'Also characters with tools' })} checked={widget.settings.allowTools === true} onChange={(checked) => updateWidgetSettings({ allowTools: checked })} />
+                <Textarea
+                  variant="settings"
+                  rows={3}
+                  aria-label={t({ ko: '빠른 답장', en: 'Quick replies' })}
+                  placeholder={t({ ko: '빠른 답장 (한 줄에 하나)', en: 'Quick replies (one per line)' })}
+                  value={widget.settings.quickReplies ?? ''}
+                  onChange={(event) => updateWidgetSettings({ quickReplies: event.target.value })}
+                />
+              </>
+            ) : null}
           </>
         )
       case 'audio-player':
@@ -338,7 +374,7 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
             <InspectorSlider label={t({ ko: '막대 수', en: 'Bars' })} value={widget.settings.barCount} min={8} max={64} onChange={(value) => updateWidgetSettings({ barCount: value })} />
             <InspectorSlider label={t({ ko: '감도', en: 'Sensitivity' })} value={widget.settings.sensitivity} min={50} max={300} step={10} unit="%" onChange={(value) => updateWidgetSettings({ sensitivity: value })} />
             <InspectorSlider label={t({ ko: '부드럽게', en: 'Smoothing' })} value={widget.settings.smoothing} min={0} max={90} unit="%" onChange={(value) => updateWidgetSettings({ smoothing: value })} />
-            <InspectorColor label={t({ ko: '색', en: 'Color' })} value={widget.settings.color} fallback="#7c5cff" nullable onChange={(value) => updateWidgetSettings({ color: value })} />
+            <InspectorColor label={t({ ko: '색', en: 'Color' })} value={widget.settings.color} fallback="#7c5cff" themeVariable="--primary" nullable onChange={(value) => updateWidgetSettings({ color: value })} />
           </>
         )
       case 'now-playing':

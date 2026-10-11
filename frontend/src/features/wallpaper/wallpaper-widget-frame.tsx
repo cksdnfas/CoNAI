@@ -94,6 +94,7 @@ export function WallpaperWidgetFrame({
 
   return (
     <div
+      data-wallpaper-frame=""
       className="flex h-full w-full flex-col overflow-hidden text-foreground"
       style={{ ...getWallpaperWidgetFrameStyle(style), ...entrance }}
     >

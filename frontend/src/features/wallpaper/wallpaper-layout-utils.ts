@@ -98,13 +98,16 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 }
 
+/** `#RRGGBB`, or `#RRGGBBAA` when a color carries its own opacity. */
+export const WALLPAPER_HEX_COLOR = /^#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?$/
+
 function clampNumber(value: unknown, fallback: number, min: number, max: number) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback
 }
 
 function asColor(value: unknown, fallback: string): string {
-  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback
+  return typeof value === 'string' && WALLPAPER_HEX_COLOR.test(value) ? value : fallback
 }
 
 function pick<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
@@ -156,7 +159,7 @@ export function normalizeWallpaperWidgetStyle(raw: unknown, base: Partial<Wallpa
   const legacyOpacity = legacy && typeof legacy.opacity === 'number' ? legacy.opacity * 100 : undefined
   return {
     variant: pick(record.variant ?? legacyVariant, ['none', 'card', 'glass', 'outline'] as const, fallback.variant),
-    backgroundColor: typeof record.backgroundColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(record.backgroundColor) ? record.backgroundColor : fallback.backgroundColor,
+    backgroundColor: typeof record.backgroundColor === 'string' && WALLPAPER_HEX_COLOR.test(record.backgroundColor) ? record.backgroundColor : fallback.backgroundColor,
     backgroundOpacity: clampNumber(record.backgroundOpacity, fallback.backgroundOpacity, 0, 100),
     radius: clampNumber(record.radius, fallback.radius, 0, 200),
     padding: clampNumber(record.padding, fallback.padding, 0, 200),
@@ -164,8 +167,8 @@ export function normalizeWallpaperWidgetStyle(raw: unknown, base: Partial<Wallpa
     blur: clampNumber(record.blur, fallback.blur, 0, 60),
     fontFamily: pick(record.fontFamily, ['inherit', 'sans', 'serif', 'mono', 'display'] as const, fallback.fontFamily),
     fontWeight: pick(record.fontWeight, ['light', 'regular', 'bold'] as const, fallback.fontWeight),
-    textColor: typeof record.textColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(record.textColor) ? record.textColor : fallback.textColor,
-    accentColor: typeof record.accentColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(record.accentColor) ? record.accentColor : fallback.accentColor,
+    textColor: typeof record.textColor === 'string' && WALLPAPER_HEX_COLOR.test(record.textColor) ? record.textColor : fallback.textColor,
+    accentColor: typeof record.accentColor === 'string' && WALLPAPER_HEX_COLOR.test(record.accentColor) ? record.accentColor : fallback.accentColor,
     textAlign: pick(record.textAlign, ['left', 'center', 'right'] as const, fallback.textAlign),
     opacity: clampNumber(record.opacity ?? legacyOpacity, fallback.opacity, 5, 100),
     showTitle: typeof record.showTitle === 'boolean' ? record.showTitle : legacy?.showTitle === true ? true : fallback.showTitle,
@@ -197,7 +200,7 @@ export const WALLPAPER_DEFAULT_PRESET_OPTIONS: WallpaperPresetOptions = {
 export function resolveWallpaperPresetOptions(raw: unknown): WallpaperPresetOptions {
   const record = asRecord(raw)
   const fallback = WALLPAPER_DEFAULT_PRESET_OPTIONS
-  const color = (value: unknown) => (typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : null)
+  const color = (value: unknown) => (typeof value === 'string' && WALLPAPER_HEX_COLOR.test(value) ? value : null)
   return {
     accentColor: color(record.accentColor),
     autoAccent: record.autoAccent === true,
@@ -527,6 +530,28 @@ export function stackWallpaperWidgets(layoutPreset: WallpaperLayoutPreset, widge
   return reorderWallpaperWidgets(layoutPreset, ordered.map((widget) => widget.id))
 }
 
+/** Move the given widgets one layer forward (or backward); a widget already at the end, or behind a selected one, stays. */
+export function stepWallpaperWidgets(layoutPreset: WallpaperLayoutPreset, widgetIds: string[], direction: 'forward' | 'backward') {
+  const ids = new Set(widgetIds)
+  const order = getWallpaperWidgetsFrontToBack(layoutPreset.widgets).map((widget) => widget.id)
+  if (direction === 'forward') {
+    for (let index = 1; index < order.length; index += 1) {
+      if (ids.has(order[index]) && !ids.has(order[index - 1])) [order[index - 1], order[index]] = [order[index], order[index - 1]]
+    }
+  } else {
+    for (let index = order.length - 2; index >= 0; index -= 1) {
+      if (ids.has(order[index]) && !ids.has(order[index + 1])) [order[index + 1], order[index]] = [order[index], order[index + 1]]
+    }
+  }
+  return reorderWallpaperWidgets(layoutPreset, order)
+}
+
+/** How far a duplicate or a paste lands from its source: the same visual step on every canvas size. */
+export function getWallpaperCopyOffset(layoutPreset: WallpaperLayoutPreset) {
+  const step = Math.round(getWallpaperLayoutCanvas(layoutPreset).width * 0.0125)
+  return { x: step, y: step }
+}
+
 /** Center of the first spot (reading order) where a `w`×`h` box overlaps no visible widget, or null. */
 function findFreeSpot(layoutPreset: WallpaperLayoutPreset, canvas: Pick<WallpaperCanvasPreset, 'width' | 'height'>, w: number, h: number) {
   const unit = getWallpaperCanvasScale(canvas)
@@ -563,7 +588,7 @@ export function appendWallpaperWidget(layoutPreset: WallpaperLayoutPreset, widge
 /** Copies of the given widgets, nudged so they do not hide the originals; returns the new ids. */
 export function duplicateWallpaperWidgets(layoutPreset: WallpaperLayoutPreset, widgetIds: string[], offset?: { x: number; y: number }) {
   const canvas = getWallpaperLayoutCanvas(layoutPreset)
-  const step = offset ?? { x: Math.round(canvas.width * 0.0125), y: Math.round(canvas.width * 0.0125) }
+  const step = offset ?? getWallpaperCopyOffset(layoutPreset)
   let topZ = layoutPreset.widgets.reduce((max, widget) => Math.max(max, widget.zIndex), 0)
   const sources = layoutPreset.widgets.filter((widget) => widgetIds.includes(widget.id)).sort((a, b) => a.zIndex - b.zIndex)
   const copies = sources.map((widget, index) => {

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -27,10 +27,18 @@ const HANDLE_CURSOR: Record<Handle, string> = { n: 'ns-resize', s: 'ns-resize', 
 const SNAP_SCREEN_PX = 6
 /** Screen px a press must travel before it becomes a drag (a plain click only selects). */
 const DRAG_START_PX = 3
+/** Zoom range (canvas px → screen px) for wheel zoom and fit-to-selection. */
+const MIN_ZOOM = 0.05
+const MAX_ZOOM = 4
+
+function clampZoom(value: number) {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value))
+}
 
 type Drag =
-  | { kind: 'move'; pointerId: number; startX: number; startY: number; ids: string[]; origin: Map<string, Frame>; active: boolean }
-  | { kind: 'resize'; pointerId: number; startX: number; startY: number; id: string; handle: Handle; origin: Frame }
+  /** `collapseTo`: a plain click inside a multi-selection narrows it to that widget when the press never drags. */
+  | { kind: 'move'; pointerId: number; startX: number; startY: number; ids: string[]; origin: Map<string, Frame>; active: boolean; collapseTo?: string }
+  | { kind: 'resize'; pointerId: number; startX: number; startY: number; id: string; handle: Handle; origin: Frame; rotation: number }
   | { kind: 'marquee'; pointerId: number; startX: number; startY: number; additive: boolean; base: string[] }
 
 interface Guides { x: number[]; y: number[] }
@@ -43,6 +51,12 @@ interface WallpaperStageProps {
   /** Canvas px → screen px (0.5 = 50%), or fit the container. */
   zoom?: WallpaperStageZoom
   onZoomPercentChange?: (percent: number) => void
+  /** Editor: Ctrl+wheel and fit-to-selection ask for a new zoom; the stage keeps the anchored point in place. */
+  onZoomChange?: (zoom: number) => void
+  /** Editor: zoom to and center a canvas-px box (a new `nonce` repeats it). */
+  focusRequest?: { frame: Frame; nonce: number } | null
+  /** Editor: right click on a widget (selected first) or on the empty canvas. */
+  onContextMenuRequest?: (request: { widgetId: string | null; clientX: number; clientY: number }) => void
   selectedIds?: string[]
   onSelectionChange?: (ids: string[]) => void
   onCommitFrames?: (frames: Map<string, Frame>) => void
@@ -82,6 +96,24 @@ function nearestSnap(moving: number[], targets: number[], threshold: number) {
     }
   }
   return best
+}
+
+/** The upright box a rotated frame covers; snapping and selection bounds use what is drawn. */
+function visualFrame(frame: Frame, rotation: number | undefined): Frame {
+  if (!rotation) return frame
+  const radians = (rotation * Math.PI) / 180
+  const cos = Math.abs(Math.cos(radians))
+  const sin = Math.abs(Math.sin(radians))
+  const w = frame.w * cos + frame.h * sin
+  const h = frame.w * sin + frame.h * cos
+  return { x: frame.x + frame.w / 2 - w / 2, y: frame.y + frame.h / 2 - h / 2, w, h }
+}
+
+function rotateVector(x: number, y: number, degrees: number) {
+  const radians = (degrees * Math.PI) / 180
+  const cos = Math.cos(radians)
+  const sin = Math.sin(radians)
+  return { x: x * cos - y * sin, y: x * sin + y * cos }
 }
 
 /** Keep touch scrolling from fighting a drag; returns the undo. */
@@ -158,6 +190,9 @@ export function WallpaperStage({
   mode,
   zoom = 'fit',
   onZoomPercentChange,
+  onZoomChange,
+  focusRequest = null,
+  onContextMenuRequest,
   selectedIds = [],
   onSelectionChange,
   onCommitFrames,
@@ -234,6 +269,95 @@ export function WallpaperStage({
     if (k > 0) onZoomPercentChange?.(Math.round(k * 100))
   }, [k, onZoomPercentChange])
 
+  // Zoom keeps one canvas point under one screen point: the pointer for Ctrl+wheel, the view center for fit-to-selection.
+  const zoomAnchorRef = useRef<{ point: { x: number; y: number }; clientX: number; clientY: number } | null>(null)
+  const applyZoomAnchor = useCallback((scaleNow: number) => {
+    const anchor = zoomAnchorRef.current
+    const element = viewportRef.current
+    const rect = layerRef.current?.getBoundingClientRect()
+    if (!anchor || !element || !rect || scaleNow <= 0) return
+    zoomAnchorRef.current = null
+    element.scrollLeft += rect.left + anchor.point.x * scaleNow - anchor.clientX
+    element.scrollTop += rect.top + anchor.point.y * scaleNow - anchor.clientY
+  }, [])
+  useLayoutEffect(() => {
+    applyZoomAnchor(k)
+  }, [applyZoomAnchor, k])
+
+  const latestZoomRef = useRef({ k, onZoomChange })
+  latestZoomRef.current = { k, onZoomChange }
+  useEffect(() => {
+    const element = viewportRef.current
+    if (!isEditor || !element) return undefined
+    const onWheel = (event: WheelEvent) => {
+      const { k: current, onZoomChange: requestZoom } = latestZoomRef.current
+      if (!(event.ctrlKey || event.metaKey) || !requestZoom || current <= 0) return
+      event.preventDefault()
+      const rect = layerRef.current?.getBoundingClientRect()
+      if (!rect) return
+      zoomAnchorRef.current = { point: { x: (event.clientX - rect.left) / current, y: (event.clientY - rect.top) / current }, clientX: event.clientX, clientY: event.clientY }
+      requestZoom(clampZoom(current * Math.exp(-event.deltaY * 0.0015)))
+    }
+    element.addEventListener('wheel', onWheel, { passive: false })
+    return () => element.removeEventListener('wheel', onWheel)
+  }, [isEditor])
+
+  useEffect(() => {
+    const element = viewportRef.current
+    const { k: current, onZoomChange: requestZoom } = latestZoomRef.current
+    if (!focusRequest || !element || !requestZoom) return
+    const { frame } = focusRequest
+    const next = clampZoom(Math.min((element.clientWidth * 0.8) / Math.max(1, frame.w), (element.clientHeight * 0.8) / Math.max(1, frame.h)))
+    const rect = element.getBoundingClientRect()
+    zoomAnchorRef.current = { point: { x: frame.x + frame.w / 2, y: frame.y + frame.h / 2 }, clientX: rect.left + element.clientWidth / 2, clientY: rect.top + element.clientHeight / 2 }
+    requestZoom(next)
+    // Same zoom as now: no re-render will run the anchor, so center right away.
+    if (Math.abs(next - current) < 0.0005) applyZoomAnchor(current)
+  }, [applyZoomAnchor, focusRequest])
+
+  // Space+drag or a middle-button drag pans a zoomed canvas.
+  const [spaceHeld, setSpaceHeld] = useState(false)
+  const panRef = useRef<{ pointerId: number; x: number; y: number; left: number; top: number } | null>(null)
+  useEffect(() => {
+    if (!isEditor) return undefined
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'Space') return
+      const target = event.target as HTMLElement | null
+      if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A'].includes(target.tagName))) return
+      event.preventDefault()
+      if (!event.repeat) setSpaceHeld(true)
+    }
+    const onKeyUp = (event: KeyboardEvent) => { if (event.code === 'Space') setSpaceHeld(false) }
+    const onBlur = () => setSpaceHeld(false)
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', onBlur)
+    }
+  }, [isEditor])
+
+  const handlePanPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const element = viewportRef.current
+    if (!isEditor || !element || !(event.button === 1 || (event.button === 0 && spaceHeld))) return
+    event.preventDefault()
+    event.stopPropagation()
+    panRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: element.scrollLeft, top: element.scrollTop }
+    element.setPointerCapture(event.pointerId)
+  }
+  const handlePanPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const pan = panRef.current
+    const element = viewportRef.current
+    if (!pan || !element || pan.pointerId !== event.pointerId) return
+    element.scrollLeft = pan.left - (event.clientX - pan.x)
+    element.scrollTop = pan.top - (event.clientY - pan.y)
+  }
+  const endPan = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (panRef.current?.pointerId === event.pointerId) panRef.current = null
+  }
+
   const widgets = useMemo(
     () => [...layout.widgets]
       .filter((widget) => isEditor || (!widget.hidden && isWallpaperClockWindowOpen(widget.style.showFrom, widget.style.showUntil, minuteClock)))
@@ -299,8 +423,9 @@ export function WallpaperStage({
     const ys = [0, canvas.height / 2, canvas.height]
     for (const widget of layout.widgets) {
       if (excluded.has(widget.id) || widget.hidden) continue
-      xs.push(widget.x, widget.x + widget.w / 2, widget.x + widget.w)
-      ys.push(widget.y, widget.y + widget.h / 2, widget.y + widget.h)
+      const box = visualFrame(widget, widget.rotation)
+      xs.push(box.x, box.x + box.w / 2, box.x + box.w)
+      ys.push(box.y, box.y + box.h / 2, box.y + box.h)
     }
     return { xs, ys }
   }, [canvas.height, canvas.width, layout.widgets])
@@ -316,14 +441,20 @@ export function WallpaperStage({
     event.stopPropagation()
     event.preventDefault()
     let nextSelection = selectedIds
-    if (event.shiftKey || event.ctrlKey || event.metaKey) {
+    const additive = event.shiftKey || event.ctrlKey || event.metaKey
+    if (additive) {
       nextSelection = selectedSet.has(widget.id) ? selectedIds.filter((id) => id !== widget.id) : [...selectedIds, widget.id]
     } else if (!selectedSet.has(widget.id)) {
       nextSelection = [widget.id]
     }
+    // A plain press on a widget of a larger selection still drags them all; only a click narrows the selection.
+    const collapseTo = !additive && selectedSet.has(widget.id) && selectedIds.length > 1 ? widget.id : undefined
     onSelectionChange?.(nextSelection)
     const movable = nextSelection.map((id) => widgetById.get(id)).filter((item): item is WallpaperWidgetInstance => Boolean(item && !item.locked))
-    if (!nextSelection.includes(widget.id) || movable.length === 0) return
+    if (!nextSelection.includes(widget.id) || movable.length === 0) {
+      if (collapseTo) onSelectionChange?.([collapseTo])
+      return
+    }
     beginDrag({
       kind: 'move',
       pointerId: event.pointerId,
@@ -332,6 +463,7 @@ export function WallpaperStage({
       ids: movable.map((item) => item.id),
       origin: new Map(movable.map((item) => [item.id, frameOf(item)])),
       active: false,
+      collapseTo,
     }, event.currentTarget)
   }
 
@@ -339,7 +471,15 @@ export function WallpaperStage({
     if (event.button !== 0) return
     event.stopPropagation()
     event.preventDefault()
-    beginDrag({ kind: 'resize', pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, id: widget.id, handle, origin: frameOf(widget) }, event.currentTarget)
+    beginDrag({ kind: 'resize', pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, id: widget.id, handle, origin: frameOf(widget), rotation: widget.rotation ?? 0 }, event.currentTarget)
+  }
+
+  const handleContextMenu = (event: ReactMouseEvent, widget: WallpaperWidgetInstance | null) => {
+    if (!isEditor || !onContextMenuRequest) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (widget && !selectedSet.has(widget.id)) onSelectionChange?.([widget.id])
+    onContextMenuRequest({ widgetId: widget?.id ?? null, clientX: event.clientX, clientY: event.clientY })
   }
 
   const handleBackgroundPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -383,8 +523,7 @@ export function WallpaperStage({
           if (Math.hypot(dxScreen, dyScreen) < DRAG_START_PX) return
           current.active = true
         }
-        const originFrames = [...current.origin.values()]
-        const box = boundsOf(originFrames)
+        const box = boundsOf([...current.origin].map(([id, frame]) => visualFrame(frame, widgetById.get(id)?.rotation)))
         // Keep the whole selection on the canvas.
         dx = Math.min(canvas.width - (box.x + box.w), Math.max(-box.x, dx))
         dy = Math.min(canvas.height - (box.y + box.h), Math.max(-box.y, dy))
@@ -409,7 +548,13 @@ export function WallpaperStage({
       const widget = widgetById.get(current.id)
       if (!widget) return
       const min = getWallpaperWidgetMinSize(widget.type, canvas)
-      const { origin, handle } = current
+      const { origin, handle, rotation } = current
+      // A rotated widget resizes along its own axes: turn the pointer delta into them first.
+      if (rotation) {
+        const local = rotateVector(dx, dy, -rotation)
+        dx = local.x
+        dy = local.y
+      }
       const movesLeft = handle.includes('w')
       const movesRight = handle.includes('e')
       const movesTop = handle.includes('n')
@@ -419,7 +564,7 @@ export function WallpaperStage({
       let top = origin.y + (movesTop ? dy : 0)
       let bottom = origin.y + origin.h + (movesBottom ? dy : 0)
       const nextGuides: Guides = { x: [], y: [] }
-      if (snapping) {
+      if (snapping && !rotation) {
         const targets = snapTargets(new Set([widget.id]))
         if (movesLeft || movesRight) {
           const edge = movesLeft ? left : right
@@ -432,10 +577,12 @@ export function WallpaperStage({
           if (hit) { if (movesTop) top += hit.delta; else bottom += hit.delta; nextGuides.y.push(hit.at) }
         }
       }
-      left = Math.max(0, left)
-      top = Math.max(0, top)
-      right = Math.min(canvas.width, right)
-      bottom = Math.min(canvas.height, bottom)
+      if (!rotation) {
+        left = Math.max(0, left)
+        top = Math.max(0, top)
+        right = Math.min(canvas.width, right)
+        bottom = Math.min(canvas.height, bottom)
+      }
       let w = right - left
       let h = bottom - top
       // Shift on a corner keeps the proportions.
@@ -448,7 +595,15 @@ export function WallpaperStage({
       }
       if (w < min.w) { w = min.w; if (movesLeft) left = right - w }
       if (h < min.h) { h = min.h; if (movesTop) top = bottom - h }
-      const next = new Map([[widget.id, { x: Math.round(left), y: Math.round(top), w: Math.round(w), h: Math.round(h) }]])
+      let x = left
+      let y = top
+      if (rotation) {
+        // The box grew in its own axes; move its center the same way on the canvas so the far edge stays put.
+        const shift = rotateVector(left + w / 2 - (origin.x + origin.w / 2), top + h / 2 - (origin.y + origin.h / 2), rotation)
+        x = origin.x + origin.w / 2 + shift.x - w / 2
+        y = origin.y + origin.h / 2 + shift.y - h / 2
+      }
+      const next = new Map([[widget.id, { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) }]])
       draftRef.current = next
       setDraftFrames(next)
       setGuides(nextGuides)
@@ -464,6 +619,7 @@ export function WallpaperStage({
       setDraftFrames(null)
       setMarquee(null)
       setGuides({ x: [], y: [] })
+      if (current.kind === 'move' && !current.active && current.collapseTo) onSelectionChange?.([current.collapseTo])
       if (frames && frames.size > 0 && current.kind !== 'marquee') onCommitFrames?.(frames)
     }
 
@@ -480,7 +636,7 @@ export function WallpaperStage({
   }, [canvas, drag, k, layout.widgets, onCommitFrames, onSelectionChange, snap, snapTargets, toCanvas, widgetById])
 
   const selectedWidgets = selectedIds.map((id) => widgetById.get(id)).filter((widget): widget is WallpaperWidgetInstance => Boolean(widget))
-  const selectionBox = selectedWidgets.length > 0 ? boundsOf(selectedWidgets.map((widget) => frameFor(widget))) : null
+  const selectionBox = selectedWidgets.length > 0 ? boundsOf(selectedWidgets.map((widget) => visualFrame(frameFor(widget), widget.rotation))) : null
   const single = selectedWidgets.length === 1 ? selectedWidgets[0] : null
   const isDragging = drag !== null && (drag.kind !== 'move' || drag.active)
   const isEmpty = layout.widgets.length === 0
@@ -493,6 +649,7 @@ export function WallpaperStage({
       <style>{WALLPAPER_ENTRANCE_KEYFRAMES + WALLPAPER_BACKGROUND_KEYFRAMES + '.wp-hit:hover{box-shadow:inset 0 0 0 calc(1.5px * var(--wp-inv)) color-mix(in srgb, var(--primary) 55%, transparent)}'}</style>
       <div
         ref={layerRef}
+        data-wallpaper-stage-layer={isEditor ? '' : undefined}
         className={cn('absolute left-0 top-0 origin-top-left overflow-hidden bg-background text-foreground', themeClassName, playbackRunning ? null : 'wallpaper-paused')}
         style={{
           ...themeStyle,
@@ -503,6 +660,7 @@ export function WallpaperStage({
           ['--wp-inv' as string]: scale > 0 ? 1 / scale : 1,
         }}
         onPointerDown={handleBackgroundPointerDown}
+        onContextMenu={(event) => handleContextMenu(event, null)}
         onDragOver={(event) => {
           if (dropType && onDropWidget && event.dataTransfer.types.includes(dropType)) {
             event.preventDefault()
@@ -550,8 +708,10 @@ export function WallpaperStage({
               <MemoWidgetFrame widget={widget} mode={mode} onOpenImage={isEditor ? undefined : setPreviewImage} animateEntrance={!isEditor} />
               {isEditor ? (
                 <div
-                  className={cn('wp-hit absolute inset-0', widget.locked ? 'cursor-default' : 'cursor-move')}
+                  // A hidden widget stays visible (faded) for orientation but lets clicks reach what is under it.
+                  className={cn('wp-hit absolute inset-0', widget.hidden ? 'pointer-events-none' : widget.locked ? 'cursor-default' : 'cursor-move')}
                   onPointerDown={(event) => handleWidgetPointerDown(event, widget)}
+                  onContextMenu={(event) => handleContextMenu(event, widget)}
                 />
               ) : null}
             </div>
@@ -575,14 +735,20 @@ export function WallpaperStage({
               <div
                 key={widget.id}
                 className={cn('absolute outline outline-[1.5px]', widget.locked ? 'outline-muted-foreground' : 'outline-primary')}
-                style={{ left: frame.x * k, top: frame.y * k, width: frame.w * k, height: frame.h * k }}
+                style={{ left: frame.x * k, top: frame.y * k, width: frame.w * k, height: frame.h * k, transform: widget.rotation ? `rotate(${widget.rotation}deg)` : undefined }}
               />
             )
           })}
           {single && !single.locked ? HANDLES.map((handle) => {
             const frame = frameFor(single)
-            const cx = frame.x * k + (handle.includes('w') ? 0 : handle.includes('e') ? frame.w * k : (frame.w * k) / 2)
-            const cy = frame.y * k + (handle.includes('n') ? 0 : handle.includes('s') ? frame.h * k : (frame.h * k) / 2)
+            // Handles sit on the drawn (rotated) box: offset from the center, then turned with the widget.
+            const offset = rotateVector(
+              (handle.includes('w') ? -frame.w / 2 : handle.includes('e') ? frame.w / 2 : 0) * k,
+              (handle.includes('n') ? -frame.h / 2 : handle.includes('s') ? frame.h / 2 : 0) * k,
+              single.rotation ?? 0,
+            )
+            const cx = (frame.x + frame.w / 2) * k + offset.x
+            const cy = (frame.y + frame.h / 2) * k + offset.y
             return (
               <div
                 key={handle}
@@ -627,9 +793,14 @@ export function WallpaperStage({
       className={cn(
         'relative h-full w-full',
         isEditor ? (zoom === 'fit' ? 'flex items-center justify-center overflow-hidden' : 'grid place-items-center overflow-auto') : 'flex items-center justify-center overflow-hidden bg-black',
+        spaceHeld ? 'cursor-grab [&_*]:cursor-grab!' : null,
         className,
       )}
       aria-label={isEditor ? t({ ko: '월페이퍼 캔버스', en: 'Wallpaper canvas' }) : undefined}
+      onPointerDownCapture={handlePanPointerDown}
+      onPointerMove={handlePanPointerMove}
+      onPointerUp={endPan}
+      onPointerCancel={endPan}
     >
       {scale > 0 ? stage : null}
       {previewImage ? <WallpaperImagePreviewOverlay image={previewImage} onClose={() => setPreviewImage(null)} /> : null}

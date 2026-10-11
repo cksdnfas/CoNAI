@@ -2,8 +2,8 @@ import type { NextFunction, Request, Response, Router } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { getUserSettingsDb } from '../database/userSettingsDb';
 import { GenerationQueueModel } from '../models/GenerationQueue';
+import { GraphExecutionModel } from '../models/GraphExecution';
 import { ImageStatsModel } from '../models/Image/ImageStatsModel';
-import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { audioCandidateFile, listAudioCandidates } from '../services/audio/audioService';
 import { resolveChatAccess } from '../services/codex-chat/codexChatAccess';
 import { loadChatSettings } from '../services/codex-chat/chatSettings';
@@ -19,7 +19,12 @@ import { buildLlmUsageSummary } from '../services/llmUsage';
 import { PostStore } from '../services/posts/postStore';
 import { PostError } from '../services/posts/postActor';
 import { WildcardService } from '../services/wildcardService';
-import { getWallpaperRuntimeAccess, requireWallpaperRuntimePermission, type WallpaperRuntimeAccess } from '../services/wallpaperRuntimeAccess';
+import {
+  getWallpaperRuntimeAccess,
+  requireWallpaperRuntimePermission,
+  sendWallpaperRuntimeForbidden,
+  type WallpaperRuntimeAccess,
+} from '../services/wallpaperRuntimeAccess';
 import { sendAudioCandidateFile } from './audioCandidateFileResponse';
 import { routeParam } from './routeParam';
 import { errorResponse, successResponse } from '@conai/shared';
@@ -45,7 +50,7 @@ function thumbnailUrl(hash: string | null | undefined) {
 /** Account-scoped feeds (queue, chat) never open to a logged-out viewer. */
 function requireSignedReader(_req: Request, res: Response, next: NextFunction) {
   if (getWallpaperRuntimeAccess(res).isAnonymous) {
-    res.status(403).json(errorResponse('Forbidden'));
+    sendWallpaperRuntimeForbidden(res);
     return;
   }
   next();
@@ -53,7 +58,7 @@ function requireSignedReader(_req: Request, res: Response, next: NextFunction) {
 
 function requireAdminReader(_req: Request, res: Response, next: NextFunction) {
   if (!getWallpaperRuntimeAccess(res).isAdmin) {
-    res.status(403).json(errorResponse('Forbidden'));
+    sendWallpaperRuntimeForbidden(res);
     return;
   }
   next();
@@ -63,7 +68,7 @@ function requireChatReader(_req: Request, res: Response, next: NextFunction) {
   const access = getWallpaperRuntimeAccess(res);
   const chat = resolveChatAccess(access.accountId);
   if (access.isAnonymous || !loadChatSettings().enabled || (!chat.codex && !chat.llm && !chat.claude)) {
-    res.status(403).json(errorResponse('Forbidden'));
+    sendWallpaperRuntimeForbidden(res);
     return;
   }
   next();
@@ -102,11 +107,29 @@ export function registerWallpaperRuntimeDataRoutes(router: Router) {
     res.json(successResponse({ counts, active }));
   });
 
+  /**
+   * Workflow run counts for the queue/activity widgets: a few aggregates instead of the browse snapshot (hundreds of
+   * executions plus their outputs) those widgets used to poll every few seconds.
+   */
+  router.get('/workflow-activity', requireWallpaperRuntimePermission('images.view'), requireSignedReader, (_req: Request, res: Response) => {
+    const activity = GraphExecutionModel.summarizeRecentActivity(24);
+    res.json(successResponse({
+      windowHours: 24,
+      workflowCount: activity.workflow_count,
+      counts: { queued: activity.queued, running: activity.running, completed: activity.completed, failed: activity.failed },
+      recentResults: activity.recent_results,
+      oldestQueuedAt: activity.oldest_queued_at,
+      oldestRunningAt: activity.oldest_running_at,
+      latestUpdatedAt: activity.latest_updated_at,
+    }));
+  });
+
   /** Latest finished generations (NAI, ComfyUI, Codex, workflow results) that are safe to show. */
   router.get('/generation/history', requireWallpaperRuntimePermission('images.view'), asyncHandler(async (req: Request, res: Response) => {
     const scope = historyRequesterScope(getWallpaperRuntimeAccess(res));
+    // A logged-out viewer has no generations of its own; say so instead of an empty feed that looks like "none yet".
     if (!scope) {
-      return res.json(successResponse([]));
+      return sendWallpaperRuntimeForbidden(res);
     }
     const limit = clampInt(req.query.limit, 12, 1, 60);
     const serviceType = parseServiceType(req.query.service);
@@ -142,12 +165,11 @@ export function registerWallpaperRuntimeDataRoutes(router: Router) {
   /** Generation counts per local day and service over the last `days`. */
   router.get('/generation/stats', requireWallpaperRuntimePermission('images.view'), (req: Request, res: Response) => {
     const scope = historyRequesterScope(getWallpaperRuntimeAccess(res));
+    if (!scope) {
+      return sendWallpaperRuntimeForbidden(res);
+    }
     const days = clampInt(req.query.days, 7, 1, 90);
     const offset = clampInt(req.query.offset, 0, -840, 840);
-    const empty = { days, daily: [] as unknown[], totals: { total: 0, completed: 0, failed: 0, byService: { novelai: 0, comfyui: 0, codex: 0 } } };
-    if (!scope) {
-      return res.json(successResponse(empty));
-    }
     const day = localDayExpression('created_at');
     const rows = getUserSettingsDb().prepare(`
       SELECT ${day} AS day, service_type, generation_status, COUNT(*) AS total
@@ -179,25 +201,28 @@ export function registerWallpaperRuntimeDataRoutes(router: Router) {
     res.json(successResponse(buildLlmUsageSummary(clampInt(req.query.days, 7, 1, 90), clampInt(req.query.offset, 0, -840, 840))));
   });
 
-  /** Library size and tag overview; cached because the tag scan is not cheap. */
-  router.get('/library/stats', requireWallpaperRuntimePermission('images.view'), asyncHandler(async (_req: Request, res: Response) => {
+  /**
+   * Library size and tag overview over the media a feed shows (hidden tiers excluded, so their tags never reach a
+   * public wallpaper); cached because the tag scan is not cheap.
+   */
+  router.get('/library/stats', requireWallpaperRuntimePermission('images.view'), (_req: Request, res: Response) => {
     const now = Date.now();
     if (!libraryStatsCache || now - libraryStatsCache.at > LIBRARY_STATS_TTL_MS) {
-      const autoTag = await ImageStatsModel.getAutoTagStats();
+      const stats = ImageStatsModel.getVisibleLibraryStats(20);
       libraryStatsCache = {
         at: now,
         data: {
-          total: MediaMetadataModel.countVisibleWithActiveFile(),
-          taggedImages: autoTag.tagged_images,
-          untaggedImages: autoTag.untagged_images,
-          characterCount: autoTag.character_count,
-          ratingDistribution: autoTag.rating_distribution,
-          topTags: autoTag.top_general_tags.slice(0, 20).map((tag) => ({ tag: tag.tag, count: tag.count })),
+          total: stats.total,
+          taggedImages: stats.tagged_images,
+          untaggedImages: stats.untagged_images,
+          characterCount: stats.images_with_character,
+          ratingDistribution: stats.rating_distribution,
+          topTags: stats.top_general_tags,
         },
       };
     }
-    return res.json(successResponse(libraryStatsCache.data));
-  }));
+    res.json(successResponse(libraryStatsCache.data));
+  });
 
   router.get('/chat/profiles', requireChatReader, (_req: Request, res: Response) => {
     const canViewImages = getWallpaperRuntimeAccess(res).permissionKeys.includes('images.view');

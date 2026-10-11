@@ -171,4 +171,104 @@ test('wallpaper runtime keys, access scope and feeds', { timeout: 120000 }, asyn
     assert.deepEqual(stored.background, preset.background)
     assert.deepEqual(stored.widgets[0].style, { variant: 'glass' })
   })
+
+  await t.test('workflow activity is a few counts, failures only from the last day', async () => {
+    const db = userDb.getUserSettingsDb()
+    const workflowId = Number(db.prepare("INSERT INTO graph_workflows (name, graph_json) VALUES ('wf', '{}')").run().lastInsertRowid)
+    const inactiveId = Number(db.prepare("INSERT INTO graph_workflows (name, graph_json, is_active) VALUES ('off', '{}', 0)").run().lastInsertRowid)
+    const insert = db.prepare(`INSERT INTO graph_executions (graph_workflow_id, graph_version, status, started_at, completed_at, created_date, updated_date)
+      VALUES (?, 1, ?, ?, ?, datetime('now', ?), datetime('now', ?))`)
+    insert.run(workflowId, 'queued', null, null, '-5 minutes', '-5 minutes')
+    insert.run(workflowId, 'running', '2026-01-01 00:00:00', null, '-1 hours', '-1 minutes')
+    const completed = Number(insert.run(workflowId, 'completed', null, null, '-2 hours', '-2 hours').lastInsertRowid)
+    db.prepare("UPDATE graph_executions SET completed_at = datetime('now', '-2 hours') WHERE id = ?").run(completed)
+    insert.run(workflowId, 'failed', null, null, '-3 hours', '-3 hours')
+    // Old failure and inactive workflows do not count.
+    insert.run(workflowId, 'failed', null, null, '-3 days', '-3 days')
+    insert.run(inactiveId, 'queued', null, null, '-5 minutes', '-5 minutes')
+
+    const activity = await call('GET', '/api/wallpaper-runtime/workflow-activity', 'admin')
+    assert.equal(activity.status, 200, JSON.stringify(activity.json))
+    assert.deepEqual(activity.json.data.counts, { queued: 1, running: 1, completed: 1, failed: 1 })
+    assert.equal(activity.json.data.workflowCount, 1)
+    assert.equal(activity.json.data.oldestRunningAt, '2026-01-01T00:00:00Z')
+    assert.match(activity.json.data.oldestQueuedAt, /Z$/)
+  })
+
+  await t.test('a logged-out viewer is refused account feeds instead of getting empty ones', async () => {
+    sessions.kiosk = {}
+    const anonymousGroup = auth.prepare("SELECT id FROM auth_permission_groups WHERE group_key = 'anonymous'").get() as { id: number }
+    // The runtime page permission follows images.view.
+    const permission = auth.prepare("SELECT id FROM auth_permissions WHERE permission_key = 'images.view'").get() as { id: number }
+    auth.prepare('INSERT OR REPLACE INTO auth_group_permissions (group_id, permission_id, allowed) VALUES (?, ?, 1)').run(anonymousGroup.id, permission.id)
+    ;(await import('../src/services/authAccessControlService')).invalidateResolvedAuthAccessCache()
+    assert.equal((await call('GET', '/api/wallpaper-runtime/settings')).status, 200)
+    for (const url of ['/generation/history', '/generation/stats', '/generation/queue', '/workflow-activity', '/llm-usage']) {
+      const refused = await call('GET', `/api/wallpaper-runtime${url}`)
+      assert.equal(refused.status, 403, url)
+      // Widgets read this to say "sign in or use a key" rather than "not allowed".
+      assert.equal(refused.json.code, 'sign_in_required', url)
+    }
+    const guestRefused = await call('GET', '/api/wallpaper-runtime/llm-usage', 'guest')
+    assert.equal(guestRefused.status, 403)
+    assert.equal(guestRefused.json.code, undefined)
+    // Library stats stay public (visible media only).
+    assert.equal((await call('GET', '/api/wallpaper-runtime/library/stats')).status, 200)
+  })
+
+  await t.test('a wallpaper sends chat only from a saved widget that allows it, into the chat it shows', async () => {
+    ;(await import('../src/services/codex-chat/chatSettings')).updateChatSettings({ enabled: true })
+    const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
+    const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
+    const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
+    const { CodexChatService } = await import('../src/services/codex-chat/codexChatService')
+    ExternalApiProvider.create({ provider_name: 'wp-conn', display_name: 'Conn', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
+    const plain = ChatProfileStore.create({ name: 'Plain', engine: 'llm', providerName: 'wp-conn' })
+    const tooled = ChatProfileStore.create({ name: 'Tooled', engine: 'llm', providerName: 'wp-conn', mcpEnabled: true, mcpScopes: ['read'] })
+    const plainThread = CodexChatStore.createThread(adminId, 'plain chat', 'llm', plain.id)
+    const tooledThread = CodexChatStore.createThread(adminId, 'tooled chat', 'llm', tooled.id)
+
+    const chatWidget = (id: string, settings: Record<string, unknown>) => ({ id, type: 'chat-recent', x: 0, y: 0, w: 400, h: 300, zIndex: 1, locked: false, hidden: false, rotation: 0, style: {}, settings: { title: '', messageCount: 3, ...settings } })
+    const preset = {
+      id: 'chat-room', name: 'chat', canvasPresetId: 'landscape-1080p', version: 2, background: { kind: 'theme' },
+      widgets: [
+        chatWidget('read-only', { profileId: plain.id }),
+        chatWidget('plain', { profileId: plain.id, allowReply: true }),
+        chatWidget('tooled', { profileId: tooled.id, allowReply: true }),
+        chatWidget('tooled-allowed', { profileId: tooled.id, allowReply: true, allowTools: true }),
+        { ...chatWidget('inbox', { profileId: null, allowReply: true, listCount: 8 }), type: 'chat-inbox' },
+      ],
+      createdAt: '2026-10-11T00:00:00Z', updatedAt: '2026-10-11T00:00:00Z',
+    }
+    const savedChat = await call('PUT', '/api/settings/appearance', 'admin', { wallpaperLayoutPresets: [preset], wallpaperActivePresetId: null })
+    assert.equal(savedChat.status, 200, JSON.stringify(savedChat.json))
+    const { token } = WallpaperRuntimeToken.create({ name: 'chat kiosk', accountId: adminId, presetId: null })
+    sessions.kiosk = {}
+    assert.equal((await call('POST', '/api/wallpaper-runtime/session', 'kiosk', { token })).status, 200)
+    const send = (widgetId: string, threadId: number, text = 'hi') => call('POST', '/api/wallpaper-runtime/chat/send', 'kiosk', { presetId: 'chat-room', widgetId, threadId, text })
+
+    assert.equal((await send('read-only', plainThread)).status, 404, 'replies are off unless the widget allows them')
+    assert.equal((await send('missing', plainThread)).status, 404)
+    assert.equal((await send('plain', plainThread, 'x'.repeat(501))).status, 400)
+    const moved = await send('plain', tooledThread)
+    assert.equal(moved.status, 409, 'never a chat the widget does not follow')
+    assert.equal(moved.json.code, 'chat_changed')
+    const tools = await send('tooled', tooledThread)
+    assert.equal(tools.status, 403)
+    assert.equal(tools.json.code, 'tools_not_allowed')
+    // The inbox may send into any chat of its list, nothing outside it, and keeps the tools gate.
+    assert.equal((await send('inbox', 999_999)).json.code, 'chat_changed')
+    assert.equal((await send('inbox', tooledThread)).json.code, 'tools_not_allowed')
+
+    const sent = await send('plain', plainThread)
+    assert.equal(sent.status, 202, JSON.stringify(sent.json))
+    assert.equal(sent.json.data.threadId, plainThread)
+    // Right after: still answering (409) or inside the cooldown (429), never a second send.
+    assert.ok([409, 429].includes((await send('plain', plainThread)).status))
+    // The reply fails against the unreachable connection; let it settle before the database closes.
+    for (let waited = 0; CodexChatService.isRunning(plainThread) && waited < 10_000; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50))
+    assert.ok(CodexChatStore.listMessages(plainThread).some((message) => message.role === 'user' && message.content === 'hi'))
+    assert.equal((await send('tooled-allowed', tooledThread)).status, 202)
+    for (let waited = 0; CodexChatService.isRunning(tooledThread) && waited < 10_000; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50))
+  })
 })

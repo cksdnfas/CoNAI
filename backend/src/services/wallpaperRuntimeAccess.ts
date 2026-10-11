@@ -116,12 +116,21 @@ export function requireWallpaperRuntimeAccess(req: Request, res: Response, next:
   next();
 }
 
+/** Error code on a runtime 403 that a login or a runtime key would lift (the reader is logged out). */
+export const WALLPAPER_RUNTIME_SIGN_IN_REQUIRED = 'sign_in_required';
+
+/** Refuse a runtime read; widgets tell a logged-out viewer to sign in or use a key instead of "not allowed". */
+export function sendWallpaperRuntimeForbidden(res: Response): void {
+  const anonymous = getWallpaperRuntimeAccess(res).isAnonymous;
+  res.status(403).json({ success: false, error: 'Forbidden', ...(anonymous ? { code: WALLPAPER_RUNTIME_SIGN_IN_REQUIRED } : {}) });
+}
+
 /** Narrow a runtime read to readers holding one feature permission. */
 export function requireWallpaperRuntimePermission(permissionKey: string) {
   return (_req: Request, res: Response, next: NextFunction): void => {
     const access = getWallpaperRuntimeAccess(res);
     if (!access.permissionKeys.includes(permissionKey)) {
-      res.status(403).json({ success: false, error: 'Forbidden' });
+      sendWallpaperRuntimeForbidden(res);
       return;
     }
     next();

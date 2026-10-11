@@ -26,6 +26,23 @@ export async function getWallpaperRuntimeBrowseContent(folderId?: number | null)
   return requestWallpaperRuntimeData<GraphWorkflowBrowseContentRecord>(`${BASE}/browse-content${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`, 'wallpaperRuntime.browseContent.load')
 }
 
+export interface WallpaperWorkflowActivity {
+  windowHours: number
+  workflowCount: number
+  /** Queued/running now; completed/failed inside the window. */
+  counts: { queued: number; running: number; completed: number; failed: number }
+  /** Final results written inside the window. */
+  recentResults: number
+  oldestQueuedAt: string | null
+  oldestRunningAt: string | null
+  latestUpdatedAt: string | null
+}
+
+/** Workflow run counts for the queue-status and activity-pulse widgets (signed-in readers). */
+export function getWallpaperWorkflowActivity() {
+  return requestApiData<WallpaperWorkflowActivity>(`${BASE}/workflow-activity`)
+}
+
 /** Load one read-only group preview image list for wallpaper live widgets. */
 export async function getWallpaperRuntimeGroupPreviewImages(groupId: number, params?: { includeChildren?: boolean; count?: number }) {
   const searchParams = new URLSearchParams()
@@ -176,6 +193,7 @@ export interface WallpaperLibraryStats {
   total: number
   taggedImages: number
   untaggedImages: number
+  /** Images with at least one character tag (not distinct characters). */
   characterCount: number
   ratingDistribution: Record<string, number>
   topTags: Array<{ tag: string; count: number }>
@@ -219,6 +237,15 @@ export interface WallpaperChatMessages {
 
 export function getWallpaperChatMessages(threadId: number, limit: number) {
   return requestApiData<WallpaperChatMessages>(`${BASE}/chat/threads/${threadId}/messages?limit=${limit}`)
+}
+
+/** Send from a saved chat widget that allows replies; `threadId` is the chat on screen. The reply arrives later. */
+export function sendWallpaperChatMessage(presetId: string, widgetId: string, threadId: number, text: string) {
+  return requestApiData<{ threadId: number }>(`${BASE}/chat/send`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presetId, widgetId, threadId, text }),
+  })
 }
 
 export interface WallpaperAudioCandidate {

@@ -252,6 +252,7 @@ export const WALLPAPER_WIDGET_TYPES = [
   'library-stats',
   'character-card',
   'chat-recent',
+  'chat-inbox',
   'audio-player',
   'post-ticker',
   'prompt-of-day',

@@ -204,7 +204,8 @@ export function configureAppMiddleware(
   app.use(dependencies.createCors((req, callback) => {
     const origin = req.get('Origin');
 
-    if (!origin || isSameRequestOrigin(req, origin) || allowedCorsOrigins.has(origin)) {
+    // Embedded hosts (Wallpaper Engine) can send an Origin that is not the page's own; Sec-Fetch-Site comes from the browser.
+    if (!origin || isSameRequestOrigin(req, origin) || allowedCorsOrigins.has(origin) || req.get('Sec-Fetch-Site') === 'same-origin') {
       callback(null, {
         origin: true,
         credentials: true,
@@ -212,7 +213,7 @@ export function configureAppMiddleware(
       return;
     }
 
-    callback(new Error('Cross-origin request is not allowed'));
+    callback(new Error(`Cross-origin request is not allowed (Origin: ${origin}, Sec-Fetch-Site: ${req.get('Sec-Fetch-Site') ?? 'none'})`));
   }));
 
   app.use(dependencies.createCompression({

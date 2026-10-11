@@ -56,3 +56,66 @@ test('auto-tag stats count tagger-nested ratings, characters and models', async 
   // Same precedence as the search filters: root model, then tagger, then kaloscope.
   assert.deepEqual(stats.model_distribution, { vit: 2, eva02: 1, legacy: 1, 'kaloscope-onnx': 1 })
 })
+
+test('top general tags come from the tag index, tagger general only', async () => {
+  const { db } = await boot()
+  const { AutoTagIndexService } = await import('../src/services/autoTagIndexService')
+  const insert = db.prepare('INSERT INTO media_metadata (composite_hash, auto_tags) VALUES (?, ?)')
+  const rows: Array<[string, object]> = [
+    [hash(101), { version: 2, tagger: { general: { solo: 0.9, smile: 0.8 } }, kaloscope: { artists: { some_artist: 0.9 } } }],
+    [hash(102), { version: 2, tagger: { general: { solo: 0.7 } }, kaloscope: { artists: { some_artist: 0.8 } } }],
+    // Legacy root shape still counts.
+    [hash(103), { general: { solo: 0.6, smile: 0.5 } }],
+    [hash(104), { version: 2, kaloscope: { artists: { some_artist: 0.7 } } }],
+  ]
+  for (const [compositeHash, tags] of rows) {
+    insert.run(compositeHash, JSON.stringify(tags))
+    AutoTagIndexService.syncForHash(compositeHash, JSON.stringify(tags))
+  }
+
+  const { ImageStatsModel } = await import('../src/models/Image/ImageStatsModel')
+  // Kaloscope artists are general-typed in the index but are not "top tags"; earlier rows from the other test add none.
+  assert.deepEqual(ImageStatsModel.getTopGeneralTags(5), [{ tag: 'solo', count: 3 }, { tag: 'smile', count: 2 }])
+  assert.deepEqual(ImageStatsModel.getTopGeneralTags(1), [{ tag: 'solo', count: 3 }])
+})
+
+test('visible library stats leave out hidden-tier, file-less and deleted media', async () => {
+  const { db } = await boot()
+  const { AutoTagIndexService } = await import('../src/services/autoTagIndexService')
+  const { RatingScoreModel } = await import('../src/models/RatingScore')
+  const top = RatingScoreModel.getAllTiers().find((tier) => tier.max_score === null)
+  assert.ok(top)
+  RatingScoreModel.updateTier(top.id, { feed_visibility: 'hide' })
+
+  const folderId = Number(db.prepare("INSERT INTO watched_folders (folder_path, folder_name) VALUES ('/lib', 'lib')").run().lastInsertRowid)
+  const insertMedia = db.prepare('INSERT INTO media_metadata (composite_hash, auto_tags, rating_score) VALUES (?, ?, ?)')
+  const insertFile = db.prepare('INSERT INTO image_files (composite_hash, original_file_path, folder_id, file_status, file_size, mime_type) VALUES (?, ?, ?, ?, 1, ?)')
+  const rating = (general: number, sensitive: number, questionable: number, explicit: number) => ({ general, sensitive, questionable, explicit })
+  const rows: Array<[number, object | null, number, string]> = [
+    [201, { version: 2, tagger: { rating: rating(0.9, 0.1, 0, 0), general: { solo: 0.9 }, character: { izumi_konata: 0.8 } } }, 1, 'active'],
+    [202, { version: 2, tagger: { rating: rating(0.1, 0.8, 0, 0), general: { solo: 0.8, smile: 0.7 } } }, 3, 'active'],
+    [203, null, 0, 'active'],
+    // Hidden tier: its tag and character must not leak.
+    [204, { version: 2, tagger: { rating: rating(0, 0, 0.1, 0.9), general: { secret_tag: 0.9 }, character: { hidden_girl: 0.9 } } }, 50, 'active'],
+    // Visible score but the file is gone.
+    [205, { version: 2, tagger: { rating: rating(0.9, 0, 0, 0), general: { gone_tag: 0.9 } } }, 0, 'deleted'],
+  ]
+  for (const [n, tags, score, fileStatus] of rows) {
+    const json = tags ? JSON.stringify(tags) : null
+    insertMedia.run(hash(n), json, score)
+    insertFile.run(hash(n), `/lib/${n}.png`, folderId, fileStatus, 'image/png')
+    AutoTagIndexService.syncForHash(hash(n), json)
+  }
+
+  const { ImageStatsModel } = await import('../src/models/Image/ImageStatsModel')
+  const stats = ImageStatsModel.getVisibleLibraryStats(10)
+  // Rows from the earlier tests have no file row, so only 201-203 count.
+  assert.equal(stats.total, 3)
+  assert.equal(stats.tagged_images, 2)
+  assert.equal(stats.untagged_images, 1)
+  assert.deepEqual(stats.rating_distribution, { general: 1, sensitive: 1, questionable: 0, explicit: 0 })
+  assert.equal(stats.images_with_character, 1)
+  assert.deepEqual(stats.top_general_tags, [{ tag: 'solo', count: 2 }, { tag: 'smile', count: 1 }])
+  // The unscoped variant still sees everything indexed.
+  assert.ok(ImageStatsModel.getTopGeneralTags(20).some((tag) => tag.tag === 'secret_tag'))
+})

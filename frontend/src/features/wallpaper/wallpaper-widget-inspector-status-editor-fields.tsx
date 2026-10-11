@@ -121,18 +121,21 @@ export function WallpaperStatusWidgetEditorFields({
           </WallpaperInspectorSectionCard>
 
           <WallpaperInspectorSectionCard title={t({ ko: '전환', en: 'Transition' })}>
-            <Field label={t({ ko: '화면 전환 간격', en: 'Screen transition interval' })}>
-              <Select
-                value={String(selectedWidget.settings.shiftIntervalSec ?? 8)}
-                onChange={(event) => {
-                  updateWidgetSettings({ shiftIntervalSec: Number(event.target.value) })
-                }}
-              >
-                {[4, 6, 8, 12, 16].map((seconds) => (
-                  <option key={seconds} value={seconds}>{seconds}s</option>
-                ))}
-              </Select>
-            </Field>
+            {/* Only the stack rotates on a timer; grid and masonry show every result at once. */}
+            {selectedWidget.settings.displayMode === 'stack' ? (
+              <Field label={t({ ko: '화면 전환 간격', en: 'Screen transition interval' })}>
+                <Select
+                  value={String(selectedWidget.settings.shiftIntervalSec ?? 8)}
+                  onChange={(event) => {
+                    updateWidgetSettings({ shiftIntervalSec: Number(event.target.value) })
+                  }}
+                >
+                  {[4, 6, 8, 12, 16].map((seconds) => (
+                    <option key={seconds} value={seconds}>{seconds}s</option>
+                  ))}
+                </Select>
+              </Field>
+            ) : null}
 
             <WallpaperTransitionAnimationEditorField
               transitionStyle={selectedWidget.settings.imageTransitionStyle}

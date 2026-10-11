@@ -1226,6 +1226,11 @@ html:lang(ko) {
   animation-play-state: paused !important;
 }
 
+/* A widget body that renders this marker hides its whole frame (glass, border, title), e.g. now-playing with "hide when idle". */
+[data-wallpaper-frame]:has([data-wallpaper-hide-frame]) {
+  visibility: hidden;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .wallpaper-drift,
   .wallpaper-pulse-bar,

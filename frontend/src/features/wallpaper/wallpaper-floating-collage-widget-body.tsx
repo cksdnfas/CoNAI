@@ -35,6 +35,7 @@ import {
   evaluateWallpaperAnimationEasingAtTime,
   getWallpaperAnimationEasingCss,
   getWallpaperMotionStrengthMultiplier,
+  useWallpaperElementSize,
 } from './wallpaper-widget-utils'
 import { runWallpaperFrameLoop } from './wallpaper-playback'
 
@@ -44,9 +45,9 @@ const WALLPAPER_FLOATING_COLLAGE_SPAWN_BLEND_MS = 1100
 /** Render one layered floating collage that always stays inside the widget area. */
 export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { widget: Extract<WallpaperWidgetInstance, { type: 'floating-collage' }>; mode: 'editor' | 'runtime'; onOpenImage?: (image: WallpaperWidgetPreviewImage) => void }) {
   const { t } = useI18n()
-  const containerRef = useRef<HTMLDivElement | null>(null)
+  // A callback ref: the container only mounts after the loading/empty states, so a mount-time effect measured nothing.
+  const [containerRef, containerSize] = useWallpaperElementSize<HTMLDivElement>()
   const spawnHoldUntilRef = useRef(0)
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
   const [cardStates, setCardStates] = useState<WallpaperFloatingCollageCardState[]>([])
   const [spawnAnchor, setSpawnAnchor] = useState<{ x: number; y: number; holdUntil: number; blendUntil: number; active: boolean }>({ x: 0, y: 0, holdUntil: 0, blendUntil: 0, active: false })
   const groupId = widget.settings.groupId
@@ -89,33 +90,6 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
     }).filter((value): value is string => typeof value === 'string' && value.length > 0))),
     [images, initialCardStates],
   )
-
-  useEffect(() => {
-    const element = containerRef.current
-    if (!element) {
-      return
-    }
-
-    const updateSize = () => {
-      const nextWidth = Math.max(0, element.clientWidth)
-      const nextHeight = Math.max(0, element.clientHeight)
-      setContainerSize((current) => (
-        current.width === nextWidth && current.height === nextHeight
-          ? current
-          : { width: nextWidth, height: nextHeight }
-      ))
-    }
-
-    updateSize()
-    const observer = new ResizeObserver(() => {
-      updateSize()
-    })
-    observer.observe(element)
-
-    return () => {
-      observer.disconnect()
-    }
-  }, [])
 
   useEffect(() => {
     let cancelled = false

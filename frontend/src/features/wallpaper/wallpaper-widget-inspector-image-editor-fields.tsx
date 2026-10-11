@@ -145,7 +145,7 @@ export function WallpaperImageWidgetEditorFields({
                   updateWidgetSettings({ visibleCount: Number(event.target.value) })
                 }}
               >
-                {[1, 2, 4, 6, 9].map((count) => (
+                {[1, 2, 4, 6, 8, 9].map((count) => (
                   <option key={count} value={count}>{count}</option>
                 ))}
               </Select>

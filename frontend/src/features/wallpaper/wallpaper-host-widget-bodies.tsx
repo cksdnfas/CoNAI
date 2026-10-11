@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Music, Play } from 'lucide-react'
 import { useI18n } from '@/i18n'
+import { ApiRequestError } from '@/lib/api-request'
 import { runWallpaperQuickRun } from '@/lib/api-wallpaper-runtime'
 import { cn } from '@/lib/utils'
 import type { WallpaperWidgetInstance } from './wallpaper-types'
 import { readWallpaperHostAudio, useWallpaperHostState, WALLPAPER_AUDIO_BINS, type WallpaperHostSystemInfo, type WallpaperHostTrack } from './wallpaper-host-bridge'
-import { WallpaperWidgetNote } from './wallpaper-monitor-widget-bodies'
+import { getWallpaperWidgetErrorKind, WallpaperWidgetErrorNote, WallpaperWidgetNote } from './wallpaper-widget-note'
 import { runWallpaperFrameLoop } from './wallpaper-playback'
 import { useWallpaperComfyStats, useWallpaperDataEnvironment } from './wallpaper-widget-data'
 
@@ -28,8 +29,22 @@ function demoLevels(time: number, out: Float32Array) {
   }
 }
 
+/** System audio and now playing come only from a desktop host package. */
+function useWallpaperHostHint() {
+  const { t } = useI18n()
+  return t({ ko: 'Lively나 Wallpaper Engine 패키지로 열면 보여.', en: 'Shown when opened from the Lively or Wallpaper Engine package.' })
+}
+
+/** Backing pixels per CSS pixel: the stage scale (read from the rendered size) times the screen density, capped. */
+function readCanvasPixelRatio(canvas: HTMLCanvasElement) {
+  const stageScale = canvas.clientWidth > 0 ? canvas.getBoundingClientRect().width / canvas.clientWidth : 1
+  return Math.max(1, Math.min(4, stageScale * (window.devicePixelRatio || 1)))
+}
+
 export function WallpaperAudioVisualizerBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'audio-visualizer' }> }) {
   const { mode } = useWallpaperDataEnvironment()
+  const { host } = useWallpaperHostState()
+  const hostHint = useWallpaperHostHint()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const { shape, barCount, sensitivity, smoothing, color } = widget.settings
 
@@ -45,20 +60,27 @@ export function WallpaperAudioVisualizerBody({ widget }: { widget: Extract<Wallp
     const fall = Math.max(0, Math.min(0.9, smoothing / 100))
     let paint = color ?? ''
     let paintCheckedAt = 0
+    let pixelRatio = 1
 
     return runWallpaperFrameLoop((now) => {
+      // Drawing stays in CSS px; the backing store follows stage zoom and screen density so 4K hosts stay sharp.
       const width = canvas.clientWidth
       const height = canvas.clientHeight
       if (width <= 0 || height <= 0) return
-      if (canvas.width !== width || canvas.height !== height) {
-        canvas.width = width
-        canvas.height = height
-      }
-      // The accent can change with the theme or the background; re-read it about once a second.
-      if (!color && now - paintCheckedAt > 1000) {
-        paint = getComputedStyle(canvas).color
+      // The accent can change with the theme or the background, the stage scale with the window; re-read them
+      // about once a second.
+      if (now - paintCheckedAt > 1000) {
+        if (!color) paint = getComputedStyle(canvas).color
+        pixelRatio = readCanvasPixelRatio(canvas)
         paintCheckedAt = now
       }
+      const backingWidth = Math.round(width * pixelRatio)
+      const backingHeight = Math.round(height * pixelRatio)
+      if (canvas.width !== backingWidth || canvas.height !== backingHeight) {
+        canvas.width = backingWidth
+        canvas.height = backingHeight
+      }
+      context.setTransform(backingWidth / width, 0, 0, backingHeight / height, 0, 0)
       const audio = readWallpaperHostAudio()
       if (audio.fresh) sampleBars(audio.levels, count, target)
       else if (mode === 'editor') {
@@ -131,7 +153,13 @@ export function WallpaperAudioVisualizerBody({ widget }: { widget: Extract<Wallp
     }, 100)
   }, [barCount, color, mode, sensitivity, shape, smoothing])
 
-  return <canvas ref={canvasRef} aria-hidden="true" className="block h-full w-full text-primary" style={color ? { color } : undefined} />
+  return (
+    <div className="relative h-full w-full">
+      <canvas ref={canvasRef} aria-hidden="true" className="block h-full w-full text-primary" style={color ? { color } : undefined} />
+      {/* Outside a host the live page has no audio; say why instead of flat bars. */}
+      {mode === 'runtime' && host === null ? <div className="absolute inset-0"><WallpaperWidgetNote>{hostHint}</WallpaperWidgetNote></div> : null}
+    </div>
+  )
 }
 
 const SAMPLE_TRACK: WallpaperHostTrack = { title: 'Midnight Signal', artist: 'CoNAI', album: '', thumbnail: null }
@@ -139,12 +167,15 @@ const SAMPLE_TRACK: WallpaperHostTrack = { title: 'Midnight Signal', artist: 'Co
 export function WallpaperNowPlayingBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'now-playing' }> }) {
   const { t } = useI18n()
   const { mode } = useWallpaperDataEnvironment()
-  const { track: hostTrack } = useWallpaperHostState()
+  const { host, track: hostTrack } = useWallpaperHostState()
+  const hostHint = useWallpaperHostHint()
   const track = hostTrack ?? (mode === 'editor' ? SAMPLE_TRACK : null)
   const { layout, showArt, hideWhenIdle } = widget.settings
 
   if (!track) {
-    return hideWhenIdle ? null : <WallpaperWidgetNote>{t({ ko: '재생 중인 곡이 없어.', en: 'Nothing is playing.' })}</WallpaperWidgetNote>
+    // The marker hides the whole widget frame (index.css), not just this body, so no empty card is left behind.
+    if (hideWhenIdle) return <span data-wallpaper-hide-frame="" hidden />
+    return <WallpaperWidgetNote>{host === null ? hostHint : t({ ko: '재생 중인 곡이 없어.', en: 'Nothing is playing.' })}</WallpaperWidgetNote>
   }
 
   const art = showArt ? (
@@ -158,13 +189,17 @@ export function WallpaperNowPlayingBody({ widget }: { widget: Extract<WallpaperW
   ) : null
 
   return (
-    <div className={cn('flex h-full min-w-0', layout === 'stack' ? 'flex-col items-start justify-end gap-2' : 'items-center gap-3')}>
+    <div
+      className={cn('flex h-full min-w-0', layout === 'stack' ? 'flex-col items-start justify-end gap-[0.5em]' : 'items-center gap-[0.8em]')}
+      // Row: three text lines share the height. Stack: the art takes most of it, so lean on the width.
+      style={{ fontSize: layout === 'stack' ? 'clamp(12px, min(7cqh, 6cqw), 30px)' : 'clamp(12px, min(17cqh, 5cqw), 32px)' }}
+    >
       {art}
       <div className="min-w-0 flex-1 self-stretch">
         <div className="flex h-full min-w-0 flex-col justify-center">
-          <div className="truncate text-base font-semibold">{track.title || t({ ko: '알 수 없는 곡', en: 'Unknown track' })}</div>
-          {track.artist ? <div className="truncate text-sm opacity-70">{track.artist}</div> : null}
-          {track.album ? <div className="truncate text-xs opacity-50">{track.album}</div> : null}
+          <div className="truncate text-[1.15em] font-semibold">{track.title || t({ ko: '알 수 없는 곡', en: 'Unknown track' })}</div>
+          {track.artist ? <div className="truncate opacity-70">{track.artist}</div> : null}
+          {track.album ? <div className="truncate text-[0.8em] opacity-50">{track.album}</div> : null}
         </div>
       </div>
     </div>
@@ -180,12 +215,17 @@ interface Meter {
 }
 
 function MeterList({ meters, display }: { meters: Meter[]; display: 'bars' | 'rings' }) {
+  const count = Math.max(1, meters.length)
   if (display === 'rings') {
+    // Rings share the width in one row and take the height left after the label (and network) line.
     return (
-      <div className="flex h-full flex-wrap content-center items-center justify-around gap-3">
+      <div
+        className="flex h-full flex-wrap items-center justify-around gap-[0.75em] overflow-hidden [align-content:safe_center]"
+        style={{ fontSize: 'clamp(11px, min(7cqh, 3.2cqw), 20px)' }}
+      >
         {meters.map((meter) => (
-          <div key={meter.key} className="flex min-w-0 flex-col items-center gap-1">
-            <svg viewBox="0 0 36 36" className="size-[min(56cqh,88px)]" aria-hidden="true">
+          <div key={meter.key} className="flex min-w-0 flex-col items-center gap-[0.25em]">
+            <svg viewBox="0 0 36 36" style={{ width: `min(calc(100cqh - 3.5em), ${(84 / count).toFixed(1)}cqw)`, height: 'auto' }} aria-hidden="true">
               <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" strokeOpacity="0.15" strokeWidth="3.5" />
               <circle
                 cx="18"
@@ -201,21 +241,25 @@ function MeterList({ meters, display }: { meters: Meter[]; display: 'bars' | 'ri
               />
               <text x="18" y="21" textAnchor="middle" fontSize="9" className="fill-current font-semibold tabular-nums">{Math.round(meter.ratio * 100)}</text>
             </svg>
-            <div className="max-w-24 truncate text-2xs opacity-70">{meter.label}</div>
+            <div className="max-w-[8em] truncate text-[0.85em] opacity-70">{meter.label}</div>
           </div>
         ))}
       </div>
     )
   }
+  // A bar row is about 2.9em with its gap (3.2 leaves room for the network line); later rows clip first.
   return (
-    <div className="flex h-full flex-col justify-center gap-2.5">
+    <div
+      className="flex h-full flex-col gap-[0.7em] overflow-hidden [justify-content:safe_center]"
+      style={{ fontSize: `clamp(11px, min(${(100 / (count * 3.2)).toFixed(2)}cqh, 3.4cqw), 22px)` }}
+    >
       {meters.map((meter) => (
-        <div key={meter.key} className="min-w-0">
-          <div className="flex items-baseline justify-between gap-2 text-xs">
+        <div key={meter.key} className="min-w-0 shrink-0">
+          <div className="flex items-baseline justify-between gap-[0.5em]">
             <span className="truncate opacity-75">{meter.label}</span>
             <span className="shrink-0 tabular-nums opacity-60">{meter.detail}</span>
           </div>
-          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[color-mix(in_srgb,currentColor_14%,transparent)]">
+          <div className="mt-[0.3em] h-[0.4em] overflow-hidden rounded-full bg-[color-mix(in_srgb,currentColor_14%,transparent)]">
             <div className="h-full rounded-full bg-primary transition-[width] duration-700" style={{ width: `${Math.round(Math.max(0, Math.min(1, meter.ratio)) * 100)}%` }} />
           </div>
         </div>
@@ -256,7 +300,7 @@ export function WallpaperSystemMonitorBody({ widget }: { widget: Extract<Wallpap
       <div className="flex h-full flex-col gap-2">
         <div className="min-h-0 flex-1"><MeterList meters={meters} display={display} /></div>
         {showNetwork ? (
-          <div className="flex shrink-0 justify-between gap-2 text-2xs tabular-nums opacity-65">
+          <div className="flex shrink-0 justify-between gap-2 text-[clamp(10px,min(9cqh,3cqw),18px)] tabular-nums opacity-65">
             <span>↓ {formatRate(system.netDown)}</span>
             <span>↑ {formatRate(system.netUp)}</span>
           </div>
@@ -265,7 +309,7 @@ export function WallpaperSystemMonitorBody({ widget }: { widget: Extract<Wallpap
     )
   }
 
-  if (comfyQuery.isError) return <WallpaperWidgetNote>{t({ ko: 'ComfyUI 상태는 관리자만 볼 수 있어.', en: 'ComfyUI stats are for administrators.' })}</WallpaperWidgetNote>
+  if (comfyQuery.isError) return <WallpaperWidgetErrorNote error={comfyQuery.error} forbidden={t({ ko: 'ComfyUI 상태는 관리자만 볼 수 있어.', en: 'ComfyUI stats are for administrators.' })} />
   const servers = comfyQuery.data ?? []
   if (servers.length === 0) {
     return <WallpaperWidgetNote>{comfyQuery.isLoading ? t({ ko: '불러오는 중…', en: 'Loading…' }) : t({ ko: '켜진 ComfyUI 서버가 없어.', en: 'No active ComfyUI server.' })}</WallpaperWidgetNote>
@@ -289,19 +333,34 @@ export function WallpaperSystemMonitorBody({ widget }: { widget: Extract<Wallpap
 export function WallpaperQuickRunBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'quick-run' }> }) {
   const { t } = useI18n()
   const { mode, presetId } = useWallpaperDataEnvironment()
-  const [status, setStatus] = useState<{ tone: 'idle' | 'busy' | 'ok' | 'error'; message: string }>({ tone: 'idle', message: '' })
+  const [status, setStatus] = useState<{ tone: 'idle' | 'busy' | 'ok' | 'info' | 'error'; message: string }>({ tone: 'idle', message: '' })
   const label = widget.settings.label.trim() || widget.settings.scheduleName || t({ ko: '실행', en: 'Run' })
 
   useEffect(() => {
-    if (status.tone !== 'ok' && status.tone !== 'error') return undefined
+    if (status.tone === 'idle' || status.tone === 'busy') return undefined
     const timer = window.setTimeout(() => setStatus({ tone: 'idle', message: '' }), 6000)
     return () => window.clearTimeout(timer)
   }, [status.tone])
 
   if (widget.settings.scheduleId === null) return <WallpaperWidgetNote>{t({ ko: '설정에서 실행할 예약을 골라줘.', en: 'Pick a schedule to run in settings.' })}</WallpaperWidgetNote>
 
+  /** Server refusals in plain words instead of the raw English error. */
+  const describeError = (error: unknown) => {
+    if (getWallpaperWidgetErrorKind(error) === 'sign-in') return t({ ko: '로그인하거나 키가 든 URL이 필요해.', en: 'Sign in or open a URL with a key.' })
+    if (error instanceof ApiRequestError) {
+      if (error.status === 403) return t({ ko: '이 예약을 실행할 권한이 없어.', en: 'You may not run this schedule.' })
+      if (error.status === 404) return t({ ko: '저장된 버튼이나 예약을 찾을 수 없어.', en: 'The saved button or schedule is gone.' })
+      if (error.status === 429) return t({ ko: '방금 눌렀어. 잠깐 뒤에 다시 눌러줘.', en: 'Just pressed. Try again in a moment.' })
+    }
+    return t({ ko: '실행하지 못했어.', en: 'Could not run it.' })
+  }
+
   const press = async () => {
-    if (mode !== 'runtime' || status.tone === 'busy') return
+    if (status.tone === 'busy') return
+    if (mode !== 'runtime') {
+      setStatus({ tone: 'info', message: t({ ko: '실제 월페이퍼에서만 실행돼.', en: 'Runs only on the live wallpaper.' }) })
+      return
+    }
     if (!presetId) {
       setStatus({ tone: 'error', message: t({ ko: '저장된 월페이퍼에서만 실행돼.', en: 'Runs only from a saved wallpaper.' }) })
       return
@@ -313,7 +372,7 @@ export function WallpaperQuickRunBody({ widget }: { widget: Extract<WallpaperWid
         ? { tone: 'ok', message: t({ ko: '대기열에 넣었어.', en: 'Queued.' }) }
         : { tone: 'error', message: t({ ko: '예약 실행 한도에 걸렸어.', en: 'The schedule hit its run limit.' }) })
     } catch (error) {
-      setStatus({ tone: 'error', message: error instanceof Error ? error.message : t({ ko: '실행하지 못했어.', en: 'Could not run it.' }) })
+      setStatus({ tone: 'error', message: describeError(error) })
     }
   }
 
@@ -324,13 +383,15 @@ export function WallpaperQuickRunBody({ widget }: { widget: Extract<WallpaperWid
         type="button"
         onClick={() => void press()}
         disabled={status.tone === 'busy'}
-        className="flex min-h-0 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-base font-semibold text-primary-foreground transition-[filter,transform] hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
+        className="flex min-h-0 flex-1 items-center justify-center gap-[0.5em] rounded-[0.6em] bg-primary px-[0.9em] font-semibold text-primary-foreground transition-[filter,transform] hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
+        // The label grows with the button; the status line below keeps its own smaller size.
+        style={{ fontSize: 'clamp(14px, min(32cqh, 8cqw), 44px)' }}
       >
         <Play className="size-[1.1em] shrink-0" />
         <span className="truncate">{label}</span>
       </button>
       {status.message ? (
-        <div className={cn('shrink-0 truncate text-center text-xs', status.tone === 'error' ? 'text-destructive' : 'opacity-70')} role="status">{status.message}</div>
+        <div className={cn('shrink-0 truncate text-center text-[clamp(11px,min(12cqh,3.6cqw),18px)]', status.tone === 'error' ? 'text-destructive' : 'opacity-70')} role="status">{status.message}</div>
       ) : null}
     </div>
   )

@@ -6,6 +6,69 @@ import {
   buildAutoTagModelExpr,
   buildAutoTagRatingExpr,
 } from '../../services/autoTagSqlShared';
+import { ImageSafetyService } from '../../services/imageSafetyService';
+import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
+
+/** Rating mix by each row's strongest rating, over tagged `mm` rows that also match `whereSql`. */
+function buildRatingDistributionQuery(whereSql: string): string {
+  return `
+    SELECT
+      COALESCE(SUM(CASE
+        WHEN general >= sensitive
+          AND general >= questionable
+          AND general >= explicit
+        THEN 1 ELSE 0 END), 0) as general,
+      COALESCE(SUM(CASE
+        WHEN sensitive > general
+          AND sensitive >= questionable
+          AND sensitive >= explicit
+        THEN 1 ELSE 0 END), 0) as sensitive,
+      COALESCE(SUM(CASE
+        WHEN questionable > general
+          AND questionable > sensitive
+          AND questionable >= explicit
+        THEN 1 ELSE 0 END), 0) as questionable,
+      COALESCE(SUM(CASE
+        WHEN explicit > general
+          AND explicit > sensitive
+          AND explicit > questionable
+        THEN 1 ELSE 0 END), 0) as explicit
+    FROM (
+      SELECT
+        ${buildAutoTagRatingExpr('mm', 'general')} as general,
+        ${buildAutoTagRatingExpr('mm', 'sensitive')} as sensitive,
+        ${buildAutoTagRatingExpr('mm', 'questionable')} as questionable,
+        ${buildAutoTagRatingExpr('mm', 'explicit')} as explicit
+      FROM media_metadata mm
+      WHERE mm.auto_tags IS NOT NULL
+        AND ${whereSql}
+    )
+    WHERE general IS NOT NULL
+  `;
+}
+
+/**
+ * The library a feed would show for `alias`: not in a hidden rating tier, post-processing done, with an active file.
+ * Same set as MediaMetadataModel.countVisibleWithActiveFile().
+ */
+function buildVisibleMediaCondition(alias: string): string {
+  return `${ImageSafetyService.buildVisibleScoreCondition(`${alias}.rating_score`)}
+    AND ${MediaPostprocessVisibilityService.buildReadyCondition(alias)}
+    AND EXISTS (
+      SELECT 1 FROM image_files activefile
+      WHERE activefile.composite_hash = ${alias}.composite_hash AND activefile.file_status = 'active'
+    )`;
+}
+
+export interface VisibleLibraryStats {
+  total: number;
+  tagged_images: number;
+  untagged_images: number;
+  rating_distribution: AutoTagStats['rating_distribution'];
+  /** Images with at least one tagged character (not distinct characters). */
+  images_with_character: number;
+  top_general_tags: Array<{ tag: string; count: number }>;
+}
 
 /**
  * 통계 관련 작업을 담당하는 이미지 모델 (새 구조 기반)
@@ -74,40 +137,7 @@ export class ImageStatsModel {
     `).get() as any;
 
     // 2. Rating 분포 조회 (가장 높은 rating 기준)
-    const ratingQuery = `
-      SELECT
-        COALESCE(SUM(CASE
-          WHEN general >= sensitive
-            AND general >= questionable
-            AND general >= explicit
-          THEN 1 ELSE 0 END), 0) as general,
-        COALESCE(SUM(CASE
-          WHEN sensitive > general
-            AND sensitive >= questionable
-            AND sensitive >= explicit
-          THEN 1 ELSE 0 END), 0) as sensitive,
-        COALESCE(SUM(CASE
-          WHEN questionable > general
-            AND questionable > sensitive
-            AND questionable >= explicit
-          THEN 1 ELSE 0 END), 0) as questionable,
-        COALESCE(SUM(CASE
-          WHEN explicit > general
-            AND explicit > sensitive
-            AND explicit > questionable
-          THEN 1 ELSE 0 END), 0) as explicit
-      FROM (
-        SELECT
-          ${buildAutoTagRatingExpr('mm', 'general')} as general,
-          ${buildAutoTagRatingExpr('mm', 'sensitive')} as sensitive,
-          ${buildAutoTagRatingExpr('mm', 'questionable')} as questionable,
-          ${buildAutoTagRatingExpr('mm', 'explicit')} as explicit
-        FROM media_metadata mm
-        WHERE mm.auto_tags IS NOT NULL
-      )
-      WHERE general IS NOT NULL
-    `;
-    const ratingRow = db.prepare(ratingQuery).get() as any;
+    const ratingRow = db.prepare(buildRatingDistributionQuery('1 = 1')).get() as any;
 
     // 3. Character 개수 조회 (캐릭터가 하나라도 태깅된 이미지 수)
     const characterQuery = `
@@ -162,5 +192,65 @@ export class ImageStatsModel {
     };
 
     return stats;
+  }
+
+  /**
+   * Most frequent tagger general tags, counted from the auto-tag index (Kaloscope artist paths excluded).
+   * Not part of getAutoTagStats: it scans the whole index, so callers cache it for minutes.
+   */
+  static getTopGeneralTags(limit: number, options: { visibleOnly?: boolean } = {}): Array<{ tag: string; count: number }> {
+    const hasIndex = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'media_auto_tags'").get();
+    if (!hasIndex) {
+      return [];
+    }
+
+    // A join keyed by media_id: the planner turned `media_id IN (visible ids)` into a probe per term and visible id
+    // (seconds on 60k media); the join checks visibility once per tag row instead (~20ms).
+    const visibleJoin = options.visibleOnly ? 'JOIN media_metadata vm ON vm.media_id = mat.media_id' : '';
+    const visibleFilter = options.visibleOnly ? `AND ${buildVisibleMediaCondition('vm')}` : '';
+    return db.prepare(`
+      SELECT t.tag_key AS tag, COUNT(DISTINCT mat.media_id) AS count
+      FROM auto_tag_terms t
+      JOIN media_auto_tags mat ON mat.term_id = t.term_id
+      ${visibleJoin}
+      WHERE t.tag_type = 'general'
+        AND t.source_path IN ('$.general', '$.tagger.general')
+        ${visibleFilter}
+      GROUP BY t.tag_key
+      ORDER BY count DESC
+      LIMIT ?
+    `).all(limit) as Array<{ tag: string; count: number }>;
+  }
+
+  /**
+   * Library overview limited to what a feed shows (see buildVisibleMediaCondition), so a public wallpaper never
+   * counts or names tags from hidden-tier, unfinished or file-less media. Uncached: callers cache it for minutes.
+   */
+  static getVisibleLibraryStats(topTagLimit: number): VisibleLibraryStats {
+    const visible = buildVisibleMediaCondition('mm');
+    const counts = db.prepare(`
+      SELECT
+        COUNT(*) AS total,
+        COALESCE(SUM(CASE WHEN mm.auto_tags IS NOT NULL THEN 1 ELSE 0 END), 0) AS tagged,
+        COALESCE(SUM(CASE WHEN mm.auto_tags IS NOT NULL
+          AND ${buildAutoTagExistsForPaths('mm', AUTO_TAG_CHARACTER_JSON_PATHS, '1 = 1')} THEN 1 ELSE 0 END), 0) AS with_character
+      FROM media_metadata mm
+      WHERE ${visible}
+    `).get() as { total: number; tagged: number; with_character: number };
+    const ratingRow = db.prepare(buildRatingDistributionQuery(visible)).get() as Record<string, number> | undefined;
+
+    return {
+      total: counts.total,
+      tagged_images: counts.tagged,
+      untagged_images: counts.total - counts.tagged,
+      rating_distribution: {
+        general: ratingRow?.general || 0,
+        sensitive: ratingRow?.sensitive || 0,
+        questionable: ratingRow?.questionable || 0,
+        explicit: ratingRow?.explicit || 0,
+      },
+      images_with_character: counts.with_character,
+      top_general_tags: this.getTopGeneralTags(topTagLimit, { visibleOnly: true }),
+    };
   }
 }

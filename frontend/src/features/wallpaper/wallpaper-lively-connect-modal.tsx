@@ -25,7 +25,6 @@ interface WallpaperLivelyConnectModalProps {
   open: boolean
   onClose: () => void
   presets: WallpaperLayoutPreset[]
-  activePresetId: string | null
   /** A key issued just before opening (from a connected chat's card), shown once like one issued here. */
   initialIssued?: WallpaperIssuedKey | null
 }
@@ -36,22 +35,24 @@ function absoluteUrl(path: string) {
 
 export const WALLPAPER_RUNTIME_TOKENS_QUERY_KEY = TOKENS_QUERY_KEY
 
-/** The one-time URL of a freshly issued key: its own wallpaper, else the active one, else the runtime page. */
-export function wallpaperIssuedKey(token: { name: string; presetId: string | null; token: string }, presets: WallpaperLayoutPreset[], activePresetId: string | null): WallpaperIssuedKey {
-  const presetById = new Map(presets.map((preset) => [preset.id, preset]))
-  const preset = (token.presetId ? presetById.get(token.presetId) : null) ?? (activePresetId ? presetById.get(activePresetId) : null)
+/**
+ * The one-time URL of a freshly issued key. A key bound to a wallpaper pins it; an unbound key follows the live
+ * wallpaper and the schedule, so its URL must not carry a `preset` (which would outrank both).
+ */
+export function wallpaperIssuedKey(token: { name: string; presetId: string | null; token: string }, presets: WallpaperLayoutPreset[]): WallpaperIssuedKey {
+  const preset = token.presetId ? presets.find((candidate) => candidate.id === token.presetId) ?? null : null
   const path = preset ? buildWallpaperRuntimePath(preset, token.token) : `/#/wallpaper/runtime?k=${encodeURIComponent(token.token)}`
   return { name: token.name, url: absoluteUrl(path), presetId: preset?.id ?? null }
 }
 
 /** Issue view keys (plus quick-run presses) so logged-out kiosk browsers (Lively) can show a wallpaper; list and revoke them. */
-export function WallpaperLivelyConnectModal({ open, onClose, presets, activePresetId, initialIssued = null }: WallpaperLivelyConnectModalProps) {
+export function WallpaperLivelyConnectModal({ open, onClose, presets, initialIssued = null }: WallpaperLivelyConnectModalProps) {
   const { t, formatDateTime } = useI18n()
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
-  const [presetId, setPresetId] = useState<string>(activePresetId ?? '')
+  const [presetId, setPresetId] = useState<string>('')
   const [issued, setIssued] = useState<WallpaperIssuedKey | null>(initialIssued)
 
   const tokensQuery = useQuery({ queryKey: TOKENS_QUERY_KEY, queryFn: listWallpaperRuntimeTokens, enabled: open })
@@ -60,7 +61,7 @@ export function WallpaperLivelyConnectModal({ open, onClose, presets, activePres
   const createMutation = useMutation({
     mutationFn: () => createWallpaperRuntimeToken({ name: name.trim(), presetId: presetId || null }),
     onSuccess: (token) => {
-      setIssued(wallpaperIssuedKey(token, presets, activePresetId))
+      setIssued(wallpaperIssuedKey(token, presets))
       setName('')
       void queryClient.invalidateQueries({ queryKey: TOKENS_QUERY_KEY })
     },
