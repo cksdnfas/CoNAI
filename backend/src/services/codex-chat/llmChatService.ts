@@ -17,7 +17,7 @@ import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { ChatProfileStore, isVisionTool, type ChatProfile } from './chatProfiles'
 import { translateReply, translateUserInput } from './chatTranslation'
 import { hasTranslation, resolveProfileModel } from './chatModelRoles'
-import { stripEchoedAddresses } from '@conai/shared'
+import { stripEchoedAddresses, withoutNarrationMarks } from '@conai/shared'
 import { ChatUserProfileStore, userPersonaForThread, userPersonaOf } from './chatUserProfiles'
 import { loadChatSettings } from './chatSettings'
 import { canUseChatProfile, resolveChatProfileToolGrant, resolveChatAccess } from './codexChatAccess'
@@ -815,7 +815,7 @@ export const LlmChatService = {
         turn.translation.catch(() => undefined)
       }
       ChatFlagStore.setThreadFlags(thread.id, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
-      if (!thread.title) CodexChatStore.renameThread(thread.id, (trimmed || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' '))
+      if (!thread.title) CodexChatStore.renameThread(thread.id, (withoutNarrationMarks(trimmed) || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' '))
       return { type: 'user', message: CodexChatStore.listMessages(thread.id).find((entry) => entry.id === userMessageId) as CodexChatMessageRecord }
     }, undefined, undefined, page)
   },

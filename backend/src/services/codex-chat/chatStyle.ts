@@ -280,6 +280,8 @@ const ROLEPLAY_GUIDANCE = [
   "*She looks up from the sketchbook and smiles.* \"Oh, you made it!\" 'A bit late, though…'",
 ].join('\n')
 
+const NARRATION_GUIDANCE = 'Lines in the user\'s message that start with [나레이션] are scene narration the user writes as the narrator: events and circumstances of the scene, not words or actions of the user\'s character. Take them as having happened and let the reply react to them; do not repeat or quote them.'
+
 function buildBlocksGuidance(blocks: ChatDisplayBlock[]) {
   // A block without a template still shows (as a plain list of its fields), so it is offered to the model too.
   const usable = blocks.filter((block) => block.enabled && block.key)
@@ -320,5 +322,5 @@ function buildCastGuidance(cast: ChatCastMember[], profileName: string) {
 
 /** The part of the system prompt that tells the model about the profile's display conventions. */
 export function buildChatStyleGuidance(style: ChatStyle, profileName: string) {
-  return [style.roleplay ? ROLEPLAY_GUIDANCE : '', buildCastGuidance(style.cast, profileName), buildBlocksGuidance(style.blocks)].filter(Boolean).join('\n\n')
+  return [style.roleplay ? ROLEPLAY_GUIDANCE : '', NARRATION_GUIDANCE, buildCastGuidance(style.cast, profileName), buildBlocksGuidance(style.blocks)].filter(Boolean).join('\n\n')
 }

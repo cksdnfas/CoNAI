@@ -38,7 +38,7 @@ import { translateReply, translateUserInput } from './chatTranslation'
 import { hasTranslation } from './chatModelRoles'
 import { endJudgedTurn, judgeBeforeReply, judgeDirectiveText, type JudgedTurn } from './chatJudge'
 import { judgeStatusFields } from './chatJudgeFields'
-import { stripEchoedAddresses } from '@conai/shared'
+import { stripEchoedAddresses, withoutNarrationMarks } from '@conai/shared'
 import { recordLlmUsage, type LlmTokenCounts } from '../llmUsage'
 import { LlmChatService, type GroupReplyResult } from './llmChatService'
 import { ChatGroupStore } from './chatGroupStore'
@@ -1208,7 +1208,7 @@ export const CodexChatService = {
       session.activeTurns.set(codexThreadId, turn)
       clearIdleTimer(session)
       if (!thread.title) {
-        CodexChatStore.renameThread(threadId, (trimmed || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' '))
+        CodexChatStore.renameThread(threadId, (withoutNarrationMarks(trimmed) || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' '))
       }
       const userMessage = CodexChatStore.listMessages(threadId).find((entry) => entry.id === userMessageId) as CodexChatMessageRecord
       emit(turn, { type: 'user', message: userMessage })

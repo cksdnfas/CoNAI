@@ -546,25 +546,27 @@ function MessageTime({ at, appearance, className }: { at: string | undefined; ap
 /** The chat's user profile as it shows on the user's own messages. */
 export type ChatUserSpeaker = { name: string; avatar: string | null }
 
-export const CodexChatUserMessage = memo(function CodexChatUserMessage({ content, mentions, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, speaker = null, routing, recipientLabel }: {
+export const CodexChatUserMessage = memo(function CodexChatUserMessage({ content, mentions, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, speaker = null, routing, recipientLabel, bare = false }: {
   routing?: ChatMessageRouting | null
   recipientLabel?: string
   content: string; mentions?: readonly string[]; appearance?: ChatAppearance; createdAt?: string
   /** The chat's user profile (name and picture); null shows "Me" and no picture. */
   speaker?: ChatUserSpeaker | null
+  /** A later part of a message split by narration lines: the text only, without the name line, picture or time. */
+  bare?: boolean
 }) {
   const { t } = useI18n()
   // Posts referenced from the board ride as link lines at the top: shown as chips.
   const { refs, text: body } = splitPostRefLines(content)
   const text = mentions?.length ? splitMentions(body, mentions).map((part, index) => part.mention ? <span key={index} className={MENTION_CLASS}>{part.text}</span> : part.text) : body
   const refChips = refs.length ? <div className="mb-1.5 flex flex-wrap gap-1">{refs.map((ref) => <ChatPostRefChip key={`${ref.postId}-${ref.commentId ?? 0}`} item={ref} />)}</div> : null
-  const avatar = speaker && appearance.avatarSize !== 'none'
+  const avatar = !bare && speaker && appearance.avatarSize !== 'none'
     ? <ChatProfileAvatar name={speaker.name} avatar={speaker.avatar} engine="llm" size={AVATAR_SIZE[appearance.avatarSize]} className={appearance.avatarSize === 'lg' ? 'size-14 text-lg' : undefined} />
     : null
   if (appearance.userPlacement === 'flat') {
     return (
       <div className="space-y-2">
-        {appearance.showNames || appearance.timeStamps !== 'off' || avatar ? (
+        {!bare && (appearance.showNames || appearance.timeStamps !== 'off' || avatar) ? (
           <div className="flex min-h-6 items-center gap-1.5">
             {avatar}
             {appearance.showNames ? <span className="text-xs font-semibold text-muted-foreground">{speaker?.name ?? t({ ko: '나', en: 'Me' })}</span> : null}

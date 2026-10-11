@@ -1,4 +1,4 @@
-import { CHAT_TRANSLATION_DEFAULTS, CHAT_TRANSLATION_LANGUAGES, type ChatTranslationLanguage } from '@conai/shared'
+import { CHAT_TRANSLATION_DEFAULTS, CHAT_TRANSLATION_LANGUAGES, narrationLineCount, type ChatTranslationLanguage } from '@conai/shared'
 import { hasTranslation, resolveProfileModel, type ModelRoleProfile } from './chatModelRoles'
 import type { ChatProfile } from './chatProfiles'
 import { completeChat, resolveChatCompletionTarget, type ChatCompletionTarget } from './llmChatCompletion'
@@ -60,6 +60,7 @@ export function userTranslationPrompt(profile?: TranslationLanguages | null) {
     `You translate a chat user's message into natural, fluent ${language} for an AI character to read.`,
     'Preserve the meaning, tone, and register (casual stays casual, polite stays polite); keep roleplay actions in *asterisks* as actions.',
     `If the message is already in ${language}, return it unchanged.`,
+    'A line that starts with `$` is scene narration: translate it, keeping the `$` as the first character of that line.',
     PRESERVE_RULES,
   ].join('\n')
 }
@@ -236,6 +237,8 @@ export async function translateUserInput(profile: (ModelRoleProfile & Translatio
   const { model, display } = languagesOf(profile)
   if (!target || !trimmed || model === display || letterCounts(proseOf(trimmed), display).own === 0) return null
   const translated = await translate(target, userTranslationPrompt(profile), trimmed, signal)
+  // A translation that lost or invented narration lines would tell the model a different scene: keep the original.
+  if (translated && narrationLineCount(translated) !== narrationLineCount(trimmed)) return null
   return translated && translated !== trimmed ? translated : null
 }
 

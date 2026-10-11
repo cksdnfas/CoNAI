@@ -158,3 +158,11 @@ test('an address label the model copied from history is cut from its reply, so t
   assert.equal(await translateReply(translating, stripEchoedAddresses('[message_id=759; to=["user"]; reply_to=758; from=assistant]\nThe reply.')), '답장이야.')
   assert.equal(requests.length, 1)
 })
+
+test('user input: narration lines keep their `$`; a translation that loses one is dropped', async (t) => {
+  mockTranslator(t, '$The door bursts open\nWho is it?')
+  assert.equal(await translateUserInput(translating, '$그때 문이 벌컥 열렸다\n누구야?'), '$The door bursts open\nWho is it?')
+  t.mock.restoreAll()
+  mockTranslator(t, 'The door bursts open\nWho is it?')
+  assert.equal(await translateUserInput(translating, '$그때 문이 벌컥 열렸다\n누구야?'), null)
+})

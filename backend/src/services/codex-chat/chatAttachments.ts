@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { IMAGE_VIEW_PERMISSION, type StoredFileEntry } from '@conai/shared';
+import { IMAGE_VIEW_PERMISSION, narrationForModel, type StoredFileEntry } from '@conai/shared';
 import type { McpRequester } from '../../mcp/context';
 import { requireRequesterPermission } from '../../middleware/featureAccess';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
@@ -139,6 +139,7 @@ export function attachedImagesOf(message: ImageCarrier, images: AttachedImages |
  * plain references.
  */
 export function chatContentWithAttachments(content: string, attachments: StoredFileEntry[] = [], mediaAttachments: ChatMediaAttachment[] = [], inlineTexts?: ReadonlyMap<string, string>, images?: AttachedImages): string {
+  content = narrationForModel(content);
   const shownFiles = images ? attachments.filter((file) => images.has(attachedImageKey('file', file.id))) : [];
   const shownMedia = images ? mediaAttachments.filter((item) => images.has(attachedImageKey('media', item.compositeHash))) : [];
   if (shownMedia.length || shownFiles.length) {

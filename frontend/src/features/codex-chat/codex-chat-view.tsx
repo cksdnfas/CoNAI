@@ -64,6 +64,7 @@ import { getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
+import { ChatComposerNarrationBackdrop, caretOnNarration, draftHasNarration, narrationColorStyle } from './chat-narration'
 import { CHAT_APPEARANCE_ICON as AppearanceIcon, CHAT_MESSAGE_GAP_PX, CHAT_WIDTH_CLASS, ChatAppearancePopover, chatBackgroundLook, chatTranscriptStyle, useChatAppearance, type ChatBackgroundFit } from './chat-appearance'
 import { ChatBlockChangesContext, type BlockAction } from './chat-display-block'
 import { ChatProfileAvatar } from './chat-profile-avatar'
@@ -847,6 +848,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const profileMissing = thread !== null ? (isGroup ? !memberProfiles.some((member) => member.isEnabled) : !profile || !profile.isEnabled) : pendingProfile !== null && !pendingProfile.usable
   const codexUnavailable = isCodexThread && !codexStatus?.available
   const isCommand = draft.startsWith('/') && !draft.startsWith('//')
+  const narrating = !isCommand && draftHasNarration(draft)
   const matchingCommands = CHAT_COMMANDS.filter((command) => command.name.startsWith(draft.slice(1).toLowerCase()))
   const showCommands = isCommand && !/\s/.test(draft) && dismissedCommand !== draft && matchingCommands.length > 0
   const selectedCommand = Math.min(commandIndex, matchingCommands.length - 1)
@@ -1219,11 +1221,13 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           onClose={closeFlagTray}
         />
       ) : null}
-      <div {...fileDrop.dropHandlers} className={cn('flex items-end gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-primary/55', backgroundUrl && 'bg-background/85 backdrop-blur-sm', fileDrop.dragging && 'border-primary focus-within:border-primary')}>
+      <div {...fileDrop.dropHandlers} style={narrationColorStyle(profile?.style.roleplay ? profile.style.colors.narration : null)} className={cn('flex items-end gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-primary/55', narrating && caretOnNarration(draft, caret) && 'focus-within:border-[color-mix(in_srgb,var(--chat-rp-narration,var(--secondary-text))_70%,transparent)]', backgroundUrl && 'bg-background/85 backdrop-blur-sm', fileDrop.dragging && 'border-primary focus-within:border-primary')}>
         <ChatAttachButton chat={chat} disabled={isBusy || activeThreadId === null} />
         {!isGroup && profile?.pageAssist ? <ChatPageConnectButton disabled={isBusy} /> : null}
         {flags.length > 0 ? <ChatFlagButton buttonRef={flagButtonRef} count={activeFlagIds.length} open={flagTrayOpen} disabled={activeThreadId === null} onToggle={() => setFlagTrayOpen((open) => !open)} /> : null}
         {profile?.suggestEnabled ? <ChatSuggestButton buttonRef={suggestButtonRef} open={suggestions.open} loading={suggestions.loading} disabled={isBusy || activeThreadId === null} onToggle={suggestions.toggle} /> : null}
+        <div className="relative min-w-0 flex-1">
+        {narrating ? <ChatComposerNarrationBackdrop textareaRef={composerRef} text={draft} /> : null}
         <textarea
           ref={composerRef}
           value={draft}
@@ -1237,8 +1241,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           aria-autocomplete="list"
           aria-controls={showCommands ? commandListId : showMentions ? mentionListId : undefined}
           aria-activedescendant={showCommands ? `${commandListId}-${selectedCommand}` : showMentions ? `${mentionListId}-${selectedMention}` : undefined}
-          className="block min-h-0 flex-1 resize-none bg-transparent py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+          className={cn('relative block min-h-0 w-full resize-none bg-transparent py-1.5 text-sm text-foreground caret-foreground outline-none placeholder:text-muted-foreground', narrating && 'text-transparent')}
         />
+        </div>
         {(streamingHere || serverRunning) && !(isGroup && canSend) ? (
           <IconButton variant="secondary" size="icon-sm" className="rounded-full" onClick={() => activeThreadId !== null && chat.stop(activeThreadId)} label={t({ ko: '중단', en: 'Stop' })}>
             <Square />

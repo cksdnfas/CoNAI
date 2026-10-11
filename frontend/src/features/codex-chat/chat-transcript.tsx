@@ -14,7 +14,8 @@ import { ChatReferenceChips } from './chat-reference'
 import { ChatMessageFlags } from './chat-flags'
 import type { CodexChatLiveTurn } from './codex-chat-context'
 import { ChatMessageIdContext } from './chat-display-block'
-import { CodexChatAssistantMessage, CodexChatUserMessage, type ChatSpeaker, type ChatUserSpeaker } from './codex-chat-message'
+import { CodexChatAssistantMessage, type ChatSpeaker, type ChatUserSpeaker } from './codex-chat-message'
+import { ChatUserMessage } from './chat-narration'
 import { ChatRoutineEventLine, ChatTaskEventLine } from './chat-task-ui'
 
 const EMPTY_SEGMENTS: ChatSummarySegment[] = []
@@ -124,7 +125,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousCon
     {isUser
       ? <>{actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEdit} onCancel={() => actions.onEditingChange(null)} />
-        : (content || message.routing?.replyTo) && <CodexChatUserMessage content={content} routing={routing} recipientLabel={recipientLabel} mentions={mentions} appearance={look.appearance} createdAt={message.created_date} speaker={userSpeaker} />}<ChatFileLinks files={message.attachments} /><ChatReferenceChips items={message.mediaAttachments} threadId={message.thread_id} /><ChatMessageFlags flags={message.flags} /></>
+        : (content || message.routing?.replyTo) && <ChatUserMessage content={content} routing={routing} recipientLabel={recipientLabel} mentions={mentions} appearance={look.appearance} createdAt={message.created_date} speaker={userSpeaker} />}<ChatFileLinks files={message.attachments} /><ChatReferenceChips items={message.mediaAttachments} threadId={message.thread_id} /><ChatMessageFlags flags={message.flags} /></>
       : actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEditReply} onCancel={() => actions.onEditingChange(null)} reply />
         : <ChatMessageIdContext.Provider value={message.id}><CodexChatAssistantMessage content={content} routing={routing} recipientLabel={recipientLabel} toolCalls={message.tool_calls} threadId={message.thread_id} status={message.status} error={message.error} finishReason={message.finish_reason ?? null} media={media} {...look} createdAt={message.created_date} speaker={speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker} /></ChatMessageIdContext.Provider>}
@@ -193,7 +194,7 @@ export const ChatLiveMessage = memo(function ChatLiveMessage({ turn, speakerOf, 
   const { t } = useI18n()
   const recipients = (routing?: ChatMessageRouting) => routing?.recipients.map((id) => typeof id === 'number' ? (speakerOf?.(id)?.name ?? look.speaker?.name ?? '') : id === 'user' ? userSpeaker?.name ?? t({ ko: '사용자', en: 'User' }) : t({ ko: '방 전체', en: 'Room' })).filter(Boolean).join(', ')
   return <>
-    {(turn.userText || turn.userRouting?.replyTo) && <CodexChatUserMessage content={turn.userText} routing={turn.userRouting} mentions={mentions} appearance={look.appearance} speaker={userSpeaker} />}
+    {(turn.userText || turn.userRouting?.replyTo) && <ChatUserMessage content={turn.userText} routing={turn.userRouting} mentions={mentions} appearance={look.appearance} speaker={userSpeaker} />}
     <ChatFileLinks files={turn.attachments} />
     <ChatReferenceChips items={turn.mediaAttachments} threadId={turn.threadId} />
     <ChatMessageFlags flags={turn.flags} />

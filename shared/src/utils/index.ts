@@ -14,5 +14,6 @@ export * from './chatPage';
 export * from './chatWorkflow';
 export * from './chatPageAction';
 export * from './chatEditing';
+export * from './chatNarration';
 export * from './loreKeyLanguage';
 export * from './groupAutoCollect';
