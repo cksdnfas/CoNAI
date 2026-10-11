@@ -89,7 +89,7 @@ test('wallpaper runtime keys, access scope and feeds', { timeout: 120000 }, asyn
     assert.equal(listed.json.data[0].token, undefined)
   })
 
-  await t.test('a logged-out browser reads nothing until it trades a live key', async () => {
+  await t.test('a logged-out browser reads nothing until it trades a live key, which logs it in as the key account', async () => {
     assert.equal((await call('GET', '/api/wallpaper-runtime/settings')).status, 401)
     assert.equal((await call('GET', '/api/images/count')).status, 401)
     assert.equal((await call('POST', '/api/wallpaper-runtime/session', 'kiosk', { token: 'wpk_wrong' })).status, 401)
@@ -99,19 +99,23 @@ test('wallpaper runtime keys, access scope and feeds', { timeout: 120000 }, asyn
     assert.equal(traded.status, 200)
     assert.equal(traded.json.data.presetId, 'living')
     assert.equal(sessions.kiosk.wallpaperRuntimeTokenId, record.id)
-    assert.equal(sessions.kiosk.authenticated, undefined, 'a key never logs the browser in')
+    // A personal app: the wallpaper is the owner's own screen, so the key is a login (chat works exactly as in the app).
+    assert.equal(sessions.kiosk.authenticated, true)
+    assert.equal(sessions.kiosk.accountId, adminId)
 
     const settings = await call('GET', '/api/wallpaper-runtime/settings')
     assert.equal(settings.status, 200)
     assert.equal(settings.json.data.tokenPresetId, 'living')
     assert.equal((await call('GET', '/api/wallpaper-runtime/llm-usage')).status, 200, 'reads as the issuing admin')
     assert.equal((await call('GET', '/api/wallpaper-runtime/generation/queue')).status, 200)
-    // Library image reads open up, writes and other features do not.
     assert.equal((await call('GET', '/api/images/count')).status, 200)
-    assert.equal((await call('GET', '/api/generation-queue')).status, 401)
-    assert.equal((await call('PUT', '/api/settings/appearance', 'kiosk', { wallpaperLayoutPresets: [] })).status, 401)
+    assert.equal((await call('GET', '/api/generation-queue')).status, 200, 'the whole app, as the account')
 
+    // Revoking the key logs that browser out on its next request.
     WallpaperRuntimeToken.revoke(record.id)
+    assert.equal((await call('GET', '/api/generation-queue')).status, 401)
+    assert.equal(sessions.kiosk.authenticated, false)
+    assert.equal(sessions.kiosk.wallpaperRuntimeTokenId, undefined)
     assert.equal((await call('GET', '/api/wallpaper-runtime/settings')).status, 401)
     assert.equal((await call('GET', '/api/images/count')).status, 401)
   })
@@ -214,61 +218,5 @@ test('wallpaper runtime keys, access scope and feeds', { timeout: 120000 }, asyn
     assert.equal(guestRefused.json.code, undefined)
     // Library stats stay public (visible media only).
     assert.equal((await call('GET', '/api/wallpaper-runtime/library/stats')).status, 200)
-  })
-
-  await t.test('a wallpaper sends chat only from a saved widget that allows it, into the chat it shows', async () => {
-    ;(await import('../src/services/codex-chat/chatSettings')).updateChatSettings({ enabled: true })
-    const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
-    const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
-    const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
-    const { CodexChatService } = await import('../src/services/codex-chat/codexChatService')
-    ExternalApiProvider.create({ provider_name: 'wp-conn', display_name: 'Conn', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
-    const plain = ChatProfileStore.create({ name: 'Plain', engine: 'llm', providerName: 'wp-conn' })
-    const tooled = ChatProfileStore.create({ name: 'Tooled', engine: 'llm', providerName: 'wp-conn', mcpEnabled: true, mcpScopes: ['read'] })
-    const plainThread = CodexChatStore.createThread(adminId, 'plain chat', 'llm', plain.id)
-    const tooledThread = CodexChatStore.createThread(adminId, 'tooled chat', 'llm', tooled.id)
-
-    const chatWidget = (id: string, settings: Record<string, unknown>) => ({ id, type: 'chat-recent', x: 0, y: 0, w: 400, h: 300, zIndex: 1, locked: false, hidden: false, rotation: 0, style: {}, settings: { title: '', messageCount: 3, ...settings } })
-    const preset = {
-      id: 'chat-room', name: 'chat', canvasPresetId: 'landscape-1080p', version: 2, background: { kind: 'theme' },
-      widgets: [
-        chatWidget('read-only', { profileId: plain.id }),
-        chatWidget('plain', { profileId: plain.id, allowReply: true }),
-        chatWidget('tooled', { profileId: tooled.id, allowReply: true }),
-        chatWidget('tooled-allowed', { profileId: tooled.id, allowReply: true, allowTools: true }),
-        { ...chatWidget('inbox', { profileId: null, allowReply: true, listCount: 8 }), type: 'chat-inbox' },
-      ],
-      createdAt: '2026-10-11T00:00:00Z', updatedAt: '2026-10-11T00:00:00Z',
-    }
-    const savedChat = await call('PUT', '/api/settings/appearance', 'admin', { wallpaperLayoutPresets: [preset], wallpaperActivePresetId: null })
-    assert.equal(savedChat.status, 200, JSON.stringify(savedChat.json))
-    const { token } = WallpaperRuntimeToken.create({ name: 'chat kiosk', accountId: adminId, presetId: null })
-    sessions.kiosk = {}
-    assert.equal((await call('POST', '/api/wallpaper-runtime/session', 'kiosk', { token })).status, 200)
-    const send = (widgetId: string, threadId: number, text = 'hi') => call('POST', '/api/wallpaper-runtime/chat/send', 'kiosk', { presetId: 'chat-room', widgetId, threadId, text })
-
-    assert.equal((await send('read-only', plainThread)).status, 404, 'replies are off unless the widget allows them')
-    assert.equal((await send('missing', plainThread)).status, 404)
-    assert.equal((await send('plain', plainThread, 'x'.repeat(501))).status, 400)
-    const moved = await send('plain', tooledThread)
-    assert.equal(moved.status, 409, 'never a chat the widget does not follow')
-    assert.equal(moved.json.code, 'chat_changed')
-    const tools = await send('tooled', tooledThread)
-    assert.equal(tools.status, 403)
-    assert.equal(tools.json.code, 'tools_not_allowed')
-    // The inbox may send into any chat of its list, nothing outside it, and keeps the tools gate.
-    assert.equal((await send('inbox', 999_999)).json.code, 'chat_changed')
-    assert.equal((await send('inbox', tooledThread)).json.code, 'tools_not_allowed')
-
-    const sent = await send('plain', plainThread)
-    assert.equal(sent.status, 202, JSON.stringify(sent.json))
-    assert.equal(sent.json.data.threadId, plainThread)
-    // Right after: still answering (409) or inside the cooldown (429), never a second send.
-    assert.ok([409, 429].includes((await send('plain', plainThread)).status))
-    // The reply fails against the unreachable connection; let it settle before the database closes.
-    for (let waited = 0; CodexChatService.isRunning(plainThread) && waited < 10_000; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50))
-    assert.ok(CodexChatStore.listMessages(plainThread).some((message) => message.role === 'user' && message.content === 'hi'))
-    assert.equal((await send('tooled-allowed', tooledThread)).status, 202)
-    for (let waited = 0; CodexChatService.isRunning(tooledThread) && waited < 10_000; waited += 50) await new Promise((resolve) => setTimeout(resolve, 50))
   })
 })

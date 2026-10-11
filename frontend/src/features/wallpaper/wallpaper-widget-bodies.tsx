@@ -28,11 +28,10 @@ import {
 import {
   WallpaperAudioPlayerBody,
   WallpaperCharacterCardBody,
-  WallpaperChatInboxBody,
-  WallpaperChatRecentBody,
   WallpaperPostTickerBody,
   WallpaperPromptOfDayBody,
 } from './wallpaper-chat-media-widget-bodies'
+import { WallpaperChatInboxBody, WallpaperChatRecentBody } from './wallpaper-chat-panel-widget'
 import {
   WallpaperAudioVisualizerBody,
   WallpaperNowPlayingBody,
@@ -397,7 +396,7 @@ export function WallpaperWidgetBody({ widget, mode, onOpenImage }: { widget: Wal
     case 'chat-recent':
       return <WallpaperChatRecentBody widget={widget} />
     case 'chat-inbox':
-      return <WallpaperChatInboxBody widget={widget} />
+      return <WallpaperChatInboxBody />
     case 'audio-player':
       return <WallpaperAudioPlayerBody widget={widget} />
     case 'post-ticker':

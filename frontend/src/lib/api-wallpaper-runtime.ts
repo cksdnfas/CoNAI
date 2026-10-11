@@ -206,6 +206,8 @@ export function getWallpaperLibraryStats() {
 export interface WallpaperChatProfile {
   id: number
   name: string
+  /** Picks the no-avatar fallback, as in the chat (Codex shows a terminal). */
+  engine?: 'codex' | 'claude' | 'llm'
   tagline: string | null
   avatarThumbnailUrl: string | null
   backgroundUrl: string | null
@@ -237,15 +239,6 @@ export interface WallpaperChatMessages {
 
 export function getWallpaperChatMessages(threadId: number, limit: number) {
   return requestApiData<WallpaperChatMessages>(`${BASE}/chat/threads/${threadId}/messages?limit=${limit}`)
-}
-
-/** Send from a saved chat widget that allows replies; `threadId` is the chat on screen. The reply arrives later. */
-export function sendWallpaperChatMessage(presetId: string, widgetId: string, threadId: number, text: string) {
-  return requestApiData<{ threadId: number }>(`${BASE}/chat/send`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ presetId, widgetId, threadId, text }),
-  })
 }
 
 export interface WallpaperAudioCandidate {

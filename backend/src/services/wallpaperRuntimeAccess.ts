@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { AuthAccount } from '../models/AuthAccount';
 import { WallpaperRuntimeToken } from '../models/WallpaperRuntimeToken';
-import { hasConfiguredAuth } from '../routes/auth-route-helpers';
+import { clearSessionAuthAccess, hasConfiguredAuth } from '../routes/auth-route-helpers';
 import { isDirectLoopbackRequest } from '../utils/bootstrapAccess';
 import { AuthAccessControlService } from './authAccessControlService';
 
@@ -66,6 +66,12 @@ export function resolveWallpaperRuntimeAccess(req: Request): WallpaperRuntimeAcc
     return resolveTokenAccess(req);
   }
 
+  // A key session is also logged in as the key's account (see POST /session); read it as the key so its preset binds.
+  const keyAccess = resolveTokenAccess(req);
+  if (keyAccess) {
+    return keyAccess;
+  }
+
   if (req.session?.authenticated === true && typeof req.session.accountId === 'number') {
     const account = AuthAccount.findById(req.session.accountId);
     if (account && account.status === 'active') {
@@ -76,16 +82,24 @@ export function resolveWallpaperRuntimeAccess(req: Request): WallpaperRuntimeAcc
     }
   }
 
-  const tokenAccess = resolveTokenAccess(req);
-  if (tokenAccess) {
-    return tokenAccess;
-  }
-
   const anonymous = AuthAccessControlService.resolveForGroupKey('anonymous');
   if (anonymous.permissionKeys.includes(RUNTIME_PAGE_PERMISSION)) {
     return { accountId: null, isAdmin: false, isAnonymous: true, permissionKeys: anonymous.permissionKeys, tokenId: null, presetId: null };
   }
   return null;
+}
+
+/**
+ * A wallpaper key logs its browser in as the key's account (a personal app: the wallpaper is the owner's own screen,
+ * so its chat and widgets work exactly like the app). That login ends the moment the key is revoked.
+ */
+export function dropRevokedWallpaperKeyLogin(req: Request, _res: Response, next: NextFunction): void {
+  const tokenId = req.session?.wallpaperRuntimeTokenId;
+  if (tokenId !== undefined && !WallpaperRuntimeToken.findActiveById(tokenId)) {
+    if (req.session.authenticated === true) clearSessionAuthAccess(req);
+    delete req.session.wallpaperRuntimeTokenId;
+  }
+  next();
 }
 
 /** True when the request rides a live runtime key session whose reader may view images. */

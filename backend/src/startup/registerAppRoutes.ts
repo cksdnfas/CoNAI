@@ -28,6 +28,7 @@ import postsRoutes from '../routes/posts.routes';
 import audioRoutes from '../routes/audio.routes';
 import audioLegacyImportRoutes from '../routes/audio-legacy-import.routes';
 import { isAudioStorePath } from '../services/audio/audioStore';
+import { dropRevokedWallpaperKeyLogin } from '../services/wallpaperRuntimeAccess';
 import systemFolderRoutes from '../routes/system-folders.routes';
 import { wildcardMutationRoutes } from '../routes/wildcards.mutation.routes';
 import { wildcardReadRoutes } from '../routes/wildcards.read.routes';
@@ -161,6 +162,7 @@ function requireReadAccess(permissionKey: string, readPostPaths: readonly string
 
 /** Register API routes, runtime static directories, frontend assets, and terminal handlers. */
 export function registerAppRoutes(app: Express, options: RegisterAppRoutesOptions): RegisterAppRoutesResult {
+  app.use('/api', dropRevokedWallpaperKeyLogin);
   // The audio store lives under uploads but is only served through /api/audio (audio.view), never statically.
   // Resolve the request like serve-static would, so `//audio`, `%2e%2e` or case tricks cannot reach it either.
   app.use('/uploads', (req, res, next) => {

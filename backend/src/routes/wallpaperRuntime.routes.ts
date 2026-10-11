@@ -6,6 +6,8 @@ import { buildGraphWorkflowBrowseContent } from '../services/graphWorkflowViewSe
 import { GraphWorkflowFolderModel } from '../models/GraphWorkflowFolder';
 import { ImageGroupModel } from '../models/Group';
 import { WallpaperRuntimeToken, type WallpaperRuntimeTokenRecord } from '../models/WallpaperRuntimeToken';
+import { AuthAccount } from '../models/AuthAccount';
+import { setAuthenticatedSession } from './auth-route-helpers';
 import { RuntimeEventBroadcaster } from '../services/runtime-events/runtimeEventBroadcaster';
 import {
   getWallpaperRuntimeAccess,
@@ -38,11 +40,18 @@ function toTokenView(record: WallpaperRuntimeTokenRecord) {
   };
 }
 
-/** Trade a runtime key for this browser session (Lively and other kiosk browsers stay logged out). */
+/**
+ * Trade a runtime key for this browser session: the browser (Lively, Wallpaper Engine) is logged in as the key's
+ * account, so chat and every widget behave exactly as in the app. Revoking the key logs it out again.
+ */
 router.post('/session', asyncHandler(async (req: Request, res: Response) => {
   const token = WallpaperRuntimeToken.findActiveByToken(req.body?.token);
   if (!token) {
     return res.status(401).json(errorResponse('Invalid or revoked wallpaper key'));
+  }
+  const account = token.account_id === null ? null : AuthAccount.findById(token.account_id);
+  if (account && account.status === 'active') {
+    setAuthenticatedSession(req, account);
   }
   req.session.wallpaperRuntimeTokenId = token.id;
   WallpaperRuntimeToken.touch(token.id);

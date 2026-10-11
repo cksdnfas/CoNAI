@@ -75,7 +75,7 @@ const TYPE_CHOICES: Partial<Record<WallpaperWidgetType, Record<string, string[]>
 const NUMBER_CHOICES: Record<string, number[]> = { messageLines: [0, 1, 3] }
 const NUMBER_RANGES: Record<string, [number, number]> = {
   volume: [0, 100], barCount: [8, 64], sensitivity: [50, 300], smoothing: [0, 90], fontSize: [10, 240], maxJobs: [1, 8],
-  tagCount: [1, 20], messageCount: [1, 12], listCount: [1, 30], count: [1, 10], visibleCount: [1, 48], days: [1, 90], motionStrength: [0, 100],
+  tagCount: [1, 20], messageCount: [1, 12], count: [1, 10], visibleCount: [1, 48], days: [1, 90], motionStrength: [0, 100],
   imageHoverMotion: [0, 100], refreshIntervalSec: [5, 3600], shiftIntervalSec: [1, 3600], slideshowIntervalSec: [1, 86400],
   swapIntervalSec: [1, 3600], swapBounceCount: [1, 20], poolRefreshMinutes: [0, 1440], rerollMinutes: [0, 1440],
   imageScalePercent: [10, 300], imageTransitionDurationMs: [0, 10000],
@@ -104,14 +104,11 @@ function settingType(key: string, value: unknown): 'string' | 'number' | 'boolea
 /** Optional settings every image widget reads (click and preview behaviour). */
 const IMAGE_OPTIONAL_KEYS = ['imageClickAction', 'pauseOnHover', 'imagePreviewOpenScalePercent', 'imagePreviewOpenDurationMs', 'imagePreviewOpenEasing', 'imagePreviewCloseScalePercent', 'imagePreviewCloseDurationMs', 'imagePreviewCloseEasing', 'imageTransitionDurationMs']
 
-/** Switches that let a live wallpaper act as the admin account: a person flips them in the inspector, never the chat. */
-const PERSON_ONLY_SETTINGS = new Set(['allowReply', 'allowTools'])
-
 /** Every widget's settings keys (the union; data.widgetTypes says which keys each widget reads). */
 function collectSettingKeys() {
   const keys = new Map<string, 'string' | 'number' | 'boolean'>()
   for (const definition of listWallpaperWidgetDefinitions()) {
-    for (const [key, value] of Object.entries(definition.defaultSettings)) if (!PERSON_ONLY_SETTINGS.has(key)) keys.set(key, settingType(key, value))
+    for (const [key, value] of Object.entries(definition.defaultSettings)) keys.set(key, settingType(key, value))
   }
   for (const key of IMAGE_OPTIONAL_KEYS) {
     if (!keys.has(key)) keys.set(key, key === 'pauseOnHover' ? 'boolean' : key.endsWith('Easing') || key === 'imageClickAction' ? 'string' : 'number')
@@ -147,7 +144,7 @@ export function describeWallpaperWidgetTypes(t: (input: TranslationInput) => str
     type: definition.type,
     name: t(definition.title),
     shows: t(definition.description),
-    settings: Object.keys(definition.defaultSettings).filter((key) => !PERSON_ONLY_SETTINGS.has(key)),
+    settings: Object.keys(definition.defaultSettings),
     defaultSize: { w: definition.defaultSize.w, h: definition.defaultSize.h },
   }))
 }
@@ -179,7 +176,6 @@ export function patchWallpaperWidgetSettings(widget: WallpaperWidgetInstance, ra
   const current = widget.settings as unknown as Record<string, unknown>
   const next: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(raw)) {
-    if (PERSON_ONLY_SETTINGS.has(key)) throw new Error(`${key}는 사람이 위젯 설정에서 직접 켜야 해. 사용자에게 안내만 해.`)
     const known = key in defaults || key in current || (isWallpaperPreviewableImageWidget(widget) && IMAGE_OPTIONAL_KEYS.includes(key))
     if (!known) throw new Error(`${widget.type} 위젯에는 ${key} 설정이 없어. data.widgetTypes에서 그 위젯의 설정을 확인해.`)
     const choices = TYPE_CHOICES[widget.type]?.[key]

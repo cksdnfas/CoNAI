@@ -218,29 +218,12 @@ export interface WallpaperCharacterCardWidgetSettings extends WallpaperBaseWidge
 }
 
 export interface WallpaperChatRecentWidgetSettings extends WallpaperBaseWidgetSettings {
-  /** null = the most recently active chat. */
+  /** The chat the panel opens on: this character's latest chat; null = the latest chat. */
   profileId: number | null
-  messageCount: number
-  /** The live wallpaper may send into this chat, as the key's account. Set by a person only, never by chat. */
-  allowReply: boolean
-  /** Replies also when the chat's character can act (CoNAI tools, Codex, Claude Code). Person only. */
-  allowTools: boolean
-  /** One-tap replies, one per line. */
-  quickReplies: string
 }
 
-/** A chat list that opens into one chat and back (a small messenger). */
-export interface WallpaperChatInboxWidgetSettings extends WallpaperBaseWidgetSettings {
-  /** null = every character's chats. */
-  profileId: number | null
-  /** Chats in the list (newest first); only these can be opened or sent into. */
-  listCount: number
-  messageCount: number
-  /** Same person-only switches as chat-recent. */
-  allowReply: boolean
-  allowTools: boolean
-  quickReplies: string
-}
+/** The app's chat panel opened on its chat list. */
+export type WallpaperChatInboxWidgetSettings = WallpaperBaseWidgetSettings
 
 export interface WallpaperAudioPlayerWidgetSettings extends WallpaperBaseWidgetSettings {
   audioGroupId: string | null

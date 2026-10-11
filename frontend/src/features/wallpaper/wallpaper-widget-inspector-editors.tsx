@@ -287,43 +287,6 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
         return (
           <>
             <InspectorRow label={t({ ko: '대화', en: 'Chat' })}><CharacterSelect value={widget.settings.profileId} allowLatest onChange={(value) => updateWidgetSettings({ profileId: value })} /></InspectorRow>
-            <InspectorSlider label={t({ ko: '메시지 수', en: 'Messages' })} value={widget.settings.messageCount} min={1} max={12} onChange={(value) => updateWidgetSettings({ messageCount: value })} />
-            <InspectorSwitch label={t({ ko: '답장 허용', en: 'Allow replies' })} checked={widget.settings.allowReply === true} onChange={(checked) => updateWidgetSettings({ allowReply: checked })} />
-            {widget.settings.allowReply ? (
-              <>
-                <InspectorSwitch label={t({ ko: '도구 쓰는 캐릭터도 허용', en: 'Also characters with tools' })} checked={widget.settings.allowTools === true} onChange={(checked) => updateWidgetSettings({ allowTools: checked })} />
-                <Textarea
-                  variant="settings"
-                  rows={3}
-                  aria-label={t({ ko: '빠른 답장', en: 'Quick replies' })}
-                  placeholder={t({ ko: '빠른 답장 (한 줄에 하나)', en: 'Quick replies (one per line)' })}
-                  value={widget.settings.quickReplies ?? ''}
-                  onChange={(event) => updateWidgetSettings({ quickReplies: event.target.value })}
-                />
-              </>
-            ) : null}
-          </>
-        )
-      case 'chat-inbox':
-        return (
-          <>
-            <InspectorRow label={t({ ko: '캐릭터', en: 'Character' })}><CharacterSelect value={widget.settings.profileId} allowLatest emptyLabel={t({ ko: '모든 캐릭터', en: 'Every character' })} onChange={(value) => updateWidgetSettings({ profileId: value })} /></InspectorRow>
-            <InspectorSlider label={t({ ko: '목록 수', en: 'Chats' })} value={widget.settings.listCount} min={1} max={30} onChange={(value) => updateWidgetSettings({ listCount: value })} />
-            <InspectorSlider label={t({ ko: '메시지 수', en: 'Messages' })} value={widget.settings.messageCount} min={1} max={12} onChange={(value) => updateWidgetSettings({ messageCount: value })} />
-            <InspectorSwitch label={t({ ko: '답장 허용', en: 'Allow replies' })} checked={widget.settings.allowReply === true} onChange={(checked) => updateWidgetSettings({ allowReply: checked })} />
-            {widget.settings.allowReply ? (
-              <>
-                <InspectorSwitch label={t({ ko: '도구 쓰는 캐릭터도 허용', en: 'Also characters with tools' })} checked={widget.settings.allowTools === true} onChange={(checked) => updateWidgetSettings({ allowTools: checked })} />
-                <Textarea
-                  variant="settings"
-                  rows={3}
-                  aria-label={t({ ko: '빠른 답장', en: 'Quick replies' })}
-                  placeholder={t({ ko: '빠른 답장 (한 줄에 하나)', en: 'Quick replies (one per line)' })}
-                  value={widget.settings.quickReplies ?? ''}
-                  onChange={(event) => updateWidgetSettings({ quickReplies: event.target.value })}
-                />
-              </>
-            ) : null}
           </>
         )
       case 'audio-player':

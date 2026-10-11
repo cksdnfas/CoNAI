@@ -231,6 +231,7 @@ export function registerWallpaperRuntimeDataRoutes(router: Router) {
       return {
         id: profile.id,
         name: profile.name,
+        engine: profile.engine,
         tagline: profile.tagline,
         avatarThumbnailUrl: assets.avatarThumbnailUrl,
         backgroundUrl: thumbnailUrl(assets.backgroundHash),
@@ -261,7 +262,7 @@ export function registerWallpaperRuntimeDataRoutes(router: Router) {
     }))));
   });
 
-  /** Last few messages of one of the reader's chats (text only). */
+  /** Last few messages of one of the reader's chats (text only; the chat widgets embed the real chat). */
   router.get('/chat/threads/:id/messages', requireChatReader, (req: Request, res: Response) => {
     const access = getWallpaperRuntimeAccess(res);
     const threadId = Number(routeParam(req.params.id));
