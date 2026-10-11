@@ -25,7 +25,7 @@ export const TOOL_CATEGORIES: Record<ToolCategoryId, string> = {
   emoticons: 'Emoticons: list, view, keywords, groups',
   generation: 'Generation: NovelAI, ComfyUI workflows, servers, routing, jobs',
   workflows: 'Graph workflows and definitions: list, inspect, run, export/import',
-  prompts: 'Prompts, prompt groups, presets, wildcards, dropdown lists, backups',
+  prompts: 'Saved prompts and Danbooru tags/artists/characters (including related tags), prompt groups, presets, wildcards, dropdown lists, backups',
   files: 'Private file store: list, search, read/write/edit text docs, folders, rename, move, delete, versions',
   posts: 'Posts board: categories, tags, search, read, write, edit, delete posts and comments, earlier versions',
   audio: 'Sound effects (오디오): projects, effects (groups), folders (UI 그룹), takes, orders, edits, export',

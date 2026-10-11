@@ -72,7 +72,7 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   wait_generation_job: { group: 'history', label: { ko: '작업 완료 대기', en: 'Wait for a job' }, ko: '생성 작업이 끝날 때까지 기다렸다가 결과를 돌려줘.' },
   get_generation_artifacts: { group: 'history', label: { ko: '결과물 받기', en: 'Job artifacts' }, ko: '생성 작업의 결과 파일과 다운로드 링크를 받아.' },
   refresh_artifact_download: { group: 'history', label: { ko: '다운로드 링크 갱신', en: 'Refresh download link' }, ko: '결과물의 다운로드 링크를 새로 발급해.' },
-  search_prompts: { group: 'prompts', label: { ko: '프롬프트 검색', en: 'Search prompts' }, ko: '저장된 프롬프트를 글로 찾아.' },
+  search_prompts: { group: 'prompts', label: { ko: '프롬프트·단부루 검색', en: 'Search prompts and Danbooru' }, ko: '저장된 프롬프트와 설치된 단부루 DB의 태그·작가·캐릭터를 함께 찾아. 캐릭터의 작품명과 관련 태그도 읽어.' },
   get_most_used_prompts: { group: 'prompts', label: { ko: '자주 쓴 프롬프트', en: 'Most used prompts' }, ko: '사용 횟수가 많은 프롬프트를 순서대로 읽어.' },
   list_prompt_groups: { group: 'prompts', label: { ko: '프롬프트 그룹 목록', en: 'List prompt groups' }, ko: '프롬프트 그룹과 각 그룹의 개수를 나열해.' },
   get_prompt_group_structure: { group: 'prompts', label: { ko: '프롬프트 그룹 구조', en: 'Prompt group tree' }, ko: '프롬프트 그룹의 전체 계층과 미분류 개수를 읽어.' },

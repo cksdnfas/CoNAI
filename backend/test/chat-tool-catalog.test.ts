@@ -76,6 +76,81 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
     assert.match(contents, /- audio: .*\n\s+.*order_audio.*\+\d+ more/)
     assert.ok(!contents.includes('create_audio_folder'), 'the contents name only the main tools of a large category')
     assert.ok(listed.length < catalogued.length, 'the catalog is the smaller list')
+    assert.match(contents, /Danbooru/)
+
+    await t.test('prompt search combines saved prompts and dictionary characters through the catalog', async () => {
+      const { default: Database } = await import('better-sqlite3')
+      const { danbooruBrowserService } = await import('../src/services/danbooruBrowserService')
+      const originalPath = process.env.DANBOORU_SQLITE_PATH
+      const dictionaryPath = path.join(root, 'dictionary.sqlite')
+      process.env.DANBOORU_SQLITE_PATH = dictionaryPath
+      const search = async (args: Record<string, unknown>) => {
+        const result = await client.callTool({ name: CATALOG_RUN_TOOL, arguments: { tool: 'search_prompts', arguments: args } })
+        assert.notEqual(result.isError, true, text(result))
+        return JSON.parse(text(result))
+      }
+      try {
+        main.db.prepare('INSERT INTO prompt_collection (prompt, usage_count) VALUES (?, ?)').run('blue eyes', 7)
+        const missing = await search({ query: 'blue' })
+        assert.equal(missing.prompts[0].prompt, 'blue eyes')
+        assert.equal(missing.danbooru.status, 'not_installed')
+        const dictionary = new Database(dictionaryPath)
+        try {
+          dictionary.exec(`
+            CREATE TABLE tags (id INTEGER PRIMARY KEY, name TEXT, normalized_name TEXT, display_name TEXT,
+              post_count INTEGER, category_code INTEGER, category_name TEXT, is_deprecated INTEGER);
+            CREATE TABLE artists (tag_id INTEGER, name TEXT, normalized_name TEXT, post_count INTEGER);
+            CREATE TABLE characters (tag_id INTEGER, name TEXT, normalized_name TEXT, post_count INTEGER);
+            CREATE TABLE copyrights (tag_id INTEGER, name TEXT, post_count INTEGER);
+            CREATE TABLE tag_translations (tag_id INTEGER, locale TEXT, translated_name TEXT);
+            CREATE TABLE character_copyright_links (character_tag_id INTEGER, copyright_tag_id INTEGER, confidence REAL, is_primary INTEGER);
+            CREATE TABLE character_related_tags (character_tag_id INTEGER, related_tag_id INTEGER, score REAL);
+            INSERT INTO tags VALUES (1, 'blue_eyes', 'blue_eyes', 'blue eyes', 100, 0, 'general', 0);
+            INSERT INTO tags VALUES (2, 'blue_hero', 'blue_hero', 'blue hero', 50, 4, 'character', 0);
+            INSERT INTO tags VALUES (3, 'blue_hair', 'blue_hair', 'blue hair', 80, 0, 'general', 0);
+            INSERT INTO characters VALUES (2, 'blue_hero', 'blue_hero', 50);
+            INSERT INTO artists VALUES (4, 'blue_artist', 'blue_artist', 40);
+            INSERT INTO copyrights VALUES (5, 'hero_story', 200);
+            INSERT INTO tag_translations VALUES (2, 'ko', '파란 영웅');
+            INSERT INTO character_copyright_links VALUES (2, 5, 1, 1);
+            INSERT INTO character_related_tags VALUES (2, 1, 0.9), (2, 3, 0.8);
+          `)
+        } finally { dictionary.close() }
+        const combined = await search({ query: 'blue' })
+        assert.equal(combined.total, 1, 'the saved prompt total keeps its original meaning')
+        assert.equal(combined.prompts[0].usage_count, 7)
+        assert.equal(combined.danbooru.status, 'ready')
+        assert.equal(combined.danbooru.tags.pagination.total, 3)
+        assert.equal(combined.danbooru.artists.items[0].name, 'blue_artist')
+        const character = combined.danbooru.characters.items[0]
+        assert.equal(character.name, 'blue_hero')
+        assert.equal(character.copyrights[0].name, 'hero_story')
+        assert.deepEqual(character.relatedTags.map((tag: { name: string }) => tag.name), ['blue_eyes', 'blue_hair'])
+        assert.equal(character.relatedTags[0].score, 0.9)
+        assert.equal(character.images, undefined)
+        const korean = await search({ query: '파란 영웅', source: 'danbooru', danbooru_section: 'characters', related_tag_limit: 1 })
+        assert.equal(korean.danbooru.characters.items[0].relatedTags.length, 1)
+        assert.equal(korean.danbooru.tags, undefined)
+        assert.deepEqual(korean.prompts, [])
+        assert.equal((await search({ query: 'blue eyes', source: 'danbooru' })).danbooru.tags.items[0].name, 'blue_eyes')
+        assert.equal((await search({ query: 'blue_eyes', source: 'danbooru' })).danbooru.tags.items[0].name, 'blue_eyes')
+        const secondPage = await search({ query: 'blue', limit: 1, page: 2 })
+        assert.equal(secondPage.danbooru.tags.items[0].name, 'blue_hair')
+        assert.equal(secondPage.danbooru.tags.pagination.totalPages, 3)
+        assert.equal((await search({ query: 'unmatched' })).danbooru.status, 'ready')
+        danbooruBrowserService.close()
+        fs.writeFileSync(dictionaryPath, 'invalid database')
+        const broken = await search({ query: 'blue' })
+        assert.equal(broken.prompts[0].prompt, 'blue eyes')
+        assert.equal(broken.danbooru.status, 'error')
+        assert.ok(!JSON.stringify(broken).includes(root), 'dictionary failures do not expose server paths')
+        assert.equal((await search({ query: 'blue', source: 'stored' })).danbooru, undefined)
+      } finally {
+        danbooruBrowserService.close()
+        if (originalPath === undefined) delete process.env.DANBOORU_SQLITE_PATH
+        else process.env.DANBOORU_SQLITE_PATH = originalPath
+      }
+    })
 
     // Open a category: descriptions and input schemas.
     const opened = JSON.parse(text(await client.callTool({ name: CATALOG_OPEN_TOOL, arguments: { category: 'audio' } }))) as { tools: Array<{ name: string; input_schema: { properties?: Record<string, unknown> } }> }
