@@ -30,6 +30,7 @@ export async function checkThinkingSwitch(providerName: string, current: LlmThin
         messages: [{ role: 'user', content: 'Reply with the single word: ok' }],
         signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
         allowCompatibilityFallback: false,
+        recordHealth: false,
       })
       if (!result.reasoning.trim() && !/^\s*<think>/i.test(result.content)) return { model, current, found: thinkingSwitch }
     } catch {

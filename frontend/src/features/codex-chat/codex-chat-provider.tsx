@@ -4,7 +4,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { CHAT_APPEARANCE_QUERY_KEY, CHAT_FLAGS_QUERY_KEY, createCodexChatThread, type CodexChatThread, getCodexChatStatus, getCodexChatThread, previewChatGreeting, interruptCodexChatThread, pickSnapshot, choiceSnapshot, readThreadFlagIds, streamCodexChatMessage, streamChatContinue, streamChatRewrite, type ChatFlag, type ChatMediaAttachment, type CodexChatMessage, type CodexChatStreamEvent, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
-import { CHAT_PROFILES_QUERY_KEY, CHAT_STATUS_QUERY_KEY, threadLorebooksQueryKey, type ChatProfileSummary } from '@/lib/api-codex-chat'
+import { CHAT_HEALTH_QUERY_KEY, CHAT_PROFILES_QUERY_KEY, CHAT_STATUS_QUERY_KEY, threadLorebooksQueryKey, type ChatProfileSummary } from '@/lib/api-codex-chat'
 import { summarizeChatError } from './chat-error-chip'
 import { postLink, type StoredFileEntry } from '@conai/shared'
 import { getCodexChatThreadMedia } from '@/lib/api-codex-chat'
@@ -511,6 +511,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
         queryClient.invalidateQueries({ queryKey: threadLorebooksQueryKey(sentThreadId) }),
         queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }),
       ])
+      // A failed reply may have found the connection down, a working one may have brought it back (not awaited).
+      void queryClient.invalidateQueries({ queryKey: CHAT_HEALTH_QUERY_KEY })
       if (streamAbortRef.current === controller) {
         streamAbortRef.current = null
         streamThreadRef.current = null

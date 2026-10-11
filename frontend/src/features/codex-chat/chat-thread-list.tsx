@@ -13,6 +13,7 @@ import type { ChatProfileSummary, CodexChatThread } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 import { GroupAvatarStack } from './chat-group'
 import { ChatDeleteDialog } from './chat-delete-dialog'
+import { ChatHealthDot, useChatHealth } from './chat-health'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { UnreadCount } from './chat-unread-count'
 import { ChatTaskRing } from './chat-task-ui'
@@ -47,6 +48,9 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
   onBulk: (threadIds: number[], action: ChatBulkAction, backupDate?: string) => Promise<boolean>
 }) {
   const { t, formatDate, formatNumber } = useI18n()
+  const healthOf = useChatHealth()
+  // A room is cut off only when no member can answer; it shows the first member's reason.
+  const groupDown = (memberIds: number[]) => memberIds.length > 0 && memberIds.every((id) => healthOf(id)) ? healthOf(memberIds[0]) : null
   const [openBranches, setOpenBranches] = useState<ReadonlySet<number>>(() => new Set())
   const [archiveOpen, setArchiveOpen] = useState(false)
   const hasAutomation = threads.some((entry) => entry.automation)
@@ -128,8 +132,8 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
             <span className="relative flex shrink-0">
               <span className={cn('flex', selecting && 'opacity-0')}>
               {entry.kind === 'group'
-                ? <GroupAvatarStack profiles={(entry.member_profile_ids ?? []).flatMap((id) => profilesById.get(id) ?? [])} size={dense ? 'xs' : 'sm'} ringClassName="ring-background" />
-                : entryProfile ? <ChatProfileAvatar name={entryProfile.name} avatar={entryProfile.avatar} profile={entryProfile} engine={entryProfile.engine} size={dense ? 'xs' : 'md'} /> : <span className={dense ? 'size-5' : 'size-8'} />}
+                ? <ChatHealthDot down={groupDown(entry.member_profile_ids ?? [])}><GroupAvatarStack profiles={(entry.member_profile_ids ?? []).flatMap((id) => profilesById.get(id) ?? [])} size={dense ? 'xs' : 'sm'} ringClassName="ring-background" /></ChatHealthDot>
+                : entryProfile ? <ChatHealthDot down={healthOf(entryProfile.id)}><ChatProfileAvatar name={entryProfile.name} avatar={entryProfile.avatar} profile={entryProfile} engine={entryProfile.engine} size={dense ? 'xs' : 'md'} /></ChatHealthDot> : <span className={dense ? 'size-5' : 'size-8'} />}
               </span>
               <span
                 aria-hidden

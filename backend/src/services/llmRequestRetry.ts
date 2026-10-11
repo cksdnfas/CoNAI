@@ -9,7 +9,7 @@ export class LlmRequestError extends Error {
   }
 }
 
-function isTransientConnectionError(error: unknown): boolean {
+export function isTransientConnectionError(error: unknown): boolean {
   if (!(error instanceof Error) || error.name === 'AbortError' || error.name === 'TimeoutError') return false
   if (error instanceof LlmRequestError && error.status !== undefined) {
     if (error.status >= 400 && error.status < 500) return false

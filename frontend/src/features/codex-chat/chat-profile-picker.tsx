@@ -15,6 +15,7 @@ import { CHAT_BACKUP_FOLDER, type ChatProfileSummary, type CodexChatThread } fro
 import { listStoredFiles } from '@/lib/api-files'
 import { cn } from '@/lib/utils'
 import { GROUP_MEMBER_MAX } from './chat-group'
+import { ChatHealthDot, useChatHealth } from './chat-health'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 
 /**
@@ -34,6 +35,7 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
   const { t, formatNumber } = useI18n()
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState<number[]>([])
+  const healthOf = useChatHealth()
   const importRef = useRef<HTMLInputElement>(null)
   const canBrowseFiles = useAuthStatusQuery().data?.permissionKeys.includes('files.view') === true && onImportFiles !== undefined
   /** The file store picker, opened in the chat backup folder when there is one; undefined while closed. */
@@ -114,7 +116,7 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
                     onClick={() => (selecting ? toggle(profile.id) : onPick(profile.id))}
                     className="w-full items-center gap-3 py-2.5 pr-10 text-left disabled:opacity-50"
                   >
-                    <ChatProfileAvatar name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size="lg" />
+                    <ChatHealthDot down={healthOf(profile.id)}><ChatProfileAvatar name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size="lg" /></ChatHealthDot>
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-center gap-1.5">
                         <span className="truncate font-semibold">{profile.name}</span>

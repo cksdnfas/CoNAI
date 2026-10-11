@@ -9,6 +9,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Switch } from '@/components/ui/switch'
 import { Tip } from '@/components/ui/tooltip'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
+import { ChatHealthDot, ChatHealthTip, useChatHealth } from '@/features/codex-chat/chat-health'
 import { getChatScopeCopy } from '@/features/codex-chat/chat-scope-copy'
 import { useI18n } from '@/i18n'
 import {
@@ -127,6 +128,7 @@ export function ChatSettingsProfiles() {
 
   const profiles = profilesQuery.data ?? []
   const slots = slotsQuery.data ?? []
+  const healthOf = useChatHealth()
 
   // A connected chat can open the editor for a new or listed profile; it fills and saves from there.
   useChatPageRegistration({
@@ -190,11 +192,11 @@ export function ChatSettingsProfiles() {
           <ResourceRow
             key={profile.id}
             className="min-h-14"
-            leading={<ChatProfileAvatar name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size="lg" />}
+            leading={<ChatHealthDot down={healthOf(profile.id)}><ChatProfileAvatar name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size="lg" /></ChatHealthDot>}
             name={profile.name}
             extra={(
-              <Tip content={profileModelLine(profile, slots, t)}>
-                <span className="min-w-0"><Chip size="sm" tone="muted" className="max-w-48"><span className="truncate">{profileModelChip(profile, slots)}</span></Chip></span>
+              <Tip content={healthOf(profile.id) ? <ChatHealthTip down={healthOf(profile.id)!} /> : profileModelLine(profile, slots, t)}>
+                <span className="min-w-0"><Chip size="sm" tone={healthOf(profile.id) ? 'destructive' : 'muted'} className="max-w-48"><span className="truncate">{profileModelChip(profile, slots)}</span></Chip></span>
               </Tip>
             )}
             trailing={(

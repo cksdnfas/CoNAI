@@ -122,6 +122,22 @@ export const CHAT_GENERATION_PRESETS_QUERY_KEY = ['codex-chat-generation-presets
 export const MODEL_SLOTS_QUERY_KEY = ['codex-chat-model-slots'] as const
 export const MODEL_USAGE_QUERY_KEY = ['codex-chat-model-usage'] as const
 export const CHAT_STATUS_QUERY_KEY = ['codex-chat-status'] as const
+export const CHAT_HEALTH_QUERY_KEY = ['codex-chat-health'] as const
+
+/** Why a profile's chat connection is down (see the backend's connectionHealthState). */
+export type ChatConnectionDownReason = 'unreachable' | 'auth' | 'quota' | 'model_missing' | 'disabled' | 'not_installed' | 'not_signed_in'
+
+export interface ChatProfileConnectionDown {
+  reason: ChatConnectionDownReason
+  /** The connection's display name (Codex / Claude Code for those engines). */
+  connection: string
+  checkedAt: string
+}
+
+/** Usable profiles whose chat connection is down, by profile id; a working profile is absent. */
+export interface ChatHealth {
+  profiles: Record<string, ChatProfileConnectionDown>
+}
 
 export interface CodexChatStatus {
   /** The chat master switch. */
@@ -916,6 +932,11 @@ const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
 export function getCodexChatStatus() {
   return requestApiData<CodexChatStatus>('/api/codex-chat/status', { cache: 'no-store' })
+}
+
+/** `recheck` checks every connection again now instead of reusing a recent result. */
+export function getChatHealth(recheck = false) {
+  return requestApiData<ChatHealth>(`/api/codex-chat/health${recheck ? '?recheck=1' : ''}`, { cache: 'no-store' })
 }
 
 export function listChatProfiles() {

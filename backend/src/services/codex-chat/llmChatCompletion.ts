@@ -3,6 +3,7 @@ import { acquireLlmRequestSlot } from '../llmRequestScheduler'
 import { buildOpenAiGenerationFields, readLlmConnectionConfig, type LlmGenerationOptions, type LlmThinkingSwitch } from '../llmGenerationOptions'
 import { normalizeOptionalString } from '../../utils/valueNormalization'
 import { LlmRequestError } from '../llmRequestRetry'
+import { recordRequestOutcome } from './connectionHealthState'
 import { CLAUDE_CHAT_PROVIDER, streamClaudeChatCompletion, type ClaudeChatSession } from './claudeChatCompletion'
 import type { ChatMcpToolResult } from './chatMcpBridge'
 import { primaryModelOf } from './modelSlots'
@@ -582,7 +583,11 @@ type ChatCompletionParams = Parameters<typeof requestChatCompletion>[1]
  * assembled from their deltas and returned once the model stops. Every request that got to the model goes into the
  * usage ledger under `usage` (what it was for), with estimated counts when the server reports none.
  */
-export async function streamChatCompletion(params: ChatCompletionParams & { usage?: LlmUsageTag }): Promise<ChatCompletionResult> {
+export async function streamChatCompletion(params: ChatCompletionParams & {
+  usage?: LlmUsageTag
+  /** false: the outcome says nothing about the connection (a probe trying settings that may be refused). */
+  recordHealth?: boolean
+}): Promise<ChatCompletionResult> {
   const startedAt = Date.now()
   const meter = { sent: false, usage: null as LlmTokenCounts | null, output: '' }
   const record = (result: ChatCompletionResult | null) => {
@@ -610,9 +615,12 @@ export async function streamChatCompletion(params: ChatCompletionParams & { usag
       onReasoning: (text) => { meter.output += text; params.onReasoning?.(text) },
     })
     record(result)
+    if (params.recordHealth !== false) recordRequestOutcome(params.target.providerName, params.target.model, null)
     return result
   } catch (error) {
     if (meter.sent) record(null)
+    // A cancel by the person (or the turn) says nothing about the connection.
+    if (params.recordHealth !== false && !params.signal.aborted) recordRequestOutcome(params.target.providerName, params.target.model, error)
     throw error
   }
 }

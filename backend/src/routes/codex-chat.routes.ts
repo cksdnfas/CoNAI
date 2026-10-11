@@ -41,6 +41,7 @@ import { isJudgeConnectionReady, JudgeError } from '../services/judge/judgeEngin
 import { testJudgePreset } from '../services/codex-chat/chatJudge'
 import type { ChatJudgePresetInput } from '@conai/shared'
 import { ModelSlotStore } from '../services/codex-chat/modelSlots'
+import { downChatProfiles } from '../services/codex-chat/chatConnectionHealth'
 import { buildModelUsage } from '../services/codex-chat/modelUsage'
 import { buildLlmUsageSummary } from '../services/llmUsage'
 import { effectiveModelOf, modelLabelOf } from '../services/codex-chat/chatModelRoles'
@@ -207,6 +208,16 @@ router.get('/status', (req: Request, res: Response) => {
     },
   })
 })
+
+/**
+ * GET /api/codex-chat/health — the usable profiles whose chat connection is down (`{ [profileId]: { reason,
+ * connection, checkedAt } }`), from free checks and real requests; `?recheck=1` checks every connection again now.
+ */
+router.get('/health', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+  const access = chatAccessOf(req)
+  const profiles = ChatProfileStore.list({ enabledOnly: true }).filter((profile) => canUseChatProfile(access, profile))
+  res.json({ success: true, data: { profiles: await downChatProfiles(profiles, { force: req.query.recheck === '1' }) } })
+}))
 
 /**
  * GET /api/codex-chat/profiles — every profile (threads show their profile even when it is off or not usable here),

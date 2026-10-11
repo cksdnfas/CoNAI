@@ -3,7 +3,7 @@ import { resolveChatPortrait } from '@conai/shared'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useIsMutating, useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
-import { Activity, AlarmClock, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Download, Eraser, Flag, FoldVertical, LayoutGrid, ListChecks, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, UserRound, X } from 'lucide-react'
+import { Activity, AlarmClock, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Download, Eraser, Flag, FoldVertical, LayoutGrid, ListChecks, Maximize2, Minimize2, MoreHorizontal, Plus, RotateCw, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, UserRound, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -15,6 +15,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { ChatPageConnectButton, ChatPageConnectionNotice } from './chat-page-context'
 import { ChatTaskStrip } from './chat-task-ui'
+import { chatHealthLine, useChatHealth, useChatHealthRecheck } from './chat-health'
 import { ChatChoiceDock, ChatChoiceStatesContext, chatChoiceStates, findOpenChoice } from './chat-choice'
 import {
   CHAT_APPEARANCE_QUERY_KEY,
@@ -356,6 +357,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   const codexStatusQuery = useQuery({ queryKey: ['codex-generation-status'], queryFn: getCodexGenerationStatus, staleTime: 30_000, enabled: isCodexThread && (thread !== null || pendingProfile !== null) })
   const codexStatus = codexStatusQuery.data?.data ?? null
+  const healthOf = useChatHealth()
+  const healthRecheck = useChatHealthRecheck()
 
   // One reply streams at a time. A stream in another chat still blocks sending and rewriting here (isBusy), but only
   // this chat's own reply makes it "replying" (the stop button, its server state).
@@ -823,8 +826,14 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     return () => window.clearTimeout(timer)
   }, [flashMessageId])
 
+  // The chat's connection is down (Codex keeps its own sign-in warning): a room only when no member can answer.
+  const connectionDown = isCodexThread ? null
+    : isGroup ? memberProfiles.length > 0 && memberProfiles.every((member) => healthOf(member.id)) ? healthOf(memberProfiles[0].id) : null
+    : healthOf(profile?.id)
   // The room title is already in the header; the hint only has to fit beside the composer buttons.
-  const composerPlaceholder = isGroup
+  const composerPlaceholder = connectionDown
+    ? t({ ko: '채팅 불가 · {line}', en: 'Cannot chat · {line}' }, { line: chatHealthLine(connectionDown, t) })
+    : isGroup
     ? t({ ko: '그룹에 메시지', en: 'Message the group' })
     : profile ? t({ ko: '{name}에게 메시지', en: 'Message {name}' }, { name: shortHintName(profile.name) }) : t({ ko: '메시지', en: 'Message' })
 
@@ -862,7 +871,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const selectedCommand = Math.min(commandIndex, matchingCommands.length - 1)
   // Group rooms: the user may cut in while members are still answering.
   const sendBlocked = isGroup ? alternativeMutation.isPending || commandPending || isCompacting || (isCommand && isBusy) || (isStreaming && !streamingHere) : isBusy
-  const canSend = (activeThreadId !== null || (pendingChat?.greeting != null && !isStartingChat)) && (Boolean(draft.trim()) || chat.draftAttachments.length > 0 || chat.draftMediaAttachments.length > 0 || chat.draftPostRefs.length > 0 || picks.length > 0 || Boolean(choiceDraft?.labels.length)) && !chat.attachmentsUploading && !sendBlocked && (isCommand || (!profileMissing && !codexUnavailable))
+  const canSend = (activeThreadId !== null || (pendingChat?.greeting != null && !isStartingChat)) && (Boolean(draft.trim()) || chat.draftAttachments.length > 0 || chat.draftMediaAttachments.length > 0 || chat.draftPostRefs.length > 0 || picks.length > 0 || Boolean(choiceDraft?.labels.length)) && !chat.attachmentsUploading && !sendBlocked && (isCommand || (!profileMissing && !codexUnavailable && !connectionDown))
   const mentionQuery = isGroup && !isCommand ? mentionQueryAt(draft, caret) : null
   const mentionMatches = mentionQuery ? mentionOptions(mentionQuery.query, memberProfiles, group?.representativeId ?? null) : []
   const showMentions = mentionMatches.length > 0 && dismissedMention !== draft
@@ -1199,7 +1208,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       {activeThreadId !== null ? <ChatTaskStrip threadId={activeThreadId} /> : null}
       {!isGroup && profile?.pageAssist ? <ChatPageConnectionNotice /> : null}
       {openChoice && closedChoiceId !== openChoice.id && activeThreadId !== null ? (
-        <ChatChoiceDock card={openChoice} selected={choiceDraft?.labels ?? []} disabled={sendBlocked || profileMissing || codexUnavailable} onPick={pickChoice} onClose={() => setClosedChoiceId(openChoice.id)} />
+        <ChatChoiceDock card={openChoice} selected={choiceDraft?.labels ?? []} disabled={sendBlocked || profileMissing || codexUnavailable || Boolean(connectionDown)} onPick={pickChoice} onClose={() => setClosedChoiceId(openChoice.id)} />
       ) : null}
       {picks.length > 0 || (choiceDraft && openChoice?.multiple) ? (
         <div className="mb-2 flex flex-wrap gap-1.5">
@@ -1253,12 +1262,17 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           aria-autocomplete="list"
           aria-controls={showCommands ? commandListId : showMentions ? mentionListId : undefined}
           aria-activedescendant={showCommands ? `${commandListId}-${selectedCommand}` : showMentions ? `${mentionListId}-${selectedMention}` : undefined}
-          className={cn('relative block min-h-0 w-full resize-none bg-transparent py-1.5 text-sm text-foreground caret-foreground outline-none placeholder:text-muted-foreground', narrating && 'text-transparent')}
+          className={cn('relative block min-h-0 w-full resize-none bg-transparent py-1.5 text-sm text-foreground caret-foreground outline-none placeholder:text-muted-foreground', connectionDown && 'placeholder:text-destructive', narrating && 'text-transparent')}
         />
         </div>
         {(streamingHere || serverRunning) && !(isGroup && canSend) ? (
           <IconButton variant="secondary" size="icon-sm" className="rounded-full" onClick={() => activeThreadId !== null && chat.stop(activeThreadId)} label={t({ ko: '중단', en: 'Stop' })}>
             <Square />
+          </IconButton>
+        ) : connectionDown && !isCommand ? (
+          // Down: the send button checks again instead; it comes back once the connection answers.
+          <IconButton variant="destructive" size="icon-sm" className="rounded-full" onClick={() => healthRecheck.mutate()} disabled={healthRecheck.isPending} label={t({ ko: '다시 확인', en: 'Check again' })}>
+            <RotateCw className={cn(healthRecheck.isPending && 'animate-spin')} />
           </IconButton>
         ) : (
           <IconButton variant="default" size="icon-sm" className="rounded-full" onClick={handleSend} disabled={!canSend} label={t({ ko: '보내기', en: 'Send' })}>
