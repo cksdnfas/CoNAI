@@ -1,3 +1,4 @@
+import { GeneratedVideoOptimizationService } from '../../services/generatedVideoOptimizationService';
 import { Router, Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -5,6 +6,7 @@ import { asyncHandler } from '../../middleware/asyncHandler';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageFileModel } from '../../models/Image/ImageFileModel';
 import { MediaMetadataFileQueries } from '../../models/Image/MediaMetadataFileQueries';
+import { findGroupMembershipsForImageQuery } from '../../models/GroupImageQueries';
 import { resolveUploadsPath } from '../../config/runtimePaths';
 import { ImageSafetyService } from '../../services/imageSafetyService';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
@@ -112,7 +114,7 @@ router.get('/:compositeHash', asyncHandler(async (req: Request, res: Response) =
 
     res.json({
       success: true,
-      data: enrichImageWithFileView(image)
+      data: enrichImageWithFileView({ ...image, groups: findGroupMembershipsForImageQuery(compositeHash) })
     });
     return;
   } catch (error) {
@@ -155,7 +157,12 @@ router.get('/:compositeHash/file', asyncHandler(async (req: Request, res: Respon
     const mimeType = file.mime_type;
 
     if (mimeType && mimeType.startsWith('video/')) {
-      streamRangeFile(req, res, originalPath, mimeType);
+      const optimizedPath = req.query.variant === 'optimized' ? GeneratedVideoOptimizationService.getPlaybackPath(compositeHash) : null;
+      if (req.query.variant === 'optimized' && !optimizedPath) {
+        res.status(404).json({ success: false, error: 'Optimized video is unavailable' });
+        return;
+      }
+      streamRangeFile(req, res, optimizedPath || originalPath, optimizedPath ? 'video/mp4' : mimeType);
       return;
     }
 

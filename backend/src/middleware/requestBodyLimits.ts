@@ -52,8 +52,6 @@ export function resolveRequestBodyLimitsMb(): Record<RequestBodyLimitTier, numbe
 const REQUEST_BODY_LIMIT_TIER_BY_MOUNT: ReadonlyArray<readonly [string, RequestBodyLimitTier]> = [
   ['/mcp', 'mcp'],
   // --- media: JSON body carries base64 data URLs ---
-  // 캔버스 원본 해상도 PNG data URL (image-editor.routes.ts save/save-output/save-webp)
-  ['/api/image-editor', 'media'],
   // img2img image·inpaint mask·vibe encoded·character reference (routes/nai/generate.ts, store.ts)
   ['/api/nai', 'media'],
   // request_payload 안의 novelai/codex/comfyui 이미지 입력 (queue-action-routes.ts)

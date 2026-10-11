@@ -7,7 +7,6 @@ import { settingsResources, settingsCatalog } from './settings'
 import { groupsResources, groupsCatalog } from './groups'
 import { promptsResources, promptsCatalog } from './prompts'
 import { imagesResources, imagesCatalog } from './images'
-import { imageEditorResources, imageEditorCatalog } from './image-editor'
 import { metadataResources, metadataCatalog } from './metadata'
 import { searchResources, searchCatalog } from './search'
 import { wallpaperResources, wallpaperCatalog } from './wallpaper'
@@ -23,7 +22,6 @@ export { settingsResources, settingsCatalog } from './settings'
 export { groupsResources, groupsCatalog } from './groups'
 export { promptsResources, promptsCatalog } from './prompts'
 export { imagesResources, imagesCatalog } from './images'
-export { imageEditorResources, imageEditorCatalog } from './image-editor'
 export { metadataResources, metadataCatalog } from './metadata'
 export { searchResources, searchCatalog } from './search'
 export { wallpaperResources, wallpaperCatalog } from './wallpaper'
@@ -41,7 +39,6 @@ export const featureLocaleResources = {
   "groups": groupsResources,
   "prompts": promptsResources,
   "images": imagesResources,
-  "image-editor": imageEditorResources,
   "metadata": metadataResources,
   "search": searchResources,
   "wallpaper": wallpaperResources,
@@ -59,7 +56,6 @@ export const featureLocaleCatalog = {
   ...groupsCatalog,
   ...promptsCatalog,
   ...imagesCatalog,
-  ...imageEditorCatalog,
   ...metadataCatalog,
   ...searchCatalog,
   ...wallpaperCatalog,

@@ -10,7 +10,7 @@ import {
 } from '@/lib/download-utils'
 import { requestApiData } from '@/lib/api-request'
 import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
-import type { ImageSaveFormat, SimilaritySortBy, SimilaritySortOrder } from '@conai/shared'
+import type { SimilaritySortBy, SimilaritySortOrder } from '@conai/shared'
 import type { PromptSimilarityQueryResult, SimilarityQueryResult } from '@/types/similarity'
 import type { AutoTestKaloscopeResult } from './api-settings-kaloscope'
 import type { AutoTestTaggerResult } from './api-settings-tagger'
@@ -267,52 +267,6 @@ export async function getPromptSimilarImages(compositeHash: string, limit?: numb
     throw createApiFallbackError(response.error, 'images.promptSimilar.load')
   }
   return response.data
-}
-
-export interface SaveEditedImageResult {
-  success: boolean
-  filePath: string
-  tempId: string
-  width: number
-  height: number
-  fileSize: number
-  fileName: string
-  savedUrl: string
-}
-
-/** Save one edited image into the managed save/canvas workspace as a reusable asset. */
-export async function saveEditedImageToCanvas(
-  imageId: number,
-  imageData: string,
-  options?: {
-    quality?: number
-    format?: Exclude<ImageSaveFormat, 'original'>
-  },
-): Promise<SaveEditedImageResult> {
-  const response = await fetchJson<ApiResponse<Omit<SaveEditedImageResult, 'fileName' | 'savedUrl'>>>(`/api/image-editor/${imageId}/save-output`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      imageData,
-      quality: options?.quality ?? 90,
-      format: options?.format ?? 'webp',
-    }),
-  })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'images.edit.save')
-  }
-
-  const normalizedPath = response.data.filePath.replace(/\\/g, '/')
-  const fileName = normalizedPath.split('/').at(-1) || `${response.data.tempId}.webp`
-
-  return {
-    ...response.data,
-    fileName,
-    savedUrl: buildApiUrl(`/save/canvas/${encodeURIComponent(fileName)}`),
-  }
 }
 
 /** Build the best available source URL for opening one existing image in the editor. */
@@ -665,6 +619,24 @@ export interface RewriteMetadataDownloadResult {
 }
 
 export type MetadataPatchPayload = Record<string, string | number | null>
+
+/** Image editor AI erase: fill the white part of `mask` in `image` (same-size crops) on the server. */
+export async function inpaintImageRegion(image: Blob, mask: Blob, signal?: AbortSignal): Promise<Blob> {
+  const formData = new FormData()
+  formData.append('image', image, 'image.png')
+  formData.append('mask', mask, 'mask.png')
+  const response = await fetch(buildApiUrl('/api/image-editor/inpaint'), {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+    signal,
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: string } | null
+    throw new Error(body?.error || `Request failed: ${response.status}`)
+  }
+  return response.blob()
+}
 
 /** Convert a single image file to WebP and trigger an immediate download. */
 export async function downloadConvertedWebP(file: File, options?: { quality?: number }) {

@@ -49,7 +49,7 @@ const routeModuleLoaders = {
   'codex-chat-page': () => import('@/features/codex-chat/codex-chat-page'),
   'image-detail-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/images/image-detail-page'),
-    [() => import('@/i18n/resources/images').then((module) => module.imagesCatalog), () => import('@/i18n/resources/image-editor').then((module) => module.imageEditorCatalog), () => import('@/i18n/resources/groups').then((module) => module.groupsCatalog)],
+    [() => import('@/i18n/resources/images').then((module) => module.imagesCatalog), () => import('@/i18n/resources/groups').then((module) => module.groupsCatalog)],
   ),
   'image-metadata-edit-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/metadata/image-metadata-edit-page'),

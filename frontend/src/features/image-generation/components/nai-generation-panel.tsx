@@ -1,4 +1,5 @@
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -45,7 +46,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { normalizeTextSegmentSpreadsheetText } from './text-segment-spreadsheet-input'
 import { useNaiChatPage } from './use-generation-chat-page'
 
-const ImageEditorModal = lazy(() => import('@/features/image-editor/image-editor-modal'))
+const ImageEditor = lazy(() => import('@/features/image-editor/image-editor'))
 
 type NaiGenerationPanelProps = {
   onHistoryRefresh: () => void
@@ -294,6 +295,7 @@ export function NaiGenerationPanel({
   const handleCloseNaiAuthModal = useCallback(() => setIsNaiAuthModalOpen(false), [setIsNaiAuthModalOpen])
   const handleSubmitNaiAuthModal = useCallback(() => void handleNaiAuthSubmit(), [handleNaiAuthSubmit])
   const handleCloseImageEditor = useCallback(() => setIsImageEditorOpen(false), [setIsImageEditorOpen])
+  const { canEditImages } = useImagePermissions()
   const handleImageEditorSaveOptionsChange = useCallback((patch: Partial<typeof imageEditorSaveOptions>) => {
     setImageEditorSaveOptions((current) => ({ ...current, ...patch }))
   }, [setImageEditorSaveOptions])
@@ -535,13 +537,13 @@ export function NaiGenerationPanel({
 
       {isImageEditorOpen ? (
         <Suspense fallback={null}>
-          <ImageEditorModal
+          <ImageEditor
             open={isImageEditorOpen}
-            title={naiForm.action === 'infill' ? t({ ko: '원본·마스크 편집기', en: 'Source and Mask Editor' }) : t({ ko: '원본 이미지 편집기', en: 'Source Image Editor' })}
-            sourceImageDataUrl={naiForm.sourceImage?.dataUrl}
+            sourceUrl={naiForm.sourceImage?.dataUrl}
             sourceFileName={naiForm.sourceImage?.fileName}
-            maskImageDataUrl={naiForm.maskImage?.dataUrl}
+            maskUrl={naiForm.maskImage?.dataUrl}
             enableMaskEditing={naiForm.action === 'infill'}
+            enableAiErase={canEditImages}
             onClose={handleCloseImageEditor}
             onSave={handleSaveImageEditor}
           />

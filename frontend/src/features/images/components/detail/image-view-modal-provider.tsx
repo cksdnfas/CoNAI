@@ -29,11 +29,9 @@ function loadImageViewModalOverlay() {
   imageViewModalOverlayLoadPromise ??= Promise.all([
     import('./image-view-modal-overlay'),
     import('@/i18n/resources/images').then((module) => module.imagesCatalog),
-    import('@/i18n/resources/image-editor').then((module) => module.imageEditorCatalog),
   ])
-    .then(([module, imagesCatalog, imageEditorCatalog]) => {
+    .then(([module, imagesCatalog]) => {
       registerTranslationCatalog(imagesCatalog)
-      registerTranslationCatalog(imageEditorCatalog)
       return { default: module.ImageViewModalOverlay }
     })
     .catch((error: unknown) => {

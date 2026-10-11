@@ -1,5 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from 'react'
 import { useI18n } from '@/i18n'
+import { readBlobAsDataUrl } from '@/lib/file-data-url'
+import type { ImageEditorResult } from '@/features/image-editor/image-editor'
 import { DEFAULT_IMAGE_SAVE_SETTINGS, buildImageSaveOutput, buildImageSaveOutputFileName, loadImageSaveSourceInfo, type ImageSaveSourceInfo } from '@/lib/image-save-output'
 import type { ImageSaveSettings } from '@conai/shared'
 import { buildSelectedImageDraftFromDataUrl } from '../image-generation-drafts'
@@ -87,16 +89,22 @@ export function useNaiImageEditorBridge({
     }))
   }
 
-  /** Receive one image-editor save payload and either apply it directly or open the save-options modal. */
-  const handleSaveImageEditor = async (payload: { sourceImageDataUrl: string; maskImageDataUrl?: string }) => {
+  /** Receive the editor result, close the editor, and either apply it directly or open the save-options modal. */
+  const handleSaveImageEditor = async (result: ImageEditorResult) => {
+    const payload = {
+      sourceImageDataUrl: await readBlobAsDataUrl(result.source),
+      maskImageDataUrl: result.mask ? await readBlobAsDataUrl(result.mask) : undefined,
+    }
     if (imageSaveSettings.applyToEditorSave && imageSaveSettings.alwaysShowDialog) {
       setEditorSaveOptions(imageSaveSettings)
       setPendingImageEditorSaveInfo(await loadImageSaveSourceInfo({ source: payload.sourceImageDataUrl, sourceMimeType: 'image/png' }))
       setPendingImageEditorSave(payload)
+      setIsImageEditorOpen(false)
       return
     }
 
     await applyImageEditorSaveOutput(payload, imageSaveSettings)
+    setIsImageEditorOpen(false)
   }
 
   /** Confirm the deferred image-editor save using the current modal options. */

@@ -6,18 +6,15 @@ import { ImageSaveOptionsModal } from '@/components/media/image-save-options-mod
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { getExistingImageEditorSourceUrl, saveEditedImageToCanvas } from '@/lib/api-images'
+import { addImagesToGroup } from '@/lib/api-groups'
+import { getExistingImageEditorSourceUrl, uploadMultipleImages } from '@/lib/api-images'
 import { getImageViewerSettings } from '@/lib/api-settings'
-import {
-  DEFAULT_IMAGE_SAVE_SETTINGS,
-  buildImageSaveOutput,
-  loadImageSaveSourceInfo,
-  type ImageSaveSourceInfo,
-} from '@/lib/image-save-output'
+import { DEFAULT_IMAGE_SAVE_SETTINGS, loadImageSaveSourceInfo, type ImageSaveSourceInfo } from '@/lib/image-save-output'
+import type { ImageEditorResult } from '@/features/image-editor/image-editor'
 import type { ImageRecord } from '@/types/image'
 import type { ImageSaveSettings } from '@conai/shared'
 
-const ImageEditorModal = lazy(() => import('@/features/image-editor/image-editor-modal'))
+const ImageEditor = lazy(() => import('@/features/image-editor/image-editor'))
 
 interface ImageEditActionProps {
   image?: ImageRecord
@@ -25,86 +22,93 @@ interface ImageEditActionProps {
   variant?: 'ghost' | 'secondary' | 'overlay'
 }
 
-/** Render a reusable image edit action that saves the edited result into save/canvas. */
+function sourceFileNameOf(image?: ImageRecord) {
+  return image?.original_file_path?.replace(/\\/g, '/').split('/').at(-1) || image?.composite_hash || 'image'
+}
+
+/** `photo.png` → `photo-edit.png` (the server swaps the extension if it converts the format). */
+function editedFileName(image?: ImageRecord) {
+  const base = sourceFileNameOf(image).replace(/\.[^.]+$/, '')
+  return `${base}-edit.png`
+}
+
+/** Edit an image and save the result into the library as a new image, in the same groups as the original. */
 export function ImageEditAction({ image, variant = 'secondary' }: ImageEditActionProps) {
-  const { canEditImages } = useImagePermissions()
+  const { canCreateImageCopies } = useImagePermissions()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const [isEditorOpen, setIsEditorOpen] = useState(false)
   const [imageSaveOptions, setImageSaveOptions] = useState<ImageSaveSettings>(DEFAULT_IMAGE_SAVE_SETTINGS)
-  const [pendingCanvasSaveDataUrl, setPendingCanvasSaveDataUrl] = useState<string | null>(null)
-  const [pendingCanvasSaveInfo, setPendingCanvasSaveInfo] = useState<ImageSaveSourceInfo | null>(null)
-  const fileId = typeof image?.file_id === 'number' && image.file_id > 0 ? image.file_id : null
+  const [pendingResult, setPendingResult] = useState<Blob | null>(null)
+  const [pendingInfo, setPendingInfo] = useState<ImageSaveSourceInfo | null>(null)
   const sourceImageUrl = getExistingImageEditorSourceUrl(image)
-  const canEditImage = canEditImages && Boolean(fileId && sourceImageUrl && image?.file_type === 'image')
+  const canEditImage = canCreateImageCopies && Boolean(sourceImageUrl && image?.file_type === 'image')
 
   const appSettingsQuery = useQuery({
     queryKey: ['image-viewer-settings'],
     queryFn: getImageViewerSettings,
-    enabled: canEditImage && (isEditorOpen || pendingCanvasSaveDataUrl !== null),
+    enabled: canEditImage && (isEditorOpen || pendingResult !== null),
   })
-
-  const effectiveImageSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
+  const effectiveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
 
   const saveMutation = useMutation({
-    mutationFn: async (payload: { sourceImageDataUrl: string; options: ImageSaveSettings }) => {
-      const output = await buildImageSaveOutput(
-        {
-          source: payload.sourceImageDataUrl,
-          sourceMimeType: 'image/png',
-        },
-        payload.options,
-      )
-
-      return saveEditedImageToCanvas(fileId as number, output.dataUrl, {
-        format: output.format,
-        quality: payload.options.quality,
+    mutationFn: async ({ blob, options }: { blob: Blob; options: ImageSaveSettings }) => {
+      const file = new File([blob], editedFileName(image), { type: 'image/png' })
+      const outcome = await uploadMultipleImages([file], {}, {
+        enabled: options.applyToCanvasSave,
+        format: options.defaultFormat,
+        quality: options.quality,
+        resizeEnabled: options.resizeEnabled,
+        maxWidth: options.maxWidth,
+        maxHeight: options.maxHeight,
       })
+      const uploaded = outcome.uploaded[0]
+      if (!uploaded?.composite_hash) {
+        throw new Error(outcome.failed[0]?.error || t('images.components.detail.image.edit.action.failed.to.save.the.edited.image'))
+      }
+      // Same place as the original: every manual group it is in (auto groups collect by their own rules).
+      const groups = (image?.groups ?? []).filter((group) => group.collection_type !== 'auto')
+      await Promise.all(groups.map((group) => addImagesToGroup(group.id, [uploaded.composite_hash as string])))
+      return { fileName: uploaded.original_name || uploaded.filename, groupCount: groups.length }
     },
-    onSuccess: async (result) => {
+    onSuccess: async ({ fileName, groupCount }) => {
       setIsEditorOpen(false)
-      showSnackbar({ message: t({ ko: '편집본을 save/canvas에 저장했어: {fileName}', en: 'Saved the edit to save/canvas: {fileName}' }, { fileName: result.fileName }), tone: 'info' })
-      await queryClient.invalidateQueries({ queryKey: ['image-attachment-save-images'] })
-    },
-    onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : t('images.components.detail.image.edit.action.failed.to.save.the.edited.image'), tone: 'error' })
+      setPendingResult(null)
+      setPendingInfo(null)
+      showSnackbar({
+        message: groupCount > 0
+          ? t({ ko: '편집본을 라이브러리에 저장했어: {fileName} · 그룹 {count}개', en: 'Saved the edit to the library: {fileName} · {count} groups' }, { fileName, count: groupCount })
+          : t({ ko: '편집본을 라이브러리에 저장했어: {fileName}', en: 'Saved the edit to the library: {fileName}' }, { fileName }),
+        tone: 'info',
+      })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['home-images'] }),
+        queryClient.invalidateQueries({ predicate: (query) => typeof query.queryKey[0] === 'string' && query.queryKey[0].startsWith('group') }),
+      ])
     },
   })
 
-  const handleEditorSave = async (payload: { sourceImageDataUrl: string }) => {
-    if (!effectiveImageSaveSettings.applyToCanvasSave) {
-      await saveEditedImageToCanvas(fileId as number, payload.sourceImageDataUrl, {
-        format: 'webp',
-        quality: 90,
-      })
+  /** Editor save: upload now, or first ask for format options when the settings say so. */
+  const handleEditorSave = async (result: ImageEditorResult) => {
+    if (effectiveSettings.applyToCanvasSave && effectiveSettings.alwaysShowDialog) {
+      setImageSaveOptions(effectiveSettings)
+      setPendingInfo(await loadImageSaveSourceInfo({ source: result.source, sourceMimeType: 'image/png' }))
+      setPendingResult(result.source)
       setIsEditorOpen(false)
-      showSnackbar({ message: t('images.components.detail.image.edit.action.saved.the.edit.to.save.canvas'), tone: 'info' })
-      await queryClient.invalidateQueries({ queryKey: ['image-attachment-save-images'] })
       return
     }
-
-    if (effectiveImageSaveSettings.alwaysShowDialog) {
-      setImageSaveOptions(effectiveImageSaveSettings)
-      setPendingCanvasSaveInfo(await loadImageSaveSourceInfo({ source: payload.sourceImageDataUrl, sourceMimeType: 'image/png' }))
-      setPendingCanvasSaveDataUrl(payload.sourceImageDataUrl)
-      return
-    }
-
-    await saveMutation.mutateAsync({ sourceImageDataUrl: payload.sourceImageDataUrl, options: effectiveImageSaveSettings })
+    // Errors propagate so the editor stays open with the edit intact.
+    await saveMutation.mutateAsync({ blob: result.source, options: effectiveSettings })
   }
 
-  const handleConfirmCanvasSave = async () => {
-    if (!pendingCanvasSaveDataUrl) {
-      return
+  const handleConfirmSave = async () => {
+    if (!pendingResult) return
+    try {
+      await saveMutation.mutateAsync({ blob: pendingResult, options: { ...imageSaveOptions, applyToCanvasSave: true } })
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : t('images.components.detail.image.edit.action.failed.to.save.the.edited.image'), tone: 'error' })
     }
-
-    await saveMutation.mutateAsync({
-      sourceImageDataUrl: pendingCanvasSaveDataUrl,
-      options: imageSaveOptions,
-    })
-    setPendingCanvasSaveDataUrl(null)
-    setPendingCanvasSaveInfo(null)
   }
 
   if (!canEditImage) {
@@ -119,38 +123,33 @@ export function ImageEditAction({ image, variant = 'secondary' }: ImageEditActio
 
       {isEditorOpen ? (
         <Suspense fallback={null}>
-          <ImageEditorModal
+          <ImageEditor
             open={isEditorOpen}
-            title={t({ ko: '이미지 편집기', en: 'Image Editor' })}
-            sourceImageDataUrl={sourceImageUrl ?? undefined}
-            sourceFileName={image?.original_file_path?.replace(/\\/g, '/').split('/').at(-1) || image?.composite_hash || 'image'}
-            enableMaskEditing={false}
+            sourceUrl={sourceImageUrl}
+            sourceFileName={sourceFileNameOf(image)}
+            enableAiErase
             onClose={() => {
-              if (!saveMutation.isPending) {
-                setIsEditorOpen(false)
-              }
+              if (!saveMutation.isPending) setIsEditorOpen(false)
             }}
-            onSave={async (payload) => {
-              await handleEditorSave({ sourceImageDataUrl: payload.sourceImageDataUrl })
-            }}
+            onSave={handleEditorSave}
           />
         </Suspense>
       ) : null}
 
       <ImageSaveOptionsModal
-        open={pendingCanvasSaveDataUrl !== null}
+        open={pendingResult !== null}
         title={t('images.components.detail.image.edit.action.images.save')}
         options={imageSaveOptions}
-        sourceInfo={pendingCanvasSaveInfo}
+        sourceInfo={pendingInfo}
         isSaving={saveMutation.isPending}
         onClose={() => {
           if (!saveMutation.isPending) {
-            setPendingCanvasSaveDataUrl(null)
-            setPendingCanvasSaveInfo(null)
+            setPendingResult(null)
+            setPendingInfo(null)
           }
         }}
         onOptionsChange={(patch) => setImageSaveOptions((current) => ({ ...current, ...patch }))}
-        onConfirm={() => void handleConfirmCanvasSave()}
+        onConfirm={() => void handleConfirmSave()}
       />
     </>
   )

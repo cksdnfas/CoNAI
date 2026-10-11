@@ -8,9 +8,11 @@ each on first use, queues requests by priority and unloads each model after its 
 | --- | --- |
 | `conai_worker.py` | stdin/stdout JSON-lines protocol, model registry, device choice, download events |
 | `worker_images.py` | image loading shared by every model (EXIF transpose, alpha on white, size cap) |
+| `worker_dtypes.py` | weight precision for WD / Kaloscope / embeddings: half on CUDA, BF16 on CPUs with native BF16, else FP32 |
 | `worker_wd.py` | WD v3 tagger (SmilingWolf `wd-*-tagger-v3`, timm) |
 | `worker_pixai.py` | PixAI tagger v1.0 (GPU only; model classes loaded from the pinned repository file) |
 | `worker_kaloscope.py` | Kaloscope 3.0 preview: artist classifier + 256-d style vector (pinned revision) |
+| `worker_lama.py` | anime/manga LaMa for the image editor's AI erase (TorchScript weights from the IOPaint releases, MD5-pinned, in `models/lama/`) |
 | `worker_embedding.py` | EmbeddingGemma 2: text (task prefixes, token-window chunks) and, in the "full" variant, images |
 | `ai_runtime_probe.py` | prints the Python / torch / CUDA / package report the settings page shows |
 | `install-ai-env.sh` | Docker build helper: uv-managed Python 3.12 venv + torch for `TORCH_BACKEND` |
@@ -39,4 +41,4 @@ event    {"event": "ready" | "download", ...}
 ```
 
 Ops: `status`, `load`, `unload`, `analyze` (taggers, Kaloscope), `embed` (text), `chunk` (token windows),
-`embed_images`, `shutdown`.
+`embed_images`, `inpaint` (image + mask PNG → PNG), `shutdown`.

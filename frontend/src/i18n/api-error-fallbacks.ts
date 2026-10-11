@@ -91,10 +91,6 @@ export const API_ERROR_FALLBACKS = {
     ko: '텍스트 기반 유사 이미지를 불러오지 못했어.',
     en: 'Failed to load text-based similar images.',
   },
-  'images.edit.save': {
-    ko: '편집 이미지를 저장하지 못했어.',
-    en: 'Failed to save the edited image.',
-  },
   'settings.app.load': {
     ko: '설정을 불러오지 못했어.',
     en: 'Failed to load settings.',

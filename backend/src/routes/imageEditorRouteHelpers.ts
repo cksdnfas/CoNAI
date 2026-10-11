@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import { publicUrls, runtimePaths } from '../config/runtimePaths';
-import type { EditResult } from '../services/imageEditorService';
 
 const SAVE_BROWSER_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 
@@ -14,24 +13,6 @@ export type SaveBrowserImageListItem = {
   file_size: number;
   modified_at: string;
 };
-
-/** Resolve a child path only when it stays below the given directory. */
-export function resolveChildPathWithinDirectory(directoryPath: string, childPath: string) {
-  const resolvedDirectory = path.resolve(directoryPath);
-  const resolvedChild = path.resolve(resolvedDirectory, childPath);
-  const relativePath = path.relative(resolvedDirectory, resolvedChild);
-
-  if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-    return null;
-  }
-
-  return resolvedChild;
-}
-
-/** Resolve a canvas file path and reject sibling-prefix traversal. */
-export function resolveCanvasFilePath(filename: string) {
-  return resolveChildPathWithinDirectory(runtimePaths.canvasDir, filename);
-}
 
 /** Normalize one relative save-path segment for browser-safe URL generation. */
 function toSaveBrowserRelativePath(filePath: string) {
@@ -87,17 +68,4 @@ export async function listSaveBrowserImages(): Promise<SaveBrowserImageListItem[
   items.sort((left, right) => new Date(right.modified_at).getTime() - new Date(left.modified_at).getTime());
 
   return items;
-}
-
-/** Build the shared response payload returned by temporary editor save routes. */
-export function buildImageEditorResultData(result: EditResult, options?: { message?: string }) {
-  return {
-    tempId: result.tempId,
-    tempImagePath: result.tempImagePath,
-    tempMaskPath: result.tempMaskPath,
-    expiresAt: result.expiresAt,
-    width: result.width,
-    height: result.height,
-    ...(options?.message ? { message: options.message } : {}),
-  };
 }

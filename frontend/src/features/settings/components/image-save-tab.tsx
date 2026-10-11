@@ -305,12 +305,12 @@ export function ImageSaveTab({
                 <SettingsSwitchRow
                   checked={imageSaveDraft.applyToEditorSave}
                   onCheckedChange={(checked) => onPatchImageSave({ applyToEditorSave: checked })}
-                  label={<ChatFilledLabel fieldId="imageSave.applyToEditorSave">{t({ ko: '에디터 저장에 적용', en: 'Apply to editor saves' })}</ChatFilledLabel>}
+                  label={<ChatFilledLabel fieldId="imageSave.applyToEditorSave">{t({ ko: '생성 입력 편집에 적용', en: 'Apply to generation input edits' })}</ChatFilledLabel>}
                 />
                 <SettingsSwitchRow
                   checked={imageSaveDraft.applyToCanvasSave}
                   onCheckedChange={(checked) => onPatchImageSave({ applyToCanvasSave: checked })}
-                  label={<ChatFilledLabel fieldId="imageSave.applyToCanvasSave">{t({ ko: '캔버스 저장에 적용', en: 'Apply to canvas saves' })}</ChatFilledLabel>}
+                  label={<ChatFilledLabel fieldId="imageSave.applyToCanvasSave">{t({ ko: '라이브러리 편집본에 적용', en: 'Apply to library edits' })}</ChatFilledLabel>}
                 />
                 <SettingsSwitchRow
                   checked={imageSaveDraft.applyToUpload}

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""CoNAI AI worker: a long-lived process hosting the image models (WD tagger, Kaloscope 3) or text embeddings.
+"""CoNAI AI worker: a long-lived process hosting the image models (WD tagger, Kaloscope 3, LaMa) or text embeddings.
 
 Protocol (stdin/stdout, UTF-8, one JSON object per line):
-  request  {"id": "...", "op": "...", ...}
+  request  {"id": "...", "op": "...", "threads"?: n, ...}
   reply    {"id": "...", "ok": true, "result": {...}} | {"id": "...", "ok": false, "error": "...", "errorType": "..."}
   event    {"event": "ready" | "download", ...}   (not a reply; "id" set when caused by a request)
 Requests are handled one at a time in arrival order; the Node client owns queueing and priorities.
@@ -24,6 +24,7 @@ THREADS = int(os.environ.get("CONAI_AI_THREADS", "0") or 0)
 if THREADS > 0:
     torch.set_num_threads(THREADS)
     torch.set_num_interop_threads(1)
+DEFAULT_THREADS = torch.get_num_threads()
 
 from huggingface_hub import HfApi, hf_hub_download  # noqa: E402
 
@@ -97,6 +98,16 @@ def ensure_model(name, options):
     elif name == "embedding":
         from worker_embedding import TextEmbedder
         instance = TextEmbedder(device, fetch, vision=options.get("variant") == "full")
+    elif name == "lama":
+        from worker_lama import MODEL_FILE, AnimeLama
+
+        def announce(state, size, seconds):
+            event = {"event": "download", "id": current_request_id, "repo": "Sanster/models", "file": MODEL_FILE, "state": state, "bytes": size}
+            if seconds is not None:
+                event["seconds"] = seconds
+            send(event)
+
+        instance = AnimeLama(device, announce)
     else:
         raise ValueError(f"Unknown model: {name}")
     models[name] = {"key": key, "instance": instance, "device": str(device), "variant": options.get("variant")}
@@ -204,6 +215,13 @@ def op_embed_images(request):
     return {"model": "embeddinggemma-2", "device": models["embedding"]["device"], "items": items}
 
 
+def op_inpaint(request):
+    """Fill the white part of `mask` in `image` (same-size PNGs) and write the result to `output` as PNG."""
+    model = ensure_model("lama", {"device": request.get("device", "auto")})
+    result = model.inpaint(request["image"], request["mask"], request["output"])
+    return {**result, "device": models["lama"]["device"]}
+
+
 OPS = {
     "status": op_status,
     "load": op_load,
@@ -212,6 +230,7 @@ OPS = {
     "embed": op_embed,
     "chunk": op_chunk,
     "embed_images": op_embed_images,
+    "inpaint": op_inpaint,
 }
 
 
@@ -242,6 +261,10 @@ def main():
         if handler is None:
             send({"id": current_request_id, "ok": False, "error": f"Unknown op: {op}", "errorType": "InvalidOp"})
             continue
+        # A request may run on fewer threads (background work while another worker is busy); the rest get the default.
+        threads = int(request.get("threads") or 0) or DEFAULT_THREADS
+        if torch.get_num_threads() != threads:
+            torch.set_num_threads(threads)
         try:
             send({"id": current_request_id, "ok": True, "result": handler(request)})
         except Exception as exc:  # noqa: BLE001

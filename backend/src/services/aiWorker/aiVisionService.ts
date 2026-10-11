@@ -18,6 +18,8 @@ export const KALOSCOPE_FILE = 'v1-artist-classifier/model.safetensors'
 export const MEDIA_STYLE_SPACE = 'media-style'
 export const MEDIA_STYLE_MODEL_KEY = 'kaloscope-3.0-preview@5e4bfa2'
 
+const LAMA_IDLE_MINUTES = 5
+
 type IdlePolicy = { keepModelLoaded: boolean; autoUnloadMinutes: number }
 
 function idleMinutes(policy: IdlePolicy) {
@@ -34,6 +36,8 @@ export const visionWorker = new AiWorkerClient({
   label: 'AiVisionWorker',
   env: () => ({ CONAI_AI_THREADS: String(aiThreads()), CONAI_AI_ROLE: 'vision' }),
   idleMinutes: (model) => {
+    // LaMa (image editor AI erase) runs in bursts while someone edits; it has no setting of its own.
+    if (model === 'lama') return LAMA_IDLE_MINUTES
     const settings = settingsService.loadSettings()
     return idleMinutes(model === 'kaloscope' ? settings.kaloscope : settings.tagger)
   },
@@ -157,10 +161,12 @@ export async function aiGpuReady() {
   return Boolean(probe.torch && probe.cudaAvailable && probe.gpuSupported !== false && probe.gpuComputeOk !== false)
 }
 
-/** Whether the AI Python can run the worker (cached probe, a minute). */
-export async function checkAiDependencies(): Promise<{ available: boolean; message: string; missingPackages: string[]; python: string }> {
+/** Whether the AI Python can run the worker (cached probe, a minute); `packages` narrows the check to what one feature imports. */
+export async function checkAiDependencies(packages?: readonly string[]): Promise<{ available: boolean; message: string; missingPackages: string[]; python: string }> {
   const { python, probe } = await aiRuntimeProbe()
-  const missingPackages = Object.entries(probe.packages).filter(([, version]) => !version).map(([name]) => name)
+  const missingPackages = Object.entries(probe.packages)
+    .filter(([name, version]) => !version && (!packages || packages.includes(name)))
+    .map(([name]) => name)
   if (probe.torch && missingPackages.length === 0) {
     return { available: true, message: 'AI runtime ready', missingPackages, python }
   }

@@ -460,3 +460,21 @@ export function getImageFileIdsForGroupQuery(groupId: number, page: IdPage = nor
     (db.prepare(`SELECT COUNT(*) as total ${fromWhere}`).get(groupId) as { total: number }).total
   ), ['groups']));
 }
+
+export type ImageGroupMembershipRow = {
+  id: number
+  name: string
+  color: string | null
+  collection_type: string | null
+}
+
+/** Groups one image belongs to (same shape as the list queries' `groups`). */
+export function findGroupMembershipsForImageQuery(compositeHash: string): ImageGroupMembershipRow[] {
+  return db.prepare(`
+    SELECT g.id, g.name, g.color, ig.collection_type
+    FROM image_groups ig
+    INNER JOIN groups g ON g.id = ig.group_id
+    WHERE ig.composite_hash = ?
+    ORDER BY g.name ASC
+  `).all(compositeHash) as ImageGroupMembershipRow[];
+}
