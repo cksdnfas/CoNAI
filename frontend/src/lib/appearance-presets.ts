@@ -416,19 +416,19 @@ export const FONT_PRESETS: Record<FontPreset, FontPresetDefinition> = {
     label: 'Manrope',
     description: 'appearancePresets.font.manrope.description',
     fontFamily: "'Manrope', ui-sans-serif, system-ui, sans-serif",
-    monoFamily: "'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace",
+    monoFamily: "'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'D2Coding', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', monospace",
   },
   system: {
     label: 'System',
     description: 'appearancePresets.font.system.description',
     fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    monoFamily: "ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace",
+    monoFamily: "ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'D2Coding', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', monospace",
   },
   custom: {
     label: 'Custom',
     description: 'appearancePresets.font.custom.description',
     fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-    monoFamily: "ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace",
+    monoFamily: "ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'D2Coding', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', monospace",
   },
 }
 
