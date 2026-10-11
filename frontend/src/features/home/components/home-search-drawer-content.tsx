@@ -1,5 +1,6 @@
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { RotateCcw, Search, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
@@ -12,12 +13,13 @@ import { Tip } from '@/components/ui/tooltip'
 import { SearchChipList } from '@/features/search/components/search-chip-list'
 import { SearchScopeTabs } from '@/features/search/components/search-scope-tabs'
 import { SearchSuggestionList } from '@/features/search/components/search-suggestion-list'
-import { SEARCH_OPERATOR_DESCRIPTIONS, SEARCH_OPERATOR_LABELS, SEARCH_SCOPE_LABEL_KEYS } from '@/features/search/search-constants'
+import { SEARCH_OPERATOR_DESCRIPTIONS, SEARCH_OPERATOR_LABELS, SEARCH_SCOPE_LABEL_KEYS, SEARCH_SCOPE_TABS_WITH_MEANING } from '@/features/search/search-constants'
 import { createRatingSearchChip, getSearchScopeStyle } from '@/features/search/search-utils'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import { useSearchSuggestionData } from '@/features/search/use-search-suggestion-data'
 import { useHomeSearch } from '@/features/home/home-search-context'
 import { useI18n } from '@/i18n'
+import { getImageViewerSettings } from '@/lib/api-settings'
 import type { PromptCollectionItem } from '@/types/prompt'
 import { cn } from '@/lib/utils'
 
@@ -94,12 +96,18 @@ function HomeSearchSuggestionPanel({
     loraSuggestionsLoading,
   } = useSearchSuggestionData(searchScope, searchInput)
   const { t } = useI18n()
+  const viewerSettingsQuery = useQuery({
+    queryKey: ['image-viewer-settings'],
+    queryFn: getImageViewerSettings,
+    staleTime: 60_000,
+  })
+  const canSearchByMeaning = viewerSettingsQuery.data?.search?.imageSearch === true
 
   return (
     <div className={cn('theme-floating-panel overflow-hidden rounded-sm bg-background/95', className)} style={style}>
       <div className="flex items-center gap-2 px-[var(--theme-panel-padding-x)] py-[calc(var(--theme-panel-padding-y)_-_0.125rem)]">
         <div className="min-w-0 flex-1">
-          <SearchScopeTabs searchScope={searchScope} onChange={setSearchScope} />
+          <SearchScopeTabs searchScope={searchScope} onChange={setSearchScope} scopes={canSearchByMeaning ? SEARCH_SCOPE_TABS_WITH_MEANING : undefined} />
         </div>
 
         {onClose ? (

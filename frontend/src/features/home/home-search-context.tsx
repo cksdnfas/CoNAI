@@ -7,7 +7,7 @@ import { useI18n } from '@/i18n'
 import { clearSearchHistory, deleteSearchHistory, getSearchHistory, saveSearchHistory } from '@/lib/api-search'
 import { SEARCH_SCOPE_LABEL_KEYS } from '@/features/search/search-constants'
 import type { SearchAiToolGroup, SearchChip, SearchHistoryEntry, SearchOperator, SearchScope } from '@/features/search/search-types'
-import { buildSearchChipKey, buildSearchHistoryLabel, createAIToolSearchChip, createTextSearchChip, cycleSearchOperator } from '@/features/search/search-utils'
+import { appendUniqueSearchChip, buildSearchHistoryLabel, createAIToolSearchChip, createTextSearchChip, cycleSearchOperator, isFixedOperatorChip } from '@/features/search/search-utils'
 import { buildHomeSearchString, decodeSearchChipsParam, encodeSearchChipsParam, readHomeSortParam, readSearchChipsParam } from './home-search-url'
 
 export type TextSearchScope = Exclude<SearchScope, 'rating' | 'tool'>
@@ -45,13 +45,9 @@ interface HomeSearchContextValue {
 
 const HomeSearchContext = createContext<HomeSearchContextValue | null>(null)
 
-function appendUniqueSearchChip(chips: SearchChip[], chip: SearchChip) {
-  const nextKey = buildSearchChipKey(chip)
-  if (chips.some((item) => buildSearchChipKey(item) === nextKey)) {
-    return chips
-  }
-
-  return [...chips, chip]
+/** Next operator for one chip (a description chip keeps 포함). */
+function cycleChip(chip: SearchChip): SearchChip {
+  return isFixedOperatorChip(chip) ? chip : { ...chip, operator: cycleSearchOperator(chip.operator) }
 }
 
 /** Provide shared home-search state for the header search box, drawer, and image feed. */
@@ -242,12 +238,7 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
       return chips
     }
 
-    const nextKey = buildSearchChipKey(nextChip)
-    if (chips.some((item) => buildSearchChipKey(item) === nextKey)) {
-      return chips
-    }
-
-    return [...chips, nextChip]
+    return appendUniqueSearchChip(chips, nextChip)
   }, [searchInput, searchScope])
 
   const applySearch = useCallback(() => {
@@ -266,7 +257,7 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
   }, [navigateToAppliedChips])
 
   const cycleChipOperator = useCallback((chipId: string) => {
-    setDraftChips((current) => current.map((chip) => (chip.id === chipId ? { ...chip, operator: cycleSearchOperator(chip.operator) } : chip)))
+    setDraftChips((current) => current.map((chip) => (chip.id === chipId ? cycleChip(chip) : chip)))
   }, [])
 
   const removeChip = useCallback((chipId: string) => {
@@ -278,7 +269,7 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
   }, [appliedChips, navigateToAppliedChips])
 
   const cycleAppliedChipOperator = useCallback((chipId: string) => {
-    navigateToAppliedChips(appliedChips.map((chip) => (chip.id === chipId ? { ...chip, operator: cycleSearchOperator(chip.operator) } : chip)))
+    navigateToAppliedChips(appliedChips.map((chip) => (chip.id === chipId ? cycleChip(chip) : chip)))
   }, [appliedChips, navigateToAppliedChips])
 
   const clearAppliedChips = useCallback(() => {

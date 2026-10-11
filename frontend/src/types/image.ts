@@ -106,6 +106,8 @@ export interface ImageRecord {
   groups?: ImageGroupMembership[] | null
   /** Sounds of the run behind this tile (generation history): instead of a picture when there is none, else beside it. */
   audio?: ImageRecordAudio[] | null
+  /** Library search ordered by a description: how well this image matches it (cosine × 100). */
+  meaning_score?: number
 }
 
 export interface ImageRecordAudio {

@@ -4,6 +4,7 @@ import { queryRoutes } from './query.routes';
 import { taggingRoutes } from './tagging.routes';
 import { managementRoutes } from './management.routes';
 import { similarityRoutes } from './similarity.routes';
+import { semanticImageRoutes } from './semantic.routes';
 import complexSearchRoutes from './complex-search.routes';
 import metadataRoutes from './metadata.routes';
 import hashRoutes from './hash.routes';
@@ -25,6 +26,9 @@ router.use('/', uploadRoutes);
 
 // Tagging routes (must come before queryRoutes to avoid /:id catching /untagged-count)
 router.use('/', taggingRoutes);
+
+// Embedding search (/semantic-search, /:id/similar-content, /:id/similar-style); before queryRoutes' /:id
+router.use('/', semanticImageRoutes);
 
 // Metadata routes (composite_hash 기반 메타데이터 조회)
 router.use('/metadata', metadataRoutes);

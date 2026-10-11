@@ -1,4 +1,5 @@
-export type SearchScope = 'positive' | 'negative' | 'auto' | 'rating' | 'model' | 'lora' | 'tool'
+/** `meaning` = a description matched by image embeddings (one per search, always included, orders the results). */
+export type SearchScope = 'positive' | 'negative' | 'auto' | 'rating' | 'model' | 'lora' | 'tool' | 'meaning'
 export type SearchOperator = 'OR' | 'AND' | 'NOT'
 export type SearchAiToolGroup = 'nai' | 'comfyui' | 'other'
 

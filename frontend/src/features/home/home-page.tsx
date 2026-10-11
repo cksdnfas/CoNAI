@@ -76,6 +76,7 @@ export function HomePage() {
     imageListResetKey,
     sortOrder,
     setSortOrder,
+    isMeaningSearch,
     canAutoLoadMore,
     feedCountState,
     feedSequenceTotal,
@@ -195,7 +196,7 @@ export function HomePage() {
                 <X className="size-4" />
               </IconButton>
             ) : null}
-            <HomeSortMenu value={sortOrder} onChange={setSortOrder} />
+            <HomeSortMenu value={sortOrder} onChange={setSortOrder} meaningOrder={isMeaningSearch} />
           </>
         )}
       >

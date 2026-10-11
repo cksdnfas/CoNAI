@@ -11,11 +11,15 @@ import { useI18n } from '@/i18n'
 interface SearchScopeTabsProps {
   searchScope: SearchScope
   onChange: (scope: SearchScope) => void
+  /** Tabs to show (default: the chip scopes). */
+  scopes?: SearchScope[]
   className?: string
 }
 
+const DEFAULT_SCOPES = SEARCH_SCOPE_TABS.map((tab) => tab.value)
+
 /** Render the shared search scope tabs with drag-scroll and edge hints. */
-export function SearchScopeTabs({ searchScope, onChange, className }: SearchScopeTabsProps) {
+export function SearchScopeTabs({ searchScope, onChange, scopes = DEFAULT_SCOPES, className }: SearchScopeTabsProps) {
   const { t } = useI18n()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const dragPointerIdRef = useRef<number | null>(null)
@@ -165,24 +169,24 @@ export function SearchScopeTabs({ searchScope, onChange, className }: SearchScop
         }}
       >
         <div className="inline-flex min-w-full items-center gap-1 rounded-sm bg-surface-low p-1 pr-9">
-          {SEARCH_SCOPE_TABS.map((tab) => (
+          {scopes.map((scope) => (
             <Button
-              key={tab.value}
-              data-scope={tab.value}
+              key={scope}
+              data-scope={scope}
               type="button"
               variant="ghost"
               size="xs"
-              aria-pressed={searchScope === tab.value}
+              aria-pressed={searchScope === scope}
               onClick={() => {
                 if (suppressClickRef.current) {
                   return
                 }
-                onChange(tab.value)
+                onChange(scope)
               }}
-              className={cn('px-3 font-semibold select-none', searchScope === tab.value && 'shadow-elevation-1')}
-              style={searchScope === tab.value ? getSearchScopeStyle(tab.value) : undefined}
+              className={cn('px-3 font-semibold select-none', searchScope === scope && 'shadow-elevation-1')}
+              style={searchScope === scope ? getSearchScopeStyle(scope) : undefined}
             >
-              {t(SEARCH_SCOPE_LABEL_KEYS[tab.value])}
+              {t(SEARCH_SCOPE_LABEL_KEYS[scope])}
             </Button>
           ))}
         </div>

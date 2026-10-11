@@ -2,13 +2,14 @@ import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { settingsService } from '../services/settingsService';
 import { RatingScoreService } from '../services/ratingScoreService';
+import { embeddingFeatureOn } from '../services/aiWorker/textEmbeddingService';
 
 const router = Router();
 
 /** Non-sensitive preferences needed by the shared viewer without granting Settings page access. */
 router.get('/viewer', (_req: Request, res: Response) => {
   const { general, imageSave, kaloscope } = settingsService.loadSettings();
-  res.json({ success: true, data: { general: { imageSimilarityCheckMode: general.imageSimilarityCheckMode }, imageSave, kaloscope: { artistLinkUrlTemplate: kaloscope.artistLinkUrlTemplate } } });
+  res.json({ success: true, data: { general: { imageSimilarityCheckMode: general.imageSimilarityCheckMode }, imageSave, kaloscope: { artistLinkUrlTemplate: kaloscope.artistLinkUrlTemplate }, search: { imageSearch: embeddingFeatureOn('imageSearch') } } });
 });
 
 router.get(

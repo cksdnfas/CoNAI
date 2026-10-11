@@ -53,7 +53,13 @@ export interface RuntimeGenerationHistorySettings {
 }
 
 export async function getImageViewerSettings() {
-  const result = await fetchJson<ApiResponse<{ general: Pick<AppSettings['general'], 'imageSimilarityCheckMode'>; imageSave: ImageSaveSettings; kaloscope: Pick<AppSettings['kaloscope'], 'artistLinkUrlTemplate'> }>>('/api/runtime-media-settings/viewer')
+  const result = await fetchJson<ApiResponse<{
+    general: Pick<AppSettings['general'], 'imageSimilarityCheckMode'>
+    imageSave: ImageSaveSettings
+    kaloscope: Pick<AppSettings['kaloscope'], 'artistLinkUrlTemplate'>
+    /** Image embeddings on: the library search takes a description and image details show content matches. */
+    search?: { imageSearch: boolean }
+  }>>('/api/runtime-media-settings/viewer')
   if (!result.success || !result.data) throw new Error('Failed to load image viewer settings')
   return result.data
 }

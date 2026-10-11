@@ -17,6 +17,7 @@ import { ImageMetadataRecord } from '../types/image';
 import { RatingWeights } from '../types/rating';
 import { peekSearchTotal, resolveSearchTotal } from './aggregateCache';
 import { buildIdPageResponse, normalizeIdPage, type IdPage, type IdPageResponse } from '../utils/idPage';
+import type { ImageVectorHit } from './embeddings/imageIndex';
 
 /**
  * Complex Filter Service
@@ -192,6 +193,61 @@ export class ComplexFilterService {
       nextCursorValue: lastRow ? (sortBy === 'filename' ? lastRow.original_file_path : lastRow[sortBy]) : null,
       nextCursorHash: lastRow?.composite_hash ?? null,
       stats,
+    };
+  }
+
+  /**
+   * A search ordered by meaning: the images matching a description (ranked by the embedding index, at most a few
+   * thousand) that also pass the chip filter, best match first. Each row carries `meaning_score` (cosine × 100).
+   * The cursor is the last row's hash (its score when that image has left the ranking since).
+   */
+  static async executeMeaningSearch(
+    filter: ComplexFilter,
+    ranked: ImageVectorHit[],
+    basicParams?: ComplexSearchScope,
+    pagination?: { page: number; limit: number; useCursor?: boolean; cursorValue?: string | number | null; cursorHash?: string },
+  ): Promise<{ images: any[]; total: number; hasMore: boolean; totalKnown: boolean; nextCursorValue?: string | number | null; nextCursorHash?: string | null }> {
+    const weights = await RatingScoreService.getWeights();
+    const { query, params, cteClause, countFromClause, whereClause } = this.buildComplexQuery(filter, weights, basicParams);
+    const restrict = 'AND im.composite_hash IN (SELECT value FROM json_each(?))';
+    const matched = new Set((db.prepare(`
+      ${cteClause}
+      SELECT im.composite_hash
+      ${countFromClause}
+      ${whereClause}
+      ${restrict}
+    `).all(...params, JSON.stringify(ranked.map((hit) => hit.compositeHash))) as Array<{ composite_hash: string }>)
+      .map((row) => row.composite_hash));
+    const ordered = ranked.filter((hit) => matched.has(hit.compositeHash));
+
+    const limit = pagination?.limit || 25;
+    let start = ((pagination?.page || 1) - 1) * limit;
+    if (pagination?.useCursor) {
+      start = 0;
+      if (pagination.cursorHash) {
+        const at = ordered.findIndex((hit) => hit.compositeHash === pagination.cursorHash);
+        const score = Number(pagination.cursorValue);
+        start = at >= 0 ? at + 1 : Number.isFinite(score) ? ordered.findIndex((hit) => hit.score * 100 < score) : ordered.length;
+        if (start < 0) start = ordered.length;
+      }
+    }
+    const pageHits = ordered.slice(start, start + limit);
+    const rows = pageHits.length === 0 ? [] : db.prepare(`${query} ${restrict}`)
+      .all(...params, JSON.stringify(pageHits.map((hit) => hit.compositeHash))) as any[];
+    const byHash = new Map(rows.map((row) => [row.composite_hash as string, row]));
+    const images = pageHits.flatMap((hit) => {
+      const row = byHash.get(hit.compositeHash);
+      return row ? [{ ...row, meaning_score: Math.round(hit.score * 1000) / 10 }] : [];
+    });
+    const last = pageHits.at(-1);
+
+    return {
+      images,
+      total: ordered.length,
+      hasMore: start + limit < ordered.length,
+      totalKnown: true,
+      nextCursorValue: last ? last.score * 100 : null,
+      nextCursorHash: last?.compositeHash ?? null,
     };
   }
 

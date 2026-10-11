@@ -112,6 +112,12 @@ export function SearchSuggestionList({
     )
   }
 
+  if (searchScope === 'meaning') {
+    return trimmedInput.length > 0
+      ? <SuggestionActionRow label={t({ ko: '"{value}" 설명으로 찾기', en: 'Find by "{value}"' }, { value: trimmedInput })} onClick={onSubmitInput} />
+      : null
+  }
+
   if (searchScope === 'tool') {
     return (
       <>

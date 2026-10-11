@@ -83,6 +83,10 @@ export const API_ERROR_FALLBACKS = {
     ko: '유사 이미지를 불러오지 못했어.',
     en: 'Failed to load similar images.',
   },
+  'images.vectorSimilar.load': {
+    ko: '내용·화풍이 비슷한 이미지를 불러오지 못했어.',
+    en: 'Could not load images with similar content or style.',
+  },
   'images.promptSimilar.load': {
     ko: '텍스트 기반 유사 이미지를 불러오지 못했어.',
     en: 'Failed to load text-based similar images.',

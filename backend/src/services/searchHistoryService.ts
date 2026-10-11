@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { runtimePaths } from '../config/runtimePaths';
 
-export type SearchChipScope = 'positive' | 'negative' | 'auto' | 'rating';
+export type SearchChipScope = 'positive' | 'negative' | 'auto' | 'rating' | 'meaning';
 export type SearchChipOperator = 'OR' | 'AND' | 'NOT';
 
 export interface SearchHistoryChip {
@@ -87,7 +87,7 @@ export class SearchHistoryService {
     }
 
     const chip = value as Partial<SearchHistoryChip>;
-    const validScopes: SearchChipScope[] = ['positive', 'negative', 'auto', 'rating'];
+    const validScopes: SearchChipScope[] = ['positive', 'negative', 'auto', 'rating', 'meaning'];
     const validOperators: SearchChipOperator[] = ['OR', 'AND', 'NOT'];
 
     return typeof chip.id === 'string'

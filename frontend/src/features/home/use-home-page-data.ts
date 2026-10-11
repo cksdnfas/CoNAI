@@ -1,11 +1,13 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, createElement, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useHomeSearch } from '@/features/home/home-search-context'
-import { buildComplexFilterPayload } from '@/features/search/search-utils'
+import { buildComplexSearchPayload, getMeaningSearchText } from '@/features/search/search-utils'
+import { VectorScoreOverlay } from '@/features/images/components/detail/similarity-score-overlay'
+import type { ImageRecord } from '@/types/image'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import type { ImageViewSequenceTotal } from '@/features/images/components/detail/image-view-modal-context'
 import { getHomeFeedProgressSummary } from '@/features/home/home-feed-progress'
@@ -68,7 +70,9 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
       .map((chip) => [chip.scope, chip.operator, chip.conditionCategory ?? '', chip.conditionType ?? '', chip.value, chip.minScore ?? '', chip.maxScore ?? ''].join('::'))
       .join('|')}`
   }, [appliedChips, isAnonymousSession])
-  const imageListResetKey = `${feedScopeKey}:${sortOrder}`
+  // A description orders the search by meaning; the newest/oldest choice does not apply to it.
+  const meaningText = isSearchMode ? getMeaningSearchText(appliedChips) : null
+  const imageListResetKey = meaningText ? `${feedScopeKey}:meaning` : `${feedScopeKey}:${sortOrder}`
 
   /** Change the order in the URL (next to `q`) and start the reordered list from the top. */
   const setSortOrder = useCallback((nextSortOrder: HomeSortOrder) => {
@@ -93,7 +97,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
 
       if (isSearchMode) {
         return searchImagesComplex({
-          complex_filter: buildComplexFilterPayload(appliedChips),
+          ...buildComplexSearchPayload(appliedChips),
           page: 1,
           limit: 40,
           sortBy: 'first_seen_date',
@@ -158,7 +162,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     queryFn: async ({ signal }) => {
       if (isSearchMode) {
         const result = await searchImagesComplex({
-          complex_filter: buildComplexFilterPayload(appliedChips),
+          ...buildComplexSearchPayload(appliedChips),
           page: 1,
           limit: 1,
           sortBy: 'first_seen_date',
@@ -211,7 +215,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   const {
     visibleItems: visibleImages,
     hasOnlyHiddenItems,
-    renderItemPersistentOverlay,
+    renderItemPersistentOverlay: renderSafetyOverlay,
     shouldBlurItemPreview,
   } = useImageFeedSafety({
     items: images,
@@ -222,6 +226,27 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     isLoadingMore: imagesQuery.isFetchingNextPage,
     onLoadMore: imagesQuery.fetchNextPage,
   })
+
+  // Description search: each tile also carries its match score. Elements are cached per tile so memoized cells keep
+  // the same props while more pages load.
+  const meaningOverlayCacheRef = useRef(new Map<string, { score: number; safety: ReactNode; element: ReactNode }>())
+  const renderItemPersistentOverlay = useCallback((image: ImageRecord) => {
+    const safety = renderSafetyOverlay(image)
+    const score = image.meaning_score
+    if (!meaningText || typeof score !== 'number') {
+      return safety
+    }
+
+    const key = image.composite_hash ?? String(image.id)
+    const cached = meaningOverlayCacheRef.current.get(key)
+    if (cached && cached.score === score && cached.safety === safety) {
+      return cached.element
+    }
+
+    const element = createElement(Fragment, null, createElement(VectorScoreOverlay, { score, basis: 'meaning' }), safety)
+    meaningOverlayCacheRef.current.set(key, { score, safety, element })
+    return element
+  }, [meaningText, renderSafetyOverlay])
 
   const feedProgress = useMemo(
     () => getHomeFeedProgressSummary(imagesQuery.data?.pages, visibleImages.length, {
@@ -405,6 +430,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     imageListResetKey,
     sortOrder,
     setSortOrder,
+    isMeaningSearch: meaningText !== null,
     canAutoLoadMore,
     feedProgress,
     feedCountState,

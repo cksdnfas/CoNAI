@@ -23,6 +23,7 @@ import type { SimilarImage } from '@/types/similarity'
 import { ImageDetailMedia } from './components/detail/image-detail-media'
 import { ImageDetailMetaCard } from './components/detail/image-detail-meta-card'
 import { ImageDetailSimilaritySection } from './components/detail/image-detail-similarity-section'
+import { ImageDetailVectorSimilaritySection } from './components/detail/image-detail-vector-similarity-section'
 import { SimilarImageScoreOverlay } from './components/detail/similarity-score-overlay'
 import { getImageListMediaKind } from './components/image-list/image-list-utils'
 import {
@@ -164,6 +165,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
   const [isSimilarityInspectionRequested, setIsSimilarityInspectionRequested] = useState(false)
   const [isImageSimilarityInspectionRequested, setIsImageSimilarityInspectionRequested] = useState(false)
   const [isPromptSimilarityInspectionRequested, setIsPromptSimilarityInspectionRequested] = useState(false)
+  const [isVectorSimilarityInspectionRequested, setIsVectorSimilarityInspectionRequested] = useState(false)
   const [stableSimilarityInspectionCompositeHash, setStableSimilarityInspectionCompositeHash] = useState<string | null>(null)
   const queryClient = useQueryClient()
   const detailUrl = initialImage?.detail_url
@@ -211,6 +213,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     setIsSimilarityInspectionRequested(false)
     setIsImageSimilarityInspectionRequested(false)
     setIsPromptSimilarityInspectionRequested(false)
+    setIsVectorSimilarityInspectionRequested(false)
     setStableSimilarityInspectionCompositeHash(null)
     setActiveImageAreaTab('current')
   }, [compositeHash])
@@ -290,7 +293,12 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     setIsSimilarityInspectionRequested(true)
     setIsImageSimilarityInspectionRequested(true)
     setIsPromptSimilarityInspectionRequested(true)
+    setIsVectorSimilarityInspectionRequested(true)
     shouldScrollToRelatedRef.current = true
+  }, [])
+
+  const handleRequestVectorSimilarityInspection = useCallback(() => {
+    setIsSimilarityInspectionRequested(true)
   }, [])
 
   const handleRequestImageSimilarityInspection = useCallback(() => {
@@ -320,6 +328,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     setIsSimilarityInspectionRequested(true)
     setIsImageSimilarityInspectionRequested(true)
     setIsPromptSimilarityInspectionRequested(true)
+    setIsVectorSimilarityInspectionRequested(true)
   }, [shouldAutoRunSimilarityInspection, isRelatedImageAreaActive, compositeHash])
 
   useEffect(() => {
@@ -568,6 +577,20 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
         promptSimilarImagesError={promptSimilarImagesError}
         promptSimilarImagesRequested={isPromptSimilarityInspectionRequested}
         onRequestPromptSimilarImages={handleRequestPromptSimilarityInspection}
+        mobileCardColumns={relatedImageMobileColumns}
+        desktopCardColumns={relatedImageDesktopColumns}
+        cardAspectRatio={relatedImageAspectRatio}
+        hideEmptySections={presentation === 'modal'}
+      />
+
+      <ImageDetailVectorSimilaritySection
+        compositeHash={compositeHash}
+        presentation={presentation}
+        ready={canRunStabilizedSimilarityInspection}
+        requestAll={isVectorSimilarityInspectionRequested}
+        onRequest={handleRequestVectorSimilarityInspection}
+        resultLimit={detailSimilarLimit}
+        excludeHashes={duplicateHashSet}
         mobileCardColumns={relatedImageMobileColumns}
         desktopCardColumns={relatedImageDesktopColumns}
         cardAspectRatio={relatedImageAspectRatio}

@@ -20,6 +20,7 @@ export const searchResources = {
   "search.search.constants.model": "모델",
   "search.search.constants.lora": "LoRA",
   "search.search.constants.tool": "AI 도구",
+  "search.search.constants.meaning": "설명",
 },
   en: {
   "search.components.search.chip.list.no.condition.chips.yet": "No condition chips yet.",
@@ -40,6 +41,7 @@ export const searchResources = {
   "search.search.constants.model": "Model",
   "search.search.constants.lora": "LoRA",
   "search.search.constants.tool": "AI Tool",
+  "search.search.constants.meaning": "Description",
 },
 } as const satisfies ScopedLocaleResources
 

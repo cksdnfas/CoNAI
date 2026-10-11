@@ -19,7 +19,11 @@ export const SEARCH_SCOPE_LABEL_KEYS: Record<SearchScope, string> = {
   model: 'search.search.constants.model',
   lora: 'search.search.constants.lora',
   tool: 'search.search.constants.tool',
+  meaning: 'search.search.constants.meaning',
 }
+
+/** The library search's tabs when image search is on: the chip scopes plus a description. */
+export const SEARCH_SCOPE_TABS_WITH_MEANING: SearchScope[] = [...SEARCH_SCOPE_TABS.map((tab) => tab.value), 'meaning']
 
 /** Plain-language chip operator labels (AND = must match, OR = any of, NOT = exclude). */
 export const SEARCH_OPERATOR_LABELS: Record<SearchOperator, TranslationDictionary> = {
@@ -39,7 +43,7 @@ export const SEARCH_OPERATOR_CYCLE_HINT: TranslationDictionary = {
   en: 'Click to switch Include → Any → Exclude',
 }
 
-export const SEARCH_TEXT_INPUT_SCOPES: SearchScope[] = ['positive', 'negative', 'auto', 'model', 'lora']
+export const SEARCH_TEXT_INPUT_SCOPES: SearchScope[] = ['positive', 'negative', 'auto', 'model', 'lora', 'meaning']
 
 export const SEARCH_AI_TOOL_OPTIONS: SearchAiToolOption[] = [
   { value: 'nai', label: 'NAI', aliases: ['NovelAI', 'NAI'] },

@@ -14,7 +14,7 @@ export const HOME_SORT_QUERY_PARAM = 'sort'
 export type HomeSortOrder = 'newest' | 'oldest'
 export const DEFAULT_HOME_SORT_ORDER: HomeSortOrder = 'newest'
 
-const SEARCH_SCOPES: ReadonlySet<SearchScope> = new Set(['positive', 'negative', 'auto', 'rating', 'model', 'lora', 'tool'])
+const SEARCH_SCOPES: ReadonlySet<SearchScope> = new Set(['positive', 'negative', 'auto', 'rating', 'model', 'lora', 'tool', 'meaning'])
 const SEARCH_OPERATORS: ReadonlySet<SearchOperator> = new Set(['OR', 'AND', 'NOT'])
 const MAX_URL_SEARCH_CHIPS = 50
 

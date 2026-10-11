@@ -8,8 +8,11 @@ import {
 } from '@conai/shared';
 import { enrichCompactImageWithFileView } from './utils';
 import { normalizeIdPage } from '../../utils/idPage';
+import { rankImagesByText } from '../../services/embeddings/imageIndex';
+import { embeddingFeatureOn } from '../../services/aiWorker/textEmbeddingService';
 
 const router = Router();
+const MAX_MEANING_CHARS = 500;
 
 type SearchScope = {
   ai_tool?: string;
@@ -53,6 +56,12 @@ function buildSearchScope(requestBody: ComplexSearchRequest): SearchScope {
   };
 }
 
+/** The description a search is ordered by, when it has one. */
+function meaningText(requestBody: ComplexSearchRequest): string | null {
+  const text = typeof requestBody.meaning?.text === 'string' ? requestBody.meaning.text.trim() : '';
+  return text ? text.slice(0, MAX_MEANING_CHARS) : null;
+}
+
 function resolveSearchFilter(requestBody: ComplexSearchRequest): { filter?: ComplexFilter; error?: string } {
   if (requestBody.simple_search?.text) {
     return { filter: buildSimpleSearchFilter(requestBody.simple_search.text) };
@@ -65,6 +74,11 @@ function resolveSearchFilter(requestBody: ComplexSearchRequest): { filter?: Comp
     }
 
     return { filter: requestBody.complex_filter };
+  }
+
+  // A description alone is a whole search.
+  if (meaningText(requestBody)) {
+    return { filter: {} };
   }
 
   return { error: 'Either simple_search or complex_filter must be provided' };
@@ -86,6 +100,7 @@ function resolveSearchFilter(requestBody: ComplexSearchRequest): { filter?: Comp
  *   model_name?: string,
  *   start_date?: string,
  *   end_date?: string,
+ *   meaning?: { text: string },   // only images matching this description, best match first (image search on)
  *   page?: number,
  *   limit?: number,
  *   sortBy?: 'upload_date' | 'filename' | 'file_size' | 'width' | 'height',
@@ -115,24 +130,43 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       } as ComplexSearchResponse);
     }
 
-    const result = await ComplexFilterService.executeComplexSearch(
-      filter,
-      buildSearchScope(requestBody),
-      {
-        page,
-        limit,
-        sortBy,
-        sortOrder,
-        includeStats: false,
-        useCursor: requestBody.pagination === 'cursor',
-        cursorValue: requestBody.cursorValue,
-        cursorHash: requestBody.cursorHash,
-        includeTotal: requestBody.includeTotal,
+    const meaning = meaningText(requestBody);
+    let ranked = null;
+    if (meaning) {
+      if (!embeddingFeatureOn('imageSearch')) {
+        return res.status(409).json({ success: false, error: 'Image search is off (settings → embeddings)' } as ComplexSearchResponse);
       }
-    );
+      ranked = await rankImagesByText(meaning);
+      if (!ranked) {
+        return res.status(503).json({ success: false, error: 'The embedding model is not available right now' } as ComplexSearchResponse);
+      }
+    }
+
+    const cursor = {
+      useCursor: requestBody.pagination === 'cursor',
+      cursorValue: requestBody.cursorValue,
+      cursorHash: requestBody.cursorHash,
+    };
+    const result = ranked
+      ? await ComplexFilterService.executeMeaningSearch(filter, ranked, buildSearchScope(requestBody), { page, limit, ...cursor })
+      : await ComplexFilterService.executeComplexSearch(
+        filter,
+        buildSearchScope(requestBody),
+        {
+          page,
+          limit,
+          sortBy,
+          sortOrder,
+          includeStats: false,
+          ...cursor,
+          includeTotal: requestBody.includeTotal,
+        }
+      );
 
     // Enrich with the compact list-feed shape shared with the normal image feed
-    const enrichedImages = result.images.map(enrichCompactImageWithFileView);
+    const enrichedImages = result.images.map((image) => (image.meaning_score === undefined
+      ? enrichCompactImageWithFileView(image)
+      : { ...enrichCompactImageWithFileView(image), meaning_score: image.meaning_score }));
 
     const response: ComplexSearchResponse = {
       success: true,

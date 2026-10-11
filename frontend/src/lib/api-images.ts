@@ -21,6 +21,8 @@ interface ComplexImageSearchRequest {
     or_group?: Array<Record<string, unknown>>
     and_group?: Array<Record<string, unknown>>
   }
+  /** Only images matching this description, best match first (sortBy/sortOrder are ignored). */
+  meaning?: { text: string }
   page?: number
   limit?: number
   sortBy?: 'first_seen_date' | 'upload_date' | 'filename' | 'file_size' | 'width' | 'height'
@@ -226,6 +228,29 @@ export async function getSimilarImages(
   const response = await fetchJson<ApiResponse<SimilarityQueryResult>>(`/api/images/${compositeHash}/similar?${searchParams.toString()}`, init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'images.similar.load')
+  }
+  return response.data
+}
+
+export type VectorSimilarityBasis = 'content' | 'style'
+
+/** Which embedding searches one image can take part in (it has an image vector / a style vector). */
+export async function getImageVectorAvailability(compositeHash: string, init?: RequestInit) {
+  const response = await fetchJson<ApiResponse<Record<VectorSimilarityBasis, boolean>>>(`/api/images/${compositeHash}/vector-similarity`, init)
+  if (!response.success || !response.data) {
+    throw createApiFallbackError(response.error, 'images.vectorSimilar.load')
+  }
+  return response.data
+}
+
+/** Images closest to one image by what it shows (content) or by its drawing style; `similarity` is cosine × 100. */
+export async function getVectorSimilarImages(compositeHash: string, basis: VectorSimilarityBasis, limit: number, init?: RequestInit) {
+  const response = await fetchJson<ApiResponse<{ similar: Array<{ image: ImageRecord; similarity: number }>; total: number }>>(
+    `/api/images/${compositeHash}/similar-${basis}?limit=${Math.max(1, Math.round(limit))}`,
+    init,
+  )
+  if (!response.success || !response.data) {
+    throw createApiFallbackError(response.error, 'images.vectorSimilar.load')
   }
   return response.data
 }

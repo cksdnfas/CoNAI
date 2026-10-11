@@ -28,7 +28,7 @@ function fakeVector(text: string) {
 const base64 = (vector: Float32Array) => Buffer.from(vector.buffer).toString('base64')
 const hash = (n: number) => n.toString(16).padStart(48, '0')
 
-test('image semantic: index walk, text search, similar images, safety, prune, routes', { timeout: 60000 }, async (t) => {
+test('image semantic: index walk, text search, similar images, safety, prune, routes, library search by meaning', { timeout: 60000 }, async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-image-semantic-'))
   process.env.RUNTIME_BASE_PATH = root
   for (const part of ['DATABASE', 'UPLOADS', 'LOGS', 'TEMP', 'SAVE', 'CANVAS', 'ARTIFACTS', 'MODELS', 'CUSTOM_NODES', 'RECYCLE_BIN']) {
@@ -147,6 +147,43 @@ test('image semantic: index walk, text search, similar images, safety, prune, ro
   assert.equal((await get(`/api/images/${hash(99)}/similar-content`)).status, 404)
   assert.equal((await get(`/api/images/${hash(7)}/similar-content`)).status, 409, 'no vector for the unreadable image')
 
+  // Which sections the detail page shows.
+  assert.deepEqual((await get(`/api/images/${hash(3)}/vector-similarity`)).body.data, { content: true, style: true })
+  assert.deepEqual((await get(`/api/images/${hash(7)}/vector-similarity`)).body.data, { content: false, style: false })
+
+  // Library search ordered by a description, mixed with chip filters; hidden tiers stay out.
+  const complexRoutes = (await import('../src/routes/images/complex-search.routes')).default
+  const searchApp = express()
+  searchApp.use(express.json())
+  searchApp.use('/api/images/search/complex', complexRoutes)
+  const searchServer = http.createServer(searchApp)
+  await new Promise<void>((resolve) => searchServer.listen(0, '127.0.0.1', resolve))
+  t.after(() => new Promise<void>((resolve) => searchServer.close(() => resolve())))
+  const searchOrigin = `http://127.0.0.1:${(searchServer.address() as { port: number }).port}`
+  const complex = async (body: unknown) => {
+    const response = await fetch(`${searchOrigin}/api/images/search/complex`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    return { status: response.status, body: await response.json() }
+  }
+  db.prepare("UPDATE media_metadata SET model_name = 'excluded-model' WHERE composite_hash = ?").run(hash(8))
+  const byMeaning = await complex({ meaning: { text: 'cat' }, pagination: 'cursor', limit: 1 })
+  assert.equal(byMeaning.status, 200)
+  assert.equal(byMeaning.body.data.total, 2, 'the two visible cats; city/soup score under the floor, the hidden cat is filtered')
+  assert.equal(byMeaning.body.data.images.length, 1)
+  assert.ok(byMeaning.body.data.images[0].meaning_score > 64)
+  assert.equal(byMeaning.body.data.hasMore, true)
+  const nextPage = await complex({ meaning: { text: 'cat' }, pagination: 'cursor', limit: 1, cursorValue: byMeaning.body.data.nextCursorValue, cursorHash: byMeaning.body.data.nextCursorHash })
+  assert.equal(nextPage.body.data.images.length, 1)
+  assert.notEqual(nextPage.body.data.images[0].composite_hash, byMeaning.body.data.images[0].composite_hash)
+  assert.equal(nextPage.body.data.hasMore, false)
+  const filtered = await complex({
+    meaning: { text: 'cat' },
+    complex_filter: { exclude_group: [{ category: 'basic', type: 'model_name', value: 'excluded-model' }] },
+  })
+  assert.deepEqual(filtered.body.data.images.map((image: any) => image.composite_hash), [hash(1)])
+  const plain = await complex({ complex_filter: { exclude_group: [{ category: 'basic', type: 'model_name', value: 'excluded-model' }] } })
+  assert.equal(plain.status, 200)
+  assert.equal(plain.body.data.images[0].meaning_score, undefined)
+
   // Media that is gone loses its vector.
   db.prepare('DELETE FROM image_files WHERE composite_hash = ?').run(hash(4))
   db.prepare('DELETE FROM media_metadata WHERE composite_hash = ?').run(hash(4))
@@ -156,6 +193,8 @@ test('image semantic: index walk, text search, similar images, safety, prune, ro
   // Off again: search answers 409 and the walk stops.
   settingsService.updateEmbeddingSettings({ imageSearch: false })
   assert.equal((await get('/api/images/semantic-search?q=cat')).status, 409)
+  assert.equal((await complex({ meaning: { text: 'cat' } })).status, 409)
+  assert.deepEqual((await get(`/api/images/${hash(1)}/vector-similarity`)).body.data, { content: false, style: true }, 'style vectors do not depend on image search')
   assert.equal(await searchImagesByText('cat', 3), null)
   assert.equal(embedding.embeddingVariant(), 'text')
 })

@@ -81,6 +81,11 @@ export interface ComplexSearchRequest {
   // Advanced search mode (complex filter)
   complex_filter?: ComplexFilter;
 
+  // Order by how well each image matches a description (image embeddings; only matching images come back)
+  meaning?: {
+    text: string;
+  };
+
   // Common search parameters
   ai_tool?: string;
   model_name?: string;

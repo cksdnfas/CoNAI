@@ -28,6 +28,11 @@ const SEARCH_SCOPE_STYLE_BY_SCOPE: Record<SearchScope, CSSProperties> = {
     color: 'color-mix(in srgb, #f59e0b 90%, white 2%)',
     boxShadow: 'inset 0 0 0 1px color-mix(in srgb, #f59e0b 28%, transparent)',
   },
+  meaning: {
+    backgroundColor: 'color-mix(in srgb, #14b8a6 14%, transparent)',
+    color: 'color-mix(in srgb, #14b8a6 88%, white 4%)',
+    boxShadow: 'inset 0 0 0 1px color-mix(in srgb, #14b8a6 28%, transparent)',
+  },
 }
 
 function getSearchChipScoreRange(chip: Pick<SearchChip, 'minScore' | 'maxScore'>) {
@@ -86,10 +91,30 @@ export function createTextSearchChip(scope: Exclude<SearchScope, 'rating' | 'too
   return {
     id: createSearchChipId(scope),
     scope,
-    operator: options?.operator ?? 'AND',
+    operator: scope === 'meaning' ? 'AND' : options?.operator ?? 'AND',
     label: buildSearchChipLabel(scope, trimmedValue),
     value: trimmedValue,
   } satisfies SearchChip
+}
+
+/** A description chip always narrows (포함); its operator does not cycle. */
+export function isFixedOperatorChip(chip: Pick<SearchChip, 'scope'>) {
+  return chip.scope === 'meaning'
+}
+
+/** Add a chip unless the same condition is already there; a new description replaces the previous one. */
+export function appendUniqueSearchChip(chips: SearchChip[], chip: SearchChip) {
+  const nextKey = buildSearchChipKey(chip)
+  if (chips.some((item) => buildSearchChipKey(item) === nextKey)) {
+    return chips
+  }
+
+  return [...(chip.scope === 'meaning' ? chips.filter((item) => item.scope !== 'meaning') : chips), chip]
+}
+
+/** The description a search is ordered by, if it has one. */
+export function getMeaningSearchText(chips: SearchChip[]) {
+  return chips.find((chip) => chip.scope === 'meaning')?.value.trim() || null
 }
 
 /** Create a fixed AI-tool group chip (NAI / ComfyUI / Other). */
@@ -179,6 +204,10 @@ export function buildComplexFilterPayload(chips: SearchChip[]) {
   }
 
   for (const chip of chips) {
+    if (chip.scope === 'meaning') {
+      continue
+    }
+
     const targetGroup = chip.operator === 'NOT' ? filter.exclude_group : chip.operator === 'AND' ? filter.and_group : filter.or_group
 
     if (chip.conditionCategory && chip.conditionType) {
@@ -229,4 +258,13 @@ export function buildComplexFilterPayload(chips: SearchChip[]) {
   }
 
   return filter
+}
+
+/** The complex-search body for a set of chips: the filter, plus the description it is ordered by. */
+export function buildComplexSearchPayload(chips: SearchChip[]) {
+  const meaning = getMeaningSearchText(chips)
+  return {
+    complex_filter: buildComplexFilterPayload(chips),
+    ...(meaning ? { meaning: { text: meaning } } : {}),
+  }
 }

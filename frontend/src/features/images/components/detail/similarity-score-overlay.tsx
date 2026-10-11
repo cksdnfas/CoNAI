@@ -16,6 +16,8 @@ interface SimilarityScoreOverlayCardProps {
   badgeValue: number
   popupBadgeLabel?: string
   rows: SimilarityOverlayRow[]
+  /** Embedding scores sit on another scale than the hash bands: one neutral colour, no band text. */
+  neutral?: boolean
 }
 
 type Translate = ReturnType<typeof useI18n>['t']
@@ -56,7 +58,7 @@ function getSimilarityBadgeClassName(similarity: number) {
 }
 
 /** Render the shared similarity score badge + popup shell used across image/text similarity cards. */
-function SimilarityScoreOverlayCard({ badgeValue, popupBadgeLabel, rows }: SimilarityScoreOverlayCardProps) {
+function SimilarityScoreOverlayCard({ badgeValue, popupBadgeLabel, rows, neutral = false }: SimilarityScoreOverlayCardProps) {
   const { t } = useI18n()
   const anchorRef = useRef<HTMLDivElement | null>(null)
   const [isAnchorHovered, setIsAnchorHovered] = useState(false)
@@ -83,7 +85,7 @@ function SimilarityScoreOverlayCard({ badgeValue, popupBadgeLabel, rows }: Simil
           variant="secondary"
           className={cn(
             'max-w-full shadow-elevation-1 tracking-normal normal-case',
-            getSimilarityBadgeClassName(badgeValue),
+            neutral ? 'bg-surface-bright text-foreground' : getSimilarityBadgeClassName(badgeValue),
           )}
           onMouseEnter={handleAnchorEnter}
           onMouseMove={() => {
@@ -120,7 +122,7 @@ function SimilarityScoreOverlayCard({ badgeValue, popupBadgeLabel, rows }: Simil
             </span>
             {popupBadgeLabel ? <Badge variant="outline" className="px-2 py-0.5 tracking-normal normal-case">{popupBadgeLabel}</Badge> : null}
           </div>
-          <p className="mt-0.5 text-muted-foreground">{getSimilarityBandLabel(badgeValue, t)}</p>
+          {neutral ? null : <p className="mt-0.5 text-muted-foreground">{getSimilarityBandLabel(badgeValue, t)}</p>}
 
           {rows.length > 0 ? (
             <details className="mt-2" onClick={(event) => event.stopPropagation()}>
@@ -212,6 +214,20 @@ export function SimilarImageScoreOverlay({ item }: { item: SimilarImage }) {
       rows={rows}
     />
   )
+}
+
+export type VectorScoreBasis = 'meaning' | 'content' | 'style'
+
+const VECTOR_SCORE_LABELS: Record<VectorScoreBasis, { ko: string; en: string }> = {
+  meaning: { ko: '설명 일치', en: 'Description match' },
+  content: { ko: '내용 비교', en: 'Content match' },
+  style: { ko: '화풍 비교', en: 'Style match' },
+}
+
+/** Render the score overlay for embedding matches: a description, what an image shows, or its drawing style. */
+export function VectorScoreOverlay({ score, basis }: { score: number; basis: VectorScoreBasis }) {
+  const { t } = useI18n()
+  return <SimilarityScoreOverlayCard badgeValue={score} popupBadgeLabel={t(VECTOR_SCORE_LABELS[basis])} rows={[]} neutral />
 }
 
 /** Build per-field rows for prompt-similarity results. */
