@@ -18,6 +18,7 @@ import { useCanSeeServerDetails } from '../use-can-see-server-details'
 import { PromptPageToolbar, type PromptPageToolbarBaseProps } from './prompt-page-toolbar'
 import { SidebarTree } from './sidebar-tree'
 import { ToolbarSearchField } from './toolbar-search-field'
+import { PromptDanbooruInstallation } from './prompt-danbooru-installation'
 import {
   CHARACTER_PAGE_SIZE,
   DEFAULT_PAGE_SIZE,
@@ -62,6 +63,7 @@ function DanbooruDatabaseMissingNotice({ database }: { database: DanbooruBrowser
       <AlertTitle>{t({ ko: 'Danbooru DB 파일 없음', en: 'Danbooru DB file missing' })}</AlertTitle>
       <AlertDescription>
         <div className="space-y-2">
+          <PromptDanbooruInstallation available={false} />
           <div className="grid gap-1 text-xs sm:grid-cols-[120px_minmax(0,1fr)]">
             <span className="font-medium text-muted-foreground">{t({ ko: '기본 경로', en: 'Default path' })}</span>
             <span className="min-w-0 break-all font-mono text-foreground">{database.expectedPath}</span>
@@ -79,6 +81,7 @@ function DanbooruDatabaseMissingNotice({ database }: { database: DanbooruBrowser
 
 export function PromptDanbooruBrowserPanel({ toolbarProps }: { toolbarProps: PromptPageToolbarBaseProps }) {
   const { language, t, formatNumber } = useI18n()
+  const canManageDatabase = useCanSeeServerDetails()
   const [selectedNodeId, setSelectedNodeId] = useState('tags')
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -311,6 +314,7 @@ export function PromptDanbooruBrowserPanel({ toolbarProps }: { toolbarProps: Pro
       )}
     >
       <div className="space-y-4">
+        {isDanbooruDbAvailable && canManageDatabase ? <PromptDanbooruInstallation available /> : null}
         <CharacterRelatedTagOptionsPopup
           open={activeSection === 'characters' && isRelatedTagOptionsOpen}
           anchorRef={relatedTagOptionsAnchorRef}

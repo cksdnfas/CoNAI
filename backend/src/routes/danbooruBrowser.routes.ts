@@ -1,15 +1,29 @@
 import { Router, type Request, type Response } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { hasAdminAccess, requirePermission } from '../middleware/authMiddleware';
+import { hasAdminAccess, requireAdmin } from '../middleware/authMiddleware';
 import { requireImagesView } from '../middleware/imageAccess';
 import { danbooruBrowserService } from '../services/danbooruBrowserService';
 import { toPublicDanbooruDbInfo } from '../services/danbooruBrowser/dbResolver';
+import { danbooruReleaseInstaller } from '../services/danbooruBrowser/releaseInstaller';
 
 const router = Router();
 
 function sendSuccess(res: Response, data: unknown): void {
   res.json({ success: true, data });
 }
+
+router.get('/installation', requireAdmin, asyncHandler(async (_req, res) => {
+  sendSuccess(res, await danbooruReleaseInstaller.status());
+}));
+
+router.post('/installation/check', requireAdmin, asyncHandler(async (_req, res) => {
+  sendSuccess(res, await danbooruReleaseInstaller.status(true));
+}));
+
+router.post('/installation', requireAdmin, asyncHandler(async (_req, res) => {
+  danbooruReleaseInstaller.start();
+  res.status(202).json({ success: true });
+}));
 
 router.get('/summary', asyncHandler(async (req: Request, res: Response) => {
   const summary = danbooruBrowserService.getSummary();

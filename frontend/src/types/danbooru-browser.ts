@@ -31,7 +31,21 @@ export interface DanbooruBrowserDatabaseInfo {
   expectedDirectory?: string
   downloadUrl: string
   filePatterns: string[]
-  matchedBy: 'configured' | 'default' | 'discovered' | 'missing'
+  matchedBy: 'configured' | 'managed' | 'default' | 'discovered' | 'missing'
+}
+
+export interface DanbooruInstallationStatus {
+  phase: 'idle' | 'checking' | 'downloading' | 'validating' | 'completed' | 'error'
+  downloadedBytes: number
+  totalBytes: number
+  error: string | null
+  canInstall: boolean
+  installedVersion: string | null
+  installedRevision: string | null
+  latestVersion: string | null
+  latestSize: number | null
+  updateAvailable: boolean
+  releaseError: string | null
 }
 
 export interface DanbooruBrowserSummary {

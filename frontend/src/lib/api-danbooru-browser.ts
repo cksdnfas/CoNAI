@@ -7,6 +7,7 @@ import type {
   DanbooruBrowserRelatedTagCategory,
   DanbooruBrowserSummary,
   DanbooruBrowserTagRecord,
+  DanbooruInstallationStatus,
 } from '@/types/danbooru-browser'
 
 function appendPagingParams(searchParams: URLSearchParams, params?: { query?: string; page?: number; limit?: number }) {
@@ -15,12 +16,24 @@ function appendPagingParams(searchParams: URLSearchParams, params?: { query?: st
   if (params?.limit !== undefined) searchParams.set('limit', String(params.limit))
 }
 
-async function requestDanbooruData<T>(path: string, fallbackMessage: string) {
-  const response = await fetchJson<ApiResponse<T>>(path)
+async function requestDanbooruData<T>(path: string, fallbackMessage: string, init?: RequestInit) {
+  const response = await fetchJson<ApiResponse<T>>(path, init)
   if (!response.success) {
     throw new Error(response.error || fallbackMessage)
   }
   return response.data
+}
+
+export function getDanbooruInstallationStatus() {
+  return requestDanbooruData<DanbooruInstallationStatus>('/api/danbooru-browser/installation', 'Failed to load installation status.')
+}
+
+export function checkDanbooruLatestRelease() {
+  return requestDanbooruData<DanbooruInstallationStatus>('/api/danbooru-browser/installation/check', 'Failed to check the latest release.', { method: 'POST' })
+}
+
+export function installLatestDanbooruRelease() {
+  return requestDanbooruData<void>('/api/danbooru-browser/installation', 'Failed to start database installation.', { method: 'POST' })
 }
 
 export async function getDanbooruBrowserSummary() {

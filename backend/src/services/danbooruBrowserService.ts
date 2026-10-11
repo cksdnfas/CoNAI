@@ -267,15 +267,18 @@ class DanbooruBrowserService {
   }
 
   private hasAvailableDb(): boolean {
-    return this.db !== null || resolveDanbooruDbInfo().available;
+    const database = resolveDanbooruDbInfo();
+    if (this.db && (!database.available || this.db.name !== database.path)) this.close();
+    return database.available;
   }
 
   private getDb(): Database.Database {
-    if (this.db) {
+    const database = resolveDanbooruDbInfo();
+    if (this.db && this.db.name === database.path && database.available) {
       return this.db;
     }
 
-    const database = resolveDanbooruDbInfo();
+    this.close();
     if (!database.available) {
       throw new Error(`Danbooru database not found. Place a DB file matching ${database.filePatterns.join(' or ')} in ${database.expectedDirectory}. Download guide: ${database.downloadUrl}`);
     }

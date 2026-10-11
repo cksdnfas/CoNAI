@@ -7,6 +7,29 @@ const DANBOORU_DB_DOWNLOAD_URL = 'https://github.com/cksdnfas/danbooru-db-viewer
 const DANBOORU_DB_FILE_PATTERNS = ['danbooru.sqlite', '*danbooru*.sqlite', '*danbooru*.sqlite3', '*danbooru*.db'];
 const DANBOORU_DB_EXTENSIONS = new Set(['.sqlite', '.sqlite3', '.db']);
 
+export const danbooruReleaseDirectory = path.join(runtimePaths.databaseDir, 'danbooru-releases');
+export const danbooruReleaseManifestPath = path.join(danbooruReleaseDirectory, 'current.json');
+
+export interface InstalledDanbooruRelease {
+  version: string;
+  sha256: string;
+  size: number;
+  fileName: string;
+}
+
+export function readInstalledDanbooruRelease(): InstalledDanbooruRelease | null {
+  try {
+    const release = JSON.parse(fs.readFileSync(danbooruReleaseManifestPath, 'utf8')) as InstalledDanbooruRelease;
+    if (typeof release.version !== 'string' || !/^[a-f0-9]{64}$/.test(release.sha256)
+      || !/^[a-f0-9-]+\.sqlite$/.test(release.fileName)
+      || !Number.isSafeInteger(release.size) || release.size <= 0) return null;
+    const stat = fs.statSync(path.join(danbooruReleaseDirectory, release.fileName));
+    return stat.isFile() && stat.size === release.size ? release : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface DanbooruBrowserDatabaseInfo {
   available: boolean;
   path: string;
@@ -14,7 +37,7 @@ export interface DanbooruBrowserDatabaseInfo {
   expectedDirectory: string;
   downloadUrl: string;
   filePatterns: string[];
-  matchedBy: 'configured' | 'default' | 'discovered' | 'missing';
+  matchedBy: 'configured' | 'managed' | 'default' | 'discovered' | 'missing';
 }
 
 /** Database info with the server file-system locations removed, for non-admin viewers. */
@@ -92,6 +115,19 @@ export function resolveDanbooruDbInfo(): DanbooruBrowserDatabaseInfo {
       downloadUrl: DANBOORU_DB_DOWNLOAD_URL,
       filePatterns: DANBOORU_DB_FILE_PATTERNS,
       matchedBy: exists ? 'configured' : 'missing',
+    };
+  }
+
+  const installed = readInstalledDanbooruRelease();
+  if (installed) {
+    return {
+      available: true,
+      path: path.join(danbooruReleaseDirectory, installed.fileName),
+      expectedPath,
+      expectedDirectory,
+      downloadUrl: DANBOORU_DB_DOWNLOAD_URL,
+      filePatterns: DANBOORU_DB_FILE_PATTERNS,
+      matchedBy: 'managed',
     };
   }
 

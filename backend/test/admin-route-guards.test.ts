@@ -66,6 +66,18 @@ test('maintenance routes are admin-only and search history is per account', { ti
   AuthPermissionGroup.addAccountMembership(group.id, otherId)
   invalidateConfiguredAuthCache()
 
+  await t.test('a prompt viewer cannot install or check shared Danbooru database releases', async () => {
+    const promptGroup = AuthPermissionGroup.createCustomGroup({ name: 'prompt-viewer', permissionKeys: ['prompts.view'] })
+    const promptViewer = addAccount('prompt-viewer', 'guest')
+    AuthPermissionGroup.addAccountMembership(promptGroup.id, promptViewer)
+    assert.equal((await call('/api/danbooru-browser/summary', promptViewer)).status, 200)
+    for (const [url, method] of [
+      ['/api/danbooru-browser/installation', 'GET'],
+      ['/api/danbooru-browser/installation', 'POST'],
+      ['/api/danbooru-browser/installation/check', 'POST'],
+    ]) assert.equal((await call(url, promptViewer, method)).status, 403)
+  })
+
   await t.test('a guest with image viewing cannot run server maintenance', async () => {
     const maintenance: Array<[string, string]> = [
       ['/api/system/cache-stats', 'GET'], ['/api/system/cache-stats/reset', 'POST'], ['/api/system/cache/invalidate', 'POST'],
