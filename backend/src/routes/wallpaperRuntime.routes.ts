@@ -20,6 +20,7 @@ import { routeParam } from './routeParam';
 import { parseOptionalGraphFolderId } from './graph-workflows/route-helpers';
 import { errorResponse, successResponse, validateId } from '@conai/shared';
 import { registerWallpaperRuntimeDataRoutes } from './wallpaperRuntimeData.routes';
+import { registerWallpaperRuntimeActionRoutes } from './wallpaperRuntimeActions.routes';
 
 const router = Router();
 
@@ -146,6 +147,7 @@ router.get('/settings', asyncHandler(async (_req: Request, res: Response) => {
   return res.json(successResponse({
     wallpaperLayoutPresets: settings.appearance.wallpaperLayoutPresets,
     wallpaperActivePresetId: settings.appearance.wallpaperActivePresetId,
+    wallpaperSchedule: settings.appearance.wallpaperSchedule ?? { enabled: false, entries: [] },
     tokenPresetId: access.presetId,
   }));
 }));
@@ -184,5 +186,6 @@ router.get('/groups/:id/preview-images', requireWallpaperRuntimePermission('imag
 }));
 
 registerWallpaperRuntimeDataRoutes(router);
+registerWallpaperRuntimeActionRoutes(router);
 
 export { router as wallpaperRuntimeRoutes };

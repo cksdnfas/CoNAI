@@ -6,6 +6,7 @@ import { sendRouteBadRequest } from '../routeValidation'
 import { asyncHandler } from '../../middleware/asyncHandler'
 import { runtimePaths, publicUrls } from '../../config/runtimePaths'
 import { settingsService } from '../../services/settingsService'
+import { normalizeWallpaperSchedule, WALLPAPER_SCHEDULE_TIME } from '../../services/settingsServiceStorage'
 import { WALLPAPER_BACKGROUND_KINDS, WALLPAPER_WIDGET_TYPES } from '@conai/shared'
 import type {
   AppearancePresetSlot,
@@ -327,8 +328,12 @@ function validateWallpaperLayoutPresets(layoutPresets: unknown): string | null {
       }
     }
 
-    if (record.themeMode !== undefined && record.themeMode !== 'dark' && record.themeMode !== 'light') {
-      return `wallpaperLayoutPresets[${index}].themeMode must be dark or light`
+    if (record.themeMode !== undefined && record.themeMode !== 'dark' && record.themeMode !== 'light' && record.themeMode !== 'auto') {
+      return `wallpaperLayoutPresets[${index}].themeMode must be dark, light or auto`
+    }
+
+    if (record.options !== undefined && (!record.options || typeof record.options !== 'object' || Array.isArray(record.options))) {
+      return `wallpaperLayoutPresets[${index}].options must be an object`
     }
 
     if (record.background !== undefined) {
@@ -346,6 +351,32 @@ function validateWallpaperLayoutPresets(layoutPresets: unknown): string | null {
     }
   }
 
+  return null
+}
+
+function validateWallpaperSchedule(schedule: unknown): string | null {
+  if (!schedule || typeof schedule !== 'object' || Array.isArray(schedule)) {
+    return 'wallpaperSchedule must be an object'
+  }
+  const record = schedule as Record<string, unknown>
+  if (typeof record.enabled !== 'boolean') {
+    return 'wallpaperSchedule.enabled must be a boolean'
+  }
+  if (!Array.isArray(record.entries) || record.entries.length > 48) {
+    return 'wallpaperSchedule.entries must be an array of up to 48 windows'
+  }
+  for (const [index, entry] of record.entries.entries()) {
+    const item = entry && typeof entry === 'object' ? entry as Record<string, unknown> : null
+    if (!item || typeof item.id !== 'string' || typeof item.presetId !== 'string' || !item.presetId.trim()) {
+      return `wallpaperSchedule.entries[${index}] needs an id and a presetId`
+    }
+    if (typeof item.start !== 'string' || !WALLPAPER_SCHEDULE_TIME.test(item.start) || typeof item.end !== 'string' || !WALLPAPER_SCHEDULE_TIME.test(item.end)) {
+      return `wallpaperSchedule.entries[${index}].start and end must be HH:MM`
+    }
+    if (!Array.isArray(item.days) || item.days.some((day) => !Number.isInteger(day) || Number(day) < 0 || Number(day) > 6)) {
+      return `wallpaperSchedule.entries[${index}].days must be weekday numbers 0-6`
+    }
+  }
   return null
 }
 
@@ -457,6 +488,15 @@ router.put('/appearance', asyncHandler(async (req: Request, res: Response) => {
   if (appearanceSettings.wallpaperActivePresetId !== undefined && appearanceSettings.wallpaperActivePresetId !== null && typeof appearanceSettings.wallpaperActivePresetId !== 'string') {
     sendRouteBadRequest(res, 'wallpaperActivePresetId must be a string or null')
     return
+  }
+
+  if (appearanceSettings.wallpaperSchedule !== undefined) {
+    const scheduleError = validateWallpaperSchedule(appearanceSettings.wallpaperSchedule)
+    if (scheduleError) {
+      sendRouteBadRequest(res, scheduleError)
+      return
+    }
+    appearanceSettings.wallpaperSchedule = normalizeWallpaperSchedule(appearanceSettings.wallpaperSchedule)
   }
 
   const currentSettings = settingsService.loadSettings()

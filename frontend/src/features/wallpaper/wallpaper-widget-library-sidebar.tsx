@@ -24,6 +24,10 @@ import {
   Type,
   UserRound,
   Workflow,
+  AudioWaveform,
+  Music,
+  Gauge,
+  Play,
 } from 'lucide-react'
 import { TextTabs } from '@/components/common/text-tabs'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -59,6 +63,10 @@ const WIDGET_ICONS: Record<WallpaperWidgetType, typeof Clock3> = {
   'audio-player': AudioLines,
   'post-ticker': Newspaper,
   'prompt-of-day': Sparkles,
+  'audio-visualizer': AudioWaveform,
+  'now-playing': Music,
+  'system-monitor': Gauge,
+  'quick-run': Play,
 }
 
 export function getWallpaperWidgetIcon(widgetType: WallpaperWidgetType) {

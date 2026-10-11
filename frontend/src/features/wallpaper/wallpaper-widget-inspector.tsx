@@ -150,6 +150,23 @@ function StyleFields({ widget, patchStyle }: { widget: WallpaperWidgetInstance; 
           <option value="zoom">{t({ ko: '줌', en: 'Zoom' })}</option>
         </Select>
       </InspectorRow>
+      <InspectorSlider label={t({ ko: '패럴랙스 깊이', en: 'Parallax depth' })} value={style.depth} min={0} max={100} unit="%" onChange={(value) => patchStyle({ depth: value }, 'depth')} />
+
+      <InspectorHeading>{t({ ko: '표시 시간', en: 'Shown' })}</InspectorHeading>
+      <div className="grid grid-cols-2 gap-2">
+        <Input
+          type="time"
+          aria-label={t({ ko: '표시 시작', en: 'Shown from' })}
+          value={style.showFrom ?? ''}
+          onChange={(event) => patchStyle({ showFrom: event.target.value || null }, 'showFrom')}
+        />
+        <Input
+          type="time"
+          aria-label={t({ ko: '표시 끝', en: 'Shown until' })}
+          value={style.showUntil ?? ''}
+          onChange={(event) => patchStyle({ showUntil: event.target.value || null }, 'showUntil')}
+        />
+      </div>
     </div>
   )
 }

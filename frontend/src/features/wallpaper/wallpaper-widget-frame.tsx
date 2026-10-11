@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { useMemo, type CSSProperties } from 'react'
 import { useI18n } from '@/i18n'
 import { WallpaperWidgetBody, type WallpaperWidgetPreviewImage } from './wallpaper-widget-bodies'
 import type { WallpaperWidgetInstance, WallpaperWidgetStyle } from './wallpaper-types'
@@ -11,7 +11,7 @@ const SHADOWS: Record<WallpaperWidgetStyle['shadow'], string> = {
   lg: '0 22px 60px rgb(0 0 0 / 0.42)',
 }
 
-const FONTS: Record<WallpaperWidgetStyle['fontFamily'], string | undefined> = {
+export const WALLPAPER_WIDGET_FONTS: Record<WallpaperWidgetStyle['fontFamily'], string | undefined> = {
   inherit: undefined,
   sans: 'var(--font-sans)',
   serif: "'Noto Serif KR', 'Nanum Myeongjo', ui-serif, Georgia, serif",
@@ -40,7 +40,7 @@ export function getWallpaperWidgetFrameStyle(style: WallpaperWidgetStyle): CSSPr
     borderRadius: style.radius,
     padding: style.padding,
     boxShadow: SHADOWS[style.shadow],
-    fontFamily: FONTS[style.fontFamily],
+    fontFamily: WALLPAPER_WIDGET_FONTS[style.fontFamily],
     fontWeight: WEIGHTS[style.fontWeight],
     letterSpacing: style.fontFamily === 'display' ? '-0.02em' : undefined,
     color: style.textColor ?? undefined,
@@ -79,6 +79,15 @@ export function WallpaperWidgetFrame({
 }) {
   const { t } = useI18n()
   const { style } = widget
+  const clickAction = 'imageClickAction' in widget.settings ? widget.settings.imageClickAction : undefined
+  const handleOpenImage = useMemo(() => {
+    if (!onOpenImage || clickAction !== 'open') return onOpenImage
+    return (preview: WallpaperWidgetPreviewImage) => {
+      const hash = preview.image.composite_hash
+      if (hash) window.open(`${window.location.origin}/#/images/${encodeURIComponent(hash)}`, '_blank', 'noopener')
+      else onOpenImage(preview)
+    }
+  }, [clickAction, onOpenImage])
   const entrance = animateEntrance && style.entrance !== 'none'
     ? { animation: `wallpaper-enter-${style.entrance} 700ms cubic-bezier(0.22, 1, 0.36, 1) both` }
     : undefined
@@ -94,7 +103,7 @@ export function WallpaperWidgetFrame({
         </div>
       ) : null}
       <div className="relative min-h-0 flex-1" style={{ containerType: 'size' }}>
-        <WallpaperWidgetBody widget={widget} mode={mode} onOpenImage={onOpenImage} />
+        <WallpaperWidgetBody widget={widget} mode={mode} onOpenImage={handleOpenImage} />
       </div>
     </div>
   )

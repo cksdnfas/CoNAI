@@ -16,6 +16,7 @@ export interface AppearanceFontUploadResult {
 export interface WallpaperRuntimeSettings {
   wallpaperLayoutPresets: AppearanceSettings['wallpaperLayoutPresets']
   wallpaperActivePresetId: string | null
+  wallpaperSchedule?: AppearanceSettings['wallpaperSchedule']
 }
 
 export async function getPublicAppearanceSettings() {

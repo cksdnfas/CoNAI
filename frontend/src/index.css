@@ -1175,3 +1175,61 @@ html:lang(ko) {
     pointer-events: none;
   }
 }
+
+/*
+ * Wallpaper motion runs as CSS animations (no per-frame React renders). `.wallpaper-paused` (hidden page or a
+ * host such as Lively pausing the wallpaper) freezes every animation under it; reduced motion turns them off.
+ */
+@keyframes wallpaper-drift {
+  from {
+    transform: translate3d(calc(var(--wp-bx, 0px) - var(--wp-ax, 3px)), calc(var(--wp-by, 0px) - var(--wp-ay, 3px)), 0) scale(var(--wp-scale, 1));
+  }
+  to {
+    transform: translate3d(calc(var(--wp-bx, 0px) + var(--wp-ax, 3px)), calc(var(--wp-by, 0px) + var(--wp-ay, 3px)), 0) scale(var(--wp-scale, 1));
+  }
+}
+
+@keyframes wallpaper-pulse-bar {
+  0%,
+  100% {
+    transform: scaleY(var(--wp-low, 0.8));
+  }
+  50% {
+    transform: scaleY(var(--wp-high, 1));
+  }
+}
+
+@keyframes wallpaper-ken-burns {
+  from {
+    transform: translate3d(-8px, -6px, 0) scale(1.08);
+  }
+  to {
+    transform: translate3d(8px, 6px, 0) scale(1.14);
+  }
+}
+
+.wallpaper-drift {
+  animation: wallpaper-drift var(--wp-duration, 6s) ease-in-out var(--wp-delay, 0s) infinite alternate;
+}
+
+.wallpaper-pulse-bar {
+  transform-origin: bottom;
+  animation: wallpaper-pulse-bar var(--wp-duration, 2.4s) ease-in-out var(--wp-delay, 0s) infinite;
+}
+
+.wallpaper-ken-burns {
+  animation: wallpaper-ken-burns var(--wp-duration, 24s) ease-in-out infinite alternate;
+}
+
+.wallpaper-paused,
+.wallpaper-paused * {
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wallpaper-drift,
+  .wallpaper-pulse-bar,
+  .wallpaper-ken-burns {
+    animation: none;
+  }
+}

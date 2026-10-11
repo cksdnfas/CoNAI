@@ -1,11 +1,14 @@
 import { useMemo } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { Field } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import { listAudioGroups, listAudioProjects } from '@/lib/api-audio'
+import { getGraphWorkflowSchedules } from '@/lib/api-module-graph'
 import {
+  InspectorColor,
   InspectorHeading,
   InspectorRow,
   InspectorSegments,
@@ -75,6 +78,27 @@ function CharacterSelect({ value, allowLatest, onChange }: { value: number | nul
   )
 }
 
+/** Workflow schedules the quick-run button can press; the name is stored too because the live page cannot list them. */
+function ScheduleSelect({ value, savedName, onChange }: { value: number | null; savedName: string; onChange: (value: number | null, name: string) => void }) {
+  const { t } = useI18n()
+  const schedulesQuery = useQuery({ queryKey: ['wallpaper-inspector', 'graph-workflow-schedules'], queryFn: () => getGraphWorkflowSchedules() })
+  const schedules = schedulesQuery.data ?? []
+  const missing = value !== null && !schedulesQuery.isLoading && !schedules.some((schedule) => schedule.id === value)
+  return (
+    <Select
+      value={value === null ? '' : String(value)}
+      onChange={(event) => {
+        const id = event.target.value ? Number(event.target.value) : null
+        onChange(id, schedules.find((schedule) => schedule.id === id)?.name ?? '')
+      }}
+    >
+      <option value="">{t({ ko: '고르기', en: 'Pick one' })}</option>
+      {missing ? <option value={value}>{savedName || `#${value}`} · {t({ ko: '없음', en: 'missing' })}</option> : null}
+      {schedules.map((schedule) => <option key={schedule.id} value={schedule.id}>{schedule.name}</option>)}
+    </Select>
+  )
+}
+
 /** Every audio group of every project, grouped by project. */
 function AudioGroupSelect({ value, onChange }: { value: string | null; onChange: (value: string | null) => void }) {
   const { t } = useI18n()
@@ -137,8 +161,12 @@ function ImagePreviewFields({ widget, updateWidgetSettings }: { widget: Wallpape
   return (
     <WallpaperInspectorDisclosure title={t({ ko: '클릭 미리보기', en: 'Click preview' })}>
       <Field label={t({ ko: '이미지 클릭', en: 'Image click' })}>
-        <Select value={widget.settings.imageClickAction ?? 'preview'} onChange={(event) => updateWidgetSettings({ imageClickAction: event.target.value === 'none' ? 'none' : 'preview' })}>
+        <Select value={widget.settings.imageClickAction ?? 'preview'} onChange={(event) => {
+          const next = event.target.value
+          updateWidgetSettings({ imageClickAction: next === 'none' || next === 'open' ? next : 'preview' })
+        }}>
           <option value="preview">{t({ ko: '확대 미리보기', en: 'Open preview' })}</option>
+          <option value="open">{t({ ko: 'CoNAI에서 열기', en: 'Open in CoNAI' })}</option>
           <option value="none">{t({ ko: '동작 없음', en: 'No action' })}</option>
         </Select>
       </Field>
@@ -291,6 +319,55 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
               </Select>
             </InspectorRow>
             <InspectorSegments label={t({ ko: '글꼴', en: 'Typeface' })} value={widget.settings.typeface} items={[{ value: 'serif', label: t({ ko: '세리프', en: 'Serif' }) }, { value: 'sans', label: t({ ko: '고딕', en: 'Sans' }) }]} onChange={(value) => updateWidgetSettings({ typeface: value })} />
+          </>
+        )
+      case 'audio-visualizer':
+        return (
+          <>
+            <InspectorSegments
+              label={t({ ko: '모양', en: 'Shape' })}
+              value={widget.settings.shape}
+              items={[
+                { value: 'bars', label: t({ ko: '막대', en: 'Bars' }) },
+                { value: 'mirror', label: t({ ko: '대칭', en: 'Mirror' }) },
+                { value: 'wave', label: t({ ko: '파형', en: 'Wave' }) },
+                { value: 'circle', label: t({ ko: '원형', en: 'Circle' }) },
+              ]}
+              onChange={(value) => updateWidgetSettings({ shape: value })}
+            />
+            <InspectorSlider label={t({ ko: '막대 수', en: 'Bars' })} value={widget.settings.barCount} min={8} max={64} onChange={(value) => updateWidgetSettings({ barCount: value })} />
+            <InspectorSlider label={t({ ko: '감도', en: 'Sensitivity' })} value={widget.settings.sensitivity} min={50} max={300} step={10} unit="%" onChange={(value) => updateWidgetSettings({ sensitivity: value })} />
+            <InspectorSlider label={t({ ko: '부드럽게', en: 'Smoothing' })} value={widget.settings.smoothing} min={0} max={90} unit="%" onChange={(value) => updateWidgetSettings({ smoothing: value })} />
+            <InspectorColor label={t({ ko: '색', en: 'Color' })} value={widget.settings.color} fallback="#7c5cff" nullable onChange={(value) => updateWidgetSettings({ color: value })} />
+          </>
+        )
+      case 'now-playing':
+        return (
+          <>
+            <InspectorSegments label={t({ ko: '배치', en: 'Layout' })} value={widget.settings.layout} items={[{ value: 'row', label: t({ ko: '가로', en: 'Row' }) }, { value: 'stack', label: t({ ko: '세로', en: 'Stack' }) }]} onChange={(value) => updateWidgetSettings({ layout: value })} />
+            <InspectorSwitch label={t({ ko: '앨범 아트', en: 'Album art' })} checked={widget.settings.showArt} onChange={(checked) => updateWidgetSettings({ showArt: checked })} />
+            <InspectorSwitch label={t({ ko: '재생 안 할 때 숨기기', en: 'Hide when idle' })} checked={widget.settings.hideWhenIdle} onChange={(checked) => updateWidgetSettings({ hideWhenIdle: checked })} />
+          </>
+        )
+      case 'system-monitor':
+        return (
+          <>
+            <InspectorSegments label={t({ ko: '대상', en: 'Source' })} value={widget.settings.source} items={[{ value: 'comfyui', label: 'ComfyUI' }, { value: 'host', label: t({ ko: '이 PC', en: 'This PC' }) }]} onChange={(value) => updateWidgetSettings({ source: value })} />
+            <InspectorSegments label={t({ ko: '표시', en: 'Display' })} value={widget.settings.display} items={[{ value: 'bars', label: t({ ko: '막대', en: 'Bars' }) }, { value: 'rings', label: t({ ko: '링', en: 'Rings' }) }]} onChange={(value) => updateWidgetSettings({ display: value })} />
+            {widget.settings.source === 'host' ? (
+              <InspectorSwitch label={t({ ko: '네트워크', en: 'Network' })} checked={widget.settings.showNetwork} onChange={(checked) => updateWidgetSettings({ showNetwork: checked })} />
+            ) : null}
+          </>
+        )
+      case 'quick-run':
+        return (
+          <>
+            <InspectorRow label={t({ ko: '예약', en: 'Schedule' })}>
+              <ScheduleSelect value={widget.settings.scheduleId} savedName={widget.settings.scheduleName} onChange={(scheduleId, scheduleName) => updateWidgetSettings({ scheduleId, scheduleName })} />
+            </InspectorRow>
+            <InspectorRow label={t({ ko: '버튼 글자', en: 'Label' })}>
+              <Input value={widget.settings.label} maxLength={40} placeholder={widget.settings.scheduleName || t({ ko: '실행', en: 'Run' })} onChange={(event) => updateWidgetSettings({ label: event.target.value })} />
+            </InspectorRow>
           </>
         )
       case 'queue-status':

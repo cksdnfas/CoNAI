@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ClipboardCopy, ExternalLink, KeyRound, Monitor, Plus, Trash2 } from 'lucide-react'
+import { ClipboardCopy, Download, ExternalLink, KeyRound, Monitor, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
@@ -12,6 +12,8 @@ import { useI18n } from '@/i18n'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { createWallpaperRuntimeToken, listWallpaperRuntimeTokens, revokeWallpaperRuntimeToken } from '@/lib/api-wallpaper-runtime'
 import { buildWallpaperRuntimePath } from './wallpaper-layout-utils'
+import { triggerBlobDownload } from '@/lib/api-client'
+import { buildLivelyWallpaperPackage, buildWallpaperEnginePackage } from './wallpaper-host-package'
 import type { WallpaperLayoutPreset } from './wallpaper-types'
 
 const LIVELY_WALLPAPER_URL = 'https://github.com/rocksdanister/lively'
@@ -28,7 +30,7 @@ function absoluteUrl(path: string) {
   return typeof window === 'undefined' ? path : new URL(path, window.location.origin).toString()
 }
 
-/** Issue read-only keys so logged-out kiosk browsers (Lively) can show a wallpaper; list and revoke them. */
+/** Issue view keys (plus quick-run presses) so logged-out kiosk browsers (Lively) can show a wallpaper; list and revoke them. */
 export function WallpaperLivelyConnectModal({ open, onClose, presets, activePresetId }: WallpaperLivelyConnectModalProps) {
   const { t, formatDateTime } = useI18n()
   const confirm = useConfirm()
@@ -36,7 +38,7 @@ export function WallpaperLivelyConnectModal({ open, onClose, presets, activePres
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [presetId, setPresetId] = useState<string>(activePresetId ?? '')
-  const [issued, setIssued] = useState<{ name: string; url: string } | null>(null)
+  const [issued, setIssued] = useState<{ name: string; url: string; presetId: string | null } | null>(null)
 
   const tokensQuery = useQuery({ queryKey: TOKENS_QUERY_KEY, queryFn: listWallpaperRuntimeTokens, enabled: open })
   const presetById = new Map(presets.map((preset) => [preset.id, preset]))
@@ -46,7 +48,7 @@ export function WallpaperLivelyConnectModal({ open, onClose, presets, activePres
     onSuccess: (token) => {
       const preset = (token.presetId ? presetById.get(token.presetId) : null) ?? (activePresetId ? presetById.get(activePresetId) : null)
       const path = preset ? buildWallpaperRuntimePath(preset, token.token) : `/#/wallpaper/runtime?k=${encodeURIComponent(token.token)}`
-      setIssued({ name: token.name, url: absoluteUrl(path) })
+      setIssued({ name: token.name, url: absoluteUrl(path), presetId: preset?.id ?? null })
       setName('')
       void queryClient.invalidateQueries({ queryKey: TOKENS_QUERY_KEY })
     },
@@ -70,6 +72,13 @@ export function WallpaperLivelyConnectModal({ open, onClose, presets, activePres
 
   const tokens = tokensQuery.data ?? []
 
+  const downloadPackage = (host: 'lively' | 'wallpaper-engine') => {
+    if (!issued) return
+    const input = { name: issued.name, url: issued.url, presets, basePreset: issued.presetId ? presetById.get(issued.presetId) ?? null : null, t }
+    const { fileName, blob } = host === 'lively' ? buildLivelyWallpaperPackage(input) : buildWallpaperEnginePackage(input)
+    triggerBlobDownload(blob, fileName)
+  }
+
   return (
     <Modal open={open} onClose={onClose} widthClassName="max-w-xl" title={t({ ko: 'Lively 연결', en: 'Connect Lively' })}>
       <div className="space-y-5">
@@ -82,7 +91,17 @@ export function WallpaperLivelyConnectModal({ open, onClose, presets, activePres
                 <ClipboardCopy />
               </IconButton>
             </div>
-            <div className="text-xs text-muted-foreground">{t({ ko: '키는 지금만 보여. 읽기 전용이고 언제든 폐기할 수 있어.', en: 'The key is shown only now. It is read-only and can be revoked any time.' })}</div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" size="sm" className="gap-1.5" title={t({ ko: '설정·오디오·재생 중 곡을 쓰는 Lively 패키지 (zip을 Lively 창에 끌어다 놓기)', en: 'Lively package with settings, audio and now playing (drop the zip on Lively)' })} onClick={() => downloadPackage('lively')}>
+                <Download className="size-4" />
+                Lively
+              </Button>
+              <Button type="button" variant="secondary" size="sm" className="gap-1.5" title={t({ ko: 'Wallpaper Engine 웹 프로젝트 (압축을 풀어 myprojects에 넣기)', en: 'Wallpaper Engine web project (unzip into myprojects)' })} onClick={() => downloadPackage('wallpaper-engine')}>
+                <Download className="size-4" />
+                Wallpaper Engine
+              </Button>
+            </div>
+            <div className="text-xs text-muted-foreground">{t({ ko: '키는 지금만 보여. 보기 전용이고(빠른 실행 버튼만 예외) 언제든 폐기할 수 있어.', en: 'The key is shown only now. It only views (except quick-run buttons) and can be revoked any time.' })}</div>
           </div>
         ) : null}
 

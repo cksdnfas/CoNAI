@@ -16,25 +16,31 @@ import {
   InspectorSlider,
   InspectorSwitch,
 } from './wallpaper-inspector-controls'
-import { normalizeWallpaperBackground } from './wallpaper-layout-utils'
+import { normalizeWallpaperBackground, resolveWallpaperPresetOptions } from './wallpaper-layout-utils'
 import type { WallpaperInspectorGroupOption } from './wallpaper-widget-inspector-editors'
-import type { WallpaperBackground, WallpaperBackgroundFit, WallpaperBackgroundKind, WallpaperLayoutPreset } from './wallpaper-types'
+import type { WallpaperBackground, WallpaperBackgroundFit, WallpaperBackgroundKind, WallpaperLayoutPreset, WallpaperParticleKind, WallpaperPresetOptions, WallpaperThemeMode, WallpaperWidgetFont } from './wallpaper-types'
 
 interface WallpaperBackgroundInspectorProps {
   layout: WallpaperLayoutPreset
   groups: WallpaperInspectorGroupOption[]
   onChangeBackground: (background: WallpaperBackground, key: string) => void
   onChangeCanvas: (canvasPresetId: string, custom?: { width: number; height: number }) => void
-  onChangeThemeMode: (themeMode: 'dark' | 'light' | undefined) => void
+  onChangeThemeMode: (themeMode: WallpaperThemeMode | undefined) => void
+  onChangeOptions: (options: WallpaperPresetOptions, key: string) => void
 }
 
 /** Shown while nothing is selected: the canvas, its theme and its background. */
-export function WallpaperBackgroundInspector({ layout, groups, onChangeBackground, onChangeCanvas, onChangeThemeMode }: WallpaperBackgroundInspectorProps) {
+export function WallpaperBackgroundInspector({ layout, groups, onChangeBackground, onChangeCanvas, onChangeThemeMode, onChangeOptions }: WallpaperBackgroundInspectorProps) {
   const { t } = useI18n()
   const [isPickerOpen, setIsPickerOpen] = useState(false)
   const background = layout.background
   const overlay = { dim: background.dim ?? 0, blur: background.blur ?? 0, vignette: background.vignette ?? 0 }
   const isCustom = layout.canvasPresetId === WALLPAPER_CUSTOM_CANVAS_ID
+  const options = resolveWallpaperPresetOptions(layout.options)
+  const setOption = <K extends keyof WallpaperPresetOptions>(field: K, value: WallpaperPresetOptions[K]) => {
+    onChangeOptions({ ...options, [field]: value }, `options.${field}`)
+  }
+  const hasStillImage = background.kind === 'image' || background.kind === 'group-slideshow'
 
   const patch = (next: Partial<WallpaperBackground>, field: string) => {
     onChangeBackground(normalizeWallpaperBackground({ ...background, ...next }), `background.${field}`)
@@ -79,12 +85,14 @@ export function WallpaperBackgroundInspector({ layout, groups, onChangeBackgroun
           </div>
         ) : null}
         <InspectorSegments
+          stacked
           label={t({ ko: '색 테마', en: 'Theme' })}
           value={layout.themeMode ?? 'app'}
           items={[
             { value: 'app', label: t({ ko: '앱 설정', en: 'App' }) },
             { value: 'dark', label: t({ ko: '다크', en: 'Dark' }) },
             { value: 'light', label: t({ ko: '라이트', en: 'Light' }) },
+            { value: 'auto', label: t({ ko: '낮밤', en: 'Day/night' }), ariaLabel: t({ ko: '낮엔 라이트, 밤엔 다크', en: 'Light by day, dark at night' }) },
           ]}
           onChange={(value) => onChangeThemeMode(value === 'app' ? undefined : value)}
         />
@@ -160,6 +168,9 @@ export function WallpaperBackgroundInspector({ layout, groups, onChangeBackgroun
             {fitSegments(background.fit)}
           </>
         ) : null}
+        {hasStillImage ? (
+          <InspectorSwitch label={t({ ko: '천천히 확대·이동', en: 'Slow pan and zoom' })} checked={background.kenBurns === true} onChange={(checked) => patch({ kenBurns: checked }, 'kenBurns')} />
+        ) : null}
 
         {background.kind !== 'theme' ? (
           <>
@@ -171,6 +182,64 @@ export function WallpaperBackgroundInspector({ layout, groups, onChangeBackgroun
             <InspectorSlider label={t({ ko: '비네팅', en: 'Vignette' })} value={overlay.vignette} min={0} max={100} unit="%" onChange={(value) => patch({ vignette: value }, 'vignette')} />
           </>
         ) : null}
+      </div>
+
+      <div className="text-base font-semibold">{t({ ko: '스타일', en: 'Style' })}</div>
+      <div className="space-y-3">
+        <InspectorColor label={t({ ko: '강조색', en: 'Accent' })} value={options.accentColor} fallback="#7c5cff" nullable onChange={(value) => setOption('accentColor', value)} />
+        {background.kind === 'image' || background.kind === 'video' || background.kind === 'group-slideshow' ? (
+          <InspectorSwitch label={t({ ko: '배경에서 강조색 뽑기', en: 'Accent from background' })} checked={options.autoAccent} onChange={(checked) => setOption('autoAccent', checked)} />
+        ) : null}
+        <InspectorColor label={t({ ko: '글자색', en: 'Text' })} value={options.textColor} fallback="#f2f2f2" nullable onChange={(value) => setOption('textColor', value)} />
+        <InspectorRow label={t({ ko: '글꼴', en: 'Font' })}>
+          <Select value={options.fontFamily} onChange={(event) => setOption('fontFamily', event.target.value as WallpaperWidgetFont)}>
+            <option value="inherit">{t({ ko: '앱 설정', en: 'App' })}</option>
+            <option value="sans">{t({ ko: '고딕', en: 'Sans' })}</option>
+            <option value="serif">{t({ ko: '명조', en: 'Serif' })}</option>
+            <option value="mono">{t({ ko: '고정폭', en: 'Mono' })}</option>
+            <option value="display">{t({ ko: '디스플레이', en: 'Display' })}</option>
+          </Select>
+        </InspectorRow>
+      </div>
+
+      <div className="text-base font-semibold">{t({ ko: '효과', en: 'Effects' })}</div>
+      <div className="space-y-3">
+        <InspectorRow label={t({ ko: '파티클', en: 'Particles' })}>
+          <Select value={options.particles} onChange={(event) => setOption('particles', event.target.value as WallpaperParticleKind)}>
+            <option value="none">{t({ ko: '없음', en: 'None' })}</option>
+            <option value="snow">{t({ ko: '눈', en: 'Snow' })}</option>
+            <option value="sakura">{t({ ko: '벚꽃', en: 'Sakura' })}</option>
+            <option value="rain">{t({ ko: '비', en: 'Rain' })}</option>
+            <option value="dust">{t({ ko: '먼지', en: 'Dust' })}</option>
+            <option value="fireflies">{t({ ko: '반딧불', en: 'Fireflies' })}</option>
+          </Select>
+        </InspectorRow>
+        {options.particles !== 'none' ? (
+          <InspectorSlider label={t({ ko: '양', en: 'Amount' })} value={options.particleAmount} min={0} max={100} unit="%" onChange={(value) => setOption('particleAmount', value)} />
+        ) : null}
+        <InspectorSlider label={t({ ko: '패럴랙스', en: 'Parallax' })} value={options.parallax} min={0} max={100} unit="%" onChange={(value) => setOption('parallax', value)} />
+      </div>
+
+      <div className="text-base font-semibold">{t({ ko: '동작', en: 'Behavior' })}</div>
+      <div className="space-y-3">
+        <InspectorSegments
+          label={t({ ko: '위젯 표시', en: 'Widgets' })}
+          value={options.widgetReveal}
+          items={[
+            { value: 'always', label: t({ ko: '항상', en: 'Always' }) },
+            { value: 'pointer', label: t({ ko: '마우스 가까이', en: 'Near pointer' }) },
+          ]}
+          onChange={(value) => setOption('widgetReveal', value)}
+        />
+        {options.widgetReveal === 'pointer' ? (
+          <InspectorSlider label={t({ ko: '평소 투명도', en: 'Idle opacity' })} value={options.idleOpacity} min={0} max={100} unit="%" onChange={(value) => setOption('idleOpacity', value)} />
+        ) : null}
+        <InspectorRow label={t({ ko: 'FPS 상한', en: 'FPS cap' })}>
+          <Select value={String(options.fpsLimit)} onChange={(event) => setOption('fpsLimit', Number(event.target.value))}>
+            <option value="0">{t({ ko: '제한 없음', en: 'None' })}</option>
+            {[60, 30, 24, 15].map((fps) => <option key={fps} value={fps}>{fps}</option>)}
+          </Select>
+        </InspectorRow>
       </div>
 
       {isPickerOpen && (background.kind === 'image' || background.kind === 'video') ? (

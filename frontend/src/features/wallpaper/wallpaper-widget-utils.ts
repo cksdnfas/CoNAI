@@ -1,7 +1,8 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useState } from 'react'
 import type { ImageRecord } from '@/types/image'
 import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord } from '@/lib/api-module-graph'
 import type { WallpaperAnimationEasing, WallpaperAnimationEasingPreset, WallpaperImageHoverMotion, WallpaperImageTransitionSpeed } from './wallpaper-types'
+import { isWallpaperPlaybackRunning, useWallpaperPlayback } from './wallpaper-playback'
 
 /** Render one live clock string for the wallpaper clock widget. */
 export function useWallpaperClockText() {
@@ -19,12 +20,13 @@ export function useWallpaperClockText() {
   return currentTime
 }
 
-/** Rotate through a widget image list on an interval when motion is enabled. */
+/** Rotate through a widget image list on an interval when motion is enabled; holds while playback is paused. */
 export function useWallpaperRotatingIndex(length: number, intervalMs: number, enabled: boolean) {
   const [tick, setTick] = useState(0)
+  const running = isWallpaperPlaybackRunning(useWallpaperPlayback())
 
   useEffect(() => {
-    if (!enabled || length <= 1) {
+    if (!enabled || !running || length <= 1) {
       return
     }
 
@@ -35,67 +37,13 @@ export function useWallpaperRotatingIndex(length: number, intervalMs: number, en
     return () => {
       window.clearInterval(timer)
     }
-  }, [enabled, intervalMs, length])
+  }, [enabled, intervalMs, length, running])
 
   if (length <= 1) {
     return 0
   }
 
   return tick % length
-}
-
-const WALLPAPER_MOTION_TICK_INTERVAL_MS = 90
-const wallpaperMotionListeners = new Set<() => void>()
-let wallpaperMotionTick = 0
-let wallpaperMotionTimer: number | null = null
-
-function startWallpaperMotionTicker() {
-  if (wallpaperMotionTimer !== null) {
-    return
-  }
-
-  wallpaperMotionTimer = window.setInterval(() => {
-    wallpaperMotionTick += 1
-    for (const listener of wallpaperMotionListeners) {
-      listener()
-    }
-  }, WALLPAPER_MOTION_TICK_INTERVAL_MS)
-}
-
-function stopWallpaperMotionTicker() {
-  if (wallpaperMotionTimer === null) {
-    return
-  }
-
-  window.clearInterval(wallpaperMotionTimer)
-  wallpaperMotionTimer = null
-}
-
-function subscribeWallpaperMotionTick(listener: () => void) {
-  wallpaperMotionListeners.add(listener)
-  if (wallpaperMotionListeners.size === 1) {
-    startWallpaperMotionTicker()
-  }
-
-  return () => {
-    wallpaperMotionListeners.delete(listener)
-    if (wallpaperMotionListeners.size === 0) {
-      stopWallpaperMotionTicker()
-    }
-  }
-}
-
-const subscribeDisabledWallpaperMotionTick = () => () => {}
-const getWallpaperMotionTickSnapshot = () => wallpaperMotionTick
-const getDisabledWallpaperMotionTickSnapshot = () => 0
-
-/** Drive subtle ambient motion with one shared ticker for all active widgets. */
-export function useWallpaperMotionTick(enabled: boolean) {
-  return useSyncExternalStore(
-    enabled ? subscribeWallpaperMotionTick : subscribeDisabledWallpaperMotionTick,
-    enabled ? getWallpaperMotionTickSnapshot : getDisabledWallpaperMotionTickSnapshot,
-    getDisabledWallpaperMotionTickSnapshot,
-  )
 }
 
 export interface WallpaperBezierControlPoints {

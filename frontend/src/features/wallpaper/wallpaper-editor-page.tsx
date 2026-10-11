@@ -9,6 +9,7 @@ import {
   ClipboardCopy,
   Copy,
   CopyPlus,
+  Download,
   ExternalLink,
   Eye,
   LayoutTemplate,
@@ -23,8 +24,10 @@ import {
   SendToBack,
   Trash2,
   Undo2,
+  Upload,
   ZoomIn,
   ZoomOut,
+  CalendarClock,
 } from 'lucide-react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { PageToolbar } from '@/components/common/page-toolbar'
@@ -39,6 +42,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { getGroupsHierarchyAll } from '@/lib/api-groups'
 import { getWallpaperRuntimeSettings, updateAppearanceSettings } from '@/lib/api-settings-appearance'
 import { copyTextToClipboard } from '@/lib/clipboard'
+import { triggerBlobDownload } from '@/lib/api-client'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { WALLPAPER_WIDGET_TYPES } from '@conai/shared'
@@ -58,6 +62,7 @@ import {
   loadWallpaperActivePresetId,
   loadWallpaperLayoutDraft,
   loadWallpaperLayoutPresets,
+  normalizeWallpaperBackground,
   normalizeWallpaperLayoutPreset,
   nudgeWallpaperWidgets,
   pasteWallpaperWidgets,
@@ -81,6 +86,7 @@ import { WallpaperWidgetInspector, type WallpaperWidgetPatch } from './wallpaper
 import { WallpaperBackgroundInspector } from './wallpaper-background-inspector'
 import { WALLPAPER_WIDGET_DRAG_TYPE, WallpaperWidgetLibrarySidebar } from './wallpaper-widget-library-sidebar'
 import { WallpaperLivelyConnectModal } from './wallpaper-lively-connect-modal'
+import { WallpaperScheduleModal } from './wallpaper-schedule-modal'
 import { WallpaperTemplateModal } from './wallpaper-template-modal'
 import { WallpaperStage, type WallpaperStageZoom } from './wallpaper-stage'
 import { useUndoableState } from './use-undoable-state'
@@ -88,6 +94,7 @@ import { useWallpaperLeaveGuard } from './use-wallpaper-leave-guard'
 import { useWallpaperTheme } from './use-wallpaper-theme'
 import { buildWallpaperTemplateLayout, type WallpaperTemplateDefinition } from './wallpaper-templates'
 import { WallpaperDataEnvironmentContext } from './wallpaper-widget-data'
+import { buildWallpaperPresetFile, parseWallpaperPresetFile } from './wallpaper-preset-file'
 
 const ZOOM_STEPS = [0.1, 0.15, 0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2]
 const SNAP_STORAGE_KEY = 'conai.wallpaper.snap'
@@ -122,7 +129,7 @@ function patchWidget(layout: WallpaperLayoutPreset, widgetId: string, patch: Wal
 /** What saving persists, normalized so clamping or defaults never read as edits. */
 function presetSignature(preset: WallpaperLayoutPreset) {
   const wire = toWallpaperLayoutPresetWireModel(normalizeWallpaperLayoutPreset(preset))
-  return JSON.stringify([wire.canvasPresetId, wire.canvasWidth, wire.canvasHeight, wire.themeMode, wire.background, wire.widgets])
+  return JSON.stringify([wire.canvasPresetId, wire.canvasWidth, wire.canvasHeight, wire.themeMode, normalizeWallpaperBackground(wire.background), wire.options ?? null, wire.widgets])
 }
 
 export function WallpaperEditorPage() {
@@ -150,9 +157,11 @@ export function WallpaperEditorPage() {
   const [zoomPercent, setZoomPercent] = useState(0)
   const [snap, setSnap] = useState(readSnapPreference)
   const [isLivelyOpen, setIsLivelyOpen] = useState(false)
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false)
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false)
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false)
   const workspaceMenuAnchorRef = useRef<HTMLButtonElement | null>(null)
+  const importInputRef = useRef<HTMLInputElement | null>(null)
   const clipboardRef = useRef<WallpaperWidgetInstance[]>([])
   const theme = useWallpaperTheme(layoutPreset.themeMode)
 
@@ -379,6 +388,27 @@ export function WallpaperEditorPage() {
     resetLayoutPreset(nextLayoutPreset)
     setSelectedIds([])
     syncWallpaperPresetState(savedPresets, null)
+  }
+
+  const handleExportFile = () => {
+    const { fileName, blob } = buildWallpaperPresetFile({ ...layoutPreset, name: layoutPreset.name.trim() || activePreset?.name || 'Wallpaper' })
+    triggerBlobDownload(blob, fileName)
+  }
+
+  const handleImportFile = async (file: File) => {
+    const draft = parseWallpaperPresetFile(await file.text())
+    if (!draft) {
+      notifyError(t({ ko: '월페이퍼 파일이 아니야.', en: 'This is not a wallpaper file.' }))
+      return
+    }
+    if (!(await confirmDiscardEdits(t({ ko: '파일에서 가져오기', en: 'Import from file' }), t({ ko: '가져오기', en: 'Import' })))) {
+      return
+    }
+    setActivePresetId(null)
+    resetLayoutPreset(draft)
+    setSelectedIds([])
+    syncWallpaperPresetState(savedPresets, null)
+    notifyInfo(t({ ko: "'{name}'을 새 캔버스로 가져왔어. 저장하면 프리셋이 돼.", en: "Imported '{name}' as a new canvas. Save it to make a preset." }, { name: draft.name }))
   }
 
   const addWidget = (widgetType: WallpaperWidgetType, center?: { x: number; y: number }) => {
@@ -672,6 +702,9 @@ export function WallpaperEditorPage() {
           {[
             { icon: Plus, label: t({ ko: '새 캔버스', en: 'New canvas' }), disabled: false, action: () => void handleCreateBlankCanvas() },
             { icon: Copy, label: t({ ko: '다른 이름으로 저장', en: 'Save as new' }), disabled: !isAdmin || wallpaperPresetMutation.isPending, action: () => handleSavePreset({ saveAsNew: true }) },
+            { icon: Download, label: t({ ko: '파일로 내보내기', en: 'Export to file' }), disabled: false, action: handleExportFile },
+            { icon: Upload, label: t({ ko: '파일에서 가져오기', en: 'Import from file' }), disabled: false, action: () => importInputRef.current?.click() },
+            { icon: CalendarClock, label: t({ ko: '시간대별 월페이퍼', en: 'Wallpaper schedule' }), disabled: !isAdmin || savedPresets.length === 0 || !wallpaperSettingsQuery.data, action: () => setIsScheduleOpen(true) },
             { icon: ClipboardCopy, label: t({ ko: '월페이퍼 URL 복사', en: 'Copy wallpaper URL' }), disabled: !activePresetRuntimePath, action: () => void handleCopyRuntimeUrl() },
             { icon: ExternalLink, label: t({ ko: '저장 월페이퍼 열기', en: 'Open saved wallpaper' }), disabled: !activePresetRuntimePath, action: () => activePresetRuntimePath && window.open(activePresetRuntimePath, '_blank', 'noopener,noreferrer') },
             { icon: Trash2, label: t({ ko: '프리셋 삭제', en: 'Delete preset' }), disabled: !isAdmin || !activePreset || wallpaperPresetMutation.isPending, action: handleDeletePreset, destructive: true },
@@ -692,6 +725,17 @@ export function WallpaperEditorPage() {
             </Button>
           ))}
         </AnchoredPopup>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0]
+            event.target.value = ''
+            if (file) void handleImportFile(file)
+          }}
+        />
 
         <div className="grid gap-6 pt-2 xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-0">
           <div className="min-w-0 xl:pr-6">
@@ -737,6 +781,7 @@ export function WallpaperEditorPage() {
                 onChangeBackground={(background, key) => setLayoutPreset((current) => ({ ...current, background }), { coalesceKey: key })}
                 onChangeCanvas={handleChangeCanvas}
                 onChangeThemeMode={(themeMode) => setLayoutPreset((current) => ({ ...current, themeMode }))}
+                onChangeOptions={(options, key) => setLayoutPreset((current) => ({ ...current, options }), { coalesceKey: key })}
               />
             )}
           </aside>
@@ -748,6 +793,13 @@ export function WallpaperEditorPage() {
             onClose={() => setIsLivelyOpen(false)}
             presets={savedPresets}
             activePresetId={effectiveActivePresetId}
+          />
+        ) : null}
+        {isScheduleOpen ? (
+          <WallpaperScheduleModal
+            onClose={() => setIsScheduleOpen(false)}
+            presets={savedPresets}
+            schedule={wallpaperSettingsQuery.data?.wallpaperSchedule}
           />
         ) : null}
         <WallpaperTemplateModal

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { getImageListMediaKind, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 import { formatDateTime } from '@/features/module-graph/module-graph-shared'
@@ -24,9 +24,36 @@ import {
   getWallpaperImageTransitionDurationMs,
   getWallpaperImageUrl,
   getWallpaperMotionStrengthMultiplier,
-  useWallpaperMotionTick,
   useWallpaperRotatingIndex,
 } from './wallpaper-widget-utils'
+import { computeWallpaperPuzzleLayout } from './wallpaper-puzzle-layout'
+
+const WALLPAPER_PUZZLE_GAP = 8
+
+/** Inner size of an element, tracked with a ResizeObserver (layout px, unaffected by the stage scale). */
+function useWallpaperElementSize<T extends HTMLElement>() {
+  const [element, setElement] = useState<T | null>(null)
+  const [size, setSize] = useState({ width: 0, height: 0 })
+
+  useEffect(() => {
+    if (!element) {
+      return
+    }
+    const updateSize = () => {
+      const nextWidth = Math.max(0, element.clientWidth)
+      const nextHeight = Math.max(0, element.clientHeight)
+      setSize((current) => (current.width === nextWidth && current.height === nextHeight ? current : { width: nextWidth, height: nextHeight }))
+    }
+    updateSize()
+    const observer = new ResizeObserver(updateSize)
+    observer.observe(element)
+    return () => {
+      observer.disconnect()
+    }
+  }, [element])
+
+  return [setElement, size] as const
+}
 
 function getWallpaperBaseStackCardFrame(
   offsetX: number,
@@ -167,6 +194,11 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
   })), [resultsQuery.data])
 
   const stackIndex = useWallpaperRotatingIndex(recentEntries.length, shiftInterval, displayMode === 'stack' && recentEntries.length > 1)
+  const [puzzleRef, puzzleSize] = useWallpaperElementSize<HTMLDivElement>()
+  const puzzleRects = useMemo(
+    () => (displayMode === 'masonry' ? computeWallpaperPuzzleLayout(recentEntries.map((entry) => entry.aspect), puzzleSize.width, puzzleSize.height, WALLPAPER_PUZZLE_GAP) : []),
+    [displayMode, recentEntries, puzzleSize.width, puzzleSize.height],
+  )
 
   if (resultsQuery.isLoading) {
     return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t({ ko: '최근 결과 불러오는 중…', en: 'Loading recent results…' })}</div>
@@ -265,32 +297,33 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
   }
 
   if (displayMode === 'masonry') {
-    const columnCount = visibleCount <= 2 ? visibleCount : visibleCount <= 6 ? 3 : 4
+    // Puzzle-fit: every entry gets a tile and the tiles cover the whole widget (CSS columns clipped the overflow).
     return (
-      <div className="h-full overflow-hidden" style={{ columnCount, columnGap: 8 }}>
+      <div ref={puzzleRef} className="relative h-full overflow-hidden">
         {recentEntries.length === 0 ? (
           <div className="flex h-full items-center justify-center px-3 text-center text-sm opacity-60">
             {t({ ko: '아직 생성 결과가 없어.', en: 'No generations yet.' })}
           </div>
         ) : null}
-        {recentEntries.map((entry) => (
-          <WallpaperPreviewImageSurface
-            key={entry.id}
-            image={entry.previewImage}
-            alt={entry.workflowName}
-            onOpenImage={mode === 'runtime' && widget.settings.imageClickAction !== 'none' ? onOpenImage : undefined}
-            transitionStyle={imageTransitionStyle}
-            transitionSpeed={imageTransitionSpeed}
-            transitionDurationMs={imageTransitionDurationMs}
-            transitionEasing={imageTransitionEasing}
-            hoverMotion={imageHoverMotion}
-            hoverEasing={hoverEasing}
-            {...getWallpaperPreviewOpenSettings(widget)}
-            className="relative mb-2 block w-full break-inside-avoid overflow-hidden rounded-lg"
-            style={{ aspectRatio: String(entry.aspect) }}
-            imageClassName="h-full w-full object-cover"
-          />
-        ))}
+        {recentEntries.map((entry, index) => puzzleRects[index] ? (
+          // The surface forces `relative`, so the tile position lives on a wrapper.
+          <div key={entry.id} className="absolute transition-[left,top,width,height] duration-500 ease-out" style={puzzleRects[index]}>
+            <WallpaperPreviewImageSurface
+              image={entry.previewImage}
+              alt={entry.workflowName}
+              onOpenImage={mode === 'runtime' && widget.settings.imageClickAction !== 'none' ? onOpenImage : undefined}
+              transitionStyle={imageTransitionStyle}
+              transitionSpeed={imageTransitionSpeed}
+              transitionDurationMs={imageTransitionDurationMs}
+              transitionEasing={imageTransitionEasing}
+              hoverMotion={imageHoverMotion}
+              hoverEasing={hoverEasing}
+              {...getWallpaperPreviewOpenSettings(widget)}
+              className="block h-full w-full overflow-hidden rounded-lg"
+              imageClassName="h-full w-full object-cover"
+            />
+          </div>
+        ) : null)}
       </div>
     )
   }
@@ -351,7 +384,6 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
   const imageHoverMotion = getWallpaperHoverMotionAmount(widget.settings.imageHoverMotion ?? 1)
   const hoverEasing = widget.settings.hoverEasing ?? 'easeOutCubic'
   const allowPointerMotion = motionMode === 'pointer' && mode === 'runtime'
-  const ambientTick = useWallpaperMotionTick(motionMode === 'ambient')
   const [pointerOffset, setPointerOffset] = useState<{ x: number; y: number } | null>(null)
   const [isPointerInside, setIsPointerInside] = useState(false)
 
@@ -400,6 +432,14 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
     }
   }, [targetVisibleImages, visibleImages])
 
+  const isPuzzle = layoutMode === 'masonry'
+  const [puzzleRef, puzzleSize] = useWallpaperElementSize<HTMLDivElement>()
+  const puzzleRects = useMemo(
+    () => (isPuzzle
+      ? computeWallpaperPuzzleLayout(visibleImages.map((image) => (image.width && image.height ? image.width / image.height : 1)), puzzleSize.width, puzzleSize.height, WALLPAPER_PUZZLE_GAP)
+      : []),
+    [isPuzzle, visibleImages, puzzleSize.width, puzzleSize.height],
+  )
   const columnCount = layoutMode === 'filmstrip' ? visibleCount : visibleCount >= 6 ? 3 : visibleCount >= 4 ? 2 : 1
   const rowCount = Math.max(1, Math.ceil(Math.max(visibleImages.length, 1) / columnCount))
 
@@ -417,8 +457,9 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
 
   return (
     <div
-      className="relative grid h-full gap-2"
-      style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
+      ref={isPuzzle ? puzzleRef : undefined}
+      className={cn('relative h-full', isPuzzle ? 'overflow-hidden' : 'grid gap-2')}
+      style={isPuzzle ? undefined : { gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
       onPointerEnter={() => setIsPointerInside(true)}
       onPointerMove={allowPointerMotion ? (event) => {
         const rect = event.currentTarget.getBoundingClientRect()
@@ -442,26 +483,40 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
         const imageUrl = getWallpaperImageUrl(image)
         const columnIndex = index % columnCount
         const rowIndex = Math.floor(index / columnCount)
-        const columnBias = columnIndex - (columnCount - 1) / 2
-        const rowBias = rowIndex - (rowCount - 1) / 2
+        const puzzleRect = isPuzzle ? puzzleRects[index] : undefined
+        if (isPuzzle && !puzzleRect) {
+          return null
+        }
+        const columnBias = puzzleRect
+          ? ((puzzleRect.left + puzzleRect.width / 2) / Math.max(1, puzzleSize.width) - 0.5) * 2
+          : columnIndex - (columnCount - 1) / 2
+        const rowBias = puzzleRect
+          ? ((puzzleRect.top + puzzleRect.height / 2) / Math.max(1, puzzleSize.height) - 0.5) * 2
+          : rowIndex - (rowCount - 1) / 2
         let translateX = 0
         let translateY = 0
-        let scale = 1
 
-        if (motionMode === 'ambient') {
-          const phase = ambientTick / 8 + index * 0.72
-          translateX = (Math.sin(phase) * 2.8 + columnBias * 1.35) * motionStrength
-          translateY = (Math.cos(phase * 0.9) * 2.4 + rowBias * 1.15) * motionStrength
-          scale = 1.025
-        } else if (allowPointerMotion && pointerOffset) {
+        // Ambient drift runs in CSS, on a wrapper so hover scaling still reaches the tile, around a resting
+        // offset that fans tiles out from the centre.
+        const ambientStyle = motionMode === 'ambient'
+          ? {
+              ['--wp-bx' as string]: `${(columnBias * 1.35 * motionStrength).toFixed(2)}px`,
+              ['--wp-by' as string]: `${(rowBias * 1.15 * motionStrength).toFixed(2)}px`,
+              ['--wp-ax' as string]: `${(2.8 * motionStrength).toFixed(2)}px`,
+              ['--wp-ay' as string]: `${(2.4 * motionStrength).toFixed(2)}px`,
+              ['--wp-scale' as string]: '1.025',
+              ['--wp-duration' as string]: `${(5 + (index % 4) * 0.9).toFixed(2)}s`,
+              ['--wp-delay' as string]: `${(-index * 0.8).toFixed(2)}s`,
+            }
+          : null
+        if (allowPointerMotion && pointerOffset) {
           translateX = (pointerOffset.x * 7 + columnBias * 1.8) * motionStrength
           translateY = (pointerOffset.y * 7 + rowBias * 1.8) * motionStrength
-          scale = 1
         }
+        const fillsWrapper = isPuzzle || ambientStyle !== null
 
-        return imageUrl ? (
+        const tile = imageUrl ? (
           <WallpaperPreviewImageSurface
-            key={`group-grid-slot-${index}`}
             image={image}
             alt={t({ ko: '그룹 미리보기', en: 'Group preview' })}
             onOpenImage={mode === 'runtime' && widget.settings.imageClickAction !== 'none' ? onOpenImage : undefined}
@@ -472,24 +527,33 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
             hoverMotion={imageHoverMotion}
             hoverEasing={hoverEasing}
             {...getWallpaperPreviewOpenSettings(widget)}
-            className="overflow-hidden rounded-lg border border-border/70 bg-surface-low transition-transform duration-200 will-change-transform"
+            className={cn('overflow-hidden rounded-lg border border-border/70 bg-surface-low transition-transform duration-200 will-change-transform', fillsWrapper && 'h-full w-full')}
             imageClassName="h-full w-full object-cover"
             style={{
-              transform: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})`,
+              transform: `translate3d(${translateX}px, ${translateY}px, 0)`,
               transitionTimingFunction: getWallpaperAnimationEasingCss(motionEasing),
             }}
           />
         ) : (
           <div
-            key={`group-grid-slot-${index}`}
-            className="flex h-full min-h-16 items-center justify-center overflow-hidden rounded-lg border border-border/70 bg-surface-low text-xs text-muted-foreground transition-transform duration-200 will-change-transform"
+            className="flex h-full w-full min-h-16 items-center justify-center overflow-hidden rounded-lg border border-border/70 bg-surface-low text-xs text-muted-foreground transition-transform duration-200 will-change-transform"
             style={{
-              transform: `translate3d(${translateX}px, ${translateY}px, 0) scale(${scale})`,
+              transform: `translate3d(${translateX}px, ${translateY}px, 0)`,
               transitionTimingFunction: getWallpaperAnimationEasingCss(motionEasing),
             }}
           >
             {t({ ko: '이미지 없음', en: 'No image' })}
           </div>
+        )
+        const movingTile = ambientStyle ? <div className="wallpaper-drift h-full w-full" style={ambientStyle}>{tile}</div> : tile
+
+        // The surface forces `relative`, so a puzzle tile's position lives on a wrapper.
+        return puzzleRect ? (
+          <div key={`group-grid-slot-${index}`} className="absolute transition-[left,top,width,height] duration-500 ease-out" style={puzzleRect}>
+            {movingTile}
+          </div>
+        ) : (
+          <Fragment key={`group-grid-slot-${index}`}>{movingTile}</Fragment>
         )
       })}
 
@@ -519,7 +583,6 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
   const rotationEnabled = playbackMode !== 'static' && images.length > 1 && !(widget.settings.pauseOnHover !== false && isPointerInside)
   const kenBurnsEnabled = playbackMode === 'ken-burns'
   const currentIndex = useWallpaperRotatingIndex(images.length, slideshowInterval, rotationEnabled)
-  const motionTick = useWallpaperMotionTick(kenBurnsEnabled)
   const currentImage = images[currentIndex] ?? images[0] ?? null
   const imageUrl = getWallpaperImageUrl(currentImage)
 
@@ -542,15 +605,8 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
     return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">{t({ ko: '표시할 쇼케이스 이미지가 없어.', en: 'There is no showcase image to display.' })}</div>
   }
 
-  const motionPhase = motionTick / 18 + currentIndex * 0.8
-  const kenBurnsTranslateX = Math.sin(motionPhase * 0.8) * 8
-  const kenBurnsTranslateY = Math.cos(motionPhase * 0.6) * 6
-  const kenBurnsScale = 1.08 + ((Math.sin(motionPhase * 0.5) + 1) * 0.03)
-  const showcaseTransform = kenBurnsEnabled
-    ? `translate3d(${kenBurnsTranslateX}px, ${kenBurnsTranslateY}px, 0) scale(${kenBurnsScale})`
-    : rotationEnabled
-      ? 'scale(1.03)'
-      : 'scale(1)'
+  // Ken Burns pans in CSS (`.wallpaper-ken-burns`); the other modes hold a fixed transform.
+  const showcaseTransform = kenBurnsEnabled ? undefined : rotationEnabled ? 'scale(1.03)' : 'scale(1)'
 
   return (
     <WallpaperPreviewImageSurface
@@ -571,10 +627,11 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
       imageClassName={cn(
         'h-full w-full rounded-xl ease-out will-change-transform',
         widget.settings.fitMode === 'contain' ? 'object-contain' : widget.settings.fitMode === 'scale-down' ? 'object-scale-down' : 'object-cover',
-        kenBurnsEnabled ? 'transition-transform duration-200' : 'transition-transform duration-[1600ms]',
+        kenBurnsEnabled ? 'wallpaper-ken-burns' : 'transition-transform duration-[1600ms]',
       )}
       imageStyle={{
         transform: showcaseTransform,
+        ...(kenBurnsEnabled ? { ['--wp-duration' as string]: `${Math.max(16, (slideshowInterval / 1000) * 2)}s` } : null),
         transitionTimingFunction: getWallpaperAnimationEasingCss(imageTransitionEasing),
       }}
       onPointerEnter={() => setIsPointerInside(true)}

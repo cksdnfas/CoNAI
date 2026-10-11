@@ -18,6 +18,8 @@ import {
   TaggerDevice,
   WallpaperBackground,
   WallpaperLayoutPreset,
+  WallpaperSchedule,
+  WallpaperScheduleEntry,
   WallpaperWidgetInstance,
 } from '@conai/shared';
 import { DEFAULT_ARTIST_LINK_URL_TEMPLATE } from '../constants/settings';
@@ -156,6 +158,33 @@ function normalizeWallpaperWidget(rawWidget: unknown): WallpaperWidgetInstance |
   return normalizedWidget;
 }
 
+export const WALLPAPER_SCHEDULE_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Normalize the stored wallpaper schedule, dropping malformed windows. */
+export function normalizeWallpaperSchedule(raw: unknown): WallpaperSchedule {
+  const record = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+  const entries = Array.isArray(record.entries) ? record.entries : [];
+  return {
+    enabled: record.enabled === true,
+    entries: entries.flatMap((rawEntry): WallpaperScheduleEntry[] => {
+      const entry = rawEntry && typeof rawEntry === 'object' ? rawEntry as Record<string, unknown> : null;
+      if (
+        !entry
+        || typeof entry.id !== 'string'
+        || typeof entry.presetId !== 'string'
+        || typeof entry.start !== 'string' || !WALLPAPER_SCHEDULE_TIME.test(entry.start)
+        || typeof entry.end !== 'string' || !WALLPAPER_SCHEDULE_TIME.test(entry.end)
+      ) {
+        return [];
+      }
+      const days = Array.isArray(entry.days)
+        ? [...new Set(entry.days.filter((day): day is number => Number.isInteger(day) && Number(day) >= 0 && Number(day) <= 6))].sort()
+        : [];
+      return [{ id: entry.id, presetId: entry.presetId, days, start: entry.start, end: entry.end }];
+    }).slice(0, 48),
+  };
+}
+
 /** Normalize raw wallpaper layout presets from persisted settings into the canonical shape. */
 function normalizeWallpaperLayoutPresets(rawPresets: unknown): WallpaperLayoutPreset[] {
   if (!Array.isArray(rawPresets)) {
@@ -193,8 +222,9 @@ function normalizeWallpaperLayoutPresets(rawPresets: unknown): WallpaperLayoutPr
       canvasPresetId: record.canvasPresetId,
       ...(Number.isInteger(record.version) ? { version: Number(record.version) } : {}),
       ...(isCanvasSize(record.canvasWidth) && isCanvasSize(record.canvasHeight) ? { canvasWidth: record.canvasWidth, canvasHeight: record.canvasHeight } : {}),
-      ...(record.themeMode === 'dark' || record.themeMode === 'light' ? { themeMode: record.themeMode } : {}),
+      ...(record.themeMode === 'dark' || record.themeMode === 'light' || record.themeMode === 'auto' ? { themeMode: record.themeMode } : {}),
       ...(background ? { background } : {}),
+      ...(record.options && typeof record.options === 'object' && !Array.isArray(record.options) ? { options: { ...(record.options as Record<string, unknown>) } } : {}),
       widgets,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
@@ -711,6 +741,7 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
       wallpaperActivePresetId: typeof loadedSettings.appearance?.wallpaperActivePresetId === 'string'
         ? loadedSettings.appearance.wallpaperActivePresetId
         : null,
+      wallpaperSchedule: normalizeWallpaperSchedule(loadedSettings.appearance?.wallpaperSchedule),
     },
     metadataExtraction: {
       ...defaults.metadataExtraction,

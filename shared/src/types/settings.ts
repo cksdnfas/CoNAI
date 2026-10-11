@@ -229,6 +229,10 @@ export const WALLPAPER_WIDGET_TYPES = [
   'audio-player',
   'post-ticker',
   'prompt-of-day',
+  'audio-visualizer',
+  'now-playing',
+  'system-monitor',
+  'quick-run',
 ] as const;
 
 export type WallpaperWidgetType = (typeof WALLPAPER_WIDGET_TYPES)[number];
@@ -281,11 +285,31 @@ export interface WallpaperLayoutPreset {
   /** Canvas size for canvasPresetId 'custom'. */
   canvasWidth?: number;
   canvasHeight?: number;
-  themeMode?: 'dark' | 'light';
+  /** 'auto' is light by day (07:00-19:00 local) and dark at night. */
+  themeMode?: 'dark' | 'light' | 'auto';
   background?: WallpaperBackground;
+  /** Preset-wide look, effects and behavior (accent, particles, parallax, clean desktop, FPS); kept open. */
+  options?: Record<string, unknown>;
   widgets: WallpaperWidgetInstance[];
   createdAt: string;
   updatedAt: string;
+}
+
+/** One time window of the wallpaper schedule; `end` before `start` wraps past midnight. */
+export interface WallpaperScheduleEntry {
+  id: string;
+  presetId: string;
+  /** 0 = Sunday … 6 = Saturday; empty = every day. */
+  days: number[];
+  /** HH:MM, local time of the wallpaper's machine. */
+  start: string;
+  end: string;
+}
+
+/** Which wallpaper the live page shows when no key or link pins one. */
+export interface WallpaperSchedule {
+  enabled: boolean;
+  entries: WallpaperScheduleEntry[];
 }
 
 export interface AppearanceThemeSettings {
@@ -339,6 +363,7 @@ export interface AppearanceSettings extends AppearanceThemeSettings {
   presetSlots: AppearancePresetSlot[];
   wallpaperLayoutPresets: WallpaperLayoutPreset[];
   wallpaperActivePresetId: string | null;
+  wallpaperSchedule?: WallpaperSchedule;
 }
 
 export type ThumbnailSize = 'original' | '2048' | '1080' | '720' | '512';

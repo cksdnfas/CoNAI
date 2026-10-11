@@ -36,6 +36,7 @@ import {
   getWallpaperAnimationEasingCss,
   getWallpaperMotionStrengthMultiplier,
 } from './wallpaper-widget-utils'
+import { runWallpaperFrameLoop } from './wallpaper-playback'
 
 const WALLPAPER_FLOATING_COLLAGE_SPAWN_HOLD_MS = 900
 const WALLPAPER_FLOATING_COLLAGE_SPAWN_BLEND_MS = 1100
@@ -179,16 +180,10 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
       return
     }
 
-    let frameId = 0
-    let lastFrameTime = performance.now()
     const swapIntervalMs = swapIntervalSec * 1000
 
-    const step = (now: number) => {
-      const deltaMs = Math.min(48, now - lastFrameTime)
-      lastFrameTime = now
-
+    const step = (now: number, deltaMs: number) => {
       if (now < spawnHoldUntilRef.current) {
-        frameId = window.requestAnimationFrame(step)
         return
       }
 
@@ -326,14 +321,9 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
           }
         })
       })
-
-      frameId = window.requestAnimationFrame(step)
     }
 
-    frameId = window.requestAnimationFrame(step)
-    return () => {
-      window.cancelAnimationFrame(frameId)
-    }
+    return runWallpaperFrameLoop(step)
   }, [aspectMode, cardStates.length, containerSize.height, containerSize.width, imageScalePercent, imageSwapMode, images, motionStrength, swapBounceCount, swapIntervalSec, transitionDurationMs])
 
   if (groupId === null) {

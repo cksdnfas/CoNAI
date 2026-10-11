@@ -4,7 +4,7 @@ import { requestApiData } from '@/lib/api-request'
 import type { GraphWorkflowBrowseContentRecord } from '@/lib/api-module-graph'
 import type { ImageRecord } from '@/types/image'
 import type { ApiResponse } from '@/types/image'
-import type { AppearanceSettings } from '@conai/shared'
+import type { AppearanceSettings, WallpaperSchedule } from '@conai/shared'
 
 async function requestWallpaperRuntimeData<T>(path: string, fallbackKey: Parameters<typeof createApiFallbackError>[1]) {
   const response = await fetchJson<ApiResponse<T>>(path)
@@ -38,6 +38,7 @@ export async function getWallpaperRuntimeGroupPreviewImages(groupId: number, par
 export interface WallpaperRuntimeSettingsRecord {
   wallpaperLayoutPresets: AppearanceSettings['wallpaperLayoutPresets']
   wallpaperActivePresetId: string | null
+  wallpaperSchedule?: WallpaperSchedule
   /** Set when this browser reads through a runtime key bound to one wallpaper. */
   tokenPresetId?: string | null
 }
@@ -248,4 +249,28 @@ export function getWallpaperRecentPosts(limit: number) {
 
 export function rollWallpaperPrompt(text: string) {
   return requestApiData<{ text: string }>(`${BASE}/prompt-roll?text=${encodeURIComponent(text)}`)
+}
+
+export interface WallpaperComfyServerStats {
+  id: number
+  name: string
+  online: boolean
+  /** Bytes */
+  ramTotal: number | null
+  ramFree: number | null
+  devices: Array<{ name: string; vramTotal: number; vramFree: number }>
+}
+
+/** GPU memory and RAM of the active self-hosted ComfyUI servers (administrators). */
+export function getWallpaperComfyStats() {
+  return requestApiData<WallpaperComfyServerStats[]>(`${BASE}/comfyui/stats`)
+}
+
+/** Press a saved quick-run button: runs its workflow schedule once. */
+export function runWallpaperQuickRun(presetId: string, widgetId: string) {
+  return requestApiData<{ enqueued: number; executionId: number | null }>(`${BASE}/quick-run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presetId, widgetId }),
+  })
 }

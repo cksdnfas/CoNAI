@@ -17,7 +17,6 @@ import { useWallpaperBrowseContentQuery } from './wallpaper-widget-data'
 import {
   getWallpaperMotionStrengthMultiplier,
   useWallpaperClockText,
-  useWallpaperMotionTick,
 } from './wallpaper-widget-utils'
 import {
   WallpaperGenerationProgressBody,
@@ -32,6 +31,12 @@ import {
   WallpaperPostTickerBody,
   WallpaperPromptOfDayBody,
 } from './wallpaper-chat-media-widget-bodies'
+import {
+  WallpaperAudioVisualizerBody,
+  WallpaperNowPlayingBody,
+  WallpaperQuickRunBody,
+  WallpaperSystemMonitorBody,
+} from './wallpaper-host-widget-bodies'
 
 /** Render one graph execution status widget using existing browse-content APIs. */
 function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetInstance, { type: 'queue-status' }> }) {
@@ -174,7 +179,6 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
   const motionStrength = getWallpaperMotionStrengthMultiplier(widget.settings.motionStrength ?? 1)
   const emphasis = widget.settings.emphasis ?? 'mixed'
   const { t, formatNumber, formatDateTime } = useI18n()
-  const motionTick = useWallpaperMotionTick(true)
   const activityQuery = useWallpaperBrowseContentQuery('activity-pulse', refreshInterval)
 
   const summary = useMemo(() => {
@@ -214,15 +218,17 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
       ? summary.completed * 0.8 + summary.recentResults * 1.35
       : summary.running * 1.15 + summary.queued * 0.9 + summary.recentResults * 0.95 + summary.failed * 0.6
   const intensity = Math.min(1, emphasisWeight / 10)
+  // Each bar breathes between its low and high height in CSS; only the data changes them.
   const pulseBars = Array.from({ length: 16 }, (_, index) => {
-    const phase = motionTick / 10 + index * 0.72
-    const wave = (Math.sin(phase) + Math.cos(phase * 0.65 + intensity * 2.8)) / 2
     const emphasisBoost = emphasis === 'queue'
       ? (index % 4 === 0 ? 0.18 : 0)
       : emphasis === 'results'
         ? (index % 5 === 2 ? 0.22 : 0)
         : (index % 3 === 1 ? 0.1 : 0)
-    return Math.max(0.16, Math.min(1, 0.22 + intensity * 0.5 + wave * 0.22 * motionStrength + emphasisBoost))
+    const base = 0.22 + intensity * 0.5 + emphasisBoost
+    const low = Math.max(0.16, Math.min(1, base - 0.22 * motionStrength))
+    const high = Math.max(0.16, Math.min(1, base + 0.22 * motionStrength))
+    return { base: Math.max(0.16, Math.min(1, base)), low, high, index }
   })
   const statusTone = summary.failed > 0 ? 'var(--destructive)' : summary.running > 0 ? 'var(--success)' : 'var(--secondary)'
   const activityBadge = summary.running > 0
@@ -249,14 +255,16 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
       </div>
 
       <div className="flex min-h-0 flex-1 items-end gap-1 rounded-sm border border-border/60 bg-background/35 px-2 py-2 backdrop-blur-sm">
-        {pulseBars.map((heightRatio, index) => (
+        {pulseBars.map(({ base, low, high, index }) => (
           <div
             key={index}
-            className="flex-1 rounded-full transition-[height,opacity,transform] duration-200 ease-out"
+            className="wallpaper-pulse-bar flex-1 rounded-full transition-[height,opacity] duration-200 ease-out"
             style={{
-              height: `${Math.round(22 + heightRatio * 78)}%`,
-              opacity: 0.48 + heightRatio * 0.48,
-              transform: `translateY(${Math.round((1 - heightRatio) * 4)}px)`,
+              height: `${Math.round(22 + high * 78)}%`,
+              opacity: 0.48 + base * 0.48,
+              ['--wp-low' as string]: String((22 + low * 78) / (22 + high * 78)),
+              ['--wp-duration' as string]: `${(1.8 + (index % 5) * 0.35).toFixed(2)}s`,
+              ['--wp-delay' as string]: `${(-index * 0.37).toFixed(2)}s`,
               background: `linear-gradient(180deg, color-mix(in srgb, ${statusTone} 92%, white), color-mix(in srgb, ${statusTone} 58%, transparent))`,
               boxShadow: `0 0 18px color-mix(in srgb, ${statusTone} 20%, transparent)`,
             }}
@@ -385,6 +393,14 @@ export function WallpaperWidgetBody({ widget, mode, onOpenImage }: { widget: Wal
       return <WallpaperPostTickerBody widget={widget} />
     case 'prompt-of-day':
       return <WallpaperPromptOfDayBody widget={widget} />
+    case 'audio-visualizer':
+      return <WallpaperAudioVisualizerBody widget={widget} />
+    case 'now-playing':
+      return <WallpaperNowPlayingBody widget={widget} />
+    case 'system-monitor':
+      return <WallpaperSystemMonitorBody widget={widget} />
+    case 'quick-run':
+      return <WallpaperQuickRunBody widget={widget} />
     default:
       return null
   }

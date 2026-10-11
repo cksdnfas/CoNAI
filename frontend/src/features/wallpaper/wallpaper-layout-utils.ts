@@ -13,6 +13,7 @@ import {
   type WallpaperCanvasPreset,
   type WallpaperLayoutPreset,
   type WallpaperLayoutPresetWire,
+  type WallpaperPresetOptions,
   type WallpaperWidgetFrame,
   type WallpaperWidgetInstance,
   type WallpaperWidgetInstanceWire,
@@ -117,6 +118,7 @@ export function normalizeWallpaperBackground(raw: unknown): WallpaperBackground 
     dim: clampNumber(record.dim, 0, 0, 80),
     blur: clampNumber(record.blur, 0, 0, 24),
     vignette: clampNumber(record.vignette, 0, 0, 100),
+    kenBurns: record.kenBurns === true,
   }
   const fit = pick(record.fit, ['cover', 'contain', 'blur-fill'] as const, 'cover')
   switch (record.kind) {
@@ -168,6 +170,45 @@ export function normalizeWallpaperWidgetStyle(raw: unknown, base: Partial<Wallpa
     opacity: clampNumber(record.opacity ?? legacyOpacity, fallback.opacity, 5, 100),
     showTitle: typeof record.showTitle === 'boolean' ? record.showTitle : legacy?.showTitle === true ? true : fallback.showTitle,
     entrance: pick(record.entrance, ['none', 'fade', 'rise', 'zoom'] as const, fallback.entrance),
+    depth: clampNumber(record.depth, fallback.depth, 0, 100),
+    showFrom: asClockTime(record.showFrom) ?? fallback.showFrom,
+    showUntil: asClockTime(record.showUntil) ?? fallback.showUntil,
+  }
+}
+
+function asClockTime(value: unknown): string | null {
+  return typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : null
+}
+
+export const WALLPAPER_DEFAULT_PRESET_OPTIONS: WallpaperPresetOptions = {
+  accentColor: null,
+  autoAccent: false,
+  textColor: null,
+  fontFamily: 'inherit',
+  particles: 'none',
+  particleAmount: 40,
+  parallax: 0,
+  widgetReveal: 'always',
+  idleOpacity: 25,
+  fpsLimit: 0,
+}
+
+/** Coerce stored preset options; missing ones take the defaults. */
+export function resolveWallpaperPresetOptions(raw: unknown): WallpaperPresetOptions {
+  const record = asRecord(raw)
+  const fallback = WALLPAPER_DEFAULT_PRESET_OPTIONS
+  const color = (value: unknown) => (typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : null)
+  return {
+    accentColor: color(record.accentColor),
+    autoAccent: record.autoAccent === true,
+    textColor: color(record.textColor),
+    fontFamily: pick(record.fontFamily, ['inherit', 'sans', 'serif', 'mono', 'display'] as const, fallback.fontFamily),
+    particles: pick(record.particles, ['none', 'snow', 'sakura', 'rain', 'dust', 'fireflies'] as const, fallback.particles),
+    particleAmount: clampNumber(record.particleAmount, fallback.particleAmount, 0, 100),
+    parallax: clampNumber(record.parallax, fallback.parallax, 0, 100),
+    widgetReveal: pick(record.widgetReveal, ['always', 'pointer'] as const, fallback.widgetReveal),
+    idleOpacity: clampNumber(record.idleOpacity, fallback.idleOpacity, 0, 100),
+    fpsLimit: [0, 15, 24, 30, 60].includes(Number(record.fpsLimit)) ? Number(record.fpsLimit) : fallback.fpsLimit,
   }
 }
 
@@ -226,8 +267,9 @@ export function toWallpaperLayoutPresetViewModel(preset: WallpaperLayoutPresetWi
     name: preset.name,
     canvasPresetId: canvas.id,
     ...(canvas.id === WALLPAPER_CUSTOM_CANVAS_ID ? { canvasWidth: canvas.width, canvasHeight: canvas.height } : {}),
-    themeMode: preset.themeMode === 'light' ? 'light' : preset.themeMode === 'dark' ? 'dark' : undefined,
+    themeMode: preset.themeMode === 'light' || preset.themeMode === 'dark' || preset.themeMode === 'auto' ? preset.themeMode : undefined,
     background: normalizeWallpaperBackground(preset.background),
+    ...(preset.options ? { options: resolveWallpaperPresetOptions(preset.options) } : {}),
     widgets,
     createdAt: preset.createdAt,
     updatedAt: preset.updatedAt,
@@ -249,6 +291,7 @@ export function toWallpaperLayoutPresetWireModel({ unsupportedWidgets = [], ...p
     ...(preset.canvasPresetId === WALLPAPER_CUSTOM_CANVAS_ID ? { canvasWidth: preset.canvasWidth, canvasHeight: preset.canvasHeight } : {}),
     ...(preset.themeMode ? { themeMode: preset.themeMode } : {}),
     background: { ...preset.background },
+    ...(preset.options ? { options: { ...preset.options } as Record<string, unknown> } : {}),
     widgets: [
       ...preset.widgets.map((widget) => ({
         ...widget,

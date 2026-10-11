@@ -5,10 +5,20 @@ import { cn } from '@/lib/utils'
 import { getWallpaperLayoutCanvas } from './wallpaper-canvas-presets'
 import { WALLPAPER_BACKGROUND_KEYFRAMES, WallpaperBackgroundLayer } from './wallpaper-background-layer'
 import type { WallpaperLayoutPreset, WallpaperWidgetFrame as Frame, WallpaperWidgetInstance } from './wallpaper-types'
-import { WALLPAPER_ENTRANCE_KEYFRAMES, WallpaperWidgetFrame } from './wallpaper-widget-frame'
+import { WALLPAPER_ENTRANCE_KEYFRAMES, WALLPAPER_WIDGET_FONTS, WallpaperWidgetFrame } from './wallpaper-widget-frame'
 import type { WallpaperWidgetPreviewImage } from './wallpaper-widget-bodies'
 import { getWallpaperCanvasScale, getWallpaperWidgetMinSize } from './wallpaper-widget-registry'
 import { getWallpaperAnimationEasingCss } from './wallpaper-widget-utils'
+import { isWallpaperPlaybackRunning, setWallpaperFpsLimit, useWallpaperPlayback } from './wallpaper-playback'
+import { resolveWallpaperPresetOptions } from './wallpaper-layout-utils'
+import { useImageAccentColor } from './wallpaper-accent-color'
+import { WallpaperParticleLayer } from './wallpaper-particle-layer'
+import { isWallpaperClockWindowOpen, useWallpaperMinuteClock } from './wallpaper-schedule-utils'
+
+/** Layout px the nearest layer (depth 100) shifts at full parallax. */
+const PARALLAX_MAX_SHIFT = 36
+/** Canvas px around a widget that count as "near" for the clean-desktop reveal. */
+const REVEAL_DISTANCE = 160
 
 type Handle = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
 const HANDLES: Handle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']
@@ -177,6 +187,28 @@ export function WallpaperStage({
   const [marquee, setMarquee] = useState<Frame | null>(null)
   const [guides, setGuides] = useState<Guides>({ x: [], y: [] })
   const [previewImage, setPreviewImage] = useState<WallpaperWidgetPreviewImage | null>(null)
+  const playbackRunning = isWallpaperPlaybackRunning(useWallpaperPlayback())
+  const options = useMemo(() => resolveWallpaperPresetOptions(layout.options), [layout.options])
+  const [accentSource, setAccentSource] = useState<string | null>(null)
+  const autoAccent = useImageAccentColor(accentSource, options.autoAccent)
+  const accent = (options.autoAccent ? autoAccent : null) ?? options.accentColor
+  const tokenStyle = useMemo<CSSProperties>(() => ({
+    ...(accent ? { ['--primary' as string]: accent } : null),
+    ...(options.textColor
+      ? { ['--foreground' as string]: options.textColor, ['--muted-foreground' as string]: `color-mix(in srgb, ${options.textColor} 66%, transparent)` }
+      : null),
+    ...(options.fontFamily !== 'inherit' ? { fontFamily: WALLPAPER_WIDGET_FONTS[options.fontFamily] } : null),
+  }), [accent, options.fontFamily, options.textColor])
+  const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null)
+  const tracksPointer = !isEditor && (options.parallax > 0 || options.widgetReveal === 'pointer')
+  const usesClockWindows = !isEditor && layout.widgets.some((widget) => widget.style.showFrom || widget.style.showUntil)
+  const minuteClock = useWallpaperMinuteClock(usesClockWindows)
+
+  useEffect(() => {
+    if (isEditor) return undefined
+    setWallpaperFpsLimit('preset', options.fpsLimit)
+    return () => setWallpaperFpsLimit('preset', 0)
+  }, [isEditor, options.fpsLimit])
 
   useLayoutEffect(() => {
     const element = viewportRef.current
@@ -203,8 +235,10 @@ export function WallpaperStage({
   }, [k, onZoomPercentChange])
 
   const widgets = useMemo(
-    () => [...layout.widgets].filter((widget) => isEditor || !widget.hidden).sort((left, right) => left.zIndex - right.zIndex),
-    [isEditor, layout.widgets],
+    () => [...layout.widgets]
+      .filter((widget) => isEditor || (!widget.hidden && isWallpaperClockWindowOpen(widget.style.showFrom, widget.style.showUntil, minuteClock)))
+      .sort((left, right) => left.zIndex - right.zIndex),
+    [isEditor, layout.widgets, minuteClock],
   )
   const widgetById = useMemo(() => new Map(layout.widgets.map((widget) => [widget.id, widget])), [layout.widgets])
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
@@ -217,6 +251,48 @@ export function WallpaperStage({
     if (!rect || k <= 0) return { x: 0, y: 0 }
     return { x: (clientX - rect.left) / k, y: (clientY - rect.top) / k }
   }, [k])
+
+  // Live page: follow the pointer (throttled to frames) for parallax and the clean-desktop reveal.
+  useEffect(() => {
+    if (!tracksPointer) {
+      setPointer(null)
+      return undefined
+    }
+    let frame = 0
+    let latest: { x: number; y: number } | null = null
+    const flush = () => {
+      frame = 0
+      setPointer(latest)
+    }
+    const onMove = (event: PointerEvent) => {
+      latest = toCanvas(event.clientX, event.clientY)
+      if (!frame) frame = window.requestAnimationFrame(flush)
+    }
+    const onLeave = () => {
+      latest = null
+      if (!frame) frame = window.requestAnimationFrame(flush)
+    }
+    window.addEventListener('pointermove', onMove)
+    document.documentElement.addEventListener('pointerleave', onLeave)
+    window.addEventListener('blur', onLeave)
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame)
+      window.removeEventListener('pointermove', onMove)
+      document.documentElement.removeEventListener('pointerleave', onLeave)
+      window.removeEventListener('blur', onLeave)
+    }
+  }, [toCanvas, tracksPointer])
+
+  const parallaxShift = isEditor ? 0 : (options.parallax / 100) * PARALLAX_MAX_SHIFT
+  const pointerNorm = pointer && parallaxShift > 0
+    ? { x: Math.max(-1, Math.min(1, (pointer.x / canvas.width - 0.5) * 2)), y: Math.max(-1, Math.min(1, (pointer.y / canvas.height - 0.5) * 2)) }
+    : { x: 0, y: 0 }
+  const isWidgetRevealed = (frame: Frame) => {
+    if (!pointer) return false
+    const dx = Math.max(frame.x - pointer.x, 0, pointer.x - (frame.x + frame.w))
+    const dy = Math.max(frame.y - pointer.y, 0, pointer.y - (frame.y + frame.h))
+    return Math.hypot(dx, dy) <= REVEAL_DISTANCE * unit
+  }
 
   const snapTargets = useCallback((excluded: Set<string>) => {
     const xs = [0, canvas.width / 2, canvas.width]
@@ -417,9 +493,10 @@ export function WallpaperStage({
       <style>{WALLPAPER_ENTRANCE_KEYFRAMES + WALLPAPER_BACKGROUND_KEYFRAMES + '.wp-hit:hover{box-shadow:inset 0 0 0 calc(1.5px * var(--wp-inv)) color-mix(in srgb, var(--primary) 55%, transparent)}'}</style>
       <div
         ref={layerRef}
-        className={cn('absolute left-0 top-0 origin-top-left overflow-hidden bg-background text-foreground', themeClassName)}
+        className={cn('absolute left-0 top-0 origin-top-left overflow-hidden bg-background text-foreground', themeClassName, playbackRunning ? null : 'wallpaper-paused')}
         style={{
           ...themeStyle,
+          ...tokenStyle,
           width: layoutWidth,
           height: layoutHeight,
           transform: `scale(${scale})`,
@@ -439,9 +516,23 @@ export function WallpaperStage({
           onDropWidget(value, toCanvas(event.clientX, event.clientY))
         }}
       >
-        <WallpaperBackgroundLayer background={layout.background} />
+        <WallpaperBackgroundLayer
+          background={layout.background}
+          onAccentSource={options.autoAccent ? setAccentSource : undefined}
+          style={parallaxShift > 0 ? {
+            transform: `translate3d(${(pointerNorm.x * parallaxShift * 0.35).toFixed(2)}px, ${(pointerNorm.y * parallaxShift * 0.35).toFixed(2)}px, 0) scale(${(1 + (parallaxShift * 0.9) / layoutWidth).toFixed(4)})`,
+            transition: 'transform 700ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+          } : undefined}
+        />
+        <WallpaperParticleLayer kind={options.particles} amount={options.particleAmount} width={layoutWidth} height={layoutHeight} pixelRatio={scale * (typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1)} />
         {widgets.map((widget) => {
           const frame = frameFor(widget)
+          const depthShift = parallaxShift * (widget.style.depth / 100)
+          const transforms = [
+            depthShift > 0 ? `translate3d(${(-pointerNorm.x * depthShift).toFixed(2)}px, ${(-pointerNorm.y * depthShift).toFixed(2)}px, 0)` : null,
+            widget.rotation ? `rotate(${widget.rotation}deg)` : null,
+          ].filter(Boolean)
+          const fadesIdle = !isEditor && options.widgetReveal === 'pointer'
           return (
             <div
               key={widget.id}
@@ -451,8 +542,9 @@ export function WallpaperStage({
                 top: frame.y / unit,
                 width: frame.w / unit,
                 height: frame.h / unit,
-                transform: widget.rotation ? `rotate(${widget.rotation}deg)` : undefined,
-                opacity: isEditor && widget.hidden ? 0.25 : undefined,
+                transform: transforms.length > 0 ? transforms.join(' ') : undefined,
+                opacity: isEditor && widget.hidden ? 0.25 : fadesIdle && !isWidgetRevealed(frame) ? options.idleOpacity / 100 : undefined,
+                transition: parallaxShift > 0 || fadesIdle ? 'transform 600ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 450ms ease' : undefined,
               }}
             >
               <MemoWidgetFrame widget={widget} mode={mode} onOpenImage={isEditor ? undefined : setPreviewImage} animateEntrance={!isEditor} />

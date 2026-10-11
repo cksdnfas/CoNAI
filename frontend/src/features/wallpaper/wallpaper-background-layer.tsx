@@ -1,9 +1,11 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { buildApiUrl } from '@/lib/api-client'
 import type { ImageRecord } from '@/types/image'
 import type { WallpaperBackground, WallpaperBackgroundFit } from './wallpaper-types'
 import { useWallpaperGroupPreviewImagesQuery } from './wallpaper-widget-data'
 import { useWallpaperRotatingIndex } from './wallpaper-widget-utils'
+import { isWallpaperPlaybackRunning, useWallpaperPlayback } from './wallpaper-playback'
+import { cn } from '@/lib/utils'
 
 const SLIDESHOW_POOL_SIZE = 40
 
@@ -16,10 +18,19 @@ function isVideoRecord(image: ImageRecord) {
   return (image.mime_type ?? '').toLowerCase().startsWith('video/')
 }
 
-function MediaFill({ src, poster, video, fit, blur, style }: { src: string; poster?: string | null; video: boolean; fit: WallpaperBackgroundFit; blur: number; style?: CSSProperties }) {
-  const filter = blur > 0 ? `blur(${blur}px)` : undefined
-  const media = (objectFit: 'cover' | 'contain', extra?: CSSProperties) => (video ? (
+/** A looping background video that stops decoding while the wallpaper is hidden or paused by its host. */
+function BackgroundVideo({ src, poster, style }: { src: string; poster?: string | null; style: CSSProperties }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const running = isWallpaperPlaybackRunning(useWallpaperPlayback())
+  useEffect(() => {
+    const element = videoRef.current
+    if (!element) return
+    if (running) void element.play().catch(() => undefined)
+    else element.pause()
+  }, [running])
+  return (
     <video
+      ref={videoRef}
       src={src}
       poster={poster ?? undefined}
       autoPlay
@@ -27,10 +38,23 @@ function MediaFill({ src, poster, video, fit, blur, style }: { src: string; post
       loop
       playsInline
       className="absolute inset-0 h-full w-full"
-      style={{ objectFit, filter, ...extra }}
+      style={style}
     />
+  )
+}
+
+function MediaFill({ src, poster, video, fit, blur, kenBurns = false, style }: { src: string; poster?: string | null; video: boolean; fit: WallpaperBackgroundFit; blur: number; kenBurns?: boolean; style?: CSSProperties }) {
+  const filter = blur > 0 ? `blur(${blur}px)` : undefined
+  const media = (objectFit: 'cover' | 'contain', extra?: CSSProperties) => (video ? (
+    <BackgroundVideo src={src} poster={poster} style={{ objectFit, filter, ...extra }} />
   ) : (
-    <img src={src} alt="" draggable={false} className="absolute inset-0 h-full w-full select-none" style={{ objectFit, filter, ...extra }} />
+    <img
+      src={src}
+      alt=""
+      draggable={false}
+      className={cn('absolute inset-0 h-full w-full select-none', kenBurns && !extra?.transform ? 'wallpaper-ken-burns' : null)}
+      style={{ objectFit, filter, ...(kenBurns ? { ['--wp-duration' as string]: '48s' } : null), ...extra }}
+    />
   ))
 
   return (
@@ -46,7 +70,7 @@ function MediaFill({ src, poster, video, fit, blur, style }: { src: string; post
 }
 
 /** Cross-fading slideshow of one group, refreshed from the server every few rounds. */
-function GroupSlideshow({ background }: { background: Extract<WallpaperBackground, { kind: 'group-slideshow' }> }) {
+function GroupSlideshow({ background, onAccentSource }: { background: Extract<WallpaperBackground, { kind: 'group-slideshow' }>; onAccentSource?: (url: string | null) => void }) {
   const intervalMs = Math.max(10, background.intervalSec) * 1000
   // Draw a fresh pool roughly once all of the current one has been shown.
   const poolMinutes = Math.max(5, Math.round((intervalMs * SLIDESHOW_POOL_SIZE) / 60_000))
@@ -70,6 +94,12 @@ function GroupSlideshow({ background }: { background: Extract<WallpaperBackgroun
     loader.src = url
   }, [current])
 
+  const topImage = layers[layers.length - 1]?.image ?? null
+  const accentSource = topImage ? mediaUrl(topImage.thumbnail_url ?? topImage.image_url) : null
+  useEffect(() => {
+    onAccentSource?.(accentSource)
+  }, [accentSource, onAccentSource])
+
   const transition = background.transition
   return (
     <>
@@ -90,6 +120,7 @@ function GroupSlideshow({ background }: { background: Extract<WallpaperBackgroun
             video={isVideoRecord(layer.image)}
             fit={background.fit}
             blur={background.blur ?? 0}
+            kenBurns={background.kenBurns === true}
             style={isTop && layers.length > 1 ? { animation: enter } : undefined}
           />
         )
@@ -103,9 +134,18 @@ export const WALLPAPER_BACKGROUND_KEYFRAMES = `
 @keyframes wallpaper-bg-slide { from { opacity: 0; transform: translateX(6%) } to { opacity: 1; transform: none } }
 `
 
-/** The wallpaper's own background, under every widget. */
-export function WallpaperBackgroundLayer({ background }: { background: WallpaperBackground }) {
+/**
+ * The wallpaper's own background, under every widget. `onAccentSource` receives a thumbnail URL of the image on
+ * screen (for the accent-from-background option).
+ */
+export function WallpaperBackgroundLayer({ background, onAccentSource, style }: { background: WallpaperBackground; onAccentSource?: (url: string | null) => void; style?: CSSProperties }) {
   const blur = background.blur ?? 0
+  const stillSource = (background.kind === 'image' || background.kind === 'video') && background.compositeHash
+    ? buildApiUrl(`/api/images/${background.compositeHash}/thumbnail`)
+    : null
+  useEffect(() => {
+    if (background.kind !== 'group-slideshow') onAccentSource?.(stillSource)
+  }, [background.kind, onAccentSource, stillSource])
   let content: ReactNode
   switch (background.kind) {
     case 'color':
@@ -123,11 +163,12 @@ export function WallpaperBackgroundLayer({ background }: { background: Wallpaper
           video={background.kind === 'video'}
           fit={background.fit}
           blur={blur}
+          kenBurns={background.kind === 'image' && background.kenBurns === true}
         />
       ) : null
       break
     case 'group-slideshow':
-      content = background.groupId !== null ? <GroupSlideshow background={background} /> : null
+      content = background.groupId !== null ? <GroupSlideshow background={background} onAccentSource={onAccentSource} /> : null
       break
     default:
       content = null
@@ -136,7 +177,7 @@ export function WallpaperBackgroundLayer({ background }: { background: Wallpaper
   const dim = background.dim ?? 0
   const vignette = background.vignette ?? 0
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden bg-background">
+    <div className="pointer-events-none absolute inset-0 overflow-hidden bg-background" style={style}>
       {content}
       {dim > 0 ? <div className="absolute inset-0" style={{ background: `rgb(0 0 0 / ${dim / 100})` }} /> : null}
       {vignette > 0 ? (

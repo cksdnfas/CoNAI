@@ -5,6 +5,7 @@ import { GraphWorkflowFolderModel } from '../../models/GraphWorkflowFolder'
 import { GraphExecutionModel } from '../../models/GraphExecution'
 import { GraphWorkflowScheduleModel } from '../../models/GraphWorkflowSchedule'
 import { GraphWorkflowExecutionQueue } from '../../services/graphWorkflowExecutionQueue'
+import { enqueueScheduleRuns, parseStoredScheduleInputValues } from '../../services/graphWorkflowScheduleRuns'
 import { GraphWorkflowScheduleService } from '../../services/graphWorkflowScheduleService'
 import { decorateGraphWorkflowScheduleRecords } from '../../services/graphWorkflowViewService'
 import { asyncHandler } from '../../middleware/asyncHandler'
@@ -33,56 +34,6 @@ import {
 /** The signed-in account; a schedule runs as whoever last saved it (null while no accounts are configured). */
 function sessionAccountId(req: Request) {
   return typeof req.session?.accountId === 'number' ? req.session.accountId : null
-}
-
-function parseStoredScheduleInputValues(value?: string | null) {
-  if (!value) {
-    return undefined
-  }
-
-  return JSON.parse(value) as Record<string, unknown>
-}
-
-function countReservedScheduleRuns(scheduleId: number) {
-  return GraphExecutionModel.countReservedByScheduleId(scheduleId)
-}
-
-function resolveAllowedScheduleEnqueueCount(scheduleId: number, requestedCount: number, maxRunCount?: number | null) {
-  if (requestedCount <= 0) {
-    return 0
-  }
-
-  if (maxRunCount === null || maxRunCount === undefined) {
-    return requestedCount
-  }
-
-  const remainingCount = Math.max(0, maxRunCount - countReservedScheduleRuns(scheduleId))
-  return Math.min(requestedCount, remainingCount)
-}
-
-function enqueueScheduleRuns(params: {
-  scheduleId: number
-  workflowId: number
-  inputValues?: Record<string, unknown>
-  requestedCount: number
-  maxRunCount?: number | null
-  requestedByAccountId: number | null
-}) {
-  const allowedCount = resolveAllowedScheduleEnqueueCount(params.scheduleId, params.requestedCount, params.maxRunCount)
-  const executionIds = GraphWorkflowExecutionQueue.enqueueMany(
-    params.workflowId,
-    allowedCount,
-    params.inputValues,
-    undefined,
-    false,
-    { triggerType: 'schedule', scheduleId: params.scheduleId, requestedByAccountId: params.requestedByAccountId },
-  ).map((result) => result.executionId)
-
-  return {
-    requested_count: params.requestedCount,
-    enqueued_count: executionIds.length,
-    execution_ids: executionIds,
-  }
 }
 
 export function createGraphWorkflowScheduleRoutes() {

@@ -59,6 +59,11 @@ export interface WallpaperWidgetStyle {
   opacity: number
   showTitle: boolean
   entrance: WallpaperWidgetEntrance
+  /** 0-100: how far the widget follows the pointer when the wallpaper uses parallax. */
+  depth: number
+  /** HH:MM window the live wallpaper shows the widget in; null = always. `until` before `from` wraps midnight. */
+  showFrom: string | null
+  showUntil: string | null
 }
 
 export interface WallpaperBaseWidgetSettings {
@@ -69,7 +74,8 @@ export interface WallpaperBaseWidgetSettings {
   imagePreviewCloseScalePercent?: number
   imagePreviewCloseDurationMs?: number
   imagePreviewCloseEasing?: WallpaperAnimationEasing
-  imageClickAction?: 'preview' | 'none'
+  /** 'open' opens the image page of CoNAI in the browser. */
+  imageClickAction?: 'preview' | 'none' | 'open'
   pauseOnHover?: boolean
 }
 
@@ -235,6 +241,40 @@ export interface WallpaperPromptOfDayWidgetSettings extends WallpaperBaseWidgetS
   typeface: 'serif' | 'sans'
 }
 
+export interface WallpaperAudioVisualizerWidgetSettings extends WallpaperBaseWidgetSettings {
+  shape: 'bars' | 'mirror' | 'wave' | 'circle'
+  /** 8-64 */
+  barCount: number
+  /** 50-300 % */
+  sensitivity: number
+  /** 0-90 %: how slowly peaks fall back. */
+  smoothing: number
+  /** null = accent */
+  color: string | null
+}
+
+export interface WallpaperNowPlayingWidgetSettings extends WallpaperBaseWidgetSettings {
+  layout: 'row' | 'stack'
+  showArt: boolean
+  hideWhenIdle: boolean
+}
+
+export interface WallpaperSystemMonitorWidgetSettings extends WallpaperBaseWidgetSettings {
+  /** 'host' = this PC through Lively; 'comfyui' = GPU memory of the ComfyUI servers. */
+  source: 'host' | 'comfyui'
+  display: 'bars' | 'rings'
+  showNetwork: boolean
+}
+
+export interface WallpaperQuickRunWidgetSettings extends WallpaperBaseWidgetSettings {
+  /** Workflow schedule whose "run now" the button presses. */
+  scheduleId: number | null
+  /** Schedule name when it was picked (the live page cannot list schedules). */
+  scheduleName: string
+  /** Button text; empty = schedule name. */
+  label: string
+}
+
 export interface WallpaperWidgetSettingsMap {
   clock: WallpaperClockWidgetSettings
   calendar: WallpaperCalendarWidgetSettings
@@ -254,6 +294,10 @@ export interface WallpaperWidgetSettingsMap {
   'audio-player': WallpaperAudioPlayerWidgetSettings
   'post-ticker': WallpaperPostTickerWidgetSettings
   'prompt-of-day': WallpaperPromptOfDayWidgetSettings
+  'audio-visualizer': WallpaperAudioVisualizerWidgetSettings
+  'now-playing': WallpaperNowPlayingWidgetSettings
+  'system-monitor': WallpaperSystemMonitorWidgetSettings
+  'quick-run': WallpaperQuickRunWidgetSettings
 }
 
 export type WallpaperWidgetCategory = 'basic' | 'images' | 'generation' | 'chat-media'
@@ -314,6 +358,33 @@ export interface WallpaperBackgroundOverlay {
   blur?: number
   /** 0-100 */
   vignette?: number
+  /** Slow pan and zoom on still images (image and slideshow backgrounds). */
+  kenBurns?: boolean
+}
+
+export type WallpaperParticleKind = 'none' | 'snow' | 'sakura' | 'rain' | 'dust' | 'fireflies'
+export type WallpaperThemeMode = 'dark' | 'light' | 'auto'
+
+/** Preset-wide look, effects and behavior. Widgets with their own color or font keep them. */
+export interface WallpaperPresetOptions {
+  /** Accent for every widget without its own; null = app theme. */
+  accentColor: string | null
+  /** Take the accent from the background image instead. */
+  autoAccent: boolean
+  /** Text color for every widget without its own; null = theme. */
+  textColor: string | null
+  fontFamily: WallpaperWidgetFont
+  particles: WallpaperParticleKind
+  /** 0-100 */
+  particleAmount: number
+  /** 0-100: how far widgets (by depth) and the background shift with the pointer. */
+  parallax: number
+  /** 'pointer' fades widgets until the pointer comes near them (clean desktop). */
+  widgetReveal: 'always' | 'pointer'
+  /** 0-100: widget opacity while faded. */
+  idleOpacity: number
+  /** Frame cap for scripted animation; 0 = display rate. */
+  fpsLimit: number
 }
 
 export type WallpaperBackground = WallpaperBackgroundOverlay & (
@@ -342,8 +413,10 @@ export interface WallpaperLayoutPreset {
   /** Set when canvasPresetId is 'custom'. */
   canvasWidth?: number
   canvasHeight?: number
-  themeMode?: 'dark' | 'light'
+  themeMode?: WallpaperThemeMode
   background: WallpaperBackground
+  /** Absent on presets saved before options existed; read through resolveWallpaperPresetOptions. */
+  options?: WallpaperPresetOptions
   widgets: WallpaperWidgetInstance[]
   createdAt: string
   updatedAt: string

@@ -5,6 +5,7 @@ import {
   getWallpaperChatMessages,
   getWallpaperChatProfiles,
   getWallpaperChatThreads,
+  getWallpaperComfyStats,
   getWallpaperGenerationHistory,
   getWallpaperGenerationStats,
   getWallpaperLibraryStats,
@@ -22,6 +23,8 @@ export interface WallpaperDataEnvironment {
   mode: 'editor' | 'runtime'
   /** True while the wallpaper event stream is connected; polling then slows to a safety net. */
   live: boolean
+  /** Saved preset shown on the live page (actions such as quick run name it). */
+  presetId?: string | null
 }
 
 export const WallpaperDataEnvironmentContext = createContext<WallpaperDataEnvironment>({ mode: 'editor', live: false })
@@ -151,6 +154,17 @@ export function useWallpaperGenerationStats(days: number) {
     queryFn: () => getWallpaperGenerationStats(days),
     refetchInterval: useRefetchInterval(5 * 60_000, 10 * 60_000),
     placeholderData: (previous) => previous,
+  })
+}
+
+export function useWallpaperComfyStats(enabled: boolean) {
+  return useQuery({
+    queryKey: [WALLPAPER_QUERY_ROOT, 'comfyui-stats'],
+    queryFn: getWallpaperComfyStats,
+    enabled,
+    refetchInterval: 4_000,
+    placeholderData: (previous) => previous,
+    retry: false,
   })
 }
 

@@ -128,10 +128,11 @@ export function WallpaperImageWidgetEditorFields({
               <Select
                 value={selectedWidget.settings.layoutMode ?? 'grid'}
                 onChange={(event) => {
-                  updateWidgetSettings({ layoutMode: event.target.value === 'filmstrip' ? 'filmstrip' : 'grid' })
+                  updateWidgetSettings({ layoutMode: event.target.value === 'filmstrip' ? 'filmstrip' : event.target.value === 'masonry' ? 'masonry' : 'grid' })
                 }}
               >
                 <option value="grid">{t({ ko: '그리드', en: 'Grid' })}</option>
+                <option value="masonry">{t({ ko: '메이슨리', en: 'Masonry' })}</option>
                 <option value="filmstrip">{t({ ko: '필름스트립', en: 'Filmstrip' })}</option>
               </Select>
             </Field>

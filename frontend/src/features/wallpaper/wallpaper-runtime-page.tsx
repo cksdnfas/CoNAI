@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { focusManager, useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ImagePermissionsContext, resolveImagePermissions } from '@/features/auth/use-image-permissions'
 import { useI18n } from '@/i18n'
@@ -9,6 +9,10 @@ import { useWallpaperLiveEvents } from './use-wallpaper-live-events'
 import { WallpaperStage } from './wallpaper-stage'
 import { useWallpaperTheme } from './use-wallpaper-theme'
 import { WallpaperDataEnvironmentContext } from './wallpaper-widget-data'
+import { useWallpaperHostState } from './wallpaper-host-bridge'
+import { applyWallpaperHostOverrides, resolveWallpaperHostOverrides, WALLPAPER_HOST_PRESETS_PARAM } from './wallpaper-host-package'
+import { useWallpaperPlayback } from './wallpaper-playback'
+import { resolveScheduledWallpaperPresetId, useWallpaperMinuteClock } from './wallpaper-schedule-utils'
 
 /** The server checks every read; the page itself may try to show library images. */
 const RUNTIME_IMAGE_PERMISSIONS = resolveImagePermissions(['images.view'], true)
@@ -55,6 +59,16 @@ export function WallpaperRuntimePage() {
   const [keyState, setKeyState] = useState<KeyState>(runtimeKey ? 'pending' : 'none')
   const [keyPresetId, setKeyPresetId] = useState<string | null>(null)
   const draft = useLocalDraft(isDraftPreview)
+  const hostState = useWallpaperHostState()
+  const hostPresetIds = useMemo(() => (searchParams.get(WALLPAPER_HOST_PRESETS_PARAM) ?? '').split(',').filter(Boolean), [searchParams])
+  const hostOverrides = useMemo(() => resolveWallpaperHostOverrides(hostState.properties, hostPresetIds), [hostPresetIds, hostState.properties])
+  const { hostPaused } = useWallpaperPlayback()
+
+  // A host pausing the wallpaper (fullscreen app) leaves the page "visible"; stop polling as if it were hidden.
+  useEffect(() => {
+    focusManager.setFocused(hostPaused ? false : undefined)
+    return () => focusManager.setFocused(undefined)
+  }, [hostPaused])
 
   useEffect(() => {
     if (!runtimeKey) return
@@ -84,20 +98,29 @@ export function WallpaperRuntimePage() {
     retry: 1,
   })
 
-  const layout = useMemo(() => {
+  const scheduleEnabled = settingsQuery.data?.wallpaperSchedule?.enabled === true
+  const minuteClock = useWallpaperMinuteClock(scheduleEnabled && !isDraftPreview)
+
+  // Which wallpaper: the host's pick (Lively / Wallpaper Engine property), then a ?preset link, the key's binding,
+  // the schedule, the active one. The host pick goes first because package URLs carry ?preset as their default.
+  const baseLayout = useMemo(() => {
     if (isDraftPreview) {
       return draft ?? buildWallpaperStarterLayout('landscape-1080p')
     }
     const settings = settingsQuery.data
     if (!settings) return null
     const presets = toWallpaperLayoutPresetViewModels(settings.wallpaperLayoutPresets)
+    const byId = (id: string | null | undefined) => (id ? presets.find((preset) => preset.id === id) ?? null : null)
+    const hostPick = byId(hostOverrides.presetId)
+    if (hostPick) return hostPick
     if (presetQuery) return findWallpaperPresetByQuery(presets, presetQuery)
-    const boundId = keyPresetId ?? settings.tokenPresetId ?? null
-    return (boundId ? presets.find((preset) => preset.id === boundId) : null)
-      ?? presets.find((preset) => preset.id === settings.wallpaperActivePresetId)
+    return byId(keyPresetId ?? settings.tokenPresetId)
+      ?? byId(resolveScheduledWallpaperPresetId(settings.wallpaperSchedule, minuteClock))
+      ?? byId(settings.wallpaperActivePresetId)
       ?? presets[0]
       ?? null
-  }, [draft, isDraftPreview, keyPresetId, presetQuery, settingsQuery.data])
+  }, [draft, hostOverrides.presetId, isDraftPreview, keyPresetId, minuteClock, presetQuery, settingsQuery.data])
+  const layout = useMemo(() => (baseLayout ? applyWallpaperHostOverrides(baseLayout, hostOverrides) : null), [baseLayout, hostOverrides])
 
   useEffect(() => lockDocumentScroll(), [])
 
@@ -121,7 +144,7 @@ export function WallpaperRuntimePage() {
 
   return (
     <ImagePermissionsContext.Provider value={RUNTIME_IMAGE_PERMISSIONS}>
-      <WallpaperDataEnvironmentContext.Provider value={{ mode: 'runtime', live }}>
+      <WallpaperDataEnvironmentContext.Provider value={{ mode: 'runtime', live, presetId: isDraftPreview ? null : layout.id }}>
         <div className="h-dvh w-full overflow-hidden bg-black">
           <WallpaperStage layout={layout} mode="runtime" themeClassName={theme.className} themeStyle={theme.style} />
         </div>
