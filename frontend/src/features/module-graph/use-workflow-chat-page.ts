@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, type Dispatch, type SetStateAction } from 'react'
 import { useReactFlow } from '@xyflow/react'
-import { applyChatWorkflowOperations, describeChatWorkflowModule, normalizeChatWorkflowSnapshot, sanitizeChatWorkflowInputs, type ChatWorkflowSnapshot } from '@conai/shared'
+import { applyChatWorkflowOperations, describeChatWorkflowModule, normalizeChatWorkflowSnapshot, replayWorkflowLocalInputs, sanitizeChatWorkflowInputs, type ChatWorkflowSnapshot } from '@conai/shared'
 import { useChatPageRegistration, type WorkflowPageProposal } from '@/features/codex-chat/chat-page-context'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowExposedInput, ModuleDefinitionRecord } from '@/lib/api-module-graph'
@@ -8,7 +8,7 @@ import { createRandomUuid } from '@/lib/random-uuid'
 import { buildGraphPayload } from './module-graph-flow'
 import { buildHandleId, buildModuleEdgePresentation, findNodePort, getModulePortCompatibility } from './module-graph-ports'
 import type { ModuleGraphEdge, ModuleGraphNode } from './module-graph-types'
-import { buildWorkflowRunInputDefaults, deriveWorkflowExposedInputsFromNodes, isWorkflowInputEnabledForNode, WORKFLOW_INPUT_DESCRIPTION_KEY, WORKFLOW_INPUT_ENABLED_KEY, WORKFLOW_INPUT_LABEL_KEY, WORKFLOW_INPUT_REQUIRED_KEY } from './module-graph-workflow-inputs'
+import { buildWorkflowRunInputDefaults, deriveWorkflowExposedInputsFromNodes, isWorkflowInputEnabledForNode, WORKFLOW_INPUT_DESCRIPTION_KEY, WORKFLOW_INPUT_LABEL_KEY } from './module-graph-workflow-inputs'
 
 type Draft = { name: string; description: string; nodes: ModuleGraphNode[]; edges: ModuleGraphEdge[]; runInputs: Record<string, unknown> }
 type Params = Draft & {
@@ -58,25 +58,19 @@ export function useWorkflowChatPage(params: Params) {
     const transaction = applyChatWorkflowOperations(current.snapshot, current.modules, proposal.operations)
     const moduleRecords = new Map(original.modules.map((module) => [module.id, module]))
     const oldNodes = new Map(original.nodes.map((node) => [node.id, node]))
+    const localGraph = buildGraphPayload(original.nodes, original.edges)
+    const local = replayWorkflowLocalInputs({ ...localGraph, nodes: localGraph.nodes.map((node, index) => ({ ...node, run_input: { enabled: isWorkflowInputEnabledForNode(original.nodes[index]) } })) }, original.modules, transaction.operations)
+    const localNodes = new Map(local.nodes.map((node) => [node.id, node]))
+    const replaced = new Set(transaction.operations.flatMap((operation) => operation.type === 'set_variant' || operation.type === 'add_node' ? [operation.nodeId] : []))
     const nodes: ModuleGraphNode[] = transaction.graph.nodes.map((node) => {
       const old = oldNodes.get(node.id)
       const module = moduleRecords.get(node.module_id)
       if (!module) throw new Error('등록된 모듈을 찾지 못했어.')
-      // Preserve private inputs and authored settings. Only explicitly proposed keys are changed.
-      const inputValues = { ...old?.data.inputValues }
-      for (const operation of transaction.operations) {
-        if ('nodeId' in operation && operation.nodeId === node.id) {
-          if (operation.type === 'set_input') inputValues[operation.key] = operation.value
-          if (operation.type === 'clear_input') delete inputValues[operation.key]
-          if (operation.type === 'set_run_input') {
-            inputValues[WORKFLOW_INPUT_ENABLED_KEY] = operation.enabled
-            inputValues[WORKFLOW_INPUT_LABEL_KEY] = operation.label ?? ''
-            inputValues[WORKFLOW_INPUT_DESCRIPTION_KEY] = operation.description ?? ''
-            inputValues[WORKFLOW_INPUT_REQUIRED_KEY] = true
-          }
-        }
-      }
-      return { ...old, id: node.id, type: 'module', position: node.position, data: { ...old?.data, module, label: node.label, disabled: node.disabled, inputValues } }
+      // Native values omitted from the chat snapshot must pass the same lossless variant check.
+      const localNode = localNodes.get(node.id)
+      if (!localNode || localNode.module_id !== node.module_id) throw new Error('노드 변형의 편집 결과가 일치하지 않아.')
+      const inputValues = localNode.input_values ?? {}
+      return { ...old, id: node.id, type: 'module', position: node.position, data: { ...(replaced.has(node.id) ? {} : old?.data), module, label: node.label, disabled: node.disabled, inputValues } }
     })
     const nodeMap = new Map(nodes.map((node) => [node.id, node]))
     const edges: ModuleGraphEdge[] = transaction.graph.edges.map((edge) => {

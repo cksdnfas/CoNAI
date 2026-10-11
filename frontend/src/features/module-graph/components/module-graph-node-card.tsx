@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { getBuiltinNodeFamily, getBuiltinNodeVariant, listBuiltinNodeVariants } from '@conai/shared'
 import { NodeToolbar, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react'
 import { Copy, Ellipsis, Play, Power, RotateCcw, Trash2 } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
@@ -18,7 +19,7 @@ import {
   type ModuleGraphNode,
 } from '../module-graph-shared'
 import { hasMeaningfulValue } from './module-graph-field-shared'
-import { useModuleGraphCanvasContext, useModuleGraphExecutionLock, useModuleGraphNodeActions } from './module-graph-canvas-context'
+import { useModuleGraphCanvasContext, useModuleGraphExecutionLock, useModuleGraphNodeActions, useModuleGraphVariantModules } from './module-graph-canvas-context'
 import { NODE_CONTROL_CLASS, stopNodeEvent } from './module-graph-node-controls'
 import { NodeArtifactOutputs } from './module-graph-node-card-layouts/node-artifact-outputs'
 import { ModuleGraphNodeBody } from './module-graph-node-layout-renderer'
@@ -82,6 +83,7 @@ function getNodeWidth(data: ModuleGraphNode['data']) {
 function ModuleGraphNodeCardComponent({ id, data, selected, dragging }: NodeProps<ModuleGraphNode>) {
   const { t } = useI18n()
   const actions = useModuleGraphNodeActions()
+  const variantModules = useModuleGraphVariantModules()
   const executionLocked = useModuleGraphExecutionLock()
   const { canExecuteGeneration, canUpdateWorkflows } = useFeaturePermissions()
   const { drag, debugMode, liftedLink } = useModuleGraphCanvasContext()
@@ -118,6 +120,10 @@ function ModuleGraphNodeCardComponent({ id, data, selected, dragging }: NodeProp
   const status = useNodeStatus(data, missingRequiredCount)
   const nodeLabel = getModuleNodeDisplayLabelFromData(data)
   const baseLabel = getModuleBaseDisplayName(module)
+  const family = getBuiltinNodeFamily(module)
+  const variant = getBuiltinNodeVariant(module, data.inputValues)
+  const variants = useMemo(() => family ? listBuiltinNodeVariants(variantModules, family.id) : [], [family, variantModules])
+  const headerLabel = family && (nodeLabel === baseLabel || nodeLabel === module.name) ? t(family.label) : nodeLabel
   const [isRenaming, setIsRenaming] = useState(false)
   const [labelDraft, setLabelDraft] = useState(data.label ?? '')
 
@@ -229,9 +235,25 @@ function ModuleGraphNodeCardComponent({ id, data, selected, dragging }: NodeProp
               if (canUpdateWorkflows) setIsRenaming(true)
             }}
           >
-            {nodeLabel}
+            {headerLabel}
           </span>
         )}
+        {family && variant && variants.length > 1 && !isRenaming ? (
+          <select
+            aria-label={t({ ko: '{family} 변형', en: '{family} variant' }, { family: t(family.label) })}
+            title={t(variant.label)}
+            value={variant.id}
+            disabled={!canUpdateWorkflows || executionLocked}
+            onMouseDown={stopNodeEvent}
+            onPointerDown={stopNodeEvent}
+            onKeyDown={stopNodeEvent}
+            onChange={(event) => actions.changeVariant(id, event.target.value)}
+            className="nodrag nopan nowheel h-6 min-w-0 max-w-[125px] rounded border border-line bg-surface-high px-1 text-2xs disabled:opacity-50"
+          >
+            {!variants.some((entry) => entry.variant.id === variant.id) ? <option value={variant.id}>{t(variant.label)}</option> : null}
+            {variants.map((entry) => <option key={entry.variant.id} value={entry.variant.id}>{t(entry.variant.label)}</option>)}
+          </select>
+        ) : null}
         {debugMode && data.plannedExecutionOrder ? (
           <Tip content={t({ ko: '실행 순서', en: 'Run order' })}>
             <span className="shrink-0 font-mono text-2xs text-muted-foreground">#{data.plannedExecutionOrder}</span>

@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
-import type { ModulePortDataType } from '@/lib/api-module-graph'
+import type { ModuleDefinitionRecord, ModulePortDataType } from '@/lib/api-module-graph'
 
 /** The port a link is being dragged from. */
 export type ModuleGraphConnectionDrag = {
@@ -56,6 +56,7 @@ export function buildInputSourceKey(nodeId: string, portKey: string) {
 
 /** What a node card can do to the graph. The object stays the same across renders, so cards only redraw for their own data. */
 export type ModuleGraphNodeActions = {
+  changeVariant: (nodeId: string, variantId: string) => void
   changeValue: (nodeId: string, key: string, value: unknown) => void
   clearValue: (nodeId: string, key: string) => void
   changeLabel: (nodeId: string, label: string) => void
@@ -71,6 +72,7 @@ export type ModuleGraphNodeActions = {
 }
 
 const NOOP_ACTIONS: ModuleGraphNodeActions = {
+  changeVariant: () => {},
   changeValue: () => {},
   clearValue: () => {},
   changeLabel: () => {},
@@ -84,6 +86,12 @@ const NOOP_ACTIONS: ModuleGraphNodeActions = {
 }
 
 export const ModuleGraphNodeActionsContext = createContext<ModuleGraphNodeActions>(NOOP_ACTIONS)
+
+export const ModuleGraphVariantModulesContext = createContext<ModuleDefinitionRecord[]>([])
+
+export function useModuleGraphVariantModules() {
+  return useContext(ModuleGraphVariantModulesContext)
+}
 
 export function useModuleGraphNodeActions() {
   return useContext(ModuleGraphNodeActionsContext)

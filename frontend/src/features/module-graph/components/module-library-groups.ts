@@ -1,5 +1,6 @@
 import type { TranslationInput, TranslationParams } from '@/i18n'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
+import { getBuiltinNodeFamily } from '@conai/shared'
 
 type TranslateFunction = (input: TranslationInput, values?: TranslationParams) => string
 
@@ -127,6 +128,11 @@ export function shouldHideFromModuleLibrary(module: ModuleDefinitionRecord) {
 
 /** Build a user-facing group for system modules based on practical workflow role. */
 export function getSystemModuleGroup(module: ModuleDefinitionRecord): ModuleGroupLabel {
+  const family = getBuiltinNodeFamily(module)
+  if (family) {
+    const labels: Record<string, string> = { input: 'Input', generation: 'Generation', logic: 'Logic', utility: 'Utility', get: 'Get', llm: 'LLM', output: 'END' }
+    return { key: family.group, label: labels[family.group] ?? 'Other' }
+  }
   const category = (module.category ?? '').trim().toLowerCase()
   const name = getNormalizedModuleName(module)
   const operationKey = getModuleLibraryOperationKey(module)

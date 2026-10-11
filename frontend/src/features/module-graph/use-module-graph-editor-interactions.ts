@@ -25,6 +25,7 @@ import {
 import { getActiveModuleInputPorts } from './module-graph-minimax-director-ports'
 import { toWorkflowImageValue } from './module-graph-image-values'
 import { resolveInitialOptionValues } from './module-graph-node-option-values'
+import { changeModuleGraphNodeVariant } from './module-graph-node-variants'
 
 /** Own local canvas/editor interactions for the module-graph page. */
 export function useModuleGraphEditorInteractions({
@@ -154,6 +155,7 @@ export function useModuleGraphEditorInteractions({
     options?: {
       position?: { x: number; y: number }
       connectionStart?: { nodeId: string; handleId: string; handleType: 'source' | 'target' }
+      inputValues?: Record<string, unknown>
     },
   ) => {
     const nodeId = createModuleGraphNodeId()
@@ -172,7 +174,7 @@ export function useModuleGraphEditorInteractions({
         data: {
           module,
           label: undefined,
-          inputValues: {},
+          inputValues: { ...options?.inputValues },
         },
       },
     ])
@@ -180,7 +182,7 @@ export function useModuleGraphEditorInteractions({
     // Live picks (the Codex node's newest model) land once their list arrives; anything set meanwhile wins.
     void resolveInitialOptionValues(queryClient, module).then((initialValues) => {
       if (Object.keys(initialValues).length === 0) return
-      setNodes((current) => current.map((node) => (node.id === nodeId
+      setNodes((current) => current.map((node) => (node.id === nodeId && node.data.module.id === module.id
         ? { ...node, data: { ...node.data, inputValues: { ...initialValues, ...node.data.inputValues } } }
         : node)))
     })
@@ -193,8 +195,10 @@ export function useModuleGraphEditorInteractions({
       if (existingNode && parsedHandle) {
         if (connectionStart.handleType === 'source') {
           const sourcePort = findNodePort(existingNode, 'out', parsedHandle.portKey)
+          const targetPorts = getActiveModuleInputPorts(module, options?.inputValues)
           const compatibleTargetPort = sourcePort
-            ? getActiveModuleInputPorts(module).find((port) => getModulePortCompatibility(sourcePort.data_type, port.data_type) !== 'incompatible')
+            ? targetPorts.find((port) => getModulePortCompatibility(sourcePort.data_type, port.data_type) === 'exact')
+              ?? targetPorts.find((port) => getModulePortCompatibility(sourcePort.data_type, port.data_type) === 'string-bridge')
             : null
 
           if (sourcePort && compatibleTargetPort) {
@@ -205,21 +209,22 @@ export function useModuleGraphEditorInteractions({
               targetHandle: `in:${compatibleTargetPort.key}`,
             }
 
-            if (isValidConnection(nextConnection)) {
-              setEdges((currentEdges) => addEdge(
-                {
-                  id: createModuleGraphEdgeId(),
-                  ...nextConnection,
-                  ...buildModuleEdgePresentation(sourcePort, compatibleTargetPort),
-                },
-                currentEdges,
-              ))
-            }
+            // The new node is not in nodeById until React renders. Both ports were checked above;
+            // a fresh node cannot introduce a cycle or already occupy its input.
+            setEdges((currentEdges) => addEdge(
+              {
+                id: createModuleGraphEdgeId(),
+                ...nextConnection,
+                ...buildModuleEdgePresentation(sourcePort, compatibleTargetPort),
+              },
+              currentEdges,
+            ))
           }
         } else {
           const targetPort = findNodePort(existingNode, 'in', parsedHandle.portKey)
           const compatibleSourcePort = targetPort
-            ? module.output_ports.find((port) => getModulePortCompatibility(port.data_type, targetPort.data_type) !== 'incompatible')
+            ? module.output_ports.find((port) => getModulePortCompatibility(port.data_type, targetPort.data_type) === 'exact')
+              ?? module.output_ports.find((port) => getModulePortCompatibility(port.data_type, targetPort.data_type) === 'string-bridge')
             : null
 
           if (targetPort && compatibleSourcePort) {
@@ -230,18 +235,16 @@ export function useModuleGraphEditorInteractions({
               targetHandle: connectionStart.handleId,
             }
 
-            if (isValidConnection(nextConnection)) {
-              setEdges((currentEdges) => addEdge(
-                {
-                  id: createModuleGraphEdgeId(),
-                  ...nextConnection,
-                  ...buildModuleEdgePresentation(compatibleSourcePort, targetPort),
-                },
-                targetPort.multiple
-                  ? currentEdges
-                  : currentEdges.filter((edge) => !(edge.target === existingNode.id && edge.targetHandle === connectionStart.handleId)),
-              ))
-            }
+            setEdges((currentEdges) => addEdge(
+              {
+                id: createModuleGraphEdgeId(),
+                ...nextConnection,
+                ...buildModuleEdgePresentation(compatibleSourcePort, targetPort),
+              },
+              targetPort.multiple
+                ? currentEdges
+                : currentEdges.filter((edge) => !(edge.target === existingNode.id && edge.targetHandle === connectionStart.handleId)),
+            ))
           }
         }
       }
@@ -249,7 +252,7 @@ export function useModuleGraphEditorInteractions({
 
     setSelectedEdgeId(null)
     setSelectedNodeId(nodeId)
-  }, [isValidConnection, nodeById, nodes.length, queryClient, setEdges, setNodes, setSelectedEdgeId, setSelectedNodeId])
+  }, [nodeById, nodes.length, queryClient, setEdges, setNodes, setSelectedEdgeId, setSelectedNodeId])
 
   /** Duplicate one node by id with copied input values. */
   const handleDuplicateNodeById = useCallback((nodeId: string) => {
@@ -420,6 +423,16 @@ export function useModuleGraphEditorInteractions({
     showSnackbar({ message: nextNodes.length === 1 ? '노드를 붙여넣었어.' : `${nextNodes.length}개 노드를 붙여넣었어.`, tone: 'info' })
     return true
   }, [modules, setEdges, setNodes, setSelectedEdgeId, setSelectedNodeId, showSnackbar])
+
+  /** A variant switch is explicit and lossless; incompatible inputs and links stay untouched. */
+  const handleNodeVariantChange = useCallback((nodeId: string, variantId: string) => {
+    try {
+      const nextNodes = changeModuleGraphNodeVariant(nodes, edges, modules, nodeId, variantId)
+      setNodes(nextNodes)
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : '변형을 변경할 수 없어.', tone: 'error' })
+    }
+  }, [nodes, edges, modules, setNodes, showSnackbar])
 
   /** Update one node label in local editor state. */
   const handleNodeLabelChange = useCallback((nodeId: string, label: string) => {
@@ -698,6 +711,7 @@ export function useModuleGraphEditorInteractions({
     handleCopySelectedNodesToClipboard,
     handlePasteNodesFromClipboard,
     handleNodeLabelChange,
+    handleNodeVariantChange,
     handleNodeValueChange,
     handleNodeValueClear,
     handleNodeImageChange,

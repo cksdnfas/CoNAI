@@ -1,11 +1,12 @@
 import type { ChatPageTarget } from './chatPage'
+import type { BuiltinNodeVariant } from '../utils/workflowNodeVariants'
 
 export type ChatWorkflowValue = string | number | boolean | null | ChatWorkflowValue[] | { [key: string]: ChatWorkflowValue }
 export type ChatWorkflowDataType = 'text' | 'prompt' | 'number' | 'boolean' | 'json' | 'any' | 'image' | 'video' | 'audio' | 'mask'
 export type ChatWorkflowPort = { key: string; label: string; dataType: ChatWorkflowDataType; required: boolean; multiple: boolean; connectable: boolean }
 export type ChatWorkflowField = { key: string; label: string; type: ChatWorkflowDataType | 'select'; editable: boolean; hasDefault: boolean; min?: number; max?: number; options?: string[] }
 /** Public editor interface only: module templates, code, paths and credentials are never included. */
-export type ChatWorkflowModule = { id: number; name: string; description: string; engine: string; version: number; operation: string | null; inputs: ChatWorkflowPort[]; outputs: ChatWorkflowPort[]; fields: ChatWorkflowField[]; runInputCapable: boolean }
+export type ChatWorkflowModule = { id: number; name: string; description: string; engine: string; version: number; operation: string | null; inputs: ChatWorkflowPort[]; outputs: ChatWorkflowPort[]; fields: ChatWorkflowField[]; runInputCapable: boolean; family?: { id: string; label: { ko: string; en: string } }; variants?: BuiltinNodeVariant[] }
 export type ChatWorkflowNode = {
   id: string; module_id: number; label: string; disabled: boolean; position: { x: number; y: number }
   input_values: Record<string, ChatWorkflowValue>
@@ -17,6 +18,7 @@ export type ChatWorkflowOperation =
   | { type: 'add_node'; nodeId: string; moduleId: number; label?: string; position?: { x: number; y: number } }
   | { type: 'remove_node'; nodeId: string }
   | { type: 'set_node'; nodeId: string; label?: string; disabled?: boolean; position?: { x: number; y: number } }
+  | { type: 'set_variant'; nodeId: string; variantId: string }
   | { type: 'set_input'; nodeId: string; key: string; value: ChatWorkflowValue }
   | { type: 'clear_input'; nodeId: string; key: string }
   | { type: 'connect'; edgeId: string; sourceNodeId: string; sourcePort: string; targetNodeId: string; targetPort: string }

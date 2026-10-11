@@ -1,4 +1,6 @@
 import type { ChatWorkflowDataType, ChatWorkflowField, ChatWorkflowModule, ChatWorkflowNode, ChatWorkflowOperation, ChatWorkflowPort, ChatWorkflowSnapshot, ChatWorkflowValue, ChatWorkflowChange } from '../types/chatWorkflow'
+import { getBuiltinNodeFamily } from './workflowNodeVariants'
+import { applyBuiltinNodeVariant } from './workflowNodeVariantTransition'
 
 export const CHAT_WORKFLOW_LIMITS = { nodes: 128, edges: 512, operations: 80, text: 8000, snapshot: 120000, jsonDepth: 6 } as const
 const PRIVATE_KEY = /password|secret|credential|api[ _-]?key|authorization|bearer|token|headers|(?:file|source|output|save)[ _-]?path|(?:^|[_.-])(?:code|script|url|endpoint)(?:$|[_.-])|비밀번호|암호|인증키|토큰|저장.?경로/i
@@ -24,6 +26,8 @@ export function copyChatWorkflowValue(value: unknown, depth = 0): ChatWorkflowVa
 
 type EditorModule = {
   id: number; name: string; description?: string | null; engine_type: string; version: number
+  authoring_source?: string
+  external_key?: string | null
   exposed_inputs: Array<{ key: string; label: string; data_type: ChatWorkflowDataType; required?: boolean; multiple?: boolean; default_value?: unknown; description?: string }>
   output_ports: Array<{ key: string; label: string; data_type: ChatWorkflowDataType; multiple?: boolean; description?: string }>
   ui_schema?: Array<{ key: string; label: string; data_type: ChatWorkflowDataType | 'select'; options?: Array<string | { value: string; label: string }>; min?: number; max?: number; node_editor?: string; description?: string; default_value?: unknown }> | null
@@ -33,6 +37,7 @@ type EditorModule = {
 /** The same public interface is derived from the live server definition and the editor's definition. */
 export function describeChatWorkflowModule(module: EditorModule): ChatWorkflowModule {
   const operation = module.internal_fixed_values?.operation_key ?? module.template_defaults.operation_key
+  const family = getBuiltinNodeFamily(module)
   const protectedField = (field: { key: string; label: string; description?: string }) => [field.key, field.label, field.description ?? ''].some(isProtectedWorkflowKey)
   const port = (entry: EditorModule['exposed_inputs'][number]): ChatWorkflowPort => ({ key: entry.key, label: entry.label.slice(0, 160), dataType: entry.data_type, required: entry.required === true, multiple: entry.multiple === true, connectable: !protectedField(entry) })
   const schemas = new Map((module.ui_schema ?? []).map((field) => [field.key, field]))
@@ -53,6 +58,7 @@ export function describeChatWorkflowModule(module: EditorModule): ChatWorkflowMo
   return { id: module.id, name: module.name.slice(0, 160), description: (module.description ?? '').slice(0, 500), engine: module.engine_type, version: module.version,
     operation: typeof operation === 'string' ? operation : null, inputs: module.exposed_inputs.map(port), outputs: module.output_ports.map(port), fields,
     runInputCapable: module.engine_type === 'system' && typeof operation === 'string' && /^system\.constant_(text|prompt|json|image|number|boolean)$/.test(operation),
+    ...(family ? { family: { id: family.id, label: family.label }, variants: family.variants.filter((variant) => variant.operationKey === operation) } : {}),
   }
 }
 
@@ -154,6 +160,25 @@ export function applyChatWorkflowOperations(snapshot: ChatWorkflowSnapshot, modu
       if (raw.position !== undefined) { op.position = position(raw.position); addChange(`노드 배치 · ${node.label}`, node.position, op.position); node.position = op.position }
       if (Object.keys(op).length === 2) throw new Error('변경할 노드 속성이 없어.')
       operations.push(op)
+    } else if (raw.type === 'set_variant') {
+      const node = findNode(raw.nodeId), variantId = id(raw.variantId)
+      const current = findModule(node.module_id)
+      if (!current.family) throw new Error('이 노드는 기본 노드 변형 전환 대상이 아니야.')
+      const target = modules.find((module) => module.family?.id === current.family!.id && module.variants?.some((variant) => variant.id === variantId))
+      if (!target) throw new Error('등록된 같은 그룹의 노드 변형을 찾지 못했어.')
+      const transitionModules = modules.map((module) => ({
+        id: module.id, name: module.name, engine_type: module.engine,
+        authoring_source: module.family ? 'manual' : 'excluded',
+        internal_fixed_values: { operation_key: module.operation }, template_defaults: {},
+        exposed_inputs: module.inputs.map((port) => ({ key: port.key, label: port.label, data_type: port.dataType, multiple: port.multiple })),
+        output_ports: module.outputs.map((port) => ({ key: port.key, label: port.label, data_type: port.dataType, multiple: port.multiple })),
+        ui_schema: module.fields.map((field) => ({ key: field.key, label: field.label, data_type: field.type, options: field.options, min: field.min, max: field.max })),
+      }))
+      const changed = applyBuiltinNodeVariant(graph, transitionModules, node.id, variantId)
+      graph.nodes = changed.nodes
+      graph.edges = changed.edges
+      operations.push({ type: 'set_variant', nodeId: node.id, variantId })
+      addChange(`노드 변형 · ${node.label}`, current.name, `${target.family!.label.ko} · ${target.variants!.find((variant) => variant.id === variantId)!.label.ko}`)
     } else if (raw.type === 'set_input' || raw.type === 'clear_input') {
       const node = findNode(raw.nodeId), field = findField(node, raw.key)
       const old = node.input_values[field.key]

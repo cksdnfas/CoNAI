@@ -140,6 +140,11 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       const catalog = await bridge.call('list_workflow_modules', { moduleIds: [textModule.id] })
       assert.ok(!catalog.isError)
       assert.ok(!JSON.stringify(catalog).includes('template_defaults'))
+      const familyCatalog = JSON.parse(((await bridge.call('list_workflow_modules', { query: '값' })).content?.[0] as { text: string }).text)
+      assert.ok(familyCatalog.modules.some((module: { id: number; family?: { id: string } }) => module.id === textModule.id && module.family?.id === 'value'))
+      const replaceCatalog = JSON.parse(((await bridge.call('list_workflow_modules', { query: 'text.replace' })).content?.[0] as { text: string }).text)
+      assert.equal(replaceCatalog.modules.length, 1)
+      assert.deepEqual(replaceCatalog.modules[0].variants.find((variant: { id: string }) => variant.id === 'text.replace').inputValues, { mode: 'replace' })
       assert.ok((await bridge.call('workflow_edit', { operations: [{ type: 'add_node', nodeId: 'unknown', moduleId: 9999999 }] })).isError, 'an invalid transaction never reaches the tab')
 
       // A test tab: it applies the transaction to its editor and answers with the new screen.
@@ -152,7 +157,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
         commands.push(event)
         if (event.type === 'capture') { setImmediate(() => resolveChatPageCommand(admin, event.commandId, { ok: true, page: tabPage })); return }
         if (event.type !== 'workflow') return
-        const graph = applyChatWorkflowOperations(emptyWorkflow, workflowModules, event.operations).graph
+        const graph = applyChatWorkflowOperations((tabPage as typeof workflowPage).workflow!, workflowModules, event.operations).graph
         tabPage = { ...workflowPage, workflow: { ...graph, revision: 'workflow-revision-after' } }
         setImmediate(() => resolveChatPageCommand(admin, event.commandId, { ok: true, page: tabPage }))
       })
@@ -171,6 +176,18 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
         assert.equal(ChatProposalStore.listForThread(workflowThreadId).length, 0, 'no review card is left behind')
         const after = JSON.parse(((await bridge.call('get_workflow_editor', {})).content?.[0] as { text: string }).text)
         assert.equal(after.nodeCount, 2, 'the next read sees the editor as the tab reported it')
+        const variantEdit = await bridge.call('workflow_edit', { operations: [
+          { type: 'add_node', nodeId: 'variant-number', moduleId: textModule.id, position: { x: 920, y: 80 } },
+          { type: 'set_variant', nodeId: 'variant-number', variantId: 'value.number' },
+          { type: 'set_input', nodeId: 'variant-number', key: 'number', value: 42 },
+        ] })
+        assert.ok(!variantEdit.isError, JSON.stringify(variantEdit.content))
+        const afterVariant = JSON.parse(((await bridge.call('get_workflow_editor', {})).content?.[0] as { text: string }).text)
+        assert.equal(afterVariant.nodeCount, 3)
+        const variantNode = afterVariant.nodes.find((node: { id: string }) => node.id === 'variant-number')
+        assert.equal(variantNode.module_id, numberModule.id)
+        assert.deepEqual(variantNode.input_values, { number: 42 })
+        assert.deepEqual(variantNode.position, { x: 920, y: 80 })
         requireChatWorkflowModules(command.modules)
         ModuleDefinitionModel.update(textModule.id, { version: textModule.version + 1 })
         assert.throws(() => requireChatWorkflowModules(command.modules), /모듈 정의/)
@@ -179,6 +196,100 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       unregister()
       assert.ok((await bridge.call('workflow_edit', { operations: createGraph })).isError)
     } finally { unregister(); await bridge.close() }
+  })
+
+  await t.test('workflow variants: legacy graphs, atomic compatible switching and loss protection', () => {
+    const and = workflowModules.find((module) => module.operation === 'system.logic_and')!
+    const or = workflowModules.find((module) => module.operation === 'system.logic_or')!
+    const regex = workflowModules.find((module) => module.operation === 'system.regex_text_transform')!
+    const legacy = workflowModules.find((module) => module.operation === 'system.constant_prompt')!
+    assert.equal(textModule.family?.id, 'value')
+    assert.equal(legacy.family?.id, 'value')
+    const visible = workflowModules.filter((module) => module.engine === 'system' && module.operation !== 'system.constant_prompt')
+    assert.equal(visible.length, 47)
+    assert.equal(new Set(visible.map((module) => module.family?.id ?? module.operation)).size, 24)
+    const created = applyChatWorkflowOperations(emptyWorkflow, workflowModules, [
+      { type: 'add_node', nodeId: 'logic', moduleId: and.id },
+      { type: 'set_input', nodeId: 'logic', key: 'left', value: true },
+      { type: 'set_input', nodeId: 'logic', key: 'right', value: false },
+      { type: 'add_node', nodeId: 'out', moduleId: finalModule.id },
+      { type: 'connect', edgeId: 'logic-out', sourceNodeId: 'logic', sourcePort: and.outputs[0].key, targetNodeId: 'out', targetPort: 'value' },
+    ])
+    const changed = applyChatWorkflowOperations(created.graph, workflowModules, [{ type: 'set_variant', nodeId: 'logic', variantId: 'logic.or' }])
+    assert.equal(changed.graph.nodes[0].module_id, or.id)
+    assert.equal(changed.graph.nodes[0].label, or.name)
+    assert.deepEqual(changed.graph.nodes[0].input_values, { left: true, right: false })
+    assert.deepEqual(changed.graph.edges, created.graph.edges)
+    assert.equal(created.graph.nodes[0].module_id, and.id)
+    const named = applyChatWorkflowOperations(created.graph, workflowModules, [
+      { type: 'set_node', nodeId: 'logic', label: '내 조건' }, { type: 'set_variant', nodeId: 'logic', variantId: 'logic.or' },
+    ])
+    assert.equal(named.graph.nodes[0].label, '내 조건')
+    const numbered = applyChatWorkflowOperations(emptyWorkflow, workflowModules, [
+      { type: 'add_node', nodeId: 'value', moduleId: textModule.id, label: '텍스트' }, { type: 'set_variant', nodeId: 'value', variantId: 'value.number' },
+    ])
+    assert.equal(numbered.graph.nodes[0].label, '숫자')
+    assert.throws(() => applyChatWorkflowOperations(created.graph, workflowModules, [{ type: 'set_workflow', name: 'must rollback' }, { type: 'set_variant', nodeId: 'logic', variantId: 'logic.not' }]), /유지할 수 없는/)
+    assert.equal(created.graph.name, 'Draft')
+    assert.throws(() => applyChatWorkflowOperations(created.graph, workflowModules, [{ type: 'set_variant', nodeId: 'logic', variantId: 'value.number' }]), /같은 그룹/)
+    const transformed = applyChatWorkflowOperations(emptyWorkflow, workflowModules, [
+      { type: 'add_node', nodeId: 'transform', moduleId: regex.id },
+      { type: 'set_input', nodeId: 'transform', key: 'value', value: 'hello' },
+      { type: 'set_variant', nodeId: 'transform', variantId: 'text.replace' },
+    ])
+    assert.deepEqual(transformed.graph.nodes[0].input_values, { value: 'hello', mode: 'replace' })
+    const legacyGraph = applyChatWorkflowOperations(emptyWorkflow, workflowModules, [
+      { type: 'add_node', nodeId: 'old', moduleId: legacy.id },
+      { type: 'set_input', nodeId: 'old', key: 'prompt', value: 'legacy prompt' },
+      { type: 'set_node', nodeId: 'old', position: { x: 420, y: 80 } },
+    ])
+    assert.equal(legacyGraph.graph.nodes[0].module_id, legacy.id)
+    assert.deepEqual(legacyGraph.graph.nodes[0].input_values, { prompt: 'legacy prompt' })
+    const publicGraph = applyChatWorkflowOperations(emptyWorkflow, workflowModules, [
+      { type: 'add_node', nodeId: 'public', moduleId: textModule.id },
+      { type: 'set_run_input', nodeId: 'public', enabled: true },
+    ])
+    assert.throws(() => applyChatWorkflowOperations(publicGraph.graph, workflowModules, [{ type: 'set_variant', nodeId: 'public', variantId: 'value.number' }]), /실행 입력/)
+  })
+
+  await t.test('workflow native replay: variant defaults, private values, ordered disconnects and rollback', async () => {
+    const { replayWorkflowLocalInputs } = await import('@conai/shared')
+    const { BUILTIN_SYSTEM_MODULE_DEFINITIONS } = await import('../src/database/userSettingsBuiltinModuleDefinitionData')
+    const nativeModules = BUILTIN_SYSTEM_MODULE_DEFINITIONS.map((definition) => ({
+      id: workflowModules.find((module) => module.operation === definition.internalFixedValues.operation_key)!.id,
+      name: definition.name, engine_type: 'system', authoring_source: 'manual', external_key: definition.internalFixedValues.operation_key,
+      internal_fixed_values: definition.internalFixedValues, template_defaults: {},
+      exposed_inputs: definition.exposedInputs, output_ports: definition.outputPorts, ui_schema: definition.uiSchema,
+    })) as Parameters<typeof replayWorkflowLocalInputs>[1]
+    const llm = workflowModules.find((module) => module.operation === 'system.call_llm')!
+    const regex = workflowModules.find((module) => module.operation === 'system.regex_text_transform')!
+    const and = workflowModules.find((module) => module.operation === 'system.logic_and')!
+    const graph = { nodes: [{ id: 'llm', module_id: llm.id, input_values: { prompt: 'old', api_key: 'local-only' } }], edges: [] }
+    const publicGraph = normalizeChatWorkflowSnapshot({ ...emptyWorkflow, nodes: [{ id: 'llm', module_id: llm.id, label: 'LLM', disabled: false, position: { x: 0, y: 0 }, input_values: { prompt: 'old' } }] })
+    const edit = applyChatWorkflowOperations(publicGraph, workflowModules, [{ type: 'set_input', nodeId: 'llm', key: 'prompt', value: 'new' }])
+    const local = replayWorkflowLocalInputs(graph, nativeModules, edit.operations)
+    assert.deepEqual(local.nodes[0].input_values, { prompt: 'new', api_key: 'local-only' })
+    assert.deepEqual(graph.nodes[0].input_values, { prompt: 'old', api_key: 'local-only' })
+    const variant = applyChatWorkflowOperations(publicGraph, workflowModules, [
+      { type: 'clear_input', nodeId: 'llm', key: 'prompt' }, { type: 'set_variant', nodeId: 'llm', variantId: 'llm.translate' },
+    ])
+    assert.throws(() => replayWorkflowLocalInputs(graph, nativeModules, variant.operations), /유지할 수 없는/)
+    assert.equal(graph.nodes[0].input_values.prompt, 'old', 'native rejection leaves the entire editor transaction untouched')
+
+    const created = applyChatWorkflowOperations(emptyWorkflow, workflowModules, [
+      { type: 'add_node', nodeId: 'regex', moduleId: regex.id }, { type: 'set_variant', nodeId: 'regex', variantId: 'text.replace' },
+      { type: 'set_input', nodeId: 'regex', key: 'value', value: 'hello cat' },
+    ])
+    assert.deepEqual(replayWorkflowLocalInputs({ nodes: [], edges: [] }, nativeModules, created.operations).nodes[0].input_values, created.graph.nodes[0].input_values)
+    const linked = applyChatWorkflowOperations(emptyWorkflow, workflowModules, [
+      { type: 'add_node', nodeId: 'logic', moduleId: and.id }, { type: 'add_node', nodeId: 'out', moduleId: finalModule.id },
+      { type: 'connect', edgeId: 'edge', sourceNodeId: 'logic', sourcePort: 'result', targetNodeId: 'out', targetPort: 'value' },
+    ])
+    const switched = applyChatWorkflowOperations(linked.graph, workflowModules, [{ type: 'disconnect', edgeId: 'edge' }, { type: 'set_variant', nodeId: 'logic', variantId: 'logic.not' }])
+    const replayed = replayWorkflowLocalInputs(linked.graph, nativeModules, switched.operations)
+    assert.equal(replayed.nodes[0].module_id, switched.graph.nodes[0].module_id)
+    assert.deepEqual(replayed.edges, [])
+    assert.equal(linked.graph.edges.length, 1)
   })
 
   await t.test('page actions: exact native schemas, route binding, protected data and fresh revisions', async () => {

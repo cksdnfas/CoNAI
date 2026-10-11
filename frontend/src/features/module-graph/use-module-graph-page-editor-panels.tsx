@@ -53,6 +53,7 @@ export function useModuleGraphPageEditorPanels({
   onWorkflowDebugModeChange,
   onSaveGraph,
   onNodeLabelChange,
+  onNodeVariantChange,
   onNodeValueChange,
   onNodeValueClear,
   onNodeImageChange,
@@ -107,6 +108,7 @@ export function useModuleGraphPageEditorPanels({
   onWorkflowDebugModeChange: (value: boolean) => void
   onSaveGraph: () => Promise<boolean>
   onNodeLabelChange: (nodeId: string, label: string) => void
+  onNodeVariantChange: (nodeId: string, variantId: string) => void
   onNodeValueChange: (nodeId: string, portKey: string, value: unknown) => void
   onNodeValueClear: (nodeId: string, portKey: string) => void
   onNodeImageChange: (nodeId: string, portKey: string, image?: SelectedImageDraft) => void
@@ -118,7 +120,7 @@ export function useModuleGraphPageEditorPanels({
   onPaneSelect: () => void
   onSelectionChange: (selection: { nodes: ModuleGraphNode[]; edges: ModuleGraphEdge[] }) => void
   onConnect: (connection: Connection) => void
-  onAddModuleNode: (module: ModuleDefinitionRecord, options?: { position?: { x: number; y: number }; connectionStart?: { nodeId: string; handleId: string; handleType: 'source' | 'target' } }) => void
+  onAddModuleNode: (module: ModuleDefinitionRecord, options?: { position?: { x: number; y: number }; connectionStart?: { nodeId: string; handleId: string; handleType: 'source' | 'target' }; inputValues?: Record<string, unknown> }) => void
   onCopySelection: () => Promise<boolean>
   onPasteSelection: (options?: { position?: { x: number; y: number } }) => Promise<boolean>
   isValidConnection: (connection: Connection | ModuleGraphEdge) => boolean
@@ -196,6 +198,7 @@ export function useModuleGraphPageEditorPanels({
           changeValue: onNodeValueChange,
           clearValue: onNodeValueClear,
           changeLabel: onNodeLabelChange,
+          changeVariant: onNodeVariantChange,
           changeImage: onNodeImageChange,
           execute: onExecuteNodeById,
           editInPanel: onEditNodeInPanel,

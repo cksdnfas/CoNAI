@@ -1,3 +1,4 @@
+import { getWorkflowModuleBaseDisplayName } from '@conai/shared'
 import type {
   ModuleDefinitionRecord,
   ModulePortDataType,
@@ -85,30 +86,7 @@ export function normalizeModulePortDescription(description?: string | null) {
 
 /** Normalize legacy/built-in system node names into the user-facing names we want to keep. */
 export function getModuleBaseDisplayName(module: ModuleDefinitionRecord) {
-  const operationKey = getModuleOperationKey(module)
-  if (operationKey === 'system.constant_text' || operationKey === 'system.constant_prompt') {
-    return '텍스트'
-  }
-  if (operationKey === 'system.constant_json') {
-    return 'JSON'
-  }
-  if (operationKey === 'system.constant_image') {
-    return '이미지'
-  }
-  if (operationKey === 'system.constant_number') {
-    return '숫자'
-  }
-  if (operationKey === 'system.constant_boolean') {
-    return '불리언'
-  }
-  if (operationKey === 'system.merge_text') {
-    return '텍스트 합치기'
-  }
-  if (operationKey === 'system.random_text_choice') {
-    return '랜덤 항목 출력'
-  }
-
-  return module.name
+  return getWorkflowModuleBaseDisplayName(module)
 }
 
 /** Resolve the user-visible node name, preferring one custom label when present. */

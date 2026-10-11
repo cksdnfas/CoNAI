@@ -11,6 +11,7 @@ import {
   ModuleGraphCanvasContext,
   ModuleGraphExecutionLockContext,
   ModuleGraphNodeActionsContext,
+  ModuleGraphVariantModulesContext,
   buildInputSourceKey,
   type ModuleGraphCanvasContextValue,
   type ModuleGraphConnectionDrag,
@@ -62,7 +63,7 @@ type QuickCreateState = {
 type ActionMenuState = (ModuleGraphActionMenuState & { flowPosition: { x: number; y: number }; nodeId?: string })
 
 /** What a node card can do, minus the menu the canvas opens itself. */
-export type ModuleGraphCanvasNodeActions = Pick<ModuleGraphNodeActions, 'changeValue' | 'clearValue' | 'changeLabel' | 'changeImage' | 'execute' | 'editInPanel'>
+export type ModuleGraphCanvasNodeActions = Pick<ModuleGraphNodeActions, 'changeVariant' | 'changeValue' | 'clearValue' | 'changeLabel' | 'changeImage' | 'execute' | 'editInPanel'>
 
 /** Resolve one mouse/touch client point from graph-canvas interactions. */
 function getEventClientPoint(event: unknown) {
@@ -267,7 +268,7 @@ export function ModuleGraphCanvas({
   onPaneSelect: () => void
   onSelectionChange: (selection: { nodes: ModuleGraphNode[]; edges: ModuleGraphEdge[] }) => void
   onConnect: (connection: Connection) => void
-  onAddModuleNode: (module: ModuleDefinitionRecord, options?: { position?: { x: number; y: number }; connectionStart?: PendingConnectionStart }) => void
+  onAddModuleNode: (module: ModuleDefinitionRecord, options?: { position?: { x: number; y: number }; connectionStart?: PendingConnectionStart; inputValues?: Record<string, unknown> }) => void
   onCopySelection: () => Promise<boolean>
   onPasteSelection: (options?: { position?: { x: number; y: number } }) => Promise<boolean>
   onDuplicateNodeById: (nodeId: string) => void
@@ -442,6 +443,7 @@ export function ModuleGraphCanvas({
     graphActionsRef.current = { onDuplicateNodeById, onToggleNodeDisabled, onRemoveNodeById, onNodesChange }
   })
   const stableNodeActions = useMemo<ModuleGraphNodeActions>(() => ({
+    changeVariant: (nodeId, variantId) => nodeActionsRef.current.changeVariant(nodeId, variantId),
     changeValue: (nodeId, key, value) => nodeActionsRef.current.changeValue(nodeId, key, value),
     clearValue: (nodeId, key) => nodeActionsRef.current.clearValue(nodeId, key),
     changeLabel: (nodeId, label) => nodeActionsRef.current.changeLabel(nodeId, label),
@@ -695,6 +697,7 @@ export function ModuleGraphCanvas({
   }), [drag?.dataType])
 
   return (
+    <ModuleGraphVariantModulesContext.Provider value={modules}>
     <ModuleGraphNodeActionsContext.Provider value={stableNodeActions}>
       <ModuleGraphExecutionLockContext.Provider value={executionLocked}>
         <ModuleGraphCanvasContext.Provider value={canvasContextValue}>
@@ -881,8 +884,9 @@ export function ModuleGraphCanvas({
                 align={quickCreateState.align}
                 modules={modules}
                 recommendedModules={recommendedModules}
-                onSelectModule={(module) => {
+                onSelectModule={(module, inputValues) => {
                   onAddModuleNode(module, {
+                    inputValues,
                     position: quickCreateState.flowPosition,
                     connectionStart: quickCreateState.connectionStart ?? undefined,
                   })
@@ -899,5 +903,6 @@ export function ModuleGraphCanvas({
         </ModuleGraphCanvasContext.Provider>
       </ModuleGraphExecutionLockContext.Provider>
     </ModuleGraphNodeActionsContext.Provider>
+    </ModuleGraphVariantModulesContext.Provider>
   )
 }
