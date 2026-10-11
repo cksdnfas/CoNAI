@@ -2,7 +2,7 @@ import type { ChatJudgeItem } from '@conai/shared'
 import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../llmGenerationOptions'
 import { callTypesafeSystemOne, TYPESAFE_DEFAULT_MODEL, type TypesafeQuestion, type TypesafeResponse } from './typesafeClient'
-import { isCallerAbort, readUsageCounts, recordLlmUsage, type LlmUsageTag } from '../llmUsage'
+import { readUsageCounts, recordLlmUsage, type LlmUsageTag } from '../llmUsage'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionTarget } from '../codex-chat/llmChatCompletion'
 import { primaryModelOf } from '../codex-chat/modelSlots'
 
@@ -104,6 +104,7 @@ function answerFromDistribution(question: JudgeQuestion, distribution: Record<st
 }
 
 async function askTypesafe(connection: Extract<JudgeConnection, { engine: 'typesafe' }>, state: unknown, questions: JudgeQuestion[], signal?: AbortSignal, usage: LlmUsageTag = { purpose: 'judge' }) {
+  signal?.throwIfAborted()
   const typed = Object.fromEntries(questions.map((question) => [question.id, typesafeQuestionOf(question)]))
   const request = { model: connection.model, state, questions: typed }
   const startedAt = Date.now()
@@ -115,7 +116,7 @@ async function askTypesafe(connection: Extract<JudgeConnection, { engine: 'types
   try {
     response = await callTypesafeSystemOne({ baseUrl: connection.baseUrl, apiKey: connection.apiKey, model: connection.model, state, questions: typed, signal, timeoutMs: connection.timeoutMs })
   } catch (error) {
-    if (!signal || !isCallerAbort(signal)) meter(false)
+    meter(false)
     throw error
   }
   meter(true, response)

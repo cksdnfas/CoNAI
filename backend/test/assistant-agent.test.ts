@@ -264,6 +264,47 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
     assert.equal(ChatTaskStore.find(spent.id)?.status, 'paused')
     assert.match(ChatTaskStore.find(spent.id)?.reason ?? '', /예산/)
   })
+
+  await t.test('resuming a spent task requires explicit valid total budgets and preserves usage', async (sub) => {
+    const scheduled = sub.mock.method(ChatTaskRunner, 'schedule', () => {})
+    const thread = CodexChatStore.createThread(null, 'budget chat', 'llm', profile.id)
+    const task = ChatTaskStore.create(thread, '예산', [{ title: 'a' }], { continuations: 1, images: 2 })
+    ChatTaskStore.update(task.id, { status: 'paused', used: { continuations: 1, images: 0 } })
+    assert.throws(() => ChatTaskRunner.resume(thread), /예산/)
+    assert.equal(ChatTaskStore.find(task.id)?.status, 'paused')
+    assert.equal(scheduled.mock.callCount(), 0)
+    for (const budget of [{ continuations: 101, images: 2 }, { continuations: 2, images: 65 }, { continuations: 2, images: 1 }, { continuations: 2.5, images: 2 }, { continuations: '2', images: 2 }, {}]) {
+      assert.throws(() => ChatTaskRunner.resume(thread, { taskId: task.id, budget }), /예산/)
+    }
+    assert.throws(() => ChatTaskRunner.resume(thread, { taskId: task.id + 1, budget: { continuations: 2, images: 2 } }), /작업이 바뀌/)
+    assert.deepEqual(ChatTaskStore.find(task.id)?.budget, task.budget, 'rejected approvals never change limits')
+    const resumed = ChatTaskRunner.resume(thread, { taskId: task.id, budget: { continuations: 2, images: 2 } })!
+    assert.equal(resumed.status, 'running')
+    assert.deepEqual(resumed.used, { continuations: 1, images: 0 })
+    assert.deepEqual(resumed.budget, { continuations: 2, images: 2 })
+    assert.equal(scheduled.mock.callCount(), 1)
+    assert.throws(() => ChatTaskRunner.resume(thread, { taskId: task.id, budget: { continuations: 3, images: 2 } }), /이어갈 작업/)
+  })
+
+  await t.test('resume rechecks image usage and cannot bypass an exhausted image budget', async (sub) => {
+    sub.mock.method(ChatTaskRunner, 'schedule', () => {})
+    const thread = CodexChatStore.createThread(null, 'image budget chat', 'llm', profile.id)
+    const task = ChatTaskStore.create(thread, '이미지', [{ title: 'a' }], { images: 1 })
+    ChatTaskStore.update(task.id, { status: 'waiting', wait: 'user' })
+    const db = dbModule.getUserSettingsDb()
+    const jobId = Number(db.prepare('INSERT INTO generation_queue_jobs (service_type, status, request_payload) VALUES (?, ?, ?)').run('novelai', 'completed', '{}').lastInsertRowid)
+    db.prepare('INSERT INTO chat_generation_links (job_id, thread_id, reply_id) VALUES (?, ?, ?)').run(jobId, thread, 'budget-image')
+    assert.throws(() => ChatTaskRunner.resume(thread), /예산/)
+    assert.equal(ChatTaskStore.find(task.id)?.used.images, 1, 'the UI receives newly observed usage')
+    assert.throws(() => ChatTaskRunner.resume(thread, { taskId: task.id, budget: { ...task.budget, continuations: 31 } }), /예산/)
+    assert.deepEqual(ChatTaskStore.find(task.id)?.budget, task.budget)
+    const resumed = ChatTaskRunner.resume(thread, { taskId: task.id, budget: { ...task.budget, images: 2 } })!
+    assert.equal(resumed.status, 'running')
+    assert.equal(resumed.used.images, 1)
+    ChatTaskRunner.pause(thread)
+    assert.equal(ChatTaskRunner.resume(thread)?.used.images, 1, 'ordinary resume retains approved limits and cumulative use')
+  })
+
   await t.test('new page operations: the registry decides tier, route and whether they leave the screen', async () => {
     const { chatPageActionTier, chatPageActionLeavesScreen, chatPageActionAllowed, normalizeChatPageActions } = await import('@conai/shared')
     for (const id of ['resource.save', 'wallpaper.save', 'metadata.save']) assert.equal(chatPageActionTier(id), 'commit', id)

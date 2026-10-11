@@ -2,6 +2,7 @@ import { CHAT_TRANSLATION_DEFAULTS, CHAT_TRANSLATION_LANGUAGES, narrationLineCou
 import { hasTranslation, resolveProfileModel, type ModelRoleProfile } from './chatModelRoles'
 import type { ChatProfile } from './chatProfiles'
 import { completeChat, resolveChatCompletionTarget, type ChatCompletionTarget } from './llmChatCompletion'
+import type { LlmUsageTag } from '../llmUsage'
 
 /**
  * Chats with a translation model talk to the chat model in its language (the profile's `translationModelLanguage`,
@@ -202,7 +203,7 @@ function splitTrailingBlocks(masked: string) {
   return match ? { body: masked.slice(0, match.index), tail: masked.slice(match.index) } : { body: masked, tail: '' }
 }
 
-async function translate(target: ChatCompletionTarget, system: string, text: string, signal?: AbortSignal) {
+async function translate(target: ChatCompletionTarget, system: string, text: string, signal?: AbortSignal, attribution?: Omit<LlmUsageTag, 'purpose'>) {
   const timeout = AbortSignal.timeout(TRANSLATION_TIMEOUT_MS)
   try {
     const masked = maskCodeBlocks(text)
@@ -211,7 +212,7 @@ async function translate(target: ChatCompletionTarget, system: string, text: str
     const answer = (await completeChat(target, [
       { role: 'system', content: system },
       { role: 'user', content: body },
-    ], signal ? AbortSignal.any([signal, timeout]) : timeout, { purpose: 'translation' })).trim()
+    ], signal ? AbortSignal.any([signal, timeout]) : timeout, { ...attribution, purpose: 'translation' })).trim()
     if (!answer) return null
     const output = answer + tail
     const translated = keepsMarkup(masked.text, output) ? restoreCodeBlocks(output, masked.blocks) : null
@@ -231,12 +232,12 @@ async function translate(target: ChatCompletionTarget, system: string, text: str
  * both languages are the same, the text has nothing written in the display language, or the translation failed (the
  * message is then sent as written).
  */
-export async function translateUserInput(profile: (ModelRoleProfile & TranslationLanguages) | null | undefined, text: string, signal?: AbortSignal) {
+export async function translateUserInput(profile: (ModelRoleProfile & TranslationLanguages & { id?: number }) | null | undefined, text: string, signal?: AbortSignal, attribution?: Omit<LlmUsageTag, 'purpose'>) {
   const target = profile ? translationTargetOf(profile) : null
   const trimmed = text.trim()
   const { model, display } = languagesOf(profile)
   if (!target || !trimmed || model === display || letterCounts(proseOf(trimmed), display).own === 0) return null
-  const translated = await translate(target, userTranslationPrompt(profile), trimmed, signal)
+  const translated = await translate(target, userTranslationPrompt(profile), trimmed, signal, { profileId: profile?.id, ...attribution })
   // A translation that lost or invented narration lines would tell the model a different scene: keep the original.
   if (translated && narrationLineCount(translated) !== narrationLineCount(trimmed)) return null
   return translated && translated !== trimmed ? translated : null
@@ -247,13 +248,13 @@ export async function translateUserInput(profile: (ModelRoleProfile & Translatio
  * is already mostly in the display language, or the translation failed (the reply is then shown as written). The
  * translator is told who speaks and the profile's translation notes (`userName` fills their `{{user}}`).
  */
-export async function translateReply(profile: (ModelRoleProfile & TranslationLanguages & { name?: string; translationInstructions?: string }) | null | undefined, text: string, signal?: AbortSignal, userName?: string) {
+export async function translateReply(profile: (ModelRoleProfile & TranslationLanguages & { id?: number; name?: string; translationInstructions?: string }) | null | undefined, text: string, signal?: AbortSignal, userName?: string, attribution?: Omit<LlmUsageTag, 'purpose'>) {
   const target = profile ? translationTargetOf(profile) : null
   const trimmed = text.trim()
   if (!profile || !target || !trimmed) return null
   const letters = letterCounts(proseOf(trimmed), languagesOf(profile).display)
   if (letters.other === 0 || letters.own > letters.other) return null
-  const translated = await translate(target, replyTranslationPrompt(profile, userName), trimmed, signal)
+  const translated = await translate(target, replyTranslationPrompt(profile, userName), trimmed, signal, { profileId: profile.id, ...attribution })
   return translated && translated !== trimmed ? translated : null
 }
 

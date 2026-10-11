@@ -52,7 +52,7 @@ test('llm usage ledger: reported, estimated, failed and stopped requests; daily 
     assert.ok(Number(row.input_tokens) > 0 && Number(row.output_tokens) > 0)
   })
 
-  await t.test('a failed request counts as a failure; a stop by the caller is not counted', async () => {
+  await t.test('failures and stops after dispatch are recorded; a stop before dispatch is not counted', async () => {
     t.mock.method(globalThis, 'fetch', async () => new Response('boom', { status: 500 }))
     await assert.rejects(streamChatCompletion({ target, messages, signal: new AbortController().signal, usage: { purpose: 'summary' } }))
     assert.deepEqual([rows().at(-1)!.purpose, rows().at(-1)!.ok, rows().at(-1)!.input_tokens], ['summary', 0, 0])
@@ -64,7 +64,11 @@ test('llm usage ledger: reported, estimated, failed and stopped requests; daily 
       throw new Error('unreachable')
     })
     await assert.rejects(streamChatCompletion({ target, messages, signal: controller.signal, usage: { purpose: 'chat' } }))
-    assert.equal(rows().length, before)
+    assert.equal(rows().length, before + 1)
+    const stopped = rows().at(-1)!
+    assert.deepEqual([stopped.purpose, stopped.ok, stopped.input_tokens, stopped.output_tokens, stopped.estimated], ['chat', 0, 0, 0, 0], 'a dispatched stop is recorded without inventing token counts')
+    await assert.rejects(streamChatCompletion({ target, messages, signal: controller.signal, usage: { purpose: 'chat' } }))
+    assert.equal(rows().length, before + 1, 'an already-stopped signal never dispatches or creates a usage event')
   })
 
   await t.test('summary: local days by the viewer offset, totals, purposes and models', () => {

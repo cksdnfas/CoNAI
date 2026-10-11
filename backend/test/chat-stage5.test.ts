@@ -214,7 +214,10 @@ test('stage 5: lore provenance, usage, undo, branches, greetings and tone', { ti
     const output = blockStateText([block], { status: { affinity: 0, mood: '슬픔' } })
     assert.ok(output.includes('{"affinity":0,"mood":"슬픔"}'))
     assert.ok(output.includes('말투: 조심스럽게 말해 · 차분하게 말해'))
-    assert.ok(!blockStateText([block], { status: {} }).includes('말투:'))
+    assert.ok(!blockStateText([block], { status: {} }).includes('말투: '))
+    // A zero value is the present feeling, not a missing past; the values show through behaviour.
+    assert.match(output, /0인 값도 함께한 과거나 관계가 없다는 뜻은 아니야/)
+    assert.match(output, /행동·거리감·말의 온도로 드러내/)
     assert.deepEqual(normalizeBlock(JSON.parse(JSON.stringify(block)))!.fields, block.fields)
   })
 

@@ -100,12 +100,12 @@ export const ChatTaskStore = {
     const row = table().prepare('SELECT * FROM chat_tasks WHERE thread_id = ? ORDER BY id DESC LIMIT 1').get(threadId) as TaskRow | undefined
     return row ? toTask(row) : null
   },
-  update(id: number, patch: Partial<Pick<ChatTask, 'steps' | 'status' | 'wait' | 'reason' | 'used'>>): ChatTask | null {
+  update(id: number, patch: Partial<Pick<ChatTask, 'steps' | 'status' | 'wait' | 'reason' | 'used' | 'budget'>>): ChatTask | null {
     const current = ChatTaskStore.find(id)
     if (!current) return null
     const next = { ...current, ...patch }
-    table().prepare("UPDATE chat_tasks SET steps = ?, status = ?, wait = ?, reason = ?, used = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(JSON.stringify(next.steps), next.status, next.status === 'waiting' ? next.wait : null, next.reason, JSON.stringify(next.used), id)
+    table().prepare("UPDATE chat_tasks SET steps = ?, status = ?, wait = ?, reason = ?, used = ?, budget = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(JSON.stringify(next.steps), next.status, next.status === 'waiting' ? next.wait : null, next.reason, JSON.stringify(next.used), JSON.stringify(next.budget), id)
     const task = ChatTaskStore.find(id)
     announce(task)
     return task
@@ -270,10 +270,27 @@ export const ChatTaskRunner = {
     return ChatTaskStore.update(task.id, { status: 'paused', reason })
   },
 
-  resume(threadId: number) {
+  resume(threadId: number, extension?: unknown) {
     const task = ChatTaskStore.live(threadId)
     if (!task || (task.status !== 'paused' && task.status !== 'waiting')) throw new Error('이어갈 작업이 없어.')
-    const resumed = ChatTaskStore.update(task.id, { status: 'running', reason: null })
+    const used = { ...task.used, images: imagesUsed(task) }
+    let budget = task.budget
+    if (extension !== undefined) {
+      const approved = extension as { taskId?: unknown; budget?: Partial<ChatTaskBudget> } | null
+      if (!approved || approved.taskId !== task.id) throw new Error('작업이 바뀌었어. 현재 작업의 예산을 다시 확인해줘.')
+      const proposed = approved.budget
+      for (const key of ['continuations', 'images'] as const) {
+        const value = proposed?.[key]
+        if (!Number.isSafeInteger(value) || value! < task.budget[key] || value! > CHAT_TASK_LIMITS[key]) throw new Error('예산은 기존 한도 이상, 작업 최대 한도 이내의 정수여야 해.')
+      }
+      budget = { continuations: proposed!.continuations!, images: proposed!.images! }
+    }
+    if (used.continuations >= budget.continuations || used.images >= budget.images) {
+      const reason = '작업 예산을 다 썼어. 예산을 늘려 승인한 뒤 이어가거나 작업을 중단해줘.'
+      ChatTaskStore.update(task.id, { status: 'paused', used, reason })
+      throw new Error(reason)
+    }
+    const resumed = ChatTaskStore.update(task.id, { status: 'running', reason: null, used, budget })
     ChatTaskStore.markActive(task.id)
     ChatTaskRunner.schedule(threadId, '사용자가 작업을 이어가라고 했어.', 300)
     return resumed
@@ -320,8 +337,8 @@ export const ChatTaskRunner = {
       return
     }
     const used = { continuations: task.used.continuations, images: imagesUsed(task) }
-    if (used.continuations >= task.budget.continuations) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '이어가기 예산을 다 썼어. 이어가려면 재개해줘.' }); return }
-    if (used.images >= task.budget.images) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '이미지 예산을 다 썼어. 이어가려면 재개해줘.' }); return }
+    if (used.continuations >= task.budget.continuations) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '이어가기 예산을 다 썼어. 예산을 늘려 승인한 뒤 이어가거나 작업을 중단해줘.' }); return }
+    if (used.images >= task.budget.images) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '이미지 예산을 다 썼어. 예산을 늘려 승인한 뒤 이어가거나 작업을 중단해줘.' }); return }
     if (ChatTaskStore.activeMs(task.id) > ACTIVE_LIMIT_MS) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '작업 시간이 길어져서 멈췄어. 이어가려면 재개해줘.' }); return }
     if (ChatTaskStore.markProgress(task.id) >= STALL_LIMIT) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '몇 번 이어가도 진전이 없어서 멈췄어.' }); return }
     const current = task.steps.findIndex((step) => step.status === 'doing' || step.status === 'todo')

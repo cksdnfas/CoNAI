@@ -163,11 +163,28 @@ function parseToolCalls(value: string | null): CodexChatToolCall[] {
     return []
   }
   try {
-    const parsed = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed as CodexChatToolCall[] : []
+    const parsed: unknown = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed.flatMap(normalizeToolCall) : []
   } catch {
     return []
   }
+}
+
+/** A stored call with its required fields filled, so one malformed row can't break the reader. */
+function normalizeToolCall(value: unknown): CodexChatToolCall[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return []
+  const call = value as Partial<CodexChatToolCall>
+  const status = call.status === 'running' || call.status === 'failed' ? call.status : 'completed'
+  return [{
+    ...call,
+    id: typeof call.id === 'string' ? call.id : '',
+    tool: typeof call.tool === 'string' ? call.tool : '',
+    status,
+    arguments: call.arguments ?? null,
+    summary: typeof call.summary === 'string' ? call.summary : null,
+    historyIds: Array.isArray(call.historyIds) ? call.historyIds.filter((id): id is number => typeof id === 'number') : [],
+    compositeHashes: Array.isArray(call.compositeHashes) ? call.compositeHashes.filter((hash): hash is string => typeof hash === 'string') : [],
+  }]
 }
 
 function parseAlternatives(value: string | null): ChatMessageAlternative[] {
@@ -177,6 +194,28 @@ function parseAlternatives(value: string | null): ChatMessageAlternative[] {
   } catch {
     return []
   }
+}
+
+/** Hydrate only the selected rows; a quoted message outside a page is still available in this thread. */
+function readMessageRows(threadId: number, rows: StoredMessageRow[]): CodexChatMessageRecord[] {
+  if (rows.length === 0) return []
+  const attachments = FileStoreService.attachmentsForThread(threadId, { fromId: rows[0].id, untilId: rows[rows.length - 1].id })
+  const ids = new Set(rows.map((row) => row.id))
+  const parsed = rows.map(({ media_attachments, routing, ...row }) => ({
+    ...row, routing: parseMessageRouting(routing), mediaAttachments: parseChatMediaAttachments(media_attachments),
+    tool_calls: parseToolCalls(row.tool_calls), alternatives: parseAlternatives(row.alternatives),
+    flags: parseFlagSnapshots(row.flags), attachments: attachments.get(row.id) ?? [],
+  }))
+  const references = [...new Set(parsed.flatMap((row) => row.routing?.replyTo ? [row.routing.replyTo.messageId] : []))].filter((id) => !ids.has(id))
+  const db = getUserSettingsDb()
+  for (let start = 0; start < references.length; start += 400) {
+    const chunk = references.slice(start, start + 400)
+    for (const row of db.prepare(`SELECT id FROM codex_chat_messages WHERE thread_id = ? AND id IN (${chunk.map(() => '?').join(',')})`).all(threadId, ...chunk) as Array<{ id: number }>) ids.add(row.id)
+  }
+  for (const row of parsed) {
+    if (row.routing?.replyTo && !ids.has(row.routing.replyTo.messageId)) row.routing.replyTo = { ...row.routing.replyTo, excerpt: '', media: undefined, unavailable: true }
+  }
+  return parsed
 }
 
 /**
@@ -387,19 +426,31 @@ export const CodexChatStore = {
     }
   },
 
-  listMessages(threadId: number) {
-    const attachments = FileStoreService.attachmentsForThread(threadId)
-    const rows = getUserSettingsDb().prepare(`
-      SELECT * FROM codex_chat_messages WHERE thread_id = ? ORDER BY id
-    `).all(threadId) as StoredMessageRow[]
-    const ids = new Set(rows.map((row) => row.id))
-    return rows.map(({ media_attachments, routing: storedRouting, ...row }) => {
-      const routing = parseMessageRouting(storedRouting)
-      if (routing?.replyTo && !ids.has(routing.replyTo.messageId)) {
-        routing.replyTo = { ...routing.replyTo, excerpt: '', media: undefined, unavailable: true }
-      }
-      return { ...row, routing, mediaAttachments: parseChatMediaAttachments(media_attachments), tool_calls: parseToolCalls(row.tool_calls), alternatives: parseAlternatives(row.alternatives), flags: parseFlagSnapshots(row.flags), attachments: attachments.get(row.id) ?? [] }
-    })
+  listMessages(threadId: number, options: { tail?: number } = {}) {
+    const tail = options.tail
+    if (tail !== undefined && (!Number.isSafeInteger(tail) || tail < 1)) throw new Error('Invalid message limit')
+    const rows = getUserSettingsDb().prepare(`SELECT * FROM codex_chat_messages WHERE thread_id = ? ORDER BY id ${tail === undefined ? '' : 'DESC LIMIT ?'}`)
+      .all(threadId, ...(tail === undefined ? [] : [tail])) as StoredMessageRow[]
+    return readMessageRows(threadId, tail === undefined ? rows : rows.reverse())
+  },
+
+  findMessage(threadId: number, messageId: number) {
+    const row = getUserSettingsDb().prepare('SELECT * FROM codex_chat_messages WHERE thread_id = ? AND id = ?').get(threadId, messageId) as StoredMessageRow | undefined
+    return row ? readMessageRows(threadId, [row])[0] : undefined
+  },
+
+  latestMessage(threadId: number) {
+    return CodexChatStore.listMessages(threadId, { tail: 1 })[0]
+  },
+
+  messageCount(threadId: number) {
+    return (getUserSettingsDb().prepare('SELECT COUNT(*) AS count FROM codex_chat_messages WHERE thread_id = ?').get(threadId) as { count: number }).count
+  },
+
+  /** Display state needs fenced replies, without tool outputs, alternatives, attachments or diagnostics. */
+  listBlockMessages(threadId: number) {
+    return getUserSettingsDb().prepare("SELECT id, role, content, speaker_profile_id FROM codex_chat_messages WHERE thread_id = ? AND role = 'assistant' AND instr(content, '```') > 0 ORDER BY id")
+      .all(threadId) as Array<Pick<CodexChatMessageRecord, 'id' | 'role' | 'content' | 'speaker_profile_id'>>
   },
 
   latestMessageId(threadId: number) {

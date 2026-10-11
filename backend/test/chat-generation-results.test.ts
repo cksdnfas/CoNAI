@@ -18,7 +18,7 @@ test('chat generation: terminal results and owner-only completion events', { tim
   ;(await import('../src/models/ExternalApiProvider')).ExternalApiProvider.create({ provider_name: 'test', display_name: 'test', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
   const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
   const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
-  const { attachJobResults, withGenerationOutcomes, generationOutcomeNote } = await import('../src/services/codex-chat/codexChatMedia')
+  const { attachJobResults, countPendingChatJobs, withGenerationOutcomes, generationOutcomeNote } = await import('../src/services/codex-chat/codexChatMedia')
   const { GenerationQueueService } = await import('../src/services/generationQueueService')
   const { publishQueueJobEvent } = await import('../src/services/runtime-events/runtimeEventPublishers')
   const { subscribeToRuntimeEvents, getRuntimeEventCursor } = await import('../src/services/runtime-events/runtimeEventBus')
@@ -46,6 +46,20 @@ test('chat generation: terminal results and owner-only completion events', { tim
   const reply = (jobId: number, calls = [call(jobId)]) => CodexChatStore.addMessage({ thread_id: thread.id, role: 'assistant', content: '', tool_calls: calls, status: 'completed', error: null, routing: { replyId: `reply-${jobId}`, replyTo: null, recipients: [] } })
   const history = (jobId: number, status: string, hash: string | null, accountId: number | null = 1) => Number(db.prepare('INSERT INTO api_generation_history (service_type, generation_status, composite_hash, queue_job_id, requested_by_account_id) VALUES (?, ?, ?, ?, ?)').run('novelai', status, hash, jobId, accountId).lastInsertRowid)
   const read = () => attachJobResults(CodexChatStore.listMessages(thread.id))
+
+  await t.test('tail polling counts older linked and legacy jobs once without counting a reply no longer shown', () => {
+    const linked = job('running')
+    reply(linked, [])
+    const legacy = job('running', false)
+    reply(legacy, [{ ...call(legacy), jobIds: undefined, output: JSON.stringify({ job_id: legacy }) }])
+    const hidden = job('running')
+    CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: 'latest', tool_calls: [], status: 'completed', error: null })
+    assert.equal(attachJobResults(CodexChatStore.listMessages(thread.id, { tail: 1 })).pendingJobs, 0)
+    assert.equal(countPendingChatJobs(thread.id), 2)
+    assert.equal(countPendingChatJobs(thread.id), read().pendingJobs)
+    db.prepare("UPDATE generation_queue_jobs SET status = 'completed' WHERE id IN (?, ?, ?)").run(linked, legacy, hidden)
+    assert.equal(countPendingChatJobs(thread.id), 0)
+  })
 
   await t.test('failure without history, cancellation and no-image completion stay on the creator; pending does not overlap', () => {
     for (const status of ['failed', 'cancelled', 'completed']) {

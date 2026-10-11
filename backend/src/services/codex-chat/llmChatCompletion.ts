@@ -7,7 +7,7 @@ import { CLAUDE_CHAT_PROVIDER, streamClaudeChatCompletion, type ClaudeChatSessio
 import type { ChatMcpToolResult } from './chatMcpBridge'
 import { primaryModelOf } from './modelSlots'
 import { createRepetitionWatch, withoutRepetition } from './repetitionGuard'
-import { isCallerAbort, rawMessagesEstimate, rawTokenEstimate, readUsageCounts, recordLlmUsage, type LlmTokenCounts, type LlmUsageTag } from '../llmUsage'
+import { rawMessagesEstimate, rawTokenEstimate, readUsageCounts, recordLlmUsage, type LlmTokenCounts, type LlmUsageTag } from '../llmUsage'
 import { learnServerContextLimit, MIN_FITTED_REPLY_TOKENS, replyRoomFromRefusal } from './serverContextLimit'
 import { contextPartsOf } from './chatContextDiagnostics'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -335,8 +335,8 @@ function readJsonCompletion(json: unknown): ChatCompletionResult {
   }
 }
 
-/** One chat-completions request; `meter.startedAt` is set once it has its request slot. */
-async function requestChatCompletion(meter: { startedAt: number }, params: {
+/** A request is metered only once transport starts; its latency includes waiting for a slot. */
+async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCounts | null; output: string }, params: {
   target: ChatCompletionTarget
   messages: ChatCompletionMessage[]
   tools?: ChatCompletionTool[]
@@ -355,7 +355,6 @@ async function requestChatCompletion(meter: { startedAt: number }, params: {
   stopLoops?: boolean
 }): Promise<ChatCompletionResult> {
   const release = await acquireLlmRequestSlot(params.target.providerName, params.target.maxConcurrentRequests ?? 1, params.signal)
-  meter.startedAt = Date.now()
   const controller = new AbortController()
   const signal = controller.signal
   const abort = () => controller.abort(params.signal.reason)
@@ -374,8 +373,10 @@ async function requestChatCompletion(meter: { startedAt: number }, params: {
 
   try {
     if (params.target.transport === 'claude-code') {
+      signal.throwIfAborted()
       const claudeTools = params.toolChoice === 'none' ? [] : params.tools ?? []
       params.onRequestBody?.({ model: params.target.model, messages: params.messages, tools: claudeTools, transport: 'claude-code' }, params.target)
+      meter.sent = true
       return await streamClaudeChatCompletion({ ...params, tools: claudeTools, signal, onContent: (text) => { touch(); params.onContent?.(text) }, onReasoning: (text) => { touch(); params.onReasoning?.(text) } })
     }
     let streamUsage = true
@@ -384,6 +385,8 @@ async function requestChatCompletion(meter: { startedAt: number }, params: {
       assertLlmReachable(target)
       const body = buildBody(target, params.messages, toolsRefusedBy(target) || (toolChoiceRefused && params.toolChoice) ? [] : params.tools ?? [], true, streamUsage, params.toolChoice)
       params.onRequestBody?.(body, target)
+      signal.throwIfAborted()
+      meter.sent = true
       return fetch(target.endpoint, {
         method: 'POST',
         headers: buildHeaders(target),
@@ -466,6 +469,7 @@ async function requestChatCompletion(meter: { startedAt: number }, params: {
     }
     if (!response.body || !(response.headers.get('content-type') ?? '').includes('text/event-stream')) {
       const read = readJsonCompletion(await response.json())
+      meter.usage = read.usage ?? null
       signal.throwIfAborted()
       const unlooped = params.stopLoops ? withoutRepetition(read.content) : read.content
       const result = unlooped === read.content ? read : { ...read, content: unlooped, toolCalls: [], finishReason: 'repetition' }
@@ -497,6 +501,7 @@ async function requestChatCompletion(meter: { startedAt: number }, params: {
       }
       promptTokens = readPromptTokens(json) ?? promptTokens
       usage = readUsageCounts(json) ?? usage
+      meter.usage = usage
       if (json.error) {
         const error = json.error as { message?: string; code?: unknown; status?: unknown }
         const status = Number(error.status ?? error.code)
@@ -524,6 +529,7 @@ async function requestChatCompletion(meter: { startedAt: number }, params: {
         if (typeof call.id === 'string' && call.id) draft.id = call.id
         if (typeof fn.name === 'string') draft.name += fn.name
         if (typeof fn.arguments === 'string') draft.arguments += fn.arguments
+        meter.output += (typeof fn.name === 'string' ? fn.name : '') + (typeof fn.arguments === 'string' ? fn.arguments : '')
         drafts.set(index, draft)
       }
       if (typeof choice.finish_reason === 'string') {
@@ -577,30 +583,36 @@ type ChatCompletionParams = Parameters<typeof requestChatCompletion>[1]
  * usage ledger under `usage` (what it was for), with estimated counts when the server reports none.
  */
 export async function streamChatCompletion(params: ChatCompletionParams & { usage?: LlmUsageTag }): Promise<ChatCompletionResult> {
-  const meter = { startedAt: 0 }
+  const startedAt = Date.now()
+  const meter = { sent: false, usage: null as LlmTokenCounts | null, output: '' }
   const record = (result: ChatCompletionResult | null) => {
-    const estimate = result && !result.usage
+    const reported = result?.usage ?? meter.usage
+    const estimate = !reported && (result !== null || meter.output.length > 0)
     recordLlmUsage({
       ...(params.usage ?? { purpose: 'other' }),
       engine: params.target.transport === 'claude-code' ? 'claude-code' : 'api',
       providerName: params.target.providerName,
       model: params.target.model,
-      tokens: !result ? null : result.usage ?? {
+      tokens: reported ?? (estimate ? {
         inputTokens: rawMessagesEstimate(params.messages, params.tools ?? []),
         cachedInputTokens: 0,
-        outputTokens: rawTokenEstimate(result.content + result.reasoning + result.toolCalls.map((call) => call.function.name + call.function.arguments).join('')),
-      },
+        outputTokens: rawTokenEstimate(result ? result.content + result.reasoning + result.toolCalls.map((call) => call.function.name + call.function.arguments).join('') : meter.output),
+      } : null),
       estimated: Boolean(estimate),
-      latencyMs: Date.now() - meter.startedAt,
+      latencyMs: Date.now() - startedAt,
       ok: result !== null,
     })
   }
   try {
-    const result = await requestChatCompletion(meter, params)
+    const result = await requestChatCompletion(meter, {
+      ...params,
+      onContent: (text) => { meter.output += text; params.onContent?.(text) },
+      onReasoning: (text) => { meter.output += text; params.onReasoning?.(text) },
+    })
     record(result)
     return result
   } catch (error) {
-    if (meter.startedAt && !isCallerAbort(params.signal)) record(null)
+    if (meter.sent) record(null)
     throw error
   }
 }

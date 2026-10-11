@@ -78,7 +78,7 @@ async function settleFields(setup: NonNullable<ReturnType<typeof judgeSetupOf>>,
 
   const questions = candidates.map((candidate, at) => questionOf(candidate, at, params.profile.name))
   const state = { ...judgeStateOf(params.profile, thread, upTo, setup.preset.fields.window), status: Object.fromEntries(blocks.map((block) => [block.key, folded.state[block.key] ?? {}])) }
-  const asked = await askBuiltQuestions(setup, state, questions)
+  const asked = await askBuiltQuestions(setup, state, questions, undefined, { purpose: 'judge', threadId: params.threadId, profileId: params.profile.id })
 
   const patches = new Map<string, BlockData>()
   const results: JudgeLogItem[] = candidates.map((candidate, at) => {

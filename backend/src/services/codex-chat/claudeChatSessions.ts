@@ -103,9 +103,12 @@ export async function buildClaudeSessionTurn(params: {
   const outcomes = pendingGenerationOutcomes(threadId, earlier, sent)
   const pageReference = pendingPageReference(params.page, requester, sent)
   const cards = pendingProposalOutcomes(threadId, sent)
-  const generated = await pendingGeneratedImages(profile, requester, threadId, sent)
-  const images = latest ? await loadAttachedImages(profile, requester, [latest]) : null
-  const body = latest ? chatContentWithAttachments(latest.content, latest.attachments, latest.mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [latest]), images) : ''
+  const [generated, images, attachmentTexts] = await Promise.all([
+    pendingGeneratedImages(profile, requester, threadId, sent),
+    latest ? loadAttachedImages(profile, requester, [latest]) : null,
+    latest ? inlineTextsForChat(profile, requester.accountId, [latest]) : undefined,
+  ])
+  const body = latest ? chatContentWithAttachments(latest.content, latest.attachments, latest.mediaAttachments, attachmentTexts, images) : ''
   const directive = [flagDirectiveFor(history, profile, user), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
   const text = [
     recap,
@@ -178,16 +181,20 @@ export async function buildClaudeGroupSessionTurn(params: {
   const state = pendingBlockState(thread, profile, messages, sent, profile.id)
   const rejected = pendingRejectedLore(thread.id, profile, sent)
   const outcomes = pendingGenerationOutcomes(thread.id, messages.filter((message) => message.speaker_profile_id === profile.id), sent)
-  const generated = await pendingGeneratedImages(profile, requester, thread.id, sent)
+  const { missed, shown } = groupMissedMessages(messages, profile.id, lastSeen, params.windowLimit)
+  const [generated, attachmentTexts, attachedImages] = await Promise.all([
+    pendingGeneratedImages(profile, requester, thread.id, sent),
+    params.attachmentTexts ?? inlineTextsForChat(profile, requester.accountId, shown),
+    params.attachedImages === undefined ? loadAttachedImages(profile, requester, shown) : params.attachedImages,
+  ])
   const flags = flagDirectiveFor(messages, profile, user)
   const text = buildGroupCodexInput({
     thread, members, self: profile, messages, routing: params.routing, lastSeenMessageId: lastSeen, windowLimit: params.windowLimit,
     lore: [lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text, generated.text].filter(Boolean).join('\n\n'),
     directive: [flags, postHistoryText(profile, user)].filter(Boolean).join('\n\n'),
-    attachmentTexts: params.attachmentTexts, attachedImages: params.attachedImages, header: false,
+    attachmentTexts, attachedImages, header: false,
   })
-  const { missed, shown } = groupMissedMessages(messages, profile.id, lastSeen, params.windowLimit)
-  const urls = [...shown.filter((message) => message.role === 'user').flatMap((message) => attachedImagesOf(message, params.attachedImages)), ...generated.urls]
+  const urls = [...shown.filter((message) => message.role === 'user').flatMap((message) => attachedImagesOf(message, attachedImages)), ...generated.urls]
   const keys = [...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys, ...generated.keys]
   const content: string | ChatContentPart[] = urls.length ? [{ type: 'text', text }, ...urls.map((url) => ({ type: 'image_url' as const, image_url: { url } }))] : text
   const seen = messages.at(-1)?.id ?? 0

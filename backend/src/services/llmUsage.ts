@@ -1,7 +1,7 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
 
 /** What a model request was for. The dashboard folds the small ones (translation, suggestions, asset work) together. */
-export type LlmUsagePurpose = 'chat' | 'summary' | 'judge' | 'translation' | 'suggestion' | 'asset_vision' | 'appearance' | 'image_prompt' | 'workflow' | 'other'
+export type LlmUsagePurpose = 'chat' | 'summary' | 'judge' | 'translation' | 'suggestion' | 'asset_vision' | 'appearance' | 'image_prompt' | 'workflow' | 'web_search' | 'other'
 /** How the request reached the model: an API connection, a subscription CLI, or the TypeSafe judge API. */
 export type LlmUsageEngine = 'api' | 'claude-code' | 'codex' | 'typesafe'
 
@@ -86,7 +86,7 @@ export function rawMessagesEstimate(messages: EstimatedMessage[], tools: unknown
   return rawTokenEstimate(JSON.stringify(textMessages) + (tools.length > 0 ? JSON.stringify(tools) : '')) + imageCount * 2048
 }
 
-/** An abort the caller asked for (a stop, a closed page) used no tokens worth counting; a timeout is a failure. */
+/** Distinguishes an explicit caller stop from a timeout; a stopped request can still have consumed tokens. */
 export function isCallerAbort(signal: AbortSignal) {
   if (!signal.aborted) return false
   const reason = signal.reason as { name?: unknown } | undefined

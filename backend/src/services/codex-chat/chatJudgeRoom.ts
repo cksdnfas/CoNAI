@@ -59,7 +59,7 @@ export async function judgeRoute(params: { thread: CodexChatThreadRecord; member
   if (!setup || !setup.preset.room.route.enabled || params.members.length < 2) return null
   const settings = setup.preset.room.route
   const question = choiceQuestion('route', settings.instructions || DEFAULT_ROUTE_INSTRUCTIONS, params.members.map(memberOption))
-  const asked = await askBuiltQuestions(setup, roomState(params.thread, params.members, params.messages, setup.preset.room.window), [question], params.signal)
+  const asked = await askBuiltQuestions(setup, roomState(params.thread, params.members, params.messages, setup.preset.room.window), [question], params.signal, { purpose: 'judge', threadId: params.thread.id })
   const answer = asked.answers.get('route')
   const picked = answer?.choice ? params.members.find((member) => memberLabel(member) === answer.choice) ?? null : null
   const probability = answer?.choice ? answer.distribution?.[answer.choice] ?? 0 : 0
@@ -88,7 +88,7 @@ export async function judgeNext(params: { thread: CodexChatThreadRecord; members
     ...candidates.map(memberOption),
     [WAIT, `No one speaks now; the room waits for ${user}`, false],
   ])
-  const asked = await askBuiltQuestions(setup, state, [question], params.signal)
+  const asked = await askBuiltQuestions(setup, state, [question], params.signal, { purpose: 'judge', threadId: params.thread.id })
   const answer = asked.answers.get('next')
   // Going on is the sum over the members; who goes on is the member with the highest probability.
   const goesOn = Boolean(answer && answer.probability >= settings.continueThreshold)

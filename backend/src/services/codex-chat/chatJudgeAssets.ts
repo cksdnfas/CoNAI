@@ -33,7 +33,7 @@ export async function judgeExpression(params: { profile: ChatProfile; emotions: 
   const question = choiceQuestion('emotion', `Judging from the image tags of this character portrait, which facial expression or emotion does it show?`, options)
   const state = { character: params.profile.name, imageTags: params.tags.general.slice(0, TAGS_MAX) }
   try {
-    const asked = await askBuiltQuestions(setup, state, [question], params.signal)
+    const asked = await askBuiltQuestions(setup, state, [question], params.signal, { purpose: 'judge', profileId: params.profile.id })
     const answer = asked.answers.get('emotion')
     const picked = answer?.choice ? emotions[Number(answer.choice.slice(1)) - 1] ?? null : null
     logJudgeRun({ setup, threadId: null, profileId: params.profile.id, stage: 'asset', messageId: null, replyId: null, run: {

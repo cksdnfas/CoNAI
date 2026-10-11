@@ -109,6 +109,11 @@ test('chat cannot fill or wire exact code/path controls while ordinary prompt in
   const fields = [{ id: 'code', label: 'Program', type: 'text' as const, jsonPath: '1.inputs.value' }, { id: 'prompt', label: 'Prompt', type: 'text' as const, jsonPath: '2.inputs.text' }]
   assert.throws(() => requireChatWorkflowInputs(context, fields, { code: 'must not execute' }), /protected workflow input/)
   assert.doesNotThrow(() => requireChatWorkflowInputs(context, fields, { prompt: 'ordinary image request' }))
+  const definition = { id: 2, name: 'User module', version: 1, template_defaults: {}, exposed_inputs: [], output_ports: [], internal_fixed_values: { operation_key: 'system.constant_text' } }
+  for (const engine_type of ['comfyui', 'custom_js', 'minimax']) {
+    assert.equal(describeChatWorkflowModule({ ...definition, engine_type }).family, undefined, 'user modules and Director cannot be folded into built-in families')
+  }
+  assert.equal(describeChatWorkflowModule({ ...definition, engine_type: 'system', authoring_source: 'manual', external_key: null }).family, undefined, 'a manual user clone is not a seeded builtin')
 })
 
 const target: ChatCompletionTarget = {
@@ -264,6 +269,13 @@ test('group history fits the member token budget while retaining the latest mess
   assert.ok(estimateMessagesTokens(profile.id, fitted) + 100 <= profile.contextTokens)
   assert.ok(JSON.stringify(fitted).includes('message-15:'))
   assert.ok(!JSON.stringify(fitted).includes('message-1:'))
+  const extraTokens = 600
+  let estimatedTokens = 0
+  const withPictures = buildGroupLlmMessages({ ...params, extraTokens, onMeta: (meta) => { estimatedTokens = meta.estimatedTokens } })
+  assert.ok(estimateMessagesTokens(profile.id, withPictures) + 100 + extraTokens <= profile.contextTokens)
+  assert.ok(JSON.stringify(withPictures).includes('message-15:'))
+  assert.ok(withPictures.length <= fitted.length)
+  assert.equal(estimatedTokens, estimateMessagesTokens(profile.id, withPictures) + extraTokens)
 })
 
 test('prompt preview uses the same author note and block state as a new direct request', (t) => {
@@ -402,6 +414,13 @@ test('a tool round that does not fit is retried with the tool result cut shorter
   const expected = estimateMessagesTokens(profile.id, shortest) + 100
   assert.throws(() => fitChatContext(profile, messages, [], 100), (error: Error) => error.message.includes(`예상 ${expected} /`))
   assert.ok(estimateMessagesTokens(profile.id, messages) + 100 > expected)
+  const catalogMessages: ChatCompletionMessage[] = [
+    ...messages.slice(0, 2),
+    { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'open_tools', arguments: '{}' } }] },
+    messages[3],
+  ]
+  profile.contextTokens = estimateMessagesTokens(profile.id, cut) + 100
+  assert.throws(() => fitChatContext(profile, catalogMessages, [], 100), /컨텍스트 한도를 넘었어/, 'catalog schemas stay intact even when generic result cuts would fit')
 })
 
 test('the summary transcript leaves out the chat\'s own tools, quoted lore files and address labels', (t) => {

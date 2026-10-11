@@ -26,7 +26,7 @@ import { buildSuggestionTranscript } from './chatSuggestions'
 import { userPersonaForThread } from './chatUserProfiles'
 import { CodexChatStore, type CodexChatMessageRecord } from './codexChatStore'
 import { completeChat, resolveChatCompletionTarget, type ChatCompletionMessage, type ChatContentPart } from './llmChatCompletion'
-import { stripThinking } from './llmChatContext'
+import { estimateMessagesTokens, stripThinking } from './llmChatContext'
 import { ModelSlotStore } from './modelSlots'
 
 /**
@@ -38,8 +38,6 @@ import { ModelSlotStore } from './modelSlots'
 /** Bytes of a linked guide file that go to the model. */
 export const GUIDE_FILE_MAX_BYTES = 12000
 const GENERATED_IMAGE_SIZE = 640
-/** What one picture adds to a request, kept free when the context window is chosen (a 640px image runs near this). */
-export const GENERATED_IMAGE_TOKENS = 800
 const WRITER_TIMEOUT_MS = 180_000
 const WRITER_ATTEMPTS = 2
 /** How long a finished reply may take to be saved before its requests are dropped. */
@@ -162,6 +160,13 @@ export function withGeneratedImages(messages: ChatCompletionMessage[], images: R
     { kind: 'reference', text: GENERATED_IMAGES_NOTE },
   ])
   return messages.map((message, position) => (position === index ? merged : message))
+}
+
+/** The extra note and images appended to an existing user turn, using the same estimate as final context fitting. */
+export function generatedImagesTokens(profileId: number, images: ReadonlyArray<Pick<GeneratedImage, 'url'>>) {
+  if (images.length === 0) return 0
+  const base: ChatCompletionMessage[] = [{ role: 'user', content: '' }]
+  return Math.max(0, estimateMessagesTokens(profileId, withGeneratedImages(base, images)) - estimateMessagesTokens(profileId, base))
 }
 
 // ---- Writing after the reply ---------------------------------------------------------------------------------

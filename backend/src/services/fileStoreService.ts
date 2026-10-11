@@ -190,10 +190,12 @@ function idsInput(value: unknown): string[] {
 }
 
 export const FileStoreService = {
-  attachmentsForThread(threadId: number) {
+  attachmentsForThread(threadId: number, range?: { fromId: number; untilId: number }) {
     const rows = getUserSettingsDb().prepare(`SELECT e.*, a.message_id FROM chat_file_attachments a
       JOIN stored_file_entries e ON e.id = a.file_id AND e.deleted_at IS NULL
-      JOIN codex_chat_messages m ON m.id = a.message_id WHERE m.thread_id = ? ORDER BY a.rowid`).all(threadId) as Array<FileRow & { message_id: number }>;
+      JOIN codex_chat_messages m ON m.id = a.message_id WHERE m.thread_id = ?
+      ${range ? 'AND m.id BETWEEN ? AND ?' : ''} ORDER BY a.rowid`)
+      .all(threadId, ...(range ? [range.fromId, range.untilId] : [])) as Array<FileRow & { message_id: number }>;
     const result = new Map<number, StoredFileEntry[]>();
     for (const row of rows) result.set(row.message_id, [...(result.get(row.message_id) ?? []), toEntry(row)]);
     return result;

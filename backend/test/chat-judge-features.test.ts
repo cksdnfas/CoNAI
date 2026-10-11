@@ -269,20 +269,29 @@ test('judge beyond turn items: group rooms, status fields, lore and recall, expr
       { keys: ['등대지기'], title: '등대 마을 축제', content: '등대 마을 축제는 매년 가을 바닷가 등대 앞에서 열린다.' },
       { keys: ['용광로'], title: '대장간', content: '대장간은 산 위에 있다.' },
     ] })
-    const lorePreset = ChatJudgePresetStore.create({ name: '로어', providerName: 'jev', items: [], context: { ...JUDGE_OPTION_DEFAULTS.context, recall: { enabled: false, threshold: 0.35 } } })
+    const lorePreset = ChatJudgePresetStore.create({ name: '로어', providerName: 'jev', items: [
+      { id: 'lore-0', name: '안내', stage: 'before', instructions: 'Offer guidance?', directive: '[판단] 안내해.', window: JUDGE_OPTION_DEFAULTS.context.window },
+      { id: 'other-window', name: '다른 범위', stage: 'before', instructions: 'Other window?', window: JUDGE_OPTION_DEFAULTS.context.window + 1 },
+    ], context: { ...JUDGE_OPTION_DEFAULTS.context, recall: { enabled: false, threshold: 0.35 } } })
     const guide = ChatProfileStore.create({ name: '안내인', engine: 'llm', providerName: 'chat', model: 'chat-model', summaryEnabled: false, mcpEnabled: false, lorebookIds: [book.id], judgePresetId: lorePreset.id })
     const calls = route(s, (body) => Object.fromEntries(Object.keys(body.questions).map((id) => [id, { type: 'noul', noul: 0.9 }])))
     const thread = CodexChatStore.findThreadById(CodexChatStore.createThread(1, '로어', 'llm', guide.id))!
     const sent = await LlmChatService.sendMessage(requester, thread, '가을에 바닷가 등대 마을 축제 가볼까?', () => {})
-    const judge = judgeCalls(calls)[0]
+    assert.equal(judgeCalls(calls).length, 2, 'before/context share one call for the same window, other windows stay separate')
+    const judge = judgeCalls(calls).find((call) => call.body.questions['lore-0'])!
     const asked = Object.values(judge.body.questions as Record<string, { instructions: string }>).map((entry) => entry.instructions)
-    assert.equal(asked.length, 1, 'only the entry sharing words with the exchange is asked about')
-    assert.ok(asked[0].includes('등대 마을 축제'))
+    assert.equal(asked.length, 2, 'one preset item and only the entry sharing words with the exchange are asked together')
+    assert.ok(asked.some((question) => question.includes('등대 마을 축제')))
+    assert.ok(judge.body.questions['context:lore-0'], 'built-in question ids cannot overwrite a preset item')
     const chat = calls.find((call) => call.url.endsWith('/chat/completions'))!
     assert.ok(JSON.stringify(chat.body.messages).includes('매년 가을 바닷가 등대 앞에서'), 'the picked entry is in the request')
     const meta = JSON.parse(CodexChatStore.listMessages(thread.id).find((message) => message.id === sent.id)!.context_meta!)
     assert.equal(meta.loreEntries.find((entry: { title: string }) => entry.title === '등대 마을 축제')?.reason, 'judge')
-    assert.equal(meta.judge.items[0].action, 'lore')
+    assert.ok(meta.judge.items.some((item: { action: string }) => item.action === 'lore'))
+    assert.ok(meta.judge.items.some((item: { itemId: string; action: string }) => item.itemId === 'lore-0' && item.action === 'offered'))
+    const usage = dbModule.getUserSettingsDb().prepare("SELECT thread_id, profile_id FROM llm_usage_events WHERE purpose = 'judge' AND thread_id = ?").all(thread.id) as Array<{ thread_id: number; profile_id: number }>
+    assert.equal(usage.length, 2)
+    assert.ok(usage.every((entry) => entry.profile_id === guide.id))
   })
 
   await t.test('the first log tables (turns only) are made again on start', async () => {

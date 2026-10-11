@@ -5,12 +5,14 @@ import { askJudge, JudgeError, resolveJudgeConnection, type JudgeAnswer, type Ju
 import { ChatJudgeLogStore, judgeToolMatches, type JudgeLogItem } from './chatJudgeLogs'
 import { DEFAULT_FOLLOW_UP_DIRECTIVE } from './chatJudgeDefaults'
 import { contextQuestions, type JudgedContext } from './chatJudgeContext'
+import type { SemanticContext } from '../embeddings/chatSemantic'
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
 import { ModelSlotStore } from './modelSlots'
 import { userPersonaForThread } from './chatUserProfiles'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import type { ChatCompletionTool } from './llmChatCompletion'
 import { inBackground } from '../llmRequestScheduler'
+import type { LlmUsageTag } from '../llmUsage'
 
 /**
  * The judge step of a chat turn (profiles with a judge preset only). Before the reply, the preset's questions about the
@@ -135,7 +137,7 @@ function addTokens(total: number | null, more: number | null) {
 }
 
 /** Questions built in code (not preset items) in one call: their answers by id, the request as sent, and any error. */
-export async function askBuiltQuestions(setup: Pick<JudgeSetup, 'providerName' | 'model'>, state: unknown, questions: JudgeQuestion[], signal?: AbortSignal) {
+export async function askBuiltQuestions(setup: Pick<JudgeSetup, 'providerName' | 'model'>, state: unknown, questions: JudgeQuestion[], signal?: AbortSignal, usage?: LlmUsageTag) {
   const started = Date.now()
   const errors: string[] = []
   const answers = new Map<string, JudgeAnswer>()
@@ -144,7 +146,7 @@ export async function askBuiltQuestions(setup: Pick<JudgeSetup, 'providerName' |
   let tokens: number | null = null
   if (connection) {
     try {
-      const result = await askJudge(connection, state, questions, signal)
+      const result = await askJudge(connection, state, questions, signal, usage)
       request = result.request
       tokens = result.tokens
       for (const [id, answer] of result.answers) answers.set(id, answer)
@@ -161,20 +163,30 @@ export async function askBuiltQuestions(setup: Pick<JudgeSetup, 'providerName' |
  * Asks the judge every item (one call per distinct window), then settles the uncertain ones by their setting. A
  * failed call leaves its items `fallback` (the turn behaves as without them) and its message in `error`.
  */
-export async function runJudgeItems(setup: JudgeSetup, profile: ChatProfile, items: ChatJudgeItem[], stateFor: (window: number) => unknown, signal?: AbortSignal): Promise<JudgeRun> {
+export async function runJudgeItems(setup: JudgeSetup, profile: ChatProfile, items: ChatJudgeItem[], stateFor: (window: number) => unknown, signal?: AbortSignal, options: { extra?: { window: number; questions: JudgeQuestion[] }; usage?: LlmUsageTag } = {}): Promise<JudgeRun & { extraAnswers: Map<string, JudgeAnswer> }> {
   const started = Date.now()
   const answers = new Map<string, JudgeAnswer>()
   const requests: unknown[] = []
   const errors: string[] = []
   let tokens: number | null = null
-  const connection = items.length > 0 ? connectionOf(setup, errors) : null
+  const usedIds = new Set(items.map((item) => item.id))
+  const extraIds = new Map<string, string>()
+  const extra = options.extra && { ...options.extra, questions: options.extra.questions.map((question) => {
+    let id = question.id
+    while (usedIds.has(id)) id = `context:${id}`
+    usedIds.add(id)
+    extraIds.set(id, question.id)
+    return { ...question, id }
+  }) }
+  const usage = options.usage ?? { purpose: 'judge' as const, profileId: profile.id }
+  const connection = items.length > 0 || extra?.questions.length ? connectionOf(setup, errors) : null
   if (connection) {
-    const windows = [...new Set(items.map((item) => item.window))]
+    const windows = [...new Set([...items.map((item) => item.window), ...(extra?.questions.length ? [extra.window] : [])])]
     await Promise.all(windows.map(async (window) => {
-      const group = items.filter((item) => item.window === window)
+      const group: JudgeQuestion[] = [...items.filter((item) => item.window === window), ...(extra?.window === window ? extra.questions : [])]
       const state = stateFor(window)
       try {
-        const result = await askJudge(connection, state, group, signal)
+        const result = await askJudge(connection, state, group, signal, usage)
         requests.push(result.request)
         tokens = addTokens(tokens, result.tokens)
         for (const [id, answer] of result.answers) answers.set(id, answer)
@@ -211,7 +223,7 @@ export async function runJudgeItems(setup: JudgeSetup, profile: ChatProfile, ite
       await Promise.all([...new Set(escalate.map((item) => item.window))].map(async (window) => {
         const group = escalate.filter((item) => item.window === window)
         try {
-          const result = await askJudge(llm, stateFor(window), group, signal)
+          const result = await askJudge(llm, stateFor(window), group, signal, usage)
           requests.push({ escalation: true, ...(result.request as object) })
           tokens = addTokens(tokens, result.tokens)
           for (const item of group) {
@@ -233,7 +245,8 @@ export async function runJudgeItems(setup: JudgeSetup, profile: ChatProfile, ite
     const item = items.find((candidate) => candidate.id === entry.itemId) as ChatJudgeItem
     entry.action = entry.decidedBy === 'fallback' ? 'none' : actionOf(item, entry.verdict)
   }
-  return { connection, results, request: requests.length === 1 ? requests[0] : requests, latencyMs: Date.now() - started, tokens, error: errors.length ? [...new Set(errors)].join(' / ') : null }
+  const extraAnswers = new Map([...extraIds].flatMap(([id, original]) => answers.has(id) ? [[original, answers.get(id)!] as const] : []))
+  return { connection, results, extraAnswers, request: requests.length === 1 ? requests[0] : requests, latencyMs: Date.now() - started, tokens, error: errors.length ? [...new Set(errors)].join(' / ') : null }
 }
 
 /** One run in the judge log (best effort: a failed write never fails the turn). Returns its id, 0 when not written. */
@@ -308,36 +321,27 @@ export function judgeDirectiveText(judged: JudgedTurn | null | undefined, withhe
  * `availableTools`: the tools this turn offers; null when they cannot be steered per turn (Codex), where an item that
  * steers tools does nothing and only the directives of tool-less yes items go through.
  */
-export async function judgeBeforeReply(params: { profile: ChatProfile; threadId: number; replyId: string | null; availableTools: string[] | null; excludeMessageId?: number; context?: boolean; signal?: AbortSignal }): Promise<JudgedTurn | null> {
+export async function judgeBeforeReply(params: { profile: ChatProfile; threadId: number; replyId: string | null; availableTools: string[] | null; excludeMessageId?: number; context?: boolean; signal?: AbortSignal; semantic?: SemanticContext | null }): Promise<JudgedTurn | null> {
   const setup = judgeSetupOf(params.profile)
   if (!setup) return null
   const items = askableJudgeItems(setup.preset.items).filter((item) => item.stage === 'before')
   const thread = CodexChatStore.findThreadById(params.threadId)
   const messages = CodexChatStore.listMessages(params.threadId).filter((message) => message.id !== params.excludeMessageId)
-  const extra = params.context && thread ? contextQuestions(setup.preset.context, params.profile, thread, messages) : null
+  const extra = params.context && thread ? contextQuestions(setup.preset.context, params.profile, thread, messages, params.semantic) : null
   if (items.length === 0 && !extra?.questions.length) return null
 
-  const [run, asked] = await Promise.all([
-    runJudgeItems(setup, params.profile, items, (window) => judgeStateOf(params.profile, thread, messages, window), params.signal),
-    extra?.questions.length ? askBuiltQuestions(setup, judgeStateOf(params.profile, thread, messages, setup.preset.context.window), extra.questions, params.signal) : Promise.resolve(null),
-  ])
+  const run = await runJudgeItems(setup, params.profile, items, (window) => judgeStateOf(params.profile, thread, messages, window), params.signal, {
+    extra: extra ? { window: setup.preset.context.window, questions: extra.questions } : undefined,
+    usage: { purpose: 'judge', threadId: params.threadId, profileId: params.profile.id },
+  })
   // An item steering tools this turn does not offer at all does nothing: its directive would name a missing tool.
   const available = params.availableTools
   for (const result of run.results) {
     if ((result.action === 'offered' || result.action === 'withheld') && result.tools.length > 0
       && (available === null || !result.tools.some((pattern) => available.some((name) => judgeToolMatches(pattern, name))))) result.action = 'none'
   }
-  const settled = extra && asked ? extra.settle(asked.answers) : null
-  const combined: JudgeRun = asked
-    ? {
-        connection: run.connection ?? asked.connection,
-        results: [...run.results, ...(settled?.results ?? [])],
-        request: items.length ? [run.request, asked.request].flat() : asked.request,
-        latencyMs: Math.max(run.latencyMs, asked.latencyMs),
-        tokens: addTokens(run.tokens, asked.tokens),
-        error: [run.error, asked.error].filter(Boolean).join(' / ') || null,
-      }
-    : run
+  const settled = extra?.questions.length ? extra.settle(run.extraAnswers) : null
+  const combined: JudgeRun = { ...run, results: [...run.results, ...(settled?.results ?? [])] }
   const latestUser = [...messages].reverse().find((message) => message.role === 'user')
   const runId = logJudgeRun({ setup, threadId: params.threadId, profileId: params.profile.id, stage: 'before', messageId: latestUser?.id ?? null, replyId: params.replyId, run: combined })
 
@@ -413,7 +417,7 @@ export function judgeAfterReply(params: { profile: ChatProfile; threadId: number
     && CodexChatStore.listMessages(params.threadId).at(-1)?.id === params.message.id
 
   void inBackground(async () => {
-    const run = await runJudgeItems(setup, params.profile, items, (window) => judgeStateOf(params.profile, thread, messages, window), pending.controller.signal)
+    const run = await runJudgeItems(setup, params.profile, items, (window) => judgeStateOf(params.profile, thread, messages, window), pending.controller.signal, { usage: { purpose: 'judge', threadId: params.threadId, profileId: params.profile.id } })
     if (pending.controller.signal.aborted) return
     const runId = logJudgeRun({ setup, threadId: params.threadId, profileId: params.profile.id, stage: 'after', messageId: params.message.id, replyId: params.message.routing?.replyId ?? null, run })
     if (!run.results.some((result) => result.action === 'follow-up') || !stillLatest()) {
@@ -460,7 +464,7 @@ export async function testJudgePreset(params: { preset: ChatJudgePreset; provide
       continue
     }
     const upTo = messages.slice(0, messages.findIndex((message) => message.id === target.id) + 1)
-    const run = await runJudgeItems(setup, params.profile, stageItems, (window) => judgeStateOf(params.profile, params.thread, upTo, window), params.signal)
+    const run = await runJudgeItems(setup, params.profile, stageItems, (window) => judgeStateOf(params.profile, params.thread, upTo, window), params.signal, { usage: { purpose: 'judge', threadId: params.thread.id, profileId: params.profile.id } })
     results.push({ messageId: target.id, role: target.role, excerpt, error: run.error, items: run.results.map(({ tools: _tools, ...result }) => result) })
   }
   return results

@@ -39,6 +39,52 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
   const say = (threadId: number, role: 'user' | 'assistant', content: string, extra: Record<string, unknown> = {}) =>
     CodexChatStore.addMessage({ thread_id: threadId, role, content, tool_calls: [], status: 'completed', error: null, ...extra })
 
+  await t.test('tail and single-message reads keep older quotes but never resolve a quote into another chat', () => {
+    const id = newThread()
+    const earlier = say(id, 'user', 'earlier')
+    const elsewhere = say(newThread(), 'user', 'private')
+    const quote = (messageId: number) => ({ messageId, role: 'user', speakerProfileId: null, speakerName: 'user', excerpt: 'quoted', alternative: 0 })
+    const own = say(id, 'assistant', 'own quote', { routing: { recipients: ['user'], replyTo: quote(earlier) } })
+    const foreign = say(id, 'assistant', 'foreign quote', { routing: { recipients: ['user'], replyTo: quote(elsewhere) } })
+    const tail = CodexChatStore.listMessages(id, { tail: 2 })
+    assert.deepEqual(tail.map((message) => message.id), [own, foreign])
+    assert.equal(tail[0].routing?.replyTo?.excerpt, 'quoted')
+    assert.equal(tail[0].routing?.replyTo?.unavailable, undefined)
+    assert.equal(tail[1].routing?.replyTo?.unavailable, true)
+    assert.equal(tail[1].routing?.replyTo?.excerpt, '')
+    assert.deepEqual(CodexChatStore.findMessage(id, own), tail[0])
+    assert.equal(CodexChatStore.findMessage(id, elsewhere), undefined)
+    assert.equal(CodexChatStore.latestMessage(id)?.id, foreign)
+    assert.equal(CodexChatStore.messageCount(id), 3)
+  })
+
+  await t.test('tail detail keeps state from earlier replies and manual edits, including group member state', async () => {
+    const { ChatSharedBlockStore } = await import('../src/services/codex-chat/chatDisplayBlocks')
+    const { GroupChatService } = await import('../src/services/codex-chat/groupChatService')
+    const block = ChatSharedBlockStore.create({ name: 'tail state', block: { key: 'status', example: '{"hp":2}' } })
+    const stateProfile = ChatProfileStore.create({ name: 'state', engine: 'llm', providerName: 'test', model: 'm', blockIds: [block.id], mcpEnabled: false })
+    const id = CodexChatService.createThread(requester, stateProfile.id).id
+    const beforeEdit = say(id, 'assistant', '```status\n{"hp":5}\n```')
+    CodexChatStore.setBlockEdits(id, [{ id: 'edit', key: 'status', afterMessageId: beforeEdit, data: { hp: 8 }, at: new Date().toISOString() }])
+    say(id, 'user', 'latest')
+    const full = CodexChatService.getThread(requester, id)
+    const tail = CodexChatService.getThread(requester, id, 1)
+    assert.deepEqual(tail.messages, full.messages.slice(-1))
+    assert.equal(tail.messageCount, full.messages.length)
+    assert.equal(tail.messagesFrom, tail.messages[0].id)
+    assert.deepEqual(tail.blocks, full.blocks)
+    assert.equal(tail.blocks?.state.status.hp, 8)
+    assert.throws(() => CodexChatService.getThread(stranger, id, 1), /찾을 수 없어/)
+
+    const room = GroupChatService.create(requester, { profileIds: [stateProfile.id, profile.id], representativeId: stateProfile.id, userProfileId: null })
+    say(room.id, 'assistant', '```status\n{"hp":7}\n```', { speaker_profile_id: stateProfile.id })
+    say(room.id, 'user', 'latest')
+    const fullRoom = GroupChatService.getThread(requester, room.id)
+    const roomTail = GroupChatService.getThread(requester, room.id, 1)
+    assert.deepEqual(roomTail.memberBlocks, fullRoom.memberBlocks)
+    assert.equal(roomTail.memberBlocks?.[stateProfile.id]?.state.status.hp, 7)
+  })
+
   await t.test('preview text: one plain line without blocks, reasoning, tags or markdown', () => {
     assert.equal(previewText('*웃으며* 안녕!\n\n```status\n{"hp": 3}\n```\n오늘은 **비**가 와.'), '웃으며 안녕! 오늘은 비가 와.')
     assert.equal(previewText('<think>속으로</think>[링크](http://x) ![그림](a.png) <b>굵게</b>'), '링크 굵게')

@@ -16,7 +16,8 @@ test('chat generation prompting: preset settings, guide, writer answers and defe
   ;(await import('../src/models/ExternalApiProvider')).ExternalApiProvider.create({ provider_name: 'test', display_name: 'test', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
   const { ChatGenerationPresetStore, readGenerationPresetFile } = await import('../src/services/codex-chat/chatGenerationPresets')
   const { FileStoreService, fileOwnerKey } = await import('../src/services/fileStoreService')
-  const { presetGuideText, parseWriterAnswer, buildWriterMessages, withGeneratedImages, GENERATED_IMAGES_NOTE } = await import('../src/services/codex-chat/chatGenerationPrompting')
+  const { presetGuideText, parseWriterAnswer, buildWriterMessages, withGeneratedImages, generatedImagesTokens, GENERATED_IMAGES_NOTE } = await import('../src/services/codex-chat/chatGenerationPrompting')
+  const { estimateMessagesTokens } = await import('../src/services/codex-chat/llmChatContext')
   const { presetInputShape } = await import('../src/services/codex-chat/chatGenerationInputs')
   const { ChatDeferredGenerationStore, DEFERRED_PER_REPLY_MAX } = await import('../src/services/codex-chat/chatDeferredGenerations')
   const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
@@ -89,6 +90,14 @@ test('chat generation prompting: preset settings, guide, writer answers and defe
     assert.equal(last[0].text, 'again')
     assert.equal(last.at(-1)?.image_url?.url, 'data:image/jpeg;base64,BB')
     assert.deepEqual(withGeneratedImages([{ role: 'user', content: 'x' }], []), [{ role: 'user', content: 'x' }])
+    const profile = ChatProfileStore.create({ name: 'Vision budget', engine: 'llm', providerName: 'test', model: 'm' })
+    const images = [{ url: 'data:image/jpeg;base64,BB' }]
+    const reserved = generatedImagesTokens(profile.id, images)
+    const base = [{ role: 'user' as const, content: 'again' }]
+    assert.ok(reserved > 2000, 'the context reserves the image allowance plus its note')
+    assert.ok(Math.abs(estimateMessagesTokens(profile.id, withGeneratedImages(base, images)) - estimateMessagesTokens(profile.id, base) - reserved) <= 1)
+    assert.equal(generatedImagesTokens(profile.id, []), 0)
+    assert.equal(generatedImagesTokens(profile.id, [{ url: `data:image/jpeg;base64,${'A'.repeat(10000)}` }]), reserved, 'base64 transport length does not affect image cost')
   })
 
   await t.test('a deferred request shows on its reply while written, then its failure; queued ones show through their job', () => {

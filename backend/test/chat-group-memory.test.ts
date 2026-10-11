@@ -91,6 +91,9 @@ test('group room memory: the room summary, what its members see, and recall', { 
     assert.ok(await summarizeGroupAll(threadId, members, WINDOW))
     const { plot, folded } = splitSegments(ChatSummaryStore.list(threadId))
     assert.ok(plot, 'the older stretches were folded into a plot')
+    const usage = db.prepare("SELECT thread_id, profile_id FROM llm_usage_events WHERE purpose = 'summary'").all() as Array<{ thread_id: number; profile_id: number }>
+    assert.equal(usage.length, requests.length)
+    assert.ok(usage.every((event) => event.thread_id === threadId && event.profile_id === kai.id), 'both segment and plot requests are attributed to the room and its summarizer')
     assert.ok(folded.some((segment) => segment.content.startsWith('은하수정원')))
     say(null, '은하수정원에서 했던 얘기 기억나?')
     assert.ok(sentTo(kai).includes('## 관련된 지난 일\\n은하수정원의 기억'))

@@ -281,6 +281,31 @@ test('character asset batches: durable jobs, dependencies, review and approved a
     assert.equal(EmoticonService.listEntries(group).length, 0)
   })
 
+  await t.test('a copied profile gets its own expressions; a renamed one keeps its character group', async () => {
+    const { setProfileExpression, copyProfileExpressions, expressionGroupId } = await import('../src/services/codex-chat/chatProfileExpressions')
+    const source = ChatProfileStore.create({ name: '원본 캐릭터', engine: 'codex', referenceHash: reference })
+    setProfileExpression(requester, source.id, '기쁨', other)
+    const sourceGroup = expressionGroupId(source)!
+    const linked = ChatProfileStore.find(source.id)!
+    const copy = copyProfileExpressions(linked, ChatProfileStore.create({ ...linked, name: '원본 캐릭터 사본' }))
+    const copyGroup = expressionGroupId(copy)!
+    assert.notEqual(copyGroup, sourceGroup)
+    assert.equal(copy.style.emoticonGroupIds[0], copyGroup)
+    assert.deepEqual(EmoticonService.listEntries(copyGroup).map((entry) => [entry.compositeHash, entry.keywords]), [[other, ['기쁨']]])
+    // Changing the copy's expressions leaves the source's alone.
+    setProfileExpression(requester, copy.id, '기쁨', candidate)
+    assert.deepEqual(EmoticonService.listEntries(sourceGroup).map((entry) => [entry.compositeHash, entry.keywords]), [[other, ['기쁨']]])
+    // A rename takes the character group along, so the editor and chats still find its expressions by name.
+    const renamed = ChatProfileStore.update(copy.id, { name: '새 이름' })!
+    assert.equal(expressionGroupId(renamed), copyGroup)
+    assert.equal(GroupPathService.getPathLabel(copyGroup), '채팅 캐릭터/새 이름/표정')
+    // Another profile still named like the old one keeps the group where it is.
+    const twin = ChatProfileStore.create({ name: '원본 캐릭터', engine: 'codex' })
+    ChatProfileStore.update(source.id, { name: '원본 개명' })
+    assert.equal(GroupPathService.getPathLabel(sourceGroup), '채팅 캐릭터/원본 캐릭터/표정')
+    ChatProfileStore.delete(twin.id)
+  })
+
   await t.test('cancel uses queue cancellation; profile deletion cascades batches and dispatch rechecks live authority', async (sub) => {
     const deleting = ChatProfileStore.create({ name: '삭제할 캐릭터', engine: 'codex', referenceHash: reference })
     const pending = await batches.createChatAssetBatch(requester, deleting.id, { idempotencyKey: 'cancel-delete', presetId: preset.id, slots: [{ slotKey: '아바타', kind: 'avatar', prompt: 'portrait' }] })

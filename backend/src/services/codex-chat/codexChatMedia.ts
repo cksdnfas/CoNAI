@@ -63,6 +63,33 @@ function jobIdsOf(call: CodexChatMessageRecord['tool_calls'][number]) {
   return match ? [Number(match[1])] : []
 }
 
+/** A tail poll must keep watching jobs from earlier replies, without loading their text or alternatives. */
+export function countPendingChatJobs(threadId: number) {
+  const db = getUserSettingsDb()
+  const ids = new Set<number>()
+  const rows = db.prepare("SELECT tool_calls FROM codex_chat_messages WHERE thread_id = ? AND tool_calls IS NOT NULL AND tool_calls != '[]'")
+    .all(threadId) as Array<{ tool_calls: string }>
+  for (const row of rows) {
+    try {
+      const calls = JSON.parse(row.tool_calls)
+      if (Array.isArray(calls)) for (const call of calls) for (const id of jobIdsOf(call)) ids.add(id)
+    } catch { /* A malformed old tool record contributes no jobs, just as in listMessages. */ }
+  }
+  const links = db.prepare(`SELECT l.job_id FROM chat_generation_links l
+    JOIN generation_queue_jobs j ON j.id = l.job_id AND j.status NOT IN ('completed', 'failed', 'cancelled')
+    JOIN codex_chat_messages m ON m.thread_id = l.thread_id
+      AND json_extract(CASE WHEN json_valid(m.routing) THEN m.routing ELSE '{}' END, '$.replyId') = l.reply_id
+      AND json_type(CASE WHEN json_valid(m.routing) THEN m.routing ELSE '{}' END, '$.recipients') = 'array'
+    WHERE l.thread_id = ?`).all(threadId) as Array<{ job_id: number }>
+  for (const link of links) ids.add(link.job_id)
+  let pending = 0
+  for (const chunk of chunked([...ids])) {
+    pending += (db.prepare(`SELECT COUNT(*) AS count FROM generation_queue_jobs WHERE id IN (${chunk.map(() => '?').join(',')}) AND status NOT IN ('completed', 'failed', 'cancelled')`)
+      .get(...chunk) as { count: number }).count
+  }
+  return pending
+}
+
 const PROPOSAL_TOOLS: Record<ChatProposal['kind'], string> = {
   display_block: 'propose_display_block',
   profile: 'propose_chat_profile',
