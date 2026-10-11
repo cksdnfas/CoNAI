@@ -1,4 +1,4 @@
-"""EmbeddingGemma 2 embeddings (CPU, bf16): text, and images when the vision tower is kept ("full" variant).
+"""EmbeddingGemma 2 embeddings (CPU; bf16 where the CPU has native bf16, else fp32): text, and images when the vision tower is kept ("full" variant).
 
 Inputs get the model card's task prefixes here, so callers send plain text:
   query       "task: search result | query: <text>"        (what is searched for)
@@ -17,6 +17,8 @@ from typing import Dict, List, Optional
 import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
+
+from worker_dtypes import half_dtype
 
 REPO = "google/embeddinggemma-2"
 REVISION = "914f7f89142e33e77833254d9c9b90c3cef7303b"
@@ -59,7 +61,9 @@ class TextEmbedder:
         folder = os.path.dirname(hf_hub_download(REPO, "modules.json", revision=REVISION))
         # modules.json lists a Normalize module folder that holds no files, so the Hub never creates it.
         os.makedirs(os.path.join(folder, "2_Normalize"), exist_ok=True)
-        dtype = torch.bfloat16 if device.type == "cpu" else torch.float16
+        # BF16 matches FP32 (cos >= 0.9999, same rankings) at half the memory; Gemma overflows in FP16, so CUDA is
+        # BF16 too. CPUs without native BF16 get FP32: emulated BF16 there embeds an image in ~8 s instead of ~1.5 s.
+        dtype = half_dtype(device, torch.bfloat16)
         model = SentenceTransformer(folder, device=str(device), model_kwargs={"torch_dtype": dtype}, local_files_only=True)
         inner = model[0].auto_model
         # The vision and audio towers are 40% of the weights; text-only instances drop both, image ones keep vision.

@@ -29,7 +29,8 @@ function statusPill(status: EmbeddingServerStatus | undefined, t: (input: Transl
   if (!status) return { tone: 'muted', text: t({ ko: '확인 중', en: 'Checking' }) }
   if (!status.enabled) return { tone: 'muted', text: t({ ko: '꺼짐', en: 'Off' }) }
   if (!status.dependenciesAvailable) return { tone: 'error', text: t({ ko: 'AI 런타임 필요', en: 'Needs the AI runtime' }) }
-  if (status.download) return { tone: 'busy', text: t({ ko: '모델 받는 중', en: 'Downloading model' }) }
+  if (status.download?.state === 'start') return { tone: 'busy', text: t({ ko: '모델 받는 중', en: 'Downloading model' }) }
+  if (status.failure) return { tone: 'error', text: t({ ko: '오류 · 잠시 쉬는 중', en: 'Error · resting' }) }
   if (status.indexing) return { tone: 'busy', text: t({ ko: '색인 중 · CPU', en: 'Indexing · CPU' }) }
   if (status.modelLoaded) return { tone: 'ok', text: t({ ko: '올라감 · CPU', en: 'Loaded · CPU' }) }
   return { tone: 'ok', text: t({ ko: '대기 · CPU', en: 'Idle · CPU' }) }
@@ -106,7 +107,7 @@ export function EmbeddingSettingsCard({ heading, actions, draft, status, onPatch
           </SettingRow>
           <SettingRow
             label={t({ ko: '색인', en: 'Indexed' })}
-            info={status?.statusMessage && !status.dependenciesAvailable ? status.statusMessage : undefined}
+            info={status?.statusMessage && (!status.dependenciesAvailable || status.failure) ? status.statusMessage : undefined}
             controlClassName="flex min-w-0 justify-end"
           >
             <span className="font-mono text-xs text-muted-foreground tabular-nums">{indexed || '—'}</span>

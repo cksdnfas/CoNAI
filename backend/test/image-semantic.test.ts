@@ -14,9 +14,9 @@ import { test } from 'node:test'
 const CONCEPTS: string[][] = [['cat', '고양이'], ['city', '도시'], ['soup', '국']]
 const DIM = 256
 
-function fakeVector(text: string) {
-  const vector = new Float32Array(DIM)
-  vector[DIM - 1] = 1
+function fakeVector(text: string, dim = DIM) {
+  const vector = new Float32Array(dim)
+  vector[CONCEPTS.length] = 1
   CONCEPTS.forEach((words, axis) => {
     for (const word of words) if (text.includes(word)) vector[axis] += 1.5
   })
@@ -49,9 +49,12 @@ test('image semantic: index walk, text search, similar images, safety, prune, ro
   embedding.embeddingRuntime.checkDependencies = async () => ({ available: true, message: 'ok', missingPackages: [], python: 'fake' })
   t.mock.method(embedding.textWorker, 'request', async (op: string, payload: any) => {
     requests.push({ op, payload })
-    if (op === 'embed') return { device: 'cpu', items: payload.items.map((item: { text: string }) => [{ start: 0, end: item.text.length, vector: base64(fakeVector(item.text)) }]) }
+    // Text at the full dimension, images at its prefix; text searches over images cut the query down.
+    if (op === 'embed') assert.equal(payload.dim, embedding.EMBEDDING_DIM)
+    if (op === 'embed_images') assert.equal(payload.dim, embedding.IMAGE_EMBEDDING_DIM)
+    if (op === 'embed') return { device: 'cpu', items: payload.items.map((item: { text: string }) => [{ start: 0, end: item.text.length, vector: base64(fakeVector(item.text, payload.dim)) }]) }
     if (op === 'embed_images') {
-      return { device: 'cpu', items: payload.images.map((file: string) => (file.includes('broken') ? { error: 'cannot identify image file' } : { vector: base64(fakeVector(path.basename(file))) })) }
+      return { device: 'cpu', items: payload.images.map((file: string) => (file.includes('broken') ? { error: 'cannot identify image file' } : { vector: base64(fakeVector(path.basename(file), payload.dim)) })) }
     }
     throw new Error(`unexpected op ${op}`)
   })
@@ -94,11 +97,15 @@ test('image semantic: index walk, text search, similar images, safety, prune, ro
   assert.deepEqual(sent.map((file) => path.win32.basename(file)), ['broken.png', 'soup-bowl.png', 'city-night.png', 'cat-window.png', 'cat-sofa.png'])
   assert.equal(imageIndexInternals.state().fullPass, true)
 
-  // A new image after the full walk is picked up; the unreadable one is not retried in this process.
+  // A new image after the full walk is picked up; the unreadable one waits for the walk to start over.
   add(8, 'cat-garden.png')
   assert.equal(await indexPendingImages(), 1)
   assert.equal(await indexPendingImages(), 0)
   assert.equal(imageIndexCount(), 5)
+  imageIndexInternals.ageWalk()
+  assert.equal(await indexPendingImages(), 1, 'a new walk retries the unreadable image')
+  assert.equal(await indexPendingImages(), 0)
+  assert.equal(path.win32.basename(requests.filter((request) => request.op === 'embed_images').at(-1)!.payload.images[0]), 'broken.png')
 
   // Text search ranks by meaning; queries go out with the full instance's variant.
   const cats = await searchImagesByText('고양이 사진', 3)

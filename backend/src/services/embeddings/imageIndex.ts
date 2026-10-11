@@ -1,10 +1,11 @@
 import { db } from '../../database/init'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
-import { vectorStore } from '../vectors/vectorStore'
+import { normalizeVector, vectorStore } from '../vectors/vectorStore'
 import { ImageSafetyService } from '../imageSafetyService'
 import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibilityService'
 import { MEDIA_STYLE_MODEL_KEY, MEDIA_STYLE_SPACE } from '../aiWorker/aiVisionService'
 import {
+  IMAGE_EMBEDDING_DIM,
   IMAGE_EMBEDDING_MODEL_KEY,
   embedImages,
   embedQuery,
@@ -17,15 +18,18 @@ import {
  * whatever its rating or post-processing state, and searches show only what the library would show.
  *
  * The media rows live in the main database and the vectors in vectors.db (attached to user.db), so pending images
- * are found by walking media ids: newest first down to the oldest once per process, then only ids above the highest
- * one seen. An image that cannot be read is passed over until the next process start.
+ * are found by walking media ids: newest first down to the oldest, then only ids above the highest one seen. Every
+ * few hours the walk starts over, which picks up an image that could not be read before or whose hash changed.
  */
 
 export const MEDIA_IMAGE_SPACE = 'media-image'
 
-/** Images per worker request (about 0.7 s each on CPU). */
-const BATCH_IMAGES = 4
+/** Images per worker request (about 0.7-1 s each on CPU): a chat query waits behind at most one batch. */
+const BATCH_IMAGES = 2
 const SCAN_PAGE = 500
+/** Pages one pass may scan without finding work (a caught-up library is walked over several passes). */
+const SCAN_PAGES_PER_PASS = 20
+const REWALK_MS = 6 * 60 * 60_000
 const IN_CHUNK = 500
 const PRUNE_EVERY_MS = 60 * 60_000
 
@@ -40,6 +44,8 @@ const scan = {
   /** The highest id when the downward walk began; afterwards, ids above it are new. */
   top: 0,
   fullPass: false,
+  /** When the current walk began (it starts over REWALK_MS after that, once caught up). */
+  startedAt: 0,
 }
 let lastPruneAt = 0
 
@@ -52,7 +58,10 @@ function scanPage(): { rows: ScanRow[]; downward: boolean } {
     const rows = (scan.below === null
       ? db.prepare(`${select} ORDER BY im.media_id DESC LIMIT ?`).all(SCAN_PAGE)
       : db.prepare(`${select} AND im.media_id < ? ORDER BY im.media_id DESC LIMIT ?`).all(scan.below, SCAN_PAGE)) as ScanRow[]
-    if (scan.below === null) scan.top = rows[0]?.media_id ?? 0
+    if (scan.below === null) {
+      scan.top = rows[0]?.media_id ?? 0
+      scan.startedAt = Date.now()
+    }
     return { rows, downward: true }
   }
   return { rows: db.prepare(`${select} AND im.media_id > ? ORDER BY im.media_id ASC LIMIT ?`).all(scan.top, SCAN_PAGE) as ScanRow[], downward: false }
@@ -70,14 +79,24 @@ function storedHashes(hashes: string[]): Set<string> {
   return found
 }
 
-/** The next images without a vector (at most `limit`), moving the walk past everything before them. */
-function nextPendingImages(limit: number): ScanRow[] {
-  for (;;) {
+/**
+ * The next images without a vector (at most `limit`), moving the walk past everything before them, and how many
+ * media rows were looked at (more than zero with no images: the page budget ran out, the walk goes on next pass).
+ */
+function nextPendingImages(limit: number): { rows: ScanRow[]; scanned: number } {
+  if (scan.fullPass && Date.now() - scan.startedAt >= REWALK_MS) {
+    scan.below = null
+    scan.top = 0
+    scan.fullPass = false
+  }
+  let scanned = 0
+  for (let page = 0; page < SCAN_PAGES_PER_PASS; page += 1) {
     const { rows, downward } = scanPage()
     if (rows.length === 0) {
       if (downward) scan.fullPass = true
-      return []
+      return { rows: [], scanned: 0 }
     }
+    scanned += rows.length
     const stored = storedHashes(rows.map((row) => row.composite_hash))
     const pending = rows.filter((row) => !stored.has(row.composite_hash))
     const taken = pending.slice(0, limit)
@@ -85,15 +104,19 @@ function nextPendingImages(limit: number): ScanRow[] {
     const reached = taken.length === limit && pending.length > limit ? taken[taken.length - 1].media_id : rows[rows.length - 1].media_id
     if (downward) scan.below = reached
     else scan.top = Math.max(scan.top, reached)
-    if (taken.length > 0) return taken
+    if (taken.length > 0) return { rows: taken, scanned }
   }
+  return { rows: [], scanned }
 }
 
-/** One batch of the background pass: embed a few images without a vector; returns how many were looked at. */
+/**
+ * One batch of the background pass: embed a few images without a vector; returns how many were looked at (zero once
+ * the walk has nothing left).
+ */
 export async function indexPendingImages(limit = BATCH_IMAGES): Promise<number> {
   if (!embeddingFeatureOn('imageSearch')) return 0
-  const rows = nextPendingImages(limit)
-  if (rows.length === 0) return 0
+  const { rows, scanned } = nextPendingImages(limit)
+  if (rows.length === 0) return scanned
   const vectors = await embedImages(rows.map((row) => row.path), { priority: 'low' })
   rows.forEach((row, index) => {
     const vector = vectors[index]
@@ -158,18 +181,30 @@ const TEXT_MATCH_MIN_SCORE = 0.64
 const overfetch = (limit: number) => Math.max(limit * 4, 200)
 
 /**
+ * A text query in the image space: queries come at the text dimension, images are stored at a Matryoshka prefix of
+ * it. The prefix renormalized is what the worker returns when asked for that dimension.
+ */
+async function imageSpaceQuery(text: string, waitMs: number) {
+  const query = await embedQuery(text, { waitMs })
+  return query ? normalizeVector(query.subarray(0, IMAGE_EMBEDDING_DIM)) : null
+}
+
+/**
  * Images matching a text description, best first; null when image search is off or the model did not answer in
  * `waitMs` (a cold model loads in about 10 s).
  */
 export async function searchImagesByText(text: string, limit: number, options: { waitMs?: number; minScore?: number } = {}): Promise<ImageVectorHit[] | null> {
   if (!embeddingFeatureOn('imageSearch')) return null
-  const query = await embedQuery(text, { waitMs: options.waitMs ?? 20_000 })
+  const query = await imageSpaceQuery(text, options.waitMs ?? 20_000)
   if (!query) return null
   const hits = vectorStore.search(MEDIA_IMAGE_SPACE, IMAGE_EMBEDDING_MODEL_KEY, query, { limit: overfetch(limit), minScore: options.minScore ?? TEXT_MATCH_MIN_SCORE })
   return visibleOnly(hits.map((hit) => ({ compositeHash: hit.sourceKey, score: hit.score })), limit)
 }
 
-/** Most text matches one library search orders by meaning; the rest of the chip filter narrows them in SQL. */
+/**
+ * Most text matches one library search orders by meaning; the rest of the chip filter narrows them in SQL. Kept a
+ * minute per text (an image indexed meanwhile joins the next search after that).
+ */
 const RANK_LIMIT = 3000
 const RANK_CACHE_MS = 60_000
 const RANK_CACHE_SIZE = 16
@@ -182,10 +217,10 @@ const rankCache = new Map<string, { at: number; hits: ImageVectorHit[] }>()
  */
 export async function rankImagesByText(text: string, options: { waitMs?: number } = {}): Promise<ImageVectorHit[] | null> {
   if (!embeddingFeatureOn('imageSearch')) return null
-  const key = `${imageIndexCount()}\u0000${text}`
+  const key = text
   const cached = rankCache.get(key)
   if (cached && Date.now() - cached.at < RANK_CACHE_MS) return cached.hits
-  const query = await embedQuery(text, { waitMs: options.waitMs ?? 20_000 })
+  const query = await imageSpaceQuery(text, options.waitMs ?? 20_000)
   if (!query) return null
   const hits = vectorStore.search(MEDIA_IMAGE_SPACE, IMAGE_EMBEDDING_MODEL_KEY, query, { limit: RANK_LIMIT, minScore: TEXT_MATCH_MIN_SCORE })
     .map((hit) => ({ compositeHash: hit.sourceKey, score: hit.score }))
@@ -223,8 +258,13 @@ export const imageIndexInternals = {
     scan.below = null
     scan.top = 0
     scan.fullPass = false
+    scan.startedAt = 0
     lastPruneAt = 0
     rankCache.clear()
   },
   state: () => ({ ...scan }),
+  /** Make the finished walk old enough to start over. */
+  ageWalk() {
+    scan.startedAt = Date.now() - REWALK_MS
+  },
 }

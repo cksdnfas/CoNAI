@@ -84,7 +84,7 @@ export type HistoryHit = { chat_id: number; message_id: number; role: 'user' | '
 const INDEX_BEFORE_SEARCH = 32
 /** A search may wait for the model to load (a tool call, not a reply in progress). */
 const SEARCH_QUERY_WAIT_MS = 20_000
-const SEMANTIC_MIN_SCORE = 0.62
+const SEMANTIC_MIN_SCORE = 0.6
 const SEMANTIC_MIN_LEAD = 0.04
 
 /**

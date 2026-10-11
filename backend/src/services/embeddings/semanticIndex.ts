@@ -1,20 +1,26 @@
 import { createHash } from 'crypto'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { vectorStore } from '../vectors/vectorStore'
+import type { EmbeddingSettings } from '@conai/shared'
 import {
   EMBEDDING_MODEL_KEY,
   embedTexts,
   embeddingFailure,
   embeddingFeatureOn,
+  embeddingRuntime,
   embeddingSettings,
   embeddingVariant,
   textWorker,
+  warmEmbeddingModel,
   type EmbeddedChunk,
+  type EmbeddingFeature,
 } from '../aiWorker/textEmbeddingService'
 import { loreEntryKeys, loreEntryTitle, normalizeLorebook, type ChatLoreEntry } from '../codex-chat/chatLorebook'
 import { refreshFileSearchIndex } from '../fileStoreSearch'
+import { FileStoreService } from '../fileStoreService'
 import { SEMANTIC_SPACES } from './rankFusion'
 import { indexPendingImages, pruneImageVectors } from './imageIndex'
+import { onSemanticChange, type SemanticSource } from './semanticSignal'
 
 /**
  * What text embeddings are kept for, one vector space each (vectors.db; derived data, rebuilt when missing):
@@ -25,7 +31,8 @@ import { indexPendingImages, pruneImageVectors } from './imageIndex'
  *   file          file store text (minutes too)      source `<entry id>`, owner `<file owner key>`
  * and, with image search on, `media-image` (imageIndex.ts): library still images by composite hash.
  * A background pass embeds what is new or changed (content fingerprints), a few items per worker request at low
- * priority so chat queries go first, and drops vectors whose source is gone.
+ * priority so chat queries go first, and drops vectors whose source is gone. Stores signal changes (semanticSignal):
+ * a pass then looks only at the sources that changed; a slow idle pass looks at everything, as a safety net.
  */
 
 export { SEMANTIC_SPACES }
@@ -36,14 +43,24 @@ const CHUNK_TOKENS = 512
 const OVERLAP_TOKENS = 64
 /** Items per worker request: a chat query waits at most for one batch. */
 const BATCH_ITEMS = 8
+/** Token windows of one long document per request (each up to CHUNK_TOKENS, so fewer than short items). */
+const CHUNK_BATCH = 4
 const MESSAGE_MAX_CHARS = 6000
 const MESSAGE_MAX_CHUNKS = 4
 const FILE_MAX_CHUNKS = 32
 const LORE_MAX_CHARS = 4000
 
-const IDLE_SWEEP_MS = 5 * 60_000
+/** Changes signal the indexer; this slow pass over every source only catches what no signal reported. */
+const IDLE_SWEEP_MS = 15 * 60_000
 const BUSY_SWEEP_MS = 500
 const FIRST_SWEEP_MS = 60_000
+/** After a failed pass (not an embedding failure, which has its own rest). */
+const ERROR_SWEEP_MS = 60_000
+/** How soon a change is looked at: a chat message is searched with on-the-spot indexing anyway, so it can wait. */
+const SIGNAL_DELAY_MS: Record<SemanticSource, number> = { recall: 2_000, lore: 2_000, file: 5_000, image: 10_000, message: 60_000 }
+/** Items one scan queues: a backlog is scanned once per this many, not once per batch. */
+const QUEUE_ITEMS = 64
+const PRUNE_EVERY_MS = 60 * 60_000
 
 /** SQLite fingerprint of a text column: length and both ends (a change elsewhere comes with an updated row anyway). */
 const fingerprint = (column: string) => `(length(${column}) || ':' || hex(substr(${column}, 1, 24)) || hex(substr(${column}, -24)))`
@@ -78,8 +95,8 @@ export async function embedDocument(text: string, title: string | null, maxChunk
   }, { priority })
   const spans = reply.items[0] ?? []
   const chunks: EmbeddedChunk[] = []
-  for (let start = 0; start < spans.length; start += BATCH_ITEMS) {
-    const batch = spans.slice(start, start + BATCH_ITEMS)
+  for (let start = 0; start < spans.length; start += CHUNK_BATCH) {
+    const batch = spans.slice(start, start + CHUNK_BATCH)
     const vectors = await embedTexts(batch.map((span) => ({ text: text.slice(span.start, span.end), title })), 'document', { priority })
     batch.forEach((span, index) => {
       const vector = vectors[index]?.[0]?.vector
@@ -116,12 +133,13 @@ function store(item: IndexItem, chunks: EmbeddedChunk[]) {
 
 // ---- What is missing ------------------------------------------------------------------------------------------
 
-function pendingSegments(limit: number): IndexItem[] {
+function pendingSegments(limit: number, threadId?: number): IndexItem[] {
   const rows = getUserSettingsDb().prepare(`SELECT s.id, s.thread_id, s.content, ${fingerprint('s.content')} AS fp
     FROM chat_summary_segments s
     LEFT JOIN vector_db.vectors v ON v.space = @space AND v.source_key = CAST(s.id AS TEXT) AND v.chunk = 0 AND v.model_key = @model
-    WHERE s.level = 0 AND trim(s.content) != '' AND (v.source_key IS NULL OR v.content_hash IS NOT ${fingerprint('s.content')})
-    ORDER BY s.id DESC LIMIT @limit`).all({ space: SEMANTIC_SPACES.recall, model: EMBEDDING_MODEL_KEY, limit }) as Array<{ id: number; thread_id: number; content: string; fp: string }>
+    WHERE s.level = 0 AND trim(s.content) != '' ${threadId === undefined ? '' : 'AND s.thread_id = @thread'}
+      AND (v.source_key IS NULL OR v.content_hash IS NOT ${fingerprint('s.content')})
+    ORDER BY s.id DESC LIMIT @limit`).all({ space: SEMANTIC_SPACES.recall, model: EMBEDDING_MODEL_KEY, limit, ...(threadId === undefined ? {} : { thread: threadId }) }) as Array<{ id: number; thread_id: number; content: string; fp: string }>
   return rows.map((row) => ({ space: SEMANTIC_SPACES.recall, sourceKey: String(row.id), ownerKey: `thread:${row.thread_id}`, hash: row.fp, text: row.content.trim(), title: null, maxChunks: 8 }))
 }
 
@@ -199,104 +217,189 @@ function pruneVectors() {
   return removed
 }
 
-// ---- Background pass ------------------------------------------------------------------------------------------
+/// ---- Background pass ------------------------------------------------------------------------------------------
+
+type TextSource = {
+  source: Exclude<SemanticSource, 'image'>
+  feature: EmbeddingFeature
+  /** What is missing, at most `limit` items, most useful first. */
+  pending: (limit: number) => IndexItem[] | Promise<IndexItem[]>
+  /** Items one scan takes, and items embedded per pass. */
+  scan: number
+  batch: number
+}
+
+/** Most useful first: what the next reply recalls, then lore, then searchable history and files; images last. */
+const TEXT_SOURCES: TextSource[] = [
+  { source: 'recall', feature: 'chatRecall', pending: (limit) => pendingSegments(limit), scan: QUEUE_ITEMS, batch: BATCH_ITEMS },
+  { source: 'lore', feature: 'lorebook', pending: (limit) => pendingLore(limit), scan: QUEUE_ITEMS, batch: BATCH_ITEMS },
+  { source: 'message', feature: 'chatHistory', pending: (limit) => pendingMessages(limit), scan: QUEUE_ITEMS, batch: BATCH_ITEMS },
+  // Files are long (up to FILE_MAX_CHUNKS windows each): one per pass.
+  { source: 'file', feature: 'fileSearch', pending: pendingFiles, scan: 2, batch: 1 },
+]
+const ALL_SOURCES: SemanticSource[] = ['recall', 'lore', 'message', 'file', 'image']
+
+function sourceOn(settings: EmbeddingSettings, source: SemanticSource) {
+  if (source === 'image') return settings.imageSearch
+  return settings[TEXT_SOURCES.find((entry) => entry.source === source)!.feature]
+}
+
+/** Whether a queued item got its current vector meanwhile (a chat turn or search embedded it on the spot). */
+function alreadyEmbedded(item: IndexItem) {
+  return vectorStore.contentHash(item.space, item.sourceKey, EMBEDDING_MODEL_KEY) === item.hash
+}
 
 class SemanticIndexer {
   private timer: NodeJS.Timeout | null = null
+  private timerAt = 0
+  private timerFull = false
   private running: Promise<void> | null = null
   private started = false
   private busy = false
   private stopped = false
+  /** Sources that may have work: everything at first and on each idle pass, then what changes signal. */
+  private dirty = new Set<SemanticSource>(ALL_SOURCES)
+  /** The rest of the last scan, embedded a batch per pass before anything is scanned again. */
+  private queue: { source: SemanticSource; items: IndexItem[] } | null = null
+  private lastPruneAt = 0
+  private unsubscribeFiles: (() => void) | null = null
 
   /** Start sweeping (once, after boot). */
   start() {
     if (this.started) return
     this.started = true
     this.stopped = false
+    onSemanticChange((source) => this.poke(source))
+    this.unsubscribeFiles = FileStoreService.onChange((change) => {
+      if (change.action === 'write' && change.entries.some((entry) => entry.kind === 'file')) this.poke('file')
+    })
     this.schedule(FIRST_SWEEP_MS)
   }
 
   stop() {
     this.stopped = true
+    onSemanticChange(null)
+    this.unsubscribeFiles?.()
+    this.unsubscribeFiles = null
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
   }
 
-  /** Something changed (a summary, lore, a message, a file): sweep soon. */
-  poke() {
+  /** Something changed (one source, or anything when not said): look at it soon. */
+  poke(source?: SemanticSource) {
     if (!this.started || this.stopped) return
-    this.schedule(2_000)
+    for (const each of source ? [source] : ALL_SOURCES) this.dirty.add(each)
+    // A pass in progress reschedules itself soon while anything is dirty.
+    if (this.running) return
+    this.schedule(source ? SIGNAL_DELAY_MS[source] : SIGNAL_DELAY_MS.recall)
   }
 
-  /** Whether the last pass found work (the status page shows it). */
+  /** Whether the indexer still has work (the status page shows it). */
   get indexing() {
     return this.busy
   }
 
-  private schedule(delayMs: number) {
+  /** Arm the timer, keeping an earlier one; `full` makes that pass look at every source. */
+  private schedule(delayMs: number, full = false) {
     if (this.stopped) return
+    const at = Date.now() + delayMs
+    if (this.timer && this.timerAt <= at) {
+      this.timerFull ||= full
+      return
+    }
     if (this.timer) clearTimeout(this.timer)
-    this.timer = setTimeout(() => { this.timer = null; void this.sweep() }, delayMs)
+    this.timerAt = at
+    this.timerFull = full
+    this.timer = setTimeout(() => {
+      this.timer = null
+      if (this.timerFull) for (const source of ALL_SOURCES) this.dirty.add(source)
+      void this.sweep(false)
+    }, delayMs)
     this.timer.unref?.()
   }
 
-  /** One batch of work; resolves when it is done. Exposed for tests and the manual check. */
-  async sweep(): Promise<number> {
+  /**
+   * One batch of work; resolves when it is done. `all` looks at every source (tests and the manual check), not only
+   * the ones that changed.
+   */
+  async sweep(all = true): Promise<number> {
     if (this.running) {
       await this.running
       return 0
     }
+    if (all) for (const source of ALL_SOURCES) this.dirty.add(source)
     let done = 0
+    let failed = false
     this.running = (async () => {
       try {
         done = await this.runOnce()
       } catch (error) {
+        failed = true
         console.warn('[SemanticIndex] pass failed:', error instanceof Error ? error.message : error)
       }
     })()
     await this.running
     this.running = null
-    this.busy = done > 0
-    this.schedule(done > 0 ? BUSY_SWEEP_MS : IDLE_SWEEP_MS)
+    const settings = embeddingSettings()
+    const resting = embeddingFailure()
+    const more = done > 0 || this.queue !== null || this.dirty.size > 0
+    this.busy = settings.enabled && !resting && !failed && more
+    // Resting after a failure: retry once the rest is over; anything else waits for a signal or the idle pass.
+    if (!settings.enabled) this.schedule(IDLE_SWEEP_MS, true)
+    else if (resting) this.schedule(embeddingRuntime.failureRestMs + 1_000, true)
+    else if (failed) this.schedule(ERROR_SWEEP_MS, true)
+    else if (more) this.schedule(BUSY_SWEEP_MS)
+    else this.schedule(IDLE_SWEEP_MS, true)
     return done
   }
 
   private async runOnce(): Promise<number> {
     const settings = embeddingSettings()
     if (!settings.enabled || embeddingFailure()) return 0
-    if (!this.pruned) {
-      this.pruned = true
+    // Weights first (a fresh install, a new model): fetched on their own, so the status shows the download.
+    if (!embeddingRuntime.isModelCached() && !(await warmEmbeddingModel())) return 0
+    if (Date.now() - this.lastPruneAt >= PRUNE_EVERY_MS) {
+      this.lastPruneAt = Date.now()
       pruneVectors()
-      pruneImageVectors()
     }
-    // Most useful first: what the next reply recalls, then lore, then searchable history and files.
-    if (settings.chatRecall) {
-      const items = pendingSegments(BATCH_ITEMS)
-      if (items.length) return indexItems(items)
+    pruneImageVectors()
+
+    if (this.queue) {
+      const { source, items } = this.queue
+      if (!sourceOn(settings, source)) {
+        this.queue = null
+      } else {
+        const batch = items.splice(0, TEXT_SOURCES.find((entry) => entry.source === source)?.batch ?? BATCH_ITEMS)
+        if (items.length === 0) this.queue = null
+        await indexItems(batch.filter((item) => !alreadyEmbedded(item)))
+        return batch.length
+      }
     }
-    if (settings.lorebook) {
-      const items = pendingLore(BATCH_ITEMS)
-      if (items.length) return indexItems(items)
-    }
-    if (settings.chatHistory) {
-      const items = pendingMessages(BATCH_ITEMS)
-      if (items.length) return indexItems(items)
-    }
-    if (settings.fileSearch) {
-      const items = await pendingFiles(2)
-      if (items.length) return indexItems(items)
+    for (const entry of TEXT_SOURCES) {
+      if (!this.dirty.has(entry.source)) continue
+      if (!settings[entry.feature]) {
+        this.dirty.delete(entry.source)
+        continue
+      }
+      const items = await entry.pending(entry.scan)
+      if (items.length === 0) {
+        this.dirty.delete(entry.source)
+        continue
+      }
+      // The source stays dirty: once its queue is done, a scan looks for more.
+      const batch = items.splice(0, entry.batch)
+      if (items.length > 0) this.queue = { source: entry.source, items }
+      await indexItems(batch)
+      return batch.length
     }
     // Images last: the slowest (about 0.7 s each), and nothing waits on them.
-    if (settings.imageSearch) {
-      const done = await indexPendingImages()
+    if (this.dirty.has('image')) {
+      const done = settings.imageSearch ? await indexPendingImages() : 0
       if (done) return done
+      this.dirty.delete('image')
     }
-    // Caught up: drop what no longer has a source, once per idle period.
-    this.pruned = false
     return 0
   }
-
-  private pruned = false
 }
 
 export const semanticIndexer = new SemanticIndexer()
@@ -308,15 +411,15 @@ export const semanticIndexer = new SemanticIndexer()
 export async function indexLoreNow(bookIds: ReadonlySet<number>, limit: number) {
   if (!embeddingFeatureOn('lorebook')) return 0
   const items = pendingLore(limit + 1, bookIds)
-  if (items.length > limit) semanticIndexer.poke()
+  if (items.length > limit) semanticIndexer.poke('lore')
   return indexItems(items.slice(0, limit), 'normal')
 }
 
 /** Embed this chat's summary segments that have none yet (a recall is about to rank them). */
 export async function indexSegmentsNow(threadId: number, limit: number) {
   if (!embeddingFeatureOn('chatRecall')) return 0
-  const items = pendingSegments(500).filter((item) => item.ownerKey === `thread:${threadId}`)
-  if (items.length > limit) semanticIndexer.poke()
+  const items = pendingSegments(limit + 1, threadId)
+  if (items.length > limit) semanticIndexer.poke('recall')
   return indexItems(items.slice(0, limit), 'normal')
 }
 
@@ -325,7 +428,7 @@ export async function indexMessagesNow(threadIds: number[], limit: number) {
   if (!embeddingFeatureOn('chatHistory')) return 0
   const eligible = new Set(historyThreadIds())
   const items = pendingMessages(limit + 1, threadIds.filter((id) => eligible.has(id)))
-  if (items.length > limit) semanticIndexer.poke()
+  if (items.length > limit) semanticIndexer.poke('message')
   return indexItems(items.slice(0, limit), 'normal')
 }
 

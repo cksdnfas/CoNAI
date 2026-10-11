@@ -15,7 +15,7 @@ const DOWNLOAD_GRACE_MS = 20 * 60_000
 const STOP_GRACE_MS = 3_000
 
 export type AiWorkerPriority = 'high' | 'normal' | 'low'
-export type AiWorkerModel = 'wd' | 'kaloscope' | 'embedding' | 'pixai'
+export type AiWorkerModel = 'wd' | 'kaloscope' | 'embedding' | 'pixai' | 'lama'
 
 export type AiWorkerDownload = {
   repo: string
@@ -71,7 +71,8 @@ export class AiWorkerClient {
   private seq = 0
   private loaded = new Map<AiWorkerModel, { device: string | null; lastUsedAt: number }>()
   private idleTimers = new Map<AiWorkerModel, NodeJS.Timeout>()
-  private lastDownload: AiWorkerDownload | null = null
+  /** The download running now (set by a "start" event, cleared when it is done or its request ends). */
+  private activeDownload: AiWorkerDownload | null = null
   private startedAt: number | null = null
 
   constructor(private readonly options: AiWorkerOptions) {}
@@ -80,8 +81,9 @@ export class AiWorkerClient {
     return this.child !== null && this.child.exitCode === null
   }
 
+  /** The model file being downloaded right now, or null. */
   get download() {
-    return this.lastDownload
+    return this.activeDownload
   }
 
   loadedModels() {
@@ -164,7 +166,7 @@ export class AiWorkerClient {
       startedAt: this.startedAt ? new Date(this.startedAt).toISOString() : null,
       models: Object.fromEntries([...this.loaded.entries()].map(([name, value]) => [name, { device: value.device, lastUsedAt: new Date(value.lastUsedAt).toISOString() }])),
       queued: this.queue.length + (this.inFlight ? 1 : 0),
-      download: this.lastDownload,
+      download: this.activeDownload,
     }
   }
 
@@ -205,6 +207,7 @@ export class AiWorkerClient {
     this.child = null
     this.ready = null
     this.startedAt = null
+    this.activeDownload = null
     this.loaded.clear()
     for (const name of [...this.idleTimers.keys()]) {
       this.clearIdle(name)
@@ -269,7 +272,9 @@ export class AiWorkerClient {
           return
         }
         if (message.event === 'download') {
-          this.lastDownload = { repo: message.repo, file: message.file, state: message.state, bytes: message.bytes ?? null, at: new Date().toISOString() }
+          this.activeDownload = message.state === 'start'
+            ? { repo: message.repo, file: message.file, state: message.state, bytes: message.bytes ?? null, at: new Date().toISOString() }
+            : null
           console.log(`[${this.options.label}] download ${message.state}: ${message.repo}/${message.file}`)
           if (this.inFlight && message.state === 'start') {
             this.extendDeadline(this.inFlight, DOWNLOAD_GRACE_MS)
@@ -282,6 +287,8 @@ export class AiWorkerClient {
         }
         if (pending.timer) clearTimeout(pending.timer)
         this.inFlight = null
+        // A download the request caused has ended with it (a failed one never sends "done").
+        this.activeDownload = null
         if (message.ok) {
           pending.resolve(message.result)
         } else {

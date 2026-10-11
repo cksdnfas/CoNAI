@@ -19,7 +19,7 @@ export function fuseRanks<K>(rankings: ReadonlyArray<ReadonlyArray<K>>, k = 60) 
 
 /** Fewer candidates than this make the median meaningless: a higher bar applies instead. */
 const MIN_FOR_MEDIAN = 5
-const SMALL_SET_MIN_SCORE = 0.72
+const SMALL_SET_MIN_SCORE = 0.7
 
 function median(values: number[]) {
   if (values.length === 0) return 0

@@ -185,7 +185,11 @@ export function useAutoSettingsTab({
     queryKey: ['embedding-status'],
     queryFn: getEmbeddingStatus,
     enabled: isActive,
-    refetchInterval: (query) => (query.state.data?.indexing || query.state.data?.download ? 5000 : false),
+    // Polled while something moves: indexing, the model still to fetch, a download, or a failure rest that ends on its own.
+    refetchInterval: (query) => {
+      const data = query.state.data
+      return data && (data.indexing || data.download || data.failure || (data.enabled && data.dependenciesAvailable && !data.modelCached)) ? 5000 : false
+    },
   })
   const ratingWeightsQuery = useQuery({
     queryKey: ['rating-weights'],

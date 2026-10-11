@@ -9,6 +9,7 @@ import { ChatSummaryStore } from './chatMemory'
 import { OwnedLorebookStore } from './chatLorebookFiles'
 import { ChatProposalStore } from './chatProposals'
 import { forgetThreadFileChanges } from './chatFileChanges'
+import { notifySemanticChange } from '../embeddings/semanticSignal'
 
 export type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
 import type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
@@ -474,6 +475,7 @@ export const CodexChatStore = {
   /** The model's (English) text of a user message translated after it was stored; the reader keeps their own words. */
   setUserMessageTranslation(threadId: number, messageId: number, content: string, displayContent: string) {
     getUserSettingsDb().prepare("UPDATE codex_chat_messages SET content = ?, display_content = ? WHERE thread_id = ? AND id = ? AND role = 'user'").run(content, displayContent, threadId, messageId)
+    notifySemanticChange('message')
   },
 
   editUserMessage(threadId: number, messageId: number, content: string, displayContent: string | null = null) {
@@ -484,6 +486,7 @@ export const CodexChatStore = {
       removeMessagesAfter(threadId, messageId)
       invalidateContext(threadId, messageId)
     }).immediate()
+    notifySemanticChange('message')
   },
 
   /**
@@ -501,6 +504,7 @@ export const CodexChatStore = {
         .run(content, alternatives.length > 0 ? JSON.stringify(alternatives) : null, messageId)
       invalidateContext(threadId, messageId)
     }).immediate()
+    notifySemanticChange('message')
   },
 
   /**
@@ -522,6 +526,7 @@ export const CodexChatStore = {
       return row.account_id
     }).immediate()
     if (accountId === undefined) return false
+    notifySemanticChange('message')
     publishRuntimeEvent({ name: 'chat.message.updated', topic: 'generation-queue', visibility: 'owner', accountId,
       payload: { threadId, messageId, requestedByAccountId: accountId } })
     return true
@@ -553,6 +558,7 @@ export const CodexChatStore = {
       invalidateContext(threadId, messageId)
       if (alternative.routing !== undefined) CodexChatStore.setMessageRouting(threadId, messageId, alternative.routing)
     }).immediate()
+    notifySemanticChange('message')
   },
 
   selectAlternative(threadId: number, messageId: number, index: number) {
@@ -566,6 +572,7 @@ export const CodexChatStore = {
       invalidateContext(threadId, messageId)
       CodexChatStore.setMessageRouting(threadId, messageId, alternative.routing ?? null)
     }).immediate()
+    notifySemanticChange('message')
   },
 
   /** Generation jobs a reply started now belong to another reply id (a continuation of it). */
@@ -673,6 +680,7 @@ export const CodexChatStore = {
       if (message.role === 'user') CodexChatStore.markRead(message.thread_id, Number(result.lastInsertRowid))
       return { id: Number(result.lastInsertRowid), accountId: thread.account_id }
     }).immediate()
+    notifySemanticChange('message')
     // A new reply refreshes the owner's unread marks in every tab, wherever it was written.
     if (message.role === 'assistant') {
       publishRuntimeEvent({ name: 'chat.message.created', topic: 'generation-queue', visibility: 'owner', accountId: saved.accountId,

@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import { sortLoreKeysByLanguage } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { notifySemanticChange } from '../embeddings/semanticSignal'
 import { ChatProfileError } from './chatProfileError'
 import { loadChatSettings } from './chatSettings'
 
@@ -283,6 +284,7 @@ export const ChatLorebookStore = {
   create(input: { name?: unknown; entries?: unknown }) {
     const entries = withoutFiles(sortLorebookKeys(normalizeLorebook(input.entries ?? [])))
     const result = getUserSettingsDb().prepare("INSERT INTO chat_lorebooks (name, entries, kind) VALUES (?, ?, 'global')").run(lorebookName(input.name), JSON.stringify(entries))
+    notifySemanticChange('lore')
     return ChatLorebookStore.find(Number(result.lastInsertRowid)) as ChatLorebook
   },
 
@@ -296,6 +298,7 @@ export const ChatLorebookStore = {
       JSON.stringify(sortLorebookKeys(entries)),
       lorebookId,
     )
+    if (patch.entries !== undefined) notifySemanticChange('lore')
     return ChatLorebookStore.find(lorebookId)
   },
 

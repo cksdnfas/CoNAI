@@ -40,13 +40,17 @@ const QUERY_MESSAGE_CHARS = 600
  * of subject; apart and weighted, a new subject leads while a bare "go on" still borrows the previous one's.
  */
 const LATEST_WEIGHT = 0.7
-/** Waiting for the query vector: a warm model answers in well under this; a cold one is left to warm up. */
-const WARM_WAIT_MS = 2500
+/**
+ * Waiting for the query vector: a warm model answers in well under this, even behind the one background batch the
+ * worker may be running (it cannot be interrupted); a cold one is left to warm up.
+ */
+const WARM_WAIT_MS = 4000
 const COLD_WAIT_MS = 300
 
-const RECALL_MIN_SCORE = 0.66
+/** Floors at 768 dims (scores run ~0.02 below 256 dims; calibrated on the lore/recall test set). */
+const RECALL_MIN_SCORE = 0.64
 const RECALL_MIN_LEAD = 0.06
-const LORE_MIN_SCORE = 0.68
+const LORE_MIN_SCORE = 0.66
 const LORE_MIN_LEAD = 0.09
 /** Entries brought in by meaning per reply; a second one only when nearly as close as the first. */
 const LORE_MAX_AUTO = 2
@@ -105,12 +109,14 @@ export async function semanticContextFor(params: {
   const books = loreOn ? booksForRequest({ thread: params.thread, profile: params.profile }) : []
   const entries = keyedLoreEntries(books).filter((item) => item.bookId !== undefined && loreEntryEmbeddable(item.entry))
   const warm = embeddingModelWarm()
+  const pendingQueries = embedQueries(texts, { waitMs: warm ? WARM_WAIT_MS : COLD_WAIT_MS })
   if (warm) {
-    // Missing vectors are made now at normal priority; the query below (high) still goes first.
+    // Missing vectors are made at normal priority, queued after the query (an idle worker would otherwise start on
+    // them first); they serve the next reply.
     if (loreOn && entries.length) void indexLoreNow(new Set(entries.map((item) => item.bookId!)), LORE_INDEX_NOW).catch(() => undefined)
     if (recallOn) void indexSegmentsNow(params.thread.id, SEGMENTS_INDEX_NOW).catch(() => undefined)
   }
-  const queries = await embedQueries(texts, { waitMs: warm ? WARM_WAIT_MS : COLD_WAIT_MS })
+  const queries = await pendingQueries
   if (!queries) return null
 
   const recallScores = new Map<number, number>()

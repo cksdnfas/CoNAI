@@ -5,6 +5,7 @@ import { settingsService } from '../../services/settingsService';
 import { taggerDaemon } from '../../services/taggerDaemon';
 import { kaloscopeTaggerService } from '../../services/kaloscopeTaggerService';
 import { resetEmbeddingBackoff, textWorker } from '../../services/aiWorker/textEmbeddingService';
+import { semanticIndexer } from '../../services/embeddings/semanticIndex';
 import {
   cancelAiRuntimeInstall,
   cleanupAiRuntimeOnBoot,
@@ -24,6 +25,8 @@ async function stopAiWorkers() {
   await kaloscopeTaggerService.stopDaemon();
   await textWorker.stop();
   resetEmbeddingBackoff();
+  // The indexer resumes on the new runtime (and fetches the embedding model if it is still missing).
+  semanticIndexer.poke();
 }
 
 onAiRuntimeSwitch(stopAiWorkers);

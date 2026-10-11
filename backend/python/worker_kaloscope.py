@@ -16,6 +16,8 @@ from huggingface_hub import hf_hub_download
 from safetensors.torch import load_file
 from PIL import Image
 
+from worker_dtypes import half_dtype
+
 REPO = "heathcliff01/Kaloscope3.0-preview"
 # Preview weights may change upstream; results stay comparable only on a fixed revision.
 REVISION = "5e4bfa229619b7c459ec126283827373df9de564"
@@ -34,30 +36,31 @@ STD = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
 class Kaloscope3:
     def __init__(self, device: torch.device, fetch):
         self.device = device
+        # BF16 on CUDA, as the card verified (top-5 matches fp32); DINO activations risk FP16 overflow. All BF16 halves
+        # the weights (596 -> 298 MiB): top-5 unchanged, style vectors cos 0.9997 vs fp32.
+        self.dtype = half_dtype(device, torch.bfloat16)
         fetch(REPO, FILES, REVISION)
         state = load_file(hf_hub_download(REPO, FILES[0], revision=REVISION))
         backbone_state = {key[len("backbone."):]: value for key, value in state.items() if key.startswith("backbone.")}
         backbone = timm.create_model("vit_base_patch16_dinov3_qkvb", pretrained=False, num_classes=0, img_size=INPUT_SIZE)
         backbone.load_state_dict(checkpoint_filter_fn(backbone_state, backbone), strict=True)
         self.prefix_tokens = backbone.num_prefix_tokens
-        self.backbone = backbone.eval().to(device)
+        self.backbone = backbone.eval().to(device, self.dtype)
         projector = torch.nn.Sequential(torch.nn.Linear(1536, 1536), torch.nn.GELU(), torch.nn.Linear(1536, STYLE_DIM))
         projector.load_state_dict({
             "0.weight": state["projector.0.weight"], "0.bias": state["projector.0.bias"],
             "2.weight": state["projector.2.weight"], "2.bias": state["projector.2.bias"],
         })
-        self.projector = projector.eval().to(device)
+        self.projector = projector.eval().to(device, self.dtype)
         head = torch.nn.Linear(1536, state["head.weight"].shape[0])
         head.load_state_dict({"weight": state["head.weight"], "bias": state["head.bias"]})
-        self.head = head.eval().to(device)
+        self.head = head.eval().to(device, self.dtype)
         names: Dict[int, str] = {}
         with open(hf_hub_download(REPO, FILES[1], revision=REVISION), newline="", encoding="utf-8") as handle:
             for row in csv.reader(handle):
                 if row and row[0].strip().isdigit():
                     names[int(row[0])] = row[1].strip()
         self.names = names
-        # bf16 on GPU matches fp32 top-5 per the card's verification; CPU stays fp32 (no speed gain there).
-        self.autocast = device.type == "cuda"
 
     def _preprocess(self, image: Image.Image) -> torch.Tensor:
         width, height = image.size
@@ -75,15 +78,13 @@ class Kaloscope3:
         probs_sum: Optional[torch.Tensor] = None
         style_sum: Optional[torch.Tensor] = None
         for image in images:
-            inputs = self._preprocess(image).to(self.device)
-            with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=self.autocast):
-                tokens = self.backbone.forward_features(inputs)
-            tokens = tokens.float()
+            inputs = self._preprocess(image).to(self.device, self.dtype)
+            tokens = self.backbone.forward_features(inputs).float()
             pooled = torch.cat([tokens[:, 0], tokens[:, self.prefix_tokens:].mean(1)], dim=-1)
-            probs = self.head(F.normalize(pooled, dim=-1) * (1536 ** 0.5)).softmax(-1)[0]
+            probs = self.head((F.normalize(pooled, dim=-1) * (1536 ** 0.5)).to(self.dtype)).float().softmax(-1)[0]
             probs_sum = probs if probs_sum is None else probs_sum + probs
             if want_style:
-                style = F.normalize(self.projector(pooled), dim=-1)[0]
+                style = F.normalize(self.projector(pooled.to(self.dtype)).float(), dim=-1)[0]
                 style_sum = style if style_sum is None else style_sum + style
         assert probs_sum is not None
         probs = (probs_sum / len(images)).cpu()

@@ -22,22 +22,69 @@ export type VectorInput = {
 }
 
 type SpaceCache = {
+  modelKey: string
   dim: number
-  rows: VectorRow[]
+  /** Row slots in matrix order; null where a row was removed (compacted away once many are). */
+  rows: Array<VectorRow | null>
+  /** Room for more rows than are in use, so a write appends instead of reloading the space. */
   matrix: Float32Array
+  /** Slots per source. */
+  bySource: Map<string, number[]>
+  dead: number
 }
 
-/** Loaded matrices per `${space}\u0000${modelKey}`; dropped on any write to the space. */
+/**
+ * Loaded matrices per `${space}\u0000${modelKey}`, kept in step with writes: a write replaces that source's rows in
+ * place, so a backfill does not make every search reload the whole space.
+ */
 const caches = new Map<string, SpaceCache>()
+/** Removed slots tolerated before a matrix is rebuilt without them. */
+const COMPACT_MIN_DEAD = 1024
 
 function cacheKey(space: string, modelKey: string) {
   return `${space}\u0000${modelKey}`
 }
 
-function invalidate(space: string) {
-  for (const key of [...caches.keys()]) {
-    if (key.startsWith(`${space}\u0000`)) caches.delete(key)
+function spaceCaches(space: string) {
+  return [...caches.entries()].filter(([key]) => key.startsWith(`${space}\u0000`))
+}
+
+function dropSource(cache: SpaceCache, sourceKey: string) {
+  const slots = cache.bySource.get(sourceKey)
+  if (!slots) return
+  for (const slot of slots) cache.rows[slot] = null
+  cache.dead += slots.length
+  cache.bySource.delete(sourceKey)
+}
+
+function appendRow(cache: SpaceCache, row: VectorRow, vector: Float32Array) {
+  const slot = cache.rows.length
+  if ((slot + 1) * cache.dim > cache.matrix.length) {
+    const grown = new Float32Array(Math.max(cache.matrix.length * 2, (slot + 64) * cache.dim))
+    grown.set(cache.matrix)
+    cache.matrix = grown
   }
+  cache.matrix.set(vector, slot * cache.dim)
+  cache.rows.push(row)
+  const slots = cache.bySource.get(row.sourceKey)
+  if (slots) slots.push(slot)
+  else cache.bySource.set(row.sourceKey, [slot])
+}
+
+function compact(cache: SpaceCache) {
+  if (cache.dead < COMPACT_MIN_DEAD || cache.dead * 2 < cache.rows.length) return
+  const rows: Array<VectorRow | null> = []
+  const matrix = new Float32Array((cache.rows.length - cache.dead + 64) * cache.dim)
+  const bySource = new Map<string, number[]>()
+  cache.rows.forEach((row, slot) => {
+    if (!row) return
+    matrix.set(cache.matrix.subarray(slot * cache.dim, (slot + 1) * cache.dim), rows.length * cache.dim)
+    const slots = bySource.get(row.sourceKey)
+    if (slots) slots.push(rows.length)
+    else bySource.set(row.sourceKey, [rows.length])
+    rows.push(row)
+  })
+  Object.assign(cache, { rows, matrix, bySource, dead: 0 })
 }
 
 /** L2-normalized float32 copy (the stored form; a zero vector stays zero). */
@@ -79,26 +126,47 @@ export const vectorStore = {
       INSERT INTO vector_db.vectors (space, source_key, chunk, model_key, dim, owner_key, content_hash, span_start, span_end, vector, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
+    const written: Array<{ row: VectorRow; vector: Float32Array }> = []
     db.transaction(() => {
       db.prepare('DELETE FROM vector_db.vectors WHERE space = ? AND source_key = ?').run(space, sourceKey)
       inputs.forEach((input, index) => {
         const vector = normalizeVector(input.vector)
-        insert.run(space, sourceKey, input.chunk ?? index, modelKey, vector.length, input.ownerKey ?? null, input.contentHash ?? null, input.start ?? null, input.end ?? null, toBlob(vector), now)
+        const row: VectorRow = { sourceKey, chunk: input.chunk ?? index, ownerKey: input.ownerKey ?? null, contentHash: input.contentHash ?? null, spanStart: input.start ?? null, spanEnd: input.end ?? null }
+        insert.run(space, sourceKey, row.chunk, modelKey, vector.length, row.ownerKey, row.contentHash, row.spanStart, row.spanEnd, toBlob(vector), now)
+        written.push({ row, vector })
       })
     })()
-    invalidate(space)
+    // The source's rows of every model are gone; the new ones join the loaded matrix of their model.
+    for (const [key, cache] of spaceCaches(space)) {
+      dropSource(cache, sourceKey)
+      if (cache.modelKey === modelKey) {
+        if (written.some(({ vector }) => vector.length !== cache.dim)) {
+          caches.delete(key)
+          continue
+        }
+        for (const { row, vector } of written) appendRow(cache, row, vector)
+      }
+      compact(cache)
+    }
   },
 
   remove(space: string, sourceKey: string) {
     const changes = getUserSettingsDb().prepare('DELETE FROM vector_db.vectors WHERE space = ? AND source_key = ?').run(space, sourceKey).changes
-    if (changes > 0) invalidate(space)
+    if (changes > 0) {
+      for (const [, cache] of spaceCaches(space)) {
+        dropSource(cache, sourceKey)
+        compact(cache)
+      }
+    }
     return changes
   },
 
   /** Delete rows of a space made by any other model (after a model change). */
   pruneOtherModels(space: string, modelKey: string) {
     const changes = getUserSettingsDb().prepare('DELETE FROM vector_db.vectors WHERE space = ? AND model_key != ?').run(space, modelKey).changes
-    if (changes > 0) invalidate(space)
+    if (changes > 0) {
+      for (const [key, cache] of spaceCaches(space)) if (cache.modelKey !== modelKey) caches.delete(key)
+    }
     return changes
   },
 
@@ -113,6 +181,13 @@ export const vectorStore = {
       WHERE space = ? AND source_key = ? AND model_key = ? ORDER BY chunk
     `).all(space, sourceKey, modelKey) as Array<StoredRow & { vector: Buffer }>
     return rows.map((row) => ({ ...toRow(row), vector: fromBlob(row.vector) }))
+  },
+
+  /** content_hash of one source (chunk 0), or undefined when it has no vector of this model. */
+  contentHash(space: string, sourceKey: string, modelKey: string): string | null | undefined {
+    const row = getUserSettingsDb().prepare('SELECT content_hash FROM vector_db.vectors WHERE space = ? AND source_key = ? AND model_key = ? AND chunk = 0')
+      .get(space, sourceKey, modelKey) as { content_hash: string | null } | undefined
+    return row ? row.content_hash : undefined
   },
 
   /** content_hash per source (chunk 0) for a space, to skip re-embedding unchanged text. */
@@ -150,6 +225,7 @@ export const vectorStore = {
     const { dim, matrix, rows } = cache
     for (let r = 0; r < rows.length; r += 1) {
       const row = rows[r]
+      if (!row) continue
       if (owners && !owners.has(row.ownerKey)) continue
       if (sources && !sources.has(row.sourceKey)) continue
       let score = 0
@@ -178,13 +254,8 @@ function loadSpace(space: string, modelKey: string): SpaceCache | null {
   if (rows.length === 0) return null
   const dim = rows[0].dim
   const usable = rows.filter((row) => row.dim === dim)
-  const matrix = new Float32Array(usable.length * dim)
-  usable.forEach((row, index) => matrix.set(fromBlob(row.vector), index * dim))
-  const cache: SpaceCache = {
-    dim,
-    matrix,
-    rows: usable.map(toRow),
-  }
+  const cache: SpaceCache = { modelKey, dim, rows: [], matrix: new Float32Array((usable.length + 64) * dim), bySource: new Map(), dead: 0 }
+  for (const row of usable) appendRow(cache, toRow(row), fromBlob(row.vector))
   caches.set(key, cache)
   return cache
 }

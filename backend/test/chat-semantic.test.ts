@@ -20,11 +20,11 @@ const CONCEPTS: string[][] = [
   ['실권자', '재상', '오르윈'],
   ['등불', '망자'],
 ]
-const DIM = 256
+const DIM = 768
 
-function fakeVector(text: string) {
-  const vector = new Float32Array(DIM)
-  vector[DIM - 1] = 1
+function fakeVector(text: string, dim = DIM) {
+  const vector = new Float32Array(dim)
+  vector[dim - 1] = 1
   CONCEPTS.forEach((words, axis) => {
     for (const word of words) if (text.includes(word)) vector[axis] += 1.5
   })
@@ -55,10 +55,16 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
   const embedding = await import('../src/services/aiWorker/textEmbeddingService')
   const requests: Array<{ op: string; payload: any }> = []
   embedding.embeddingRuntime.checkDependencies = async () => ({ available: true, message: 'ok', missingPackages: [], python: 'fake' })
+  let modelCached = true
+  embedding.embeddingRuntime.isModelCached = () => modelCached
   t.mock.method(embedding.textWorker, 'request', async (op: string, payload: any) => {
     requests.push({ op, payload })
-    if (op === 'embed') return { device: 'cpu', items: payload.items.map((item: { text: string }) => [{ start: 0, end: item.text.length, vector: base64(fakeVector(item.text)) }]) }
+    if (op === 'embed') return { device: 'cpu', items: payload.items.map((item: { text: string }) => [{ start: 0, end: item.text.length, vector: base64(fakeVector(item.text, payload.dim)) }]) }
     if (op === 'chunk') return { items: payload.texts.map((text: string) => [{ start: 0, end: text.length }]) }
+    if (op === 'load') {
+      modelCached = true
+      return {}
+    }
     throw new Error(`unexpected op ${op}`)
   })
 
@@ -74,6 +80,7 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
   const { standouts } = await import('../src/services/embeddings/rankFusion')
   const { searchChatHistory } = await import('../src/services/codex-chat/chatHistorySearch')
   const { vectorStore } = await import('../src/services/vectors/vectorStore')
+  const { notifySemanticChange } = await import('../src/services/embeddings/semanticSignal')
   const db = dbModule.getUserSettingsDb()
 
   ExternalApiProvider.create({ provider_name: 'conn', display_name: 'Conn', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
@@ -112,11 +119,18 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
 
   settingsService.updateEmbeddingSettings({ enabled: true })
 
+  await t.test('a missing model is fetched on its own before any work', async () => {
+    modelCached = false
+    assert.equal(await semanticIndexer.sweep(), episodes.length, 'then the first batch')
+    assert.deepEqual(requests.slice(0, 2).map((request) => request.op), ['load', 'embed'])
+    assert.equal(requests[0].payload.model, 'embedding')
+  })
+
   await t.test('the background pass embeds segments, then keyword lore (not "always on"), then nothing', async () => {
     while (await semanticIndexer.sweep() > 0) { /* drain */ }
     assert.equal(vectorStore.count('chat-recall', embedding.EMBEDDING_MODEL_KEY), episodes.length)
     assert.equal(vectorStore.count('chat-lore', embedding.EMBEDDING_MODEL_KEY), 6)
-    assert.ok(requests.every((request) => request.payload.kind === 'document'))
+    assert.ok(requests.filter((request) => request.op === 'embed').every((request) => request.payload.kind === 'document'))
     const before = requests.length
     assert.equal(await semanticIndexer.sweep(), 0, 'unchanged text is not embedded again')
     assert.equal(requests.length, before)
@@ -191,6 +205,47 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
     assert.equal(words[0].excerpt, '오늘 장 보러 가자.')
   })
 
+  await t.test('a signalled change is looked at; an unsignalled one waits for the full pass', async () => {
+    while (await semanticIndexer.sweep() > 0) { /* drain */ }
+    semanticIndexer.start()
+    t.after(() => semanticIndexer.stop())
+    const insert = () => Number(db.prepare('INSERT INTO chat_summary_segments (thread_id, level, from_message_id, until_message_id, content) VALUES (?, 0, 900, 909, ?)')
+      .run(threadId, '설원의 이끼를 다시 찾으러 갔다.').lastInsertRowid)
+    const quiet = insert()
+    assert.equal(await semanticIndexer.sweep(false), 0, 'no signal: nothing is scanned')
+    notifySemanticChange('recall')
+    assert.equal(await semanticIndexer.sweep(false), 1)
+    assert.equal(vectorStore.get('chat-recall', String(quiet), embedding.EMBEDDING_MODEL_KEY).length, 1)
+    db.prepare('DELETE FROM chat_summary_segments WHERE id = ?').run(quiet)
+    semanticIndexInternals.pruneVectors()
+  })
+
+  await t.test('the loaded vectors follow writes without a reload', () => {
+    const space = 'test-cache'
+    const axis = (i: number) => Array.from({ length: DIM }, (_, k) => (k === i ? 1 : 0))
+    vectorStore.replace(space, 'a', 'm', [{ vector: axis(0) }])
+    vectorStore.replace(space, 'b', 'm', [{ vector: axis(1) }])
+    assert.deepEqual(vectorStore.search(space, 'm', axis(0), { limit: 1 }).map((hit) => hit.sourceKey), ['a'])
+    vectorStore.replace(space, 'c', 'm', [{ vector: axis(0) }, { vector: axis(2) }])
+    vectorStore.replace(space, 'a', 'm', [{ vector: axis(3) }])
+    assert.deepEqual(vectorStore.search(space, 'm', axis(0), { minScore: 0.5 }).map((hit) => hit.sourceKey), ['c'], 'a moved, c joined')
+    assert.deepEqual(vectorStore.search(space, 'm', axis(3), { minScore: 0.5 }).map((hit) => hit.sourceKey), ['a'])
+    vectorStore.remove(space, 'c')
+    assert.deepEqual(vectorStore.search(space, 'm', axis(0), { minScore: 0.5 }), [])
+    for (let i = 0; i < 3000; i += 1) vectorStore.replace(space, 'churn', 'm', [{ vector: axis(i % 8) }])
+    assert.deepEqual(vectorStore.search(space, 'm', axis(1), { minScore: 0.5 }).map((hit) => hit.sourceKey).sort(), ['b'], 'compacted, still right')
+    assert.equal(vectorStore.contentHash(space, 'b', 'm'), null)
+    assert.equal(vectorStore.contentHash(space, 'gone', 'm'), undefined)
+  })
+
+  await t.test('versions: an older library is below the pinned one', () => {
+    assert.equal(embedding.versionBelow('4.57.1', '5.19.0'), true)
+    assert.equal(embedding.versionBelow('5.19.0', '5.19.0'), false)
+    assert.equal(embedding.versionBelow('5.19.0.dev0', '5.19.0'), false)
+    assert.equal(embedding.versionBelow('5.20.1', '5.19.0'), false)
+    assert.equal(embedding.versionBelow('6.0.0+cpu', '6.1.0'), true)
+  })
+
   await t.test('prune drops vectors whose source is gone', async () => {
     db.prepare('DELETE FROM chat_summary_segments WHERE id = ?').run(segmentIds[5])
     semanticIndexInternals.pruneVectors()
@@ -201,7 +256,7 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
   await t.test('standouts: a lead over the median, or a high score among few', () => {
     const many = new Map([['a', 0.8], ['b', 0.62], ['c', 0.6], ['d', 0.61], ['e', 0.63]])
     assert.deepEqual(standouts(many, 0.66, 0.06).map(([key]) => key), ['a'])
-    assert.deepEqual(standouts(new Map([['a', 0.7], ['b', 0.73]]), 0.66, 0.06).map(([key]) => key), ['b'])
+    assert.deepEqual(standouts(new Map([['a', 0.68], ['b', 0.73]]), 0.66, 0.06).map(([key]) => key), ['b'])
   })
 
   semanticIndexer.stop()

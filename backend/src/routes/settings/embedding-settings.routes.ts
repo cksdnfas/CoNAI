@@ -2,15 +2,16 @@ import { Router, Request, Response } from 'express';
 import type { EmbeddingServerStatus, EmbeddingSettings } from '@conai/shared';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { settingsService } from '../../services/settingsService';
-import { checkAiDependencies } from '../../services/aiWorker/aiVisionService';
 import {
   EMBEDDING_MODEL,
   EMBEDDING_MODEL_KEY,
   EMBEDDING_REPO,
   embeddingFailure,
+  embeddingRuntime,
   isEmbeddingModelCached,
   resetEmbeddingBackoff,
   textWorker,
+  warmEmbeddingModel,
 } from '../../services/aiWorker/textEmbeddingService';
 import { semanticIndexer, SEMANTIC_SPACES } from '../../services/embeddings/semanticIndex';
 import { imageIndexCount, MEDIA_IMAGE_SPACE } from '../../services/embeddings/imageIndex';
@@ -22,13 +23,14 @@ const FLAGS = ['enabled', 'chatRecall', 'lorebook', 'chatHistory', 'fileSearch',
 
 async function embeddingStatus(): Promise<EmbeddingServerStatus> {
   const settings = settingsService.loadSettings().embedding;
-  const dependencies = await checkAiDependencies();
+  const dependencies = await embeddingRuntime.checkDependencies();
   const worker = textWorker.status();
   const failure = embeddingFailure();
   return {
     enabled: settings.enabled,
     dependenciesAvailable: dependencies.available,
     statusMessage: failure ?? dependencies.message,
+    failure,
     model: EMBEDDING_MODEL,
     modelRepo: EMBEDDING_REPO,
     modelCached: isEmbeddingModelCached(),
@@ -69,12 +71,16 @@ router.put(
     for (const flag of FLAGS) if (patch[flag] !== undefined) next[flag] = patch[flag];
     if (patch.autoUnloadMinutes !== undefined) next.autoUnloadMinutes = patch.autoUnloadMinutes;
 
-    const wasEnabled = settingsService.loadSettings().embedding.enabled;
+    const previous = settingsService.loadSettings().embedding;
     const updated = settingsService.updateEmbeddingSettings(next).embedding;
     resetEmbeddingBackoff();
-    if (wasEnabled && !updated.enabled) {
+    if (previous.enabled && !updated.enabled) {
       await textWorker.stop();
     } else if (updated.enabled) {
+      // Turned on (or the image part toggled): fetch and load the model now, not on the first chat turn.
+      if (!previous.enabled || previous.imageSearch !== updated.imageSearch || !isEmbeddingModelCached()) {
+        void warmEmbeddingModel();
+      }
       semanticIndexer.poke();
     }
     res.json({ success: true, data: { settings: updated, status: await embeddingStatus() } });

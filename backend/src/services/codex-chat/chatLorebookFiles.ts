@@ -6,6 +6,7 @@ import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { ensureFileStoreSchema } from '../../database/fileStoreSchema'
 import { FileStoreError, FileStoreService, TEXT_EXTENSIONS, fileOwnerKey, type FileStoreChange } from '../fileStoreService'
 import { storedFilePath } from '../fileStorePaths'
+import { notifySemanticChange } from '../embeddings/semanticSignal'
 import {
   LOREBOOK_NAME_MAX_LENGTH,
   PROFILE_MAX_LOREBOOKS,
@@ -207,6 +208,7 @@ function writeBook(row: LorebookRow, value: ChatLoreEntry[]) {
   FileStoreService.writeText(owner, folderId, LOREBOOK_MARKDOWN, renderMarkdown(row.name, entries), { silent: true, history: false })
   getUserSettingsDb().prepare('UPDATE chat_lorebooks SET entries = ?, source_stamp = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?')
     .run(JSON.stringify(entries), stampOf(json), row.id)
+  notifySemanticChange('lore')
 }
 
 /**
@@ -227,6 +229,7 @@ function refreshBook(row: LorebookRow): LorebookRow {
     if (cached !== row.entries) {
       console.warn(`[lorebook] Book ${row.id}: the cache differed from lorebook.json; took the file`)
       getUserSettingsDb().prepare('UPDATE chat_lorebooks SET entries = ?, source_stamp = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(cached, read.stamp, row.id)
+      notifySemanticChange('lore')
     } else if (read.stamp !== row.source_stamp) {
       getUserSettingsDb().prepare('UPDATE chat_lorebooks SET source_stamp = ? WHERE id = ?').run(read.stamp, row.id)
     }

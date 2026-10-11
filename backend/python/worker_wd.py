@@ -9,6 +9,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from timm.data import create_transform, resolve_data_config
 
+from worker_dtypes import half_dtype
 from worker_images import pad_square
 
 WD_REPOS = {
@@ -31,7 +32,9 @@ class WdTagger:
         fetch(repo, ["model.safetensors", "config.json", "selected_tags.csv"])
         model = timm.create_model("hf-hub:" + repo).eval()
         model.load_state_dict(timm.models.load_state_dict_from_hf(repo))
-        self.model = model.to(device)
+        # FP16 on CUDA: closest to FP32 (tags identical, probs within 5e-4).
+        self.dtype = half_dtype(device, torch.float16)
+        self.model = model.to(device, self.dtype)
         self.transform = create_transform(**resolve_data_config(model.pretrained_cfg, model=model))
         names: List[str] = []
         categories: List[int] = []
@@ -49,7 +52,7 @@ class WdTagger:
     def tag(self, image: Image.Image, general_threshold: float, character_threshold: float) -> Dict:
         inputs = self.transform(pad_square(image)).unsqueeze(0)
         inputs = inputs[:, [2, 1, 0]]  # RGB -> BGR, as the model was trained
-        probs = torch.sigmoid(self.model(inputs.to(self.device))).float().cpu().numpy()[0]
+        probs = torch.sigmoid(self.model(inputs.to(self.device, self.dtype)).float()).cpu().numpy()[0]
 
         def pick(indices, threshold: Optional[float]):
             selected = [(self.names[i], float(probs[i])) for i in indices if threshold is None or probs[i] > threshold]

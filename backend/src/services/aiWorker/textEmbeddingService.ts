@@ -1,20 +1,28 @@
+import fs from 'fs'
+import path from 'path'
 import type { EmbeddingSettings } from '@conai/shared'
 import { settingsService } from '../settingsService'
+import { aiPythonDir } from '../aiRuntime/aiPythonDir'
 import { AiWorkerClient, type AiWorkerPriority } from './aiWorkerClient'
-import { aiThreads, checkAiDependencies, isHubModelCached } from './aiVisionService'
+import { aiRuntimeProbe, aiThreads, checkAiDependencies, isHubModelCached, visionWorker } from './aiVisionService'
 
 export const EMBEDDING_MODEL = 'embeddinggemma-2'
 export const EMBEDDING_REPO = 'google/embeddinggemma-2'
 export const EMBEDDING_FILE = 'model.safetensors'
-export const EMBEDDING_DIM = 256
+/**
+ * Text vectors keep the full 768 dims: few rows (chat, lore, files) and better separation for recall. Image vectors
+ * stay at 256 (Matryoshka prefix): the library has tens of thousands, held in memory for every search.
+ */
+export const EMBEDDING_DIM = 768
+export const IMAGE_EMBEDDING_DIM = 256
 /** Vector store key: model, pinned revision (worker_embedding.py) and dimension. Another key re-embeds everything. */
-export const EMBEDDING_MODEL_KEY = 'embeddinggemma-2@914f7f8/256'
+export const EMBEDDING_MODEL_KEY = 'embeddinggemma-2@914f7f8/768'
 /** Image vectors: same model and space as text queries, at 140 image tokens (worker_embedding.py IMAGE_TOKENS). */
 export const IMAGE_EMBEDDING_MODEL_KEY = 'embeddinggemma-2@914f7f8/256/img140'
 
 /**
  * The worker process for embeddings, apart from the vision worker so a chat's query never waits behind image
- * tagging. Always CPU, bf16: text modules only (~1.3 GB), or with the vision tower while image search is on (~2.2 GB;
+ * tagging. Always CPU, bf16 (fp32 on CPUs without native bf16): text modules only (~1.3 GB), or with the vision tower while image search is on (~2.2 GB;
  * one instance then serves both, text vectors are the same).
  */
 export const textWorker = new AiWorkerClient({
@@ -26,9 +34,71 @@ export const textWorker = new AiWorkerClient({
   },
 })
 
-/** The runtime check before a request; a seam so tests can run the Node side without Python. */
+/** Libraries the model needs at least the version requirements-ai.txt pins (an older install loads it wrong or not at all). */
+const VERSIONED_PACKAGES = ['transformers', 'sentence-transformers']
+let pinnedVersions: Map<string, string> | null = null
+
+function requiredVersions() {
+  if (!pinnedVersions) {
+    pinnedVersions = new Map()
+    try {
+      for (const line of fs.readFileSync(path.join(aiPythonDir(), 'requirements-ai.txt'), 'utf8').split(/\r?\n/)) {
+        const match = /^\s*([A-Za-z0-9_.-]+)\s*==\s*([^\s#;]+)/.exec(line)
+        if (match) pinnedVersions.set(match[1].toLowerCase(), match[2])
+      }
+    } catch {
+      // No requirements file next to the scripts: presence is all that can be checked.
+    }
+  }
+  return pinnedVersions
+}
+
+/** Whether version `installed` is below `required` (numeric parts compared in order; "5.19.0.dev0" counts as 5.19.0). */
+export function versionBelow(installed: string, required: string) {
+  const parts = (version: string) => version.split(/[.+-]/).map((part) => Number.parseInt(part, 10)).filter((part) => Number.isFinite(part))
+  const have = parts(installed)
+  const want = parts(required)
+  for (let index = 0; index < Math.max(have.length, want.length); index += 1) {
+    const difference = (have[index] ?? 0) - (want[index] ?? 0)
+    if (difference !== 0) return difference < 0
+  }
+  return false
+}
+
+/** The AI runtime check plus the library versions this model needs. */
+export async function checkEmbeddingDependencies(): Promise<Awaited<ReturnType<typeof checkAiDependencies>>> {
+  const base = await checkAiDependencies()
+  if (!base.available) return base
+  const { probe } = await aiRuntimeProbe()
+  const required = requiredVersions()
+  const outdated = VERSIONED_PACKAGES.flatMap((name) => {
+    const want = required.get(name)
+    const have = probe.packages[name]
+    return want && have && versionBelow(have, want) ? [`${name} ${have} → ${want}`] : []
+  })
+  if (outdated.length === 0) return base
+  return {
+    ...base,
+    available: false,
+    message: `임베딩에 필요한 패키지 버전이 낮아 (${outdated.join(', ')}). 설정 › 자동 › AI 런타임에서 다시 설치해줘.`,
+  }
+}
+
+/** The runtime checks; a seam so tests can run the Node side without Python. */
 export const embeddingRuntime = {
-  checkDependencies: checkAiDependencies,
+  checkDependencies: checkEmbeddingDependencies,
+  isModelCached: () => isEmbeddingModelCached(),
+  /** After a failure (no runtime, download failed) embeddings rest this long instead of failing every chat turn. */
+  failureRestMs: 5 * 60_000,
+}
+
+/**
+ * Threads for one request: background work runs on half while the vision worker is busy too (tagging and indexing
+ * at once would otherwise ask for twice the cores); undefined keeps the worker's default.
+ */
+function requestThreads(priority: AiWorkerPriority) {
+  if (priority !== 'low' || visionWorker.status().queued === 0) return undefined
+  return Math.max(1, Math.floor(aiThreads() / 2))
 }
 
 export type EmbedKind = 'query' | 'document' | 'similarity'
@@ -55,8 +125,6 @@ export function isEmbeddingModelCached() {
   return isHubModelCached(EMBEDDING_REPO, EMBEDDING_FILE)
 }
 
-/** After a failure (no runtime, download failed) embeddings rest a while instead of failing every chat turn. */
-const FAILURE_BACKOFF_MS = 5 * 60_000
 let unavailableUntil = 0
 let lastFailure: string | null = null
 
@@ -81,6 +149,7 @@ export async function embedTexts(
 ): Promise<EmbeddedChunk[][]> {
   if (items.length === 0) return []
   if (Date.now() < unavailableUntil) throw new Error(lastFailure ?? 'Embeddings are unavailable')
+  const priority = options.priority ?? 'normal'
   try {
     const dependencies = await embeddingRuntime.checkDependencies()
     if (!dependencies.available) throw new Error(dependencies.message)
@@ -93,7 +162,8 @@ export async function embedTexts(
       chunkTokens: options.chunkTokens ?? 0,
       overlapTokens: options.overlapTokens ?? 0,
       maxChunks: options.maxChunks ?? 64,
-    }, { priority: options.priority ?? 'normal' })
+      threads: requestThreads(priority),
+    }, { priority })
     textWorker.touch('embedding', reply.device)
     return reply.items.map((chunks) => chunks.map((chunk) => ({ start: chunk.start, end: chunk.end, vector: decodeVector(chunk.vector) })))
   } catch (error) {
@@ -106,7 +176,7 @@ function noteFailure(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
   // A stopped worker (settings change, shutdown) is not a fault of the model.
   if ((error as { errorType?: string })?.errorType !== 'WorkerStopped') {
-    unavailableUntil = Date.now() + FAILURE_BACKOFF_MS
+    unavailableUntil = Date.now() + embeddingRuntime.failureRestMs
     lastFailure = message
     console.warn('[TextEmbedding] unavailable for a while:', message)
   }
@@ -119,17 +189,36 @@ function noteFailure(error: unknown) {
 export async function embedImages(paths: string[], options: { priority?: AiWorkerPriority } = {}): Promise<Array<Float32Array | { error: string }>> {
   if (paths.length === 0) return []
   if (Date.now() < unavailableUntil) throw new Error(lastFailure ?? 'Embeddings are unavailable')
+  const priority = options.priority ?? 'low'
   try {
     const dependencies = await embeddingRuntime.checkDependencies()
     if (!dependencies.available) throw new Error(dependencies.message)
     const reply = await textWorker.request<{ device: string; items: Array<{ vector?: string; error?: string }> }>('embed_images', {
-      images: paths, dim: EMBEDDING_DIM, device: 'cpu',
-    }, { priority: options.priority ?? 'low' })
+      images: paths, dim: IMAGE_EMBEDDING_DIM, device: 'cpu', threads: requestThreads(priority),
+    }, { priority })
     textWorker.touch('embedding', reply.device)
     return reply.items.map((item) => (item.vector ? decodeVector(item.vector) : { error: item.error ?? 'Image could not be embedded' }))
   } catch (error) {
     noteFailure(error)
     throw error
+  }
+}
+
+/**
+ * Load the model now, downloading it first when it is missing (low priority: anything else waiting goes first), so
+ * turning embeddings on fetches the weights right away instead of on the first chat turn. False when it failed.
+ */
+export async function warmEmbeddingModel(): Promise<boolean> {
+  if (!embeddingSettings().enabled || Date.now() < unavailableUntil) return false
+  try {
+    const dependencies = await embeddingRuntime.checkDependencies()
+    if (!dependencies.available) throw new Error(dependencies.message)
+    await textWorker.request('load', { model: 'embedding', options: { device: 'cpu', variant: embeddingVariant() } }, { priority: 'low' })
+    textWorker.touch('embedding', 'cpu')
+    return true
+  } catch (error) {
+    noteFailure(error)
+    return false
   }
 }
 

@@ -1,5 +1,6 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { fuseRanks } from '../embeddings/rankFusion'
+import { notifySemanticChange } from '../embeddings/semanticSignal'
 
 /**
  * Long-term memory of a chat, in three layers:
@@ -79,13 +80,15 @@ export const ChatSummaryStore = {
   /** Add the summary of messages from..until, unless the history changed since `expectedRevision` was read. */
   addSegment(threadId: number, segment: { from: number; until: number; content: string }, expectedRevision: number) {
     const db = getUserSettingsDb()
-    return db.transaction(() => {
+    const added = db.transaction(() => {
       if (!revisionMatches(threadId, expectedRevision)) return false
       db.prepare('INSERT INTO chat_summary_segments (thread_id, level, from_message_id, until_message_id, content) VALUES (?, 0, ?, ?, ?)')
         .run(threadId, segment.from, segment.until, segment.content)
       syncThreadSummary(threadId)
       return true
     }).immediate()
+    if (added) notifySemanticChange('recall')
+    return added
   },
 
   /**
@@ -108,11 +111,13 @@ export const ChatSummaryStore = {
   /** A hand edit of one segment's text; empty text is refused (clear the whole summary instead). */
   editSegment(threadId: number, segmentId: number, content: string) {
     const db = getUserSettingsDb()
-    return db.transaction(() => {
-      const changed = db.prepare('UPDATE chat_summary_segments SET content = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ? AND thread_id = ?').run(content, segmentId, threadId).changes > 0
-      if (changed) syncThreadSummary(threadId, false)
-      return changed
+    const changed = db.transaction(() => {
+      const updated = db.prepare('UPDATE chat_summary_segments SET content = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ? AND thread_id = ?').run(content, segmentId, threadId).changes > 0
+      if (updated) syncThreadSummary(threadId, false)
+      return updated
     }).immediate()
+    if (changed) notifySemanticChange('recall')
+    return changed
   },
 
   /**
