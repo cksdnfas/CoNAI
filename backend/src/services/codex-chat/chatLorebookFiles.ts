@@ -202,8 +202,9 @@ function writeBook(row: LorebookRow, value: ChatLoreEntry[]) {
   const owner = row.owner_key as string
   const folderId = row.folder_id as string
   const entries = sortLorebookKeys(value)
-  const json = FileStoreService.writeText(owner, folderId, LOREBOOK_JSON, renderJson(row.name, entries), { silent: true })
-  FileStoreService.writeText(owner, folderId, LOREBOOK_MARKDOWN, renderMarkdown(row.name, entries), { silent: true })
+  // Regenerated from the book on every change, which keeps its own undo: no versions of these two.
+  const json = FileStoreService.writeText(owner, folderId, LOREBOOK_JSON, renderJson(row.name, entries), { silent: true, history: false })
+  FileStoreService.writeText(owner, folderId, LOREBOOK_MARKDOWN, renderMarkdown(row.name, entries), { silent: true, history: false })
   getUserSettingsDb().prepare('UPDATE chat_lorebooks SET entries = ?, source_stamp = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?')
     .run(JSON.stringify(entries), stampOf(json), row.id)
 }

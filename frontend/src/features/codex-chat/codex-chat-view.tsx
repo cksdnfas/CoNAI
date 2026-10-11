@@ -1120,7 +1120,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           <ChatLiveMessage turn={liveTurn} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
         ) : null}
         {runningFromServer && !isGroup && speaker ? <CodexChatAssistantMessage content={runningFromServer.text} routing={runningFromServer.routing} toolCalls={runningFromServer.toolCalls} streaming appearance={appearance} speaker={speaker} /> : null}
-        {!isGroup && activeThreadId !== null ? <ChatTaskChecklist threadId={activeThreadId} /> : null}
+        {activeThreadId !== null ? <ChatTaskChecklist threadId={activeThreadId} /> : null}
         {serverReplies.map((reply) => {
           const replySpeaker = speakerOf(reply.profileId)
           return replySpeaker ? <CodexChatAssistantMessage key={reply.routing?.replyId ?? reply.profileId} content={reply.text} routing={reply.routing} toolCalls={reply.toolCalls} streaming appearance={appearance} speaker={replySpeaker} /> : null
@@ -1184,7 +1184,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         </Tip>
       ) : null}
       <ChatDraftAttachments chat={chat} canReadText={profile?.canReadFileText === true} />
-      {!isGroup && activeThreadId !== null ? <ChatTaskStrip threadId={activeThreadId} /> : null}
+      {activeThreadId !== null ? <ChatTaskStrip threadId={activeThreadId} /> : null}
       {!isGroup && profile?.pageAssist ? <ChatPageConnectionNotice /> : null}
       {openChoice && closedChoiceId !== openChoice.id && activeThreadId !== null ? (
         <ChatChoiceDock card={openChoice} selected={choiceDraft?.labels ?? []} disabled={sendBlocked || profileMissing || codexUnavailable} onPick={pickChoice} onClose={() => setClosedChoiceId(openChoice.id)} />

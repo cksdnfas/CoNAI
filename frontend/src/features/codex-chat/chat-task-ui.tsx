@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Circle, CircleCheck, CircleDot, CircleMinus, Pause, Play, Square } from 'lucide-react'
-import type { ChatProposal, ChatRoutineRouting, ChatTask, ChatTaskRouting, ChatTaskStep, ChatTaskSummary } from '@conai/shared'
+import { Circle, CircleCheck, CircleDot, CircleMinus, Pause, Play, Square, Users } from 'lucide-react'
+import type { ChatProposal, ChatRoutineRouting, ChatTask, ChatTaskAssignee, ChatTaskRouting, ChatTaskStep, ChatTaskSummary } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { approveChatTaskPlan, chatTaskQueryKey, dismissChatProposal, getChatTask, setChatTaskState } from '@/lib/api-codex-chat'
+import { approveChatTaskPlan, CHAT_PROFILES_QUERY_KEY, chatTaskQueryKey, dismissChatProposal, getChatTask, listChatProfiles, setChatTaskState } from '@/lib/api-codex-chat'
+import { ChatProfileAvatar } from './chat-profile-avatar'
 import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey } from './codex-chat-context'
 import { getErrorMessage } from '@/lib/error-message'
 import { createRuntimeEventStream } from '@/lib/runtime-event-stream'
@@ -77,20 +78,40 @@ function StateChip({ task }: { task: ChatTask }) {
   return task.reason ? <Tip content={task.reason}>{chip}</Tip> : chip
 }
 
+/** Group rooms: who does a step — one member (avatar and name) or everyone. */
+function Assignee({ assignee, compact }: { assignee: ChatTaskAssignee; compact?: boolean }) {
+  const { t } = useI18n()
+  const profiles = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000 })
+  if (assignee === 'all') {
+    const label = t({ ko: '모두', en: 'Everyone' })
+    return compact
+      ? <Tip content={label}><Users className="size-3.5 shrink-0 text-muted-foreground" aria-label={label} /></Tip>
+      : <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground"><Users className="size-3.5" />{label}</span>
+  }
+  const profile = profiles.data?.find((entry) => entry.id === assignee)
+  if (!profile) return compact ? null : <span />
+  const avatar = <ChatProfileAvatar name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size="xs" />
+  return compact
+    ? <Tip content={profile.name}>{avatar}</Tip>
+    : <span className="inline-flex min-w-0 max-w-28 shrink-0 items-center gap-1 text-xs text-muted-foreground">{avatar}<span className="truncate">{profile.name}</span></span>
+}
+
 const currentStep = (steps: ChatTaskStep[]) => {
   const doing = steps.findIndex((step) => step.status === 'doing')
   return doing >= 0 ? doing : steps.findIndex((step) => step.status === 'todo')
 }
 
-function StepList({ steps, current, task }: { steps: Array<{ title: string; status: ChatTaskStep['status']; approval?: boolean; note?: string }>; current: number; task?: ChatTask }) {
+function StepList({ steps, current, task }: { steps: Array<{ title: string; status: ChatTaskStep['status']; approval?: boolean; note?: string; assignee?: ChatTaskAssignee }>; current: number; task?: ChatTask }) {
   const { t } = useI18n()
+  const assigned = steps.some((step) => step.assignee !== undefined)
   return (
     <ol className="space-y-0.5">
       {steps.map((step, index) => (
-        <li key={index} className={cn('grid grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-2 py-0.5 text-sm', step.status === 'done' && 'text-muted-foreground', index === current && 'font-semibold')}>
+        <li key={index} className={cn('grid items-center gap-2 py-0.5 text-sm', assigned ? 'grid-cols-[1rem_minmax(0,1fr)_auto_auto]' : 'grid-cols-[1rem_minmax(0,1fr)_auto]', step.status === 'done' && 'text-muted-foreground', index === current && 'font-semibold')}>
           <StepIcon status={step.status} current={index === current} />
           <span className="min-w-0 truncate" title={step.note}>{step.title}</span>
           {index === current && task && task.status !== 'running' ? <StateChip task={task} /> : step.approval && step.status === 'todo' ? <span className="rounded-full bg-warning/15 px-2 py-px text-2xs font-semibold text-warning">{t({ ko: '승인', en: 'Approval' })}</span> : <span />}
+          {assigned ? step.assignee !== undefined ? <Assignee assignee={step.assignee} /> : <span /> : null}
         </li>
       ))}
     </ol>
@@ -162,6 +183,7 @@ export function ChatTaskStrip({ threadId }: { threadId: number }) {
   const canResume = task.status === 'paused' || (task.status === 'waiting' && (task.wait === 'user' || task.wait === 'page'))
   return (
     <div className="mb-2 flex min-w-0 items-center gap-2.5 text-xs">
+      {index >= 0 && task.steps[index].assignee !== undefined ? <Assignee assignee={task.steps[index].assignee} compact /> : null}
       <span className="min-w-0 truncate font-semibold">{index >= 0 ? task.steps[index].title : task.goal}</span>
       <StateChip task={task} />
       <span className="h-0.5 min-w-10 flex-1 overflow-hidden rounded-full bg-muted"><span className="block h-full bg-primary transition-[width]" style={{ width: `${Math.round((done / Math.max(1, task.steps.length)) * 100)}%` }} /></span>

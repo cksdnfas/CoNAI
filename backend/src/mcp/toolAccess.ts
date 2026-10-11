@@ -66,7 +66,7 @@ const PAGE_SAFE_SCOPES = new Set(['read', 'configure']);
  * A turn answering a posts board call reads posts and comments other people wrote: whatever they ask, it must not
  * reach the caller's private file store.
  */
-const BOARD_CALL_BLOCKED_TOOLS = new Set(['list_files', 'get_file_info', 'read_file_text', 'search_files', 'write_text_file', 'update_file_text', 'edit_file_text', 'create_file_folder', 'rename_file', 'move_files', 'delete_files', 'edit_lore_file', 'linked_list', 'linked_search', 'linked_read', 'linked_write', 'linked_edit']);
+const BOARD_CALL_BLOCKED_TOOLS = new Set(['list_files', 'get_file_info', 'read_file_text', 'search_files', 'write_text_file', 'update_file_text', 'edit_file_text', 'create_file_folder', 'rename_file', 'move_files', 'delete_files', 'edit_lore_file', 'linked_list', 'linked_search', 'linked_read', 'linked_write', 'linked_edit', 'room_history_search', 'room_history_read']);
 const PAGE_PRIVATE_FILE_TOOLS = new Set(['list_files', 'get_file_info', 'read_file_text', 'search_files']);
 
 /**
@@ -126,8 +126,8 @@ export function isContextToolAllowed(context: McpRequestContext, toolName: strin
   if (isChatMcpSource(context.source) && CHAT_BLOCKED_TOOLS.has(toolName)) return false;
   if (accountChecks && context.requester && !accountHoldsTool(context, toolName)) return false;
   // Page text may steer the reply: lore files are not rewritten from it (save_lore still leaves an undoable entry), and
-  // linked private files stay out like the file store tools.
-  if ((toolName === 'edit_lore_file' || toolName.startsWith('linked_')) && context.chatContext?.page) return false;
+  // linked private files and other chats' history stay out like the file store tools.
+  if ((toolName === 'edit_lore_file' || toolName.startsWith('linked_') || toolName.startsWith('room_history_')) && context.chatContext?.page) return false;
   if (CHAT_ROOM_TOOLS.has(toolName)) return Boolean(context.chatContext) && (!GROUP_ONLY_CHAT_TOOLS.has(toolName) || context.chatContext?.kind === 'group');
   if (CHAT_VISION_BUILTIN_TOOLS.has(toolName) && context.chatContext) return true;
   if (isConnectedChatPageTool(context, toolName)) return true;

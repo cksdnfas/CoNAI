@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import { CHAT_TASK_DEFAULT_BUDGET, CHAT_TASK_LIMITS, type ChatExecutionContext, type ChatRoutineRouting, type ChatTask, type ChatTaskBudget, type ChatTaskRouting, type ChatTaskStatus, type ChatTaskStep, type ChatTaskSummary, type ChatTaskWait } from '@conai/shared'
+import { CHAT_TASK_DEFAULT_BUDGET, CHAT_TASK_LIMITS, type ChatExecutionContext, type ChatRoutineRouting, type ChatTask, type ChatTaskAssignee, type ChatTaskBudget, type ChatTaskRouting, type ChatTaskStatus, type ChatTaskStep, type ChatTaskSummary, type ChatTaskWait } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { McpRequester } from '../../mcp/context'
 import { AuthAccount } from '../../models/AuthAccount'
@@ -11,6 +11,7 @@ import { lastChatPageForThread } from './chatPageBridge'
 import { onChatUserSend } from './chatSendEvents'
 import { CodexChatStore } from './codexChatStore'
 import { ChatProfileStore } from './chatProfiles'
+import { ChatGroupStore } from './chatGroupStore'
 
 /** Extra options of a send that the person did not type: a task continuation or an automation's wake is marked so it shows as one thin line. */
 /** `choice`: the request body's answer to the chat's question card, unchecked (see readChoiceAnswer). */
@@ -63,9 +64,9 @@ function announce(task: ChatTask | null) {
 }
 
 export const ChatTaskStore = {
-  create(threadId: number, goal: string, steps: Array<{ title: string; approval?: boolean }>, budget?: Partial<ChatTaskBudget>): ChatTask {
+  create(threadId: number, goal: string, steps: Array<{ title: string; approval?: boolean; assignee?: ChatTaskAssignee }>, budget?: Partial<ChatTaskBudget>): ChatTask {
     const cleanGoal = clip(goal, CHAT_TASK_LIMITS.goal)
-    const cleanSteps = steps.slice(0, CHAT_TASK_LIMITS.steps).map((step) => ({ title: clip(step.title, CHAT_TASK_LIMITS.stepTitle), status: 'todo' as const, ...(step.approval ? { approval: true } : {}) })).filter((step) => step.title)
+    const cleanSteps = steps.slice(0, CHAT_TASK_LIMITS.steps).map((step) => ({ title: clip(step.title, CHAT_TASK_LIMITS.stepTitle), status: 'todo' as const, ...(step.approval ? { approval: true } : {}), ...(step.assignee !== undefined ? { assignee: step.assignee } : {}) })).filter((step) => step.title)
     if (!cleanGoal || !cleanSteps.length) throw new Error('목표와 단계가 필요해.')
     const limit = (value: unknown, max: number, fallback: number) => Number.isSafeInteger(value) && (value as number) > 0 ? Math.min(value as number, max) : fallback
     const cleanBudget = { continuations: limit(budget?.continuations, CHAT_TASK_LIMITS.continuations, CHAT_TASK_DEFAULT_BUDGET.continuations), images: limit(budget?.images, CHAT_TASK_LIMITS.images, CHAT_TASK_DEFAULT_BUDGET.images) }
@@ -144,20 +145,55 @@ function requesterOf(accountId: number | null): McpRequester | null {
   return account?.status === 'active' ? { accountId, accountType: account.account_type } : null
 }
 
-function stepsText(task: ChatTask) {
+type Member = { id: number; name: string }
+
+function stepsText(task: ChatTask, members: Member[] = []) {
   const mark = { todo: ' ', doing: '>', done: 'x', skipped: '-' }
-  return task.steps.map((step, index) => `${index + 1}. [${mark[step.status]}] ${step.title}${step.approval ? ' (승인 필요)' : ''}${step.note ? ` — ${step.note}` : ''}`).join('\n')
+  const who = (step: ChatTaskStep) => step.assignee === undefined ? '' : ` @${step.assignee === 'all' ? 'all' : members.find((member) => member.id === step.assignee)?.name ?? '?'}`
+  return task.steps.map((step, index) => `${index + 1}. [${mark[step.status]}] ${step.title}${who(step)}${step.approval ? ' (승인 필요)' : ''}${step.note ? ` — ${step.note}` : ''}`).join('\n')
+}
+
+/**
+ * A group room's turn: the member woken for the current step. An `all` step wakes each member once in room order (the
+ * last one closes the step); once everyone had theirs and it is still open, or when no step is left open, the
+ * representative wraps up. A member who left or was switched off hands its step to the representative.
+ */
+type GroupTurn = { member: Member; mode: 'own' | 'all' | 'wrap'; last: boolean; heard?: number[] }
+function groupTurn(task: ChatTask, current: number, members: Member[], representative: Member): GroupTurn {
+  const step = current >= 0 ? task.steps[current] : null
+  if (!step) return { member: representative, mode: 'wrap', last: true }
+  if (step.assignee === 'all') {
+    const heard = (step.heard ?? []).filter((id) => members.some((member) => member.id === id))
+    const next = members.find((member) => !heard.includes(member.id))
+    if (!next) return { member: representative, mode: 'wrap', last: true }
+    return { member: next, mode: 'all', last: members.every((member) => member.id === next.id || heard.includes(member.id)), heard: [...heard, next.id] }
+  }
+  return { member: members.find((member) => member.id === step.assignee) ?? representative, mode: 'own', last: true }
+}
+
+function groupTurnText(turn: GroupTurn, step: number | null) {
+  const name = turn.member.name
+  if (turn.mode === 'own') return `This turn is ${name}'s: step ${step} is yours. Call another member with @name only when you need their input.`
+  if (turn.mode === 'all') {
+    return `Step ${step} is for every member, one turn each in room order; this turn is ${name}'s. Give your own part and leave the others' parts to them.${turn.last ? ` You are the last: once the parts are in, mark step ${step} done with task_update.` : ' Do not mark the step done.'}`
+  }
+  return step === null
+    ? `This turn is ${name}'s: every step is closed; check the result and call task_finish.`
+    : `This turn is ${name}'s: every member has had their turn on step ${step}. Wrap it up and mark it done with task_update.`
 }
 
 /** The request that moves a task on. The person sees only the thin line built from `routing`. */
-function continuationText(task: ChatTask, event: string) {
+function continuationText(task: ChatTask, event: string, room?: { members: Member[]; turn: GroupTurn; step: number | null }) {
   return [
     '[Task continuation — sent by the app, not typed by the person]',
     `Goal: ${task.goal}`,
-    `Steps:\n${stepsText(task)}`,
+    `Steps:\n${stepsText(task, room?.members)}`,
     `What just happened: ${event}`,
     `Budget used: continuations ${task.used.continuations}/${task.budget.continuations}, images ${task.used.images}/${task.budget.images}`,
-    'Carry on with the next step yourself. Mark progress with task_update. When the next step needs the person (a card to approve, a choice) or a running generation to finish, make that happen, call task_wait and end your reply. When every step is done call task_finish. Do not ask the person things you can do or decide within the approved plan.',
+    ...(room ? [groupTurnText(room.turn, room.step)] : []),
+    room
+      ? 'Do your part of the plan now. Mark progress with task_update. When the next step needs the person (a card to approve, a choice) or a running generation to finish, make that happen, call task_wait and end your reply. When every step is done call task_finish. Do not ask the person things the room can do or decide within the approved plan.'
+      : 'Carry on with the next step yourself. Mark progress with task_update. When the next step needs the person (a card to approve, a choice) or a running generation to finish, make that happen, call task_wait and end your reply. When every step is done call task_finish. Do not ask the person things you can do or decide within the approved plan.',
   ].join('\n\n')
 }
 
@@ -174,8 +210,8 @@ export const ChatTaskRunner = {
     ChatTaskRunner.started = true
     // A task cannot be half way through a turn after a restart: stop and let the person resume it.
     table().prepare("UPDATE chat_tasks SET status = 'paused', reason = '서버가 다시 시작돼서 멈췄어.', wait = NULL WHERE status IN ('running')").run()
+    // In a room every member's reply ends this way; the continuation waits until the whole room is quiet.
     onChatReplyFinished((context: ChatExecutionContext) => {
-      if (context.kind !== 'direct') return
       const task = ChatTaskStore.live(context.threadId)
       if (task?.status === 'running') ChatTaskRunner.schedule(task.threadId, '이전 답변이 끝났어.')
     })
@@ -269,14 +305,17 @@ export const ChatTaskRunner = {
     // A reply still running (the person's own, or one that just ended and has not let go yet) goes first: try again
     // in a moment, before anything counts against the budget or the stall limit. Its end schedules a turn too.
     const { CodexChatService } = await import('./codexChatService')
-    if (CodexChatService.isRunning(threadId)) {
+    const { GroupChatService } = await import('./groupChatService')
+    if (CodexChatService.isRunning(threadId) || GroupChatService.isRunning(threadId)) {
       if (!timers.has(threadId)) ChatTaskRunner.schedule(threadId, event, 1500)
       return
     }
     const thread = CodexChatStore.findThreadById(threadId)
-    const profile = thread?.profile_id ? ChatProfileStore.find(thread.profile_id) : null
+    const group = thread?.kind === 'group'
+    const members: Member[] = group ? ChatGroupStore.members(threadId).flatMap((member) => { const found = ChatProfileStore.find(member.profile_id); return found?.isEnabled ? [found] : [] }) : []
+    const profile = group ? null : thread?.profile_id ? ChatProfileStore.find(thread.profile_id) : null
     const requester = thread ? requesterOf(thread.account_id) : null
-    if (!thread || thread.kind !== 'direct' || !profile?.isEnabled || !requester) {
+    if (!thread || !requester || (group ? members.length === 0 : thread.kind !== 'direct' || !profile?.isEnabled)) {
       ChatTaskStore.update(task.id, { status: 'failed', reason: '채팅이나 프로필, 계정을 쓸 수 없어서 멈췄어.' })
       return
     }
@@ -285,19 +324,26 @@ export const ChatTaskRunner = {
     if (used.images >= task.budget.images) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '이미지 예산을 다 썼어. 이어가려면 재개해줘.' }); return }
     if (ChatTaskStore.activeMs(task.id) > ACTIVE_LIMIT_MS) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '작업 시간이 길어져서 멈췄어. 이어가려면 재개해줘.' }); return }
     if (ChatTaskStore.markProgress(task.id) >= STALL_LIMIT) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '몇 번 이어가도 진전이 없어서 멈췄어.' }); return }
-    task = ChatTaskStore.update(task.id, { used: { ...used, continuations: used.continuations + 1 } })!
     const current = task.steps.findIndex((step) => step.status === 'doing' || step.status === 'todo')
-    const routing: ChatTaskRouting = { id: task.id, step: current >= 0 ? current + 1 : null, total: task.steps.length, title: current >= 0 ? task.steps[current].title : null, event: clip(event, 160) }
-    const page = profile.pageAssist ? lastChatPageForThread(requester, threadId) : undefined
+    const turn = group ? groupTurn(task, current, members, members.find((member) => member.id === thread.profile_id) ?? members[0]) : null
+    // The text shows the steps as they stand; the member woken for an `all` step is remembered with the turn.
+    const text = continuationText(task, event, turn ? { members, turn, step: current >= 0 ? current + 1 : null } : undefined)
+    task = ChatTaskStore.update(task.id, {
+      used: { ...used, continuations: used.continuations + 1 },
+      ...(turn?.heard ? { steps: task.steps.map((step, index) => index === current ? { ...step, heard: turn.heard } : step) } : {}),
+    })!
+    const routing: ChatTaskRouting = { id: task.id, step: current >= 0 ? current + 1 : null, total: task.steps.length, title: current >= 0 ? task.steps[current].title : null, event: clip(event, 160), ...(turn ? { assignee: turn.member.id } : {}) }
     running.add(threadId)
     try {
-      await CodexChatService.sendMessage(requester, threadId, continuationText(task, event), () => {}, undefined, undefined, undefined, undefined, undefined, page, { task: routing })
+      if (turn) await GroupChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, undefined, undefined, undefined, { task: routing, recipients: [turn.member.id] })
+      else await CodexChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, undefined, undefined, undefined, profile?.pageAssist ? lastChatPageForThread(requester, threadId) : undefined, { task: routing })
     } catch (error) {
       // A reply already running finishes first and its end schedules the next continuation; in case it ended just
       // before, this one is given back and tried again a little later.
       const message = error instanceof Error ? error.message : String(error)
       if (/진행 중/.test(message)) {
-        ChatTaskStore.update(task.id, { used: { ...task.used, continuations: Math.max(0, task.used.continuations - 1) } })
+        const back = turn?.heard ? task.steps.map((step, index) => index === current ? { ...step, heard: turn.heard!.slice(0, -1) } : step) : task.steps
+        ChatTaskStore.update(task.id, { used: { ...task.used, continuations: Math.max(0, task.used.continuations - 1) }, steps: back })
         if (!timers.has(threadId)) ChatTaskRunner.schedule(threadId, event, 1500)
       } else ChatTaskStore.update(task.id, { status: 'paused', reason: `이어가지 못했어: ${clip(message, 200)}` })
     } finally {

@@ -143,9 +143,35 @@ export function groupSummaryOn(thread: Pick<CodexChatThreadRecord, 'summary_enab
   return thread.summary_enabled === 1
 }
 
+/**
+ * A routine or workflow that keeps waking the room sends its instruction every time, and a task sends its whole plan
+ * with every continuation; only the latest of each stays in a member's view, so the repeats do not fill the window the
+ * members' own talk needs.
+ */
+export function withoutStaleWakes(messages: CodexChatMessageRecord[]) {
+  const key = (message: CodexChatMessageRecord) => {
+    if (message.role !== 'user') return null
+    const wake = message.routing?.routine
+    if (wake) return `${wake.source}:${wake.id ?? wake.name}`
+    // A task continuation repeats the whole plan: only the newest one matters.
+    const task = message.routing?.task
+    return task ? `task:${task.id}` : null
+  }
+  const latest = new Map<string, number>()
+  for (const message of messages) {
+    const wake = key(message)
+    if (wake) latest.set(wake, message.id)
+  }
+  if (latest.size === 0) return messages
+  return messages.filter((message) => {
+    const wake = key(message)
+    return wake === null || latest.get(wake) === message.id
+  })
+}
+
 export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMessage[] {
   // With the room's summary on, the messages it covers stay out: the summary stands in for them.
-  const sendable = sendableMessages(unsummarizedMessages(params.messages, params.thread, { summaryEnabled: groupSummaryOn(params.thread) }))
+  const sendable = withoutStaleWakes(sendableMessages(unsummarizedMessages(params.messages, params.thread, { summaryEnabled: groupSummaryOn(params.thread) })))
   let window = latestWindow(sendable, params.windowLimit)
   params = { ...params, books: params.books ?? booksForRequest({ thread: params.thread, profile: params.profile }) }
   const lore = selectChatLore(params.profile, window, userPersonaForThread(params.thread), { thread: params.thread, books: params.books, toolOffered: offersLoreFileTool(params.tools), linkedOffered: offersLinkedFiles(params.tools), history: params.messages, speakerProfileId: params.profile.id, judged: params.judged?.loreKeys })
@@ -224,7 +250,7 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
  * replies are in its memory already. `shown` is the part the window lets through.
  */
 export function groupMissedMessages(messages: CodexChatMessageRecord[], selfId: number, lastSeenMessageId: number | null, windowLimit: number) {
-  const missed = sendableMessages(messages).filter((message) => message.id > (lastSeenMessageId ?? 0)
+  const missed = withoutStaleWakes(sendableMessages(messages)).filter((message) => message.id > (lastSeenMessageId ?? 0)
     && !(lastSeenMessageId !== null && message.role === 'assistant' && message.speaker_profile_id === selfId))
   return { missed, shown: missed.slice(-windowLimit) }
 }
@@ -251,8 +277,12 @@ export function buildGroupCodexInput(params: {
   const user = userPersonaForThread(thread)
   const names = new Map(members.map((member) => [member.id, member.name]))
   const { missed, shown } = groupMissedMessages(params.messages, self.id, lastSeenMessageId, windowLimit)
+  // The room's summary fills the gap a member's own memory cannot: its first turn, or more missed than the window shows.
+  const gap = lastSeenMessageId === null || missed.length > shown.length
+  const summary = gap && groupSummaryOn(thread) && thread.summary?.trim() ? `[방 요약]\n${thread.summary.trim()}\n[/방 요약]` : ''
   return [
     params.header === false ? '' : buildGroupHeader({ thread, members, self, user }),
+    summary,
     hiddenHistoryNote(thread, missed.length - shown.length),
     buildReplyContext(params.messages, params.routing, { group: true, visibleIds: new Set(shown.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) }),
     lore ? `[참고 설정]\n${lore}\n[/참고 설정]` : '',

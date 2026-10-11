@@ -1,10 +1,17 @@
-import type { McpHttpScope, ChatExecutionContext } from '@conai/shared';
+import type { McpHttpScope, ChatExecutionContext, FileWriteSource } from '@conai/shared';
 import type { AuthAccountType } from '../types/authAccount';
 
 /** Account that owns the jobs and history a request creates (set for Codex chat sessions). */
 export interface McpRequester {
   accountId: number | null;
   accountType: AuthAccountType | null;
+}
+
+/** Who a file tool's write is recorded as (see FileStoreRevisions): the chat reply it ran in, or the MCP key's account. */
+export function fileWriteSource(context: McpRequestContext): FileWriteSource {
+  const accountId = context.requester?.accountId ?? null;
+  const chat = context.chatContext;
+  return chat ? { via: 'chat', accountId, threadId: chat.threadId, profileId: chat.profileId, ...(chat.replyId ? { replyId: chat.replyId } : {}) } : { via: 'mcp', accountId };
 }
 
 export interface McpRequestContext {
@@ -238,9 +245,10 @@ export const CHAT_ROOM_TOOLS = new Set(['chat_reply_to', 'room_call_member', 'ro
 
 /**
  * The room tools only a group room offers. A direct chat keeps chat_reply_to (it quotes an earlier message of the
- * chat, see offersChatReplyTo) and the lorebook tools; its context comes from the window and the summary, not the room history tools.
+ * chat, see offersChatReplyTo), the lorebook tools and the history tools (its own history, and that of the chats
+ * sharing its knowledge: see chatHistorySearch).
  */
-export const GROUP_ONLY_CHAT_TOOLS = new Set(['room_call_member', 'room_history_search', 'room_history_read']);
+export const GROUP_ONLY_CHAT_TOOLS = new Set(['room_call_member']);
 
 /**
  * Tools every chat whose model sees images has, whatever the profile's scopes and tool list and the account's chat

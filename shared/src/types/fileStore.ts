@@ -38,6 +38,34 @@ export interface StoredFileText {
   size: number;
 }
 
+/**
+ * Who wrote a text file's content: a person in the editor (or a restore), a chat character's tool (with its chat,
+ * profile and reply), the MCP file tools, or the app itself.
+ */
+export interface FileWriteSource {
+  via: 'editor' | 'restore' | 'chat' | 'mcp' | 'app';
+  accountId?: number | null;
+  threadId?: number;
+  profileId?: number;
+  /** The chat reply whose tool wrote it. */
+  replyId?: string;
+  /** Filled in when listed: the chat character's name. */
+  profileName?: string;
+}
+
+/** An earlier text of a text file, kept when the file was replaced in place. */
+export interface StoredFileRevision {
+  id: string;
+  fileId: string;
+  size: number;
+  /** When this text was written, and by whom (null: not known). */
+  writtenAt: string;
+  writtenBy: FileWriteSource | null;
+  /** When it was replaced, and by whom. */
+  replacedAt: string;
+  replacedBy: FileWriteSource | null;
+}
+
 /** One search hit: a file or folder whose name or UTF-8 text contains every search term. */
 export interface StoredFileSearchHit {
   entry: StoredFileEntry;

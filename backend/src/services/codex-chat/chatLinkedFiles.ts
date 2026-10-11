@@ -1,5 +1,5 @@
 import path from 'path'
-import type { StoredFileEntry } from '@conai/shared'
+import type { FileWriteSource, StoredFileEntry } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { searchStoredFiles } from '../fileStoreSearch'
 import { FileStoreError, FileStoreService, MAX_TEXT_DOCUMENT_BYTES, TEXT_EXTENSIONS, applyTextEdits, fileOwnerKey, type TextEdit } from '../fileStoreService'
@@ -260,7 +260,8 @@ export function listLinked(places: LinkedPlace[], value?: string) {
 export async function searchLinked(places: LinkedPlace[], query: string, limit = 20) {
   if (places.length === 0) return '(연결된 파일이 없어.)'
   const owner = places[0].owner
-  const result = await searchStoredFiles(owner, query, 200)
+  // Searched inside the links only: a store-wide top list would push hits in the linked places out of it.
+  const result = await searchStoredFiles(owner, query, 200, places.map((place) => place.entry.id))
   const hits = result.hits.flatMap((hit) => {
     for (const place of places) {
       const at = pathInPlace(place, hit.entry)
@@ -289,21 +290,21 @@ export async function readLinked(places: LinkedPlace[], value: string, offset = 
 }
 
 /** A new text document (folders on the way are made), or a whole file replaced with `overwrite`. */
-export function writeLinked(places: LinkedPlace[], value: string, text: string, overwrite = false) {
+export function writeLinked(places: LinkedPlace[], value: string, text: string, overwrite = false, source: FileWriteSource | null = null) {
   const resolved = splitLinkedPath(places, value)
   const { place, segments } = resolved
   requireWritable(place)
   if (Buffer.byteLength(text, 'utf8') > MAX_TEXT_DOCUMENT_BYTES) throw new LinkedFileError('A document can be 2 MB at most.', 413)
   if (place.entry.kind === 'file') {
     if (!overwrite) throw new LinkedFileError(`[${place.label}] already exists; set overwrite to replace it, or change part of it with ${LINKED_TOOLS.edit}.`, 409)
-    const saved = FileStoreService.updateText(place.owner, place.entry.id, text)
+    const saved = FileStoreService.updateText(place.owner, place.entry.id, text, { source })
     return `${resolved.display}에 썼어 (${sizeLabel(saved.size)}).`
   }
   if (segments.length === 0) throw new LinkedFileError(`Give a file name inside [${place.label}], e.g. [${place.label}]/notes.md.`)
   let parentId = place.entry.id
   for (const folder of segments.slice(0, -1)) parentId = FileStoreService.ensureFolder(place.owner, parentId, folder).id
   try {
-    const saved = FileStoreService.writeText(place.owner, parentId, segments[segments.length - 1], text, { create: !overwrite })
+    const saved = FileStoreService.writeText(place.owner, parentId, segments[segments.length - 1], text, { create: !overwrite, source })
     return `${resolved.display}에 썼어 (${sizeLabel(saved.size)}).`
   } catch (error) {
     if (error instanceof FileStoreError && error.status === 409 && !overwrite) {
@@ -314,7 +315,7 @@ export function writeLinked(places: LinkedPlace[], value: string, text: string, 
 }
 
 /** Add to the end of a linked text file, or replace exact text in it (nothing is saved when one edit fails). */
-export function editLinked(places: LinkedPlace[], value: string, change: { append?: string; edits?: TextEdit[] }) {
+export function editLinked(places: LinkedPlace[], value: string, change: { append?: string; edits?: TextEdit[] }, source: FileWriteSource | null = null) {
   if ((change.append === undefined) === (change.edits === undefined)) throw new LinkedFileError('Give either append or edits.')
   const resolved = splitLinkedPath(places, value)
   requireWritable(resolved.place)
@@ -327,7 +328,7 @@ export function editLinked(places: LinkedPlace[], value: string, change: { appen
     const edited = applyTextEdits(text, change.edits!)
     replaced = edited.replaced
     return edited.text
-  })
+  }, { source })
   return `${resolved.display}을 고쳤어 (${sizeLabel(saved.size)}${change.edits ? `, ${replaced}군데 바꿈` : ''}).`
 }
 

@@ -725,6 +725,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['lore_record_book_id', 'INTEGER'],
     // JSON [{ id, write }]: file store folders and files linked to this chat (see chatLinkedFiles).
     ['linked_files', 'TEXT'],
+    // The writable linked folder each new summary stretch is also kept in, under 회의록/<date>.md (see chatMinutes).
+    ['minutes_folder_id', 'TEXT'],
     // The chat list: pinned chats come first; archived ones leave the list for the archive (nothing is deleted).
     ['pinned', 'INTEGER NOT NULL DEFAULT 0'],
     ['archived', 'INTEGER NOT NULL DEFAULT 0'],

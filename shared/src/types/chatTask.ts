@@ -3,7 +3,19 @@
  * moving (approvals, finished jobs and finished replies each start the next turn) until done, paused or out of budget.
  */
 export type ChatTaskStepStatus = 'todo' | 'doing' | 'done' | 'skipped'
-export type ChatTaskStep = { title: string; status: ChatTaskStepStatus; /** The step ends in a card the person saves. */ approval?: boolean; note?: string }
+/** Who does a step in a group room: one member (profile id) or every member in room order (`all`). */
+export type ChatTaskAssignee = number | 'all'
+export type ChatTaskStep = {
+  title: string
+  status: ChatTaskStepStatus
+  /** The step ends in a card the person saves. */
+  approval?: boolean
+  note?: string
+  /** Group rooms: the member the runner wakes for this step (see ChatTaskAssignee). */
+  assignee?: ChatTaskAssignee
+  /** Group rooms, an `all` step: the members already woken for it. */
+  heard?: number[]
+}
 export type ChatTaskStatus = 'awaiting_plan' | 'running' | 'waiting' | 'paused' | 'done' | 'failed' | 'cancelled'
 /** What a waiting task waits for. */
 export type ChatTaskWait = 'approval' | 'job' | 'page' | 'user'
@@ -32,7 +44,7 @@ export type ChatTaskPlanProposal = {
   kind: 'task_plan'
   taskId: number
   goal: string
-  steps: Array<{ title: string; approval?: boolean }>
+  steps: Array<{ title: string; approval?: boolean; assignee?: ChatTaskAssignee }>
   budget: ChatTaskBudget
   savedId?: number | null
 }
@@ -41,4 +53,4 @@ export type ChatTaskPlanProposal = {
 export type ChatTaskSummary = { status: ChatTaskStatus; wait: ChatTaskWait | null; done: number; total: number; step: string | null }
 
 /** Marks a request the server sent to move a task on; shown as one thin line instead of a user message. */
-export type ChatTaskRouting = { id: number; step: number | null; total: number; title: string | null; event: string }
+export type ChatTaskRouting = { id: number; step: number | null; total: number; title: string | null; event: string; /** Group rooms: the member this turn woke. */ assignee?: number }

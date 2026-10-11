@@ -19,6 +19,7 @@ import type { LoreHistoryMessage, SelectedLore } from './chatLorebook'
 import { booksForRequest, loreIndexText, READ_LORE_FILE_TOOL, selectRequestLore, type AttachedLoreBook, type ChatLore } from './chatLoreContext'
 import { rejectedLoreLine, SAVE_LORE_TOOL } from './chatLoreProposals'
 import { buildLinkedIndex, LINKED_TOOLS, placesForRequest } from './chatLinkedFiles'
+import { appendMinutes } from './chatMinutes'
 import { buildFlagDirective } from './chatFlags'
 import { generationPromptOf } from './chatToolReferences'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
@@ -1080,6 +1081,7 @@ async function foldIntoSummary(threadId: number, plan: FoldPlanner, mode: FoldMo
     if (!ChatSummaryStore.addSegment(threadId, { from: chunk[0].id, until: chunk[chunk.length - 1].id, content }, thread.context_revision)) {
       return folded
     }
+    appendMinutes(threadId, { content, firstAt: chunk[0].created_date, lastAt: chunk[chunk.length - 1].created_date })
     if (!plotFailed) CodexChatStore.setSummaryError(threadId, null)
     folded = content
   }

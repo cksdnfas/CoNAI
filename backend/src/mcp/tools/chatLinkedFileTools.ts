@@ -4,7 +4,7 @@ import { ChatProfileStore } from '../../services/codex-chat/chatProfiles';
 import { CodexChatStore } from '../../services/codex-chat/codexChatStore';
 import { editLinked, LINKED_TOOLS, LinkedFileError, listLinked, placesForRequest, readLinked, searchLinked, writeLinked, type LinkedPlace } from '../../services/codex-chat/chatLinkedFiles';
 import { MAX_TEXT_DOCUMENT_BYTES } from '../../services/fileStoreService';
-import type { McpRequestContext } from '../context';
+import { fileWriteSource, type McpRequestContext } from '../context';
 
 /**
  * The chat's linked files (see chatLinkedFiles), scoped like the room tools: they reach only the folders and files
@@ -60,7 +60,7 @@ export function registerChatLinkedFileTools(server: McpServer, context: McpReque
       text: z.string().max(MAX_TEXT_DOCUMENT_BYTES),
       overwrite: z.boolean().optional(),
     }),
-  }, ({ target, text, overwrite }) => run(() => writeLinked(places(), target, text, overwrite ?? false)));
+  }, ({ target, text, overwrite }) => run(() => writeLinked(places(), target, text, overwrite ?? false, fileWriteSource(context))));
 
   server.registerTool(LINKED_TOOLS.edit, {
     description: 'Change a text file in a place marked 쓰기 without resending it: append adds text at its end (start with a newline yourself if needed), edits replace exact text (each old_text must appear exactly once, copied from linked_read, unless replace_all; if any fails nothing is saved). Give either append or edits.',
@@ -69,5 +69,5 @@ export function registerChatLinkedFileTools(server: McpServer, context: McpReque
       append: z.string().min(1).max(MAX_TEXT_DOCUMENT_BYTES).optional(),
       edits: z.array(z.object({ old_text: z.string().min(1), new_text: z.string(), replace_all: z.boolean().optional() })).min(1).max(20).optional(),
     }),
-  }, ({ target, append, edits }) => run(() => editLinked(places(), target, { append, edits })));
+  }, ({ target, append, edits }) => run(() => editLinked(places(), target, { append, edits }, fileWriteSource(context))));
 }

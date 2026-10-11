@@ -99,15 +99,21 @@ export function refreshFileSearchIndex(owner: string): Promise<void> {
 
 /**
  * Files and folders of one store whose name or text contains every term (case-insensitive for ASCII), name hits
- * first, then the most recently changed.
+ * first, then the most recently changed. `within`: only these entries and everything under them (the limit then
+ * counts hits inside them, not in the whole store).
  */
-export async function searchStoredFiles(owner: string, query: unknown, limit = 50): Promise<StoredFileSearchResult> {
+export async function searchStoredFiles(owner: string, query: unknown, limit = 50, within?: readonly string[]): Promise<StoredFileSearchResult> {
   const terms = parseSearchTerms(query);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new FileStoreError('잘못된 검색 개수야.');
   await refreshFileSearchIndex(owner);
   const db = getUserSettingsDb();
   const params: Record<string, string | number> = { owner, limit: limit + 1 };
   terms.forEach((term, index) => { params[`t${index}`] = term; });
+  if (within) params.within = JSON.stringify(within);
+  const scope = within ? `AND e.id IN (WITH RECURSIVE tree(id, depth) AS (
+      SELECT value, 0 FROM json_each(@within) UNION ALL
+      SELECT c.id, tree.depth + 1 FROM stored_file_entries c JOIN tree ON c.parent_id = tree.id WHERE c.deleted_at IS NULL AND tree.depth < 64
+    ) SELECT id FROM tree)` : '';
   const inName = (index: number) => `instr(lower(e.name), @t${index}) > 0`;
   const inBody = (index: number) => `instr(lower(t.body), @t${index}) > 0`;
   const every = terms.map((_, index) => `(${inName(index)} OR ${inBody(index)})`).join(' AND ');
@@ -117,7 +123,7 @@ export async function searchStoredFiles(owner: string, query: unknown, limit = 5
   const rows = db.prepare(`SELECT e.*, ${position} AS hit_at, length(t.body) AS body_length,
       CASE WHEN ${position} > 0 THEN substr(t.body, max(${position} - ${SNIPPET_BEFORE}, 1), ${SNIPPET_LENGTH}) END AS excerpt
     FROM stored_file_entries e LEFT JOIN search_db.search_documents t ON t.source = 'file' AND t.source_id = e.id
-    WHERE e.owner_key = @owner AND e.deleted_at IS NULL AND ${every}
+    WHERE e.owner_key = @owner AND e.deleted_at IS NULL AND ${every} ${scope}
     ORDER BY CASE WHEN ${nameOnly} THEN 0 ELSE 1 END, e.updated_at DESC, e.name_key
     LIMIT @limit`).all(params) as Array<FileRow & { hit_at: number; body_length: number | null; excerpt: string | null }>;
 

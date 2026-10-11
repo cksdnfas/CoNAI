@@ -13,7 +13,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { editChatSummarySegment, summarizeCodexChatThread, thinkingMayFillCap, updateCodexChatThreadContext, updateGroupChat, updateGroupChatMember, type ChatGroupInfo, type ChatProfileSummary, type ChatSummarySegment, type CodexChatThread, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { editChatSummarySegment, getThreadLinkedFiles, summarizeCodexChatThread, threadLinkedFilesQueryKey, thinkingMayFillCap, updateCodexChatThreadContext, updateGroupChat, updateGroupChatMember, type ChatGroupInfo, type ChatProfileSummary, type ChatSummarySegment, type CodexChatThread, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error-message'
 import { LorebookBlock } from './chat-lorebook-block'
@@ -248,8 +248,45 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
           ariaLabel={t({ ko: '대화 요약', en: 'Conversation summary' })}
         />
       </SettingRow>
+      {thread.summary_enabled === 1 ? <MinutesRow thread={thread} /> : null}
       <SummaryBlock thread={thread} segments={segments} summaryOn={thread.summary_enabled === 1} />
     </div>
+  )
+}
+
+/**
+ * Where each new summary stretch is also kept as minutes: a linked folder the chat may write (회의록/<date>.md in it).
+ * Shown only once such a folder is linked, or while one is still chosen.
+ */
+function MinutesRow({ thread }: { thread: CodexChatThread }) {
+  const { t } = useI18n()
+  const { showSnackbar } = useSnackbar()
+  const queryClient = useQueryClient()
+  const linked = useQuery({ queryKey: threadLinkedFilesQueryKey(thread.id), queryFn: () => getThreadLinkedFiles(thread.id) })
+  const folders = (linked.data ?? []).filter((view) => view.kind === 'folder' && view.write && !view.missing)
+  const chosen = thread.minutes_folder_id ?? null
+  const mutation = useMutation({
+    mutationFn: (minutesFolderId: string | null) => updateCodexChatThreadContext(thread.id, { minutesFolderId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(thread.id) }),
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
+  })
+  if (folders.length === 0 && chosen === null) return null
+  const lost = chosen !== null && !folders.some((view) => view.id === chosen)
+  return (
+    <SettingRow label={t({ ko: '회의록', en: 'Minutes' })}>
+      <Select
+        className="w-48"
+        value={chosen ?? ''}
+        onChange={(event) => mutation.mutate(event.target.value || null)}
+        disabled={mutation.isPending}
+        aria-invalid={lost || undefined}
+        aria-label={t({ ko: '회의록 폴더', en: 'Minutes folder' })}
+      >
+        <option value="">{t({ ko: '남기지 않음', en: 'Off' })}</option>
+        {lost ? <option value={chosen}>{t({ ko: '연결이 끊긴 폴더', en: 'Unlinked folder' })}</option> : null}
+        {folders.map((view) => <option key={view.id} value={view.id}>{`[${view.name}]/회의록`}</option>)}
+      </Select>
+    </SettingRow>
   )
 }
 
@@ -450,6 +487,7 @@ export function CodexChatContextView({ thread, profiles, segments, profileTurns,
           ariaLabel={t({ ko: '대화 요약', en: 'Conversation summary' })}
         />
       </SettingRow>
+      {summaryOn ? <MinutesRow thread={thread} /> : null}
 
       <SummaryBlock thread={thread} segments={segments} summaryOn={summaryOn} />
     </div>

@@ -1,8 +1,9 @@
 import { validateChatMediaAttachments } from './chatMediaAttachments'
 import { randomUUID } from 'crypto'
-import type { ChatExecutionContext, ChatMessageRouting, ChatRecipient, ChatRoutineRouting } from '@conai/shared'
+import type { ChatExecutionContext, ChatMessageRouting, ChatRecipient, ChatRoutineRouting, ChatTaskRouting } from '@conai/shared'
 import { automaticReplyRouting, messageSender, quoteMessage, requireReplyTarget, userReplyRouting } from './chatReplies'
 import { registerChatReply, skipThreadGenerationReactions } from './chatReplyRegistry'
+import { notifyChatUserSend } from './chatSendEvents'
 import type { McpRequester } from '../../mcp/context'
 import { inlineTextsForChat, loadAttachedImages, validateChatAttachments } from './chatAttachments'
 import { loadInlineGeneratedImages, withGeneratedImages } from './chatGenerationPrompting'
@@ -556,9 +557,10 @@ export const GroupChatService = {
    * A user message: stops whatever the room is still saying (the user cut in), then the addressed members answer
    * (together as far as their connections allow) — or the representative when no one is addressed.
    * An automation's wake (`options.routine`) never cuts in: it fails while the room is talking, and may lower the
-   * room's chain limit for its own run.
+   * room's chain limit for its own run. A task continuation (`options.task`, see ChatTaskRunner) does not either, and
+   * goes to the member its step names (`options.recipients`) as it is, untranslated.
    */
-  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, mediaHashes?: unknown, picks?: unknown, replyToMessageId?: unknown, options: { routine?: ChatRoutineRouting; chainLimit?: number | null } = {}) {
+  async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, mediaHashes?: unknown, picks?: unknown, replyToMessageId?: unknown, options: { routine?: ChatRoutineRouting; task?: ChatTaskRouting; recipients?: number[]; chainLimit?: number | null } = {}) {
     const thread = requireGroup(requester, threadId)
     assertGroupChatAvailable(requester)
     const attachments = validateChatAttachments(requester, fileIds)
@@ -566,15 +568,22 @@ export const GroupChatService = {
     const flags = [...ChatFlagStore.resolve(requester, parseFlagIds(flagIds)), ...parsePicks(picks)]
     const trimmed = text.trim()
     if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) throw new CodexChatError('메시지를 입력해줘.')
-    if (options.routine && GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
-    const routing: ChatMessageRouting = { ...userReplyRouting(thread, replyToMessageId), ...(options.routine ? { routine: options.routine } : {}) }
-    routing.recipients = userRecipients(requester, thread, trimmed, routing)
-    const judgeRoutes = unaddressed(thread, trimmed, routing)
+    const automatic = Boolean(options.routine || options.task)
+    if (automatic && GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    const routing: ChatMessageRouting = { ...userReplyRouting(thread, replyToMessageId), ...(options.routine ? { routine: options.routine } : {}), ...(options.task ? { task: options.task } : {}) }
+    if (options.recipients) {
+      const answerable = answerableMembers(requester, threadId)
+      routing.recipients = options.recipients.filter((id) => answerable.some((member) => member.id === id))
+      if (routing.recipients.length === 0) throw new CodexChatError('답장 받을 참가자가 없거나 지금 응답할 수 없어. 수신자를 다시 지정해줘.', 409)
+    } else routing.recipients = userRecipients(requester, thread, trimmed, routing)
+    const judgeRoutes = !options.recipients && unaddressed(thread, trimmed, routing)
     LlmChatService.skipReaction(threadId)
     skipThreadGenerationReactions(threadId)
-    // The members read the message in English; the reader keeps their own words.
-    const modelText = await translateUserInput(translatorOf(memberProfiles(threadId)), trimmed)
-    if (!options.routine) await GroupChatService.stop(threadId)
+    // The members read the message in English; the reader keeps their own words. The app's own task text is English.
+    const modelText = options.task ? null : await translateUserInput(translatorOf(memberProfiles(threadId)), trimmed)
+    if (!automatic) await GroupChatService.stop(threadId)
+    // The person's own message answers a task waiting for them (see ChatTaskRunner).
+    if (!automatic) notifyChatUserSend(threadId, false)
 
     await startRun(threadId, listener, async (run) => {
       if (typeof options.chainLimit === 'number' && options.chainLimit >= 0) run.chainLimit = Math.min(run.chainLimit, Math.floor(options.chainLimit))

@@ -3,7 +3,7 @@ import { memo, useCallback, useEffect, useRef, useState, type PointerEvent as Re
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Ban, Check, ChevronLeft, ChevronRight, ImageOff, Repeat, Scissors, Wrench, X } from 'lucide-react'
 import { isCodexChatGenerationTool, stripEchoedAddresses, withChatGenerationProgress } from '@conai/shared'
-import type { ChatMessageRouting } from '@conai/shared'
+import type { ChatFileChange, ChatMessageRouting } from '@conai/shared'
 import { ChatMessageReply } from './chat-reply'
 import { Button } from '@/components/ui/button'
 import { Tip } from '@/components/ui/tooltip'
@@ -30,6 +30,7 @@ import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatProposalCards } from './chat-proposal-card'
 import { ChatChoiceLines } from './chat-choice'
 import { ChatPageOperationChips } from './chat-page-operation-chips'
+import { ChatFileChangeChips } from './chat-file-change-chips'
 import { ChatReferenceButton, ChatThumbOverlay } from './chat-reference'
 import { MENTION_CLASS, splitMentions } from './chat-mentions'
 
@@ -680,9 +681,13 @@ function ReasoningBlock({ text, active }: { text: string; active: boolean }) {
 const AVATAR_SIZE = { sm: 'sm', md: 'lg', lg: 'xl' } as const
 const BUBBLE_CLASS = 'max-w-[85%] self-start rounded-lg bg-surface-low/85 px-3.5 py-2.5 backdrop-blur-sm'
 
-export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content: written, toolCalls, status, error, finishReason = null, reasoning, streaming = false, translating = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, routing, recipientLabel, threadId }: {
+export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content: written, toolCalls, status, error, finishReason = null, reasoning, streaming = false, translating = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, routing, recipientLabel, threadId, fileChanges, replyId }: {
   /** The stored thread this reply belongs to (proposal cards refresh it after a save). */
   threadId?: number
+  /** The text files this reply's tools wrote (chips with undo). */
+  fileChanges?: ChatFileChange[]
+  /** The reply's id (1:1 chats leave `routing` out), for undoing its file changes. */
+  replyId?: string
   routing?: ChatMessageRouting | null
   recipientLabel?: string
   content: string
@@ -746,7 +751,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   const showReasoning = Boolean(reasoning) && appearance.showReasoning
   // A failed or empty reply has no body: nothing to draw a bubble around.
   // A proposal rides on a tool call, so `toolCalls.length` already counts it as content.
-  const ownParts = !ownText && !showReasoning && toolCalls.length === 0 && !routing?.replyTo ? null : (
+  const ownParts = !ownText && !showReasoning && toolCalls.length === 0 && !fileChanges?.length && !routing?.replyTo ? null : (
     <div className="space-y-2">
       <ChatMessageReply routing={routing} recipientLabel={recipientLabel} />
       {showReasoning ? <ReasoningBlock text={reasoning as string} active={streaming && !content} /> : null}
@@ -757,6 +762,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
       {streaming ? null : <ChatPostCards calls={toolCalls} text={content} />}
       {ownText ? markdown(ownText) : null}
       <ChatChoiceLines calls={toolCalls} />
+      <ChatFileChangeChips changes={fileChanges} threadId={threadId} replyId={replyId ?? routing?.replyId} />
     </div>
   )
   const showOwnRow = !hasCast || Boolean(ownText || showReasoning || toolCalls.length > 0)

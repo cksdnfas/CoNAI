@@ -1,6 +1,6 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { publishRuntimeEvent } from '../runtime-events/runtimeEventBus'
-import type { StoredFileEntry, ChatMessageRouting } from '@conai/shared'
+import type { StoredFileEntry, ChatMessageRouting, ChatFileChange } from '@conai/shared'
 import { FileStoreService, fileOwnerKey } from '../fileStoreService'
 import { parseBlockEdits, type BlockEdit } from './chatBlockState'
 import { parseFlagSnapshots, type ChatFlagSnapshot } from './chatFlags'
@@ -8,6 +8,7 @@ import { parseChatMediaAttachments, type ChatMediaAttachment } from './chatMedia
 import { ChatSummaryStore } from './chatMemory'
 import { OwnedLorebookStore } from './chatLorebookFiles'
 import { ChatProposalStore } from './chatProposals'
+import { forgetThreadFileChanges } from './chatFileChanges'
 
 export type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
 import type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
@@ -62,6 +63,8 @@ export type CodexChatThreadRecord = {
   lorebook_ids: string | null
   /** save_lore saves right away (1), leaves a card (0), or follows the chat settings (null). */
   lore_auto_save: 0 | 1 | null
+  /** The writable linked folder new summary stretches are also kept in (see chatMinutes); null: none. */
+  minutes_folder_id?: string | null
   /** Why the last background summary failed; null once one succeeds. */
   summary_error: string | null
   /** The chat list: shown first / kept out of the list (in the archive). */
@@ -123,6 +126,8 @@ export type CodexChatMessageRecord = {
   context_meta?: string | null
   /** User messages: the chat flags that were on when it was sent. */
   flags?: ChatFlagSnapshot[]
+  /** Replies: the text files their tools wrote (derived when reading; see chatFileChanges). */
+  fileChanges?: ChatFileChange[]
   created_date: string
 }
 
@@ -368,6 +373,7 @@ export const CodexChatStore = {
       db.prepare('DELETE FROM chat_group_members WHERE thread_id = ?').run(threadId)
       ChatSummaryStore.clear(threadId)
       ChatProposalStore.deleteForThread(threadId)
+      forgetThreadFileChanges(threadId)
       // chat_tasks is created on first use (see chatTasks.ts); deleted here without importing the task runner.
       if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chat_tasks'").get()) db.prepare('DELETE FROM chat_tasks WHERE thread_id = ?').run(threadId)
       // Its branches stay, as chats of their own.

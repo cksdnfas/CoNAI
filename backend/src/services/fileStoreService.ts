@@ -1,10 +1,11 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import type { FileStoreListing, StoredFileEntry, StoredFileOwner, StoredFileText } from '@conai/shared';
+import type { FileStoreListing, FileWriteSource, StoredFileEntry, StoredFileOwner, StoredFileText } from '@conai/shared';
 import { getUserSettingsDb } from '../database/userSettingsDb';
 import { AuthAccount } from '../models/AuthAccount';
 import { ensureFileOwnerDirectory, ensureFileStoreDirectories, fileStoreIncoming, migrateFileStoreLayout, storedFilePath, fileStoreThumbnailPath } from './fileStorePaths';
+import { FileStoreRevisions } from './fileStoreRevisions';
 
 export class FileStoreError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
@@ -57,6 +58,12 @@ export function toEntry(row: FileRow): StoredFileEntry {
 }
 
 export type TextEdit = { old_text: string; new_text: string; replace_all?: boolean };
+
+/**
+ * How a text write is recorded: `source` names who wrote it (see FileStoreRevisions); `history: false` replaces the
+ * file without keeping its earlier text (files the app regenerates itself, such as a lorebook's JSON).
+ */
+export type TextWriteRecord = { source?: FileWriteSource | null; history?: boolean };
 
 /** Apply exact-text replacements in order; each must match once (or replace_all). Throws, saving nothing, when one fails. */
 export function applyTextEdits(text: string, edits: TextEdit[]) {
@@ -152,6 +159,9 @@ export type FileStoreChange = {
 };
 type FileStoreListener = (change: FileStoreChange) => void;
 const changeListeners = new Set<FileStoreListener>();
+/** A text write with a known writer, told after it committed: `created` when the file is new. */
+export type TextWriteEvent = { owner: string; entry: StoredFileEntry; source: FileWriteSource; created: boolean };
+const textWriteListeners = new Set<(event: TextWriteEvent) => void>();
 
 /** A failing listener never fails the change itself; it is logged. */
 function notifyChange(change: FileStoreChange) {
@@ -344,10 +354,11 @@ export const FileStoreService = {
 
   /**
    * Create a UTF-8 text file, or replace one in place: the blob is swapped in one rename and the id stays, so links
-   * by id survive. `silent` keeps the change listeners out (the caller already accounts for it). `create` refuses a
-   * name that is taken; `replaceId` refuses anything but that file still being there.
+   * by id survive, and the text it had is kept as a version (see TextWriteRecord). `silent` keeps the change listeners
+   * out (the caller already accounts for it). `create` refuses a name that is taken; `replaceId` refuses anything but
+   * that file still being there.
    */
-  writeText(owner: string, parentId: string | null, value: unknown, text: string, options: { silent?: boolean; create?: boolean; replaceId?: string } = {}): StoredFileEntry {
+  writeText(owner: string, parentId: string | null, value: unknown, text: string, options: { silent?: boolean; create?: boolean; replaceId?: string } & TextWriteRecord = {}): StoredFileEntry {
     const name = normalizeName(value);
     if (!TEXT_EXTENSIONS.has(path.extname(name).toLowerCase())) throw new FileStoreError('텍스트 파일만 쓸 수 있어.', 415);
     ensureFileStoreDirectories();
@@ -356,13 +367,17 @@ export const FileStoreService = {
     const staged = path.join(fileStoreIncoming, `${crypto.randomBytes(16).toString('hex')}.tmp`);
     fs.writeFileSync(staged, data);
     let row: FileRow;
+    let kept: string | null = null;
+    let created = false;
     try {
       row = getUserSettingsDb().transaction(() => {
         const existing = this.findChild(owner, parentId, name);
         if (existing && (existing.kind !== 'file' || options.create)) throw new FileStoreError(`같은 이름의 항목이 있어: ${name}`, 409);
         if (options.replaceId !== undefined && existing?.id !== options.replaceId) throw new FileStoreError('파일이 옮겨졌거나 이름이 바뀌었어. 다시 열어줘.', 409);
         const id = existing?.id ?? crypto.randomBytes(16).toString('hex');
+        created = !existing;
         if (existing) {
+          if (options.history !== false) kept = FileStoreRevisions.keep(owner, requireRow(owner, id), storedFilePath(owner, id), options.source ?? null);
           getUserSettingsDb().prepare('UPDATE stored_file_entries SET size = ?, mime_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(data.length, textMimeType(name), id);
           // A rewrite in the same second at the same size would look unchanged to the search cache.
           getUserSettingsDb().prepare("DELETE FROM search_db.search_documents WHERE source = 'file' AND source_id = ?").run(id);
@@ -372,26 +387,53 @@ export const FileStoreService = {
         fs.renameSync(staged, storedFilePath(owner, id));
         return requireRow(owner, id);
       }).immediate();
+    } catch (error) {
+      // The transaction took its version row back; its copy goes too.
+      if (kept) fs.rmSync(kept, { force: true });
+      throw error;
     } finally {
       fs.rmSync(staged, { force: true });
     }
+    FileStoreRevisions.setWriter(row.id, options.source ?? null);
+    if (kept) FileStoreRevisions.trim(owner, row.id);
     fs.rmSync(fileStoreThumbnailPath(row.id), { force: true });
     if (!options.silent) notifyChange({ owner, action: 'write', entries: [changedEntry(row)] });
+    if (options.source) {
+      const event = { owner, entry: toEntry(row), source: options.source, created };
+      for (const listener of textWriteListeners) {
+        try { listener(event); }
+        catch (error) { console.warn('[file-store] Text write hook failed:', error instanceof Error ? error.message : error); }
+      }
+    }
     return toEntry(row);
   },
 
+  /** Listen to text writes whose writer is known (see TextWriteEvent). Returns the unsubscribe. */
+  onTextWrite(listener: (event: TextWriteEvent) => void) {
+    textWriteListeners.add(listener);
+    return () => { textWriteListeners.delete(listener); };
+  },
+
+  /** Put an earlier version's text back (the current text becomes a version itself, so a restore can be undone). */
+  restoreRevision(owner: string, id: string, revisionId: string, source: FileWriteSource | null = null): StoredFileEntry {
+    const row = requireRow(owner, id);
+    const text = FileStoreRevisions.readText(owner, id, revisionId);
+    if (text === null) throw new FileStoreError('그 버전을 찾을 수 없어.', 404);
+    return this.writeText(owner, row.parent_id, row.name, text, { replaceId: row.id, source: { ...(source ?? {}), via: 'restore' } });
+  },
+
   /** Replace the text of an existing text file in place (the editor's save). */
-  updateText(owner: string, id: string, text: string): StoredFileEntry {
+  updateText(owner: string, id: string, text: string, record: TextWriteRecord = {}): StoredFileEntry {
     const row = requireRow(owner, id);
     if (row.kind !== 'file') throw new FileStoreError('파일을 선택해줘.');
-    return this.writeText(owner, row.parent_id, row.name, text, { replaceId: row.id });
+    return this.writeText(owner, row.parent_id, row.name, text, { replaceId: row.id, ...record });
   },
 
   /**
    * Read a whole text file, transform it and save it in place. Read and write are synchronous, so no other request
    * can save the file in between and have its change overwritten.
    */
-  editText(owner: string, id: string, transform: (text: string) => string): StoredFileEntry {
+  editText(owner: string, id: string, transform: (text: string) => string, record: TextWriteRecord = {}): StoredFileEntry {
     const { entry, filePath } = this.resolveFile(owner, id);
     if (!TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) throw new FileStoreError('텍스트 파일만 고칠 수 있어.', 415);
     if (entry.size > MAX_TEXT_DOCUMENT_BYTES) throw new FileStoreError('2MB가 넘는 파일은 고칠 수 없어.', 413);
@@ -402,7 +444,7 @@ export const FileStoreService = {
     catch { throw new FileStoreError('UTF-8로 저장한 텍스트 파일만 고칠 수 있어.', 415); }
     const next = transform(text);
     if (Buffer.byteLength(next, 'utf8') > MAX_TEXT_DOCUMENT_BYTES) throw new FileStoreError('문서는 2MB까지 저장할 수 있어.', 413);
-    return this.updateText(owner, id, next);
+    return this.updateText(owner, id, next, record);
   },
 
   /**
@@ -496,6 +538,7 @@ export const FileStoreService = {
         if (row.kind === 'file') {
           fs.rmSync(storedFilePath(row.owner_key, row.id), { force: true });
           fs.rmSync(fileStoreThumbnailPath(row.id), { force: true });
+          FileStoreRevisions.purge(row.owner_key, row.id);
         }
         db.prepare('DELETE FROM stored_file_entries WHERE id = ? AND NOT EXISTS (SELECT 1 FROM stored_file_entries WHERE parent_id = ?)').run(row.id, row.id);
         db.prepare("DELETE FROM search_db.search_documents WHERE source = 'file' AND source_id = ?").run(row.id);

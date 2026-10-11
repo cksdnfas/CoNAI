@@ -8,10 +8,10 @@ import { routeChatReply, requireActiveChatReply } from '../../services/codex-cha
 import { ChatGroupStore } from '../../services/codex-chat/chatGroupStore';
 import { resolveMemberName } from '../../services/codex-chat/groupChatContext';
 import { buildReplyContext } from '../../services/codex-chat/chatReplyContext';
+import { connectedThreadIds, HISTORY_SEARCH_LIMIT, searchChatMessages, sharesKnowledge } from '../../services/codex-chat/chatHistorySearch';
 import type { McpRequestContext } from '../context';
 
 const MESSAGE_TEXT_LIMIT = 2000;
-const EXCERPT_LENGTH = 240;
 
 type RoomMessageRow = { id: number; role: 'user' | 'assistant'; speaker_profile_id: number | null; content: string; created_date: string; routing: string | null };
 
@@ -23,7 +23,7 @@ function errorResult(error: unknown) {
   return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
 }
 
-/** The caller's own group room, or an error the model can read. */
+/** The caller's own chat (a group room or a direct chat) the reply is in, or an error the model can read. */
 function requireRoom(context: McpRequestContext, roomId: number) {
   if (context.chatContext?.threadId !== roomId) throw new Error('Only the current chat room is accessible.');
   requireActiveChatReply(context.chatContext);
@@ -48,7 +48,10 @@ export function offersChatReplyTo(_context: McpRequestContext) {
   return true;
 }
 
-/** Group room tools for chat agents in a room the caller owns: call another member, and read the room's history. */
+/**
+ * Chat tools for chat agents in a chat the caller owns: quote an earlier message, call another member (group rooms),
+ * and search and read the chat's history and that of the chats connected to it (see chatHistorySearch).
+ */
 export function registerChatRoomTools(server: McpServer, context: McpRequestContext): void {
   if (offersChatReplyTo(context)) registerChatReplyTo(server, context);
   registerRoomTools(server, context);
@@ -97,23 +100,46 @@ function registerRoomTools(server: McpServer, context: McpRequestContext): void 
     },
   );
 
+  // A room always reads its history; a direct chat only when it works with shared knowledge (see sharesKnowledge).
+  const chat = context.chatContext;
+  if (chat && chat.kind !== 'group') {
+    const thread = CodexChatStore.findThread(chat.threadId, context.requester?.accountId ?? null);
+    if (!thread || !sharesKnowledge(thread)) return;
+  }
+
   server.registerTool(
     'room_history_search',
-    { description: 'Search earlier messages of the group chat room you are in (the room id is given in the room header). Returns message ids, speakers and excerpts, newest first.', inputSchema: z.object({
-      room_id: z.number().int().positive().describe('Group room id from the room header'),
-      query: z.string().trim().min(1).max(200).describe('Text to find (plain substring, case-insensitive)'),
-      limit: z.number().int().min(1).max(20).optional().describe('Max results (default 10)'),
+    { description: 'Search earlier messages of this chat (the room you are in), or with chats:"connected" the other chats that share a lorebook or linked folder with it (the same project). Returns chat and message ids, speakers and excerpts, newest first. Use it only when what you need is not in your context.', inputSchema: z.object({
+      room_id: z.number().int().positive().optional().describe('This chat or room id (default: the current one)'),
+      query: z.string().trim().min(1).max(200).describe('Words that must all appear (case-insensitive); a "quoted phrase" as written'),
+      chats: z.enum(['this', 'connected']).optional().describe('this (default): only this chat; connected: the chats sharing a lorebook or linked folder with it'),
+      limit: z.number().int().min(1).max(HISTORY_SEARCH_LIMIT).optional().describe('Max results (default 10)'),
     }) },
-    async ({ room_id, query, limit }) => {
+    async ({ room_id, query, chats, limit }) => {
       try {
-        const userName = userPersonaForThread(requireRoom(context, room_id)).name;
-        const rows = getUserSettingsDb().prepare(`
-          SELECT id, role, speaker_profile_id, created_date, routing,
-          substr(content, MAX(1, instr(lower(content), lower(?)) - 80), ${EXCERPT_LENGTH}) AS content
-          FROM codex_chat_messages WHERE thread_id = ? AND instr(lower(content), lower(?)) > 0 ORDER BY id DESC LIMIT ?
-        `).all(query, room_id, query, limit ?? 10) as RoomMessageRow[];
+        const thread = requireRoom(context, room_id ?? context.chatContext?.threadId ?? 0);
+        const accountId = context.requester?.accountId ?? null;
+        const connected = chats === 'connected' ? connectedThreadIds(thread.id, accountId) : [];
+        if (chats === 'connected' && connected.length === 0) return textResult({ results: [], note: 'No other chat shares a lorebook or linked folder with this one.' });
+        const hits = searchChatMessages(chats === 'connected' ? connected : [thread.id], query, limit ?? 10);
         const names = new Map<number, string>();
-        return textResult(rows.map((row) => ({ id: row.id, speaker: speakerName(row, names, userName), at: row.created_date, excerpt: row.content, to: parseMessageRouting(row.routing)?.recipients, reply_to: parseMessageRouting(row.routing)?.replyTo?.messageId })));
+        const titles = new Map<number, { title: string; user: string }>();
+        const chatOf = (id: number) => {
+          if (!titles.has(id)) {
+            const other = CodexChatStore.findThread(id, accountId);
+            titles.set(id, { title: other?.title || `#${id}`, user: other ? userPersonaForThread(other).name : '사용자' });
+          }
+          return titles.get(id)!;
+        };
+        return textResult(hits.map((hit) => ({
+          ...(chats === 'connected' ? { chat_id: hit.chat_id, chat: chatOf(hit.chat_id).title } : {}),
+          id: hit.message_id,
+          speaker: speakerName({ ...hit, id: hit.message_id, content: hit.excerpt, created_date: hit.at }, names, chatOf(hit.chat_id).user),
+          at: hit.at,
+          excerpt: hit.excerpt,
+          to: parseMessageRouting(hit.routing)?.recipients,
+          reply_to: parseMessageRouting(hit.routing)?.replyTo?.messageId,
+        })));
       } catch (error) {
         return errorResult(error);
       }
@@ -122,20 +148,26 @@ function registerRoomTools(server: McpServer, context: McpRequestContext): void 
 
   server.registerTool(
     'room_history_read',
-    { description: 'Read the group chat room conversation around one message id (from room_history_search, or the oldest one you were given), oldest first.', inputSchema: z.object({
-      room_id: z.number().int().positive().describe('Group room id from the room header'),
+    { description: 'Read the conversation around one message id (from room_history_search, or the oldest one you were given), oldest first. room_id: this chat (default), or a chat_id room_history_search returned from a connected chat.', inputSchema: z.object({
+      room_id: z.number().int().positive().optional().describe('Chat or room id (default: the current one)'),
       message_id: z.number().int().positive().describe('Message id to read around'),
       before: z.number().int().min(0).max(30).optional().describe('Messages before it (default 10)'),
       after: z.number().int().min(0).max(30).optional().describe('Messages after it (default 0)'),
     }) },
     async ({ room_id, message_id, before, after }) => {
       try {
-        const userName = userPersonaForThread(requireRoom(context, room_id)).name;
+        const current = requireRoom(context, context.chatContext?.threadId ?? 0);
+        const accountId = context.requester?.accountId ?? null;
+        const chatId = room_id ?? current.id;
+        if (chatId !== current.id && !connectedThreadIds(current.id, accountId).includes(chatId)) throw new Error('Only this chat and the chats connected to it (shared lorebook or linked folder) can be read.');
+        const thread = chatId === current.id ? current : CodexChatStore.findThread(chatId, accountId);
+        if (!thread) throw new Error(`Chat not found: ${chatId}`);
+        const userName = userPersonaForThread(thread).name;
         const db = getUserSettingsDb();
         const older = db.prepare('SELECT id, role, speaker_profile_id, content, created_date, routing FROM codex_chat_messages WHERE thread_id = ? AND id <= ? ORDER BY id DESC LIMIT ?')
-          .all(room_id, message_id, (before ?? 10) + 1) as RoomMessageRow[];
+          .all(chatId, message_id, (before ?? 10) + 1) as RoomMessageRow[];
         const newer = db.prepare('SELECT id, role, speaker_profile_id, content, created_date, routing FROM codex_chat_messages WHERE thread_id = ? AND id > ? ORDER BY id ASC LIMIT ?')
-          .all(room_id, message_id, after ?? 0) as RoomMessageRow[];
+          .all(chatId, message_id, after ?? 0) as RoomMessageRow[];
         const names = new Map<number, string>();
         return textResult([...older.reverse(), ...newer].map((row) => ({
           id: row.id,

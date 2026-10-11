@@ -41,6 +41,19 @@ export type ChatExecutionContext = {
   page?: ChatPageSnapshot
 }
 
+/**
+ * A text file one reply's tool wrote (a linked file, a lore file, a file store document). The chip under the reply
+ * names it and offers undo: back to the text it had before that reply, or, for a file the reply made, removing it.
+ */
+export type ChatFileChange = {
+  fileId: string
+  name: string
+  /** The folder it is in, from the store root (`/` at the top); null when the file is gone. */
+  folder: string | null
+  created: boolean
+  undone: boolean
+}
+
 /** Wire contracts shared by the chat server and client. */
 export type ChatPageOperation = { commandId: string; tier: 'view' | 'draft'; label: string }
 

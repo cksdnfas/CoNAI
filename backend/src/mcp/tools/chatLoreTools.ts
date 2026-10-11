@@ -8,8 +8,8 @@ import { booksForRequest, CHAT_BOOK_LABEL, hasLoreFiles, READ_LORE_FILE_TOOL, ty
 import { LORE_PROPOSAL_LIMITS, LORE_PROPOSAL_MAX_KEYS, loreAutoSaveOn, proposeLore, SAVE_LORE_TOOL } from '../../services/codex-chat/chatLoreProposals';
 import { loadChatSettings } from '../../services/codex-chat/chatSettings';
 import { FileStoreService, applyTextEdits, fileOwnerKey } from '../../services/fileStoreService';
-import { loreKeyLanguageLabel } from '@conai/shared';
-import type { McpRequestContext } from '../context';
+import { loreKeyLanguageLabel, type FileWriteSource } from '@conai/shared';
+import { fileWriteSource, type McpRequestContext } from '../context';
 
 /** Bytes of a linked file one call returns; the rest follows with `offset`. */
 const READ_LORE_FILE_MAX_BYTES = 32_000;
@@ -91,7 +91,7 @@ export type EditLoreFileInput = { title: string; append?: string; edits?: Array<
  * Change the text file an entry of the chat's record book links: add to its end, or replace exact text. It writes
  * right away, so only while lore auto-save is on; otherwise changes go through save_lore cards.
  */
-export function editLoreFile(chat: LoreChat, input: EditLoreFileInput) {
+export function editLoreFile(chat: LoreChat, input: EditLoreFileInput, source: FileWriteSource | null = null) {
   if (!loreAutoSaveOn(chat.threadId)) throw new LoreFileError(`Lore auto-save is off in this chat, so files are not changed directly. Propose the change with ${SAVE_LORE_TOOL} (the same title, with file) instead.`, 409);
   if ((input.append === undefined) === (input.edits === undefined)) throw new LoreFileError('Give either append or edits.');
   const thread = CodexChatStore.findThread(chat.threadId, chat.accountId);
@@ -112,7 +112,7 @@ export function editLoreFile(chat: LoreChat, input: EditLoreFileInput) {
     else ({ text: next, replaced } = applyTextEdits(text, input.edits!));
     if (Buffer.byteLength(next, 'utf8') > LORE_FILE_EDIT_MAX_BYTES) throw new LoreFileError(`A lore file can grow to ${LORE_FILE_EDIT_MAX_BYTES / 1024} KB; move older parts into another entry's file.`, 413);
     return next;
-  });
+  }, { source });
   return { book: label, title: loreEntryTitle(entry), file: entry.file, size: saved.size, ...(input.edits ? { replaced } : {}) };
 }
 
@@ -253,7 +253,7 @@ function registerSaveLore(server: McpServer, context: McpRequestContext): void {
         if (!chatContext) throw new Error('Lore files are changed only during a chat reply.');
         if (!allowsLoreProposals(chatContext.profileId)) throw new Error('Lore proposals are turned off for this profile.');
         const chat: LoreChat = { threadId: chatContext.threadId, profileId: chatContext.profileId, accountId: context.requester?.accountId ?? null };
-        const edited = editLoreFile(chat, args);
+        const edited = editLoreFile(chat, args, fileWriteSource(context));
         return { content: [{ type: 'text' as const, text: `자료를 고쳤어: [${edited.book}] ${edited.title} (${edited.file}, ${edited.size}바이트${edited.replaced !== undefined ? `, ${edited.replaced}군데 바꿈` : ''})` }] };
       } catch (error) {
         return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };

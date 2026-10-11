@@ -2,7 +2,7 @@ import { requestApiData, requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
 import type { ChatAssetVisionReview, ChatAssetBatch, ChatAssetBatchInput, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
 export type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetKind, ChatAssetReview, ChatAssetVisionReview, ChatAssetCandidate, ChatAssetAttempt, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
-import type { ChatJudgeDiagnostics } from '@conai/shared'
+import type { ChatJudgeDiagnostics, ChatFileChange } from '@conai/shared'
 import type { ChatStreamEvent, ChatTranslationLanguage, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal, ChatTask, ChatChoiceAnswer } from '@conai/shared'
 
 export type ChatScope = 'read' | 'generate' | 'organize' | 'configure'
@@ -724,6 +724,8 @@ export interface CodexChatThread {
   automation?: import('@conai/shared').ChatAutomationRoomKind | null
   /** save_lore saves right away (1), leaves a card (0), or follows the chat settings (null). */
   lore_auto_save?: 0 | 1 | null
+  /** The writable linked folder each new summary stretch is also kept in (회의록/<date>.md); null: none. */
+  minutes_folder_id?: string | null
   codex_thread_id: string | null
   title: string
   engine: ChatEngine
@@ -820,6 +822,8 @@ export interface CodexChatMessage {
   context_meta?: string | null
   /** User messages: the chat flags that were on when it was sent. */
   flags?: ChatFlagSnapshot[]
+  /** Replies: the text files their tools wrote, each with an undo. */
+  fileChanges?: ChatFileChange[]
   created_date: string
 }
 
@@ -1340,7 +1344,7 @@ export function editChatBlock(threadId: number, key: string, data: Record<string
   })
 }
 
-export function updateCodexChatThreadContext(threadId: number, patch: { loreAutoSave?: boolean | null; contextTurns?: number | null; maxTokens?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null; userProfileId?: number | null; lorebookIds?: number[]; loreRecordBookId?: number | null; linkedFiles?: LinkedFileLink[]; reactionEnabled?: boolean; reactionModelSlotId?: number | null }) {
+export function updateCodexChatThreadContext(threadId: number, patch: { loreAutoSave?: boolean | null; contextTurns?: number | null; maxTokens?: number | null; summaryEnabled?: boolean | null; summary?: string | null; authorNote?: string | null; authorNoteDepth?: number | null; userProfileId?: number | null; lorebookIds?: number[]; loreRecordBookId?: number | null; linkedFiles?: LinkedFileLink[]; minutesFolderId?: string | null; reactionEnabled?: boolean; reactionModelSlotId?: number | null }) {
   return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/context`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
@@ -1505,6 +1509,11 @@ export const threadLinkedFilesQueryKey = (threadId: number) => ['codex-chat-thre
 /** The chat's own links, then those its profile (a room: every member) brings. */
 export function getThreadLinkedFiles(threadId: number) {
   return requestApiData<LinkedFileView[]>(`/api/codex-chat/threads/${threadId}/linked-files`, { cache: 'no-store' })
+}
+
+/** Undo what one reply's tools did to a file: back to the version before it, or remove a file it made. */
+export function undoChatFileChange(threadId: number, replyId: string, fileId: string) {
+  return requestApiData<ChatFileChange>(`/api/codex-chat/threads/${threadId}/file-changes/undo`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ replyId, fileId }) })
 }
 
 /** Names and places of links in your own file store (the profile editor). */

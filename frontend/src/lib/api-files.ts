@@ -1,4 +1,4 @@
-import type { FileStoreListing, StoredFileEntry, StoredFileOwner, StoredFileSearchResult, StoredFileText } from '@conai/shared'
+import type { FileStoreListing, FileWriteSource, StoredFileEntry, StoredFileOwner, StoredFileRevision, StoredFileSearchResult, StoredFileText } from '@conai/shared'
 import { requestApiData } from './api-request'
 import { buildApiUrl } from './api-url'
 
@@ -40,6 +40,13 @@ export async function readWholeStoredFileText(id: string, owner?: StoredFileOwne
     throw new Error('UTF-8 텍스트 파일만 편집할 수 있어. / Only UTF-8 text files can be edited.')
   }
 }
+/** A text file's earlier versions (newest first) and who wrote its current text. */
+export type StoredFileRevisions = { current: { writtenAt: string; writtenBy: FileWriteSource | null }; revisions: StoredFileRevision[] }
+export const listStoredFileRevisions = (id: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileRevisions>(`/api/files/${encodeURIComponent(id)}/revisions${ownerQuery(owner, true)}`)
+export const readStoredFileRevision = (id: string, revisionId: string, owner?: StoredFileOwnerKey) => requestApiData<{ revision: StoredFileRevision; text: string }>(`/api/files/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}${ownerQuery(owner, true)}`)
+/** Put an earlier version back; the current text is kept as a version too. */
+export const restoreStoredFileRevision = (id: string, revisionId: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileEntry>(`/api/files/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}/restore${ownerQuery(owner, true)}`, { method: 'POST', headers, body: '{}' })
+export const getStoredFile = (id: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileEntry>(`/api/files/${encodeURIComponent(id)}${ownerQuery(owner, true)}`)
 export const deleteStoredFiles =(ids: string[], owner?: StoredFileOwnerKey) => requestApiData<void>(`/api/files/delete${ownerQuery(owner, true)}`, { method: 'POST', headers, body: JSON.stringify({ ids }) })
 
 /** Mirrors the server's default upload policy so a restricted pick fails before the bytes leave the browser. */

@@ -31,7 +31,7 @@ export const SAVE_LORE_TOOL = 'save_lore'
 export const LORE_PROPOSAL_LIMITS = { title: 80, keys: 20, key: 100, content: 4000, fileName: 120, fileBytes: 32 * 1024 } as const
 /** Set-aside titles the next request names (newest ones). */
 const REJECTED_LORE_TITLES = 10
-/** A chat proposes lore at most once in this many assistant replies, unless the user asks for something to be kept. */
+/** A chat (a group room: each member) proposes lore at most once in this many assistant replies, unless the user asks for something to be kept. */
 const LORE_PROPOSAL_SPACING = 3
 /** Words in the latest user message that ask for something to be kept; they lift that spacing. */
 const LORE_REQUEST_WORDS = /기억|저장|남겨|remember|save/i
@@ -109,15 +109,17 @@ function chatNames(threadId: number, profileId: number, messages: CodexChatMessa
 /**
  * Whether the chat proposed lore in one of its last LORE_PROPOSAL_SPACING assistant replies, while the latest user
  * message asks for nothing to be kept. A direct chat's replies after the latest user message are the one being
- * regenerated or continued, so they do not count.
+ * regenerated or continued, so they do not count. In a group room each member keeps its own spacing: one member's
+ * entry does not hold back what another member learned.
  */
-export function loreProposedRecently(context: Pick<ChatExecutionContext, 'threadId' | 'kind'>) {
+export function loreProposedRecently(context: Pick<ChatExecutionContext, 'threadId' | 'kind' | 'profileId'>) {
   const messages = CodexChatStore.listMessages(context.threadId)
   const latestUser = messages.map((message) => message.role).lastIndexOf('user')
   const user = latestUser >= 0 ? messages[latestUser] : null
   if (user && LORE_REQUEST_WORDS.test(`${user.content}\n${user.display_content ?? ''}`)) return false
   const answered = context.kind === 'direct' && latestUser >= 0 ? messages.slice(0, latestUser) : messages
-  const recent = new Set(answered.filter((message) => message.role === 'assistant').slice(-LORE_PROPOSAL_SPACING).flatMap((message) => message.routing?.replyId ?? []))
+  const replies = answered.filter((message) => message.role === 'assistant' && (context.kind !== 'group' || message.speaker_profile_id === context.profileId))
+  const recent = new Set(replies.slice(-LORE_PROPOSAL_SPACING).flatMap((message) => message.routing?.replyId ?? []))
   return recent.size > 0 && ChatProposalStore.listForThread(context.threadId).some((row) => row.proposal.kind === 'lore' && recent.has(row.replyId))
 }
 

@@ -28,6 +28,7 @@ import { buildChatPromptPreview, estimateTokens, isSummarizing, referenceBlock, 
 import { ChatLorebookStore, normalizeLorebookIds } from '../services/codex-chat/chatLorebook'
 import { LorebookError, OwnedLorebookStore } from '../services/codex-chat/chatLorebookFiles'
 import { assertLinkedFiles, describeLinkedFiles, LinkedFileError, LinkedFileStore, normalizeLinkedFiles, threadLinkedFiles } from '../services/codex-chat/chatLinkedFiles'
+import { ChatMinutesStore } from '../services/codex-chat/chatMinutes'
 import { loreIndexText, threadLorebooks } from '../services/codex-chat/chatLoreContext'
 import { applyMerge, assertMergeDecisions, draftMerge, hasDuplicates, MergeDecisionsMissingError, previewMerge, type MergeResult } from '../services/codex-chat/chatLorebookMerge'
 import { fillLoreKeys } from '../services/codex-chat/chatLoreKeyFill'
@@ -52,7 +53,8 @@ import { LlmChatError, LlmChatService } from '../services/codex-chat/llmChatServ
 import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers'
 import { sendRouteBadRequest } from './routeValidation'
 import { FileStoreError, FileStoreService, fileOwnerKey, parseFileId } from '../services/fileStoreService'
-import { requireFileStoreOwner } from '../services/fileStoreAccess'
+import { requireFileStoreAction, requireFileStoreOwner } from '../services/fileStoreAccess'
+import { ChatFileChangeError, undoFileChange } from '../services/codex-chat/chatFileChanges'
 import { exportChatMarkdown } from '../services/codex-chat/chatExport'
 import { ExternalApiProvider } from '../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../services/llmGenerationOptions'
@@ -112,7 +114,7 @@ function isGroupThread(req: Request, threadId: number) {
 }
 
 function sendChatError(res: Response, error: unknown) {
-  if (error instanceof ChatDiagnosticsError || error instanceof ChatPageContextError || error instanceof CodexChatError || error instanceof LlmChatError || error instanceof FileStoreError || error instanceof ChatReplyError || error instanceof ChatSuggestError || error instanceof LorebookError || error instanceof LinkedFileError) {
+  if (error instanceof ChatDiagnosticsError || error instanceof ChatPageContextError || error instanceof CodexChatError || error instanceof LlmChatError || error instanceof FileStoreError || error instanceof ChatReplyError || error instanceof ChatSuggestError || error instanceof LorebookError || error instanceof LinkedFileError || error instanceof ChatFileChangeError) {
     res.status(error.status).json({ success: false, error: error.message })
     return
   }
@@ -320,7 +322,7 @@ router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
   const members = ChatGroupStore.memberIdsByThread(threads.filter((thread) => thread.kind === 'group').map((thread) => thread.id))
   const previews = CodexChatStore.listPreviews(threads.map((thread) => thread.id))
   const unread = CodexChatStore.countUnread(threads.map((thread) => thread.id))
-  const tasks = ChatTaskStore.summaries(threads.filter((thread) => thread.kind === 'direct').map((thread) => thread.id))
+  const tasks = ChatTaskStore.summaries(threads.map((thread) => thread.id))
   const automation = automationRoomKinds(getRequesterAccountId(req))
   res.json({ success: true, data: threads.map((thread) => ({
     ...thread,
@@ -541,7 +543,7 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
     // The user profile (who the user is) applies to every kind of chat; in a room its name must not read as a member's.
     const userProfileId = parseUserProfileIdField(body.userProfileId)
     if (userProfileId === 'invalid') { sendRouteBadRequest(res, 'userProfileId must be a number or null'); return }
-    const windowKeys = ['contextTurns', 'summaryEnabled', 'summary', 'maxTokens'] as const
+    const windowKeys = ['contextTurns', 'summaryEnabled', 'summary', 'maxTokens', 'minutesFolderId'] as const
     if (body.reactionEnabled !== undefined && typeof body.reactionEnabled !== 'boolean') {
       sendRouteBadRequest(res, 'reactionEnabled must be a boolean')
       return
@@ -632,6 +634,11 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
         // Linking reaches the chat owner's file store: the same right the file page needs.
         requireFileStoreOwner(requesterFrom(req))
         LinkedFileStore.setThreadLinks(threadId, body.linkedFiles ?? [])
+      }
+      // Minutes write into the owner's file store too; set after the links, so a folder linked in the same patch counts.
+      if (body.minutesFolderId !== undefined) {
+        requireFileStoreOwner(requesterFrom(req))
+        ChatMinutesStore.set(threadId, body.minutesFolderId)
       }
       // The whole summary at once: empty clears it, text replaces it as one plot up to where it reached.
       if (body.summary !== undefined) {
@@ -1061,6 +1068,24 @@ router.get('/threads/:threadId/linked-files', requireChatAccess, (req: Request, 
     const profileIds = thread.kind === 'group' ? ChatGroupStore.members(threadId).map((member) => member.profile_id) : thread.profile_id ? [thread.profile_id] : []
     const profiles = profileIds.flatMap((id) => ChatProfileStore.find(id) ?? [])
     res.json({ success: true, data: threadLinkedFiles(thread, profiles) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/**
+ * POST /api/codex-chat/threads/:threadId/file-changes/undo — `{ replyId, fileId }`: undo what that reply's tools did to
+ * the file (back to the version before it; a file it made is removed). Needs the file store's edit or delete right.
+ */
+router.post('/threads/:threadId/file-changes/undo', requireChatAccess, (req: Request, res: Response) => {
+  const threadId = parseThreadId(req, res)
+  if (threadId === null) return
+  try {
+    const accountId = getRequesterAccountId(req)
+    if (!CodexChatStore.findThread(threadId, accountId)) throw new LinkedFileError('채팅을 찾을 수 없어.', 404)
+    const replyId = typeof req.body?.replyId === 'string' ? req.body.replyId : ''
+    const fileId = parseFileId(req.body?.fileId) as string
+    if (!replyId) { sendRouteBadRequest(res, 'replyId is required'); return }
+    requireFileStoreAction(requesterFrom(req), 'organize')
+    res.json({ success: true, data: undoFileChange({ threadId, accountId, replyId, fileId, canDelete: () => requireFileStoreAction(requesterFrom(req), 'delete') }) })
   } catch (error) { sendChatError(res, error) }
 })
 

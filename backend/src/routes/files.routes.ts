@@ -9,6 +9,9 @@ import { FileStoreError, FileStoreService, MAX_TEXT_DOCUMENT_BYTES, assertFileTy
 import { ensureFileStoreDirectories, fileStoreIncoming } from '../services/fileStorePaths';
 import { filePreviewMime, getFileThumbnail } from '../services/fileStorePreview';
 import { searchStoredFiles } from '../services/fileStoreSearch';
+import { FileStoreRevisions } from '../services/fileStoreRevisions';
+import { ChatProfileStore } from '../services/codex-chat/chatProfiles';
+import type { FileWriteSource } from '@conai/shared';
 import { getRequesterAccountId, isAdminRequest } from './requester-session-helpers';
 
 const router = Router();
@@ -31,6 +34,12 @@ const owner = (req: Request) => {
   return key;
 };
 const id = (req: Request) => parseFileId(req.params.id) as string;
+const editorSource = (req: Request): FileWriteSource => ({ via: 'editor', accountId: getRequesterAccountId(req) });
+/** A listed writer with the chat character's name, when it was one. */
+const named = (source: FileWriteSource | null): FileWriteSource | null => {
+  const name = source?.profileId !== undefined ? ChatProfileStore.find(source.profileId)?.name : undefined;
+  return source && name ? { ...source, profileName: name } : source;
+};
 /** Restricted types (executables and the like) are for administrators; bootstrap is the local administrator. */
 const allowAnyType = (req: Request) => isAdminRequest(req);
 /** A document body from the editor. */
@@ -55,7 +64,7 @@ router.post('/folders', requirePermission('files.edit'), (req, res) => {
 });
 /** POST /api/files/text — a new text document (name must be free and end in a text extension). */
 router.post('/text', requirePermission('files.edit'), (req, res) => {
-  res.status(201).json({ success: true, data: FileStoreService.writeText(owner(req), parseFileId(req.body?.parentId, true), req.body?.name, textBody(req), { create: true }) });
+  res.status(201).json({ success: true, data: FileStoreService.writeText(owner(req), parseFileId(req.body?.parentId, true), req.body?.name, textBody(req), { create: true, source: editorSource(req) }) });
 });
 
 const upload = wrapUploadMiddleware(multer({
@@ -109,7 +118,26 @@ router.get('/:id/text', asyncHandler(async (req, res) => {
 }));
 /** PUT /api/files/:id/text — the editor's save: the whole text replaces the file in place (same id). */
 router.put('/:id/text', requirePermission('files.edit'), (req, res) => {
-  res.json({ success: true, data: FileStoreService.updateText(owner(req), id(req), textBody(req)) });
+  res.json({ success: true, data: FileStoreService.updateText(owner(req), id(req), textBody(req), { source: editorSource(req) }) });
+});
+/** GET /api/files/:id/revisions — the file's earlier texts, newest first, and who wrote the current one. */
+router.get('/:id/revisions', (req, res) => {
+  const fileOwner = owner(req);
+  const entry = FileStoreService.get(fileOwner, id(req));
+  res.json({ success: true, data: { current: { writtenAt: entry.updatedAt, writtenBy: named(FileStoreRevisions.writer(entry.id)) }, revisions: FileStoreRevisions.list(fileOwner, entry.id).map((revision) => ({ ...revision, writtenBy: named(revision.writtenBy), replacedBy: named(revision.replacedBy) })) } });
+});
+/** GET /api/files/:id/revisions/:revisionId — one earlier text. */
+router.get('/:id/revisions/:revisionId', (req, res) => {
+  const fileOwner = owner(req);
+  const entry = FileStoreService.get(fileOwner, id(req));
+  const text = FileStoreRevisions.readText(fileOwner, entry.id, String(req.params.revisionId));
+  if (text === null) throw new FileStoreError('그 버전을 찾을 수 없어.', 404);
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ success: true, data: { revision: FileStoreRevisions.find(fileOwner, entry.id, String(req.params.revisionId)), text } });
+});
+/** POST /api/files/:id/revisions/:revisionId/restore — put that text back (the current one is kept as a version). */
+router.post('/:id/revisions/:revisionId/restore', requirePermission('files.edit'), (req, res) => {
+  res.json({ success: true, data: FileStoreService.restoreRevision(owner(req), id(req), String(req.params.revisionId), { via: 'restore', accountId: getRequesterAccountId(req) }) });
 });
 /** Safe inline media and inert text; sendFile handles single byte ranges (206/416) and HEAD. */
 router.get('/:id/view', asyncHandler(async (req, res, next) => {

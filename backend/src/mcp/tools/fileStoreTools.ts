@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import type { McpRequestContext } from '../context';
+import { fileWriteSource, type McpRequestContext } from '../context';
 import { canStoreAnyFileType, requireFileStoreAction, requireFileStoreOwner, type FileStoreAction } from '../../services/fileStoreAccess';
 import { FileStoreError, FileStoreService, MAX_TEXT_DOCUMENT_BYTES, applyTextEdits } from '../../services/fileStoreService';
 import { searchStoredFiles } from '../../services/fileStoreSearch';
@@ -38,12 +38,12 @@ export function registerFileStoreTools(server: McpServer, context: McpRequestCon
   server.registerTool('write_text_file', { description: 'Create a UTF-8 text document in your private file store: Markdown, HTML, txt, JSON, CSV, YAML and other text types (the name\'s extension picks the type: .md, .html, .txt, .json, .csv, .yaml, .xml, .svg, .css, .js…). parent_id null = top level; folder IDs come from list_files, search_files or create_file_folder. A taken name is refused unless overwrite is true, which replaces that file\'s whole text in place (same file ID). Up to 2 MB. To change part of an existing file use edit_file_text; to add to its end use update_file_text with mode "append".', inputSchema: z.object({
     parent_id: fileId.nullable().optional(), name: z.string().trim().min(1).max(255),
     text: z.string().max(MAX_TEXT_DOCUMENT_BYTES), overwrite: z.boolean().optional(),
-  }) }, ({ parent_id, name, text, overwrite }) => manage('organize', (owner) => FileStoreService.writeText(owner, parent_id ?? null, name, fitDocument(text), { create: !overwrite })));
+  }) }, ({ parent_id, name, text, overwrite }) => manage('organize', (owner) => FileStoreService.writeText(owner, parent_id ?? null, name, fitDocument(text), { create: !overwrite, source: fileWriteSource(context) })));
   server.registerTool('update_file_text', { description: 'Replace the whole text of one private text file (mode "replace", the default), or add text to its end (mode "append"; start with a newline yourself if needed). The file keeps its ID, name and folder. Up to 2 MB.', inputSchema: z.object({
     file_id: fileId, text: z.string().max(MAX_TEXT_DOCUMENT_BYTES), mode: z.enum(['replace', 'append']).optional(),
   }) }, ({ file_id, text, mode }) => manage('organize', (owner) => mode === 'append'
-    ? FileStoreService.editText(owner, file_id, (current) => current + text)
-    : FileStoreService.updateText(owner, file_id, fitDocument(text))));
+    ? FileStoreService.editText(owner, file_id, (current) => current + text, { source: fileWriteSource(context) })
+    : FileStoreService.updateText(owner, file_id, fitDocument(text), { source: fileWriteSource(context) })));
   server.registerTool('edit_file_text', { description: 'Change part of one private text file by exact-text replacement, without resending the whole file. Each old_text must appear exactly once (copy it from read_file_text with enough surrounding text to be unique) unless replace_all is true. Edits apply in order; if any fails, nothing is saved. Returns the file and the number of replacements.', inputSchema: z.object({
     file_id: fileId,
     edits: z.array(z.object({ old_text: z.string().min(1), new_text: z.string(), replace_all: z.boolean().optional() })).min(1).max(50),
@@ -53,7 +53,7 @@ export function registerFileStoreTools(server: McpServer, context: McpRequestCon
       const edited = applyTextEdits(current, edits);
       replaced = edited.replaced;
       return edited.text;
-    });
+    }, { source: fileWriteSource(context) });
     return { file, replaced };
   }));
   server.registerTool('create_file_folder', { description: 'Create a folder in your private file store (parent_id null = top level).', inputSchema: z.object({

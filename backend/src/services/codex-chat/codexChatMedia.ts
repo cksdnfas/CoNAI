@@ -1,6 +1,7 @@
 import { isCodexChatGenerationTool, isCodexChatCreationTool, type ChatProposal } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { ChatProposalStore } from './chatProposals'
+import { attachFileChanges } from './chatFileChanges'
 import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibilityService'
 import { audioCandidatesByQueueJob, audioOrderGroupsByQueueJob } from '../audio/audioJobCandidates'
 import type { CodexChatMessageRecord } from './codexChatStore'
@@ -115,7 +116,7 @@ export function attachProposals(messages: CodexChatMessageRecord[]): CodexChatMe
  * shows results as they land without waiting for another message.
  */
 export function attachJobResults(messages: CodexChatMessageRecord[]) {
-  messages = attachProposals(messages)
+  messages = attachFileChanges(attachProposals(messages))
   const db = getUserSettingsDb()
   const owners = new Map<number, string>()
   const links: Array<{ job_id: number; reply_id: string }> = []
