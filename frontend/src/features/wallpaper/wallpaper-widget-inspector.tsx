@@ -101,6 +101,7 @@ function StyleFields({ widgets, patchStyle }: { widgets: WallpaperWidgetInstance
   const textColor = field('textColor')
   const accentColor = field('accentColor')
   const textAlign = field('textAlign')
+  const scale = field('scale')
   const entrance = field('entrance')
   const depth = field('depth')
   const showFrom = field('showFrom')
@@ -146,6 +147,7 @@ function StyleFields({ widgets, patchStyle }: { widgets: WallpaperWidgetInstance
         </>
       ) : null}
       <InspectorSlider label={t({ ko: '여백', en: 'Padding' })} value={padding.value} mixed={padding.mixed} min={0} max={80} onChange={(value) => patchStyle({ padding: value }, 'padding')} />
+      <InspectorSlider label={t({ ko: '크기 배율', en: 'Content scale' })} value={scale.value} mixed={scale.mixed} min={50} max={200} step={5} unit="%" onChange={(value) => patchStyle({ scale: value }, 'scale')} />
 
       <InspectorHeading>{t({ ko: '글자', en: 'Text' })}</InspectorHeading>
       <InspectorRow label={t({ ko: '글꼴', en: 'Font' })}>

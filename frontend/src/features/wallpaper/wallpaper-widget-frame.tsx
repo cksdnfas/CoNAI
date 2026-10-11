@@ -91,13 +91,8 @@ export function WallpaperWidgetFrame({
   const entrance = animateEntrance && style.entrance !== 'none'
     ? { animation: `wallpaper-enter-${style.entrance} 700ms cubic-bezier(0.22, 1, 0.36, 1) both` }
     : undefined
-
-  return (
-    <div
-      data-wallpaper-frame=""
-      className="flex h-full w-full flex-col overflow-hidden text-foreground"
-      style={{ ...getWallpaperWidgetFrameStyle(style), ...entrance }}
-    >
+  const content = (
+    <>
       {style.showTitle ? (
         <div className="mb-2 shrink-0 truncate text-xs font-semibold uppercase tracking-overline opacity-70">
           {getWallpaperWidgetDisplayTitle(widget, t)}
@@ -106,6 +101,27 @@ export function WallpaperWidgetFrame({
       <div className="relative min-h-0 flex-1" style={{ containerType: 'size' }}>
         <WallpaperWidgetBody widget={widget} mode={mode} onOpenImage={handleOpenImage} />
       </div>
+    </>
+  )
+  const scale = style.scale / 100
+
+  return (
+    <div
+      data-wallpaper-frame=""
+      className="flex h-full w-full flex-col overflow-hidden text-foreground"
+      style={{ ...getWallpaperWidgetFrameStyle(style), ...entrance }}
+    >
+      {scale === 1 ? content : (
+        // Lay the content out at 1/scale of the frame's inner box, then scale it back to fit: everything inside draws smaller or larger.
+        <div className="relative min-h-0 flex-1">
+          <div
+            className="absolute left-0 top-0 flex flex-col"
+            style={{ width: `${100 / scale}%`, height: `${100 / scale}%`, transform: `scale(${scale})`, transformOrigin: '0 0' }}
+          >
+            {content}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

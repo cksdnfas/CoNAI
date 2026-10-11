@@ -57,6 +57,8 @@ export interface WallpaperWidgetStyle {
   textAlign: 'left' | 'center' | 'right'
   /** 0-100 */
   opacity: number
+  /** 50-200: draws the title and body at this percent of their size inside the same frame. */
+  scale: number
   showTitle: boolean
   entrance: WallpaperWidgetEntrance
   /** 0-100: how far the widget follows the pointer when the wallpaper uses parallax. */

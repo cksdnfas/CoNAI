@@ -25,6 +25,7 @@ export const WALLPAPER_DEFAULT_WIDGET_STYLE: WallpaperWidgetStyle = {
   accentColor: null,
   textAlign: 'left',
   opacity: 100,
+  scale: 100,
   showTitle: false,
   entrance: 'fade',
   depth: 40,

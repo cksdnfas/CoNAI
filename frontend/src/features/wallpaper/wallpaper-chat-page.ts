@@ -35,6 +35,7 @@ export const WALLPAPER_STYLE_SCHEMA = pageObject({
   accentColor: color('Bars, progress and highlights inside the widget.'),
   textAlign: pageChoice(['left', 'center', 'right']),
   opacity: pageNumber(5, 100),
+  scale: { ...pageNumber(50, 200), description: 'Percent the title and body are drawn at inside the frame (smaller fits more).' },
   showTitle: { type: 'boolean' },
   entrance: pageChoice(['none', 'fade', 'rise', 'zoom']),
   depth: { ...pageNumber(0, 100), description: 'How far the widget follows the pointer when the wallpaper uses parallax.' },
@@ -300,7 +301,7 @@ function compactWidget(widget: WallpaperWidgetInstance) {
   })
 }
 
-const STYLE_KEYS = 'variant, backgroundColor, backgroundOpacity, radius, padding, shadow, blur, fontFamily, fontWeight, textColor, accentColor, textAlign, opacity, showTitle, entrance, depth, showFrom, showUntil'
+const STYLE_KEYS = 'variant, backgroundColor, backgroundOpacity, radius, padding, shadow, blur, fontFamily, fontWeight, textColor, accentColor, textAlign, opacity, scale, showTitle, entrance, depth, showFrom, showUntil'
 const WIDGET_PATCH_HINT = `x, y, w, h (canvas px), hidden, locked, rotation, style {${STYLE_KEYS}}, settings {keys data.widgetTypes lists for that widget}; colors #RRGGBB, times HH:MM, "" clears`
 const LOOK_HINT = 'background {kind=theme|color|gradient|image|video|group-slideshow, color, from, to, angle, compositeHash, fit, groupId, includeChildren, intervalSec, order, transition, dim, blur, vignette, kenBurns}; options {themeMode, accentColor, autoAccent, textColor, fontFamily, particles, particleAmount, parallax, widgetReveal, idleOpacity, fpsLimit}'
 export const WALLPAPER_PATCH_HINTS = { widget: WIDGET_PATCH_HINT, look: LOOK_HINT }

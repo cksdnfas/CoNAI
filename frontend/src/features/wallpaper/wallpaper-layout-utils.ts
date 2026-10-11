@@ -171,6 +171,7 @@ export function normalizeWallpaperWidgetStyle(raw: unknown, base: Partial<Wallpa
     accentColor: typeof record.accentColor === 'string' && WALLPAPER_HEX_COLOR.test(record.accentColor) ? record.accentColor : fallback.accentColor,
     textAlign: pick(record.textAlign, ['left', 'center', 'right'] as const, fallback.textAlign),
     opacity: clampNumber(record.opacity ?? legacyOpacity, fallback.opacity, 5, 100),
+    scale: clampNumber(record.scale, fallback.scale, 50, 200),
     showTitle: typeof record.showTitle === 'boolean' ? record.showTitle : legacy?.showTitle === true ? true : fallback.showTitle,
     entrance: pick(record.entrance, ['none', 'fade', 'rise', 'zoom'] as const, fallback.entrance),
     depth: clampNumber(record.depth, fallback.depth, 0, 100),
