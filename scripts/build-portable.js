@@ -340,20 +340,18 @@ const pythonTarget = path.join(appDir, 'python');
 if (fs.existsSync(pythonSource)) {
   fs.ensureDirSync(pythonTarget);
 
-  // Copy Python files
-  const pythonFiles = ['wdv3_tagger_daemon.py', 'kaloscope_tagger_daemon.py', 'requirements.txt', 'README.md'];
+  // Copy every script, requirements file and helper module (the daemons import shared helpers; requirements.txt
+  // includes requirements-ai.txt), skipping caches.
   let copiedCount = 0;
-
-  for (const file of pythonFiles) {
-    const src = path.join(pythonSource, file);
-    if (fs.existsSync(src)) {
-      fs.copyFileSync(src, path.join(pythonTarget, file));
+  for (const entry of fs.readdirSync(pythonSource, { withFileTypes: true })) {
+    if (entry.isFile() && /\.(py|txt|md|sh)$/.test(entry.name)) {
+      fs.copyFileSync(path.join(pythonSource, entry.name), path.join(pythonTarget, entry.name));
       copiedCount++;
     }
   }
 
   console.log(`   ✅ Copied ${copiedCount} Python files`);
-  console.log('   ℹ️  Users need to run: pip install -r app/python/requirements.txt');
+  console.log('   ℹ️  The app installs its own Python environment from Settings › Auto › AI runtime');
 } else {
   console.warn('   ⚠️  Python source not found, skipping');
 }
@@ -579,13 +577,10 @@ If you need to use this in an offline environment:
 2. After first successful run, no internet is required
 3. The \`app/node_modules/\` folder contains all required dependencies
 
-### Prerequisites (Optional - for WD v3 Tagger feature)
+### Prerequisites (Optional - for AI tagging)
 
-If you want to use the AI tagging feature, install Python dependencies:
-
-\`\`\`bash
-pip install -r app/python/requirements.txt
-\`\`\`
+Nothing to install by hand: open Settings › Auto › AI runtime and install. The app downloads uv, a private
+Python 3.12 and the PyTorch build that fits your GPU (CPU, CUDA 12.6 or CUDA 13) into \`user/ai-runtime/\`.
 
 **Note:** The application works without Python - tagging is an optional feature.
 
@@ -600,16 +595,14 @@ pip install -r app/python/requirements.txt
 The application includes an optional AI image tagging feature:
 
 ### Setup
-1. Install Python 3.8+ (if not already installed)
-2. Install dependencies:
-   \`\`\`bash
-   pip install -r app/python/requirements.txt
-   \`\`\`
-3. Enable in \`.env\`:
-   \`\`\`
-   TAGGER_ENABLED=true
-   PYTHON_PATH=python
-   \`\`\`
+1. Settings › Auto › AI runtime → install (picks CPU / CUDA 12.6 / CUDA 13 from your GPU and driver)
+2. Turn the tagger on in Settings › Auto
+
+To use your own Python instead, pick "custom" in AI runtime and install:
+\`\`\`bash
+pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cu130
+pip install -r app/python/requirements.txt
+\`\`\`
 
 ### Features
 - Automatic tag detection (characters, objects, style)
@@ -618,10 +611,8 @@ The application includes an optional AI image tagging feature:
 - Models download automatically on first use (~600MB-1GB)
 
 ### GPU Acceleration (Optional)
-For faster tagging with NVIDIA GPU:
-\`\`\`bash
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-\`\`\`
+The AI runtime installer picks the CUDA build automatically; you can also choose it there
+(CUDA 12.6 for GTX 900/1000 and V100, CUDA 13 for RTX 20 and newer with an R580+ driver).
 
 ## 🌐 Remote Access
 

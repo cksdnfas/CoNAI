@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { RotateCcw } from 'lucide-react'
+import { RefreshCw, RotateCcw } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { RowGroup } from '@/components/ui/row-group'
@@ -19,6 +19,9 @@ interface KaloscopeSettingsCardProps {
   kaloscopeDraft: KaloscopeSettings | null
   kaloscopeStatus: KaloscopeServerStatus | undefined
   onPatchKaloscope: (patch: Partial<KaloscopeSettings>) => void
+  /** Send results of the older Kaloscope back to the auto-tag queue (saved settings must allow auto tagging). */
+  onRequeueOutdated: () => void
+  isRequeueingOutdated: boolean
 }
 
 function formatKaloscopeDependencyLabel(status: KaloscopeServerStatus | undefined, t: (input: TranslationInput) => string) {
@@ -32,6 +35,8 @@ export function KaloscopeSettingsCard({
   kaloscopeDraft,
   kaloscopeStatus,
   onPatchKaloscope,
+  onRequeueOutdated,
+  isRequeueingOutdated,
 }: KaloscopeSettingsCardProps) {
   const { t } = useI18n()
   const isEnabled = kaloscopeDraft?.enabled === true
@@ -41,7 +46,11 @@ export function KaloscopeSettingsCard({
     topK: t({ ko: '작가 후보 수', en: 'Artist candidates' }),
     unload: t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' }),
     artistLink: t({ ko: 'Artist 링크 URL', en: 'Artist link URL' }),
+    requeue: t({ ko: '이전 결과 다시 추출', en: 'Re-extract older results' }),
   }
+  const outdated = kaloscopeStatus?.outdatedResults ?? 0
+  // The scheduler re-extracts, so the saved settings (not the draft) decide whether it can run now.
+  const canRequeue = outdated > 0 && kaloscopeStatus?.enabled === true && kaloscopeStatus.autoTagOnUpload === true
 
   return (
     <RowGroup heading={heading} actions={actions}>
@@ -70,6 +79,10 @@ export function KaloscopeSettingsCard({
             label={<ChatFilledLabel fieldId="kaloscope.autoTagOnUpload">{t({ ko: '새 이미지 자동 처리', en: 'Process new images automatically' })}</ChatFilledLabel>}
           />
 
+          <SettingRow label={t({ ko: '모델', en: 'Model' })} controlClassName="flex min-w-0 justify-end">
+            <span className="text-sm">3.0 preview</span>
+          </SettingRow>
+
           <SettingRow label={<ChatFilledLabel fieldId="kaloscope.device">{labels.device}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <Select variant="settings" aria-label={labels.device} value={kaloscopeDraft.device} disabled={!isEnabled} onChange={(event) => onPatchKaloscope({ device: event.target.value as KaloscopeSettings['device'] })}>
               <option value="auto">{t({ ko: '자동 (GPU 우선)', en: 'Auto (GPU if available)' })}</option>
@@ -80,6 +93,27 @@ export function KaloscopeSettingsCard({
 
           <SettingRow label={<ChatFilledLabel fieldId="kaloscope.topK">{labels.topK}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <NumberStepperInput min={1} max={200} variant="settings" aria-label={labels.topK} disabled={!isEnabled} value={kaloscopeDraft.topK} onValueCommit={(nextValue) => onPatchKaloscope({ topK: Number(nextValue) || 1 })} />
+          </SettingRow>
+
+          <SettingsSwitchRow
+            checked={kaloscopeDraft.styleVectors !== false}
+            disabled={!isEnabled}
+            onCheckedChange={(checked) => onPatchKaloscope({ styleVectors: checked })}
+            label={<ChatFilledLabel fieldId="kaloscope.styleVectors">{t({ ko: '화풍 벡터 저장', en: 'Keep style vectors' })}</ChatFilledLabel>}
+            info={t({ ko: '비슷한 화풍 찾기에 쓰는 256차원 벡터.', en: 'The 256-d vector used to find images in a similar style.' })}
+          />
+
+          <SettingRow
+            label={labels.requeue}
+            info={outdated > 0 && !canRequeue
+              ? t({ ko: 'v2로 뽑은 작가를 3.0으로 다시 뽑아. Kaloscope와 새 이미지 자동 처리를 켜고 저장해야 돌아가.', en: 'Extracts v2 artist results again with 3.0. Needs Kaloscope and automatic processing on (saved).' })
+              : t({ ko: 'v2로 뽑은 작가를 3.0으로 다시 뽑아.', en: 'Extracts v2 artist results again with 3.0.' })}
+            controlClassName="flex min-w-0 items-center justify-end gap-2"
+          >
+            <span className="font-mono text-xs text-muted-foreground tabular-nums">{t({ ko: '{count}장', en: '{count} items' }, { count: outdated.toLocaleString() })}</span>
+            <IconButton size="icon-sm" variant="ghost" className="text-primary" label={t({ ko: '다시 추출', en: 'Re-extract' })} disabled={!canRequeue || isRequeueingOutdated} onClick={onRequeueOutdated}>
+              <RefreshCw className="h-4 w-4" />
+            </IconButton>
           </SettingRow>
 
           <SettingsSwitchRow

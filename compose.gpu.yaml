@@ -1,5 +1,7 @@
 # NVIDIA GPU opt-in:
 # docker compose -f compose.yaml -f compose.gpu.yaml up -d --build
+# CONAI_TORCH_BACKEND picks the PyTorch CUDA build: cu130 (default, RTX 20+ with an R580+ driver),
+# cu126 (GTX 900/1000, V100, or an older driver), cu132.
 services:
   conai:
     image: conai:gpu
@@ -7,4 +9,6 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runtime-gpu
+      args:
+        TORCH_BACKEND: ${CONAI_TORCH_BACKEND:-cu130}
     gpus: all

@@ -64,6 +64,8 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
       await ChatGenerationReactionService.stop();
       const { ChatGenerationPromptingService } = await import('../services/codex-chat/chatGenerationPrompting');
       await ChatGenerationPromptingService.stop();
+      const { closeExternalMcpServers } = await import('../services/externalMcp/externalMcpServers');
+      await closeExternalMcpServers();
       const { GenerationQueueService } = await import('../services/generationQueueService');
       await GenerationQueueService.stopAndDrain();
     },
@@ -121,6 +123,10 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
     stopTaggerDaemon: async () => {
       const { imageTaggerService } = await import('../services/imageTaggerService');
       await imageTaggerService.stopDaemon();
+      const { semanticIndexer } = await import('../services/embeddings/semanticIndex');
+      semanticIndexer.stop();
+      const { textWorker } = await import('../services/aiWorker/textEmbeddingService');
+      await textWorker.stop();
     },
     shutdownRuntimeJobs: async () => {
       const { RuntimeJobRunner } = await import('../services/runtimeJobs/runtimeJobRunner');

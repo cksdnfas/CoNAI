@@ -1,86 +1,42 @@
-# WD v3 Tagger Python Module
+# CoNAI AI worker
 
-This module provides image tagging functionality using WD (Waifu Diffusion) v3 models.
+`conai_worker.py` runs as two long-lived processes: the vision worker (taggers and Kaloscope, GPU or CPU) and the
+embedding worker (EmbeddingGemma 2, always CPU), so a chat query never waits behind image tagging. The backend starts
+each on first use, queues requests by priority and unloads each model after its idle setting.
 
-## Installation
+| File | Role |
+| --- | --- |
+| `conai_worker.py` | stdin/stdout JSON-lines protocol, model registry, device choice, download events |
+| `worker_images.py` | image loading shared by every model (EXIF transpose, alpha on white, size cap) |
+| `worker_wd.py` | WD v3 tagger (SmilingWolf `wd-*-tagger-v3`, timm) |
+| `worker_pixai.py` | PixAI tagger v1.0 (GPU only; model classes loaded from the pinned repository file) |
+| `worker_kaloscope.py` | Kaloscope 3.0 preview: artist classifier + 256-d style vector (pinned revision) |
+| `worker_embedding.py` | EmbeddingGemma 2: text (task prefixes, token-window chunks) and, in the "full" variant, images |
+| `ai_runtime_probe.py` | prints the Python / torch / CUDA / package report the settings page shows |
+| `install-ai-env.sh` | Docker build helper: uv-managed Python 3.12 venv + torch for `TORCH_BACKEND` |
 
-### 1. Install Python Dependencies
+## Python environment
+
+The app installs its own environment: 설정 › 자동 › AI 런타임. It uses uv to fetch Python 3.12 and a torch
+build matched to the GPU (cpu, cu126, cu130, cu132), then `requirements-ai.txt`.
+
+A custom Python works too (3.10+): install torch for your GPU from https://pytorch.org first, then
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Model Download
+and point 설정 › 자동 › AI 런타임 › Python 경로 at it.
 
-Models are automatically downloaded from Hugging Face Hub on first use:
+Models download from Hugging Face into the app's `models/` folder on first use.
 
-- **vit**: SmilingWolf/wd-vit-tagger-v3 (default)
-- **swinv2**: SmilingWolf/wd-swinv2-tagger-v3
-- **convnext**: SmilingWolf/wd-convnext-tagger-v3
+## Protocol
 
-Models are cached in the `models/` directory at the application root.
-
-## Usage
-
-### Command Line
-
-```bash
-python wdv3_tagger.py <image_path> [model] [gen_threshold] [char_threshold] [cache_dir]
+```text
+request  {"id": "1", "op": "analyze", "images": ["a.png"], "wd": {...}, "kaloscope": {...}}
+reply    {"id": "1", "ok": true, "result": {...}}  |  {"id": "1", "ok": false, "error": "...", "errorType": "..."}
+event    {"event": "ready" | "download", ...}
 ```
 
-**Example:**
-```bash
-python wdv3_tagger.py image.png vit 0.35 0.75 ../models
-```
-
-### From Node.js
-
-The service is integrated via `imageTaggerService.ts` using child process:
-
-```typescript
-import { imageTaggerService } from '../services/imageTaggerService';
-
-const result = await imageTaggerService.tagImage('/path/to/image.png');
-```
-
-## Output Format
-
-```json
-{
-  "success": true,
-  "caption": "1girl, solo, long hair, ...",
-  "taglist": "1girl, solo, long hair, ...",
-  "rating": {
-    "general": 0.95,
-    "sensitive": 0.03,
-    "questionable": 0.01,
-    "explicit": 0.01
-  },
-  "general": {
-    "1girl": 0.98,
-    "solo": 0.95,
-    "long_hair": 0.89
-  },
-  "character": {
-    "hatsune_miku": 0.85
-  },
-  "model": "vit",
-  "thresholds": {
-    "general": 0.35,
-    "character": 0.75
-  }
-}
-```
-
-## Configuration
-
-Environment variables in `.env`:
-
-- `TAGGER_MODEL`: Model type (vit, swinv2, convnext)
-- `TAGGER_GEN_THRESHOLD`: General tags threshold (0.0-1.0, default: 0.35)
-- `TAGGER_CHAR_THRESHOLD`: Character tags threshold (0.0-1.0, default: 0.75)
-- `PYTHON_PATH`: Python executable path (default: python)
-
-## GPU Support
-
-The tagger automatically uses CUDA if available for faster processing. CPU mode is used as fallback.
+Ops: `status`, `load`, `unload`, `analyze` (taggers, Kaloscope), `embed` (text), `chunk` (token windows),
+`embed_images`, `shutdown`.

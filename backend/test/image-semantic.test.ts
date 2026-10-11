@@ -1,0 +1,161 @@
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import http from 'node:http'
+import os from 'node:os'
+import path from 'node:path'
+import { test } from 'node:test'
+
+/**
+ * Image embeddings, Node side, with the Python worker replaced by a concept-vector fake: the background walk over the
+ * library (still images with an active file, newest first, then new ones), search by description, similar images by
+ * content and by style, the safety filter, pruning, and the routes.
+ */
+
+const CONCEPTS: string[][] = [['cat', '고양이'], ['city', '도시'], ['soup', '국']]
+const DIM = 256
+
+function fakeVector(text: string) {
+  const vector = new Float32Array(DIM)
+  vector[DIM - 1] = 1
+  CONCEPTS.forEach((words, axis) => {
+    for (const word of words) if (text.includes(word)) vector[axis] += 1.5
+  })
+  let norm = 0
+  for (const value of vector) norm += value * value
+  return vector.map((value) => value / Math.sqrt(norm))
+}
+
+const base64 = (vector: Float32Array) => Buffer.from(vector.buffer).toString('base64')
+const hash = (n: number) => n.toString(16).padStart(48, '0')
+
+test('image semantic: index walk, text search, similar images, safety, prune, routes', { timeout: 60000 }, async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-image-semantic-'))
+  process.env.RUNTIME_BASE_PATH = root
+  for (const part of ['DATABASE', 'UPLOADS', 'LOGS', 'TEMP', 'SAVE', 'CANVAS', 'ARTIFACTS', 'MODELS', 'CUSTOM_NODES', 'RECYCLE_BIN']) {
+    process.env[`RUNTIME_${part}_DIR`] = path.join(root, part.toLowerCase())
+  }
+  process.env.AI_RUNTIME_DIR = path.join(root, 'ai-runtime')
+  const authModule = await import('../src/database/authDb')
+  authModule.initializeAuthDb()
+  const main = await import('../src/database/init')
+  await main.initializeDatabase()
+  const user = await import('../src/database/userSettingsDb')
+  user.initializeUserSettingsDb()
+  const db = main.db
+
+  const { settingsService } = await import('../src/services/settingsService')
+  const embedding = await import('../src/services/aiWorker/textEmbeddingService')
+  const requests: Array<{ op: string; payload: any }> = []
+  embedding.embeddingRuntime.checkDependencies = async () => ({ available: true, message: 'ok', missingPackages: [], python: 'fake' })
+  t.mock.method(embedding.textWorker, 'request', async (op: string, payload: any) => {
+    requests.push({ op, payload })
+    if (op === 'embed') return { device: 'cpu', items: payload.items.map((item: { text: string }) => [{ start: 0, end: item.text.length, vector: base64(fakeVector(item.text)) }]) }
+    if (op === 'embed_images') {
+      return { device: 'cpu', items: payload.images.map((file: string) => (file.includes('broken') ? { error: 'cannot identify image file' } : { vector: base64(fakeVector(path.basename(file))) })) }
+    }
+    throw new Error(`unexpected op ${op}`)
+  })
+  const { indexPendingImages, imageIndexCount, imageIndexInternals, pruneImageVectors, searchImagesByText, similarImagesByVector } = await import('../src/services/embeddings/imageIndex')
+  const { saveMediaStyleVector } = await import('../src/services/aiWorker/aiVisionService')
+  const { RatingScoreModel } = await import('../src/models/RatingScore')
+
+  const folderId = (db.prepare('SELECT id FROM watched_folders ORDER BY id LIMIT 1').get() as { id: number }).id
+  const insertMedia = db.prepare('INSERT INTO media_metadata (composite_hash) VALUES (?)')
+  const insertFile = db.prepare("INSERT INTO image_files (composite_hash, original_file_path, folder_id, file_status, file_type, file_size, mime_type) VALUES (?, ?, ?, ?, ?, 1, ?)")
+  const add = (n: number, name: string, status = 'active', type = 'image') => {
+    insertMedia.run(hash(n))
+    insertFile.run(hash(n), `D:\\lib\\${name}`, folderId, status, type, type === 'video' ? 'video/mp4' : 'image/png')
+  }
+  db.transaction(() => {
+    add(1, 'cat-sofa.png')
+    add(2, 'cat-window.png')
+    add(3, 'city-night.png')
+    add(4, 'soup-bowl.png')
+    add(5, 'cat-video.mp4', 'active', 'video')
+    add(6, 'cat-gone.png', 'missing')
+    add(7, 'broken.png')
+  })()
+
+  // Off: nothing is embedded and the worker keeps its text-only instance.
+  assert.equal(await indexPendingImages(), 0)
+  assert.equal(embedding.embeddingVariant(), 'text')
+  settingsService.updateEmbeddingSettings({ enabled: true, imageSearch: true })
+  assert.equal(embedding.embeddingVariant(), 'full')
+
+  let looked = 0
+  for (let pass = 0; pass < 10; pass += 1) {
+    const done = await indexPendingImages(2)
+    if (done === 0) break
+    looked += done
+  }
+  assert.equal(looked, 5, 'four images and the unreadable one; the video and the missing file are never sent')
+  assert.equal(imageIndexCount(), 4)
+  const sent = requests.filter((request) => request.op === 'embed_images').flatMap((request) => request.payload.images as string[])
+  assert.deepEqual(sent.map((file) => path.win32.basename(file)), ['broken.png', 'soup-bowl.png', 'city-night.png', 'cat-window.png', 'cat-sofa.png'])
+  assert.equal(imageIndexInternals.state().fullPass, true)
+
+  // A new image after the full walk is picked up; the unreadable one is not retried in this process.
+  add(8, 'cat-garden.png')
+  assert.equal(await indexPendingImages(), 1)
+  assert.equal(await indexPendingImages(), 0)
+  assert.equal(imageIndexCount(), 5)
+
+  // Text search ranks by meaning; queries go out with the full instance's variant.
+  const cats = await searchImagesByText('고양이 사진', 3)
+  assert.deepEqual(cats?.slice(0, 3).map((hit) => hit.compositeHash).sort(), [hash(1), hash(2), hash(8)].sort())
+  assert.equal(requests.filter((request) => request.op === 'embed').at(-1)?.payload.variant, 'full')
+
+  // Hidden rating tiers never come back.
+  RatingScoreModel.createTier({ tier_name: '테스트 숨김', min_score: 10000, max_score: null, tier_order: -100, color: '#000000', feed_visibility: 'hide' })
+  db.prepare('UPDATE media_metadata SET rating_score = 10001 WHERE composite_hash = ?').run(hash(2))
+  const visibleCats = await searchImagesByText('cat', 3)
+  assert.equal(visibleCats?.some((hit) => hit.compositeHash === hash(2)), false)
+
+  // Similar by content excludes the image itself; by style needs Kaloscope's vectors.
+  const similar = similarImagesByVector(hash(1), 'content', 2)
+  assert.equal(similar?.[0].compositeHash, hash(8))
+  assert.equal(similar?.some((hit) => hit.compositeHash === hash(1)), false)
+  assert.equal(similarImagesByVector(hash(3), 'style', 5), null)
+  const axis = (i: number) => Array.from({ length: 256 }, (_, k) => (k === i ? 1 : k === 255 ? 0.2 : 0))
+  saveMediaStyleVector(hash(3), axis(0))
+  saveMediaStyleVector(hash(4), axis(0))
+  saveMediaStyleVector(hash(1), axis(9))
+  assert.deepEqual(similarImagesByVector(hash(3), 'style', 1)?.map((hit) => hit.compositeHash), [hash(4)])
+
+  // Routes.
+  const express = (await import('express')).default
+  const { semanticImageRoutes } = await import('../src/routes/images/semantic.routes')
+  const app = express()
+  app.use('/api/images', semanticImageRoutes)
+  const server = http.createServer(app)
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  t.after(() => new Promise<void>((resolve) => server.close(() => resolve())))
+  const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`
+  const get = async (url: string) => {
+    const response = await fetch(origin + url)
+    return { status: response.status, body: await response.json() }
+  }
+  const search = await get('/api/images/semantic-search?q=soup&limit=2')
+  assert.equal(search.status, 200)
+  assert.equal(search.body.data.images[0].image.composite_hash, hash(4))
+  assert.ok(search.body.data.images[0].similarity > 90)
+  assert.equal((await get('/api/images/semantic-search')).status, 400)
+  const style = await get(`/api/images/${hash(3)}/similar-style?limit=5`)
+  assert.equal(style.status, 200)
+  assert.deepEqual(style.body.data.similar.map((item: any) => item.image.composite_hash), [hash(4), hash(1)])
+  assert.equal((await get(`/api/images/${hash(2)}/similar-content`)).status, 403)
+  assert.equal((await get(`/api/images/${hash(99)}/similar-content`)).status, 404)
+  assert.equal((await get(`/api/images/${hash(7)}/similar-content`)).status, 409, 'no vector for the unreadable image')
+
+  // Media that is gone loses its vector.
+  db.prepare('DELETE FROM image_files WHERE composite_hash = ?').run(hash(4))
+  db.prepare('DELETE FROM media_metadata WHERE composite_hash = ?').run(hash(4))
+  assert.equal(pruneImageVectors(true), 1)
+  assert.equal(imageIndexCount(), 4)
+
+  // Off again: search answers 409 and the walk stops.
+  settingsService.updateEmbeddingSettings({ imageSearch: false })
+  assert.equal((await get('/api/images/semantic-search?q=cat')).status, 409)
+  assert.equal(await searchImagesByText('cat', 3), null)
+  assert.equal(embedding.embeddingVariant(), 'text')
+})

@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import { Input } from '@/components/ui/input'
 import { RowGroup } from '@/components/ui/row-group'
 import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
@@ -8,7 +7,7 @@ import { useI18n } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { ChatFilledLabel } from './settings-filled-label'
-import { SETTINGS_CONTROL_CLASS, SETTINGS_WIDE_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
+import { SETTINGS_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
 
 interface TaggerSettingsCardProps {
   heading: ReactNode
@@ -32,7 +31,6 @@ export function TaggerSettingsCard({
     device: t({ ko: '실행 장치', en: 'Device' }),
     general: t({ ko: '일반 태그 기준값', en: 'General tag threshold' }),
     character: t({ ko: '캐릭터 기준값', en: 'Character threshold' }),
-    python: t({ ko: 'Python 실행 파일', en: 'Python executable' }),
     unload: t({ ko: '자동 언로드(분)', en: 'Auto unload (minutes)' }),
   }
 
@@ -43,7 +41,7 @@ export function TaggerSettingsCard({
           <SettingsSwitchRow
             checked={taggerDraft.enabled}
             onCheckedChange={(checked) => onPatchTagger({ enabled: checked })}
-            label={<ChatFilledLabel fieldId="tagger.enabled">{t({ ko: 'WD Tagger 활성화', en: 'Enable WD Tagger' })}</ChatFilledLabel>}
+            label={<ChatFilledLabel fieldId="tagger.enabled">{t({ ko: '태거 활성화', en: 'Enable tagger' })}</ChatFilledLabel>}
           />
 
           <SettingsSwitchRow
@@ -56,8 +54,8 @@ export function TaggerSettingsCard({
           <SettingRow label={<ChatFilledLabel fieldId="tagger.model">{labels.model}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <Select variant="settings" aria-label={labels.model} value={taggerDraft.model} disabled={!isEnabled} onChange={(event) => onPatchTagger({ model: event.target.value as TaggerSettings['model'] })}>
               {taggerModels.map((model) => (
-                <option key={model.name} value={model.name}>
-                  {model.label}
+                <option key={model.name} value={model.name} disabled={model.available === false && model.name !== taggerDraft.model}>
+                  {model.requiresGpu ? `${model.label} · ${model.available === false ? t({ ko: 'GPU 필요', en: 'needs a GPU' }) : 'GPU'}` : model.label}
                 </option>
               ))}
             </Select>
@@ -66,7 +64,7 @@ export function TaggerSettingsCard({
           <SettingRow label={<ChatFilledLabel fieldId="tagger.device">{labels.device}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <Select variant="settings" aria-label={labels.device} value={taggerDraft.device} disabled={!isEnabled} onChange={(event) => onPatchTagger({ device: event.target.value as TaggerSettings['device'] })}>
               <option value="auto">{t({ ko: '자동 (GPU 우선)', en: 'Auto (GPU if available)' })}</option>
-              <option value="cpu">{t({ ko: 'CPU (느림, GPU 불필요)', en: 'CPU (slower, no GPU needed)' })}</option>
+              <option value="cpu" disabled={taggerModels.some((model) => model.name === taggerDraft.model && model.requiresGpu)}>{t({ ko: 'CPU (느림, GPU 불필요)', en: 'CPU (slower, no GPU needed)' })}</option>
               <option value="cuda">{t({ ko: 'GPU (NVIDIA CUDA)', en: 'GPU (NVIDIA CUDA)' })}</option>
             </Select>
           </SettingRow>
@@ -77,10 +75,6 @@ export function TaggerSettingsCard({
 
           <SettingRow label={<ChatFilledLabel fieldId="tagger.characterThreshold">{labels.character}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
             <NumberStepperInput min={0} max={1} step={0.01} variant="settings" aria-label={labels.character} disabled={!isEnabled} value={taggerDraft.characterThreshold} onValueCommit={(nextValue) => onPatchTagger({ characterThreshold: Number(nextValue) || 0 })} />
-          </SettingRow>
-
-          <SettingRow label={labels.python} controlClassName={SETTINGS_WIDE_CONTROL_CLASS}>
-            <Input variant="settings" aria-label={labels.python} value={taggerDraft.pythonPath} disabled={!isEnabled} onChange={(event) => onPatchTagger({ pythonPath: event.target.value })} placeholder="python" />
           </SettingRow>
 
           <SettingsSwitchRow

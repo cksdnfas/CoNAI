@@ -79,31 +79,25 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
 CMD ["node", "dist/backend/src/index.js"]
 
 # CPU is the default and keeps the normal image free of CUDA libraries.
+# The AI worker runs in a uv-managed CPython 3.12 venv (Debian's 3.11 is too old for the pinned libraries), the same
+# layout the app's own installer (Settings › Auto › AI runtime) creates, so both run identical versions.
 FROM runtime-base AS runtime-cpu
 
-# torch comes from the CPU wheel index; everything else resolves from PyPI only, so the PyTorch index's
-# older mirrored copies (numpy, pandas, onnxruntime) are never picked. Long timeouts/retries ride out
-# slow index responses instead of failing the build.
-RUN python3 -m pip install --break-system-packages --no-cache-dir --timeout 60 --retries 8 \
-    --index-url https://download.pytorch.org/whl/cpu \
-    --extra-index-url https://pypi.org/simple \
-    torch torchvision \
-  && python3 -m pip install --break-system-packages --no-cache-dir --timeout 60 --retries 8 \
-    -r /app/backend/python/requirements.txt
+ARG TORCH_BACKEND=cpu
+RUN AI_VENV=/opt/conai-ai TORCH_BACKEND="${TORCH_BACKEND}" sh /app/backend/python/install-ai-env.sh
 
-# GPU users opt into this target explicitly. PyTorch wheels provide the CUDA
-# runtime libraries, so a second CUDA base image is not needed.
+ENV PYTHON_PATH=/opt/conai-ai/bin/python
+
+# GPU users opt into this target explicitly. PyTorch wheels provide the CUDA runtime libraries, so a CUDA base
+# image is not needed. TORCH_BACKEND: cu130 (Turing / RTX 20 and newer, R580+ driver) is the default; cu126 for
+# Maxwell–Volta (GTX 900/1000, V100) or older drivers; cu132 also works on R580+.
 FROM runtime-base AS runtime-gpu
 
-ARG PYTORCH_CUDA_INDEX_URL=https://download.pytorch.org/whl/cu121
+ARG TORCH_BACKEND=cu130
+RUN AI_VENV=/opt/conai-ai TORCH_BACKEND="${TORCH_BACKEND}" sh /app/backend/python/install-ai-env.sh
 
-RUN python3 -m pip install --break-system-packages --no-cache-dir --timeout 60 --retries 8 \
-    --index-url "${PYTORCH_CUDA_INDEX_URL}" \
-    torch torchvision \
-  && python3 -m pip install --break-system-packages --no-cache-dir --timeout 60 --retries 8 \
-    -r /app/backend/python/requirements-gpu.txt
-
-ENV NVIDIA_VISIBLE_DEVICES=all \
+ENV PYTHON_PATH=/opt/conai-ai/bin/python \
+    NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 # An ordinary `docker build .` ends here and therefore remains CPU-only.

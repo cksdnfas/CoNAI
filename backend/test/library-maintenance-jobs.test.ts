@@ -156,11 +156,11 @@ test('batch tagging walks newest first, honours the limit and sorts undated rows
   const { imageTaggerService } = await import('../src/services/imageTaggerService')
   const { batchTagLibrary } = await import('../src/services/maintenance/autoTagMaintenanceService')
   const tagged: string[] = []
-  const original = imageTaggerService.tagImage
-  imageTaggerService.tagImage = (async (imagePath: string) => {
+  const original = imageTaggerService.analyze
+  imageTaggerService.analyze = (async (imagePath: string) => {
     tagged.push(path.basename(imagePath, '.png'))
-    return { success: true, caption: 'a', taglist: 'a', general: { a: 0.9 }, character: {}, rating: { general: 0.9, sensitive: 0.1, questionable: 0, explicit: 0 } }
-  }) as typeof imageTaggerService.tagImage
+    return { tagger: { success: true, caption: 'a', taglist: 'a', general: { a: 0.9 }, character: {}, rating: { general: 0.9, sensitive: 0.1, questionable: 0, explicit: 0 } } }
+  }) as typeof imageTaggerService.analyze
   try {
     const dates = ['2031-01-03 00:00:00', '2031-01-01 00:00:00', '2031-01-02 00:00:00', '2031-01-02 00:00:00', null]
     dates.forEach((date, n) => {
@@ -181,7 +181,7 @@ test('batch tagging walks newest first, honours the limit and sorts undated rows
     assert.equal(everything.total, (db.prepare('SELECT COUNT(*) c FROM media_metadata').get() as { c: number }).c)
     assert.equal(tagged[tagged.length - 1], hashOf('t', 4), 'the undated row comes last')
   } finally {
-    imageTaggerService.tagImage = original
+    imageTaggerService.analyze = original
   }
 })
 
@@ -397,7 +397,7 @@ test('maintenance routes answer 202 with a job, and a cancelled job stops after 
   const { registerAppRoutes } = await import('../src/startup/registerAppRoutes')
   const { RuntimeJobRunner } = await import('../src/services/runtimeJobs')
   const { imageTaggerService } = await import('../src/services/imageTaggerService')
-  imageTaggerService.tagImage = (async () => ({ success: false, error: 'no tagger in tests' })) as typeof imageTaggerService.tagImage
+  imageTaggerService.analyze = (async () => ({ tagger: { success: false, error: 'no tagger in tests' } })) as typeof imageTaggerService.analyze
   const app = express()
   app.use(express.json())
   const adminId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('jobs-admin', 'unused', 'admin')").run().lastInsertRowid)

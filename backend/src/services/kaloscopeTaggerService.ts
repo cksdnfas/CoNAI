@@ -1,15 +1,21 @@
 import fs from 'fs';
-import path from 'path';
-import readline from 'readline';
-import { ChildProcess, spawn } from 'child_process';
-import { runtimePaths } from '../config/runtimePaths';
+import { db } from '../database/init';
 import { settingsService } from './settingsService';
-import { KaloscopeResult } from './autoTagsComposeService';
+import { KALOSCOPE_MODEL, KaloscopeResult } from './autoTagsComposeService';
 import { KaloscopeServerStatus, KaloscopeSettings } from '@conai/shared';
-import { VideoFrameExtractor } from './videoFrameExtractor';
+import {
+  analyzeMedia,
+  checkAiDependencies,
+  isHubModelCached,
+  KALOSCOPE_FILE,
+  KALOSCOPE_REPO,
+  visionWorker,
+} from './aiWorker/aiVisionService';
 
 interface KaloscopeServiceOptions {
   topk?: number;
+  /** Store the style vector for this media. */
+  compositeHash?: string;
 }
 
 interface KaloscopeDependencyStatus {
@@ -17,13 +23,6 @@ interface KaloscopeDependencyStatus {
   missingPackages: string[];
   message: string;
   installCommand?: string;
-}
-
-interface KaloscopeModelCacheResult {
-  success: boolean;
-  message: string;
-  path?: string;
-  removedPaths?: string[];
 }
 
 interface KaloscopeRuntimeStatus {
@@ -34,136 +33,22 @@ interface KaloscopeRuntimeStatus {
   lastUsedAt: string | null;
 }
 
-interface DaemonCommand {
-  action: 'load_model' | 'unload_model' | 'tag_image' | 'get_status' | 'shutdown';
-  repo?: string;
-  model_file?: string;
-  device?: string;
-  cache_dir?: string;
-  image_path?: string;
-  topk?: number;
-}
-
-interface DaemonResponse {
-  success: boolean;
-  model?: string;
-  device?: string;
-  model_loaded?: boolean;
-  current_model?: string;
-  status?: string;
-  error?: string;
-  error_type?: string;
-  [key: string]: any;
-}
-
-
-const DAEMON_READY_TIMEOUT_MS = 120_000;
+/**
+ * Kaloscope 3.0 preview (artist classifier + style vector) on the shared AI vision worker. Keeps the API the
+ * routes and services already use; the model loads on first use and unloads after its idle setting.
+ */
 class KaloscopeTaggerService {
-  private readonly daemonScriptPath: string;
-  private process: ChildProcess | null = null;
-  private modelLoaded = false;
-  private currentModel: string | null = null;
-  private currentDevice: string | null = null;
-  private lastUsedAt: Date | null = null;
-  private autoUnloadTimer: NodeJS.Timeout | null = null;
-  private isReady = false;
-  private readyPromise: Promise<void> | null = null;
-  private responseQueue: ((response: DaemonResponse) => void)[] = [];
-
-  constructor() {
-    this.daemonScriptPath = this.findDaemonScriptPath();
-  }
-
-  /** Resolve the Kaloscope Python daemon path across dev and compiled layouts. */
-  private findDaemonScriptPath(): string {
-    const possiblePaths = [
-      path.join(__dirname, 'python', 'kaloscope_tagger_daemon.py'),
-      path.join(__dirname, '..', '..', 'python', 'kaloscope_tagger_daemon.py'),
-      path.join(__dirname, '..', '..', '..', '..', 'python', 'kaloscope_tagger_daemon.py'),
-      path.join(__dirname, '..', '..', '..', 'python', 'kaloscope_tagger_daemon.py'),
-      path.join(__dirname, '..', 'python', 'kaloscope_tagger_daemon.py'),
-      path.join(process.cwd(), 'app', 'python', 'kaloscope_tagger_daemon.py'),
-    ];
-
-    const foundPath = possiblePaths.find((candidate) => fs.existsSync(candidate));
-    return foundPath || possiblePaths[0];
-  }
-
   private getKaloscopeSettings(): KaloscopeSettings {
-    const settings = settingsService.loadSettings();
-    return settings.kaloscope;
-  }
-
-  private getPythonPath(): string {
-    const settings = settingsService.loadSettings();
-    return settings.tagger.pythonPath || 'python';
-  }
-
-  private isEnabled(): boolean {
-    return this.getKaloscopeSettings().enabled;
-  }
-
-  private getModelRepo(): string {
-    return process.env.KALOSCOPE_MODEL_REPO || 'DraconicDragon/Kaloscope-onnx';
-  }
-
-  private getModelFile(): string {
-    return process.env.KALOSCOPE_MODEL_FILE || 'v2.0/kaloscope_2-0.onnx';
-  }
-
-  private getCacheBasePaths(): string[] {
-    const modelDirName = `models--${this.getModelRepo().replace('/', '--')}`;
-    return [
-      path.join(runtimePaths.modelsDir, modelDirName),
-      path.join(runtimePaths.modelsDir, 'hub', modelDirName),
-    ];
-  }
-
-  private getRequirementsPath(): string {
-    return path.join(path.dirname(this.daemonScriptPath), 'requirements.txt');
-  }
-
-  private getInstallCommand(): string {
-    return `"${this.getPythonPath()}" -m pip install -r "${this.getRequirementsPath()}"`;
-  }
-
-  private createPythonEnv(extraEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-    return {
-      ...process.env,
-      PYTHONUNBUFFERED: '1',
-      PYTHONIOENCODING: 'utf-8',
-      ...extraEnv,
-    };
+    return settingsService.loadSettings().kaloscope;
   }
 
   isModelCached(): boolean {
-    const modelFile = this.getModelFile();
-    const modelFileName = path.basename(modelFile);
+    return isHubModelCached(KALOSCOPE_REPO, KALOSCOPE_FILE);
+  }
 
-    for (const basePath of this.getCacheBasePaths()) {
-      const snapshotsPath = path.join(basePath, 'snapshots');
-      if (!fs.existsSync(snapshotsPath)) {
-        continue;
-      }
-
-      try {
-        const snapshots = fs.readdirSync(snapshotsPath);
-        for (const snapshot of snapshots) {
-          const snapshotPath = path.join(snapshotsPath, snapshot);
-          if (!fs.statSync(snapshotPath).isDirectory()) {
-            continue;
-          }
-
-          if (fs.existsSync(path.join(snapshotPath, modelFile)) || fs.existsSync(path.join(snapshotPath, modelFileName))) {
-            return true;
-          }
-        }
-      } catch {
-        // Ignore cache read errors and treat as not cached.
-      }
-    }
-
-    return false;
+  async checkDependencies(): Promise<KaloscopeDependencyStatus> {
+    const status = await checkAiDependencies();
+    return { available: status.available, missingPackages: status.missingPackages, message: status.message };
   }
 
   async getServerStatus(): Promise<KaloscopeServerStatus> {
@@ -182,632 +67,131 @@ class KaloscopeTaggerService {
       topK: settings.topK,
       keepModelLoaded: settings.keepModelLoaded,
       autoUnloadMinutes: settings.autoUnloadMinutes,
-      scriptExists: fs.existsSync(this.daemonScriptPath),
+      scriptExists: true,
       modelCached: this.isModelCached(),
-      modelRepo: this.getModelRepo(),
-      modelFile: this.getModelFile(),
+      modelRepo: KALOSCOPE_REPO,
+      modelFile: KALOSCOPE_FILE,
       dependenciesAvailable: dependencyStatus.available,
       missingPackages: dependencyStatus.missingPackages,
       statusMessage: dependencyStatus.message,
-      installCommand: dependencyStatus.installCommand,
+      outdatedResults: this.countOutdatedResults(),
     };
   }
 
-  async checkDependencies(): Promise<KaloscopeDependencyStatus> {
-    const pythonPath = this.getPythonPath();
-    const installCommand = this.getInstallCommand();
+  private outdatedCache: { count: number; at: number } | null = null;
 
-    return await new Promise<KaloscopeDependencyStatus>((resolve) => {
-      const child = spawn(
-        pythonPath,
-        ['-c', 'import importlib.util; import json; mods=["onnxruntime","numpy","PIL","huggingface_hub"]; missing=[m for m in mods if importlib.util.find_spec(m) is None]; print(json.dumps({"missing": missing}))'],
-        {
-          cwd: path.dirname(this.daemonScriptPath),
-          env: this.createPythonEnv(),
-        },
-      );
-
-      let stdout = '';
-      let stderr = '';
-
-      child.stdout?.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      child.stderr?.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      child.on('error', (error) => {
-        resolve({
-          available: false,
-          missingPackages: ['python'],
-          message: `Python 실행 실패: ${error.message}`,
-          installCommand,
-        });
-      });
-
-      child.on('close', () => {
-        const raw = stdout.trim();
-        if (!raw) {
-          resolve({
-            available: false,
-            missingPackages: ['unknown'],
-            message: stderr.trim() || 'Kaloscope Python 의존성 확인에 실패했습니다.',
-            installCommand,
-          });
-          return;
-        }
-
-        try {
-          const parsed = JSON.parse(raw) as { missing?: string[] };
-          const missingPackages = Array.isArray(parsed.missing) ? parsed.missing : [];
-          if (missingPackages.length === 0) {
-            resolve({
-              available: true,
-              missingPackages: [],
-              message: 'Kaloscope Python 의존성이 모두 준비되었습니다.',
-              installCommand,
-            });
-            return;
-          }
-
-          resolve({
-            available: false,
-            missingPackages,
-            message: `Kaloscope 실행에 필요한 Python 패키지가 없습니다: ${missingPackages.join(', ')}`,
-            installCommand,
-          });
-        } catch {
-          resolve({
-            available: false,
-            missingPackages: ['unknown'],
-            message: stderr.trim() || `Kaloscope Python 의존성 확인 결과를 해석하지 못했습니다: ${raw.slice(0, 300)}`,
-            installCommand,
-          });
-        }
-      });
-    });
-  }
-
-  async ensureModelCached(): Promise<KaloscopeModelCacheResult> {
-    const dependencyStatus = await this.checkDependencies();
-    if (!dependencyStatus.available) {
-      return {
-        success: false,
-        message: dependencyStatus.message,
-      };
+  /** Items whose stored artist result (success or failure) came from another model. Cached for a minute. */
+  countOutdatedResults(): number {
+    if (this.outdatedCache && Date.now() - this.outdatedCache.at < 60_000) {
+      return this.outdatedCache.count;
     }
-
-    const pythonPath = this.getPythonPath();
-    const repoId = this.getModelRepo();
-    const modelFile = this.getModelFile();
-
-    return await new Promise<KaloscopeModelCacheResult>((resolve) => {
-      const child = spawn(
-        pythonPath,
-        [
-          '-c',
-          'from huggingface_hub import snapshot_download; import sys; path = snapshot_download(repo_id=sys.argv[1], allow_patterns=[sys.argv[2]], cache_dir=sys.argv[3]); print(path)',
-          repoId,
-          modelFile,
-          runtimePaths.modelsDir,
-        ],
-        {
-          cwd: path.dirname(this.daemonScriptPath),
-          env: this.createPythonEnv({
-            HF_HOME: runtimePaths.modelsDir,
-            HUGGINGFACE_HUB_CACHE: runtimePaths.modelsDir,
-            TRANSFORMERS_CACHE: runtimePaths.modelsDir,
-          }),
-        },
-      );
-
-      let stdout = '';
-      let stderr = '';
-
-      child.stdout?.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      child.stderr?.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      child.on('error', (error) => {
-        resolve({
-          success: false,
-          message: `Kaloscope 모델 캐시 실패: ${error.message}`,
-        });
-      });
-
-      child.on('close', (code) => {
-        if (code !== 0) {
-          resolve({
-            success: false,
-            message: stderr.trim() || `Kaloscope model cache exited with code ${code}`,
-          });
-          return;
-        }
-
-        resolve({
-          success: true,
-          message: 'Kaloscope 모델을 캐시에 준비했어.',
-          path: stdout.trim() || undefined,
-        });
-      });
-    });
+    const row = db.prepare(`
+      SELECT COUNT(*) AS count FROM media_metadata
+      WHERE auto_tags IS NOT NULL AND json_valid(auto_tags)
+        AND json_type(auto_tags, '$.kaloscope') = 'object'
+        AND json_extract(auto_tags, '$.kaloscope.model') IS NOT ?
+    `).get(KALOSCOPE_MODEL) as { count: number };
+    this.outdatedCache = { count: row.count, at: Date.now() };
+    return row.count;
   }
 
-  clearModelCache(): KaloscopeModelCacheResult {
-    const removedPaths: string[] = [];
-
-    for (const cachePath of this.getCacheBasePaths()) {
-      if (!fs.existsSync(cachePath)) {
-        continue;
-      }
-
-      fs.rmSync(cachePath, { recursive: true, force: true });
-      removedPaths.push(cachePath);
+  /**
+   * Drop outdated artist results so the auto-tag scheduler extracts them again with the current model. Removing
+   * `$.kaloscope` re-arms `auto_tag_state` through the media_metadata triggers; the search index keeps the old
+   * artists until each item is re-tagged. Runs in rowid chunks so a large library never holds one long write.
+   */
+  async requeueOutdatedResults(): Promise<number> {
+    const nextRange = db.prepare('SELECT rowid AS id FROM media_metadata WHERE rowid > ? ORDER BY rowid LIMIT 1 OFFSET 499');
+    const requeue = db.prepare(`
+      UPDATE media_metadata
+      SET auto_tags = json_remove(auto_tags, '$.kaloscope')
+      WHERE rowid > ? AND rowid <= ?
+        AND auto_tags IS NOT NULL AND json_valid(auto_tags)
+        AND json_type(auto_tags, '$.kaloscope') = 'object'
+        AND json_extract(auto_tags, '$.kaloscope.model') IS NOT ?
+    `);
+    let total = 0;
+    let cursor = 0;
+    for (;;) {
+      const end = nextRange.get(cursor) as { id: number } | undefined;
+      const to = end ? end.id : Number.MAX_SAFE_INTEGER;
+      total += requeue.run(cursor, to, KALOSCOPE_MODEL).changes;
+      if (!end) break;
+      cursor = to;
+      await new Promise<void>((resolve) => setImmediate(resolve));
     }
-
-    return {
-      success: true,
-      message: removedPaths.length > 0 ? 'Kaloscope 모델 캐시를 제거했어.' : '제거할 Kaloscope 캐시가 없었어.',
-      removedPaths,
-    };
+    this.outdatedCache = null;
+    return total;
   }
 
-  /** Validate the common preconditions before running Kaloscope tagging. */
+  /** Preconditions shared by image and video tagging. */
   private async ensureReady(targetPath: string, targetLabel: 'Image' | 'Video'): Promise<KaloscopeResult | null> {
-    if (!this.isEnabled()) {
-      return {
-        success: false,
-        error: 'Kaloscope integration disabled by KALOSCOPE_ENABLED',
-        error_type: 'Disabled',
-      };
+    if (!this.getKaloscopeSettings().enabled) {
+      return { success: false, error: 'Kaloscope is disabled', error_type: 'Disabled' };
     }
-
-    if (!fs.existsSync(this.daemonScriptPath)) {
-      return {
-        success: false,
-        error: `Kaloscope daemon script not found: ${this.daemonScriptPath}`,
-        error_type: 'ScriptNotFound',
-      };
-    }
-
     if (!fs.existsSync(targetPath)) {
-      return {
-        success: false,
-        error: `${targetLabel} not found: ${targetPath}`,
-        error_type: 'FileNotFound',
-      };
+      return { success: false, error: `${targetLabel} not found: ${targetPath}`, error_type: 'FileNotFound' };
     }
-
-    const dependencyStatus = await this.checkDependencies();
-    if (!dependencyStatus.available) {
-      return {
-        success: false,
-        error: `${dependencyStatus.message}${dependencyStatus.installCommand ? `\n해결: ${dependencyStatus.installCommand}` : ''}`,
-        error_type: 'MissingDependency',
-      };
-    }
-
     return null;
   }
 
-  /** Resolve the requested top-k with the current settings as fallback. */
-  private getEffectiveTopk(options?: KaloscopeServiceOptions): number {
-    return options?.topk || this.getKaloscopeSettings().topK;
-  }
+  async startDaemon(): Promise<void> {}
 
-  /** Start daemon process. */
-  async startDaemon(): Promise<void> {
-    if (this.process && this.isReady) {
-      return;
-    }
-
-    if (this.readyPromise) {
-      return this.readyPromise;
-    }
-
-    this.readyPromise = new Promise((resolve, reject) => {
-      try {
-        if (!fs.existsSync(this.daemonScriptPath)) {
-          reject(new Error(`Daemon script not found: ${this.daemonScriptPath}`));
-          return;
-        }
-
-        const child = spawn(this.getPythonPath(), [this.daemonScriptPath], {
-          cwd: path.dirname(this.daemonScriptPath),
-          env: this.createPythonEnv({
-            HF_HOME: runtimePaths.modelsDir,
-            HUGGINGFACE_HUB_CACHE: runtimePaths.modelsDir,
-            TRANSFORMERS_CACHE: runtimePaths.modelsDir,
-          }),
-        });
-        this.process = child;
-        const isCurrent = () => this.process === child;
-
-        if (!child.stdout || !child.stderr) {
-          reject(new Error('Failed to capture daemon process streams'));
-          return;
-        }
-
-        const rl = readline.createInterface({
-          input: child.stdout,
-          crlfDelay: Infinity,
-        });
-
-        rl.on('line', (line) => {
-          try {
-            if (!isCurrent()) {
-              return;
-            }
-            const response: DaemonResponse = JSON.parse(line);
-
-            if (response.status === 'ready' && !this.isReady) {
-              this.isReady = true;
-              resolve();
-              return;
-            }
-
-            const callback = this.responseQueue.shift();
-            if (callback) {
-              callback(response);
-            }
-          } catch (error) {
-            console.error('[KaloscopeDaemon] Failed to parse response:', line, error);
-          }
-        });
-
-        child.stderr.on('data', (data) => {
-          console.error('[KaloscopeDaemon] stderr:', data.toString());
-        });
-
-        child.on('exit', (code, signal) => {
-          if (!isCurrent()) {
-            return;
-          }
-          console.log('[KaloscopeDaemon] Process exited with code:', code, 'signal:', signal);
-          this.isReady = false;
-          this.process = null;
-          this.readyPromise = null;
-          this.modelLoaded = false;
-          this.currentModel = null;
-          this.currentDevice = null;
-          this.failPendingResponses('Daemon exited');
-        });
-
-        child.on('error', (error) => {
-          if (!isCurrent()) {
-            return;
-          }
-          console.error('[KaloscopeDaemon] Process error:', error);
-          this.isReady = false;
-          this.process = null;
-          this.readyPromise = null;
-          reject(error);
-        });
-
-        // A cold container (empty page cache, boot-time scans) can take well over 30s to import torch.
-        setTimeout(() => {
-          if (isCurrent() && !this.isReady) {
-            console.error('[KaloscopeDaemon] Daemon did not become ready in time; stopping it so the next request retries cleanly');
-            this.resetDaemonState();
-            child.kill('SIGTERM');
-            reject(new Error(`Daemon failed to become ready within ${DAEMON_READY_TIMEOUT_MS / 1000} seconds`));
-          }
-        }, DAEMON_READY_TIMEOUT_MS);
-      } catch (error) {
-        reject(error);
-      }
-    });
-
-    return this.readyPromise;
-  }
-
-  /** Stop daemon process. */
+  /** Stop the whole vision worker (the tagger shares it); the next request starts it again. */
   async stopDaemon(): Promise<void> {
-    this.clearAutoUnloadTimer();
-
-    if (this.process) {
-      try {
-        await this.sendCommand({ action: 'shutdown' });
-      } catch (error) {
-        console.error('[KaloscopeDaemon] Error sending shutdown command:', error);
-      }
-
-      const stoppingProcess = this.process;
-      setTimeout(() => {
-        if (stoppingProcess && stoppingProcess.exitCode === null) {
-          stoppingProcess.kill('SIGTERM');
-        }
-      }, 1000);
-    }
-
-    this.resetDaemonState();
+    await visionWorker.stop();
   }
 
-  /** Forget the current process; late events from it are ignored by the per-process guards. */
-  private resetDaemonState(): void {
-    this.isReady = false;
-    this.process = null;
-    this.readyPromise = null;
-    this.modelLoaded = false;
-    this.currentModel = null;
-    this.currentDevice = null;
-    this.failPendingResponses('Daemon stopped');
-  }
-
-  /** Answer every queued request so callers fail fast instead of waiting for the command timeout. */
-  private failPendingResponses(reason: string): void {
-    const pending = this.responseQueue.splice(0);
-    pending.forEach((callback) => callback({ success: false, error: reason } as DaemonResponse));
-  }
-
-  /** Send command to daemon. */
-  private async sendCommand(command: DaemonCommand): Promise<DaemonResponse> {
-    if (!this.isReady || !this.process || !this.process.stdin) {
-      throw new Error('Daemon is not running');
-    }
-
-    return await new Promise((resolve, reject) => {
-      const child = this.process!;
-      const callback = (response: DaemonResponse) => {
-        clearTimeout(timeout);
-        resolve(response);
-      };
-      const timeout = setTimeout(() => {
-        const index = this.responseQueue.indexOf(callback);
-        if (index >= 0) {
-          this.responseQueue.splice(index, 1);
-        }
-        reject(new Error('Daemon command timeout'));
-        if (this.process === child) {
-          console.error('[KaloscopeDaemon] Command timed out; restarting the daemon to resync responses');
-          this.resetDaemonState();
-          child.kill('SIGTERM');
-        }
-      }, 120000);
-
-      this.responseQueue.push(callback);
-
-      this.process!.stdin!.write(`${JSON.stringify(command)}\n`);
-    });
-  }
-
-  /** Ensure daemon is started. */
-  private async ensureStarted(): Promise<void> {
-    if (!this.isReady) {
-      try {
-        await this.startDaemon();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        throw new Error(`Failed to start Kaloscope daemon: ${message}. Check Python installation and dependencies.`);
-      }
-    }
-  }
-
-  /** Load model into memory. */
   async loadModel(device?: string): Promise<void> {
-    await this.ensureStarted();
-
-    const targetDevice = device || this.getKaloscopeSettings().device || 'auto';
-    const response = await this.sendCommand({
-      action: 'load_model',
-      repo: this.getModelRepo(),
-      model_file: this.getModelFile(),
-      device: targetDevice,
-      cache_dir: runtimePaths.modelsDir,
-    });
-
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to load Kaloscope model');
-    }
-
-    this.modelLoaded = true;
-    this.currentModel = response.model || 'kaloscope-onnx';
-    this.currentDevice = response.device || null;
-    this.lastUsedAt = new Date();
-  }
-
-  /** Unload model from memory. */
-  async unloadModel(): Promise<void> {
-    if (!this.modelLoaded || !this.isReady) {
-      return;
-    }
-
-    this.clearAutoUnloadTimer();
-
-    const response = await this.sendCommand({ action: 'unload_model' });
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to unload Kaloscope model');
-    }
-
-    this.modelLoaded = false;
-    this.currentModel = null;
-    this.currentDevice = null;
-  }
-
-  /** Run the Kaloscope daemon for a single image file. */
-  async tagImage(imagePath: string, options?: KaloscopeServiceOptions): Promise<KaloscopeResult> {
-    const readyError = await this.ensureReady(imagePath, 'Image');
-    if (readyError) {
-      return readyError;
-    }
-
-    try {
-      await this.ensureStarted();
-
-      if (!this.modelLoaded) {
-        await this.loadModel();
-      }
-
-      this.lastUsedAt = new Date();
-
-      const response = await this.sendCommand({
-        action: 'tag_image',
-        image_path: imagePath,
-        topk: this.getEffectiveTopk(options),
-      });
-
-      this.resetAutoUnloadTimer();
-      return response as KaloscopeResult;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      return {
-        success: false,
-        error: message,
-        error_type: 'DaemonException',
-      };
-    }
-  }
-
-  /** Merge multiple frame-level Kaloscope results into one video-level result. */
-  private mergeVideoResults(results: KaloscopeResult[], topk: number): KaloscopeResult {
-    const successfulResults = results.filter((result) => result.success && result.artists && Object.keys(result.artists).length > 0);
-
-    if (successfulResults.length === 0) {
-      const firstFailure = results.find((result) => !result.success);
-      return {
-        success: false,
-        error: firstFailure?.error || 'All Kaloscope frame tagging attempts failed',
-        error_type: firstFailure?.error_type || 'MergeError',
-      };
-    }
-
-    const artistAccumulator: Record<string, { sum: number; count: number }> = {};
-    for (const result of successfulResults) {
-      for (const [artist, score] of Object.entries(result.artists || {})) {
-        if (!artistAccumulator[artist]) {
-          artistAccumulator[artist] = { sum: 0, count: 0 };
-        }
-        artistAccumulator[artist].sum += score;
-        artistAccumulator[artist].count += 1;
-      }
-    }
-
-    const mergedArtists = Object.fromEntries(
-      Object.entries(artistAccumulator)
-        .map(([artist, value]) => [artist, value.sum / value.count] as const)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, topk),
+    const settings = this.getKaloscopeSettings();
+    const status = await visionWorker.request<{ models: Record<string, { device: string }> }>(
+      'load',
+      { model: 'kaloscope', options: { device: device || settings.device || 'auto' } },
+      { priority: 'high' },
     );
-
-    if (Object.keys(mergedArtists).length === 0) {
-      return {
-        success: false,
-        error: 'No Kaloscope artist predictions were produced from video frames',
-        error_type: 'MergeError',
-      };
-    }
-
-    return {
-      success: true,
-      model: successfulResults[0].model || 'kaloscope-onnx',
-      topk,
-      artists: mergedArtists,
-      taglist: Object.keys(mergedArtists).join(', '),
-      tagged_at: new Date().toISOString(),
-    };
+    visionWorker.touch('kaloscope', status.models?.kaloscope?.device ?? null);
   }
 
+  async unloadModel(): Promise<void> {
+    await visionWorker.unload(['kaloscope']);
+  }
+
+  async tagImage(imagePath: string, options?: KaloscopeServiceOptions): Promise<KaloscopeResult> {
+    return this.tag(imagePath, false, options);
+  }
+
+  /** Frames are averaged inside the worker (probabilities and style vector). */
   async tagVideo(videoPath: string, options?: KaloscopeServiceOptions): Promise<KaloscopeResult> {
-    const readyError = await this.ensureReady(videoPath, 'Video');
-    if (readyError) {
-      return readyError;
+    return this.tag(videoPath, true, options);
+  }
+
+  private async tag(targetPath: string, isVideo: boolean, options?: KaloscopeServiceOptions): Promise<KaloscopeResult> {
+    const readyError = await this.ensureReady(targetPath, isVideo ? 'Video' : 'Image');
+    if (readyError) return readyError;
+    const result = await analyzeMedia(targetPath, isVideo, { kaloscope: { topk: options?.topk } }, { compositeHash: options?.compositeHash });
+    if (!result.kaloscope) {
+      return { success: false, error: 'Kaloscope returned nothing', error_type: 'WorkerError' };
     }
-
-    const topk = this.getEffectiveTopk(options);
-    let framePaths: string[] = [];
-
-    try {
-      framePaths = await VideoFrameExtractor.extractFramesForTagging(videoPath);
-      const frameResults: KaloscopeResult[] = [];
-
-      for (const framePath of framePaths) {
-        frameResults.push(await this.tagImage(framePath, { topk }));
-      }
-
-      return this.mergeVideoResults(frameResults, topk);
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown Kaloscope video tagging error',
-        error_type: 'VideoTagError',
-      };
-    } finally {
-      if (framePaths.length > 0) {
-        await VideoFrameExtractor.cleanupTempFrames(framePaths);
-      }
-    }
+    // The style vector is stored by hash (when given); callers get the artist result only.
+    const { style: _style, ...kaloscope } = result.kaloscope;
+    return kaloscope;
   }
 
   async getStatus(): Promise<KaloscopeRuntimeStatus> {
-    if (!this.isReady || !this.process) {
-      return {
-        isRunning: false,
-        modelLoaded: false,
-        currentModel: null,
-        currentDevice: null,
-        lastUsedAt: null,
-      };
-    }
-
-    try {
-      const response = await this.sendCommand({ action: 'get_status' });
-      return {
-        isRunning: true,
-        modelLoaded: response.model_loaded || false,
-        currentModel: typeof response.current_model === 'string' ? response.current_model : this.currentModel,
-        currentDevice: response.device || this.currentDevice,
-        lastUsedAt: this.lastUsedAt ? this.lastUsedAt.toISOString() : null,
-      };
-    } catch {
-      return {
-        isRunning: false,
-        modelLoaded: false,
-        currentModel: null,
-        currentDevice: null,
-        lastUsedAt: null,
-      };
-    }
+    const status = visionWorker.status();
+    const kaloscope = status.models.kaloscope;
+    return {
+      isRunning: status.running,
+      modelLoaded: Boolean(kaloscope),
+      currentModel: kaloscope ? KALOSCOPE_MODEL : null,
+      currentDevice: kaloscope?.device ?? null,
+      lastUsedAt: kaloscope?.lastUsedAt ?? null,
+    };
   }
 
-  /** Reload configuration. Daemon restarts lazily on next use. */
+  /** Settings are read per request; only a device change needs the loaded model dropped. */
   async reloadConfig(): Promise<void> {
-    if (this.isReady) {
-      await this.stopDaemon();
-    }
-  }
-
-  /** Reset auto-unload timer using the same semantics as WD tagger. */
-  private resetAutoUnloadTimer(): void {
-    this.clearAutoUnloadTimer();
-
-    const settings = this.getKaloscopeSettings();
-    if (settings.keepModelLoaded) {
-      return;
-    }
-
-    if (settings.autoUnloadMinutes > 0) {
-      const timeoutMs = settings.autoUnloadMinutes * 60 * 1000;
-      this.autoUnloadTimer = setTimeout(async () => {
-        try {
-          await this.unloadModel();
-        } catch (error) {
-          console.error('[KaloscopeDaemon] Auto-unload failed:', error);
-        }
-      }, timeoutMs);
-    }
-  }
-
-  private clearAutoUnloadTimer(): void {
-    if (this.autoUnloadTimer) {
-      clearTimeout(this.autoUnloadTimer);
-      this.autoUnloadTimer = null;
-    }
+    await visionWorker.unload(['kaloscope']);
   }
 }
 

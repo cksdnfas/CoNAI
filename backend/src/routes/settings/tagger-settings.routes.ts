@@ -5,6 +5,7 @@ import { settingsService } from '../../services/settingsService';
 import { imageTaggerService } from '../../services/imageTaggerService';
 import { autoTagScheduler } from '../../services/autoTagScheduler';
 import { autoTestMediaService } from '../../services/autoTestMediaService';
+import { aiGpuReady } from '../../services/aiWorker/aiVisionService';
 import {
   sendRouteBadRequest,
   validateNumberInRangeIfDefined,
@@ -12,13 +13,16 @@ import {
 } from '../routeValidation';
 
 const router = Router();
-const validTaggerModels = ['vit', 'swinv2', 'convnext'] as const;
+const validTaggerModels = ['vit', 'swinv2', 'convnext', 'pixai-v1'] as const;
+const GPU_ONLY_MODELS: readonly TaggerModel[] = ['pixai-v1'];
+const GPU_REQUIRED_MESSAGE = 'PixAI 태거는 CUDA GPU에서만 돌아가. AI 런타임에 GPU용(CUDA) 빌드를 설치해줘.';
 const validTaggerDevices = ['auto', 'cpu', 'cuda'] as const;
 
 router.get(
   '/tagger/models',
   asyncHandler(async (_req: Request, res: Response) => {
-    const models = settingsService.getModelsList();
+    const gpuReady = await aiGpuReady().catch(() => false);
+    const models = settingsService.getModelsList().map((model) => (model.requiresGpu ? { ...model, available: gpuReady } : model));
     res.json({
       success: true,
       data: models,
@@ -39,6 +43,17 @@ router.put(
     const currentSettings = settingsService.loadSettings();
     const nextEnabled = taggerSettings.enabled ?? currentSettings.tagger.enabled;
     const wasEnabled = currentSettings.tagger.enabled;
+    const nextModel = taggerSettings.model ?? currentSettings.tagger.model;
+    if (GPU_ONLY_MODELS.includes(nextModel)) {
+      if ((taggerSettings.device ?? currentSettings.tagger.device) === 'cpu') {
+        sendRouteBadRequest(res, GPU_REQUIRED_MESSAGE);
+        return;
+      }
+      if (taggerSettings.model !== undefined && taggerSettings.model !== currentSettings.tagger.model && !(await aiGpuReady().catch(() => false))) {
+        sendRouteBadRequest(res, GPU_REQUIRED_MESSAGE);
+        return;
+      }
+    }
 
     if (!wasEnabled && nextEnabled) {
       const dependencyStatus = await imageTaggerService.checkPythonDependencies();
@@ -79,7 +94,7 @@ router.post(
     const { model } = req.body;
 
     if (!model || !validTaggerModels.includes(model)) {
-      sendRouteBadRequest(res, 'Invalid model. Must be one of: vit, swinv2, convnext');
+      sendRouteBadRequest(res, `Invalid model. Must be one of: ${validTaggerModels.join(', ')}`);
       return;
     }
 
@@ -121,7 +136,7 @@ router.post(
     const { model, device }: { model?: TaggerModel; device?: TaggerDevice } = req.body;
 
     if (model && !validTaggerModels.includes(model)) {
-      sendRouteBadRequest(res, 'Invalid model. Must be one of: vit, swinv2, convnext');
+      sendRouteBadRequest(res, `Invalid model. Must be one of: ${validTaggerModels.join(', ')}`);
       return;
     }
 

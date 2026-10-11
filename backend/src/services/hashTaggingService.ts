@@ -4,8 +4,7 @@ import { resolveUploadsPath } from '../config/runtimePaths';
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { imageTaggerService, ImageTaggerService } from './imageTaggerService';
 import { TaggerResult } from './taggerDaemon';
-import { AutoTagsComposeService } from './autoTagsComposeService';
-import { kaloscopeTaggerService } from './kaloscopeTaggerService';
+import { AutoTagsComposeService, KaloscopeResult } from './autoTagsComposeService';
 import { RatingScoreService } from './ratingScoreService';
 import { settingsService } from './settingsService';
 import { RatingData } from '../types/autoTag';
@@ -71,22 +70,17 @@ export function extractRatingData(raw: unknown): RatingData | null {
   return { general, sensitive, questionable, explicit };
 }
 
-export async function buildMergedAutoTags(
+export function buildMergedAutoTags(
   existingAutoTags: string | null,
   taggerResult: TaggerResult,
-  imagePath: string,
-  mimeType?: string
-): Promise<string> {
+  kaloscopeResult?: KaloscopeResult,
+): string {
   let autoTagsJson = AutoTagsComposeService.mergeTagger(existingAutoTags, taggerResult);
-  const settings = settingsService.loadSettings();
 
-  if (settings.kaloscope.enabled && !ImageTaggerService.isVideoFile(imagePath, mimeType)) {
-    const kaloscopeResult = await kaloscopeTaggerService.tagImage(imagePath);
-    if (kaloscopeResult.success) {
-      autoTagsJson = AutoTagsComposeService.mergeKaloscope(autoTagsJson, kaloscopeResult);
-    } else {
-      logger.warn('[Kaloscope] Tagging skipped or failed:', kaloscopeResult.error || kaloscopeResult.error_type || 'unknown');
-    }
+  if (kaloscopeResult?.success) {
+    autoTagsJson = AutoTagsComposeService.mergeKaloscope(autoTagsJson, kaloscopeResult);
+  } else if (kaloscopeResult) {
+    logger.warn('[Kaloscope] Tagging skipped or failed:', kaloscopeResult.error || kaloscopeResult.error_type || 'unknown');
   }
 
   return autoTagsJson;
@@ -169,15 +163,24 @@ function resolveRecordTaggingTarget(
   return buildTargetFromRecord(image, compositeHash, filePath, missingFileError);
 }
 
-async function runTagger(target: TaggingTarget, logPrefix: string, verboseResult = false): Promise<TaggerResult> {
+/** Tagger plus (when enabled) Kaloscope in one worker request; Kaloscope's style vector is stored for the hash. */
+async function runTagger(
+  target: TaggingTarget,
+  logPrefix: string,
+  verboseResult = false,
+): Promise<{ taggerResult: TaggerResult; kaloscopeResult?: KaloscopeResult }> {
   const isVideo = ImageTaggerService.isVideoFile(target.imagePath, target.mimeType);
   if (verboseResult && isVideo) {
     logger.debug('[ImageTag] Detected video file, extracting frames...');
   }
 
-  const taggerResult = isVideo
-    ? await imageTaggerService.tagVideo(target.imagePath)
-    : await imageTaggerService.tagImage(target.imagePath);
+  const analysis = await imageTaggerService.analyze(
+    target.imagePath,
+    isVideo,
+    { tagger: true, kaloscope: settingsService.loadSettings().kaloscope.enabled },
+    { compositeHash: target.compositeHash },
+  );
+  const taggerResult: TaggerResult = analysis.tagger ?? { success: false, error: 'Tagger returned nothing', error_type: 'WorkerError' };
 
   if (verboseResult) {
     logger.debug(`${logPrefix} Tagger result details logged to file`);
@@ -189,7 +192,7 @@ async function runTagger(target: TaggingTarget, logPrefix: string, verboseResult
     });
   }
 
-  return taggerResult;
+  return { taggerResult, kaloscopeResult: analysis.kaloscope };
 }
 
 async function calculateRatingScore(taggerResult: TaggerResult, logPrefix: string, logSuccess = false): Promise<number | null> {
@@ -215,7 +218,7 @@ export async function tagAndPersistTarget(
   logPrefix: string,
   options: { verboseResult?: boolean; logRatingScore?: boolean; includeErrorType?: boolean } = {},
 ): Promise<TaggingResultPayload> {
-  const taggerResult = await runTagger(target, logPrefix, options.verboseResult);
+  const { taggerResult, kaloscopeResult } = await runTagger(target, logPrefix, options.verboseResult);
 
   if (!taggerResult.success) {
     return createFailedTaggingResult(
@@ -225,7 +228,7 @@ export async function tagAndPersistTarget(
     );
   }
 
-  const autoTagsJson = await buildMergedAutoTags(target.existingAutoTags, taggerResult, target.imagePath, target.mimeType);
+  const autoTagsJson = buildMergedAutoTags(target.existingAutoTags, taggerResult, kaloscopeResult);
   if (options.verboseResult) {
     logger.debug(`${logPrefix} Formatted JSON length: ${autoTagsJson?.length || 0}`);
     if (autoTagsJson) {

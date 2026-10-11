@@ -4,6 +4,9 @@ import type { StoredFileSearchResult } from '@conai/shared';
 import { getUserSettingsDb } from '../database/userSettingsDb';
 import { storedFilePath } from './fileStorePaths';
 import { FileStoreError, TEXT_EXTENSIONS, toEntry, type FileRow } from './fileStoreService';
+import { EMBEDDING_MODEL_KEY, embedQuery, embeddingFeatureOn } from './aiWorker/textEmbeddingService';
+import { fuseRanks, SEMANTIC_SPACES, standouts } from './embeddings/rankFusion';
+import { vectorStore } from './vectors/vectorStore';
 
 /** Only the start of a big file is searchable; documents fit, logs and backups are cut. */
 const MAX_INDEXED_BYTES = 2 * 1024 * 1024;
@@ -97,12 +100,54 @@ export function refreshFileSearchIndex(owner: string): Promise<void> {
   return task;
 }
 
+type SearchRow = FileRow & { hit_at: number; body_length: number | null; excerpt: string | null };
+
+/** A search may wait for the embedding model to load (a tool call, not a reply in progress). */
+const SEMANTIC_QUERY_WAIT_MS = 20_000;
+const SEMANTIC_MIN_SCORE = 0.62;
+const SEMANTIC_MIN_LEAD = 0.04;
+
+/**
+ * The lexical rows fused with files close in meaning to the query (text embeddings, see semanticIndex), best first;
+ * null when embeddings are off or not answering. A file found by meaning shows the part of its text that matched.
+ */
+async function withSemanticRows(owner: string, query: string, limit: number, scopeSql: string, params: Record<string, string | number>, lexical: SearchRow[]): Promise<SearchRow[] | null> {
+  if (!embeddingFeatureOn('fileSearch')) return null;
+  const vector = await embedQuery(query, { waitMs: SEMANTIC_QUERY_WAIT_MS });
+  if (!vector) return null;
+  const db = getUserSettingsDb();
+  const scope = scopeSql
+    ? new Set((db.prepare(`SELECT e.id FROM stored_file_entries e WHERE e.owner_key = @owner ${scopeSql}`).all({ owner, within: params.within }) as Array<{ id: string }>).map((row) => row.id))
+    : null;
+  const best = new Map<string, { score: number; spanStart: number | null }>();
+  for (const hit of vectorStore.search(SEMANTIC_SPACES.file, EMBEDDING_MODEL_KEY, vector, { ownerKeys: [owner] })) {
+    if (scope && !scope.has(hit.sourceKey)) continue;
+    const known = best.get(hit.sourceKey);
+    if (!known || known.score < hit.score) best.set(hit.sourceKey, { score: hit.score, spanStart: hit.spanStart });
+  }
+  const close = standouts(new Map([...best].map(([id, value]) => [id, value.score])), SEMANTIC_MIN_SCORE, SEMANTIC_MIN_LEAD).slice(0, limit).map(([id]) => id);
+  if (close.length === 0) return null;
+  const rows = new Map(lexical.map((row) => [row.id, row]));
+  const missing = close.filter((id) => !rows.has(id));
+  if (missing.length > 0) {
+    const found = db.prepare(`SELECT e.*, t.body FROM stored_file_entries e LEFT JOIN search_db.search_documents t ON t.source = 'file' AND t.source_id = e.id
+      WHERE e.owner_key = ? AND e.deleted_at IS NULL AND e.id IN (${missing.map(() => '?').join(', ')})`).all(owner, ...missing) as Array<FileRow & { body: string | null }>;
+    for (const { body, ...row } of found) {
+      const start = best.get(row.id)?.spanStart ?? 0;
+      rows.set(row.id, { ...row, hit_at: body ? start + SNIPPET_BEFORE + 1 : 0, body_length: body?.length ?? null, excerpt: body ? body.slice(start, start + SNIPPET_LENGTH) : null });
+    }
+  }
+  const fused = fuseRanks([lexical.map((row) => row.id), close]);
+  return [...fused.entries()].sort((a, b) => b[1] - a[1]).flatMap(([id]) => rows.get(id) ?? []);
+}
+
 /**
  * Files and folders of one store whose name or text contains every term (case-insensitive for ASCII), name hits
  * first, then the most recently changed. `within`: only these entries and everything under them (the limit then
- * counts hits inside them, not in the whole store).
+ * counts hits inside them, not in the whole store). `semantic`: files close in meaning come in too, ranked together
+ * with the word matches (when text embeddings are on for file search).
  */
-export async function searchStoredFiles(owner: string, query: unknown, limit = 50, within?: readonly string[]): Promise<StoredFileSearchResult> {
+export async function searchStoredFiles(owner: string, query: unknown, limit = 50, within?: readonly string[], options: { semantic?: boolean } = {}): Promise<StoredFileSearchResult> {
   const terms = parseSearchTerms(query);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new FileStoreError('잘못된 검색 개수야.');
   await refreshFileSearchIndex(owner);
@@ -125,7 +170,8 @@ export async function searchStoredFiles(owner: string, query: unknown, limit = 5
     FROM stored_file_entries e LEFT JOIN search_db.search_documents t ON t.source = 'file' AND t.source_id = e.id
     WHERE e.owner_key = @owner AND e.deleted_at IS NULL AND ${every} ${scope}
     ORDER BY CASE WHEN ${nameOnly} THEN 0 ELSE 1 END, e.updated_at DESC, e.name_key
-    LIMIT @limit`).all(params) as Array<FileRow & { hit_at: number; body_length: number | null; excerpt: string | null }>;
+    LIMIT @limit`).all(params) as SearchRow[];
+  const ranked = (options.semantic ? await withSemanticRows(owner, String(query), limit, scope, params, rows) : null) ?? rows;
 
   const folders = new Map((db.prepare(`SELECT id, parent_id, name FROM stored_file_entries WHERE owner_key = ? AND kind = 'folder' AND deleted_at IS NULL`)
     .all(owner) as Array<{ id: string; parent_id: string | null; name: string }>).map((folder) => [folder.id, folder]));
@@ -145,7 +191,7 @@ export async function searchStoredFiles(owner: string, query: unknown, limit = 5
     return value;
   };
 
-  const hits = rows.slice(0, limit).map((row) => {
+  const hits = ranked.slice(0, limit).map((row) => {
     let snippet: string | null = null;
     if (row.excerpt) {
       const start = Math.max(row.hit_at - SNIPPET_BEFORE, 1);

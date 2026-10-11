@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { attachMainImagesDatabase, ensureApiGenerationHistoryTable, USER_DB_PATH } from './userSettingsBootstrap';
 import { attachSearchDatabase } from './searchDb';
+import { attachVectorDatabase } from './vectorDb';
 import { ensureUserSettingsCompatibility } from './userSettingsCompatibility';
 import { createUserSettingsSchema } from './userSettingsSchema';
 import { configureSqliteConnection } from './sqlitePragmas';
@@ -35,6 +36,7 @@ export function initializeUserSettingsDb(): void {
     ensureUserSettingsCompatibility(userSettingsDb);
     attachMainImagesDatabase(userSettingsDb);
     attachSearchDatabase(userSettingsDb);
+    attachVectorDatabase(userSettingsDb);
     ensureApiGenerationHistoryTable(userSettingsDb);
   } catch (error) {
     console.error('Failed to initialize unified user database:', error);

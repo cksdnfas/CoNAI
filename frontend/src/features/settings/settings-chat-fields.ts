@@ -1,6 +1,8 @@
 import { CHAT_PAGE_LIMITS, HEADER_NAVIGATION_ITEM_KEYS, MAX_RECYCLE_BIN_RETENTION_DAYS } from '@conai/shared'
 import type {
+  AiRuntimeSettings,
   AppearanceSettings,
+  EmbeddingSettings,
   ChatPageField,
   ChatPageValue,
   GeneralSettings,
@@ -33,8 +35,10 @@ export type SettingsChatSources = {
   thumbnail: ThumbnailSettings | null
   videoOptimization: VideoOptimizationSettings | null
   generationThrottle: GenerationThrottleSettings | null
+  aiRuntime: AiRuntimeSettings | null
   tagger: TaggerSettings | null
   kaloscope: KaloscopeSettings | null
+  embedding: EmbeddingSettings | null
   ratingWeights: RatingWeightsRecord | null
   ratingTiers: RatingTierRecord[] | null
   taggerModels: string[]
@@ -182,15 +186,21 @@ const GENERATION_THROTTLE: FieldSpec[] = [
 ]
 
 const DEVICES = ['auto', 'cpu', 'cuda']
-const TAGGER: FieldSpec[] = grouped({ ko: 'WD Tagger', en: 'WD Tagger' }, [
-  toggle('enabled', { ko: 'WD Tagger 활성화', en: 'Enable WD Tagger' }),
+const AI_RUNTIME: FieldSpec[] = grouped({ ko: 'AI 런타임', en: 'AI runtime' }, [
+  choice('torchBackend', { ko: '빌드 (auto 추천, 바꾸면 설치해야 적용)', en: 'Build (auto recommended; applies after installing)' }, ['auto', 'cpu', 'cu126', 'cu130', 'cu132']),
+  choice('pythonSource', { ko: 'Python (auto = 앱이 설치한 환경)', en: 'Python (auto = app-installed environment)' }, ['auto', 'custom']),
+  // The server runs this executable, so a chat may read it but never fill it.
+  { path: 'customPythonPath', label: { ko: '직접 지정 Python 경로', en: 'Custom Python path' }, type: 'text', editable: false, fallback: '' },
+  count('cpuThreads', { ko: 'CPU 스레드 (0 = 코어 절반, 최대 8)', en: 'CPU threads (0 = half the cores, at most 8)' }, 0, 256),
+])
+
+const TAGGER: FieldSpec[] = grouped({ ko: '태거', en: 'Tagger' }, [
+  toggle('enabled', { ko: '태거 활성화', en: 'Enable tagger' }),
   toggle('autoTagOnUpload', { ko: '업로드 시 자동 태깅', en: 'Auto tag on upload' }),
-  choice('model', { ko: '모델', en: 'Model' }, ['vit', 'swinv2', 'convnext']),
+  choice('model', { ko: '모델 (pixai-v1은 GPU 전용)', en: 'Model (pixai-v1 needs a GPU)' }, ['vit', 'swinv2', 'convnext', 'pixai-v1']),
   choice('device', { ko: '실행 장치', en: 'Device' }, DEVICES),
   { path: 'generalThreshold', label: { ko: '일반 태그 기준값', en: 'General tag threshold' }, type: 'number', min: 0, max: 1 },
   { path: 'characterThreshold', label: { ko: '캐릭터 기준값', en: 'Character threshold' }, type: 'number', min: 0, max: 1 },
-  // The server runs this executable, so a chat may read it but never fill it.
-  { path: 'pythonPath', label: { ko: 'Python 실행 파일', en: 'Python executable' }, type: 'text', editable: false, fallback: '' },
   toggle('keepModelLoaded', { ko: '모델 메모리 유지', en: 'Keep model in memory' }),
   count('autoUnloadMinutes', { ko: '자동 언로드(분)', en: 'Auto unload (minutes)' }, 1),
 ])
@@ -200,9 +210,21 @@ const KALOSCOPE: FieldSpec[] = grouped({ ko: 'Kaloscope', en: 'Kaloscope' }, [
   toggle('autoTagOnUpload', { ko: '새 이미지 자동 처리', en: 'Process new images automatically' }),
   choice('device', { ko: '실행 장치', en: 'Device' }, DEVICES),
   count('topK', { ko: '작가 후보 수', en: 'Artist candidates' }, 1, 200),
+  { ...toggle('styleVectors', { ko: '화풍 벡터 저장', en: 'Keep style vectors' }), fallback: true },
   toggle('keepModelLoaded', { ko: '모델 메모리 유지', en: 'Keep model in memory' }),
   count('autoUnloadMinutes', { ko: '자동 언로드(분)', en: 'Auto unload (minutes)' }, 1),
   { path: 'artistLinkUrlTemplate', label: { ko: 'Artist 링크 URL', en: 'Artist link URL' }, type: 'text', fallback: '' },
+])
+
+const EMBEDDING: FieldSpec[] = grouped({ ko: '임베딩', en: 'Embeddings' }, [
+  toggle('enabled', { ko: '임베딩 사용', en: 'Use embeddings' }),
+  toggle('chatRecall', { ko: '채팅 기억 회상', en: 'Chat memory recall' }),
+  toggle('lorebook', { ko: '로어북 의미 발동', en: 'Lorebook by meaning' }),
+  toggle('chatHistory', { ko: '채팅 기록 검색', en: 'Chat history search' }),
+  toggle('fileSearch', { ko: '파일·회의록 검색', en: 'File and minutes search' }),
+  toggle('imageSearch', { ko: '이미지 임베딩 (CPU로 라이브러리 색인)', en: 'Image embeddings (indexes the library on the CPU)' }),
+  toggle('keepModelLoaded', { ko: '모델 메모리 유지', en: 'Keep model in memory' }),
+  count('autoUnloadMinutes', { ko: '자동 언로드(분)', en: 'Auto unload (minutes)' }, 1, 1440),
 ])
 
 const RATING_WEIGHTS: FieldSpec[] = (['general', 'sensitive', 'questionable', 'explicit'] as const).map((key): FieldSpec => ({
@@ -229,8 +251,10 @@ const SECTION_SPECS: Record<ObjectSection, FieldSpec[]> = {
   thumbnail: THUMBNAIL,
   videoOptimization: VIDEO_OPTIMIZATION,
   generationThrottle: GENERATION_THROTTLE,
+  aiRuntime: AI_RUNTIME,
   tagger: TAGGER,
   kaloscope: KALOSCOPE,
+  embedding: EMBEDDING,
   ratingWeights: RATING_WEIGHTS,
 }
 
@@ -239,7 +263,7 @@ const TAB_SECTIONS: Partial<Record<SettingsTab, Array<[ObjectSection, FieldSpec[
   general: [['general', GENERAL_BASIC], ['appearance', APPEARANCE]],
   library: [['general', GENERAL_LIBRARY], ['metadata', METADATA]],
   media: [['imageSave', IMAGE_SAVE], ['thumbnail', THUMBNAIL], ['videoOptimization', VIDEO_OPTIMIZATION]],
-  auto: [['tagger', TAGGER], ['kaloscope', KALOSCOPE], ['ratingWeights', RATING_WEIGHTS]],
+  auto: [['aiRuntime', AI_RUNTIME], ['kaloscope', KALOSCOPE], ['tagger', TAGGER], ['embedding', EMBEDDING], ['ratingWeights', RATING_WEIGHTS]],
   generation: [['generationThrottle', GENERATION_THROTTLE]],
   system: [['general', SAFETY]],
 }

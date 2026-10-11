@@ -1,2 +1,5 @@
 # Golden fixtures are compared byte-for-byte (sha256 in manifest.json); never rewrite line endings.
 backend/test/fixtures/av-golden/** -text
+
+# Shell scripts run inside Linux images; keep LF even on Windows checkouts.
+*.sh text eol=lf

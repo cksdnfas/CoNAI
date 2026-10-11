@@ -4,6 +4,11 @@ import type { AutoTestKaloscopeResult } from '@/lib/api-settings-kaloscope'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import type { ImageRecord } from '@/types/image'
 import type {
+  AiRuntimeSettings,
+  AiRuntimeStatus,
+  AiTorchBackendPreference,
+  EmbeddingServerStatus,
+  EmbeddingSettings,
   KaloscopeServerStatus,
   KaloscopeSettings,
   TaggerDependencyCheckResult,
@@ -13,6 +18,21 @@ import type {
 } from '@conai/shared'
 
 export interface AutoTabProps {
+  aiRuntimeDraft: AiRuntimeSettings | null
+  aiRuntimeStatus: AiRuntimeStatus | undefined
+  onPatchAiRuntime: (patch: Partial<AiRuntimeSettings>) => void
+  onRefreshAiRuntime: () => void
+  isRefreshingAiRuntime: boolean
+  onInstallAiRuntime: (backend: AiTorchBackendPreference) => void
+  onCancelAiRuntimeInstall: () => void
+  isAiRuntimeInstallPending: boolean
+  hasAiRuntimeChanges: boolean
+  embeddingDraft: EmbeddingSettings | null
+  embeddingStatus: EmbeddingServerStatus | undefined
+  onPatchEmbedding: (patch: Partial<EmbeddingSettings>) => void
+  hasEmbeddingChanges: boolean
+  onRequeueOutdatedKaloscope: () => void
+  isRequeueingOutdatedKaloscope: boolean
   taggerDraft: TaggerSettings | null
   kaloscopeDraft: KaloscopeSettings | null
   taggerModels: TaggerModelInfo[]

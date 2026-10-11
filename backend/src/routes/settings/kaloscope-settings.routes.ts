@@ -9,6 +9,7 @@ import { autoTestMediaService } from '../../services/autoTestMediaService';
 import {
   sendRouteBadRequest,
   validateIntegerInRangeIfDefined,
+  validateBooleanIfDefined,
   validateStringEnumIfDefined,
 } from '../routeValidation';
 
@@ -22,6 +23,7 @@ router.put(
 
     if (!validateStringEnumIfDefined(res, kaloscopeSettings.device, validKaloscopeDevices, `Invalid device. Must be one of: ${validKaloscopeDevices.join(', ')}`)) return;
     if (!validateIntegerInRangeIfDefined(res, kaloscopeSettings.topK, 1, 200, 'topK must be an integer between 1 and 200')) return;
+    if (!validateBooleanIfDefined(res, kaloscopeSettings.styleVectors, 'styleVectors must be a boolean')) return;
 
     if (kaloscopeSettings.autoUnloadMinutes !== undefined) {
       if (!Number.isInteger(kaloscopeSettings.autoUnloadMinutes) || kaloscopeSettings.autoUnloadMinutes < 1) {
@@ -91,6 +93,22 @@ router.post(
   asyncHandler(async (_req: Request, res: Response) => {
     await kaloscopeTaggerService.unloadModel();
     res.json({ success: true, message: 'Model unloaded successfully' });
+    return;
+  })
+);
+
+router.post(
+  '/kaloscope/requeue-outdated',
+  asyncHandler(async (_req: Request, res: Response) => {
+    // Only the auto-tag scheduler re-extracts; without it the dropped results would stay empty.
+    const { kaloscope } = settingsService.loadSettings();
+    if (!kaloscope.enabled || !kaloscope.autoTagOnUpload) {
+      sendRouteBadRequest(res, 'Kaloscope and its auto tagging must be enabled to re-extract');
+      return;
+    }
+    const requeued = await kaloscopeTaggerService.requeueOutdatedResults();
+    autoTagScheduler.restart();
+    res.json({ success: true, data: { requeued } });
     return;
   })
 );

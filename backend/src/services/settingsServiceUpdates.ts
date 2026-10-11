@@ -1,6 +1,8 @@
 import type {
+  AiRuntimeSettings,
   AppSettings,
   AppearanceSettings,
+  EmbeddingSettings,
   GenerationThrottleSettings,
   GeneralSettings,
   KaloscopeSettings,
@@ -32,10 +34,35 @@ export function applyGeneralSettingsUpdate(currentSettings: AppSettings, general
   };
 }
 
-/** Build the next settings state after applying a tagger-settings patch. */
-export function applyTaggerSettingsUpdate(currentSettings: AppSettings, taggerSettings: Partial<TaggerSettings>): AppSettings {
+/** Build the next settings state after applying an AI-runtime-settings patch. */
+export function applyAiRuntimeSettingsUpdate(currentSettings: AppSettings, aiRuntimeSettings: Partial<AiRuntimeSettings>): AppSettings {
   return {
     ...currentSettings,
+    aiRuntime: {
+      ...currentSettings.aiRuntime,
+      ...aiRuntimeSettings,
+    },
+  };
+}
+
+/** Build the next settings state after applying an embedding-settings patch. */
+export function applyEmbeddingSettingsUpdate(currentSettings: AppSettings, embeddingSettings: Partial<EmbeddingSettings>): AppSettings {
+  return {
+    ...currentSettings,
+    embedding: {
+      ...currentSettings.embedding,
+      ...embeddingSettings,
+    },
+  };
+}
+
+/** Build the next settings state after applying a tagger-settings patch. */
+export function applyTaggerSettingsUpdate(currentSettings: AppSettings, taggerSettings: Partial<TaggerSettings>): AppSettings {
+  // The tagger's Python path now lives in aiRuntime.customPythonPath; an edit through the old field still lands there.
+  const pythonPath = typeof taggerSettings.pythonPath === 'string' ? taggerSettings.pythonPath.trim() : '';
+  return {
+    ...currentSettings,
+    ...(pythonPath && { aiRuntime: { ...currentSettings.aiRuntime, customPythonPath: pythonPath } }),
     tagger: {
       ...currentSettings.tagger,
       ...taggerSettings,

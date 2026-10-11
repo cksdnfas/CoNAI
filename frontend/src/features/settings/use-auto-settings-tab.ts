@@ -5,9 +5,22 @@ import { getRatingTiers } from '@/lib/api-search'
 import { getRandomAutoTestMedia, getRatingWeights, resolveAutoTestMedia, updateRatingTiers, updateRatingWeights, type AutoTestMediaRecord, type RatingWeightsRecord } from '@/lib/api-settings'
 import { checkTaggerDependencies, getTaggerModels, getTaggerStatus, runTaggerAutoTest, updateTaggerSettings, type AutoTestTaggerResult } from '@/lib/api-settings-tagger'
 import { getKaloscopeStatus, runKaloscopeAutoTest, updateKaloscopeSettings, type AutoTestKaloscopeResult } from '@/lib/api-settings-kaloscope'
+import {
+  cancelAiRuntimeInstall,
+  getAiRuntimeStatus,
+  getEmbeddingStatus,
+  installAiRuntime,
+  requeueOutdatedKaloscopeResults,
+  updateAiRuntimeSettings,
+  updateEmbeddingSettings,
+} from '@/lib/api-settings-ai'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import type { ImageRecord } from '@/types/image'
 import type {
+  AiRuntimeSettings,
+  AiRuntimeStatus,
+  AppSettings,
+  EmbeddingSettings,
   KaloscopeSettings,
   TaggerDependencyCheckResult,
   TaggerSettings,
@@ -23,6 +36,10 @@ interface UseAutoSettingsTabOptions {
   taggerSettings: TaggerSettings | null | undefined
   /** Current saved-or-loaded kaloscope settings. */
   kaloscopeSettings: KaloscopeSettings | null | undefined
+  /** Saved AI runtime (Python environment) settings. */
+  aiRuntimeSettings: AiRuntimeSettings | null | undefined
+  /** Saved embedding settings. */
+  embeddingSettings: EmbeddingSettings | null | undefined
   /** Sync the updated app settings into the shared query cache. */
   syncSettingsCache: (nextSettings: Awaited<ReturnType<typeof updateTaggerSettings>>) => void
   /** Refresh cross-cutting auto/settings queries after save. */
@@ -120,6 +137,8 @@ export function useAutoSettingsTab({
   isActive,
   taggerSettings,
   kaloscopeSettings,
+  aiRuntimeSettings,
+  embeddingSettings,
   syncSettingsCache,
   refreshAutoQueries,
   notifyInfo,
@@ -129,6 +148,8 @@ export function useAutoSettingsTab({
   const { t } = useI18n()
   const [taggerDraft, setTaggerDraft] = useState<TaggerSettings | null>(null)
   const [kaloscopeDraft, setKaloscopeDraft] = useState<KaloscopeSettings | null>(null)
+  const [aiRuntimeDraft, setAiRuntimeDraft] = useState<AiRuntimeSettings | null>(null)
+  const [embeddingDraft, setEmbeddingDraft] = useState<EmbeddingSettings | null>(null)
   const [ratingWeightsDraft, setRatingWeightsDraft] = useState<RatingWeightsRecord | null>(null)
   const [ratingTiersDraft, setRatingTiersDraft] = useState<RatingTierRecord[] | null>(null)
   const [taggerDependencyResult, setTaggerDependencyResult] = useState<TaggerDependencyCheckResult | null>(null)
@@ -153,6 +174,19 @@ export function useAutoSettingsTab({
     queryFn: getKaloscopeStatus,
     enabled: isActive,
   })
+  const aiRuntimeStatusQuery = useQuery({
+    queryKey: ['ai-runtime-status'],
+    queryFn: () => getAiRuntimeStatus(),
+    enabled: isActive,
+    // Install progress (step, downloaded bytes, log) comes from polling while an install runs.
+    refetchInterval: (query) => (query.state.data?.install.status === 'running' ? 1500 : false),
+  })
+  const embeddingStatusQuery = useQuery({
+    queryKey: ['embedding-status'],
+    queryFn: getEmbeddingStatus,
+    enabled: isActive,
+    refetchInterval: (query) => (query.state.data?.indexing || query.state.data?.download ? 5000 : false),
+  })
   const ratingWeightsQuery = useQuery({
     queryKey: ['rating-weights'],
     queryFn: getRatingWeights,
@@ -171,6 +205,10 @@ export function useAutoSettingsTab({
 
   const effectiveTaggerDraft = taggerDraft ?? taggerSettings ?? null
   const effectiveKaloscopeDraft = kaloscopeDraft ?? kaloscopeSettings ?? null
+  const effectiveAiRuntimeDraft = aiRuntimeDraft ?? aiRuntimeSettings ?? null
+  const effectiveEmbeddingDraft = embeddingDraft ?? embeddingSettings ?? null
+  const hasAiRuntimeChanges = Boolean(effectiveAiRuntimeDraft && aiRuntimeSettings && !areSettingsDraftsEqual(effectiveAiRuntimeDraft, aiRuntimeSettings))
+  const hasEmbeddingChanges = Boolean(effectiveEmbeddingDraft && embeddingSettings && !areSettingsDraftsEqual(effectiveEmbeddingDraft, embeddingSettings))
   const effectiveRatingWeightsDraft = ratingWeightsDraft ?? ratingWeightsQuery.data ?? null
   const effectiveRatingTiersDraft = ratingTiersDraft ?? ratingTiersQuery.data ?? null
   const hasTaggerChanges = Boolean(effectiveTaggerDraft && taggerSettings && !areSettingsDraftsEqual(effectiveTaggerDraft, taggerSettings))
@@ -212,6 +250,74 @@ export function useAutoSettingsTab({
       await refreshAutoQueries()
     },
   })
+
+  /** These endpoints answer with their status, not the whole settings: patch the cached settings in place. */
+  const patchSettingsCache = (patch: Partial<AppSettings>) => {
+    queryClient.setQueryData<AppSettings>(['app-settings'], (current) => (current ? { ...current, ...patch } : current))
+  }
+  const setAiRuntimeStatus = (status: AiRuntimeStatus) => queryClient.setQueryData(['ai-runtime-status'], status)
+
+  const aiRuntimeMutation = useMutation({
+    mutationFn: updateAiRuntimeSettings,
+    onSuccess: async (status) => {
+      patchSettingsCache({ aiRuntime: status.settings })
+      setAiRuntimeDraft(status.settings)
+      setAiRuntimeStatus(status)
+      await refreshAutoQueries()
+    },
+  })
+
+  const embeddingMutation = useMutation({
+    mutationFn: updateEmbeddingSettings,
+    onSuccess: ({ settings, status }) => {
+      patchSettingsCache({ embedding: settings })
+      setEmbeddingDraft(settings)
+      queryClient.setQueryData(['embedding-status'], status)
+    },
+  })
+
+  const aiRuntimeRefreshMutation = useMutation({
+    mutationFn: () => getAiRuntimeStatus(true),
+    onSuccess: setAiRuntimeStatus,
+    onError: (error) => notifyError(error instanceof Error ? error.message : t({ ko: 'AI 런타임을 검사하지 못했어.', en: 'Failed to check the AI runtime.' })),
+  })
+
+  const aiRuntimeInstallMutation = useMutation({
+    mutationFn: installAiRuntime,
+    onSuccess: (status) => {
+      setAiRuntimeStatus(status)
+      notifyInfo(t({ ko: 'AI 런타임 설치를 시작했어. 검증을 통과하면 바꿔 끼워.', en: 'AI runtime install started. It switches over once its check passes.' }))
+    },
+    onError: (error) => notifyError(error instanceof Error ? error.message : t({ ko: 'AI 런타임 설치를 시작하지 못했어.', en: 'Failed to start the AI runtime install.' })),
+  })
+
+  const aiRuntimeCancelMutation = useMutation({
+    mutationFn: cancelAiRuntimeInstall,
+    onSuccess: setAiRuntimeStatus,
+    onError: (error) => notifyError(error instanceof Error ? error.message : t({ ko: '설치를 취소하지 못했어.', en: 'Failed to cancel the install.' })),
+  })
+
+  const kaloscopeRequeueMutation = useMutation({
+    mutationFn: requeueOutdatedKaloscopeResults,
+    onSuccess: async ({ requeued }) => {
+      notifyInfo(t({ ko: '{count}장을 다시 추출 대기열에 넣었어.', en: 'Queued {count} items for re-extraction.' }, { count: requeued.toLocaleString() }))
+      await queryClient.invalidateQueries({ queryKey: ['kaloscope-status'] })
+    },
+    onError: (error) => notifyError(error instanceof Error ? error.message : t({ ko: '작가 다시 추출을 시작하지 못했어.', en: 'Failed to queue the artist re-extraction.' })),
+  })
+
+  // A finished install changes which Python the taggers use; refresh their status once it settles.
+  const installState = aiRuntimeStatusQuery.data?.install.status
+  const previousInstallStateRef = useRef(installState)
+  useEffect(() => {
+    if (previousInstallStateRef.current === 'running' && installState && installState !== 'running') {
+      if (installState === 'succeeded') notifyInfo(t({ ko: 'AI 런타임을 새 환경으로 바꿨어.', en: 'Switched to the new AI runtime.' }))
+      else if (installState === 'failed') notifyError(t({ ko: 'AI 런타임 설치에 실패했어. 이전 환경을 그대로 써.', en: 'The AI runtime install failed. The previous environment stays.' }))
+      void refreshAutoQueries()
+      void queryClient.invalidateQueries({ queryKey: ['embedding-status'] })
+    }
+    previousInstallStateRef.current = installState
+  }, [installState, notifyError, notifyInfo, queryClient, refreshAutoQueries, t])
 
   const ratingWeightsMutation = useMutation({
     mutationFn: updateRatingWeights,
@@ -307,6 +413,16 @@ export function useAutoSettingsTab({
   const patchTaggerDraft = (patch: Partial<TaggerSettings>) => {
     if (!effectiveTaggerDraft) return
     setTaggerDraft({ ...effectiveTaggerDraft, ...patch })
+  }
+
+  const patchAiRuntimeDraft = (patch: Partial<AiRuntimeSettings>) => {
+    if (!effectiveAiRuntimeDraft) return
+    setAiRuntimeDraft({ ...effectiveAiRuntimeDraft, ...patch })
+  }
+
+  const patchEmbeddingDraft = (patch: Partial<EmbeddingSettings>) => {
+    if (!effectiveEmbeddingDraft) return
+    setEmbeddingDraft({ ...effectiveEmbeddingDraft, ...patch })
   }
 
   const patchKaloscopeDraft = (patch: Partial<KaloscopeSettings>) => {
@@ -486,6 +602,16 @@ export function useAutoSettingsTab({
 
   const draftSections: SettingsDraftSection[] = [
     {
+      id: 'ai-runtime',
+      label: t({ ko: 'AI 런타임', en: 'AI runtime' }),
+      tab: 'auto',
+      isDirty: hasAiRuntimeChanges,
+      save: async () => {
+        if (effectiveAiRuntimeDraft) await aiRuntimeMutation.mutateAsync(effectiveAiRuntimeDraft)
+      },
+      discard: () => setAiRuntimeDraft(null),
+    },
+    {
       id: 'kaloscope',
       label: 'Kaloscope',
       tab: 'auto',
@@ -497,13 +623,23 @@ export function useAutoSettingsTab({
     },
     {
       id: 'tagger',
-      label: 'WD Tagger',
+      label: t({ ko: '태거', en: 'Tagger' }),
       tab: 'auto',
       isDirty: hasTaggerChanges,
       save: async () => {
         if (effectiveTaggerDraft) await taggerMutation.mutateAsync(effectiveTaggerDraft)
       },
       discard: () => setTaggerDraft(null),
+    },
+    {
+      id: 'embedding',
+      label: t({ ko: '임베딩', en: 'Embeddings' }),
+      tab: 'auto',
+      isDirty: hasEmbeddingChanges,
+      save: async () => {
+        if (effectiveEmbeddingDraft) await embeddingMutation.mutateAsync(effectiveEmbeddingDraft)
+      },
+      discard: () => setEmbeddingDraft(null),
     },
     {
       id: 'rating-weights',
@@ -526,6 +662,21 @@ export function useAutoSettingsTab({
   return {
     draftSections,
     tabProps: {
+      aiRuntimeDraft: effectiveAiRuntimeDraft,
+      aiRuntimeStatus: aiRuntimeStatusQuery.data,
+      onPatchAiRuntime: patchAiRuntimeDraft,
+      onRefreshAiRuntime: () => void aiRuntimeRefreshMutation.mutateAsync(),
+      isRefreshingAiRuntime: aiRuntimeRefreshMutation.isPending,
+      onInstallAiRuntime: (backend) => void aiRuntimeInstallMutation.mutateAsync(backend),
+      onCancelAiRuntimeInstall: () => void aiRuntimeCancelMutation.mutateAsync(),
+      isAiRuntimeInstallPending: aiRuntimeInstallMutation.isPending,
+      hasAiRuntimeChanges,
+      embeddingDraft: effectiveEmbeddingDraft,
+      embeddingStatus: embeddingStatusQuery.data,
+      onPatchEmbedding: patchEmbeddingDraft,
+      hasEmbeddingChanges,
+      onRequeueOutdatedKaloscope: () => void kaloscopeRequeueMutation.mutateAsync(),
+      isRequeueingOutdatedKaloscope: kaloscopeRequeueMutation.isPending,
       taggerDraft: effectiveTaggerDraft,
       kaloscopeDraft: effectiveKaloscopeDraft,
       taggerModels: taggerModelsQuery.data ?? [],

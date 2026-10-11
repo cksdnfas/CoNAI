@@ -2,7 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import { runtimePaths } from '../config/runtimePaths';
 import {
+  AiRuntimeSettings,
   AppSettings,
+  EmbeddingSettings,
   GenerationThrottleSettings,
   GeneralSettings,
   TaggerSettings,
@@ -30,6 +32,8 @@ import {
   writeSettingsFile,
 } from './settingsServiceStorage';
 import {
+  applyAiRuntimeSettingsUpdate,
+  applyEmbeddingSettingsUpdate,
   applyAppearanceSettingsUpdate,
   applyGenerationThrottleSettingsUpdate,
   applyGeneralSettingsUpdate,
@@ -47,6 +51,7 @@ const MODEL_REPO_MAP: Record<TaggerModel, string> = {
   vit: 'SmilingWolf/wd-vit-tagger-v3',
   swinv2: 'SmilingWolf/wd-swinv2-tagger-v3',
   convnext: 'SmilingWolf/wd-convnext-tagger-v3',
+  'pixai-v1': 'pixai-labs/pixai-tagger-v1.0',
 };
 
 const MODEL_INFO: Record<TaggerModel, { label: string; description: string }> = {
@@ -61,6 +66,10 @@ const MODEL_INFO: Record<TaggerModel, { label: string; description: string }> = 
   convnext: {
     label: 'ConvNeXt',
     description: '빠른 속도, 높은 정확도 - 빠른 처리가 필요한 경우',
+  },
+  'pixai-v1': {
+    label: 'PixAI v1.0',
+    description: 'GPU 전용 - 작품명·작가·메타 태그까지, 1008px 입력',
   },
 };
 
@@ -140,6 +149,22 @@ class SettingsService {
   updateGeneralSettings(generalSettings: Partial<GeneralSettings>): AppSettings {
     const currentSettings = this.loadSettings();
     const updatedSettings = applyGeneralSettingsUpdate(currentSettings, generalSettings);
+    this.saveSettings(updatedSettings);
+    return updatedSettings;
+  }
+
+  /** Update AI runtime settings (Python source, custom path, preferred torch build). */
+  updateAiRuntimeSettings(aiRuntimeSettings: Partial<AiRuntimeSettings>): AppSettings {
+    const currentSettings = this.loadSettings();
+    const updatedSettings = applyAiRuntimeSettingsUpdate(currentSettings, aiRuntimeSettings);
+    this.saveSettings(updatedSettings);
+    return updatedSettings;
+  }
+
+  /** Update text embedding settings. */
+  updateEmbeddingSettings(embeddingSettings: Partial<EmbeddingSettings>): AppSettings {
+    const currentSettings = this.loadSettings();
+    const updatedSettings = applyEmbeddingSettingsUpdate(currentSettings, embeddingSettings);
     this.saveSettings(updatedSettings);
     return updatedSettings;
   }
@@ -348,13 +373,14 @@ class SettingsService {
    * Get list of available models with download status
    */
   getModelsList(): TaggerModelInfo[] {
-    const models: TaggerModel[] = ['vit', 'swinv2', 'convnext'];
+    const models: TaggerModel[] = ['vit', 'swinv2', 'convnext', 'pixai-v1'];
 
     return models.map(model => ({
       name: model,
       label: MODEL_INFO[model].label,
       description: MODEL_INFO[model].description,
       downloaded: this.isModelDownloaded(model),
+      ...(model === 'pixai-v1' ? { requiresGpu: true } : {}),
     }));
   }
 

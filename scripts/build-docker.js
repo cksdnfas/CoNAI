@@ -127,11 +127,16 @@ const safeRemove = async (dirPath) => {
     if (fs.existsSync(pythonSource)) {
       fs.ensureDirSync(pythonTarget);
       const pythonFiles = [
-        'wdv3_tagger_daemon.py',
-        'kaloscope_tagger_daemon.py',
+        'conai_worker.py',
+        'worker_images.py',
+        'worker_wd.py',
+        'worker_kaloscope.py',
+        'worker_embedding.py',
+        'worker_pixai.py',
         'requirements.txt',
-        'requirements-common.txt',
-        'requirements-gpu.txt',
+        'requirements-ai.txt',
+        'ai_runtime_probe.py',
+        'install-ai-env.sh',
         'README.md'
       ];
       let copiedCount = 0;
@@ -309,10 +314,10 @@ COPY python/requirements*.txt ./python/
 
 # Install Python dependencies (GPU)
 RUN pip3 install --break-system-packages --no-cache-dir \\
-    --index-url https://download.pytorch.org/whl/cu121 \\
-    torch torchvision && \\
+    --index-url https://download.pytorch.org/whl/cu130 \\
+    torch==2.14.1 torchvision==0.29.1 && \\
     pip3 install --break-system-packages --no-cache-dir \\
-    -r python/requirements-gpu.txt && \\
+    -r python/requirements.txt && \\
     find /usr/local/lib/python3* -name '*.pyc' -delete && \\
     find /usr/local/lib/python3* -name '__pycache__' -delete && \\
     rm -rf /root/.cache/pip

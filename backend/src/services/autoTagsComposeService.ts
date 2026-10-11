@@ -11,6 +11,9 @@ export interface KaloscopeResult {
   error_type?: string;
 }
 
+/** Model name stored in `auto_tags.kaloscope.model`; results from any other model are outdated. */
+export const KALOSCOPE_MODEL = 'kaloscope-3.0-preview';
+
 type AutoTagsRecord = Record<string, unknown>;
 
 function normalizeFailureMessage(value: unknown): string {
@@ -86,6 +89,8 @@ export class AutoTagsComposeService {
       rating: taggerResult.rating || {},
       general: taggerResult.general || {},
       character: taggerResult.character || {},
+      ...(taggerResult.artist && Object.keys(taggerResult.artist).length ? { artist: taggerResult.artist } : {}),
+      ...(taggerResult.meta && Object.keys(taggerResult.meta).length ? { meta: taggerResult.meta } : {}),
       model: taggerResult.model || 'unknown',
       thresholds: taggerResult.thresholds || { general: 0.35, character: 0.75 },
       tagged_at: new Date().toISOString(),
@@ -137,7 +142,7 @@ export class AutoTagsComposeService {
     const parsed = this.parse(autoTagsJson);
 
     const kaloscopePayload = {
-      model: kaloscopeResult.model || 'kaloscope-onnx',
+      model: kaloscopeResult.model || KALOSCOPE_MODEL,
       topk: kaloscopeResult.topk || 0,
       artists: kaloscopeResult.artists || {},
       taglist: kaloscopeResult.taglist || '',
@@ -158,7 +163,7 @@ export class AutoTagsComposeService {
     const parsed = this.parse(autoTagsJson);
 
     const kaloscopePayload = {
-      model: 'kaloscope-onnx',
+      model: KALOSCOPE_MODEL,
       topk: 0,
       artists: {},
       taglist: '',

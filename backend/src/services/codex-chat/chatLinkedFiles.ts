@@ -261,7 +261,7 @@ export async function searchLinked(places: LinkedPlace[], query: string, limit =
   if (places.length === 0) return '(연결된 파일이 없어.)'
   const owner = places[0].owner
   // Searched inside the links only: a store-wide top list would push hits in the linked places out of it.
-  const result = await searchStoredFiles(owner, query, 200, places.map((place) => place.entry.id))
+  const result = await searchStoredFiles(owner, query, 200, places.map((place) => place.entry.id), { semantic: true })
   const hits = result.hits.flatMap((hit) => {
     for (const place of places) {
       const at = pathInPlace(place, hit.entry)

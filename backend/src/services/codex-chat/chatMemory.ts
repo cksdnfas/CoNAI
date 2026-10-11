@@ -1,4 +1,5 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { fuseRanks } from '../embeddings/rankFusion'
 
 /**
  * Long-term memory of a chat, in three layers:
@@ -181,11 +182,14 @@ const COMMON_TERM_SHARE = 0.6
  * The folded segments the latest messages (`query`) are about, best first, within `budgetTokens`. Scored by the rare
  * terms they share with the query (inverse document frequency over the candidates), so stock phrases do not count.
  * `minShared`: fewer terms in common than this is not a match (the judge, which reads each candidate, asks wider).
+ * `semantic`: segments close in meaning (id → closeness, see chatSemantic); both rankings are fused, so an episode
+ * told in other words comes back too. `score` is then the fused rank score.
  */
-export function selectRecall(candidates: ChatSummarySegment[], query: string, budgetTokens: number, estimate: (text: string) => number, limit = 3, minShared = MIN_SHARED_TERMS) {
+export function selectRecall(candidates: ChatSummarySegment[], query: string, budgetTokens: number, estimate: (text: string) => number, limit = 3, minShared = MIN_SHARED_TERMS, semantic?: ReadonlyMap<number, number> | null) {
   if (candidates.length === 0 || budgetTokens <= 0) return []
   const queryTerms = recallTerms(query)
-  if (queryTerms.size === 0) return []
+  const close = semantic ? candidates.filter((segment) => semantic.has(segment.id)) : []
+  if (queryTerms.size === 0 && close.length === 0) return []
   const documents = candidates.map((segment) => ({ segment, terms: recallTerms(segment.content) }))
   const frequency = new Map<string, number>()
   for (const term of queryTerms) frequency.set(term, documents.filter((document) => document.terms.has(term)).length)
@@ -204,13 +208,25 @@ export function selectRecall(candidates: ChatSummarySegment[], query: string, bu
     }
     return shared >= minShared ? [{ segment, score, terms: sharedTerms.sort((a, b) => b.weight - a.weight).slice(0, 6).map(({ term }) => term) }] : []
   }).sort((a, b) => b.score - a.score || b.segment.until_message_id - a.segment.until_message_id)
-  const chosen: Array<ChatSummarySegment & { score: number; terms: string[] }> = []
+  const ranked: Array<{ segment: ChatSummarySegment; score: number; terms: string[]; similarity?: number }> = scored
+  if (semantic && close.length > 0) {
+    const byMeaning = [...close].sort((a, b) => semantic.get(b.id)! - semantic.get(a.id)!)
+    const fused = fuseRanks([scored.map(({ segment }) => segment.id), byMeaning.map((segment) => segment.id)])
+    const lexical = new Map(scored.map((item) => [item.segment.id, item]))
+    ranked.splice(0, ranked.length, ...[...new Set([...scored.map(({ segment }) => segment), ...byMeaning])].map((segment) => ({
+      segment,
+      score: fused.get(segment.id) ?? 0,
+      terms: lexical.get(segment.id)?.terms ?? [],
+      ...(semantic.has(segment.id) ? { similarity: semantic.get(segment.id)! } : {}),
+    })).sort((a, b) => b.score - a.score || b.segment.until_message_id - a.segment.until_message_id))
+  }
+  const chosen: Array<ChatSummarySegment & { score: number; terms: string[]; similarity?: number }> = []
   let remaining = budgetTokens
-  for (const { segment, score, terms } of scored) {
+  for (const { segment, score, terms, similarity } of ranked) {
     if (chosen.length >= limit) break
     const cost = estimate(segment.content)
     if (cost > remaining) continue
-    chosen.push({ ...segment, score, terms })
+    chosen.push({ ...segment, score, terms, ...(similarity !== undefined ? { similarity } : {}) })
     remaining -= cost
   }
   // Told in the order they happened.

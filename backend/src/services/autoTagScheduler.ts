@@ -1,8 +1,6 @@
 import path from 'path';
 import { db } from '../database/init';
-import { taggerDaemon } from './taggerDaemon';
 import { settingsService } from './settingsService';
-import { imageTaggerService } from './imageTaggerService';
 import { SystemSettingsService } from './systemSettingsService';
 import { RatingScoreService } from './ratingScoreService';
 import { PromptCollectionService } from './promptCollectionService';
@@ -10,7 +8,7 @@ import { AutoTagsComposeService } from './autoTagsComposeService';
 import { AutoTagIndexService } from './autoTagIndexService';
 import { AutoTagStateService } from './autoTagStateService';
 import { AutoCollectionService } from './autoCollectionService';
-import { kaloscopeTaggerService } from './kaloscopeTaggerService';
+import { analyzeMedia } from './aiWorker/aiVisionService';
 import { SystemMaintenanceLockService } from './systemMaintenanceLockService';
 import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
 import { QueryCacheService } from './QueryCacheService';
@@ -348,10 +346,16 @@ class AutoTagScheduler {
     let taggerTaglist = '';
     let ratingData: RatingData | null = null;
 
+    // One worker request for both models: the file (or the video's frames, extracted once) is decoded once.
+    const analysis = await analyzeMedia(
+      filePath,
+      isVideo,
+      { tagger: needsTagger, kaloscope: needsKaloscope },
+      { priority: 'low', compositeHash },
+    );
+
     if (needsTagger) {
-      const taggerResult = isVideo
-        ? await imageTaggerService.tagVideo(filePath)
-        : await taggerDaemon.tagImage(filePath);
+      const taggerResult = analysis.tagger ?? { success: false, error: 'Tagger returned nothing' };
 
       if (taggerResult.success) {
         autoTags = AutoTagsComposeService.mergeTagger(autoTags, taggerResult);
@@ -365,9 +369,7 @@ class AutoTagScheduler {
     }
 
     if (needsKaloscope) {
-      const kaloscopeResult = isVideo
-        ? await kaloscopeTaggerService.tagVideo(filePath)
-        : await kaloscopeTaggerService.tagImage(filePath);
+      const kaloscopeResult = analysis.kaloscope ?? { success: false, error: 'Kaloscope returned nothing' };
 
       if (kaloscopeResult.success) {
         autoTags = AutoTagsComposeService.mergeKaloscope(autoTags, kaloscopeResult);

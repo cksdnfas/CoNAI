@@ -1,0 +1,10 @@
+# AI worker libraries. torch / torchvision are installed separately from the PyTorch index for the chosen build
+# (cpu, cu126, cu130, cu132): the app's AI runtime installer and the Dockerfile both do that first.
+timm==1.0.30
+transformers==5.19.0
+sentence-transformers==6.1.0
+# Generic libraries take ranges so a custom Python 3.10/3.11 still resolves (the app's own env is 3.12).
+safetensors>=0.4
+huggingface-hub>=1.0
+pillow>=10.0
+numpy>=1.26,<3

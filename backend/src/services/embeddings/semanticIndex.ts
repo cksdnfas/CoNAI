@@ -1,0 +1,332 @@
+import { createHash } from 'crypto'
+import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { vectorStore } from '../vectors/vectorStore'
+import {
+  EMBEDDING_MODEL_KEY,
+  embedTexts,
+  embeddingFailure,
+  embeddingFeatureOn,
+  embeddingSettings,
+  embeddingVariant,
+  textWorker,
+  type EmbeddedChunk,
+} from '../aiWorker/textEmbeddingService'
+import { loreEntryKeys, loreEntryTitle, normalizeLorebook, type ChatLoreEntry } from '../codex-chat/chatLorebook'
+import { refreshFileSearchIndex } from '../fileStoreSearch'
+import { SEMANTIC_SPACES } from './rankFusion'
+import { indexPendingImages, pruneImageVectors } from './imageIndex'
+
+/**
+ * What text embeddings are kept for, one vector space each (vectors.db; derived data, rebuilt when missing):
+ *   chat-recall   level-0 summary segments          source `<segment id>`, owner `thread:<id>`
+ *   chat-lore     enabled keyword lore entries       source `<book id>:<entry id>`, owner `book:<id>`
+ *   chat-message  messages of chats that share knowledge (rooms, chats with books or linked files)
+ *                                                    source `<message id>`, owner `thread:<id>`
+ *   file          file store text (minutes too)      source `<entry id>`, owner `<file owner key>`
+ * and, with image search on, `media-image` (imageIndex.ts): library still images by composite hash.
+ * A background pass embeds what is new or changed (content fingerprints), a few items per worker request at low
+ * priority so chat queries go first, and drops vectors whose source is gone.
+ */
+
+export { SEMANTIC_SPACES }
+
+/** Text up to this many characters is one vector; longer text is split into token windows. */
+const SINGLE_CHUNK_CHARS = 1500
+const CHUNK_TOKENS = 512
+const OVERLAP_TOKENS = 64
+/** Items per worker request: a chat query waits at most for one batch. */
+const BATCH_ITEMS = 8
+const MESSAGE_MAX_CHARS = 6000
+const MESSAGE_MAX_CHUNKS = 4
+const FILE_MAX_CHUNKS = 32
+const LORE_MAX_CHARS = 4000
+
+const IDLE_SWEEP_MS = 5 * 60_000
+const BUSY_SWEEP_MS = 500
+const FIRST_SWEEP_MS = 60_000
+
+/** SQLite fingerprint of a text column: length and both ends (a change elsewhere comes with an updated row anyway). */
+const fingerprint = (column: string) => `(length(${column}) || ':' || hex(substr(${column}, 1, 24)) || hex(substr(${column}, -24)))`
+
+export function loreEntryVectorKey(bookId: number, entryId: string) {
+  return `${bookId}:${entryId}`
+}
+
+/** What a lore entry is embedded from, and its fingerprint. */
+export function loreEntryDocument(entry: Pick<ChatLoreEntry, 'title' | 'keys' | 'content'> & { localKeys?: string[] }) {
+  const keys = loreEntryKeys(entry).filter((key) => !/^\/.*\/[a-z]*$/i.test(key))
+  const text = [keys.length ? keys.join(', ') : '', entry.content.slice(0, LORE_MAX_CHARS)].filter(Boolean).join('\n')
+  const title = loreEntryTitle(entry)
+  return { title, text, hash: createHash('sha1').update(`${title}\u0000${text}`).digest('hex').slice(0, 16) }
+}
+
+/** Whether a lore entry is one meaning can bring in (keyword entries with content; "always on" ones are in anyway). */
+export function loreEntryEmbeddable(entry: ChatLoreEntry) {
+  return entry.enabled && !entry.constant && entry.content.trim().length > 0
+}
+
+/**
+ * Embed one document: one vector for short text, else the tokenizer's windows (at most `maxChunks`), a few per
+ * request. Spans are character offsets into `text`.
+ */
+export async function embedDocument(text: string, title: string | null, maxChunks: number, priority: 'normal' | 'low' = 'low'): Promise<EmbeddedChunk[]> {
+  if (text.length <= SINGLE_CHUNK_CHARS) {
+    return (await embedTexts([{ text, title }], 'document', { priority }))[0] ?? []
+  }
+  const reply = await textWorker.request<{ items: Array<Array<{ start: number; end: number }>> }>('chunk', {
+    texts: [text], chunkTokens: CHUNK_TOKENS, overlapTokens: OVERLAP_TOKENS, maxChunks, device: 'cpu', variant: embeddingVariant(),
+  }, { priority })
+  const spans = reply.items[0] ?? []
+  const chunks: EmbeddedChunk[] = []
+  for (let start = 0; start < spans.length; start += BATCH_ITEMS) {
+    const batch = spans.slice(start, start + BATCH_ITEMS)
+    const vectors = await embedTexts(batch.map((span) => ({ text: text.slice(span.start, span.end), title })), 'document', { priority })
+    batch.forEach((span, index) => {
+      const vector = vectors[index]?.[0]?.vector
+      if (vector) chunks.push({ start: span.start, end: span.end, vector })
+    })
+  }
+  return chunks
+}
+
+type IndexItem = { space: string; sourceKey: string; ownerKey: string; hash: string; text: string; title: string | null; maxChunks: number }
+
+/** Embed and store items: short ones several per request, long ones split. */
+async function indexItems(items: IndexItem[], priority: 'normal' | 'low' = 'low') {
+  const short = items.filter((item) => item.text.length <= SINGLE_CHUNK_CHARS)
+  for (let start = 0; start < short.length; start += BATCH_ITEMS) {
+    const batch = short.slice(start, start + BATCH_ITEMS)
+    const vectors = await embedTexts(batch.map((item) => ({ text: item.text, title: item.title })), 'document', { priority })
+    batch.forEach((item, index) => store(item, vectors[index] ?? []))
+  }
+  for (const item of items.filter((candidate) => candidate.text.length > SINGLE_CHUNK_CHARS)) {
+    store(item, await embedDocument(item.text, item.title, item.maxChunks, priority))
+  }
+  return items.length
+}
+
+function store(item: IndexItem, chunks: EmbeddedChunk[]) {
+  if (chunks.length === 0) return
+  const whole = chunks.length === 1 && chunks[0].start === 0 && chunks[0].end >= item.text.length
+  vectorStore.replace(item.space, item.sourceKey, EMBEDDING_MODEL_KEY, chunks.map((chunk, index) => ({
+    vector: chunk.vector, chunk: index, ownerKey: item.ownerKey, contentHash: item.hash,
+    ...(whole ? {} : { start: chunk.start, end: chunk.end }),
+  })))
+}
+
+// ---- What is missing ------------------------------------------------------------------------------------------
+
+function pendingSegments(limit: number): IndexItem[] {
+  const rows = getUserSettingsDb().prepare(`SELECT s.id, s.thread_id, s.content, ${fingerprint('s.content')} AS fp
+    FROM chat_summary_segments s
+    LEFT JOIN vector_db.vectors v ON v.space = @space AND v.source_key = CAST(s.id AS TEXT) AND v.chunk = 0 AND v.model_key = @model
+    WHERE s.level = 0 AND trim(s.content) != '' AND (v.source_key IS NULL OR v.content_hash IS NOT ${fingerprint('s.content')})
+    ORDER BY s.id DESC LIMIT @limit`).all({ space: SEMANTIC_SPACES.recall, model: EMBEDDING_MODEL_KEY, limit }) as Array<{ id: number; thread_id: number; content: string; fp: string }>
+  return rows.map((row) => ({ space: SEMANTIC_SPACES.recall, sourceKey: String(row.id), ownerKey: `thread:${row.thread_id}`, hash: row.fp, text: row.content.trim(), title: null, maxChunks: 8 }))
+}
+
+/** Chats whose history the characters can search (see sharesKnowledge): rooms, and chats with books or linked files. */
+function historyThreadIds(): number[] {
+  const linked = (column: string) => `(${column} IS NOT NULL AND ${column} != '[]')`
+  return (getUserSettingsDb().prepare(`SELECT t.id FROM codex_chat_threads t LEFT JOIN llm_chat_profiles p ON p.id = t.profile_id
+    WHERE t.kind = 'group' OR ${linked('t.lorebook_ids')} OR ${linked('t.linked_files')} OR ${linked('p.lorebook_ids')} OR ${linked('p.linked_files')}`)
+    .all() as Array<{ id: number }>).map((row) => row.id)
+}
+
+function pendingMessages(limit: number, threadIds = historyThreadIds()): IndexItem[] {
+  if (threadIds.length === 0) return []
+  const rows = getUserSettingsDb().prepare(`SELECT m.id, m.thread_id, m.content, ${fingerprint('m.content')} AS fp
+    FROM codex_chat_messages m
+    LEFT JOIN vector_db.vectors v ON v.space = @space AND v.source_key = CAST(m.id AS TEXT) AND v.chunk = 0 AND v.model_key = @model
+    WHERE m.thread_id IN (${threadIds.map(Number).join(', ')}) AND m.role IN ('user', 'assistant') AND trim(m.content) != ''
+      AND (v.source_key IS NULL OR v.content_hash IS NOT ${fingerprint('m.content')})
+    ORDER BY m.id DESC LIMIT @limit`).all({ space: SEMANTIC_SPACES.message, model: EMBEDDING_MODEL_KEY, limit }) as Array<{ id: number; thread_id: number; content: string; fp: string }>
+  return rows.map((row) => ({ space: SEMANTIC_SPACES.message, sourceKey: String(row.id), ownerKey: `thread:${row.thread_id}`, hash: row.fp, text: row.content.trim().slice(0, MESSAGE_MAX_CHARS), title: null, maxChunks: MESSAGE_MAX_CHUNKS }))
+}
+
+/** Every book's cached entries (account and chat books cache theirs from lorebook.json). */
+function allLoreEntries() {
+  const rows = getUserSettingsDb().prepare('SELECT id, entries FROM chat_lorebooks').all() as Array<{ id: number; entries: string }>
+  return rows.flatMap((row) => normalizeLorebook(row.entries).filter(loreEntryEmbeddable).map((entry) => ({ bookId: row.id, entry })))
+}
+
+function pendingLore(limit: number, bookIds?: ReadonlySet<number>): IndexItem[] {
+  const known = vectorStore.contentHashes(SEMANTIC_SPACES.lore, EMBEDDING_MODEL_KEY)
+  const items: IndexItem[] = []
+  for (const { bookId, entry } of allLoreEntries()) {
+    if (bookIds && !bookIds.has(bookId)) continue
+    const sourceKey = loreEntryVectorKey(bookId, entry.id)
+    const document = loreEntryDocument(entry)
+    if (known.get(sourceKey) === document.hash) continue
+    items.push({ space: SEMANTIC_SPACES.lore, sourceKey, ownerKey: `book:${bookId}`, hash: document.hash, text: document.text, title: document.title, maxChunks: 4 })
+    if (items.length >= limit) break
+  }
+  return items
+}
+
+async function pendingFiles(limit: number): Promise<IndexItem[]> {
+  const db = getUserSettingsDb()
+  const owners = (db.prepare("SELECT DISTINCT owner_key FROM stored_file_entries WHERE kind = 'file' AND deleted_at IS NULL").all() as Array<{ owner_key: string }>).map((row) => row.owner_key)
+  // The search index's cached text is what gets embedded; bring it up to date first (only changed files are read).
+  for (const owner of owners) await refreshFileSearchIndex(owner)
+  const rows = db.prepare(`SELECT e.id, e.owner_key, e.name, t.body, t.revision
+    FROM stored_file_entries e
+    JOIN search_db.search_documents t ON t.source = 'file' AND t.source_id = e.id
+    LEFT JOIN vector_db.vectors v ON v.space = @space AND v.source_key = e.id AND v.chunk = 0 AND v.model_key = @model
+    WHERE e.kind = 'file' AND e.deleted_at IS NULL AND length(trim(t.body)) > 0 AND (v.source_key IS NULL OR v.content_hash IS NOT t.revision)
+    ORDER BY e.updated_at DESC LIMIT @limit`).all({ space: SEMANTIC_SPACES.file, model: EMBEDDING_MODEL_KEY, limit }) as Array<{ id: string; owner_key: string; name: string; body: string; revision: string }>
+  return rows.map((row) => ({ space: SEMANTIC_SPACES.file, sourceKey: row.id, ownerKey: row.owner_key, hash: row.revision, text: row.body, title: row.name, maxChunks: FILE_MAX_CHUNKS }))
+}
+
+/** Vectors whose source is gone (or out of scope), and those of another model. */
+function pruneVectors() {
+  const db = getUserSettingsDb()
+  for (const space of Object.values(SEMANTIC_SPACES)) vectorStore.pruneOtherModels(space, EMBEDDING_MODEL_KEY)
+  let removed = 0
+  removed += db.prepare(`DELETE FROM vector_db.vectors WHERE space = ? AND NOT EXISTS (
+    SELECT 1 FROM chat_summary_segments s WHERE s.id = CAST(vector_db.vectors.source_key AS INTEGER) AND s.level = 0)`).run(SEMANTIC_SPACES.recall).changes
+  const threads = historyThreadIds()
+  removed += db.prepare(`DELETE FROM vector_db.vectors WHERE space = ? AND (NOT EXISTS (
+    SELECT 1 FROM codex_chat_messages m WHERE m.id = CAST(vector_db.vectors.source_key AS INTEGER))
+    OR owner_key NOT IN (${threads.length ? threads.map((id) => `'thread:${Number(id)}'`).join(', ') : "''"}))`).run(SEMANTIC_SPACES.message).changes
+  removed += db.prepare(`DELETE FROM vector_db.vectors WHERE space = ? AND NOT EXISTS (
+    SELECT 1 FROM stored_file_entries e WHERE e.id = vector_db.vectors.source_key AND e.deleted_at IS NULL)`).run(SEMANTIC_SPACES.file).changes
+  const lore = new Set(allLoreEntries().map(({ bookId, entry }) => loreEntryVectorKey(bookId, entry.id)))
+  for (const sourceKey of vectorStore.contentHashes(SEMANTIC_SPACES.lore, EMBEDDING_MODEL_KEY).keys()) {
+    if (!lore.has(sourceKey)) removed += vectorStore.remove(SEMANTIC_SPACES.lore, sourceKey)
+  }
+  if (removed > 0) vectorStore.invalidateAll()
+  return removed
+}
+
+// ---- Background pass ------------------------------------------------------------------------------------------
+
+class SemanticIndexer {
+  private timer: NodeJS.Timeout | null = null
+  private running: Promise<void> | null = null
+  private started = false
+  private busy = false
+  private stopped = false
+
+  /** Start sweeping (once, after boot). */
+  start() {
+    if (this.started) return
+    this.started = true
+    this.stopped = false
+    this.schedule(FIRST_SWEEP_MS)
+  }
+
+  stop() {
+    this.stopped = true
+    if (this.timer) clearTimeout(this.timer)
+    this.timer = null
+  }
+
+  /** Something changed (a summary, lore, a message, a file): sweep soon. */
+  poke() {
+    if (!this.started || this.stopped) return
+    this.schedule(2_000)
+  }
+
+  /** Whether the last pass found work (the status page shows it). */
+  get indexing() {
+    return this.busy
+  }
+
+  private schedule(delayMs: number) {
+    if (this.stopped) return
+    if (this.timer) clearTimeout(this.timer)
+    this.timer = setTimeout(() => { this.timer = null; void this.sweep() }, delayMs)
+    this.timer.unref?.()
+  }
+
+  /** One batch of work; resolves when it is done. Exposed for tests and the manual check. */
+  async sweep(): Promise<number> {
+    if (this.running) {
+      await this.running
+      return 0
+    }
+    let done = 0
+    this.running = (async () => {
+      try {
+        done = await this.runOnce()
+      } catch (error) {
+        console.warn('[SemanticIndex] pass failed:', error instanceof Error ? error.message : error)
+      }
+    })()
+    await this.running
+    this.running = null
+    this.busy = done > 0
+    this.schedule(done > 0 ? BUSY_SWEEP_MS : IDLE_SWEEP_MS)
+    return done
+  }
+
+  private async runOnce(): Promise<number> {
+    const settings = embeddingSettings()
+    if (!settings.enabled || embeddingFailure()) return 0
+    if (!this.pruned) {
+      this.pruned = true
+      pruneVectors()
+      pruneImageVectors()
+    }
+    // Most useful first: what the next reply recalls, then lore, then searchable history and files.
+    if (settings.chatRecall) {
+      const items = pendingSegments(BATCH_ITEMS)
+      if (items.length) return indexItems(items)
+    }
+    if (settings.lorebook) {
+      const items = pendingLore(BATCH_ITEMS)
+      if (items.length) return indexItems(items)
+    }
+    if (settings.chatHistory) {
+      const items = pendingMessages(BATCH_ITEMS)
+      if (items.length) return indexItems(items)
+    }
+    if (settings.fileSearch) {
+      const items = await pendingFiles(2)
+      if (items.length) return indexItems(items)
+    }
+    // Images last: the slowest (about 0.7 s each), and nothing waits on them.
+    if (settings.imageSearch) {
+      const done = await indexPendingImages()
+      if (done) return done
+    }
+    // Caught up: drop what no longer has a source, once per idle period.
+    this.pruned = false
+    return 0
+  }
+
+  private pruned = false
+}
+
+export const semanticIndexer = new SemanticIndexer()
+
+/**
+ * Embed the lore entries of these books that have no current vector yet, now (a chat turn is waiting); at most
+ * `limit`, the rest is left to the background pass.
+ */
+export async function indexLoreNow(bookIds: ReadonlySet<number>, limit: number) {
+  if (!embeddingFeatureOn('lorebook')) return 0
+  const items = pendingLore(limit + 1, bookIds)
+  if (items.length > limit) semanticIndexer.poke()
+  return indexItems(items.slice(0, limit), 'normal')
+}
+
+/** Embed this chat's summary segments that have none yet (a recall is about to rank them). */
+export async function indexSegmentsNow(threadId: number, limit: number) {
+  if (!embeddingFeatureOn('chatRecall')) return 0
+  const items = pendingSegments(500).filter((item) => item.ownerKey === `thread:${threadId}`)
+  if (items.length > limit) semanticIndexer.poke()
+  return indexItems(items.slice(0, limit), 'normal')
+}
+
+/** Embed messages of these chats that have none yet, newest first (a history search is about to run). */
+export async function indexMessagesNow(threadIds: number[], limit: number) {
+  if (!embeddingFeatureOn('chatHistory')) return 0
+  const eligible = new Set(historyThreadIds())
+  const items = pendingMessages(limit + 1, threadIds.filter((id) => eligible.has(id)))
+  if (items.length > limit) semanticIndexer.poke()
+  return indexItems(items.slice(0, limit), 'normal')
+}
+
+export const semanticIndexInternals = { pendingSegments, pendingMessages, pendingLore, pendingFiles, pruneVectors, historyThreadIds }

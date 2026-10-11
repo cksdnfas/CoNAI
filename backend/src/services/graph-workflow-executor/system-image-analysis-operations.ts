@@ -5,6 +5,7 @@ import { db } from '../../database/init'
 import { ImageSimilarityService } from '../imageSimilarity'
 import { imageTaggerService } from '../imageTaggerService'
 import { kaloscopeTaggerService } from '../kaloscopeTaggerService'
+import { KALOSCOPE_MODEL } from '../autoTagsComposeService'
 import { settingsService } from '../settingsService'
 import { SIMILARITY_THRESHOLDS } from '../../types/similarity'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
@@ -303,7 +304,7 @@ export async function executeExtractArtistFromImage(
     const artistJsonValue = {
       artists: kaloscopeResult.artists || {},
       taglist: kaloscopeResult.taglist || '',
-      model: kaloscopeResult.model || 'kaloscope-onnx',
+      model: kaloscopeResult.model || KALOSCOPE_MODEL,
       topk: kaloscopeResult.topk || settings.kaloscope.topK,
       tagged_at: kaloscopeResult.tagged_at || new Date().toISOString(),
     }

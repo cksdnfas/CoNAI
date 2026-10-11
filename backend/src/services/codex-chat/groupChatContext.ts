@@ -174,7 +174,7 @@ export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMe
   const sendable = withoutStaleWakes(sendableMessages(unsummarizedMessages(params.messages, params.thread, { summaryEnabled: groupSummaryOn(params.thread) })))
   let window = latestWindow(sendable, params.windowLimit)
   params = { ...params, books: params.books ?? booksForRequest({ thread: params.thread, profile: params.profile }) }
-  const lore = selectChatLore(params.profile, window, userPersonaForThread(params.thread), { thread: params.thread, books: params.books, toolOffered: offersLoreFileTool(params.tools), linkedOffered: offersLinkedFiles(params.tools), history: params.messages, speakerProfileId: params.profile.id, judged: params.judged?.loreKeys })
+  const lore = selectChatLore(params.profile, window, userPersonaForThread(params.thread), { thread: params.thread, books: params.books, toolOffered: offersLoreFileTool(params.tools), linkedOffered: offersLinkedFiles(params.tools), history: params.messages, speakerProfileId: params.profile.id, judged: params.judged?.loreKeys, semantic: params.judged?.semantic?.loreKeys })
   let context = buildGroupWindowMessages(params, window, sendable.length, lore)
   const budget = params.profile.contextTokens
   const reserve = replyReserveFor(budget, params.maxTokens) + (params.extraTokens ?? 0)
@@ -193,6 +193,7 @@ export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMe
   }
   if (params.onMeta) {
     const meta = buildContextMeta(params.profile, params.thread, params.messages, window, groupSummaryOn(params.thread), context.lore, context.recalled, params.tools, context.messages)
+    meta.estimatedTokens += params.extraTokens ?? 0
     if (meta.version === 2) meta.sources?.push(...contextSource('group-header', context.header))
     params.onMeta(limitContextMeta(meta))
   }
@@ -232,7 +233,7 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
   // The flags the user had on for the message this run answers reach every member answering it; the request ends
   // with the exact handles, where small models actually look before writing a mention.
   // Summaries the room's plot already took in come back when the latest exchange touches them, like in a direct chat.
-  const recalled = summaryOn && params.segments ? recalledSegments(profile, params.segments, params.messages, { contextTokens: profile.contextTokens }, params.judged?.recallKeep) : []
+  const recalled = summaryOn && params.segments ? recalledSegments(profile, params.segments, params.messages, { contextTokens: profile.contextTokens }, params.judged?.recallKeep, params.judged?.semantic?.recall) : []
   const recall = recallText(recalled)
   const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread, params.messages, profile.id), recall, rejectedLoreFor(thread.id, params.tools))
   const reference = buildReplyContext(params.messages, params.routing, { group: true, maxChars: Math.max(256, Math.min(6000, Math.floor((profile.contextTokens ?? 24000) / 4))), visibleIds: new Set(window.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) })

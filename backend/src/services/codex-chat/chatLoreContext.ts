@@ -263,12 +263,13 @@ export function selectRequestLore(
   messages: ReadonlyArray<{ content: string; display_content?: string | null }> | undefined,
   estimate: (text: string) => number,
   render: (text: string) => string,
-  options: { toolOffered: boolean; inlineFiles?: boolean; skip?: (key: string) => boolean; timing?: LoreTimingOptions; judged?: ReadonlySet<string>; linked?: string },
+  options: { toolOffered: boolean; inlineFiles?: boolean; skip?: (key: string) => boolean; timing?: LoreTimingOptions; judged?: ReadonlySet<string>; semantic?: ReadonlySet<string>; linked?: string },
 ): ChatLore {
   const selected = selectLoreEntries(profile, messages, estimate, render, {
     skip: options.skip,
     timing: options.timing,
     judged: options.judged,
+    semantic: options.semantic,
     entries: keyedLoreEntries(books),
     files: {
       inline: options.inlineFiles ?? true,

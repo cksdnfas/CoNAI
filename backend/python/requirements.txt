@@ -1,4 +1,4 @@
--r requirements-common.txt
-
-torch>=2.0.0
-onnxruntime>=1.17.0
+# Manual install into your own Python (the app can also install a managed environment: Settings › Auto › AI runtime):
+#   pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/<cpu|cu126|cu130|cu132>
+#   pip install -r requirements.txt
+-r requirements-ai.txt

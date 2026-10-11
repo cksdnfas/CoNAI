@@ -21,7 +21,9 @@ docker compose up -d --build
 - 데이터: `conai-data` 볼륨 → 컨테이너의 `/app/data/user`
 - 상태 확인: `docker compose ps`에서 `healthy`, 로그는 `docker compose logs -f conai`
 
-태그 추출(WD Tagger)과 작가 추출(Kaloscope)은 CPU에서도 동작합니다. 한 장씩 올리는 용도로는 충분하지만, 기존 이미지 수천 장을 처음 등록하면 자동 태깅이 끝날 때까지 몇 시간이 걸릴 수 있습니다. 참고로 32코어 PC에서 태그와 작가 추출을 함께 돌리면 분당 약 12장이 처리됩니다.
+태그 추출(WD Tagger)과 작가 추출(Kaloscope 3)은 CPU에서도 동작합니다. 한 장씩 올리는 용도로는 충분하지만, 기존 이미지 수천 장을 처음 등록하면 자동 태깅이 끝날 때까지 몇 시간이 걸릴 수 있습니다. 8스레드 CPU 기준으로 WD는 장당 약 0.3초, Kaloscope 3은 약 0.6초입니다. PixAI 태거는 GPU 이미지에서만 고를 수 있습니다.
+
+이미지 안의 Python 환경(`/opt/conai-ai`)은 **설정 › 자동 › AI 런타임**에서 앱이 직접 설치하는 환경과 같은 구성(uv가 받은 Python 3.12 + PyTorch)입니다.
 
 ## NVIDIA GPU로 실행 (선택)
 
@@ -31,33 +33,33 @@ GPU 이미지는 `runtime-gpu` 빌드 단계를 사용합니다. 일반 `docker 
 docker compose -f compose.yaml -f compose.gpu.yaml up -d --build
 ```
 
-### RTX 50 시리즈는 CUDA 인덱스를 바꿔야 함
+### GPU 세대에 맞는 CUDA 빌드 고르기
 
-`runtime-gpu`의 기본 PyTorch 인덱스는 `cu121`입니다. 이 빌드에는 RTX 50 시리즈(Blackwell) 커널이 없어서 태거가 GPU에서 돌지 않습니다. RTX 50 시리즈는 `cu128` 인덱스로 빌드하세요. NVIDIA 드라이버 570 이상이 필요합니다.
+`runtime-gpu`는 빌드 인자 `TORCH_BACKEND`로 PyTorch CUDA 빌드를 고릅니다. compose에서는 환경 변수 `CONAI_TORCH_BACKEND`로 넘깁니다.
+
+| 값 | 대상 GPU | 드라이버 |
+| --- | --- | --- |
+| `cu130` (기본) | RTX 20 시리즈 이상 (RTX 50 시리즈 포함) | 580 이상 |
+| `cu126` | GTX 900/1000, V100, 또는 드라이버를 580 이상으로 올릴 수 없을 때 | 560 이상 |
+| `cu132` | `cu130`과 같은 범위 (직접 고를 때만) | 580 이상 |
 
 ```bash
-docker compose -f compose.yaml -f compose.gpu.yaml build \
-  --build-arg PYTORCH_CUDA_INDEX_URL=https://download.pytorch.org/whl/cu128
-docker compose -f compose.yaml -f compose.gpu.yaml up -d
+CONAI_TORCH_BACKEND=cu126 docker compose -f compose.yaml -f compose.gpu.yaml up -d --build
 ```
-
-RTX 40 시리즈 이하는 기본값(`cu121`)으로 충분합니다.
 
 ### GPU가 실제로 쓰이는지 확인
 
 ```bash
 docker compose exec conai nvidia-smi
-docker compose exec conai python3 -c "import torch; print(torch.__version__, torch.cuda.is_available())"
-docker compose exec conai python3 -c "import onnxruntime as o; print(o.get_available_providers())"
+docker compose exec conai /opt/conai-ai/bin/python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_arch_list())"
 ```
 
 | 확인 항목 | 정상 | CPU로 떨어진 상태 |
 | --- | --- | --- |
 | `nvidia-smi` | GPU 이름 표시 | 명령 실패 → 컨테이너에 GPU가 전달되지 않음 |
-| `torch` | `True`, 버전에 `+cu` 포함 | `+cpu` 또는 `False` → CPU 이미지이거나 CUDA 인덱스가 GPU와 맞지 않음 |
-| `onnxruntime` | `CUDAExecutionProvider` 포함 | `CPUExecutionProvider`만 있음 → Kaloscope가 CPU로 동작 |
+| `torch` | `True`, 버전에 `+cu` 포함, 목록에 GPU의 `sm_` 번호 포함 | `+cpu` 또는 `False` → CPU 이미지이거나 CUDA 빌드가 GPU와 맞지 않음 |
 
-설정 → 태거의 장치가 `auto`이면 GPU를 먼저 쓰고, GPU를 쓸 수 없을 때 CPU로 넘어갑니다. 로그의 `[TaggerDaemon] Model loaded: vit on cpu` 줄로도 확인할 수 있습니다.
+설정 → 태거·Kaloscope의 장치가 `auto`이면 GPU를 먼저 쓰고, GPU를 쓸 수 없을 때 CPU로 넘어갑니다. 로그의 `[AiVisionWorker] ready (… cuda true …)` 줄로도 확인할 수 있습니다. 임베딩(채팅 의미 검색·이미지 검색)은 GPU 이미지에서도 CPU로 돕니다.
 
 ## 처음 관리자 계정 만들기
 
@@ -149,7 +151,7 @@ services:
 | Build Pack | `Dockerfile` | `Dockerfile` |
 | Dockerfile Location | `/Dockerfile` | `/Dockerfile` |
 | Docker Build Stage Target | 비워 둠 (`runtime` = CPU) | `runtime-gpu` |
-| Build Variable | 없음 | RTX 50 시리즈면 `PYTORCH_CUDA_INDEX_URL=https://download.pytorch.org/whl/cu128` |
+| Build Variable | 없음 | 필요할 때만 `TORCH_BACKEND=cu126` (기본 `cu130`) |
 | Custom Docker Options | 없음 | `--gpus all` |
 | Ports Exposes | `1666` | `1666` |
 | Persistent Storage | `/app/data/user` | `/app/data/user` |

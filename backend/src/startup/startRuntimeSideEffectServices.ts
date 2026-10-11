@@ -1,5 +1,3 @@
-import { imageTaggerService } from '../services/imageTaggerService'
-import { settingsService } from '../services/settingsService'
 import { AutoScanScheduler } from '../services/autoScanScheduler'
 import { autoTagScheduler } from '../services/autoTagScheduler'
 import { GraphWorkflowScheduleService } from '../services/graphWorkflowScheduleService'
@@ -42,6 +40,11 @@ export async function startRuntimeSideEffectServices(
   }
 
   warnUnknownRuntimeSideEffectRole()
+  if (runtimeRole !== 'worker') {
+    // Chats (served by the API) reach the external MCP servers' tools once connected.
+    const { startExternalMcpServers } = await import('../services/externalMcp/externalMcpServers')
+    startExternalMcpServers()
+  }
   if (runtimeRole === 'api') {
     console.log('🧩 CONAI_RUNTIME_ROLE=api, skipping worker daemons, watchers, queues, and schedulers')
     return
@@ -49,20 +52,6 @@ export async function startRuntimeSideEffectServices(
 
   if (runtimeRole === 'worker') {
     console.log('🧩 CONAI_RUNTIME_ROLE=worker, starting runtime side-effect services')
-  }
-
-  const settings = settingsService.loadSettings()
-
-  if (settings.tagger.enabled) {
-    try {
-      await imageTaggerService.startDaemon()
-      console.log('🤖 Tagger daemon ready')
-    } catch (error) {
-      console.warn('⚠️  Failed to start tagger daemon:', error instanceof Error ? error.message : error)
-      console.warn('   Tagger will be started on first use')
-    }
-  } else {
-    console.log('🤖 Tagger daemon skipped: disabled in settings')
   }
 
   if (process.env.ENABLE_FILE_WATCHING !== 'false') {
@@ -133,6 +122,10 @@ export async function startRuntimeSideEffectServices(
   if (!autoTagSchedulerStarted) {
     console.log('🤖 Auto-tag scheduler skipped: all processors disabled')
   }
+
+  // Text embeddings for chat recall, lore and search: a slow background pass, idle while embeddings are off.
+  const { semanticIndexer } = await import('../services/embeddings/semanticIndex')
+  semanticIndexer.start()
 
   try {
     const { TempImageCleanupScheduler } = await import('../cron/tempImageCleanup')

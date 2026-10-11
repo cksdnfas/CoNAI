@@ -69,7 +69,8 @@ export interface MetadataExtractionSettings {
   skipStealthForWebUI: boolean;
 }
 
-export type TaggerModel = 'vit' | 'swinv2' | 'convnext';
+/** WD v3 variants, or the PixAI tagger (GPU only). */
+export type TaggerModel = 'vit' | 'swinv2' | 'convnext' | 'pixai-v1';
 export type TaggerDevice = 'auto' | 'cpu' | 'cuda';
 export type KaloscopeDevice = 'auto' | 'cpu' | 'cuda';
 export type PromptSimilarityAlgorithm = 'simhash' | 'minhash';
@@ -98,6 +99,50 @@ export interface KaloscopeSettings {
   autoUnloadMinutes: number;
   unloadPolicyVersion?: number;
   artistLinkUrlTemplate: string;
+  /** Keep each image's 256-d style vector (Kaloscope 3) for "similar style" searches. Missing = on. */
+  styleVectors?: boolean;
+}
+
+/** Text embeddings (EmbeddingGemma 2, CPU): meaning-based recall and search beside the keyword paths. */
+export interface EmbeddingSettings {
+  enabled: boolean;
+  /** Chat: folded past episodes come back by meaning, not only by shared words. */
+  chatRecall: boolean;
+  /** Chat: keyword lorebook entries come in when the talk is about them, without a keyword. */
+  lorebook: boolean;
+  /** Chat history search also finds related wording. */
+  chatHistory: boolean;
+  /** File store search (minutes and linked files included) also finds related wording. */
+  fileSearch: boolean;
+  /**
+   * Library images get an image vector (CPU, about 0.7 s each, in the background): find images by a description and
+   * by what they show. Loads the vision part of the model too (about 2.2 GB instead of 1.3 GB). Off by default.
+   */
+  imageSearch: boolean;
+  keepModelLoaded: boolean;
+  autoUnloadMinutes: number;
+}
+
+export interface EmbeddingIndexCount {
+  space: string;
+  items: number;
+}
+
+export interface EmbeddingServerStatus {
+  enabled: boolean;
+  dependenciesAvailable: boolean;
+  statusMessage: string;
+  model: string;
+  modelRepo: string;
+  modelCached: boolean;
+  modelLoaded: boolean;
+  isRunning: boolean;
+  lastUsedAt: string | null;
+  /** Items embedded per space (chat recall, lore, messages, files, images). */
+  indexed: EmbeddingIndexCount[];
+  /** Whether the background indexer still has work. */
+  indexing: boolean;
+  download: { repo: string; file: string; state: 'start' | 'done'; bytes: number | null; at: string } | null;
 }
 
 export interface PromptSimilarityWeights {
@@ -411,10 +456,100 @@ export interface TaggerDependencyCheckResult {
   available: boolean;
   message: string;
 }
+/** PyTorch wheel build the app-managed Python environment is installed with. */
+export type AiTorchBackend = 'cpu' | 'cu126' | 'cu130' | 'cu132';
+export type AiTorchBackendPreference = 'auto' | AiTorchBackend;
+/** `auto`: the app-installed environment when there is one, otherwise `customPythonPath`. */
+export type AiPythonSource = 'auto' | 'custom';
+
+export interface AiRuntimeSettings {
+  pythonSource: AiPythonSource;
+  /** Python used when the source is `custom`, or when no app-installed environment exists yet. */
+  customPythonPath: string;
+  /** Build to install; `auto` picks one from the detected GPU and driver. */
+  torchBackend: AiTorchBackendPreference;
+  /** CPU threads per AI worker process; 0 = half the logical cores, at most 8. */
+  cpuThreads: number;
+}
+
+export interface AiGpuInfo {
+  index: number;
+  name: string;
+  /** e.g. "12.0" */
+  computeCapability: string;
+  driverVersion: string;
+  memoryMiB: number | null;
+}
+
+/**
+ * Why the build was picked: `no-gpu` (cpu), `legacy-gpu` (cc < 7.5 → cu126), `old-driver` (driver below the CUDA 13
+ * minimum → cu126), `current` (cu130). `blocked` is set when no CUDA build can run here (e.g. an RTX 50 card with a
+ * driver older than CUDA 13 needs).
+ */
+export interface AiRuntimeRecommendation {
+  backend: AiTorchBackend;
+  reason: 'no-gpu' | 'legacy-gpu' | 'old-driver' | 'current';
+  blocked: 'driver-too-old' | null;
+}
+
+export interface AiRuntimeProbe {
+  ok: boolean;
+  python: string | null;
+  torch: string | null;
+  torchCuda: string | null;
+  cudaAvailable: boolean;
+  devices: Array<{ name: string; capability: string }>;
+  archList: string[];
+  /** Every visible GPU has kernels in this build (null when there is no GPU). */
+  gpuSupported: boolean | null;
+  /** A small matmul ran on the GPU (null when there is no GPU). */
+  gpuComputeOk: boolean | null;
+  packages: Record<string, string | null>;
+  error: string | null;
+}
+
+export interface AiRuntimeEnvironment {
+  id: string;
+  backend: AiTorchBackend;
+  createdAt: string;
+  pythonPath: string;
+  probe: AiRuntimeProbe | null;
+}
+
+export type AiRuntimeInstallStep = 'uv' | 'python' | 'venv' | 'packages' | 'verify' | 'activate';
+
+export interface AiRuntimeInstallState {
+  status: 'idle' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  backend: AiTorchBackend | null;
+  step: AiRuntimeInstallStep | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  /** Bytes the package cache grew by during this install (download progress without a known total). */
+  downloadedBytes: number;
+  log: string[];
+  error: string | null;
+}
+
+export interface AiRuntimeStatus {
+  settings: AiRuntimeSettings;
+  gpus: AiGpuInfo[];
+  detectError: string | null;
+  recommendation: AiRuntimeRecommendation;
+  /** Build an install with `torchBackend: auto` would use. */
+  effectiveBackend: AiTorchBackend;
+  active: AiRuntimeEnvironment | null;
+  resolvedPython: { command: string; source: 'managed' | 'custom' };
+  install: AiRuntimeInstallState;
+  /** The app can install an environment on this platform (uv has a build for it). */
+  installSupported: boolean;
+}
+
 
 export interface TaggerServerStatus {
+  aiRuntime: AiRuntimeSettings;
   isRunning: boolean;
   modelLoaded: boolean;
+  embedding: EmbeddingSettings;
   currentModel: TaggerModel | null;
   currentDevice: string | null;
   lastUsedAt: string | null;
@@ -430,6 +565,10 @@ export interface KaloscopeServerStatus {
   lastUsedAt: string | null;
   topK: number;
   keepModelLoaded: boolean;
+  /** Runs only on a CUDA GPU. */
+  requiresGpu?: boolean;
+  /** False when this runtime cannot run it (no usable GPU). */
+  available?: boolean;
   autoUnloadMinutes: number;
   scriptExists: boolean;
   modelCached: boolean;
@@ -440,3 +579,5 @@ export interface KaloscopeServerStatus {
   statusMessage: string;
   installCommand?: string;
 }
+  /** Library items whose artist result came from an older Kaloscope model. */
+  outdatedResults?: number;

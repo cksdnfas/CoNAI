@@ -6,6 +6,8 @@ import { loreEntryKeys, loreEntryMatches, loreEntryTitle } from './chatLorebook'
 import { ChatSummaryStore, recallTerms, selectRecall, splitSegments } from './chatMemory'
 import type { ChatProfile } from './chatProfiles'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
+import { semanticLoreCandidates, type SemanticContext } from '../embeddings/chatSemantic'
+import { fuseRanks } from '../embeddings/rankFusion'
 
 /**
  * What a reply is given beyond keywords, decided by the judge before the reply (API LLM and Claude chats, direct and
@@ -22,6 +24,14 @@ export type JudgedContext = {
   loreKeys: ReadonlySet<string>
   /** Past episodes (summary segment ids) the judge kept; null when recall was not judged (terms alone decide). */
   recallKeep: ReadonlySet<number> | null
+  /** Closeness in meaning to the latest exchange (text embeddings), when on; see chatSemantic. */
+  semantic?: SemanticContext | null
+}
+
+/** The judge's context with the meaning-based one beside it (a context of its own when there was no judge). */
+export function withSemanticContext(judged: JudgedContext | null, semantic: SemanticContext | null): JudgedContext | null {
+  if (!semantic) return judged
+  return { loreKeys: judged?.loreKeys ?? new Set(), recallKeep: judged?.recallKeep ?? null, semantic }
 }
 
 /** Recent messages the candidates are ranked against: the latest exchange. */
@@ -42,39 +52,44 @@ function sharedTerms(query: Set<string>, text: string) {
   return shared
 }
 
-/** Keyword entries no keyword named, closest to the latest exchange first. */
-function loreCandidates(profile: ChatProfile, thread: CodexChatThreadRecord, messages: CodexChatMessageRecord[], limit: number) {
+/** Keyword entries no keyword named, closest to the latest exchange first (shared words and meaning fused). */
+function loreCandidates(profile: ChatProfile, thread: CodexChatThreadRecord, messages: CodexChatMessageRecord[], limit: number, semantic?: SemanticContext | null) {
   const entries = keyedLoreEntries(booksForRequest({ thread, profile }))
   if (entries.length === 0) return []
   const recent = messages.slice(-profile.loreScanDepth).map((message) => [message.content, message.display_content].filter(Boolean).join('\n')).join('\n')
   const folded = recent.toLowerCase()
   const query = recallTerms(messages.filter((message) => message.content.trim()).slice(-QUERY_MESSAGES).map((message) => [message.content, message.display_content].filter(Boolean).join('\n')).join('\n'))
-  if (query.size === 0) return []
-  return entries
-    // A primary keyword that matched already decided the entry (its secondary condition included).
-    .filter(({ entry }) => entry.enabled && !entry.constant && entry.content.trim() && !(loreEntryKeys(entry).length > 0 && loreEntryMatches({ ...entry, secondaryKeys: [], localSecondaryKeys: [] }, recent, folded)))
+  // A primary keyword that matched already decided the entry (its secondary condition included).
+  const eligible = entries.filter(({ entry }) => entry.enabled && !entry.constant && entry.content.trim() && !(loreEntryKeys(entry).length > 0 && loreEntryMatches({ ...entry, secondaryKeys: [], localSecondaryKeys: [] }, recent, folded)))
+  const byTerms = query.size === 0 ? [] : eligible
     .map((item) => ({ item, shared: sharedTerms(query, [loreEntryTitle(item.entry), ...loreEntryKeys(item.entry), item.entry.content.slice(0, 1200)].join('\n')) }))
     .filter(({ shared }) => shared >= MIN_SHARED_TERMS)
     .sort((a, b) => b.shared - a.shared || b.item.entry.order - a.item.entry.order)
+    .map(({ item }) => item)
+  const eligibleByKey = new Map(eligible.map((item) => [item.key, item]))
+  const byMeaning = semanticLoreCandidates(semantic, limit).flatMap((key) => eligibleByKey.get(key) ?? [])
+  const fused = fuseRanks([byTerms.map((item) => item.key), byMeaning.map((item) => item.key)])
+  return [...new Map([...byTerms, ...byMeaning].map((item) => [item.key, item])).values()]
+    .sort((a, b) => (fused.get(b.key) ?? 0) - (fused.get(a.key) ?? 0))
     .slice(0, limit)
-    .map(({ item }) => ({ key: item.key, title: loreEntryTitle(item.entry), content: item.entry.content }))
+    .map((item) => ({ key: item.key, title: loreEntryTitle(item.entry), content: item.entry.content }))
 }
 
-/** Past episodes term matching brings back, plus near misses (fewer words in common), best first. */
-function recallCandidates(thread: CodexChatThreadRecord, messages: CodexChatMessageRecord[]) {
+/** Past episodes term matching (and meaning) brings back, plus near misses (fewer words in common), best first. */
+function recallCandidates(thread: CodexChatThreadRecord, messages: CodexChatMessageRecord[], semantic?: SemanticContext | null) {
   const { folded } = splitSegments(ChatSummaryStore.list(thread.id))
   if (folded.length === 0) return []
   const query = messages.filter((message) => message.content.trim()).slice(-QUERY_MESSAGES).map((message) => message.content).join('\n')
-  return selectRecall(folded, query, Number.MAX_SAFE_INTEGER, () => 0, RECALL_CANDIDATES, MIN_SHARED_TERMS)
+  return selectRecall(folded, query, Number.MAX_SAFE_INTEGER, () => 0, RECALL_CANDIDATES, MIN_SHARED_TERMS, semantic?.recall)
 }
 
 /**
  * The context questions of one reply and how their answers settle into a JudgedContext (plus the log entries).
  * `questions` is empty when there is nothing to ask.
  */
-export function contextQuestions(settings: ChatJudgeContextSettings, profile: ChatProfile, thread: CodexChatThreadRecord, messages: CodexChatMessageRecord[]) {
-  const lore = settings.lore.enabled ? loreCandidates(profile, thread, messages, settings.lore.candidates) : []
-  const recall = settings.recall.enabled ? recallCandidates(thread, messages) : []
+export function contextQuestions(settings: ChatJudgeContextSettings, profile: ChatProfile, thread: CodexChatThreadRecord, messages: CodexChatMessageRecord[], semantic?: SemanticContext | null) {
+  const lore = settings.lore.enabled ? loreCandidates(profile, thread, messages, settings.lore.candidates, semantic) : []
+  const recall = settings.recall.enabled ? recallCandidates(thread, messages, semantic) : []
   const questions: JudgeQuestion[] = [
     ...lore.map((entry, index) => yesNoQuestion(`lore-${index}`, `Does the latest exchange concern the subject of this reference entry, so the character should have it in mind when replying? Entry "${entry.title}": ${excerpt(entry.content)}`, {
       yes: 'The conversation is about this subject, or what is being said directly involves it',

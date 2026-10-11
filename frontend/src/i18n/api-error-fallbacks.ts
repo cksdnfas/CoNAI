@@ -187,6 +187,30 @@ export const API_ERROR_FALLBACKS = {
     ko: '태거 설정을 저장하지 못했어.',
     en: 'Failed to save tagger settings.',
   },
+  'settings.aiRuntime.load': {
+    ko: 'AI 런타임 상태를 불러오지 못했어.',
+    en: 'Failed to load the AI runtime status.',
+  },
+  'settings.aiRuntime.update': {
+    ko: 'AI 런타임 설정을 저장하지 못했어.',
+    en: 'Failed to save AI runtime settings.',
+  },
+  'settings.aiRuntime.install': {
+    ko: 'AI 런타임 설치를 시작하지 못했어.',
+    en: 'Failed to start the AI runtime install.',
+  },
+  'settings.embedding.load': {
+    ko: '임베딩 상태를 불러오지 못했어.',
+    en: 'Failed to load the embedding status.',
+  },
+  'settings.embedding.update': {
+    ko: '임베딩 설정을 저장하지 못했어.',
+    en: 'Failed to save embedding settings.',
+  },
+  'settings.kaloscopeRequeue.run': {
+    ko: '작가 다시 추출을 시작하지 못했어.',
+    en: 'Failed to queue the artist re-extraction.',
+  },
   'settings.taggerModels.load': {
     ko: '태거 모델 목록을 불러오지 못했어.',
     en: 'Failed to load tagger models.',

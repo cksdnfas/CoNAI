@@ -2,6 +2,10 @@ import fs from 'fs';
 import path from 'path';
 import { runtimePaths } from '../config/runtimePaths';
 import {
+  AiPythonSource,
+  AiRuntimeSettings,
+  EmbeddingSettings,
+  AiTorchBackendPreference,
   AppSettings,
   AppearancePresetSlot,
   AppearanceThemeSettings,
@@ -460,6 +464,43 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
       pythonPath: process.env.PYTHON_PATH || 'python',
       keepModelLoaded: false,
       autoUnloadMinutes: 5,
+const AI_PYTHON_SOURCES: readonly AiPythonSource[] = ['auto', 'custom'];
+const AI_TORCH_BACKEND_PREFERENCES: readonly AiTorchBackendPreference[] = ['auto', 'cpu', 'cu126', 'cu130', 'cu132'];
+
+/** AI runtime settings with unknown values dropped; the custom Python path falls back to the old tagger field. */
+function normalizeAiRuntimeSettings(raw: any, legacyPythonPath: unknown, defaults: AiRuntimeSettings): AiRuntimeSettings {
+  const pythonSource = AI_PYTHON_SOURCES.includes(raw?.pythonSource) ? raw.pythonSource : defaults.pythonSource;
+  const torchBackend = AI_TORCH_BACKEND_PREFERENCES.includes(raw?.torchBackend) ? raw.torchBackend : defaults.torchBackend;
+  const customPythonPath = typeof raw?.customPythonPath === 'string' && raw.customPythonPath.trim()
+    ? raw.customPythonPath.trim()
+    : typeof legacyPythonPath === 'string' && legacyPythonPath.trim()
+      ? legacyPythonPath.trim()
+      : defaults.customPythonPath;
+  const threads = Number(raw?.cpuThreads);
+  return {
+    pythonSource,
+    torchBackend,
+    customPythonPath: process.env.PYTHON_PATH?.trim() || customPythonPath,
+    cpuThreads: Number.isInteger(threads) && threads >= 0 && threads <= 256 ? threads : defaults.cpuThreads,
+  };
+}
+
+/** Embedding settings with wrong types replaced by the defaults. */
+function normalizeEmbeddingSettings(raw: any, defaults: EmbeddingSettings): EmbeddingSettings {
+  const flag = (key: keyof EmbeddingSettings) => (typeof raw?.[key] === 'boolean' ? raw[key] : defaults[key]) as boolean;
+  const minutes = Number(raw?.autoUnloadMinutes);
+  return {
+    enabled: flag('enabled'),
+    chatRecall: flag('chatRecall'),
+    lorebook: flag('lorebook'),
+    chatHistory: flag('chatHistory'),
+    fileSearch: flag('fileSearch'),
+    imageSearch: flag('imageSearch'),
+    keepModelLoaded: flag('keepModelLoaded'),
+    autoUnloadMinutes: Number.isInteger(minutes) && minutes >= 1 && minutes <= 1440 ? minutes : defaults.autoUnloadMinutes,
+  };
+}
+
       unloadPolicyVersion: MODEL_UNLOAD_POLICY_VERSION,
     },
     kaloscope: {
@@ -480,6 +521,12 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
       detailSimilarWeights: {
         perceptualHash: 50,
         dHash: 30,
+    aiRuntime: {
+      pythonSource: 'auto',
+      customPythonPath: process.env.PYTHON_PATH || 'python',
+      torchBackend: 'auto',
+      cpuThreads: 0,
+    },
         aHash: 20,
         color: 0,
       },
@@ -501,6 +548,18 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
         weights: {
           positive: 1,
           negative: 1,
+      styleVectors: true,
+    },
+    embedding: {
+      enabled: process.env.EMBEDDING_ENABLED === 'true',
+      chatRecall: true,
+      lorebook: true,
+      chatHistory: true,
+      fileSearch: true,
+      imageSearch: false,
+      keepModelLoaded: false,
+      // Chat turns come minutes apart; a short idle would reload the model (several seconds) mid-conversation.
+      autoUnloadMinutes: 30,
           auto: 1,
         },
         fieldThresholds: {
@@ -631,6 +690,7 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
         ...loadedSettings.similarity?.promptSimilarity,
         weights: {
           ...defaults.similarity.promptSimilarity.weights,
+    aiRuntime: normalizeAiRuntimeSettings(loadedSettings.aiRuntime, loadedSettings.tagger?.pythonPath, defaults.aiRuntime),
           ...loadedSettings.similarity?.promptSimilarity?.weights,
         },
         fieldThresholds: {
@@ -645,6 +705,7 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
       desktopSearchMinWidth: loadedSettings.appearance?.desktopPageColumnsMinWidth ?? defaults.appearance.desktopPageColumnsMinWidth,
       desktopNavMinWidth: loadedSettings.appearance?.desktopPageColumnsMinWidth ?? defaults.appearance.desktopPageColumnsMinWidth,
       desktopPageColumnsMinWidth: loadedSettings.appearance?.desktopPageColumnsMinWidth ?? defaults.appearance.desktopPageColumnsMinWidth,
+    embedding: normalizeEmbeddingSettings(loadedSettings.embedding, defaults.embedding),
       presetSlots: normalizeAppearancePresetSlots(loadedSettings.appearance?.presetSlots),
       wallpaperLayoutPresets: normalizeWallpaperLayoutPresets(loadedSettings.appearance?.wallpaperLayoutPresets),
       wallpaperActivePresetId: typeof loadedSettings.appearance?.wallpaperActivePresetId === 'string'
@@ -733,6 +794,12 @@ export function hasMissingSettingsFields(loaded: any, defaults: AppSettings): bo
   }
 
   for (const key of Object.keys(defaults.thumbnail)) {
+  for (const key of Object.keys(defaults.aiRuntime)) {
+    if (!(key in (loaded.aiRuntime || {}))) {
+      return true;
+    }
+  }
+
     if (!(key in (loaded.thumbnail || {}))) {
       return true;
     }
@@ -751,6 +818,12 @@ export function hasMissingSettingsFields(loaded: any, defaults: AppSettings): bo
   }
 
   for (const key of Object.keys(defaults.generationThrottle.codex)) {
+  for (const key of Object.keys(defaults.embedding)) {
+    if (!(key in (loaded.embedding || {}))) {
+      return true;
+    }
+  }
+
     if (!(key in (loaded.generationThrottle?.codex || {}))) {
       return true;
     }

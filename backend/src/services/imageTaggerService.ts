@@ -2,8 +2,8 @@ import { taggerDaemon, type TaggerResult } from './taggerDaemon';
 import { logger } from '../utils/logger';
 import type { TaggerDevice, TaggerModel, TaggerServerStatus } from '@conai/shared';
 import { VideoFrameExtractor } from './videoFrameExtractor';
-import { TagMergeService } from './tagMergeService';
-import path from 'path';
+import { analyzeMedia, checkAiDependencies, type VisionResult, type VisionTasks } from './aiWorker/aiVisionService';
+import type { AiWorkerPriority } from './aiWorker/aiWorkerClient';
 
 // Re-export the daemon result and canonical wire status contracts.
 export type { TaggerResult } from './taggerDaemon';
@@ -48,77 +48,24 @@ export class ImageTaggerService {
   }
 
   /**
-   * Tag a video by extracting frames and merging results
-   * Extracts 7 uniformly distributed frames, tags each, and merges with conservative rating
+   * Tagger and/or Kaloscope over one image or video in a single worker request (see analyzeMedia)
+   */
+  async analyze(
+    filePath: string,
+    isVideo: boolean,
+    tasks: VisionTasks,
+    options: { priority?: AiWorkerPriority; compositeHash?: string } = {},
+  ): Promise<VisionResult> {
+    return analyzeMedia(filePath, isVideo, tasks, options);
+  }
+
+  /**
+   * Tag a video: frames are extracted once and tagged in one worker request, then merged with conservative rating
    */
   async tagVideo(videoPath: string): Promise<TaggerResult> {
-    let framePaths: string[] = [];
-
-    try {
-      logger.debug(`[ImageTagger] Tagging video: ${videoPath}`);
-
-      // 1. Extract 7 frames from video
-      logger.debug('[ImageTagger] Extracting frames from video...');
-      framePaths = await VideoFrameExtractor.extractFramesForTagging(videoPath);
-      logger.debug(`[ImageTagger] Extracted ${framePaths.length} frames`);
-
-      // 2. Tag each frame
-      logger.debug('[ImageTagger] Tagging extracted frames...');
-      const frameResults: TaggerResult[] = [];
-
-      for (let i = 0; i < framePaths.length; i++) {
-        const framePath = framePaths[i];
-        logger.debug(`[ImageTagger] Tagging frame ${i + 1}/${framePaths.length}`);
-
-        try {
-          const result = await this.tagImage(framePath);
-          frameResults.push(result);
-
-          if (!result.success) {
-            logger.warn(`[ImageTagger] Frame ${i + 1} tagging failed:`, result.error);
-          }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unknown error';
-          logger.error(`[ImageTagger] Frame ${i + 1} tagging exception:`, message);
-          frameResults.push({
-            success: false,
-            error: message,
-            error_type: 'FrameTagError'
-          });
-        }
-      }
-
-      // 3. Merge frame results
-      logger.debug('[ImageTagger] Merging frame results...');
-      const mergedResult = TagMergeService.mergeVideoTagResults(frameResults);
-
-      const stats = TagMergeService.getMergeStatistics(frameResults);
-      logger.debug(`[ImageTagger] Video tagging complete: ${stats.successful}/${stats.total} frames successful`);
-
-      return mergedResult;
-
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      const stack = error instanceof Error ? error.stack : undefined;
-      logger.error('[ImageTagger] Video tagging exception:', message);
-      if (stack) logger.error('[ImageTagger] Stack:', stack);
-
-      return {
-        success: false,
-        error: message,
-        error_type: 'VideoTagError'
-      };
-
-    } finally {
-      // 4. Always cleanup temporary frames
-      if (framePaths.length > 0) {
-        try {
-          await VideoFrameExtractor.cleanupTempFrames(framePaths);
-        } catch (cleanupError) {
-          logger.warn('[ImageTagger] Frame cleanup failed (non-critical):', cleanupError);
-        }
-      }
-    }
+    logger.debug(`[ImageTagger] Tagging video: ${videoPath}`);
+    const result = await this.analyze(videoPath, true, { tagger: true });
+    return result.tagger ?? { success: false, error: 'Tagger returned nothing', error_type: 'VideoTagError' };
   }
 
   /**
@@ -166,38 +113,11 @@ export class ImageTaggerService {
   }
 
   /**
-   * Check if Python and required packages are available
-   * Uses daemon to verify dependencies
+   * Check if the AI Python and its packages are available (cached probe; does not start the worker)
    */
   async checkPythonDependencies(): Promise<{ available: boolean; message: string }> {
-    try {
-      logger.debug('[ImageTagger] Checking Python dependencies via daemon...');
-
-      // Try to start daemon - if it starts, dependencies are OK
-      await taggerDaemon.start();
-
-      // Get status to confirm
-      const status = await taggerDaemon.getStatus();
-
-      if (status.isRunning) {
-        return {
-          available: true,
-          message: 'All Python dependencies are available'
-        };
-      } else {
-        return {
-          available: false,
-          message: 'Daemon failed to start - check Python dependencies'
-        };
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      logger.error('[ImageTagger] Dependency check failed:', message);
-      return {
-        available: false,
-        message: `Python dependencies check failed: ${message}`
-      };
-    }
+    const status = await checkAiDependencies();
+    return { available: status.available, message: status.message };
   }
 
   /**

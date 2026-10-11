@@ -3,6 +3,10 @@ import { fileOwnerKey } from '../fileStoreService'
 import { parseSearchTerms } from '../fileStoreSearch'
 import { normalizeLinkedFiles } from './chatLinkedFiles'
 import { normalizeLorebookIds } from './chatLorebook'
+import { EMBEDDING_MODEL_KEY, embedQuery, embeddingFeatureOn } from '../aiWorker/textEmbeddingService'
+import { indexMessagesNow } from '../embeddings/semanticIndex'
+import { fuseRanks, SEMANTIC_SPACES, standouts } from '../embeddings/rankFusion'
+import { vectorStore } from '../vectors/vectorStore'
 
 /**
  * Searching past conversation: the chat's own messages, and the chats connected to it. Two chats are connected when
@@ -75,6 +79,58 @@ export function sharesKnowledge(thread: { id: number; account_id: number | null;
 }
 
 export type HistoryHit = { chat_id: number; message_id: number; role: 'user' | 'assistant'; speaker_profile_id: number | null; at: string; excerpt: string; routing: string | null }
+
+/** Messages embedded on the spot before a search (newest first); older ones are left to the background pass. */
+const INDEX_BEFORE_SEARCH = 32
+/** A search may wait for the model to load (a tool call, not a reply in progress). */
+const SEARCH_QUERY_WAIT_MS = 20_000
+const SEMANTIC_MIN_SCORE = 0.62
+const SEMANTIC_MIN_LEAD = 0.04
+
+/**
+ * Searching with text embeddings on: messages holding the words (searchChatMessages) and messages close in meaning,
+ * the two rankings fused, best first. Without embeddings (or when they fail) it is searchChatMessages, newest first.
+ */
+export async function searchChatHistory(threadIds: number[], query: string, limit: number): Promise<HistoryHit[]> {
+  const capped = Math.min(Math.max(1, limit), HISTORY_SEARCH_LIMIT)
+  if (threadIds.length === 0) return []
+  if (!embeddingFeatureOn('chatHistory')) return searchChatMessages(threadIds, query, capped)
+  let lexical: HistoryHit[] = []
+  let lexicalError: unknown = null
+  try {
+    lexical = searchChatMessages(threadIds, query, HISTORY_SEARCH_LIMIT)
+  } catch (error) {
+    lexicalError = error
+  }
+  await indexMessagesNow(threadIds, INDEX_BEFORE_SEARCH).catch(() => 0)
+  const vector = await embedQuery(query, { waitMs: SEARCH_QUERY_WAIT_MS })
+  if (!vector) {
+    if (lexicalError) throw lexicalError
+    return lexical.slice(0, capped)
+  }
+  const hits = vectorStore.search(SEMANTIC_SPACES.message, EMBEDDING_MODEL_KEY, vector, { ownerKeys: threadIds.map((id) => `thread:${id}`) })
+  const best = new Map<number, { score: number; spanStart: number | null }>()
+  for (const hit of hits) {
+    const id = Number(hit.sourceKey)
+    if (!best.has(id) || best.get(id)!.score < hit.score) best.set(id, { score: hit.score, spanStart: hit.spanStart })
+  }
+  const close = standouts(new Map([...best].map(([id, value]) => [id, value.score])), SEMANTIC_MIN_SCORE, SEMANTIC_MIN_LEAD).slice(0, HISTORY_SEARCH_LIMIT).map(([id]) => id)
+  const fused = fuseRanks([lexical.map((hit) => hit.message_id), close])
+  const known = new Map(lexical.map((hit) => [hit.message_id, hit]))
+  const missing = close.filter((id) => !known.has(id))
+  if (missing.length > 0) {
+    const rows = getUserSettingsDb().prepare(`SELECT thread_id AS chat_id, id AS message_id, role, speaker_profile_id, created_date AS at, content, routing
+      FROM codex_chat_messages WHERE id IN (${missing.map(Number).join(', ')})`).all() as Array<Omit<HistoryHit, 'excerpt'> & { content: string }>
+    for (const { content, ...row } of rows) {
+      const start = Math.max(0, (best.get(row.message_id)?.spanStart ?? 0))
+      known.set(row.message_id, { ...row, excerpt: content.slice(start, start + EXCERPT_LENGTH) })
+    }
+  }
+  return [...fused.entries()]
+    .sort((a, b) => b[1] - a[1] || b[0] - a[0])
+    .flatMap(([id]) => known.get(id) ?? [])
+    .slice(0, capped)
+}
 
 /**
  * Messages of these chats holding every word of `query` (space-separated; a "quoted phrase" as written), in the text

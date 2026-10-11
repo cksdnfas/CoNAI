@@ -8,8 +8,10 @@ import {
 import { llmSettingsRoutes } from './settings/llm-settings.routes';
 import { agentCliRoutes } from './settings/agent-cli.routes';
 import { generalSettingsRoutes } from './settings/general-settings.routes';
+import { aiRuntimeSettingsRoutes } from './settings/ai-runtime.routes';
 import { taggerSettingsRoutes } from './settings/tagger-settings.routes';
 import { kaloscopeSettingsRoutes } from './settings/kaloscope-settings.routes';
+import { embeddingSettingsRoutes } from './settings/embedding-settings.routes';
 import { autoTestSettingsRoutes } from './settings/auto-test-settings.routes';
 import { appearanceSettingsRoutes } from './settings/appearance.routes';
 import { mediaSettingsRoutes } from './settings/media-settings.routes';
@@ -49,8 +51,10 @@ router.get(
 router.use('/', llmSettingsRoutes);
 router.use('/', agentCliRoutes);
 router.use('/', generalSettingsRoutes);
+router.use('/', aiRuntimeSettingsRoutes);
 router.use('/', taggerSettingsRoutes);
 router.use('/', kaloscopeSettingsRoutes);
+router.use('/', embeddingSettingsRoutes);
 router.use('/', autoTestSettingsRoutes);
 router.use('/', appearanceSettingsRoutes);
 router.use('/', mediaSettingsRoutes);

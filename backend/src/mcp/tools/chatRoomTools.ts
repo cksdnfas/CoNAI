@@ -8,7 +8,7 @@ import { routeChatReply, requireActiveChatReply } from '../../services/codex-cha
 import { ChatGroupStore } from '../../services/codex-chat/chatGroupStore';
 import { resolveMemberName } from '../../services/codex-chat/groupChatContext';
 import { buildReplyContext } from '../../services/codex-chat/chatReplyContext';
-import { connectedThreadIds, HISTORY_SEARCH_LIMIT, searchChatMessages, sharesKnowledge } from '../../services/codex-chat/chatHistorySearch';
+import { connectedThreadIds, HISTORY_SEARCH_LIMIT, searchChatHistory, sharesKnowledge } from '../../services/codex-chat/chatHistorySearch';
 import type { McpRequestContext } from '../context';
 
 const MESSAGE_TEXT_LIMIT = 2000;
@@ -109,9 +109,9 @@ function registerRoomTools(server: McpServer, context: McpRequestContext): void 
 
   server.registerTool(
     'room_history_search',
-    { description: 'Search earlier messages of this chat (the room you are in), or with chats:"connected" the other chats that share a lorebook or linked folder with it (the same project). Returns chat and message ids, speakers and excerpts, newest first. Use it only when what you need is not in your context.', inputSchema: z.object({
+    { description: 'Search earlier messages of this chat (the room you are in), or with chats:"connected" the other chats that share a lorebook or linked folder with it (the same project). Returns chat and message ids, speakers and excerpts, best matches first. Use it only when what you need is not in your context.', inputSchema: z.object({
       room_id: z.number().int().positive().optional().describe('This chat or room id (default: the current one)'),
-      query: z.string().trim().min(1).max(200).describe('Words that must all appear (case-insensitive); a "quoted phrase" as written'),
+      query: z.string().trim().min(1).max(200).describe('What to find: messages with all these words (case-insensitive; a "quoted phrase" as written) come first, and related wording also matches when semantic search is on'),
       chats: z.enum(['this', 'connected']).optional().describe('this (default): only this chat; connected: the chats sharing a lorebook or linked folder with it'),
       limit: z.number().int().min(1).max(HISTORY_SEARCH_LIMIT).optional().describe('Max results (default 10)'),
     }) },
@@ -121,7 +121,7 @@ function registerRoomTools(server: McpServer, context: McpRequestContext): void 
         const accountId = context.requester?.accountId ?? null;
         const connected = chats === 'connected' ? connectedThreadIds(thread.id, accountId) : [];
         if (chats === 'connected' && connected.length === 0) return textResult({ results: [], note: 'No other chat shares a lorebook or linked folder with this one.' });
-        const hits = searchChatMessages(chats === 'connected' ? connected : [thread.id], query, limit ?? 10);
+        const hits = await searchChatHistory(chats === 'connected' ? connected : [thread.id], query, limit ?? 10);
         const names = new Map<number, string>();
         const titles = new Map<number, { title: string; user: string }>();
         const chatOf = (id: number) => {
