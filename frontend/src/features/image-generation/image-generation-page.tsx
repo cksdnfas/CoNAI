@@ -157,9 +157,9 @@ function ImageGenerationPageContent() {
   }, [activeTab, pendingHistorySettingsLoad, selectedComfyWorkflowId, setSearchParams])
 
   // 생성 요청이 큐에 들어가면 좁은 화면은 결과 보기로 넘겨 진행 상황을 바로 보여 준다.
+  // 결과/기록 중 보고 있던 쪽은 그대로 둔다(기록을 보던 사람을 결과로 끌어가지 않는다).
   const handleHistoryRefresh = () => {
     setHistoryRefreshNonce((current) => current + 1)
-    setResultView('stage')
     if (!isWideLayout) {
       setNarrowView('result')
     }
@@ -245,6 +245,7 @@ function ImageGenerationPageContent() {
       workflowId={historyWorkflowId}
       splitPaneScroll={useWideSplitPaneScroll}
       compact={!isWideLayout}
+      followLatestNonce={historyRefreshNonce}
       view={resultView}
       onViewChange={setResultView}
     />
