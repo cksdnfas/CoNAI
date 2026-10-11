@@ -182,6 +182,9 @@ export function configureAppMiddleware(
 
   app.use(dependencies.createHelmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
+    // Helmet's default no-referrer makes older embedded Chromium (Wallpaper Engine) send `Origin: null` on our own
+    // same-origin POSTs; same-origin keeps the real origin on them and still sends nothing to other sites.
+    referrerPolicy: { policy: 'same-origin' },
     crossOriginEmbedderPolicy: false,
     crossOriginOpenerPolicy: isSecureContext ? { policy: 'same-origin' } : false,
     originAgentCluster: isSecureContext,
@@ -204,8 +207,10 @@ export function configureAppMiddleware(
   app.use(dependencies.createCors((req, callback) => {
     const origin = req.get('Origin');
 
-    // Embedded hosts (Wallpaper Engine) can send an Origin that is not the page's own; Sec-Fetch-Site comes from the browser.
-    if (!origin || isSameRequestOrigin(req, origin) || allowedCorsOrigins.has(origin) || req.get('Sec-Fetch-Site') === 'same-origin') {
+    // Embedded hosts (Wallpaper Engine's older Chromium) can send `Origin: null` on our own page's requests, without
+    // Sec-Fetch-Site; a null origin from another site carries no session cookie (SameSite=Lax), so it reads nothing.
+    const embeddedNullOrigin = origin === 'null' && !req.get('Sec-Fetch-Site');
+    if (!origin || isSameRequestOrigin(req, origin) || allowedCorsOrigins.has(origin) || req.get('Sec-Fetch-Site') === 'same-origin' || embeddedNullOrigin) {
       callback(null, {
         origin: true,
         credentials: true,
