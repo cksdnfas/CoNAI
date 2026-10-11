@@ -69,7 +69,8 @@ const routeModuleLoaders = {
   ),
   'upload-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/upload/upload-page'),
-    [() => import('@/i18n/resources/upload').then((module) => module.uploadCatalog)],
+    // The upload page reuses the metadata rewrite form, whose labels live in the metadata catalog.
+    [() => import('@/i18n/resources/upload').then((module) => module.uploadCatalog), () => import('@/i18n/resources/metadata').then((module) => module.metadataCatalog)],
   ),
   'files-page': () => import('@/features/files/files-page'),
   'audio-page': () => import('@/features/audio/audio-page'),

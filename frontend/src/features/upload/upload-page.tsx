@@ -226,7 +226,7 @@ export function UploadPage() {
     try {
       const result = await downloadRewrittenImage(extractFile, {
         format: rewriteDraft.format,
-        metadataPatch: buildMetadataRewritePatch(rewriteDraft),
+        metadataPatch: buildMetadataRewritePatch(rewriteDraft, { invalidStepsMessage: t('metadata.use.metadata.rewrite.draft.steps.must.be.a.number.greater.than') }),
       })
 
       const message = result.rewriteState === 'patched'
