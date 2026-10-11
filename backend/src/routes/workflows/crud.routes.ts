@@ -6,8 +6,27 @@ import { asyncHandler } from '../../middleware/asyncHandler';
 import { getWorkflowNumericFieldDefinitionError } from '../../services/workflowNumericFieldPolicy';
 import { requirePermission } from '../../middleware/authMiddleware';
 import { nativeEditRevision, requireNativeEditRevision } from '../../services/nativeEditRevision';
+import {
+  ComfyUiWorkflowConversionError,
+  convertComfyUiWorkflowWithServers,
+  describeComfyUiWorkflowConversionFailure,
+  isComfyUiWorkflowFormat,
+  resolveApiWorkflowJson,
+} from '../../services/comfyui/uiWorkflowConversion';
+import { checkComfyWorkflowOnServers } from '../../services/comfyui/workflowServerCheck';
 
 const router = Router();
+
+/** UI ("Save") workflows are converted to the API format; API workflows pass through unchanged. Null = response sent. */
+async function readApiWorkflowJson(res: Response, workflowJson: string): Promise<string | null> {
+  try {
+    return (await resolveApiWorkflowJson(workflowJson)).workflowJson;
+  } catch (error) {
+    if (!(error instanceof ComfyUiWorkflowConversionError)) throw error;
+    res.status(400).json({ success: false, error: describeComfyUiWorkflowConversionFailure(error), issues: error.issues });
+    return null;
+  }
+}
 
 function normalizeResultViewMode(value: unknown) {
   return value === 'artifact_explorer' ? 'artifact_explorer' : 'history';
@@ -192,6 +211,8 @@ router.post('/import', requirePermission('workflows.edit'), asyncHandler(async (
     res.status(400).json({ success: false, error: 'Invalid workflow_json: must be valid JSON' });
     return;
   }
+  const importedWorkflowJson = await readApiWorkflowJson(res, definition.workflow_json);
+  if (importedWorkflowJson === null) return;
   if (WorkflowModel.existsByName(definition.name)) {
     res.status(409).json({ success: false, error: 'Workflow name already exists' });
     return;
@@ -199,7 +220,7 @@ router.post('/import', requirePermission('workflows.edit'), asyncHandler(async (
   const id = WorkflowModel.create({
     name: definition.name,
     description: definition.description,
-    workflow_json: definition.workflow_json,
+    workflow_json: importedWorkflowJson,
     marked_fields: Array.isArray(definition.marked_fields)
       ? definition.marked_fields
       : typeof definition.marked_fields === 'string'
@@ -214,6 +235,52 @@ router.post('/import', requirePermission('workflows.edit'), asyncHandler(async (
     kind: normalizeWorkflowKind(definition.kind),
   });
   res.status(201).json({ success: true, data: { id } });
+}));
+
+/**
+ * ComfyUI 일반(Save) 워크플로를 API 형식으로 변환
+ * POST /api/workflows/convert-ui
+ */
+router.post('/convert-ui', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+  const raw = req.body?.workflow_json;
+  let parsed: unknown;
+  try {
+    parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch {
+    res.status(400).json({ success: false, error: 'Invalid workflow_json: must be valid JSON' });
+    return;
+  }
+  if (!isComfyUiWorkflowFormat(parsed)) {
+    res.status(400).json({ success: false, error: 'ComfyUI 일반 워크플로 형식이 아니야.' });
+    return;
+  }
+  const serverId = Number(req.body?.server_id);
+  try {
+    const result = await convertComfyUiWorkflowWithServers(parsed, { serverId: Number.isInteger(serverId) && serverId > 0 ? serverId : null });
+    res.json({ success: true, data: { workflow_json: JSON.stringify(result.workflow, null, 2), warnings: result.warnings, server: result.server } });
+  } catch (error) {
+    if (!(error instanceof ComfyUiWorkflowConversionError)) throw error;
+    res.status(422).json({ success: false, error: describeComfyUiWorkflowConversionFailure(error), issues: error.issues });
+  }
+}));
+
+/**
+ * API 워크플로를 실행 가능한 ComfyUI 서버들과 대조 (없는 노드·모델, 범위 밖 숫자, 출력에 닿지 않는 노드)
+ * POST /api/workflows/check
+ */
+router.post('/check', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+  const workflowJson = req.body?.workflow_json;
+  const workflowId = Number(req.body?.workflow_id);
+  if (typeof workflowJson !== 'string') {
+    res.status(400).json({ success: false, error: 'workflow_json is required' });
+    return;
+  }
+  try {
+    const data = await checkComfyWorkflowOnServers(workflowJson, { workflowId: Number.isInteger(workflowId) && workflowId > 0 ? workflowId : null });
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error instanceof Error ? error.message : 'Invalid workflow_json' });
+  }
 }));
 
 router.post('/:id/restore', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
@@ -253,6 +320,8 @@ router.post('/', requirePermission('workflows.edit'), asyncHandler(async (req: R
       error: 'Invalid workflow_json: must be valid JSON'
     } as WorkflowResponse);
   }
+  const apiWorkflowJson = await readApiWorkflowJson(res, workflow_json);
+  if (apiWorkflowJson === null) return;
 
   try {
     // 이름 중복 확인
@@ -284,7 +353,7 @@ router.post('/', requirePermission('workflows.edit'), asyncHandler(async (req: R
     const workflowData: WorkflowCreateData = {
       name,
       description,
-      workflow_json,
+      workflow_json: apiWorkflowJson,
       marked_fields,
       api_endpoint,
       is_active,
@@ -356,6 +425,8 @@ router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req:
       } as WorkflowResponse);
     }
   }
+  const apiWorkflowJson = workflow_json ? await readApiWorkflowJson(res, workflow_json) : workflow_json;
+  if (workflow_json && apiWorkflowJson === null) return;
 
   try {
     // 이름 중복 확인 (변경하는 경우)
@@ -389,7 +460,7 @@ router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req:
     const workflowData: WorkflowUpdateData = {
       name,
       description,
-      workflow_json,
+      workflow_json: apiWorkflowJson ?? undefined,
       marked_fields,
       api_endpoint,
       is_active,

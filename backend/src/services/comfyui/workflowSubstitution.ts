@@ -1,5 +1,6 @@
 import type { MarkedField } from '../../types/workflow';
 import { normalizeWorkflowNumericPromptValues } from '../workflowNumericFieldPolicy';
+import { randomizeComfyWorkflowSeeds } from './seedControl';
 
 const MINIMAX_DIRECTOR_MODES = new Set([
   'T2VA',
@@ -214,6 +215,7 @@ export function substituteComfyPromptData(
 ): any {
   const workflow = JSON.parse(workflowJson);
   const normalizedPromptData = normalizeWorkflowNumericPromptValues(markedFields, promptData);
+  const pinnedJsonPaths = new Set<string>();
 
   for (const field of markedFields) {
     let value = normalizedPromptData[field.id] ?? field.default_value;
@@ -234,6 +236,7 @@ export function substituteComfyPromptData(
     }
     if (value !== undefined && value !== null) {
       setValueByPath(workflow, field.jsonPath, value);
+      pinnedJsonPaths.add(field.jsonPath);
     } else if (field.default_value !== undefined) {
       setValueByPath(workflow, field.jsonPath, field.default_value);
     }
@@ -241,6 +244,7 @@ export function substituteComfyPromptData(
 
   configureMiniMaxDirectorPostprocess(workflow);
   pruneMiniMaxDirectorModeOutputs(workflow);
+  randomizeComfyWorkflowSeeds(workflow, pinnedJsonPaths);
 
   return workflow;
 }

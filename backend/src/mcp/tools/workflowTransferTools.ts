@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { WorkflowModel } from '../../models/Workflow';
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
+import { ComfyUiWorkflowConversionError, describeComfyUiWorkflowConversionFailure, resolveApiWorkflowJson } from '../../services/comfyui/uiWorkflowConversion';
 
 export function registerWorkflowTransferTools(server: McpServer): void {
   server.registerTool(
@@ -29,6 +30,9 @@ export function registerWorkflowTransferTools(server: McpServer): void {
         const workflowJson = typeof workflow.workflow_json === 'string' ? workflow.workflow_json : '';
         if (!name || !workflowJson) throw new Error('name and workflow_json are required');
         JSON.parse(workflowJson);
+        const apiWorkflowJson = await resolveApiWorkflowJson(workflowJson).catch((error: unknown) => {
+          throw error instanceof ComfyUiWorkflowConversionError ? new Error(describeComfyUiWorkflowConversionFailure(error)) : error;
+        });
         if (WorkflowModel.existsByName(name)) throw new Error('Workflow name already exists');
         const markedFields = Array.isArray(workflow.marked_fields)
           ? workflow.marked_fields
@@ -38,7 +42,7 @@ export function registerWorkflowTransferTools(server: McpServer): void {
         const id = WorkflowModel.create({
           name,
           description: typeof workflow.description === 'string' ? workflow.description : undefined,
-          workflow_json: workflowJson,
+          workflow_json: apiWorkflowJson.workflowJson,
           marked_fields: markedFields,
           api_endpoint: typeof workflow.api_endpoint === 'string' ? workflow.api_endpoint : undefined,
           is_active: workflow.is_active !== false,

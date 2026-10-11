@@ -208,6 +208,43 @@ export async function createGenerationWorkflow(payload: CreateGenerationWorkflow
   })
 }
 
+/** Convert a ComfyUI "Save" (UI) workflow into the API format using a registered server's node definitions. */
+export async function convertComfyUiWorkflow(workflowJson: string) {
+  const response = await requestJson<{ success: boolean; data: { workflow_json: string; warnings: string[] } }>('/api/workflows/convert-ui', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ workflow_json: workflowJson }),
+  })
+  return response.data
+}
+
+export type ComfyWorkflowServerCheck = {
+  server_id: number
+  server_name: string
+  status: 'ok' | 'incompatible' | 'unreachable'
+  issues: Array<{ node_id: string; message: string }>
+}
+
+export type ComfyWorkflowCheckResult = {
+  servers: ComfyWorkflowServerCheck[]
+  output_node_ids: string[] | null
+  unused_node_ids: string[] | null
+}
+
+/** Check an API workflow against the ComfyUI servers that may run it (the workflow's linked ones when it has an id). */
+export async function checkComfyWorkflow(workflowJson: string, workflowId?: number | null) {
+  const response = await requestJson<{ success: boolean; data: ComfyWorkflowCheckResult }>('/api/workflows/check', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ workflow_json: workflowJson, workflow_id: workflowId ?? undefined }),
+  })
+  return response.data
+}
+
 /** Update a saved ComfyUI workflow definition. */
 export async function updateGenerationWorkflow(workflowId: number, payload: CreateGenerationWorkflowPayload, revision?: string) {
   return requestJson<MutationResponse>(`/api/workflows/${workflowId}`, {

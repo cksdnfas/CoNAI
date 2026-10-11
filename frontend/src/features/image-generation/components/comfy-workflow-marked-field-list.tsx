@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
-import { GripVertical, Search, X } from 'lucide-react'
+import { GripVertical, Search, Sparkles, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +13,10 @@ import { useMarkedFieldTypeLabel } from './comfy-workflow-marked-field-editor'
 
 type ComfyWorkflowMarkedFieldListProps = {
   markedFields: WorkflowMarkedField[]
+  /** Fields whose node or input is not in the current workflow JSON. */
+  missingFieldIds?: ReadonlySet<string>
+  /** Add the commonly exposed inputs as fields; absent while there is no graph to read them from. */
+  onSuggestFields?: () => void
   selectedFieldId: string | null
   onFieldSelect: (fieldId: string) => void
   onReorderMarkedField: (sourceFieldId: string, targetFieldId: string) => void
@@ -29,6 +33,8 @@ type DragState =
  */
 export function ComfyWorkflowMarkedFieldList({
   markedFields,
+  missingFieldIds,
+  onSuggestFields,
   selectedFieldId,
   onFieldSelect,
   onReorderMarkedField,
@@ -121,6 +127,11 @@ export function ComfyWorkflowMarkedFieldList({
             <span className="text-sm font-bold text-foreground">{t({ ko: '필드', en: 'Fields' })}</span>
             <span className="font-mono text-2xs text-muted-foreground">{markedFields.length}</span>
             <span className="flex-1" />
+            {onSuggestFields ? (
+              <IconButton size="icon-sm" variant="ghost" onClick={onSuggestFields} label={t({ ko: '자주 쓰는 필드 추가', en: 'Add common fields' })}>
+                <Sparkles />
+              </IconButton>
+            ) : null}
           </>
         )}
         <IconButton
@@ -199,6 +210,13 @@ export function ComfyWorkflowMarkedFieldList({
                   >
                     <span className={cn('min-w-0 truncate', isSelected ? 'font-bold text-secondary-text' : 'text-foreground')}>{field.label || field.id}</span>
                     {field.required ? <span role="img" className="size-1.5 shrink-0 rounded-full bg-secondary-text" aria-label={t({ ko: '필수', en: 'Required' })} /> : null}
+                    {missingFieldIds?.has(field.id) ? (
+                      <Tip content={t({ ko: '워크플로에 이 입력이 없어', en: 'This input is not in the workflow' })}>
+                        <span role="img" aria-label={t({ ko: '워크플로에 이 입력이 없어', en: 'This input is not in the workflow' })} className="shrink-0 text-warning">
+                          <TriangleAlert className="size-3.5" />
+                        </span>
+                      </Tip>
+                    ) : null}
                     <span className="ml-auto shrink-0 text-xs text-muted-foreground">{formatType(field.type)}</span>
                   </Button>
                 </div>

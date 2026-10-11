@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
-import { Check, GripVertical, Plus } from 'lucide-react'
+import { Check, GripVertical, Plus, TriangleAlert } from 'lucide-react'
 import { Handle, Position, type Edge, type Node, type NodeProps } from '@xyflow/react'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { Button } from '@/components/ui/button'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { buildPowerLoraNodeItemsFromInputs } from './power-lora-loader-input'
@@ -20,6 +21,7 @@ type WorkflowJsonNodeRecord = {
   position?: unknown
   _meta?: {
     title?: string
+    pos?: unknown
   }
 }
 
@@ -49,6 +51,10 @@ export type AuthoringNodeData = {
   searchQuery?: string
   searchMatched?: boolean
   searchCurrent?: boolean
+  /** Server check findings for this node ("server: message"). */
+  issues?: string[]
+  /** No output node reaches this node, so ComfyUI never runs it. */
+  unused?: boolean
   onInputSelect: (nodeId: string, nodeTitle: string, classType: string, input: EditableWorkflowInput) => void
 }
 
@@ -58,7 +64,12 @@ export type AuthoringEdge = Edge
 export type ParsedWorkflowGraph = {
   nodes: AuthoringNode[]
   edges: AuthoringEdge[]
+  /** Every node carries a ComfyUI editor position, so the ComfyUI arrangement can be shown. */
+  hasComfyPositions: boolean
 }
+
+/** auto: layered layout; comfy: the positions saved from the ComfyUI editor. */
+export type AuthoringGraphLayout = 'auto' | 'comfy'
 
 /** Build a readable label from a workflow input key. */
 function humanizeWorkflowInputKey(value: string) {
@@ -138,9 +149,19 @@ export function parseWorkflowDefinition(workflowJson: string): WorkflowJsonRecor
   return parsed as WorkflowJsonRecord
 }
 
+/** A ComfyUI "Save" (UI) workflow has a root `nodes` array; the API format is a map of node id → node. */
+export function isComfyUiWorkflowJson(workflowJson: string) {
+  try {
+    const parsed = JSON.parse(workflowJson) as unknown
+    return Boolean(parsed) && typeof parsed === 'object' && !Array.isArray(parsed) && Array.isArray((parsed as { nodes?: unknown }).nodes)
+  } catch {
+    return false
+  }
+}
+
 /** Resolve node coordinates from the Comfy export when present. */
 function resolveWorkflowNodePosition(nodeData: WorkflowJsonNodeRecord) {
-  const candidate = nodeData.pos ?? nodeData.position
+  const candidate = nodeData.pos ?? nodeData.position ?? nodeData._meta?.pos
 
   if (Array.isArray(candidate) && candidate.length >= 2) {
     const [x, y] = candidate
@@ -170,112 +191,228 @@ function resolveWorkflowNodePosition(nodeData: WorkflowJsonNodeRecord) {
   return null
 }
 
-/** Approximate node height so auto-layout columns stay readable. */
+/** Approximate the rendered card height: padding + header, then one 28px row (+2px gap) per input. */
 function estimateAuthoringNodeHeight(node: AuthoringNode) {
   const editableInputCount = node.data.editableInputs.length
   if (editableInputCount === 0) {
-    return 120
+    return 100
   }
 
-  return 108 + editableInputCount * 42
+  return 84 + editableInputCount * 30
 }
 
-/** Place nodes using explicit Comfy positions first, then a simple fallback DAG layout. */
+const LAYOUT_COLUMN_SPACING = 340
+const LAYOUT_ROW_GAP = 32
+const LAYOUT_COMPONENT_GAP = 120
+const LAYOUT_LONE_NODES_PER_ROW = 6
+const LAYOUT_ORDER_SWEEPS = 6
+
+/** Ids sort numerically where they can, so Comfy ids like 3, 10, 57:12 keep their natural order. */
+function compareNodeIds(a: string, b: string) {
+  const left = a.split(':').map(Number)
+  const right = b.split(':').map(Number)
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const difference = (left[index] ?? -1) - (right[index] ?? -1)
+    if (Number.isFinite(difference) && difference !== 0) return difference
+  }
+  return a.localeCompare(b)
+}
+
+/**
+ * Layered left-to-right layout for API workflows, which carry no positions: each connected part gets its own block,
+ * nodes sit one column before their nearest consumer, rows are ordered to cut crossings, and each node is pulled
+ * level with the nodes it links to.
+ */
+function layoutLayeredGraph(nodes: AuthoringNode[], edges: AuthoringEdge[]) {
+  const nodeIds = new Set(nodes.map((node) => node.id))
+  const successors = new Map<string, string[]>(nodes.map((node) => [node.id, []]))
+  const predecessors = new Map<string, string[]>(nodes.map((node) => [node.id, []]))
+  for (const edge of edges) {
+    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target) || edge.source === edge.target) continue
+    successors.get(edge.source)!.push(edge.target)
+    predecessors.get(edge.target)!.push(edge.source)
+  }
+  const heightById = new Map(nodes.map((node) => [node.id, estimateAuthoringNodeHeight(node)]))
+  const sortedIds = nodes.map((node) => node.id).sort(compareNodeIds)
+
+  // Connected parts, in order of their smallest node id.
+  const componentOf = new Map<string, number>()
+  const components: string[][] = []
+  for (const startId of sortedIds) {
+    if (componentOf.has(startId)) continue
+    const members: string[] = []
+    const stack = [startId]
+    componentOf.set(startId, components.length)
+    while (stack.length > 0) {
+      const id = stack.pop()!
+      members.push(id)
+      for (const next of [...successors.get(id)!, ...predecessors.get(id)!]) {
+        if (!componentOf.has(next)) {
+          componentOf.set(next, components.length)
+          stack.push(next)
+        }
+      }
+    }
+    components.push(members.sort(compareNodeIds))
+  }
+
+  const positions = new Map<string, { x: number; y: number }>()
+  let cursorY = 0
+  const loneIds: string[] = []
+
+  for (const members of components) {
+    if (members.length === 1) {
+      loneIds.push(members[0])
+      continue
+    }
+
+    // Longest path from the sources gives each node its earliest column (Kahn order; cycle leftovers go last).
+    const memberSet = new Set(members)
+    const remainingInputs = new Map(members.map((id) => [id, predecessors.get(id)!.filter((source) => memberSet.has(source)).length]))
+    const queue = members.filter((id) => remainingInputs.get(id) === 0)
+    const topological: string[] = []
+    const layer = new Map(members.map((id) => [id, 0]))
+    while (queue.length > 0) {
+      const id = queue.shift()!
+      topological.push(id)
+      for (const next of successors.get(id)!) {
+        layer.set(next, Math.max(layer.get(next)!, layer.get(id)! + 1))
+        remainingInputs.set(next, remainingInputs.get(next)! - 1)
+        if (remainingInputs.get(next) === 0) queue.push(next)
+      }
+    }
+    const deepest = Math.max(0, ...layer.values())
+    for (const id of members) {
+      if (!topological.includes(id)) {
+        layer.set(id, deepest + 1)
+        topological.push(id)
+      }
+    }
+    // Then move every producer right, up to the column before its nearest consumer (loaders sit next to their users).
+    for (const id of [...topological].reverse()) {
+      const consumerLayers = successors.get(id)!.map((next) => layer.get(next)!).filter((value) => value > layer.get(id)!)
+      if (consumerLayers.length > 0) layer.set(id, Math.min(...consumerLayers) - 1)
+    }
+
+    const layerCount = Math.max(...members.map((id) => layer.get(id)!)) + 1
+    const columns: string[][] = Array.from({ length: layerCount }, () => [])
+    for (const id of members) columns[layer.get(id)!].push(id)
+
+    // Barycenter sweeps: order each column by the average row of its neighbours to cut crossings.
+    const rowOf = new Map<string, number>()
+    const indexColumns = () => columns.forEach((column) => column.forEach((id, index) => rowOf.set(id, index)))
+    indexColumns()
+    for (let sweep = 0; sweep < LAYOUT_ORDER_SWEEPS; sweep += 1) {
+      const downward = sweep % 2 === 0
+      const order = downward ? columns.map((_, index) => index) : columns.map((_, index) => columns.length - 1 - index)
+      for (const columnIndex of order) {
+        const column = columns[columnIndex]
+        const key = new Map(column.map((id) => {
+          const neighbours = downward ? predecessors.get(id)! : successors.get(id)!
+          const rows = neighbours.filter((next) => memberSet.has(next)).map((next) => rowOf.get(next)!)
+          return [id, rows.length > 0 ? rows.reduce((sum, value) => sum + value, 0) / rows.length : rowOf.get(id)!]
+        }))
+        column.sort((a, b) => key.get(a)! - key.get(b)! || rowOf.get(a)! - rowOf.get(b)!)
+        column.forEach((id, index) => rowOf.set(id, index))
+      }
+    }
+
+    // Vertical placement: keep each column's order, aim every node at the centre of its neighbours, then pack.
+    const top = new Map<string, number>()
+    const centerOf = (id: string) => top.get(id)! + heightById.get(id)! / 2
+    const packColumn = (column: string[], desiredTop: (id: string) => number) => {
+      const wanted = column.map(desiredTop)
+      const placed: number[] = []
+      column.forEach((_, index) => {
+        const floor = index === 0 ? -Infinity : placed[index - 1] + heightById.get(column[index - 1])! + LAYOUT_ROW_GAP
+        placed.push(Math.max(wanted[index], floor))
+      })
+      // The forward pass only pushes down; shift the column back so it sits centred on what it wanted.
+      const shift = placed.reduce((sum, value, index) => sum + (wanted[index] - value), 0) / column.length
+      column.forEach((id, index) => top.set(id, placed[index] + shift))
+    }
+    let stackY = 0
+    for (const id of columns[0]) {
+      top.set(id, stackY)
+      stackY += heightById.get(id)! + LAYOUT_ROW_GAP
+    }
+    const towardNeighbours = (pick: (id: string) => string[]) => (id: string) => {
+      const placedNeighbours = pick(id).filter((next) => memberSet.has(next) && top.has(next))
+      if (placedNeighbours.length === 0) return top.get(id) ?? 0
+      const center = placedNeighbours.reduce((sum, next) => sum + centerOf(next), 0) / placedNeighbours.length
+      return center - heightById.get(id)! / 2
+    }
+    for (let index = 1; index < columns.length; index += 1) packColumn(columns[index], towardNeighbours((id) => predecessors.get(id)!))
+    for (let index = columns.length - 2; index >= 0; index -= 1) packColumn(columns[index], towardNeighbours((id) => successors.get(id)!))
+    for (let index = 1; index < columns.length; index += 1) packColumn(columns[index], towardNeighbours((id) => [...predecessors.get(id)!, ...successors.get(id)!]))
+
+    const minTop = Math.min(...members.map((id) => top.get(id)!))
+    let maxBottom = 0
+    for (const id of members) {
+      const y = top.get(id)! - minTop
+      positions.set(id, { x: layer.get(id)! * LAYOUT_COLUMN_SPACING, y: cursorY + y })
+      maxBottom = Math.max(maxBottom, y + heightById.get(id)!)
+    }
+    cursorY += maxBottom + LAYOUT_COMPONENT_GAP
+  }
+
+  // Unconnected nodes go in a grid under everything else.
+  for (let start = 0; start < loneIds.length; start += LAYOUT_LONE_NODES_PER_ROW) {
+    const row = loneIds.slice(start, start + LAYOUT_LONE_NODES_PER_ROW)
+    row.forEach((id, index) => positions.set(id, { x: index * LAYOUT_COLUMN_SPACING, y: cursorY }))
+    cursorY += Math.max(...row.map((id) => heightById.get(id)!)) + LAYOUT_ROW_GAP
+  }
+
+  return nodes.map((node) => ({ ...node, position: positions.get(node.id) ?? { x: 0, y: 0 } }))
+}
+
+const COMFY_LAYOUT_GAP = 24
+const COMFY_LAYOUT_MAX_SPREAD = 3
+
+/**
+ * The ComfyUI arrangement. Cards here are 260px wide and sized by their inputs, unlike ComfyUI's nodes, so the
+ * coordinates are spread by the smallest factor that keeps every pair of cards apart.
+ */
+function layoutFromComfyPositions(nodes: AuthoringNode[], positions: Map<string, { x: number; y: number }>) {
+  const boxes = nodes.map((node) => ({ node, ...positions.get(node.id)!, height: estimateAuthoringNodeHeight(node) }))
+  let spread = 1
+  for (let i = 0; i < boxes.length; i += 1) {
+    for (let j = i + 1; j < boxes.length; j += 1) {
+      const a = boxes[i]
+      const b = boxes[j]
+      const dx = Math.abs(a.x - b.x)
+      const dy = Math.abs(a.y - b.y)
+      const upperHeight = a.y <= b.y ? a.height : b.height
+      const needX = dx > 0 ? (260 + COMFY_LAYOUT_GAP) / dx : Infinity
+      const needY = dy > 0 ? (upperHeight + COMFY_LAYOUT_GAP) / dy : Infinity
+      spread = Math.max(spread, Math.min(needX, needY, COMFY_LAYOUT_MAX_SPREAD))
+    }
+  }
+  const minX = Math.min(...boxes.map((box) => box.x))
+  const minY = Math.min(...boxes.map((box) => box.y))
+  return boxes.map(({ node, x, y }) => ({ ...node, position: { x: (x - minX) * spread, y: (y - minY) * spread } }))
+}
+
+/** Place nodes with the layered layout, or with their ComfyUI positions when asked and every node has one. */
 function layoutAuthoringGraph(
   nodes: AuthoringNode[],
   edges: AuthoringEdge[],
   explicitPositions: Map<string, { x: number; y: number } | null>,
+  layout: AuthoringGraphLayout,
 ) {
-  const hasExplicitPositions = nodes.some((node) => explicitPositions.get(node.id) !== null)
-  if (hasExplicitPositions) {
-    const explicitNodes = nodes.filter((node) => explicitPositions.get(node.id) !== null)
-    const maxExplicitX = explicitNodes.reduce((acc, node) => Math.max(acc, explicitPositions.get(node.id)?.x ?? 0), 0)
-    const maxExplicitY = explicitNodes.reduce(
-      (acc, node) => Math.max(acc, (explicitPositions.get(node.id)?.y ?? 0) + estimateAuthoringNodeHeight(node)),
-      0,
-    )
-    let missingCursorY = maxExplicitY + 80
-
-    return nodes.map((node) => {
-      const explicitPosition = explicitPositions.get(node.id)
-      if (explicitPosition) {
-        return {
-          ...node,
-          position: explicitPosition,
-        }
-      }
-
-      const nextNode = {
-        ...node,
-        position: {
-          x: maxExplicitX + 360,
-          y: missingCursorY,
-        },
-      }
-      missingCursorY += estimateAuthoringNodeHeight(node) + 48
-      return nextNode
-    })
+  const positioned = new Map([...explicitPositions].filter((entry): entry is [string, { x: number; y: number }] => entry[1] !== null))
+  if (layout === 'comfy' && nodes.length > 0 && positioned.size === nodes.length) {
+    return layoutFromComfyPositions(nodes, positioned)
   }
 
-  const inDegree = new Map<string, number>()
-  const adjacency = new Map<string, string[]>()
-  const depthByNode = new Map<string, number>()
-
-  for (const node of nodes) {
-    inDegree.set(node.id, 0)
-    adjacency.set(node.id, [])
-    depthByNode.set(node.id, 0)
-  }
-
-  for (const edge of edges) {
-    adjacency.get(edge.source)?.push(edge.target)
-    inDegree.set(edge.target, (inDegree.get(edge.target) ?? 0) + 1)
-  }
-
-  const queue = nodes.filter((node) => (inDegree.get(node.id) ?? 0) === 0).map((node) => node.id)
-  const visited = new Set<string>()
-
-  while (queue.length > 0) {
-    const nodeId = queue.shift() as string
-    visited.add(nodeId)
-    const currentDepth = depthByNode.get(nodeId) ?? 0
-
-    for (const nextNodeId of adjacency.get(nodeId) ?? []) {
-      depthByNode.set(nextNodeId, Math.max(depthByNode.get(nextNodeId) ?? 0, currentDepth + 1))
-      inDegree.set(nextNodeId, (inDegree.get(nextNodeId) ?? 1) - 1)
-      if ((inDegree.get(nextNodeId) ?? 0) === 0) {
-        queue.push(nextNodeId)
-      }
-    }
-  }
-
-  for (const node of nodes) {
-    if (!visited.has(node.id)) {
-      depthByNode.set(node.id, Math.max(...depthByNode.values(), 0) + 1)
-    }
-  }
-
-  const columnYOffsets = new Map<number, number>()
-  return nodes.map((node) => {
-    const depth = depthByNode.get(node.id) ?? 0
-    const currentY = columnYOffsets.get(depth) ?? 0
-    const estimatedHeight = estimateAuthoringNodeHeight(node)
-    columnYOffsets.set(depth, currentY + estimatedHeight + 48)
-
-    return {
-      ...node,
-      position: {
-        x: depth * 360,
-        y: currentY,
-      },
-    }
-  })
+  return layoutLayeredGraph(nodes, edges)
 }
 
 /** Convert the raw Comfy workflow JSON into authoring graph nodes and edges. */
 export function parseWorkflowGraph(params: {
   workflowJson: string
   onInputSelect: (nodeId: string, nodeTitle: string, classType: string, input: EditableWorkflowInput) => void
+  layout?: AuthoringGraphLayout
 }): ParsedWorkflowGraph {
   const workflow = parseWorkflowDefinition(params.workflowJson)
 
@@ -364,10 +501,65 @@ export function parseWorkflowGraph(params: {
   }
 
   return {
-    nodes: layoutAuthoringGraph(nodes, edges, explicitPositions),
+    nodes: layoutAuthoringGraph(nodes, edges, explicitPositions, params.layout ?? 'auto'),
     edges,
+    hasComfyPositions: nodes.length > 0 && nodes.every((node) => explicitPositions.get(node.id) !== null),
   }
 }
+
+const SUGGESTED_NUMBER_INPUT_KEYS = new Set(['seed', 'noise_seed', 'steps', 'cfg'])
+/** Size inputs only count on the node that makes the empty latent; upscalers and resizers have their own. */
+const SUGGESTED_LATENT_SIZE_KEYS = new Set(['width', 'height', 'batch_size'])
+const SUGGESTED_PROMPT_INPUT_KEY = /^(text|text_[gl]|prompt|positive|negative|(positive|negative)_prompt)$/i
+const MAX_SUGGESTED_FIELDS = 20
+
+/**
+ * Fields most workflows want exposed: prompt texts, the image to load, node editors (LoRA rows, director), seed,
+ * steps, CFG and the size. Linked inputs, nodes that never run and inputs already marked are skipped.
+ */
+export function suggestWorkflowMarkedFields(graph: ParsedWorkflowGraph, existingJsonPaths: ReadonlySet<string>) {
+  const fields: WorkflowMarkedField[] = []
+  // A text that feeds nothing is a display (Show Text and the like), not a prompt.
+  const feedingNodeIds = new Set(graph.edges.map((edge) => edge.source))
+  for (const node of graph.nodes) {
+    if (node.data.unused) continue
+    const makesLatent = /latent/i.test(node.data.classType)
+    const showsText = /show|preview|display/i.test(node.data.classType)
+    for (const input of node.data.editableInputs) {
+      const path = input.jsonPath ?? `${node.id}.inputs.${input.key}`
+      if (existingJsonPaths.has(path)) continue
+      const wanted = input.inferredType === 'node'
+        || (input.inferredType === 'image' && input.key === 'image' && typeof input.value === 'string')
+        || ((input.inferredType === 'textarea' || input.inferredType === 'text') && typeof input.value === 'string' && SUGGESTED_PROMPT_INPUT_KEY.test(input.key) && feedingNodeIds.has(node.id) && !showsText)
+        || (input.inferredType === 'number' && (SUGGESTED_NUMBER_INPUT_KEYS.has(input.key) || (makesLatent && SUGGESTED_LATENT_SIZE_KEYS.has(input.key))))
+      if (wanted) fields.push(buildWorkflowMarkedFieldFromInput(node.id, node.data.title, node.data.classType, input))
+      if (fields.length >= MAX_SUGGESTED_FIELDS) return fields
+    }
+  }
+  return fields
+}
+
+/** Marked fields whose node or input is not in the workflow JSON (the workflow was replaced or edited). */
+export function findMissingMarkedFieldIds(workflowJson: string, fields: readonly WorkflowMarkedField[]) {
+  let workflow: WorkflowJsonRecord
+  try {
+    workflow = parseWorkflowDefinition(workflowJson)
+  } catch {
+    return new Set<string>()
+  }
+  const missing = new Set<string>()
+  for (const field of fields) {
+    const match = /^([^.[\]]+)\.inputs(?:\.(.+))?$/.exec(field.jsonPath)
+    if (!match) continue
+    const node = workflow[match[1]]
+    const inputs = node && typeof node === 'object' ? node.inputs : undefined
+    if (!inputs || (match[2] !== undefined && !(match[2] in inputs))) missing.add(field.id)
+  }
+  return missing
+}
+
+/** Seed inputs the backend rolls per run unless a value is given (mirrors backend comfyui/seedControl). */
+const RANDOMIZED_SEED_INPUT_KEYS = new Set(['seed', 'noise_seed'])
 
 /** Build a marked-field draft from a clicked graph input. */
 export function buildWorkflowMarkedFieldFromInput(
@@ -379,6 +571,8 @@ export function buildWorkflowMarkedFieldFromInput(
   const fieldType = input.inferredType
   const dropdownOptions = typeof input.value === 'boolean' ? ['true', 'false'] : undefined
   const resolvedJsonPath = input.jsonPath ?? `${nodeId}.inputs.${input.key}`
+  // No default: an empty seed field (or -1) rolls a new seed every run.
+  const isRandomSeed = fieldType === 'number' && RANDOMIZED_SEED_INPUT_KEYS.has(input.key)
 
   return {
     id: sanitizeWorkflowFieldId(`${nodeId}_${input.key}`),
@@ -390,12 +584,12 @@ export function buildWorkflowMarkedFieldFromInput(
     type: fieldType,
     default_collapsed: false,
     default_value:
-      input.value === null
+      input.value === null || isRandomSeed
         ? undefined
         : typeof input.value === 'boolean'
           ? String(input.value)
           : input.value as WorkflowMarkedField['default_value'],
-    placeholder: fieldType === 'text' || fieldType === 'textarea' ? humanizeWorkflowInputKey(input.key) : undefined,
+    placeholder: fieldType === 'text' || fieldType === 'textarea' ? humanizeWorkflowInputKey(input.key) : isRandomSeed ? 'random' : undefined,
     options: dropdownOptions,
     required: false,
     step: typeof input.value === 'number' ? inferWorkflowNumberStep(input.value) : undefined,
@@ -460,8 +654,9 @@ function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
     <div
       // Floating card on the graph canvas: tone + elevation; the selected field's node and search hits get a primary ring.
       className={cn(
-        'w-[260px] rounded-sm bg-surface-container p-3 shadow-elevation-1',
-        hasSelectedInput || data.searchCurrent ? 'ring-2 ring-primary/60' : data.searchMatched ? 'ring-1 ring-primary/40' : undefined,
+        'w-[260px] rounded-sm bg-surface-container p-3 shadow-elevation-1 transition-opacity',
+        hasSelectedInput || data.searchCurrent ? 'ring-2 ring-primary/60' : data.searchMatched ? 'ring-1 ring-primary/40' : data.issues?.length ? 'ring-1 ring-warning/60' : undefined,
+        data.unused && !hasSelectedInput && !data.searchCurrent && 'opacity-45 hover:opacity-100',
       )}
     >
       {/* Link anchors only; the canvas is read-only, so they stay hidden. */}
@@ -472,11 +667,21 @@ function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
           <GripVertical className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1 space-y-1">
-          <div className="text-sm font-semibold text-foreground">{data.title}</div>
+          <div className="flex items-start gap-1.5">
+            <div className="min-w-0 flex-1 text-sm font-semibold text-foreground">{data.title}</div>
+            {data.issues?.length ? (
+              <Tip content={<div className="max-w-80 space-y-1 text-xs">{data.issues.map((issue) => <div key={issue}>{issue}</div>)}</div>}>
+                <span role="img" aria-label={t({ ko: '서버 점검 문제', en: 'Server check issues' })} className="mt-0.5 shrink-0 text-warning">
+                  <TriangleAlert className="size-3.5" />
+                </span>
+              </Tip>
+            ) : null}
+          </div>
           <div className="flex flex-wrap items-center gap-1.5 text-2xs text-muted-foreground">
             <span>{data.classType}</span>
             <span>•</span>
             <span>#{id}</span>
+            {data.unused ? <span>• {t({ ko: '실행 안 됨', en: 'Never runs' })}</span> : null}
           </div>
         </div>
       </div>

@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useRef, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type DragEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useBlocker } from 'react-router-dom'
 import {
   Background,
+  ControlButton,
   Controls,
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Save, Search, Upload } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronUp, CircleCheck, CloudOff, LayoutGrid, Loader2, Save, Search, TriangleAlert, Upload, Workflow } from 'lucide-react'
 import { TextTabs } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -44,6 +45,9 @@ type ComfyWorkflowAuthoringModalProps = {
   onClose: () => void
   onSaved?: (workflowId: number) => void
 }
+
+/** Files the editor loads: workflow JSON, or ComfyUI images and videos that carry their workflow. */
+const WORKFLOW_FILE_ACCEPT = '.json,application/json,image/png,image/webp,video/webm,video/mp4'
 
 /** Search text with match count and previous/next, shared by the graph canvas and the JSON tab. */
 function AuthoringSearchBox({ query, count, index, placeholder, onQueryChange, onStep, className }: {
@@ -124,7 +128,14 @@ export function ComfyWorkflowAuthoringModal({
     handleReorderMarkedFieldGroup,
     handleSave,
     handleWorkflowJsonChange,
+    focusNextCheckIssue,
+    graphLayout,
+    handleSuggestFields,
     isCoarsePointer,
+    isConvertingUiWorkflow,
+    missingFieldIds,
+    serverCheckSummary,
+    toggleGraphLayout,
     isDirty,
     isSaving,
     jsonError,
@@ -150,6 +161,7 @@ export function ComfyWorkflowAuthoringModal({
     open,
   })
 
+  const [isFileDragOver, setIsFileDragOver] = useState(false)
   const unsavedMessage = t({ ko: '저장하지 않은 변경이 사라져.', en: 'Unsaved changes will be lost.' })
   const shouldGuard = open && isDirty && !isSaving
 
@@ -199,6 +211,38 @@ export function ComfyWorkflowAuthoringModal({
   const saveLabel = mode === 'edit' ? t({ ko: '저장', en: 'Save' }) : t({ ko: '등록', en: 'Register' })
   const selectedFieldNodeId = selectedField ? resolveWorkflowMarkedFieldNodeSource(selectedField).nodeId : null
   const openFilePicker = () => fileInputRef.current?.click()
+  // Only files react; the field list's own reordering drags carry text, not files.
+  const isFileDrag = (event: DragEvent) => Array.from(event.dataTransfer.types).includes('Files')
+  const fileDropHandlers = {
+    onDragOver: (event: DragEvent<HTMLDivElement>) => {
+      if (!isFileDrag(event)) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'copy'
+      setIsFileDragOver(true)
+    },
+    onDragLeave: (event: DragEvent<HTMLDivElement>) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsFileDragOver(false)
+    },
+    onDrop: (event: DragEvent<HTMLDivElement>) => {
+      if (!isFileDrag(event)) return
+      event.preventDefault()
+      setIsFileDragOver(false)
+      void handleFileUpload(event.dataTransfer.files[0])
+    },
+  }
+  const serverCheckIndicator = serverCheckSummary ? (
+    <Tip content={<div className="space-y-0.5">{serverCheckSummary.lines.map((line) => <div key={line}>{line}</div>)}</div>}>
+      {serverCheckSummary.status === 'issues' ? (
+        <IconButton size="icon-sm" variant="ghost" className="shrink-0 text-warning" onClick={focusNextCheckIssue} label={t({ ko: '서버 점검 문제 노드로 이동', en: 'Go to a flagged node' })}>
+          <TriangleAlert />
+        </IconButton>
+      ) : (
+        <span role="img" aria-label={serverCheckSummary.lines.join(', ')} className="flex size-8 shrink-0 items-center justify-center text-muted-foreground">
+          {serverCheckSummary.status === 'unreachable' ? <CloudOff className="size-4" /> : <CircleCheck className="size-4" />}
+        </span>
+      )}
+    </Tip>
+  ) : null
 
   const bar = (
     <div className={cn('flex h-11 shrink-0 items-center gap-1 border-b border-line', isWideLayout ? 'px-2' : 'px-1')}>
@@ -237,8 +281,9 @@ export function ComfyWorkflowAuthoringModal({
         />
       </div>
       <span className="min-w-1 flex-1" />
-      <input ref={fileInputRef} type="file" accept=".json,application/json" hidden onChange={(event) => { void handleFileUpload(event.target.files?.[0]); event.target.value = '' }} />
-      <IconButton size="icon-sm" variant="ghost" className="shrink-0" onClick={openFilePicker} label={t({ ko: 'JSON 파일 불러오기', en: 'Load JSON file' })}>
+      {serverCheckIndicator}
+      <input ref={fileInputRef} type="file" accept={WORKFLOW_FILE_ACCEPT} hidden onChange={(event) => { void handleFileUpload(event.target.files?.[0]); event.target.value = '' }} />
+      <IconButton size="icon-sm" variant="ghost" className="shrink-0" onClick={openFilePicker} label={t({ ko: '워크플로 불러오기 (JSON·이미지·영상)', en: 'Load workflow (JSON, image, video)' })}>
         <Upload />
       </IconButton>
       <IconButton size="icon-sm" variant="default" onClick={() => void handleSave()} disabled={isSaving} label={saveLabel} aria-busy={isSaving || undefined}>
@@ -278,10 +323,25 @@ export function ComfyWorkflowAuthoringModal({
             className="!bg-surface-lowest"
           />
         ) : null}
-        <Controls />
+        <Controls>
+          {parsedGraph.hasComfyPositions ? (
+            <ControlButton
+              onClick={toggleGraphLayout}
+              title={graphLayout === 'auto' ? t({ ko: 'ComfyUI 배치로 보기', en: 'Show the ComfyUI arrangement' }) : t({ ko: '자동 정렬로 보기', en: 'Show the automatic layout' })}
+              aria-label={graphLayout === 'auto' ? t({ ko: 'ComfyUI 배치로 보기', en: 'Show the ComfyUI arrangement' }) : t({ ko: '자동 정렬로 보기', en: 'Show the automatic layout' })}
+            >
+              {graphLayout === 'auto' ? <Workflow /> : <LayoutGrid />}
+            </ControlButton>
+          ) : null}
+        </Controls>
         <Background color="color-mix(in srgb, var(--foreground) 10%, transparent)" />
       </ReactFlow>
     </ReactFlowProvider>
+  ) : isConvertingUiWorkflow ? (
+    <div role="status" className="flex h-full items-center justify-center gap-2 px-6 text-sm text-muted-foreground">
+      <Loader2 className="size-4 animate-spin" />
+      {t({ ko: '일반 워크플로를 API 형식으로 바꾸는 중…', en: 'Converting the workflow to the API format…' })}
+    </div>
   ) : (
     <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
       <div className="text-sm text-muted-foreground">
@@ -301,6 +361,8 @@ export function ComfyWorkflowAuthoringModal({
     >
       <ComfyWorkflowMarkedFieldList
         markedFields={markedFieldsWithNodeSources}
+        missingFieldIds={missingFieldIds}
+        onSuggestFields={parsedGraph ? handleSuggestFields : undefined}
         selectedFieldId={selectedField?.id ?? null}
         onFieldSelect={handleFieldSelect}
         onReorderMarkedField={handleReorderMarkedField}
@@ -331,8 +393,15 @@ export function ComfyWorkflowAuthoringModal({
       data-slot="comfy-workflow-editor"
       style={{ '--editor-side-inset': 'var(--chat-dock-width, 0px)' } as CSSProperties}
       className="fixed inset-x-0 bottom-0 top-(--theme-shell-header-height) z-modal flex flex-col bg-background outline-none lg:right-(--editor-side-inset)"
+      {...fileDropHandlers}
     >
       {bar}
+      {isFileDragOver ? (
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center gap-2 bg-primary/8 text-sm font-medium text-foreground ring-2 ring-inset ring-primary/50">
+          <Upload className="size-4" />
+          {t({ ko: '놓으면 워크플로를 불러와', en: 'Drop to load the workflow' })}
+        </div>
+      ) : null}
       <div className="relative min-h-0 flex-1">
         {editorTab === 'graph' ? (
           <div className={cn('grid h-full min-h-0', isWideLayout ? 'grid-cols-[minmax(0,1fr)_minmax(320px,380px)]' : 'grid-rows-[minmax(0,1fr)_minmax(0,1fr)]')}>
