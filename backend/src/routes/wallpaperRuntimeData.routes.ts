@@ -230,7 +230,7 @@ export function registerWallpaperRuntimeDataRoutes(router: Router) {
       kind: thread.kind,
       profileId: thread.profile_id,
       updatedAt: thread.updated_date,
-      preview: previews.get(thread.id) ?? null,
+      preview: previews.get(thread.id)?.text || null,
       unreadCount: unread.get(thread.id) ?? 0,
       running: CodexChatService.isRunning(thread.id) || GroupChatService.isRunning(thread.id),
     }))));
