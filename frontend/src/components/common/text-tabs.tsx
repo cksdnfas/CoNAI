@@ -9,7 +9,8 @@ export type TextTabItem<T extends string> = {
   count?: number | string | null
 }
 
-const TEXT_TAB_LIST_CLASS = 'flex min-w-0 flex-1 flex-nowrap gap-5 overflow-x-auto rounded-none bg-transparent p-0 [scrollbar-width:none]'
+// Full width of its column and wrapping: a narrow column (the wallpaper inspector) gets a second row instead of tabs spilling past it.
+const TEXT_TAB_LIST_CLASS = 'flex w-full min-w-0 flex-1 flex-wrap gap-x-5 gap-y-1.5 rounded-none bg-transparent p-0'
 const TEXT_TAB_TRIGGER_CLASS = 'relative shrink-0 rounded-none px-0 pt-0 pb-2 text-sm font-semibold text-muted-foreground hover:bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-primary after:opacity-0 data-[state=active]:after:opacity-100'
 
 /**
