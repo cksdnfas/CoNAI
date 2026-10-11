@@ -77,7 +77,7 @@ export function ChatChoiceDock({ card, selected, disabled, onPick, onClose }: { 
     onPick(card.options[index].label)
   }
   return (
-    <div role="group" aria-label={card.question} onKeyDown={handleKeyDown} className="mb-2 rounded-lg border border-line px-1.5 pb-1.5 pt-1.5">
+    <div role="group" aria-label={card.question} onKeyDown={handleKeyDown} className="mb-2 border-b border-line pb-1.5">
       <div className="flex items-center justify-between gap-2 pb-0.5 pl-2">
         <span className="min-w-0 text-sm font-semibold">{card.question}</span>
         <IconButton variant="ghost" size="icon-xs" label={t({ ko: '닫기', en: 'Close' })} onClick={onClose}><X /></IconButton>

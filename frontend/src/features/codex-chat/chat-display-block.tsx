@@ -379,19 +379,19 @@ const DEFAULT_BLOCK_CSS = '.dl{display:grid;grid-template-columns:auto minmax(0,
  * A block without a template shows every field as a plain label / value list. The template language cannot walk an
  * object's keys, so the list is built from the data at hand and rendered through the same sanitizer.
  */
-export function defaultBlockTemplate(data: Record<string, unknown>) {
-  return `<dl class="dl">${Object.keys(data).map((field) => `<dt>${escapeHtml(field)}</dt><dd>{{${field}}}</dd>`).join('')}</dl>`
+export function defaultBlockTemplate(data: Record<string, unknown>, block?: Partial<Pick<ChatDisplayBlock, 'fields'>>) {
+  return `<dl class="dl">${Object.keys(data).map((field) => `<dt>${escapeHtml(blockFieldLabel(block, field))}</dt><dd>{{${field}}}</dd>`).join('')}</dl>`
 }
 
 export function ChatDisplayBlockView({ block, data, onAction, picked }: {
-  block: Pick<ChatDisplayBlock, 'template' | 'css'>
+  block: Pick<ChatDisplayBlock, 'template' | 'css'> & Partial<Pick<ChatDisplayBlock, 'fields'>>
   data: Record<string, unknown>
   onAction?: (action: BlockAction) => void
   picked?: ReadonlySet<string>
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const plain = !block.template.trim()
-  const html = renderNodes(parseTemplate(plain ? defaultBlockTemplate(data) : block.template), [data])
+  const html = renderNodes(parseTemplate(plain ? defaultBlockTemplate(data, block) : block.template), [data])
   const css = plain ? DEFAULT_BLOCK_CSS + block.css : block.css
 
   useLayoutEffect(() => {
@@ -439,20 +439,27 @@ export function renderBlockText(template: string, data: Record<string, unknown>)
 const SUMMARY_FIELDS = 4
 
 /** The strip line of a block: its summary template, else the first few scalar fields as `name value`. */
-export function blockSummaryLine(block: Pick<ChatDisplayBlock, 'summary' | 'key'>, data: Record<string, unknown>) {
+export function blockSummaryLine(block: Pick<ChatDisplayBlock, 'summary' | 'key'> & Partial<Pick<ChatDisplayBlock, 'fields'>>, data: Record<string, unknown>) {
   if (block.summary.trim()) return renderBlockText(block.summary, data)
   return Object.entries(data)
     .filter(([, value]) => typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')
     .slice(0, SUMMARY_FIELDS)
-    .map(([field, value]) => `${field} ${toText(value)}`)
+    .map(([field, value]) => `${blockFieldLabel(block, field)} ${toText(value)}`)
     .join(' · ')
 }
 
 type Translate = (text: { ko: string; en: string }) => string
 
-/** A change as the chips say it: `hp +5`, `mood 들뜸`, `+ 캔커피`, `− 연필`, `quest 삭제`. */
-export function describeBlockChange(change: ChatBlockChange, t: Translate): string[] {
-  const { field, from, to } = change
+/** The name people read for a block's field: its display name, else the key the model writes. */
+export function blockFieldLabel(block: Partial<Pick<ChatDisplayBlock, 'fields'>> | null | undefined, field: string) {
+  return block?.fields?.find((entry) => entry.name === field)?.label || field
+}
+
+/** A change as the chips say it (`labelOf` names the field): `hp +5`, `mood 들뜸`, `+ 캔커피`, `− 연필`, `quest 삭제`. */
+
+export function describeBlockChange(change: ChatBlockChange, t: Translate, labelOf: (field: string) => string = (field) => field): string[] {
+  const { from, to } = change
+  const field = labelOf(change.field)
   if (to === undefined) return [`${field} ${t({ ko: '삭제', en: 'removed' })}`]
   if (typeof from === 'number' && typeof to === 'number') {
     const delta = to - from
@@ -492,10 +499,12 @@ export function BlockChangeChips({ blockKey, data }: { blockKey: string; data: R
   const { t } = useI18n()
   const context = useContext(ChatBlockChangesContext)
   const messageId = useContext(ChatMessageIdContext)
+  const block = useChatDisplayBlock(blockKey)
+  const labelOf = (field: string) => blockFieldLabel(block, field)
   const known = messageId !== null && context ? context.changes[messageId] : undefined
   const texts = known
-    ? (known[blockKey] ?? []).flatMap((change) => describeBlockChange(change, t))
-    : Object.entries(data).map(([field, value]) => value === null ? `${field} ${t({ ko: '삭제', en: 'removed' })}` : `${field} ${toText(value)}`)
+    ? (known[blockKey] ?? []).flatMap((change) => describeBlockChange(change, t, labelOf))
+    : Object.entries(data).map(([field, value]) => value === null ? `${labelOf(field)} ${t({ ko: '삭제', en: 'removed' })}` : `${labelOf(field)} ${toText(value)}`)
   if (texts.length === 0) return null
   return (
     <div className="my-1.5 flex flex-wrap gap-1.5">

@@ -103,7 +103,7 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
   const keepMutation = useMutation({
     mutationFn: () => keepThreadLorebook(threadId),
     onSuccess: async (book) => {
-      showSnackbar({ message: t({ ko: '내 로어북 {name}(으)로 보관했어.', en: 'Kept as your lorebook {name}.' }, { name: book.name }), tone: 'info' })
+      showSnackbar({ message: t({ ko: '내 로어북 {name}(으)로 남겼어.', en: 'Kept as your lorebook {name}.' }, { name: book.name }), tone: 'info' })
       await refresh()
     },
     onError,
@@ -226,7 +226,7 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
           record={recordBookId === null ? recordTip : undefined}
           actions={(
             <>
-              {chatBook ? <IconButton variant="ghost" size="icon-xs" disabled={keepMutation.isPending} onClick={() => keepMutation.mutate()} label={t({ ko: '내 로어북으로 보관', en: 'Keep as my lorebook' })}><BookUp /></IconButton> : null}
+              {chatBook ? <IconButton variant="ghost" size="icon-xs" disabled={keepMutation.isPending} onClick={() => keepMutation.mutate()} label={t({ ko: '내 로어북으로 남기기', en: 'Keep as my lorebook' })}><BookUp /></IconButton> : null}
               <IconButton variant="ghost" size="icon-xs" disabled={chatEntries.length >= 500} onClick={() => setEditing({ book: CHAT_BOOK, entry: newLoreEntry(chatEntries.length), isNew: true })} label={t({ ko: '항목 추가', en: 'Add entry' })}><Plus /></IconButton>
             </>
           )}

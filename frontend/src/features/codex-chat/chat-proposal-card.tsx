@@ -53,7 +53,8 @@ type LoreProposal = Extract<Proposal, { kind: 'lore' }>
 
 import { TaskPlanCard } from './chat-task-ui'
 
-const CARD_CLASS = 'space-y-2.5 rounded-md border border-line px-3 py-2.5'
+// Flat: hairlines above and below set a proposal off from the reply text; nothing inside it is boxed again.
+const CARD_CLASS = 'space-y-2.5 border-y border-line py-2.5'
 const DEFAULTS_QUERY_KEY = ['codex-chat-profile-defaults'] as const
 const LONG_TEXT = 160
 
@@ -70,7 +71,7 @@ export function ChatProposalCards({ calls, threadId }: { calls: CodexChatToolCal
   return (
     <div className="space-y-2">
       {items.map((item) => item.proposal === null
-        ? <div key={item.key} className="flex items-center gap-2 rounded-md border border-dashed border-line px-3 py-1.5 text-xs text-muted-foreground"><Spinner className="size-3" />{t({ ko: '제안 만드는 중…', en: 'Writing a proposal…' })}</div>
+        ? <div key={item.key} className="flex items-center gap-2 py-1.5 text-xs text-muted-foreground"><Spinner className="size-3" />{t({ ko: '제안 만드는 중…', en: 'Writing a proposal…' })}</div>
         : <ProposalCard key={item.key} proposal={item.proposal} threadId={threadId} />)}
     </div>
   )
@@ -199,7 +200,7 @@ function BlockProposalCard({ proposal, threadId }: { proposal: BlockProposal; th
   return (
     <div className={CARD_CLASS}>
       <Header label={t({ ko: '표시 블록 제안', en: 'Display block proposal' })} name={block.key} />
-      <div className="rounded-md border border-dashed border-line px-3 py-1"><ChatDisplayBlockView block={block} data={data} /></div>
+      <div className="py-1"><ChatDisplayBlockView block={block} data={data} /></div>
       {chips.length > 0 ? (
         <div className="flex flex-wrap gap-1">
           {chips.map((chip) => <span key={chip} className="rounded-sm bg-fill px-1.5 py-0.5 font-mono text-2xs text-muted-foreground">{chip}</span>)}

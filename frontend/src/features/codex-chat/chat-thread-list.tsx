@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { AlarmClock, Archive, ArchiveRestore, Check, ChevronDown, ChevronRight, GitBranch, ListChecks, MoreHorizontal, Pencil, Pin, PinOff, SquareCheck, Trash2, X } from 'lucide-react'
+import { AlarmClock, Archive, ArchiveRestore, Check, CheckCheck, ChevronDown, ChevronRight, GitBranch, MoreHorizontal, Pencil, Pin, PinOff, SquareCheck, Trash2, X } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -111,6 +111,7 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
   const row = (entry: CodexChatThread, nested = false) => {
     const entryProfile = entry.profile_id ? profilesById.get(entry.profile_id) : undefined
     const movedAt = new Date(`${entry.updated_date.replace(' ', 'T')}Z`)
+    const time = Number.isNaN(movedAt.getTime()) ? null : <time className="text-2xs tabular-nums text-muted-foreground" dateTime={movedAt.toISOString()}>{whenLabel(movedAt)}</time>
     const preview = dense ? null : previewOf(entry)
     const checked = picked.has(entry.id)
     return (
@@ -146,13 +147,15 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
                 {routineThreadIds?.has(entry.id) ? <AlarmClock aria-label={t({ ko: '루틴', en: 'Routine' })} className="size-3 shrink-0 text-muted-foreground" /> : null}
               </span>
               {preview ? <span className="block truncate text-xs text-muted-foreground">{preview}</span> : null}
+              {/* The side column puts the time under the title, so the title gets the whole width. */}
+              {dense && time ? <span className="block leading-tight">{time}</span> : null}
             </span>
-            {/* Time on top, the unread count under it (side by side in the dense list). */}
+            {/* Time on top, the unread count under it (the dense list keeps only the marks and the count here). */}
             <span className={cn('flex shrink-0', dense ? 'items-center gap-2' : 'flex-col items-end gap-1')}>
               <span className="flex items-center gap-2">
                 {entry.task ? <ChatTaskRing summary={entry.task} /> : null}
                 {runningThreadIds.has(entry.id) ? <span role="img" aria-label={t({ ko: '답변 중', en: 'Replying' })} className="size-1.5 rounded-full bg-success motion-safe:animate-pulse" /> : null}
-                {Number.isNaN(movedAt.getTime()) ? null : <time className="text-2xs tabular-nums text-muted-foreground" dateTime={movedAt.toISOString()}>{whenLabel(movedAt)}</time>}
+                {dense ? null : time}
               </span>
               {entry.unread_count ? <UnreadCount count={entry.unread_count} /> : null}
             </span>
@@ -257,13 +260,13 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
     ) : null}
     {section(listed)}
     {archived.length > 0 ? <>
-      {foldRow('archive', archiveShown, () => setArchiveOpen((current) => !current), <Archive className="size-3.5" />, t({ ko: '보관함', en: 'Archive' }), archived.length)}
+      {foldRow('archive', archiveShown, () => setArchiveOpen((current) => !current), <Archive className="size-3.5" />, t({ ko: '보관된 채팅', en: 'Archived chats' }), archived.length)}
       {archiveShown ? section(archived) : null}
     </> : null}
     {selecting ? (
       <div className="sticky bottom-2 z-10 mx-1 mt-2 flex items-center gap-0.5 rounded-lg border border-line bg-surface-high py-1 pl-3 pr-1 shadow-[var(--elevation-2)]">
         <span className="min-w-0 flex-1 truncate text-sm font-semibold">{t({ ko: '{count}개 선택', en: '{count} selected' }, { count: formatNumber(pickedIds.length) })}</span>
-        <IconButton variant="ghost" size="icon-sm" disabled={bulkBusy} onClick={() => setPicked(new Set(shownIds))} label={t({ ko: '전체 선택', en: 'Select all' })}><ListChecks /></IconButton>
+        <IconButton variant="ghost" size="icon-sm" disabled={bulkBusy} onClick={() => setPicked(new Set(shownIds))} label={t({ ko: '전체 선택', en: 'Select all' })}><CheckCheck /></IconButton>
         <IconButton variant="ghost" size="icon-sm" disabled={bulkBusy} onClick={() => void runBulk(allPickedArchived ? 'unarchive' : 'archive')} label={allPickedArchived ? t({ ko: '보관 해제', en: 'Unarchive' }) : t({ ko: '보관', en: 'Archive' })}>
           {allPickedArchived ? <ArchiveRestore /> : <Archive />}
         </IconButton>

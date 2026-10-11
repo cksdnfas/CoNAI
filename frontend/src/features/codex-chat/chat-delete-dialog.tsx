@@ -89,7 +89,7 @@ export function ChatDeleteDialog({ open, count = 1, book, pending, onConfirm, on
                 : t({ ko: '항목 {entries}', en: '{entries} entries' }, { entries })}
             </span>
           ))}
-          {choice('keep', t({ ko: '계정 로어북으로 보관', en: 'Keep as an account lorebook' }), book ? <span className="block truncate font-mono text-xs text-muted-foreground">로어북/{book.name}</span> : null)}
+          {choice('keep', t({ ko: '계정 로어북으로 남기기', en: 'Keep as an account lorebook' }), book ? <span className="block truncate font-mono text-xs text-muted-foreground">로어북/{book.name}</span> : null)}
           {choice('merge', t({ ko: '계정 로어북에 병합', en: 'Merge into an account lorebook' }), undefined, targets.length === 0, targets.length > 0 ? (
             <Select className="h-8 w-36" value={targetId === null ? '' : String(targetId)} onChange={(event) => { setTargetId(Number(event.target.value)); setAction('merge') }} aria-label={t({ ko: '병합할 계정 로어북', en: 'Account lorebook to merge into' })}>
               {targets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}

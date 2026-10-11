@@ -89,8 +89,8 @@ export const ChatSharedBlockStore = {
   /** The blocks a profile links, in link order; a missing block is skipped and a repeated key keeps the first. */
   blocksOf(ids: number[]): ChatDisplayBlock[] {
     if (ids.length === 0) return []
-    const rows = getUserSettingsDb().prepare(`SELECT id, block FROM chat_display_blocks WHERE id IN (${ids.map(() => '?').join(', ')})`).all(...ids) as Array<{ id: number; block: string }>
-    const byId = new Map(rows.map((row) => [row.id, parseStoredBlock(row.id, row.block)]))
+    const rows = getUserSettingsDb().prepare(`SELECT id, name, block FROM chat_display_blocks WHERE id IN (${ids.map(() => '?').join(', ')})`).all(...ids) as Array<{ id: number; name: string; block: string }>
+    const byId = new Map(rows.map((row) => [row.id, { ...parseStoredBlock(row.id, row.block), name: row.name }]))
     const seen = new Set<string>()
     return ids.flatMap((id) => {
       const block = byId.get(id)

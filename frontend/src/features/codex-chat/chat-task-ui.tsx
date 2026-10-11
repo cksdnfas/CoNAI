@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Circle, CircleCheck, CircleDot, CircleMinus, Pause, Play, Square, Users } from 'lucide-react'
-import type { ChatProposal, ChatRoutineRouting, ChatTask, ChatTaskAssignee, ChatTaskRouting, ChatTaskStep, ChatTaskSummary } from '@conai/shared'
+import { ChevronDown, ChevronUp, Circle, CircleCheck, CircleDot, CircleMinus, CircleStop, Pause, Play, Users } from 'lucide-react'
+import { CHAT_TASK_DEFAULT_BUDGET, CHAT_TASK_LIMITS, type ChatProposal, type ChatRoutineRouting, type ChatTask, type ChatTaskAssignee, type ChatTaskRouting, type ChatTaskStep, type ChatTaskSummary } from '@conai/shared'
 import { Button } from '@/components/ui/button'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
+import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/loading-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
@@ -132,8 +134,18 @@ export function TaskPlanCard({ proposal, threadId }: { proposal: PlanProposal; t
   const approve = useMutation({ mutationFn: () => approveChatTaskPlan(proposal.id), onSuccess: async () => { setState('approved'); await refresh() }, onError })
   const dismiss = useMutation({ mutationFn: () => dismissChatProposal(proposal.id), onSuccess: async () => { setState('dismissed'); await refresh() }, onError })
   const busy = approve.isPending || dismiss.isPending
+  const [unfolded, setUnfolded] = useState(false)
+  // A decided plan folds to one line; the live steps are on the bar above the composer.
+  if (state !== 'open' && !unfolded) return (
+    <Button variant="ghost" size="xs" className="h-auto max-w-full justify-start gap-2 px-0 py-1 font-normal text-muted-foreground hover:bg-transparent hover:text-foreground" onClick={() => setUnfolded(true)} aria-expanded={false}>
+      <ChevronDown />
+      <span className="shrink-0 font-semibold">{t({ ko: '작업 플랜', en: 'Task plan' })}</span>
+      <span className="min-w-0 truncate">{proposal.goal}</span>
+      <span className="shrink-0">· {t({ ko: '{count}단계', en: '{count} steps' }, { count: proposal.steps.length })} · {state === 'approved' ? t({ ko: '승인됨', en: 'Approved' }) : t({ ko: '무시함', en: 'Dismissed' })}</span>
+    </Button>
+  )
   return (
-    <div className="space-y-2.5 rounded-md border border-line px-3 py-2.5">
+    <div className="space-y-2.5 border-y border-line py-2.5">
       <div className="flex min-w-0 items-baseline gap-2">
         <span className="shrink-0 text-xs font-semibold text-muted-foreground">{t({ ko: '작업 플랜', en: 'Task plan' })}</span>
         <span className="min-w-0 truncate text-sm font-semibold">{proposal.goal}</span>
@@ -149,50 +161,80 @@ export function TaskPlanCard({ proposal, threadId }: { proposal: PlanProposal; t
             <Button size="xs" variant="ghost" disabled={busy} onClick={() => dismiss.mutate()}>{t({ ko: '무시', en: 'Dismiss' })}</Button>
             <Button size="xs" disabled={busy} onClick={() => approve.mutate()}>{approve.isPending ? <Spinner className="size-3" /> : null}{t({ ko: '승인', en: 'Approve' })}</Button>
           </>
-        ) : <span className="text-xs text-muted-foreground">{state === 'approved' ? t({ ko: '승인됨', en: 'Approved' }) : t({ ko: '무시함', en: 'Dismissed' })}</span>}
+        ) : <>
+          <span className="text-xs text-muted-foreground">{state === 'approved' ? t({ ko: '승인됨', en: 'Approved' }) : t({ ko: '무시함', en: 'Dismissed' })}</span>
+          <IconButton size="icon-xs" variant="ghost" label={t({ ko: '접기', en: 'Fold' })} onClick={() => setUnfolded(false)}><ChevronUp /></IconButton>
+        </>}
       </div>
     </div>
   )
 }
 
-/** The live checklist under the latest reply while a task is under way. */
-export function ChatTaskChecklist({ threadId }: { threadId: number }) {
-  const task = useChatTask(threadId).data
-  if (!task || !LIVE.has(task.status)) return null
+/** Explicit approval of new total limits; cumulative usage is never reset by resuming. */
+function TaskBudgetResume({ task, busy, onResume }: { task: ChatTask; busy: boolean; onResume: (budget: ChatTask['budget']) => void }) {
+  const { t } = useI18n()
+  const [budget, setBudget] = useState(() => ({
+    continuations: Math.min(CHAT_TASK_LIMITS.continuations, task.used.continuations >= task.budget.continuations ? task.used.continuations + CHAT_TASK_DEFAULT_BUDGET.continuations : task.budget.continuations),
+    images: Math.min(CHAT_TASK_LIMITS.images, task.used.images >= task.budget.images ? task.used.images + CHAT_TASK_DEFAULT_BUDGET.images : task.budget.images),
+  }))
+  const keys = ['continuations', 'images'] as const
+  const capped = keys.some((key) => task.used[key] >= CHAT_TASK_LIMITS[key])
+  const valid = keys.every((key) => Number.isSafeInteger(budget[key]) && budget[key] >= task.budget[key] && budget[key] > task.used[key] && budget[key] <= CHAT_TASK_LIMITS[key])
+  if (capped) return <p className="mb-2 text-xs text-muted-foreground">{t({ ko: '작업 최대 예산에 도달했어. 현재 작업을 중단한 뒤 새 플랜을 승인해줘.', en: 'This task reached its maximum budget. Stop it before approving a new plan.' })}</p>
   return (
-    <div className="ml-10 max-w-xl border-t border-line pt-2">
-      <StepList steps={task.steps} current={currentStep(task.steps)} task={task} />
-    </div>
+    <form className="mb-2 flex flex-wrap items-end gap-2 border-b border-line pb-2" onSubmit={(event) => { event.preventDefault(); if (valid && !busy) onResume(budget) }}>
+      <p className="w-full text-xs text-muted-foreground">{t({ ko: '예산을 다 썼어. 지금까지 사용한 양을 포함한 새 총한도를 승인하면 이어갈게.', en: 'Budget exhausted. Approve new total limits, including usage so far, to resume.' })}</p>
+      {keys.map((key) => (
+        <label key={key} className="flex flex-col gap-1 text-xs">
+          <span>{key === 'continuations' ? t({ ko: '이어가기 총한도', en: 'Total turns' }) : t({ ko: '이미지 총한도', en: 'Total images' })} · {t({ ko: '{count} 사용', en: '{count} used' }, { count: task.used[key] })}</span>
+          <Input className="h-7 w-32" type="number" min={Math.max(task.budget[key], task.used[key] + 1)} max={CHAT_TASK_LIMITS[key]} step={1} value={budget[key]} disabled={busy} onChange={(event) => setBudget((current) => ({ ...current, [key]: Number(event.target.value) }))} />
+        </label>
+      ))}
+      <Button size="xs" type="submit" disabled={busy || !valid}>{t({ ko: '예산 승인 후 재개', en: 'Approve budget and resume' })}</Button>
+    </form>
   )
 }
 
-/** The bar above the composer: current step, progress, pause/resume and stop. */
+/** The bar above the composer: current step, progress, the step list folded under it, pause/resume and stop. */
 export function ChatTaskStrip({ threadId }: { threadId: number }) {
   const { t } = useI18n()
+  const confirm = useConfirm()
+  const [stepsOpen, setStepsOpen] = useState(false)
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const task = useChatTask(threadId).data
   const change = useMutation({
-    mutationFn: (action: 'pause' | 'resume' | 'cancel') => setChatTaskState(threadId, action),
+    mutationFn: ({ action, extension }: { action: 'pause' | 'resume' | 'cancel'; extension?: { taskId: number; budget: ChatTask['budget'] } }) => setChatTaskState(threadId, action, extension),
     onSuccess: (next) => queryClient.setQueryData(chatTaskQueryKey(threadId), next),
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '작업을 바꾸지 못했어.', en: 'Could not change the task.' })), tone: 'error' }),
+    onError: (error) => {
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '작업을 바꾸지 못했어.', en: 'Could not change the task.' })), tone: 'error' })
+      void queryClient.invalidateQueries({ queryKey: chatTaskQueryKey(threadId) })
+    },
   })
   if (!task || !LIVE.has(task.status)) return null
   const index = currentStep(task.steps)
   const done = task.steps.filter((step) => step.status === 'done' || step.status === 'skipped').length
   const canResume = task.status === 'paused' || (task.status === 'waiting' && (task.wait === 'user' || task.wait === 'page'))
+  const exhausted = task.used.continuations >= task.budget.continuations || task.used.images >= task.budget.images
   return (
-    <div className="mb-2 flex min-w-0 items-center gap-2.5 text-xs">
-      {index >= 0 && task.steps[index].assignee !== undefined ? <Assignee assignee={task.steps[index].assignee} compact /> : null}
-      <span className="min-w-0 truncate font-semibold">{index >= 0 ? task.steps[index].title : task.goal}</span>
-      <StateChip task={task} />
-      <span className="h-0.5 min-w-10 flex-1 overflow-hidden rounded-full bg-muted"><span className="block h-full bg-primary transition-[width]" style={{ width: `${Math.round((done / Math.max(1, task.steps.length)) * 100)}%` }} /></span>
-      <span className="shrink-0 font-mono text-muted-foreground tabular-nums">{done}/{task.steps.length}</span>
-      {canResume
-        ? <IconButton size="icon-xs" variant="ghost" label={t({ ko: '이어가기', en: 'Resume' })} disabled={change.isPending} onClick={() => change.mutate('resume')}><Play /></IconButton>
-        : <IconButton size="icon-xs" variant="ghost" label={t({ ko: '일시정지', en: 'Pause' })} disabled={change.isPending || task.status !== 'running' && task.status !== 'waiting'} onClick={() => change.mutate('pause')}><Pause /></IconButton>}
-      <IconButton size="icon-xs" variant="ghost" label={t({ ko: '중단', en: 'Stop' })} disabled={change.isPending} onClick={() => change.mutate('cancel')}><Square /></IconButton>
-    </div>
+    <>
+      {stepsOpen ? <div className="mb-2 border-b border-line pb-2"><StepList steps={task.steps} current={index} task={task} /></div> : null}
+      <div className="mb-2 flex min-w-0 items-center gap-2.5 text-xs">
+        {index >= 0 && task.steps[index].assignee !== undefined ? <Assignee assignee={task.steps[index].assignee} compact /> : null}
+        <span className="min-w-0 truncate font-semibold">{index >= 0 ? task.steps[index].title : task.goal}</span>
+        <StateChip task={task} />
+        <span className="h-0.5 min-w-10 flex-1 overflow-hidden rounded-full bg-muted"><span className="block h-full bg-primary transition-[width]" style={{ width: `${Math.round((done / Math.max(1, task.steps.length)) * 100)}%` }} /></span>
+        <span className="shrink-0 font-mono text-muted-foreground tabular-nums">{done}/{task.steps.length}</span>
+        <IconButton size="icon-xs" variant="ghost" aria-expanded={stepsOpen} label={stepsOpen ? t({ ko: '단계 접기', en: 'Hide steps' }) : t({ ko: '단계 보기', en: 'Show steps' })} onClick={() => setStepsOpen((current) => !current)}>{stepsOpen ? <ChevronDown /> : <ChevronUp />}</IconButton>
+        {canResume
+          ? <IconButton size="icon-xs" variant="ghost" label={exhausted ? t({ ko: '예산 승인이 필요해', en: 'Budget approval required' }) : t({ ko: '재개', en: 'Resume' })} disabled={change.isPending || exhausted} onClick={() => change.mutate({ action: 'resume' })}><Play /></IconButton>
+          : <IconButton size="icon-xs" variant="ghost" label={t({ ko: '일시정지', en: 'Pause' })} disabled={change.isPending || task.status !== 'running' && task.status !== 'waiting'} onClick={() => change.mutate({ action: 'pause' })}><Pause /></IconButton>}
+        <IconButton size="icon-xs" variant="ghost" label={t({ ko: '중단', en: 'Stop' })} disabled={change.isPending} onClick={() => void (async () => {
+          if (await confirm({ title: t({ ko: '작업 중단', en: 'Stop task' }), description: t({ ko: '이 작업을 중단할까? 남은 단계는 진행하지 않아.', en: 'Stop this task? The remaining steps will not run.' }), confirmLabel: t({ ko: '중단', en: 'Stop' }), tone: 'destructive' })) change.mutate({ action: 'cancel' })
+        })()}><CircleStop /></IconButton>
+      </div>
+      {canResume && exhausted ? <TaskBudgetResume key={`${task.id}:${task.budget.continuations}:${task.budget.images}:${task.used.continuations}:${task.used.images}`} task={task} busy={change.isPending} onResume={(budget) => change.mutate({ action: 'resume', extension: { taskId: task.id, budget } })} /> : null}
+    </>
   )
 }
 

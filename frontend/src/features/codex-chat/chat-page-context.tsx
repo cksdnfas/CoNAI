@@ -383,8 +383,7 @@ export function ChatPageConnectButton({ disabled }: { disabled: boolean }) {
   const { t } = useI18n()
   if (!page?.available) return null
   const label = t(page.driving ? { ko: '어시스턴트가 조작 중', en: 'Assistant is operating the page' } : page.enabled ? { ko: '현재 페이지 연결 해제', en: 'Disconnect current page' } : { ko: '현재 페이지 연결', en: 'Connect current page' })
-  const hint = t({ ko: '현재 페이지의 등록된 입력과 워크플로 편집 정보를 전달해. 채팅이 만든 변경안을 검토하고 직접 적용해.', en: 'Share registered page inputs and workflow editor state. Review and apply the changes proposed by chat.' })
-  return <Tip content={hint}><IconButton variant="ghost" size="icon-sm" active={page.enabled} disabled={disabled} onClick={page.toggle} label={label} tooltip={false}><Monitor className={page.driving ? 'animate-pulse motion-reduce:animate-none' : undefined} /></IconButton></Tip>
+  return <IconButton variant="ghost" size="icon-sm" active={page.enabled} disabled={disabled} onClick={page.toggle} label={label}><Monitor className={page.driving ? 'animate-pulse motion-reduce:animate-none' : undefined} /></IconButton>
 }
 
 export function ChatPageConnectionNotice() {

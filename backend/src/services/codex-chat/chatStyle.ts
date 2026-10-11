@@ -22,6 +22,8 @@ export type ChatStyleColors = {
 export type ChatBlockField = {
   tone?: ChatBlockTone
   name: string
+  /** What people read for this field (chips, change log); the model keeps writing `name`. */
+  label?: string
   min: number | null
   max: number | null
   /** Largest change per reply (numbers). */
@@ -40,6 +42,8 @@ export type ChatDisplayBlock = {
   id: string
   /** Fence language the model writes, e.g. `status`. */
   key: string
+  /** The shared block's name, for people (the status panel title); filled when a profile's blocks are read. */
+  name?: string
   /** When and how the model should use the block; goes into the system prompt. */
   instruction: string
   /** Example JSON values: shown to the model as the format, and used for the editor preview. */
@@ -102,6 +106,7 @@ const AVATAR_PATTERN = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$
 const MAX_BLOCKS = 12
 const MAX_BLOCK_FIELDS = 40
 const BLOCK_FIELD_NAME_MAX_LENGTH = 60
+const BLOCK_FIELD_LABEL_MAX_LENGTH = 40
 const BLOCK_FIELD_VALUE_MAX_LENGTH = 80
 const MAX_BLOCK_FIELD_VALUES = 40
 const BLOCK_KEY_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/
@@ -146,7 +151,8 @@ function normalizeFields(value: unknown): ChatBlockField[] {
     const max = optionalNumber(record.max)
     const step = optionalNumber(record.step)
     const tone = normalizeTone(record.tone, values)
-    return [{ name, min, max: max !== null && min !== null && max < min ? min : max, step: step !== null && step < 0 ? null : step, values, readonly: record.readonly === true, ...(tone ? { tone } : {}) }]
+    const label = typeof record.label === 'string' ? record.label.trim().slice(0, BLOCK_FIELD_LABEL_MAX_LENGTH) : ''
+    return [{ name, ...(label ? { label } : {}), min, max: max !== null && min !== null && max < min ? min : max, step: step !== null && step < 0 ? null : step, values, readonly: record.readonly === true, ...(tone ? { tone } : {}) }]
   })
 }
 
@@ -291,6 +297,7 @@ function buildBlocksGuidance(blocks: ChatDisplayBlock[]) {
   const fence = '```'
   return [
     'Status blocks: the chat keeps a running state for each block below and shows it in a status panel. The current values come with the conversation under "현재 상태" (inside [참고 설정]); treat them as the facts of the scene and act consistently with them.',
+    'Show the values through behaviour, distance and warmth instead of stating them, and keep the character\'s personality and way of speaking; a "말투:" line is the present attitude on top of that voice. Values describe the present, not the whole history: a low or zero value does not mean there is no shared past, and what memories, summaries or lore record still happened. Read each field on its own.',
     'To change values, write a fenced block (the fence name, then one JSON object) holding ONLY the fields that changed: leave unchanged fields out, set a field to null to remove it, write lists whole. Put it at the end of the reply, at most once per block, and leave it out when nothing changed. Values are plain text; never put HTML or Markdown in them.',
     ...usable.map((block) => [
       `- ${block.key}: ${block.instruction || 'update when the scene changes it'}`,

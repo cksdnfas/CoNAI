@@ -45,7 +45,7 @@ export function ChatAssetProposalCard({ proposal, threadId }: { proposal: Assets
     ...(proposal.input.expressionPresetId ? [expressionCount === undefined ? t({ ko: '표정', en: 'Expressions' }) : t({ ko: '표정 {count}', en: '{count} expressions' }, { count: expressionCount })] : []),
     ...(proposal.input.slots ?? []).map((slot) => slot.kind === 'background' ? t({ ko: '배경', en: 'Background' }) : slot.kind === 'full' ? t({ ko: '전신', en: 'Full body' }) : slot.kind === 'reference' ? t({ ko: '기준 이미지', en: 'Reference image' }) : t({ ko: '아바타', en: 'Avatar' })),
   ] : Object.keys(proposal.chosenHashes)
-  return <div className="space-y-2.5 rounded-md border border-line px-3 py-2.5">
+  return <div className="space-y-2.5 border-y border-line py-2.5">
     <div className="flex items-baseline gap-2"><span className="text-xs font-semibold text-muted-foreground">{proposal.action === 'create' ? t({ ko: '자산 만들기', en: 'Create assets' }) : t({ ko: '자산 적용', en: 'Apply assets' })}</span><span className="truncate text-xs text-muted-foreground">{proposal.profileName}</span></div>
     <div className="text-sm">{parts.join(' · ')}</div>
     {proposal.action === 'apply' ? <ChatMediaAttachments items={[...new Map(Object.entries(proposal.chosenHashes).map(([name, compositeHash]) => [compositeHash, { name, compositeHash, mimeType: null }])).values()]} /> : null}

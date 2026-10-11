@@ -29,7 +29,7 @@ export function ChatPageProposalCard({ proposal }: { proposal: PageProposal }) {
     catch (reason) { setError(reason instanceof Error ? reason.message : t({ ko: '입력을 적용하지 못했어.', en: 'Could not apply the inputs.' })) }
     finally { setBusy(false) }
   }
-  return <div className="space-y-2.5 rounded-md border border-line px-3 py-2.5" aria-label={t({ ko: '페이지 입력 제안', en: 'Page input proposal' })}>
+  return <div className="space-y-2.5 border-y border-line py-2.5" aria-label={t({ ko: '페이지 입력 제안', en: 'Page input proposal' })}>
     <p className="text-xs font-semibold">{t({ ko: '{name} 입력 변경', en: 'Change inputs on {name}' }, { name: proposal.page.title })}</p>
     <dl className="space-y-2 text-xs">
       {proposal.changes.map((change) => <div key={change.fieldId}>

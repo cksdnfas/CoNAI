@@ -21,7 +21,7 @@ export function ChatPageActionCard({ proposal }: { proposal: PageActionProposal 
     catch (reason) { setError(reason instanceof Error ? reason.message : t({ ko: '작업을 적용하지 못했어.', en: 'Could not apply the operation.' })) }
     finally { setBusy(false) }
   }
-  return <div className="space-y-2.5 rounded-md border border-line px-3 py-2.5" aria-label={t({ ko: '페이지 작업 제안', en: 'Page operation proposal' })}>
+  return <div className="space-y-2.5 border-y border-line py-2.5" aria-label={t({ ko: '페이지 작업 제안', en: 'Page operation proposal' })}>
     <p className="flex items-center gap-1 text-xs font-semibold">{proposal.page.title} · {proposal.action.label}{proposal.action.description ? <FieldInfo>{proposal.action.description}</FieldInfo> : null}</p>
     {/* A save without inputs stores the screen as it is: the card shows only what will be saved. */}
     <div className={hasArguments ? 'grid grid-cols-2 gap-2 text-xs' : 'text-xs'}>

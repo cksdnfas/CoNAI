@@ -1,7 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ALargeSmall, Check, Pencil, Plus, RotateCcw, Star, Trash2 } from 'lucide-react'
+import { ALargeSmall, Check, Layers, Pencil, Plus, RotateCcw, Star, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
@@ -377,6 +378,7 @@ function SlotOverlay({ file, appearance, onApply, onNew, onSaveSlots, onClose }:
   onClose: () => void
 }) {
   const { t } = useI18n()
+  const confirm = useConfirm()
   const [renaming, setRenaming] = useState<string | null>(null)
   const active = file.slots.find((slot) => slot.id === appearance.slotId) ?? null
   const delay = (index: number): CSSProperties => ({ animationDelay: `${index * POP_STAGGER_MS}ms` })
@@ -422,7 +424,10 @@ function SlotOverlay({ file, appearance, onApply, onNew, onSaveSlots, onClose }:
                 <Star className={cn('size-4', active.id === file.defaultSlotId && 'fill-primary text-primary')} />
               </IconButton>
               <IconButton size="icon-sm" variant="ghost" label={t({ ko: '이름 바꾸기', en: 'Rename' })} onClick={() => setRenaming(active.name)}><Pencil className="size-4" /></IconButton>
-              <IconButton size="icon-sm" variant="ghost" label={t({ ko: '슬롯 지우기', en: 'Delete slot' })} onClick={() => void onSaveSlots({ defaultSlotId: file.defaultSlotId === active.id ? null : file.defaultSlotId, slots: file.slots.filter((slot) => slot.id !== active.id) })}>
+              <IconButton size="icon-sm" variant="ghost" label={t({ ko: '슬롯 지우기', en: 'Delete slot' })} onClick={() => void (async () => {
+                if (!await confirm({ title: t({ ko: '슬롯 지우기', en: 'Delete slot' }), description: t({ ko: '"{name}" 슬롯을 지울까?', en: 'Delete the "{name}" slot?' }, { name: active.name }), confirmLabel: t({ ko: '지우기', en: 'Delete' }), tone: 'destructive' })) return
+                await onSaveSlots({ defaultSlotId: file.defaultSlotId === active.id ? null : file.defaultSlotId, slots: file.slots.filter((slot) => slot.id !== active.id) })
+              })()}>
                 <Trash2 className="size-4" />
               </IconButton>
             </>
@@ -579,7 +584,7 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
               {activeSlot || !dirty ? t({ ko: '저장', en: 'Save' }) : t({ ko: '새 슬롯', en: 'New slot' })}
             </Button>
             <IconButton size="icon-xs" variant="ghost" active={slotsOpen} aria-expanded={slotsOpen} disabled={threadId === null} onClick={() => setSlotsOpen((current) => !current)} label={t({ ko: '슬롯', en: 'Slots' })}>
-              <RotateCcw className={cn('transition-transform duration-300 ease-[cubic-bezier(.2,.9,.3,1.3)] motion-reduce:transition-none', slotsOpen && '-rotate-45 scale-110')} />
+              <Layers className={cn('transition-transform duration-300 ease-[cubic-bezier(.2,.9,.3,1.3)] motion-reduce:transition-none', slotsOpen && '-rotate-45 scale-110')} />
             </IconButton>
           </span>
         </div>

@@ -119,7 +119,7 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
           </CollapsibleRow>
           <CollapsibleRow
             title={t({ ko: '작가 노트', en: "Author's note" })}
-            info={t({ ko: '모든 채팅에 매 요청 들어가는 장면 지시. 대화 끝쪽에 들어가. 채팅마다 ⋯ → 컨텍스트에서 따로 쓰면 그쪽이 우선이야.', en: "A scene instruction added to every request in every chat, near the end of the conversation. A note written per chat under ⋯ → Context takes precedence." })}
+            info={t({ ko: '모든 채팅에 매 요청 들어가는 장면 지시. 대화 끝쪽에 들어가. 채팅마다 헤더의 컨텍스트에서 따로 쓰면 그쪽이 우선이야.', en: "A scene instruction added to every request in every chat, near the end of the conversation. A note written per chat under Context in the chat header takes precedence." })}
             meta={draft.authorNote.trim() ? null : t({ ko: '없음', en: 'none' })}
           >
             <Textarea variant="settings" rows={3} className={cn(GROW_TEXTAREA, filled('authorNote') && ASSIST_FILLED_CLASS)} value={draft.authorNote} aria-label={t({ ko: '작가 노트', en: "Author's note" })} onChange={(event) => patch({ authorNote: event.target.value })} />

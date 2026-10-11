@@ -19,7 +19,7 @@ export function ChatWorkflowProposalCard({ proposal }: { proposal: WorkflowPageP
     catch (reason) { setError(reason instanceof Error ? reason.message : t({ ko: '워크플로를 적용하지 못했어.', en: 'Could not apply the workflow.' })) }
     finally { setBusy(false) }
   }
-  return <div className="space-y-2.5 rounded-md border border-line px-3 py-2.5" aria-label={t({ ko: '워크플로 변경 제안', en: 'Workflow edit proposal' })}>
+  return <div className="space-y-2.5 border-y border-line py-2.5" aria-label={t({ ko: '워크플로 변경 제안', en: 'Workflow edit proposal' })}>
     <p className="text-xs font-semibold">{t({ ko: '워크플로 초안 변경 · 노드 {nodes}개 · 연결 {edges}개', en: 'Workflow draft edits · {nodes} nodes · {edges} edges' }, { nodes: proposal.nodeCount, edges: proposal.edgeCount })}</p>
     <dl className="max-h-80 space-y-2 overflow-auto text-xs">{proposal.changes.map((change, index) => <div key={index}>
       <dt className="mb-1 font-medium">{change.title}</dt>

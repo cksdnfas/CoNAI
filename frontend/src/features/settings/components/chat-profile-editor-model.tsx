@@ -186,7 +186,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
               </Field>
               <Field
                 label={t({ ko: '최대 출력 토큰', en: 'Max output tokens' })}
-                info={t({ ko: '추론과 답변을 합친 한도. 채팅의 ⋯ → 컨텍스트에서 따로 정하면 그쪽이 우선이야.', en: 'Limit for reasoning and answer combined. A value set per chat under ⋯ → Context takes precedence.' })}
+                info={t({ ko: '추론과 답변을 합친 한도. 채팅의 헤더의 컨텍스트에서 따로 정하면 그쪽이 우선이야.', en: 'Limit for reasoning and answer combined. A value set per chat under Context in the chat header takes precedence.' })}
               >
                 <div className="flex items-center gap-2">
                   {thinkingMayFillCap(draft.reasoningEffort, draft.maxTokens) ? (

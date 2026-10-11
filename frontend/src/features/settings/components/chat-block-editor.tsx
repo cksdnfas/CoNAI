@@ -92,7 +92,7 @@ function blockOf(rows: FieldRow[]): Pick<ChatDisplayBlock, 'example' | 'fields'>
   const named = rows.filter((row) => row.name.trim())
   return {
     example: JSON.stringify(Object.fromEntries(named.map((row) => [row.name.trim(), startValue(row.start)])), null, 2),
-    fields: named.map((row) => ({ name: row.name.trim(), min: row.min, max: row.max, step: row.step, values: row.values, readonly: row.readonly, ...(row.tone ? { tone: row.tone } : {}) })),
+    fields: named.map((row) => ({ name: row.name.trim(), ...(row.label?.trim() ? { label: row.label.trim() } : {}), min: row.min, max: row.max, step: row.step, values: row.values, readonly: row.readonly, ...(row.tone ? { tone: row.tone } : {}) })),
   }
 }
 
@@ -176,13 +176,16 @@ function BlockFieldsTable({ rows, onChange }: { rows: FieldRow[]; onChange: (row
                 key={row.id}
                 open={openId === row.id}
                 onOpenChange={(open) => setOpenId(open ? row.id : null)}
-                title={<span className={cn('font-mono', duplicate && 'text-destructive', !row.name.trim() && 'text-muted-foreground')}>{row.name.trim() || t({ ko: '이름 없음', en: 'Unnamed' })}</span>}
+                title={<span className="flex min-w-0 items-baseline gap-2"><span className={cn('font-mono', duplicate && 'text-destructive', !row.name.trim() && 'text-muted-foreground')}>{row.name.trim() || t({ ko: '이름 없음', en: 'Unnamed' })}</span>{row.label?.trim() ? <span className="truncate text-muted-foreground">{row.label.trim()}</span> : null}</span>}
                 meta={summary ? <span className="block max-w-[18rem] truncate font-mono">{summary}</span> : undefined}
                 actions={<IconButton size="icon-sm" variant="ghost" onClick={() => onChange(rows.filter((entry) => entry.id !== row.id))} label={t({ ko: '필드 삭제', en: 'Delete field' })}><Trash2 /></IconButton>}
               >
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3 sm:grid-cols-3">
                   <Field label={t({ ko: '필드', en: 'Field' })}>
                     <Input variant="settings" value={row.name} maxLength={60} className={cn('font-mono', duplicate && 'border-destructive')} aria-invalid={duplicate} onChange={(event) => update(row.id, { name: event.target.value })} />
+                  </Field>
+                  <Field label={t({ ko: '표시 이름', en: 'Display name' })}>
+                    <Input variant="settings" value={row.label ?? ''} maxLength={40} placeholder={row.name.trim()} onChange={(event) => update(row.id, { label: event.target.value })} />
                   </Field>
                   <Field label={t({ ko: '시작 값', en: 'Start' })}>
                     <Input variant="settings" value={row.start} className="font-mono" onChange={(event) => update(row.id, { start: event.target.value })} />

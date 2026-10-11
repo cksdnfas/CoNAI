@@ -169,7 +169,7 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
   const commit = (value: string) => (value.trim() === '' ? null : Number(value))
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4 *:shrink-0">
       <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock thread={thread} defaults={{ note: '', depth: null }} />
       {llmMembers.length > 0 ? <GenerationReactionSettings thread={thread} /> : null}
@@ -433,7 +433,7 @@ export function CodexChatContextView({ thread, profiles, segments, profileTurns,
   const summaryOn = thread.summary_enabled === null ? profileSummaryEnabled === true : thread.summary_enabled === 1
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4 *:shrink-0">
       <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock thread={thread} defaults={noteDefaults} />
       <GenerationReactionSettings thread={thread} />
@@ -509,7 +509,7 @@ export function CodexEngineContextView({ thread, profiles, compactTokens, noteDe
   const cachedShare = thread.codex_input_tokens ? Math.round(((thread.codex_cached_input_tokens ?? 0) / thread.codex_input_tokens) * 100) : null
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4 *:shrink-0">
       <ChatUserProfileRow thread={thread} />
       <AuthorNoteBlock thread={thread} defaults={noteDefaults} />
       <LorebookBlock threadId={thread.id} loreAutoSave={thread.lore_auto_save} profiles={profiles} />

@@ -105,9 +105,9 @@ export function GroupMembersPopover({ threadId, group, profilesById, disabled, o
 
   const remove = async (profile: ChatProfileSummary) => {
     const confirmed = await confirm({
-      title: t({ ko: '참가자 내보내기', en: 'Remove member' }),
-      description: t({ ko: '{name}을(를) 이 방에서 내보낼까? 지금까지의 대화는 남아.', en: 'Remove {name} from this room? The conversation stays.' }, { name: profile.name }),
-      confirmLabel: t({ ko: '내보내기', en: 'Remove' }),
+      title: t({ ko: '참가자 빼기', en: 'Remove member' }),
+      description: t({ ko: '{name}을(를) 이 방에서 뺄까? 지금까지의 대화는 남아.', en: 'Remove {name} from this room? The conversation stays.' }, { name: profile.name }),
+      confirmLabel: t({ ko: '빼기', en: 'Remove' }),
       tone: 'destructive',
     })
     if (confirmed) removeMutation.mutate(profile.id)
@@ -133,7 +133,7 @@ export function GroupMembersPopover({ threadId, group, profilesById, disabled, o
               {representative ? null : (
                 <div className="flex">
                   <IconButton size="icon-xs" variant="ghost" disabled={busy} label={t({ ko: '대표로 지정', en: 'Make representative' })} onClick={() => updateMutation.mutate({ representativeId: profile.id })}><Crown /></IconButton>
-                  <IconButton size="icon-xs" variant="ghost" disabled={busy || members.length <= 1} label={t({ ko: '방에서 내보내기', en: 'Remove from room' })} onClick={() => void remove(profile)}><UserMinus /></IconButton>
+                  <IconButton size="icon-xs" variant="ghost" disabled={busy || members.length <= 1} label={t({ ko: '방에서 빼기', en: 'Remove from room' })} onClick={() => void remove(profile)}><UserMinus /></IconButton>
                 </div>
               )}
             </div>

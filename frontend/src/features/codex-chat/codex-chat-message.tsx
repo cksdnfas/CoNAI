@@ -1,7 +1,7 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { memo, useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Ban, Check, ChevronLeft, ChevronRight, ImageOff, Repeat, Scissors, Wrench, X } from 'lucide-react'
+import { AlertTriangle, Ban, Check, ChevronLeft, ChevronRight, ImageOff, RefreshCw, Repeat, Scissors, Wrench, X } from 'lucide-react'
 import { isCodexChatGenerationTool, stripEchoedAddresses, withChatGenerationProgress } from '@conai/shared'
 import type { ChatFileChange, ChatMessageRouting } from '@conai/shared'
 import { ChatMessageReply } from './chat-reply'
@@ -33,6 +33,7 @@ import { ChatPageOperationChips } from './chat-page-operation-chips'
 import { ChatFileChangeChips } from './chat-file-change-chips'
 import { ChatReferenceButton, ChatThumbOverlay } from './chat-reference'
 import { MENTION_CLASS, splitMentions } from './chat-mentions'
+import { chatToolLabel } from './chat-tool-catalog'
 
 const HISTORY_POLL_MS = 3000
 const THUMB_CLASS = 'w-auto rounded-sm object-cover'
@@ -415,7 +416,7 @@ function ToolCallsBadge({ calls }: { calls: CodexChatToolCall[] }) {
           {groups.map((group) => (
             <li key={group.tool} className="rounded-sm px-2 py-1 text-xs">
               <div className="flex items-center gap-1.5">
-                <span className="min-w-0 flex-1 truncate font-mono">{group.tool}</span>
+                <span className="min-w-0 flex-1 truncate" title={group.tool}>{chatToolLabel(group.tool, t)}</span>
                 {group.count > 1 ? <span className="tabular-nums text-muted-foreground">×{group.count}</span> : null}
                 <span className="text-muted-foreground"><ToolStatusIcon status={group.status} /></span>
               </div>
@@ -535,7 +536,7 @@ function MessageTime({ at, appearance, className }: { at: string | undefined; ap
   if (Number.isNaN(date.getTime())) return null
   return (
     <time dateTime={date.toISOString()} className={cn('shrink-0 text-2xs tabular-nums text-muted-foreground', appearance.timeStamps === 'hover' && 'opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100', className)}>
-      {formatDateTime(date, { hour: '2-digit', minute: '2-digit' })}
+      {formatDateTime(date, { hour: 'numeric', minute: '2-digit' })}
     </time>
   )
 }
@@ -611,7 +612,7 @@ function ActivityLine({ toolCalls, translating = false }: { toolCalls: CodexChat
     <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
       <Spinner size="sm" />
       <span className="truncate">
-        {translating ? t({ ko: '번역 중…', en: 'Translating…' }) : runningTool ? t({ ko: '도구 실행 중: {tool}', en: 'Running tool: {tool}' }, { tool: runningTool.tool }) : t({ ko: '작업 중…', en: 'Working…' })}
+        {translating ? t({ ko: '번역 중…', en: 'Translating…' }) : runningTool ? t({ ko: '도구 실행 중: {tool}', en: 'Running tool: {tool}' }, { tool: chatToolLabel(runningTool.tool, t) }) : t({ ko: '작업 중…', en: 'Working…' })}
       </span>
     </div>
   )
@@ -681,7 +682,7 @@ function ReasoningBlock({ text, active }: { text: string; active: boolean }) {
 const AVATAR_SIZE = { sm: 'sm', md: 'lg', lg: 'xl' } as const
 const BUBBLE_CLASS = 'max-w-[85%] self-start rounded-lg bg-surface-low/85 px-3.5 py-2.5 backdrop-blur-sm'
 
-export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content: written, toolCalls, status, error, finishReason = null, reasoning, streaming = false, translating = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, routing, recipientLabel, threadId, fileChanges, replyId }: {
+export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content: written, toolCalls, status, error, finishReason = null, reasoning, streaming = false, translating = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, routing, recipientLabel, threadId, fileChanges, replyId, onRetry }: {
   /** The stored thread this reply belongs to (proposal cards refresh it after a save). */
   threadId?: number
   /** The text files this reply's tools wrote (chips with undo). */
@@ -707,6 +708,8 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   /** The reader's chat appearance: avatar and image sizes, bubble or plain, names, time, chips. */
   appearance?: ChatAppearance
   createdAt?: string
+  /** A failed reply that can be answered again: a "다시 시도" next to its error. */
+  onRetry?: () => void
 }) {
   const { t } = useI18n()
   // Older stored replies and live streams may still carry the model's copy of the app's [message_id=...] label.
@@ -724,6 +727,8 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
    * One speaker's part: the name line (avatar, name, time), the content under it at full width (in a bubble, by
    * choice), then `after` (status lines, outside the bubble).
    */
+  // Rooms: whom a reply was for, beside the name; a quoted reply names it inside the quote instead.
+  const addressee = !routing?.replyTo && recipientLabel ? recipientLabel : ''
   const row = (key: string, who: ChatProfileAssetFields & { id?: number; name: string; avatar?: string | null; color?: string } | null, engine: ChatEngine, extra: ReactNode, children: ReactNode, after?: ReactNode) => {
     const avatar = who ? avatarOf(who, engine) : null
     const nameLine = (who && (appearance.showNames || avatar)) || extra || (appearance.timeStamps !== 'off' && createdAt)
@@ -733,6 +738,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
           <div className="flex min-h-6 items-center gap-2">
             {avatar}
             {who && appearance.showNames ? <span className="truncate text-xs font-semibold text-muted-foreground" style={who.color ? { color: who.color } : undefined}>{who.name}</span> : null}
+            {key === 'own' && addressee ? <span className="truncate text-xs text-muted-foreground">· {t({ ko: '{name}에게', en: 'to {name}' }, { name: addressee })}</span> : null}
             <MessageTime at={createdAt} appearance={appearance} />
             {extra}
           </div>
@@ -753,7 +759,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   // A proposal rides on a tool call, so `toolCalls.length` already counts it as content.
   const ownParts = !ownText && !showReasoning && toolCalls.length === 0 && !fileChanges?.length && !routing?.replyTo ? null : (
     <div className="space-y-2">
-      <ChatMessageReply routing={routing} recipientLabel={recipientLabel} />
+      <ChatMessageReply routing={routing} recipientLabel={routing?.replyTo ? recipientLabel : undefined} />
       {showReasoning ? <ReasoningBlock text={reasoning as string} active={streaming && !content} /> : null}
       {canViewImages ? <CodexChatToolMedia calls={toolCalls.filter((call) => !isAudioWorkspaceCall(call))} size={appearance.imageSize} layout={appearance.imageLayout} media={media} /> : null}
       <ChatAudioCards calls={toolCalls} />
@@ -772,9 +778,12 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
     <div className="space-y-2">
       {streaming ? <ActivityLine toolCalls={toolCalls} translating={translating} /> : null}
       {status === 'interrupted' ? <p className="text-xs text-muted-foreground">{t({ ko: '중단됨', en: 'Stopped' })}</p> : null}
-      {status === 'failed' ? <ChatErrorChip error={error ?? null} /> : null}
+      {status === 'failed' ? <div className="flex flex-wrap items-center gap-2">
+        <ChatErrorChip error={error ?? null} />
+        {onRetry ? <Button type="button" variant="ghost" size="xs" className="text-primary" onClick={onRetry}><RefreshCw />{t({ ko: '다시 시도', en: 'Try again' })}</Button> : null}
+      </div> : null}
       {truncated ? (
-        <Tip content={t({ ko: '최대 출력 토큰에 닿아서 답변이 여기서 끊겼어. ⋯ → 컨텍스트에서 한도를 올릴 수 있어.', en: 'The reply hit the max output tokens. Raise the cap under ⋯ → Context.' })} side="bottom" align="start">
+        <Tip content={t({ ko: '최대 출력 토큰에 닿아서 답변이 여기서 끊겼어. 헤더의 컨텍스트에서 한도를 올릴 수 있어.', en: 'The reply hit the max output tokens. Raise the cap under Context in the chat header.' })} side="bottom" align="start">
           <p tabIndex={0} className="flex w-fit cursor-help items-center gap-1 rounded-sm text-xs text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
             <Scissors className="size-3" aria-hidden />{t({ ko: '길이 제한에서 잘림', en: 'Cut at the length limit' })}
           </p>

@@ -107,7 +107,9 @@ export interface ChatDiagnostics {
 }
 
 /** `loreKeyLanguage`: the one language besides English every lorebook's keywords are kept in (`ko`, `ja`, `zh` or a typed name); null: English only. */
-export type ChatAdminSettings = { enabled: boolean; diagnostics: { enabled: boolean; captureRaw: boolean; captureLimit: number }; loreAutoSave: boolean; loreKeyLanguage: string | null }
+/** Who answers the chats' web_search tool: a Codex or Claude Code run with only its web search (model null: its default). */
+export type WebResearchSettings = { engine: 'off' | 'codex' | 'claude'; model: string | null; dailyLimit: number | null }
+export type ChatAdminSettings = { enabled: boolean; diagnostics: { enabled: boolean; captureRaw: boolean; captureLimit: number }; loreAutoSave: boolean; loreKeyLanguage: string | null; webResearch: WebResearchSettings }
 
 export const CHAT_SCOPES: ChatScope[] = ['read', 'generate', 'organize', 'configure']
 export const CHAT_PROFILES_QUERY_KEY = ['codex-chat-profiles'] as const
@@ -142,6 +144,8 @@ export type ChatTypeface = 'sans' | 'serif' | 'mono'
 export interface ChatBlockField {
   tone?: import('@conai/shared').ChatBlockTone
   name: string
+  /** What people read for this field (chips, change log); the model keeps writing `name`. */
+  label?: string
   min: number | null
   max: number | null
   /** Largest change per reply (numbers). */
@@ -155,6 +159,8 @@ export interface ChatBlockField {
 export interface ChatDisplayBlock {
   id: string
   key: string
+  /** The shared block's name, for people (the status panel title). */
+  name?: string
   /** When the model should use it (sent in the system prompt). */
   instruction: string
   /** Example JSON values: the format shown to the model, and the editor preview's data. */
@@ -918,7 +924,7 @@ export function getChatAdminSettings() {
   return requestApiData<ChatAdminSettings>('/api/codex-chat/admin/settings', { cache: 'no-store' })
 }
 
-export function updateChatAdminSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatAdminSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null }) {
+export function updateChatAdminSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatAdminSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null; webResearch?: Partial<WebResearchSettings> }) {
   return requestApiData<ChatAdminSettings>('/api/codex-chat/admin/settings', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
@@ -938,8 +944,9 @@ export function listChatAdminProfiles() {
   return requestApiData<ChatProfile[]>('/api/codex-chat/admin/profiles', { cache: 'no-store' })
 }
 
-export function createChatProfile(input: ChatProfileInput) {
-  return requestApiData<ChatProfile>('/api/codex-chat/admin/profiles', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
+/** `copyOf`: the profile this one copies; it keeps that profile's links and gets its own copy of its expressions. */
+export function createChatProfile(input: ChatProfileInput, copyOf?: number) {
+  return requestApiData<ChatProfile>('/api/codex-chat/admin/profiles', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(copyOf ? { ...input, copyOf } : input) })
 }
 
 /** A chat exported as CoNAI JSON, back in as a new chat; `notes` say what did not come along. */
@@ -1633,8 +1640,8 @@ export function getChatTask(threadId: number) {
   return requestApiData<ChatTask | null>(`/api/codex-chat/threads/${threadId}/task`)
 }
 
-export function setChatTaskState(threadId: number, action: 'pause' | 'resume' | 'cancel') {
-  return requestApiData<ChatTask>(`/api/codex-chat/threads/${threadId}/task/${action}`, { method: 'POST' })
+export function setChatTaskState(threadId: number, action: 'pause' | 'resume' | 'cancel', extension?: { taskId: number; budget: ChatTask['budget'] }) {
+  return requestApiData<ChatTask>(`/api/codex-chat/threads/${threadId}/task/${action}`, { method: 'POST', ...(extension ? { headers: JSON_HEADERS, body: JSON.stringify({ extension }) } : {}) })
 }
 
 /** Approve a task plan card; the server starts the task. */

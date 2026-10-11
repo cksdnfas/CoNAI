@@ -5,12 +5,13 @@ import { ChatProfileImage } from './chat-profile-image'
 import { Chip } from '@/components/ui/chip'
 import { chatEmoticonUrl, chatProfileAssetUrl, type ChatProfileSummary } from '@/lib/api-codex-chat'
 import { Button } from '@/components/ui/button'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import type { ChatBlockChange, ChatBlocksState, ChatDisplayBlock, CodexChatMessage } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
-import { blockSummaryLine, ChatDisplayBlockView, describeBlockChange, type BlockAction } from './chat-display-block'
+import { blockSummaryLine, ChatDisplayBlockView, blockFieldLabel, describeBlockChange, type BlockAction } from './chat-display-block'
 import { parseServerDate } from './codex-chat-message'
 
 /*
@@ -121,19 +122,19 @@ function BlockTabs({ blocks, activeKey, onChange, className }: { blocks: ChatSta
 }
 
 /** The last few replies that changed this block, newest first. */
-function RecentChanges({ messages, changes, blockKey }: { messages: CodexChatMessage[]; changes: ChatBlocksState['changes']; blockKey: string }) {
+function RecentChanges({ messages, changes, block }: { messages: CodexChatMessage[]; changes: ChatBlocksState['changes']; block: ChatStatusBlock }) {
   const { t, formatDateTime } = useI18n()
   const rows = useMemo(() => {
     const result: Array<{ id: number; time: string; text: string }> = []
     for (let index = messages.length - 1; index >= 0 && result.length < RECENT_CHANGES; index -= 1) {
       const message = messages[index]
-      const list = changes[message.id]?.[blockKey]
+      const list = changes[message.id]?.[block.key]
       if (!list?.length) continue
       const date = parseServerDate(message.created_date)
-      result.push({ id: message.id, time: Number.isNaN(date.getTime()) ? '' : formatDateTime(date, { hour: '2-digit', minute: '2-digit' }), text: list.flatMap((change: ChatBlockChange) => describeBlockChange(change, t)).join(', ') })
+      result.push({ id: message.id, time: Number.isNaN(date.getTime()) ? '' : formatDateTime(date, { hour: 'numeric', minute: '2-digit' }), text: list.flatMap((change: ChatBlockChange) => describeBlockChange(change, t, (field) => blockFieldLabel(block, field))).join(', ') })
     }
     return result
-  }, [blockKey, changes, formatDateTime, messages, t])
+  }, [block, changes, formatDateTime, messages, t])
   if (rows.length === 0) return null
   return (
     <ul className="space-y-1.5 border-t border-line pt-3 text-xs text-muted-foreground">
@@ -186,13 +187,14 @@ export function ChatStatusContent({ data, activeKey, onActiveKey, actions, heade
   bodyClassName?: string
 }) {
   const { t } = useI18n()
+  const confirm = useConfirm()
   const [editing, setEditing] = useState(false)
   const block = data.blocks.find((entry) => entry.key === activeKey) ?? data.blocks[0]
   useEffect(() => setEditing(false), [activeKey, data.busy])
   if (!block && !data.portrait) return null
   const values = block ? data.state.state[block.key] ?? {} : {}
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto *:shrink-0">
       {data.portrait}
       <div className={cn('flex min-h-12 shrink-0 flex-wrap items-center gap-1 border-b border-line py-1 pl-4 pr-1', headerClassName)}>
         {headerStart}
@@ -200,7 +202,9 @@ export function ChatStatusContent({ data, activeKey, onActiveKey, actions, heade
         <span className="ml-auto flex items-center gap-1">
           {block ? <>
             <IconButton variant="ghost" size="icon-sm" active={editing} disabled={data.busy} onClick={() => setEditing((current) => !current)} label={t({ ko: '직접 고치기', en: 'Edit values' })}><Pencil /></IconButton>
-            <IconButton variant="ghost" size="icon-sm" disabled={data.busy} onClick={() => void data.onEdit(block.key, null)} label={t({ ko: '처음 값으로', en: 'Reset to starting values' })}><RotateCcw /></IconButton>
+            <IconButton variant="ghost" size="icon-sm" disabled={data.busy} onClick={() => void (async () => {
+              if (await confirm({ title: t({ ko: '처음 값으로', en: 'Reset to starting values' }), description: t({ ko: '지금 상태 값을 처음 값으로 되돌릴까?', en: 'Put the status values back to their starting values?' }), confirmLabel: t({ ko: '되돌리기', en: 'Reset' }), tone: 'destructive' })) await data.onEdit(block.key, null)
+            })()} label={t({ ko: '처음 값으로', en: 'Reset to starting values' })}><RotateCcw /></IconButton>
           </> : null}
           {actions}
         </span>
@@ -209,7 +213,7 @@ export function ChatStatusContent({ data, activeKey, onActiveKey, actions, heade
         {editing
           ? <BlockEditor data={values} busy={data.busy} onSave={async (next) => { await data.onEdit(block.key, next); setEditing(false) }} onCancel={() => setEditing(false)} />
           : <ChatDisplayBlockView block={block} data={values} picked={data.picks} onAction={(action) => data.onAction(block.key, action)} />}
-        <RecentChanges messages={data.messages} changes={data.state.changes} blockKey={block.key} />
+        <RecentChanges messages={data.messages} changes={data.state.changes} block={block} />
       </div> : null}
     </div>
   )

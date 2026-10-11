@@ -4,7 +4,7 @@ import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo
 import { useIsMutating, useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { Activity, AlarmClock, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Download, Eraser, Flag, FoldVertical, LayoutGrid, ListChecks, Maximize2, Minimize2, MoreHorizontal, Plus, SlidersHorizontal, Square, Target, Trash2, TriangleAlert, UserPlus, UserRound, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
@@ -13,7 +13,7 @@ import { Modal, ModalBody } from '@/components/ui/modal'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { ChatPageConnectButton, ChatPageConnectionNotice } from './chat-page-context'
-import { ChatTaskChecklist, ChatTaskStrip } from './chat-task-ui'
+import { ChatTaskStrip } from './chat-task-ui'
 import { ChatChoiceDock, ChatChoiceStatesContext, chatChoiceStates, findOpenChoice } from './chat-choice'
 import {
   CHAT_APPEARANCE_QUERY_KEY,
@@ -565,8 +565,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   // A block without a template still shows, as a plain field list.
   const usableBlock = (block: ChatDisplayBlock) => block.enabled && block.key
   const statusBlocks = useMemo<ChatStatusBlock[]>(() => {
-    if (isGroup) return memberProfiles.flatMap((member) => (member.style?.blocks ?? []).filter(usableBlock).map((block) => ({ ...block, key: `${member.id}:${block.key}`, label: memberProfiles.length > 1 ? `${member.name} · ${block.key}` : block.key })))
-    return (profile?.style?.blocks ?? []).filter(usableBlock)
+    const blockName = (block: ChatDisplayBlock) => block.name || block.key
+    if (isGroup) return memberProfiles.flatMap((member) => (member.style?.blocks ?? []).filter(usableBlock).map((block) => ({ ...block, key: `${member.id}:${block.key}`, label: memberProfiles.length > 1 ? `${member.name} · ${blockName(block)}` : blockName(block) })))
+    return (profile?.style?.blocks ?? []).filter(usableBlock).map((block) => ({ ...block, label: blockName(block) }))
   }, [isGroup, memberProfiles, profile?.style?.blocks])
   const panelState = useMemo<ChatBlocksState | null>(() => {
     if (!isGroup) return blocksState
@@ -849,7 +850,12 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const codexUnavailable = isCodexThread && !codexStatus?.available
   const isCommand = draft.startsWith('/') && !draft.startsWith('//')
   const narrating = !isCommand && draftHasNarration(draft)
-  const matchingCommands = CHAT_COMMANDS.filter((command) => command.name.startsWith(draft.slice(1).toLowerCase()))
+  // Only the commands this chat can run: none of the chat-bound ones before it exists, no compaction in a room,
+  // no regenerate/edit in a Codex chat.
+  const commandFits = (name: ChatCommand['name']) => activeThreadId === null
+    ? !['clear', 'compact', 'note', 'retry', 'edit'].includes(name)
+    : !(isGroup && name === 'compact') && !(isCodexThread && (name === 'retry' || name === 'edit'))
+  const matchingCommands = CHAT_COMMANDS.filter((command) => commandFits(command.name) && command.name.startsWith(draft.slice(1).toLowerCase()))
   const showCommands = isCommand && !/\s/.test(draft) && dismissedCommand !== draft && matchingCommands.length > 0
   const selectedCommand = Math.min(commandIndex, matchingCommands.length - 1)
   // Group rooms: the user may cut in while members are still answering.
@@ -908,8 +914,10 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           if (isGroup && name === 'compact') throw new Error(t({ ko: '그룹 방에서는 쓸 수 없어.', en: 'Not available in group rooms.' }))
           if (name === 'compact') {
             // Codex folds its own memory; an LLM chat folds into its summary, which must then be on.
+            const summaryOff = !isCodexThread && (thread?.summary_enabled === null || thread?.summary_enabled === undefined ? profile?.summaryEnabled !== true : thread.summary_enabled !== 1)
+            if (summaryOff && !await confirm({ title: t({ ko: '지금 요약', en: 'Summarize now' }), description: t({ ko: '이 채팅의 대화 요약이 켜져. 계속할까?', en: 'This turns the chat’s conversation summary on. Continue?' }), confirmLabel: t({ ko: '요약', en: 'Summarize' }) })) return
             await compactMutation.mutateAsync({ threadId: activeThreadId, enableSummary: !isCodexThread })
-            showSnackbar({ message: t({ ko: '대화를 압축했어.', en: 'Chat compacted.' }) })
+            showSnackbar({ message: isCodexThread ? t({ ko: '대화를 압축했어.', en: 'Chat compacted.' }) : t({ ko: '대화를 요약했어.', en: 'Chat summarized.' }) })
           } else if (name === 'retry') {
             if (lastReplyId === null) throw new Error(t({ ko: '다시 생성할 답변이 없어.', en: 'No answer to regenerate.' }))
             await regenerate(activeThreadId, lastReplyId)
@@ -1051,13 +1059,16 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       <IconButton variant="ghost" size="icon-sm" disabled={activeThreadId === null} label={t({ ko: '채팅 메뉴', en: 'Chat menu' })} tooltip={false}><MoreHorizontal /></IconButton>
     </DropdownMenuTrigger></Tip>
     <DropdownMenuContent align="end" className="min-w-48" onCloseAutoFocus={(event) => { if (appearanceOpenRef.current) { event.preventDefault(); appearanceOpenRef.current = false } }}>
+      {/* This chat's own items first, then the account-wide managers it also opens, each group named. */}
+      <DropdownMenuLabel>{t({ ko: '이 채팅', en: 'This chat' })}</DropdownMenuLabel>
       <DropdownMenuItem onSelect={() => { appearanceOpenRef.current = true; setAppearanceOpen(true) }}><AppearanceIcon />{t({ ko: '채팅 모양', en: 'Chat appearance' })}</DropdownMenuItem>
+      {isGroup ? null : <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/compact')}><FoldVertical />{isCodexThread ? t({ ko: '압축', en: 'Compact' }) : t({ ko: '지금 요약', en: 'Summarize now' })}</DropdownMenuItem>}
+      <DropdownMenuItem onSelect={() => setExportOpen(true)}><Download />{t({ ko: '내보내기', en: 'Export' })}</DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel>{t({ ko: '내 설정', en: 'My settings' })}</DropdownMenuLabel>
       <DropdownMenuItem onSelect={() => setFlagManagerOpen(true)}><Flag />{t({ ko: '플래그 관리', en: 'Manage flags' })}</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => setUserProfileManagerOpen(true)}><UserRound />{t({ ko: '사용자 프로필', en: 'User profiles' })}</DropdownMenuItem>
       {canManageRoutines ? <DropdownMenuItem onSelect={() => setRoutinesOpen(true)}><AlarmClock />{t({ ko: '루틴', en: 'Routines' })}</DropdownMenuItem> : null}
-      <DropdownMenuSeparator />
-      {isGroup ? null : <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/compact')}><FoldVertical />{t({ ko: '압축', en: 'Compact' })}</DropdownMenuItem>}
-      <DropdownMenuItem onSelect={() => setExportOpen(true)}><Download />{t({ ko: '내보내기', en: 'Export' })}</DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem disabled={isBusy || deleteMutation.isPending} onSelect={() => void handleDelete()} className="text-destructive"><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
     </DropdownMenuContent>
@@ -1082,7 +1093,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     ? null
     : isGroup
       ? group ? <IconButton variant="ghost" size="icon-sm" disabled={isBusy || group.memberIds.length >= GROUP_MEMBER_MAX} onClick={() => setInvite({ kind: 'add', threadId: activeThreadId, memberIds: group.memberIds })} label={t({ ko: '참가자 초대', en: 'Invite members' })}><UserPlus /></IconButton> : null
-      : profile?.usable ? <IconButton variant="ghost" size="icon-sm" onClick={() => setInvite({ kind: 'create', baseProfileId: profile.id })} label={t({ ko: '참가자 초대', en: 'Invite members' })}><UserPlus /></IconButton> : null
+      : profile?.usable ? <IconButton variant="ghost" size="icon-sm" onClick={() => setInvite({ kind: 'create', baseProfileId: profile.id })} label={t({ ko: '그룹방으로 만들기', en: 'Make a group room' })}><UserPlus /></IconButton> : null
   const liveGroupTurn = isGroup && liveTurn?.threadId === activeThreadId ? liveTurn : null
   const turnStatus = isCompacting ? (
     <div role="status" className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
@@ -1120,7 +1131,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           <ChatLiveMessage turn={liveTurn} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
         ) : null}
         {runningFromServer && !isGroup && speaker ? <CodexChatAssistantMessage content={runningFromServer.text} routing={runningFromServer.routing} toolCalls={runningFromServer.toolCalls} streaming appearance={appearance} speaker={speaker} /> : null}
-        {activeThreadId !== null ? <ChatTaskChecklist threadId={activeThreadId} /> : null}
         {serverReplies.map((reply) => {
           const replySpeaker = speakerOf(reply.profileId)
           return replySpeaker ? <CodexChatAssistantMessage key={reply.routing?.replyId ?? reply.profileId} content={reply.text} routing={reply.routing} toolCalls={reply.toolCalls} streaming appearance={appearance} speaker={replySpeaker} /> : null

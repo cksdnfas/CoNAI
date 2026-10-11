@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, ImageOff, RotateCcw, ScanEye, Sparkles, Square } from 'lucide-react'
+import { AlertTriangle, Check, ImageOff, RefreshCw, ScanEye, Sparkles, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Chip, ToggleChip } from '@/components/ui/chip'
 import { Field } from '@/components/ui/field'
@@ -265,7 +265,7 @@ export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = f
               <Tip content={entry.kind === 'full' ? t({ ko: '전신은 후보 그룹에 보관해', en: 'Full-body images stay in the candidates group' }) : null}><span className="w-16 shrink-0 text-sm font-semibold">{entry.slotKey}</span></Tip><ReviewChips review={chosen?.review ?? latest?.review} /><span className="flex-1" />
               <SlotVisionReview key={`${batch?.id}:${entry.slotKey}:${reviewHash}:${reviewReference}:${visionSlotId}`} profileId={profileId} batchId={batch?.id ?? 0} slotKey={entry.slotKey} hash={reviewHash} referenceHash={reviewReference} modelSlotId={visionSlotId} disabled={!batch || busy || !canViewImages || !reviewHash || !visibleImages.has(reviewHash)} />
               {working ? <IconButton variant="ghost" size="icon-sm" disabled={busy || slot?.attempts.filter(activeAttempt).every((attempt) => attempt.cancelRequested)} label={t({ ko: '취소', en: 'Cancel' })} onClick={() => slotMutation.mutate({ slotKey: entry.slotKey, action: 'cancel' })}><Square /></IconButton> : null}
-              <IconButton variant="ghost" size="icon-sm" disabled={!slot || busy || referenceBlocked} label={referenceBlocked ? t({ ko: '기준 이미지를 먼저 골라줘', en: 'Choose the reference first' }) : t({ ko: '다시 만들기', en: 'Regenerate' })} onClick={() => slotMutation.mutate({ slotKey: entry.slotKey, action: 'regenerate' })}><RotateCcw /></IconButton>
+              <IconButton variant="ghost" size="icon-sm" disabled={!slot || busy || referenceBlocked} label={referenceBlocked ? t({ ko: '기준 이미지를 먼저 골라줘', en: 'Choose the reference first' }) : t({ ko: '다시 만들기', en: 'Regenerate' })} onClick={() => slotMutation.mutate({ slotKey: entry.slotKey, action: 'regenerate' })}><RefreshCw /></IconButton>
             </div>
             <div className="flex gap-3 overflow-x-auto p-1">
               {slotCandidates.map((candidate, index) => {

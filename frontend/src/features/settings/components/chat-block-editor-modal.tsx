@@ -177,7 +177,7 @@ function useBlockChatPage({ open, shared, name, setName, block, setBlock, remoun
       { id: 'css', label: 'CSS', type: 'text', value: block.css },
     ],
     data: {
-      fields: block.fields.map((field) => ({ name: field.name, min: field.min, max: field.max, step: field.step, values: field.values, readonly: field.readonly })),
+      fields: block.fields.map((field) => ({ name: field.name, label: field.label ?? '', min: field.min, max: field.max, step: field.step, values: field.values, readonly: field.readonly })),
       selected: { name, key: block.key },
     },
     apply: (patch) => {
@@ -190,17 +190,18 @@ function useBlockChatPage({ open, shared, name, setName, block, setBlock, remoun
       if (next.example !== undefined) remount()
     },
     actions: [pageAction('block.fields', t({ ko: '필드 규칙 채우기', en: 'Fill field rules' }), t({ ko: '필드 규칙을 전부 바꿔. 저장하지 않아. 시작 값은 example 필드로 따로 채워. min/max/step은 숫자 필드만, values는 허용 값 목록(비우면 아무 값), readonly는 모델이 못 바꾸는 값.', en: 'Replace every field rule; nothing is saved. Starting values go in the example field. min/max/step are for numbers, values lists the allowed values (empty: any), readonly fields cannot be changed by the model.' }), pageObject({
-      fields: pageArray(pageObject({ name: pageText(60), min: pageNumber(), max: pageNumber(), step: pageNumber(0), values: pageArray(pageText(100), 40), readonly: { type: 'boolean' } }, ['name']), 40),
+      fields: pageArray(pageObject({ name: pageText(60), label: pageText(40), min: pageNumber(), max: pageNumber(), step: pageNumber(0), values: pageArray(pageText(100), 40), readonly: { type: 'boolean' } }, ['name']), 40),
     }, ['fields']))],
     applyAction: (id, args) => {
       if (id !== 'block.fields' || !Array.isArray(args.fields)) throw new Error('표시 블록 편집기에 없는 작업이야.')
       const before = blockRef.current
       const tones = new Map(before.fields.map((field) => [field.name, field.tone]))
       const fields = args.fields.map((raw) => {
-        const field = raw as { name: string; min?: number; max?: number; step?: number; values?: string[]; readonly?: boolean }
+        const field = raw as { name: string; label?: string; min?: number; max?: number; step?: number; values?: string[]; readonly?: boolean }
         const fieldName = field.name.trim()
         const tone = tones.get(fieldName)
-        return { name: fieldName, min: field.min ?? null, max: field.max ?? null, step: field.step ?? null, values: field.values ?? [], readonly: field.readonly === true, ...(tone ? { tone } : {}) }
+        const label = field.label?.trim()
+        return { name: fieldName, ...(label ? { label } : {}), min: field.min ?? null, max: field.max ?? null, step: field.step ?? null, values: field.values ?? [], readonly: field.readonly === true, ...(tone ? { tone } : {}) }
       }).filter((field) => field.name)
       const next = { ...before, fields }
       setBlock(() => next)

@@ -79,6 +79,23 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
   const { ChatSharedBlockStore } = await import('../src/services/codex-chat/chatDisplayBlocks')
   const state = ChatSharedBlockStore.create({ name: '상태', block: { key: 'status', example: '{"hp":2}', rules: '상태의 공개 규칙\n두 번째 규칙도 보여' } })
   ChatProfileStore.update(profile.id, { blockIds: [state.id] })
+  // The panel titles a block by its shared name, not its fence key.
+  assert.equal(ChatProfileStore.find(profile.id)?.style.blocks[0]?.name, '상태')
+  {
+    // A field's display name is kept (trimmed) for people; an empty one is left out.
+    const labelled = ChatSharedBlockStore.create({ name: '라벨', block: { key: 'labelled', fields: [{ name: 'hp', label: ' 체력 ' }, { name: 'mp', label: '' }] } })
+    assert.deepEqual(labelled.block.fields.map((field: { name: string; label?: string }) => [field.name, field.label]), [['hp', '체력'], ['mp', undefined]])
+    ChatSharedBlockStore.delete(labelled.id)
+  }
+  {
+    // A malformed stored tool call reads back with its required fields, so one bad row can't break the chat view.
+    const id = CodexChatStore.addMessage({ thread_id: threadId, role: 'assistant', content: '깨진 도구 기록', tool_calls: [], status: 'completed', error: null })
+    db.prepare('UPDATE codex_chat_messages SET tool_calls = ? WHERE id = ?').run(JSON.stringify([{ id: 'c1', tool: 'web_search' }, 'junk', null]), id)
+    const [call, ...rest] = message(id).tool_calls
+    assert.deepEqual(rest, [])
+    assert.deepEqual({ ...call }, { id: 'c1', tool: 'web_search', status: 'completed', arguments: null, summary: null, historyIds: [], compositeHashes: [] })
+    db.prepare('DELETE FROM codex_chat_messages WHERE id = ?').run(id)
+  }
   const { ChatUserProfileStore } = await import('../src/services/codex-chat/chatUserProfiles')
   const persona = ChatUserProfileStore.create(1, { name: '사용자', persona: '내 사용자 페르소나' })
   ChatUserProfileStore.setThreadUserProfile(threadId, persona.id)
@@ -86,6 +103,50 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
   const flag = ChatFlagStore.create(requester, { name: '조용히', content: '공개된 플래그 본문' })
   OwnedLorebookStore.saveChatBook(threadId, [{ id: 'pinned', title: '약속', constant: true, content: '채팅 책 상시 본문' }])
   let answerId = 0
+
+  await t.test('usage includes queue latency and stopped streams while queued cancellations consume nothing', async (s) => {
+    const { streamChatCompletion } = await import('../src/services/codex-chat/llmChatCompletion')
+    const { acquireLlmRequestSlot } = await import('../src/services/llmRequestScheduler')
+    const target = { providerName: 'meter-test', displayName: 'Meter', endpoint: 'http://meter.invalid', apiKey: null, model: 'meter', generation: {}, promptCacheMarks: false }
+    const usage = { purpose: 'chat' as const, threadId, profileId: profile.id }
+    const rows = () => db.prepare("SELECT latency_ms, input_tokens, output_tokens, estimated, ok FROM llm_usage_events WHERE provider_name = 'meter-test' ORDER BY id").all() as Array<{ latency_ms: number; input_tokens: number; output_tokens: number; estimated: number; ok: number }>
+    let now = Date.now()
+    s.mock.method(Date, 'now', () => now)
+    let fetchResponse: typeof fetch = async () => Response.json({ choices: [{ message: { content: 'done' } }], usage: { prompt_tokens: 12, completion_tokens: 1 } })
+    s.mock.method(globalThis, 'fetch', (...args: Parameters<typeof fetch>) => fetchResponse(...args))
+    const release = await acquireLlmRequestSlot(target.providerName, 1, new AbortController().signal)
+    const waiting = streamChatCompletion({ target, messages: [], signal: new AbortController().signal, usage })
+    now += 250
+    release()
+    await waiting
+    assert.equal(rows()[0].latency_ms, 250)
+
+    const releaseAgain = await acquireLlmRequestSlot(target.providerName, 1, new AbortController().signal)
+    const queuedStop = new AbortController()
+    const cancelled = streamChatCompletion({ target, messages: [], signal: queuedStop.signal, usage })
+    queuedStop.abort()
+    await assert.rejects(cancelled)
+    releaseAgain()
+    assert.equal(rows().length, 1, 'cancelling before transport never creates a usage event')
+
+    for (const reported of [false, true]) {
+      const stop = new AbortController()
+      fetchResponse = async (_url, init) => new Response(new ReadableStream({
+        start(controller) {
+          init?.signal?.addEventListener('abort', () => controller.error(init.signal!.reason), { once: true })
+          const chunk = { choices: [{ delta: { content: 'partial output' } }], ...(reported ? { usage: { prompt_tokens: 33, completion_tokens: 4 } } : {}) }
+          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`))
+        },
+      }), { headers: { 'Content-Type': 'text/event-stream' } })
+      await assert.rejects(streamChatCompletion({ target, messages: [{ role: 'user', content: 'hello' }], signal: stop.signal, usage, onContent: () => stop.abort() }))
+      const recorded = rows().at(-1)!
+      assert.equal(recorded.ok, 0)
+      assert.equal(recorded.estimated, reported ? 0 : 1)
+      assert.ok(recorded.input_tokens > 0 && recorded.output_tokens > 0)
+      if (reported) assert.equal(recorded.input_tokens, 33)
+    }
+    assert.equal(rows().length, 3)
+  })
 
   await t.test('final sections include connected-page guidance and both continuation messages', async () => {
     const updated = ChatProfileStore.update(profile.id, { mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page'] })!
