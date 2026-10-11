@@ -2,7 +2,10 @@ import fs from 'fs';
 import path from 'path';
 import { runtimePaths } from '../config/runtimePaths';
 
-export type SearchChipScope = 'positive' | 'negative' | 'auto' | 'rating' | 'meaning';
+export type SearchChipScope = 'positive' | 'negative' | 'auto' | 'rating' | 'model' | 'lora' | 'tool' | 'meaning';
+
+const VALID_SCOPES: SearchChipScope[] = ['positive', 'negative', 'auto', 'rating', 'model', 'lora', 'tool', 'meaning'];
+const VALID_OPERATORS: SearchChipOperator[] = ['OR', 'AND', 'NOT'];
 export type SearchChipOperator = 'OR' | 'AND' | 'NOT';
 
 export interface SearchHistoryChip {
@@ -14,6 +17,9 @@ export interface SearchHistoryChip {
   minScore?: number;
   maxScore?: number | null;
   color?: string | null;
+  /** Model, LoRA and AI-tool chips name the filter condition they stand for (e.g. basic / model_name). */
+  conditionCategory?: string;
+  conditionType?: string;
 }
 
 export interface SearchHistoryEntry {
@@ -87,17 +93,32 @@ export class SearchHistoryService {
     }
 
     const chip = value as Partial<SearchHistoryChip>;
-    const validScopes: SearchChipScope[] = ['positive', 'negative', 'auto', 'rating', 'meaning'];
-    const validOperators: SearchChipOperator[] = ['OR', 'AND', 'NOT'];
-
     return typeof chip.id === 'string'
-      && validScopes.includes(chip.scope as SearchChipScope)
-      && validOperators.includes(chip.operator as SearchChipOperator)
+      && VALID_SCOPES.includes(chip.scope as SearchChipScope)
+      && VALID_OPERATORS.includes(chip.operator as SearchChipOperator)
       && typeof chip.label === 'string'
       && typeof chip.value === 'string'
       && (chip.minScore === undefined || typeof chip.minScore === 'number')
       && (chip.maxScore === undefined || chip.maxScore === null || typeof chip.maxScore === 'number')
-      && (chip.color === undefined || chip.color === null || typeof chip.color === 'string');
+      && (chip.color === undefined || chip.color === null || typeof chip.color === 'string')
+      && (chip.conditionCategory === undefined || typeof chip.conditionCategory === 'string')
+      && (chip.conditionType === undefined || typeof chip.conditionType === 'string');
+  }
+
+  /** Only the chip fields history keeps (anything else a client sends is dropped). */
+  private static pickChip(chip: SearchHistoryChip): SearchHistoryChip {
+    return {
+      id: chip.id,
+      scope: chip.scope,
+      operator: chip.operator,
+      label: chip.label,
+      value: chip.value,
+      ...(chip.minScore !== undefined ? { minScore: chip.minScore } : {}),
+      ...(chip.maxScore !== undefined ? { maxScore: chip.maxScore } : {}),
+      ...(chip.color !== undefined ? { color: chip.color } : {}),
+      ...(chip.conditionCategory !== undefined ? { conditionCategory: chip.conditionCategory } : {}),
+      ...(chip.conditionType !== undefined ? { conditionType: chip.conditionType } : {}),
+    };
   }
 
   /** Validate a persisted history entry. */
@@ -125,6 +146,8 @@ export class SearchHistoryService {
         value: chip.value,
         minScore: chip.minScore ?? null,
         maxScore: chip.maxScore ?? null,
+        // Left out when absent so keys of entries saved before condition chips were kept stay the same.
+        ...(chip.conditionType ? { conditionType: chip.conditionType } : {}),
       })),
     );
   }
@@ -147,7 +170,7 @@ export class SearchHistoryService {
   /** Save or update a history entry using a stable chip signature. */
   static saveEntry(owner: SearchHistoryOwner, input: { label: string; chips: SearchHistoryChip[] }): SearchHistoryEntry {
     const label = input.label.trim();
-    const chips = input.chips.filter((chip) => this.isValidChip(chip));
+    const chips = input.chips.filter((chip) => this.isValidChip(chip)).map((chip) => this.pickChip(chip));
 
     if (!label) {
       throw new Error('Search history label is required');
