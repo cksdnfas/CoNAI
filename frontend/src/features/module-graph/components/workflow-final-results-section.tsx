@@ -159,8 +159,15 @@ function buildFinalResultImageRecord(entry: ResolvedFinalResultEntry): ImageReco
       ? 'animated'
       : 'image'
   const metadata = resolveFinalResultMetadataRecord(entry)
+  const historyId = Number(metadata?.historyId ?? metadata?.history_id)
+  const historyScope = Number.isInteger(historyId) && historyId > 0 ? {
+    generation_history_id: historyId,
+    detail_url: `/api/generation-history/${historyId}/image`,
+    detail_scope_key: `generation-history:${historyId}`,
+  } : {}
 
   return {
+    ...historyScope,
     id: `final-result-${entry.finalResult.id}`,
     composite_hash: readMetadataString(metadata, ['actualCompositeHash', 'actual_composite_hash', 'compositeHash', 'composite_hash']),
     original_file_path: resolveFinalResultOriginalFilePath(metadata, previewArtifact),

@@ -835,6 +835,7 @@ export interface CodexChatMessage {
 
 /** Media kind of an image a transcript references (so videos can play inline). */
 export interface CodexChatMediaInfo {
+  postprocessStatus?: string | null
   historyId?: number
   mimeType: string | null
   width: number | null
@@ -897,6 +898,7 @@ export interface ChatGroupInfo {
 
 /** One image a chat brought in: `generated` by its jobs, or `found` through searches and lookups. */
 export interface CodexChatMediaItem {
+  postprocessStatus?: string | null
   historyId?: number
   compositeHash: string
   messageId: number

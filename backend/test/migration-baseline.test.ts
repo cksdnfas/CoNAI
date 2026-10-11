@@ -22,9 +22,29 @@ const KEPT_MIGRATIONS = [
   '041_rebuild_media_metadata_with_id',
   '042_add_media_similarity_index',
   '043_add_request_path_indexes',
+  '044_add_media_postprocess_state',
 ]
 
 let dbCounter = 0
+
+test('postprocess migration preserves visible media and resumes unfinished metadata without resetting jobs', async () => {
+  const db = new Database(':memory:')
+  db.pragma('foreign_keys = ON')
+  db.exec(`CREATE TABLE media_metadata (composite_hash TEXT PRIMARY KEY, postprocess_status TEXT);
+    INSERT INTO media_metadata VALUES ('visible', 'ready'), ('unfinished', 'pending');`)
+  const migration = await import('../src/database/migrations/044_add_media_postprocess_state')
+  await migration.up(db)
+  assert.equal((db.prepare("SELECT metadata_extraction_status AS status FROM media_metadata WHERE composite_hash = 'visible'").get() as { status: string }).status, 'completed')
+  assert.equal((db.prepare("SELECT metadata_extraction_status AS status FROM media_metadata WHERE composite_hash = 'unfinished'").get() as { status: string }).status, 'pending')
+  db.exec(`INSERT INTO generated_video_optimizations
+    (composite_hash, source_path, source_size, source_mtime, crf, audio_bitrate, status, attempts)
+    VALUES ('unfinished', '/original.mp4', 128, 1, 23, 128, 'processing', 1)`)
+  await migration.up(db)
+  assert.equal((db.prepare('SELECT attempts FROM generated_video_optimizations').get() as { attempts: number }).attempts, 1)
+  db.exec("DELETE FROM media_metadata WHERE composite_hash = 'unfinished'")
+  assert.equal(db.prepare('SELECT 1 FROM generated_video_optimizations').get(), undefined)
+  db.close()
+})
 function openDb(): Database.Database {
   dbCounter += 1
   const db = new Database(path.join(scratchDir, `images-${dbCounter}.db`))

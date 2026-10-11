@@ -20,6 +20,7 @@ export type CodexChatMediaItem = {
   height: number | null
   /** Existing owner-scoped history source, when this chat references a generated result. */
   historyId?: number
+  postprocessStatus?: string | null
 }
 
 /** Keep comfortably below SQLite's default 999 binding limit. */
@@ -94,6 +95,7 @@ const PROPOSAL_TOOLS: Record<ChatProposal['kind'], string> = {
   display_block: 'propose_display_block',
   profile: 'propose_chat_profile',
   profile_update: 'propose_profile_update',
+  chat_settings: 'propose_chat_settings',
   profile_assets: 'propose_profile_assets',
   lore: 'save_lore',
   page_fields: 'propose_page_changes',
@@ -334,32 +336,48 @@ export function attachResolvedJobResults(messages: CodexChatMessageRecord[], his
 }
 
 /** Completed history rows → their result image hash. Failed, pending or deleted rows drop out. */
-function readHistoryHashes(historyIds: number[]) {
+function readHistoryHashes(historyIds: number[], threadIds: number[]) {
   const db = getUserSettingsDb()
   const hashById = new Map<number, string>()
+  const previewHashes = new Set<string>()
+  const previewHistoryByHash = new Map<string, number>()
+  const threadOwners = new Set<number | null>()
+  for (const chunk of chunked(threadIds)) {
+    const rows = db.prepare(`SELECT account_id FROM codex_chat_threads WHERE id IN (${chunk.map(() => '?').join(',')})`).all(...chunk) as Array<{ account_id: number | null }>
+    rows.forEach((row) => threadOwners.add(row.account_id))
+  }
   for (const chunk of chunked(historyIds)) {
     const rows = db.prepare(`
-      SELECT id, composite_hash FROM api_generation_history
+      SELECT id, composite_hash, requested_by_account_id FROM api_generation_history
       WHERE generation_status = 'completed' AND composite_hash IS NOT NULL AND id IN (${chunk.map(() => '?').join(',')})
-    `).all(...chunk) as Array<{ id: number; composite_hash: string }>
-    rows.forEach((row) => hashById.set(row.id, row.composite_hash))
+    `).all(...chunk) as Array<{ id: number; composite_hash: string; requested_by_account_id: number | null }>
+    rows.forEach((row) => {
+      hashById.set(row.id, row.composite_hash)
+      if (threadOwners.has(row.requested_by_account_id)) {
+        previewHashes.add(row.composite_hash)
+        previewHistoryByHash.set(row.composite_hash, row.id)
+      }
+    })
   }
-  return hashById
+  return { hashById, previewHashes, previewHistoryByHash }
 }
 
-/** Library images that still exist (an active file, post-processing done), with what the viewer needs to know. */
-function readActiveMedia(compositeHashes: string[]) {
+/** Public lookups stay ready-only; an owned history also permits its private pending preview. */
+function readActiveMedia(compositeHashes: string[], previewHashes: Set<string>) {
   const db = getUserSettingsDb()
-  const mediaByHash = new Map<string, { mimeType: string | null; width: number | null; height: number | null }>()
+  const mediaByHash = new Map<string, { mimeType: string | null; width: number | null; height: number | null; postprocessStatus: string | null }>()
   for (const chunk of chunked(compositeHashes)) {
     const rows = db.prepare(`
-      SELECT f.composite_hash, f.mime_type, m.width, m.height
+      SELECT f.composite_hash, f.mime_type, m.width, m.height, m.postprocess_status
       FROM main_db.image_files f
       JOIN main_db.media_metadata m ON m.composite_hash = f.composite_hash
-        AND ${MediaPostprocessVisibilityService.buildReadyCondition('m')}
       WHERE f.file_status = 'active' AND f.composite_hash IN (${chunk.map(() => '?').join(',')})
-    `).all(...chunk) as Array<{ composite_hash: string; mime_type: string | null; width: number | null; height: number | null }>
-    rows.forEach((row) => mediaByHash.set(row.composite_hash, { mimeType: row.mime_type, width: row.width, height: row.height }))
+    `).all(...chunk) as Array<{ composite_hash: string; mime_type: string | null; width: number | null; height: number | null; postprocess_status: string | null }>
+    rows.forEach((row) => {
+      if (previewHashes.has(row.composite_hash) || MediaPostprocessVisibilityService.isReadyStatus(row.postprocess_status)) {
+        mediaByHash.set(row.composite_hash, { mimeType: row.mime_type, width: row.width, height: row.height, postprocessStatus: row.postprocess_status })
+      }
+    })
   }
   return mediaByHash
 }
@@ -375,8 +393,9 @@ export function collectCodexChatMedia(messages: CodexChatMessageRecord[]): Codex
     .map((message) => ({ message, calls: message.tool_calls }))
 
   const historyIds = [...new Set(assistantCalls.flatMap(({ calls }) => calls.flatMap((call) => call.historyIds ?? [])))]
-  const historyHashById = readHistoryHashes(historyIds)
+  const { hashById: historyHashById, previewHashes, previewHistoryByHash } = readHistoryHashes(historyIds, [...new Set(messages.map((message) => message.thread_id))])
   const historyIdByHash = new Map([...historyHashById].map(([id, hash]) => [hash, id]))
+  previewHistoryByHash.forEach((id, hash) => historyIdByHash.set(hash, id))
 
   // Same order as the thumbnails in the transcript: per message, history results first, then library hashes.
   const references = new Map<string, MediaReference>()
@@ -404,7 +423,7 @@ export function collectCodexChatMedia(messages: CodexChatMessageRecord[]): Codex
     }
   }
 
-  const mediaByHash = readActiveMedia([...references.keys()])
+  const mediaByHash = readActiveMedia([...references.keys()], previewHashes)
   const items: CodexChatMediaItem[] = []
   references.forEach((reference, compositeHash) => {
     const media = mediaByHash.get(compositeHash)

@@ -99,7 +99,7 @@ export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId
       // 종전에는 로드된 페이지 수만큼 무거운 히스토리 쿼리가 매 리프레시마다 반복됐다.
       if (pageParam > 0 && !isFullHistoryRefreshRef.current && !hasHistoryPageBoundaryShiftRef.current) {
         const cachedPage = readCachedHistoryPage(queryClient, historyQueryKey, pageParam)
-        if (cachedPage) {
+        if (cachedPage && !hasActiveGenerationHistory(cachedPage.records) && !hasPostprocessPendingHistory(cachedPage.records)) {
           return cachedPage
         }
       }

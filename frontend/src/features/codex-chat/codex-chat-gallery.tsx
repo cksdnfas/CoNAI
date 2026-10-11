@@ -1,3 +1,5 @@
+import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
+import { chatGenerationPollInterval } from '@/features/runtime-events/chat-generation-query-updates'
 import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { buildChatImageRecord } from './chat-image-record'
@@ -75,7 +77,8 @@ export function CodexChatGallery({ threadId, columns }: { threadId: number; colu
   const [filter, setFilter] = useState<GalleryFilter>('all')
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const { canViewImages } = useImagePermissions()
-  const mediaQuery = useQuery({ enabled: canViewImages, queryKey: codexChatMediaQueryKey(threadId), queryFn: () => getCodexChatThreadMedia(threadId) })
+  const { status: streamStatus } = useRuntimeEventStream()
+  const mediaQuery = useQuery({ refetchInterval: chatGenerationPollInterval(streamStatus), enabled: canViewImages, queryKey: codexChatMediaQueryKey(threadId), queryFn: () => getCodexChatThreadMedia(threadId) })
 
   const allEntries = useMemo<GalleryEntry[]>(
     () => (mediaQuery.data ?? []).map((media) => ({ media, image: toImageRecord(media) })),

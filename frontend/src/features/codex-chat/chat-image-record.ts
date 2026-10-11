@@ -14,6 +14,7 @@ export function buildChatImageRecord(compositeHash: string, record?: GenerationH
     detail_url: historyId ? `/api/generation-history/${historyId}/image` : null,
     detail_scope_key: historyId ? `generation-history:${historyId}` : null,
     generation_history_id: historyId,
+    postprocess_status: record?.postprocess_status ?? info?.postprocessStatus,
     mime_type: record?.actual_mime_type ?? info?.mimeType ?? null,
     width: record?.actual_width ?? info?.width ?? record?.width ?? null,
     height: record?.actual_height ?? info?.height ?? record?.height ?? null,

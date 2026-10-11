@@ -30,6 +30,12 @@ interface CacheStats {
 }
 
 export class QueryCacheService {
+  private static readonly metadataInvalidationListeners = new Set<(hash?: string) => void>();
+
+  static onMetadataInvalidated(listener: (hash?: string) => void): () => void {
+    this.metadataInvalidationListeners.add(listener);
+    return () => { this.metadataInvalidationListeners.delete(listener); };
+  }
   private static galleryCache: InstanceType<typeof LRUCache>;
   private static galleryTotalCache: InstanceType<typeof LRUCache>;
   private static metadataCache: InstanceType<typeof LRUCache>;
@@ -225,6 +231,7 @@ export class QueryCacheService {
   }
 
   static invalidateMetadataCache(compositeHash: string): void {
+    this.metadataInvalidationListeners.forEach((listener) => listener(compositeHash));
     try {
       if (!this.metadataCache) {
         return;
@@ -284,6 +291,7 @@ export class QueryCacheService {
         this.invalidateGalleryCache();
         this.metadataCache.clear();
         this.thumbnailCache.clear();
+        this.metadataInvalidationListeners.forEach((listener) => listener());
         logger.debug('🗑️ All image caches invalidated (bulk operation)');
       } else {
         // One image can move or disappear from any page and any supported sort.

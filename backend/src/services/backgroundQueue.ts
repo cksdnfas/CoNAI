@@ -94,6 +94,7 @@ export interface BackgroundTask {
  * 참고: 자동 태깅은 AutoTagScheduler로 분리되어 처리됨
  */
 export class BackgroundQueueService {
+  private static recoveryTimer: ReturnType<typeof setInterval> | undefined;
   private static queue: BackgroundTask[] = [];
   private static activeTasks: BackgroundTask[] = [];
   private static activeMetadataTaskKeys = new Set<string>();
@@ -101,6 +102,30 @@ export class BackgroundQueueService {
   private static lockRetryScheduled = false;
   private static readonly MAX_RETRIES = 3;
   private static readonly BATCH_SIZE = resolveBackgroundQueueBatchSize(); // 동시 처리 작업 수
+
+  /** Pending metadata survives a restart; failed extraction stays private instead of becoming public. */
+  static startMetadataRecovery(): void {
+    if (this.recoveryTimer) return;
+    const recover = () => {
+      try {
+        const rows = db.prepare(`SELECT mm.composite_hash, (
+          SELECT original_file_path FROM image_files f WHERE f.composite_hash = mm.composite_hash
+            AND f.file_status = 'active' LIMIT 1
+        ) AS file_path FROM media_metadata mm
+          WHERE metadata_extraction_status = 'pending' AND EXISTS (
+            SELECT 1 FROM image_files f WHERE f.composite_hash = mm.composite_hash AND f.file_status = 'active'
+          ) LIMIT 50`).all() as Array<{ composite_hash: string; file_path: string | null }>;
+        for (const row of rows) {
+          if (row.file_path) this.addMetadataExtractionTask(row.file_path, row.composite_hash);
+        }
+      } catch (error) {
+        logger.warn('Pending metadata recovery failed', error);
+      }
+    };
+    this.recoveryTimer = setInterval(recover, 30_000);
+    this.recoveryTimer.unref();
+    recover();
+  }
 
   private static getMetadataExtractionTaskKey(filePath: string, compositeHash: string): string {
     return `${compositeHash}\u0000${path.resolve(filePath)}`;
@@ -147,7 +172,7 @@ export class BackgroundQueueService {
 
     // 큐 처리 시작
     if (!this.processing) {
-      this.processQueue();
+      setImmediate(() => void this.processQueue());
     }
   }
 
@@ -255,7 +280,7 @@ export class BackgroundQueueService {
           } else {
             logger.error(`  ❌ 작업 최종 실패: ${task.id}`, result.reason);
             if (task.type === TaskType.METADATA_EXTRACTION) {
-              MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(task.compositeHash);
+              MediaPostprocessVisibilityService.finishMetadataExtraction(task.compositeHash, 'failed');
               QueryCacheService.scheduleGalleryCacheInvalidation();
             }
           }
@@ -322,7 +347,7 @@ export class BackgroundQueueService {
         if (!error.retryable) {
           logger.debug(`  ⏭️  재시도 불필요한 오류: ${error.type} - ${error.message}`);
           if (task.type === TaskType.METADATA_EXTRACTION) {
-            MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(task.compositeHash);
+            MediaPostprocessVisibilityService.finishMetadataExtraction(task.compositeHash, 'failed');
             QueryCacheService.scheduleGalleryCacheInvalidation();
           }
           return; // 재시도하지 않음 (성공으로 간주)
@@ -342,23 +367,38 @@ export class BackgroundQueueService {
    * pipeline so every path uses the exact same parser and persistence logic.
    */
   static async extractAndPersistMetadata(filePath: string, compositeHash: string): Promise<void> {
-    const aiMetadata = await MetadataExtractor.extractMetadata(filePath);
+    const file = db.prepare(`SELECT file_type FROM image_files WHERE composite_hash = ?
+      AND original_file_path = ? AND file_status = 'active' LIMIT 1`).get(compositeHash, filePath) as { file_type: string } | undefined;
+    if (file?.file_type === 'video') {
+      const stream = db.prepare('SELECT width, height FROM media_metadata WHERE composite_hash = ?').get(compositeHash) as { width: number; height: number } | undefined;
+      if (!stream?.width || !stream.height) {
+        const { VideoProcessor } = await import('./videoProcessor');
+        const metadata = await VideoProcessor.extractMetadata(filePath);
+        db.prepare(`UPDATE media_metadata SET width = ?, height = ?, duration = ?, fps = ?, video_codec = ?, audio_codec = ?, bitrate = ?
+          WHERE composite_hash = ?`).run(metadata.width, metadata.height, metadata.duration, metadata.fps,
+          metadata.video_codec, metadata.audio_codec, metadata.bitrate, compositeHash);
+      }
+    }
+    // Video registration already probes stream metadata; don't read a whole video through the image parser.
+    const aiMetadata = file?.file_type === 'video' ? { ai_info: {} } : await MetadataExtractor.extractMetadata(filePath);
     const aiInfo = aiMetadata.ai_info || {};
     const persistence = metadataPersistenceFields(aiInfo);
 
     // media_metadata 업데이트
     try {
-      MediaMetadataModel.update(compositeHash, persistence.updates);
+      if (file?.file_type !== 'video') MediaMetadataModel.update(compositeHash, persistence.updates);
     } catch (error) {
       if (error instanceof RangeError) {
         logger.error(`  ❌ RangeError during metadata update (skipping): ${path.basename(filePath)}`);
         // RangeError는 재시도해도 해결되지 않으므로 throw하지 않고 스킵
-        MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(compositeHash);
+        MediaPostprocessVisibilityService.finishMetadataExtraction(compositeHash, 'failed');
         QueryCacheService.scheduleGalleryCacheInvalidation();
         return;
       }
       throw error;
     }
+
+    MediaPostprocessVisibilityService.finishMetadataExtraction(compositeHash, 'completed');
 
     logger.debug(`  ✅ 메타데이터 추출 완료: ${path.basename(filePath)}`);
 

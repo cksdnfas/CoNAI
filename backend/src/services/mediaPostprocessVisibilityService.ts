@@ -5,12 +5,14 @@ import { settingsService } from './settingsService';
 type PendingPostprocessRow = {
   composite_hash: string;
   auto_tags: string | null;
+  metadata_extraction_status: string;
 };
 
 export type ImmediatePostprocessRequirements = {
   needsTagger: boolean;
   needsKaloscope: boolean;
   hasPendingWork: boolean;
+  hasFailedWork: boolean;
 };
 
 // undefined = 아직 probe 안 함, false = probe 완료·컬럼 없음 (음성 결과도 캐시해
@@ -50,15 +52,8 @@ export class MediaPostprocessVisibilityService {
     }
   }
 
-  /**
-   * ready 전환을 연결된 생성 히스토리 행에 알린다.
-   *
-   * 히스토리 목록은 이 서비스의 ready 조건이 참이 될 때까지 완료 행을 '후처리 중' 으로
-   * 그린다. 전환 시점에 히스토리 테이블 쓰기가 없어 자체 이벤트가 나가지 않으므로,
-   * 여기서 알리지 않으면 SSE-live 클라이언트(폴링 꺼짐)는 목록을 영영 갱신하지 못한다.
-   * GenerationHistory 가 이 서비스를 import 하므로 순환을 피해 lazy require 로 접근한다.
-   */
-  private static publishLinkedGenerationHistoryEvents(compositeHashes: string[]): void {
+  /** Notify authorized history lists and open details after background metadata changes. */
+  static publishLinkedGenerationHistoryEvents(compositeHashes: string[]): void {
     try {
       const { HistoryCommandService } = require('./historyCommandService') as typeof import('./historyCommandService');
       HistoryCommandService.publishStatusEventsByCompositeHashes(compositeHashes);
@@ -109,11 +104,20 @@ export class MediaPostprocessVisibilityService {
       settings.kaloscope.autoTagOnUpload &&
       !AutoTagsComposeService.hasKaloscope(autoTagsJson)
     );
+    const parsed = AutoTagsComposeService.parse(autoTagsJson);
+    const hasFailedWork = (
+      settings.tagger.enabled && settings.tagger.autoTagOnUpload &&
+      (parsed.tagger as { status?: string } | undefined)?.status === 'failed'
+    ) || (
+      settings.kaloscope.enabled && settings.kaloscope.autoTagOnUpload &&
+      (parsed.kaloscope as { status?: string } | undefined)?.status === 'failed'
+    );
 
     return {
       needsTagger,
       needsKaloscope,
       hasPendingWork: needsTagger || needsKaloscope,
+      hasFailedWork: Boolean(hasFailedWork),
     };
   }
 
@@ -154,16 +158,21 @@ export class MediaPostprocessVisibilityService {
     }
 
     const row = db.prepare(`
-      SELECT auto_tags
+      SELECT auto_tags, metadata_extraction_status
       FROM media_metadata
       WHERE composite_hash = ?
-    `).get(compositeHash) as { auto_tags: string | null } | undefined;
+    `).get(compositeHash) as PendingPostprocessRow | undefined;
 
     if (!row) {
       return false;
     }
 
-    if (this.getImmediatePostprocessRequirements(row.auto_tags).hasPendingWork) {
+    const requirements = this.getImmediatePostprocessRequirements(row.auto_tags);
+    if (requirements.hasFailedWork) {
+      this.markFailed(compositeHash);
+      return false;
+    }
+    if (row.metadata_extraction_status !== 'completed' || requirements.hasPendingWork) {
       return false;
     }
 
@@ -176,17 +185,19 @@ export class MediaPostprocessVisibilityService {
       return 0;
     }
 
-    // A NULL status reads as 'ready' either way, so the bare equality selects the same rows and can use
-    // idx_metadata_postprocess_status for the (normally tiny) pending set instead of scanning the table.
+    // Indexed pending/failed rows can be released when requirements finish or are disabled.
     const rows = db.prepare(`
-      SELECT composite_hash, auto_tags
+      SELECT composite_hash, auto_tags, metadata_extraction_status
       FROM media_metadata
-      WHERE postprocess_status = 'pending'
+      WHERE postprocess_status IN ('pending', 'failed')
     `).all() as PendingPostprocessRow[];
 
     const releasedHashes: string[] = [];
     for (const row of rows) {
-      if (!this.getImmediatePostprocessRequirements(row.auto_tags).hasPendingWork) {
+      const requirements = this.getImmediatePostprocessRequirements(row.auto_tags);
+      if (requirements.hasFailedWork) {
+        this.markFailed(row.composite_hash);
+      } else if (row.metadata_extraction_status === 'completed' && !requirements.hasPendingWork) {
         releasedHashes.push(row.composite_hash);
       }
     }
@@ -216,5 +227,25 @@ export class MediaPostprocessVisibilityService {
     this.publishLinkedGenerationHistoryEvents(releasedHashes);
 
     return releasedHashes.length;
+  }
+
+  private static markFailed(compositeHash: string): void {
+    const result = db.prepare(`UPDATE media_metadata SET postprocess_status = 'failed', postprocess_completed_at = NULL,
+      metadata_updated_date = CURRENT_TIMESTAMP WHERE composite_hash = ? AND postprocess_status <> 'failed'`).run(compositeHash);
+    if (result.changes) {
+      this.invalidateVisibilityCaches(compositeHash);
+      this.publishLinkedGenerationHistoryEvents([compositeHash]);
+    }
+  }
+
+  static finishMetadataExtraction(compositeHash: string, status: 'completed' | 'failed'): void {
+    db.prepare(`UPDATE media_metadata SET metadata_extraction_status = ?,
+      postprocess_status = CASE WHEN ? = 'failed' THEN 'failed'
+        WHEN postprocess_status = 'failed' THEN 'pending' ELSE postprocess_status END,
+      postprocess_completed_at = NULL,
+      metadata_updated_date = CURRENT_TIMESTAMP
+      WHERE composite_hash = ?`).run(status, status, compositeHash);
+    this.invalidateVisibilityCaches(compositeHash);
+    this.publishLinkedGenerationHistoryEvents([compositeHash]);
   }
 }

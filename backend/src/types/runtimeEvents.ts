@@ -19,6 +19,7 @@ export type RuntimeEventName =
   | 'queue.job.cancel-requested'
   | 'queue.job.progress'
   | 'chat.generation.finished'
+  | 'chat.generation.updated'
   | 'chat.reaction.created'
   | 'chat.message.created'
   | 'chat.message.updated'
@@ -205,3 +206,11 @@ export interface RuntimeEventSessionExpired {
 
 /** 제어 이벤트 이름. 데이터 이벤트 이름과 네임스페이스가 겹치지 않는다. */
 export type RuntimeEventControlName = 'hello' | 'heartbeat' | 'reset' | 'session-expired'
+
+/** Owner-only hint: a preview or its enrichment changed, even while the queue job is still running. */
+export interface ChatGenerationUpdatedEventPayload {
+  threadId: number
+  jobId: number
+  historyId: number
+  compositeHash: string | null
+}

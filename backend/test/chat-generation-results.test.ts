@@ -13,14 +13,16 @@ test('chat generation: terminal results and owner-only completion events', { tim
   process.env.RUNTIME_BASE_PATH = root
   process.env.RUNTIME_DATABASE_DIR = path.join(root, 'database')
   process.env.RUNTIME_SAVE_DIR = path.join(root, 'save')
+  const main = await import('../src/database/init')
+  await main.initializeDatabase()
   const dbModule = await import('../src/database/userSettingsDb')
   dbModule.initializeUserSettingsDb()
   ;(await import('../src/models/ExternalApiProvider')).ExternalApiProvider.create({ provider_name: 'test', display_name: 'test', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
   const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
   const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
-  const { attachJobResults, countPendingChatJobs, withGenerationOutcomes, generationOutcomeNote } = await import('../src/services/codex-chat/codexChatMedia')
+  const { attachJobResults, collectCodexChatMedia, countPendingChatJobs, withGenerationOutcomes, generationOutcomeNote } = await import('../src/services/codex-chat/codexChatMedia')
   const { GenerationQueueService } = await import('../src/services/generationQueueService')
-  const { publishQueueJobEvent } = await import('../src/services/runtime-events/runtimeEventPublishers')
+  const { publishQueueJobEvent, publishHistoryRecordEvent } = await import('../src/services/runtime-events/runtimeEventPublishers')
   const { subscribeToRuntimeEvents, getRuntimeEventCursor } = await import('../src/services/runtime-events/runtimeEventBus')
   const { RuntimeEventBroadcaster } = await import('../src/services/runtime-events/runtimeEventBroadcaster')
   t.after(async () => {
@@ -46,6 +48,115 @@ test('chat generation: terminal results and owner-only completion events', { tim
   const reply = (jobId: number, calls = [call(jobId)]) => CodexChatStore.addMessage({ thread_id: thread.id, role: 'assistant', content: '', tool_calls: calls, status: 'completed', error: null, routing: { replyId: `reply-${jobId}`, replyTo: null, recipients: [] } })
   const history = (jobId: number, status: string, hash: string | null, accountId: number | null = 1) => Number(db.prepare('INSERT INTO api_generation_history (service_type, generation_status, composite_hash, queue_job_id, requested_by_account_id) VALUES (?, ?, ?, ?, ?)').run('novelai', status, hash, jobId, accountId).lastInsertRowid)
   const read = () => attachJobResults(CodexChatStore.listMessages(thread.id))
+
+  await t.test('a preview event precedes queue completion and reveals chat ids only to the owner', () => {
+    const id = job('running')
+    const historyId = history(id, 'completed', 'early-preview')
+    const listen = (accountId: number, isAdmin: boolean) => {
+      const frames: string[] = []
+      const res = { write: (frame: string) => frames.push(frame), end: () => {}, writableEnded: false } as unknown as Response
+      return { frames, ...RuntimeEventBroadcaster.register({ res, accountId, isAdmin, topics: ['generation-history'], resumeCursor: null, revalidateAccess: () => ({ ok: true }) }) }
+    }
+    const owner = listen(1, false)
+    const stranger = listen(2, false)
+    const admin = listen(3, true)
+    const events: RuntimeEventRecord[] = []
+    const unsubscribe = subscribeToRuntimeEvents((event) => events.push(event))
+    try {
+      publishHistoryRecordEvent('history.record.status', { history_id: historyId, queue_job_id: id, service_type: 'novelai', workflow_id: null, generation_status: 'completed', composite_hash: 'early-preview', requested_by_account_id: 1 })
+      const updated = events.find((event) => event.name === 'chat.generation.updated')!
+      assert.equal(updated.visibility, 'owner')
+      assert.deepEqual(updated.payload, { threadId: thread.id, jobId: id, historyId, compositeHash: 'early-preview' })
+      assert.equal((db.prepare('SELECT status FROM generation_queue_jobs WHERE id = ?').get(id) as { status: string }).status, 'running')
+      assert.ok(owner.frames.some((frame) => frame.includes('event: chat.generation.updated')))
+      assert.ok(!stranger.frames.some((frame) => frame.includes('event: chat.generation.updated')))
+      assert.ok(!admin.frames.some((frame) => frame.includes('event: chat.generation.updated')))
+      const before = events.filter((event) => event.name === 'chat.generation.updated').length
+      publishHistoryRecordEvent('history.record.status', { history_id: historyId, queue_job_id: id, service_type: 'novelai', workflow_id: null, generation_status: 'completed', composite_hash: 'early-preview', requested_by_account_id: 2 })
+      assert.equal(events.filter((event) => event.name === 'chat.generation.updated').length, before)
+    } finally {
+      owner.close(); stranger.close(); admin.close(); unsubscribe()
+      db.prepare("UPDATE generation_queue_jobs SET status = 'completed' WHERE id = ?").run(id)
+    }
+  })
+
+  await t.test('chat media includes owned pending results, but not pending library lookups or foreign histories', () => {
+    const hash = 'd1'.repeat(24)
+    const folder = main.db.prepare('SELECT id FROM watched_folders LIMIT 1').get() as { id: number }
+    main.db.prepare("INSERT INTO media_metadata (composite_hash, width, height, postprocess_status) VALUES (?, 32, 32, 'pending')").run(hash)
+    main.db.prepare(`INSERT INTO image_files (composite_hash, original_file_path, folder_id, file_type, mime_type, file_size, file_status)
+      VALUES (?, ?, ?, 'image', 'image/png', 1, 'active')`).run(hash, path.join(root, 'preview.png'), folder.id)
+    const id = job('running')
+    const messageId = reply(id)
+    const own = history(id, 'completed', hash)
+    const foreign = history(id, 'completed', hash, 2)
+    try {
+      const messages = read().messages.filter((message) => message.id === messageId)
+      const media = collectCodexChatMedia(messages)
+      assert.equal(media.length, 1)
+      assert.equal(media[0].historyId, own, 'prefer the owned history when multiple rows point to the same pixels')
+      assert.equal(media[0].postprocessStatus, 'pending')
+      const lookedUp = [{ ...messages[0], tool_calls: [{ ...call(id, 'search_images'), historyIds: [], compositeHashes: [hash] }] }]
+      assert.deepEqual(collectCodexChatMedia(lookedUp), [])
+      const foreignOnly = [{ ...messages[0], tool_calls: [{ ...call(id), historyIds: [foreign] }] }]
+      assert.deepEqual(collectCodexChatMedia(foreignOnly), [])
+      main.db.prepare("UPDATE media_metadata SET postprocess_status = 'ready' WHERE composite_hash = ?").run(hash)
+      assert.equal(collectCodexChatMedia(lookedUp).length, 1)
+      main.db.prepare("UPDATE image_files SET file_status = 'deleted' WHERE composite_hash = ?").run(hash)
+      assert.deepEqual(collectCodexChatMedia(messages), [])
+    } finally {
+      main.db.prepare('DELETE FROM image_files WHERE composite_hash = ?').run(hash)
+      main.db.prepare('DELETE FROM media_metadata WHERE composite_hash = ?').run(hash)
+      db.prepare("UPDATE generation_queue_jobs SET status = 'completed' WHERE id = ?").run(id)
+    }
+  })
+
+  await t.test('chat result hints refetch active matching queries without waiting for a polling timer', async () => {
+    const { QueryClient, QueryObserver } = await import('@tanstack/react-query')
+    const { refreshChatGenerationQueries, chatGenerationPollInterval } = await import('../../frontend/src/features/runtime-events/chat-generation-query-updates')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity } } })
+    const keys = [['codex-chat-thread', 1], ['codex-chat-media', 1], ['codex-chat-history', 11], ['image-generation-history', 'codex-chat-job', 12], ['codex-chat-thread', 2]]
+    const reads = keys.map(() => 0)
+    const unsubscribe: Array<() => void> = []
+    try {
+      for (const [index, queryKey] of keys.entries()) {
+        const options = { queryKey, queryFn: async () => ++reads[index] }
+        await client.fetchQuery(options)
+        unsubscribe.push(new QueryObserver(client, options).subscribe(() => {}))
+      }
+      await refreshChatGenerationQueries(client, { threadId: 1, historyId: 11, jobId: 12 })
+      assert.deepEqual(reads, [2, 2, 2, 2, 1])
+      assert.equal(chatGenerationPollInterval('degraded'), 3000)
+      assert.equal(chatGenerationPollInterval('live'), 15000)
+    } finally {
+      unsubscribe.forEach((stop) => stop())
+      client.clear()
+    }
+  })
+
+  await t.test('a completion racing the first history request replaces that old request instead of waiting for a poll', async () => {
+    const { QueryClient, QueryObserver } = await import('@tanstack/react-query')
+    const { refreshChatGenerationQueries } = await import('../../frontend/src/features/runtime-events/chat-generation-query-updates')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } })
+    const queryKey = ['codex-chat-history', 71]
+    let finishOld!: (value: string) => void
+    const oldRequest = new Promise<string>((resolve) => { finishOld = resolve })
+    let reads = 0
+    const observer = new QueryObserver(client, { queryKey, queryFn: () => ++reads === 1 ? oldRequest : Promise.resolve('completed') })
+    const unsubscribe = observer.subscribe(() => {})
+    try {
+      assert.equal(client.getQueryState(queryKey)?.fetchStatus, 'fetching')
+      await refreshChatGenerationQueries(client, { threadId: 1, jobId: 12, historyId: 71 })
+      assert.equal(client.getQueryData(queryKey), 'completed')
+      finishOld('processing')
+      await oldRequest
+      assert.equal(client.getQueryData(queryKey), 'completed', 'the stale response must not replace the ready result')
+    } finally {
+      finishOld('processing')
+      unsubscribe()
+      client.clear()
+    }
+  })
 
   await t.test('tail polling counts older linked and legacy jobs once without counting a reply no longer shown', () => {
     const linked = job('running')

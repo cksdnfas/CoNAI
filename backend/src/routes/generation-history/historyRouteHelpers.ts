@@ -2,7 +2,6 @@ import type { Request, Response } from 'express';
 import { resolveUploadsPath } from '../../config/runtimePaths';
 import { GenerationHistoryService } from '../../services/generationHistoryService';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
-import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import { getActiveFileOrBlock, type ImageDownloadType } from '../images/query-file-helpers';
 import { getRequesterAccountId, isAdminRequest } from '../requester-session-helpers';
 import { parsePositiveInteger } from '../routeValidation';
@@ -188,11 +187,6 @@ export async function getAccessibleHistoryMediaOrBlock(req: Request, res: Respon
   const metadata = await MediaMetadataModel.findByHash(compositeHash);
   if (!metadata) {
     res.status(404).json({ success: false, error: 'Metadata not found' });
-    return null;
-  }
-
-  if (!MediaPostprocessVisibilityService.isReadyRecord(metadata)) {
-    res.status(404).json({ success: false, error: 'Generation history image not found' });
     return null;
   }
 

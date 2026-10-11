@@ -148,8 +148,8 @@ export class ImageMediaProcessor {
           INSERT INTO media_metadata (
             composite_hash, perceptual_hash, dhash, ahash,
             width, height, thumbnail_path,
-            postprocess_status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+            postprocess_status, metadata_extraction_status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'pending')
         `).run(
           hashes.compositeHash,
           hashes.perceptualHash,
@@ -190,24 +190,26 @@ export class ImageMediaProcessor {
       });
     }
 
-    try {
-      console.log('  🔍 Running auto-collection (after hash generation)...');
-      const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(
-        hashes.compositeHash,
-      );
-      if (autoCollectResults.length > 0) {
-        console.log(`  ✅ Auto-assigned to ${autoCollectResults.length} group(s)`);
+    if (options.metadataMode !== 'background') {
+      try {
+        console.log('  🔍 Running auto-collection (after hash generation)...');
+        const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(
+          hashes.compositeHash,
+        );
+        if (autoCollectResults.length > 0) {
+          console.log(`  ✅ Auto-assigned to ${autoCollectResults.length} group(s)`);
+        }
+        stages.push(completedStage('auto-collection'));
+      } catch (autoCollectError) {
+        console.warn(
+          `  ⚠️  Auto-collection failed (non-critical) for ${fileName}:`,
+          autoCollectError instanceof Error ? autoCollectError.message : autoCollectError,
+        );
+        stages.push(failedStage('auto-collection', autoCollectError, false));
       }
-      stages.push(completedStage('auto-collection'));
-    } catch (autoCollectError) {
-      console.warn(
-        `  ⚠️  Auto-collection failed (non-critical) for ${fileName}:`,
-        autoCollectError instanceof Error ? autoCollectError.message : autoCollectError,
-      );
-      stages.push(failedStage('auto-collection', autoCollectError, false));
-    }
 
-    stages.push(await MediaPostprocessCoordinator.processApiGenerationGroupAssignment(hashes.compositeHash));
+      stages.push(await MediaPostprocessCoordinator.processApiGenerationGroupAssignment(hashes.compositeHash));
+    }
     stages.push(await MediaPostprocessCoordinator.extractMetadataForProcessedMedia(
       file.original_file_path,
       hashes.compositeHash,

@@ -1,3 +1,6 @@
+import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
+import { chatGenerationPollInterval } from '@/features/runtime-events/chat-generation-query-updates'
+import type { RuntimeStreamStatus } from '@/features/runtime-events/runtime-event-fallback'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { memo, useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
@@ -35,7 +38,6 @@ import { ChatReferenceButton, ChatThumbOverlay } from './chat-reference'
 import { MENTION_CLASS, splitMentions } from './chat-mentions'
 import { chatToolLabel } from './chat-tool-catalog'
 
-const HISTORY_POLL_MS = 3000
 const THUMB_CLASS = 'w-auto rounded-sm object-cover'
 /**
  * `full`: the chat's width at the image's own ratio (the original file, so it stays sharp). `tile`: a masonry column's
@@ -75,8 +77,7 @@ const THUMB_RETRY_DELAYS_MS = [1000, 2000, 3000, 5000, 8000, 10000, 15000, 15000
 const settledThumbnails = new Map<string, string>()
 
 /**
- * A new result is marked completed slightly before its file finishes post-processing, and until then the image routes
- * answer 404. The `<img>` stays mounted and hidden while it retries (new URL each time) and shows once it has loaded,
+ * Owner-scoped previews are served before enrichment. Transient file/thumbnail availability failures can still occur. The `<img>` stays mounted and hidden while it retries (new URL each time) and shows once it has loaded,
  * so the placeholder never flashes in and out.
  */
 function useRetriedThumbnail(url: string) {
@@ -110,8 +111,7 @@ function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: Thu
   const isVideo = image.mime_type?.startsWith('video/') === true
   const retried = useRetriedThumbnail(size === 'full' && !isVideo ? image.image_url ?? thumbnailUrl : thumbnailUrl)
   const hoverPreview = useMediaHoverPreview(thumbnailUrl ? { src: thumbnailUrl, fullSrc: isVideo ? null : image.image_url, videoSrc: isVideo ? image.image_url : null } : null)
-  // A video waits for its poster too: the thumbnail is served only once the file is post-processed, which is also
-  // when the reference action can be accepted on send.
+  // Mount playback once its poster is available; enrichment does not gate the owner preview.
   const drawn = retried.loaded
   const placeholder = thumbPlaceholder(size, image.width, image.height)
 
@@ -240,13 +240,14 @@ function ChatFoundGrid({ items }: { items: ImageRecord[] }) {
   )
 }
 
-function historyQueryOptions(historyId: number) {
+function historyQueryOptions(historyId: number, streamStatus: RuntimeStreamStatus) {
   return {
     queryKey: ['codex-chat-history', historyId] as const,
     queryFn: () => requestJson<{ success: boolean; record: GenerationHistoryRecord }>(`/api/generation-history/${historyId}`, { cache: 'no-store' }),
     refetchInterval: (query: { state: { data?: { record: GenerationHistoryRecord } } }) => {
       const status = query.state.data?.record.generation_status
-      return status === 'completed' || status === 'failed' ? false : HISTORY_POLL_MS
+      const enriching = query.state.data?.record.postprocess_status === 'pending'
+      return (status === 'completed' && !enriching) || status === 'failed' ? false : chatGenerationPollInterval(streamStatus)
     },
     retry: false,
   }
@@ -258,7 +259,8 @@ function resolveHistoryHash(record: GenerationHistoryRecord | undefined) {
 
 /** A generation result: polls the history row until its image lands, then shows it like any library image. */
 function HistoryThumb({ historyId, size, media, onOpen }: { historyId: number; size: ThumbSize; media?: Record<string, CodexChatMediaInfo>; onOpen: (compositeHash: string) => void }) {
-  const historyQuery = useQuery(historyQueryOptions(historyId))
+  const { status: streamStatus } = useRuntimeEventStream()
+  const historyQuery = useQuery(historyQueryOptions(historyId, streamStatus))
   const record = historyQuery.data?.record
   const compositeHash = resolveHistoryHash(record)
 
@@ -282,10 +284,11 @@ function HistoryThumb({ historyId, size, media, onOpen }: { historyId: number; s
  */
 function PendingJobThumb({ jobId, size, onResolved }: { jobId: number; size: ThumbSize; onResolved: (jobId: number, historyId: number) => void }) {
   const { t } = useI18n()
+  const { status: streamStatus } = useRuntimeEventStream()
   const jobQuery = useQuery({
     queryKey: ['image-generation-history', 'codex-chat-job', jobId] as const,
     queryFn: () => getGenerationHistory(undefined, { queueJobId: jobId, limit: 1 }),
-    refetchInterval: (query: { state: { data?: { records: GenerationHistoryRecord[] } } }) => (query.state.data?.records.length ? false : HISTORY_POLL_MS),
+    refetchInterval: (query: { state: { data?: { records: GenerationHistoryRecord[] } } }) => (query.state.data?.records.length ? false : chatGenerationPollInterval(streamStatus)),
     retry: false,
   })
   const historyId = jobQuery.data?.records[0]?.id
@@ -458,6 +461,7 @@ function ChatMediaMasonry({ tiles, size }: { tiles: ReactNode[]; size: ChatImage
 function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { calls: CodexChatToolCall[]; size?: ChatImageSize; layout?: ChatImageLayout; media?: Record<string, CodexChatMediaInfo> }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   // Jobs that were still queued when the message was stored, resolved to their history row on this client.
+  const { status: streamStatus } = useRuntimeEventStream()
   const [resolvedJobs, setResolvedJobs] = useState<Record<number, number>>({})
   const resolveJob = useCallback((jobId: number, historyId: number) => setResolvedJobs((current) => (current[jobId] === historyId ? current : { ...current, [jobId]: historyId })), [])
   const resolvedCalls = withChatGenerationProgress(calls)
@@ -470,8 +474,8 @@ function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { ca
   const historyIds = [...new Set([...generatedCalls.flatMap((call) => call.historyIds), ...generatedCalls.flatMap((call) => (call.pendingJobIds ?? []).flatMap((jobId) => (resolvedJobs[jobId] !== undefined ? [resolvedJobs[jobId]] : [])))])]
   const foundHistoryIds = [...new Set(foundCalls.flatMap((call) => call.historyIds))].filter((historyId) => !historyIds.includes(historyId))
   // History rows resolve to library images too; skip hashes a history thumbnail already shows.
-  const historyQueries = useQueries({ queries: historyIds.map((historyId) => historyQueryOptions(historyId)) })
-  const foundHistoryQueries = useQueries({ queries: foundHistoryIds.map((historyId) => historyQueryOptions(historyId)) })
+  const historyQueries = useQueries({ queries: historyIds.map((historyId) => historyQueryOptions(historyId, streamStatus)) })
+  const foundHistoryQueries = useQueries({ queries: foundHistoryIds.map((historyId) => historyQueryOptions(historyId, streamStatus)) })
   const historyHashes = new Set(historyQueries.map((query) => resolveHistoryHash(query.data?.record)).filter(Boolean))
   const compositeHashes = [...new Set(generatedCalls.flatMap((call) => call.compositeHashes))].filter((hash) => !historyHashes.has(hash))
   const generatedHashes = new Set([...historyHashes, ...compositeHashes])

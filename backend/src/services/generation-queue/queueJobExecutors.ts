@@ -254,6 +254,21 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
   try {
     const audioOrders = audioOrderJob ? await import('../audio/audioOrders') : null
     const result = await executeComfyGeneration({
+      onImageSaved: async (image, savedCount) => {
+        const outputHistoryId = savedCount === 1 && historyId ? historyId : await GenerationHistoryService.createComfyUIHistory({
+          workflowId: workflow.id,
+          workflowName: workflow.name,
+          groupId: job.requested_group_id ?? undefined,
+          queueJobId: job.id,
+          requestedByAccountId: job.requested_by_account_id ?? undefined,
+          requestedByAccountType: job.requested_by_account_type ?? undefined,
+          serverId: assignedServer?.id ?? job.assigned_server_id ?? undefined,
+        })
+        if (savedCount === 1) historyId = outputHistoryId
+        HistoryCommandService.updateImagePaths(outputHistoryId, { compositeHash: image.compositeHash })
+        HistoryCommandService.updateStatus(outputHistoryId, 'completed')
+        assignGeneratedMediaToGroup(job.requested_group_id, [image.compositeHash])
+      },
       comfyService,
       workflow: substitutedWorkflow,
       imageSaveOptions: payload.imageSaveOptions,
@@ -446,7 +461,7 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
         error_message: 'Queue job cancelled before ComfyUI output handoff completed',
       })
 
-      if (historyId) {
+      if (historyId && HistoryQueryRepository.findById(historyId)?.generation_status !== 'completed') {
         HistoryCommandService.recordError(historyId, 'Cancelled by user')
       }
 
@@ -461,7 +476,7 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       error_message: failureMessage,
     })
 
-    if (historyId) {
+    if (historyId && HistoryQueryRepository.findById(historyId)?.generation_status !== 'completed') {
       HistoryCommandService.recordError(historyId, failureMessage)
     }
     throw error

@@ -16,7 +16,7 @@ export function isHistoryPostprocessPending(record: GenerationHistoryRecord) {
   return record.generation_status === 'completed'
     && Boolean(record.composite_hash)
     && record.result_file_status === 'active'
-    && !record.actual_composite_hash
+    && (record.postprocess_status === 'pending' || !record.actual_composite_hash)
 }
 
 /** A run that saved sounds and no picture: its result is the sounds. */
@@ -53,7 +53,7 @@ export function resolveHistoryDisplayStatus(record: GenerationHistoryRecord): Ge
     return 'failed'
   }
 
-  return isHistoryPostprocessPending(record) ? 'processing' : 'completed'
+  return record.actual_composite_hash || hasHistoryAudioResult(record) ? 'completed' : 'processing'
 }
 
 export function getHistoryCancellationBadgeLabel(record: GenerationHistoryRecord) {
@@ -138,6 +138,7 @@ export function getHistoryRunRecoveryState(record: GenerationHistoryRecord): His
 /** Resolve a compact label for the history status badge. */
 export function getHistoryStatusLabel(status: GenerationHistoryRecord['generation_status'], record?: GenerationHistoryRecord) {
   if (record && isHistoryMissingLinkedResult(record)) return '결과 없음'
+  if (record?.postprocess_status === 'failed' && record.actual_composite_hash) return '후처리 실패'
   if (record && isHistoryPostprocessPending(record)) return '후처리 중'
   if (status === 'completed') return '완료'
   if (status === 'failed') return '생성 실패'

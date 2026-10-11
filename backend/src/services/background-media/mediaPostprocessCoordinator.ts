@@ -1,5 +1,6 @@
 import path from 'path';
 import { autoTagScheduler } from '../autoTagScheduler';
+import { notifySemanticChange } from '../embeddings/semanticSignal';
 import { BackgroundQueueService } from '../backgroundQueue';
 import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibilityService';
 import { QueryCacheService } from '../QueryCacheService';
@@ -30,6 +31,7 @@ export class MediaPostprocessCoordinator {
     filePath: string,
     options: SavedMediaProcessingOptions,
   ): MediaProcessingStageResult {
+    notifySemanticChange('image');
     if (options.triggerAutoTag === false) {
       return skippedStage('auto-tag', 'disabled by caller');
     }
@@ -95,6 +97,8 @@ export class MediaPostprocessCoordinator {
     logLabel: string,
     options: ProcessFileOptions = {},
   ): Promise<MediaProcessingStageResult> {
+    // A new library image: the image index looks for it soon.
+    notifySemanticChange('image');
     if (options.metadataMode === 'background') {
       return this.queueMetadataExtraction(filePath, compositeHash, logLabel);
     }

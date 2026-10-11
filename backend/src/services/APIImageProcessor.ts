@@ -5,6 +5,8 @@ import { ImageProcessor } from './imageProcessor';
 import { BackgroundProcessorService } from './backgroundProcessorService';
 import { FileSaver, type GeneratedImageSaveOptions } from '../utils/fileSaver';
 import { runtimePaths } from '../config/runtimePaths';
+import { GeneratedVideoOptimizationService } from './generatedVideoOptimizationService';
+import { db } from '../database/init';
 
 type ProcessedGeneratedMedia = {
   originalPath: string;
@@ -26,7 +28,7 @@ export class APIImageProcessor {
       : path.join(runtimePaths.uploadsDir, originalPath);
   }
 
-  private static async runImmediateMediaPipeline(saved: ProcessedGeneratedMedia): Promise<ProcessedGeneratedMedia> {
+  private static async runImmediateMediaPipeline(saved: Omit<ProcessedGeneratedMedia, 'compositeHash'>): Promise<ProcessedGeneratedMedia> {
     const processingResult = await BackgroundProcessorService.processSavedMediaFile(
       this.resolveSavedMediaPath(saved.originalPath),
       {
@@ -36,16 +38,25 @@ export class APIImageProcessor {
       },
     );
 
-    return {
-      ...saved,
-      compositeHash: processingResult.compositeHash || saved.compositeHash,
-    };
+    if (!processingResult.compositeHash) {
+      throw new Error('Generated media registration did not produce an identity');
+    }
+    if (saved.mimeType?.startsWith('video/')) {
+      try {
+        await GeneratedVideoOptimizationService.enqueue(processingResult.compositeHash, this.resolveSavedMediaPath(saved.originalPath));
+      } catch (error) {
+        console.warn('Could not schedule generated video optimization:', error);
+      }
+    }
+    const dimensions = !saved.width || !saved.height
+      ? db.prepare('SELECT width, height FROM media_metadata WHERE composite_hash = ?').get(processingResult.compositeHash) as { width: number; height: number } | undefined
+      : undefined;
+    return { ...saved, width: dimensions?.width ?? saved.width, height: dimensions?.height ?? saved.height, compositeHash: processingResult.compositeHash };
   }
 
   /**
-   * Process generated image from buffer - SIMPLIFIED VERSION
-   * Saves ONLY original file to uploads/API/images/YYYY-MM-DD/
-   * Thumbnail version will be created by background scan
+   * Save and register a generated image with its thumbnail.
+   * Metadata extraction and automatic tagging continue in the background.
    *
    * @param imageBuffer - Image buffer from API response
    * @param serviceType - 'comfyui', 'novelai', or 'codex'

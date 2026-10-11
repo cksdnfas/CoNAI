@@ -21,6 +21,8 @@ export interface ExecuteComfyGenerationInput {
   comfyService: ComfyUIService
   workflow: Record<string, any>
   imageSaveOptions?: GeneratedImageSaveOptions
+  /** Publish each durable preview without waiting for the rest of the outputs. */
+  onImageSaved?: (image: ComfyGenerationRepresentativeImage, savedCount: number) => void | Promise<void>
   artifactWorkflow?: WorkflowRecord | null
   /** 디버그 스냅샷/히스토리 갱신 전용. 상태 전이 책임은 onPromptAccepted 가 가진다. */
   onPromptSubmitted?: (promptId: string) => void | Promise<void>
@@ -288,6 +290,8 @@ export async function executeComfyGeneration(
               compositeHash: processedPaths.compositeHash,
             }
           }
+
+          await input.onImageSaved?.(processedPaths, savedImageCount)
 
           console.log(`✅ ComfyUI output saved: ${processedPaths.originalPath}`)
         }

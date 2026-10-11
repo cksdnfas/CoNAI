@@ -191,6 +191,7 @@ export function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse[
     detail_url: hasLinkedImage ? `${historyMediaBaseUrl}/image` : null,
     detail_scope_key: `generation-history:${record.id}`,
     generation_history_id: record.id,
+    postprocess_status: record.postprocess_status,
     mime_type: record.actual_mime_type ?? (!hasLinkedImage && audio.length ? record.audio_results?.[0]?.mime_type ?? 'audio/*' : null),
     audio: audio.length ? audio : null,
     width: record.actual_width ?? null,

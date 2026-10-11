@@ -257,6 +257,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     enabled: canViewImages && Boolean(compositeHash),
     placeholderData: cachedInitialImage,
     staleTime: 0,
+    // Recover missed completion events (including split API/worker runtimes) while this detail is open.
+    refetchInterval: (query) => query.state.data?.postprocess_status === 'pending' ? 5_000 : false,
   })
   const refetchImage = imageQuery.refetch
 
@@ -663,7 +665,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
                 <div className="relative h-full w-full bg-black">
                   <ImageDetailModalNavigationButtons navigation={modalNavigation} />
                   <div className="flex h-full w-full items-center justify-center bg-black">
-                    <ImageDetailMedia image={image as ImageRecord} renderUrl={renderUrl} className="max-h-full max-w-full w-auto object-contain" onPrimaryLoad={handlePrimaryMediaReady} />
+                    <ImageDetailMedia image={image as ImageRecord} renderUrl={renderUrl} isRefreshing={imageQuery.isFetching} className="max-h-full max-w-full w-auto object-contain" onPrimaryLoad={handlePrimaryMediaReady} />
                   </div>
                 </div>
               ) : null}
@@ -764,7 +766,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
         <div className="grid xl:grid-cols-[minmax(0,1fr)_380px]">
           <div className="min-w-0 space-y-10 py-6 xl:pr-6">
             <div className={cn('flex items-center justify-center', stageHeightClassName)}>
-              <ImageDetailMedia image={image as ImageRecord} renderUrl={renderUrl} onPrimaryLoad={handlePrimaryMediaReady} />
+              <ImageDetailMedia image={image as ImageRecord} renderUrl={renderUrl} isRefreshing={imageQuery.isFetching} onPrimaryLoad={handlePrimaryMediaReady} />
             </div>
 
             {!canUseSplitPaneScroll ? (

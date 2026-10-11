@@ -3,6 +3,7 @@ import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { audioCandidatesByQueueJob } from '../audio/audioJobCandidates'
 import type {
   ChatGenerationFinishedEventPayload,
+  ChatGenerationUpdatedEventPayload,
   GraphExecutionEventPayload,
   GraphScheduleEventPayload,
   HistoryRecordEventPayload,
@@ -175,6 +176,31 @@ export function publishHistoryRecordEvent(
     accountId: payload.requested_by_account_id,
     payload,
   })
+  if (payload.queue_job_id === null) return
+  try {
+    const chat = getUserSettingsDb().prepare(`
+      SELECT l.thread_id AS threadId
+      FROM chat_generation_links l
+      JOIN codex_chat_threads t ON t.id = l.thread_id
+      JOIN generation_queue_jobs j ON j.id = l.job_id
+      WHERE l.job_id = ? AND t.account_id IS ? AND j.requested_by_account_id IS ?
+    `).get(payload.queue_job_id, payload.requested_by_account_id, payload.requested_by_account_id) as { threadId: number } | undefined
+    if (!chat) return
+    publishRuntimeEvent({
+      name: 'chat.generation.updated',
+      topic: 'generation-history',
+      visibility: 'owner',
+      accountId: payload.requested_by_account_id,
+      payload: {
+        threadId: chat.threadId,
+        jobId: payload.queue_job_id,
+        historyId: payload.history_id,
+        compositeHash: payload.composite_hash,
+      } satisfies ChatGenerationUpdatedEventPayload,
+    })
+  } catch (error) {
+    console.warn('Failed to publish chat generation update:', error instanceof Error ? error.message : error)
+  }
 }
 
 /** Publish one workflow schedule change. Schedules are shared runtime state, so visibility stays 'all'. */

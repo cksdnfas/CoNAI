@@ -1,3 +1,4 @@
+import { GeneratedVideoOptimizationService } from '../../services/generatedVideoOptimizationService';
 import type { NextFunction, Request, Response } from 'express';
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
 import { GenerationHistoryService } from '../../services/generationHistoryService';
@@ -43,7 +44,7 @@ export async function handleHistoryBatchDownload(req: Request, res: Response) {
     return;
   }
 
-  const streamed = await streamBatchDownloadArchive(res, compositeHashes, downloadType, { includeHidden: true });
+  const streamed = await streamBatchDownloadArchive(res, compositeHashes, downloadType, { includeHidden: true, includePending: true });
   if (!streamed) {
     res.status(404).json({ success: false, error: `No downloadable ${downloadType} files were found` });
     return;
@@ -68,7 +69,12 @@ export async function handleHistoryFile(req: Request, res: Response, id: string)
 
   const mimeType = media.file.mime_type;
   if (mimeType && mimeType.startsWith('video/')) {
-    streamRangeFile(req, res, originalPath, mimeType);
+    const optimizedPath = req.query.variant === 'optimized' ? GeneratedVideoOptimizationService.getPlaybackPath(media.compositeHash) : null;
+    if (req.query.variant === 'optimized' && !optimizedPath) {
+      res.status(404).json({ success: false, error: 'Optimized video is unavailable' });
+      return;
+    }
+    streamRangeFile(req, res, optimizedPath || originalPath, optimizedPath ? 'video/mp4' : mimeType);
     return;
   }
 
@@ -125,7 +131,7 @@ export async function handleHistoryImageDetail(req: Request, res: Response, id: 
     return;
   }
 
-  const image = MediaMetadataFileQueries.findByHashWithFile(media.compositeHash, { includeHidden: true });
+  const image = MediaMetadataFileQueries.findByHashWithFile(media.compositeHash, { includeHidden: true, includePending: true });
   if (!image) {
     res.status(404).json({ success: false, error: 'Generation history image not found' });
     return;
@@ -140,7 +146,9 @@ export async function handleHistoryImageDetail(req: Request, res: Response, id: 
       detail_scope_key: `generation-history:${media.record.id}`,
       detail_url: `${historyMediaBaseUrl}/image`,
       thumbnail_url: `${historyMediaBaseUrl}/thumbnail`,
-      image_url: `${historyMediaBaseUrl}/file`,
+      image_url: media.file.mime_type?.startsWith('video/')
+        ? GeneratedVideoOptimizationService.playbackUrl(media.compositeHash, `${historyMediaBaseUrl}/file`)
+        : `${historyMediaBaseUrl}/file`,
     },
   });
 }

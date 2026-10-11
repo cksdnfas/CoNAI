@@ -1,5 +1,4 @@
 import { apiGenDb } from '../../database/apiGenerationDb';
-import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import { audioCandidatesByQueueJob } from '../../services/audio/audioJobCandidates';
 import type {
   GenerationHistoryDetailRecord,
@@ -31,6 +30,7 @@ type HistoryResultMediaView = {
   actual_file_name: string | null;
   result_file_status: 'active' | 'missing' | 'deleted' | null;
   rating_score: number | null;
+  postprocess_status: string | null;
 };
 
 const EMPTY_HISTORY_RESULT_MEDIA_VIEW: HistoryResultMediaView = {
@@ -41,6 +41,7 @@ const EMPTY_HISTORY_RESULT_MEDIA_VIEW: HistoryResultMediaView = {
   actual_file_name: null,
   result_file_status: null,
   rating_score: null,
+  postprocess_status: null,
 };
 
 type HistoryResultMediaRow = {
@@ -53,6 +54,7 @@ type HistoryResultMediaRow = {
   media_width: number | null;
   media_height: number | null;
   media_rating_score: number | null;
+  postprocess_status: string | null;
 };
 
 /** Replicate `ORDER BY (file_status = 'active') DESC, id DESC LIMIT 1` in memory. */
@@ -247,7 +249,8 @@ export class HistoryQueryRepository {
         CASE WHEN matched_file.file_status = 'active' THEN im.height ELSE NULL END as actual_height,
         CASE WHEN matched_file.file_status = 'active' THEN matched_file.mime_type ELSE NULL END as actual_mime_type,
         matched_file.file_status as result_file_status,
-        CASE WHEN matched_file.file_status = 'active' THEN im.rating_score ELSE NULL END as rating_score
+        CASE WHEN matched_file.file_status = 'active' THEN im.rating_score ELSE NULL END as rating_score,
+        im.postprocess_status
       FROM api_generation_history gh
       LEFT JOIN generation_queue_jobs qj ON qj.id = gh.queue_job_id
       LEFT JOIN workflows workflow ON workflow.id = gh.workflow_id
@@ -264,7 +267,6 @@ export class HistoryQueryRepository {
         LIMIT 1
       )
       LEFT JOIN main_db.media_metadata im ON im.composite_hash = matched_file.composite_hash
-        AND ${MediaPostprocessVisibilityService.buildReadyCondition('im')}
       WHERE gh.id = ?
       LIMIT 1
     `).get(id) as GenerationHistoryDetailRecord | undefined;
@@ -365,11 +367,11 @@ export class HistoryQueryRepository {
           im.composite_hash as media_composite_hash,
           im.width as media_width,
           im.height as media_height,
-          im.rating_score as media_rating_score
+          im.rating_score as media_rating_score,
+          im.postprocess_status as postprocess_status
         FROM main_db.image_files matched_file
         LEFT JOIN main_db.media_metadata im ON im.composite_hash = matched_file.composite_hash
-          AND ${MediaPostprocessVisibilityService.buildReadyCondition('im')}
-        WHERE matched_file.composite_hash IN (${chunk.map(() => '?').join(',')})
+          WHERE matched_file.composite_hash IN (${chunk.map(() => '?').join(',')})
       `).all(...chunk) as HistoryResultMediaRow[];
 
       for (const chunkRow of chunkRows) {
@@ -392,6 +394,7 @@ export class HistoryQueryRepository {
           : null,
         result_file_status: row.file_status ?? null,
         rating_score: isActiveFile ? row.media_rating_score ?? null : null,
+        postprocess_status: row.postprocess_status ?? null,
       });
     });
 
@@ -457,13 +460,12 @@ export class HistoryQueryRepository {
           AND active_file.file_status = 'active'
       )
     )`;
-    const hasReadyResultMedia = `(
+    const hasRenderableResultMedia = `(
       ${hasActiveResultFile}
       AND EXISTS (
         SELECT 1 FROM main_db.media_metadata im
         WHERE im.composite_hash = gh.composite_hash
-          AND ${MediaPostprocessVisibilityService.buildReadyCondition('im')}
-      )
+        )
     )`;
 
     let sql = `
@@ -479,7 +481,7 @@ export class HistoryQueryRepository {
     sql += `
       AND (
         gh.generation_status = 'failed'
-        OR (qj.status IN ('failed', 'cancelled') AND NOT ${hasReadyResultMedia})
+        OR (qj.status IN ('failed', 'cancelled') AND NOT ${hasRenderableResultMedia})
         OR (gh.generation_status = 'completed' AND NOT ${hasActiveResultFile})
       )`;
 

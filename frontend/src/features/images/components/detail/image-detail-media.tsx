@@ -27,10 +27,11 @@ interface ImageDetailMediaProps {
   renderUrl: string | null
   className?: string
   onPrimaryLoad?: () => void
+  isRefreshing?: boolean
 }
 
 /** Render the main detail media using the correct element for image, GIF, or video files. */
-export function ImageDetailMedia({ image, renderUrl, className, onPrimaryLoad }: ImageDetailMediaProps) {
+export function ImageDetailMedia({ image, renderUrl, className, onPrimaryLoad, isRefreshing = false }: ImageDetailMediaProps) {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const { preferredRenderMode, updatePreferredRenderMode } = useImageDetailRenderModePreference()
@@ -72,7 +73,7 @@ export function ImageDetailMedia({ image, renderUrl, className, onPrimaryLoad }:
   }
 
   if (mediaKind === 'video') {
-    return <EnhancedVideoPlayer renderUrl={effectiveRenderUrl} className={mediaClassName} loop autoPlay />
+    return <StableDetailVideo key={image.composite_hash || String(image.id)} renderUrl={effectiveRenderUrl} className={mediaClassName} isRefreshing={isRefreshing} />
   }
 
   return (
@@ -88,6 +89,18 @@ export function ImageDetailMedia({ image, renderUrl, className, onPrimaryLoad }:
       onPrimaryLoad={onPrimaryLoad}
     />
   )
+}
+
+/** A metadata refresh may offer an optimized copy; keep this viewing session on its original source. */
+function StableDetailVideo({ renderUrl, className, isRefreshing }: { renderUrl: string; className: string; isRefreshing: boolean }) {
+  const { t } = useI18n()
+  // Resolve the latest copy once when opening, then keep every range request on that copy.
+  const [sessionUrl, setSessionUrl] = useState<string | null>(() => isRefreshing ? null : renderUrl)
+  useEffect(() => {
+    if (!sessionUrl && !isRefreshing) setSessionUrl(renderUrl)
+  }, [isRefreshing, renderUrl, sessionUrl])
+  if (!sessionUrl) return <ImagePreviewPlaceholder label={t({ ko: '영상 불러오는 중', en: 'Loading video' })} className={className} />
+  return <EnhancedVideoPlayer renderUrl={sessionUrl} className={className} loop autoPlay />
 }
 
 function ImageDetailMediaFallback({ image }: { image: ImageRecord }) {

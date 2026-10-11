@@ -1,4 +1,7 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
+import { useQuery } from '@tanstack/react-query'
+import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
+import { Spinner } from '@/components/ui/loading-state'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, ImageOff, Info, X } from 'lucide-react'
@@ -91,7 +94,23 @@ function MediaLightboxStage({ item, canViewPrevious, canViewNext, onViewPrevious
   const [renderAs, setRenderAs] = useState<'image' | 'video' | 'failed'>(getImageListMediaKind(item) === 'video' ? 'video' : 'image')
   const [zoom, setZoom] = useState<ZoomAnchor | null>(null)
   const [canZoom, setCanZoom] = useState(false)
-  const fullUrl = getFullUrl(item)
+  const scopedVideo = renderAs === 'video' && Boolean(item.detail_url && item.composite_hash)
+  const playbackQuery = useQuery({
+    queryKey: getImageDetailQueryKey(item.composite_hash || '', item),
+    queryFn: ({ signal }) => getImage(item.composite_hash!, { signal }, item),
+    enabled: scopedVideo,
+    staleTime: 0,
+    retry: false,
+  })
+  const [sessionVideoUrl, setSessionVideoUrl] = useState<string | null>(null)
+  const originalUrl = getFullUrl(item)
+  useEffect(() => {
+    // Resolve once per opening. Later enrichment/optimization events must not restart playback.
+    if (scopedVideo && !sessionVideoUrl && !playbackQuery.isFetching) {
+      setSessionVideoUrl(playbackQuery.data?.image_url || originalUrl)
+    }
+  }, [originalUrl, playbackQuery.data?.image_url, playbackQuery.isFetching, scopedVideo, sessionVideoUrl])
+  const fullUrl = scopedVideo ? sessionVideoUrl : originalUrl
   const thumbnailUrl = item.thumbnail_url ?? null
 
   useLayoutEffect(() => {
@@ -246,7 +265,9 @@ function MediaLightboxStage({ item, canViewPrevious, canViewNext, onViewPrevious
         dragRef.current = null
       }}
     >
-      {renderAs === 'failed' || !fullUrl ? (
+      {scopedVideo && !sessionVideoUrl && playbackQuery.isFetching ? (
+        <div className="absolute inset-0 flex items-center justify-center text-white/60"><Spinner size="md" /></div>
+      ) : renderAs === 'failed' || !fullUrl ? (
         <div className="absolute inset-0 flex items-center justify-center text-white/60">
           <ImageOff className="size-8" />
         </div>

@@ -84,7 +84,7 @@ export interface ImageMetadataRecord {
   metadata_updated_date: string;
 
   // Immediate post-processing visibility gate
-  postprocess_status?: 'pending' | 'ready';
+  postprocess_status?: 'pending' | 'ready' | 'failed';
   postprocess_completed_at?: string | null;
 }
 

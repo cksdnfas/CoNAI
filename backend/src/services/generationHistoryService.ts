@@ -140,9 +140,7 @@ export class GenerationHistoryService {
   }
 
   /**
-   * Process generated image - Simple file save only
-   * 1. Saves original file to uploads/API/images/YYYY-MM-DD/
-   * 2. Main system will auto-detect and process (thumbnails, metadata, etc.)
+   * Publish a registered original and thumbnail before background enrichment finishes.
    */
   static async processAndUploadImage(
     historyId: number,
@@ -155,7 +153,7 @@ export class GenerationHistoryService {
       // Step 1: Update status to processing
       HistoryCommandService.updateStatus(historyId, 'processing');
 
-      // Step 2: Save original file only to uploads/API/images/YYYY-MM-DD/
+      // Save the original, thumbnail and library identity.
       const mediaPipelineStartedAt = Date.now();
       const processedPaths = await APIImageProcessor.processGeneratedImage(imageBuffer, serviceType, saveOptions);
       logSlowGenerationPostprocessStep({
@@ -173,6 +171,8 @@ export class GenerationHistoryService {
 
       // The file is already registered by APIImageProcessor; run the generation
       // group handoff after history linking so requested groups are not missed.
+      // The owner's result is usable now; enrichment/group work must not delay publication.
+      HistoryCommandService.updateStatus(historyId, 'completed');
       const groupAssignmentStartedAt = Date.now();
       await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash(processedPaths.compositeHash);
       logSlowGenerationPostprocessStep({
@@ -183,12 +183,9 @@ export class GenerationHistoryService {
         extra: processedPaths.compositeHash,
       });
 
-      // Step 4: Update status to completed (file save complete)
-      HistoryCommandService.updateStatus(historyId, 'completed');
-
       console.log(`✅ ${serviceType.toUpperCase()} image saved: ${processedPaths.originalPath} (${Math.round(processedPaths.fileSize / 1024)}KB)`);
       console.log(`✅ Composite hash: ${processedPaths.compositeHash}`);
-      console.log(`   → Main system will auto-detect and process (thumbnails, metadata, prompts, tags, groups)`);
+      console.log(`   → Original and preview registered; background metadata and tagging continue`);
       logSlowGenerationPostprocessStep({
         stage: 'total',
         historyId,
@@ -198,7 +195,9 @@ export class GenerationHistoryService {
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      HistoryCommandService.recordError(historyId, errorMessage);
+      if (HistoryQueryRepository.findById(historyId)?.generation_status !== 'completed') {
+        HistoryCommandService.recordError(historyId, errorMessage);
+      }
       console.error(`✗ Failed to process generation history ${historyId}:`, errorMessage);
       throw error;
     }
@@ -231,6 +230,8 @@ export class GenerationHistoryService {
         compositeHash: processedPaths.compositeHash
       });
 
+      // The owner's result is usable now; enrichment/group work must not delay publication.
+      HistoryCommandService.updateStatus(historyId, 'completed');
       const groupAssignmentStartedAt = Date.now();
       await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash(processedPaths.compositeHash);
       logSlowGenerationPostprocessStep({
@@ -241,11 +242,9 @@ export class GenerationHistoryService {
         extra: processedPaths.compositeHash,
       });
 
-      HistoryCommandService.updateStatus(historyId, 'completed');
-
       console.log(`✅ ${serviceType.toUpperCase()} file saved: ${processedPaths.originalPath} (${Math.round(processedPaths.fileSize / 1024)}KB)`);
       console.log(`✅ Composite hash: ${processedPaths.compositeHash}`);
-      console.log('   → Main system will auto-detect and process (thumbnails, metadata, prompts, tags, groups)');
+      console.log('   → Original and preview registered; background metadata and tagging continue');
       logSlowGenerationPostprocessStep({
         stage: 'total',
         historyId,
@@ -255,7 +254,9 @@ export class GenerationHistoryService {
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      HistoryCommandService.recordError(historyId, errorMessage);
+      if (HistoryQueryRepository.findById(historyId)?.generation_status !== 'completed') {
+        HistoryCommandService.recordError(historyId, errorMessage);
+      }
       console.error(`✗ Failed to process generated file history ${historyId}:`, errorMessage);
       throw error;
     }

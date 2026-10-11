@@ -89,6 +89,11 @@ export async function startRuntimeSideEffectServices(
     console.log('👀 File watching disabled, scheduled scans only')
   }
 
+  const { BackgroundQueueService } = await import('../services/backgroundQueue')
+  BackgroundQueueService.startMetadataRecovery()
+  const { GeneratedVideoOptimizationService } = await import('../services/generatedVideoOptimizationService')
+  GeneratedVideoOptimizationService.start()
+
   AutoScanScheduler.start()
   GraphWorkflowExecutionQueue.start()
   GraphWorkflowScheduleService.start()

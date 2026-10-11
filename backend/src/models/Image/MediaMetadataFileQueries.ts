@@ -67,6 +67,7 @@ const ACTIVE_FILE_WITH_METADATA_SELECT = `
     mm.raw_nai_parameters,
     mm.first_seen_date,
     mm.metadata_updated_date,
+    mm.postprocess_status,
     if.id,
     if.original_file_path,
     if.file_size,
@@ -286,9 +287,9 @@ export class MediaMetadataFileQueries {
   }
 
   /** Load one active image by composite hash with metadata and file columns in a single query. */
-  static findByHashWithFile(compositeHash: string, options: { includeHidden?: boolean } = {}): any | null {
+  static findByHashWithFile(compositeHash: string, options: { includeHidden?: boolean; includePending?: boolean } = {}): any | null {
     const visibleCondition = options.includeHidden ? '1=1' : getVisibleMediaMetadataCondition();
-    const readyCondition = getReadyMediaMetadataCondition();
+    const readyCondition = options.includePending ? '1=1' : getReadyMediaMetadataCondition();
     const query = `
       ${ACTIVE_FILE_WITH_METADATA_SELECT}
       WHERE if.file_status = 'active'

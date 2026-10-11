@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
-import type { QueueJobEventPayload, QueueJobProgressEventPayload, RuntimeEventEnvelope, RuntimeJobHintPayload } from '@/lib/runtime-events-types'
+import type { ChatGenerationFinishedEventPayload, ChatGenerationUpdatedEventPayload, HistoryRecordEventPayload, QueueJobEventPayload, QueueJobProgressEventPayload, RuntimeEventEnvelope, RuntimeJobHintPayload } from '@/lib/runtime-events-types'
+import { refreshChatGenerationQueries } from './chat-generation-query-updates'
 import { AUDIO_QUERY_KEY } from '@/lib/api-audio'
 import { POSTS_QUERY_KEY } from '@/lib/api-posts'
 import { RUNTIME_JOB_QUERY_KEY } from '@/lib/use-runtime-job'
@@ -22,7 +23,7 @@ import { RUNTIME_JOB_QUERY_KEY } from '@/lib/use-runtime-job'
  */
 
 const QUEUE_INVALIDATE_DEBOUNCE_MS = 2_000
-const HISTORY_INVALIDATE_DEBOUNCE_MS = 2_000
+const HISTORY_INVALIDATE_DEBOUNCE_MS = 200
 const GRAPH_INVALIDATE_DEBOUNCE_MS = 500
 /**
  * 진행률 패치 코얼레싱 창. 진행률 반영은 잡별 최신 샘플만 의미가 있으므로,
@@ -253,8 +254,21 @@ export function useRuntimeEventQueryBridge() {
       }
       case 'history.record.created':
       case 'history.record.status': {
-        // infinite query 라 부분 패치가 위험하다. 무효화로만 정합을 맞춘다.
+        const history = envelope.payload as HistoryRecordEventPayload
+        void queryClient.invalidateQueries({ queryKey: ['codex-chat-history', history.history_id], refetchType: 'active' })
+        if (history.composite_hash) {
+          void queryClient.invalidateQueries({ queryKey: ['image-detail', history.composite_hash], refetchType: 'active' })
+        }
         scheduleInvalidate([HISTORY_QUERY_KEY_PREFIX], HISTORY_INVALIDATE_DEBOUNCE_MS)
+        return
+      }
+      case 'chat.generation.updated': {
+        void refreshChatGenerationQueries(queryClient, envelope.payload as ChatGenerationUpdatedEventPayload)
+        return
+      }
+      case 'chat.generation.finished': {
+        const result = envelope.payload as ChatGenerationFinishedEventPayload
+        void refreshChatGenerationQueries(queryClient, { threadId: result.chat.threadId, jobId: result.jobId, historyId: result.thumbnailHistoryId })
         return
       }
       case 'graph.schedule.changed': {
@@ -295,6 +309,10 @@ export function useRuntimeEventQueryBridge() {
     [
       QUEUE_QUERY_KEY_PREFIX,
       HISTORY_QUERY_KEY_PREFIX,
+      'image-detail',
+      'codex-chat-history',
+      'codex-chat-thread',
+      'codex-chat-media',
       GRAPH_SCHEDULE_QUERY_KEY_PREFIX,
       GRAPH_BROWSE_CONTENT_QUERY_KEY_PREFIX,
       GRAPH_RESERVATION_QUERY_KEY_PREFIX,

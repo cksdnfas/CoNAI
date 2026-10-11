@@ -1,3 +1,4 @@
+import { chatGenerationPollInterval } from '@/features/runtime-events/chat-generation-query-updates'
 import { resolveChatPortrait } from '@conai/shared'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
@@ -109,7 +110,6 @@ const GroupContextView = lazy(async () => ({ default: (await import('./codex-cha
 const CodexChatGallery = lazy(async () => ({ default: (await import('./codex-chat-gallery')).CodexChatGallery }))
 
 const RUNNING_POLL_MS = 2000
-const PENDING_JOB_POLL_MS = 3000
 const COMPOSER_MAX_HEIGHT_PX = 220
 /** Names longer than this are shortened in the composer hint so it stays on one line in narrow panels. */
 const COMPOSER_HINT_NAME_MAX = 10
@@ -276,14 +276,16 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     queryFn: async () => {
       const id = activeThreadId as number
       const cached = queryClient.getQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(id))
-      if (cached?.running && !cached.pendingJobs) {
+      // A result event may concern an older message outside the polled tail.
+      const invalidated = queryClient.getQueryState(codexChatThreadQueryKey(id))?.isInvalidated === true
+      if (!invalidated && cached?.running && !cached.pendingJobs) {
         const status = await getCodexChatRunning(id)
         if (status.running && status.latestMessageId === (cached.messages.at(-1)?.id ?? null)) {
           return { ...cached, running: status.running }
         }
       }
       // While a reply or a generation job is still landing, only the end of the transcript can change.
-      if (cached && (cached.running || cached.pendingJobs)) {
+      if (!invalidated && cached && (cached.running || cached.pendingJobs)) {
         const merged = mergeThreadTail(cached, await getCodexChatThread(id, POLL_TAIL_MESSAGES))
         if (merged) return merged
       }
@@ -292,7 +294,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     enabled: activeThreadId !== null,
     // A turn started before a reload keeps running on the server, and generation jobs finish after the reply that
     // started them: poll until the turn is stored and every job has landed.
-    refetchInterval: (query) => (query.state.data?.running && liveTurn?.threadId !== activeThreadId ? RUNNING_POLL_MS : query.state.data?.pendingJobs ? PENDING_JOB_POLL_MS : false),
+    refetchInterval: (query) => (query.state.data?.running && liveTurn?.threadId !== activeThreadId ? RUNNING_POLL_MS : query.state.data?.pendingJobs ? chatGenerationPollInterval(streamStatus) : false),
   })
   const thread = threadQuery.data?.thread ?? activeThread
   const pendingUserProfileId = pendingChat?.userProfileId ?? null

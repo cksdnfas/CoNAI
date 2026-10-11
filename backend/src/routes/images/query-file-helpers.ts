@@ -10,6 +10,7 @@ import {
   type MediaVisibilityGuardRecord,
 } from '../../models/Image/MediaMetadataFileQueries';
 import { ImageSafetyService } from '../../services/imageSafetyService';
+import { QueryCacheService } from '../../services/QueryCacheService';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import { requestThumbnailRepair } from '../../services/runtimeJobs/handlers/thumbnailRepairHandlers';
 import { requestVideoPoster } from '../../services/runtimeJobs/handlers/videoPosterHandlers';
@@ -44,6 +45,16 @@ type MediaServeRowCacheEntry<T> = {
 
 const visibilityGuardRowCache = new Map<string, MediaServeRowCacheEntry<MediaVisibilityGuardRecord | null>>();
 const activeFileRowCache = new Map<string, MediaServeRowCacheEntry<ImageFileRecord[]>>();
+
+QueryCacheService.onMetadataInvalidated((hash) => {
+  if (hash === undefined) {
+    visibilityGuardRowCache.clear();
+    activeFileRowCache.clear();
+  } else {
+    visibilityGuardRowCache.delete(hash);
+    activeFileRowCache.delete(hash);
+  }
+});
 
 function readMediaServeRowCache<T>(cache: Map<string, MediaServeRowCacheEntry<T>>, key: string): MediaServeRowCacheEntry<T> | null {
   const entry = cache.get(key);
@@ -94,7 +105,7 @@ export async function getVisibleMetadataOrBlock(res: Response, compositeHash: st
   const metadata = cachedGuard
     ? cachedGuard.value
     : MediaMetadataFileQueries.findVisibilityGuardByHash(compositeHash);
-  if (!cachedGuard) {
+  if (!cachedGuard && metadata && MediaPostprocessVisibilityService.isReadyRecord(metadata)) {
     writeMediaServeRowCache(visibilityGuardRowCache, compositeHash, metadata);
   }
 
@@ -131,7 +142,7 @@ export async function getActiveFileOrBlock(res: Response, compositeHash: string,
   const files = cachedFiles
     ? cachedFiles.value
     : await ImageFileModel.findActiveByHash(compositeHash);
-  if (!cachedFiles) {
+  if (!cachedFiles && files?.length) {
     writeMediaServeRowCache(activeFileRowCache, compositeHash, files ?? []);
   }
 
@@ -322,7 +333,7 @@ interface BatchDownloadArchiveEntry {
 async function prepareBatchDownloadArchive(
   compositeHashes: string[],
   downloadType: ImageDownloadType = 'original',
-  options: { includeHidden?: boolean } = {},
+  options: { includeHidden?: boolean; includePending?: boolean } = {},
 ) {
   const usedNames = new Map<string, number>();
   let totalSourceBytes = 0;
@@ -342,7 +353,7 @@ async function prepareBatchDownloadArchive(
     const metadata = metadataByHash.get(compositeHash);
     if (
       !metadata ||
-      !MediaPostprocessVisibilityService.isReadyRecord(metadata) ||
+      (!options.includePending && !MediaPostprocessVisibilityService.isReadyRecord(metadata)) ||
       (!options.includeHidden && ImageSafetyService.isHidden(metadata.rating_score))
     ) {
       continue;
@@ -394,7 +405,7 @@ export async function streamBatchDownloadArchive(
   res: Response,
   compositeHashes: string[],
   downloadType: ImageDownloadType = 'original',
-  options: { includeHidden?: boolean } = {},
+  options: { includeHidden?: boolean; includePending?: boolean } = {},
 ): Promise<boolean> {
   const prepared = await prepareBatchDownloadArchive(compositeHashes, downloadType, options);
   if (!prepared) {

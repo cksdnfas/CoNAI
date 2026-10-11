@@ -426,6 +426,7 @@ class AutoTagScheduler {
       );
     }
 
+    MediaPostprocessVisibilityService.publishLinkedGenerationHistoryEvents([compositeHash]);
     const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(compositeHash);
     if (releasedForVisibility) {
       QueryCacheService.scheduleGalleryCacheInvalidation();

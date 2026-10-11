@@ -99,6 +99,7 @@ export interface ImageRecord {
   file_size?: number | null
   first_seen_date?: string | null
   rating_score?: number | null
+  postprocess_status?: string | null
   is_processing?: boolean
   preview_status?: ImagePreviewStatus
   ai_metadata?: ImageAiMetadata | null

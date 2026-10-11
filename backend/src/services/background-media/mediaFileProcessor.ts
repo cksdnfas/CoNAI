@@ -56,7 +56,7 @@ export async function processMediaFile(
   }
 
   if (file.file_type === 'video' || file.file_type === 'animated') {
-    return VideoMediaProcessor.process(file);
+    return VideoMediaProcessor.process(file, options);
   }
 
   return ImageMediaProcessor.process(file, options, fileSize);

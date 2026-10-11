@@ -50,6 +50,7 @@ export interface GenerationHistoryRecord {
 
 export interface GenerationHistoryListRecord extends GenerationHistoryRecord {
   workflow_deleted?: number | boolean;
+  postprocess_status?: string | null;
   actual_composite_hash?: string | null;
   actual_width?: number | null;
   actual_height?: number | null;
@@ -71,6 +72,7 @@ export interface GenerationHistoryListRecord extends GenerationHistoryRecord {
 
 export interface GenerationHistoryDetailRecord extends GenerationHistoryRecord {
   workflow_deleted?: number | boolean;
+  postprocess_status?: string | null;
   actual_composite_hash?: string | null;
   actual_width?: number | null;
   actual_height?: number | null;

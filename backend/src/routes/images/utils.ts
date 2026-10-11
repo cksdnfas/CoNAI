@@ -1,3 +1,5 @@
+import { GeneratedVideoOptimizationService } from '../../services/generatedVideoOptimizationService';
+
 /**
  * 이미지 레코드에 URL과 구조화된 메타데이터 추가 (레거시)
  * @deprecated 새 코드에서는 enrichImageWithFileView 사용
@@ -89,8 +91,12 @@ function buildBaseImageWithFileView(image: any) {
 }
 
 export function enrichImageWithFileView(image: any) {
+  const base = buildBaseImageWithFileView(image);
+  if (image.composite_hash && image.mime_type?.startsWith('video/')) {
+    base.image_url = GeneratedVideoOptimizationService.playbackUrl(image.composite_hash, base.image_url);
+  }
   const enriched = {
-    ...buildBaseImageWithFileView(image),
+    ...base,
 
     // 구조화된 AI 메타데이터
     ai_metadata: {

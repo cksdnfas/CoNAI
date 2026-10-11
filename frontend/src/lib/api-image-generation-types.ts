@@ -137,6 +137,7 @@ export interface GenerationHistoryRecord {
   nai_model?: string | null
   error_message?: string | null
   composite_hash?: string | null
+  postprocess_status?: string | null
   actual_composite_hash?: string | null
   created_at?: string | null
 

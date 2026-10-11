@@ -16,6 +16,7 @@ import {
   type MediaFileProcessingResult,
   type MediaProcessingStageResult,
   type UnhashedMediaFile,
+  type ProcessFileOptions,
 } from './mediaProcessingTypes';
 
 /** Generate and persist the poster that stands in for a video in list views. */
@@ -56,7 +57,7 @@ export async function generateVideoPosterFrame(
 
 /** File-level video/animated hash, metadata, poster, and postprocess pipeline. */
 export class VideoMediaProcessor {
-  static async process(file: UnhashedMediaFile): Promise<MediaFileProcessingResult> {
+  static async process(file: UnhashedMediaFile, options: ProcessFileOptions = {}): Promise<MediaFileProcessingResult> {
     const filePath = file.original_file_path;
     const fileName = path.basename(filePath);
     const stages: MediaProcessingStageResult[] = [];
@@ -141,9 +142,9 @@ export class VideoMediaProcessor {
       db.prepare(`
         INSERT INTO media_metadata (
           composite_hash, duration, fps, width, height, video_codec, audio_codec, bitrate, first_seen_date,
-          postprocess_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'pending')
-      `).run(fileHash, duration, fps, width, height, videoCodec, audioCodec, bitrate);
+          postprocess_status, metadata_extraction_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'pending', ?)
+      `).run(fileHash, duration, fps, width, height, videoCodec, audioCodec, bitrate, options.metadataMode === 'background' || !width || !height ? 'pending' : 'completed');
       stages.push(completedStage('metadata-row'));
     } catch (error) {
       return stoppedFileProcessing(failedStage('metadata-row', error, true), stages, {
@@ -164,22 +165,26 @@ export class VideoMediaProcessor {
 
     stages.push(await generateVideoPosterFrame(fileHash, filePath, file.file_type));
 
-    try {
-      console.log('  🔍 Running auto-collection (after hash generation)...');
-      const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(fileHash);
-      if (autoCollectResults.length > 0) {
-        console.log(`  ✅ Auto-assigned to ${autoCollectResults.length} group(s)`);
+    if (options.metadataMode === 'background') {
+      stages.push(await MediaPostprocessCoordinator.extractMetadataForProcessedMedia(filePath, fileHash, fileName, options));
+    } else {
+      try {
+        console.log('  🔍 Running auto-collection (after hash generation)...');
+        const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(fileHash);
+        if (autoCollectResults.length > 0) {
+          console.log(`  ✅ Auto-assigned to ${autoCollectResults.length} group(s)`);
+        }
+        stages.push(completedStage('auto-collection'));
+      } catch (autoCollectError) {
+        console.warn(
+          `  ⚠️  Auto-collection failed (non-critical) for ${fileName}:`,
+          autoCollectError instanceof Error ? autoCollectError.message : autoCollectError,
+        );
+        stages.push(failedStage('auto-collection', autoCollectError, false));
       }
-      stages.push(completedStage('auto-collection'));
-    } catch (autoCollectError) {
-      console.warn(
-        `  ⚠️  Auto-collection failed (non-critical) for ${fileName}:`,
-        autoCollectError instanceof Error ? autoCollectError.message : autoCollectError,
-      );
-      stages.push(failedStage('auto-collection', autoCollectError, false));
-    }
 
-    stages.push(await MediaPostprocessCoordinator.processApiGenerationGroupAssignment(fileHash));
+      stages.push(await MediaPostprocessCoordinator.processApiGenerationGroupAssignment(fileHash));
+    }
     try {
       stages.push(MediaPostprocessCoordinator.releaseVisibilityIfReady(fileHash));
     } catch (error) {

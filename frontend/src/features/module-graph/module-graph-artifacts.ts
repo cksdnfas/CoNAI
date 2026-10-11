@@ -51,6 +51,11 @@ export function getArtifactPreviewUrl(artifact: GraphArtifactPreviewLike) {
   const storagePath = resolveGraphArtifactStoragePath(artifact, metadata)
   const compositeHash = getArtifactCompositeHash(metadata)
 
+  const historyId = Number(metadata?.historyId ?? metadata?.history_id)
+  if (compositeHash && Number.isInteger(historyId) && historyId > 0) {
+    return buildApiUrl(`/api/generation-history/${historyId}/file`)
+  }
+
   if (compositeHash) {
     return buildApiUrl(`/api/images/${encodeURIComponent(compositeHash)}/file`)
   }
