@@ -184,11 +184,11 @@ export interface PostsSettings {
 }
 
 export const POSTS_SAFETY_LIMITS: Record<Exclude<keyof PostsSafetySettings, 'summonEnabled'>, { min: number; max: number; default: number }> = {
-  chainDepth: { min: 0, max: 5, default: 2 },
-  botsPerComment: { min: 1, max: 6, default: 3 },
-  repliesPerPostPerHour: { min: 1, max: 200, default: 20 },
-  callsPerProfilePerDay: { min: 1, max: 1000, default: 50 },
-  summonsPerAccountPerHour: { min: 1, max: 500, default: 30 },
+  chainDepth: { min: 0, max: 20, default: 2 },
+  botsPerComment: { min: 1, max: 30, default: 3 },
+  repliesPerPostPerHour: { min: 1, max: 5000, default: 20 },
+  callsPerProfilePerDay: { min: 1, max: 50000, default: 50 },
+  summonsPerAccountPerHour: { min: 1, max: 5000, default: 30 },
 };
 
 export const DEFAULT_POSTS_SETTINGS: PostsSettings = {

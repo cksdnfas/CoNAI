@@ -64,7 +64,7 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
     assert.equal(loadPostsSettings().safety.chainDepth, 2)
     const next = updatePostsSettings({ layout: 'sns', safety: { chainDepth: 99, botsPerComment: 0 } })
     assert.equal(next.layout, 'sns')
-    assert.equal(next.safety.chainDepth, 5)
+    assert.equal(next.safety.chainDepth, 20)
     assert.equal(next.safety.botsPerComment, 1)
     assert.equal(next.safety.repliesPerPostPerHour, 20, 'untouched fields keep their value')
     assert.equal(normalizePostsSettings({ layout: 'weird' }).layout, 'feed')
