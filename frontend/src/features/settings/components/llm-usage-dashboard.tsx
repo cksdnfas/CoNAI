@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import type { AgentCliName } from '@conai/shared'
+import type { AgentCliName, ChatPageData } from '@conai/shared'
 import { ChevronRight, RefreshCw } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,8 @@ import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { getAgentCliStatus, getAgentCliUsage } from '@/lib/api-agent-cli'
 import { CHAT_JUDGE_STATS_QUERY_KEY, getChatJudgeStats } from '@/lib/api-chat-judge'
 import { getExternalApiProviders } from '@/lib/api-external-api'
@@ -18,6 +20,7 @@ import { cn } from '@/lib/utils'
 import { AgentCliUsageBars } from './agent-cli-settings'
 import { Sparkline, StackedBars, type StackedSeries } from './llm-usage-charts'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
+import { useAgentCliChatData } from './use-llm-connections-chat-page'
 
 type Split = 'purpose' | 'model'
 type Metric = 'tokens' | 'requests'
@@ -192,6 +195,35 @@ export function LlmUsageDashboard({ onOpenJudge }: { onOpenJudge: () => void }) 
   const chartValues = chart ? (useRequests ? chart.requests : chart.values) : []
   const chartTotals = chart ? (useRequests ? chart.requestTotals : chart.totals) : []
   const formatChart = useRequests ? (value: number) => formatNumber(value) : compact
+  const agentCli = useAgentCliChatData()
+
+  // A connected chat answers usage questions from the same numbers, aggregated; lists sit at the top of data so a
+  // long one shows as a count until read_page_data reads it. The period switch is its only control. Counts are
+  // keyed "tok": page data refuses a key that names tokens.
+  const chatData: Record<string, ChatPageData> = {
+    days,
+    totals: totals ? { requests: totals.requests, failed: totals.failed, inputTok: totals.inputTokens, cachedInputTok: totals.cachedInputTokens, outputTok: totals.outputTokens, averageLatencyMs: totals.averageLatencyMs } : null,
+    byPurpose: summary ? PURPOSE_GROUPS.map((group) => {
+      const entries = summary.byPurpose.filter((entry) => group.purposes.includes(entry.purpose))
+      return { purpose: group.id, requests: entries.reduce((sum, entry) => sum + entry.requests, 0), tok: entries.reduce((sum, entry) => sum + entry.tokens, 0) }
+    }).filter((entry) => entry.requests > 0) : [],
+    byModel: (summary?.models ?? []).map((model) => ({
+      model: `${connectionName(model.providerName, names)} · ${model.model || 'default'}`, requests: model.requests, failed: model.failed, tok: model.inputTokens + model.outputTokens,
+    })),
+    daily: (summary?.daily ?? []).map((day) => ({ date: day.date, requests: day.requests, tok: day.inputTokens + day.outputTokens })),
+    judge: judgeQuery.isSuccess ? { runs: judgeRuns, uncertain: judgeUnsure, failed: judgeFailed, overThirtyPercentUnsure: unsureItems.map((entry) => entry.name) } : null,
+    subscriptions: agentCli,
+  }
+  useChatPageRegistration({
+    kind: 'settings', title: t({ ko: '설정 · LLM 계기판', en: 'Settings · LLM dashboard' }), resourceId: 'llm', priority: 5, fields: [], data: chatData,
+    actions: [pageAction('settings.usage_period', t({ ko: '기간 바꾸기', en: 'Change the period' }), t({ ko: '최근 7일 또는 30일로 바꿔.', en: 'Show the last 7 or 30 days.' }), pageObject({ days: pageChoice([7, 30]) }, ['days']))],
+    apply: () => {},
+    applyAction: (id, args, assertCurrent) => {
+      assertCurrent()
+      if (id !== 'settings.usage_period') throw new Error('이 화면에 없는 작업이야.')
+      setDays(Number(args.days))
+    },
+  }, { preserveOnSearchChange: true })
 
   return (
     <div className="space-y-8">

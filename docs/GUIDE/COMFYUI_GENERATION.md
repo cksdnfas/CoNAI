@@ -96,7 +96,9 @@ Modal 서버는 일반 ComfyUI의 idle 상태 확인과 다르게 동작할 수 
 
 업로드 버튼으로 ComfyUI workflow JSON을 선택하거나, JSON 탭에 직접 붙여 넣습니다.
 
-권장 형식은 ComfyUI API workflow JSON입니다. 일반 UI workflow와 다르면 실행 시 실패할 수 있습니다.
+ComfyUI API workflow JSON(Workflow → Export (API))과 ComfyUI 편집기에서 저장한 일반 workflow JSON을 모두 받습니다. 일반 workflow는 등록된 ComfyUI 서버의 노드 정보로 API 형식으로 바뀌고, 바꾸지 못하면 그 이유가 표시됩니다. 그때는 ComfyUI에서 Export (API)로 내보낸 JSON을 넣습니다.
+
+JSON이 바뀌면 실행할 수 있는 서버와 대조하는 서버 검사가 돕니다. 없는 노드·모델, 범위를 벗어난 값, 출력에 닿지 않는 노드가 그래프에 표시됩니다.
 
 JSON이 유효하면 그래프 보기에서 노드가 표시됩니다.
 
@@ -129,6 +131,15 @@ Marked Field는 생성 화면에 노출되는 입력칸입니다. 너무 많이 
 - 입력 이미지
 - ControlNet 이미지
 - denoise / strength
+
+### 시드
+
+`seed`·`noise_seed` 입력은 실행할 때마다 새 무작위 값으로 바뀌어서, 같은 워크플로를 다시 돌려도 결과가 달라집니다. 시드가 그대로 유지되는 경우는 두 가지입니다.
+
+- Marked Field로 연 시드 칸에 0 이상의 숫자를 넣은 경우 (그 실행에만 적용)
+- ComfyUI 편집기에서 그 시드가 "fixed"였던 workflow를 변환한 경우 (노드 `_meta.conai_fixed_seeds`에 남음)
+
+시드 칸을 비우거나 -1을 넣으면 매번 새 시드로 생성합니다. 음수 시드는 항상 새로 뽑습니다.
 
 ## Marked Field 설정
 
@@ -259,11 +270,23 @@ artifact explorer를 쓰면 결과 저장 루트와 저장 방식이 중요합�
 
 - 처음에는 prompt, negative, seed, 입력 이미지만 Marked Field로 엽니다.
 - 모델 파일명은 select + 드롭다운 목록으로 만듭니다.
-- seed는 number 필드로 열고 기본값을 고정하거나 비워 둡니다.
+- seed는 number 필드로 열고 비워 둡니다. 같은 이미지를 다시 뽑을 때만 그 시드 값을 넣습니다.
 - 실험용 서버와 운영용 서버는 routing tag를 분리합니다.
 - 대형 워크플로우는 큐 등록 개수를 낮게 시작합니다.
 - artifact explorer를 쓸 워크플로우는 저장 루트를 명확히 정합니다.
 - 공개 페이지는 큐 상한을 낮게 잡고 권한을 확인합니다.
+
+## 채팅으로 편집하기
+
+워크플로 등록·수정 편집기를 채팅에 연결하면 채팅이 다음을 할 수 있습니다. 저장은 항상 카드로 제안되고 사람이 적용합니다.
+
+- API JSON이나 ComfyUI 편집기 workflow를 넣기 (편집기 workflow는 먼저 API 형식으로 바꿈, 변환 경고도 읽음)
+- 서버 검사를 바로 돌리고 결과(서버별 문제, 출력에 닿지 않는 노드)를 읽기
+- 추천 필드(프롬프트, 입력 이미지, seed·steps·CFG, 크기 등)를 Marked Field로 표시하기
+- 시드 입력마다 고정 여부를 보고 고정·해제하기
+- Marked Field 등록·수정·해제·순서 바꾸기
+
+페이지 연결 없이도 채팅과 MCP는 `check_comfy_workflow`로 등록된 워크플로나 초안 JSON을 저장 없이 서버 검사할 수 있습니다. 생성 화면을 연결하면 채팅은 어느 칸이 시드인지 알고, 같은 이미지를 다시 뽑을 때는 시드 값을 넣고 새 이미지를 원할 때는 비워 둡니다.
 
 ## 실패 시 확인
 
@@ -271,7 +294,8 @@ artifact explorer를 쓰면 결과 저장 루트와 저장 방식이 중요합�
 | --- | --- |
 | 서버 테스트 실패 | Endpoint, 포트, 방화벽, ComfyUI 실행 상태 |
 | Modal 호출 실패 | `/generate` 엔드포인트, 인증, 원격 로그, 비용 제한 |
-| 워크플로우 저장 실패 | JSON 형식, API workflow 여부, 이름 입력 여부 |
+| 워크플로우 저장 실패 | JSON 형식, 일반 workflow 변환 실패 이유, 이름 입력 여부 |
+| 매번 다른 결과가 나옴 | 시드 칸이 비어 있는지 (비우면 실행마다 새 시드) |
 | 실행 버튼 후 실패 | required 필드, 이미지 입력, 선택 서버 연결 상태 |
 | 모델을 찾지 못함 | 서버의 모델 폴더와 드롭다운 값이 실제 파일명과 일치하는지 |
 | 커스텀 노드 오류 | 해당 서버에 필요한 ComfyUI 커스텀 노드가 설치되어 있는지 |

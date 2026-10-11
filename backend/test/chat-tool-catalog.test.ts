@@ -73,7 +73,8 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
     const catalogued = catalogToolNames(server)
     assert.ok(catalogued.includes('create_audio_folder') && catalogued.includes('move_audio_candidates') && catalogued.includes('search_images'))
     const contents = listed.find((tool) => tool.name === CATALOG_OPEN_TOOL)!.description ?? ''
-    assert.match(contents, /- audio: .*\n\s+.*create_audio_folder/)
+    assert.match(contents, /- audio: .*\n\s+.*order_audio.*\+\d+ more/)
+    assert.ok(!contents.includes('create_audio_folder'), 'the contents name only the main tools of a large category')
     assert.ok(listed.length < catalogued.length, 'the catalog is the smaller list')
 
     // Open a category: descriptions and input schemas.

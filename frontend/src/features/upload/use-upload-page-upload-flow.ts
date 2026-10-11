@@ -345,6 +345,12 @@ export function useUploadPageUploadFlow({
     await runUpload(uploadFiles, effectiveImageSaveSettings)
   }
 
+  /** Upload the queue right away with these save options (null = files as they are), skipping the options dialog. */
+  const uploadWithOptions = async (options: ImageSaveSettings | null) => {
+    if (uploadFiles.length === 0 || isUploading) return
+    await runUpload(uploadFiles, options ?? undefined)
+  }
+
   return {
     uploadFiles,
     setUploadFiles,
@@ -368,5 +374,7 @@ export function useUploadPageUploadFlow({
     handleConfirmUploadSave,
     handleOpenUploadSaveOptions,
     handleUpload,
+    effectiveImageSaveSettings,
+    uploadWithOptions,
   }
 }

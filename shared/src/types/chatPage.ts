@@ -17,6 +17,8 @@ export type ChatPageField = {
   multipleOf?: number
   allowEmpty?: boolean
   options?: string[]
+  /** What the input does, for the model only (never shown on screen); labels stay short. */
+  hint?: string
 }
 
 export type ChatPageSnapshot = {

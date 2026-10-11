@@ -134,7 +134,10 @@ export function ChatSettingsProfiles() {
     data: { section: 'chat', profiles: profiles.map((profile) => ({ id: profile.id, name: profile.name, tagline: profile.tagline, engine: profile.engine, isEnabled: profile.isEnabled })) },
     actions: [
       pageAction('profile.open_create', t({ ko: '새 프로필 편집기 열기', en: 'Open new profile editor' }), t({ ko: '빈 프로필 편집기를 열어. 열린 편집기가 바로 돌아오니 이어서 profile.draft로 채워.', en: 'Open an empty profile editor; it comes back so you can fill it with profile.draft next.' })),
-      ...(profiles.length ? [pageAction('profile.open_edit', t({ ko: '프로필 편집기 열기', en: 'Open profile editor' }), t({ ko: '목록(data.profiles)의 프로필 편집기를 열어.', en: 'Open the editor of a listed profile (data.profiles).' }), pageObject({ id: pageChoice(profiles.map((profile) => profile.id)) }, ['id']))] : []),
+      ...(profiles.length ? [
+        pageAction('profile.open_edit', t({ ko: '프로필 편집기 열기', en: 'Open profile editor' }), t({ ko: '목록(data.profiles)의 프로필 편집기를 열어.', en: 'Open the editor of a listed profile (data.profiles).' }), pageObject({ id: pageChoice(profiles.map((profile) => profile.id)) }, ['id'])),
+        pageAction('profile.copy', t({ ko: '프로필 복사', en: 'Copy profile' }), t({ ko: '목록 프로필의 사본 초안을 열어. 저장해야 생겨.', en: 'Open a copy of a listed profile as a new draft; saved only from the editor.' }), pageObject({ id: pageChoice(profiles.map((profile) => profile.id)) }, ['id'])),
+      ] : []),
     ],
     apply: () => {},
     applyAction: (id, args, assertCurrent) => {
@@ -142,6 +145,7 @@ export function ChatSettingsProfiles() {
       if (id === 'profile.open_create') { setEditor({ profile: null }); return }
       const profile = profiles.find((entry) => entry.id === Number(args.id))
       if (!profile) throw new Error('목록에 없는 프로필이야.')
+      if (id === 'profile.copy') { setEditor({ profile: null, draft: copyDraft(profile, profiles, t), copyOf: profile.id }); return }
       setEditor({ profile })
     },
   }, { preserveOnSearchChange: true })

@@ -7,7 +7,7 @@ import { requireActiveChatReply } from '../services/codex-chat/chatReplyRegistry
 import { BoardCallRooms } from '../services/posts/boardCallRooms';
 import { validateMcpToolArguments } from './requestSecurity';
 import { findExternalMcpTool } from '../services/externalMcp/externalMcpServers';
-import { CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
+import { CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
 
 export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]> = {
   search_prompts: 'prompts.view', get_most_used_prompts: 'prompts.view', list_prompt_groups: 'prompts.view',
@@ -16,16 +16,18 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   create_prompt_preset: 'prompts.edit', create_prompt_group: 'prompts.edit', batch_create_groups: 'prompts.edit',
   assign_prompts_to_group: 'prompts.edit', move_prompts_between_groups: 'prompts.edit',
   restore_prompt_data: 'prompts.edit', search_wildcards: 'wildcards.view',
-  list_workflows: 'workflows.view', get_workflow_details: 'workflows.view', list_comfyui_servers: 'workflows.view',
+  list_workflows: 'workflows.view', get_workflow_details: 'workflows.view', list_comfyui_servers: 'workflows.view', check_comfy_workflow: 'workflows.edit',
   list_custom_dropdown_lists: 'workflows.view', search_custom_dropdown_items: 'workflows.view',
   get_workflow_editor: 'workflows.view', list_workflow_modules: 'workflows.view', workflow_edit: 'workflows.view',
   list_graph_workflows: 'workflows.view', get_graph_workflow_details: 'workflows.view',
   get_graph_workflow_execution: ['workflows.view', 'images.view'], export_workflow_definition: 'workflows.view',
+  // The caller's own chats only (account-scoped), like the room fields of the node editor.
+  list_chat_rooms: [],
   import_workflow_definition: 'workflows.edit', restore_deleted_workflow: 'workflows.edit',
   get_generation_routing_options: 'workflows.view', get_generation_history_request: 'images.view',
   refresh_artifact_download: 'images.view', get_media_download: 'images.view',
   search_images: 'images.view', get_image_metadata: 'images.view', get_generation_history: 'images.view',
-  search_images_by_tags: 'images.view', view_images: 'images.view', view_media_frames: [], list_emoticons: 'images.view',
+  search_images_by_tags: 'images.view', search_images_by_meaning: 'images.view', find_similar_images: 'images.view', view_images: 'images.view', view_media_frames: [], list_emoticons: 'images.view',
   list_emoticon_groups: 'images.view', list_image_groups: 'images.view', get_image_groups: 'images.view', get_image_group: 'images.view',
   add_images_to_group: 'images.edit', remove_images_from_group: 'images.edit', move_images_between_groups: 'images.edit',
   create_image_group: 'images.edit', update_image_group: 'images.edit', run_group_auto_collect: 'images.edit',
@@ -36,8 +38,13 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   normalize_sprite_sheets: ['images.edit', 'images.upload'], create_sprite_animation: ['images.edit', 'images.upload'],
   resize_images: ['images.edit', 'images.upload'],
   list_files: 'files.view', get_file_info: 'files.view', read_file_text: 'files.view', search_files: 'files.view',
+  list_file_versions: 'files.view', read_file_version: 'files.view', restore_file_version: ['files.view', 'files.edit'],
   posts_categories: 'posts.view', posts_search: 'posts.view', posts_read: 'posts.view',
   posts_create: ['posts.view', 'posts.write'], posts_update: ['posts.view', 'posts.write'], post_comment: ['posts.view', 'posts.comment'],
+  posts_tags: 'posts.view', posts_revisions: ['posts.view', 'posts.write'], posts_delete: ['posts.view', 'posts.write'], posts_restore_revision: ['posts.view', 'posts.write'],
+  post_comment_edit: ['posts.view', 'posts.comment'], post_comment_delete: ['posts.view', 'posts.comment'],
+  // Administrator-only in the store (and registered only for administrators acting as themselves).
+  post_comment_hide: 'posts.view', posts_category_create: 'posts.view', posts_category_update: 'posts.view', posts_category_delete: 'posts.view',
   create_file_folder: ['files.view', 'files.edit'], write_text_file: ['files.view', 'files.edit'], update_file_text: ['files.view', 'files.edit'], edit_file_text: ['files.view', 'files.edit'], rename_file: ['files.view', 'files.edit'], move_files: ['files.view', 'files.edit'], delete_files: ['files.view', 'files.delete'],
   generate_nai: 'generation.execute', generate_comfyui: 'generation.execute', generate_comfyui_all_servers: 'generation.execute',
   submit_generation_job: 'generation.execute', cancel_generation_job: 'generation.execute', execute_graph_workflow: 'generation.execute',
@@ -49,6 +56,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   list_audio_folders: 'audio.view', create_audio_folder: ['audio.view', 'audio.edit'], update_audio_folder: ['audio.view', 'audio.edit'],
   move_audio_candidates: ['audio.view', 'audio.edit'], import_audio: ['audio.view', 'audio.edit'],
   set_audio_group_comment_status: ['audio.view', 'audio.edit'],
+  delete_audio_group: ['audio.view', 'audio.edit'], delete_audio_folder: ['audio.view', 'audio.edit'], delete_audio_project: ['audio.view', 'audio.edit'],
   edit_audio_candidate: ['audio.view', 'audio.edit'], delete_unselected_audio_candidates: ['audio.view', 'audio.edit'],
   export_audio_selected: 'audio.view', get_audio_download: 'audio.view',
   list_audio_workflows: 'audio.view', get_audio_order: 'audio.view',
@@ -56,8 +64,12 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   cancel_audio_order: ['audio.view', 'audio.edit'], retry_audio_order_job: ['audio.view', 'audio.edit', 'generation.execute'],
   chat_reply_to: [], room_call_member: [], task_propose: [], task_status: [], task_update: [], task_wait: [], task_finish: [], get_proposal_status: [], offer_choices: [], room_history_search: [], room_history_read: [], read_lore_file: [], save_lore: [], edit_lore_file: [],
   linked_list: 'files.view', linked_search: 'files.view', linked_read: 'files.view', linked_write: ['files.view', 'files.edit'], linked_edit: ['files.view', 'files.edit'],
+  // The chat's own settings card; saving rechecks the file store right for links and minutes, as the context tab does.
+  get_chat_settings: [], propose_chat_settings: [],
   get_current_page: [], page_fill: [], page_act: [], read_page_data: [], propose_page_action: [],
   web_search: 'chat.web.use', web_read: 'chat.web.use',
+  // The user guides are the app's public documentation: any signed-in account reads them.
+  get_app_guide: [],
   get_chat_setup_guide: [], list_chat_profiles: [], get_chat_profile: [], list_display_blocks: [], get_display_block: [],
   propose_display_block: [], propose_chat_profile: [], propose_profile_update: [], propose_profile_assets: [], get_asset_batch: [],
 };
@@ -68,8 +80,10 @@ const PAGE_SAFE_SCOPES = new Set(['read', 'configure']);
  * A turn answering a posts board call reads posts and comments other people wrote: whatever they ask, it must not
  * reach the caller's private file store.
  */
-const BOARD_CALL_BLOCKED_TOOLS = new Set(['list_files', 'get_file_info', 'read_file_text', 'search_files', 'write_text_file', 'update_file_text', 'edit_file_text', 'create_file_folder', 'rename_file', 'move_files', 'delete_files', 'edit_lore_file', 'linked_list', 'linked_search', 'linked_read', 'linked_write', 'linked_edit', 'room_history_search', 'room_history_read']);
-const PAGE_PRIVATE_FILE_TOOLS = new Set(['list_files', 'get_file_info', 'read_file_text', 'search_files']);
+const BOARD_CALL_BLOCKED_TOOLS = new Set(['list_files', 'get_file_info', 'read_file_text', 'search_files', 'write_text_file', 'update_file_text', 'edit_file_text', 'create_file_folder', 'rename_file', 'move_files', 'delete_files', 'edit_lore_file', 'linked_list', 'linked_search', 'linked_read', 'linked_write', 'linked_edit', 'room_history_search', 'room_history_read', 'list_file_versions', 'read_file_version', 'restore_file_version']);
+const PAGE_PRIVATE_FILE_TOOLS = new Set(['list_files', 'get_file_info', 'read_file_text', 'search_files', 'list_file_versions', 'read_file_version']);
+/** Posts tools a board-call turn never gets: comments it answers are other people's text, and these cannot be taken back easily. */
+const BOARD_CALL_BLOCKED_POST_TOOLS = new Set(['posts_delete', 'posts_restore_revision', 'post_comment_delete']);
 
 /**
  * Page text may steer the reply, so a connected page keeps only tools that change nothing by themselves: library and
@@ -129,13 +143,15 @@ function accountHoldsTool(context: McpRequestContext, toolName: string): boolean
  * explicit errors.
  */
 export function isContextToolAllowed(context: McpRequestContext, toolName: string, accountChecks = true): boolean {
-  if (BOARD_CALL_BLOCKED_TOOLS.has(toolName) && context.chatContext && BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null) return false;
+  if ((BOARD_CALL_BLOCKED_TOOLS.has(toolName) || BOARD_CALL_BLOCKED_POST_TOOLS.has(toolName)) && context.chatContext && BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null) return false;
   if (context.requester && featurePermissionOf(toolName) === undefined) return false;
   if (isChatMcpSource(context.source) && CHAT_BLOCKED_TOOLS.has(toolName)) return false;
   if (accountChecks && context.requester && !accountHoldsTool(context, toolName)) return false;
   // Page text may steer the reply: lore files are not rewritten from it (save_lore still leaves an undoable entry), and
   // linked private files and other chats' history stay out like the file store tools.
   if ((toolName === 'edit_lore_file' || toolName.startsWith('linked_') || toolName.startsWith('room_history_')) && context.chatContext?.page) return false;
+  // The chat's own settings name its private files and links: not from page text or a board call either.
+  if (CHAT_SETTINGS_TOOLS.has(toolName)) return Boolean(context.chatContext) && !context.chatContext?.page && BoardCallRooms.runFor(context.chatContext!.threadId, context.chatContext!.profileId) === null;
   if (CHAT_ROOM_TOOLS.has(toolName)) return Boolean(context.chatContext) && (!GROUP_ONLY_CHAT_TOOLS.has(toolName) || context.chatContext?.kind === 'group');
   if (CHAT_VISION_BUILTIN_TOOLS.has(toolName) && context.chatContext) return true;
   if (isConnectedChatPageTool(context, toolName)) return true;

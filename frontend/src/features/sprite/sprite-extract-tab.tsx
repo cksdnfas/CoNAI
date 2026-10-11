@@ -35,7 +35,7 @@ import { cn } from '@/lib/utils'
 import { LibraryResults } from './sprite-library'
 import { MAX_SPRITE_FRAMES, estimateFrameIndices, extractSignature, formFromOptions, normalizeHex, resolvedEndTime, resolvedStartTime, toExtractOptions, type ExtractForm, type OutputForm, type SaveForm } from './sprite-options'
 import { SpritePresetMenu } from './sprite-presets'
-import { SpriteQueue } from './sprite-queue'
+import { MAX_QUEUE_VIDEOS, SpriteQueue } from './sprite-queue'
 import { SpriteResultPanel } from './sprite-result-panel'
 import { SpriteSettingsPanel } from './sprite-settings-panel'
 import { readStoredSpriteSettings, writeStoredSpriteSettings } from './sprite-storage'
@@ -53,7 +53,9 @@ function saveTarget(save: SaveForm): SpriteGroupTarget | true {
  * Extract: one list of videos (one or many), one set of settings for all of them. A selected video can be previewed
  * on its own before the whole list runs; the run saves every sheet to the library and can also hand over a ZIP.
  */
-export function SpriteExtractTab({ initialVideoHash, onVideoChange, toolbarSlot }: {
+export function SpriteExtractTab({ active, initialVideoHash, onVideoChange, toolbarSlot }: {
+  /** The open tab; only it talks to a connected chat. */
+  active: boolean
   initialVideoHash: string | null
   onVideoChange: (hash: string | null) => void
   /** Where the preset menu goes (the page toolbar, next to the tabs). */
@@ -222,7 +224,13 @@ export function SpriteExtractTab({ initialVideoHash, onVideoChange, toolbarSlot 
     setActiveColor(0)
   }, [info])
 
-  useSpriteChatPage({ videoHash: selected, videos: videoHashes, selectVideo: setSelectedHash, info, form, setForm, output, build })
+  const changeVideos = (next: string[]) => { setVideoHashes(next); if (!next.includes(selected ?? '')) setSelectedHash(next[0] ?? null); setBatchResult(null) }
+  const downloadZip = () => { if (batchResult?.zip) triggerBrowserDownload(spriteResultDownloadUrl(batchResult.zip.workspaceId, batchResult.zip.fileName)) }
+
+  useSpriteChatPage({
+    active, videoHash: selected, videos: videoHashes, setVideos: changeVideos, maxVideos: MAX_QUEUE_VIDEOS, selectVideo: setSelectedHash, info, form, setForm, output, setOutput, save, setSave, build,
+    statuses, batchRunning, zipReady: Boolean(batchResult?.zip), canPreview, canRunAll, preview, runAll, stopBatch: stopAfterCurrent, downloadZip,
+  })
 
   const selectedItem = selected ? statuses.get(selected) : undefined
   // Sheets appear in the summary as each video finishes, not only at the end.
@@ -242,7 +250,7 @@ export function SpriteExtractTab({ initialVideoHash, onVideoChange, toolbarSlot 
       statuses={statuses}
       locked={batchRunning}
       onSelect={(hash) => { setSelectedHash(hash); setPicking(false); const item = statuses.get(hash); setView(item?.status === 'done' ? 'result' : 'video') }}
-      onChange={(next) => { setVideoHashes(next); if (!next.includes(selected ?? '')) setSelectedHash(next[0] ?? null); setBatchResult(null) }}
+      onChange={changeVideos}
     />
   )
 
@@ -373,7 +381,7 @@ export function SpriteExtractTab({ initialVideoHash, onVideoChange, toolbarSlot 
         ) : (
           <>
             {batchResult?.zip ? (
-              <IconButton variant="secondary" label={t({ ko: 'ZIP 다시 받기', en: 'Download the ZIP again' })} onClick={() => triggerBrowserDownload(spriteResultDownloadUrl(batchResult.zip!.workspaceId, batchResult.zip!.fileName))}><Download /></IconButton>
+              <IconButton variant="secondary" label={t({ ko: 'ZIP 다시 받기', en: 'Download the ZIP again' })} onClick={downloadZip}><Download /></IconButton>
             ) : null}
             <IconButton variant="secondary" disabled={!canPreview} onClick={() => void preview()} label={t({ ko: '이 영상만 미리보기: 저장 없이 결과만 만들어봐', en: 'Preview this video: build without saving' })}><Eye /></IconButton>
             <IconButton variant="default" disabled={!canRunAll} onClick={() => void runAll()} label={t({ ko: '전체 생성 · {count}', en: 'Build all · {count}' }, { count: videoHashes.length })}>

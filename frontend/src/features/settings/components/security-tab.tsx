@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react'
+import type { ChatPageData } from '@conai/shared'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useI18n } from '@/i18n'
 import { SecurityAccountFormCard } from './security-account-form-card'
 import { SecurityAccountListCard } from './security-account-list-card'
 import { SecurityGroupColorEditorModal } from './security-group-color-editor-modal'
@@ -13,6 +16,7 @@ import { SettingsRowsSkeleton } from './settings-rows'
 /** Compose the auth/account-management settings UI from a few focused sections. */
 export function SecurityTab() {
   const securityTabData = useSecurityTabData()
+  const { t } = useI18n()
   const [isGroupColorEditorOpen, setIsGroupColorEditorOpen] = useState(false)
   const { groupColors, setGroupColor, resetGroupColor, commit: commitGroupColors } = useSecurityGroupColors()
 
@@ -42,6 +46,22 @@ export function SecurityTab() {
     () => Object.fromEntries(colorEditableGroups.map((group) => [group.groupKey, group.name ?? group.groupKey])),
     [colorEditableGroups],
   )
+
+  // Accounts and permissions stay out of a chat's reach: it reads who has which groups, and never changes them.
+  const chatData: Record<string, ChatPageData> = {
+    signedInAs: securityTabData.currentUsername ?? null,
+    accounts: securityTabData.canManageAccess ? securityTabData.accounts.map((account) => ({
+      id: account.id, username: account.username, type: account.accountType, status: account.status, groups: account.groupKeys, lastLoginAt: account.lastLoginAt,
+    })) : [],
+    permissionGroups: securityTabData.canManageAccess ? securityTabData.permissionGroups.map((group) => ({
+      key: group.groupKey, name: group.name, description: group.description, systemGroup: group.systemGroup, parent: group.parentGroupKey,
+      members: group.memberCount, permissions: group.directPermissionKeys,
+    })) : [],
+  }
+  useChatPageRegistration(securityTabData.isLoading ? null : {
+    kind: 'settings', title: t({ ko: '설정 · 계정', en: 'Settings · Accounts' }), resourceId: 'accounts', priority: 5, fields: [], data: chatData,
+    apply: () => {},
+  }, { preserveOnSearchChange: true })
 
   if (securityTabData.isLoading) {
     return <SettingsRowsSkeleton rows={5} />

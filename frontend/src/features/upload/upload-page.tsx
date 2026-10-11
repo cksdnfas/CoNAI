@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import type { ChatPageData } from '@conai/shared'
 import { FileDown, FileSearch, ImageDown, Library, RotateCcw, ScanSearch, Settings2, Upload } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -14,11 +15,12 @@ import {
 } from '@/lib/api-images'
 import type { AutoTestTaggerResult } from '@/lib/api-settings-tagger'
 import type { AutoTestKaloscopeResult } from '@/lib/api-settings-kaloscope'
-import { getImageExtractedPromptCards } from '@/lib/image-extracted-prompts'
+import { getImageExtractedPromptCards, getImageExtractedPromptSummary, getImageLoraModels } from '@/lib/image-extracted-prompts'
 import { shouldBypassImageSaveProcessing } from '@/lib/image-save-output'
 import { createRandomUuid } from '@/lib/random-uuid'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { pageAction, pageChoice, pageNumber, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import type { ImageRecord } from '@/types/image'
 import { buildMetadataRewritePatch, useMetadataRewriteDraft } from '../metadata/use-metadata-rewrite-draft'
@@ -65,18 +67,6 @@ export function UploadPage() {
   const { draft: rewriteDraft, patchDraft: patchRewriteDraft } = useMetadataRewriteDraft(extractFile, extractResult)
   const isDesktopPageLayout = useDesktopPageLayout()
   const chatUploadResourceId = useMemo(() => ({ file: extractFile, id: createRandomUuid() }), [extractFile]).id
-  useChatPageRegistration({
-    kind: 'upload', title: t({ ko: '업로드·메타데이터 검사', en: 'Upload and metadata inspection' }), resourceId: chatUploadResourceId,
-    fields: [
-      { id: 'mode', label: t({ ko: '업로드 화면', en: 'Upload view' }), type: 'select', value: mode, options: ['library', 'inspect'] },
-      ...(mode === 'inspect' && extractFile ? [
-        { id: 'prompt', label: t({ ko: '프롬프트', en: 'Prompt' }), type: 'text' as const, value: rewriteDraft.prompt }, { id: 'negativePrompt', label: t({ ko: '부정 프롬프트', en: 'Negative prompt' }), type: 'text' as const, value: rewriteDraft.negativePrompt },
-        { id: 'steps', label: 'Steps', type: 'number' as const, value: rewriteDraft.steps, min: 1, integer: true, allowEmpty: true }, { id: 'sampler', label: t({ ko: '샘플러', en: 'Sampler' }), type: 'text' as const, value: rewriteDraft.sampler }, { id: 'model', label: t({ ko: '모델', en: 'Model' }), type: 'text' as const, value: rewriteDraft.model }, { id: 'format', label: t({ ko: '파일 형식', en: 'File format' }), type: 'select' as const, value: rewriteDraft.format, options: ['png', 'jpeg', 'webp'] },
-      ] : []),
-    ],
-    data: { selected: { fileName: extractFile?.name ?? '', bytes: extractFile?.size ?? 0 } },
-    apply: (patch) => { const { mode: nextMode, ...metadata } = patch; if (nextMode !== undefined) setMode(nextMode as UploadPageMode); if (Object.keys(metadata).length) { patchRewriteDraft(metadata as Partial<typeof rewriteDraft>); setIsRewritePanelOpen(true) } },
-  })
 
 
   useEffect(() => {
@@ -129,6 +119,8 @@ export function UploadPage() {
     handleConfirmUploadSave,
     handleOpenUploadSaveOptions,
     handleUpload,
+    effectiveImageSaveSettings,
+    uploadWithOptions,
   } = useUploadPageUploadFlow({ showSnackbar })
   const extractBusy = activeExtractAction !== null || isConvertingWebP || isRewritingMetadata
 
@@ -320,6 +312,90 @@ export function UploadPage() {
       setActiveExtractAction(null)
     }
   }
+
+  // The chat sees what the inspected image holds (no paths), the upload queue and the save options, and can re-run an
+  // extraction, convert or download the inspected file, or (through a review card) upload the queue to the library.
+  // Clipped and without empty values: an API chat resends the page view with every request.
+  const clip = (text: string | null | undefined, max: number) => (text ? (text.length > max ? `${text.slice(0, max)}…` : text) : null)
+  const compact = (value: Record<string, unknown>) => Object.fromEntries(Object.entries(value).filter(([, item]) => item !== null && item !== undefined && item !== '' && !(Array.isArray(item) && item.length === 0)))
+  const extractedSummary = extractResult ? (() => {
+    const prompts = getImageExtractedPromptSummary(extractResult)
+    return compact({
+      aiTool: extractResult.ai_metadata?.ai_tool,
+      model: extractResult.ai_metadata?.model_name,
+      loras: getImageLoraModels(extractResult).slice(0, 16),
+      prompt: clip(prompts.positivePrompt, 1500),
+      negativePrompt: clip(prompts.negativePrompt, 600),
+      characterPrompts: prompts.characterPrompts.slice(0, 6).map((text) => clip(text, 300)),
+      params: Object.fromEntries(extractedGenerationParamItems.filter((item) => item.value && item.value !== '-').map((item) => [item.id, item.value])),
+      size: extractResult.width && extractResult.height ? `${extractResult.width}x${extractResult.height}` : null,
+    })
+  })() : null
+  const topScores = (scores: Record<string, number> | undefined, count: number) => Object.entries(scores ?? {}).sort((a, b) => b[1] - a[1]).slice(0, count).map(([name, score]) => ({ name, score: Math.round(score * 1000) / 1000 }))
+  const saveOptionsData = (options: typeof effectiveImageSaveSettings) => ({ applyToUpload: options.applyToUpload, format: options.defaultFormat, quality: options.quality, resize: options.resizeEnabled, maxWidth: options.maxWidth, maxHeight: options.maxHeight })
+  const inspecting = mode === 'inspect' && Boolean(extractFile)
+  useChatPageRegistration({
+    kind: 'upload', title: t({ ko: '업로드·메타데이터 검사', en: 'Upload and metadata inspection' }), resourceId: chatUploadResourceId,
+    fields: [
+      { id: 'mode', label: t({ ko: '업로드 화면 (library = 라이브러리에 저장, inspect = 메타데이터만 보기)', en: 'Upload view (library = save to the library, inspect = metadata only)' }), type: 'select', value: mode, options: ['library', 'inspect'] },
+      ...(inspecting ? [
+        { id: 'prompt', label: t({ ko: '프롬프트', en: 'Prompt' }), type: 'text' as const, value: rewriteDraft.prompt }, { id: 'negativePrompt', label: t({ ko: '부정 프롬프트', en: 'Negative prompt' }), type: 'text' as const, value: rewriteDraft.negativePrompt },
+        { id: 'steps', label: 'Steps', type: 'number' as const, value: rewriteDraft.steps, min: 1, integer: true, allowEmpty: true }, { id: 'sampler', label: t({ ko: '샘플러', en: 'Sampler' }), type: 'text' as const, value: rewriteDraft.sampler }, { id: 'model', label: t({ ko: '모델', en: 'Model' }), type: 'text' as const, value: rewriteDraft.model }, { id: 'format', label: t({ ko: '파일 형식', en: 'File format' }), type: 'select' as const, value: rewriteDraft.format, options: ['png', 'jpeg', 'webp'] },
+      ] : []),
+    ],
+    data: mode === 'inspect' ? compact({
+      selected: { fileName: extractFile?.name ?? '', bytes: extractFile?.size ?? 0, mimeType: extractFile?.type ?? '' },
+      extracting: activeExtractAction,
+      error: clip(extractError, 300),
+      extracted: extractedSummary,
+      tagger: taggerResult ? compact({ model: taggerResult.model, rating: topScores(taggerResult.rating, 4), general: topScores(taggerResult.general, 25), character: topScores(taggerResult.character, 8) }) : null,
+      artists: kaloscopeResult ? compact({ model: kaloscopeResult.model, artists: topScores(kaloscopeResult.artists, 10) }) : null,
+    }) as Record<string, ChatPageData> : compact({
+      queue: uploadFiles.slice(0, 40).map((file) => ({ name: file.name.slice(0, 120), bytes: file.size })),
+      queued: uploadFiles.length > 40 ? uploadFiles.length : null,
+      uploading: isUploading || null,
+      result: uploadResult ? compact({ successful: uploadResult.successful, failed: uploadResult.failed.slice(0, 20).map((failure) => ({ name: failure.filename, error: clip(failure.error, 200) })) }) : null,
+      error: clip(uploadError, 300),
+      saveSettings: saveOptionsData(effectiveImageSaveSettings),
+    }) as Record<string, ChatPageData>,
+    actions: mode === 'inspect' ? (extractFile && !extractBusy ? [
+      pageAction('upload.reextract', t({ ko: '다시 추출', en: 'Extract again' }), t({ ko: '검사 중인 이미지에서 다시 뽑아. prompt = 프롬프트·생성 정보, tagger = 자동 태그, kaloscope = 작가, all = 전부. 결과는 data에 나와.', en: 'Extract again from the inspected image: prompt = prompt and generation info, tagger = auto tags, kaloscope = artists, all = everything. Results appear in data.' }), pageObject({ kind: pageChoice(['all', 'prompt', 'tagger', 'kaloscope']) }, ['kind'])),
+      pageAction('upload.convert', t({ ko: 'WebP로 변환해 받기', en: 'Convert to WebP and download' }), t({ ko: '검사 중인 이미지를 메타데이터를 보존한 WebP로 바꿔 브라우저로 받아. 라이브러리에는 저장 안 해.', en: 'Convert the inspected image to WebP (metadata kept) and download it; nothing is saved to the library.' })),
+      pageAction('upload.download', t({ ko: '메타 수정 파일 받기', en: 'Download with edited metadata' }), t({ ko: '채운 프롬프트·스텝·샘플러·모델·형식으로 메타데이터를 고친 파일을 브라우저로 받아. 라이브러리에는 저장 안 해.', en: 'Download the inspected image with the filled prompt, steps, sampler, model and format written into its metadata; nothing is saved to the library.' })),
+    ] : []) : (uploadFiles.length && !isUploading ? [
+      pageAction('upload.library', t({ ko: '라이브러리에 업로드', en: 'Upload to the library' }), t({ ko: '대기열(data.queue)의 파일을 라이브러리에 올려. processing: settings = 설정의 저장 옵션(data.saveSettings), custom = 여기서 준 형식·품질·크기 조정, off = 원본 그대로. 동영상과 GIF는 항상 원본으로 들어가.', en: 'Upload the queued files (data.queue) to the library. processing: settings = the saved options (data.saveSettings), custom = the format, quality and resize given here, off = files as they are. Videos and GIFs always go in unchanged.' }), pageObject({
+        processing: pageChoice(['settings', 'custom', 'off']),
+        format: pageChoice(['original', 'png', 'jpeg', 'webp']),
+        quality: pageNumber(1, 100, true),
+        resize: { type: 'boolean' },
+        maxWidth: pageNumber(1, 16384, true),
+        maxHeight: pageNumber(1, 16384, true),
+      }, ['processing']), 'save'),
+    ] : []),
+    apply: (patch) => { const { mode: nextMode, ...metadata } = patch; if (nextMode !== undefined) setMode(nextMode as UploadPageMode); if (Object.keys(metadata).length) { patchRewriteDraft(metadata as Partial<typeof rewriteDraft>); setIsRewritePanelOpen(true) } },
+    applyAction: async (id, args, assertCurrent) => {
+      assertCurrent()
+      if (id === 'upload.reextract') { await handleExtractAction(String(args.kind) as ExtractAction); return }
+      if (id === 'upload.convert') { await handleConvertWebP(); return }
+      if (id === 'upload.download') { await handleRewriteMetadata(); return }
+      if (id === 'upload.library') {
+        const base = effectiveImageSaveSettings
+        if (args.processing === 'off') { await uploadWithOptions(null); return }
+        if (args.processing === 'settings') { await uploadWithOptions(base.applyToUpload ? base : null); return }
+        await uploadWithOptions({
+          ...base,
+          applyToUpload: true,
+          defaultFormat: typeof args.format === 'string' ? args.format as typeof base.defaultFormat : base.defaultFormat,
+          quality: typeof args.quality === 'number' ? args.quality : base.quality,
+          resizeEnabled: typeof args.resize === 'boolean' ? args.resize : base.resizeEnabled,
+          maxWidth: typeof args.maxWidth === 'number' ? args.maxWidth : base.maxWidth,
+          maxHeight: typeof args.maxHeight === 'number' ? args.maxHeight : base.maxHeight,
+        })
+        return
+      }
+      throw new Error('업로드 화면에 없는 작업이야.')
+    },
+  })
 
   const uploadDropZone = useDropZoneState<HTMLButtonElement>({
     onDropFiles: (files) => {

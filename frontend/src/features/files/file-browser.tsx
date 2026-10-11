@@ -21,11 +21,11 @@ import { SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SendToAudioDialog, useCanSendToAudio } from '@/features/audio/send-to-audio-dialog'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
-import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
+import { pageAction, pageArray, pageChoice, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
-import { FILES_QUERY_KEY, createStoredFolder, deleteStoredFiles, formatFileSize, listStoredFileOwners, listStoredFiles, listStoredFolders, moveStoredFiles, renameStoredFile, searchStoredFiles, storedFileDownloadUrl, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
+import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, TEXT_FILE_PATTERN, createStoredFolder, deleteStoredFiles, formatFileSize, listStoredFileOwners, listStoredFileRevisions, listStoredFiles, listStoredFolders, moveStoredFiles, renameStoredFile, restoreStoredFileRevision, searchStoredFiles, storedFileDownloadUrl, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { FilePreview } from './file-preview'
@@ -297,8 +297,16 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '파일 작업에 실패했어.', en: 'File operation failed.' })) }),
   })
   const busy = mutation.isPending
+  const chatPage = !isPicker && chatCanReadFiles && !browsingAll && !browsingSystem
+  // The previewed text file's earlier versions, so the connected chat can put one back (a review card).
+  const previewVersioned = chatPage && preview !== null && preview.kind === 'file' && TEXT_FILE_PATTERN.test(preview.name)
+  const versionsQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'revisions', preview?.id, preview?.updatedAt], queryFn: () => listStoredFileRevisions(preview!.id, storeOwner), enabled: previewVersioned })
+  const versions = previewVersioned ? versionsQuery.data?.revisions ?? [] : []
+  const editableDocuments = entries.filter((entry) => entry.kind === 'file' && TEXT_FILE_PATTERN.test(entry.name) && entry.size <= MAX_TEXT_DOCUMENT_BYTES)
+  const saveName = (dialog: NonNullable<NameDialog>) => mutation.mutateAsync(() => (dialog.id ? renameStoredFile(dialog.id, dialog.name, storeOwner) : createStoredFolder(parentId, dialog.name, storeOwner)))
+  const writerName = (source: { via?: string; profileName?: string } | null) => (source ? [source.via, source.profileName].filter(Boolean).join(' · ') : null)
 
-  useChatPageRegistration(!isPicker && chatCanReadFiles && !browsingAll && !browsingSystem ? {
+  useChatPageRegistration(chatPage ? {
     kind: 'files', title: t({ ko: '파일 보관함', en: 'File store' }), resourceId: `${storeOwner ?? 'self'}:${parentId ?? 'root'}`, localRevision: JSON.stringify([selected, preview?.id, nameDialog, moveOpen, searchOpen, searchInput]),
     fields: [
       { id: 'viewMode', label: t({ ko: '목록 표시', en: 'List view' }), type: 'select', value: viewMode, options: ['grid', 'list'] },
@@ -306,18 +314,52 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
       ...(nameDialog ? [{ id: 'name', label: t({ ko: '폴더·파일 이름 입력', en: 'Folder or file name draft' }), type: 'text' as const, value: nameDialog.name }] : []),
       ...(moveOpen ? [{ id: 'moveTarget', label: t({ ko: '이동할 폴더 (빈 값은 최상위)', en: 'Destination folder (empty means root)' }), type: 'select' as const, value: moveTarget, options: ['', ...folders.filter((entry) => !selected.includes(entry.folder.id)).map((entry) => entry.folder.id)].slice(0, 100) }] : []),
     ],
-    data: { files: entries.slice(0, 512).map((entry) => ({ id: entry.id, name: entry.name, kind: entry.kind, mimeType: entry.mimeType, bytes: entry.size })), selected: selection.map((entry) => ({ id: entry.id, name: entry.name })), total: query.data?.total ?? 0, offset },
+    data: {
+      files: entries.slice(0, 512).map((entry) => ({ id: entry.id, name: entry.name, kind: entry.kind, mimeType: entry.mimeType, bytes: entry.size })), selected: selection.map((entry) => ({ id: entry.id, name: entry.name })), total: query.data?.total ?? 0, offset,
+      ...(preview ? { previewing: preview.id } : {}),
+      // Names and writers of the previewed file's versions only: their text stays out (open the document to read it).
+      ...(versions.length ? { previewVersions: versions.slice(0, 30).map((version) => ({ id: version.id, at: version.replacedAt, by: writerName(version.replacedBy) })) } : {}),
+    },
     apply: (patch) => { if (patch.viewMode !== undefined) changeViewMode(patch.viewMode as FileViewMode); if (patch.search !== undefined) { setSearchInput(String(patch.search)); setSearchOpen(String(patch.search).trim() !== '') } if (patch.name !== undefined) setNameDialog((old) => old ? { ...old, name: String(patch.name) } : old); if (patch.moveTarget !== undefined) setMoveTarget(String(patch.moveTarget)) },
     actions: [
       pageAction('files.open', t({ ko: '폴더 열기', en: 'Open folder' }), t({ ko: '목록(data.files)의 폴더나 최상위(root)를 열어.', en: 'Open a listed folder or the top level (root).' }), pageObject({ id: pageChoice(['root', ...entries.filter((entry) => entry.kind === 'folder').slice(0, 200).map((entry) => entry.id)]) }, ['id'])),
       ...(entries.some((entry) => entry.kind !== 'folder') ? [pageAction('files.preview', t({ ko: '파일 미리보기', en: 'Preview file' }), t({ ko: '목록의 파일 미리보기를 열어.', en: 'Open a listed file preview.' }), pageObject({ id: pageChoice(entries.filter((entry) => entry.kind !== 'folder').slice(0, 300).map((entry) => entry.id)) }, ['id']))] : []),
+      ...(entries.length ? [pageAction('files.select', t({ ko: '항목 선택', en: 'Select items' }), t({ ko: '빈 배열은 선택 해제', en: 'empty clears' }), pageObject({ ids: pageArray(pageText(32), 200) }, ['ids']))] : []),
+      ...(canOrganize ? [
+        pageAction('files.new_folder', t({ ko: '새 폴더 창 열기', en: 'Open new folder dialog' }), t({ ko: 'name을 채우고 files.name_save', en: 'fill name, then files.name_save' })),
+        ...(entries.length ? [pageAction('files.rename', t({ ko: '이름 변경 창 열기', en: 'Open rename dialog' }), t({ ko: 'name을 채우고 files.name_save', en: 'fill name, then files.name_save' }), pageObject({ id: pageText(32) }, ['id']))] : []),
+        ...(nameDialog && nameDialog.name.trim() ? [pageAction('files.name_save', nameDialog.id ? t({ ko: '이름 바꾸기', en: 'Rename' }) : t({ ko: '폴더 만들기', en: 'Create folder' }), '', undefined, 'save')] : []),
+        ...(selection.length ? [pageAction('files.move', t({ ko: '이동 창 열기', en: 'Open move dialog' }), t({ ko: 'moveTarget을 고르고 files.move_save', en: 'pick moveTarget, then files.move_save' }))] : []),
+        ...(moveOpen && selection.length ? [pageAction('files.move_save', t({ ko: '선택 항목 이동', en: 'Move selection' }), '', undefined, 'save')] : []),
+      ] : []),
+      ...(canDelete && selection.length ? [pageAction('files.delete', t({ ko: '선택 항목 삭제', en: 'Delete selection' }), '', undefined, 'save')] : []),
+      ...(canUpload ? [pageAction('files.new_document', t({ ko: '새 문서 쓰기', en: 'New document' }), '')] : []),
+      ...(canUpload && editableDocuments.length ? [pageAction('files.edit_document', t({ ko: '텍스트 문서 열기', en: 'Open text document' }), t({ ko: '열린 문서만 읽고 고칠 수 있어', en: 'only an open document can be read and edited' }), pageObject({ id: pageText(32) }, ['id']))] : []),
+      ...(canOrganize && versions.length ? [pageAction('files.restore_version', t({ ko: '이전 버전 되돌리기', en: 'Restore earlier version' }), t({ ko: 'data.previewVersions의 id', en: 'an id in data.previewVersions' }), pageObject({ versionId: pageText(32) }, ['versionId']), 'save')] : []),
     ],
-    applyAction: (id, args, assertCurrent) => {
+    applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
       if (id === 'files.open') { navigate(args.id === 'root' ? null : String(args.id)); return }
+      if (id === 'files.select') { setSelected((Array.isArray(args.ids) ? args.ids : []).map(String).filter((value) => entries.some((entry) => entry.id === value))); return }
+      if (id === 'files.new_folder') { setNameDialog({ name: '' }); return }
+      if (id === 'files.name_save' && nameDialog) { await saveName(nameDialog); return }
+      if (id === 'files.move') { setMoveTarget(parentId ?? ''); setMoveOpen(true); return }
+      if (id === 'files.move_save') { await mutation.mutateAsync(() => moveStoredFiles(selected, moveTarget || null, storeOwner)); return }
+      if (id === 'files.delete') { await mutation.mutateAsync(() => deleteStoredFiles(selected, storeOwner)); return }
+      if (id === 'files.new_document') { setEditor({ entry: null }); return }
+      if (id === 'files.restore_version' && preview) {
+        if (!versions.some((version) => version.id === args.versionId)) throw new Error('그 버전을 찾을 수 없어.')
+        const saved = await restoreStoredFileRevision(preview.id, String(args.versionId), storeOwner)
+        await refresh()
+        setPreview(saved)
+        return
+      }
       const entry = entries.find((item) => item.id === String(args.id))
-      if (id !== 'files.preview' || !entry) throw new Error('보관함에 없는 파일이야.')
-      setPreview(entry)
+      if (!entry) throw new Error('보관함에 없는 파일이야.')
+      if (id === 'files.preview') setPreview(entry)
+      else if (id === 'files.rename') setNameDialog({ id: entry.id, name: entry.name })
+      else if (id === 'files.edit_document' && editableDocuments.includes(entry)) { setPreview(null); setEditor({ entry }) }
+      else throw new Error('보관함에 없는 작업이야.')
     },
   } : null)
 
@@ -662,8 +704,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
           onSubmit={(event) => {
             event.preventDefault()
             if (!nameDialog || busy) return
-            const dialog = nameDialog
-            mutation.mutate(() => (dialog.id ? renameStoredFile(dialog.id, dialog.name, storeOwner) : createStoredFolder(parentId, dialog.name, storeOwner)))
+            void saveName(nameDialog).catch(() => undefined)
           }}
         >
           <ModalBody>
@@ -694,6 +735,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
       {editor ? (
         <FileTextEditor
           key={editor.entry?.id ?? 'new'}
+          chatPage={chatPage}
           entry={editor.entry}
           parentId={parentId}
           owner={storeOwner}

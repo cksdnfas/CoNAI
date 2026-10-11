@@ -25,6 +25,9 @@ import { resolveRequestBodyLimitsMb } from '../../middleware/requestBodyLimits';
 import { getMcpGenerationRoutingOptions, getMcpGenerationRoutingRules } from './generationJobRouting';
 import { canRequesterViewImages } from '../../middleware/imageAccess';
 import { isChatMcpSource } from '../context';
+import { COMFY_SEED_RULE } from '../../services/comfyui/seedControl';
+import { checkComfyWorkflowOnServers } from '../../services/comfyui/workflowServerCheck';
+import { ComfyUiWorkflowConversionError, describeComfyUiWorkflowConversionFailure, resolveApiWorkflowJson } from '../../services/comfyui/uiWorkflowConversion';
 
 export function registerGenerationTools(server: McpServer, context: McpRequestContext): void {
   registerWorkflowListTools(server);
@@ -227,7 +230,7 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
 
   server.registerTool(
     'generate_comfyui',
-    { description: 'Compatibility synchronous ComfyUI generation. Prefer submit_generation_job for durable work that may exceed the HTTP connection lifetime.', inputSchema: z.object(inputSchema) },
+    { description: `Compatibility synchronous ComfyUI generation. Prefer submit_generation_job for durable work that may exceed the HTTP connection lifetime. ${COMFY_SEED_RULE}`, inputSchema: z.object(inputSchema) },
     async ({ workflow_id, server_id, inputs, prompt_data, group_id, group_path }) => {
       try {
         const workflow = resolveUsableWorkflow(workflow_id);
@@ -318,7 +321,7 @@ function registerWorkflowDetailTools(server: McpServer): void {
   // 워크플로우 상세 조회
   server.registerTool(
     'get_workflow_details',
-    { description: 'Get detailed information about a specific ComfyUI workflow, including its marked fields (parameters required for generation).', inputSchema: z.object({
+    { description: 'Get detailed information about a specific ComfyUI workflow, including its marked fields (parameters required for generation). Workflows are stored in the ComfyUI API format; a ComfyUI editor ("Save") workflow is converted to it when it is registered or imported.', inputSchema: z.object({
       workflow_id: z.number().int().describe('Workflow ID to get details for'),
     }) },
     async ({ workflow_id }) => {
@@ -365,6 +368,7 @@ function registerWorkflowDetailTools(server: McpServer): void {
                 notes: [
                   'Every input key is a marked field ID.',
                   'Any omitted field uses its saved workflow default.',
+                  COMFY_SEED_RULE,
                   'Omit both server_id and server_tag for automatic queue distribution.',
                   'Provide server_id for one fixed active workflow-eligible server, or server_tag for exact normalized tag routing. Do not combine them.',
                   'submit_generation_job returns immediately; poll get_generation_job at intervals of at least 2 seconds and back off on HTTP 429.',
@@ -387,4 +391,46 @@ function registerWorkflowDetailTools(server: McpServer): void {
       }
     }
   );
+
+  server.registerTool(
+    'check_comfy_workflow',
+    { description: `Check a ComfyUI workflow against the ComfyUI servers that may run it, without saving or running anything: missing node types or models, values out of range, and nodes that never reach an output. Give workflow_id for a registered workflow (checked against its linked servers), or workflow_json for a draft; a ComfyUI editor ("Save") workflow is converted to the API format first, the same way registering it would. ${COMFY_SEED_RULE}`, inputSchema: z.object({
+      workflow_id: z.number().int().positive().optional().describe('A registered ComfyUI workflow to check'),
+      workflow_json: z.string().max(CHECK_WORKFLOW_JSON_MAX).optional().describe('A workflow draft (API format, or a ComfyUI editor workflow to convert first)'),
+      include_converted: z.boolean().optional().describe('Also return the converted API workflow JSON when a ComfyUI editor workflow was converted'),
+    }) },
+    async ({ workflow_id, workflow_json, include_converted }) => {
+      try {
+        if ((workflow_id === undefined) === (workflow_json === undefined)) throw new Error('Give either workflow_id or workflow_json.');
+        let source = workflow_json ?? '';
+        if (workflow_id !== undefined) {
+          const workflow = WorkflowModel.findById(workflow_id);
+          if (!workflow || workflow.deleted_at) throw new Error(`Workflow with ID ${workflow_id} not found`);
+          source = workflow.workflow_json;
+        }
+        let converted: Awaited<ReturnType<typeof resolveApiWorkflowJson>>;
+        try {
+          converted = await resolveApiWorkflowJson(source);
+        } catch (error) {
+          if (error instanceof ComfyUiWorkflowConversionError) throw new Error(`${describeComfyUiWorkflowConversionFailure(error)}${error.issues.length > 1 ? ` (${error.issues.slice(0, 8).join(' · ')})` : ''}`);
+          throw error;
+        }
+        const check = await checkComfyWorkflowOnServers(converted.workflowJson, { workflowId: workflow_id ?? null });
+        return { content: [{ type: 'text' as const, text: JSON.stringify({
+          converted: converted.converted,
+          ...(converted.warnings.length > 0 ? { conversion_warnings: converted.warnings } : {}),
+          ...(include_converted && converted.converted ? { converted_workflow_json: converted.workflowJson.length <= CHECK_WORKFLOW_JSON_MAX ? converted.workflowJson : null } : {}),
+          servers: check.servers,
+          output_node_ids: check.output_node_ids,
+          unused_node_ids: check.unused_node_ids,
+          ...(check.servers.length === 0 ? { note: 'No active ComfyUI server can run this workflow, so nothing was checked.' } : {}),
+        }) }] };
+      } catch (error) {
+        return { isError: true, content: [{ type: 'text' as const, text: `Workflow check error: ${(error as Error).message}` }] };
+      }
+    },
+  );
 }
+
+/** A draft larger than this does not fit a chat argument anyway. */
+const CHECK_WORKFLOW_JSON_MAX = 400_000;

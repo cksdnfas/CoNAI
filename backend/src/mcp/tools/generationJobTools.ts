@@ -23,6 +23,7 @@ import { requireRequesterPermission } from '../../middleware/featureAccess';
 import { validateMcpToolArguments } from '../requestSecurity';
 import { canRequesterViewImages } from '../../middleware/imageAccess';
 import { requireChatAssetGeneration } from '../../services/codex-chat/chatAssetAccess';
+import { COMFY_SEED_RULE } from '../../services/comfyui/seedControl';
 import type { McpRequester } from '../context';
 import {
   describeMcpGenerationJobRouting,
@@ -294,7 +295,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
       workflow_id: z.number().int().positive().optional(),
       server_id: z.number().int().positive().optional().describe('ComfyUI only. Target one active workflow-eligible server. Cannot be combined with server_tag.'),
       server_tag: z.string().trim().min(1).max(64).optional().describe('ComfyUI only. Route to an active workflow-eligible server with this exact normalized tag. Cannot be combined with server_id.'),
-      inputs: z.record(z.string(), z.unknown()).optional().describe('ComfyUI marked-field inputs, or a NovelAI/Codex payload alias'),
+      inputs: z.record(z.string(), z.unknown()).optional().describe(`ComfyUI marked-field inputs, or a NovelAI/Codex payload alias. ${COMFY_SEED_RULE}`),
       request_payload: z.record(z.string(), z.unknown()).optional().describe('NovelAI/Codex generation parameters. NovelAI: prompt, negative_prompt, model, width, height, steps, scale, sampler, seed, n_samples (1), characters. Codex (see get_codex_generation_options): model (real CLI agent-model override), prompt, negative_prompt, operation, image, mask, size, count and imageSaveOptions.'),
       group_id: z.number().int().positive().optional(),
       group_path: mcpGroupPathSchema,

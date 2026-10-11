@@ -126,6 +126,21 @@ export type ChatProposal = { id: number; dismissed?: boolean } & (
       patch: Record<string, unknown>
       /** The current values of those same fields, for the before/after view. */
       before: Record<string, unknown>
+      /** How ids in a row read (a rating tier, judge preset, profile or linked files by name), when the raw value would not. */
+      display?: Record<string, { before: string; after: string }>
+      saved?: boolean
+    }
+  | {
+      /**
+       * propose_chat_settings: this chat's own settings (linked account lorebooks, record book, linked files, minutes
+       * folder). The chat's owner saves it (POST /api/chat-proposals/:id/apply) with the context tab's rules.
+       */
+      kind: 'chat_settings'
+      /** Only the keys that change. */
+      patch: { lorebookIds?: number[]; loreRecordBookId?: number | null; linkedFiles?: Array<{ id: string; write: boolean }>; minutesFolderId?: string | null }
+      before: { lorebookIds?: number[]; loreRecordBookId?: number | null; linkedFiles?: Array<{ id: string; write: boolean }>; minutesFolderId?: string | null }
+      /** Each changed key as it reads on the card (names, not ids). */
+      display: Record<string, { before: string; after: string }>
       saved?: boolean
     }
   | {

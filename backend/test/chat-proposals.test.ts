@@ -116,8 +116,16 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
       { type: 'connect', edgeId: 'image-result', sourceNodeId: 'image', sourcePort: 'image', targetNodeId: 'result', targetPort: 'value' },
     ])
     assert.equal(media.graph.edges.length, 1, 'media port wiring remains available')
-    assert.throws(() => applyChatWorkflowOperations(media.graph, workflowModules, [{ type: 'set_input', nodeId: 'image', key: 'image', value: '/uploads/private.png' }]), /보호된 입력/)
+    assert.throws(() => applyChatWorkflowOperations(media.graph, workflowModules, [{ type: 'set_input', nodeId: 'image', key: 'image', value: '/uploads/private.png' }]), /composite_hash/)
+    assert.throws(() => applyChatWorkflowOperations(media.graph, workflowModules, [{ type: 'set_input', nodeId: 'image', key: 'image', value: 'data:image/png;base64,AAAA' }]), /composite_hash/)
+    // A library image is set by its hash and kept as a ref; paths and inline data never reach the chat.
+    const hash = 'a'.repeat(48)
+    const picked = applyChatWorkflowOperations(media.graph, workflowModules, [{ type: 'set_input', nodeId: 'image', key: 'image', value: hash.toUpperCase() }])
+    assert.deepEqual(picked.graph.nodes.find((node) => node.id === 'image')!.input_values.image, { composite_hash: hash })
+    assert.deepEqual(applyChatWorkflowOperations(media.graph, workflowModules, [{ type: 'set_input', nodeId: 'image', key: 'image', value: JSON.stringify({ composite_hash: hash }) }]).operations[0], { type: 'set_input', nodeId: 'image', key: 'image', value: { composite_hash: hash } })
     assert.deepEqual(sanitizeChatWorkflowInputs({ image: '/uploads/private.png' }, imageModule), {})
+    assert.deepEqual(sanitizeChatWorkflowInputs({ image: 'data:image/png;base64,AAAA' }, imageModule), {})
+    assert.deepEqual(sanitizeChatWorkflowInputs({ image: { composite_hash: hash, path: '/uploads/x.png' } }, imageModule), { image: { composite_hash: hash } })
     const jsonModule = workflowModules.find((module) => module.operation === 'system.constant_json')!
     assert.throws(() => applyChatWorkflowOperations(emptyWorkflow, workflowModules, [{ type: 'add_node', nodeId: 'json', moduleId: jsonModule.id }, { type: 'set_input', nodeId: 'json', key: 'json', value: '{"api_key":"secret"}' }]), /안전한 JSON/)
     const removed = applyChatWorkflowOperations(edited.graph, workflowModules, [{ type: 'remove_node', nodeId: 'middle' }])

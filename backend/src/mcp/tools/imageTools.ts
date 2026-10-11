@@ -12,6 +12,9 @@ import { ImageSafetyService } from '../../services/imageSafetyService';
 import { CONTENT_RATING_BLOCKED, libraryMediaAllowed } from '../../services/contentRating';
 import { contextContentLimit, historyWithinContextRating } from '../../services/codex-chat/chatContentRating';
 import { AuthAccount } from '../../models/AuthAccount';
+import { db } from '../../database/init';
+import { searchImagesByText, similarImagesByVector, type ImageVectorHit } from '../../services/embeddings/imageIndex';
+import { embeddingFeatureOn } from '../../services/aiWorker/textEmbeddingService';
 
 function sanitizeMetadata(metadata: Record<string, unknown>, includeHeavyFields: boolean) {
   const excluded = new Set(['original_file_path', 'thumbnail_path', 'storage_path', 'path']);
@@ -121,7 +124,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   // 이미지 메타데이터 상세 조회
   server.registerTool(
     'get_image_metadata',
-    { description: 'Get detailed metadata for a specific image by its composite hash.', inputSchema: z.object({
+    { description: 'Get detailed metadata for a specific image by its composite hash. auto_tags holds the automatic analysis: tagger (model, booru-style general/character/rating tags with confidence; the PixAI tagger, model "pixai-v1", adds artist and meta tags) and kaloscope (likely artists with scores).', inputSchema: z.object({
       composite_hash: z.string().describe('The 48-character composite hash of the image'),
       include_heavy_fields: z.boolean().default(false).describe('Include histogram and raw metadata fields'),
     }) },
@@ -239,7 +242,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   // 자동 태그 기반 이미지 검색
   server.registerTool(
     'search_images_by_tags',
-    { description: 'Search images by auto-generated tags (WD Tagger). Supports tag name search, character search, rating filter, and rating score range.', inputSchema: z.object({
+    { description: 'Search images by booru-style tags from the automatic tagger (the WD tagger or PixAI, whichever Settings › 자동 › 태거 uses). Supports tag name search, character search, rating filter, and rating score range. For a plain-language description of what an image shows, use search_images_by_meaning.', inputSchema: z.object({
       tags: z.string().optional().describe('Comma-separated tag names to search (e.g. "long_hair, blue_eyes, school_uniform")'),
       min_tag_score: z.number().min(0).max(1).optional().describe('Minimum confidence score for tag matching (0-1)'),
       character: z.string().optional().describe('Character name to search for'),
@@ -347,4 +350,89 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
       }
     }
   );
+
+  // 뜻(설명)으로 이미지 검색 — 이미지 임베딩
+  server.registerTool(
+    'search_images_by_meaning',
+    { description: 'Find library images by what they show, from a plain description ("a girl reading under a tree at dusk"), using image embeddings; best match first with similarity (cosine × 100, about 64+ is a match). Same as the library\'s 설명 (meaning) search tab. Needs image embeddings on (Settings › 자동 › 임베딩 › 이미지 임베딩); prompt words are better searched with search_images, booru tags with search_images_by_tags.', inputSchema: z.object({
+      text: z.string().trim().min(1).max(MEANING_QUERY_MAX_CHARS).describe('What the image shows, in plain words (English matches best)'),
+      limit: z.number().int().min(1).max(VECTOR_TOOL_MAX_LIMIT).default(20).describe('Results to return'),
+    }) },
+    async ({ text, limit }) => {
+      try {
+        if (!embeddingFeatureOn('imageSearch')) return vectorToolError(IMAGE_SEARCH_OFF);
+        const hits = await searchImagesByText(text, limit);
+        if (!hits) return vectorToolError('The embedding model did not answer (the AI runtime may not be installed or is still loading). Try again in a moment.');
+        const images = vectorHitSummaries(hits);
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ images, total: images.length, query: text }) }] };
+      } catch (error) {
+        return vectorToolError(`Error searching by meaning: ${(error as Error).message}`);
+      }
+    }
+  );
+
+  // 한 이미지와 내용·화풍이 비슷한 이미지 — 상세 화면의 내용 유사 / 화풍 유사
+  server.registerTool(
+    'find_similar_images',
+    { description: 'Images closest to one library image, best first with similarity (cosine × 100): basis "content" = shows similar things (image embeddings, needs image embeddings on), "style" = drawn in a similar style (Kaloscope style vectors, needs Kaloscope style vectors saved). These are the image detail page\'s 내용 유사 / 화풍 유사 sections. An image without that vector yet is reported as such.', inputSchema: z.object({
+      composite_hash: z.string().trim().regex(/^(?:[0-9a-f]{48}|[0-9a-f]{32})$/, 'composite_hash must be a library media hash').describe('The image to compare against'),
+      basis: z.enum(['content', 'style']).describe('"content" (what it shows) or "style" (how it is drawn)'),
+      limit: z.number().int().min(1).max(VECTOR_TOOL_MAX_LIMIT).default(20).describe('Results to return'),
+    }) },
+    async ({ composite_hash, basis, limit }) => {
+      try {
+        const target = MediaMetadataModel.findByHash(composite_hash);
+        if (!target || !MediaPostprocessVisibilityService.isReadyRecord(target) || ImageSafetyService.isHidden(target.rating_score)) {
+          return vectorToolError(`Image with hash ${composite_hash} not found`);
+        }
+        if (basis === 'content' && !embeddingFeatureOn('imageSearch')) return vectorToolError(IMAGE_SEARCH_OFF);
+        const hits = similarImagesByVector(composite_hash, basis, limit);
+        if (!hits) {
+          return vectorToolError(basis === 'style'
+            ? 'This image has no style vector yet (Kaloscope with style vectors on has to run on it first; Settings › 자동 › Kaloscope › 화풍 벡터 저장).'
+            : 'This image has no image vector yet (it is still waiting to be indexed).');
+        }
+        const images = vectorHitSummaries(hits);
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ images, total: images.length, basis, composite_hash }) }] };
+      } catch (error) {
+        return vectorToolError(`Error finding similar images: ${(error as Error).message}`);
+      }
+    }
+  );
+}
+
+const MEANING_QUERY_MAX_CHARS = 500;
+const VECTOR_TOOL_MAX_LIMIT = 50;
+const IMAGE_SEARCH_OFF = 'Image search by meaning is off. An administrator turns it on in Settings › 자동 › 임베딩 (이미지 임베딩); the library is then indexed in the background.';
+
+function vectorToolError(text: string) {
+  return { isError: true, content: [{ type: 'text' as const, text }] };
+}
+
+/** The hits as short library rows, in hit order (hits are already limited to images the library shows). */
+function vectorHitSummaries(hits: ImageVectorHit[]) {
+  if (hits.length === 0) return [];
+  const rows = db.prepare(`
+    SELECT im.composite_hash, im.width, im.height, im.ai_tool, im.model_name, im.prompt, im.first_seen_date, f.mime_type
+    FROM media_metadata im
+    LEFT JOIN image_files f ON im.composite_hash = f.composite_hash AND f.file_status = 'active'
+    WHERE im.composite_hash IN (${hits.map(() => '?').join(', ')})
+    GROUP BY im.composite_hash
+  `).all(...hits.map((hit) => hit.compositeHash)) as Array<{ composite_hash: string; width: number | null; height: number | null; ai_tool: string | null; model_name: string | null; prompt: string | null; first_seen_date: string | null; mime_type: string | null }>;
+  const byHash = new Map(rows.map((row) => [row.composite_hash, row]));
+  return hits.flatMap((hit) => {
+    const row = byHash.get(hit.compositeHash);
+    if (!row) return [];
+    return [{
+      composite_hash: row.composite_hash,
+      similarity: Math.round(hit.score * 1000) / 10,
+      media_type: row.mime_type?.startsWith('video/') ? 'video' : row.mime_type === 'image/gif' ? 'animated' : 'image',
+      width: row.width,
+      height: row.height,
+      ai_tool: row.ai_tool,
+      model_name: row.model_name,
+      prompt: row.prompt ? (row.prompt.length > 200 ? `${row.prompt.substring(0, 200)}...` : row.prompt) : null,
+      first_seen_date: row.first_seen_date,
+    }];
+  });
 }

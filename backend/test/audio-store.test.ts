@@ -403,7 +403,8 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
     const admin = await connect({ accountId: adminId, accountType: 'admin' })
     const adminTools = await audioTools(admin)
     assert.ok(adminTools.includes('import_audio') && adminTools.includes('set_audio_group_comment_status'))
-    assert.deepEqual(adminTools.filter((name) => /review|delete_audio|restore|create_audio_group_comment/.test(name)), [], 'review, unrestricted delete and comment writing stay with people (delete_unselected_audio_candidates never touches a selected take)')
+    assert.deepEqual(adminTools.filter((name) => /review|delete_audio_candidate|restore|create_audio_group_comment/.test(name)), [], 'review, deleting single takes and comment writing stay with people (delete_unselected_audio_candidates never touches a selected take)')
+    assert.deepEqual(adminTools.filter((name) => name.startsWith('delete_audio_')), ['delete_audio_folder', 'delete_audio_group', 'delete_audio_project'], 'whole effect / folder / project deletes name what they delete')
 
     const listed = await listener.callTool({ name: 'list_audio_candidates', arguments: { group_id: snow.id } }) as { content: Array<{ text: string }> }
     assert.ok(JSON.parse(listed.content[0].text).candidates.every((candidate: Record<string, unknown>) => 'candidate_id' in candidate && !('composite_hash' in candidate)))

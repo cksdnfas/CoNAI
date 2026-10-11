@@ -192,10 +192,13 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
     sub.mock.method(ChatTaskRunner, 'schedule', (_thread: number, event: string) => { scheduled.push(event) })
     const context = reply('r-plan')
     const stop = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
-    const bridge = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'configure'], null, { chatContext: context })
+    const open = () => openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'configure'], null, { chatContext: context })
+    let bridge = await open()
     try {
       const names = bridge.tools.map((tool) => tool.function.name)
-      for (const name of ['task_propose', 'task_status', 'task_update', 'task_wait', 'task_finish']) assert.ok(names.includes(name), `${name} is offered in a 1:1 chat`)
+      assert.ok(names.includes('task_propose'), 'task_propose is offered in a 1:1 chat')
+      // An API LLM chat lists the step tools only while an approved task runs (they cost every request otherwise).
+      for (const name of ['task_status', 'task_update', 'task_wait', 'task_finish']) assert.ok(!names.includes(name), `${name} waits for an approved plan`)
       assert.ok((await bridge.call('task_update', { step: 1, status: 'done' })).isError, 'no task yet')
       const proposed = await bridge.call('task_propose', { goal: '세라 프로필 완성', steps: [{ title: '초안' }, { title: '저장', approval: true }, { title: '이미지' }], budget: { continuations: 5 } })
       assert.ok(!proposed.isError, JSON.stringify(proposed.content))
@@ -209,6 +212,11 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
       ChatProposalStore.markSaved(proposalId, taskId)
       assert.equal(ChatTaskStore.find(taskId)?.status, 'running')
       assert.equal(scheduled.length, 1, 'approval starts the first turn')
+
+      // The next request (the runner's turn) lists the step tools.
+      await bridge.close()
+      bridge = await open()
+      for (const name of ['task_status', 'task_update', 'task_wait', 'task_finish']) assert.ok(bridge.tools.some((tool) => tool.function.name === name), `${name} is offered while the task runs`)
 
       assert.ok(!(await bridge.call('task_update', { step: 1, status: 'done' })).isError)
       assert.ok(!(await bridge.call('task_update', { step: 2, status: 'doing' })).isError)

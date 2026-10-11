@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { applyChatWorkflowOperations, CHAT_WORKFLOW_LIMITS } from '@conai/shared'
 import type { McpRequestContext } from '../context'
 import { requireChatPageAccess } from '../../services/codex-chat/chatPageContext'
-import { chatWorkflowModules, sanitizeChatWorkflowPage } from '../../services/codex-chat/chatWorkflowContext'
+import { chatWorkflowModules, requireChatWorkflowChoiceValues, sanitizeChatWorkflowPage, withChatWorkflowChoices } from '../../services/codex-chat/chatWorkflowContext'
 import { captureChatPage, currentChatPage, newChatPageCommandId, runChatPageCommand } from '../../services/codex-chat/chatPageBridge'
 
 const key = z.string().min(1).max(100)
@@ -14,7 +14,7 @@ const operation = z.discriminatedUnion('type', [
   z.object({ type: z.literal('remove_node'), nodeId: key }),
   z.object({ type: z.literal('set_node'), nodeId: key, label: label.optional(), disabled: z.boolean().optional(), position: position.optional() }),
   z.object({ type: z.literal('set_variant'), nodeId: key, variantId: key }),
-  z.object({ type: z.literal('set_input'), nodeId: key, key, value: z.union([z.string().max(CHAT_WORKFLOW_LIMITS.text), z.number().finite(), z.boolean(), z.null()]).describe('Use a JSON string for json/any object or array inputs.') }),
+  z.object({ type: z.literal('set_input'), nodeId: key, key, value: z.union([z.string().max(CHAT_WORKFLOW_LIMITS.text), z.number().finite(), z.boolean(), z.null()]).describe('Use a JSON string for json/any object or array inputs. Image: a composite_hash.') }),
   z.object({ type: z.literal('clear_input'), nodeId: key, key }),
   z.object({ type: z.literal('connect'), edgeId: key, sourceNodeId: key, sourcePort: key, targetNodeId: key, targetPort: key }),
   z.object({ type: z.literal('disconnect'), edgeId: key }),
@@ -48,7 +48,7 @@ export function registerChatWorkflowTools(server: McpServer, context: McpRequest
       return result({ revision: graph.revision, name: graph.name, description: graph.description, nodeCount: graph.nodes.length, edgeCount: graph.edges.length, nodes, edges: graph.edges.filter((edge) => ids.has(edge.source_node_id) || ids.has(edge.target_node_id)), nextOffset: !nodeIds && offset + limit < graph.nodes.length ? offset + limit : null })
     } catch (error) { return failure(error) }
   })
-  server.registerTool('list_workflow_modules', { description: 'Find registered active modules by name, operation key, family or variant. Built-in families consolidate the add menu only: use the actual module ID and its ports for add_node. variants supplies exact variant IDs and inputValues to apply with set_input after creation. set_variant changes an existing node within its family while preserving compatible data and connections; incompatible changes are rejected. Legacy modules remain editable without migration. A specific search with up to 4 matches returns full safe fields/options and ports. For broader results, request moduleIds for full details before editing. Templates, credentials, code and file paths are excluded.', inputSchema: z.object({
+  server.registerTool('list_workflow_modules', { description: 'Find registered active modules by name, operation key, family or variant. Built-in families consolidate the add menu only: use the actual module ID and its ports for add_node. variants supplies exact variant IDs and inputValues to apply with set_input after creation. set_variant changes an existing node within its family while preserving compatible data and connections; incompatible changes are rejected. Legacy modules remain editable without migration. A specific search with up to 4 matches returns full safe fields/options and ports (plus `choices` for id fields: use only those values). For broader results, request moduleIds for full details before editing. Templates, credentials, code and file paths are excluded.', inputSchema: z.object({
     query: z.string().max(160).optional(), moduleIds: z.array(z.number().int().positive()).max(16).optional(), offset: z.number().int().min(0).optional(), limit: z.number().int().min(1).max(24).optional(),
   }) }, async ({ query, moduleIds, offset = 0, limit = 12 }) => {
     try {
@@ -59,10 +59,11 @@ export function registerChatWorkflowTools(server: McpServer, context: McpRequest
         ...(module.variants ?? []).flatMap((variant) => [variant.id, variant.label.ko, variant.label.en, ...variant.aliases]),
       ].join(' ').toLowerCase().includes(search)))
       const entries = modules.slice(offset, offset + limit)
-      return result({ total: modules.length, modules: moduleIds || search && modules.length <= 4 ? entries : entries.map(({ id, name, engine, operation, inputs, outputs, family, variants }) => ({ id, name, engine, operation, inputs, outputs, family, variants })), nextOffset: offset + limit < modules.length ? offset + limit : null })
+      const full = Boolean(moduleIds || search && modules.length <= 4)
+      return result({ total: modules.length, modules: full ? await withChatWorkflowChoices(entries, context.requester!.accountId) : entries.map(({ id, name, engine, operation, inputs, outputs, family, variants }) => ({ id, name, engine, operation, inputs, outputs, family, variants })), nextOffset: offset + limit < modules.length ? offset + limit : null })
     } catch (error) { return failure(error) }
   })
-  server.registerTool('workflow_edit', { description: 'Apply one atomic transaction to the connected native CoNAI node workflow editor right away (draft: nothing is saved, executed or generated; the person sees it and can undo it). Use the current revision and the actual module schemas (list_workflow_modules). Supports add/remove/configure nodes, wire/unwire ports, positions, workflow name/description, constant-node run inputs. New nodeIds must be unique; edgeIds must be unique among remaining edges. Disconnect an edge before reusing its ID. Nodes are about 340px wide; use horizontal spacing of 420px when choosing positions, or omit positions for the default layout. Disconnect an occupied single input before rewiring. Node removal also removes incident edges. Protected fields, invalid types and cycles are rejected. Partial drafts may have warnings. Returns the updated editor. Only make the requested edits; saving stays with the person.', inputSchema: z.object({
+  server.registerTool('workflow_edit', { description: 'Apply one atomic transaction to the connected native CoNAI node workflow editor right away (draft: nothing is saved, executed or generated; the person sees it and can undo it). Use the current revision and the actual module schemas (list_workflow_modules). Supports add/remove/configure nodes, set_variant, wire/unwire ports, positions, workflow name/description, constant-node run inputs. New nodeIds must be unique; edgeIds must be unique among remaining edges. Disconnect an edge before reusing its ID. Nodes are about 340px wide; use horizontal spacing of 420px when choosing positions, or omit positions for the default layout. Disconnect an occupied single input before rewiring. Node removal also removes incident edges. Protected fields, invalid types and cycles are rejected. Partial drafts may have warnings. Returns the updated editor. Only make the requested edits; saving stays with the person.', inputSchema: z.object({
     operations: z.array(operation).min(1).max(CHAT_WORKFLOW_LIMITS.operations),
   }) }, async ({ operations }) => {
     try {
@@ -73,6 +74,8 @@ export function registerChatWorkflowTools(server: McpServer, context: McpRequest
         // The editor's own revision binds the edit; asking the model to copy a UUID adds failures without a stronger binding.
         const modules = chatWorkflowModules()
         const validated = applyChatWorkflowOperations(graph, modules, operations)
+        const nodeModules = new Map(validated.graph.nodes.map((node) => [node.id, node.module_id]))
+        await requireChatWorkflowChoiceValues(modules, validated.operations.flatMap((entry) => entry.type === 'set_input' ? [{ moduleId: nodeModules.get(entry.nodeId) ?? 0, key: entry.key, value: entry.value }] : []), context.requester!.accountId)
         const usedIds = new Set([...graph.nodes, ...validated.graph.nodes].map((node) => node.module_id))
         const label = validated.changes.length === 1 ? validated.changes[0].title : `노드 편집 ${validated.changes.length}건`
         const commandId = newChatPageCommandId()

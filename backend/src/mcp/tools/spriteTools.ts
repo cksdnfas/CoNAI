@@ -235,18 +235,19 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
 
   server.registerTool(
     'extract_sprite_sheets_batch',
-    { description: 'Extract one sprite sheet per library video with the same options and save each to the library. Returns a job_id; poll get_sprite_job. The finished job lists items in request order, each pairing video_hash (and its library video_name) with sheet_hash and a download link, or with the error; zip_download holds every sheet plus a manifest.', inputSchema: z.object({
+    { description: 'Extract one sprite sheet per library video with the same options and save each to the library. Returns a job_id; poll get_sprite_job. The finished job lists items in request order, each pairing video_hash (and its library video_name) with sheet_hash and a download link, or with the error; zip_download (only with zip: true) holds every sheet plus a manifest.', inputSchema: z.object({
       composite_hashes: z.array(hashSchema).min(1).max(100).describe('Library video hashes (1..100, no duplicates)'),
       options: extractOptionsSchema,
       group_id: groupIdSchema,
       group_path: groupPathSchema,
+      zip: z.boolean().optional().describe('Also pack the saved sheets and a manifest into one ZIP (zip_download in the finished job; default false)'),
       wait_seconds: waitSchema,
     }) },
-    async ({ composite_hashes, options, group_id, group_path, wait_seconds }) => {
+    async ({ composite_hashes, options, group_id, group_path, zip, wait_seconds }) => {
       try {
         const target = groupTarget(group_id, group_path);
         const requester = requesterOf(context);
-        return await startAndWait(context, () => startExtractBatchJob({ videoHashes: composite_hashes, options: toExtractOptions(options), save: target, requester }), wait_seconds ?? 0);
+        return await startAndWait(context, () => startExtractBatchJob({ videoHashes: composite_hashes, options: toExtractOptions(options), save: target, zip: zip === true, requester }), wait_seconds ?? 0);
       } catch (error) {
         return errorResult(error);
       }

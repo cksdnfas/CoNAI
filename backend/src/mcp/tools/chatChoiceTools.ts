@@ -18,14 +18,14 @@ export function registerChatChoiceTools(server: McpServer, context: McpRequestCo
   // Same gate as the task tools: a profile with nothing to work with keeps its tool list empty.
   if (context.scopes.length === 0 && !chat.page && !context.generationPresetIds?.length && !ChatTaskStore.live(chat.threadId)) return
 
-  server.registerTool('offer_choices', { description: 'Ask the person to pick from ready answers. The app shows the question and options above the composer; the person clicks one (several when multiple is true) or types their own answer instead, and that answer arrives as their next message. Use it when a request is ambiguous between a few concrete options, or when you cannot do what was asked as things stand and the person must choose how to go on. Call it once, as the last thing in your reply, then end the reply. Keep the reply text short and do not repeat the options in it.', inputSchema: z.object({
-    question: z.string().min(1).max(CHAT_CHOICE_LIMITS.question).describe('The question, in the person\'s language.'),
+  server.registerTool('offer_choices', { description: 'Ask the person to pick from ready answers, shown above the composer: they click one (several if multiple) or type their own, and it arrives as their next message. Use it when a request is ambiguous between a few concrete options, or when they must choose how to go on because you cannot do it as things stand. Call it once, last in your reply, then end the reply; keep the reply text short and do not repeat the options.', inputSchema: z.object({
+    question: z.string().min(1).max(CHAT_CHOICE_LIMITS.question).describe('In the person\'s language'),
     options: z.array(z.object({
-      label: z.string().min(1).max(CHAT_CHOICE_LIMITS.label).describe('The answer as the person would say it; sent as their message.'),
-      detail: z.string().max(CHAT_CHOICE_LIMITS.detail).optional().describe('One short line on what happens with this answer.'),
-      without_page: z.boolean().optional().describe('Only while a page is connected: choosing this answer sends that one message without the page, so the tools a page connection withholds are offered for it.'),
+      label: z.string().min(1).max(CHAT_CHOICE_LIMITS.label).describe('As the person would say it; sent as their message'),
+      detail: z.string().max(CHAT_CHOICE_LIMITS.detail).optional().describe('One short line on what it does'),
+      without_page: z.boolean().optional().describe('Only with a page connected: this answer is sent without the page, so the tools a page withholds are offered for it'),
     })).min(CHAT_CHOICE_LIMITS.minOptions).max(CHAT_CHOICE_LIMITS.maxOptions),
-    multiple: z.boolean().optional().describe('The person may pick several options together.'),
+    multiple: z.boolean().optional(),
   }) }, async ({ question, options, multiple }) => {
     try {
       if (!chat.replyId) throw new Error('Choices need an active chat reply.')

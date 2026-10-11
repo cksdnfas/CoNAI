@@ -17,6 +17,7 @@ import { applyProfileAssetsProposal } from '../services/codex-chat/chatAssetProp
 import { ChatAssetError } from '../services/codex-chat/chatAssetAccess'
 import { hasAdminAccess } from '../middleware/authMiddleware'
 import { ChatTaskRunner } from '../services/codex-chat/chatTasks'
+import { applyChatSettingsProposal, ChatSettingsError } from '../services/codex-chat/chatSettingsProposals'
 
 const router = express.Router()
 
@@ -120,6 +121,16 @@ router.post('/:proposalId/apply', asyncHandler(async (req: Request, res: Respons
   const proposalId = visibleProposalId(req, res)
   if (proposalId === null) return
   if (ChatProposalStore.find(proposalId)?.kind !== 'lore') {
+    // The chat's own settings: saved by its owner (the visibility check above) with the context tab's rules.
+    if (ChatProposalStore.find(proposalId)?.kind === 'chat_settings') {
+      try {
+        res.json({ success: true, data: applyChatSettingsProposal({ accountId: getRequesterAccountId(req), accountType: getRequesterAccountType(req) ?? 'admin' }, proposalId) })
+      } catch (error) {
+        if (error instanceof ChatSettingsError || error instanceof FileStoreError) { res.status(error.status).json({ success: false, error: error.message }); return }
+        throw error
+      }
+      return
+    }
     if (ChatProposalStore.find(proposalId)?.kind === 'profile_assets') {
       if (!hasAdminAccess(req)) { res.status(403).json({ success: false, error: '자산을 승인할 관리자 권한이 없어.' }); return }
       try {

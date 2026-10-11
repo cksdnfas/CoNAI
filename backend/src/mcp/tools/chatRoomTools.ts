@@ -60,7 +60,7 @@ export function registerChatRoomTools(server: McpServer, context: McpRequestCont
 function registerChatReplyTo(server: McpServer, context: McpRequestContext): void {
   server.registerTool(
     'chat_reply_to',
-    { description: 'Set the quote and recipients of the reply you are writing. Omit message_id to keep its current quote. to contains exact member profile IDs, "user" to finish by addressing the human, or "room" for an announcement without waking anyone. Replaces an earlier recipient selection. The app displays the quote; do not repeat it in your text. Your sender and room are server-controlled.', inputSchema: z.object({
+    { description: 'Set the quote and recipients of the reply you are writing. message_id: the message to quote (omit to keep the current quote). to: exact member profile IDs, "user" (address the human) or "room" (announce without waking anyone); replaces earlier recipients. The app shows the quote; do not repeat it. Sender and room are server-controlled.', inputSchema: z.object({
       message_id: z.number().int().positive().optional(),
       to: z.array(z.union([z.number().int().positive(), z.literal('user'), z.literal('room')])).min(1).max(6).optional(),
     }) },

@@ -2,7 +2,7 @@ import type { ChatPageField, ChatPageProposal, ChatPageSnapshot, ChatPageTarget,
 import { CHAT_WORKFLOW_LIMITS, normalizeChatWorkflowSnapshot } from './chatWorkflow'
 import { CHAT_PAGE_ACTION_LIMITS, copyChatPageData, normalizeChatPageActions } from './chatPageAction'
 
-export const CHAT_PAGE_LIMITS = { fields: 64, changes: 24, text: 8000, options: 100, snapshot: 24000, lifetimeMs: 5 * 60_000 } as const
+export const CHAT_PAGE_LIMITS = { fields: 64, changes: 24, text: 8000, options: 100, hint: 400, snapshot: 24000, lifetimeMs: 5 * 60_000 } as const
 
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('페이지 정보가 올바르지 않아.')
@@ -66,6 +66,7 @@ export function normalizeChatPageSnapshot(value: unknown): ChatPageSnapshot {
     if (typeof current === 'string' && current.length > CHAT_PAGE_LIMITS.text) throw new Error('필드 내용이 너무 길어.')
     const result: ChatPageField = { id, label: text(field.label, 160), type, value: (segments ? [...current as string[]] : current) as ChatPageValue }
     if (field.editable === false) result.editable = false
+    if (field.hint !== undefined) result.hint = text(field.hint, CHAT_PAGE_LIMITS.hint)
     for (const bound of ['min', 'max'] as const) {
       if (field[bound] !== undefined) {
         if (typeof field[bound] !== 'number' || !Number.isFinite(field[bound])) throw new Error('숫자 범위가 올바르지 않아.')

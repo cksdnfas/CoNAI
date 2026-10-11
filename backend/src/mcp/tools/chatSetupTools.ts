@@ -1,10 +1,15 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import type { ChatProposal } from '@conai/shared';
+import { CHAT_TRANSLATION_LANGUAGES, isChatTranslationLanguage, type ChatProposal } from '@conai/shared';
 import { z } from 'zod';
 import { ChatProposalStore, type NewChatProposal } from '../../services/codex-chat/chatProposals';
 import { ChatProfileStore, CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, normalizeAlternateGreetings, normalizeSections, type ChatProfile } from '../../services/codex-chat/chatProfiles';
 import { ChatSharedBlockStore, PROFILE_MAX_BLOCKS } from '../../services/codex-chat/chatDisplayBlocks';
-import { ChatLorebookStore, PROFILE_MAX_LOREBOOKS } from '../../services/codex-chat/chatLorebook';
+import { ChatLorebookStore, LORE_RECURSION_MAX_DEPTH, PROFILE_MAX_LOREBOOKS } from '../../services/codex-chat/chatLorebook';
+import { ChatJudgePresetStore } from '../../services/codex-chat/chatJudgePresets';
+import { assertLinkedFiles, describeLinkedFiles, normalizeLinkedFiles, type LinkedFileLink } from '../../services/codex-chat/chatLinkedFiles';
+import { RatingScoreModel } from '../../models/RatingScore';
+import { requireFileStoreOwner } from '../../services/fileStoreAccess';
+import { CHAT_FEATURES_GUIDE } from './chatSettingsTools';
 import { ModelSlotStore } from '../../services/codex-chat/modelSlots';
 import { modelLabelOf } from '../../services/codex-chat/chatModelRoles';
 import { normalizeBlock } from '../../services/codex-chat/chatStyle';
@@ -27,8 +32,20 @@ const BLOCK_KEY_ERROR = 'block.key must match /^[a-z][a-z0-9_-]{0,31}$/';
 const PROPOSAL_NOTE = 'The card is shown to the user; nothing is saved until they press 저장.';
 const NO_CHAT_ERROR = 'Proposals need an active chat reply.';
 
-/** Profile fields a chat may propose changing. Engine, tool grants, allowlists, presets and provider/model pairs are not among them. */
-const PROPOSABLE_KEYS = ['name', 'tagline', 'systemPrompt', 'promptSections', 'greeting', 'alternateGreetings', 'authorNote', 'appearance', 'modelSlotId', 'summarySlotId', 'translationSlotId', 'suggestSlotId', 'lorebookIds', 'blockIds'] as const;
+/**
+ * Profile fields a chat may propose changing. Grants stay out: engine, tool scopes and allowlists, the page assistant,
+ * who may chat with it, generation presets and provider/model pairs are set by hand in the editor.
+ */
+const PROPOSABLE_KEYS = [
+  'name', 'tagline', 'systemPrompt', 'promptSections', 'greeting', 'alternateGreetings', 'authorNote', 'appearance',
+  'modelSlotId', 'summarySlotId', 'translationSlotId', 'suggestSlotId', 'judgeSlotId', 'judgePresetId', 'lorebookIds', 'blockIds',
+  'temperature', 'maxTokens', 'contextTurns', 'contextTokens', 'maxToolRounds', 'toolOutputLimit',
+  'summaryEnabled', 'summaryTriggerTurns', 'summaryPrompt',
+  'translationModelLanguage', 'translationDisplayLanguage', 'translationInstructions',
+  'suggestEnabled', 'suggestProfileId',
+  'visionEnabled', 'contentRatingMode', 'contentRatingTierId',
+  'loreRecursionDepth', 'allowLoreProposals', 'linkedFiles',
+] as const;
 type ProposableKey = typeof PROPOSABLE_KEYS[number];
 
 const KEY_ALIASES: Record<string, ProposableKey> = {
@@ -44,9 +61,34 @@ const KEY_ALIASES: Record<string, ProposableKey> = {
   translation_slot_id: 'translationSlotId',
   suggest_slot: 'suggestSlotId',
   suggest_slot_id: 'suggestSlotId',
+  judge_slot: 'judgeSlotId',
+  judge_slot_id: 'judgeSlotId',
+  judge_preset_id: 'judgePresetId',
   lorebook_ids: 'lorebookIds',
   block_ids: 'blockIds',
+  max_tokens: 'maxTokens',
+  context_turns: 'contextTurns',
+  context_tokens: 'contextTokens',
+  max_tool_rounds: 'maxToolRounds',
+  tool_output_limit: 'toolOutputLimit',
+  summary_enabled: 'summaryEnabled',
+  summary_trigger_turns: 'summaryTriggerTurns',
+  summary_prompt: 'summaryPrompt',
+  translation_model_language: 'translationModelLanguage',
+  translation_display_language: 'translationDisplayLanguage',
+  translation_instructions: 'translationInstructions',
+  suggest_enabled: 'suggestEnabled',
+  suggest_profile_id: 'suggestProfileId',
+  vision_enabled: 'visionEnabled',
+  content_rating_mode: 'contentRatingMode',
+  content_rating_tier_id: 'contentRatingTierId',
+  lore_recursion_depth: 'loreRecursionDepth',
+  allow_lore_proposals: 'allowLoreProposals',
+  linked_files: 'linkedFiles',
 };
+
+const NOT_PROPOSABLE = 'Engine, tool scopes, tool allowlists, the page assistant, allowed groups, generation presets and provider/model pairs are never proposable (the user sets them in the profile editor).';
+const LANGUAGE_IDS = CHAT_TRANSLATION_LANGUAGES.map((language) => language.id);
 
 // ---------------------------------------------------------------- guide text
 
@@ -85,6 +127,9 @@ function profileGuide() {
   const slots = ModelSlotStore.list();
   const lorebooks = ChatLorebookStore.list();
   const blocks = ChatSharedBlockStore.list();
+  const judges = ChatJudgePresetStore.list();
+  const tiers = RatingScoreModel.getAllTiers();
+  const profiles = ChatProfileStore.list();
   const limits = CHAT_PROFILE_TEXT_LIMITS;
   return [
     'CHAT PROFILE reference',
@@ -101,11 +146,27 @@ function profileGuide() {
     '- model_slot: model id or `connection · model` label (the chat model). Omit to start on the default model.',
     `- lorebook_ids (max ${PROFILE_MAX_LOREBOOKS}) and block_ids (max ${PROFILE_MAX_BLOCKS}): link existing shared lorebooks / display blocks by id.`,
     '- typeface: "sans" | "serif" | "mono".',
-    `Numeric profile settings are clamped by the app and are not proposable (for reference: context turns ${CHAT_PROFILE_LIMITS.contextTurns.min}-${CHAT_PROFILE_LIMITS.contextTurns.max}, tool rounds ${CHAT_PROFILE_LIMITS.maxToolRounds.min}-${CHAT_PROFILE_LIMITS.maxToolRounds.max}).`,
+    '- settings: any other key below, e.g. {"translationSlotId": 3, "translationDisplayLanguage": "ko", "summaryEnabled": true}.',
     '',
-    'propose_profile_update patch keys: name, tagline, systemPrompt, promptSections, greeting, alternateGreetings, authorNote, appearance, modelSlotId (or model_slot), summarySlotId, translationSlotId, suggestSlotId, lorebookIds, blockIds (snake_case also accepted). Engine, tool scopes, tool allowlists, presets and provider/model pairs can never be proposed. Values equal to the current ones are dropped.',
+    'Other settings (propose_profile_update patch keys, or propose_chat_profile settings; snake_case also accepted). Numbers outside the range are clamped as the editor does; null clears where noted.',
+    '- Models per role: modelSlotId (chat), summarySlotId, translationSlotId (null: no translation), suggestSlotId (null: the chat model), judgeSlotId (judge model, TypeSafe rows allowed; null: the judge preset\'s own) — a model id, `connection · model` label or row id.',
+    '- judgePresetId: a judge preset that steers each turn (null: no judge). Editor › 모델 › 역할 › 판단.',
+    `- temperature (0-2, null: server default), maxTokens (1-1000000, null: server default; a ceiling, cut to the room left), contextTurns (${CHAT_PROFILE_LIMITS.contextTurns.min}-${CHAT_PROFILE_LIMITS.contextTurns.max}), contextTokens (${CHAT_PROFILE_LIMITS.contextTokens.min}-${CHAT_PROFILE_LIMITS.contextTokens.max}, null: no token cap), maxToolRounds (${CHAT_PROFILE_LIMITS.maxToolRounds.min}-${CHAT_PROFILE_LIMITS.maxToolRounds.max}), toolOutputLimit (${CHAT_PROFILE_LIMITS.toolOutputLimit.min}-${CHAT_PROFILE_LIMITS.toolOutputLimit.max} characters of one tool result).`,
+    `- summaryEnabled (true/false), summaryTriggerTurns (${CHAT_PROFILE_LIMITS.summaryTriggerTurns.min}-${CHAT_PROFILE_LIMITS.summaryTriggerTurns.max}: fold older turns once this many left the window), summaryPrompt (max ${limits.summaryPrompt}, empty: the default). Codex profiles keep their own context (no summary).`,
+    `- With a translation model: translationModelLanguage (what the chat model reads and writes) and translationDisplayLanguage (what the user writes and reads), each one of ${LANGUAGE_IDS.join(' | ')}; translationInstructions (max ${limits.translationInstructions}): voice, forms of address and a glossary for translating replies.`,
+    '- suggestEnabled: the composer\'s reply suggestions button; suggestProfileId: a chat profile that writes them with its own model and prompt (null: the suggest role\'s model).',
+    '- visionEnabled: the model sees images (Codex always does). contentRatingMode "model" (follow the chat model row\'s ceiling; API LLM only) or "custom" with contentRatingTierId (the highest rating tier the model is shown; null: no ceiling).',
+    `- loreRecursionDepth (0-${LORE_RECURSION_MAX_DEPTH}): how many times chosen lore entries\' text is scanned for more entries (0: off). allowLoreProposals: the model may save_lore.`,
+    '- linkedFiles: [{ "id": "<32-hex file store id>", "write": false }]: folders or text files of YOUR file store every chat of this profile can open (write: may write there); not inside 로어북/. Only the chat owner\'s own links apply in a chat.',
+    NOT_PROPOSABLE,
+    'Where to find those by hand (profile editor tabs 캐릭터 · 외형 · 모델 · 기억 · 도구 · 꾸미기): engine and model params in 모델; tool scopes, tool list, tool presets and the 페이지 어시스턴트 switch in 도구; generation presets and character images in 외형 (images: propose_profile_assets); who may chat with it in the editor header\'s access menu; colours and blocks in 꾸미기.',
+    'Values equal to the current ones are dropped.',
     '',
     `Models (connection · model): ${slots.length ? slots.filter((slot) => slot.providerType !== 'decision_typesafe').map((slot) => `#${slot.id} "${slot.label}"${slot.isDefault ? ' (default)' : ''}`).join(', ') : '(none yet)'}`,
+    `Judge models (TypeSafe): ${slots.filter((slot) => slot.providerType === 'decision_typesafe').map((slot) => `#${slot.id} "${slot.label}"`).join(', ') || '(none)'}`,
+    `Judge presets: ${judges.length ? judges.map((preset) => `#${preset.id} "${preset.name}"`).join(', ') : '(none)'}`,
+    `Rating tiers (lowest first): ${tiers.length ? tiers.map((tier) => `#${tier.id} "${tier.tier_name}"`).join(', ') : '(none)'}`,
+    `Profiles: ${profiles.map((profile) => `#${profile.id} "${profile.name}"`).join(', ') || '(none)'}`,
     `Lorebooks: ${lorebooks.length ? lorebooks.map((book) => `#${book.id} "${book.name}"`).join(', ') : '(none)'}`,
     `Shared display blocks: ${blocks.length ? blocks.map((block) => `#${block.id} "${block.name}" (\`${block.block.key}\`)`).join(', ') : '(none)'}`,
     '',
@@ -124,9 +185,10 @@ function limitedText(label: string, value: unknown, maxLength: number, options: 
 }
 
 /** A model row id from a number, a numeric string, a `connection · model` label or a model id (case-insensitive); null clears. */
-function resolveSlot(label: string, value: unknown): number | null {
+function resolveSlot(label: string, value: unknown, options: { judge?: boolean } = {}): number | null {
   if (value === null || value === undefined || value === '') return null;
-  const slots = ModelSlotStore.list().filter((slot) => slot.providerType !== 'decision_typesafe');
+  // A judge may use a TypeSafe decision model as well; every other role needs an LLM row.
+  const slots = ModelSlotStore.list().filter((slot) => options.judge || slot.providerType !== 'decision_typesafe');
   const known = `Known models: ${slots.map((slot) => slot.label).join(', ') || '(none)'}`;
   if (typeof value === 'string') {
     const wanted = value.trim().toLowerCase();
@@ -168,8 +230,68 @@ function resolveGreetings(value: unknown) {
   return normalizeAlternateGreetings(value);
 }
 
+function flag(label: string, value: unknown) {
+  if (typeof value !== 'boolean') throw new Error(`${label} must be true or false.`);
+  return value;
+}
+
+/** A number in `range`, clamped and rounded like the editor stores it; null only where the setting can be unset. */
+function boundedNumber(label: string, value: unknown, range: { min: number; max: number }, options: { integer?: boolean; nullable?: boolean } = {}) {
+  if (value === null || value === '') {
+    if (options.nullable) return null;
+    throw new Error(`${label} needs a number (${range.min}-${range.max}).`);
+  }
+  const number = Number(value);
+  if (typeof value === 'boolean' || !Number.isFinite(number)) throw new Error(`${label} must be a number (${range.min}-${range.max}).`);
+  const clamped = Math.min(range.max, Math.max(range.min, number));
+  return options.integer === false ? clamped : Math.round(clamped);
+}
+
+function translationLanguage(label: string, value: unknown) {
+  if (!isChatTranslationLanguage(value)) throw new Error(`${label} must be one of ${LANGUAGE_IDS.join(', ')}.`);
+  return value;
+}
+
+function ratingTier(value: unknown) {
+  if (value === null || value === undefined || value === '') return null;
+  const id = Number(value);
+  const tiers = RatingScoreModel.getAllTiers();
+  if (!tiers.some((tier) => tier.id === id)) throw new Error(`contentRatingTierId: unknown rating tier ${JSON.stringify(value)}. Tiers: ${tiers.map((tier) => `#${tier.id} "${tier.tier_name}"`).join(', ') || '(none)'}.`);
+  return id;
+}
+
+function judgePreset(value: unknown) {
+  if (value === null || value === undefined || value === '') return null;
+  const id = ChatJudgePresetStore.existing(Number(value));
+  if (id === null) throw new Error(`judgePresetId: no such judge preset ${JSON.stringify(value)}. Presets: ${ChatJudgePresetStore.list().map((preset) => `#${preset.id} "${preset.name}"`).join(', ') || '(none)'}.`);
+  return id;
+}
+
+function suggestProfile(value: unknown) {
+  if (value === null || value === undefined || value === '') return null;
+  const profile = ChatProfileStore.find(Number(value));
+  if (!profile) throw new Error(`suggestProfileId: no such chat profile ${JSON.stringify(value)} (list_chat_profiles lists them).`);
+  return profile.id;
+}
+
+/**
+ * Links in the proposing account's file store: its own live folders and text files, none in the lorebooks; links the
+ * profile already holds pass as they are (another account's link on a shared profile is kept untouched).
+ */
+function proposedLinkedFiles(value: unknown, owner: string | null, kept: LinkedFileLink[]) {
+  if (!Array.isArray(value)) throw new Error('linkedFiles must be a list of { id, write }.');
+  const links = normalizeLinkedFiles(value);
+  if (links.length !== value.length) throw new Error('linkedFiles: each item needs the 32-character id of a file store folder or text file (list_files / search_files show ids), at most 20, no repeats.');
+  const added = links.filter((link) => !kept.some((item) => item.id === link.id));
+  if (added.length && !owner) throw new Error('linkedFiles: linking needs a chat account with the file store.');
+  return owner ? assertLinkedFiles(owner, links, kept) : links;
+}
+
+/** What validating a field may need beyond its value: the proposer's file store and the profile's current links. */
+type FieldContext = { owner?: string | null; current?: ChatProfile | null };
+
 /** Validates one proposable field and returns its normalized value (what the admin REST would store). */
-function normalizeProposedField(key: ProposableKey, value: unknown): unknown {
+function normalizeProposedField(key: ProposableKey, value: unknown, fieldContext: FieldContext = {}): unknown {
   switch (key) {
     case 'name': return limitedText('name', value, CHAT_PROFILE_TEXT_LIMITS.name, { required: true });
     case 'tagline': return limitedText('tagline', value, CHAT_PROFILE_TEXT_LIMITS.tagline);
@@ -183,9 +305,52 @@ function normalizeProposedField(key: ProposableKey, value: unknown): unknown {
     case 'summarySlotId':
     case 'translationSlotId':
     case 'suggestSlotId': return resolveSlot(key, value);
+    case 'judgeSlotId': return resolveSlot(key, value, { judge: true });
+    case 'judgePresetId': return judgePreset(value);
     case 'lorebookIds': return resolveIds(key, value, PROFILE_MAX_LOREBOOKS, (ids) => ChatLorebookStore.existing(ids));
     case 'blockIds': return resolveIds(key, value, PROFILE_MAX_BLOCKS, (ids) => ChatSharedBlockStore.existing(ids));
+    case 'temperature': return boundedNumber(key, value, { min: 0, max: 2 }, { integer: false, nullable: true });
+    case 'maxTokens': return boundedNumber(key, value, { min: 1, max: 1_000_000 }, { nullable: true });
+    case 'contextTurns': return boundedNumber(key, value, CHAT_PROFILE_LIMITS.contextTurns);
+    case 'contextTokens': return boundedNumber(key, value, CHAT_PROFILE_LIMITS.contextTokens, { nullable: true });
+    case 'maxToolRounds': return boundedNumber(key, value, CHAT_PROFILE_LIMITS.maxToolRounds);
+    case 'toolOutputLimit': return boundedNumber(key, value, CHAT_PROFILE_LIMITS.toolOutputLimit);
+    case 'summaryTriggerTurns': return boundedNumber(key, value, CHAT_PROFILE_LIMITS.summaryTriggerTurns);
+    case 'loreRecursionDepth': return boundedNumber(key, value, { min: 0, max: LORE_RECURSION_MAX_DEPTH });
+    case 'summaryEnabled':
+    case 'suggestEnabled':
+    case 'visionEnabled':
+    case 'allowLoreProposals': return flag(key, value);
+    case 'summaryPrompt': return limitedText(key, value, CHAT_PROFILE_TEXT_LIMITS.summaryPrompt);
+    case 'translationInstructions': return limitedText(key, value, CHAT_PROFILE_TEXT_LIMITS.translationInstructions);
+    case 'translationModelLanguage':
+    case 'translationDisplayLanguage': return translationLanguage(key, value);
+    case 'suggestProfileId': return suggestProfile(value);
+    case 'contentRatingMode':
+      if (value !== 'model' && value !== 'custom') throw new Error('contentRatingMode must be "model" or "custom".');
+      return value;
+    case 'contentRatingTierId': return ratingTier(value);
+    case 'linkedFiles': return proposedLinkedFiles(value, fieldContext.owner ?? null, fieldContext.current?.linkedFiles ?? []);
   }
+}
+
+/** How a value with an id in it reads on the card; null where the raw value already reads well. */
+function displayValue(key: ProposableKey, value: unknown, owner: string | null): string | null {
+  const none = '—';
+  if (key === 'contentRatingTierId') return value === null ? '제한 없음' : RatingScoreModel.getAllTiers().find((tier) => tier.id === value)?.tier_name ?? `#${String(value)}`;
+  if (key === 'judgePresetId') return value === null ? none : ChatJudgePresetStore.find(Number(value))?.name ?? `#${String(value)}`;
+  if (key === 'suggestProfileId') return value === null ? none : ChatProfileStore.find(Number(value))?.name ?? `#${String(value)}`;
+  if (key === 'linkedFiles') {
+    const links = Array.isArray(value) ? value as LinkedFileLink[] : [];
+    if (!links.length) return none;
+    return owner ? describeLinkedFiles(owner, links, 'profile').map((view) => `${view.name}${view.kind === 'folder' ? '/' : ''}${view.write ? ' (쓰기)' : ''}`).join(', ') : `${links.length}`;
+  }
+  return null;
+}
+
+/** The proposing account's file store key, when the request has an account that may use it. */
+function proposerFileOwner(context: McpRequestContext): string | null {
+  try { return context.requester ? requireFileStoreOwner(context.requester) : null; } catch { return null; }
 }
 
 function withoutSectionIds(value: unknown) {
@@ -238,9 +403,14 @@ export type ProfileProposalArgs = {
   lorebook_ids?: number[];
   block_ids?: number[];
   typeface?: 'sans' | 'serif' | 'mono';
+  /** Any other proposable key (camelCase or snake_case), as in a profile update patch. */
+  settings?: Record<string, unknown>;
 };
 
-export function buildProfileProposal(args: ProfileProposalArgs) {
+/** The top-level arguments of propose_chat_profile; `settings` may not repeat them. */
+const PROFILE_ARG_KEYS = new Set<ProposableKey>(['name', 'tagline', 'systemPrompt', 'promptSections', 'greeting', 'alternateGreetings', 'authorNote', 'appearance', 'modelSlotId', 'lorebookIds', 'blockIds']);
+
+export function buildProfileProposal(args: ProfileProposalArgs, owner: string | null = null) {
   const input: Record<string, unknown> = {
     name: normalizeProposedField('name', args.name),
     tagline: normalizeProposedField('tagline', args.tagline ?? ''),
@@ -255,6 +425,10 @@ export function buildProfileProposal(args: ProfileProposalArgs) {
     blockIds: normalizeProposedField('blockIds', args.block_ids ?? []),
   };
   if (args.typeface) input.style = { typeface: args.typeface };
+  for (const [key, raw] of readProfilePatch(args.settings ?? {})) {
+    if (PROFILE_ARG_KEYS.has(key)) throw new Error(`settings.${key}: give it as its own argument instead.`);
+    input[key] = normalizeProposedField(key, raw, { owner, current: null });
+  }
   const warnings: string[] = [];
   if (input.modelSlotId === null) warnings.push('No model_slot given; the user must pick a model before saving.');
   const proposal: NewChatProposal = { kind: 'profile', input };
@@ -271,12 +445,12 @@ export function readProfilePatch(patch: Record<string, unknown>) {
     else mapped.set(key, value);
   }
   if (forbidden.length) {
-    throw new Error(`Not proposable: ${forbidden.join(', ')}. Engine, tool scopes, tool allowlists, presets and provider/model pairs are never proposable. Allowed keys: ${PROPOSABLE_KEYS.join(', ')}.`);
+    throw new Error(`Not proposable: ${forbidden.join(', ')}. ${NOT_PROPOSABLE} Allowed keys: ${PROPOSABLE_KEYS.join(', ')}.`);
   }
   return mapped;
 }
 
-export function buildProfileUpdateProposal(args: { profile_id?: number; patch: Record<string, unknown> }, defaultProfileId: number | undefined) {
+export function buildProfileUpdateProposal(args: { profile_id?: number; patch: Record<string, unknown> }, defaultProfileId: number | undefined, owner: string | null = null) {
   const profileId = args.profile_id ?? defaultProfileId;
   if (profileId === undefined) throw new Error('profile_id is required.');
   const mapped = readProfilePatch(args.patch);
@@ -284,14 +458,17 @@ export function buildProfileUpdateProposal(args: { profile_id?: number; patch: R
   if (!current) throw new Error(`Chat profile not found: ${profileId}`);
   const patch: Record<string, unknown> = {};
   const before: Record<string, unknown> = {};
+  const display: Record<string, { before: string; after: string }> = {};
   for (const [key, raw] of mapped) {
-    const value = normalizeProposedField(key, raw);
+    const value = normalizeProposedField(key, raw, { owner, current });
     if (sameValue(key, value, current[key])) continue;
     patch[key] = value;
     before[key] = current[key];
+    const shown = displayValue(key, value, owner);
+    if (shown !== null) display[key] = { before: displayValue(key, current[key], owner) ?? '—', after: shown };
   }
   if (Object.keys(patch).length === 0) throw new Error('Nothing would change: every proposed value equals the current one.');
-  const proposal: NewChatProposal = { kind: 'profile_update', profileId, profileName: current.name, patch, before };
+  const proposal: NewChatProposal = { kind: 'profile_update', profileId, profileName: current.name, patch, before, ...(Object.keys(display).length ? { display } : {}) };
   return { proposal };
 }
 
@@ -312,8 +489,11 @@ function profileSummary(profile: ChatProfile) {
   };
 }
 
-/** The text a chat may read about a profile. No tool grants, allowlists, presets, provider names or images. */
-export function profileSetupView(profile: ChatProfile) {
+/**
+ * The text a chat may read about a profile. No tool grants, allowlists, presets, provider names or images; the
+ * engine and the page assistant switch are shown read-only so the chat can say where they are set.
+ */
+export function profileSetupView(profile: ChatProfile, owner: string | null = null) {
   const { typeface, roleplay, colors, backgroundDim, backgroundBlur, cast, emoticonGroupIds, blocks } = profile.style;
   return {
     id: profile.id,
@@ -329,10 +509,36 @@ export function profileSetupView(profile: ChatProfile) {
     summarySlotId: profile.summarySlotId,
     translationSlotId: profile.translationSlotId,
     suggestSlotId: profile.suggestSlotId,
+    judgeSlotId: profile.judgeSlotId,
+    judgePresetId: profile.judgePresetId,
     lorebookIds: profile.lorebookIds,
     blockIds: profile.blockIds,
+    temperature: profile.temperature,
+    maxTokens: profile.maxTokens,
+    contextTurns: profile.contextTurns,
+    contextTokens: profile.contextTokens,
+    maxToolRounds: profile.maxToolRounds,
+    toolOutputLimit: profile.toolOutputLimit,
+    summaryEnabled: profile.summaryEnabled,
+    summaryTriggerTurns: profile.summaryTriggerTurns,
+    summaryPrompt: profile.summaryPrompt,
+    translationModelLanguage: profile.translationModelLanguage,
+    translationDisplayLanguage: profile.translationDisplayLanguage,
+    translationInstructions: profile.translationInstructions,
+    suggestEnabled: profile.suggestEnabled,
+    suggestProfileId: profile.suggestProfileId,
+    visionEnabled: profile.visionEnabled,
+    contentRatingMode: profile.contentRatingMode,
+    contentRatingTierId: profile.contentRatingTierId,
+    loreRecursionDepth: profile.loreRecursionDepth,
+    allowLoreProposals: profile.allowLoreProposals,
+    // Names only for the reader's own links; another account's link on a shared profile shows as missing.
+    linkedFiles: owner
+      ? describeLinkedFiles(owner, profile.linkedFiles, 'profile').map((view) => ({ id: view.id, name: view.missing ? null : view.name, kind: view.kind, write: view.write, ...(view.missing ? { missing: true } : {}) }))
+      : profile.linkedFiles,
     style: { typeface, roleplay, colors, backgroundDim, backgroundBlur, emoticonGroupIds, cast: cast.map(({ id, name, color }) => ({ id, name, color })), blockKeys: blocks.map((block) => block.key) },
     mcpEnabled: profile.mcpEnabled,
+    notProposable: { engine: profile.engine, pageAssist: profile.pageAssist },
   };
 }
 
@@ -393,10 +599,10 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
   });
   server.registerTool(
     'get_chat_setup_guide',
-    { description: 'Read the reference for writing a chat display block (status card: JSON shape, limits, template syntax, runtime behavior) or a chat profile (fields, limits, placeholders, available model slots, lorebooks and shared blocks). Read it once before proposing.', inputSchema: z.object({ topic: z.enum(['display_block', 'profile', 'profile_assets']) }) },
+    { description: 'Read the reference for writing a chat display block (status card: JSON shape, limits, template syntax, runtime behavior), a chat profile (every proposable setting with its range, where the others are set by hand, available models, judge presets, rating tiers, lorebooks and shared blocks), character assets, or how the chat\'s user-side features work (features: narration lines, reply orders, file versions, minutes, record book, linked files, web research, outside MCP tools). Read it once before proposing.', inputSchema: z.object({ topic: z.enum(['display_block', 'profile', 'profile_assets', 'features']) }) },
     async ({ topic }) => {
       try {
-        return { content: [{ type: 'text' as const, text: topic === 'display_block' ? DISPLAY_BLOCK_GUIDE : topic === 'profile_assets' ? profileAssetsGuide(context) : profileGuide() }] };
+        return { content: [{ type: 'text' as const, text: topic === 'display_block' ? DISPLAY_BLOCK_GUIDE : topic === 'profile_assets' ? profileAssetsGuide(context) : topic === 'features' ? CHAT_FEATURES_GUIDE : profileGuide() }] };
       } catch (error) { return errorResult(error); }
     },
   );
@@ -411,14 +617,14 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
 
   server.registerTool(
     'get_chat_profile',
-    { description: 'Read the text setup of a chat profile in full: prompts, sections, greetings, author note, model slots, linked lorebooks and blocks, style. Defaults to the profile you are speaking as. Tool grants and connection details are never included.', inputSchema: z.object({ profile_id: z.number().int().positive().optional() }) },
+    { description: 'Read the setup of a chat profile in full: prompts, sections, greetings, author note, model rows per role, judge, model params, context and summary, translation languages, suggestions, vision and content rating ceiling, lore recursion, linked files, linked lorebooks and blocks, style. Defaults to the profile you are speaking as. Tool grants and connection details are never included.', inputSchema: z.object({ profile_id: z.number().int().positive().optional() }) },
     async ({ profile_id }) => {
       try {
         const id = profile_id ?? context.chatContext?.profileId;
         if (id === undefined) throw new Error('profile_id is required.');
         const profile = ChatProfileStore.find(id);
         if (!profile) throw new Error(`Chat profile not found: ${id}`);
-        return textResult(profileSetupView(profile));
+        return textResult(profileSetupView(profile, proposerFileOwner(context)));
       } catch (error) { return errorResult(error); }
     },
   );
@@ -485,11 +691,12 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
       lorebook_ids: z.array(z.number().int().positive()).optional(),
       block_ids: z.array(z.number().int().positive()).optional(),
       typeface: z.enum(['sans', 'serif', 'mono']).optional(),
+      settings: z.record(z.string(), z.unknown()).optional().describe('Other proposable settings by key, e.g. {"translationSlotId": 3, "translationDisplayLanguage": "ko", "summaryEnabled": true}; get_chat_setup_guide(profile) lists them'),
     }) },
     async (args) => {
       try {
         if (!context.chatContext) throw new Error(NO_CHAT_ERROR);
-        const built = buildProfileProposal(args);
+        const built = buildProfileProposal(args, proposerFileOwner(context));
         const proposal = storeProposal(context, built.proposal);
         return textResult({ proposalId: proposal.id, input: built.input, warnings: built.warnings, note: PROPOSAL_NOTE }, { structuredContent: { proposal } });
       } catch (error) { return errorResult(error); }
@@ -498,14 +705,14 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
 
   server.registerTool(
     'propose_profile_update',
-    { description: 'Propose changes to an existing chat profile (default: the one you speak as) as a before/after card. Nothing is saved until the user presses 저장. patch accepts only: name, tagline, systemPrompt, promptSections, greeting, alternateGreetings, authorNote, appearance, modelSlotId (or model_slot), summarySlotId, translationSlotId, suggestSlotId, lorebookIds, blockIds. Engine, tool grants, allowlists, presets and provider/model pairs are never proposable.', inputSchema: z.object({
+    { description: `Propose changes to an existing chat profile (default: the one you speak as) as a before/after card. Nothing is saved until the user presses 저장. patch keys (camelCase or snake_case): ${PROPOSABLE_KEYS.join(', ')}. get_chat_setup_guide(profile) gives each key's meaning, range and the ids to use. ${NOT_PROPOSABLE}`, inputSchema: z.object({
       profile_id: z.number().int().positive().optional(),
       patch: z.record(z.string(), z.unknown()),
     }) },
     async (args) => {
       try {
         if (!context.chatContext) throw new Error(NO_CHAT_ERROR);
-        const built = buildProfileUpdateProposal(args, context.chatContext.profileId);
+        const built = buildProfileUpdateProposal(args, context.chatContext.profileId, proposerFileOwner(context));
         const proposal = storeProposal(context, built.proposal);
         return textResult({ proposalId: proposal.id, profileId: args.profile_id ?? context.chatContext.profileId, changed: Object.keys((proposal as { patch?: Record<string, unknown> }).patch ?? {}), note: PROPOSAL_NOTE }, { structuredContent: { proposal } });
       } catch (error) { return errorResult(error); }

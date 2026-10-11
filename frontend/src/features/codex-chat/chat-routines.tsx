@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type SyntheticEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { MessageSquare, Pause, Play, Plus, Rocket, SquarePen, Trash2 } from 'lucide-react'
-import { CHAT_ROUTINE_LIMITS } from '@conai/shared'
+import { CHAT_ROUTINE_LIMITS, type ChatPageData } from '@conai/shared'
 import { FieldTabs, FramedField } from '@/components/common/field-tabs'
 import { ScheduleField, shortRunLabel, toDateTimeLocal, type ScheduleValue } from '@/components/common/schedule-field'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -29,6 +29,8 @@ import { cn } from '@/lib/utils'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatProfilePicker, ChatRoomFace, ChatRoomPicker } from './chat-room-picker'
 import { CODEX_CHAT_THREADS_QUERY_KEY, useCodexChat } from './codex-chat-context'
+import { useChatPageRegistration } from './chat-page-context'
+import { pageAction, pageChoice, pageNumber, pageObject, pageText } from './page-action-helpers'
 
 /**
  * Chat routines: wake a chat on a schedule (Settings › 채팅 › 루틴, and 채팅 메뉴 › 루틴 for the open room).
@@ -353,6 +355,7 @@ export function ChatSettingsRoutines() {
     setEditing(routine)
     setEditorOpen(true)
   }
+  useRoutinesChatPage(routines)
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">
@@ -367,6 +370,98 @@ export function ChatSettingsRoutines() {
       <ChatRoutineEditor open={editorOpen} routine={editing} onClose={() => setEditorOpen(false)} />
     </div>
   )
+}
+
+/** The routine fields a chat may pass; omitted ones keep the routine's (or a new routine's) value. */
+function routineInput(args: Record<string, ChatPageData>, base: ChatRoutineView | null): ChatRoutineInput {
+  const pick = <T,>(key: string, fallback: T): T => (args[key] === undefined ? fallback : args[key] as T)
+  const target = pick<ChatRoutineTarget>('target', base?.target ?? 'dedicated')
+  const scheduleType = pick('scheduleType', base?.scheduleType ?? 'daily')
+  const rawRunAt = pick<string | null>('runAt', base?.runAt ?? null)
+  const runAt = scheduleType === 'once' && rawRunAt ? new Date(rawRunAt) : null
+  if (runAt && Number.isNaN(runAt.getTime())) throw new Error('runAt 날짜를 읽지 못했어.')
+  if (scheduleType === 'once' && !runAt) throw new Error('1회 루틴은 runAt이 필요해.')
+  const dailyTime = pick<string | null>('dailyTime', base?.dailyTime ?? '09:00')
+  if (scheduleType === 'daily' && !/^\d{2}:\d{2}$/.test(dailyTime ?? '')) throw new Error('dailyTime은 HH:MM이어야 해.')
+  const input: ChatRoutineInput = {
+    name: pick('name', base?.name ?? '').trim(),
+    target,
+    profileId: target === 'dedicated' ? pick<number | null>('profileId', base?.profileId ?? null) : null,
+    threadId: target === 'room' ? pick<number | null>('threadId', base?.target === 'room' ? base.threadId : null) : null,
+    message: pick('message', base?.message ?? ''),
+    scheduleType,
+    runAt: runAt ? runAt.toISOString() : null,
+    intervalMinutes: scheduleType === 'interval' ? pick<number>('intervalMinutes', base?.intervalMinutes ?? 60) : null,
+    dailyTime: scheduleType === 'daily' ? dailyTime : null,
+    maxRunCount: scheduleType !== 'once' ? (pick<number>('maxRunCount', base?.maxRunCount ?? 0) || null) : null,
+    chainLimit: target === 'room' ? pick<number | null>('chainLimit', base?.chainLimit ?? null) : null,
+    active: pick('active', base ? base.status === 'active' : true),
+  }
+  if (!input.name || !input.message.trim()) throw new Error('루틴 이름과 보낼 메시지가 필요해.')
+  if (target === 'dedicated' ? !input.profileId : !input.threadId) throw new Error(target === 'dedicated' ? '전용 방 루틴은 캐릭터(profileId)가 필요해.' : '고른 방 루틴은 방(threadId)이 필요해.')
+  return input
+}
+
+/** Settings › 채팅 › 루틴 for a connected chat: the routines, the rooms and characters they can wake, and review cards for every change. */
+function useRoutinesChatPage(routines: ChatRoutineView[]) {
+  const { t } = useI18n()
+  const queryClient = useQueryClient()
+  const profiles = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000 }).data ?? []
+  const threads = (useQuery({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY, queryFn: listCodexChatThreads, staleTime: 10_000 }).data ?? []).filter((thread) => !thread.archived).slice(0, 200)
+  const paused = useQuery({ queryKey: AUTOMATION_SWITCH_QUERY_KEY, queryFn: getAutomationSwitch, staleTime: 10_000 }).data?.paused ?? null
+  const clip = (text: string | null, max = 120) => (text && text.length > max ? `${text.slice(0, max)}…` : text)
+  // Lists sit at the top of data: a long one shows as a count until read_page_data reads it.
+  const data: Record<string, ChatPageData> = {
+    automationPaused: paused,
+    routines: routines.map((routine) => ({
+      id: routine.id, name: routine.name, status: routine.status, ...(routine.running ? { running: true } : {}), target: routine.target,
+      ...(routine.target === 'dedicated' ? { profileId: routine.profileId, profile: routine.profileName } : { threadId: routine.threadId, room: routine.roomTitle }),
+      message: clip(routine.message), scheduleType: routine.scheduleType,
+      ...(routine.scheduleType === 'once' ? { runAt: routine.runAt } : routine.scheduleType === 'interval' ? { intervalMinutes: routine.intervalMinutes } : { dailyTime: routine.dailyTime }),
+      runs: routine.maxRunCount ? `${routine.runCount}/${routine.maxRunCount}` : routine.runCount, ...(routine.chainLimit !== null ? { chainLimit: routine.chainLimit } : {}),
+      nextRunAt: routine.nextRunAt, lastResult: routine.lastResult, ...(routine.stopReason || routine.lastError ? { problem: clip(routine.stopReason ?? routine.lastError) } : {}),
+    })),
+    characters: profiles.map((profile) => ({ id: profile.id, name: profile.name })),
+    rooms: threads.map((thread) => ({ id: thread.id, title: thread.title, ...(thread.kind === 'group' ? { group: true } : {}) })),
+  }
+  useChatPageRegistration({
+    kind: 'settings', title: t({ ko: '설정 · 채팅 루틴', en: 'Settings · Chat routines' }), resourceId: 'chat', priority: 5, fields: [], data,
+    actions: [
+      pageAction('settings.routine', t({ ko: '루틴 만들기·바꾸기', en: 'Make or change a routine' }), t({
+        ko: '정해진 때 방을 깨워 message를 보내(저장한 계정으로). save: id 있으면 넘긴 것만 수정, 없으면 추가. target dedicated=캐릭터(profileId) 전용 방, room=고른 방(threadId). once는 runAt(ISO), interval은 intervalMinutes, daily는 dailyTime(HH:MM). maxRunCount 0=무제한. pause/resume/run(지금 한 번)/delete는 id만.',
+        en: 'Wakes a room at set times with message (as the saving account). save: with id edits what is passed, without adds. target dedicated = own room of a character (profileId), room = a picked room (threadId). once: runAt (ISO), interval: intervalMinutes, daily: dailyTime (HH:MM). maxRunCount 0 = no limit. pause/resume/run (once now)/delete need only id.',
+      }), pageObject({
+        operation: pageChoice(['save', 'pause', 'resume', 'run', 'delete']), id: pageNumber(0, undefined, true),
+        name: pageText(CHAT_ROUTINE_LIMITS.name), target: pageChoice(['dedicated', 'room']), profileId: pageNumber(0, undefined, true),
+        threadId: pageNumber(0, undefined, true), message: pageText(CHAT_ROUTINE_LIMITS.message),
+        scheduleType: pageChoice(['once', 'interval', 'daily']), runAt: pageText(40), intervalMinutes: pageNumber(CHAT_ROUTINE_LIMITS.minIntervalMinutes, 100_000, true),
+        dailyTime: pageText(5), maxRunCount: pageNumber(0, 1_000_000, true), chainLimit: pageNumber(0, CHAT_ROUTINE_LIMITS.chain, true), active: { type: 'boolean' },
+      }, ['operation']), 'save'),
+      pageAction('settings.automation_switch', t({ ko: '자동화 전체 멈춤', en: 'Stop all automation' }), t({ ko: '모든 채팅 루틴과 워크플로 예약을 멈추거나(paused true) 다시 돌려.', en: 'Pause (paused true) or resume every chat routine and workflow schedule.' }), pageObject({ paused: { type: 'boolean' } }, ['paused']), 'save'),
+    ],
+    apply: () => {},
+    applyAction: async (id, args, assertCurrent) => {
+      assertCurrent()
+      if (id === 'settings.automation_switch') {
+        queryClient.setQueryData(AUTOMATION_SWITCH_QUERY_KEY, await setAutomationSwitch(args.paused === true))
+        return
+      }
+      if (id !== 'settings.routine') throw new Error('이 화면에 없는 작업이야.')
+      const routine = typeof args.id === 'number' && args.id > 0 ? routines.find((entry) => entry.id === args.id) ?? null : null
+      if (typeof args.id === 'number' && args.id > 0 && !routine) throw new Error('목록에 없는 루틴이야.')
+      if (args.operation === 'save') {
+        // 0 stands for "none" in the id choices (an empty list cannot be a choice).
+        const values = Object.fromEntries(Object.entries(args).filter(([key, value]) => key !== 'operation' && key !== 'id' && !((key === 'profileId' || key === 'threadId') && value === 0)))
+        await (routine ? updateChatRoutine(routine.id, routineInput(values, routine)) : createChatRoutine(routineInput(values, null)))
+      } else {
+        if (!routine) throw new Error('루틴 id가 필요해.')
+        if (args.operation === 'run') await runChatRoutine(routine.id)
+        else if (args.operation === 'delete') await deleteChatRoutine(routine.id)
+        else await setChatRoutineActive(routine.id, args.operation === 'resume')
+      }
+      await queryClient.invalidateQueries({ queryKey: CHAT_ROUTINES_QUERY_KEY })
+    },
+  }, { preserveOnSearchChange: true })
 }
 
 /** 채팅 메뉴 › 루틴: the open room's routines, and a new one on this room. */

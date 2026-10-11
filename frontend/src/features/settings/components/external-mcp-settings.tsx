@@ -33,6 +33,7 @@ import {
 } from '@/lib/api-external-mcp'
 import { getErrorMessage } from '@/lib/error-message'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
+import type { ExternalMcpDraftSeed } from './use-llm-connections-chat-page'
 
 type TranslateFn = ReturnType<typeof useI18n>['t']
 
@@ -95,8 +96,11 @@ function stateStatus(server: ExternalMcpServer, t: TranslateFn) {
   return null
 }
 
-/** Outside MCP servers whose tools the chat profiles can use (administrators). */
-export function ExternalMcpSettings() {
+/**
+ * Outside MCP servers whose tools the chat profiles can use (administrators). `seed`: a connected chat opened the add
+ * editor with these non-secret fields; the person types the address or command and secrets, then saves.
+ */
+export function ExternalMcpSettings({ seed = null, onSeedClose }: { seed?: ExternalMcpDraftSeed | null; onSeedClose?: () => void } = {}) {
   const { t } = useI18n()
   const [editing, setEditing] = useState<{ server: ExternalMcpServer | null } | null>(null)
   const serversQuery = useQuery({
@@ -134,7 +138,8 @@ export function ExternalMcpSettings() {
           />
         ))}
       </RowGroup>
-      <ExternalMcpEditorModal open={editing !== null} server={current} onClose={() => setEditing(null)} />
+      <ExternalMcpEditorModal open={editing !== null || seed !== null} server={editing ? current : null} seed={editing ? null : seed}
+        onClose={() => { setEditing(null); onSeedClose?.() }} />
     </>
   )
 }
@@ -158,7 +163,7 @@ function SecretRows({ items, placeholder, onChange }: { items: SecretDraft[]; pl
   )
 }
 
-function ExternalMcpEditorModal({ open, server, onClose }: { open: boolean; server: ExternalMcpServer | null; onClose: () => void }) {
+function ExternalMcpEditorModal({ open, server, seed = null, onClose }: { open: boolean; server: ExternalMcpServer | null; seed?: ExternalMcpDraftSeed | null; onClose: () => void }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const confirm = useConfirm()
@@ -166,10 +171,10 @@ function ExternalMcpEditorModal({ open, server, onClose }: { open: boolean; serv
   const saved = useMemo(() => draftOf(server), [server?.id, open]) // eslint-disable-line react-hooks/exhaustive-deps
   const [draft, setDraft] = useState<ServerDraft>(saved)
   const [draftFor, setDraftFor] = useState<string | null | undefined>(undefined)
-  const openedFor = open ? server?.id ?? null : undefined
+  const openedFor = open ? server?.id ?? (seed ? `seed:${JSON.stringify(seed)}` : null) : undefined
   if (draftFor !== openedFor) {
     setDraftFor(openedFor)
-    setDraft(saved)
+    setDraft(seed && !server ? { ...saved, ...seed } : saved)
   }
   const change = (patch: Partial<ServerDraft>) => setDraft((value) => ({ ...value, ...patch }))
   const refreshList = () => queryClient.invalidateQueries({ queryKey: EXTERNAL_MCP_QUERY_KEY })

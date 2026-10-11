@@ -6,6 +6,7 @@ import { reconcileComfyModelSelectionValues } from '../../services/comfyModelSel
 import { prepareComfyPromptData } from '../../services/prepareComfyPromptData'
 import { resolveWorkflowPromptValues } from '../../services/workflowPromptValueResolver'
 import { ImageUploadService } from '../../services/imageUploadService'
+import { isComfySeedJsonPath } from '../../services/comfyui/seedControl'
 import { isChatMcpSource, type McpRequestContext } from '../context'
 import { validateMcpToolArguments } from '../requestSecurity'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
@@ -471,6 +472,7 @@ export function describeMcpMarkedField(field: MarkedField) {
     maximum: field.max,
     step: field.step,
     json_path: field.jsonPath,
+    ...(isComfySeedJsonPath(field.jsonPath) ? { seed_rule: 'Empty or -1 rolls a new seed every run; a value of 0 or more keeps that seed for this run.' } : {}),
     node_class_type: field.node_class_type,
     node_editor: field.node_editor,
     value_schema: field.type === 'node' && field.node_editor === MINIMAX_DIRECTOR_EDITOR

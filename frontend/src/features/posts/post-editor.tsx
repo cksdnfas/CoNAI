@@ -11,7 +11,8 @@ import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { ChatMediaPicker } from '@/features/codex-chat/chat-media-picker'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
-import { pageAction } from '@/features/codex-chat/page-action-helpers'
+import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
+import { pageAction, pageArray, pageFreeText, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { FilePicker } from '@/features/files/file-browser'
 import { useI18n } from '@/i18n'
 import { POSTS_QUERY_KEY, createPost, updatePost } from '@/lib/api-posts'
@@ -22,6 +23,23 @@ import { PostMediaContext } from './post-media'
 import { usePostPermissions } from './use-post-permissions'
 
 type Picker = 'media' | 'audio' | 'group' | 'file' | null
+/**
+ * The body the connected chat sees with every request: a body up to this long is a field, a longer one a chunk of
+ * this size (posts.body_at moves it) changed with posts.body_edit.
+ */
+const BODY_CHUNK = 2000
+
+/** Exact-text replacements on a body, in order; each `find` must appear once unless `all` is set. */
+function replaceInBody(body: string, edits: Array<{ find: string; replace: string; all?: boolean }>) {
+  let next = body
+  for (const edit of edits) {
+    const count = edit.find ? next.split(edit.find).length - 1 : 0
+    if (count === 0) throw new Error(`본문에 없는 글이야: ${edit.find.slice(0, 40)}`)
+    if (count > 1 && !edit.all) throw new Error(`본문에 ${count}번 나와. 앞뒤 글을 더 넣거나 all을 켜줘: ${edit.find.slice(0, 40)}`)
+    next = edit.all ? next.split(edit.find).join(edit.replace) : next.replace(edit.find, () => edit.replace)
+  }
+  return next
+}
 
 /** Categories in tree order with their depth, for a select. */
 export function flattenCategories(categories: PostCategory[]) {
@@ -97,6 +115,8 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
   const [commentMode, setCommentMode] = useState<PostCommentMode>(post?.commentMode ?? 'open')
   const [pinned, setPinned] = useState(post?.pinned ?? false)
   const [tab, setTab] = useState<'write' | 'preview'>('write')
+  const [bodyOffset, setBodyOffset] = useState(0)
+  const commitBody = useChatDraftTransaction(body, setBody)
   const [picker, setPicker] = useState<Picker>(null)
   const bodyRef = useRef<HTMLTextAreaElement | null>(null)
   const flat = useMemo(() => flattenCategories(categories), [categories])
@@ -146,10 +166,9 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
   const NO_CATEGORY = t({ ko: '없음', en: 'None' })
   const categoryLabel = categoryLabels.find((item) => item.id === categoryId)?.label ?? NO_CATEGORY
   const assistantStatuses: PostStatus[] = isAdmin || post?.status === 'hidden' ? ['published', 'draft', 'hidden'] : ['published', 'draft']
-  // A body longer than a page field holds is shown as read-only context instead (filling it would cut the rest).
-  const bodyFits = body.length <= CHAT_PAGE_LIMITS.text
+  const bodyFits = body.length <= BODY_CHUNK
   const dirty = post
-    ? title !== post.title || body !== post.body || categoryId !== post.categoryId || tags.join('\u0000') !== post.tags.join('\u0000') || status !== post.status || commentMode !== post.commentMode
+    ? title !== post.title || body !== post.body || categoryId !== post.categoryId || tags.join('\u0000') !== post.tags.join('\u0000') || status !== post.status || commentMode !== post.commentMode || (isAdmin && pinned !== post.pinned)
     : Boolean(title.trim() || body.trim())
   useChatPageRegistration(save.isPending ? null : {
     kind: 'posts',
@@ -164,9 +183,16 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
       { id: 'tags', label: t({ ko: '태그 (쉼표로 구분)', en: 'Tags (comma separated)' }), type: 'text', value: tags.join(', '), allowEmpty: true },
       { id: 'status', label: t({ ko: '상태', en: 'Status' }), type: 'select', value: status, options: assistantStatuses },
       { id: 'commentMode', label: t({ ko: '댓글', en: 'Comments' }), type: 'select', value: commentMode, options: ['open', 'closed'] },
+      ...(isAdmin ? [{ id: 'pinned', label: t({ ko: '목록 맨 위에 고정', en: 'Pin to the top of the list' }), type: 'boolean' as const, value: pinned }] : []),
     ],
-    data: bodyFits ? {} : { bodyTooLongToEdit: true, bodyStart: body.slice(0, 2000) },
-    actions: title.trim() && dirty ? [pageAction('posts.save', post ? t({ ko: '글 저장', en: 'Save post' }) : t({ ko: '글 올리기', en: 'Publish post' }), t({ ko: '편집 중인 글을 저장해.', en: 'Save the post being edited.' }), undefined, 'save')] : [],
+    data: bodyFits ? {} : { body: pageFreeText(body.slice(bodyOffset, bodyOffset + BODY_CHUNK)), bodyOffset, bodyLength: body.length },
+    actions: [
+      ...(bodyFits ? [] : [
+        pageAction('posts.body_at', t({ ko: '본문 이어 읽기', en: 'Read the body from' }), t({ ko: 'data.body를 offset부터 보여줘', en: 'data.body from offset' }), pageObject({ offset: pageNumber(0, Math.max(0, body.length - 1), true) }, ['offset'])),
+        pageAction('posts.body_edit', t({ ko: '본문 고치기', en: 'Edit the body' }), t({ ko: 'whole은 본문 전체를 바꿔. edits는 find(한 번만 나오는 글)를 replace로 차례로 바꾸고, 하나라도 안 맞으면 그대로야', en: 'whole replaces the body; edits replace each find (appearing once) in order, all or nothing' }), pageObject({ whole: pageText(200000), edits: pageArray(pageObject({ find: pageText(8000), replace: pageText(100000), all: { type: 'boolean' } }, ['find', 'replace']), 50) })),
+      ]),
+      ...(title.trim() && dirty ? [pageAction('posts.save', post ? t({ ko: '글 저장', en: 'Save post' }) : t({ ko: '글 올리기', en: 'Publish post' }), t({ ko: '편집 중인 글을 저장해.', en: 'Save the post being edited.' }), undefined, 'save')] : []),
+    ],
     apply: (patch) => {
       if (typeof patch.title === 'string') setTitle(patch.title.slice(0, POST_LIMITS.title))
       if (typeof patch.body === 'string') setBody(patch.body)
@@ -174,10 +200,16 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
       if (typeof patch.tags === 'string') setTags([...new Set(patch.tags.split(',').map((tag) => tag.replace(/^#+/, '').trim()).filter(Boolean))].slice(0, POST_LIMITS.tags))
       if (typeof patch.status === 'string' && assistantStatuses.includes(patch.status as PostStatus)) setStatus(patch.status as PostStatus)
       if (patch.commentMode === 'open' || patch.commentMode === 'closed') setCommentMode(patch.commentMode)
+      if (typeof patch.pinned === 'boolean' && isAdmin) setPinned(patch.pinned)
       if (typeof patch.body === 'string') setTab('write')
     },
-    applyAction: async (id, _args, assertCurrent) => {
+    applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
+      if (id === 'posts.body_at') { setBodyOffset(Number(args.offset)); return }
+      if (id === 'posts.body_edit') {
+        if (typeof args.whole === 'string') return commitBody(args.whole)
+        return commitBody(replaceInBody(body, (Array.isArray(args.edits) ? args.edits : []) as Array<{ find: string; replace: string; all?: boolean }>))
+      }
       if (id !== 'posts.save') throw new Error('글 편집기에 없는 작업이야.')
       await save.mutateAsync()
     },

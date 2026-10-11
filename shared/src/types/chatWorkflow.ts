@@ -4,7 +4,12 @@ import type { BuiltinNodeVariant } from '../utils/workflowNodeVariants'
 export type ChatWorkflowValue = string | number | boolean | null | ChatWorkflowValue[] | { [key: string]: ChatWorkflowValue }
 export type ChatWorkflowDataType = 'text' | 'prompt' | 'number' | 'boolean' | 'json' | 'any' | 'image' | 'video' | 'audio' | 'mask'
 export type ChatWorkflowPort = { key: string; label: string; dataType: ChatWorkflowDataType; required: boolean; multiple: boolean; connectable: boolean }
-export type ChatWorkflowField = { key: string; label: string; type: ChatWorkflowDataType | 'select'; editable: boolean; hasDefault: boolean; min?: number; max?: number; options?: string[] }
+/**
+ * `optionLabels` lines up with `options` when a static select shows other words than its values. `optionsSource` names
+ * a live list (chat profiles, rooms, model rows…): the field holds one of its ids, read with list_workflow_modules.
+ * Image and mask fields hold a library image ref `{ composite_hash }`.
+ */
+export type ChatWorkflowField = { key: string; label: string; type: ChatWorkflowDataType | 'select'; editable: boolean; hasDefault: boolean; min?: number; max?: number; options?: string[]; optionLabels?: string[]; optionsSource?: string }
 /** Public editor interface only: module templates, code, paths and credentials are never included. */
 export type ChatWorkflowModule = { id: number; name: string; description: string; engine: string; version: number; operation: string | null; inputs: ChatWorkflowPort[]; outputs: ChatWorkflowPort[]; fields: ChatWorkflowField[]; runInputCapable: boolean; family?: { id: string; label: { ko: string; en: string } }; variants?: BuiltinNodeVariant[] }
 export type ChatWorkflowNode = {

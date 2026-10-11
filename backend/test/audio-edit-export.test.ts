@@ -436,7 +436,7 @@ test('audio workspace: edits, exports, deletion plan and MCP tools', { timeout: 
     assert.ok(!listenerTools.includes('edit_audio_candidate') && !listenerTools.includes('delete_unselected_audio_candidates'))
     const editorTools = await names(editor)
     assert.ok(editorTools.includes('edit_audio_candidate') && editorTools.includes('delete_unselected_audio_candidates'))
-    assert.deepEqual(editorTools.filter((name) => /review|restore_audio|create_audio_group_comment|delete_audio/.test(name)), [], 'no review tool, no unrestricted delete')
+    assert.deepEqual(editorTools.filter((name) => /review|restore_audio|create_audio_group_comment|delete_audio_candidate/.test(name)), [], 'no review tool, no single-take delete (whole effect / folder / project deletes name what they delete)')
 
     const edited = await tool(editor, 'edit_audio_candidate', { candidate_id: source.id, start: 0.1, end: 0.9, speed: 1.5, request_key: 'mcp-edit-0001' })
     assert.equal(edited.error, false, edited.text)

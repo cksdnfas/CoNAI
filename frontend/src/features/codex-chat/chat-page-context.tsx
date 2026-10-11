@@ -135,7 +135,13 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
   const navigation = editors.find((item) => item.path === location.pathname && item.kind === 'page' && item.priority === NAVIGATION_PRIORITY)
   const activeEditor = useMemo(() => {
     if (primaryEditor?.kind !== 'workflow_runner' || primaryEditor.resourceId === 'workflow-browser' || !workflowBrowser) return withNavigation(primaryEditor, navigation)
-    return withNavigation({ ...primaryEditor, actions: [...(primaryEditor.actions ?? []), ...(workflowBrowser.actions ?? [])], data: { ...workflowBrowser.data, ...primaryEditor.data }, applyAction: workflowBrowser.applyAction }, navigation)
+    // The run screen's own operations (workflow.run) stay with it; the browser's (workflow.select) go to the browser.
+    const browserActions = new Set((workflowBrowser.actions ?? []).map((action) => action.id))
+    const runner = primaryEditor.applyAction
+    return withNavigation({ ...primaryEditor, actions: [...(primaryEditor.actions ?? []), ...(workflowBrowser.actions ?? [])], data: { ...workflowBrowser.data, ...primaryEditor.data }, applyAction: (id, args, assertCurrent, nativeRevision) => {
+      if (browserActions.has(id) || !runner) return workflowBrowser.applyAction?.(id, args, assertCurrent, nativeRevision)
+      return runner(id, args, assertCurrent, nativeRevision)
+    } }, navigation)
   }, [primaryEditor, workflowBrowser, navigation])
   const fallbackTitle = t({
     ko: ({ '/': '이미지 라이브러리', '/access': '접근 가능한 페이지', '/chat': '채팅', '/generation': '이미지 생성', '/prompts': '프롬프트', '/groups': '그룹', '/wildcards': '와일드카드', '/files': '파일 보관함', '/upload': '업로드', '/settings': '설정', '/wallpaper': '배경화면', '/wallpaper/runtime': '배경화면 실행' } as Record<string, string>)[location.pathname] ?? (location.pathname.startsWith('/groups/') ? '그룹 상세' : '이미지 상세'),

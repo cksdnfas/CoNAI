@@ -91,6 +91,11 @@ export function registerChatTaskTools(server: McpServer, context: McpRequestCont
     try { return result({ proposals: proposalStatuses(chat.threadId, proposal_ids) }) } catch (error) { return failure(error) }
   })
 
+  // API LLM chats get the tool list with every request: the step tools come only once a plan is approved (the next
+  // request after the approval lists them). Codex and Claude sessions list tools once per session, so they keep all.
+  const running = ChatTaskStore.live(chat.threadId)
+  if (context.source === 'llm-chat' && (!running || running.status === 'awaiting_plan')) return
+
   server.registerTool('task_status', { description: 'Read this chat\'s current task: goal, steps with status, what it waits for, budget used.', inputSchema: z.object({}) }, async () => {
     try { return result(view(live(), members())) } catch (error) { return failure(error) }
   })

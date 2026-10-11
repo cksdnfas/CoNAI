@@ -1,6 +1,6 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlignCenterVertical,
   AlignStartHorizontal,
@@ -44,8 +44,9 @@ import { getWallpaperRuntimeSettings, updateAppearanceSettings } from '@/lib/api
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { triggerBlobDownload } from '@/lib/api-client'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
-import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
-import { WALLPAPER_WIDGET_TYPES } from '@conai/shared'
+import { getGraphWorkflowSchedules } from '@/lib/api-module-graph'
+import { createWallpaperRuntimeToken, listWallpaperRuntimeTokens, revokeWallpaperRuntimeToken } from '@/lib/api-wallpaper-runtime'
+import type { ChatPageData } from '@conai/shared'
 import { listWallpaperCanvasPresets, WALLPAPER_CUSTOM_CANVAS_ID } from './wallpaper-canvas-presets'
 import {
   alignWallpaperWidgets,
@@ -69,6 +70,7 @@ import {
   removeWallpaperWidgets,
   reorderWallpaperWidgets,
   resizeWallpaperLayoutCanvas,
+  type WallpaperAlignMode,
   saveWallpaperActivePresetId,
   saveWallpaperLayoutDraft,
   saveWallpaperLayoutPresets,
@@ -85,16 +87,42 @@ import { WALLPAPER_WIDGET_TYPE_SET } from './wallpaper-types'
 import { WallpaperWidgetInspector, type WallpaperWidgetPatch } from './wallpaper-widget-inspector'
 import { WallpaperBackgroundInspector } from './wallpaper-background-inspector'
 import { WALLPAPER_WIDGET_DRAG_TYPE, WallpaperWidgetLibrarySidebar } from './wallpaper-widget-library-sidebar'
-import { WallpaperLivelyConnectModal } from './wallpaper-lively-connect-modal'
+import { WALLPAPER_RUNTIME_TOKENS_QUERY_KEY, WallpaperLivelyConnectModal, wallpaperIssuedKey, type WallpaperIssuedKey } from './wallpaper-lively-connect-modal'
 import { WallpaperScheduleModal } from './wallpaper-schedule-modal'
 import { WallpaperTemplateModal } from './wallpaper-template-modal'
 import { WallpaperStage, type WallpaperStageZoom } from './wallpaper-stage'
 import { useUndoableState } from './use-undoable-state'
 import { useWallpaperLeaveGuard } from './use-wallpaper-leave-guard'
 import { useWallpaperTheme } from './use-wallpaper-theme'
-import { buildWallpaperTemplateLayout, type WallpaperTemplateDefinition } from './wallpaper-templates'
+import { buildWallpaperTemplateLayout, WALLPAPER_TEMPLATES, type WallpaperTemplateDefinition, type WallpaperTemplateId } from './wallpaper-templates'
 import { WallpaperDataEnvironmentContext } from './wallpaper-widget-data'
 import { buildWallpaperPresetFile, parseWallpaperPresetFile } from './wallpaper-preset-file'
+import {
+  buildWallpaperChatPage,
+  patchWallpaperBackground,
+  patchWallpaperOptions,
+  patchWallpaperWidgetSettings,
+  patchWallpaperWidgetStyle,
+  readWallpaperPatch,
+  readWallpaperSchedule,
+  WALLPAPER_LOOK_SCHEMA,
+  WALLPAPER_PATCH_HINTS,
+  WALLPAPER_SCHEDULE_SCHEMA,
+  WALLPAPER_WIDGET_PATCH_SCHEMA,
+} from './wallpaper-chat-page'
+
+/** A chat's widget patch (JSON text: frame, visibility, style, settings) written onto one widget; add and update share it. */
+function applyChatWidgetPatch(layout: WallpaperLayoutPreset, widgetId: string, raw: ChatPageData | undefined, scheduleNames: Map<number, string>) {
+  const widget = layout.widgets.find((item) => item.id === widgetId)
+  if (!widget) throw new Error('캔버스에 없는 위젯이야. data.widgets의 id를 써.')
+  const args = readWallpaperPatch(raw, WALLPAPER_WIDGET_PATCH_SCHEMA, 'patch', WALLPAPER_PATCH_HINTS.widget)
+  const patch: WallpaperWidgetPatch = {}
+  for (const key of ['x', 'y', 'w', 'h', 'rotation'] as const) if (typeof args[key] === 'number') patch[key] = args[key] as number
+  for (const key of ['hidden', 'locked'] as const) if (typeof args[key] === 'boolean') patch[key] = args[key] as boolean
+  if (args.style !== undefined) patch.style = patchWallpaperWidgetStyle(widget, args.style as Record<string, ChatPageData>)
+  if (args.settings !== undefined) patch.settings = patchWallpaperWidgetSettings(widget, args.settings as Record<string, ChatPageData>, scheduleNames)
+  return patchWidget(layout, widgetId, patch)
+}
 
 const ZOOM_STEPS = [0.1, 0.15, 0.25, 0.33, 0.5, 0.67, 0.75, 1, 1.25, 1.5, 2]
 const SNAP_STORAGE_KEY = 'conai.wallpaper.snap'
@@ -164,6 +192,9 @@ export function WallpaperEditorPage() {
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const clipboardRef = useRef<WallpaperWidgetInstance[]>([])
   const theme = useWallpaperTheme(layoutPreset.themeMode)
+  const queryClient = useQueryClient()
+  // A key a connected chat issued through its card: shown once in the Lively dialog, never in the chat.
+  const [livelyIssued, setLivelyIssued] = useState<WallpaperIssuedKey | null>(null)
 
   const notifyInfo = useCallback((message: string) => showSnackbar({ message, tone: 'info' }), [showSnackbar])
   const notifyError = useCallback((message: string) => showSnackbar({ message, tone: 'error' }), [showSnackbar])
@@ -178,6 +209,20 @@ export function WallpaperEditorPage() {
     queryKey: ['wallpaper-runtime-settings'],
     queryFn: getWallpaperRuntimeSettings,
     staleTime: 60_000,
+  })
+
+  // For a connected chat: issued keys (names only) and the schedules a quick-run widget can press.
+  const runtimeKeysQuery = useQuery({
+    queryKey: WALLPAPER_RUNTIME_TOKENS_QUERY_KEY,
+    queryFn: listWallpaperRuntimeTokens,
+    enabled: isAdmin,
+    staleTime: 60_000,
+  })
+  const quickRunSchedulesQuery = useQuery({
+    queryKey: ['wallpaper-inspector', 'graph-workflow-schedules'],
+    queryFn: () => getGraphWorkflowSchedules(),
+    staleTime: 60_000,
+    retry: false,
   })
 
   const wallpaperPresetMutation = useMutation({
@@ -519,46 +564,152 @@ export function WallpaperEditorPage() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [duplicateSelection, effectiveSelectedIds, layoutPreset, redoLayoutEdit, removeSelection, selectedWidgets, setLayoutPreset, undoLayoutEdit])
 
-  // A connected chat fills the name and canvas, picks and adds widgets (draft), loads a saved wallpaper and asks to save with a card.
+  // A connected chat reads the whole draft and edits it (draft operations the person can undo); saving, deleting a
+  // preset, the schedule and runtime keys go through a card. A key it issues is shown only in the Lively dialog.
   const layoutRef = useRef(layoutPreset)
   layoutRef.current = layoutPreset
+  const scheduleNames = new Map((quickRunSchedulesQuery.data ?? []).map((schedule) => [schedule.id, schedule.name]))
+  const runtimeKeys = isAdmin ? (runtimeKeysQuery.data ?? []) : []
+  const canvas = getWallpaperLayoutCanvas(layoutPreset)
+  const chatPage = buildWallpaperChatPage({
+    t,
+    layout: layoutPreset,
+    canvas,
+    selectedIds: effectiveSelectedIds,
+    saveTo: activePreset?.name ?? '',
+    canUndo,
+    canRedo,
+    savedPresets,
+    activePresetId: effectiveActivePresetId,
+    schedule: wallpaperSettingsQuery.data?.wallpaperSchedule,
+    runtimeKeys,
+    quickRunSchedules: (quickRunSchedulesQuery.data ?? []).map((schedule) => ({ id: schedule.id, name: schedule.name })),
+    isAdmin,
+  })
+  const requireWidgetIds = (value: ChatPageData | undefined) => {
+    const ids = (Array.isArray(value) ? value : [value]).map(String)
+    const missing = ids.filter((widgetId) => !layoutRef.current.widgets.some((widget) => widget.id === widgetId))
+    if (missing.length) throw new Error(`캔버스에 없는 위젯이야: ${missing.join(', ')}. data.widgets의 id를 써.`)
+    return ids
+  }
+  const requirePresetId = (value: ChatPageData | undefined) => {
+    const presetId = String(value ?? '')
+    if (!savedPresetById.has(presetId)) throw new Error('저장된 배경화면이 아니야. data.savedWallpapers의 id를 써.')
+    return presetId
+  }
+  /** Run one draft edit and hand back its undo while the canvas still holds it. */
+  const draftEdit = (next: WallpaperLayoutPreset, selection?: string[]) => {
+    const before = layoutRef.current
+    setLayoutPreset(next)
+    if (selection) setSelectedIds(selection)
+    return { isCurrent: () => JSON.stringify(layoutRef.current) === JSON.stringify(next), restore: () => setLayoutPreset(before) }
+  }
+  /** Replace the whole draft (template, new canvas) without touching the server's active wallpaper. */
+  const replaceDraft = (next: WallpaperLayoutPreset) => {
+    const before = layoutRef.current
+    const beforeActive = activePresetId
+    setActivePresetId(null)
+    resetLayoutPreset(next)
+    setSelectedIds([])
+    return { isCurrent: () => JSON.stringify(layoutRef.current) === JSON.stringify(next), restore: () => { resetLayoutPreset(before); setActivePresetId(beforeActive) } }
+  }
   useChatPageRegistration({
     kind: 'wallpaper', title: t({ ko: '배경화면 편집', en: 'Wallpaper editor' }), resourceId: layoutPreset.id, localRevision: JSON.stringify(layoutPreset),
     dirty: hasUnsavedEdits,
-    fields: [
-      { id: 'name', label: t({ ko: '배경화면 이름', en: 'Wallpaper name' }), type: 'text', value: layoutPreset.name },
-      { id: 'canvasPresetId', label: t({ ko: '캔버스 크기', en: 'Canvas size' }), type: 'select', value: layoutPreset.canvasPresetId, options: listWallpaperCanvasPresets().map((preset) => preset.id) },
-    ],
-    data: {
-      widgets: layoutPreset.widgets.map((widget) => ({ id: widget.id, type: widget.type, x: widget.x, y: widget.y, w: widget.w, h: widget.h })),
-      selected: { widgetIds: effectiveSelectedIds, name: layoutPreset.name, widgets: layoutPreset.widgets.length, saveTo: activePreset?.name ?? '' },
-      savedWallpapers: savedPresets.map((preset) => ({ id: preset.id, name: preset.name, active: preset.id === effectiveActivePresetId })),
-    },
-    actions: [
-      ...(layoutPreset.widgets.length ? [pageAction('wallpaper.select', t({ ko: '위젯 선택', en: 'Select widget' }), t({ ko: '캔버스의 위젯(data.widgets)을 골라 설정 패널을 열어.', en: 'Select a widget on the canvas (data.widgets).' }), pageObject({ widgetId: pageChoice(layoutPreset.widgets.map((widget) => widget.id)) }, ['widgetId']))] : []),
-      pageAction('wallpaper.add_widget', t({ ko: '위젯 추가', en: 'Add widget' }), t({ ko: '캔버스에 위젯을 하나 더해. 저장하지 않아.', en: 'Add one widget to the canvas; nothing is saved.' }), pageObject({ type: pageChoice([...WALLPAPER_WIDGET_TYPES]) }, ['type'])),
-      ...(savedPresets.length ? [pageAction('wallpaper.open_preset', t({ ko: '저장된 배경화면 불러오기', en: 'Load saved wallpaper' }), t({ ko: '저장된 배경화면(data.savedWallpapers)을 편집기로 불러와.', en: 'Load a saved wallpaper (data.savedWallpapers) into the editor.' }), pageObject({ presetId: pageChoice(savedPresets.map((preset) => preset.id)) }, ['presetId']))] : []),
-      pageAction('wallpaper.save', t({ ko: '배경화면 저장', en: 'Save wallpaper' }), t({ ko: '편집 중인 배경화면을 저장해. asNew면 새 프리셋으로, 아니면 열린 프리셋(selected.saveTo)에 덮어써.', en: 'Save the wallpaper; asNew saves a new preset, otherwise it overwrites the open one (selected.saveTo).' }), pageObject({ asNew: { type: 'boolean' } }), 'save'),
-    ],
-    apply: (patch) => {
-      const next = { ...layoutPreset, ...patch } as typeof layoutPreset
-      setLayoutPreset(next.canvasPresetId !== layoutPreset.canvasPresetId ? resizeWallpaperLayoutCanvas({ ...next, canvasPresetId: layoutPreset.canvasPresetId }, next.canvasPresetId) : normalizeWallpaperLayoutPreset(next))
-    },
+    ...chatPage,
+    apply: (patch) => setLayoutPreset(normalizeWallpaperLayoutPreset({ ...layoutPreset, ...patch } as typeof layoutPreset)),
     applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
-      if (id === 'wallpaper.select') { setSelectedIds([String(args.widgetId)]); return }
-      if (id === 'wallpaper.open_preset') {
-        if (hasDiscardableEdits) throw new Error('편집 중인 배경화면이 저장되지 않았어. 사용자가 저장하거나 버린 뒤에 다시 해.')
-        await handleLoadPreset(String(args.presetId))
-        return
+      const current = layoutRef.current
+      const ids = args.widgetIds === undefined ? [] : requireWidgetIds(args.widgetIds)
+      switch (id) {
+        case 'wallpaper.select': setSelectedIds(requireWidgetIds(args.widgetId)); return
+        case 'wallpaper.open_preset':
+          if (hasDiscardableEdits) throw new Error('편집 중인 배경화면이 저장되지 않았어. 사용자가 저장하거나 버린 뒤에 다시 해.')
+          await handleLoadPreset(requirePresetId(args.presetId))
+          return
+        case 'wallpaper.add_widget': {
+          const { layout, widgetId } = appendWallpaperWidget(current, String(args.type) as WallpaperWidgetType)
+          return draftEdit(args.patch ? applyChatWidgetPatch(layout, widgetId, args.patch, scheduleNames) : layout, [widgetId])
+        }
+        case 'wallpaper.update_widget': {
+          const [target] = requireWidgetIds(args.widgetId)
+          return draftEdit(applyChatWidgetPatch(current, target, args.patch, scheduleNames), [target])
+        }
+        case 'wallpaper.arrange': {
+          const op = String(args.op)
+          if (op === 'remove') return draftEdit(removeWallpaperWidgets(current, ids), [])
+          if (op === 'duplicate') { const result = duplicateWallpaperWidgets(current, ids); return draftEdit(result.layout, result.widgetIds) }
+          if (op === 'front' || op === 'back') return draftEdit(stackWallpaperWidgets(current, ids, op))
+          if (op.startsWith('distribute-')) return draftEdit(distributeWallpaperWidgets(current, ids, op.endsWith('x') ? 'x' : 'y'))
+          return draftEdit(alignWallpaperWidgets(current, ids, op.slice('align-'.length) as WallpaperAlignMode))
+        }
+        case 'wallpaper.apply_template': {
+          const template = WALLPAPER_TEMPLATES.find((item) => item.id === args.templateId)
+          if (!template) throw new Error('없는 템플릿이야. data.templates의 id를 써.')
+          const size = getWallpaperLayoutCanvas(current)
+          return replaceDraft(buildWallpaperTemplateLayout(template.id as WallpaperTemplateId, current.canvasPresetId, t(template.name), { width: size.width, height: size.height }))
+        }
+        case 'wallpaper.set_look': {
+          const look = readWallpaperPatch(args.patch, WALLPAPER_LOOK_SCHEMA, 'patch', WALLPAPER_PATCH_HINTS.look)
+          const next = { ...current }
+          if (look.background !== undefined) next.background = patchWallpaperBackground(current.background, look.background as Record<string, ChatPageData>)
+          if (look.options !== undefined) {
+            const { options, themeMode } = patchWallpaperOptions(current.options, look.options as Record<string, ChatPageData>)
+            next.options = options
+            if (themeMode) next.themeMode = themeMode
+          }
+          return draftEdit(next)
+        }
+        case 'wallpaper.set_canvas': {
+          const presetId = String(args.canvasPresetId)
+          const size = getWallpaperLayoutCanvas(current)
+          const custom = presetId === WALLPAPER_CUSTOM_CANVAS_ID ? { width: typeof args.width === 'number' ? args.width : size.width, height: typeof args.height === 'number' ? args.height : size.height } : undefined
+          return draftEdit(resizeWallpaperLayoutCanvas(current, presetId, custom))
+        }
+        case 'wallpaper.history':
+          if (args.step === 'new') return replaceDraft({ ...buildWallpaperLayoutDraft(current.canvasPresetId), canvasWidth: current.canvasWidth, canvasHeight: current.canvasHeight })
+          if (args.step === 'redo') { if (!canRedo) throw new Error('다시 실행할 변경이 없어.'); redoLayoutEdit() }
+          else { if (!canUndo) throw new Error('실행 취소할 변경이 없어.'); undoLayoutEdit() }
+          return
+        case 'wallpaper.open_dialog':
+          if (args.dialog === 'templates') { setIsTemplateModalOpen(true); return }
+          if (args.dialog === 'export') { handleExportFile(); return }
+          if (!isAdmin) throw new Error('관리자만 열 수 있어.')
+          if (args.dialog === 'schedule') {
+            if (savedPresets.length === 0 || !wallpaperSettingsQuery.data) throw new Error('저장된 배경화면이 있어야 일정을 정할 수 있어.')
+            setIsScheduleOpen(true)
+            return
+          }
+          setLivelyIssued(null)
+          setIsLivelyOpen(true)
+          return
+        case 'wallpaper.save': handleSavePreset({ saveAsNew: args.asNew === true }); return
+        case 'wallpaper.delete_preset': {
+          const presetId = requirePresetId(args.presetId)
+          syncWallpaperPresetState(deleteWallpaperLayoutPreset(savedPresets, presetId), presetId === effectiveActivePresetId ? null : effectiveActivePresetId, t({ ko: '프리셋을 삭제했어.', en: 'Deleted the preset.' }))
+          return
+        }
+        case 'wallpaper.save_schedule':
+          await updateAppearanceSettings({ wallpaperSchedule: readWallpaperSchedule(readWallpaperPatch({ enabled: args.enabled, entries: args.entries }, WALLPAPER_SCHEDULE_SCHEMA(savedPresets.map((preset) => preset.id)), 'schedule')) })
+          await queryClient.invalidateQueries({ queryKey: ['wallpaper-runtime-settings'] })
+          notifyInfo(t({ ko: '일정을 저장했어.', en: 'Saved the schedule.' }))
+          return
+        case 'wallpaper.issue_key': {
+          const name = String(args.name).trim()
+          if (!name) throw new Error('기기 이름이 필요해.')
+          const token = await createWallpaperRuntimeToken({ name, presetId: args.presetId ? requirePresetId(args.presetId) : null })
+          setLivelyIssued(wallpaperIssuedKey(token, savedPresets, effectiveActivePresetId))
+          setIsLivelyOpen(true)
+          void queryClient.invalidateQueries({ queryKey: WALLPAPER_RUNTIME_TOKENS_QUERY_KEY })
+          return
+        }
+        case 'wallpaper.revoke_key':
+          await revokeWallpaperRuntimeToken(Number(args.keyId))
+          await queryClient.invalidateQueries({ queryKey: WALLPAPER_RUNTIME_TOKENS_QUERY_KEY })
+          return
+        default: throw new Error('배경화면 편집기에 없는 작업이야.')
       }
-      if (id === 'wallpaper.save') { handleSavePreset({ saveAsNew: args.asNew === true }); return }
-      if (id !== 'wallpaper.add_widget') throw new Error('배경화면 편집기에 없는 작업이야.')
-      const before = layoutRef.current
-      const { layout: next, widgetId } = appendWallpaperWidget(before, String(args.type) as WallpaperWidgetType)
-      setLayoutPreset(next)
-      setSelectedIds([widgetId])
-      return { isCurrent: () => JSON.stringify(layoutRef.current) === JSON.stringify(next), restore: () => setLayoutPreset(before) }
     },
   })
 
@@ -789,10 +940,12 @@ export function WallpaperEditorPage() {
 
         {isLivelyOpen ? (
           <WallpaperLivelyConnectModal
+            key={livelyIssued?.url ?? 'lively'}
             open
-            onClose={() => setIsLivelyOpen(false)}
+            onClose={() => { setIsLivelyOpen(false); setLivelyIssued(null) }}
             presets={savedPresets}
             activePresetId={effectiveActivePresetId}
+            initialIssued={livelyIssued}
           />
         ) : null}
         {isScheduleOpen ? (

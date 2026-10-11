@@ -38,6 +38,8 @@ function describeGraphInput(input: GraphWorkflowExposedInput) {
     has_default: input.default_value !== undefined,
     default_value: input.default_value,
     options: input.options,
+    // Run inputs keep library images by reference; the executor loads the bytes.
+    ...(input.data_type === 'image' || input.data_type === 'mask' ? { value_format: '{ "composite_hash": "<library image hash from search_images>" }' } : {}),
     source: {
       node_id: input.node_id,
       port_key: input.port_key,
@@ -133,7 +135,7 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
 
   server.registerTool(
     'get_graph_workflow_details',
-    { description: 'Get the explicit MCP input schema for a user-built workflow from /generation?tab=workflows.', inputSchema: z.object({ workflow_id: z.number().int().describe('Graph workflow ID') }) },
+    { description: 'Get the explicit MCP input schema for a user-built workflow from /generation?tab=workflows. Image and mask inputs take a library image ref { "composite_hash": "…" } (see value_format), never a file or data URL.', inputSchema: z.object({ workflow_id: z.number().int().describe('Graph workflow ID') }) },
     async ({ workflow_id }) => {
       try {
         const workflow = GraphWorkflowModel.findById(workflow_id)

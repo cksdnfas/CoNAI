@@ -18,6 +18,24 @@ const SEA_BLOB = path.join(ROOT_DIR, 'sea-prep.blob');
 const BUILD_OUTPUT_DIR = path.join(ROOT_DIR, 'build-output');
 const PKG_OUTPUT_DIR = path.join(BUILD_OUTPUT_DIR, 'sea');
 
+// User guides the chat and MCP read with get_app_guide (backend/src/services/appGuides.ts looks next to the app).
+function copyUserGuides(target) {
+  const source = path.join(ROOT_DIR, 'docs', 'GUIDE');
+  if (!fs.existsSync(source)) {
+    console.warn('   ⚠️  docs/GUIDE not found, the chat cannot read the user guides');
+    return;
+  }
+  fs.ensureDirSync(target);
+  let copied = 0;
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    if (entry.isFile() && entry.name.endsWith('.md')) {
+      fs.copyFileSync(path.join(source, entry.name), path.join(target, entry.name));
+      copied++;
+    }
+  }
+  console.log(`   ✅ Copied ${copied} user guides`);
+}
+
 const platform = os.platform();
 const arch = os.arch();
 const isWindows = platform === 'win32';
@@ -174,6 +192,8 @@ try {
 } catch (error) {
   console.warn('⚠️  Native module copy failed:', error.message, '\n');
 }
+
+copyUserGuides(path.join(PKG_OUTPUT_DIR, 'docs', 'GUIDE'));
 
 // Step 8: Copy frontend assets
 console.log('Step 8: Packaging frontend assets...');

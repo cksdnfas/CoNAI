@@ -155,6 +155,8 @@ export interface EmbeddingServerStatus {
   enabled: boolean;
   dependenciesAvailable: boolean;
   statusMessage: string;
+  /** Why embeddings are resting after a failure (model load, download), or null; they retry on their own. */
+  failure: string | null;
   model: string;
   modelRepo: string;
   modelCached: boolean;
@@ -165,6 +167,7 @@ export interface EmbeddingServerStatus {
   indexed: EmbeddingIndexCount[];
   /** Whether the background indexer still has work. */
   indexing: boolean;
+  /** The model file being downloaded right now, or null. */
   download: { repo: string; file: string; state: 'start' | 'done'; bytes: number | null; at: string } | null;
 }
 

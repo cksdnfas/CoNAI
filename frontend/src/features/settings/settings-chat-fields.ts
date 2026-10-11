@@ -1,4 +1,4 @@
-import { CHAT_PAGE_LIMITS, HEADER_NAVIGATION_ITEM_KEYS, MAX_RECYCLE_BIN_RETENTION_DAYS } from '@conai/shared'
+import { CHAT_PAGE_LIMITS, HEADER_NAVIGATION_ITEM_KEYS, MAX_RECYCLE_BIN_RETENTION_DAYS, POSTS_SAFETY_LIMITS } from '@conai/shared'
 import type {
   AiRuntimeSettings,
   AppearanceSettings,
@@ -11,6 +11,7 @@ import type {
   ImageSaveSettings,
   KaloscopeSettings,
   MetadataExtractionSettings,
+  PostsSettings,
   TaggerSettings,
   ThumbnailSettings,
   VideoOptimizationSettings,
@@ -40,6 +41,7 @@ export type SettingsChatSources = {
   kaloscope: KaloscopeSettings | null
   embedding: EmbeddingSettings | null
   ratingWeights: RatingWeightsRecord | null
+  posts: PostsSettings | null
   ratingTiers: RatingTierRecord[] | null
   taggerModels: string[]
 }
@@ -60,6 +62,19 @@ const color = (path: string, label: TranslationDictionary): FieldSpec => ({ path
 
 function grouped(group: TranslationDictionary, specs: FieldSpec[]): FieldSpec[] {
   return specs.map((spec) => ({ ...spec, group }))
+}
+
+/**
+ * Model-only notes for inputs whose label does not say enough (English, never shown on screen). Every connected
+ * request carries them, so they stay a short line each, and only where the label falls short.
+ */
+const FIELD_HINTS: Record<string, string> = {
+  'metadata.enableSecondaryExtraction': 'Reads NovelAI prompts hidden in PNG pixels; slower scans',
+  'aiRuntime.torchBackend': 'Takes effect only after settings.ai_runtime install',
+  'tagger.model': 'vit/swinv2/convnext: WD taggers; pixai-v1: more tags, CUDA GPU only',
+  'kaloscope.styleVectors': 'Needed for 화풍 유사 (similar style) on the image detail',
+  'embedding.lorebook': 'Lore entries fire when the topic matches, without the keyword',
+  'embedding.imageSearch': 'Library 설명 search and 내용 유사; ~0.7 s per image on CPU, more RAM',
 }
 
 const HEADER_NAVIGATION_LABELS: Record<HeaderNavigationItemKey, TranslationDictionary> = {
@@ -145,8 +160,8 @@ const IMAGE_SAVE: FieldSpec[] = grouped({ ko: '이미지 저장', en: 'Image sav
   count('maxHeight', { ko: '최대 세로', en: 'Max height' }, 64, 16384),
   toggle('alwaysShowDialog', { ko: '매번 팝업으로 확인 (끄면 설정값 자동 적용)', en: 'Confirm with a dialog every time (off = apply automatically)' }),
   toggle('applyToGenerationAttachments', { ko: '생성 첨부에 적용', en: 'Apply to generation attachments' }),
-  toggle('applyToEditorSave', { ko: '에디터 저장에 적용', en: 'Apply to editor saves' }),
-  toggle('applyToCanvasSave', { ko: '캔버스 저장에 적용', en: 'Apply to canvas saves' }),
+  toggle('applyToEditorSave', { ko: '생성 입력 편집에 적용', en: 'Apply to generation input edits' }),
+  toggle('applyToCanvasSave', { ko: '라이브러리 편집본에 적용', en: 'Apply to library edits' }),
   toggle('applyToUpload', { ko: '업로드에 적용', en: 'Apply to uploads' }),
   toggle('applyToWorkflowOutputs', { ko: '워크플로 출력에 적용', en: 'Apply to workflow outputs' }),
 ])
@@ -243,6 +258,25 @@ const SAFETY: FieldSpec[] = grouped({ ko: '안전 및 정리', en: 'Safety and c
   toggle('applyRatingSafetyToGenerationHistory', { ko: '생성 히스토리에도 등급 표시 규칙 적용', en: 'Apply rating visibility rules to generation history' }),
 ])
 
+const POSTS_LIMIT_LABELS: Record<keyof typeof POSTS_SAFETY_LIMITS, TranslationDictionary> = {
+  chainDepth: { ko: '봇이 봇을 부르는 단계', en: 'Bot-to-bot call depth' },
+  botsPerComment: { ko: '댓글 하나에 부를 봇 수', en: 'Bots per comment' },
+  repliesPerPostPerHour: { ko: '글 하나의 시간당 봇 답글', en: 'Bot replies per post per hour' },
+  callsPerProfilePerDay: { ko: '봇 하나의 하루 호출', en: 'Calls per bot per day' },
+  summonsPerAccountPerHour: { ko: '계정 하나의 시간당 호출', en: 'Calls per account per hour' },
+}
+
+const POSTS: FieldSpec[] = [
+  ...grouped({ ko: '게시판', en: 'Posts' }, [
+    choice('layout', { ko: '기본 목록 모양', en: 'Default list layout' }, ['feed', 'cards', 'sns']),
+    choice('botPostStatus', { ko: '봇이 쓴 글 (published 바로 발행 · draft 초안으로 두기)', en: 'Posts written by bots (published · draft)' }, ['published', 'draft']),
+  ]),
+  ...grouped({ ko: '댓글로 봇 부르기', en: 'Calling bots from comments' }, [
+    toggle('safety.summonEnabled', { ko: '봇 부르기', en: 'Bot calls' }),
+    ...(Object.keys(POSTS_LIMIT_LABELS) as Array<keyof typeof POSTS_SAFETY_LIMITS>).map((key) => count(`safety.${key}`, POSTS_LIMIT_LABELS[key], POSTS_SAFETY_LIMITS[key].min, POSTS_SAFETY_LIMITS[key].max)),
+  ]),
+]
+
 const SECTION_SPECS: Record<ObjectSection, FieldSpec[]> = {
   general: [...GENERAL_BASIC, ...GENERAL_LIBRARY, ...SAFETY],
   appearance: APPEARANCE,
@@ -256,6 +290,7 @@ const SECTION_SPECS: Record<ObjectSection, FieldSpec[]> = {
   kaloscope: KALOSCOPE,
   embedding: EMBEDDING,
   ratingWeights: RATING_WEIGHTS,
+  posts: POSTS,
 }
 
 /** What each settings tab shows, by section and (for general settings) by the fields that tab renders. */
@@ -265,6 +300,7 @@ const TAB_SECTIONS: Partial<Record<SettingsTab, Array<[ObjectSection, FieldSpec[
   media: [['imageSave', IMAGE_SAVE], ['thumbnail', THUMBNAIL], ['videoOptimization', VIDEO_OPTIMIZATION]],
   auto: [['aiRuntime', AI_RUNTIME], ['kaloscope', KALOSCOPE], ['tagger', TAGGER], ['embedding', EMBEDDING], ['ratingWeights', RATING_WEIGHTS]],
   generation: [['generationThrottle', GENERATION_THROTTLE]],
+  posts: [['posts', POSTS]],
   system: [['general', SAFETY]],
 }
 
@@ -287,7 +323,8 @@ function writePath<T>(source: T, path: string, value: unknown): T {
 function buildField(section: ObjectSection, source: object, spec: FieldSpec, t: Translate): ChatPageField {
   const { path, label, fallback, group, ...rest } = spec
   const current = readPath(source, path)
-  return { ...rest, id: fieldId(section, path), label: group ? `${t(group)} · ${t(label)}` : t(label), value: (current ?? fallback ?? '') as ChatPageValue }
+  const id = fieldId(section, path)
+  return { ...rest, id, label: group ? `${t(group)} · ${t(label)}` : t(label), value: (current ?? fallback ?? '') as ChatPageValue, ...(FIELD_HINTS[id] ? { hint: FIELD_HINTS[id] } : {}) }
 }
 
 /** The registered inputs for one settings tab; sections whose draft has not loaded yet are left out. */

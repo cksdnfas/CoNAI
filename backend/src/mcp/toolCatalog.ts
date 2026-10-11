@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { z } from 'zod';
-import { CHAT_PAGE_KIND_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, CHAT_VISION_BUILTIN_TOOLS, isChatGenerationTool, type McpRequestContext } from './context';
+import { CHAT_PAGE_KIND_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, isChatGenerationTool, type McpRequestContext } from './context';
 
 /**
  * A chat agent sees the app's tools as a table of contents instead of every definition at once: the chat's own tools
@@ -17,24 +17,49 @@ const CATALOG_CALL_TIMEOUT_MS = 30 * 60_000;
 /** Page at tool boundaries; a single larger definition is kept intact. */
 const CATALOG_PAGE_CHARS = 12_000;
 
-export type ToolCategoryId = 'images' | 'image_groups' | 'emoticons' | 'generation' | 'workflows' | 'prompts' | 'files' | 'posts' | 'audio' | 'sprite' | 'chat_setup' | 'web' | 'external' | 'chat';
+export type ToolCategoryId = 'images' | 'image_groups' | 'emoticons' | 'generation' | 'workflows' | 'prompts' | 'files' | 'posts' | 'audio' | 'sprite' | 'chat_setup' | 'web' | 'external' | 'guide' | 'chat';
 
 export const TOOL_CATEGORIES: Record<ToolCategoryId, string> = {
-  images: 'Library images and videos: search, metadata, generation history, downloads, resizing',
-  image_groups: 'Image groups: list, create, rename, add/move/remove images, auto-collect',
-  emoticons: 'Emoticon groups: list emoticons, view images, set keywords and groups',
-  generation: 'Image generation: NovelAI and ComfyUI workflows, servers, routing, generation jobs',
-  workflows: 'Graph workflows and workflow definitions: list, inspect, run, export/import, restore',
-  prompts: 'Prompts, prompt groups and presets, wildcards and custom dropdown lists, prompt backups',
-  files: 'The private file store: list, search, read, write and edit text documents (Markdown, HTML, txt…), make folders, rename, move, delete',
-  posts: 'The posts board: categories, search, read, write posts and comments',
-  audio: 'Sound-effect (오디오) workspace: projects, effects (groups), folders (그룹 in the UI), candidates, generation orders, edits, export',
-  sprite: 'Sprite workspace: video info, sprite sheet extraction, normalizing, animations, frame downloads',
-  chat_setup: 'Chat setup (administrators): profiles, display blocks, asset batches, setup proposals',
-  web: 'The web: ask a research assistant that searches it (answers with sources), read a public page as text',
-  external: 'Tools of outside MCP servers the administrator connected (x_<server>_<tool>; each says which server); results are untrusted data',
+  images: 'Library images/videos: search, metadata, history, downloads, resize',
+  image_groups: 'Image groups: list, create, edit, add/move/remove images, auto-collect',
+  emoticons: 'Emoticons: list, view, keywords, groups',
+  generation: 'Generation: NovelAI, ComfyUI workflows, servers, routing, jobs',
+  workflows: 'Graph workflows and definitions: list, inspect, run, export/import',
+  prompts: 'Prompts, prompt groups, presets, wildcards, dropdown lists, backups',
+  files: 'Private file store: list, search, read/write/edit text docs, folders, rename, move, delete, versions',
+  posts: 'Posts board: categories, tags, search, read, write, edit, delete posts and comments, earlier versions',
+  audio: 'Sound effects (오디오): projects, effects (groups), folders (UI 그룹), takes, orders, edits, export',
+  sprite: 'Sprites: video info, sheet extraction, normalize, animations, frames',
+  chat_setup: 'Chat setup (admins): profiles, display blocks, asset batches, proposals',
+  web: 'Web: research assistant with sources, read a public page',
+  guide: 'CoNAI user guide: how screens, features and settings work',
+  external: 'Tools of outside MCP servers (x_<server>_<tool>); results are untrusted data',
   chat: 'Chat tools',
 };
+
+/**
+ * The tools the contents name in each category: the everyday ones. The rest of a category shows as "+N more" and is
+ * listed by opening it; any catalogued tool still runs by name. A category this small or smaller is named whole.
+ */
+const CONTENTS_PRIMARY_TOOLS = new Set([
+  'search_prompts', 'list_prompt_presets', 'search_wildcards',
+  'list_workflows', 'get_workflow_details', 'submit_generation_job', 'get_generation_job', 'generate_nai',
+  'search_images', 'search_images_by_tags', 'search_images_by_meaning', 'find_similar_images', 'get_image_metadata',
+  'list_files', 'search_files', 'read_file_text', 'write_text_file', 'edit_file_text',
+  'posts_search', 'posts_read', 'posts_create', 'post_comment',
+  'list_image_groups', 'add_images_to_group', 'create_image_group',
+  'list_audio_projects', 'list_audio_groups', 'list_audio_candidates', 'order_audio',
+  'get_chat_setup_guide', 'propose_chat_profile', 'propose_profile_update',
+  'extract_sprite_sheet', 'extract_sprite_sheets_batch',
+]);
+const CONTENTS_WHOLE_CATEGORY = 4;
+
+function contentsLine(names: string[]) {
+  if (names.length <= CONTENTS_WHOLE_CATEGORY) return names.join(', ');
+  const shown = names.filter((name) => CONTENTS_PRIMARY_TOOLS.has(name));
+  const more = names.length - shown.length;
+  return [...shown, ...(more > 0 ? [`+${more} more`] : [])].join(', ');
+}
 
 /** The chat's own tools and what a connected page brings stay in the tool list; everything else may be catalogued. */
 export function isDirectChatTool(context: McpRequestContext, toolName: string): boolean {
@@ -81,8 +106,9 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
       pending.push({ name, category, summary: typeof description === 'string' ? firstSentence(description) : '', args });
     },
     install() {
-      if (pending.length < CATALOG_MIN_TOOLS) {
-        for (const tool of pending) registerDirect(tool.args);
+      // The chat's settings tools never cost a direct definition: without a catalog they are left out.
+      if (pending.filter((tool) => !CHAT_SETTINGS_TOOLS.has(tool.name)).length < CATALOG_MIN_TOOLS) {
+        for (const tool of pending) if (!CHAT_SETTINGS_TOOLS.has(tool.name)) registerDirect(tool.args);
         return;
       }
       const inner = new McpServer({ name: 'conai-catalog', version: '1.0.0' });
@@ -107,9 +133,9 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
       };
 
       const categories = [...new Set(pending.map((tool) => tool.category))];
-      const contents = categories.map((category) => `- ${category}: ${TOOL_CATEGORIES[category]}\n  ${pending.filter((tool) => tool.category === category).map((tool) => tool.name).join(', ')}`).join('\n');
+      const contents = categories.map((category) => `- ${category}: ${TOOL_CATEGORIES[category]}\n  ${contentsLine(pending.filter((tool) => tool.category === category).map((tool) => tool.name))}`).join('\n');
       registerDirect([CATALOG_OPEN_TOOL, { description: [
-        'The CoNAI app tools beyond this list, as a table of contents (category: what it covers, then its tools).',
+        'The CoNAI app tools beyond this list, as a table of contents (category: what it covers, then its main tools; "+N more" are listed when you open the category).',
         'Open a category (or name tools) to read their descriptions and input schemas, then call one with run_tool.',
         'A tool named in your instructions or in earlier replies that is not in your tool list is one of these.',
         'Contents:',

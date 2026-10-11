@@ -22,6 +22,7 @@ import { detectSheetGrid } from './sprite-grid-detect'
 import { cellSize } from './sprite-options'
 import { LibraryMediaButtons, LibraryResults } from './sprite-library'
 import { MiniField, SliderLine, SpriteSection } from './sprite-ui'
+import { useSpriteNormalizeChatPage } from './use-sprite-chat-page'
 
 interface SheetEntry {
   hash: string
@@ -40,7 +41,7 @@ function sheetProblem(sheet: SheetEntry) {
     || customAnchorX < 0 || customAnchorY < 0 || customAnchorX > cell.cellWidth || customAnchorY > cell.cellHeight
 }
 
-export function SpriteNormalizeTab() {
+export function SpriteNormalizeTab({ active }: { active: boolean }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const { has } = useFeaturePermissions()
@@ -88,7 +89,8 @@ export function SpriteNormalizeTab() {
     if (!current) return
     setSheets((list) => list.map((sheet) => sheet.width === current.width && sheet.height === current.height ? { ...sheet, options: { ...current.options } } : sheet))
   }
-  const problems = sheets.filter(sheetProblem).length
+  const problemHashes = sheets.filter(sheetProblem).map((sheet) => sheet.hash)
+  const problems = problemHashes.length
   const running = Boolean(jobId) || starting
   const canRun = has('images.edit') && sheets.length > 0 && problems === 0 && !running
 
@@ -104,6 +106,10 @@ export function SpriteNormalizeTab() {
       setStarting(false)
     }
   }
+
+  useSpriteNormalizeChatPage({
+    active, sheets, setSheets, selected, setSelected, addSheets: add, options, setOptions, problems: problemHashes, running, canRun, canSave: has('images.upload'), run, savedHashes, failures,
+  })
 
   const left = (
     <div className="flex min-w-0 flex-col">

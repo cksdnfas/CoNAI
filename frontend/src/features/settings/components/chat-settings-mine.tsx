@@ -1,11 +1,19 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
+import type { ChatPageData } from '@conai/shared'
 import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
 import { ChatFlagEditorModal, ChatFlagRows, useChatFlagRoom, useChatFlags } from '@/features/codex-chat/chat-flags'
 import { ChatUserProfileEditorModal, ChatUserProfileRows, useChatUserProfiles } from '@/features/codex-chat/chat-user-profiles'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { CODEX_CHAT_THREADS_QUERY_KEY } from '@/features/codex-chat/codex-chat-context'
+import { pageAction, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useI18n } from '@/i18n'
-import { CHAT_USER_PROFILE_LIMITS, type ChatFlag, type ChatUserProfile } from '@/lib/api-codex-chat'
+import {
+  CHAT_FLAG_LIMITS, CHAT_FLAGS_QUERY_KEY, CHAT_USER_PROFILE_LIMITS, CHAT_USER_PROFILES_QUERY_KEY, createChatFlag, createChatUserProfile, deleteChatFlag, deleteChatUserProfile,
+  resetChatFlag, restoreChatFlag, updateChatFlag, updateChatUserProfile, type ChatFlag, type ChatUserProfile,
+} from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 
@@ -19,6 +27,63 @@ export function ChatSettingsMine() {
   const flags = flagsQuery.data ?? []
   const userProfiles = userProfilesQuery.data ?? []
   const canAddFlag = useChatFlagRoom(flags)
+  const queryClient = useQueryClient()
+
+  // A connected chat reads and writes the account's own user profiles and flags; every change is a review card.
+  const chatData: Record<string, ChatPageData> = {
+    userProfiles: userProfiles.map((profile) => ({ id: profile.id, name: profile.name, persona: profile.persona, isDefault: profile.isDefault, modelSlotId: profile.modelSlotId })),
+    flags: flags.map((flag) => ({ id: flag.id, icon: flag.icon, name: flag.name, content: flag.content, shared: flag.shared, edited: flag.edited, hidden: flag.hidden })),
+  }
+  const saveUserProfile = async (args: Record<string, ChatPageData>) => {
+    const current = typeof args.id === 'number' ? userProfiles.find((profile) => profile.id === args.id) : undefined
+    if (typeof args.id === 'number' && !current) throw new Error('목록에 없는 사용자 프로필이야.')
+    if (args.operation === 'delete') {
+      if (!current) throw new Error('지울 사용자 프로필의 id가 필요해.')
+      await deleteChatUserProfile(current.id)
+    } else {
+      const name = (typeof args.name === 'string' ? args.name : current?.name ?? '').trim()
+      if (!name) throw new Error('사용자 프로필 이름이 필요해.')
+      const input = { name, persona: typeof args.persona === 'string' ? args.persona : current?.persona ?? '', avatar: current?.avatar ?? null, isDefault: typeof args.isDefault === 'boolean' ? args.isDefault : current?.isDefault ?? false }
+      await (current ? updateChatUserProfile(current.id, input) : createChatUserProfile(input))
+    }
+    await Promise.all([queryClient.invalidateQueries({ queryKey: CHAT_USER_PROFILES_QUERY_KEY }), queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })])
+  }
+  const saveFlag = async (args: Record<string, ChatPageData>) => {
+    const current = typeof args.id === 'number' ? flags.find((flag) => flag.id === args.id) : undefined
+    if (typeof args.id === 'number' && !current) throw new Error('목록에 없는 플래그야.')
+    if (args.operation === 'save') {
+      const name = (typeof args.name === 'string' ? args.name : current?.name ?? '').trim()
+      const content = typeof args.content === 'string' ? args.content : current?.content ?? ''
+      if (!name || !content.trim()) throw new Error('플래그 이름과 내용이 필요해.')
+      const input = { icon: typeof args.icon === 'string' ? args.icon : current?.icon ?? '', name, content }
+      await (current ? updateChatFlag(current.id, input) : createChatFlag(input))
+    } else {
+      if (!current) throw new Error('플래그 id가 필요해.')
+      await (args.operation === 'delete' ? deleteChatFlag(current.id) : args.operation === 'restore' ? restoreChatFlag(current.id) : resetChatFlag(current.id))
+    }
+    await queryClient.invalidateQueries({ queryKey: CHAT_FLAGS_QUERY_KEY })
+  }
+  useChatPageRegistration({
+    kind: 'settings', title: t({ ko: '설정 · 내 채팅 설정', en: 'Settings · My chat settings' }), resourceId: 'chat', priority: 5, fields: [], data: chatData,
+    actions: [
+      pageAction('settings.user_profile', t({ ko: '사용자 프로필 저장·삭제', en: 'Save or delete a user profile' }), t({
+        ko: 'data.userProfiles(채팅에서 내가 누구인지). save: id 있으면 넘긴 것만 수정, 없으면 추가. 아바타·제안 모델은 사람이 편집기에서.',
+        en: 'data.userProfiles (who the account is in chats). save: with id edits what is passed, without adds. Avatar and suggestion model stay in the editor.',
+      }), pageObject({ operation: pageChoice(['save', 'delete']), id: pageNumber(0, undefined, true), name: pageText(CHAT_USER_PROFILE_LIMITS.name), persona: pageText(CHAT_USER_PROFILE_LIMITS.persona), isDefault: { type: 'boolean' } }, ['operation']), 'save'),
+      pageAction('settings.flag', t({ ko: '플래그 저장·삭제', en: 'Save or delete a flag' }), t({
+        ko: 'data.flags(채팅마다 켜면 메시지에 붙는 지시문). save: id 있으면 수정(공용이면 내 사본), 없으면 추가. icon: 이모지나 lucide:<이름>. restore: 숨긴 공용 꺼내기, reset: 공용 원문으로.',
+        en: 'data.flags (instructions switched on per chat). save: with id edits (a shared one becomes an own copy), without adds. icon: emoji or lucide:<name>. restore: unhide a shared one, reset: back to the shared text.',
+      }), pageObject({ operation: pageChoice(['save', 'delete', 'restore', 'reset']), id: pageNumber(0, undefined, true), icon: pageText(60), name: pageText(CHAT_FLAG_LIMITS.name), content: pageText(CHAT_FLAG_LIMITS.content) }, ['operation']), 'save'),
+    ],
+    apply: () => {},
+    applyAction: async (id, args, assertCurrent) => {
+      assertCurrent()
+      const normalized = args.id === 0 ? { ...args, id: null } : args
+      if (id === 'settings.user_profile') return saveUserProfile(normalized)
+      if (id === 'settings.flag') return saveFlag(normalized)
+      throw new Error('이 화면에 없는 작업이야.')
+    },
+  }, { preserveOnSearchChange: true })
 
   return (
     <div className="space-y-8">

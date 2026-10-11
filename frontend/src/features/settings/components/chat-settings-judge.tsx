@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import type { ChatJudgeItemStats, ChatJudgeLogRun } from '@conai/shared'
+import type { ChatJudgeItemStats, ChatJudgeLogRun, ChatPageData } from '@conai/shared'
 import { ChevronRight, RefreshCw } from 'lucide-react'
 import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { pageAction, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import {
   CHAT_JUDGE_LOGS_QUERY_KEY,
   CHAT_JUDGE_PRESETS_QUERY_KEY,
@@ -176,6 +178,38 @@ export function ChatSettingsJudge() {
   const totalFailed = stats.reduce((sum, entry) => sum + entry.failed, 0)
   const patch = (next: Partial<ChatJudgeLogFilter>) => setFilter((current) => ({ ...current, ...next }))
   const number = (value: string) => (value ? Number(value) : undefined)
+
+  // A connected chat reads the same stats and the latest runs (lists at the top of data: a long one shows as a count
+  // until read_page_data reads it), and narrows them with the same filters.
+  const chatData: Record<string, ChatPageData> = {
+    filter: { profileId: filter.profileId ?? 0, presetId: filter.presetId ?? 0, itemId: filter.itemId ?? '', verdict: filter.verdict ?? '', days: filter.days ?? 7 },
+    bots: profiles.map((profile) => ({ id: profile.id, name: profile.name })),
+    presets: presets.map((preset) => ({ id: preset.id, name: preset.name })),
+    stats: stats.map((entry) => ({ presetId: entry.presetId, itemId: entry.itemId, name: entry.name, runs: entry.runs, yes: entry.yes, no: entry.no, uncertain: entry.uncertain, failed: entry.failed })),
+    recentRuns: runs.slice(0, 20).map((run) => ({
+      at: run.createdAt, bot: run.profileName, preset: run.presetName, ...(run.error ? { error: run.error.slice(0, 120) } : {}),
+      verdicts: run.items.map((item) => `${item.name}: ${item.verdict}`).join(', '),
+    })),
+  }
+  useChatPageRegistration({
+    kind: 'settings', title: t({ ko: '설정 · 판단 기록', en: 'Settings · Judge log' }), resourceId: 'llm', priority: 5, fields: [], data: chatData,
+    actions: [pageAction('settings.judge_filter', t({ ko: '판단 기록 거르기', en: 'Filter the judge log' }), t({
+      ko: 'data.filter를 바꿔(넘긴 것만, 0이나 빈 값 = 전체).',
+      en: 'Change data.filter (only what you pass; 0 or empty = all).',
+    }), pageObject({ profileId: pageNumber(0, undefined, true), presetId: pageNumber(0, undefined, true), itemId: pageText(120), verdict: pageChoice(['', 'yes', 'no', 'uncertain', 'failed']), days: pageChoice([1, 7, 30]) }))],
+    apply: () => {},
+    applyAction: (id, args, assertCurrent) => {
+      assertCurrent()
+      if (id !== 'settings.judge_filter') throw new Error('이 화면에 없는 작업이야.')
+      const next: Partial<ChatJudgeLogFilter> = {}
+      if (typeof args.profileId === 'number') next.profileId = args.profileId || undefined
+      if (typeof args.presetId === 'number') { next.presetId = args.presetId || undefined; next.itemId = undefined }
+      if (typeof args.itemId === 'string') next.itemId = args.itemId || undefined
+      if (typeof args.verdict === 'string') next.verdict = args.verdict || undefined
+      if (typeof args.days === 'number') next.days = args.days
+      patch(next)
+    },
+  }, { preserveOnSearchChange: true })
 
   return (
     <div className="space-y-6">

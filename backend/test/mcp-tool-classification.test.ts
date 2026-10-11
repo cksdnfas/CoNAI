@@ -33,6 +33,8 @@ const CHAT_ROOM_TOOL_NAMES = ['chat_reply_to', 'room_call_member', 'room_history
 const UNSCOPED_ALLOWED = new Set<string>([
   // Chat room/lore tools are offered by CHAT_ROOM_TOOLS regardless of scopes (isContextToolAllowed returns before scopes).
   ...CHAT_ROOM_TOOL_NAMES,
+  // The chat's own settings card is offered by CHAT_SETTINGS_TOOLS the same way (behind the tool catalog only).
+  'get_chat_settings', 'propose_chat_settings',
 ])
 const FEATURE_UNCLASSIFIED_ALLOWED = new Set<string>([])
 const STALE_SCOPE_ALLOWED = new Set<string>([])

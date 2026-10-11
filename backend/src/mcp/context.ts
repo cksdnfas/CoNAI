@@ -55,7 +55,7 @@ export function isChatGenerationTool(toolName: string) {
 export const GENERATION_PRESET_BLOCKED_TOOLS = new Set([
   'generate_nai', 'generate_comfyui', 'generate_comfyui_all_servers', 'submit_generation_job', 'execute_graph_workflow',
   'list_workflows', 'get_workflow_details', 'list_graph_workflows', 'get_graph_workflow_details', 'get_graph_workflow_execution',
-  'list_comfyui_servers', 'get_generation_routing_options', 'get_codex_generation_options',
+  'list_comfyui_servers', 'get_generation_routing_options', 'get_codex_generation_options', 'check_comfy_workflow',
 ]);
 
 export function isChatMcpSource(source: McpRequestContext['source']) {
@@ -106,6 +106,7 @@ export const ALL_MCP_HTTP_SCOPES: McpHttpScope[] = ['read', 'generate', 'organiz
 const TOOL_SCOPES: Record<string, McpHttpScope> = {
   web_search: 'read',
   web_read: 'read',
+  get_app_guide: 'read',
   get_current_page: 'read',
   page_fill: 'read',
   page_act: 'read',
@@ -118,12 +119,24 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   get_file_info: 'read',
   read_file_text: 'read',
   search_files: 'read',
+  list_file_versions: 'read',
+  read_file_version: 'read',
   posts_categories: 'read',
   posts_search: 'read',
   posts_read: 'read',
   posts_create: 'organize',
   posts_update: 'organize',
   post_comment: 'organize',
+  posts_tags: 'read',
+  posts_revisions: 'read',
+  posts_delete: 'organize',
+  posts_restore_revision: 'organize',
+  post_comment_edit: 'organize',
+  post_comment_delete: 'organize',
+  post_comment_hide: 'organize',
+  posts_category_create: 'organize',
+  posts_category_update: 'organize',
+  posts_category_delete: 'organize',
   list_emoticon_groups: 'read',
   list_emoticons: 'read',
   view_images: 'read',
@@ -137,6 +150,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   rename_file: 'organize',
   move_files: 'organize',
   delete_files: 'organize',
+  restore_file_version: 'organize',
   list_workflows: 'read',
   list_comfyui_servers: 'read',
   get_generation_routing_options: 'read',
@@ -144,13 +158,17 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   get_generation_history_request: 'read',
   list_prompt_presets: 'read',
   get_workflow_details: 'read',
+  check_comfy_workflow: 'read',
   list_graph_workflows: 'read',
   get_graph_workflow_details: 'read',
   get_graph_workflow_execution: 'read',
+  list_chat_rooms: 'read',
   search_images: 'read',
   get_image_metadata: 'read',
   get_generation_history: 'read',
   search_images_by_tags: 'read',
+  search_images_by_meaning: 'read',
+  find_similar_images: 'read',
   list_image_groups: 'read',
   get_image_groups: 'read',
   get_image_group: 'read',
@@ -201,7 +219,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   restore_prompt_data: 'restore',
   import_workflow_definition: 'restore',
   restore_deleted_workflow: 'restore',
-  // Audio workspace. Review (selected / rejected), deletes and writing comments have no tool: people do those.
+  // Audio workspace. Review (selected / rejected), deleting single takes and writing comments have no tool: people do those.
   list_audio_projects: 'read',
   list_audio_groups: 'read',
   list_audio_candidates: 'read',
@@ -219,6 +237,10 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   set_audio_group_comment_status: 'organize',
   edit_audio_candidate: 'organize',
   delete_unselected_audio_candidates: 'organize',
+  // Whole effect / folder / project deletes: never page kind tools (organize is not kept on a connected page).
+  delete_audio_group: 'organize',
+  delete_audio_folder: 'organize',
+  delete_audio_project: 'organize',
   export_audio_selected: 'organize',
   get_audio_download: 'read',
   list_audio_workflows: 'read',
@@ -260,9 +282,16 @@ export const GROUP_ONLY_CHAT_TOOLS = new Set(['room_call_member']);
  */
 export const CHAT_VISION_BUILTIN_TOOLS = new Set(['view_media_frames']);
 
+/**
+ * The chat's own settings (linked lorebooks, record book, linked files, minutes) and how its features work: offered in
+ * every chat regardless of scopes like the room tools, but not listed directly (the tool catalog keeps them under
+ * `chat`), since they matter only when the person asks.
+ */
+export const CHAT_SETTINGS_TOOLS = new Set(['get_chat_settings', 'propose_chat_settings']);
+
 /** The chat's own tools, which do not count as the profile having tools (no tool guidance, no tool budget). */
 export function isChatOwnTool(toolName: string) {
-  return CHAT_ROOM_TOOLS.has(toolName) || CHAT_VISION_BUILTIN_TOOLS.has(toolName);
+  return CHAT_ROOM_TOOLS.has(toolName) || CHAT_VISION_BUILTIN_TOOLS.has(toolName) || CHAT_SETTINGS_TOOLS.has(toolName);
 }
 
 export function getMcpToolScope(toolName: string): McpHttpScope | null {

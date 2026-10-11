@@ -214,15 +214,15 @@ function registerSaveLore(server: McpServer, context: McpRequestContext): void {
   const editable = context.source === 'codex-chat' || (autoSave && recordBookHasFiles(threadId));
   server.registerTool(
     SAVE_LORE_TOOL,
-    { description: `Save an entry to ${target.where}. Keep only what is worth remembering across sessions: what the user asks you to remember, a promise, a preference, who someone is.${memory} Never small talk or what the conversation already holds. At most one entry every several turns (the app refuses more), and at most one per reply. ${saving} Do not propose a title the user dismissed or undid, and do not repeat one already waiting. keys: a few distinctive words of the fact (at most ${LORE_PROPOSAL_MAX_KEYS}), ${loreKeyGuidance()}; not the user's or your own name, dates, weekdays or times. Using a title the book already has updates that entry (send its full new content). constant: true sends it with every request (keep those few and short); otherwise it comes back when one of its keys appears in the conversation. file: an optional text file with longer material, kept in the book's 자료/ folder${editable ? `; change it later with ${EDIT_LORE_FILE_TOOL}` : ''}.`, inputSchema: z.object({
-      title: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.title).describe('Entry title, as the lore index will show it'),
-      keys: z.array(z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.key)).max(LORE_PROPOSAL_LIMITS.keys).default([]).describe('Keywords that bring the entry back when they appear in the conversation'),
-      content: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.content).describe('The entry text: short, factual, in the language of the chat'),
-      constant: z.boolean().default(false).describe('Send it with every request (an "always on" entry)'),
+    { description: `Save an entry to ${target.where}. Only what is worth remembering across sessions: what the user asks you to remember, a promise, a preference, who someone is.${memory} Never small talk or what the conversation already holds. At most one per reply and one every several turns (the app refuses more). ${saving} Never re-propose a title the user dismissed or undid, or one already waiting. keys: up to ${LORE_PROPOSAL_MAX_KEYS} distinctive words of the fact, ${loreKeyGuidance()}; no user or own names, dates or times. A title the book already has updates that entry (send its full new content). constant: true = sent with every request (keep few and short); otherwise it returns when a key appears. file: optional longer text kept in the book's 자료/ folder${editable ? `; change it later with ${EDIT_LORE_FILE_TOOL}` : ''}.`, inputSchema: z.object({
+      title: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.title).describe('As the lore index shows it'),
+      keys: z.array(z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.key)).max(LORE_PROPOSAL_LIMITS.keys).default([]),
+      content: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.content).describe('Short, factual, in the chat\'s language'),
+      constant: z.boolean().default(false),
       file: z.object({
-        name: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.fileName).describe('Plain text file name such as 반지.md (no folders)'),
-        text: z.string().min(1).describe(`File content, UTF-8, at most ${LORE_PROPOSAL_LIMITS.fileBytes / 1024} KB`),
-      }).optional().describe('Optional longer material for the entry'),
+        name: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.fileName).describe('Plain file name, e.g. 반지.md'),
+        text: z.string().min(1).describe(`UTF-8, ≤ ${LORE_PROPOSAL_LIMITS.fileBytes / 1024} KB`),
+      }).optional(),
     }) },
     async (args) => {
       try {

@@ -19,10 +19,11 @@ import { detectSheetGrid } from './sprite-grid-detect'
 import { cellSize } from './sprite-options'
 import { LibraryMediaButtons, LibraryResults } from './sprite-library'
 import { MiniField, SliderLine, SpriteSection } from './sprite-ui'
+import { useSpriteAnimationChatPage } from './use-sprite-chat-page'
 
 interface SheetSource { hash: string; name: string; width: number; height: number }
 
-export function SpriteAnimationTab() {
+export function SpriteAnimationTab({ active }: { active: boolean }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const { has } = useFeaturePermissions()
@@ -72,6 +73,8 @@ export function SpriteAnimationTab() {
       setStarting(false)
     }
   }
+
+  useSpriteAnimationChatPage({ active, sheet, pickSheet: (hash) => pick([hash]), options, setOptions, invalid, running, canRun, canSave: has('images.upload'), run, savedHashes })
 
   const left = (
     <div className="flex min-w-0 flex-col">

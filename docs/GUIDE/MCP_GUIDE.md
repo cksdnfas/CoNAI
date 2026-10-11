@@ -176,12 +176,15 @@ stdio:
 | --- | --- |
 | `list_workflows` | 등록된 ComfyUI 워크플로우 조회 (기본은 이미지 워크플로, `kind: "audio"`·`"all"`로 음향 포함) |
 | `list_comfyui_servers` | 등록된 ComfyUI 서버 조회 |
-| `get_workflow_details` | 워크플로우 상세와 marked fields 조회 |
+| `get_workflow_details` | 워크플로우 상세와 marked fields 조회 (시드 필드에는 `seed_rule` 표시) |
+| `check_comfy_workflow` | 등록된 워크플로(`workflow_id`)나 초안(`workflow_json`, 일반 workflow는 먼저 API 형식으로 변환)을 저장·실행 없이 서버 검사 |
 | `generate_comfyui` | 특정 ComfyUI 서버에서 생성 |
 | `generate_comfyui_all_servers` | 활성 ComfyUI 서버 전체에서 병렬 생성 |
 | `generate_nai` | NovelAI 생성 |
 
 생성 도구는 실제 파일과 생성 이력을 만듭니다. 프롬프트, 서버, 그룹 ID를 확인하고 실행합니다.
+
+ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked field로 0 이상의 값을 넘기거나, 워크플로 노드의 `_meta.conai_fixed_seeds`에 들어 있는 시드만 그대로 유지됩니다. `import_workflow_definition`은 ComfyUI 편집기 workflow도 받아 API 형식으로 바꿔 등록합니다(fixed였던 시드는 고정 유지).
 
 ### 이미지 조회
 
@@ -191,7 +194,9 @@ stdio:
 | `get_image_metadata` | composite hash로 이미지 메타데이터 조회 |
 | `get_media_download` | composite hash(최대 50개)로 라이브러리 원본 파일(저장된 스프라이트 시트, 애니메이션, 이미지·영상) 다운로드 링크. 링크는 약 15분 유효 |
 | `get_generation_history` | ComfyUI/NovelAI 생성 이력 조회 |
-| `search_images_by_tags` | WD Tagger 태그, 캐릭터, 등급 조건으로 검색 |
+| `search_images_by_tags` | 자동 태거(WD 또는 PixAI) 태그, 캐릭터, 등급 조건으로 검색 |
+| `search_images_by_meaning` | 그림 내용을 문장으로 설명해 뜻이 가까운 이미지 검색(라이브러리 설명 검색과 같음). 이미지 임베딩이 켜져 있어야 함 |
+| `find_similar_images` | 이미지 하나와 내용(`content`, 이미지 임베딩) 또는 화풍(`style`, Kaloscope 화풍 벡터)이 비슷한 이미지 검색 |
 
 ### 이미지 그룹 정리
 
@@ -296,6 +301,8 @@ stdio:
 | `get_file_info` | 파일·폴더 정보 조회 | `read` |
 | `read_file_text` | UTF-8 텍스트 파일을 나눠 읽기 | `read` |
 | `search_files` | 이름·내용으로 파일 찾기 (띄어 쓴 단어 모두 포함, `"문장"`은 그대로) | `read` |
+| `list_file_versions` | 텍스트 파일의 이전 버전 목록(최대 30개)과 누가 언제 바꿨는지 | `read` |
+| `read_file_version` | 이전 버전 하나를 나눠 읽기 (`read_file_text`처럼 16KB까지) | `read` |
 | `write_text_file` | md·html·txt 같은 텍스트 문서 새로 쓰기 (`overwrite`면 같은 이름 파일을 통째로 교체) | `organize` |
 | `update_file_text` | 텍스트 파일 내용 전체 교체, `mode: "append"`면 끝에 이어 쓰기 | `organize` |
 | `edit_file_text` | 텍스트 파일에서 `old_text`를 찾아 `new_text`로 바꾸기 (한 군데만 맞아야 하고, 하나라도 실패하면 저장 안 함) | `organize` |
@@ -303,10 +310,11 @@ stdio:
 | `rename_file` | 이름 바꾸기 | `organize` |
 | `move_files` | 폴더로 옮기기 (폴더는 내용과 함께) | `organize` |
 | `delete_files` | 파일·빈 폴더 삭제 (채팅에 첨부된 파일은 보호) | `organize` |
+| `restore_file_version` | 이전 버전으로 되돌리기 (지금 내용은 버전으로 남음) | `organize` |
 
 - 문서 쓰기 도구는 텍스트 확장자(.md, .html, .txt, .json, .csv, .yaml 등)만, 2MB까지 씁니다. 고쳐도 파일 ID가 그대로라 채팅 첨부와 링크가 유지됩니다.
-- 게시판 호출에 답하는 턴에서는 보관함 도구가 모두 빠지고, 페이지가 연결된 턴에서는 쓰기·정리 도구가 빠집니다.
-- 쓰기·정리 도구는 계정에 권한이 추가로 필요합니다: 문서 쓰기·고치기와 `create_file_folder`·`rename_file`·`move_files`는 `files.edit`, `delete_files`는 `files.delete`. 이름 변경으로 실행파일 등 제한 확장자를 붙이는 건 관리자만 됩니다.
+- 게시판 호출에 답하는 턴에서는 보관함 도구(버전 도구 포함)가 모두 빠지고, 페이지가 연결된 턴에서는 쓰기·정리 도구와 파일 내용·버전을 읽는 도구가 빠집니다.
+- 쓰기·정리 도구는 계정에 권한이 추가로 필요합니다: 문서 쓰기·고치기와 `create_file_folder`·`rename_file`·`move_files`·`restore_file_version`은 `files.edit`, `delete_files`는 `files.delete`. 이름 변경으로 실행파일 등 제한 확장자를 붙이는 건 관리자만 됩니다.
 - MCP 도구는 항상 요청 계정 본인의 보관함만 다룹니다. 관리자의 다른 계정 보관함 탐색(`files.browse.all`)은 웹 UI·HTTP API(`?owner=`)에서만 됩니다.
 
 ### 게시판
@@ -321,6 +329,17 @@ stdio:
 | `posts_create` | 새 글 (본문에 `media:`·`audio:`·`group:`·`file:` 미디어) | `organize` | `posts.write` |
 | `posts_update` | 자기 글 고치기 (`expected_revision` 필수) | `organize` | `posts.write` |
 | `post_comment` | 댓글·답글 (`@이름`으로 다른 봇 부르기는 게시판 한도 안에서) | `organize` | `posts.comment` |
+| `posts_tags` | 발행된 글의 태그와 글 수 | `read` | `posts.view` |
+| `posts_revisions` | 고칠 수 있는 글의 이전 판 목록, 판 하나의 제목·본문(나눠 읽기) | `read` | `posts.write` |
+| `posts_restore_revision` | 자기 글을 이전 판으로 되돌리기 (`expected_revision` 필수, 지금 판은 이전 판에 남음) | `organize` | `posts.write` |
+| `posts_delete` | 자기 글 지우기 (댓글도 함께) | `organize` | `posts.write` |
+| `post_comment_edit` | 자기 댓글 고치기 | `organize` | `posts.comment` |
+| `post_comment_delete` | 자기 댓글 지우기 (답글이 달렸으면 지운 댓글로 남음) | `organize` | `posts.comment` |
+| `post_comment_hide` | 관리자: 댓글 숨기기·다시 보이기 | `organize` | 관리자 |
+| `posts_category_create`·`posts_category_update`·`posts_category_delete` | 관리자: 카테고리 만들기·고치기·지우기(빈 카테고리만) | `organize` | 관리자 |
+
+- 관리자 도구 4개는 관리자 계정에 묶인 HTTP 키에만 나옵니다. 채팅 봇은 관리자 계정으로 돌아도 받지 않고, 게시판 페이지를 연결해 검토 카드로 합니다.
+- 게시판 호출에 답하는 턴에서는 `posts_delete`·`posts_restore_revision`·`post_comment_delete`가 빠집니다(자기 답글 고치기는 됨).
 
 ### 음향
 
@@ -339,7 +358,8 @@ stdio:
 | `get_audio_order` | 생성 주문의 잡별 상태와 만들어진 후보 ID | `read` | `audio.view` |
 | `create_audio_project` / `update_audio_project` | 프로젝트 만들기(받은 파일 그룹이 같이 생김)·수정 | `organize` | `audio.edit` |
 | `create_audio_group` / `update_audio_group` | 그룹 만들기·수정(`label`이 내보내기 파일명 규칙, `folder_id`로 폴더 이동, `null`이면 폴더 밖) | `organize` | `audio.edit` |
-| `create_audio_folder` / `update_audio_folder` | 폴더 만들기·이름 바꾸기(삭제는 웹에서, 안의 효과음은 남음) | `organize` | `audio.edit` |
+| `create_audio_folder` / `update_audio_folder` | 폴더 만들기·이름 바꾸기 | `organize` | `audio.edit` |
+| `delete_audio_group` / `delete_audio_folder` / `delete_audio_project` | 효과음(후보·코멘트·주문 포함)·폴더(안의 효과음은 프로젝트 바로 아래로 남음)·프로젝트 전체 삭제. 웹의 삭제 버튼과 같고, `confirm_name`에 지금 이름을 정확히 적어야 함(다르면 거부). 받은 파일 그룹은 못 지움 | `organize` | `audio.edit` |
 | `move_audio_candidates` | 후보를 같은 프로젝트의 다른 그룹으로 이동 | `organize` | `audio.edit` |
 | `import_audio` | `data_url`(audio/*, 최대 50MB) 또는 내 파일 `file_id`(복사)를 후보로 추가 | `organize` | `audio.edit` (+`files.view`) |
 | `set_audio_group_comment_status` | 작업 요청 완료 처리·되돌리기(읽은 `revision` 필요) | `organize` | `audio.edit` |
@@ -351,7 +371,8 @@ stdio:
 | `cancel_audio_order` | 끝나지 않은 잡 취소 | `generate` | `audio.edit` |
 | `retry_audio_order_job` | 실패·취소된 잡을 같은 seed로 다시 실행 | `generate` | `audio.edit` + `generation.execute` |
 
-- **채택·보류·미검수 변경과 검수 메모, 코멘트 작성·수정·삭제는 도구가 없습니다.** 사람이 웹 화면에서만 합니다. 봇은 결과를 만들고 정리할 수 있지만 최종 검수는 바꿀 수 없습니다.
+- **채택·보류·미검수 변경과 검수 메모, 코멘트 작성·수정·삭제, 후보 하나 지우기는 도구가 없습니다.** 사람이 웹 화면에서만 합니다. 봇은 결과를 만들고 정리할 수 있지만 최종 검수는 바꿀 수 없습니다.
+- 효과음·폴더·프로젝트 삭제 도구는 오디오 페이지를 연결한 채팅에는 주어지지 않습니다(화면의 코멘트는 다른 사람이 쓴 글이라서). 사람이 그 항목을 이름으로 지우라고 했을 때만 씁니다.
 - 채팅에서 `order_audio`로 주문하면 생성이 끝나는 대로 앱이 후보를 답변에 붙입니다. 채팅 봇은 주문을 기다리거나 다시 조회할 필요가 없습니다.
 - 생성은 생성 쪽에 **음향 종류**로 등록되고 음향 설정에서 역할(프롬프트·길이·seed)이 연결된 워크플로로만 됩니다.
 
@@ -366,14 +387,22 @@ stdio:
 | `wait_sprite_job` | 작업이 끝날 때까지 대기(채팅에서는 제공되지 않음) | `read` | `images.view` |
 | `download_sprite_frames` | 끝난 추출의 프레임 ZIP 다운로드 링크(약 1시간 보관) | `read` | `images.view` |
 | `extract_sprite_sheet` | 구간·간격/개수로 프레임 추출, 지정색 제거(디스필 선택), 자동 크롭·리사이즈·배치 | `generate` | `images.edit` + `images.upload` |
-| `extract_sprite_sheets_batch` | 같은 옵션으로 영상 여러 개를 각각 시트로(작업 ID 반환) | `generate` | `images.edit` + `images.upload` |
+| `extract_sprite_sheets_batch` | 같은 옵션으로 영상 여러 개를 각각 시트로(작업 ID 반환, `zip: true`면 ZIP도) | `generate` | `images.edit` + `images.upload` |
 | `normalize_sprite_sheets` | 기준점을 지키며 시트들의 셀 크기를 맞춤(시트별 / 묶음 공통) | `generate` | `images.edit` + `images.upload` |
 | `create_sprite_animation` | 시트를 WebP(기본)·GIF·MP4 애니메이션으로 | `generate` | `images.edit` + `images.upload` |
 
 - 지정색은 최대 8개입니다. 디스필은 색 1개일 때만 켤 수 있고, 마젠타 `#FF00FF`는 원래 도구와 같은 알고리즘입니다.
 - `extract_sprite_sheet`는 일정 시간 안에 끝나면 결과 해시를 바로 돌려주고, 길어지면 `job_id`를 돌려줍니다.
-- 끝난 작업에는 저장된 결과마다 다운로드 링크(`downloads`)가 붙습니다. 배치는 요청 순서대로 `items`에 원본 영상(`video_hash`, 라이브러리 파일명 `video_name`)과 시트(`sheet_hash`, `download`) 또는 실패 사유(`error`)를 짝지어 주고, `zip_download`로 시트 전부와 매니페스트를 한 번에 받을 수 있습니다.
+- 끝난 작업에는 저장된 결과마다 다운로드 링크(`downloads`)가 붙습니다. 배치는 요청 순서대로 `items`에 원본 영상(`video_hash`, 라이브러리 파일명 `video_name`)과 시트(`sheet_hash`, `download`) 또는 실패 사유(`error`)를 짝지어 주고, `zip: true`로 요청했으면 `zip_download`로 시트 전부와 매니페스트를 한 번에 받을 수 있습니다.
 - 링크가 만료되면 `get_media_download`(시트·애니메이션) 또는 `refresh_artifact_download`로 새로 받습니다.
+
+### 사용자 가이드
+
+| Tool | 용도 | HTTP MCP 키 권한 | 계정 권한 |
+| --- | --- | --- | --- |
+| `get_app_guide` | 이 가이드(docs/GUIDE)를 읽음. 인자 없이 목차, `topic`이면 그 문서의 소개와 섹션 제목, `topic`+`section`이면 그 섹션, `offset`이면 문서 전체를 나눠서 | `read` | 없음(로그인만) |
+
+- 채팅 봇이 앱 기능을 설명하거나 조언하기 전에 실제 화면·설정 설명을 확인하는 용도입니다. 모든 빌드(Docker·포터블·SEA)에 가이드 파일이 같이 들어갑니다.
 
 ### 채팅 설정 (configure)
 
@@ -381,17 +410,18 @@ stdio:
 
 | Tool | 용도 |
 | --- | --- |
-| `get_chat_setup_guide` | 표시 블록(`display_block`) 또는 프로필(`profile`) 작성 가이드 조회: JSON 모양, 한도, 템플릿 문법, 사용 가능한 모델·로어북·공유 블록 |
+| `get_chat_setup_guide` | 표시 블록(`display_block`), 프로필(`profile`: 제안할 수 있는 항목과 범위, 직접 바꿔야 하는 항목의 위치, 모델·판단 프리셋·평가 등급·로어북·공유 블록), 캐릭터 자산(`profile_assets`), 채팅 기능 사용법(`features`: `$` 나레이션, 답변 지시·분기, 파일 버전, 회의록, 기록할 곳, 연결 파일, 웹 검색, 외부 MCP) 가이드 조회 |
 | `list_chat_profiles` | 프로필 목록: 이름, 소개, 엔진, 모델 표기, 연결된 블록·로어북 |
-| `get_chat_profile` | 프로필의 텍스트 설정 전체 조회(기본값은 지금 말하는 프로필). 도구 권한·연결 정보는 포함되지 않습니다. |
+| `get_chat_profile` | 프로필 설정 조회(기본값은 지금 말하는 프로필): 텍스트, 역할별 모델·판단, 모델 값, 컨텍스트·요약, 번역 언어, 답장 추천, 이미지 보기·허용 등급, 로어 재귀, 연결 파일. 도구 권한·연결 정보는 포함되지 않고, 엔진·페이지 어시스턴트는 읽기 전용으로 보입니다. |
 | `list_display_blocks` | 공유 표시 블록 목록: 이름, 키, 필드 이름, 연결된 프로필 |
 | `get_display_block` | 표시 블록 하나를 전체로 조회 |
 | `propose_display_block` | 새 표시 블록 제안 |
-| `propose_chat_profile` | 새 프로필 제안 |
-| `propose_profile_update` | 기존 프로필의 변경 제안(변경 전·후 비교). 엔진, 도구 권한, 허용 목록, 프리셋, 연결·모델 지정은 제안할 수 없습니다. |
+| `propose_chat_profile` | 새 프로필 제안(`settings`로 그 밖의 제안 가능 항목도 함께) |
+| `propose_profile_update` | 기존 프로필의 변경 제안(변경 전·후 비교). 텍스트와 역할별 모델·판단 프리셋, 모델 값, 컨텍스트·요약, 번역 언어·지시, 답장 추천, 이미지 보기·허용 등급, 로어 재귀·로어 제안, 연결 파일을 제안할 수 있습니다. 엔진, 도구 권한, 허용 목록, 페이지 어시스턴트, 허용 그룹, 프리셋, 연결·모델 지정은 제안할 수 없습니다. |
 
 - `propose_*` 도구는 답변 아래에 카드를 보여 줄 뿐 아무것도 저장하지 않습니다. 사용자가 카드에서 **저장**을 눌러야 반영됩니다.
 - 제안 도구는 진행 중인 채팅 답변 안에서만 쓸 수 있습니다.
+- 이 채팅 자체의 설정은 범위와 관계없이 `get_chat_settings`(연결 계정 로어북·기록할 곳·연결 파일·회의록 폴더 조회)와 `propose_chat_settings`(변경 카드, 채팅 주인이 저장)로 다룹니다. 도구 목차가 있는 채팅에서만, 페이지·게시판 호출 답변이 아닐 때만 제공되며 외부 MCP 클라이언트에는 없습니다.
 
 ### 리소스 조회
 
@@ -400,6 +430,7 @@ stdio:
 | `list_custom_dropdown_lists` | LoRA, 체크포인트 등 커스텀 드롭다운 목록 조회 |
 | `search_custom_dropdown_items` | 드롭다운 항목 검색 |
 | `search_wildcards` | wildcard 이름, 계층, 루트 목록 검색 |
+| `list_chat_rooms` | 내 채팅·그룹방 목록(ID, 제목, 캐릭터·참가자). 워크플로 노드의 채팅방 칸(`room_id`)에 쓸 ID 확인. 계정에 묶인 키는 그 계정의 방만, 계정이 설정된 뒤 묶이지 않은 키는 빈 목록 |
 
 ## 사용 예시
 

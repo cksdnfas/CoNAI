@@ -15,6 +15,7 @@ import { probeMediaDuration, probeMediaDimensions } from './minimax-h3-director-
 import { useChatPresetInsertion } from './use-chat-preset-insertion'
 
 type Options = { enabled?: boolean; workflows?: Array<{ id: number; name: string }>; loraOptions?: string[]; onSelect?: (id: number) => void; onOpenCreate?: () => void; onOpenEdit?: (id: number, assertCurrent: () => void) => Promise<void>; onRefresh?: () => Promise<void> }
+const SEED_JSON_PATH = /\.inputs\.(seed|noise_seed)$/
 const protectedField = (field: WorkflowMarkedField) => isPrivateChatPageKey(`${field.id}.${field.label}.${field.jsonPath}`)
 function mediaName(value: WorkflowFieldDraftValue | undefined) { return value && typeof value === 'object' && !Array.isArray(value) && 'fileName' in value ? String(value.fileName) : '' }
 
@@ -38,9 +39,11 @@ export function useComfyChatPage(workflow: { id: number; name: string } | null |
       ...(field.type === 'number' ? { min: field.min, max: field.max, integer: Number.isInteger(field.step) && (field.step ?? 0) >= 1, allowEmpty: !field.required } : {}), ...(select ? { options: field.options } : {}) }]
   })
   const workflowChoices = options.workflows?.slice(0, 512) ?? []
+  // Seeds the backend rolls per run unless this field gives one (backend comfyui/seedControl): empty or -1 = new seed each run.
+  const seedFields = safe.filter((field) => field.type === 'number' && SEED_JSON_PATH.test(field.jsonPath))
   useChatPageRegistration(options.enabled !== false ? {
     kind: 'comfyui', title: workflow ? t({ ko: 'ComfyUI · {name}', en: 'ComfyUI · {name}' }, { name: workflow.name }).slice(0, 160) : 'ComfyUI', resourceId: workflow ? String(workflow.id) : 'comfy-picker', fields, localRevision: JSON.stringify(draft),
-    data: { workflows: workflowChoices.map((item) => ({ id: item.id, name: item.name })), nodes: nodeFields.map((field) => comfyNodeChatData(field, draft[field.id])), media: media.candidates, presets: presets.candidates,
+    data: { workflows: workflowChoices.map((item) => ({ id: item.id, name: item.name })), seedFields: seedFields.map((field) => field.id), nodes: nodeFields.map((field) => comfyNodeChatData(field, draft[field.id])), media: media.candidates, presets: presets.candidates,
       options: { ...Object.fromEntries(safe.filter((field) => field.options?.length).map((field) => [field.id, field.options!.slice(0, 512)])), loras: (options.loraOptions ?? []).slice(0, 512) }, selected: { workflowId: workflow?.id ?? 0, name: workflow?.name ?? '', images: mediaFields.map((field) => ({ fieldId: field.id, label: field.label, name: mediaName(draft[field.id]) })) } },
     actions: [...media.actions, ...presets.actions,
       ...(nodeFields.length ? [pageAction('comfy.node', t({ ko: 'H3·LoRA 노드 입력', en: 'Edit H3 or LoRA inputs' }), t({ ko: 'nodes에 나온 노드별 schema에 맞춰 patch를 입력해. 타임라인은 기존 미디어 ID만 편집하고 새 미디어는 media.attach로 등록해.', en: 'Match patch to the node-specific schema in nodes. Edit existing timeline media IDs; attach new media with media.attach.' }), pageObject({ fieldId: pageChoice(nodeFields.map((field) => field.id)), patch: COMFY_NODE_PATCH_SCHEMA }, ['fieldId', 'patch']))] : []),

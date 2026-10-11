@@ -12,9 +12,11 @@ import { registerWorkflowTransferTools } from './tools/workflowTransferTools';
 import { registerPromptPresetTools } from './tools/promptPresetTools';
 import { registerFileStoreTools } from './tools/fileStoreTools';
 import { registerChatLinkedFileTools } from './tools/chatLinkedFileTools';
+import { registerChatSettingsTools } from './tools/chatSettingsTools';
 import { registerPostTools } from './tools/postTools';
 import { registerEmoticonTools } from './tools/emoticonTools';
 import { registerChatRoomTools } from './tools/chatRoomTools';
+import { registerChatRoomListTools } from './tools/chatRoomListTools';
 import { registerChatLoreTools } from './tools/chatLoreTools';
 import { registerChatSetupTools } from './tools/chatSetupTools';
 import { registerChatPageTools } from './tools/chatPageTools';
@@ -30,6 +32,7 @@ import { registerExternalMcpTools } from './tools/externalMcpTools';
 import { isContextToolAllowed, requireMcpToolAccess } from './toolAccess';
 import { ChatGenerationPresetStore } from '../services/codex-chat/chatGenerationPresets';
 import { createToolCatalog, isDirectChatTool, type ToolCategoryId } from './toolCatalog';
+import { registerAppGuideTools } from './tools/appGuideTools';
 
 
 
@@ -99,15 +102,18 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
     registerAudioEditExportTools(server, context);
   });
   registerChatRoomTools(server, context);
+  registerChatRoomListTools(server, context);
   registerChatTaskTools(server, context);
   registerChatChoiceTools(server, context);
   registerChatLoreTools(server, context);
   registerChatLinkedFileTools(server, context);
+  registerChatSettingsTools(server, context);
   inCategory('chat_setup', () => registerChatSetupTools(server, context));
   registerChatPageTools(server, context);
   inCategory('sprite', () => registerSpriteTools(server, context));
   inCategory('web', () => registerWebTools(server, context));
   inCategory('external', () => registerExternalMcpTools(server, context));
+  inCategory('guide', () => registerAppGuideTools(server));
   catalog?.install();
 
   return server;

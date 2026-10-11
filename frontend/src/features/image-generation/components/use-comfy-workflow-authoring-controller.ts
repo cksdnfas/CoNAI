@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactFlowInstance } from '@xyflow/react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
@@ -316,6 +316,13 @@ export function useComfyWorkflowAuthoringController({
     staleTime: 5 * 60_000,
     retry: false,
   })
+  const queryClient = useQueryClient()
+  /** Check the current JSON now (the chat's comfy.check), skipping the debounce and any cached answer. */
+  const runServerCheck = async () => {
+    const json = draft.workflowJson
+    setCheckedJson(json)
+    await queryClient.fetchQuery({ queryKey: ['comfy-workflow-check', checkWorkflowId, json], queryFn: () => checkComfyWorkflow(json, checkWorkflowId), staleTime: 0 })
+  }
   const workflowCheck = checkedJson === draft.workflowJson ? workflowCheckQuery.data ?? null : null
   const workflowCheckSettled = checkedJson === draft.workflowJson && !workflowCheckQuery.isFetching && (workflowCheckQuery.isSuccess || workflowCheckQuery.isError)
   const checkIssuesByNode = useMemo(() => {
@@ -555,6 +562,13 @@ export function useComfyWorkflowAuthoringController({
       setJsonError(getJsonError(next.workflowJson, invalidJsonMessage))
     },
     save: (revision) => handleSave(revision, true),
+    check: {
+      result: workflowCheck,
+      pending: checkedJson !== draft.workflowJson || workflowCheckQuery.isFetching,
+      error: checkedJson === draft.workflowJson && workflowCheckQuery.isError ? getErrorMessage(workflowCheckQuery.error, t({ ko: '서버 검사를 하지 못했어.', en: 'The server check failed.' })) : null,
+    },
+    runCheck: runServerCheck,
+    unusedNodeIds,
   })
 
   return {

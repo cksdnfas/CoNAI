@@ -1,24 +1,48 @@
 import { createContext, useContext, useMemo, useRef, useState } from 'react'
-import type { ChatPageData } from '@conai/shared'
+import { CHAT_TRANSLATION_LANGUAGES, type ChatPageData } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration, type WorkflowUndo } from '@/features/codex-chat/chat-page-context'
-import { pageAction, pageArray, pageChoice, pageObject, pageRecord, pageText } from '@/features/codex-chat/page-action-helpers'
+import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageRecord, pageText } from '@/features/codex-chat/page-action-helpers'
 import type { ChatProfile, ModelSlot } from '@/lib/api-codex-chat'
 import type { Draft } from './chat-profile-editor-fields'
 import { BACKGROUND_SLOT, REFERENCE_SLOT, type ProfileAssetRuns } from './chat-profile-asset-runs'
 
 export type ProfileEditorSection = 'character' | 'appearance' | 'model' | 'memory' | 'tools' | 'look'
 
-/** Draft keys the chat may fill, and the section that shows each. Tool grants and access are never among them. */
+/**
+ * Draft keys the chat may fill, and the section that shows each. Tool grants and access are never among them (tool
+ * scopes and list, the page assistant switch, allowed groups, generation presets).
+ */
 const DRAFT_KEYS = {
   name: 'character', tagline: 'character', systemPrompt: 'character', promptSections: 'character', greeting: 'character', alternateGreetings: 'character', authorNote: 'character',
   appearance: 'appearance', engine: 'model', modelSlotId: 'model', lorebookIds: 'memory', blockIds: 'look', isEnabled: 'character',
+  temperature: 'model', maxTokens: 'model', visionEnabled: 'model', contentRatingMode: 'model', contentRatingTierId: 'model',
+  summaryEnabled: 'model', summarySlotId: 'model', summaryTriggerTurns: 'model', summaryPrompt: 'model',
+  translationSlotId: 'model', translationModelLanguage: 'model', translationDisplayLanguage: 'model', translationInstructions: 'model',
+  suggestEnabled: 'model', suggestSlotId: 'model', suggestProfileId: 'model', judgePresetId: 'model', judgeSlotId: 'model',
+  contextTurns: 'memory', contextTokens: 'memory', loreRecursionDepth: 'memory', allowLoreProposals: 'memory', linkedFiles: 'memory',
+  maxToolRounds: 'tools', toolOutputLimit: 'tools',
 } as const satisfies Partial<Record<keyof Draft, ProfileEditorSection>>
 type DraftKey = keyof typeof DRAFT_KEYS
+
+/** Keys a page value of 0 clears (the action schema has no null): a role's model row, a picked id or an optional cap. */
+const ZERO_CLEARS = new Set<DraftKey>(['summarySlotId', 'translationSlotId', 'suggestSlotId', 'judgeSlotId', 'judgePresetId', 'suggestProfileId', 'contentRatingTierId', 'contextTokens', 'maxTokens'])
+const LANGUAGES = CHAT_TRANSLATION_LANGUAGES.map((language) => language.id)
+
+/** A filled page value as the draft holds it: 0 (or −1 for temperature) for "unset", linked files with their write flag. */
+function draftValue(key: DraftKey, value: ChatPageData): unknown {
+  if (ZERO_CLEARS.has(key) && value === 0) return null
+  if (key === 'temperature' && typeof value === 'number' && value < 0) return null
+  if (key === 'linkedFiles' && Array.isArray(value)) return value.map((entry) => ({ id: String((entry as Record<string, unknown>).id), write: (entry as Record<string, unknown>).write === true }))
+  if (key === 'promptSections' && Array.isArray(value)) return value.map((entry) => ({ ...(entry as Record<string, unknown>), enabled: (entry as Record<string, unknown>).enabled !== false }))
+  return value
+}
 
 /** Long texts are cut for reading only; the model writes them whole through profile.draft. */
 const READ_TEXT = 6000
 const cut = (value: string) => (value.length > READ_TEXT ? `${value.slice(0, READ_TEXT)}… (${value.length}자)` : value)
+/** Settings prose rides every request while the editor is connected: only its start is shown. */
+const brief = (value: string) => (value.length > 300 ? `${value.slice(0, 300)}… (${value.length}자)` : value)
 
 /** Which draft keys still hold what the chat filled; a manual edit clears the mark. */
 export const ProfileAssistContext = createContext<{ filled: (key: keyof Draft) => boolean; sectionFilled: (section: ProfileEditorSection) => boolean }>({ filled: () => false, sectionFilled: () => false })
@@ -76,6 +100,33 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
     ...(lorebooks?.length ? { lorebookIds: pageArray(pageChoice(ids(lorebooks)), 20) } : {}),
     ...(blocks?.length ? { blockIds: pageArray(pageChoice(ids(blocks)), 20) } : {}),
     isEnabled: { type: 'boolean' },
+    temperature: { ...pageNumber(-1, 2), description: '-1: default' },
+    maxTokens: { ...pageNumber(0, 1_000_000, true), description: '0: default' },
+    visionEnabled: { type: 'boolean' },
+    contentRatingMode: pageChoice(['model', 'custom']),
+    contentRatingTierId: { ...pageNumber(0, undefined, true), description: '0: none' },
+    summaryEnabled: { type: 'boolean' },
+    ...(slots.length ? {
+      summarySlotId: { ...pageChoice([0, ...slots.map((slot) => slot.id)]), description: '0: chat model' },
+      translationSlotId: { ...pageChoice([0, ...slots.map((slot) => slot.id)]), description: '0: off' },
+      suggestSlotId: { ...pageChoice([0, ...slots.map((slot) => slot.id)]), description: '0: chat model' },
+      judgeSlotId: { ...pageChoice([0, ...slots.map((slot) => slot.id)]), description: '0: preset\'s' },
+    } : {}),
+    summaryTriggerTurns: pageNumber(1, 200, true),
+    summaryPrompt: pageText(4000),
+    translationModelLanguage: pageChoice(LANGUAGES),
+    translationDisplayLanguage: pageChoice(LANGUAGES),
+    translationInstructions: pageText(4000),
+    suggestEnabled: { type: 'boolean' },
+    suggestProfileId: { ...pageNumber(0, undefined, true), description: '0: none' },
+    judgePresetId: { ...pageNumber(0, undefined, true), description: '0: none' },
+    contextTurns: pageNumber(1, 200, true),
+    contextTokens: { ...pageNumber(0, 4_000_000, true), description: '0: none' },
+    loreRecursionDepth: { ...pageNumber(0, 5, true), description: '0: off' },
+    allowLoreProposals: { type: 'boolean' },
+    linkedFiles: pageArray(pageObject({ id: pageText(32), write: { type: 'boolean' } }, ['id']), 20),
+    maxToolRounds: pageNumber(1, 20, true),
+    toolOutputLimit: pageNumber(500, 100_000, true),
   })
 
   useChatPageRegistration(open ? {
@@ -92,6 +143,14 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
         promptSections: draft.promptSections.map((entry) => ({ title: entry.title, content: cut(entry.content), enabled: entry.enabled !== false })),
         greeting: cut(draft.greeting), alternateGreetings: draft.alternateGreetings.map(cut), authorNote: draft.authorNote, appearance: cut(draft.appearance ?? ''),
         engine: draft.engine, modelSlotId: draft.modelSlotId, lorebookIds: draft.lorebookIds, blockIds: draft.blockIds, isEnabled: draft.isEnabled,
+        temperature: draft.temperature, maxTokens: draft.maxTokens, visionEnabled: draft.visionEnabled, contentRatingMode: draft.contentRatingMode, contentRatingTierId: draft.contentRatingTierId,
+        summaryEnabled: draft.summaryEnabled, summarySlotId: draft.summarySlotId, summaryTriggerTurns: draft.summaryTriggerTurns, summaryPrompt: brief(draft.summaryPrompt),
+        translationSlotId: draft.translationSlotId, translationModelLanguage: draft.translationModelLanguage, translationDisplayLanguage: draft.translationDisplayLanguage, translationInstructions: brief(draft.translationInstructions),
+        suggestEnabled: draft.suggestEnabled, suggestSlotId: draft.suggestSlotId, suggestProfileId: draft.suggestProfileId, judgePresetId: draft.judgePresetId, judgeSlotId: draft.judgeSlotId,
+        contextTurns: draft.contextTurns, contextTokens: draft.contextTokens, loreRecursionDepth: draft.loreRecursionDepth, allowLoreProposals: draft.allowLoreProposals,
+        linkedFiles: draft.linkedFiles.map((link) => ({ id: link.id, write: link.write })), maxToolRounds: draft.maxToolRounds, toolOutputLimit: draft.toolOutputLimit,
+        // Set by hand in the editor, never filled: the engine above, and these grants.
+        pageAssist: draft.pageAssist,
       },
       // What a save card shows as the contents it will store.
       selected: { name: draft.name, tagline: draft.tagline, engine: draft.engine, modelSlotId: draft.modelSlotId, greeting: draft.greeting.slice(0, 200), appearance: (draft.appearance ?? '').slice(0, 200) },
@@ -126,20 +185,18 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
       if (!keys.length) throw new Error('채울 항목이 없어.')
       const before = draftRef.current
       const next: Partial<Draft> = {}
-      for (const key of keys) {
-        const value = input[key]
-        ;(next as Record<string, unknown>)[key] = key === 'promptSections' && Array.isArray(value)
-          ? value.map((entry) => ({ ...(entry as Record<string, unknown>), enabled: (entry as Record<string, unknown>).enabled !== false }))
-          : value
-      }
-      setDraft((current) => ({ ...current, ...next }))
+      for (const key of keys) (next as Record<string, unknown>)[key] = draftValue(key, input[key])
+      // The editor's own pairings: no judge preset leaves no judge model; a suggesting chat profile replaces a user profile.
+      if (keys.includes('judgePresetId') && next.judgePresetId === null && !keys.includes('judgeSlotId')) { next.judgeSlotId = null; keys.push('judgeSlotId') }
+      const extra: Partial<Draft> = keys.includes('suggestProfileId') && next.suggestProfileId != null ? { suggestUserProfileId: null } : {}
+      setDraft((current) => ({ ...current, ...next, ...extra }))
       setFilledValues((old) => { const map = new Map(old); keys.forEach((key) => map.set(key, JSON.stringify((next as Record<string, unknown>)[key]))); return map })
       const first = DRAFT_KEYS[keys[0]]
       if (first !== section) go(first)
       return {
         isCurrent: () => keys.every((key) => JSON.stringify(draftRef.current[key]) === JSON.stringify((next as Record<string, unknown>)[key])),
         restore: () => {
-          setDraft((current) => ({ ...current, ...Object.fromEntries(keys.map((key) => [key, before[key]])) }))
+          setDraft((current) => ({ ...current, ...Object.fromEntries(keys.map((key) => [key, before[key]])), ...('suggestUserProfileId' in extra ? { suggestUserProfileId: before.suggestUserProfileId } : {}) }))
           setFilledValues((old) => { const map = new Map(old); keys.forEach((key) => map.delete(key)); return map })
         },
       }

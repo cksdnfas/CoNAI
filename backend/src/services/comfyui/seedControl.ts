@@ -6,6 +6,9 @@ export const COMFY_SEED_INPUT_NAMES: ReadonlySet<string> = new Set(['seed', 'noi
 /** `_meta` key listing seed inputs the ComfyUI editor had on "fixed"; those keep their number. */
 export const COMFY_FIXED_SEEDS_META_KEY = 'conai_fixed_seeds';
 
+/** The rule below in words, for tool descriptions and chat page guidance. */
+export const COMFY_SEED_RULE = 'ComfyUI seeds (`seed`/`noise_seed`) roll a new random number every run, unless a marked field gives a value ≥ 0 for that run or the node lists it in `_meta.conai_fixed_seeds` (ComfyUI "fixed"). Empty or -1 = new seed each run.';
+
 /** int32-safe: some nodes cap seeds at 2^31-1 and numpy-backed ones reject 2^32 and above. */
 const RANDOM_SEED_LIMIT = 2 ** 31;
 

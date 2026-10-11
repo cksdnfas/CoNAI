@@ -727,6 +727,7 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
         isExecuting={executingGraphId !== null}
         canExecute={selectedWorkflowCanExecute}
         validationIssues={selectedWorkflowValidationIssues}
+        recentRuns={executionList}
         splitPaneScroll={isWideLayout}
         stickyBarTargetId={isWideLayout ? undefined : WORKFLOW_STICKY_RUN_BAR_SLOT_ID}
         onInputValueChange={handleWorkflowRunInputChange}

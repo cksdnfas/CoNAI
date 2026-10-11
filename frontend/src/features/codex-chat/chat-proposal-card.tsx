@@ -50,6 +50,7 @@ type BlockProposal = Extract<Proposal, { kind: 'display_block' }>
 type ProfileProposal = Extract<Proposal, { kind: 'profile' }>
 type UpdateProposal = Extract<Proposal, { kind: 'profile_update' }>
 type LoreProposal = Extract<Proposal, { kind: 'lore' }>
+type ChatSettingsProposal = Extract<Proposal, { kind: 'chat_settings' }>
 
 import { TaskPlanCard } from './chat-task-ui'
 
@@ -86,6 +87,7 @@ function ProposalCard({ proposal, threadId }: { proposal: Proposal; threadId?: n
   if (proposal.kind === 'profile') return <ProfileProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'lore') return <LoreProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'profile_update') return <ProfileUpdateCard proposal={proposal} threadId={threadId} />
+  if (proposal.kind === 'chat_settings') return <ChatSettingsCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'task_plan') return <TaskPlanCard proposal={proposal} threadId={threadId} />
   return null
 }
@@ -312,15 +314,44 @@ const UPDATE_LABELS: Record<string, { ko: string; en: string }> = {
   summarySlotId: { ko: '요약 모델', en: 'Summary model' },
   translationSlotId: { ko: '번역 모델', en: 'Translation model' },
   suggestSlotId: { ko: '추천 모델', en: 'Suggestion model' },
+  judgeSlotId: { ko: '판단 모델', en: 'Judge model' },
+  judgePresetId: { ko: '판단 프리셋', en: 'Judge preset' },
   lorebookIds: { ko: '로어북', en: 'Lorebooks' },
   blockIds: { ko: '표시 블록', en: 'Display blocks' },
+  temperature: { ko: '온도', en: 'Temperature' },
+  maxTokens: { ko: '최대 출력 토큰', en: 'Max output tokens' },
+  contextTurns: { ko: '컨텍스트 턴', en: 'Context turns' },
+  contextTokens: { ko: '컨텍스트 토큰', en: 'Context tokens' },
+  maxToolRounds: { ko: '도구 왕복', en: 'Tool rounds' },
+  toolOutputLimit: { ko: '도구 결과 길이', en: 'Tool output limit' },
+  summaryEnabled: { ko: '요약', en: 'Summary' },
+  summaryTriggerTurns: { ko: '요약 턴 수', en: 'Turns per summary' },
+  summaryPrompt: { ko: '요약 프롬프트', en: 'Summary prompt' },
+  translationModelLanguage: { ko: '모델 언어', en: 'Model language' },
+  translationDisplayLanguage: { ko: '표시 언어', en: 'Display language' },
+  translationInstructions: { ko: '번역 지시', en: 'Translation notes' },
+  suggestEnabled: { ko: '답장 추천', en: 'Reply suggestions' },
+  suggestProfileId: { ko: '추천 쓰는 프로필', en: 'Suggesting profile' },
+  visionEnabled: { ko: '이미지 보기', en: 'Sees images' },
+  contentRatingMode: { ko: '허용 등급 기준', en: 'Rating ceiling from' },
+  contentRatingTierId: { ko: '허용 등급', en: 'Rating ceiling' },
+  loreRecursionDepth: { ko: '로어 재귀 깊이', en: 'Lore recursion depth' },
+  allowLoreProposals: { ko: '로어 제안', en: 'Lore proposals' },
+  linkedFiles: { ko: '연결 파일', en: 'Linked files' },
+  loreRecordBookId: { ko: '기록할 곳', en: 'Record book' },
+  minutesFolderId: { ko: '회의록', en: 'Minutes' },
 }
+
+const LANGUAGE_LABELS: Record<string, string> = { ko: '한국어', en: 'English', ja: '日本語', zh: '简体中文' }
 
 /** One side of a before/after row: arrays as counts, slot ids as slot names, long text cut (the row expands it). */
 function formatValue(key: string, value: unknown, slotNames: Map<number, string>, t: ReturnType<typeof useI18n>['t']) {
   if (value === undefined) return '—'
   if (key.endsWith('SlotId')) return value === null ? t({ ko: '기본', en: 'Default' }) : (slotNames.get(Number(value)) ?? `#${String(value)}`)
   if (Array.isArray(value)) return t({ ko: '{count}개', en: '{count}' }, { count: value.length })
+  if (typeof value === 'boolean') return value ? t({ ko: '켬', en: 'On' }) : t({ ko: '끔', en: 'Off' })
+  if (key === 'translationModelLanguage' || key === 'translationDisplayLanguage') return LANGUAGE_LABELS[String(value)] ?? String(value)
+  if (key === 'contentRatingMode') return value === 'model' ? t({ ko: '모델 설정 따름', en: 'Model’s' }) : t({ ko: '직접 지정', en: 'Custom' })
   if (value === null || value === '') return '—'
   return typeof value === 'string' ? value : JSON.stringify(value)
 }
@@ -393,8 +424,8 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
           <UpdateRow
             key={key}
             label={UPDATE_LABELS[key] ? t(UPDATE_LABELS[key]) : key}
-            before={formatValue(key, proposal.before[key], slotNames, t)}
-            after={formatValue(key, proposal.patch[key], slotNames, t)}
+            before={proposal.display?.[key]?.before ?? formatValue(key, proposal.before[key], slotNames, t)}
+            after={proposal.display?.[key]?.after ?? formatValue(key, proposal.patch[key], slotNames, t)}
           />
         ))}
       </div>
@@ -404,6 +435,45 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
         <SaveButton pending={saveMutation.isPending} onClick={() => saveMutation.mutate()} />
       </Footer>
       {admin && editorOpen && editorProfile ? <ChatProfileEditorModal open profile={editorProfile} defaults={defaultsQuery.data} onClose={handleEditorClose} /> : null}
+    </div>
+  )
+}
+
+/** This chat's own settings (lorebook links, record book, linked files, minutes): the chat's owner saves it here. */
+function ChatSettingsCard({ proposal, threadId }: { proposal: ChatSettingsProposal; threadId?: number }) {
+  const { t } = useI18n()
+  const { showSnackbar } = useSnackbar()
+  const queryClient = useQueryClient()
+  const [savedNow, setSavedNow] = useState(false)
+  const saved = savedNow || proposal.saved === true
+  const saveMutation = useMutation({
+    mutationFn: () => applyChatProposal(proposal.id),
+    onSuccess: async () => {
+      setSavedNow(true)
+      if (threadId === undefined) return
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(threadId) }),
+        queryClient.invalidateQueries({ queryKey: threadLorebooksQueryKey(threadId) }),
+      ])
+    },
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
+  })
+  return (
+    <div className={CARD_CLASS}>
+      <Header label={t({ ko: '채팅 설정 제안', en: 'Chat settings proposal' })} />
+      <div className="space-y-1.5">
+        {Object.keys(proposal.patch).map((key) => (
+          <UpdateRow key={key} label={UPDATE_LABELS[key] ? t(UPDATE_LABELS[key]) : key} before={proposal.display[key]?.before ?? '—'} after={proposal.display[key]?.after ?? '—'} />
+        ))}
+      </div>
+      {saved ? (
+        <div className="border-t border-line pt-2 text-xs text-muted-foreground">{t({ ko: '저장됨', en: 'Saved' })}</div>
+      ) : proposal.dismissed ? null : (
+        <div className="flex items-center gap-2 border-t border-line pt-2">
+          <span className="flex-1" />
+          <SaveButton pending={saveMutation.isPending} onClick={() => saveMutation.mutate()} />
+        </div>
+      )}
     </div>
   )
 }

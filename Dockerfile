@@ -54,6 +54,8 @@ COPY --from=build /app/package*.json /app/
 COPY --from=build /app/node_modules /app/node_modules
 COPY --from=build /app/shared /app/shared
 COPY --from=build /app/backend /app/backend
+# User guides the chat and MCP read with get_app_guide (backend/src/services/appGuides.ts).
+COPY --from=build /app/docs/GUIDE /app/docs/GUIDE
 
 ENV NODE_ENV=production \
     PORT=1666 \

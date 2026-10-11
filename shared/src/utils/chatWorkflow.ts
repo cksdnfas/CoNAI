@@ -30,7 +30,7 @@ type EditorModule = {
   external_key?: string | null
   exposed_inputs: Array<{ key: string; label: string; data_type: ChatWorkflowDataType; required?: boolean; multiple?: boolean; default_value?: unknown; description?: string }>
   output_ports: Array<{ key: string; label: string; data_type: ChatWorkflowDataType; multiple?: boolean; description?: string }>
-  ui_schema?: Array<{ key: string; label: string; data_type: ChatWorkflowDataType | 'select'; options?: Array<string | { value: string; label: string }>; min?: number; max?: number; node_editor?: string; description?: string; default_value?: unknown }> | null
+  ui_schema?: Array<{ key: string; label: string; data_type: ChatWorkflowDataType | 'select'; options?: Array<string | { value: string; label: string }>; options_source?: string; min?: number; max?: number; node_editor?: string; description?: string; default_value?: unknown }> | null
   template_defaults: Record<string, unknown>; internal_fixed_values?: Record<string, unknown> | null
 }
 
@@ -48,11 +48,17 @@ export function describeChatWorkflowModule(module: EditorModule): ChatWorkflowMo
     const source = schema ?? input!
     const type = schema?.data_type ?? input!.data_type
     const options = schema?.options?.map((option) => typeof option === 'string' ? option : option.value)
+    const optionLabels = schema?.options?.map((option) => typeof option === 'string' ? option : String(option.label ?? option.value).slice(0, 160))
+    const optionsSource = typeof schema?.options_source === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(schema.options_source) ? schema.options_source : undefined
+    const staticOptions = type === 'select' && !!options?.length && options.length <= 100
     return { key, label: source.label.slice(0, 160), type,
-      editable: !protectedField(source) && !schema?.node_editor && !['image', 'video', 'audio', 'mask'].includes(type) && (type !== 'select' || !!options?.length && options.length <= 100),
+      // Images and masks are set as library refs; video and audio stay with the native picker.
+      editable: !protectedField(source) && !schema?.node_editor && !['video', 'audio'].includes(type) && (type !== 'select' || staticOptions || !!optionsSource),
       hasDefault: source.default_value !== undefined || module.template_defaults[key] !== undefined || module.internal_fixed_values?.[key] !== undefined,
       ...(schema?.min !== undefined ? { min: schema.min } : {}), ...(schema?.max !== undefined ? { max: schema.max } : {}),
-      ...(type === 'select' && options && options.length <= 100 ? { options } : {}),
+      ...(staticOptions ? { options } : {}),
+      ...(staticOptions && optionLabels!.some((entry, index) => entry !== options![index]) ? { optionLabels } : {}),
+      ...(optionsSource ? { optionsSource } : {}),
     }
   })
   return { id: module.id, name: module.name.slice(0, 160), description: (module.description ?? '').slice(0, 500), engine: module.engine_type, version: module.version,
@@ -66,6 +72,8 @@ export function sanitizeChatWorkflowInputs(input: Record<string, unknown>, modul
   const values: Record<string, ChatWorkflowValue> = {}
   for (const field of module.fields.filter((entry) => entry.editable)) {
     if (input[field.key] === undefined) continue
+    // Image inputs are shown only as library refs: paths and inline data stay in the local editor.
+    if (field.type === 'image' || field.type === 'mask') { const value = input[field.key]; if (value && typeof value === 'object' && !Array.isArray(value)) { try { values[field.key] = libraryImageRef(field, value) } catch { /* not a library ref */ } } continue }
     try { values[field.key] = copyChatWorkflowValue(input[field.key]) } catch { /* Protected or oversized values remain in the local editor only. */ }
   }
   return values
@@ -99,6 +107,16 @@ export function normalizeChatWorkflowSnapshot(value: unknown): ChatWorkflowSnaps
   return result
 }
 
+const LIBRARY_HASH = /^(?:[a-f0-9]{48}|[a-f0-9]{32})$/
+/** A library image as node and run inputs keep it: `{ composite_hash }`, from a bare hash, a ref or its JSON. */
+export function libraryImageRef(field: { label: string }, input: unknown): { composite_hash: string } {
+  let value = input
+  if (typeof value === 'string' && value.trim().startsWith('{')) { try { value = JSON.parse(value) } catch { /* reported below */ } }
+  const hash = typeof value === 'string' ? value.trim().toLowerCase() : value && typeof value === 'object' && !Array.isArray(value) && typeof (value as { composite_hash?: unknown }).composite_hash === 'string' ? (value as { composite_hash: string }).composite_hash.trim().toLowerCase() : ''
+  if (!LIBRARY_HASH.test(hash)) throw new Error(`${field.label}: 라이브러리 이미지의 composite_hash가 필요해.`)
+  return { composite_hash: hash }
+}
+
 function fieldValue(field: ChatWorkflowField, input: unknown): ChatWorkflowValue {
   if (!field.editable) throw new Error(`${field.label}: 보호된 입력은 직접 편집해줘.`)
   if (field.type === 'number') {
@@ -108,7 +126,8 @@ function fieldValue(field: ChatWorkflowField, input: unknown): ChatWorkflowValue
     return value
   }
   if (field.type === 'boolean') { if (typeof input !== 'boolean') throw new Error(`${field.label}: 불리언 값이 필요해.`); return input }
-  if (field.type === 'select') { const value = text(input); if (!field.options?.includes(value)) throw new Error(`${field.label}: 선택 목록에 없는 값이야.`); return value }
+  if (field.type === 'select') { const value = text(input); if (field.options ? !field.options.includes(value) : !value.trim()) throw new Error(`${field.label}: 선택 목록에 없는 값이야.`); return value }
+  if (field.type === 'image' || field.type === 'mask') return libraryImageRef(field, input)
   if (field.type === 'text' || field.type === 'prompt') return text(input)
   if (typeof input === 'string' && (field.type === 'json' || field.type === 'any' && /^\s*[\[{]/.test(input))) { try { return copyChatWorkflowValue(JSON.parse(input)) } catch { throw new Error(`${field.label}: 안전한 JSON 값이 필요해.`) } }
   return copyChatWorkflowValue(input)

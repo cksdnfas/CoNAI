@@ -15,6 +15,7 @@ import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 import { AgentCliSettings } from './agent-cli-settings'
 import { ChatDiagnosticsSettings } from './chat-diagnostics-settings'
 import { ExternalMcpSettings } from './external-mcp-settings'
+import { useLlmConnectionsChatPage, type ExternalMcpDraftSeed } from './use-llm-connections-chat-page'
 import {
   LlmConnectionEditorModal,
   LlmConnectionListItem,
@@ -37,6 +38,7 @@ export function LlmConnectionsTab() {
   const [connectionModalState, setConnectionModalState] = useState<LlmConnectionModalState>(null)
   const [presetModalState, setPresetModalState] = useState<LlmPresetModalState>(null)
   const [editingSlotId, setEditingSlotId] = useState<number | null>(null)
+  const [mcpSeed, setMcpSeed] = useState<ExternalMcpDraftSeed | null>(null)
   const refreshModelRows = useRefreshModelRows()
 
   const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots })
@@ -174,6 +176,7 @@ export function LlmConnectionsTab() {
   const orphanProviders = [...new Set(slots.map((slot) => slot.providerName))].filter((name) => providersQuery.isSuccess && !llmProviders.some((provider) => provider.provider_name === name))
   const nodesOf = (slotId: number | undefined) => usageQuery.data?.slots.find((entry) => entry.id === slotId)?.workflowNodes ?? 0
   const editingSlot = slots.find((slot) => slot.id === editingSlotId) ?? null
+  useLlmConnectionsChatPage({ providers: llmProviders, slots, presets: llmPresetCollections, onSetDefault: (slot) => setDefaultMutation.mutateAsync(slot), onDraftMcpServer: setMcpSeed })
   const modelRow = (slot: ModelSlot) => (
     <ConnectionModelRow
       key={slot.id}
@@ -267,7 +270,7 @@ export function LlmConnectionsTab() {
 
       <ChatDiagnosticsSettings />
 
-      <ExternalMcpSettings />
+      <ExternalMcpSettings seed={mcpSeed} onSeedClose={() => setMcpSeed(null)} />
 
       <ConnectionModelEditorModal slot={editingSlot} workflowNodes={nodesOf(editingSlot?.id)} onClose={() => setEditingSlotId(null)} />
 

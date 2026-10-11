@@ -25,6 +25,7 @@ import {
 import type { GraphWorkflowNameRecord } from '@/lib/api-module-graph'
 import { getErrorMessage } from '../image-generation-shared'
 import { ModuleWorkflowEmptyRunsTab } from '@/features/module-graph/components/module-workflow-empty-runs-tab'
+import { useWorkflowReservationsChatPage } from './use-workflow-reservations-chat-page'
 import { getActiveWorkflowReservationScheduleCount, isActiveReservationExecution, mergeVisibleReservationExecutions, sortWorkflowReservationSchedules } from './workflow-reservations-ui'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Badge } from '@/components/ui/badge'
@@ -97,6 +98,16 @@ function WorkflowReservationsPanelContent() {
   const handleRefresh = async () => {
     await reservationsQuery.refetch()
   }
+
+  useWorkflowReservationsChatPage({
+    enabled: !!reservationContent && !isMutatingSchedules && !isCleaningReservations,
+    view: activeView,
+    automationPaused: automationSwitchQuery.data?.paused === true,
+    workflows,
+    schedules,
+    executions: reservationExecutions,
+    refresh: handleRefresh,
+  })
 
   const handleCancelSelectedReservationExecutions = async (executionIds?: number[]) => {
     const targetExecutionIdSet = new Set(executionIds ?? [])

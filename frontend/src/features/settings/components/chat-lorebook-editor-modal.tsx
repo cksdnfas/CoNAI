@@ -104,21 +104,21 @@ export function ChatLorebookEditorModal({ open, lorebook, kind = 'global', onClo
     data: {
       kind: owned ? 'account' : 'global',
       keyLanguage,
-      entries: entries.slice(0, 200).map((entry) => ({ title: entry.title ?? '', keys: entry.keys, localKeys: entry.localKeys ?? [], content: entry.content.slice(0, 2000), enabled: entry.enabled, constant: entry.constant })),
+      entries: entries.slice(0, 200).map((entry) => ({ title: entry.title ?? '', keys: entry.keys, localKeys: entry.localKeys ?? [], content: entry.content.slice(0, 2000), enabled: entry.enabled, constant: entry.constant, ...(entry.excludeRecursion ? { excludeRecursion: true } : {}), ...(entry.preventRecursion ? { preventRecursion: true } : {}) })),
       selected: { name, entries: entries.length },
     },
     apply: (patch) => { if (patch.name !== undefined) setName(String(patch.name)) },
-    actions: [pageAction('lorebook.entries', t({ ko: '로어북 항목 채우기', en: 'Fill lorebook entries' }), t({ ko: '항목을 뒤에 더하거나(append) 전부 바꿔(replace). 저장하지 않아. keys는 이 단어가 대화에 나오면 content가 들어가는 영어 키워드, localKeys는 같은 키워드를 keyLanguage(로어북 추가 언어)로 쓴 것, constant는 항상 넣기.', en: 'Append entries or replace them all; nothing is saved. keys are English keywords that trigger the content when they appear in the chat, localKeys the same keywords in keyLanguage (the lorebooks’ other language); constant always includes it.' }), pageObject({
+    actions: [pageAction('lorebook.entries', t({ ko: '로어북 항목 채우기', en: 'Fill lorebook entries' }), t({ ko: '항목을 뒤에 더하거나(append) 전부 바꿔(replace). 저장하지 않아. keys는 이 단어가 대화에 나오면 content가 들어가는 영어 키워드, localKeys는 같은 키워드를 keyLanguage(로어북 추가 언어)로 쓴 것, constant는 항상 넣기. exclude/preventRecursion은 재귀 스캔에서 안 걸림/안 부름.', en: 'Append entries or replace them all; nothing is saved. keys are English keywords that trigger the content when they appear in the chat, localKeys the same keywords in keyLanguage (the lorebooks’ other language); constant always includes it. exclude/preventRecursion: not triggered by / not triggering others in recursive scans.' }), pageObject({
       mode: pageChoice(['append', 'replace']),
-      entries: pageArray(pageObject({ title: pageText(120), keys: pageArray(pageText(100), 20), localKeys: pageArray(pageText(100), 20), content: pageText(8000), constant: { type: 'boolean' }, enabled: { type: 'boolean' } }, ['keys', 'content']), 50, 1),
+      entries: pageArray(pageObject({ title: pageText(120), keys: pageArray(pageText(100), 20), localKeys: pageArray(pageText(100), 20), content: pageText(8000), constant: { type: 'boolean' }, enabled: { type: 'boolean' }, excludeRecursion: { type: 'boolean' }, preventRecursion: { type: 'boolean' } }, ['keys', 'content']), 50, 1),
     }, ['mode', 'entries']))],
     applyAction: (id, args) => {
       if (id !== 'lorebook.entries' || !Array.isArray(args.entries)) throw new Error('로어북 편집기에 없는 작업이야.')
       const before = entriesRef.current
       const base = args.mode === 'replace' ? [] : before
       const added = args.entries.map((raw, index) => {
-        const entry = raw as { title?: string; keys: string[]; localKeys?: string[]; content: string; constant?: boolean; enabled?: boolean }
-        return sortLoreKeysByLanguage({ ...newLoreEntry(base.length + index), title: entry.title ?? '', keys: entry.keys, localKeys: entry.localKeys ?? [], content: entry.content, constant: entry.constant === true, enabled: entry.enabled !== false }, keyLanguage)
+        const entry = raw as { title?: string; keys: string[]; localKeys?: string[]; content: string; constant?: boolean; enabled?: boolean; excludeRecursion?: boolean; preventRecursion?: boolean }
+        return sortLoreKeysByLanguage({ ...newLoreEntry(base.length + index), title: entry.title ?? '', keys: entry.keys, localKeys: entry.localKeys ?? [], content: entry.content, constant: entry.constant === true, enabled: entry.enabled !== false, ...(entry.excludeRecursion ? { excludeRecursion: true } : {}), ...(entry.preventRecursion ? { preventRecursion: true } : {}) }, keyLanguage)
       })
       const next = [...base, ...added]
       setEntries(next)

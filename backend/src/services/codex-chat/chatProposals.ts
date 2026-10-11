@@ -63,7 +63,7 @@ function toProposal(row: ProposalRow): ChatProposal {
   // Older lore undo snapshots copied the row state into the JSON; the columns decide.
   if (row.kind === 'lore') { delete body.savedId; delete body.dismissed }
   const merged: Record<string, unknown> = { ...body, id: row.id }
-  if (row.kind === 'profile_update' || row.kind === 'page_fields' || row.kind === 'workflow_graph' || row.kind === 'page_action') {
+  if (row.kind === 'profile_update' || row.kind === 'chat_settings' || row.kind === 'page_fields' || row.kind === 'workflow_graph' || row.kind === 'page_action') {
     if (row.saved === 1) merged.saved = true
   } else if (row.saved === 1) {
     merged.savedId = row.saved_id

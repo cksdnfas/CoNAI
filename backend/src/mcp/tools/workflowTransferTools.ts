@@ -23,7 +23,7 @@ export function registerWorkflowTransferTools(server: McpServer): void {
 
   server.registerTool(
     'import_workflow_definition',
-    { description: 'Import a portable CoNAI workflow definition.', inputSchema: z.object({ workflow: z.record(z.string(), z.unknown()) }) },
+    { description: 'Import a portable CoNAI workflow definition (the export_workflow_definition shape: name, workflow_json, marked_fields, …). workflow_json may be the ComfyUI API format or a ComfyUI editor ("Save") workflow; an editor workflow is converted to the API format with a registered ComfyUI server first (literal seeds the editor had on "fixed" stay fixed), and the import fails with the reason when it cannot be converted.', inputSchema: z.object({ workflow: z.record(z.string(), z.unknown()) }) },
     async ({ workflow }) => {
       try {
         const name = typeof workflow.name === 'string' ? workflow.name.trim() : '';

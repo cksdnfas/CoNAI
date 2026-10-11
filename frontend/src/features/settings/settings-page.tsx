@@ -9,6 +9,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { reextractAllImageMetadata, updateGenerationThrottleSettings, updateImageSaveSettings, updateMetadataSettings, updateThumbnailSettings, updateVideoOptimizationSettings } from '@/lib/api-settings'
 import { getAppSettings, updateGeneralSettings } from '@/lib/api-settings-general'
 import { getPostsSettings, updatePostsSettings } from '@/lib/api-posts'
+import { getMcpHttpSettings, updateMcpHttpEnabled } from '@/lib/api-settings-mcp'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { APP_BRAND_TOOLTIP, APP_VERSION_LABEL } from '@/lib/app-metadata'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -35,6 +36,7 @@ import { useAutoSettingsTab } from './use-auto-settings-tab'
 import { useUnsavedSettingsGuard } from './use-unsaved-settings-guard'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { applySettingsChatPatch, settingsChatFields, type SettingsChatSources } from './settings-chat-fields'
+import { applySettingsChatAction, settingsChatActions, settingsChatData, type SettingsChatActionContext } from './settings-chat-actions'
 
 const MaintenanceTabLazy = lazy(async () => {
   const module = await import('./components/maintenance-tab')
@@ -186,6 +188,8 @@ export function SettingsPage() {
 
   // Posts keep their own settings file (config/posts.json) behind /api/posts/settings.
   const postsSettingsQuery = useQuery({ queryKey: ['post-settings'], queryFn: getPostsSettings, enabled: canOpenSettings })
+  // The system tab's MCP card reads the same query; the chat sees its switch and key names (never key values).
+  const mcpHttpQuery = useQuery({ queryKey: ['mcp-http-settings'], queryFn: getMcpHttpSettings, enabled: canOpenSettings && activeTab === 'system' })
 
   const notifyInfo = (message: string) => {
     showSnackbar({ message, tone: 'info' })
@@ -434,6 +438,7 @@ export function SettingsPage() {
     kaloscope: autoTabProps.kaloscopeDraft,
     embedding: autoTabProps.embeddingDraft,
     ratingWeights: autoTabProps.ratingWeightsDraft,
+    posts: effectivePostsDraft,
     ratingTiers: autoTabProps.ratingTiersDraft,
     taggerModels: autoTabProps.taggerModels.filter((model) => model.available !== false).map((model) => model.name),
   }
@@ -452,28 +457,6 @@ export function SettingsPage() {
       watcher: source.watcher_status,
     })),
   } : {}
-  useChatPageRegistration(canOpenSettings ? {
-    kind: 'settings', title: t({ ko: '설정 · {section}', en: 'Settings · {section}' }, { section: t(SETTINGS_TAB_LABELS[activeTab]) }), resourceId: activeTab,
-    fields: settingsChatFields(activeTab, chatSources, t),
-    data: { section: activeTab, ...chatFolderData },
-    // Unsaved sections keep a connected chat from navigating away and losing them.
-    dirty: dirtySections.length > 0,
-    apply: (patch) => applySettingsChatPatch(patch, chatSources, {
-      general: setGeneralDraft,
-      appearance: appearanceTabProps.onPatchAppearance,
-      metadata: setMetadataDraft,
-      imageSave: setImageSaveDraft,
-      thumbnail: setThumbnailDraft,
-      videoOptimization: setVideoOptimizationDraft,
-      generationThrottle: setGenerationThrottleDraft,
-      aiRuntime: autoTabProps.onPatchAiRuntime,
-      tagger: autoTabProps.onPatchTagger,
-      kaloscope: autoTabProps.onPatchKaloscope,
-      embedding: autoTabProps.onPatchEmbedding,
-      ratingWeights: ({ general_weight, sensitive_weight, questionable_weight, explicit_weight }) => autoTabProps.onPatchRatingWeights({ general_weight, sensitive_weight, questionable_weight, explicit_weight }),
-      ratingTier: autoTabProps.onPatchRatingTier,
-    }),
-  } : null, { preserveOnSearchChange: true })
 
   const handleSaveAll = async () => {
     if (isSavingAll || dirtySections.length === 0) {
@@ -500,6 +483,55 @@ export function SettingsPage() {
     dirtySections.forEach((section) => section.discard())
     notifyInfo(t({ ko: '저장하지 않은 변경을 되돌렸어.', en: 'Reverted unsaved changes.' }))
   }
+
+  const chatActionContext: SettingsChatActionContext = {
+    tab: activeTab,
+    auto: autoTabProps,
+    dirtyCount: dirtySections.length,
+    saveAll: handleSaveAll,
+    mcpHttp: mcpHttpQuery.data,
+    setMcpHttpEnabled: async (enabled) => queryClient.setQueryData(['mcp-http-settings'], await updateMcpHttpEnabled(enabled)),
+    maintenance: {
+      scanAll: foldersTabProps.onScanAll,
+      cancelScanAll: foldersTabProps.onCancelScanAll,
+      scanAllJob: foldersTabProps.scanAllJob,
+      isScanningAll: foldersTabProps.isScanningAll,
+      verifyAllFiles: foldersTabProps.onVerifyAllFiles,
+      cancelVerifyAllFiles: foldersTabProps.onCancelVerifyAllFiles,
+      verifyAllFilesJob: foldersTabProps.verifyAllFilesJob,
+      isVerifyingAllFiles: foldersTabProps.isVerifyingAllFiles,
+      reextractAll: () => metadataReextractMutation.mutateAsync(),
+      isReextracting: metadataReextractMutation.isPending,
+    },
+  }
+  useChatPageRegistration(canOpenSettings ? {
+    kind: 'settings', title: t({ ko: '설정 · {section}', en: 'Settings · {section}' }, { section: t(SETTINGS_TAB_LABELS[activeTab]) }), resourceId: activeTab,
+    fields: settingsChatFields(activeTab, chatSources, t),
+    data: { section: activeTab, ...chatFolderData, ...settingsChatData(chatActionContext) },
+    actions: settingsChatActions(chatActionContext, t),
+    // Unsaved sections keep a connected chat from navigating away and losing them.
+    dirty: dirtySections.length > 0,
+    apply: (patch) => applySettingsChatPatch(patch, chatSources, {
+      general: setGeneralDraft,
+      appearance: appearanceTabProps.onPatchAppearance,
+      metadata: setMetadataDraft,
+      imageSave: setImageSaveDraft,
+      thumbnail: setThumbnailDraft,
+      videoOptimization: setVideoOptimizationDraft,
+      generationThrottle: setGenerationThrottleDraft,
+      aiRuntime: autoTabProps.onPatchAiRuntime,
+      tagger: autoTabProps.onPatchTagger,
+      kaloscope: autoTabProps.onPatchKaloscope,
+      embedding: autoTabProps.onPatchEmbedding,
+      posts: setPostsDraft,
+      ratingWeights: ({ general_weight, sensitive_weight, questionable_weight, explicit_weight }) => autoTabProps.onPatchRatingWeights({ general_weight, sensitive_weight, questionable_weight, explicit_weight }),
+      ratingTier: autoTabProps.onPatchRatingTier,
+    }),
+    applyAction: async (id, args, assertCurrent) => {
+      assertCurrent()
+      if (!await applySettingsChatAction(id, args, chatActionContext)) throw new Error('설정 화면에 없는 작업이야.')
+    },
+  } : null, { preserveOnSearchChange: true })
 
   useUnsavedSettingsGuard(
     dirtySections.length > 0,

@@ -17,9 +17,9 @@ import { LoadingState } from '@/components/ui/loading-state'
 import { SidebarGroupLabel, SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
-import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
+import { pageAction, pageChoice, pageNumber, pageFreeText, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, createPostComment, deletePost, getPost, getPostsSettings, listPostCategories, listPostComments, listPosts, listPostTags } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, cancelPostBotRun, createPostCategory, createPostComment, deletePost, deletePostCategory, deletePostComment, getPost, getPostsSettings, listPostCategories, listPostComments, listPostRevisions, listPosts, listPostTags, setPostCommentHidden, updatePost, updatePostCategory, updatePostComment } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { PostCategoryDialog } from './post-category-dialog'
@@ -32,6 +32,8 @@ import { usePostPermissions } from './use-post-permissions'
 import { usePostsLayout } from './use-posts-layout'
 
 const PAGE_SIZE = 20
+/** How much of a long post body the connected chat reads at a time (posts.body_at moves through it). */
+const BODY_CHUNK = 2000
 type StatusFilter = 'draft' | 'hidden' | null
 type CategoryDialog = { category: PostCategory | null; parentId: number | null } | null
 
@@ -107,9 +109,19 @@ export function PostsPage() {
   // The open post's comment boxes (see PostCommentDraft): held here so the connected chat can read and draft them.
   const [commentDraft, setCommentDraft] = useState<PostCommentDraft>(EMPTY_COMMENT_DRAFT)
   useEffect(() => { setCommentDraft(EMPTY_COMMENT_DRAFT) }, [postId])
+  // Where the connected chat reads the open post's body from, when it is longer than one chunk.
+  const [bodyOffset, setBodyOffset] = useState(0)
+  useEffect(() => { setBodyOffset(0) }, [postId])
   const openPostData = view === 'post' ? postQuery.data ?? null : null
   const commentsQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'comments', postId], queryFn: () => listPostComments(postId as number), enabled: openPostData !== null })
   const visibleComments = (commentsQuery.data?.comments ?? []).filter((comment) => comment.status === 'visible')
+  // Hidden comments still show to administrators (and their writers), so the chat can show them again.
+  const shownComments = (commentsQuery.data?.comments ?? []).filter((comment) => comment.status !== 'deleted')
+  const editableComments = shownComments.filter((comment) => comment.canEdit)
+  const activeRuns = (commentsQuery.data?.runs ?? []).filter((run) => run.status === 'queued' || run.status === 'running')
+  const canRestore = openPostData?.canEdit === true && openPostData.revision > 1
+  const revisionsQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'revisions', postId, openPostData?.revision], queryFn: () => listPostRevisions(postId as number), enabled: canRestore })
+  const revisions = canRestore ? revisionsQuery.data ?? [] : []
   const canCommentHere = openPostData !== null && permissions.canComment && (openPostData.commentMode === 'open' || permissions.isAdmin)
   const submitComment = useMutation({
     mutationFn: async (target: 'comment' | 'reply') => {
@@ -124,6 +136,7 @@ export function PostsPage() {
     },
   })
   const tagNames = (tagsQuery.data ?? []).slice(0, 100).map((item) => item.name)
+  const refreshPosts = () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] })
   const draftedComment = Boolean(commentDraft.top.trim() || commentDraft.reply?.text.trim())
 
   useChatPageRegistration({
@@ -138,17 +151,26 @@ export function PostsPage() {
         { id: 'replyTo', label: t({ ko: '답글을 달 댓글 (data.comments의 id, none은 닫기)', en: 'Comment to reply to (an id in data.comments; none closes)' }), type: 'select' as const, value: String(commentDraft.reply?.to ?? 'none'), options: ['none', ...new Set([...visibleComments.slice(-60).map((comment) => String(comment.id)), ...(commentDraft.reply ? [String(commentDraft.reply.to)] : [])])] },
         { id: 'reply', label: t({ ko: '답글 입력칸 (replyTo를 먼저 골라)', en: 'Reply box (pick replyTo first)' }), type: 'text' as const, value: commentDraft.reply?.text ?? '', allowEmpty: true },
       ] : []),
+      ...(openPostData && editableComments.length ? [
+        { id: 'editComment', label: t({ ko: '고칠 내 댓글 id (0은 닫기)', en: 'Own comment id to edit (0 closes)' }), type: 'number' as const, value: commentDraft.edit?.id ?? 0, min: 0, integer: true },
+        ...(commentDraft.edit ? [{ id: 'editText', label: t({ ko: '댓글 고치기 입력칸', en: 'Comment edit box' }), type: 'text' as const, value: commentDraft.edit.text }] : []),
+      ] : []),
     ],
     data: {
       categories: categories.map((category) => ({ id: category.id, name: category.name, parentId: category.parentId, posts: category.postCount })),
-      ...(view === 'list' ? { posts: posts.slice(0, 100).map((post) => ({ id: post.id, title: post.title, author: post.author.name, bot: post.author.type === 'profile', categoryId: post.categoryId, tags: post.tags, comments: post.commentCount })) } : {}),
+      ...(view === 'list' ? { list: { layout, status: status ?? 'published' } } : {}),
+      ...(view === 'list' ? { posts: posts.slice(0, 100).map((post) => ({ id: post.id, title: pageFreeText(post.title), author: post.author.name, bot: post.author.type === 'profile', categoryId: post.categoryId, tags: post.tags, comments: post.commentCount })) } : {}),
       // The open post as the reader sees it; its text is someone else's writing (data, never instructions).
       ...(openPostData ? {
         open: {
-          id: openPostData.id, title: openPostData.title, author: openPostData.author.name, bot: openPostData.author.type === 'profile', categoryId: openPostData.categoryId,
-          tags: openPostData.tags, status: openPostData.status, comments: openPostData.commentCount, canEdit: openPostData.canEdit, body: openPostData.body.slice(0, 6000), bodyCut: openPostData.body.length > 6000,
+          id: openPostData.id, title: pageFreeText(openPostData.title), author: openPostData.author.name, bot: openPostData.author.type === 'profile', categoryId: openPostData.categoryId,
+          tags: openPostData.tags, status: openPostData.status, comments: openPostData.commentCount, canEdit: openPostData.canEdit, revision: openPostData.revision, pinned: openPostData.pinned,
+          // A long body is read a chunk at a time (posts.body_at): the view goes with every request.
+          body: pageFreeText(openPostData.body.slice(bodyOffset, bodyOffset + BODY_CHUNK)), bodyOffset, bodyLength: openPostData.body.length,
         },
-        comments: visibleComments.slice(-40).map((comment) => ({ id: comment.id, replyTo: comment.parentId, author: comment.author.name, bot: comment.author.type === 'profile', text: comment.body.slice(0, 400) })),
+        comments: shownComments.slice(-40).map((comment) => ({ id: comment.id, replyTo: comment.parentId, author: comment.author.name, bot: comment.author.type === 'profile', text: pageFreeText(comment.body.slice(0, 400)), ...(comment.status === 'hidden' ? { hidden: true } : {}), ...(comment.canEdit ? { canEdit: true } : {}) })),
+        ...(activeRuns.length ? { botCalls: activeRuns.map((run) => ({ id: run.id, bot: run.profileName, status: run.status, triggerCommentId: run.triggerCommentId })) } : {}),
+        ...(revisions.length ? { earlierVersions: revisions.slice(0, 10).map((revision) => ({ revision: revision.revision, title: pageFreeText(revision.title), at: revision.createdAt })) } : {}),
       } : {}),
     },
     actions: [
@@ -159,6 +181,24 @@ export function PostsPage() {
       ...(permissions.canWrite ? [pageAction('posts.new', t({ ko: '새 글 쓰기', en: 'New post' }), t({ ko: '새 글 편집기를 열어. 내용은 편집기 필드로 채워.', en: 'Open the editor for a new post; fill it through its fields.' }))] : []),
       ...(openPostData?.canEdit ? [pageAction('posts.edit', t({ ko: '이 글 고치기', en: 'Edit this post' }), t({ ko: '열린 글의 편집기를 열어.', en: 'Open the editor for the open post.' }))] : []),
       ...(canCommentHere && draftedComment ? [pageAction('posts.comment', t({ ko: '댓글 올리기', en: 'Post comment' }), t({ ko: '입력칸의 댓글(comment) 또는 답글(reply)을 올려.', en: 'Post the drafted comment or reply.' }), pageObject({ target: pageChoice(['comment', 'reply']) }, ['target']), 'save')] : []),
+      ...(view === 'list' ? [
+        pageAction('posts.layout', t({ ko: '목록 모양', en: 'List layout' }), '', pageObject({ layout: pageChoice(['feed', 'cards', 'sns']) }, ['layout'])),
+        pageAction('posts.filter', t({ ko: '글 상태별 목록', en: 'List by status' }), '', pageObject({ status: pageChoice(['published', ...(permissions.canWrite ? ['draft'] : []), ...(permissions.isAdmin ? ['hidden'] : [])]) }, ['status'])),
+      ] : []),
+      ...(openPostData && openPostData.body.length > BODY_CHUNK ? [pageAction('posts.body_at', t({ ko: '본문 이어 읽기', en: 'Read the body from' }), t({ ko: 'data.open.body를 offset부터 보여줘', en: 'data.open.body from offset' }), pageObject({ offset: pageNumber(0, Math.max(0, openPostData.body.length - 1), true) }, ['offset']))] : []),
+      ...(openPostData?.canEdit ? [pageAction('posts.delete', t({ ko: '이 글 지우기', en: 'Delete this post' }), '', undefined, 'save')] : []),
+      ...(revisions.length ? [pageAction('posts.restore_revision', t({ ko: '이전 판으로 되돌리기', en: 'Restore earlier version' }), t({ ko: 'data.earlierVersions의 판', en: 'a version in data.earlierVersions' }), pageObject({ revision: pageNumber(1, undefined, true) }, ['revision']), 'save')] : []),
+      ...(commentDraft.edit && commentDraft.edit.text.trim() ? [pageAction('posts.comment_update', t({ ko: '고친 댓글 저장', en: 'Save edited comment' }), '', undefined, 'save')] : []),
+      ...(editableComments.length ? [pageAction('posts.comment_delete', t({ ko: '내 댓글 지우기', en: 'Delete own comment' }), '', pageObject({ id: pageNumber(1, undefined, true) }, ['id']), 'save')] : []),
+      ...(permissions.isAdmin && shownComments.length ? [pageAction('posts.comment_hide', t({ ko: '댓글 숨기기·보이기', en: 'Hide or show comment' }), '', pageObject({ id: pageNumber(1, undefined, true), hidden: { type: 'boolean' } }, ['id', 'hidden']), 'save')] : []),
+      ...(activeRuns.length ? [pageAction('posts.bot_cancel', t({ ko: '봇 호출 취소', en: 'Cancel bot call' }), t({ ko: 'data.botCalls의 id', en: 'an id in data.botCalls' }), pageObject({ id: pageNumber(1, undefined, true) }, ['id']), 'save')] : []),
+      ...(permissions.isAdmin && view === 'list' ? [
+        pageAction('posts.category_create', t({ ko: '카테고리 만들기', en: 'Create category' }), t({ ko: 'parentId 0은 최상위', en: 'parentId 0 = top level' }), pageObject({ name: pageText(100), parentId: pageNumber(0, undefined, true), description: pageText(500) }, ['name']), 'save'),
+        ...(categories.length ? [
+          pageAction('posts.category_update', t({ ko: '카테고리 고치기', en: 'Edit category' }), t({ ko: '빠진 항목은 그대로, parentId 0은 최상위', en: 'Left-out fields stay; parentId 0 = top level' }), pageObject({ id: pageNumber(1, undefined, true), name: pageText(100), parentId: pageNumber(0, undefined, true), description: pageText(500) }, ['id']), 'save'),
+          pageAction('posts.category_delete', t({ ko: '빈 카테고리 지우기', en: 'Delete empty category' }), '', pageObject({ id: pageNumber(1, undefined, true) }, ['id']), 'save'),
+        ] : []),
+      ] : []),
     ],
     apply: (patch) => {
       if (patch.search !== undefined) {
@@ -173,6 +213,12 @@ export function PostsPage() {
         setCommentDraft((current) => ({ ...current, reply: to === null ? null : { to, text: current.reply?.to === to ? current.reply.text : '' } }))
       }
       if (patch.reply !== undefined) setCommentDraft((current) => (current.reply ? { ...current, reply: { ...current.reply, text: String(patch.reply) } } : current))
+      if (patch.editComment !== undefined) {
+        const id = Number(patch.editComment) || null
+        const target = editableComments.find((comment) => comment.id === id)
+        setCommentDraft((current) => ({ ...current, edit: target ? { id: target.id, text: current.edit?.id === target.id ? current.edit.text : target.body } : null }))
+      }
+      if (patch.editText !== undefined) setCommentDraft((current) => (current.edit ? { ...current, edit: { ...current.edit, text: String(patch.editText) } } : current))
     },
     applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
@@ -183,7 +229,52 @@ export function PostsPage() {
       else if (id === 'posts.new') update({ edit: 'new', post: null, comment: null })
       else if (id === 'posts.edit' && postId) update({ edit: String(postId) })
       else if (id === 'posts.comment') await submitComment.mutateAsync(args.target === 'reply' ? 'reply' : 'comment')
-      else throw new Error('게시판에 없는 작업이야.')
+      else if (id === 'posts.layout') setLayout(args.layout as PostListLayout)
+      else if (id === 'posts.filter') openList({ status: args.status === 'published' ? null : String(args.status), category: null, tag: null })
+      else if (id === 'posts.body_at') setBodyOffset(Number(args.offset))
+      else if (id === 'posts.delete' && openPostData) {
+        await deletePost(openPostData.id)
+        await refreshPosts()
+        openList()
+      } else if (id === 'posts.restore_revision' && openPostData) {
+        const revision = revisions.find((item) => item.revision === Number(args.revision))
+        if (!revision) throw new Error('그 판을 찾을 수 없어.')
+        await updatePost(openPostData.id, { title: revision.title, body: revision.body, expectedRevision: openPostData.revision })
+        await refreshPosts()
+      } else if (id === 'posts.comment_update' && commentDraft.edit) {
+        const comment = editableComments.find((item) => item.id === commentDraft.edit?.id)
+        if (!comment) throw new Error('고칠 댓글을 찾을 수 없어.')
+        await updatePostComment(comment.id, { body: commentDraft.edit.text.trim(), expectedRevision: comment.revision })
+        setCommentDraft((current) => ({ ...current, edit: null }))
+        await refreshPosts()
+      } else if (id === 'posts.comment_delete') {
+        if (!editableComments.some((comment) => comment.id === Number(args.id))) throw new Error('지울 수 있는 댓글이 아니야.')
+        await deletePostComment(Number(args.id))
+        await refreshPosts()
+      } else if (id === 'posts.comment_hide') {
+        if (!shownComments.some((comment) => comment.id === Number(args.id))) throw new Error('이 글에 없는 댓글이야.')
+        await setPostCommentHidden(Number(args.id), args.hidden === true)
+        await refreshPosts()
+      } else if (id === 'posts.bot_cancel') {
+        if (!activeRuns.some((run) => run.id === Number(args.id))) throw new Error('답하는 중인 봇 호출이 아니야.')
+        await cancelPostBotRun(Number(args.id))
+        await refreshPosts()
+      } else if (id === 'posts.category_create') {
+        await createPostCategory({ name: String(args.name), parentId: Number(args.parentId) || null, ...(typeof args.description === 'string' ? { description: args.description } : {}) })
+        await refreshPosts()
+      } else if (id === 'posts.category_update') {
+        await updatePostCategory(Number(args.id), {
+          ...(typeof args.name === 'string' ? { name: args.name } : {}),
+          ...(args.parentId !== undefined ? { parentId: Number(args.parentId) || null } : {}),
+          ...(typeof args.description === 'string' ? { description: args.description } : {}),
+        })
+        await refreshPosts()
+      } else if (id === 'posts.category_delete') {
+        const deleted = categories.find((category) => category.id === Number(args.id))
+        await deletePostCategory(Number(args.id))
+        await refreshPosts()
+        if (deleted && categoryId === deleted.id) filterCategory(deleted.parentId)
+      } else throw new Error('게시판에 없는 작업이야.')
     },
   }, { preserveOnSearchChange: true })
 

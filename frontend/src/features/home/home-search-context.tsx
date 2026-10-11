@@ -38,7 +38,8 @@ interface HomeSearchContextValue {
   clearAppliedChips: () => void
   applySearch: () => void
   clearSearch: () => void
-  selectHistoryEntry: (entry: SearchHistoryEntry) => void
+  /** `openDrawer: false` re-applies it without opening the search drawer (a connected chat keeps its panel). */
+  selectHistoryEntry: (entry: SearchHistoryEntry, options?: { openDrawer?: boolean }) => void
   deleteHistoryEntry: (entryId: string) => Promise<void>
   clearHistoryEntries: () => Promise<void>
 }
@@ -276,12 +277,12 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     navigateToAppliedChips([])
   }, [navigateToAppliedChips])
 
-  const selectHistoryEntry = useCallback((entry: SearchHistoryEntry) => {
+  const selectHistoryEntry = useCallback((entry: SearchHistoryEntry, options?: { openDrawer?: boolean }) => {
     setDraftChips(entry.chips)
     setSearchInputState('')
     // commitSearchChips 와 같은 이유로, 같은 저장 검색을 다시 고르면 키가 안 바뀐다.
     void queryClient.invalidateQueries({ queryKey: ['home-images'] })
-    openDrawer()
+    if (options?.openDrawer !== false) openDrawer()
     navigateToAppliedChips(entry.chips)
     showSnackbar({ message: t('homeSearchContext.savedSearchReapplied'), tone: 'info' })
   }, [navigateToAppliedChips, openDrawer, queryClient, showSnackbar, t])

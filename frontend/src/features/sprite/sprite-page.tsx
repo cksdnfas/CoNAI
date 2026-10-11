@@ -50,13 +50,13 @@ export function SpritePage() {
         <div ref={setToolbarSlot} className={tab === 'extract' ? 'flex items-center gap-1 pb-1.5' : 'hidden'} />
       </div>
       <TabsContent value="extract" forceMount className="data-[state=inactive]:hidden">
-        <SpriteExtractTab initialVideoHash={videoHash} onVideoChange={onVideoChange} toolbarSlot={toolbarSlot} />
+        <SpriteExtractTab active={tab === 'extract'} initialVideoHash={videoHash} onVideoChange={onVideoChange} toolbarSlot={toolbarSlot} />
       </TabsContent>
       <TabsContent value="normalize" forceMount className="data-[state=inactive]:hidden">
-        <SpriteNormalizeTab />
+        <SpriteNormalizeTab active={tab === 'normalize'} />
       </TabsContent>
       <TabsContent value="animation" forceMount className="data-[state=inactive]:hidden">
-        <SpriteAnimationTab />
+        <SpriteAnimationTab active={tab === 'animation'} />
       </TabsContent>
     </Tabs>
   )

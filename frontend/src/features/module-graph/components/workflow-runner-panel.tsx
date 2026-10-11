@@ -11,7 +11,7 @@ import { GenerateActionBar, GenerateActionDock } from '@/features/image-generati
 import { buildGraphWorkflowTargetGroupKey } from '@/features/groups/generation-target-group-store'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import type { GraphWorkflowExposedInput, GraphWorkflowFolderRecord, GraphWorkflowRecord, GraphWorkflowSummaryRecord } from '@/lib/api-module-graph'
+import type { GraphExecutionRecord, GraphWorkflowExposedInput, GraphWorkflowFolderRecord, GraphWorkflowRecord, GraphWorkflowSummaryRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import type { WorkflowValidationIssue } from '../module-graph-types'
 import { useWorkflowRunnerChatPage } from '../use-workflow-runner-chat-page'
@@ -28,6 +28,8 @@ type WorkflowRunnerPanelProps = {
   isExecuting: boolean
   canExecute: boolean
   validationIssues: WorkflowValidationIssue[]
+  /** The selected workflow's newest runs (newest first), shown to a connected chat. */
+  recentRuns: GraphExecutionRecord[]
   /** Wide layout: the fields scroll between the fixed header and the docked run bar. */
   splitPaneScroll: boolean
   /** Narrow layout: the run bar is portalled into this fixed bottom slot. */
@@ -56,6 +58,7 @@ export function WorkflowRunnerPanel({
   isExecuting,
   canExecute,
   validationIssues,
+  recentRuns,
   splitPaneScroll,
   stickyBarTargetId,
   onInputValueChange,
@@ -74,9 +77,8 @@ export function WorkflowRunnerPanel({
   const { canExecuteGeneration, canUpdateWorkflows } = useFeaturePermissions()
   const { t } = useI18n()
   const [isPickerOpen, setIsPickerOpen] = useState(false)
-  useWorkflowRunnerChatPage(selectedGraph, inputDefinitions, inputValues, onInputValueChange, !isExecuting)
-
   const runDisabled = !canExecuteGeneration || !canExecute || isExecuting
+  useWorkflowRunnerChatPage({ graph: selectedGraph, definitions: inputDefinitions, values: inputValues, change: onInputValueChange, clear: onInputValueClear, enabled: !isExecuting, canRun: !runDisabled, run: onExecute, recentRuns })
   // The slot is rendered by the workspace in the same commit, so look it up after mount.
   const [stickyBarTarget, setStickyBarTarget] = useState<HTMLElement | null>(null)
   useEffect(() => {

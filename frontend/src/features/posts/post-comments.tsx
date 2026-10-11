@@ -29,8 +29,9 @@ function mentionedIds(text: string, picked: Map<number, string>) {
  * What the comment boxes of the open post hold. It lives above the boxes so the connected chat (page assistant) can
  * read and draft it: the box under the post, and the reply box open under one comment.
  */
-export type PostCommentDraft = { top: string; reply: { to: number; text: string } | null }
-export const EMPTY_COMMENT_DRAFT: PostCommentDraft = { top: '', reply: null }
+/** The open post's comment boxes: the box under the post, the reply box and the edit box of one comment. */
+export type PostCommentDraft = { top: string; reply: { to: number; text: string } | null; edit: { id: number; text: string } | null }
+export const EMPTY_COMMENT_DRAFT: PostCommentDraft = { top: '', reply: null, edit: null }
 
 /** A comment box; `@` opens the list of bots the viewer may call. Its text is held by the caller. */
 function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, placeholder, text, setText }: {
@@ -197,8 +198,11 @@ function isReplyClick(event: MouseEvent<HTMLElement>) {
   return !window.getSelection()?.toString()
 }
 
-function CommentRow({ comment, quoted, mentionNames, canReply, onReply, reply, focused = false }: {
+function CommentRow({ comment, quoted, mentionNames, canReply, onReply, reply, editing, setEditing, focused = false }: {
   comment: PostComment
+  /** This comment's edit box text (null: closed); held by the page so the connected chat can draft it. */
+  editing: string | null
+  setEditing: (text: string | null) => void
   /** Opened from a link to this comment: it is scrolled to and marked for a moment. */
   focused?: boolean
   quoted: PostComment | null
@@ -213,7 +217,6 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, reply, f
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const { isAdmin } = usePostPermissions()
-  const [editing, setEditing] = useState<string | null>(null)
   const refresh = () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] })
   const onError = (error: unknown) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '댓글 작업에 실패했어.', en: 'Comment action failed.' })) })
   const save = useMutation({ mutationFn: (body: string) => updatePostComment(comment.id, { body, expectedRevision: comment.revision }), onSuccess: async () => { setEditing(null); await refresh() }, onError })
@@ -281,6 +284,7 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, reply, f
 /** Comments two levels deep (deeper answers quote), bot calls still in progress, and the comment box. */
 export function PostComments({ post, draft, setDraft }: { post: PostDetail; draft: PostCommentDraft; setDraft: (update: (current: PostCommentDraft) => PostCommentDraft) => void }) {
   const { t } = useI18n()
+  const editProps = (id: number) => ({ editing: draft.edit?.id === id ? draft.edit.text : null, setEditing: (text: string | null) => setDraft((current) => ({ ...current, edit: text === null ? null : { id, text } })) })
   const { canComment, canSummon, isAdmin } = usePostPermissions()
   const replyTo = draft.reply?.to ?? null
   const setReplyTo = (id: number | null) => setDraft((current) => ({ ...current, reply: id === null ? null : { to: id, text: current.reply?.to === id ? current.reply.text : '' } }))
@@ -332,11 +336,11 @@ export function PostComments({ post, draft, setDraft }: { post: PostDetail; draf
       <div className="divide-y divide-line border-y border-line">
         {tops.map((top) => (
           <div key={top.id}>
-            <CommentRow comment={top} quoted={null} mentionNames={mentionNames} canReply={canReply} reply={false} focused={focusedId === top.id} onReply={() => setReplyTo(top.id)} />
+            <CommentRow comment={top} quoted={null} mentionNames={mentionNames} canReply={canReply} reply={false} focused={focusedId === top.id} onReply={() => setReplyTo(top.id)} {...editProps(top.id)} />
             {replyTo === top.id ? replyComposer : null}
             {comments.filter((comment) => comment.parentId === top.id).map((child) => (
               <Fragment key={child.id}>
-                <CommentRow comment={child} quoted={child.quoteCommentId ? byId.get(child.quoteCommentId) ?? null : null} mentionNames={mentionNames} canReply={canReply} reply focused={focusedId === child.id} onReply={() => setReplyTo(child.id)} />
+                <CommentRow comment={child} quoted={child.quoteCommentId ? byId.get(child.quoteCommentId) ?? null : null} mentionNames={mentionNames} canReply={canReply} reply focused={focusedId === child.id} onReply={() => setReplyTo(child.id)} {...editProps(child.id)} />
                 {replyTo === child.id ? replyComposer : null}
               </Fragment>
             ))}

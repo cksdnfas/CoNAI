@@ -2,6 +2,7 @@ import { ImagePermissionNotice } from '@/features/images/components/image-permis
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { FolderPlus, ImageOff, SearchX, Trash2, X } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { CountSummary } from '@/components/ui/count-summary'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
@@ -23,16 +24,19 @@ import { ImageListColumnFloatingControl } from '@/features/images/components/ima
 import { useImageListColumnPreference } from '@/features/images/components/image-list/image-list-column-preferences'
 import { SelectionBarAction } from '@/components/common/selection-action-bar'
 import { SearchChipStrip } from '@/features/search/components/search-chip-strip'
+import { SEARCH_SCOPE_TABS, SEARCH_SCOPE_TABS_WITH_MEANING, SEARCH_TEXT_INPUT_SCOPES } from '@/features/search/search-constants'
+import type { SearchScope } from '@/features/search/search-types'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageArray, pageChoice, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { COUNT_UNITS } from '@/lib/count-display'
+import { getImageViewerSettings } from '@/lib/api-settings'
 import { cn } from '@/lib/utils'
 import type { ImageViewModalAccessOptions } from '@/features/images/components/detail/image-view-modal-context'
 import type { ImageRecord } from '@/types/image'
 import { HomeSortMenu } from './components/home-sort-menu'
-import { useHomeSearch } from './home-search-context'
+import { useHomeSearch, type TextSearchScope } from './home-search-context'
 import { useHomePageData } from './use-home-page-data'
 
 /** Library images can be deleted from the viewer (still admin-only). Module constant keeps ImageList memoized. */
@@ -53,7 +57,7 @@ function getHomeImageSelectionId(image: ImageRecord) {
 export function HomePage() {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
-  const { appliedChips, removeAppliedChip, cycleAppliedChipOperator, clearAppliedChips, searchScope, searchInput, setSearchInput, addScopedTextChip } = useHomeSearch()
+  const { appliedChips, removeAppliedChip, cycleAppliedChipOperator, clearAppliedChips, searchScope, setSearchScope, searchInput, setSearchInput, addScopedTextChip, historyEntries, selectHistoryEntry } = useHomeSearch()
   const {
     columnCount: homeColumnCount,
     setColumnCount: setHomeColumnCount,
@@ -120,17 +124,30 @@ export function HomePage() {
   const chatCanReadImages = useChatPageDataPermissions().canReadImages
   const navigate = useNavigate()
   const chatOpenableHashes = chatCanReadImages ? visibleImages.slice(0, 100).map((image) => image.composite_hash ?? '').filter(Boolean) : []
+  // The chat gets the scopes the search drawer shows: 설명 (meaning) only while image search is on.
+  const viewerSettingsQuery = useQuery({ queryKey: ['image-viewer-settings'], queryFn: getImageViewerSettings, staleTime: 60_000, enabled: canViewHome && !isAnonymousSession })
+  const canSearchByMeaning = viewerSettingsQuery.data?.search?.imageSearch === true
+  const chatScopes: SearchScope[] = canSearchByMeaning ? SEARCH_SCOPE_TABS_WITH_MEANING : SEARCH_SCOPE_TABS.map((tab) => tab.value)
+  const chatTextScopes = SEARCH_TEXT_INPUT_SCOPES.filter((scope) => chatScopes.includes(scope)) as TextSearchScope[]
+  const chatHistory = historyEntries.slice(0, 20)
   useChatPageRegistration(canViewHome && !isAnonymousSession ? {
     kind: 'library', title: t({ ko: '이미지 라이브러리', en: 'Image library' }), resourceId: `library:${viewportClass}`,
     fields: [
-      { id: 'sortOrder', label: t({ ko: '정렬 (newest: 최신순, oldest: 오래된순)', en: 'Sort (newest or oldest)' }), type: 'select', value: sortOrder, options: ['newest', 'oldest'] },
+      isMeaningSearch
+        ? { id: 'sortOrder', label: t({ ko: '정렬 (설명 검색은 뜻이 가까운 순 고정, 설명 칩을 빼면 최신·오래된 순)', en: 'Sort (a description search is ordered by meaning; remove its chip for newest/oldest)' }), type: 'select', value: 'meaning', options: ['meaning'], editable: false }
+        : { id: 'sortOrder', label: t({ ko: '정렬 (newest: 최신순, oldest: 오래된순)', en: 'Sort (newest or oldest)' }), type: 'select', value: sortOrder, options: ['newest', 'oldest'] },
       { id: 'searchInput', label: t({ ko: '검색어 입력 (Enter로 검색 실행)', en: 'Search draft (press Enter to search)' }), type: 'text', value: searchInput },
-      { id: 'searchScope', label: t({ ko: '검색 범위', en: 'Search scope' }), type: 'text', value: searchScope, editable: false },
+      { id: 'searchScope', label: t({ ko: '검색 범위 (positive·negative 프롬프트, auto 자동 태그, model, lora, meaning 설명=뜻으로 찾기)', en: 'Search scope (prompts, auto tags, model, LoRA, meaning = by description)' }), type: 'select', value: searchScope, options: [...new Set([...chatScopes, searchScope])] },
       { id: 'columns', label: t({ ko: '한 줄의 이미지 수', en: 'Images per row' }), type: 'number', value: homeColumnCount, min: minHomeColumnCount, max: maxHomeColumnCount, integer: true },
     ],
-    data: { filters: JSON.parse(JSON.stringify(appliedChips)), selected: { imageIds: selectedIds }, images: chatCanReadImages ? visibleImages.slice(0, 100).map((image) => ({ hash: image.composite_hash ?? '', width: image.width ?? 0, height: image.height ?? 0 })) : [] },
+    data: {
+      filters: JSON.parse(JSON.stringify(appliedChips)), selected: { imageIds: selectedIds },
+      images: chatCanReadImages ? visibleImages.slice(0, 100).map((image) => ({ hash: image.composite_hash ?? '', width: image.width ?? 0, height: image.height ?? 0, ...(typeof image.meaning_score === 'number' ? { meaningScore: image.meaning_score } : {}) })) : [],
+      history: chatHistory.map((entry) => ({ id: entry.id, label: entry.label, chips: entry.chips.map((chip) => ({ scope: chip.scope, operator: chip.operator, value: chip.value })) })),
+    },
     actions: [
-      pageAction('library.search', t({ ko: '검색 실행', en: 'Run a search' }), t({ ko: '검색어를 넣고 바로 검색해. 결과 화면이 돌아와.', en: 'Search right away; the results come back.' }), pageObject({ query: pageText(500) }, ['query'])),
+      pageAction('library.search', t({ ko: '검색 실행', en: 'Run a search' }), t({ ko: '검색어를 넣고 바로 검색해. scope를 주면 그 범위로 찾아 (meaning: 장면 설명과 뜻이 가까운 이미지, 결과는 뜻이 가까운 순이고 data.images에 meaningScore가 붙어). 결과 화면이 돌아와.', en: 'Search right away, optionally in one scope (meaning = images matching a description, ordered by meaning with meaningScore in data.images); the results come back.' }), pageObject({ query: pageText(500), scope: pageChoice(chatTextScopes) }, ['query'])),
+      ...(chatHistory.length ? [pageAction('library.history', t({ ko: '최근 검색 다시 적용', en: 'Re-apply a recent search' }), t({ ko: '최근 검색(data.history)의 칩을 그대로 다시 적용해.', en: 'Re-apply the chips of a recent search (data.history).' }), pageObject({ id: pageChoice(chatHistory.map((entry) => entry.id)) }, ['id']))] : []),
       ...(chatOpenableHashes.length ? [pageAction('library.select', t({ ko: '이미지 선택', en: 'Select images' }), t({ ko: '목록(data.images)의 이미지를 선택해. 빈 목록이면 선택을 풀어. 선택한 이미지로 하단 작업줄(그룹 담기·다운로드)을 쓸 수 있어.', en: 'Select listed images (data.images); an empty list clears the selection.' }), pageObject({ hashes: pageArray(pageChoice(chatOpenableHashes), 100) }, ['hashes']))] : []),
       ...(chatOpenableHashes.length ? [pageAction('library.open', t({ ko: '이미지 열기', en: 'Open image' }), t({ ko: '목록(data.images)의 이미지 상세를 열어.', en: 'Open a listed image (data.images).' }), pageObject({ hash: pageChoice(chatOpenableHashes) }, ['hash']))] : []),
     ],
@@ -138,7 +155,15 @@ export function HomePage() {
       assertCurrent()
       // Applied straight away with the search drawer closed, so the chat panel stays where it is.
       if (id === 'library.search') {
-        if (!addScopedTextChip(searchScope === 'rating' || searchScope === 'tool' ? 'positive' : searchScope, String(args.query), { apply: true })) throw new Error('검색어가 비었어.')
+        const scope = typeof args.scope === 'string' ? args.scope as TextSearchScope : searchScope === 'rating' || searchScope === 'tool' ? 'positive' : searchScope
+        if (!chatTextScopes.includes(scope)) throw new Error('설명 검색이 꺼져 있어.')
+        if (!addScopedTextChip(scope, String(args.query), { apply: true })) throw new Error('검색어가 비었어.')
+        return
+      }
+      if (id === 'library.history') {
+        const entry = chatHistory.find((item) => item.id === String(args.id))
+        if (!entry) throw new Error('최근 검색에 없는 항목이야.')
+        selectHistoryEntry(entry, { openDrawer: false })
         return
       }
       if (id === 'library.open') { void navigate(`/images/${encodeURIComponent(String(args.hash))}`); return }
@@ -151,6 +176,7 @@ export function HomePage() {
     },
     apply: (patch) => {
       if (patch.searchInput !== undefined) setSearchInput(String(patch.searchInput))
+      if (patch.searchScope !== undefined && chatScopes.includes(patch.searchScope as SearchScope)) setSearchScope(patch.searchScope as SearchScope)
       if (patch.sortOrder !== undefined) setSortOrder(patch.sortOrder === 'oldest' ? 'oldest' : 'newest')
       if (patch.columns !== undefined) setHomeColumnCount(Number(patch.columns))
     },

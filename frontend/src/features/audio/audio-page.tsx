@@ -27,7 +27,7 @@ import { Tip } from '@/components/ui/tooltip'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
-import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
+import { pageAction, pageChoice, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useStreamFallbackInterval } from '@/features/runtime-events/use-runtime-event-stream'
 import { useI18n } from '@/i18n'
 import {
@@ -527,6 +527,8 @@ export function AudioPage() {
     fields: [],
     data: {
       project: project ? { id: project.id, name: project.name } : null,
+      ...(projects.length > 1 ? { projects: projects.slice(0, 50).map((entry) => ({ id: entry.id, name: entry.name })) } : {}),
+      ...(search || filter ? { search: { text: search, filter } } : {}),
       group: group ? { id: group.id, name: group.name, label: group.label, folder: folder?.name ?? null, description: group.description, prompt: group.prompt, isInbox: group.is_inbox } : null,
       reviewFilter: reviewTab,
       selectedCandidateIds: selected ? [selected.id] : [],
@@ -534,6 +536,8 @@ export function AudioPage() {
       takes: chatTakes.map((candidate) => ({ id: candidate.id, name: candidate.name, review: candidate.review })),
     },
     actions: [
+      ...(projects.length > 1 ? [pageAction('audio.project', t({ ko: '프로젝트 바꾸기', en: 'Switch project' }), t({ ko: '드롭다운의 프로젝트(data.projects)로 바꿔. 트리가 그 프로젝트의 그룹을 보여줘.', en: 'Switch the project dropdown to a listed project (data.projects); the tree then shows its groups.' }), pageObject({ projectId: pageChoice(projects.slice(0, 50).map((entry) => entry.id)) }, ['projectId']))] : []),
+      pageAction('audio.search', t({ ko: '트리 검색', en: 'Search the tree' }), t({ ko: '모든 프로젝트에서 효과음 그룹을 찾아. 결과는 data.groups에 나오고 audio.open으로 열어. 빈 text와 filter 없음이면 검색을 지워. filter: unselected = 채택 안 된 그룹, pending_comments = 답 안 한 코멘트가 있는 그룹.', en: 'Search effect groups across every project; results appear in data.groups (open one with audio.open). Empty text and no filter clears the search. filter: unselected = groups without an adopted take, pending_comments = groups with unanswered comments.' }), pageObject({ text: pageText(200), filter: pageChoice(['none', 'unselected', 'pending_comments']) }, ['text'])),
       ...(chatGroups.length ? [pageAction('audio.open', t({ ko: '오디오 그룹 열기', en: 'Open audio group' }), t({ ko: '목록(data.groups)의 효과음 그룹이나 받은 파일을 열어.', en: 'Open a listed group (data.groups).' }), pageObject({ groupId: pageChoice(chatGroups.map((entry) => entry.id)) }, ['groupId']))] : []),
       ...(group ? [pageAction('audio.filter', t({ ko: '검수 탭 바꾸기', en: 'Switch review tab' }), t({ ko: '전체·미검수·채택·보류 탭으로 바꿔.', en: 'Show all, unreviewed, adopted or rejected takes.' }), pageObject({ review: pageChoice(['all', 'pending', 'selected', 'rejected']) }, ['review']))] : []),
       ...(chatTakes.length ? [pageAction('audio.select', t({ ko: '테이크 선택', en: 'Select take' }), t({ ko: '목록(data.takes)의 테이크를 골라 편집 패널을 열어.', en: 'Select a listed take (data.takes) and open its editor.' }), pageObject({ candidateId: pageChoice(chatTakes.map((candidate) => candidate.id)) }, ['candidateId']))] : []),
@@ -546,6 +550,19 @@ export function AudioPage() {
         if (!target) throw new Error('목록에 없는 그룹이야.')
         setProjectId(target.project_id)
         setGroupId(target.id)
+        return
+      }
+      if (id === 'audio.project') {
+        const target = projects.slice(0, 50).find((entry) => entry.id === String(args.projectId))
+        if (!target) throw new Error('목록에 없는 프로젝트야.')
+        if (target.id !== projectId) { setProjectId(target.id); setGroupId(null) }
+        return
+      }
+      if (id === 'audio.search') {
+        const text = String(args.text ?? '').trim()
+        setSearch(text)
+        setDebouncedSearch(text)
+        setFilter(args.filter === 'unselected' || args.filter === 'pending_comments' ? args.filter : null)
         return
       }
       if (id === 'audio.filter') { setReviewTab(String(args.review) as ReviewTab); setSelectedId(null); return }

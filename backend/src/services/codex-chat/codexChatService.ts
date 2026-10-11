@@ -1079,7 +1079,7 @@ export const CodexChatService = {
     const attached = attachJobResults(selected)
     const pendingJobs = partial ? countPendingChatJobs(threadId) : attached.pendingJobs
     const messages = visibleContextMessages(thread, attached.messages, requester.accountId)
-    const media = canRequesterViewImages(requester) ? Object.fromEntries(collectCodexChatMedia(messages).map((item) => [item.compositeHash, { mimeType: item.mimeType, width: item.width, height: item.height, historyId: item.historyId }])) : {}
+    const media = canRequesterViewImages(requester) ? Object.fromEntries(collectCodexChatMedia(messages).map((item) => [item.compositeHash, { mimeType: item.mimeType, width: item.width, height: item.height, historyId: item.historyId, postprocessStatus: item.postprocessStatus }])) : {}
     const profile = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
     // Display block state: direct chats only (a room's members each have their own blocks; not folded yet).
     const blocks = profile && thread.kind === 'direct' && usableBlocks(profile.style.blocks).length

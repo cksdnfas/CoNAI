@@ -44,7 +44,7 @@ export const CHAT_PROFILE_DEFAULTS = {
 export const AUTHOR_NOTE_MAX_LENGTH = 4000
 /** Text caps toColumns applies to the profile fields a chat may propose (the setup tools validate with the same numbers). */
 const TRANSLATION_INSTRUCTIONS_MAX_LENGTH = 4000
-export const CHAT_PROFILE_TEXT_LIMITS = { name: NAME_MAX_LENGTH, tagline: 200, text: TEXT_MAX_LENGTH, authorNote: AUTHOR_NOTE_MAX_LENGTH, sections: 30, sectionTitle: 80, alternateGreetings: 100 } as const
+export const CHAT_PROFILE_TEXT_LIMITS = { name: NAME_MAX_LENGTH, tagline: 200, text: TEXT_MAX_LENGTH, authorNote: AUTHOR_NOTE_MAX_LENGTH, sections: 30, sectionTitle: 80, alternateGreetings: 100, translationInstructions: TRANSLATION_INSTRUCTIONS_MAX_LENGTH, summaryPrompt: 4000 } as const
 const MAX_PROMPT_SECTIONS = 30
 const SECTION_TITLE_MAX_LENGTH = 80
 
