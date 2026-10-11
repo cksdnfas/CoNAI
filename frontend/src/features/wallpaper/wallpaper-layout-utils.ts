@@ -163,6 +163,7 @@ export function normalizeWallpaperWidgetStyle(raw: unknown, base: Partial<Wallpa
     fontFamily: pick(record.fontFamily, ['inherit', 'sans', 'serif', 'mono', 'display'] as const, fallback.fontFamily),
     fontWeight: pick(record.fontWeight, ['light', 'regular', 'bold'] as const, fallback.fontWeight),
     textColor: typeof record.textColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(record.textColor) ? record.textColor : fallback.textColor,
+    accentColor: typeof record.accentColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(record.accentColor) ? record.accentColor : fallback.accentColor,
     textAlign: pick(record.textAlign, ['left', 'center', 'right'] as const, fallback.textAlign),
     opacity: clampNumber(record.opacity ?? legacyOpacity, fallback.opacity, 5, 100),
     showTitle: typeof record.showTitle === 'boolean' ? record.showTitle : legacy?.showTitle === true ? true : fallback.showTitle,

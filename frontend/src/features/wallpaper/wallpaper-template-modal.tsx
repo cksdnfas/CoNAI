@@ -1,14 +1,53 @@
-import { LayoutTemplate } from 'lucide-react'
+import type { CSSProperties } from 'react'
 import { Modal } from '@/components/ui/modal'
 import { Panel } from '@/components/ui/panel'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { WALLPAPER_TEMPLATES, type WallpaperTemplateDefinition } from './wallpaper-templates'
+import { getWallpaperWidgetIcon } from './wallpaper-widget-library-sidebar'
+import { getWallpaperTemplatePreview, WALLPAPER_TEMPLATES, type WallpaperTemplateDefinition, type WallpaperTemplatePreview } from './wallpaper-templates'
 
 interface WallpaperTemplateModalProps {
   open: boolean
   onClose: () => void
   onApply: (template: WallpaperTemplateDefinition) => void
+}
+
+function previewBackground({ background, themeMode }: WallpaperTemplatePreview): string {
+  switch (background.kind) {
+    case 'gradient':
+      return `linear-gradient(${background.angle}deg, ${background.from}, ${background.to})`
+    case 'color':
+      return background.color
+    default:
+      return themeMode === 'light' ? '#f1efea' : 'var(--background)'
+  }
+}
+
+/** The template's widgets as blocks on its background (landscape). */
+function TemplateThumbnail({ preview }: { preview: WallpaperTemplatePreview }) {
+  const ink = preview.themeMode === 'light' ? '0 0 0' : '255 255 255'
+  return (
+    <div className="relative aspect-video overflow-hidden" style={{ background: previewBackground(preview) }}>
+      {preview.widgets.map((widget, index) => {
+        const [x, y, w, h] = widget.spot
+        const Icon = getWallpaperWidgetIcon(widget.type)
+        const look: CSSProperties = widget.variant === 'none'
+          ? { border: `1px dashed rgb(${ink} / 0.22)` }
+          : widget.variant === 'outline'
+            ? { border: `1px solid rgb(${ink} / 0.35)` }
+            : { background: `rgb(${ink} / ${widget.variant === 'glass' ? 0.12 : 0.16})` }
+        return (
+          <div
+            key={`${widget.type}-${index}`}
+            className="absolute flex items-center justify-center rounded-[3px]"
+            style={{ left: `${x * 100}%`, top: `${y * 100}%`, width: `${w * 100}%`, height: `${h * 100}%`, color: `rgb(${ink} / 0.5)`, ...look }}
+          >
+            <Icon className="size-3.5" />
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 export function WallpaperTemplateModal({ open, onClose, onApply }: WallpaperTemplateModalProps) {
@@ -19,20 +58,15 @@ export function WallpaperTemplateModal({ open, onClose, onApply }: WallpaperTemp
       open={open}
       onClose={onClose}
       title={t({ ko: '빠른 시작 템플릿', en: 'Quick-start templates' })}
-      widthClassName="max-w-3xl"
+      widthClassName="max-w-4xl"
     >
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {WALLPAPER_TEMPLATES.map((template) => (
           <Tip key={template.id} content={t(template.description)}>
-            <Panel asChild tone="low" padding="none" interactive className="group overflow-hidden text-left">
+            <Panel asChild tone="low" padding="none" interactive className="overflow-hidden text-left">
               <button type="button" onClick={() => onApply(template)}>
-                <div className="relative h-28 overflow-hidden" style={{ background: template.accent }}>
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_20%,rgba(255,255,255,0.17),transparent_42%)]" />
-                  <LayoutTemplate className="absolute right-4 bottom-4 h-8 w-8 text-white/45 transition group-hover:text-white/70" />
-                </div>
-                <div className="px-4 py-3">
-                  <div className="font-semibold text-foreground">{t(template.name)}</div>
-                </div>
+                <TemplateThumbnail preview={getWallpaperTemplatePreview(template.id)} />
+                <div className="px-3 py-2.5 text-sm font-semibold text-foreground">{t(template.name)}</div>
               </button>
             </Panel>
           </Tip>

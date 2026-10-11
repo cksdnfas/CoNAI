@@ -183,7 +183,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
     })).sort((left, right) => right.order - left.order)
 
     return (
-      <div className="relative h-full overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_12%,transparent),transparent_40%),var(--surface-low)]">
+      <div className="relative h-full overflow-hidden">
         {recentEntries.length === 0 ? (
           <div className="flex h-full items-center justify-center px-3 text-center text-sm text-muted-foreground">{t({ ko: '아직 최근 이미지 결과가 없어.', en: 'There are no recent image results yet.' })}</div>
         ) : null}
@@ -260,12 +260,6 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
             </div>
           )
         })}
-
-        {recentEntries.length > 1 ? (
-          <div className="pointer-events-none absolute right-2 top-2 rounded-full bg-background/72 px-2 py-0.5 text-2xs font-medium uppercase tracking-overline text-foreground/90 backdrop-blur-sm">
-            {t({ ko: '스택', en: 'Stack' })}
-          </div>
-        ) : null}
       </div>
     )
   }

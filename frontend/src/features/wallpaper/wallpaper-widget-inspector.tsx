@@ -128,6 +128,7 @@ function StyleFields({ widget, patchStyle }: { widget: WallpaperWidgetInstance; 
         onChange={(value) => patchStyle({ fontWeight: value }, 'fontWeight')}
       />
       <InspectorColor label={t({ ko: '글자색', en: 'Color' })} value={style.textColor} fallback="#e5e2e1" nullable onChange={(value) => patchStyle({ textColor: value }, 'textColor')} />
+      <InspectorColor label={t({ ko: '강조색', en: 'Accent' })} value={style.accentColor} fallback="#f95e14" nullable onChange={(value) => patchStyle({ accentColor: value }, 'accentColor')} />
       <InspectorSegments
         label={t({ ko: '정렬', en: 'Align' })}
         value={style.textAlign}

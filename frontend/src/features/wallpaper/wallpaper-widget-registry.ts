@@ -22,6 +22,7 @@ export const WALLPAPER_DEFAULT_WIDGET_STYLE: WallpaperWidgetStyle = {
   fontFamily: 'inherit',
   fontWeight: 'regular',
   textColor: null,
+  accentColor: null,
   textAlign: 'left',
   opacity: 100,
   showTitle: false,

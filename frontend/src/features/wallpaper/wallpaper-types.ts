@@ -52,6 +52,8 @@ export interface WallpaperWidgetStyle {
   fontWeight: WallpaperWidgetFontWeight
   /** null = theme foreground. */
   textColor: string | null
+  /** Bars, progress and highlights inside the widget; null = theme primary. */
+  accentColor: string | null
   textAlign: 'left' | 'center' | 'right'
   /** 0-100 */
   opacity: number

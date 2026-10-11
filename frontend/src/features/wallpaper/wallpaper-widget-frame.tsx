@@ -44,6 +44,7 @@ export function getWallpaperWidgetFrameStyle(style: WallpaperWidgetStyle): CSSPr
     fontWeight: WEIGHTS[style.fontWeight],
     letterSpacing: style.fontFamily === 'display' ? '-0.02em' : undefined,
     color: style.textColor ?? undefined,
+    ...(style.accentColor ? { '--primary': style.accentColor } as CSSProperties : {}),
     textAlign: style.textAlign,
     opacity: style.opacity / 100,
   }
