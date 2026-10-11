@@ -9,6 +9,7 @@ export interface PageAccessCatalogItem {
   category: 'primary' | 'derived'
 }
 
+// Same order as the header's default: library, making, chat then posts, the rest.
 export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
   {
     path: '/',
@@ -25,13 +26,33 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
     category: 'primary',
   },
   {
+    path: '/upload',
+    labelKey: 'pageAccessCatalog.upload',
+    permissionKey: 'page.upload.view',
+    icon: Upload,
+    category: 'primary',
+  },
+  {
+    path: '/files',
+    labelKey: 'pageAccessCatalog.files',
+    permissionKey: 'page.files.view',
+    icon: Archive,
+    category: 'primary',
+  },
+  {
     path: '/prompts',
     labelKey: 'pageAccessCatalog.prompts',
     permissionKey: 'page.prompts.view',
     icon: MessageSquareText,
     category: 'primary',
   },
-  { path: '/chat', labelKey: 'pageAccessCatalog.chat', permissionKey: 'page.chat.view', icon: MessageSquareText, category: 'derived' },
+  {
+    path: '/wildcards',
+    labelKey: 'pageAccessCatalog.wildcards',
+    permissionKey: 'page.wildcards.view',
+    icon: WandSparkles,
+    category: 'derived',
+  },
   {
     path: '/generation',
     labelKey: 'pageAccessCatalog.generation',
@@ -47,25 +68,19 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
     category: 'primary',
   },
   {
-    path: '/posts',
-    labelKey: 'pageAccessCatalog.posts',
-    permissionKey: 'page.posts.view',
-    icon: Newspaper,
-    category: 'primary',
-  },
-  {
     path: '/sprite',
     labelKey: 'pageAccessCatalog.sprite',
     permissionKey: 'page.sprite.view',
     icon: Film,
     category: 'primary',
   },
+  { path: '/chat', labelKey: 'pageAccessCatalog.chat', permissionKey: 'page.chat.view', icon: MessageSquareText, category: 'derived' },
   {
-    path: '/wildcards',
-    labelKey: 'pageAccessCatalog.wildcards',
-    permissionKey: 'page.wildcards.view',
-    icon: WandSparkles,
-    category: 'derived',
+    path: '/posts',
+    labelKey: 'pageAccessCatalog.posts',
+    permissionKey: 'page.posts.view',
+    icon: Newspaper,
+    category: 'primary',
   },
   {
     path: '/wallpaper',
@@ -80,20 +95,6 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
     permissionKey: 'page.wallpaper.runtime.view',
     icon: ImageIcon,
     category: 'derived',
-  },
-  {
-    path: '/upload',
-    labelKey: 'pageAccessCatalog.upload',
-    permissionKey: 'page.upload.view',
-    icon: Upload,
-    category: 'primary',
-  },
-  {
-    path: '/files',
-    labelKey: 'pageAccessCatalog.files',
-    permissionKey: 'page.files.view',
-    icon: Archive,
-    category: 'primary',
   },
   {
     path: '/settings',

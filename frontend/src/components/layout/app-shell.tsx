@@ -20,7 +20,7 @@ import { getPublicHeaderNavigationSettings } from '@/lib/api-settings-general'
 import { APP_BRAND_TOOLTIP, APP_ICON_SRC, APP_NAME } from '@/lib/app-metadata'
 import { cn } from '@/lib/utils'
 import { useMinWidth } from '@/lib/use-min-width'
-import type { HeaderNavigationItemKey } from '@conai/shared'
+import { normalizeHeaderNavigationOrder, type HeaderNavigationPageKey } from '@conai/shared'
 import { DEFAULT_HEADER_NAVIGATION_SETTINGS } from '@/lib/settings-defaults'
 import { useHorizontalDragScroll } from '@/components/common/use-horizontal-drag-scroll'
 import { Tip } from '@/components/ui/tooltip'
@@ -37,32 +37,31 @@ const GenerationQueueHeaderWidgetLazy = lazy(async () => {
 /** Below Tailwind `sm` the search and chat keys fold into the account menu so the page icons get the room. */
 const FULL_HEADER_MIN_WIDTH_PX = 640
 
-const PRIMARY_NAV_ORDER = ['/', '/groups', '/prompts', '/generation', '/audio', '/posts', '/sprite', CODEX_CHAT_ROUTE, '/upload', '/files', '/wallpaper', '/settings'] as const
-const PRIMARY_NAV_ITEM_IDS: Record<typeof PRIMARY_NAV_ORDER[number], HeaderNavigationItemKey> = {
-  '/': 'home',
-  '/groups': 'groups',
-  '/prompts': 'prompts',
-  '/generation': 'generation',
-  '/audio': 'audio',
-  '/posts': 'posts',
-  '/sprite': 'sprite',
-  [CODEX_CHAT_ROUTE]: 'chat',
-  '/upload': 'upload',
-  '/files': 'files',
-  '/wallpaper': 'wallpaper',
-  '/settings': 'settings',
+const HEADER_PAGE_PATHS: Record<Exclude<HeaderNavigationPageKey, 'access'>, string> = {
+  home: '/',
+  groups: '/groups',
+  upload: '/upload',
+  files: '/files',
+  prompts: '/prompts',
+  generation: '/generation',
+  audio: '/audio',
+  sprite: '/sprite',
+  chat: CODEX_CHAT_ROUTE,
+  posts: '/posts',
+  wallpaper: '/wallpaper',
+  settings: '/settings',
 }
 
-type NavItem = { id: HeaderNavigationItemKey; to: string; labelKey: string; icon: LucideIcon; permissionKey: string | null }
+type NavItem = { id: HeaderNavigationPageKey; to: string; labelKey: string; icon: LucideIcon; permissionKey: string | null }
 
-// "이용 가능 페이지" leads the header: it is the hub people use to reach every page they may open.
-const navItems: NavItem[] = [
-  { id: 'access', to: '/access', labelKey: 'appShell.availablePages', icon: MapIcon, permissionKey: null },
-  ...PRIMARY_NAV_ORDER.flatMap((path): NavItem[] => {
+// "이용 가능 페이지" is the hub people use to reach every page they may open; it leads unless the order moves it.
+const navItemsById = new Map<HeaderNavigationPageKey, NavItem>([
+  ['access', { id: 'access', to: '/access', labelKey: 'appShell.availablePages', icon: MapIcon, permissionKey: null }],
+  ...(Object.entries(HEADER_PAGE_PATHS) as Array<[Exclude<HeaderNavigationPageKey, 'access'>, string]>).flatMap(([id, path]): Array<[HeaderNavigationPageKey, NavItem]> => {
     const item = PAGE_ACCESS_CATALOG.find((entry) => entry.path === path)
-    return item ? [{ id: PRIMARY_NAV_ITEM_IDS[path], to: item.path, labelKey: item.labelKey, icon: item.icon, permissionKey: item.permissionKey }] : []
+    return item ? [[id, { id, to: item.path, labelKey: item.labelKey, icon: item.icon, permissionKey: item.permissionKey }]] : []
   }),
-]
+])
 
 function DeferredGenerationQueueHeaderWidget() {
   const [shouldRender, setShouldRender] = useState(false)
@@ -109,10 +108,11 @@ function AppShellLayout() {
     queryFn: getPublicHeaderNavigationSettings,
     staleTime: 60_000,
   })
-  const headerNavigation = headerNavigationQuery.data ?? DEFAULT_HEADER_NAVIGATION_SETTINGS
+  const headerNavigation = headerNavigationQuery.data?.items ?? DEFAULT_HEADER_NAVIGATION_SETTINGS
+  const headerNavigationOrder = normalizeHeaderNavigationOrder(headerNavigationQuery.data?.order)
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
   const isAnonymousSession = authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated !== true
-  const visibleNavItems = navItems.filter((item) => headerNavigation[item.id] !== false
+  const visibleNavItems = headerNavigationOrder.flatMap((id) => navItemsById.get(id) ?? []).filter((item) => headerNavigation[item.id] !== false
     && (item.permissionKey === null || hasAuthPermission(permissionKeys, item.permissionKey)))
   const logoTarget = '/access'
   const shouldShowGenerationQueueWidget = headerNavigation.queue !== false && (authStatusQuery.data?.hasCredentials !== true || authStatusQuery.data?.authenticated === true)

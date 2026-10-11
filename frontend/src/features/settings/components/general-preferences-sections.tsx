@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { ChatFilledMark } from '@/features/codex-chat/chat-page-context'
 import { ChatFilledLabel } from './settings-filled-label'
 import { Archive, AudioLines, CircleUserRound, Film, FolderTree, Images, LayoutGrid, ListTodo, Map as MapIcon, MessageSquare, MessageSquareText, Newspaper, Search, Settings2, Sparkles, Upload, type LucideIcon } from 'lucide-react'
@@ -7,8 +8,9 @@ import { RowGroup } from '@/components/ui/row-group'
 import { ToggleChip } from '@/components/ui/chip'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useI18n } from '@/i18n'
-import { MAX_RECYCLE_BIN_RETENTION_DAYS, type GeneralSettings, type HeaderNavigationItemKey } from '@conai/shared'
+import { MAX_RECYCLE_BIN_RETENTION_DAYS, normalizeHeaderNavigationOrder, type GeneralSettings, type HeaderNavigationItemKey, type HeaderNavigationPageKey } from '@conai/shared'
 import { DEFAULT_HEADER_NAVIGATION_SETTINGS } from '@/lib/settings-defaults'
+import { cn } from '@/lib/utils'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { SectionDirtyBadge } from './settings-section-status'
 import { SettingsLabelTip } from './settings-label-tip'
@@ -28,24 +30,27 @@ interface GeneralPreferencesSectionsProps {
   isSectionDirty: (section: GeneralPreferenceSection) => boolean
 }
 
-const HEADER_NAVIGATION_OPTIONS: Array<{ key: HeaderNavigationItemKey; icon: LucideIcon; label: { ko: string; en: string } }> = [
-  { key: 'access', icon: MapIcon, label: { ko: '이용 가능 페이지', en: 'Available pages' } },
-  { key: 'home', icon: Images, label: { ko: '홈', en: 'Home' } },
-  { key: 'groups', icon: FolderTree, label: { ko: '그룹', en: 'Groups' } },
-  { key: 'prompts', icon: MessageSquareText, label: { ko: '프롬프트', en: 'Prompts' } },
-  { key: 'generation', icon: Sparkles, label: { ko: '생성', en: 'Generation' } },
-  { key: 'audio', icon: AudioLines, label: { ko: '오디오', en: 'Audio' } },
-  { key: 'posts', icon: Newspaper, label: { ko: '게시판', en: 'Posts' } },
-  { key: 'sprite', icon: Film, label: { ko: '스프라이트', en: 'Sprites' } },
-  { key: 'chat', icon: MessageSquare, label: { ko: '채팅', en: 'Chat' } },
-  { key: 'upload', icon: Upload, label: { ko: '업로드', en: 'Upload' } },
-  { key: 'files', icon: Archive, label: { ko: '파일 보관함', en: 'Files' } },
-  { key: 'wallpaper', icon: LayoutGrid, label: { ko: '월페이퍼', en: 'Wallpaper' } },
-  { key: 'settings', icon: Settings2, label: { ko: '설정', en: 'Settings' } },
-  { key: 'search', icon: Search, label: { ko: '검색', en: 'Search' } },
-  { key: 'queue', icon: ListTodo, label: { ko: '대기열', en: 'Queue' } },
-  { key: 'account', icon: CircleUserRound, label: { ko: '사용자', en: 'User' } },
-]
+const HEADER_NAVIGATION_OPTIONS: Record<HeaderNavigationItemKey, { icon: LucideIcon; label: { ko: string; en: string } }> = {
+  access: { icon: MapIcon, label: { ko: '이용 가능 페이지', en: 'Available pages' } },
+  home: { icon: Images, label: { ko: '홈', en: 'Home' } },
+  groups: { icon: FolderTree, label: { ko: '그룹', en: 'Groups' } },
+  upload: { icon: Upload, label: { ko: '업로드', en: 'Upload' } },
+  files: { icon: Archive, label: { ko: '파일 보관함', en: 'Files' } },
+  prompts: { icon: MessageSquareText, label: { ko: '프롬프트', en: 'Prompts' } },
+  generation: { icon: Sparkles, label: { ko: '생성', en: 'Generation' } },
+  audio: { icon: AudioLines, label: { ko: '오디오', en: 'Audio' } },
+  sprite: { icon: Film, label: { ko: '스프라이트', en: 'Sprites' } },
+  chat: { icon: MessageSquare, label: { ko: '채팅', en: 'Chat' } },
+  posts: { icon: Newspaper, label: { ko: '게시판', en: 'Posts' } },
+  wallpaper: { icon: LayoutGrid, label: { ko: '월페이퍼', en: 'Wallpaper' } },
+  settings: { icon: Settings2, label: { ko: '설정', en: 'Settings' } },
+  search: { icon: Search, label: { ko: '검색', en: 'Search' } },
+  queue: { icon: ListTodo, label: { ko: '대기열', en: 'Queue' } },
+  account: { icon: CircleUserRound, label: { ko: '사용자', en: 'User' } },
+}
+
+/** Header tools on the right keep their place; only the page links reorder. */
+const HEADER_TOOL_KEYS: HeaderNavigationItemKey[] = ['search', 'queue', 'account']
 
 /** Render app-wide preferences in their user-facing settings category, as flat hairline rows. */
 export function GeneralPreferencesSections({
@@ -57,6 +62,8 @@ export function GeneralPreferencesSections({
 }: GeneralPreferencesSectionsProps) {
   const { t, languageOverride } = useI18n()
   const visibleSections = new Set(sections)
+  const [draggedPage, setDraggedPage] = useState<HeaderNavigationPageKey | null>(null)
+  const [dropTargetPage, setDropTargetPage] = useState<HeaderNavigationPageKey | null>(null)
 
   const updateHeaderNavigationItem = (key: HeaderNavigationItemKey, checked: boolean) => {
     if (!generalDraft) return
@@ -69,11 +76,21 @@ export function GeneralPreferencesSections({
     })
   }
 
+  const moveHeaderPage = (dragged: HeaderNavigationPageKey, target: HeaderNavigationPageKey) => {
+    if (!generalDraft || dragged === target) return
+    const current = normalizeHeaderNavigationOrder(generalDraft.headerNavigationOrder)
+    const next = current.filter((key) => key !== dragged)
+    next.splice(next.indexOf(target) + (current.indexOf(dragged) < current.indexOf(target) ? 1 : 0), 0, dragged)
+    onPatchGeneral({ headerNavigationOrder: next })
+  }
+
   if (!generalDraft) {
     return <SettingsRowsSkeleton rows={4} />
   }
 
   const headerNavigation = generalDraft.headerNavigation ?? DEFAULT_HEADER_NAVIGATION_SETTINGS
+  const headerNavigationOrder = normalizeHeaderNavigationOrder(generalDraft.headerNavigationOrder)
+  const headerMenuLabel = t({ ko: '상단 메뉴', en: 'Header menu' })
   const languageLabel = t({ ko: '언어', en: 'Language' })
   const similarityLabel = t({ ko: '유사/중복 검사', en: 'Similar/duplicate check' })
   const retentionLabel = t({ ko: '휴지통 보관 기간 (일)', en: 'Keep in recycle bin (days)' })
@@ -120,15 +137,32 @@ export function GeneralPreferencesSections({
             onCheckedChange={(checked) => onPatchGeneral({ showRatingBadges: checked })}
             label={<ChatFilledLabel fieldId="showRatingBadges">{t({ ko: '등급 배지 표시', en: 'Show rating badges' })}</ChatFilledLabel>}
           />
-          <SettingRow label={t({ ko: '상단 메뉴', en: 'Header menu' })} align="start" controlClassName="justify-start sm:max-w-xl sm:justify-end">
-            {HEADER_NAVIGATION_OPTIONS.map((option) => {
+          <SettingRow
+            label={<SettingsLabelTip label={headerMenuLabel} tip={t({ ko: '눌러서 켜고 끄기, 끌어서 순서 바꾸기', en: 'Click to show or hide, drag to reorder' })} />}
+            align="start"
+            controlClassName="justify-start sm:max-w-xl sm:justify-end"
+          >
+            {[...headerNavigationOrder, ...HEADER_TOOL_KEYS].map((key) => {
+              const option = HEADER_NAVIGATION_OPTIONS[key]
               const Icon = option.icon
-              const pressed = headerNavigation[option.key] ?? true
+              const pressed = headerNavigation[key] ?? true
+              const page = HEADER_TOOL_KEYS.includes(key) ? null : key as HeaderNavigationPageKey
               return (
-                <ToggleChip key={option.key} pressed={pressed} onClick={() => updateHeaderNavigationItem(option.key, !pressed)}>
+                <ToggleChip
+                  key={key}
+                  pressed={pressed}
+                  onClick={() => updateHeaderNavigationItem(key, !pressed)}
+                  draggable={page !== null}
+                  onDragStart={page ? (event) => { setDraggedPage(page); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', page) } : undefined}
+                  onDragEnd={() => { setDraggedPage(null); setDropTargetPage(null) }}
+                  onDragOver={page ? (event) => { if (draggedPage) { event.preventDefault(); setDropTargetPage(page) } } : undefined}
+                  onDragLeave={() => setDropTargetPage((current) => (current === page ? null : current))}
+                  onDrop={page ? (event) => { event.preventDefault(); if (draggedPage) moveHeaderPage(draggedPage, page); setDraggedPage(null); setDropTargetPage(null) } : undefined}
+                  className={cn(page && 'cursor-grab active:cursor-grabbing', page && draggedPage === page && 'opacity-50', page && dropTargetPage === page && draggedPage !== page && 'ring-2 ring-primary/60')}
+                >
                   <Icon aria-hidden />
                   {t(option.label)}
-                  <ChatFilledMark fieldId={`headerNavigation.${option.key}`} />
+                  <ChatFilledMark fieldId={`headerNavigation.${key}`} />
                 </ToggleChip>
               )
             })}

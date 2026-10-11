@@ -20,27 +20,48 @@ export function normalizeRecycleBinRetentionDays(value: unknown): number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= MAX_RECYCLE_BIN_RETENTION_DAYS ? value : 0;
 }
 
-export const HEADER_NAVIGATION_ITEM_KEYS = [
+/** Header page links in their default order: library, making, chat then posts, the rest. */
+export const HEADER_NAVIGATION_PAGE_KEYS = [
   'access',
   'home',
   'groups',
+  'upload',
+  'files',
   'prompts',
   'generation',
   'audio',
-  'posts',
   'sprite',
   'chat',
-  'upload',
-  'files',
+  'posts',
   'wallpaper',
   'settings',
+] as const;
+
+export const HEADER_NAVIGATION_ITEM_KEYS = [
+  ...HEADER_NAVIGATION_PAGE_KEYS,
   'search',
   'queue',
   'account',
 ] as const;
 
 export type HeaderNavigationItemKey = typeof HEADER_NAVIGATION_ITEM_KEYS[number];
+export type HeaderNavigationPageKey = typeof HEADER_NAVIGATION_PAGE_KEYS[number];
 export type HeaderNavigationSettings = Record<HeaderNavigationItemKey, boolean>;
+
+/** Every header page exactly once: known keys in the stored order, then any missing ones in the default order. */
+export function normalizeHeaderNavigationOrder(value: unknown): HeaderNavigationPageKey[] {
+  const known = new Set<string>(HEADER_NAVIGATION_PAGE_KEYS);
+  const order = Array.isArray(value)
+    ? [...new Set(value.filter((key): key is HeaderNavigationPageKey => typeof key === 'string' && known.has(key)))]
+    : [];
+  return [...order, ...HEADER_NAVIGATION_PAGE_KEYS.filter((key) => !order.includes(key))];
+}
+
+/** What the header reads before sign-in: which items show and the page order. */
+export interface PublicHeaderNavigationSettings {
+  items: HeaderNavigationSettings;
+  order: HeaderNavigationPageKey[];
+}
 export type ImageSimilarityCheckMode = 'manual' | 'always';
 
 export interface GeneralSettings {
@@ -48,6 +69,8 @@ export interface GeneralSettings {
   promptForDownloadLocation: boolean;
   deleteProtection: DeleteProtectionSettings;
   headerNavigation: HeaderNavigationSettings;
+  /** Page links in the order the header shows them. */
+  headerNavigationOrder: HeaderNavigationPageKey[];
   enableGallery?: boolean;
   autoCleanupCanvasOnShutdown?: boolean;
   showRatingBadges?: boolean;

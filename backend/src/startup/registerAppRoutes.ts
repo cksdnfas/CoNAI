@@ -234,9 +234,10 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
     });
   });
   app.get('/api/settings/header-navigation-public', options.readOnlyLimiter, (_req, res) => {
+    const general = settingsService.loadSettings().general;
     res.json({
       success: true,
-      data: settingsService.loadSettings().general.headerNavigation,
+      data: { items: general.headerNavigation, order: general.headerNavigationOrder },
     });
   });
   app.use('/api/runtime-appearance', optionalAuth, runtimeAppearanceRoutes);

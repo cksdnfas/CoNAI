@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import {
   HEADER_NAVIGATION_ITEM_KEYS,
+  HEADER_NAVIGATION_PAGE_KEYS,
   MAX_RECYCLE_BIN_RETENTION_DAYS,
   normalizeRecycleBinRetentionDays,
   type GeneralSettings,
@@ -25,6 +26,7 @@ const router = Router();
 const validLanguages: SupportedLanguage[] = ['ko', 'en'];
 const validImageSimilarityCheckModes: ImageSimilarityCheckMode[] = ['manual', 'always'];
 const validHeaderNavigationItemKeys = new Set<string>(HEADER_NAVIGATION_ITEM_KEYS);
+const validHeaderNavigationPageKeys = new Set<string>(HEADER_NAVIGATION_PAGE_KEYS);
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
 const MAX_PERMISSION_GROUP_COLORS = 500;
 const MAX_PERMISSION_GROUP_KEY_LENGTH = 200;
@@ -87,6 +89,14 @@ router.put(
           sendRouteBadRequest(res, `headerNavigation.${key} must be a boolean`);
           return;
         }
+      }
+    }
+
+    if (generalSettings.headerNavigationOrder !== undefined) {
+      const order: unknown = generalSettings.headerNavigationOrder;
+      if (!Array.isArray(order) || order.some((key) => typeof key !== 'string' || !validHeaderNavigationPageKeys.has(key))) {
+        sendRouteBadRequest(res, 'headerNavigationOrder must be a list of header page keys');
+        return;
       }
     }
 

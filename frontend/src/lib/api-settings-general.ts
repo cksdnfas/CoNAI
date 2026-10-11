@@ -1,7 +1,7 @@
 import type {
   AppSettings,
   GeneralSettings,
-  HeaderNavigationSettings,
+  PublicHeaderNavigationSettings,
 } from '@conai/shared'
 import type { ApiResponse } from '@/types/image'
 import { fetchJson } from '@/lib/api-client'
@@ -16,7 +16,7 @@ export async function getAppSettings() {
 }
 
 export async function getPublicHeaderNavigationSettings() {
-  const response = await fetchJson<ApiResponse<HeaderNavigationSettings>>('/api/settings/header-navigation-public')
+  const response = await fetchJson<ApiResponse<PublicHeaderNavigationSettings>>('/api/settings/header-navigation-public')
   if (!response.success) {
     throw createApiFallbackError(response.error, 'settings.headerNavigationPublic.load')
   }

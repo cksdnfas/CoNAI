@@ -13,6 +13,7 @@ import type {
   ThumbnailSettings,
   VideoOptimizationSettings,
 } from '@conai/shared';
+import { normalizeHeaderNavigationOrder } from '@conai/shared';
 
 /** Build the next settings state after applying a general-settings patch. */
 export function applyGeneralSettingsUpdate(currentSettings: AppSettings, generalSettings: Partial<GeneralSettings>): AppSettings {
@@ -30,6 +31,7 @@ export function applyGeneralSettingsUpdate(currentSettings: AppSettings, general
         ...currentSettings.general.headerNavigation,
         ...generalSettings.headerNavigation,
       },
+      headerNavigationOrder: normalizeHeaderNavigationOrder(generalSettings.headerNavigationOrder ?? currentSettings.general.headerNavigationOrder),
     },
   };
 }

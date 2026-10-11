@@ -199,7 +199,7 @@ export function SettingsPage() {
     queryClient.setQueryData(['app-settings'], nextSettings)
     queryClient.setQueryData(['runtime-appearance-settings'], nextSettings.appearance)
     queryClient.setQueryData(['runtime-appearance'], nextSettings.appearance)
-    queryClient.setQueryData(['public-header-navigation-settings'], nextSettings.general.headerNavigation)
+    queryClient.setQueryData(['public-header-navigation-settings'], { items: nextSettings.general.headerNavigation, order: nextSettings.general.headerNavigationOrder })
     queryClient.setQueryData(['runtime-generation-history-settings'], {
       applyRatingSafetyToGenerationHistory: nextSettings.general.applyRatingSafetyToGenerationHistory,
     })
