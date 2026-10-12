@@ -61,6 +61,7 @@ export function applyChatProfileAssetsProposal(proposalId: number) {
   return requestApiData<{ proposal: ChatProposal; batch?: ChatAssetBatch; result?: ChatAssetApplyResult }>(`/api/chat-proposals/${proposalId}/apply`, { method: 'POST' })
 }
 export type ChatEngine = 'llm' | 'codex' | 'claude'
+export type ChatLlmRuntime = 'direct' | 'pi'
 export type ChatDiagnosticsScope = 'none' | 'view' | 'content' | 'prompts'
 
 export type ChatContextKind = 'persona' | 'system-prompt' | 'prompt-section' | 'guidance' | 'lore-index' | 'constant-lore' | 'lore' | 'summary' | 'example' | 'window' | 'reference' | 'author-note' | 'state' | 'flags' | 'user-persona' | 'recall' | 'page' | 'continuation' | 'last-instruction' | 'tool-definition' | 'tool-result' | 'group-header' | 'summary-instruction' | 'translation-instruction' | 'judge'
@@ -638,6 +639,8 @@ export interface ChatProfile extends ChatProfileAssetFields {
   engine: ChatEngine
   /** Codex / Claude Code: the engine's own model. API LLM profiles use `modelSlotId`. */
   model: string
+  /** API LLM: 'pi' runs chat replies through the pi agent, which keeps the chat as a session and folds it itself. */
+  llmRuntime: ChatLlmRuntime
   /** Codex: CLI effort. API LLM: none / low / medium / high, sent as reasoning_effort. Empty: not sent. */
   reasoningEffort: CodexReasoningEffort | ''
   /** API LLM: reasoning_budget_tokens; null is not sent. */
@@ -729,7 +732,6 @@ export interface ChatProfileDefaults {
   maxToolRounds: number
   toolOutputLimit: number
   /** Codex profiles: compaction limit when `contextTokens` is empty, and the lowest one allowed. */
-  codexCompactTokens: { default: number; min: number }
   summaryPrompt: string
   scopes: ChatScope[]
   style: ChatStyle
@@ -879,8 +881,6 @@ export interface CodexChatThreadDetail {
     replies?: ChatGroupRunningReply[]
     queue?: number[]
   } | null
-  /** Codex chats: Codex folds its memory once a request's input reaches this many tokens. */
-  codexCompactTokens?: number
   /** A `tail` fetch: the id of the first message sent, and how many the thread has in all. */
   messagesFrom?: number
   messageCount?: number

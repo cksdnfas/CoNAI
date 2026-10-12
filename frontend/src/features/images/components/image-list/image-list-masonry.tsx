@@ -18,7 +18,6 @@ interface ImageListMasonryProps {
   getItemId?: (image: ImageRecord) => string
   onActivate: ImageListActivateHandler
   selectable?: boolean
-  alwaysShowSelectionControl?: boolean
   onToggleSelect?: ImageListToggleSelectHandler
   scrollMode: ImageListScrollMode
   viewportHeight?: number | string
@@ -39,7 +38,6 @@ interface ImageListMasonryContext {
   getItemId?: (image: ImageRecord) => string
   onActivate: ImageListActivateHandler
   selectable?: boolean
-  alwaysShowSelectionControl?: boolean
   onToggleSelect?: ImageListToggleSelectHandler
   renderItemOverlay?: (image: ImageRecord) => ReactNode
   renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
@@ -66,7 +64,6 @@ const MasonryItemContent: ItemContent<ImageRecord, ImageListMasonryContext> = ({
         selectionMode={context.selectionMode}
         onActivate={context.onActivate}
         selectable={context.selectable}
-        alwaysShowSelectionControl={context.alwaysShowSelectionControl}
         onToggleSelect={context.onToggleSelect}
         renderOverlay={context.renderItemOverlay?.(image)}
         renderPersistentOverlay={context.renderItemPersistentOverlay?.(image)}
@@ -91,7 +88,6 @@ export function ImageListMasonry({
   getItemId,
   onActivate,
   selectable,
-  alwaysShowSelectionControl,
   onToggleSelect,
   scrollMode,
   viewportHeight,
@@ -180,7 +176,6 @@ export function ImageListMasonry({
     getItemId,
     onActivate,
     selectable,
-    alwaysShowSelectionControl,
     onToggleSelect,
     renderItemOverlay,
     renderItemPersistentOverlay,
@@ -196,7 +191,6 @@ export function ImageListMasonry({
     getItemId,
     onActivate,
     selectable,
-    alwaysShowSelectionControl,
     onToggleSelect,
     renderItemOverlay,
     renderItemPersistentOverlay,

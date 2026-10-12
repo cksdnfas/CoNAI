@@ -1256,7 +1256,7 @@ export function WallpaperEditorPage() {
           <WallpaperColorPaletteContext.Provider value={layoutPalette}>
             <aside
               aria-label={t({ ko: '위젯 설정', en: 'Widget settings' })}
-              className="min-w-0 self-start xl:sticky xl:top-(--theme-shell-header-height) xl:max-h-[calc(100dvh-var(--theme-shell-header-height))] xl:overflow-x-hidden xl:overflow-y-auto xl:[scrollbar-gutter:stable] xl:[scrollbar-width:thin] xl:border-l xl:border-line xl:pt-2 xl:pb-6 xl:pl-6"
+              className="min-w-0 self-start xl:sticky xl:top-(--theme-shell-header-height) xl:max-h-[calc(100dvh-var(--theme-shell-header-height))] xl:overflow-x-hidden xl:overflow-y-auto xl:[scrollbar-gutter:stable] xl:[scrollbar-width:thin] xl:[scrollbar-color:color-mix(in_srgb,var(--foreground)_22%,transparent)_transparent] xl:border-l xl:border-line xl:pt-2 xl:pb-6 xl:pl-6 xl:pr-4"
             >
               {selectedWidgets.length > 0 ? (
                 <WallpaperWidgetInspector

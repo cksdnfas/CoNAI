@@ -74,6 +74,13 @@ export const DEFAULT_CHAT_SUMMARY_PROMPT = [
 /** `llm`: an API LLM connection driven by CoNAI. `codex`: the server Codex CLI, which keeps its own context. */
 export type ChatProfileEngine = 'llm' | 'codex' | 'claude'
 
+/**
+ * How an API LLM profile's chat replies run. `direct`: CoNAI builds every request and drives the tool rounds.
+ * `pi`: the pi agent (piChatCompletion.ts) keeps the chat as a session on the same connection and model, and folds
+ * its memory itself when the context fills, also in the middle of a long tool run.
+ */
+export type ChatLlmRuntime = 'direct' | 'pi'
+
 /** Where a profile's content rating ceiling comes from: its model row's, or its own (`contentRatingTierId`). */
 export type ChatContentRatingMode = 'model' | 'custom'
 
@@ -103,6 +110,8 @@ export type ChatProfile = {
   engine: ChatProfileEngine
   /** Codex / Claude Code: the engine's own model (empty: its default). API LLM profiles use `modelSlotId`. */
   model: string
+  /** API LLM: how chat replies run (see ChatLlmRuntime); always `direct` for the other engines. */
+  llmRuntime: ChatLlmRuntime
   /** Codex: the CLI effort. API LLM: none / low / medium / high (sent as reasoning_effort). Empty: not set. */
   reasoningEffort: CodexReasoningEffort | ''
   /** API LLM: reasoning token budget (reasoning_budget_tokens); null leaves it to the server. */
@@ -249,6 +258,7 @@ type ProfileRow = {
   engine: string | null
   provider_name: string
   model: string | null
+  llm_runtime: string | null
   reasoning_effort: string | null
   reasoning_budget_tokens: number | null
   extra_params: string | null
@@ -407,6 +417,7 @@ function toProfile(row: ProfileRow): ChatProfile {
     backgroundHash: row.background_hash ?? null,
     engine: row.engine === 'codex' ? 'codex' : row.engine === 'claude' ? 'claude' : 'llm',
     model: row.engine === 'codex' || row.engine === 'claude' ? row.model ?? '' : '',
+    llmRuntime: row.engine !== 'codex' && row.engine !== 'claude' && row.llm_runtime === 'pi' ? 'pi' : 'direct',
     reasoningEffort: isCodexReasoningEffort(row.reasoning_effort) ? row.reasoning_effort : '',
     reasoningBudgetTokens: row.reasoning_budget_tokens,
     extraParams: row.extra_params ?? '',
@@ -479,6 +490,15 @@ function optionalNumber(value: unknown, range: { min: number; max: number }, int
  */
 export function profileSeesImages(profile: Pick<ChatProfile, 'engine' | 'visionEnabled'>) {
   return profile.engine === 'codex' || profile.visionEnabled
+}
+
+/**
+ * Which agent keeps a profile's chat as a session of its own (claudeChatSessions.ts): Claude Code profiles, and API
+ * LLM profiles that run through pi. Null: CoNAI sends the conversation itself (or Codex keeps its thread).
+ */
+export function sessionRuntimeOf(profile: Pick<ChatProfile, 'engine' | 'llmRuntime'>): 'claude' | 'pi' | null {
+  if (profile.engine === 'claude') return 'claude'
+  return profile.engine === 'llm' && profile.llmRuntime === 'pi' ? 'pi' : null
 }
 
 /** Tools that answer with pictures: offered only to a profile whose model sees images (profileSeesImages). */
@@ -585,6 +605,7 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean } = {}) {
     // The pair columns are the older form of the model rows (see LegacyModelPairs); a save clears them.
     provider_name: '',
     model: engine === 'llm' ? null : text(input.model, MODEL_MAX_LENGTH) || null,
+    llm_runtime: engine === 'llm' && input.llmRuntime === 'pi' ? 'pi' : null,
     reasoning_effort: input.reasoningEffort || null,
     reasoning_budget_tokens: engine === 'llm' ? optionalNumber(input.reasoningBudgetTokens, { min: 1, max: 1_000_000 }, true) : null,
     extra_params: extraParams || null,

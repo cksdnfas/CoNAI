@@ -65,6 +65,7 @@ backend/test/*
 !backend/test/chat-thread-list.test.ts
 !backend/test/image-permissions.test.ts
 !backend/test/generated-media-pipeline.test.ts
+!backend/test/document-search.test.ts
 
 # Uploaded images
 uploads/

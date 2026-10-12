@@ -157,7 +157,7 @@ function profileGuide() {
     '- suggestEnabled: the composer\'s reply suggestions button; suggestProfileId: a chat profile that writes them with its own model and prompt (null: the suggest role\'s model).',
     '- visionEnabled: the model sees images (Codex always does). contentRatingMode "model" (follow the chat model row\'s ceiling; API LLM only) or "custom" with contentRatingTierId (the highest rating tier the model is shown; null: no ceiling).',
     `- loreRecursionDepth (0-${LORE_RECURSION_MAX_DEPTH}): how many times chosen lore entries\' text is scanned for more entries (0: off). allowLoreProposals: the model may save_lore.`,
-    '- linkedFiles: [{ "id": "<32-hex file store id>", "write": false }]: folders or text files of YOUR file store every chat of this profile can open (write: may write there); not inside 로어북/. Only the chat owner\'s own links apply in a chat.',
+    '- linkedFiles: [{ "id": "<32-hex file store id>", "write": false }]: folders, text files, PDFs or XLSX documents (PDF/XLSX content is read-only) of YOUR file store every chat of this profile can open (write: may write there); not inside 로어북/. Only the chat owner\'s own links apply in a chat.',
     NOT_PROPOSABLE,
     'Where to find those by hand (profile editor tabs 캐릭터 · 외형 · 모델 · 기억 · 도구 · 꾸미기): engine and model params in 모델; tool scopes, tool list, tool presets and the 페이지 어시스턴트 switch in 도구; generation presets and character images in 외형 (images: propose_profile_assets); who may chat with it in the editor header\'s access menu; colours and blocks in 꾸미기.',
     'Values equal to the current ones are dropped.',

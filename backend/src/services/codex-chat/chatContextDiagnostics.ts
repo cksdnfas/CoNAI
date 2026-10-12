@@ -52,6 +52,7 @@ export function markContextParts<T extends ChatCompletionMessage>(message: T, pa
   return message
 }
 export function contextPartsOf(message: ChatCompletionMessage) { return messageParts.get(message) ?? [] }
+export function contextKindOf(message: ChatCompletionMessage) { return messageKinds.get(message) }
 export function markContextMessage<T extends ChatCompletionMessage>(message: T, kind: ChatContextSectionKind): T {
   messageKinds.set(message, kind)
   return message

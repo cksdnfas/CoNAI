@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import fs from 'fs';
+import { DOCUMENT_EXTENSIONS } from './fileDocumentExtraction';
 import path from 'path';
 import type { FileStoreListing, FileWriteSource, StoredFileEntry, StoredFileOwner, StoredFileText } from '@conai/shared';
 import { getUserSettingsDb } from '../database/userSettingsDb';
@@ -588,8 +589,9 @@ export const FileStoreService = {
     return migrateFileStoreLayout((id) => (lookup.get(id) as { owner_key: string } | undefined)?.owner_key ?? null);
   },
 
-  async readText(owner: string, id: string, offset = 0, limit = 16000): Promise<StoredFileText> {
+  async readText(owner: string, id: string, offset = 0, limit = 16000, options: { source?: 'original' | 'extracted'; revision?: string } = {}): Promise<StoredFileText> {
     const { entry, filePath } = this.resolveFile(owner, id);
+    if (options.source === 'extracted' || DOCUMENT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) return (await import('./fileStoreSearch')).readExtractedDocument(owner, id, offset, limit, options.revision);
     if (!TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) throw new FileStoreError('텍스트 읽기는 UTF-8 텍스트 파일만 지원해. 음성·문서는 별도 변환이 필요해.', 415);
     if (!Number.isSafeInteger(offset) || offset < 0 || offset > entry.size || !Number.isSafeInteger(limit) || limit < 4 || limit > 32000) throw new FileStoreError(`잘못된 읽기 범위야 (파일 크기 ${entry.size}바이트).`);
     const handle = await fs.promises.open(filePath, 'r');

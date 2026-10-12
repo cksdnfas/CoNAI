@@ -14,7 +14,7 @@ import { profileContentLimit } from './chatContentRating'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
 import { CATALOG_OPEN_TOOL, unwrapCatalogCall } from '../../mcp/toolCatalog'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
-import { ChatProfileStore, isVisionTool, type ChatProfile } from './chatProfiles'
+import { ChatProfileStore, isVisionTool, sessionRuntimeOf, type ChatProfile } from './chatProfiles'
 import { translateReply, translateUserInput } from './chatTranslation'
 import { hasTranslation, resolveProfileModel } from './chatModelRoles'
 import { stripEchoedAddresses, withoutNarrationMarks } from '@conai/shared'
@@ -25,11 +25,11 @@ import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord
 import { withGenerationOutcomes } from './codexChatMedia'
 import { generatedImagesTokens, loadInlineGeneratedImages, withGeneratedImages } from './chatGenerationPrompting'
 import { buildClaudeSessionTurn } from './claudeChatSessions'
-import type { ClaudeChatSession } from './claudeChatCompletion'
+import type { EngineSession } from './claudeChatSessions'
 import type { CodexChatStreamEvent } from './codexChatService'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 import { ChatSummaryStore } from './chatMemory'
-import { appendUserDirective, buildChatMessages, cutToolOutput, directContextTurns, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, latestWindow, prefixUserContent, rawMessagesEstimate, recordPromptUsage, replyCapFor, resolveContextConfig, sendableMessages, stripThinking, summarizeAhead, summarizeAll, unsummarizedMessages } from './llmChatContext'
+import { appendUserDirective, buildChatMessages, cutToolOutput, directContextTurns, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, latestWindow, prefixUserContent, rawMessagesEstimate, recordPromptUsage, replyCapFor, resolveContextConfig, sendableMessages, stripThinking, summarizeAhead, summarizeAll, unsummarizedMessages, wrapUpRequest } from './llmChatContext'
 import { addressLabelFilter, restatement, roundSeparator } from './chatReplyText'
 import { chatPageReference, NO_PAGE_NOTE, parseChatPageContext, proposalOutcomeNote } from './chatPageContext'
 import type { ChatSendOptions } from './chatTasks'
@@ -46,7 +46,7 @@ import { withSemanticContext, type JudgedContext } from './chatJudgeContext'
 import { semanticContextFor, type SemanticContext } from '../embeddings/chatSemantic'
 import { embeddingFeatureOn } from '../aiWorker/textEmbeddingService'
 import { judgeStatusFields } from './chatJudgeFields'
-import { withServerContextLimit } from './serverContextLimit'
+import { serverContextLimit, withServerContextLimit } from './serverContextLimit'
 
 type GenerationReaction = {
   result: ChatCompletionMessage
@@ -117,8 +117,8 @@ type LlmTurn = {
   contextMeta?: ChatContextMeta & { model: string | null; promptTokens?: number | null }
   requestCapture?: string
   requestSent?: boolean
-  /** A Claude Code direct reply that continues the chat's session (see claudeChatSessions): set while the request is built. */
-  claudeSession?: ClaudeChatSession
+  /** A Claude Code or pi reply that continues the chat's session (see claudeChatSessions): set while the request is built. */
+  engineSession?: EngineSession
   listeners: Set<(event: CodexChatStreamEvent) => void>
   finished: Promise<CodexChatMessageRecord | null>
 }
@@ -264,9 +264,11 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
   const listMessages = () => withGenerationOutcomes(CodexChatStore.listMessages(thread.id).filter((message) => message.id !== turn.replacingMessageId))
   const config = resolveContextConfig(thread, profile)
   if (turn.reaction && thread.kind === 'group') config.maxTokens = ChatGroupStore.member(thread.id, profile.id)?.max_tokens ?? config.maxTokens
-  // A Claude Code direct reply continues the chat's session: it sends only what is new, and the session (not the
-  // context window or the summary) holds the conversation. A continuation of a cut reply stays a one-off request.
-  const inSession = profile.engine === 'claude' && thread.kind === 'direct' && !turn.reaction && turn.continuing === undefined
+  // A Claude Code or pi direct reply continues the chat's session: it sends only what is new, and the session (not
+  // the context window or the summary) holds the conversation. A continuation of a cut reply stays a one-off request
+  // (through CoNAI itself for a pi profile).
+  const sessionRuntime = sessionRuntimeOf(profile)
+  const inSession = sessionRuntime !== null && thread.kind === 'direct' && !turn.reaction && turn.continuing === undefined
   // Everything the request needs but the judge's answers: the conversation (read once, after the user's message is
   // translated), its attachments, the page reference and, for a long chat, the summary fitted. It runs beside the
   // judge, whose answers only add lore, episodes and a directive.
@@ -293,7 +295,8 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     const pageMessages: ChatCompletionMessage[] = reference ? [markContextMessage({ role: 'user', content: reference }, 'page')] : []
     const reactionMessages = turn.reaction ? [turn.reaction.result] : []
     const extraTokens = estimateMessagesTokens(profile.id, [...continuation, ...pageMessages, ...reactionMessages]) + generatedImagesTokens(profile.id, generatedImages)
-    if (config.summaryEnabled && !turn.reaction && !inSession) {
+    // Claude and pi sessions fold themselves; a direct chat with one keeps no summary of its own.
+    if (config.summaryEnabled && !turn.reaction && !(sessionRuntime && thread.kind === 'direct')) {
       await whileWaiting(turn, 'summary', fitThreadSummary(thread.id, profile, history, turn.controller.signal, tools, { attachmentTexts, attachedImages, extraTokens }))
     }
     return { history, attachmentTexts, attachedImages, generatedImages, continuation, reference, reactionMessages, extraTokens }
@@ -302,8 +305,8 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
   return streamReply(turn, requester, profile, async (tools, judged) => {
     const { history, attachmentTexts, attachedImages, generatedImages, continuation, reference, reactionMessages, extraTokens } = await prepare(tools)
     if (inSession) {
-      const sessionTurn = await buildClaudeSessionTurn({ requester, threadId: thread.id, profile, history, page: turn.page, withTools: tools.length > 0 })
-      turn.claudeSession = sessionTurn.session
+      const sessionTurn = await buildClaudeSessionTurn({ requester, threadId: thread.id, profile, history, page: turn.page, withTools: tools.length > 0, runtime: sessionRuntime ?? 'claude', judged })
+      turn.engineSession = sessionTurn.session
       turn.contextMeta = { ...sessionTurn.contextMeta, model: resolveProfileModel(profile, 'chat')?.model ?? null }
       return sessionTurn.messages
     }
@@ -435,7 +438,13 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     const offeredTools = visible
     turn.offeredTools = offeredTools
     const built = await buildMessages(offeredTools, withSemanticContext(judged?.context ?? null, semantic))
-    if (turn.claudeSession) target.claudeSession = turn.claudeSession
+    if (turn.engineSession?.runtime === 'pi') {
+      // The same connection and model, run by pi, which folds its session at the context the server runs with.
+      target.transport = 'pi'
+      target.piSession = turn.engineSession
+      target.contextWindow = await serverContextLimit(target)
+      target.piVision = profile.visionEnabled
+    } else if (turn.engineSession) target.claudeSession = turn.engineSession
     const directive = judgeDirectiveText(judged, withheld)
     const messages = directive ? appendUserDirective(built, directive, 'judge') : built
     const offeredNames = new Set([...offeredTools.map((tool) => tool.function.name), ...catalogued])
@@ -443,14 +452,27 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     if (judged && turn.contextMeta) turn.contextMeta.judge = judged.diagnostics
     let previousRound: TextSpan | null = null
     const replyCap = target.generation.maxTokens
+    // Where this reply's tool rounds begin in `messages` (fitting may drop conversation before them).
+    let turnStart = messages.length
+    let wrapUp = false
     for (let round = 1; ; round += 1) {
       turn.controller.signal.throwIfAborted()
+      let tools = bridge ? offeredTools : []
+      // A request over the limit sheds old turns and cuts tool results first (fitChatContext). When a later round
+      // still does not fit, the reply wraps up with what it did instead of failing; a first round has nothing to tell.
+      try {
+        const fitted = fitChatContext(profile, messages, tools, replyCap, turnStart)
+        turnStart = fitted.length - (messages.length - turnStart)
+        if (fitted !== messages) messages.splice(0, messages.length, ...fitted)
+      } catch (error) {
+        if (round === 1) throw error
+        const last = wrapUpRequest(profile, messages, tools, replyCap, turnStart)
+        messages.splice(0, messages.length, ...last.messages)
+        tools = last.tools
+        wrapUp = true
+      }
       // The last round keeps the same tool list (and so the cached prompt) and tells the model to answer in text.
-      const lastRound = round > profile.maxToolRounds
-      const tools = bridge ? offeredTools : []
-      // A tool result that tips the request over the limit is cut shorter first; only then does the reply fail.
-      const fitted = fitChatContext(profile, messages, tools, replyCap)
-      if (fitted !== messages) messages.splice(0, messages.length, ...fitted)
+      const lastRound = wrapUp || round > profile.maxToolRounds
       // The cap goes out cut to the room this round's prompt leaves.
       target.generation = { ...target.generation, maxTokens: replyCapFor(profile, messages, tools, replyCap) }
       const rawEstimate = round === 1 ? rawMessagesEstimate(messages, tools) : 0
@@ -679,7 +701,7 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
         const last = CodexChatStore.latestMessage(thread.id)
         if (last) judgeAfterReply({ profile, threadId: thread.id, message: last, write: (directive, signal) => writeFollowUp(requester, thread.id, profile.id, directive, signal) })
       }
-      if (reaction) return
+      if (reaction || (sessionRuntimeOf(profile) && thread.kind === 'direct')) return
       summarizeAhead(thread.id, profile, turn.offeredTools).catch((error: unknown) => {
         console.warn('[llm-chat] summary update failed:', error instanceof Error ? error.message : error)
       })
@@ -721,7 +743,7 @@ type HeadlessReplyParams = {
   threadId: number
   profile: ChatProfile
   /** `useSession`: a Claude member's turn continues its own session (see buildClaudeGroupSessionTurn). */
-  buildMessages: (tools: ChatCompletionTool[], onMeta: (meta: ChatContextMeta) => void, judged: JudgedContext | null, useSession: (session: ClaudeChatSession) => void) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>
+  buildMessages: (tools: ChatCompletionTool[], onMeta: (meta: ChatContextMeta) => void, judged: JudgedContext | null, useSession: (session: EngineSession) => void) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>
   /** Overrides of the profile's generation options (the member's or room's reply cap). */
   generation?: Partial<LlmGenerationOptions>
   signal: AbortSignal
@@ -752,7 +774,7 @@ async function runHeadlessReply(params: HeadlessReplyParams, order?: LlmTurn['or
   let status: CodexChatMessageRecord['status'] = 'completed'
   let error: string | null = null
   try {
-    await streamReply(turn, params.requester, params.profile, (tools, judged) => params.buildMessages(tools, (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(params.profile, 'chat')?.model ?? null } }, judged, (session) => { turn.claudeSession = session }), params.generation ?? {})
+    await streamReply(turn, params.requester, params.profile, (tools, judged) => params.buildMessages(tools, (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(params.profile, 'chat')?.model ?? null } }, judged, (session) => { turn.engineSession = session }), params.generation ?? {})
     if (controller.signal.aborted) status = 'interrupted'
   } catch (caught) {
     status = controller.signal.aborted ? 'interrupted' : 'failed'

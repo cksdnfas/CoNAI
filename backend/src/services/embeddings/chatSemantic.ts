@@ -1,4 +1,5 @@
 import { vectorStore } from '../vectors/vectorStore'
+import { getUserSettingsDb, semanticTextHash } from '../../database/userSettingsDb'
 import {
   EMBEDDING_MODEL_KEY,
   embedQueries,
@@ -8,7 +9,7 @@ import {
 import { booksForRequest, keyedLoreEntries } from '../codex-chat/chatLoreContext'
 import type { ChatProfile } from '../codex-chat/chatProfiles'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from '../codex-chat/codexChatStore'
-import { indexLoreNow, indexSegmentsNow, loreEntryDocument, loreEntryEmbeddable, loreEntryVectorKey } from './semanticIndex'
+import { indexLoreNow, indexSegmentsNow, indexMessagesNow, loreEntryDocument, loreEntryEmbeddable, loreEntryVectorKey } from './semanticIndex'
 import { SEMANTIC_SPACES, standouts } from './rankFusion'
 
 /**
@@ -30,6 +31,8 @@ export type SemanticContext = {
   loreScores: ReadonlyMap<string, number>
   /** Lore entries meaning brings in (when the judge does not decide lore). */
   loreKeys: ReadonlySet<string>
+  /** Session engines have no CoNAI summary: recall a few older, active-path messages instead. */
+  messages?: Array<{ id: number; role: string; text: string }>
 }
 
 /** Recent messages that make the query: the latest exchange, each cut to its last part. */
@@ -73,22 +76,22 @@ export function queryTextsOf(messages: ReadonlyArray<Pick<CodexChatMessageRecord
 /** Closeness per source under the weighted queries (best chunk per source and query). */
 function weightedScores(space: string, queries: Float32Array[], filter: { ownerKeys?: string[]; sourceKeys?: string[] }) {
   const weights = queries.length > 1 ? [1 - LATEST_WEIGHT, LATEST_WEIGHT] : [1]
-  const scores = new Map<string, { score: number; contentHash: string | null }>()
+  const scores = new Map<string, { score: number; contentHash: string | null; spanStart?: number | null }>()
   queries.forEach((query, index) => {
-    for (const [sourceKey, { score, contentHash }] of bestPerSource(vectorStore.search(space, EMBEDDING_MODEL_KEY, query, filter))) {
+    for (const [sourceKey, { score, contentHash, spanStart }] of bestPerSource(vectorStore.search(space, EMBEDDING_MODEL_KEY, query, filter))) {
       const known = scores.get(sourceKey)
-      scores.set(sourceKey, { score: (known?.score ?? 0) + weights[index] * score, contentHash })
+      scores.set(sourceKey, { score: (known?.score ?? 0) + weights[index] * score, contentHash, spanStart })
     }
   })
   return scores
 }
 
 /** Best chunk score per source, from search hits (several chunks of one source each come back). */
-function bestPerSource(hits: Array<{ sourceKey: string; score: number; contentHash: string | null }>) {
-  const best = new Map<string, { score: number; contentHash: string | null }>()
+function bestPerSource(hits: Array<{ sourceKey: string; score: number; contentHash: string | null; spanStart?: number | null }>) {
+  const best = new Map<string, { score: number; contentHash: string | null; spanStart?: number | null }>()
   for (const hit of hits) {
     const known = best.get(hit.sourceKey)
-    if (!known || hit.score > known.score) best.set(hit.sourceKey, { score: hit.score, contentHash: hit.contentHash })
+    if (!known || hit.score > known.score) best.set(hit.sourceKey, { score: hit.score, contentHash: hit.contentHash, spanStart: hit.spanStart })
   }
   return best
 }
@@ -101,6 +104,7 @@ export async function semanticContextFor(params: {
   judgeDecidesLore: boolean
 }): Promise<SemanticContext | null> {
   const recallOn = embeddingFeatureOn('chatRecall')
+  const session = params.profile.engine === 'codex' || params.profile.engine === 'claude' || params.profile.llmRuntime === 'pi'
   const loreOn = embeddingFeatureOn('lorebook')
   if (!recallOn && !loreOn) return null
   const texts = queryTextsOf(params.messages)
@@ -115,13 +119,18 @@ export async function semanticContextFor(params: {
     // them first); they serve the next reply.
     if (loreOn && entries.length) void indexLoreNow(new Set(entries.map((item) => item.bookId!)), LORE_INDEX_NOW).catch(() => undefined)
     if (recallOn) void indexSegmentsNow(params.thread.id, SEGMENTS_INDEX_NOW).catch(() => undefined)
+    if (recallOn && session) void indexMessagesNow([params.thread.id], SEGMENTS_INDEX_NOW).catch(() => undefined)
   }
   const queries = await pendingQueries
   if (!queries) return null
 
   const recallScores = new Map<number, number>()
   if (recallOn) {
-    for (const [sourceKey, { score }] of weightedScores(SEMANTIC_SPACES.recall, queries, { ownerKeys: [`thread:${params.thread.id}`] })) recallScores.set(Number(sourceKey), score)
+    const current = getUserSettingsDb().prepare('SELECT id, semantic_text_hash(content) AS hash FROM chat_summary_segments WHERE thread_id = ? AND level = 0').all(params.thread.id) as Array<{ id: number; hash: string }>
+    const hashes = new Map(current.map(row => [String(row.id), row.hash]))
+    for (const [sourceKey, { score, contentHash }] of weightedScores(SEMANTIC_SPACES.recall, queries, { ownerKeys: [`thread:${params.thread.id}`] })) {
+      if (hashes.get(sourceKey) === contentHash) recallScores.set(Number(sourceKey), score)
+    }
   }
 
   const loreScores = new Map<string, number>()
@@ -143,7 +152,29 @@ export async function semanticContextFor(params: {
       loreKeys.add(key)
     }
   }
-  return { recall, recallScores, loreScores, loreKeys }
+  const messages: NonNullable<SemanticContext['messages']> = []
+  if (recallOn && session) {
+    // Intersect stored vectors with the active conversation; never resurrect deleted or alternate-branch messages.
+    const eligible = new Map(params.messages.slice(0, -4).filter(message => message.role === 'user' || message.role === 'assistant').map(message => [String(message.id), message]))
+    const scores = new Map<string, number>()
+    const starts = new Map<string, number>()
+    for (const [key, hit] of weightedScores(SEMANTIC_SPACES.message, queries, { ownerKeys: [`thread:${params.thread.id}`], sourceKeys: [...eligible.keys()] })) {
+      const message = eligible.get(key)
+      if (message) {
+        const fingerprint = semanticTextHash(message.content)
+        if (hit.contentHash === fingerprint) {
+          scores.set(key, hit.score)
+          starts.set(key, hit.spanStart ?? 0)
+        }
+      }
+    }
+    for (const [key] of standouts(scores, RECALL_MIN_SCORE, RECALL_MIN_LEAD).slice(0, 2)) {
+      const message = eligible.get(key)!
+      const start = starts.get(key) ?? 0
+      messages.push({ id: message.id, role: message.role, text: message.content.slice(start, start + 1200) })
+    }
+  }
+  return { recall, recallScores, loreScores, loreKeys, messages }
 }
 
 /** Lore entries worth asking the judge about by meaning: a small lead over the rest is enough, the judge reads them. */

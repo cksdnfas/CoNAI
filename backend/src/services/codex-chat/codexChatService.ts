@@ -53,7 +53,7 @@ import { ChatSummaryStore } from './chatMemory'
 import { branchChatThread } from './chatBranch'
 import { addChatGreeting } from './chatGreeting'
 import { deleteClaudeMemberSession, deleteClaudeSessions, isClaudeSessionValue } from './claudeChatSessions'
-import { codexHistoryRecap, codexInputMeta, nextLoreSent, pendingAuthorNote, pendingBlockState, pendingLore, pendingRejectedLore, pendingReplyGuidance, pendingUserPersona, readLoreSent } from './chatSessionMemory'
+import { codexHistoryRecap, codexInputMeta, nextLoreSent, pendingAuthorNote, pendingBlockState, prepareSessionLore, pendingRejectedLore, pendingReplyGuidance, pendingUserPersona, readLoreSent } from './chatSessionMemory'
 import { logger } from '../../utils/logger'
 import { externalMcpToolsSignature } from '../externalMcp/externalMcpServers'
 import type { ChatStreamEvent } from '@conai/shared'
@@ -64,18 +64,6 @@ const COMPACT_TIMEOUT_MS = 5 * 60 * 1000
 const CLI_PROBE_TIMEOUT_MS = 20 * 1000
 const MCP_SERVER_NAME = 'conai'
 const MCP_TOKEN_ENV = 'CONAI_CHAT_MCP_TOKEN'
-
-/**
- * Codex keeps a chat's whole memory and re-reads it on every model request, so it folds that memory once a request's
- * input reaches this many tokens (profile `contextTokens`). Its fixed prompt and the CoNAI tools alone take ~25k, so a
- * lower limit would fold on every turn.
- */
-export const CODEX_COMPACT_TOKENS = { default: 64_000, min: 48_000 } as const
-
-export function codexCompactLimit(profile: Pick<ChatProfile, 'contextTokens'>) {
-  return Math.max(CODEX_COMPACT_TOKENS.min, profile.contextTokens ?? CODEX_COMPACT_TOKENS.default)
-}
-
 
 function developerInstructions(presetMode: boolean) {
   return [
@@ -139,8 +127,8 @@ type Session = {
   configModel: string | null
   configEffort: CodexReasoningEffort | null
   catalog: Awaited<ReturnType<typeof getCodexModelSuggestions>>
-  /** Codex threads loaded in this process, with the compaction limit they were loaded with. */
-  loadedThreads: Map<string, number>
+  /** Codex threads loaded in this process. */
+  loadedThreads: Set<string>
   activeTurns: Map<string, TurnState>
   /** Manual compactions waiting for Codex to finish, by Codex thread id. */
   compactions: Map<string, { resolve: () => void; reject: (error: Error) => void }>
@@ -272,7 +260,7 @@ function threadOverrides(session: Session, profile: ChatProfile) {
   const { model, effort } = resolveCodexRun(session, profile)
   return {
     model,
-    config: { ...(effort ? { model_reasoning_effort: effort } : {}), model_auto_compact_token_limit: codexCompactLimit(profile) },
+    config: effort ? { model_reasoning_effort: effort } : {},
     baseInstructions: '',
     cwd: session.runtime.cwd,
     approvalPolicy: 'never',
@@ -566,7 +554,7 @@ async function startSession(requester: McpRequester, scopes: ChatScope[], toolAl
     configModel,
     configEffort,
     catalog,
-    loadedThreads: new Map(),
+    loadedThreads: new Set(),
     activeTurns: new Map(),
     compactions: new Map(),
     idleTimer: null,
@@ -634,20 +622,14 @@ function requireThread(requester: McpRequester, threadId: number) {
  */
 async function ensureCodexThread(session: Session, codexThreadId: string | null, profile: ChatProfile, saveNew: (codexThreadId: string) => void) {
   await verifyChatRuntime(session.client, session.features, session.runtime.cwd, process.env.PORT || String(PORTS.BACKEND_DEFAULT), false)
-  const compactLimit = codexCompactLimit(profile)
-  if (codexThreadId && session.loadedThreads.get(codexThreadId) === compactLimit) {
+  if (codexThreadId && session.loadedThreads.has(codexThreadId)) {
     return codexThreadId
   }
 
   if (codexThreadId) {
-    // A loaded thread keeps the config it was loaded with; unload it so the new compaction limit applies.
-    if (session.loadedThreads.has(codexThreadId)) {
-      await session.client.request('thread/unsubscribe', { threadId: codexThreadId }, THREAD_REQUEST_TIMEOUT_MS).catch(() => undefined)
-      session.loadedThreads.delete(codexThreadId)
-    }
     try {
       await session.client.request('thread/resume', { threadId: codexThreadId, ...threadOverrides(session, profile) }, THREAD_REQUEST_TIMEOUT_MS)
-      session.loadedThreads.set(codexThreadId, compactLimit)
+      session.loadedThreads.add(codexThreadId)
       return codexThreadId
     } catch {
       // Rollout missing (CODEX_HOME reset, other account): continue in a new Codex thread.
@@ -659,7 +641,7 @@ async function ensureCodexThread(session: Session, codexThreadId: string | null,
     serviceName: 'conai',
   }, THREAD_REQUEST_TIMEOUT_MS)
   saveNew(started.thread.id)
-  session.loadedThreads.set(started.thread.id, compactLimit)
+  session.loadedThreads.add(started.thread.id)
   return started.thread.id
 }
 
@@ -758,7 +740,7 @@ export async function runCodexGroupReply(params: {
         const room = CodexChatStore.findThreadById(threadId) ?? null
         const user = userPersonaForThread(room)
         const persona = pendingUserPersona(user, sent)
-        const lore = pendingLore(room, profile, params.messages, sent, user)
+        const lore = await prepareSessionLore(room, profile, params.messages, sent, user)
         const note = pendingAuthorNote(room, profile, sent, user)
         const state = pendingBlockState(room, profile, params.messages, sent, profile.id)
         const rejected = pendingRejectedLore(threadId, profile, sent)
@@ -864,7 +846,7 @@ export async function runCodexOrderTurn(params: {
         const user = userPersonaForThread(thread)
         // A fresh Codex thread holds nothing yet: persona, lore, note and state all go in.
         const none = new Set<string>()
-        const lore = pendingLore(thread, profile, params.window, none, user)
+        const lore = await prepareSessionLore(thread, profile, params.window, none, user)
         const reference = referenceBlock([pendingUserPersona(user, none).text, lore.index.text, lore.keyed, pendingAuthorNote(thread, profile, none, user).text,
           pendingBlockState(thread, profile, params.window, none, thread?.kind === 'group' ? profile.id : undefined).text])
         assertChatAvailable(requester)
@@ -1097,7 +1079,6 @@ export const CodexChatService = {
       pendingJobs,
       blocks,
       ...page,
-      codexCompactTokens: profile ? codexCompactLimit(profile) : CODEX_COMPACT_TOKENS.default,
       running: CodexChatService.getRunning(requester, threadId),
     }
   },
@@ -1234,7 +1215,7 @@ export const CodexChatService = {
         const user = userPersonaForThread(current)
         const history = CodexChatStore.listMessages(threadId)
         const persona = pendingUserPersona(user, sent)
-        const lore = pendingLore(current, profile, history, sent, user)
+        const lore = await prepareSessionLore(current, profile, history, sent, user)
         const note = pendingAuthorNote(current, profile, sent, user)
         const state = pendingBlockState(current, profile, history, sent)
         const rejected = pendingRejectedLore(threadId, profile, sent)

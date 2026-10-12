@@ -36,6 +36,19 @@ export interface StoredFileText {
   offset: number;
   nextOffset: number | null;
   size: number;
+  /** PDF/XLSX offsets address the extracted UTF-8 text, not the binary file. */
+  extracted?: boolean;
+  extractionState?: string;
+  note?: string | null;
+  revision?: string;
+}
+
+/** Pass these fields to read_file_text/linked_read to open the matching passage safely. */
+export interface FileSearchReference {
+  source: 'extracted';
+  offset: number;
+  limit: number;
+  revision: string;
 }
 
 /**
@@ -73,6 +86,22 @@ export interface StoredFileSearchHit {
   path: string;
   /** A short excerpt around the first term found in the text, or null when only the name matched. */
   snippet: string | null;
+  location?: string | null;
+  extractionState?: string;
+  extractionNote?: string | null;
+  read?: FileSearchReference;
+}
+
+export interface FileSearchStatus {
+  mode: 'keyword' | 'hybrid';
+  semantic: 'not_requested' | 'disabled' | 'unavailable' | 'not_indexed' | 'partial' | 'ready';
+  indexedFiles: number;
+  searchableFiles: number;
+  partialDocuments: number;
+  failedDocuments: number;
+  unsupportedFiles: number;
+  pendingDocuments: number;
+  keywordTermsLimited?: boolean;
 }
 
 export interface StoredFileSearchResult {
@@ -81,6 +110,7 @@ export interface StoredFileSearchResult {
   hits: StoredFileSearchHit[];
   /** More hits exist than were returned. */
   truncated: boolean;
+  search?: FileSearchStatus;
 }
 
 /** Server folders administrators can browse next to the file store. Only the RecycleBin can be changed. */

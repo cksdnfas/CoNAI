@@ -81,3 +81,6 @@ export function formatFileSize(bytes: number) {
   if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`
 }
+
+/** Retry derived content extraction without modifying the original file. */
+export const retryStoredFileIndex = (id: string, owner?: StoredFileOwnerKey) => requestApiData<{ fileId: string }>(`/api/files/${id}/reindex${ownerQuery(owner)}`, { method: 'POST' })

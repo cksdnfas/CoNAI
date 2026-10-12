@@ -2,7 +2,7 @@ import { summaryGenerationOptions, thinkingIsOff } from '../llmGenerationOptions
 import { loadChatSettings } from './chatSettings'
 import { resolveChatAccess } from './codexChatAccess'
 import { modelLanguageGuidance, replyTranslationPrompt, userTranslationPrompt } from './chatTranslation'
-import { contextContentText, contextHash, contextSections, contextSource, limitContextMeta, loreDiagnostics, markContextMessage, markContextParts, contextPartsOf, type ChatDiagnosticsFields, type ChatContextSectionKind, type ContextSource } from './chatContextDiagnostics'
+import { contextContentText, contextHash, contextSections, contextSource, limitContextMeta, loreDiagnostics, markContextMessage, markContextParts, contextKindOf, contextPartsOf, type ChatDiagnosticsFields, type ChatContextSectionKind, type ContextSource } from './chatContextDiagnostics'
 import { buildReplyContext } from './chatReplyContext'
 import { isCodexChatCreationTool, stripEchoedAddresses } from '@conai/shared'
 import { messageAddress, REPLY_GUIDANCE } from './chatReplies'
@@ -716,30 +716,123 @@ export function cutToolOutput(content: string, length: number) {
 }
 
 /**
- * `messages` when they fit (assertChatContextFits); otherwise a copy with the tool results cut shorter, tried at
- * FIT_TOOL_OUTPUT_LENGTHS — a large tool result (a long file, a history dump) is what usually tips a tool round over
- * the limit. Throws the overflow error of the shortest cut tried (its estimate) when even that does not fit.
+ * `messages` with the tool results in [from, until) cut to `length`. `open_tools` results stay whole unless
+ * `catalog`: they are the schemas the model calls the catalog's tools by.
  */
-export function fitChatContext(profile: ChatProfile, messages: ChatCompletionMessage[], tools: ChatCompletionTool[], maxTokens: number | null | undefined): ChatCompletionMessage[] {
-  try {
-    assertChatContextFits(profile, messages, tools, maxTokens)
-    return messages
-  } catch (error) {
-    let last = error
-    const catalogCalls = new Set(messages.flatMap((message) => message.role === 'assistant'
-      ? (message.tool_calls ?? []).filter((call) => call.function.name === CATALOG_OPEN_TOOL).map((call) => call.id) : []))
-    for (const length of FIT_TOOL_OUTPUT_LENGTHS) {
-      const cut = messages.map((message) => (message.role === 'tool' && !catalogCalls.has(message.tool_call_id) && message.content.length > length ? { ...message, content: cutToolOutput(message.content, length) } : message))
-      if (cut.every((message, index) => message === messages[index])) continue
-      try {
-        assertChatContextFits(profile, cut, tools, maxTokens)
-        return cut
-      } catch (cutError) {
-        // Try a shorter cut; report the shortest one's estimate.
-        last = cutError
-      }
+function cutToolResults(messages: ChatCompletionMessage[], length: number, from = 0, until = messages.length, catalog = false): ChatCompletionMessage[] {
+  const catalogCalls = catalog ? new Set<string>() : new Set(messages.flatMap((message) => message.role === 'assistant'
+    ? (message.tool_calls ?? []).filter((call) => call.function.name === CATALOG_OPEN_TOOL).map((call) => call.id) : []))
+  const cut = messages.map((message, index) => (index >= from && index < until && message.role === 'tool' && !catalogCalls.has(message.tool_call_id) && message.content.length > length
+    ? { ...message, content: cutToolOutput(message.content, length) } : message))
+  return cut.every((message, index) => message === messages[index]) ? messages : cut
+}
+
+/**
+ * The conversation turns before the message being answered, oldest first, as indices of `messages` (the leading
+ * system message and the example dialogue are not conversation). `turnStart`: where this reply's tool rounds begin.
+ */
+function earlierTurns(messages: ChatCompletionMessage[], turnStart: number) {
+  const answered = messages.slice(0, turnStart).map((message) => message.role).lastIndexOf('user')
+  const turns: number[][] = []
+  for (let index = 0; index < answered; index += 1) {
+    const message = messages[index]
+    if (message.role === 'system' || contextKindOf(message) === 'example') continue
+    if (message.role === 'user' || turns.length === 0) turns.push([index])
+    else turns[turns.length - 1].push(index)
+  }
+  return turns
+}
+
+/**
+ * `messages` without the oldest conversation turn (null when none is left). Reference blocks merged into its user
+ * message (lore, the author's note, state, recall: see insertAtDepth) move to the next user message.
+ */
+function dropOldestTurn(messages: ChatCompletionMessage[], turnStart: number): ChatCompletionMessage[] | null {
+  const [oldest] = earlierTurns(messages, turnStart)
+  if (!oldest) return null
+  const dropped = new Set(oldest)
+  const carried = oldest.flatMap((index) => contextPartsOf(messages[index]).filter((part) => part.kind === 'reference').map((part) => part.text)).join('\n\n')
+  const next = messages.findIndex((message, index) => index > oldest[oldest.length - 1] && message.role === 'user')
+  return messages.flatMap((message, index) => {
+    if (dropped.has(index)) return []
+    if (index !== next || !carried || message.role !== 'user') return [message]
+    return [markContextParts({ ...message, content: prefixUserContent(message.content, carried) }, [
+      { kind: 'reference', text: carried },
+      ...(contextPartsOf(message).length ? contextPartsOf(message) : [{ kind: 'window' as const, text: contextContentText(message.content) }]),
+    ])]
+  })
+}
+
+/** Where the latest tool round of this reply begins (its assistant message), or `turnStart` before any round. */
+function latestRoundStart(messages: ChatCompletionMessage[], turnStart: number) {
+  return Math.max(turnStart, messages.map((message) => message.role).lastIndexOf('assistant'))
+}
+
+/**
+ * `messages` when they fit (assertChatContextFits); otherwise a copy made smaller until it does. With `turnStart`
+ * (where this reply's tool rounds begin), the request sheds what matters least to the work in progress first: the
+ * earlier rounds' results are cut to REPLAYED_TOOL_OUTPUT_LENGTH, then the oldest conversation turns go one by one,
+ * then the earlier rounds' results shrink to a short note — the latest round stays whole. Last, every tool result is
+ * cut at FIT_TOOL_OUTPUT_LENGTHS: a large tool result (a long file, a history dump) is what usually tips a tool round
+ * over the limit. Throws the overflow error of the smallest request tried (its estimate) when even that does not fit.
+ */
+export function fitChatContext(profile: ChatProfile, messages: ChatCompletionMessage[], tools: ChatCompletionTool[], maxTokens: number | null | undefined, turnStart?: number): ChatCompletionMessage[] {
+  let last: unknown = null
+  const fits = (candidate: ChatCompletionMessage[]) => {
+    try {
+      assertChatContextFits(profile, candidate, tools, maxTokens)
+      return true
+    } catch (error) {
+      last = error
+      return false
     }
-    throw last
+  }
+  if (fits(messages)) return messages
+  let current = messages
+  if (turnStart !== undefined) {
+    // Steps only ever remove conversation before the rounds, so the rounds are always the last `rounds` messages.
+    const rounds = messages.length - turnStart
+    const startOf = (candidate: ChatCompletionMessage[]) => candidate.length - rounds
+    const shrinkEarlierRounds = (candidate: ChatCompletionMessage[], length: number) => cutToolResults(candidate, length, startOf(candidate), latestRoundStart(candidate, startOf(candidate)))
+    current = shrinkEarlierRounds(current, REPLAYED_TOOL_OUTPUT_LENGTH)
+    if (current !== messages && fits(current)) return current
+    for (let next = dropOldestTurn(current, startOf(current)); next; next = dropOldestTurn(current, startOf(current))) {
+      current = next
+      if (fits(current)) return current
+    }
+    const noted = shrinkEarlierRounds(current, SUMMARY_TOOL_NOTE_LENGTH)
+    if (noted !== current && fits(noted)) return noted
+    current = noted
+  }
+  for (const length of FIT_TOOL_OUTPUT_LENGTHS) {
+    const cut = cutToolResults(current, length)
+    if (cut === current) continue
+    current = cut
+    if (fits(current)) return current
+  }
+  throw last
+}
+
+/** Told to the model when not even a cut request leaves room for another tool round. */
+const CONTEXT_FULL_DIRECTIVE = 'The context is full: no further tool call fits. Do not call tools. Reply now, in the language of the conversation: what you did and found so far, and what is left to do, so the user can tell you to continue.'
+
+/**
+ * The last request of a reply whose tool rounds no longer fit (fitChatContext threw): the conversation before the
+ * message being answered goes, this reply's tool results shrink to a short note each, and the model is told to wrap
+ * up instead of the reply failing. The tool definitions go too when they alone tip it over. Throws the overflow
+ * error when even that does not fit.
+ */
+export function wrapUpRequest(profile: ChatProfile, messages: ChatCompletionMessage[], tools: ChatCompletionTool[], maxTokens: number | null | undefined, turnStart: number) {
+  const rounds = messages.length - turnStart
+  let current = messages
+  for (let next = dropOldestTurn(current, current.length - rounds); next; next = dropOldestTurn(current, current.length - rounds)) current = next
+  const request = [...cutToolResults(current, SUMMARY_TOOL_NOTE_LENGTH, current.length - rounds, current.length, true), markContextMessage({ role: 'user', content: CONTEXT_FULL_DIRECTIVE }, 'last-instruction')]
+  try {
+    assertChatContextFits(profile, request, tools, maxTokens)
+    return { messages: request, tools }
+  } catch {
+    assertChatContextFits(profile, request, [], maxTokens)
+    return { messages: request, tools: [] }
   }
 }
 

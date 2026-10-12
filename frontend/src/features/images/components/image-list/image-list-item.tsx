@@ -1,5 +1,4 @@
 import { memo, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useState } from 'react'
-import { Checkbox } from '@/components/ui/checkbox'
 import { HistoryAudioResult, HistorySoundBar } from '@/features/audio/history-audio-result'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
@@ -28,10 +27,8 @@ interface ImageListItemProps {
   gridItemAspectRatio?: string
   itemId?: string
   onActivate?: (image: ImageRecord, itemId: string, href?: string, modifiers?: ImageListActivateModifiers) => void
-  /** Show the selection checkbox (on hover/focus, or always when `alwaysShowSelectionControl`). */
+  /** Space toggles selection through `onToggleSelect`. */
   selectable?: boolean
-  /** Keep the checkbox visible: selection mode is on or the device has no hover. */
-  alwaysShowSelectionControl?: boolean
   onToggleSelect?: (image: ImageRecord, itemId: string, modifiers?: ImageListActivateModifiers) => void
   renderOverlay?: ReactNode
   renderPersistentOverlay?: ReactNode
@@ -65,7 +62,6 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   itemId,
   onActivate,
   selectable = false,
-  alwaysShowSelectionControl = false,
   onToggleSelect,
   renderOverlay,
   renderPersistentOverlay,
@@ -172,30 +168,6 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
     onActivate?.(image, imageId, href, { shiftKey: event.shiftKey })
   }
 
-  // Mount lazily like the quick actions so idle desktop cells skip the Radix checkbox entirely.
-  const selectionControl = selectable && onToggleSelect && (alwaysShowSelectionControl || hasRevealedQuickActions) ? (
-    <div
-      className={cn(
-        'absolute left-2 top-2 z-30 transition-opacity duration-150',
-        alwaysShowSelectionControl ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 pointer-coarse:opacity-100',
-      )}
-      data-no-select-drag="true"
-      onMouseDown={(event) => event.stopPropagation()}
-    >
-      <Checkbox
-        checked={selected}
-        tabIndex={-1}
-        aria-label={t({ ko: '{name} 선택', en: 'Select {name}' }, { name: displayName })}
-        className="relative size-5 rounded-[5px] border-white/85 bg-backdrop/60 shadow-elevation-1 backdrop-blur-sm before:absolute before:-inset-2.5 before:content-[''] hover:border-white data-[state=checked]:border-primary"
-        onClick={(event) => {
-          event.stopPropagation()
-          event.preventDefault()
-          onToggleSelect(image, imageId, { shiftKey: event.shiftKey })
-        }}
-      />
-    </div>
-  ) : null
-
   const quickActions = showDefaultQuickActions && !selectionMode ? (
     <div
       className="absolute right-2 top-2 z-30 flex items-center gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100"
@@ -247,7 +219,6 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       </div>
       {renderPersistentOverlay || soundBar ? <div className="image-list-persistent-overlay absolute inset-x-0 bottom-0 z-30 space-y-1 p-2">{soundBar}{renderPersistentOverlay}</div> : null}
       {quickActions}
-      {selectionControl}
       <div className="image-list-selection-frame pointer-events-none absolute inset-0 z-20 rounded-sm" />
     </div>
   )

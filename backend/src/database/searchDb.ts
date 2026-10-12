@@ -25,7 +25,16 @@ function ensureSearchSchema(db: Database.Database): void {
       PRIMARY KEY (source, source_id)
     );
     CREATE INDEX IF NOT EXISTS search_db.idx_search_documents_owner ON search_documents(source, owner_key);
+    CREATE TABLE IF NOT EXISTS search_db.document_chunks (
+      source TEXT NOT NULL, source_id TEXT NOT NULL, chunk INTEGER NOT NULL, body BLOB NOT NULL,
+      PRIMARY KEY (source, source_id, chunk),
+      FOREIGN KEY (source, source_id) REFERENCES search_documents(source, source_id) ON DELETE CASCADE
+    );
   `);
+  const columns = new Set((db.prepare('PRAGMA search_db.table_info(search_documents)').all() as Array<{ name: string }>).map(row => row.name));
+  for (const [name, definition] of Object.entries({ extraction_state: "TEXT NOT NULL DEFAULT 'ready'", extraction_note: 'TEXT', sections: "TEXT NOT NULL DEFAULT '[]'", content_hash: "TEXT NOT NULL DEFAULT ''", body_bytes: 'INTEGER NOT NULL DEFAULT 0', retry_count: 'INTEGER NOT NULL DEFAULT 0', retry_after: 'INTEGER', retryable: 'INTEGER NOT NULL DEFAULT 0', last_attempt: 'INTEGER' })) {
+    if (!columns.has(name)) db.exec(`ALTER TABLE search_db.search_documents ADD COLUMN ${name} ${definition}`);
+  }
 }
 
 export function attachSearchDatabase(db: Database.Database): void {

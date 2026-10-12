@@ -5,7 +5,6 @@ import { cn } from '@/lib/utils'
 import { useImageViewModal, type ImageViewSequenceTotal } from '@/features/images/components/detail/image-view-modal-context'
 import { prepareImageSourceState } from '@/features/images/image-source-navigation'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
-import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import type { ImageRecord } from '@/types/image'
 const ImageListGridLazy = lazy(async () => {
   const module = await import('./image-list-grid')
@@ -94,9 +93,7 @@ export function ImageList({
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null)
   const [isDraggingSelection, setIsDraggingSelection] = useState(false)
   const selectionMode = selectable && (forceSelectionMode || selectedIds.length > 0)
-  const isCoarsePointer = useIsCoarsePointer()
   const canSelect = selectable && Boolean(onSelectedIdsChange)
-  const alwaysShowSelectionControl = selectionMode || isCoarsePointer
   // Anchor for Shift+click ranges: the last tile toggled on its own.
   const selectionAnchorIdRef = useRef<string | null>(null)
   const itemIds = useMemo(() => items.map((item) => resolveImageListItemId(item, getItemId)), [getItemId, items])
@@ -378,7 +375,6 @@ export function ImageList({
               getItemHref={getItemHref}
               onActivate={handleActivate}
               selectable={canSelect}
-              alwaysShowSelectionControl={alwaysShowSelectionControl}
               onToggleSelect={handleToggleSelect}
               scrollMode={scrollMode}
               viewportHeight={viewportHeight}
@@ -403,7 +399,6 @@ export function ImageList({
               getItemHref={getItemHref}
               onActivate={handleActivate}
               selectable={canSelect}
-              alwaysShowSelectionControl={alwaysShowSelectionControl}
               onToggleSelect={handleToggleSelect}
               scrollMode={scrollMode}
               viewportHeight={viewportHeight}

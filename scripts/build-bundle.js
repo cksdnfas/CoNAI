@@ -50,7 +50,9 @@ build({
     'canvas',
     'ffmpeg-static',
     'ffprobe-static',
-    'argon2'
+    'argon2',
+    'pdfjs-dist',
+    'read-excel-file'
   ],
   minify: false,  // Disabled for better error messages
   sourcemap: true,

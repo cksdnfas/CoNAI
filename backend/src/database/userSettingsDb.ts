@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { createHash } from 'crypto';
 import { attachMainImagesDatabase, ensureApiGenerationHistoryTable, USER_DB_PATH } from './userSettingsBootstrap';
 import { attachSearchDatabase } from './searchDb';
 import { attachVectorDatabase } from './vectorDb';
@@ -9,6 +10,11 @@ import { createUserSettingsSchema } from './userSettingsSchema';
 import { configureSqliteConnection } from './sqlitePragmas';
 
 export let userSettingsDb: Database.Database;
+
+/** Shared by SQL index scans and the in-memory recall filter; includes every character. */
+export function semanticTextHash(text: string): string {
+  return `sha256:${createHash('sha256').update(text).digest('hex')}`;
+}
 
 
 /**
@@ -24,6 +30,7 @@ export function initializeUserSettingsDb(): void {
 
     const isNewDatabase = !fs.existsSync(USER_DB_PATH);
     userSettingsDb = new Database(USER_DB_PATH);
+    userSettingsDb.function('semantic_text_hash', { deterministic: true }, value => semanticTextHash(String(value ?? '')));
     configureSqliteConnection(userSettingsDb, { label: 'user.db' });
 
     if (isNewDatabase) {

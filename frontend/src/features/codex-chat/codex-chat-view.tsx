@@ -1305,7 +1305,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     body = <Suspense fallback={null}>{isGroup
       ? <GroupContextView thread={thread} group={group} profilesById={profilesById} segments={threadQuery.data?.summarySegments ?? []} />
       : isCodexThread
-        ? <CodexEngineContextView thread={thread} profiles={loreProfiles} compactTokens={threadQuery.data?.codexCompactTokens ?? null} noteDefaults={noteDefaults} />
+        ? <CodexEngineContextView thread={thread} profiles={loreProfiles} noteDefaults={noteDefaults} />
         : <CodexChatContextView thread={thread} profiles={loreProfiles} segments={threadQuery.data?.summarySegments ?? []} profileTurns={profile?.contextTurns ?? null} profileMaxTokens={profile?.maxTokens ?? null} profileReasoningBudget={profile?.reasoningBudgetTokens ?? null} profileSummaryEnabled={profile?.summaryEnabled ?? null} noteDefaults={noteDefaults} />}</Suspense>
   } else {
     body = chatBody

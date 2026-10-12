@@ -262,6 +262,13 @@ if (argon2Source && fs.existsSync(argon2Source)) {
   console.warn(`   ⚠️  argon2 not found - NovelAI authentication will not work`);
 }
 
+for (const moduleName of ['pdfjs-dist', 'read-excel-file', '@napi-rs/canvas']) collectAllDependencies(moduleName, allDependencies);
+const documentCanvasPath = resolveModuleSourcePath('@napi-rs/canvas');
+if (documentCanvasPath) {
+  const optional = fs.readJsonSync(path.join(documentCanvasPath, 'package.json')).optionalDependencies || {};
+  for (const moduleName of Object.keys(optional)) if (resolveModuleSourcePath(moduleName)) collectAllDependencies(moduleName, allDependencies);
+}
+
 // Copy all dependencies
 console.log(`   📦 Copying all dependencies (${allDependencies.size} total)...`);
 let copiedCount = 0;
@@ -414,7 +421,9 @@ const portablePackageJson = {
     "better-sqlite3": "^9.4.0",
     "ffmpeg-static": "^5.2.0",
     "ffprobe-static": "^3.1.0",
-    "argon2": "^0.44.0"
+    "argon2": "^0.44.0",
+    "pdfjs-dist": "6.4.299",
+    "read-excel-file": "9.3.12"
   }
 };
 fs.writeFileSync(

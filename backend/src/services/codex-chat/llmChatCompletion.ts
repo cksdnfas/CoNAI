@@ -6,6 +6,7 @@ import { LlmRequestError } from '../llmRequestRetry'
 import { recordRequestOutcome } from './connectionHealthState'
 import { CLAUDE_CHAT_PROVIDER, streamClaudeChatCompletion, type ClaudeChatSession } from './claudeChatCompletion'
 import type { ChatMcpToolResult } from './chatMcpBridge'
+import { streamPiChatCompletion, type PiChatSession } from './piChatCompletion'
 import { primaryModelOf } from './modelSlots'
 import { createRepetitionWatch, withoutRepetition } from './repetitionGuard'
 import { rawMessagesEstimate, rawTokenEstimate, readUsageCounts, recordLlmUsage, type LlmTokenCounts, type LlmUsageTag } from '../llmUsage'
@@ -39,9 +40,14 @@ export type ChatCompletionTarget = {
   generation: LlmGenerationOptions
   /** Put `cache_control` breakpoints on the stable parts of the request (Anthropic through LiteLLM; off by default). */
   promptCacheMarks: boolean
-  transport?: 'claude-code'
+  /** 'pi': an API LLM chat run through the pi agent (piChatCompletion.ts), on this connection and model. */
+  transport?: 'claude-code' | 'pi'
   /** Claude Code chats that keep their memory: the session this request continues (see ClaudeChatSession). */
   claudeSession?: ClaudeChatSession
+  /** pi chats: the session this request continues, the context window pi folds its memory by, and image input. */
+  piSession?: PiChatSession
+  contextWindow?: number | null
+  piVision?: boolean
   /** How `reasoningEffort: 'none'` reaches the server (the connection's setting; default `reasoning_effort`). */
   thinkingSwitch?: LlmThinkingSwitch
 }
@@ -367,7 +373,8 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
     if (idleTimer) clearTimeout(idleTimer)
     idleTimer = setTimeout(() => controller.abort(new Error('LLM 응답이 너무 오래 멈춰 있어.')), STREAM_IDLE_TIMEOUT_MS)
   }
-  if (params.target.timeoutMs != null) {
+  // A pi run is a whole agent run (many requests and tool calls): pi applies the limit to each request instead.
+  if (params.target.timeoutMs != null && params.target.transport !== 'pi') {
     requestTimer = setTimeout(() => controller.abort(new DOMException(`LLM 요청 제한 시간을 초과했어 (${params.target.timeoutMs}ms).`, 'TimeoutError')), params.target.timeoutMs)
   }
   touch()
@@ -379,6 +386,13 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
       params.onRequestBody?.({ model: params.target.model, messages: params.messages, tools: claudeTools, transport: 'claude-code' }, params.target)
       meter.sent = true
       return await streamClaudeChatCompletion({ ...params, tools: claudeTools, signal, onContent: (text) => { touch(); params.onContent?.(text) }, onReasoning: (text) => { touch(); params.onReasoning?.(text) } })
+    }
+    if (params.target.transport === 'pi') {
+      signal.throwIfAborted()
+      const piTools = params.toolChoice === 'none' ? [] : params.tools ?? []
+      params.onRequestBody?.({ model: params.target.model, messages: params.messages, tools: piTools, transport: 'pi' }, params.target)
+      meter.sent = true
+      return await streamPiChatCompletion({ ...params, tools: piTools, signal, onActivity: touch, onContent: (text) => { touch(); params.onContent?.(text) }, onReasoning: (text) => { touch(); params.onReasoning?.(text) } })
     }
     let streamUsage = true
     let toolChoiceRefused = false

@@ -8,7 +8,7 @@ import { routeChatReply, requireActiveChatReply } from '../../services/codex-cha
 import { ChatGroupStore } from '../../services/codex-chat/chatGroupStore';
 import { resolveMemberName } from '../../services/codex-chat/groupChatContext';
 import { buildReplyContext } from '../../services/codex-chat/chatReplyContext';
-import { connectedThreadIds, HISTORY_SEARCH_LIMIT, searchChatHistory, sharesKnowledge } from '../../services/codex-chat/chatHistorySearch';
+import { type HistorySearchStatus, connectedThreadIds, HISTORY_SEARCH_LIMIT, searchChatHistory, sharesKnowledge } from '../../services/codex-chat/chatHistorySearch';
 import type { McpRequestContext } from '../context';
 
 const MESSAGE_TEXT_LIMIT = 2000;
@@ -121,7 +121,8 @@ function registerRoomTools(server: McpServer, context: McpRequestContext): void 
         const accountId = context.requester?.accountId ?? null;
         const connected = chats === 'connected' ? connectedThreadIds(thread.id, accountId) : [];
         if (chats === 'connected' && connected.length === 0) return textResult({ results: [], note: 'No other chat shares a lorebook or linked folder with this one.' });
-        const hits = await searchChatHistory(chats === 'connected' ? connected : [thread.id], query, limit ?? 10);
+        let searchStatus: HistorySearchStatus | undefined;
+        const hits = await searchChatHistory(chats === 'connected' ? connected : [thread.id], query, limit ?? 10, status => { searchStatus = status; });
         const names = new Map<number, string>();
         const titles = new Map<number, { title: string; user: string }>();
         const chatOf = (id: number) => {
@@ -131,7 +132,7 @@ function registerRoomTools(server: McpServer, context: McpRequestContext): void 
           }
           return titles.get(id)!;
         };
-        return textResult(hits.map((hit) => ({
+        const response = textResult(hits.map((hit) => ({
           ...(chats === 'connected' ? { chat_id: hit.chat_id, chat: chatOf(hit.chat_id).title } : {}),
           id: hit.message_id,
           speaker: speakerName({ ...hit, id: hit.message_id, content: hit.excerpt, created_date: hit.at }, names, chatOf(hit.chat_id).user),
@@ -140,6 +141,8 @@ function registerRoomTools(server: McpServer, context: McpRequestContext): void 
           to: parseMessageRouting(hit.routing)?.recipients,
           reply_to: parseMessageRouting(hit.routing)?.replyTo?.messageId,
         })));
+        response.content.push({ type: 'text', text: JSON.stringify({ search: searchStatus }) });
+        return response;
       } catch (error) {
         return errorResult(error);
       }

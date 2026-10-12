@@ -252,7 +252,8 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
         size="xs"
         fullWidth
         semantics="tabs"
-        className={dense ? 'mb-1' : 'mx-3 mb-1'}
+        // w-auto, not fullWidth's w-full: w-full plus mx-3 is 24px wider than the list and scrolls it sideways.
+        className={cn('mb-1 w-auto', !dense && 'mx-3')}
         value={shownTab}
         onChange={(value) => { setTab(value as 'chats' | 'automation'); clearPicks() }}
         ariaLabel={t({ ko: '채팅 종류', en: 'Chat kind' })}

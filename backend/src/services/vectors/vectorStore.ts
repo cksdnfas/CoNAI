@@ -5,7 +5,7 @@ export type VectorRow = {
   chunk: number
   ownerKey: string | null
   contentHash: string | null
-  /** The chunk's character range in the source text; null for a whole source. */
+  /** Character range for chat text, UTF-8 byte range for file chunks; null for a whole source. */
   spanStart: number | null
   spanEnd: number | null
 }
@@ -118,6 +118,44 @@ function fromBlob(blob: Buffer): Float32Array {
  * 256 dims, 100k rows is a ~100 MB matrix and a few tens of ms per query, which is what this library needs.
  */
 export const vectorStore = {
+  /** Commit one resumable file batch and its cursor together. Old revisions never share chunks. */
+  appendFileBatch(sourceKey: string, modelKey: string, ownerKey: string, revision: string,
+    inputs: VectorInput[], progress: { offset: number; chunk: number; complete: boolean }) {
+    const db = getUserSettingsDb()
+    let reset = false
+    const written: Array<{ row: VectorRow; vector: Float32Array }> = []
+    db.transaction(() => {
+      const known = db.prepare('SELECT revision, model_key FROM vector_db.file_progress WHERE source_key = ?').get(sourceKey) as { revision: string; model_key: string } | undefined
+      reset = known?.revision !== revision || known.model_key !== modelKey
+      if (reset) db.prepare("DELETE FROM vector_db.vectors WHERE space = 'file' AND source_key = ?").run(sourceKey)
+      const insert = db.prepare(`INSERT OR REPLACE INTO vector_db.vectors
+        (space, source_key, chunk, model_key, dim, owner_key, content_hash, span_start, span_end, vector, updated_at)
+        VALUES ('file', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      for (const input of inputs) {
+        const vector = normalizeVector(input.vector)
+        insert.run(sourceKey, input.chunk, modelKey, vector.length, ownerKey, revision, input.start, input.end, toBlob(vector), new Date().toISOString())
+        written.push({ vector, row: { sourceKey, chunk: input.chunk!, ownerKey, contentHash: revision, spanStart: input.start ?? null, spanEnd: input.end ?? null } })
+      }
+      db.prepare(`INSERT OR REPLACE INTO vector_db.file_progress (source_key, revision, model_key, next_offset, next_chunk, complete, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`).run(sourceKey, revision, modelKey, progress.offset, progress.chunk, Number(progress.complete), Date.now())
+    })()
+    // Preserve every other document's loaded vectors. Replace only retried chunks of this source.
+    for (const [key, cache] of spaceCaches('file')) {
+      if (reset) dropSource(cache, sourceKey)
+      if (cache.modelKey === modelKey) {
+        if (written.some(({ vector }) => vector.length !== cache.dim)) { caches.delete(key); continue }
+        const chunks = new Set(written.map(({ row }) => row.chunk))
+        const keep: number[] = []
+        for (const slot of cache.bySource.get(sourceKey) ?? []) {
+          if (chunks.has(cache.rows[slot]!.chunk)) { cache.rows[slot] = null; cache.dead++ }
+          else keep.push(slot)
+        }
+        cache.bySource.set(sourceKey, keep)
+        for (const { row, vector } of written) appendRow(cache, row, vector)
+      }
+      compact(cache)
+    }
+  },
   /** Replace every chunk of one source with the given vectors (an empty list just deletes). */
   replace(space: string, sourceKey: string, modelKey: string, inputs: VectorInput[]) {
     const db = getUserSettingsDb()

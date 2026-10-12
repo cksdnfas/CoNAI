@@ -29,7 +29,7 @@ export default function FilePdfPreview({ url, name }: { url: string; name: strin
   const [error, setError] = useState(false)
   useEffect(() => {
     let disposed = false
-    const task = getDocument({ url, withCredentials: true, disableAutoFetch: true, disableStream: true, isEvalSupported: false, enableXfa: false, maxImageSize: 16_000_000, canvasMaxAreaInBytes: 32_000_000, useWorkerFetch: false, BinaryDataFactory: PdfBinaryDataFactory })
+    const task = getDocument({ url, withCredentials: true, disableAutoFetch: true, disableStream: true, enableXfa: false, maxImageSize: 16_000_000, canvasMaxAreaInBytes: 32_000_000, useWorkerFetch: false, BinaryDataFactory: PdfBinaryDataFactory })
     void task.promise.then((pdf) => { if (!disposed) setDocument(pdf) }, () => { if (!disposed) setError(true) })
     return () => { disposed = true; void task.destroy() }
   }, [url])

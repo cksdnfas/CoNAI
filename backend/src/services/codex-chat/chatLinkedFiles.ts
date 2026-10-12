@@ -1,7 +1,8 @@
+import { DOCUMENT_EXTENSIONS } from '../fileDocumentExtraction'
 import path from 'path'
 import type { FileWriteSource, StoredFileEntry } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
-import { searchStoredFiles } from '../fileStoreSearch'
+import { retryFileSearchIndex, searchStoredFiles } from '../fileStoreSearch'
 import { FileStoreError, FileStoreService, MAX_TEXT_DOCUMENT_BYTES, TEXT_EXTENSIONS, applyTextEdits, fileOwnerKey, type TextEdit } from '../fileStoreService'
 import { LOREBOOK_ROOT_FOLDER } from './chatLorebookFiles'
 
@@ -60,7 +61,7 @@ function entryOf(owner: string, id: string): StoredFileEntry | null {
 }
 
 function isTextName(name: string) {
-  return TEXT_EXTENSIONS.has(path.extname(name).toLowerCase())
+  return TEXT_EXTENSIONS.has(path.extname(name).toLowerCase()) || DOCUMENT_EXTENSIONS.has(path.extname(name).toLowerCase())
 }
 
 /** Whether the entry is the owner's lorebook folder or inside it. */
@@ -79,7 +80,7 @@ export function assertLinkedFiles(owner: string, links: LinkedFileLink[], kept: 
     if (kept.some((item) => item.id === link.id)) continue
     const entry = entryOf(owner, link.id)
     if (!entry) throw new LinkedFileError('연결할 파일이나 폴더를 찾을 수 없어.', 404)
-    if (entry.kind === 'file' && !isTextName(entry.name)) throw new LinkedFileError(`텍스트 파일만 연결할 수 있어: ${entry.name}`)
+    if (entry.kind === 'file' && !isTextName(entry.name)) throw new LinkedFileError(`텍스트·PDF·XLSX 파일만 연결할 수 있어: ${entry.name}`)
     if (isInsideLorebooks(owner, entry.id)) throw new LinkedFileError('로어북 폴더는 연결할 수 없어. 로어북은 로어북 칸에서 연결해줘.')
   }
   return links
@@ -269,23 +270,26 @@ export async function searchLinked(places: LinkedPlace[], query: string, limit =
     }
     return []
   }).slice(0, limit)
-  if (hits.length === 0) return `(연결된 곳에서 "${query}"를 찾지 못했어.)`
-  return hits.map(({ at, hit }) => `${at}${hit.entry.kind === 'folder' ? '/' : ''}${hit.snippet ? `\n  …${hit.snippet.replace(/\s+/g, ' ').trim()}…` : ''}`).join('\n')
+  const status = `검색 상태: ${JSON.stringify(result.search)}\n`
+  if (hits.length === 0) return status + `(연결된 곳에서 "${query}"를 찾지 못했어.)`
+  return status + hits.map(({ at, hit }) => `${at}${hit.entry.kind === 'folder' ? '/' : ''}${hit.location ? ` [${hit.location}]` : ''}${hit.read ? `\n  linked_read: ${JSON.stringify({ target: at, ...hit.read })}` : ''}${hit.extractionNote ? ` (${hit.extractionNote})` : ''}${hit.snippet ? `\n  …${hit.snippet.replace(/\s+/g, ' ').trim()}…` : ''}`).join('\n')
 }
 
 /** A UTF-8 text chunk of a linked file, as data; `nextOffset` continues. */
-export async function readLinked(places: LinkedPlace[], value: string, offset = 0) {
+export async function readLinked(places: LinkedPlace[], value: string, offset = 0, options: { source?: 'original' | 'extracted'; revision?: string; limit?: number; retry?: boolean } = {}) {
   const resolved = splitLinkedPath(places, value)
   const entry = resolveEntry(resolved)
   if (!entry) throw new LinkedFileError(`Not found: ${resolved.display}`, 404)
   if (entry.kind !== 'file') throw new LinkedFileError(`${resolved.display} is a folder; list it with ${LINKED_TOOLS.list}.`)
-  const read = await FileStoreService.readText(resolved.place.owner, entry.id, offset, READ_CHUNK_BYTES)
+  if (options.retry) await retryFileSearchIndex(resolved.place.owner, entry.id)
+  const read = await FileStoreService.readText(resolved.place.owner, entry.id, offset, options.limit ?? READ_CHUNK_BYTES, options)
   return [
+    ...(read.extracted ? [`추출 문서 (${read.extractionState}); 읽기 위치는 추출된 UTF-8 본문의 바이트 기준이야.`, ...(read.note ? [read.note] : [])] : []),
     `[파일 ${resolved.display}]`,
     // The file cannot end the data block early.
     read.text.replace(/^﻿/, '').replace(/\[\/파일\]/g, '[/ 파일]'),
     '[/파일]',
-    ...(read.nextOffset !== null ? [`(${read.size}바이트 중 ${read.nextOffset}바이트까지 읽음. 이어 읽으려면 ${LINKED_TOOLS.read}(target=${JSON.stringify(resolved.display)}, offset=${read.nextOffset}))`] : []),
+    ...(read.nextOffset !== null ? [`(${read.size}바이트 중 ${read.nextOffset}바이트까지 읽음. 이어 읽으려면 ${LINKED_TOOLS.read}(target=${JSON.stringify(resolved.display)}, offset=${read.nextOffset}${read.revision ? `, source=extracted, revision=${JSON.stringify(read.revision)}` : ''}))`] : []),
   ].join('\n')
 }
 

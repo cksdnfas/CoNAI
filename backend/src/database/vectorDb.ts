@@ -34,8 +34,15 @@ function ensureVectorSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS vector_db.idx_vectors_space_model ON vectors(space, model_key);
     CREATE INDEX IF NOT EXISTS vector_db.idx_vectors_space_owner ON vectors(space, owner_key);
+    CREATE TABLE IF NOT EXISTS vector_db.file_progress (
+      source_key TEXT PRIMARY KEY, revision TEXT NOT NULL, model_key TEXT NOT NULL,
+      next_offset INTEGER NOT NULL, next_chunk INTEGER NOT NULL, complete INTEGER NOT NULL DEFAULT 0
+    );
   `);
   const columns = new Set((db.prepare('PRAGMA vector_db.table_info(vectors)').all() as Array<{ name: string }>).map((column) => column.name));
+  if (!(db.prepare('PRAGMA vector_db.table_info(file_progress)').all() as Array<{ name: string }>).some(column => column.name === 'updated_at')) {
+    db.exec('ALTER TABLE vector_db.file_progress ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0');
+  }
   for (const column of ['span_start', 'span_end']) {
     if (!columns.has(column)) db.exec(`ALTER TABLE vector_db.vectors ADD COLUMN ${column} INTEGER`);
   }

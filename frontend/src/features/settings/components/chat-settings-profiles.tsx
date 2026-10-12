@@ -49,7 +49,7 @@ function profileModelRow(profile: ChatProfile, slots: ModelSlot[]) {
 /** `★ connection · model` for an API LLM profile, else the engine and its model. */
 function profileModelLine(profile: ChatProfile, slots: ModelSlot[], t: ReturnType<typeof useI18n>['t']) {
   const slot = profileModelRow(profile, slots)
-  if (slot) return `${slot.isDefault ? '★ ' : ''}${slot.label}`
+  if (slot) return `${slot.isDefault ? '★ ' : ''}${slot.label}${profile.llmRuntime === 'pi' ? ' · pi' : ''}`
   if (profile.engine === 'claude') return `Claude Code · ${profile.model || 'sonnet'}`
   if (profile.engine === 'codex') return `Codex · ${profile.model || t({ ko: '기본 모델', en: 'default model' })}`
   return t({ ko: '모델 없음', en: 'No model' })

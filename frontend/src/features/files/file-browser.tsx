@@ -2,7 +2,7 @@ import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AudioLines, ChevronRight, Download, File, FilePlus, FileText, Film, Folder, FolderInput, FolderPlus, Image as ImageIcon, LayoutGrid, List, Music, Pencil, RefreshCw, Search, Trash2, Upload, Users, X } from 'lucide-react'
-import type { StoredFileEntry, StoredFileOwner, StoredFileSearchHit } from '@conai/shared'
+import type { FileSearchStatus, StoredFileEntry, StoredFileOwner, StoredFileSearchHit } from '@conai/shared'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -25,7 +25,7 @@ import { pageAction, pageArray, pageChoice, pageObject, pageText } from '@/featu
 import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
-import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, TEXT_FILE_PATTERN, createStoredFolder, deleteStoredFiles, formatFileSize, listStoredFileOwners, listStoredFileRevisions, listStoredFiles, listStoredFolders, moveStoredFiles, renameStoredFile, restoreStoredFileRevision, searchStoredFiles, storedFileDownloadUrl, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
+import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, TEXT_FILE_PATTERN, createStoredFolder, deleteStoredFiles, formatFileSize, listStoredFileOwners, listStoredFileRevisions, listStoredFiles, listStoredFolders, moveStoredFiles, renameStoredFile, restoreStoredFileRevision, searchStoredFiles, retryStoredFileIndex, storedFileDownloadUrl, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { FilePreview } from './file-preview'
@@ -135,15 +135,25 @@ function highlightTerms(text: string, terms: string[]): ReactNode {
 }
 
 /** Search results in place of the folder list: name, folder path and the text around the match. */
-function SearchHits({ hits, terms, truncated, onOpen }: { hits: StoredFileSearchHit[]; terms: string[]; truncated: boolean; onOpen: (entry: StoredFileEntry) => void }) {
+function SearchHits({ hits, terms, truncated, search, onOpen, onRetry, retrying }: { onRetry: (id: string) => void; retrying: boolean; search?: FileSearchStatus; hits: StoredFileSearchHit[]; terms: string[]; truncated: boolean; onOpen: (entry: StoredFileEntry) => void }) {
   const { t } = useI18n()
   return (
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground">
         {truncated ? t({ ko: '결과 {count}개 이상', en: '{count}+ results' }, { count: hits.length }) : t({ ko: '결과 {count}개', en: '{count} results' }, { count: hits.length })}
       </p>
+      {search ? <p className="text-xs text-muted-foreground" role="status">
+        {search.mode === 'hybrid' ? t({ ko: '키워드 + 의미 검색', en: 'Keyword + semantic search' }) : t({ ko: '키워드 검색', en: 'Keyword search' })}
+        {search.semantic === 'disabled' ? ` · ${t({ ko: '의미 검색 꺼짐', en: 'Semantic search is off' })}` : null}
+        {search.semantic === 'unavailable' ? ` · ${t({ ko: '의미 검색이 응답하지 않아 키워드 결과만 표시', en: 'Semantic search unavailable; showing keyword matches' })}` : null}
+        {['partial', 'not_indexed'].includes(search.semantic) ? ` · ${t({ ko: '의미 색인 {done}/{total}개', en: 'Semantic index: {done}/{total} files' }, { done: search.indexedFiles, total: search.searchableFiles })}` : null}
+        {search.pendingDocuments > 0 ? ` · ${t({ ko: '본문 추출 대기 {count}개', en: '{count} documents awaiting extraction' }, { count: search.pendingDocuments })}` : null}
+        {search.partialDocuments + search.failedDocuments > 0 ? ` · ${t({ ko: '본문 추출이 불완전한 파일 {count}개', en: '{count} files with incomplete text extraction' }, { count: search.partialDocuments + search.failedDocuments })}` : null}
+        {search.keywordTermsLimited ? ` · ${t({ ko: '긴 문장은 의미 검색에 전체를 사용하고 키워드 검색에는 앞 8개 검색어를 사용', en: 'Full sentence used for semantic search; first 8 terms used for keyword search' })}` : null}
+        {search.unsupportedFiles > 0 ? ` · ${t({ ko: '파일명만 검색하는 파일 {count}개', en: '{count} files searchable by name only' }, { count: search.unsupportedFiles })}` : null}
+      </p> : null}
       <ul className="divide-y divide-line">
-        {hits.map(({ entry, path, snippet }) => (
+        {hits.map(({ entry, path, snippet, location, extractionState }) => (
           <li key={entry.id}>
             <Button variant="ghost" className="h-auto w-full flex-col items-stretch gap-1 whitespace-normal py-2 text-left font-normal" onClick={() => onOpen(entry)}>
               <span className="flex min-w-0 items-center gap-2">
@@ -151,8 +161,11 @@ function SearchHits({ hits, terms, truncated, onOpen }: { hits: StoredFileSearch
                 <span className="min-w-0 truncate text-sm text-foreground">{highlightTerms(entry.name, terms)}</span>
                 <span className="min-w-0 shrink truncate text-xs text-muted-foreground">{path}</span>
               </span>
+              {location ? <span className="pl-6 text-xs text-muted-foreground">{location}</span> : null}
+              {extractionState && ['partial', 'empty', 'error', 'unsupported'].includes(extractionState) ? <span className="pl-6 text-xs text-muted-foreground">{t({ ko: '본문 전체를 검색하지 못한 파일', en: 'Full content was not searched' })}</span> : null}
               {snippet ? <span className="line-clamp-2 break-all pl-6 text-xs leading-relaxed text-muted-foreground">{highlightTerms(snippet, terms)}</span> : null}
             </Button>
+            {extractionState && ['partial', 'empty', 'error'].includes(extractionState) ? <Button size="sm" variant="ghost" disabled={retrying} onClick={() => onRetry(entry.id)}>{t({ ko: '다시 추출', en: 'Retry extraction' })}</Button> : null}
           </li>
         ))}
       </ul>
@@ -276,6 +289,11 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
   const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'list', parentId, offset], queryFn: () => listStoredFiles(parentId, offset, storeOwner), enabled: canViewFiles && !browsingAll && !browsingSystem })
   const foldersQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'folders'], queryFn: () => listStoredFolders(storeOwner), enabled: canViewFiles && !browsingAll })
   const searchResults = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'search', searchQuery], queryFn: () => searchStoredFiles(searchQuery, storeOwner), enabled: canViewFiles && searching })
+  const retryExtraction = useMutation({
+    mutationFn: (id: string) => retryStoredFileIndex(id, storeOwner),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: FILES_QUERY_KEY }) },
+    onError: (error: unknown) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '본문을 다시 추출하지 못했어.', en: 'Could not retry extraction.' })) }),
+  })
   const ownersQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'owners'], queryFn: listStoredFileOwners, enabled: canBrowseAll })
   const folders = useMemo(() => folderTree(foldersQuery.data ?? []), [foldersQuery.data])
   const entries = query.data?.entries ?? []
@@ -513,7 +531,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
     if (searchResults.isPending) list = <LoadingState />
     else if (searchResults.isError) list = <ErrorState title={t({ ko: '검색하지 못했어.', en: 'Search failed.' })} error={searchResults.error} onRetry={() => void searchResults.refetch()} />
     else if (searchResults.data.hits.length === 0) list = <EmptyState icon={Search} title={t({ ko: '찾은 파일이 없어', en: 'No matching files' })} />
-    else list = <SearchHits hits={searchResults.data.hits} terms={searchResults.data.terms} truncated={searchResults.data.truncated} onOpen={(entry) => (entry.kind === 'folder' ? navigate(entry.id) : setPreview(entry))} />
+    else list = <SearchHits hits={searchResults.data.hits} terms={searchResults.data.terms} truncated={searchResults.data.truncated} search={searchResults.data.search} onRetry={(id) => retryExtraction.mutate(id)} retrying={retryExtraction.isPending} onOpen={(entry) => (entry.kind === 'folder' ? navigate(entry.id) : setPreview(entry))} />
   } else if (browsingAll) {
     if (ownersQuery.isPending) list = <LoadingState />
     else if (ownersQuery.isError) list = <ErrorState title={t({ ko: '계정 목록을 불러오지 못했어.', en: 'Could not load accounts.' })} error={ownersQuery.error} onRetry={() => void ownersQuery.refetch()} />

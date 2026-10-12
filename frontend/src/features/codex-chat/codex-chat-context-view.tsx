@@ -495,7 +495,7 @@ export function CodexChatContextView({ thread, profiles, segments, profileTurns,
 }
 
 /** One Codex chat's context: its author's note, then its memory as Codex reports it (how full, what it used) and folding it now. */
-export function CodexEngineContextView({ thread, profiles, compactTokens, noteDefaults }: { thread: CodexChatThread; profiles: Array<{ id: number; name: string }>; compactTokens: number | null; noteDefaults: AuthorNoteDefaults }) {
+export function CodexEngineContextView({ thread, profiles, noteDefaults }: { thread: CodexChatThread; profiles: Array<{ id: number; name: string }>; noteDefaults: AuthorNoteDefaults }) {
   const { t, formatNumber, formatDateTime } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
@@ -514,18 +514,17 @@ export function CodexEngineContextView({ thread, profiles, compactTokens, noteDe
       <AuthorNoteBlock thread={thread} defaults={noteDefaults} />
       <LorebookBlock threadId={thread.id} loreAutoSave={thread.lore_auto_save} profiles={profiles} />
       <LinkedFilesBlock threadId={thread.id} />
-      {/* One line: context / compaction threshold. Window and running totals live in its tooltip. */}
+      {/* One line: context / model window. Running totals live in its tooltip. */}
       <SettingRow label={t({ ko: '현재 컨텍스트', en: 'Current context' })}>
         <Tip
           className="whitespace-pre-line"
           content={[
-            t({ ko: '현재 컨텍스트 / 압축 기준 토큰', en: 'Current context / compaction threshold tokens' }),
-            `${t({ ko: '모델 한도', en: 'Model window' })}: ${tokens(thread.codex_context_window)}`,
+            t({ ko: '현재 컨텍스트 / 모델 한도 토큰', en: 'Current context / model window tokens' }),
             `${t({ ko: '누적 입력', en: 'Total input' })}: ${tokens(thread.codex_input_tokens)}${cachedShare !== null ? ` · ${t({ ko: '캐시', en: 'cached' })} ${cachedShare}%` : ''}`,
             `${t({ ko: '누적 출력', en: 'Total output' })}: ${tokens(thread.codex_output_tokens)}`,
           ].join('\n')}
         >
-          <span tabIndex={0} className="cursor-help rounded-sm text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring/40">{tokens(thread.codex_context_tokens)} / {tokens(compactTokens)}</span>
+          <span tabIndex={0} className="cursor-help rounded-sm text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring/40">{tokens(thread.codex_context_tokens)} / {tokens(thread.codex_context_window)}</span>
         </Tip>
       </SettingRow>
 

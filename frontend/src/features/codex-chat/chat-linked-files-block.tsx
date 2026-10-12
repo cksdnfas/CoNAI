@@ -97,7 +97,7 @@ export function LinkedFilesBlock({ threadId }: { threadId: number }) {
       {picking ? (
         <FilePicker
           title={t({ ko: '파일 연결', en: 'Link files' })}
-          accept={TEXT_EXTENSIONS}
+          accept={[...TEXT_EXTENSIONS, '.pdf', '.xlsx']}
           pickLabel={(count) => (count > 0 ? t({ ko: '{count}개 연결', en: 'Link {count}' }, { count }) : t({ ko: '파일 연결', en: 'Link files' }))}
           onPick={(entries) => add(entries.map((entry) => entry.id))}
           pickFolderLabel={t({ ko: '이 폴더 연결', en: 'Link this folder' })}

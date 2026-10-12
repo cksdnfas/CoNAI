@@ -70,6 +70,8 @@ export function connectedThreadIds(threadId: number, accountId: number | null): 
 export function sharesKnowledge(thread: { id: number; account_id: number | null; profile_id: number | null }): boolean {
   const db = getUserSettingsDb()
   const row = db.prepare('SELECT lorebook_ids, linked_files FROM codex_chat_threads WHERE id = ?').get(thread.id) as { lorebook_ids: string | null; linked_files: string | null } | undefined
+  const session = db.prepare("SELECT 1 FROM codex_chat_threads t LEFT JOIN llm_chat_profiles p ON p.id = t.profile_id WHERE t.id = ? AND (t.engine = 'codex' OR p.engine IN ('codex', 'claude') OR p.llm_runtime = 'pi')").get(thread.id)
+  if (session) return true
   if (normalizeLinkedFiles(row?.linked_files ?? null).length > 0) return true
   const profile = thread.profile_id === null ? undefined : db.prepare('SELECT lorebook_ids, linked_files FROM llm_chat_profiles WHERE id = ?').get(thread.profile_id) as { lorebook_ids: string | null; linked_files: string | null } | undefined
   if (normalizeLinkedFiles(profile?.linked_files ?? null).length > 0) return true
@@ -91,8 +93,12 @@ const SEMANTIC_MIN_LEAD = 0.04
  * Searching with text embeddings on: messages holding the words (searchChatMessages) and messages close in meaning,
  * the two rankings fused, best first. Without embeddings (or when they fail) it is searchChatMessages, newest first.
  */
-export async function searchChatHistory(threadIds: number[], query: string, limit: number): Promise<HistoryHit[]> {
+export type HistorySearchStatus = { mode: 'keyword' | 'hybrid'; semantic: 'disabled' | 'unavailable' | 'partial' | 'ready' | 'not_indexed'; indexedMessages: number; totalMessages: number; keywordTermsLimited?: boolean }
+
+export async function searchChatHistory(threadIds: number[], query: string, limit: number, report?: (status: HistorySearchStatus) => void): Promise<HistoryHit[]> {
   const capped = Math.min(Math.max(1, limit), HISTORY_SEARCH_LIMIT)
+  const status: HistorySearchStatus = { mode: 'keyword', semantic: 'disabled', indexedMessages: 0, totalMessages: 0, keywordTermsLimited: parseSearchTerms(query, { allowLong: true }).length > 8 }
+  report?.(status)
   if (threadIds.length === 0) return []
   if (!embeddingFeatureOn('chatHistory')) return searchChatMessages(threadIds, query, capped)
   let lexical: HistoryHit[] = []
@@ -105,12 +111,22 @@ export async function searchChatHistory(threadIds: number[], query: string, limi
   await indexMessagesNow(threadIds, INDEX_BEFORE_SEARCH).catch(() => 0)
   const vector = await embedQuery(query, { waitMs: SEARCH_QUERY_WAIT_MS })
   if (!vector) {
+    status.semantic = 'unavailable'
     if (lexicalError) throw lexicalError
     return lexical.slice(0, capped)
   }
+  const live = getUserSettingsDb().prepare(`SELECT m.id, v.content_hash FROM codex_chat_messages m
+    LEFT JOIN vector_db.vectors v ON v.space = ? AND v.model_key = ? AND v.source_key = CAST(m.id AS TEXT) AND v.chunk = 0
+      AND v.content_hash = semantic_text_hash(m.content)
+    WHERE m.thread_id IN (${threadIds.map(Number).join(',')}) AND m.role IN ('user', 'assistant') AND trim(m.content) != ''`)
+    .all(SEMANTIC_SPACES.message, EMBEDDING_MODEL_KEY) as Array<{ id: number; content_hash: string | null }>
+  const current = new Map(live.filter(row => row.content_hash !== null).map(row => [String(row.id), row.content_hash]))
+  Object.assign(status, { mode: 'hybrid', indexedMessages: current.size, totalMessages: live.length,
+    semantic: current.size === 0 && live.length ? 'not_indexed' : current.size < live.length ? 'partial' : 'ready' })
   const hits = vectorStore.search(SEMANTIC_SPACES.message, EMBEDDING_MODEL_KEY, vector, { ownerKeys: threadIds.map((id) => `thread:${id}`) })
   const best = new Map<number, { score: number; spanStart: number | null }>()
   for (const hit of hits) {
+    if (current.get(hit.sourceKey) !== hit.contentHash) continue
     const id = Number(hit.sourceKey)
     if (!best.has(id) || best.get(id)!.score < hit.score) best.set(id, { score: hit.score, spanStart: hit.spanStart })
   }
@@ -138,7 +154,7 @@ export async function searchChatHistory(threadIds: number[], query: string, limi
  */
 export function searchChatMessages(threadIds: number[], query: string, limit: number): HistoryHit[] {
   if (threadIds.length === 0) return []
-  const terms = parseSearchTerms(query)
+  const terms = parseSearchTerms(query, { allowLong: true }).slice(0, 8)
   const params: Record<string, string | number> = { limit: Math.min(Math.max(1, limit), HISTORY_SEARCH_LIMIT) }
   terms.forEach((term, index) => { params[`t${index}`] = term })
   const text = "(lower(m.content) || char(10) || lower(COALESCE(m.display_content, '')))"

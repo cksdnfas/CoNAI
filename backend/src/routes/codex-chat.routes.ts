@@ -24,7 +24,7 @@ import { MediaMetadataModel } from '../models/Image/MediaMetadataModel'
 import { canUseChatProfile, resolveChatAccess, resolveChatProfileToolGrant } from '../services/codex-chat/codexChatAccess'
 import { CHAT_VISION_BUILTIN_TOOLS, getMcpToolScope } from '../mcp/context'
 import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
-import { buildCodexInstructions, CODEX_COMPACT_TOKENS, CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
+import { buildCodexInstructions, CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
 import { buildChatPromptPreview, estimateTokens, isSummarizing, referenceBlock, selectChatLore } from '../services/codex-chat/llmChatContext'
 import { ChatLorebookStore, normalizeLorebookIds } from '../services/codex-chat/chatLorebook'
 import { LorebookError, OwnedLorebookStore } from '../services/codex-chat/chatLorebookFiles'
@@ -787,7 +787,7 @@ router.put('/admin/settings', requireAdmin, (req: Request, res: Response) => {
 
 /** Values the profile editor fills in for a new profile, and the scopes it may offer. */
 router.get('/admin/profile-defaults', requireAdmin, (_req: Request, res: Response) => {
-  res.json({ success: true, data: { ...CHAT_PROFILE_DEFAULTS, codexCompactTokens: CODEX_COMPACT_TOKENS, summaryPrompt: DEFAULT_CHAT_SUMMARY_PROMPT, scopes: CHAT_SCOPES, style: DEFAULT_CHAT_STYLE } })
+  res.json({ success: true, data: { ...CHAT_PROFILE_DEFAULTS, summaryPrompt: DEFAULT_CHAT_SUMMARY_PROMPT, scopes: CHAT_SCOPES, style: DEFAULT_CHAT_STYLE } })
 })
 
 router.get('/admin/profiles', requireAdmin, (_req: Request, res: Response) => {

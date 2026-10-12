@@ -7,7 +7,7 @@ import { ChatProfileStore } from '../src/services/codex-chat/chatProfiles'
 import { normalizeChatStyle } from '../src/services/codex-chat/chatStyle'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from '../src/services/codex-chat/codexChatStore'
 import { streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTarget, type ChatCompletionTool } from '../src/services/codex-chat/llmChatCompletion'
-import { buildChatMessages, buildChatPromptPreview, completeSummary, cutToolOutput, estimateMessagesTokens, fitChatContext, fitThreadSummary, groupTranscript, rawMessagesEstimate, resolveContextConfig, summaryTranscriptText, toCompletionMessages } from '../src/services/codex-chat/llmChatContext'
+import { buildChatMessages, buildChatPromptPreview, completeSummary, cutToolOutput, estimateMessagesTokens, fitChatContext, fitThreadSummary, groupTranscript, insertAtDepth, rawMessagesEstimate, resolveContextConfig, summaryTranscriptText, toCompletionMessages, wrapUpRequest } from '../src/services/codex-chat/llmChatContext'
 import { applyGenerationOutcomes, generationOutcomeNote } from '../src/services/codex-chat/codexChatMedia'
 import { addressLabelFilter, restatement, roundSeparator } from '../src/services/codex-chat/chatReplyText'
 import { buildOpenAiGenerationFields, readLlmConnectionConfig, summaryGenerationOptions, thinkingIsOff } from '../src/services/llmGenerationOptions'
@@ -421,6 +421,47 @@ test('a tool round that does not fit is retried with the tool result cut shorter
   ]
   profile.contextTokens = estimateMessagesTokens(profile.id, cut) + 100
   assert.throws(() => fitChatContext(profile, catalogMessages, [], 100), /컨텍스트 한도를 넘었어/, 'catalog schemas stay intact even when generic result cuts would fit')
+})
+
+test('a tool round over the limit sheds old turns before the work in progress, then wraps up instead of failing', (t) => {
+  mockModelRows(t, { 1: ['test', 'test'] }, 1)
+  const profile = ChatProfileStore.draft({ name: 'Character', maxTokens: 100 })
+  const conversation = insertAtDepth([
+    { role: 'system', content: 'sys' },
+    { role: 'user', content: 'old one' },
+    { role: 'assistant', content: 'a'.repeat(2000) },
+    { role: 'user', content: 'old two' },
+    { role: 'assistant', content: 'b' },
+    { role: 'user', content: 'do the work' },
+  ], 2, 'LORE')
+  const rounds: ChatCompletionMessage[] = [
+    { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'search_images', arguments: '{}' } }] },
+    { role: 'tool', tool_call_id: 'c1', content: 'r'.repeat(3000) },
+    { role: 'assistant', content: null, tool_calls: [{ id: 'c2', type: 'function', function: { name: 'search_images', arguments: '{}' } }] },
+    { role: 'tool', tool_call_id: 'c2', content: 'latest' },
+  ]
+  const messages = [...conversation, ...rounds]
+  const turnStart = conversation.length
+  const withoutOldest: ChatCompletionMessage[] = [conversation[0], { role: 'user', content: 'LORE\n\nold two' }, ...conversation.slice(4), ...rounds]
+  profile.contextTokens = estimateMessagesTokens(profile.id, withoutOldest) + 100
+  const fitted = fitChatContext(profile, messages, [], 100, turnStart)
+  assert.deepEqual(fitted.map((message) => message.content), withoutOldest.map((message) => message.content), 'the oldest turn goes first, its lore moving to the next user message')
+  // With the conversation gone, the earlier round's result shrinks to a note; the latest round stays whole.
+  const noted = [conversation[0], conversation[5], rounds[0], { ...rounds[1], content: cutToolOutput('r'.repeat(3000), 300) }, ...rounds.slice(2)] as ChatCompletionMessage[]
+  profile.contextTokens = estimateMessagesTokens(profile.id, noted) + 200
+  const shrunk = fitChatContext(profile, messages, [], 100, turnStart)
+  assert.equal((shrunk.at(-3) as { content: string }).content, cutToolOutput('r'.repeat(3000), 300))
+  assert.equal((shrunk.at(-1) as { content: string }).content, 'latest')
+  assert.ok(!shrunk.some((message) => message.content === 'old two' || String(message.content).endsWith('old two')))
+  // Not even that: fitting fails, and the wrap-up request (rounds noted, a closing directive) still goes out.
+  profile.contextTokens = estimateMessagesTokens(profile.id, noted.slice(0, 3)) + 160
+  assert.throws(() => fitChatContext(profile, messages, [], 100, turnStart), /컨텍스트 한도를 넘었어/)
+  profile.contextTokens = 100000
+  const last = wrapUpRequest(profile, messages, [], 100, turnStart)
+  assert.equal(last.messages.at(-1)?.role, 'user')
+  assert.match(String(last.messages.at(-1)?.content), /Do not call tools/)
+  assert.ok(last.messages.every((message) => message.role !== 'tool' || message.content.length <= 340))
+  assert.ok(!last.messages.some((message) => String(message.content).includes('old one')))
 })
 
 test('the summary transcript leaves out the chat\'s own tools, quoted lore files and address labels', (t) => {

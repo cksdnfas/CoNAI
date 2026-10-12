@@ -132,6 +132,8 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
   const { t } = useI18n()
   const isLlm = draft.engine === 'llm'
   const hasLlmContext = draft.engine !== 'codex'
+  // Codex, Claude and pi fold their own sessions with the chat model.
+  const selfCompacting = draft.engine !== 'llm' || draft.llmRuntime === 'pi'
   const serverDefault = t({ ko: '서버 기본값', en: 'Server default' })
   const summaryOn = roleChoice(draft, 'summary', slots, hasLlmContext, slotsReady) !== 'off'
   const translationOn = roleChoice(draft, 'translation', slots, isLlm, slotsReady) !== 'off'
@@ -179,6 +181,15 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
           <>
             <Field label={t({ ko: '대화 모델', en: 'Chat model' })}>
               {roleSelect('chat', t({ ko: '대화 모델', en: 'Chat model' }))}
+            </Field>
+            <Field
+              label={t({ ko: '실행 방식', en: 'Runtime' })}
+              info={t({ ko: 'pi: 같은 모델을 pi 에이전트로 돌려. 대화는 pi 세션이 기억하고, 모델의 컨텍스트가 차면 도구 작업 중에도 대화 모델로 알아서 압축해.', en: 'pi: runs the same model through the pi agent. The pi session keeps the conversation and folds it with the chat model when the context of the model fills, even mid tool run.' })}
+            >
+              <Select variant="settings" value={draft.llmRuntime ?? 'direct'} onChange={(event) => patch({ llmRuntime: event.target.value === 'pi' ? 'pi' : 'direct' })}>
+                <option value="direct">{t({ ko: 'CoNAI 직접', en: 'CoNAI direct' })}</option>
+                <option value="pi">{t({ ko: 'pi 에이전트', en: 'pi agent' })}</option>
+              </Select>
             </Field>
             <div className="grid gap-3 md:grid-cols-2">
               <Field label={t({ ko: '온도', en: 'Temperature' })}>
@@ -265,7 +276,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
 
       <EditorGroup label={t({ ko: '역할', en: 'Roles' })}>
         <div>
-          {draft.engine !== 'codex' ? (
+          {!selfCompacting ? (
             <RoleRow label={t({ ko: '요약', en: 'Summary' })} select={roleSelect('summary', t({ ko: '요약 모델', en: 'Summary model' }))}>
               {summaryOn ? (
                 <>

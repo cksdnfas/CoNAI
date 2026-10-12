@@ -1006,6 +1006,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     // (a rating_tiers.id; null: no ceiling). See chatContentRating.ts.
     ['content_rating_mode', 'TEXT'],
     ['content_rating_tier_id', 'INTEGER'],
+    // API LLM profiles: 'pi' runs chat replies through the pi agent (piChatCompletion.ts); null: CoNAI directly.
+    ['llm_runtime', 'TEXT'],
   ];
   for (const [columnName, definition] of chatProfileColumns) {
     if (!hasColumn('llm_chat_profiles', columnName)) {

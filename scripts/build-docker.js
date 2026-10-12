@@ -200,11 +200,13 @@ const safeRemove = async (dirPath) => {
         "sharp": "^0.33.0",
         "better-sqlite3": "^9.4.0",
         "argon2": "^0.44.0",
+        "pdfjs-dist": "6.4.299",
+        "read-excel-file": "9.3.12",
         "ffmpeg-static": "^5.2.0",
         "ffprobe-static": "^3.1.0"
       },
       engines: {
-        "node": ">=20.0.0"
+        "node": ">=22.13.0"
       }
     };
 
@@ -223,7 +225,7 @@ const safeRemove = async (dirPath) => {
 # Contains all system dependencies, Node.js, and Python environment.
 # Build this once: docker build -t comfyui-manager-base:cpu -f Dockerfile.base .
 
-FROM node:20-slim AS deps
+FROM node:24-bookworm-slim AS deps
 
 WORKDIR /app
 
@@ -243,7 +245,7 @@ RUN npm install --production --no-package-lock && \\
 # ============================================================================
 # Runtime Stage
 # ============================================================================
-FROM node:20-slim
+FROM node:24-bookworm-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \\
@@ -292,7 +294,7 @@ RUN groupadd -g 1001 appuser && \\
 # Contains all system dependencies, Node.js, and Python environment (CUDA).
 # Build this once: docker build -t comfyui-manager-base:gpu -f Dockerfile.base.gpu .
 
-FROM node:20-slim AS deps
+FROM node:24-bookworm-slim AS deps
 
 WORKDIR /app
 
@@ -311,7 +313,7 @@ RUN npm install --production --no-package-lock && \\
 # ============================================================================
 # Runtime Stage (CUDA wheels are installed only in this opt-in image)
 # ============================================================================
-FROM node:20-slim
+FROM node:24-bookworm-slim
 
 ENV NVIDIA_VISIBLE_DEVICES=all \\
     NVIDIA_DRIVER_CAPABILITIES=compute,utility

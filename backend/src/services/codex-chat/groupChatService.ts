@@ -10,7 +10,7 @@ import { generatedImagesTokens, loadInlineGeneratedImages, withGeneratedImages }
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { foldGroupBlockState, parseBlockEdits } from './chatBlockState'
 import { GROUP_LIMITS, GROUP_MEMBER_MAX, ChatGroupStore, groupLimitsOf } from './chatGroupStore'
-import { ChatProfileStore, type ChatProfile } from './chatProfiles'
+import { ChatProfileStore, sessionRuntimeOf, type ChatProfile } from './chatProfiles'
 import { translateReply, translateUserInput, translatorOf } from './chatTranslation'
 import { hasTranslation, resolveProfileModel } from './chatModelRoles'
 import { stripEchoedAddresses } from '@conai/shared'
@@ -327,9 +327,11 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         ...groupMissedMessages(messages, profile.id, ChatGroupStore.member(run.threadId, profile.id)?.last_seen_message_id ?? null, limits.window).shown,
       ].map((message) => [message.id, message])).values()].sort((a, b) => a.id - b.id)
       : latestWindow(withoutStaleWakes(sendableMessages(unsummarizedMessages(messages, thread, { summaryEnabled: groupSummaryOn(thread) }))), limits.window)
+    // A Claude or pi member continues its own session of the room, which keeps the pictures it was shown.
+    const sessionRuntime = sessionRuntimeOf(profile)
     const [attachmentTexts, attachedImages] = await Promise.all([
-      profile.engine === 'claude' ? undefined : inlineTextsForChat(profile, requester.accountId, attachmentMessages),
-      profile.engine === 'claude' ? undefined : loadAttachedImages(profile, requester, attachmentMessages),
+      sessionRuntime ? undefined : inlineTextsForChat(profile, requester.accountId, attachmentMessages),
+      sessionRuntime ? undefined : loadAttachedImages(profile, requester, attachmentMessages),
     ])
     if (profile.engine === 'codex') {
       message = await runCodexGroupReply({
@@ -347,8 +349,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
       })
     } else {
       const maxTokens = ChatGroupStore.member(run.threadId, profile.id)?.max_tokens ?? thread.max_tokens ?? profile.maxTokens
-      // A Claude member continues its own session of the room, which keeps the pictures it was shown.
-      const inSession = profile.engine === 'claude'
+      const inSession = sessionRuntime !== null
       const generatedImages = inSession ? [] : await loadInlineGeneratedImages(profile, requester, run.threadId)
       const extraTokens = generatedImagesTokens(profile.id, generatedImages)
       message = await persist(await generateLlmGroupReply({
@@ -359,7 +360,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         chatContext: context,
         buildMessages: async (tools, onMeta, judged, useSession) => {
           if (inSession) {
-            const turn = await buildClaudeGroupSessionTurn({ requester, thread, members, profile, messages, routing: active.routing, windowLimit: limits.window, withTools: tools.some((tool) => !isChatOwnTool(tool.function.name)), attachmentTexts, attachedImages })
+            const turn = await buildClaudeGroupSessionTurn({ requester, thread, members, profile, messages, routing: active.routing, windowLimit: limits.window, withTools: tools.some((tool) => !isChatOwnTool(tool.function.name)), attachmentTexts, attachedImages, runtime: sessionRuntime ?? 'claude', judged })
             useSession(turn.session)
             onMeta(turn.contextMeta)
             return turn.messages
@@ -630,8 +631,8 @@ export const GroupChatService = {
       await startRun(threadId, listener, async (run) => {
         run.chain = false
         CodexChatStore.prepareRegeneration(threadId, messageId)
-        // A Claude member's session holds the reply being replaced: it starts over from the room.
-        if (speaker.engine === 'claude') resetMemberMemory(requester, threadId, speaker.id)
+        // A Claude or pi member's session holds the reply being replaced: it starts over from the room.
+        if (sessionRuntimeOf(speaker)) resetMemberMemory(requester, threadId, speaker.id)
         emit(run, { type: 'rewind', mode: 'regenerate', message })
         const sourceId = message.routing?.replyTo?.messageId ?? [...messages].reverse().find((entry) => entry.role === 'user')?.id ?? 0
         const reply = replyAs(run, requester, speaker, sourceId, messageId)

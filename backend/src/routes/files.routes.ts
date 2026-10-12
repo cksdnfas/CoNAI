@@ -8,7 +8,7 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { FileStoreError, FileStoreService, MAX_TEXT_DOCUMENT_BYTES, assertFileTypeAllowed, fileOwnerKey, parseFileId, parseOwnerKey } from '../services/fileStoreService';
 import { ensureFileStoreDirectories, fileStoreIncoming } from '../services/fileStorePaths';
 import { filePreviewMime, getFileThumbnail } from '../services/fileStorePreview';
-import { searchStoredFiles } from '../services/fileStoreSearch';
+import { retryFileSearchIndex, searchStoredFiles } from '../services/fileStoreSearch';
 import { FileStoreRevisions } from '../services/fileStoreRevisions';
 import { ChatProfileStore } from '../services/codex-chat/chatProfiles';
 import type { FileWriteSource } from '@conai/shared';
@@ -57,7 +57,7 @@ router.get('/owners', requireAdmin, (req, res) => res.json({ success: true, data
 router.get('/folders', (req, res) => res.json({ success: true, data: FileStoreService.folders(owner(req)) }));
 /** GET /api/files/search?q= — files and folders whose name or text contains every word ("quoted phrase" = one term). */
 router.get('/search', asyncHandler(async (req, res) => {
-  res.json({ success: true, data: await searchStoredFiles(owner(req), req.query.q, Number(req.query.limit ?? 50)) });
+  res.json({ success: true, data: await searchStoredFiles(owner(req), req.query.q, Number(req.query.limit ?? 50), undefined, { semantic: true }) });
 }));
 router.post('/folders', requirePermission('files.edit'), (req, res) => {
   res.status(201).json({ success: true, data: FileStoreService.createFolder(owner(req), parseFileId(req.body?.parentId, true), req.body?.name) });
@@ -112,9 +112,12 @@ router.patch('/:id', requirePermission('files.edit'), (req, res) => {
 });
 router.get('/:id', (req, res) => res.json({ success: true, data: FileStoreService.get(owner(req), id(req)) }));
 router.get('/:id/neighbors', (req, res) => res.json({ success: true, data: FileStoreService.neighbors(owner(req), id(req)) }));
+router.post('/:id/reindex', asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await retryFileSearchIndex(owner(req), id(req)) });
+}));
 router.get('/:id/text', asyncHandler(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ success: true, data: await FileStoreService.readText(owner(req), id(req), Number(req.query.offset ?? 0), Number(req.query.limit ?? 16000)) });
+  res.json({ success: true, data: await FileStoreService.readText(owner(req), id(req), Number(req.query.offset ?? 0), Number(req.query.limit ?? 16000), { source: req.query.source === 'extracted' ? 'extracted' : 'original', revision: typeof req.query.revision === 'string' ? req.query.revision : undefined }) });
 }));
 /** PUT /api/files/:id/text — the editor's save: the whole text replaces the file in place (same id). */
 router.put('/:id/text', requirePermission('files.edit'), (req, res) => {

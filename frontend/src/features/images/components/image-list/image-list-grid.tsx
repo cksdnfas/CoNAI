@@ -17,7 +17,6 @@ interface ImageListGridProps {
   getItemId?: (image: ImageRecord) => string
   onActivate: ImageListActivateHandler
   selectable?: boolean
-  alwaysShowSelectionControl?: boolean
   onToggleSelect?: ImageListToggleSelectHandler
   scrollMode: ImageListScrollMode
   viewportHeight?: number | string
@@ -38,7 +37,6 @@ interface ImageListGridContext {
   getItemId?: (image: ImageRecord) => string
   onActivate: ImageListActivateHandler
   selectable?: boolean
-  alwaysShowSelectionControl?: boolean
   onToggleSelect?: ImageListToggleSelectHandler
   renderItemOverlay?: (image: ImageRecord) => ReactNode
   renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
@@ -69,7 +67,6 @@ const ImageGridItemContent: GridItemContent<ImageRecord, ImageListGridContext> =
       gridItemHeight={context.gridItemHeight}
       onActivate={context.onActivate}
       selectable={context.selectable}
-      alwaysShowSelectionControl={context.alwaysShowSelectionControl}
       onToggleSelect={context.onToggleSelect}
       renderOverlay={context.renderItemOverlay?.(image)}
       renderPersistentOverlay={context.renderItemPersistentOverlay?.(image)}
@@ -95,7 +92,6 @@ export function ImageListGrid({
   getItemId,
   onActivate,
   selectable,
-  alwaysShowSelectionControl,
   onToggleSelect,
   scrollMode,
   viewportHeight,
@@ -123,7 +119,6 @@ export function ImageListGrid({
     getItemId,
     onActivate,
     selectable,
-    alwaysShowSelectionControl,
     onToggleSelect,
     renderItemOverlay,
     renderItemPersistentOverlay,
@@ -139,7 +134,6 @@ export function ImageListGrid({
     getItemId,
     onActivate,
     selectable,
-    alwaysShowSelectionControl,
     onToggleSelect,
     renderItemOverlay,
     renderItemPersistentOverlay,

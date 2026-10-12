@@ -78,6 +78,7 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     backgroundHash: profile?.backgroundHash,
     engine: profile?.engine ?? 'llm',
     model: profile?.model ?? '',
+    llmRuntime: profile?.llmRuntime ?? 'direct',
     reasoningEffort: profile?.reasoningEffort ?? '',
     reasoningBudgetTokens: profile?.reasoningBudgetTokens ?? null,
     extraParams: profile?.extraParams ?? '',
@@ -390,7 +391,7 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
               advanced={advanced}
             />
           ) : null}
-          {section === 'memory' ? <ChatProfileMemoryPanel draft={draft} patch={patch} defaults={defaults} lorebooks={linkableLorebooks} advanced={advanced} /> : null}
+          {section === 'memory' ? <ChatProfileMemoryPanel draft={draft} patch={patch} lorebooks={linkableLorebooks} advanced={advanced} /> : null}
           {section === 'tools' ? <ChatProfileToolsPanel open={open} draft={draft} patch={patch} defaults={defaults} advanced={advanced} /> : null}
           {section === 'look' ? <ChatProfileLookPanel profile={profile} draft={draft} patch={patch} defaults={defaults?.style} backgroundUrl={backgroundUrl} blocks={blocksQuery.data} onBusyChange={onAssetBusyChange} busy={assetBusy} runs={runs} /> : null}
         </div>
