@@ -16,6 +16,7 @@ import { registerAudioExportJobHandlers } from '../audio/audioExportJob'
 import { registerAudioLegacyImportJobHandlers } from '../audio/audioLegacyImportJob'
 import { registerImageBatchResizeJobHandlers } from '../imageBatchResize/imageBatchResizeService'
 import { initializeKnowledgeEvaluationRuntime, registerKnowledgeEvaluationHandler } from '../posts/knowledge/knowledgeEvaluation'
+import { initializePostTopicEvaluationRuntime, registerPostTopicEvaluationHandler } from '../posts/postTopicEvaluation'
 
 export { RuntimeJobRunner, RuntimeJobCancelledError } from './runtimeJobRunner'
 export type { RuntimeJobContext, RuntimeJobHandlerOptions } from './runtimeJobRunner'
@@ -57,6 +58,7 @@ export function registerRuntimeJobHandlers(): void {
   registerAudioLegacyImportJobHandlers()
   registerImageBatchResizeJobHandlers()
   registerKnowledgeEvaluationHandler()
+  registerPostTopicEvaluationHandler()
 }
 
 /** Register handlers and recover interrupted jobs. `index.ts` 기동 시퀀스가 1회 호출한다. */
@@ -64,4 +66,5 @@ export function bootstrapRuntimeJobs(): void {
   registerRuntimeJobHandlers()
   RuntimeJobRunner.bootstrap()
   initializeKnowledgeEvaluationRuntime()
+  initializePostTopicEvaluationRuntime()
 }

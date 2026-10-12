@@ -10,9 +10,10 @@ import { LoadingState } from '@/components/ui/loading-state'
 import { useI18n } from '@/i18n'
 import { POSTS_QUERY_KEY, getPostKnowledgeSearchStatus, listPostKnowledgeReviewQueue } from '@/lib/api-posts'
 import { PostKnowledgeStatus } from './post-knowledge-status'
+import { PostTopicSummary } from './post-topic-relevance'
 
 function KnowledgeListSummary({ post }: { post: PostSummary }) {
-  return <><span className="flex min-w-0 flex-1 flex-col gap-1.5"><span className="truncate font-semibold">{post.title}</span><PostKnowledgeStatus knowledge={post.knowledge} showVersion />{post.excerpt ? <span className="line-clamp-2 text-sm text-muted-foreground">{post.excerpt}</span> : null}{post.matchedComment ? <span className="truncate text-xs text-muted-foreground">{post.matchedComment.author}: {post.matchedComment.excerpt}</span> : null}</span><span className="text-xs text-muted-foreground">#{post.id}</span></>
+  return <><span className="flex min-w-0 flex-1 flex-col gap-1.5"><span className="truncate font-semibold">{post.title}</span><PostKnowledgeStatus knowledge={post.knowledge} showVersion />{post.excerpt ? <span className="line-clamp-2 text-sm text-muted-foreground">{post.excerpt}</span> : null}{post.matchedComment ? <span className="truncate text-xs text-muted-foreground">{post.matchedComment.author}: {post.matchedComment.excerpt}</span> : null}{!post.knowledge?.deletedAt ? <PostTopicSummary value={post.topicEvaluation} /> : null}</span><span className="text-xs text-muted-foreground">#{post.id}</span></>
 }
 
 export function PostKnowledgeList({ posts, onOpen, onRestore, onPermanentDelete, isRestoring = false }: { posts: PostSummary[]; onOpen: (post: PostSummary) => void; onRestore?: (post: PostSummary) => void; onPermanentDelete?: (post: PostSummary) => void; isRestoring?: boolean }) {

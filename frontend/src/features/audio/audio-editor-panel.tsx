@@ -132,7 +132,9 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
     const startX = (params.start / duration) * rect.width
     const endX = (params.end / duration) * rect.width
     const selecting = selectRegion || event.shiftKey
-    const kind = !selecting ? 'seek' : Math.abs(x - startX) <= 10 ? 'start' : Math.abs(x - endX) <= 10 ? 'end' : !event.shiftKey && x > startX && x < endX ? 'move' : 'new'
+    const startDistance = Math.abs(x - startX)
+    const endDistance = Math.abs(x - endX)
+    const kind = startDistance <= 12 && startDistance <= endDistance ? 'start' : endDistance <= 12 ? 'end' : !selecting ? 'seek' : !event.shiftKey && x > startX && x < endX ? 'move' : 'new'
     event.currentTarget.setPointerCapture(event.pointerId)
     const anchor = timeAt(event.clientX)
     drag.current = { kind, originX: event.clientX, originStart: params.start, originEnd: params.end, anchor }
@@ -213,7 +215,7 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
   const number = (value: number, digits = 3) => (Number.isFinite(value) ? value.toFixed(digits) : '')
 
   return (
-    <div className={cn('flex flex-col gap-4', className)}>
+    <div className={cn('flex min-w-0 flex-col gap-4', className)}>
       {showHeader ? (
         <div className="flex items-center gap-2">
           <h2 className="min-w-0 flex-1 truncate text-sm font-bold">{candidate.name}</h2>
@@ -235,7 +237,7 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
         aria-valuenow={Math.min(duration, playhead ?? 0)}
         aria-valuetext={`${number(playhead ?? 0, 2)} / ${number(duration, 2)}s`}
         aria-disabled={duration <= 0}
-        className={cn('relative h-24 touch-none select-none rounded-sm bg-foreground/[0.03] outline-none focus-visible:ring-2 focus-visible:ring-ring', selectRegion ? 'cursor-crosshair' : 'cursor-pointer')}
+        className={cn('relative h-24 overflow-hidden touch-none select-none rounded-sm bg-foreground/[0.03] outline-none focus-visible:ring-2 focus-visible:ring-ring', selectRegion ? 'cursor-crosshair' : 'cursor-pointer')}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={(event) => { drag.current = null; if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId) }}
@@ -258,15 +260,20 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
         <div className={cn('pointer-events-none absolute inset-y-0 border-x-2 border-primary bg-primary/12', selectRegion && 'border-x-4')} style={{ left: `${left}%`, right: `${right}%` }} />
         {playhead !== null && duration > 0 ? <div className="pointer-events-none absolute inset-y-0 w-px bg-foreground" style={{ left: `${(playhead / duration) * 100}%` }} /> : null}
         {hoverTime !== null && duration > 0 ? <div className="pointer-events-none absolute inset-y-0 border-l border-foreground/40" style={{ left: `${(hoverTime / duration) * 100}%` }}><span className={cn('absolute top-1 rounded-sm bg-popover px-1 font-mono text-2xs text-popover-foreground shadow-sm', hoverTime > duration / 2 ? 'right-1' : 'left-1')}>{number(hoverTime, 2)}s</span></div> : null}
+        {duration > 0 ? ([['start', left], ['end', 100 - right]] as const).map(([edge, position]) => (
+          <span key={edge} aria-hidden className="absolute inset-y-0 w-6 -translate-x-1/2 cursor-ew-resize" style={{ left: `${position}%` }}>
+            <span className="absolute top-1/2 left-1/2 h-6 w-1.5 -translate-1/2 rounded-full bg-primary" />
+          </span>
+        )) : null}
       </div>
-      <p className="-mt-2 text-2xs text-muted-foreground">{selectRegion ? t({ ko: '양 끝을 드래그해 구간 조절 · 안쪽 드래그로 이동 · Shift+드래그로 새 구간', en: 'Drag edges to trim · Drag inside to move · Shift+drag for a new region' }) : t({ ko: '클릭·드래그로 해당 위치 재생 · Shift+드래그로 구간 선택 · 파형에 포커스: Space 재생/정지, ← → 1초 이동 (Shift: 5초)', en: 'Click or drag to seek and play · Shift+drag to select · Waveform focused: Space play/pause, ← → 1 s (Shift: 5 s)' })}</p>
+      <p className="-mt-2 text-2xs text-muted-foreground">{selectRegion ? t({ ko: '양 끝을 드래그해 구간 조절 · 안쪽 드래그로 이동 · Shift+드래그로 새 구간', en: 'Drag edges to trim · Drag inside to move · Shift+drag for a new region' }) : t({ ko: '클릭·드래그로 해당 위치 재생 · 양 끝 손잡이로 구간 조절 · Shift+드래그로 구간 선택 · 파형에 포커스: Space 재생/정지, ← → 1초 이동 (Shift: 5초)', en: 'Click or drag to seek and play · Drag edge handles to trim · Shift+drag to select · Waveform focused: Space play/pause, ← → 1 s (Shift: 5 s)' })}</p>
 
       <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '시작', en: 'Start' })}
-          <Input className="font-mono" type="number" step="0.001" min={0} value={number(params.start)} onChange={(event) => set({ start: Number(event.target.value) })} />
+        <label className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '시작', en: 'Start' })}
+          <Input className="min-w-0 font-mono" type="number" step="0.001" min={0} value={number(params.start)} onChange={(event) => set({ start: Number(event.target.value) })} />
         </label>
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '끝', en: 'End' })}
-          <Input className="font-mono" type="number" step="0.001" min={0} value={number(params.end)} onChange={(event) => set({ end: Number(event.target.value) })} />
+        <label className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '끝', en: 'End' })}
+          <Input className="min-w-0 font-mono" type="number" step="0.001" min={0} value={number(params.end)} onChange={(event) => set({ end: Number(event.target.value) })} />
         </label>
       </div>
 
@@ -276,20 +283,20 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
           ['pitch_semitones', t({ ko: '피치', en: 'Pitch' }), -24, 24, 0.5, `${params.pitch_semitones > 0 ? '+' : ''}${params.pitch_semitones.toFixed(1)}`],
           ['speed', t({ ko: '속도', en: 'Speed' }), 0.25, 4, 0.05, `${params.speed.toFixed(2)}×`],
         ] as const).map(([key, label, min, max, step, readout]) => (
-          <div key={key} className="grid grid-cols-[3.5rem_1fr_4rem] items-center gap-3 text-xs text-muted-foreground">
+          <div key={key} className="grid grid-cols-[3.5rem_minmax(0,1fr)_4rem] items-center gap-3 text-xs text-muted-foreground">
             <span>{label}</span>
-            <Slider aria-label={label} min={min} max={max} step={step} value={[params[key]]} onValueChange={([value]) => set({ [key]: value } as Partial<AudioEditParams>)} />
+            <Slider className="min-w-0" aria-label={label} min={min} max={max} step={step} value={[params[key]]} onValueChange={([value]) => set({ [key]: value } as Partial<AudioEditParams>)} />
             <span className="text-right font-mono text-foreground">{readout}</span>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '페이드 인', en: 'Fade in' })}
-          <Input className="font-mono" type="number" step="0.005" min={0} max={5} value={params.fade_in} onChange={(event) => set({ fade_in: Number(event.target.value) })} />
+        <label className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '페이드 인', en: 'Fade in' })}
+          <Input className="min-w-0 font-mono" type="number" step="0.005" min={0} max={5} value={params.fade_in} onChange={(event) => set({ fade_in: Number(event.target.value) })} />
         </label>
-        <label className="flex flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '페이드 아웃', en: 'Fade out' })}
-          <Input className="font-mono" type="number" step="0.005" min={0} max={5} value={params.fade_out} onChange={(event) => set({ fade_out: Number(event.target.value) })} />
+        <label className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '페이드 아웃', en: 'Fade out' })}
+          <Input className="min-w-0 font-mono" type="number" step="0.005" min={0} max={5} value={params.fade_out} onChange={(event) => set({ fade_out: Number(event.target.value) })} />
         </label>
       </div>
       {problem ? <p className="text-xs text-destructive">{problem}</p> : null}
@@ -320,7 +327,7 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
       </dl>
 
       <label className="flex flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '메모', en: 'Memo' })}
-        <Textarea rows={3} value={notes} disabled={!canEdit} onChange={(event) => setNotes(event.target.value)} onBlur={() => void saveNotes()} />
+        <Textarea className="min-w-0 max-w-full resize-y" rows={3} value={notes} disabled={!canEdit} onChange={(event) => setNotes(event.target.value)} onBlur={() => void saveNotes()} />
       </label>
     </div>
   )

@@ -6,6 +6,7 @@ import { PostError, requireKey, requireHumanPostActor, isHumanPostActor, postAct
 import { PostStore, canEditPost, canSeePost, type PostRow } from './postStore';
 import { loadPostsSettings } from './postsSettings';
 import { removePostSearchDocument, writePostSearchDocument } from './postSearch';
+import { invalidatePostTopicRequests, onPostTopicWrite, kickPostTopicEvaluationQueue } from './postTopicEvaluation';
 import { notifySemanticChange } from '../embeddings/semanticSignal';
 
 const db = () => getUserSettingsDb();
@@ -306,6 +307,7 @@ function permanentDeletionAnalysis(actor:PostActor,knowledge:KnowledgeRow&{post:
 function changed(postId: number, content = false) {
   publishRuntimeEvent({ name: 'posts.changed', topic: 'posts', visibility: 'all', payload: { postId, kind: 'post' } });
   if (content) notifySemanticChange('post');
+  kickPostTopicEvaluationQueue();
 }
 
 export const KnowledgeStore = {
@@ -438,6 +440,7 @@ export const KnowledgeStore = {
       db().prepare('UPDATE post_knowledge SET deleted_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE post_id=?').run(postId);
       db().prepare('UPDATE posts SET revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(postId);
       appendKnowledgeReview(actor, postId, knowledge.content_version, 'trash');
+      invalidatePostTopicRequests(postId,'not_published');
     }).immediate();
     changed(postId,true);
   },
@@ -453,6 +456,7 @@ export const KnowledgeStore = {
       db().prepare('UPDATE posts SET revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(postId);
       writePostSearchDocument(postId);
       appendKnowledgeReview(actor, postId, knowledge.content_version, 'restore');
+      onPostTopicWrite(actor,knowledge.post);
     }).immediate();
     changed(postId,true);
     return PostStore.get(actor, postId);

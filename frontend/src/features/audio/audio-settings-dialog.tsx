@@ -229,6 +229,7 @@ function ExportTab() {
         {draft.format === 'ogg' ? num('quality', t({ ko: 'OGG 품질', en: 'OGG quality' }), '1') : null}
         {num('sample_rate', t({ ko: '샘플레이트', en: 'Sample rate' }), '1')}
         {num('channels', t({ ko: '채널', en: 'Channels' }), '1')}
+        <SettingsSwitchRow label={t({ ko: '앞뒤 무음 제거', en: 'Trim leading and trailing silence' })} info={t({ ko: '파일 앞뒤의 무음만 제거해. 소리 사이의 쉼은 유지해.', en: 'Trims silence at the start and end of each file, preserving pauses between sounds.' })} checked={draft.trim_silence} onCheckedChange={(checked) => set('trim_silence', checked)} />
         <SettingsSwitchRow label={t({ ko: '음량 맞추기', en: 'Normalize loudness' })} checked={draft.normalize} onCheckedChange={(checked) => set('normalize', checked)} />
         {draft.normalize ? (
           <>

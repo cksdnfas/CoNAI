@@ -21,6 +21,8 @@ import { ChatProfileStore } from '../codex-chat/chatProfiles';
 import { isProfileAssetHidden } from '../codex-chat/chatProfileAssets';
 import { PostError, requireKey, requireHumanPostActor, type PostActor } from './postActor';
 import { excerptOf, extractMediaRefs, saveMediaRefs } from './postMedia';
+import { createPostTopicResolver, onPostTopicWrite, requestPostTopicEvaluation, kickPostTopicEvaluationQueue } from './postTopicEvaluation';
+import { isHumanPostActor } from './postActor';
 import { loadPostsSettings } from './postsSettings';
 import { commentMatches, removePostSearchDocument, postSearchFilter, trashPostSearchFilter, refreshPostSearchIndex, writePostSearchDocument, createPostRelevanceResolver } from './postSearch';
 import { findKnowledgeRow, getKnowledgeState, visibleKnowledgeSources, requireKnowledgeRevision, syncKnowledgeContent, normalizeKnowledgeSources, saveKnowledgeSources, KnowledgeStore } from './knowledgeStore';
@@ -331,11 +333,13 @@ function summaries(actor: PostActor, rows: PostRow[]): PostSummary[] {
     media.set(row.post_id, list);
   }
   const author = createAuthorResolver(actor);
+  const topicEvaluation = createPostTopicResolver(ids);
   return rows.map((row) => ({
     id: row.id, categoryId: row.category_id, title: row.title, excerpt: row.excerpt, status: row.status, author: author(row),
     tags: tags.get(row.id) ?? [], media: media.get(row.id) ?? [], mediaCount: counts.get(row.id) ?? 0, commentCount: row.comment_count,
     pinned: row.pinned === 1, commentMode: row.comment_mode, revision: row.revision, publishedAt: iso(row.published_at),
     createdAt: iso(row.created_at) as string, updatedAt: iso(row.updated_at) as string, canEdit: canEditPost(actor, row), knowledge: getKnowledgeState(row.id, actor),
+    topicEvaluation: topicEvaluation(row,canEditPost(actor,row) && isHumanPostActor(actor)),
   }));
 }
 
@@ -488,6 +492,13 @@ export const PostStore = {
       ...(knowledge ? { knowledgeSources: visibleKnowledgeSources(actor,postId),knowledgeQuality: getKnowledgeQuality(actor,postId) } : {}) };
   },
 
+  requestTopicEvaluation(actor: PostActor, postId: number, input: unknown): PostDetail {
+    const row = requirePostRow(actor,postId);
+    if (!canEditPost(actor,row)) throw new PostError('이 글을 다시 평가할 권한이 없어.',403);
+    requestPostTopicEvaluation(actor,row,input);
+    return PostStore.get(actor,postId);
+  },
+
   /** `source`: manual (web), chat (a bot tool), routine, workflow, mention; `origin`: the chat reply it came from. */
   create(actor: PostActor, input: PostInput, source = 'manual', origin: PostOrigin | null = null): PostDetail {
     requireKey(actor, 'posts.write');
@@ -511,10 +522,12 @@ export const PostStore = {
       saveTags(id, tags);
       saveMediaRefs(id, 'post', id, refs, actor.accountId);
       writePostSearchDocument(id);
+      onPostTopicWrite(actor, { id, title, body, status, owner_account_id: actor.accountId, author_profile_id: actor.profileId });
       return id;
     }).immediate();
     announce(postId, 'post');
     notifySemanticChange('post');
+    kickPostTopicEvaluationQueue();
     return PostStore.get(actor, postId);
   },
 
@@ -555,10 +568,12 @@ export const PostStore = {
       if (body !== row.body) saveMediaRefs(postId, 'post', postId, extractMediaRefs(body), row.owner_account_id);
       syncKnowledgeContent(actor,postId);
       writePostSearchDocument(postId);
+      onPostTopicWrite(actor,{ ...row,title,body,status },row);
       return postId;
     }).immediate();
     announce(updated, 'post');
     notifySemanticChange('post');
+    kickPostTopicEvaluationQueue();
     return PostStore.get(actor, updated);
   },
 

@@ -33,10 +33,12 @@ export interface AudioExportOptions {
   loudness_range: number;
   sample_rate: number;
   channels: number;
+  trim_silence: boolean;
 }
 
 export const DEFAULT_AUDIO_EXPORT_OPTIONS: AudioExportOptions = {
   format: 'ogg', quality: 3, normalize: true, target_lufs: -16, peak_db: -1.5, loudness_range: 7, sample_rate: 0, channels: 0,
+  trim_silence: true,
 };
 
 const OPTION_KEYS = Object.keys(DEFAULT_AUDIO_EXPORT_OPTIONS) as Array<keyof AudioExportOptions>;
@@ -76,6 +78,7 @@ export function parseAudioExportOverrides(input: unknown): Partial<AudioExportOp
   }
   if (present('quality')) result.quality = numberValue('quality', source.quality, 0, 10, true);
   if (present('normalize')) result.normalize = boolValue('normalize', source.normalize);
+  if (present('trim_silence')) result.trim_silence = boolValue('trim_silence', source.trim_silence);
   if (present('target_lufs')) result.target_lufs = numberValue('target_lufs', source.target_lufs, -70, -5);
   if (present('peak_db')) result.peak_db = numberValue('peak_db', source.peak_db, -9, 0);
   if (present('loudness_range')) result.loudness_range = numberValue('loudness_range', source.loudness_range, 1, 50);
@@ -170,17 +173,52 @@ function baseChain(options: AudioExportOptions, rate: number): string[] {
   return chain;
 }
 
+/** Detect on the source, across all channels; keep one continuous interval so internal pauses survive. */
+async function detectAudioExportRegion(source: string, duration: number, signal?: AbortSignal): Promise<{ start: number; end: number }> {
+  const original = { start: 0, end: duration };
+  const { stdout } = await runAudioFfmpeg([
+    '-nostdin', '-v', 'error', '-i', source, '-map', '0:a:0', '-vn',
+    '-af', 'asetpts=PTS-STARTPTS,silencedetect=noise=-60dB:duration=0.02,ametadata=mode=print:file=-', '-f', 'null', '-',
+  ], { signal });
+  // Frame metadata has an end event only when sound resumes; a remaining start marks silence at EOF.
+  // Stderr also reports an end at EOF, which must not be mistaken for sound resuming.
+  let silenceStart: number | null = null;
+  let start = 0;
+  const padding = 0.01;
+  for (const match of stdout.toString('utf8').matchAll(/lavfi\.silence_(start|end)=([-+\d.eE]+)/g)) {
+    const at = Number(match[2]);
+    if (!Number.isFinite(at)) continue;
+    if (match[1] === 'start') silenceStart = at;
+    else if (silenceStart !== null && at >= silenceStart) {
+      if (silenceStart === 0) start = Math.max(0, at - padding);
+      silenceStart = null;
+    }
+  }
+  // A fully silent file stays valid instead of becoming an empty export.
+  if (silenceStart === 0) return original;
+  const end = silenceStart === null ? duration : Math.min(duration, silenceStart + padding);
+  return end > start ? { start, end } : original;
+}
+
 /** Measure (when normalising) and decide the final chain for one file. */
 export async function planAudioFileExport(source: string, options: AudioExportOptions, meta: { duration: number; sampleRate: number }, signal?: AbortSignal): Promise<AudioExportRenderPlan> {
   const rate = options.sample_rate || meta.sampleRate;
   const base = baseChain(options, rate);
+  let duration = meta.duration;
+  if (options.trim_silence) {
+    const region = await detectAudioExportRegion(source, duration, signal);
+    if (region.start > 0 || region.end < duration) {
+      base.unshift(`atrim=start=${region.start}:end=${region.end}`, 'asetpts=PTS-STARTPTS');
+      duration = region.end - region.start;
+    }
+  }
   if (!options.normalize) return { branch: 'no_normalize', chain: base.join(','), rate, measured: null };
   const loudnorm = `loudnorm=I=${options.target_lufs}:LRA=${options.loudness_range}:TP=${options.peak_db}`;
   // EBU measurement needs a 400 ms block, even for a shorter one-shot.
   const measure = [...base, 'apad=whole_dur=0.4', `${loudnorm}:print_format=json`].join(',');
   const { stderr } = await runAudioFfmpeg(['-nostdin', '-v', 'info', '-i', source, '-map', '0:a:0', '-vn', '-af', measure, '-f', 'null', '-'], { signal });
   const measured = parseLoudnormReport(stderr);
-  const decided = decideAudioExportChain(options, base, measured, meta.duration);
+  const decided = decideAudioExportChain(options, base, measured, duration);
   return { branch: decided.branch, chain: decided.chain.join(','), rate, measured };
 }
 
@@ -212,7 +250,7 @@ export async function exportAudioCandidateFile(candidateId: string, options: Aud
   const source = audioBlobPath(file.hash, file.ext);
   if (!fs.existsSync(source)) throw new AudioServiceError('오디오 파일을 찾을 수 없어.', 404);
   const target = path.join(directory, fileName);
-  if (file.ext === 'wav' && options.format === 'wav' && !options.normalize && !options.sample_rate && !options.channels) {
+  if (file.ext === 'wav' && options.format === 'wav' && !options.normalize && !options.sample_rate && !options.channels && !options.trim_silence) {
     await fs.promises.copyFile(source, target);
     return { path: target, branch: 'stored' };
   }

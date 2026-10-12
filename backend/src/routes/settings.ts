@@ -19,6 +19,7 @@ import { dataRematchSettingsRoutes } from './settings/data-rematch.routes';
 import { ratingSettingsRoutes } from './settings/rating.routes';
 import { runtimeSettingsRoutes } from './settings/runtime.routes';
 import { mcpHttpSettingsRoutes } from './settings/mcp-http.routes';
+import { contentEvaluationRoutes } from './settings/content-evaluation.routes';
 
 const router = Router();
 
@@ -62,5 +63,6 @@ router.use('/', dataRematchSettingsRoutes);
 router.use('/rating', ratingSettingsRoutes);
 router.use('/', runtimeSettingsRoutes);
 router.use('/', mcpHttpSettingsRoutes);
+router.use('/', contentEvaluationRoutes);
 
 export const settingsRoutes = router;

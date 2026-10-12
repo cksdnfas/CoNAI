@@ -70,6 +70,11 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
     assert.equal(next.safety.botsPerComment, 1)
     assert.equal(next.safety.repliesPerPostPerHour, 20, 'untouched fields keep their value')
     assert.equal(normalizePostsSettings({ layout: 'weird' }).layout, 'feed')
+    assert.equal(next.topicEvaluation.autoEnabled, false, 'existing installations do not start model calls')
+    const settingsPath = path.join(root, 'config', 'posts.json')
+    fs.writeFileSync(settingsPath, JSON.stringify({ ...next, topicEvaluation: { ...next.topicEvaluation, dailyCallLimit: 0 } }))
+    assert.equal(loadPostsSettings().topicEvaluation.dailyCallLimit, 0, 'workers observe changes written by another process')
+    updatePostsSettings({ topicEvaluation: { dailyCallLimit: 20 } })
     updatePostsSettings({ layout: 'feed', safety: { chainDepth: 2, botsPerComment: 3 } })
   })
 
@@ -524,5 +529,151 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
     }
     assert.equal((await FileStoreService.readText(fileOwnerKey(2),file.id)).text,'보존할 실제 첨부 내용')
     assert.equal(PostStore.embeddedFileOwner(voter,shared.id,file.id),fileOwnerKey(2))
+  })
+
+  await t.test('topic relevance: versioned criteria, independent scores and strict request guards', async (s) => {
+    const { loadContentEvaluationSettings, updateContentEvaluationSettings } = await import('../src/services/contentEvaluation/definitionStore')
+    const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
+    const { topicScore, topicQuestion } = await import('../src/services/contentEvaluation/topicScore')
+    const { askJudge, resolveJudgeConnection } = await import('../src/services/judge/judgeEngine')
+    ExternalApiProvider.create({ provider_name: 'topic-judge', display_name: 'Topic judge', provider_type: 'decision_typesafe', base_url: 'http://topic.invalid', is_enabled: true, additional_config: {} })
+    const modelSlotId = ModelSlotStore.ensure('topic-judge','judge-test')
+    const topics = ['교육','AI','LLM'].map((name,index) => ({ id: 'topic-' + index, name, description: 'Assess substantive discussion of ' + name, enabled: true }))
+    const initial = loadContentEvaluationSettings()
+    const saved = updateContentEvaluationSettings({ expectedRevision: initial.revision, modelSlotId, topics })
+    assert.equal(saved.definitionVersion,initial.definitionVersion + 1)
+    assert.throws(() => updateContentEvaluationSettings({ expectedRevision: initial.revision, modelSlotId, topics }), (error: any) => error.statusCode === 409)
+    assert.throws(() => ModelSlotStore.delete(modelSlotId!), /콘텐츠 평가/)
+    const mixed = { none:0,mention:0,partial:0.2,major:0.8,core:0,unknown:0 }
+    const scored = topicScore(topics[0],{probability:0,confidence:0.8,choice:'major',distribution:mixed})
+    assert.equal(scored.score,70)
+    assert.equal(topicScore(topics[1],{probability:0,confidence:1,choice:'core',distribution:{...mixed,partial:0,major:0,core:1}}).score,100)
+    assert.equal(topicScore(topics[0],{probability:0,confidence:1,choice:'none',distribution:{...mixed,partial:0,major:0,none:1}}).score,0)
+    assert.equal(topicScore(topics[0],{probability:0,confidence:1,choice:'unknown',distribution:{...mixed,partial:0,major:0,unknown:1}}).answerStatus,'unknown')
+    assert.equal(topicScore(topics[0],undefined).answerStatus,'missing')
+    let calls = 0
+    s.mock.method(globalThis,'fetch',async () => { calls++; return Response.json({model:'judge-test',answers:{'topic-0':{type:'choice',choice:'core',probabilities:{core:1}}}}) })
+    const connection = resolveJudgeConnection('topic-judge','judge-test')
+    const strict = await askJudge(connection,{},[topicQuestion(topics[0])],undefined,undefined,{strictDistributions:true})
+    assert.equal(strict.answers.size,0,'missing probability fields must not turn into confident scores')
+    const loose = await askJudge(connection,{},[topicQuestion(topics[0])])
+    assert.equal(loose.answers.get('topic-0')?.distribution?.core,1,'existing judge calls keep their normalization contract')
+    const before = calls
+    await assert.rejects(askJudge(resolveJudgeConnection('conn','m'),{},[topicQuestion(topics[0])],undefined,undefined,{
+      strictDistributions:true,beforeRequest:() => { throw new Error('request authorization stopped') },
+    }),/request authorization stopped/)
+    assert.equal(calls,before,'LLM authorization runs after acquiring the request slot and before fetch')
+  })
+
+  await t.test('topic relevance runtime: publication, stale responses, current access and deletion-safe budgets', {timeout:20000}, async (s) => {
+    const { AuthAccount } = await import('../src/models/AuthAccount')
+    const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
+    const { RuntimeJobRunner } = await import('../src/services/runtimeJobs/runtimeJobRunner')
+    const runtime = await import('../src/services/posts/postTopicEvaluation')
+    const { loadContentEvaluationSettings, updateContentEvaluationSettings } = await import('../src/services/contentEvaluation/definitionStore')
+    let revoked = false, calls = 0, holdNext = false
+    let malformed: 'none' | 'partial' | 'all' = 'none'
+    let release: (() => void) | null = null
+    s.mock.method(AuthAccount,'findById',(id: number) => ({ id, username:'test', account_type:id === 1 ? 'admin' : 'user', status:revoked ? 'disabled' : 'active' }))
+    s.mock.method(AuthAccessControlService,'resolveForAccountId',() => ({permissionKeys:ALL}))
+    s.mock.method(globalThis,'fetch',async (_url: unknown, init?: RequestInit) => {
+      calls++
+      const request = JSON.parse(String(init?.body))
+      if (holdNext) { holdNext = false; await new Promise<void>(resolve => { release = resolve }) }
+      const answers = Object.fromEntries(Object.keys(request.questions).map((id,index) => {
+        const probabilities = { none:0,mention:0,partial:index === 1 ? 0 : 0.2,major:index === 1 ? 0 : 0.8,core:index === 1 ? 1 : 0,unknown:0 }
+        if (request.state.body.includes('새 내용')) { probabilities.none=1;probabilities.partial=0;probabilities.major=0;probabilities.core=0 }
+        return [id,{type:'choice',choice:index === 1 ? 'core' : 'major',probabilities:malformed === 'all' || malformed === 'partial' && index === 2 ? {core:1} : probabilities}]
+      }))
+      return Response.json({model:'judge-test',answers,usage:{input_tokens:30,output_tokens:10}})
+    })
+    const wait = async (condition: () => boolean) => {
+      const deadline = Date.now() + 4000
+      while (!condition() && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve,10))
+      assert.ok(condition(),'evaluation state should settle')
+    }
+    const view = (id: number) => PostStore.get(admin,id).topicEvaluation!
+    const usageCount = () => (db.prepare("SELECT COUNT(*) AS n FROM post_topic_evaluation_usage WHERE account_key='account:1' AND created_at>=date('now')").get() as {n:number}).n
+    updatePostsSettings({ topicEvaluation: {autoEnabled:true,reevaluateOnEdit:true,dailyCallLimit:100,dailyTokenLimit:100000,maxRetries:0} })
+    runtime.registerPostTopicEvaluationHandler()
+    runtime.initializePostTopicEvaluationRuntime()
+    s.after(() => { runtime.shutdownPostTopicEvaluationRuntime(); RuntimeJobRunner.shutdown(); updatePostsSettings({topicEvaluation:{autoEnabled:false}}) })
+    const draft = PostStore.create(admin,{title:'학습과 AI',body:'LLM 수업 자료',status:'draft'})
+    assert.equal(view(draft.id).status,'unassessed')
+    assert.equal(calls,0)
+    PostStore.update(admin,draft.id,{status:'published'})
+    runtime.kickPostTopicEvaluationQueue()
+    await wait(() => view(draft.id).status === 'completed')
+    assert.deepEqual(view(draft.id).items.map(item => item.score),[70,100,70])
+    assert.equal(view(draft.id).isCurrent,true)
+    const requestId = view(draft.id).requestId
+    PostStore.update(admin,draft.id,{tags:['metadata-only']})
+    assert.equal(view(draft.id).requestId,requestId)
+    const manual = {expectedContentHash:view(draft.id).contentHash,idempotencyKey:'topic-command',force:false}
+    assert.equal(PostStore.requestTopicEvaluation(admin,draft.id,manual).topicEvaluation?.requestId,requestId)
+    assert.equal(PostStore.requestTopicEvaluation(admin,draft.id,manual).topicEvaluation?.requestId,requestId)
+    assert.equal(status(() => PostStore.requestTopicEvaluation(bob,draft.id,manual)),403)
+    assert.equal(status(() => PostStore.requestTopicEvaluation({...admin,profileId:luna.id},draft.id,manual)),403)
+    assert.equal(status(() => PostStore.requestTopicEvaluation(admin,draft.id,{...manual,idempotencyKey:'force',force:true})),429)
+    const count = calls
+    const cfg = loadContentEvaluationSettings()
+    updateContentEvaluationSettings({expectedRevision:cfg.revision,modelSlotId:cfg.modelSlotId,topics:cfg.topics.map((topic,index) => index === 0 ? {...topic,description:'Updated learning criterion'} : topic)})
+    assert.equal(view(draft.id).isCurrent,false)
+    assert.equal(PostStore.get(reader,draft.id).topicEvaluation?.items.length,0,'previous results are not exposed as current reader metadata')
+    assert.equal(calls,count,'criteria edits never enqueue the existing corpus')
+
+    malformed = 'partial'
+    const partial = PostStore.create(admin,{title:'응답 일부 누락',body:'교육 자료'})
+    await wait(() => view(partial.id).status === 'partial')
+    assert.equal(view(partial.id).items[2].answerStatus,'missing')
+    assert.equal(view(partial.id).items[2].score,null)
+    malformed = 'all'
+    const invalid = PostStore.create(admin,{title:'응답 전체 오류',body:'교육 자료'})
+    await wait(() => view(invalid.id).status === 'failed')
+    assert.equal(view(invalid.id).reasonCode,'invalid_response')
+    assert.equal(view(invalid.id).items.length,0)
+    malformed = 'none'
+
+    holdNext = true
+    const changing = PostStore.create(admin,{title:'수정 중 평가',body:'이전 내용'})
+    await wait(() => release !== null)
+    const staleId = view(changing.id).requestId!
+    PostStore.update(admin,changing.id,{body:'새 내용'})
+    release!()
+    await wait(() => view(changing.id).status === 'completed')
+    assert.equal(view(changing.id).isCurrent,true)
+    assert.ok(view(changing.id).items.every(item => item.score === 0),'late old scores never overwrite the new content')
+    assert.equal((db.prepare('SELECT status FROM post_topic_evaluation_requests WHERE id=?').get(staleId) as {status:string}).status,'superseded')
+
+    release = null
+    holdNext = true
+    const disconnected = PostStore.create(admin,{title:'평가 중 연결 중지',body:'교육 자료'})
+    await wait(() => release !== null)
+    ExternalApiProvider.update('topic-judge',{is_enabled:false})
+    release!()
+    await wait(() => view(disconnected.id).status === 'skipped')
+    assert.equal(view(disconnected.id).reasonCode,'judge_unavailable')
+    assert.equal(view(disconnected.id).items.length,0,'a disabled connection cannot commit its late result')
+    ExternalApiProvider.update('topic-judge',{is_enabled:true})
+
+    revoked = true
+    const privateAccess = PostStore.create(admin,{title:'권한 회수',body:'교육 자료'})
+    const beforeRevoked = calls
+    await wait(() => view(privateAccess.id).status === 'skipped')
+    assert.equal(calls,beforeRevoked,'current account access is checked before calling the provider')
+    revoked = false
+
+    const quota = usageCount() + 1
+    updatePostsSettings({topicEvaluation:{dailyCallLimit:quota}})
+    const billable = PostStore.create(admin,{title:'마지막 평가',body:'교육 자료'})
+    await wait(() => view(billable.id).status === 'completed')
+    assert.equal(usageCount(),quota)
+    PostStore.remove(admin,billable.id)
+    assert.equal(usageCount(),quota,'deleting a post must not refund the daily call allowance')
+    const blocked = PostStore.create(admin,{title:'한도 초과',body:'교육 자료'})
+    const beforeBudget = calls
+    await wait(() => view(blocked.id).status === 'skipped')
+    assert.equal(view(blocked.id).reasonCode,'daily_budget')
+    assert.equal(calls,beforeBudget)
   })
 })

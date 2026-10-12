@@ -23,6 +23,8 @@ function postForModel(post: ReturnType<typeof PostStore.get>) {
     id: post.id, title: post.title, status: post.status, category_id: post.categoryId, tags: post.tags, author: post.author.name,
     author_is_bot: post.author.type === 'profile', published_at: post.publishedAt, revision: post.revision, comment_count: post.commentCount,
     can_edit: post.canEdit, body: post.body,
+    ...(post.topicEvaluation ? { topic_relevance: { status: post.topicEvaluation.status, is_current: post.topicEvaluation.isCurrent,
+      coverage: post.topicEvaluation.coverage, items: post.topicEvaluation.isCurrent ? post.topicEvaluation.items.map(item => ({ topic: item.name, score: item.score, level: item.level })) : [] } } : {}),
     ...(post.knowledge ? { knowledge: post.knowledge, quality: post.knowledgeQuality, sources: post.knowledgeSources } : {}),
   };
 }

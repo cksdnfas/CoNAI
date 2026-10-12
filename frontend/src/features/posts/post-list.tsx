@@ -12,6 +12,7 @@ import { libraryMediaKind } from './post-media'
 import { PostAuthorAvatar, PostAuthorName, useRelativeTime } from './post-author'
 import { usePostPermissions } from './use-post-permissions'
 import { PostKnowledgeStatus } from './post-knowledge-status'
+import { PostTopicSummary } from './post-topic-relevance'
 
 type ListProps = {
   posts: PostSummary[]
@@ -96,6 +97,7 @@ export function PostFeed({ posts, categories, onOpen, onTag }: ListProps) {
               {post.excerpt ? <p className="line-clamp-2 text-sm text-muted-foreground">{post.excerpt}</p> : null}
               <MatchedComment post={post} />
               <TagRow tags={post.tags} onTag={onTag} />
+              <PostTopicSummary value={post.topicEvaluation} />
             </div>
           </div>
         )
@@ -124,6 +126,7 @@ export function PostCards({ posts, categories, onOpen, onTag }: ListProps) {
             <PostMeta post={post} categories={categories} />
             <MatchedComment post={post} />
             <TagRow tags={post.tags} onTag={onTag} />
+            <PostTopicSummary value={post.topicEvaluation} />
           </div>
         )
       })}
@@ -219,6 +222,7 @@ function SnsSlide({ post, categories, onOpen, onTag, onVisible }: Omit<ListProps
               <MessageCircle />{post.commentCount}
             </Button>
           </div>
+          <PostTopicSummary value={post.topicEvaluation} />
         </div>
       </div>
     </article>

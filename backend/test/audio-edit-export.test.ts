@@ -164,7 +164,7 @@ test('audio workspace: edits, exports, deletion plan and MCP tools', { timeout: 
     assert.equal(manifest.exports.length, 8)
     const branches = new Set<string>()
     for (const entry of manifest.exports) {
-      const options = { ...exporting.DEFAULT_AUDIO_EXPORT_OPTIONS, ...exporting.parseAudioExportOverrides(entry.options) }
+      const options = { ...exporting.DEFAULT_AUDIO_EXPORT_OPTIONS, trim_silence: false, ...exporting.parseAudioExportOverrides(entry.options) }
       const meta = { duration: entry.meta_arg.duration, sampleRate: entry.meta_arg.sample_rate }
       const source = path.join(GOLDEN, entry.input)
       const plan = await exporting.planAudioFileExport(source, options, meta)
@@ -284,11 +284,60 @@ test('audio workspace: edits, exports, deletion plan and MCP tools', { timeout: 
     assert.deepEqual((await call('/api/audio/settings/export', listenerId)).json().data, exporting.DEFAULT_AUDIO_EXPORT_OPTIONS)
     assert.equal((await call('/api/audio/settings/export', listenerId, { method: 'PUT', body: JSON.stringify({ format: 'wav' }) })).status, 403)
     assert.equal((await call('/api/audio/settings/export', editorId, { method: 'PUT', body: JSON.stringify({ sample_rate: 12345 }) })).status, 422)
-    const saved = (await call('/api/audio/settings/export', editorId, { method: 'PUT', body: JSON.stringify({ format: 'wav', normalize: false }) })).json().data
+    assert.equal((await call('/api/audio/settings/export', editorId, { method: 'PUT', body: JSON.stringify({ trim_silence: 'invalid' }) })).status, 422)
+    const saved = (await call('/api/audio/settings/export', editorId, { method: 'PUT', body: JSON.stringify({ format: 'wav', normalize: false, trim_silence: true }) })).json().data
     assert.equal(saved.format, 'wav')
     assert.equal(saved.normalize, false)
+    assert.equal(saved.trim_silence, true)
+    assert.equal((await call('/api/audio/settings/export', listenerId)).json().data.trim_silence, true)
     assert.equal(saved.target_lufs, -16)
     assert.deepEqual(exporting.resolveAudioExportOptions({ format: 'ogg' }), { ...saved, format: 'ogg' }, 'request options override the saved ones')
+    assert.equal(exporting.resolveAudioExportOptions({ trim_silence: 'false' }).trim_silence, false)
+    await call('/api/audio/settings/export', editorId, { method: 'PUT', body: JSON.stringify({ trim_silence: false }) })
+  })
+
+  await t.test('silence trimming removes only file edges, preserving both sounds and the pause in WAV/OGG with or without normalization', async () => {
+    const rate = 48000
+    const edges = path.join(scratch, 'silence-edges.wav')
+    // The left channel is silent throughout; sound in either channel must protect the interval.
+    execFileSync(ffmpeg, ['-v', 'error', '-y', '-f', 'lavfi', '-i', "aevalsrc='0|if(between(t,0.3,0.6)+between(t,1.2,1.5),0.1*sin(2*PI*440*t),0)':s=48000:d=1.8", edges])
+    const original = fs.readFileSync(edges)
+    const plain = { ...exporting.DEFAULT_AUDIO_EXPORT_OPTIONS, format: 'wav' as const, normalize: false, trim_silence: false }
+    const untouched = path.join(scratch, 'silence-untrimmed.wav')
+    await exporting.renderAudioFileExport(edges, untouched, plain, { duration: 1.8, sampleRate: rate })
+    assert.equal(levels(untouched, 2, 480).frames, 1.8 * rate, 'disabling trimming preserves the full duration')
+    for (const format of ['wav', 'ogg'] as const) {
+      for (const normalize of [false, true]) {
+        const target = path.join(scratch, `silence-trimmed-${normalize}.${format}`)
+        await exporting.renderAudioFileExport(edges, target, { ...plain, format, normalize, trim_silence: true }, { duration: 1.8, sampleRate: rate })
+        const got = levels(target, 2, 480)
+        assert.ok(Math.abs(got.frames / rate - 1.22) < 0.015, `${format}/${normalize}: only the outer silence is removed`)
+        for (const index of [10, 110]) assert.ok(got.rms[index] !== null && got.rms[index]! > -50, `${format}/${normalize}: both sounds remain`)
+        assert.ok(got.rms.slice(36, 84).every((value) => value === null || value < -60), `${format}/${normalize}: the middle pause stays silent and keeps its length`)
+      }
+    }
+    assert.deepEqual(fs.readFileSync(edges), original, 'exporting never rewrites the source')
+
+    const onlyMiddle = path.join(scratch, 'silence-middle.wav')
+    execFileSync(ffmpeg, ['-v', 'error', '-y', '-f', 'lavfi', '-i', "aevalsrc='if(between(t,0,0.3)+between(t,0.9,1.2),0.1*sin(2*PI*440*t),0)':s=48000:d=1.2", onlyMiddle])
+    const middleTarget = path.join(scratch, 'silence-middle-export.wav')
+    await exporting.renderAudioFileExport(onlyMiddle, middleTarget, { ...plain, trim_silence: true }, { duration: 1.2, sampleRate: rate })
+    assert.equal(levels(middleTarget, 1, 480).frames, 1.2 * rate, 'a file with only an internal pause keeps its full duration')
+
+    const silent = path.join(scratch, 'silence-only.wav')
+    execFileSync(ffmpeg, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo', '-t', '0.5', silent])
+    const silentTarget = path.join(scratch, 'silence-only-export.wav')
+    await exporting.renderAudioFileExport(silent, silentTarget, { ...plain, normalize: true, trim_silence: true }, { duration: 0.5, sampleRate: rate })
+    assert.equal(levels(silentTarget, 2, 480).frames, 0.5 * rate, 'a fully silent file remains a valid export')
+
+    const trimProject = service.createAudioProject({ name: 'trim edges' }, null)
+    const trimGroup = service.createAudioGroup(trimProject.id, { name: 'two sounds', label: 'two_sounds' })
+    const candidate = await service.importAudioUpload({ groupId: trimGroup.id }, staged(edges), 'two sounds.wav', null)
+    const exported = await call(`/api/audio/candidates/${candidate.id}/export?format=wav&normalize=false&trim_silence=true`, listenerId)
+    assert.equal(exported.status, 200)
+    const downloaded = path.join(scratch, 'silence-http-export.wav')
+    fs.writeFileSync(downloaded, exported.buffer)
+    assert.ok(Math.abs(levels(downloaded, 2, 480).frames / rate - 1.22) < 0.015, 'trimming bypasses the stored-WAV copy fast path')
   })
 
   await t.test('single export: a selected take is named by its group label, others by their own name', async () => {
@@ -450,9 +499,10 @@ test('audio workspace: edits, exports, deletion plan and MCP tools', { timeout: 
     const cleared = await tool(editor, 'delete_unselected_audio_candidates', { group_id: snow.id, candidate_ids: [edited.json().candidate_id] })
     assert.deepEqual(cleared.json(), { deleted: 1 })
 
-    const exported = await tool(editor, 'export_audio_selected', { project_id: project.id, audio_group_id: snow.id, format: 'wav', normalize: false })
+    const exported = await tool(editor, 'export_audio_selected', { project_id: project.id, audio_group_id: snow.id, format: 'wav', normalize: false, trim_silence: true })
     assert.equal(exported.error, false, exported.text)
     const reply = exported.json()
+    assert.equal(reply.manifest.options.trim_silence, true)
     assert.deepEqual(reply.manifest.files.map((file: { filename: string }) => file.filename), ['footstep_snow_01.wav', 'footstep_snow_02.wav'])
     assert.equal(reply.artifact.mime_type, 'application/zip')
     assert.match(reply.artifact.download_url, /\/api\/audio\/exports\/[0-9a-f-]+\/download$/)

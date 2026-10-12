@@ -1083,6 +1083,7 @@ export interface ModelSlot {
   contentRatingTierId: number | null
   profiles: Array<{ id: number; name: string; roles: ModelUseRole[] }>
   judgePresets: Array<{ id: number; name: string }>
+  contentEvaluations?: number
   userProfiles: number
   chats: number
   createdDate: string

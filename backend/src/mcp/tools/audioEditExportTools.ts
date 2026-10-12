@@ -38,6 +38,7 @@ const exportOptionShape = {
   format: z.enum(['wav', 'ogg']).optional().describe('Default: the saved export setting (ogg unless changed)'),
   quality: z.number().int().min(0).max(10).optional().describe('OGG Vorbis quality 0-10'),
   normalize: z.boolean().optional().describe('Per-file loudness normalisation (EBU R128)'),
+  trim_silence: z.boolean().optional().describe('Trim only leading and trailing silence; keep pauses between sounds (default true unless saved otherwise)'),
   target_lufs: z.number().min(-70).max(-5).optional(),
   peak_db: z.number().min(-9).max(0).optional().describe('True-peak ceiling in dBTP'),
   loudness_range: z.number().min(1).max(50).optional(),

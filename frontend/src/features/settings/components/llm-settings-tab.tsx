@@ -4,17 +4,19 @@ import { useI18n } from '@/i18n'
 import { ChatSettingsJudge } from './chat-settings-judge'
 import { LlmConnectionsTab } from './llm-connections-tab'
 import { LlmUsageDashboard } from './llm-usage-dashboard'
+import { ContentEvaluationSettingsRows } from './content-evaluation-settings'
+import type { useContentEvaluationSettings } from '../use-content-evaluation-settings'
 import { SETTINGS_TEXT_TAB_LIST_CLASS, SETTINGS_TEXT_TAB_TRIGGER_CLASS } from './settings-text-tabs'
 
-type LlmSettingsView = 'dashboard' | 'connections' | 'judge'
+type LlmSettingsView = 'dashboard' | 'connections' | 'judge' | 'content-evaluation'
 
 /** `?view=` of the LLM tab; no value means the dashboard. */
 function parseView(raw: string | null): LlmSettingsView {
-  return raw === 'connections' || raw === 'judge' ? raw : 'dashboard'
+  return raw === 'connections' || raw === 'judge' || raw === 'content-evaluation' ? raw : 'dashboard'
 }
 
 /** Settings › LLM: text tabs for the usage dashboard, the connections (with chat diagnostics) and the judge log. */
-export function LlmSettingsTab() {
+export function LlmSettingsTab({ contentEvaluation }: { contentEvaluation: ReturnType<typeof useContentEvaluationSettings>['tabProps'] }) {
   const { t } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
   const view = parseView(searchParams.get('view'))
@@ -35,10 +37,12 @@ export function LlmSettingsTab() {
         <TabsTrigger value="dashboard" className={SETTINGS_TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '계기판', en: 'Dashboard' })}</TabsTrigger>
         <TabsTrigger value="connections" className={SETTINGS_TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '연결', en: 'Connections' })}</TabsTrigger>
         <TabsTrigger value="judge" className={SETTINGS_TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '판단', en: 'Judge' })}</TabsTrigger>
+        <TabsTrigger value="content-evaluation" className={SETTINGS_TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '콘텐츠 평가', en: 'Content evaluation' })}</TabsTrigger>
       </TabsList>
       <TabsContent value="dashboard"><LlmUsageDashboard onOpenJudge={() => setView('judge')} /></TabsContent>
       <TabsContent value="connections"><LlmConnectionsTab /></TabsContent>
       <TabsContent value="judge"><ChatSettingsJudge /></TabsContent>
+      <TabsContent value="content-evaluation"><ContentEvaluationSettingsRows {...contentEvaluation} /></TabsContent>
     </Tabs>
   )
 }

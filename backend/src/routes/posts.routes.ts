@@ -70,6 +70,8 @@ router.post('/comments/:id/hidden', requireAdmin, (req, res) => res.json({ succe
 router.get('/', asyncHandler(async (req, res) => res.json({ success: true, data: await PostStore.list(actorFromRequest(req), {...req.query,taskKey:undefined,taskConditionKey:undefined}) })));
 router.post('/', write, (req, res) => res.status(201).json({ success: true, data: PostStore.create(actorFromRequest(req), req.body ?? {}) }));
 router.get('/:id', (req, res) => res.json({ success: true, data: PostStore.get(actorFromRequest(req), id(req)) }));
+router.get('/:id/topic-evaluation', (req, res) => res.json({ success: true, data: PostStore.get(actorFromRequest(req),id(req)).topicEvaluation }));
+router.post('/:id/topic-evaluation', write, (req, res) => res.status(202).json({ success: true, data: PostStore.requestTopicEvaluation(actorFromRequest(req),id(req),req.body ?? {}).topicEvaluation }));
 router.patch('/:id', write, (req, res) => res.json({ success: true, data: PostStore.update(actorFromRequest(req), id(req), req.body ?? {}) }));
 router.delete('/:id', write, (req, res) => {
   PostStore.remove(actorFromRequest(req), id(req), req.body ?? {});

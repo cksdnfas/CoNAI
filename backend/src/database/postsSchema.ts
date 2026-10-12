@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 import { POST_MEDIA_EMBED_PATTERN } from '@conai/shared';
 import { ensurePostKnowledgeRuntimeSchema } from './postKnowledgeRuntimeSchema';
+import { ensureContentEvaluationSchema } from './contentEvaluationSchema';
 
 /**
  * Posts (게시판): categories, posts, tags, comments, embedded media references and bot calls. Additive and idempotent.
@@ -340,4 +341,5 @@ export function ensurePostsSchema(db: Database.Database): void {
     })();
   }
   ensurePostKnowledgeRuntimeSchema(db);
+  ensureContentEvaluationSchema(db);
 }

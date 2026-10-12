@@ -30,6 +30,7 @@ import type {
   PostKnowledgeProposalListResult,
   PostEvaluationRequest,
   StoredFileEntry,
+  PostTopicEvaluationView,
 } from '@conai/shared'
 import { requestApiData } from './api-request'
 import { buildApiUrl } from './api-url'
@@ -100,6 +101,9 @@ export function listPosts(params: PostListParams = {}) {
 }
 
 export const getPost = (id: number) => requestApiData<PostDetail>(`/api/posts/${id}`)
+export const getPostTopicEvaluation = (id: number) => requestApiData<PostTopicEvaluationView>(`/api/posts/${id}/topic-evaluation`)
+export const requestPostTopicEvaluation = (id: number, input: { expectedContentHash: string; idempotencyKey: string; force?: boolean }) =>
+  requestApiData<PostTopicEvaluationView>(`/api/posts/${id}/topic-evaluation`, json('POST', input))
 export const createPost = (input: PostInput) => requestApiData<PostDetail>('/api/posts', json('POST', input))
 export const updatePost = (id: number, input: PostInput) => requestApiData<PostDetail>(`/api/posts/${id}`, json('PATCH', input))
 export const listPostRevisions = (id: number) => requestApiData<PostRevision[]>(`/api/posts/${id}/revisions`)

@@ -32,9 +32,10 @@ import { cn } from '@/lib/utils'
 import { CompatLine } from './audio-settings-dialog'
 
 const GLOBAL_PREFS_KEY = 'conai:audio:generate'
-const groupPrefsKey = (groupId: string) => `conai:audio:generate:${groupId}`
+const GENERATION_PREFS_KEY = 'conai:audio:generate:parameters'
+const legacyGroupPrefsKey = (groupId: string) => `conai:audio:generate:${groupId}`
 
-interface GroupPrefs { seconds: string; count: string; seed: string }
+interface GenerationPrefs { seconds: string; count: string; seed: string }
 interface GlobalPrefs { workflowId: number | null; route: string }
 
 function readPrefs<T>(key: string, fallback: T): T {
@@ -95,7 +96,8 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
   const workflows = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'workflows'], queryFn: listAudioWorkflows, enabled: canGenerate })
   const servers = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'servers'], queryFn: () => getGenerationComfyUIServers(true), enabled: canGenerate, retry: false })
   const [text, setText] = useState(group.prompt)
-  const [prefs, setPrefs] = useState<GroupPrefs>(() => readPrefs(groupPrefsKey(group.id), { seconds: '3', count: '4', seed: '' }))
+  // Keep the last generation settings across effects; migrate the current effect's saved values on first use.
+  const [prefs, setPrefs] = useState<GenerationPrefs>(() => readPrefs(GENERATION_PREFS_KEY, readPrefs(legacyGroupPrefsKey(group.id), { seconds: '3', count: '4', seed: '' })))
   const [global, setGlobal] = useState<GlobalPrefs>(() => readPrefs(GLOBAL_PREFS_KEY, { workflowId: null, route: '' }))
   const [busy, setBusy] = useState<'order' | 'fix' | 'check' | null>(null)
   const [chipOpen, setChipOpen] = useState(false)
@@ -107,7 +109,7 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
     setText((current) => (current === syncedPrompt.current ? group.prompt : current))
     syncedPrompt.current = group.prompt
   }, [group.prompt])
-  useEffect(() => { writePrefs(groupPrefsKey(group.id), prefs) }, [group.id, prefs])
+  useEffect(() => { writePrefs(GENERATION_PREFS_KEY, prefs) }, [prefs])
   useEffect(() => { writePrefs(GLOBAL_PREFS_KEY, global) }, [global])
 
   const list = useMemo(() => workflows.data ?? [], [workflows.data])
@@ -219,7 +221,7 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
     }
   }
 
-  const set = (patch: Partial<GroupPrefs>) => setPrefs((current) => ({ ...current, ...patch }))
+  const set = (patch: Partial<GenerationPrefs>) => setPrefs((current) => ({ ...current, ...patch }))
   const workflowDetail = workflow ? [
     workflow.name,
     secondsMax !== null ? t({ ko: '최대 {max}초', en: 'max {max} s' }, { max: secondsMax }) : null,

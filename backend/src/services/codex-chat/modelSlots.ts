@@ -4,6 +4,7 @@ import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { RatingScoreModel } from '../../models/RatingScore'
 import { ChatProfileError } from './chatProfileError'
 import { TYPESAFE_DEFAULT_MODEL } from '../judge/typesafeClient'
+import { publishRuntimeEvent } from '../runtime-events/runtimeEventBus'
 
 /**
  * The models of the LLM connections. A connection is a server (address, key, limits); each row here is one model it
@@ -49,6 +50,7 @@ export type ModelSlot = {
   userProfiles: number
   /** Chats whose completion reaction uses it. */
   chats: number
+  contentEvaluations?: number
   createdDate: string
   updatedDate: string
 }
@@ -84,6 +86,7 @@ type Usage = {
   judgePresets: Map<number, ModelSlot['judgePresets']>
   userProfiles: Map<number, number>
   chats: Map<number, number>
+  contentEvaluations: Map<number, number>
 }
 
 function push<T>(map: Map<number, T[]>, key: number | null, value: T) {
@@ -100,7 +103,7 @@ function count(map: Map<number, number>, key: number | null) {
 /** Every reference to every row, read once per listing. */
 function collectUsage(): Usage {
   const db = getUserSettingsDb()
-  const usage: Usage = { profiles: new Map(), judgePresets: new Map(), userProfiles: new Map(), chats: new Map() }
+  const usage: Usage = { profiles: new Map(), judgePresets: new Map(), userProfiles: new Map(), chats: new Map(), contentEvaluations: new Map() }
   const profiles = db.prepare(`
     SELECT id, name, engine, model_slot_id, summary_slot_id, translation_slot_id, suggest_slot_id, judge_slot_id FROM llm_chat_profiles
     WHERE model_slot_id IS NOT NULL OR summary_slot_id IS NOT NULL OR translation_slot_id IS NOT NULL OR suggest_slot_id IS NOT NULL OR judge_slot_id IS NOT NULL
@@ -122,6 +125,7 @@ function collectUsage(): Usage {
   }
   for (const row of db.prepare('SELECT model_slot_id FROM chat_user_profiles WHERE model_slot_id IS NOT NULL').all() as Array<{ model_slot_id: number }>) count(usage.userProfiles, row.model_slot_id)
   for (const row of db.prepare('SELECT reaction_model_slot_id FROM codex_chat_threads WHERE reaction_model_slot_id IS NOT NULL').all() as Array<{ reaction_model_slot_id: number }>) count(usage.chats, row.reaction_model_slot_id)
+  for (const row of db.prepare('SELECT model_slot_id FROM content_evaluation_settings WHERE model_slot_id IS NOT NULL').all() as Array<{model_slot_id:number}>) count(usage.contentEvaluations,row.model_slot_id)
   return usage
 }
 
@@ -147,13 +151,14 @@ function toSlot(row: SlotRow, usage: Usage, connections: Map<string, { label: st
     judgePresets: usage.judgePresets.get(row.id) ?? [],
     userProfiles: usage.userProfiles.get(row.id) ?? 0,
     chats: usage.chats.get(row.id) ?? 0,
+    contentEvaluations: usage.contentEvaluations.get(row.id) ?? 0,
     createdDate: row.created_date,
     updatedDate: row.updated_date,
   }
 }
 
-export function isSlotUsed(slot: Pick<ModelSlot, 'profiles' | 'judgePresets' | 'userProfiles' | 'chats'>) {
-  return slot.profiles.length > 0 || slot.judgePresets.length > 0 || slot.userProfiles > 0 || slot.chats > 0
+export function isSlotUsed(slot: Pick<ModelSlot, 'profiles' | 'judgePresets' | 'userProfiles' | 'chats' | 'contentEvaluations'>) {
+  return slot.profiles.length > 0 || slot.judgePresets.length > 0 || slot.userProfiles > 0 || slot.chats > 0 || (slot.contentEvaluations ?? 0) > 0
 }
 
 /** "세라, 미나 · 판단 프리셋 기본 · 사용자 프로필 2" — who holds a row, for refusals. */
@@ -163,6 +168,7 @@ function describeUse(slot: ModelSlot) {
     slot.judgePresets.length > 0 ? `판단 프리셋 ${slot.judgePresets.map((preset) => preset.name).join(', ')}` : null,
     slot.userProfiles > 0 ? `사용자 프로필 ${slot.userProfiles}` : null,
     slot.chats > 0 ? `채팅 반응 ${slot.chats}` : null,
+    (slot.contentEvaluations ?? 0) > 0 ? '콘텐츠 평가' : null,
   ].filter(Boolean).join(' · ')
 }
 
@@ -345,6 +351,7 @@ export const ModelSlotStore = {
       }
       if (input.isDefault === true) ModelSlotStore.setDefault(slotId)
     })()
+    if (model !== current.model) publishRuntimeEvent({name:'posts.changed',topic:'posts',visibility:'all',payload:{postId:null,kind:'post'}})
     return ModelSlotStore.find(slotId)
   },
 

@@ -276,6 +276,16 @@ const POSTS: FieldSpec[] = [
     toggle('safety.summonEnabled', { ko: '봇 부르기', en: 'Bot calls' }),
     ...(Object.keys(POSTS_LIMIT_LABELS) as Array<keyof typeof POSTS_SAFETY_LIMITS>).map((key) => count(`safety.${key}`, POSTS_LIMIT_LABELS[key], POSTS_SAFETY_LIMITS[key].min, POSTS_SAFETY_LIMITS[key].max)),
   ]),
+  ...grouped({ ko: '주제 관련도', en: 'Topic relevance' }, [
+    toggle('topicEvaluation.autoEnabled', { ko: '새 글 발행 후 자동 평가', en: 'Evaluate newly published posts' }),
+    toggle('topicEvaluation.reevaluateOnEdit', { ko: '제목·본문 수정 후 재평가', en: 'Re-evaluate title or body edits' }),
+    count('topicEvaluation.minimumScore', { ko: '목록 최소 관련도 (%)', en: 'Minimum list score (%)' }, 0, 100),
+    count('topicEvaluation.maximumTopics', { ko: '목록 주제 수', en: 'Maximum topics in lists' }, 1, 20),
+    count('topicEvaluation.dailyCallLimit', { ko: '계정당 하루 관련도 호출 한도', en: 'Daily topic calls per account' }, 0, 10000),
+    count('topicEvaluation.dailyTokenLimit', { ko: '계정당 하루 관련도 토큰 한도', en: 'Daily topic tokens per account' }, 0, 100000000),
+    count('topicEvaluation.maxInputCharacters', { ko: '관련도 평가 입력 글자 수', en: 'Topic evaluation input characters' }, 1000, 200000),
+    count('topicEvaluation.maxRetries', { ko: '관련도 평가 재시도', en: 'Topic evaluation retries' }, 0, 10),
+  ]),
 ]
 
 const SECTION_SPECS: Record<ObjectSection, FieldSpec[]> = {

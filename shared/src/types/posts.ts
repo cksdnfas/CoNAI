@@ -1,5 +1,6 @@
 /** Posts: a blog of hierarchical categories, tags and comments, written mostly by chat profiles ("bots"). */
 export * from './postKnowledgeRuntime';
+import { DEFAULT_POSTS_TOPIC_EVALUATION_SETTINGS, type PostsTopicEvaluationSettings, type PostTopicEvaluationView } from './contentEvaluation';
 
 export type PostStatus = 'draft' | 'published' | 'hidden';
 export type PostAuthorType = 'account' | 'profile';
@@ -67,6 +68,7 @@ export interface PostSummary {
   /** Search results only: the comment the post was found through. */
   matchedComment?: PostCommentMatch;
   knowledge?: PostKnowledge | null;
+  topicEvaluation?: PostTopicEvaluationView;
   /** Issued only for an actual human search result; never derived from free-form feedback. */
   knowledgeSearchReceipt?: PostKnowledgeSearchReceipt;
 }
@@ -410,6 +412,7 @@ export interface PostsSettings {
   botPostStatus: 'published' | 'draft';
   safety: PostsSafetySettings;
   knowledge: PostsKnowledgeSettings;
+  topicEvaluation: PostsTopicEvaluationSettings;
 }
 
 export const POSTS_SAFETY_LIMITS: Record<Exclude<keyof PostsSafetySettings, 'summonEnabled'>, { min: number; max: number; default: number }> = {
@@ -432,6 +435,7 @@ export const DEFAULT_POSTS_SETTINGS: PostsSettings = {
     summonsPerAccountPerHour: POSTS_SAFETY_LIMITS.summonsPerAccountPerHour.default,
   },
   knowledge: DEFAULT_POSTS_KNOWLEDGE_SETTINGS,
+  topicEvaluation: DEFAULT_POSTS_TOPIC_EVALUATION_SETTINGS,
 };
 
 export const POST_LIMITS = {

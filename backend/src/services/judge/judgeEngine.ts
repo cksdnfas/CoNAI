@@ -88,8 +88,14 @@ function clampProbability(value: unknown) {
 }
 
 /** The answer from a probability per option: summed over the yes options, the top option picked. */
-function answerFromDistribution(question: JudgeQuestion, distribution: Record<string, unknown>, confidence: number | null): JudgeAnswer | null {
+function answerFromDistribution(question: JudgeQuestion, distribution: Record<string, unknown>, confidence: number | null, strict = false): JudgeAnswer | null {
   const options = optionsOf(question)
+  if (strict) {
+    if (Object.keys(distribution).length !== options.length) return null
+    const raw = options.map(option => distribution[option.label])
+    if (raw.some(value => typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1)) return null
+    if (Math.abs((raw as number[]).reduce((sum, value) => sum + value, 0) - 1) > 0.02) return null
+  }
   const values = options.map((option) => clampProbability(distribution[option.label]) ?? 0)
   const total = values.reduce((sum, value) => sum + value, 0)
   if (total <= 0) return null
@@ -103,7 +109,7 @@ function answerFromDistribution(question: JudgeQuestion, distribution: Record<st
   }
 }
 
-async function askTypesafe(connection: Extract<JudgeConnection, { engine: 'typesafe' }>, state: unknown, questions: JudgeQuestion[], signal?: AbortSignal, usage: LlmUsageTag = { purpose: 'judge' }) {
+async function askTypesafe(connection: Extract<JudgeConnection, { engine: 'typesafe' }>, state: unknown, questions: JudgeQuestion[], signal?: AbortSignal, usage: LlmUsageTag = { purpose: 'judge' }, strict = false, beforeRequest?: () => void) {
   signal?.throwIfAborted()
   const typed = Object.fromEntries(questions.map((question) => [question.id, typesafeQuestionOf(question)]))
   const request = { model: connection.model, state, questions: typed }
@@ -113,6 +119,7 @@ async function askTypesafe(connection: Extract<JudgeConnection, { engine: 'types
     tokens: response ? readUsageCounts(response) : null, latencyMs: Date.now() - startedAt, ok,
   })
   let response: TypesafeResponse
+  beforeRequest?.()
   try {
     response = await callTypesafeSystemOne({ baseUrl: connection.baseUrl, apiKey: connection.apiKey, model: connection.model, state, questions: typed, signal, timeoutMs: connection.timeoutMs })
   } catch (error) {
@@ -125,11 +132,12 @@ async function askTypesafe(connection: Extract<JudgeConnection, { engine: 'types
   for (const question of questions) {
     const answer = response.answers[question.id]
     if (!answer) continue
+    if (strict && answer.type !== question.kind) continue
     if (answer.type === 'noul') {
       const probability = clampProbability(answer.noul)
       if (probability !== null) answers.set(question.id, { probability, confidence: null, choice: null, distribution: null })
     } else if (answer.type === 'choice') {
-      const parsed = answerFromDistribution(question, answer.probabilities ?? {}, clampProbability(answer.confidence))
+      const parsed = answerFromDistribution(question, answer.probabilities ?? {}, clampProbability(answer.confidence), strict)
       if (parsed) answers.set(question.id, { ...parsed, choice: typeof answer.choice === 'string' && question.options.some((option) => option.label === answer.choice) ? answer.choice : parsed.choice })
     }
   }
@@ -156,13 +164,13 @@ export function parseJudgeJson(text: string): Record<string, unknown> | null {
   }
 }
 
-async function askLlm(connection: Extract<JudgeConnection, { engine: 'llm' }>, state: unknown, questions: JudgeQuestion[], signal?: AbortSignal, usage: LlmUsageTag = { purpose: 'judge' }) {
+async function askLlm(connection: Extract<JudgeConnection, { engine: 'llm' }>, state: unknown, questions: JudgeQuestion[], signal?: AbortSignal, usage: LlmUsageTag = { purpose: 'judge' }, strict = false, beforeRequest?: () => void) {
   const asked = Object.fromEntries(questions.map((question) => [question.id, {
     question: question.instructions,
     options: Object.fromEntries(optionsOf(question).map((option) => [option.label, option.description || (option.yes ? 'yes' : 'no')])),
   }]))
   const request = { model: connection.model, state, questions: asked }
-  const target = { ...connection.target, generation: { ...connection.target.generation, maxTokens: 200 + 60 * questions.length } }
+  const target = { ...connection.target, generation: { ...connection.target.generation, maxTokens: 200 + (strict ? 140 : 60) * questions.length } }
   const timeout = AbortSignal.timeout(connection.target.timeoutMs ?? LLM_JUDGE_TIMEOUT_MS)
   const result = await streamChatCompletion({
     target,
@@ -172,6 +180,7 @@ async function askLlm(connection: Extract<JudgeConnection, { engine: 'llm' }>, s
     ],
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     usage,
+    onRequestBody: beforeRequest,
   })
   const parsed = parseJudgeJson(result.content.trim())
   if (!parsed) throw new JudgeError('판단 LLM이 JSON으로 답하지 않았어.')
@@ -179,15 +188,15 @@ async function askLlm(connection: Extract<JudgeConnection, { engine: 'llm' }>, s
   for (const question of questions) {
     const distribution = parsed[question.id]
     if (!distribution || typeof distribution !== 'object') continue
-    const answer = answerFromDistribution(question, distribution as Record<string, unknown>, null)
+    const answer = answerFromDistribution(question, distribution as Record<string, unknown>, null, strict)
     if (answer) answers.set(question.id, answer)
   }
   return { answers, request, model: connection.model, tokens: result.usage ? result.usage.inputTokens + result.usage.outputTokens : null }
 }
 
 /** All questions in one call. Questions the judge left unanswered are missing from `answers`. `usage`: who asked (chat judging by default). */
-export async function askJudge(connection: JudgeConnection, state: unknown, questions: JudgeQuestion[], signal?: AbortSignal, usage?: LlmUsageTag) {
-  return connection.engine === 'typesafe' ? askTypesafe(connection, state, questions, signal, usage) : askLlm(connection, state, questions, signal, usage)
+export async function askJudge(connection: JudgeConnection, state: unknown, questions: JudgeQuestion[], signal?: AbortSignal, usage?: LlmUsageTag, options?: { strictDistributions?: boolean; beforeRequest?: () => void }) {
+  return connection.engine === 'typesafe' ? askTypesafe(connection, state, questions, signal, usage, options?.strictDistributions, options?.beforeRequest) : askLlm(connection, state, questions, signal, usage, options?.strictDistributions, options?.beforeRequest)
 }
 
 /** A choice question built in code (not a preset item): `options` as [label, description, counts as yes]. */

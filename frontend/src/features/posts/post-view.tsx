@@ -11,6 +11,7 @@ import { mediaHashesOf, PostMarkdown } from './post-markdown'
 import { PostMediaContext } from './post-media'
 import { PostKnowledgePanel } from './post-knowledge-panel'
 import { PostKnowledgeStatus } from './post-knowledge-status'
+import { PostTopicRelevance } from './post-topic-relevance'
 import type { KnowledgeSearchContext } from './post-knowledge-task-fit'
 
 /** Ancestors first: 창작 › 일러스트. */
@@ -75,6 +76,7 @@ export function PostView({ post, categories, onTag, onCategory, commentDraft, se
           </div>
         ) : null}
       </header>
+      {!post.knowledge?.deletedAt ? <PostTopicRelevance key={'topic-' + post.id} post={post} /> : null}
       <PostMediaContext.Provider value={mediaContext}>
         <PostMarkdown text={post.body} className="text-[0.95rem]" />
       </PostMediaContext.Provider>

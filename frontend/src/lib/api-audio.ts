@@ -180,6 +180,7 @@ export interface AudioExportOptions {
   loudness_range: number
   sample_rate: number
   channels: number
+  trim_silence: boolean
 }
 
 export interface AudioExportResult {

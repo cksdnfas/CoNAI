@@ -192,6 +192,8 @@ export function PostsPage() {
         open: {
           id: openPostData.id, title: pageFreeText(openPostData.title), author: openPostData.author.name, bot: openPostData.author.type === 'profile', categoryId: openPostData.categoryId,
           tags: openPostData.tags, status: openPostData.status, comments: openPostData.commentCount, canEdit: openPostData.canEdit, revision: openPostData.revision, pinned: openPostData.pinned,
+          ...(openPostData.topicEvaluation ? { topicRelevance: { status: openPostData.topicEvaluation.status, isCurrent: openPostData.topicEvaluation.isCurrent,
+            coverage: openPostData.topicEvaluation.coverage, items: openPostData.topicEvaluation.isCurrent ? openPostData.topicEvaluation.items.map(item => ({ topic: pageFreeText(item.name), score: item.score, level: item.level })) : [] } } : {}),
           ...(openPostData.knowledge ? { knowledge: { enabled: openPostData.knowledge.enabled, contentVersion: openPostData.knowledge.contentVersion, reviewStatus: openPostData.knowledge.reviewStatus } } : {}),
           // A long body is read a chunk at a time (posts.body_at): the view goes with every request.
           body: pageFreeText(openPostData.body.slice(bodyOffset, bodyOffset + BODY_CHUNK)), bodyOffset, bodyLength: openPostData.body.length,

@@ -33,6 +33,7 @@ import { parseSettingsTab, SETTINGS_TAB_LABELS, type SettingsTab } from './setti
 import { useFolderSettingsTab } from './use-folder-settings-tab'
 import { useAppearanceSettingsTab } from './use-appearance-settings-tab'
 import { useAutoSettingsTab } from './use-auto-settings-tab'
+import { useContentEvaluationSettings } from './use-content-evaluation-settings'
 import { useUnsavedSettingsGuard } from './use-unsaved-settings-guard'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { applySettingsChatPatch, settingsChatFields, type SettingsChatSources } from './settings-chat-fields'
@@ -227,6 +228,7 @@ export function SettingsPage() {
   const effectiveGenerationThrottleDraft = generationThrottleDraft ?? settingsQuery.data?.generationThrottle ?? null
   const effectiveVideoOptimizationDraft = videoOptimizationDraft ?? settingsQuery.data?.videoOptimization ?? null
   const effectivePostsDraft = postsDraft ?? postsSettingsQuery.data ?? null
+  const contentEvaluation = useContentEvaluationSettings(canOpenSettings && activeTab === 'llm')
   const savedAppearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
   const savedGeneral = settingsQuery.data?.general
   const isGeneralSectionDirty = (section: GeneralPreferenceSection) => Boolean(
@@ -349,6 +351,7 @@ export function SettingsPage() {
 
   // Every draft on the page, in the order the tabs show them; the save bar works on the dirty subset.
   const draftSections: SettingsDraftSection[] = [
+    contentEvaluation.draftSection,
     ...GENERAL_SECTIONS.map((section): SettingsDraftSection => ({
       id: `general-${section}`,
       label: generalSectionLabels[section],
@@ -702,7 +705,7 @@ export function SettingsPage() {
           ) : null}
 
           {activeTab === 'chat' ? <ChatSettingsTabLazy /> : null}
-          {activeTab === 'llm' ? <LlmSettingsTabLazy /> : null}
+          {activeTab === 'llm' ? <LlmSettingsTabLazy contentEvaluation={contentEvaluation.tabProps} /> : null}
 
           {activeTab === 'accounts' ? <SecurityTabLazy /> : null}
 
