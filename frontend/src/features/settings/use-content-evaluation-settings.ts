@@ -23,7 +23,7 @@ export function useContentEvaluationSettings(enabled: boolean) {
         ? { ...current, revision: saved.revision, definitionVersion: saved.definitionVersion, modelReady: saved.modelReady }
         : null)
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: [MODEL_SLOTS_QUERY_KEY] }),
+        queryClient.invalidateQueries({ queryKey: MODEL_SLOTS_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }),
       ])
     },
@@ -35,12 +35,12 @@ export function useContentEvaluationSettings(enabled: boolean) {
     })
   }
   const draftSection: SettingsDraftSection = {
-    id: 'content-evaluation', label: t({ ko: '콘텐츠 평가', en: 'Content evaluation' }), tab: 'llm',
+    id: 'content-evaluation', label: t({ ko: '주제 관련도', en: 'Topic relevance' }), tab: 'posts',
     isDirty: Boolean(effective && query.data && authored(effective) !== authored(query.data)),
     save: async () => {
       if (effective) await mutation.mutateAsync({ expectedRevision: effective.revision, modelSlotId: effective.modelSlotId, topics: effective.topics })
     },
     discard: () => setDraft(null),
   }
-  return { tabProps: { draft: effective, onPatch, isSaving: mutation.isPending, error: query.error, onReload: () => { void query.refetch() } }, draftSection }
+  return { tabProps: { draft: effective, onPatch, isSaving: mutation.isPending, dirty: draftSection.isDirty, onSave: draftSection.save, error: query.error, onReload: () => { void query.refetch() } }, draftSection }
 }

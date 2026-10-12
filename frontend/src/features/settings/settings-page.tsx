@@ -11,6 +11,7 @@ import { getAppSettings, updateGeneralSettings } from '@/lib/api-settings-genera
 import { getPostsSettings, updatePostsSettings } from '@/lib/api-posts'
 import { getMcpHttpSettings, updateMcpHttpEnabled } from '@/lib/api-settings-mcp'
 import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
+import { GLOBAL_APPEARANCE_QUERY_KEY } from '@/lib/use-global-appearance-settings'
 import { APP_BRAND_TOOLTIP, APP_VERSION_LABEL } from '@/lib/app-metadata'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
@@ -36,6 +37,7 @@ import { useAutoSettingsTab } from './use-auto-settings-tab'
 import { useContentEvaluationSettings } from './use-content-evaluation-settings'
 import { useUnsavedSettingsGuard } from './use-unsaved-settings-guard'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { pageAction, pageChoice, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { applySettingsChatPatch, settingsChatFields, type SettingsChatSources } from './settings-chat-fields'
 import { applySettingsChatAction, settingsChatActions, settingsChatData, type SettingsChatActionContext } from './settings-chat-actions'
 
@@ -202,6 +204,7 @@ export function SettingsPage() {
 
   const syncSettingsCache = (nextSettings: AppSettingsRecord) => {
     queryClient.setQueryData(['app-settings'], nextSettings)
+    queryClient.setQueryData(GLOBAL_APPEARANCE_QUERY_KEY, nextSettings.appearance)
     queryClient.setQueryData(['runtime-appearance-settings'], nextSettings.appearance)
     queryClient.setQueryData(['runtime-appearance'], nextSettings.appearance)
     queryClient.setQueryData(['public-header-navigation-settings'], { items: nextSettings.general.headerNavigation, order: nextSettings.general.headerNavigationOrder })
@@ -228,7 +231,7 @@ export function SettingsPage() {
   const effectiveGenerationThrottleDraft = generationThrottleDraft ?? settingsQuery.data?.generationThrottle ?? null
   const effectiveVideoOptimizationDraft = videoOptimizationDraft ?? settingsQuery.data?.videoOptimization ?? null
   const effectivePostsDraft = postsDraft ?? postsSettingsQuery.data ?? null
-  const contentEvaluation = useContentEvaluationSettings(canOpenSettings && activeTab === 'llm')
+  const contentEvaluation = useContentEvaluationSettings(canOpenSettings && activeTab === 'posts')
   const savedAppearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
   const savedGeneral = settingsQuery.data?.general
   const isGeneralSectionDirty = (section: GeneralPreferenceSection) => Boolean(
@@ -510,8 +513,14 @@ export function SettingsPage() {
   useChatPageRegistration(canOpenSettings ? {
     kind: 'settings', title: t({ ko: '설정 · {section}', en: 'Settings · {section}' }, { section: t(SETTINGS_TAB_LABELS[activeTab]) }), resourceId: activeTab,
     fields: settingsChatFields(activeTab, chatSources, t),
-    data: { section: activeTab, ...chatFolderData, ...settingsChatData(chatActionContext) },
-    actions: settingsChatActions(chatActionContext, t),
+    data: { section: activeTab, ...chatFolderData, ...settingsChatData(chatActionContext), ...(activeTab === 'general' ? { appMark: { configured: Boolean(savedAppearance.appIconDataUrl), outputSize: 128, saving: appearanceTabProps.isSavingAppIcon } } : {}) },
+    actions: [
+      ...settingsChatActions(chatActionContext, t),
+      ...(activeTab === 'general' ? [
+        pageAction('resource.open', t({ ko: '앱 마크 편집기 열기', en: 'Open app mark editor' }), t({ ko: 'kind=app_mark. compositeHash를 주면 내부 이미지로 열고, 비우면 현재 마크를 편집해. 등록 전 위치·확대·회전·반전을 조절할 수 있어.', en: 'Use kind=app_mark. Supply compositeHash to use an app library image, or omit it to edit the current mark. Adjust position, zoom, rotation, and flip before registering.' }), pageObject({ kind: pageChoice(['app_mark']), compositeHash: pageText(80) }, ['kind'])),
+        pageAction('resource.save', t({ ko: '기본 앱 마크 복원', en: 'Restore default app mark' }), t({ ko: '등록한 공용 앱 마크를 기본 마크로 되돌려.', en: 'Restore the default shared app mark.' }), pageObject({ kind: pageChoice(['app_mark']), operation: pageChoice(['reset']) }, ['kind', 'operation']), 'save'),
+      ] : []),
+    ],
     // Unsaved sections keep a connected chat from navigating away and losing them.
     dirty: dirtySections.length > 0,
     apply: (patch) => applySettingsChatPatch(patch, chatSources, {
@@ -532,6 +541,18 @@ export function SettingsPage() {
     }),
     applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
+      if (activeTab === 'general' && args.kind === 'app_mark' && (id === 'resource.open' || id === 'resource.save')) {
+        if (appearanceTabProps.isSavingAppIcon) throw new Error(t({ ko: '앱 마크 등록이 끝날 때까지 기다려줘.', en: 'Wait until the app mark finishes registering.' }))
+        if (id === 'resource.save') {
+          if (args.operation !== 'reset') throw new Error('앱 마크에 없는 작업이야.')
+          await appearanceTabProps.onResetAppIcon()
+        } else if (typeof args.compositeHash === 'string' && args.compositeHash) {
+          await appearanceTabProps.onSelectLibraryAppIcon(args.compositeHash)
+        } else {
+          appearanceTabProps.onEditAppIcon()
+        }
+        return
+      }
       if (!await applySettingsChatAction(id, args, chatActionContext)) throw new Error('설정 화면에 없는 작업이야.')
     },
   } : null, { preserveOnSearchChange: true })
@@ -687,7 +708,7 @@ export function SettingsPage() {
           ) : null}
 
           {activeTab === 'posts' ? (
-            <PostsSettingsTabLazy draft={effectivePostsDraft} onPatch={patchPostsDraft} dirty={isPostsDraftDirty} />
+            <PostsSettingsTabLazy draft={effectivePostsDraft} onPatch={patchPostsDraft} dirty={isPostsDraftDirty} contentEvaluation={contentEvaluation.tabProps} />
           ) : null}
 
           {activeTab === 'auto' ? (
@@ -705,7 +726,7 @@ export function SettingsPage() {
           ) : null}
 
           {activeTab === 'chat' ? <ChatSettingsTabLazy /> : null}
-          {activeTab === 'llm' ? <LlmSettingsTabLazy contentEvaluation={contentEvaluation.tabProps} /> : null}
+          {activeTab === 'llm' ? <LlmSettingsTabLazy /> : null}
 
           {activeTab === 'accounts' ? <SecurityTabLazy /> : null}
 

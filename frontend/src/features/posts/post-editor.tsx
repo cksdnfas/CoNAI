@@ -1,33 +1,49 @@
-import { lazy, Suspense, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PostCategory, PostCommentMode, PostDetail, PostStatus } from '@conai/shared'
 import { CHAT_PAGE_LIMITS, POST_LIMITS } from '@conai/shared'
 import { AudioLines, FolderTree, Image as ImageIcon, Link as LinkIcon, Paperclip, X } from 'lucide-react'
 import { FieldTabs } from '@/components/common/field-tabs'
+import type { PlainTextEditorHandle } from '@/components/common/plain-text-editor'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { IconButton } from '@/components/ui/icon-button'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { ChatMediaPicker } from '@/features/codex-chat/chat-media-picker'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
 import { pageAction, pageArray, pageFreeText, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
-import { FilePicker } from '@/features/files/file-browser'
 import { useI18n } from '@/i18n'
 import { POSTS_QUERY_KEY, createPost, updatePost, getPostsSettings } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
-import { AudioEmbedPicker, GroupEmbedPicker } from './post-embed-pickers'
+import { PostAttachPicker, type AttachTab } from './post-attach-picker'
 import { mediaHashesOf, PostMarkdown } from './post-markdown'
 import { PostMediaContext } from './post-media'
 import { usePostPermissions } from './use-post-permissions'
-import { PostLinkPicker } from './post-link-picker'
 import type { PostRichEditorHandle } from './post-rich-editor'
 
+const PlainTextEditor = lazy(() => import('@/components/common/plain-text-editor').then((module) => ({ default: module.PlainTextEditor })))
 const PostRichEditor = lazy(() => import('./post-rich-editor').then((module) => ({ default: module.PostRichEditor })))
 
-type Picker = 'media' | 'audio' | 'group' | 'file' | 'post' | null
+type Picker = AttachTab | null
+
+const HEADER_TOP = 'var(--theme-shell-header-height)'
+
+/** Where a bar sticks so it stays under the app header and the page's own sticky toolbar (whose height can wrap). */
+function useStickyTopBelowPageToolbar() {
+  const [top, setTop] = useState(HEADER_TOP)
+  useEffect(() => {
+    const toolbar = document.querySelector<HTMLElement>('[data-slot="page-toolbar"]')
+    if (!toolbar || getComputedStyle(toolbar).position !== 'sticky') return
+    const update = () => setTop(`calc(${HEADER_TOP} + ${toolbar.offsetHeight}px)`)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(toolbar)
+    return () => observer.disconnect()
+  }, [])
+  return top
+}
 /**
  * The body the connected chat sees with every request: a body up to this long is a field, a longer one a chunk of
  * this size (posts.body_at moves it) changed with posts.body_edit.
@@ -124,8 +140,9 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
   const [bodyOffset, setBodyOffset] = useState(0)
   const commitBody = useChatDraftTransaction(body, setBody)
   const [picker, setPicker] = useState<Picker>(null)
-  const bodyRef = useRef<HTMLTextAreaElement | null>(null)
+  const sourceRef = useRef<PlainTextEditorHandle | null>(null)
   const richEditorRef = useRef<PostRichEditorHandle | null>(null)
+  const stickyTop = useStickyTopBelowPageToolbar()
   const flat = useMemo(() => flattenCategories(categories), [categories])
   const previewContext = useMemo(() => ({ postId: post?.id ?? null, mediaHashes: mediaHashesOf(body) }), [post?.id, body])
 
@@ -145,20 +162,10 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
   const insert = (lines: string[]) => {
     if (!lines.length) return
     if (tab === 'write' && richEditorRef.current?.insertMarkdown(`${lines.join('\n\n')}\n`)) return
-    const input = bodyRef.current
-    const start = input?.selectionStart ?? body.length
-    const end = input?.selectionEnd ?? body.length
-    const before = body.slice(0, start)
-    const after = body.slice(end)
-    const block = `${before && !before.endsWith('\n') ? '\n' : ''}${lines.join('\n')}\n${after.startsWith('\n') || !after ? '' : '\n'}`
-    const next = `${before}${block}${after}`
-    setBody(next)
+    if (tab === 'source' && sourceRef.current?.insertLines(lines)) return
+    // Preview (or an editor still loading): add them at the end and show the source.
+    setBody(`${body}${body && !body.endsWith('\n') ? '\n' : ''}${lines.join('\n')}\n`)
     setTab(tab === 'write' ? 'write' : 'source')
-    const caret = before.length + block.length
-    window.requestAnimationFrame(() => {
-      bodyRef.current?.focus()
-      bodyRef.current?.setSelectionRange(caret, caret)
-    })
   }
 
   // The connected chat (page assistant) drafts into these fields; saving stays a card the person applies.
@@ -258,10 +265,10 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
             items={[{ value: 'write', label: t({ ko: '서식 편집', en: 'Visual' }) }, { value: 'source', label: t({ ko: '원문', en: 'Source' }) }, { value: 'preview', label: t({ ko: '미리보기', en: 'Preview' }) }]}
           />
           <div className="flex items-center gap-0.5 px-1">
-            <IconButton size="icon-sm" variant="ghost" label={t({ ko: '문서 링크 넣기', en: 'Insert document link' })} onClick={() => setPicker('post')}><LinkIcon /></IconButton>
+            <IconButton size="icon-sm" variant="ghost" label={t({ ko: '게시물 넣기', en: 'Insert a post' })} onClick={() => setPicker('post')}><LinkIcon /></IconButton>
             {canViewImages ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '이미지·영상 넣기', en: 'Insert images or videos' })} onClick={() => setPicker('media')}><ImageIcon /></IconButton> : null}
             {canViewAudio ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '오디오 넣기', en: 'Insert audio' })} onClick={() => setPicker('audio')}><AudioLines /></IconButton> : null}
-            {canViewImages ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '그룹 넣기', en: 'Insert group' })} onClick={() => setPicker('group')}><FolderTree /></IconButton> : null}
+            {canViewImages ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '그룹 넣기', en: 'Insert group' })} onClick={() => setPicker('media')}><FolderTree /></IconButton> : null}
             {canUseFiles ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '보관함 파일 넣기', en: 'Insert file' })} onClick={() => setPicker('file')}><Paperclip /></IconButton> : null}
           </div>
         </div>
@@ -272,6 +279,7 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
                 ref={richEditorRef}
                 value={body}
                 onChange={setBody}
+                stickyTop={stickyTop}
                 onError={(error) => {
                   setTab('source')
                   showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '서식 편집기를 열지 못했어. 원문에서 계속 편집할 수 있어.', en: 'Could not open the visual editor. You can continue editing the source.' })) })
@@ -281,13 +289,9 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
             </Suspense>
           </PostMediaContext.Provider>
         ) : tab === 'source' ? (
-          <textarea
-            ref={bodyRef}
-            value={body}
-            onChange={(event) => setBody(event.target.value)}
-            aria-label={t({ ko: '본문', en: 'Body' })}
-            className="block min-h-[22rem] w-full resize-y bg-transparent p-3 font-mono text-sm leading-relaxed outline-none"
-          />
+          <Suspense fallback={<div className="min-h-[22rem]"><LoadingState /></div>}>
+            <PlainTextEditor ref={sourceRef} value={body} onChange={setBody} fileName="post.md" ariaLabel={t({ ko: '본문', en: 'Body' })} bare heightClassName="h-[60vh] min-h-[22rem]" />
+          </Suspense>
         ) : (
           <div className="min-h-[22rem] p-4">
             <PostMediaContext.Provider value={previewContext}>
@@ -320,31 +324,7 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
         : post ? { ko: '제목·본문이 바뀌면 주제 관련도가 이전 내용 기준으로 표시돼.', en: 'Editing the title or body marks previous topic scores as outdated.' }
           : { ko: '발행 후 주제 관련도를 자동으로 평가해. 글은 먼저 등록돼.', en: 'Topic relevance is evaluated after publication. The post is saved first.' })}</p> : null}
 
-      {picker === 'post' ? <PostLinkPicker onClose={() => setPicker(null)} onPick={(target) => {
-        insert([`[${target.title.replace(/[\\[\]]/g, '\\$&').replace(/\s+/g, ' ')}](post:${target.id})`])
-        setPicker(null)
-      }} /> : null}
-      {picker === 'media' ? (
-        <ChatMediaPicker
-          initial={[]}
-          maxCount={20}
-          title={t({ ko: '이미지·영상 넣기', en: 'Insert images or videos' })}
-          applyLabel={t({ ko: '넣기', en: 'Insert' })}
-          note={null}
-          onClose={() => setPicker(null)}
-          onPick={(items) => { setPicker(null); insert(items.map((item) => `![](media:${item.compositeHash})`)) }}
-        />
-      ) : null}
-      {picker === 'audio' ? <AudioEmbedPicker onClose={() => setPicker(null)} onPick={(takes) => { setPicker(null); insert(takes.map((take) => `![${take.name.replace(/[[\]]/g, '')}](audio:${take.id})`)) }} /> : null}
-      {picker === 'group' ? <GroupEmbedPicker onClose={() => setPicker(null)} onPick={(group) => { setPicker(null); insert([`![${group.name.replace(/[[\]]/g, '')}](group:${group.id})`]) }} /> : null}
-      {picker === 'file' ? (
-        <FilePicker
-          title={t({ ko: '보관함 파일 넣기', en: 'Insert file' })}
-          pickLabel={(count) => t({ ko: '{count}개 넣기', en: 'Insert {count}' }, { count })}
-          onClose={() => setPicker(null)}
-          onPick={(entries) => { setPicker(null); insert(entries.map((entry) => `![${entry.name.replace(/[[\]]/g, '')}](file:${entry.id})`)) }}
-        />
-      ) : null}
+      {picker ? <PostAttachPicker initialTab={picker} onClose={() => setPicker(null)} onInsert={(lines) => { setPicker(null); insert(lines) }} /> : null}
     </div>
   )
 }

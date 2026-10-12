@@ -389,6 +389,8 @@ export interface AppearancePresetSlot {
 }
 
 export interface AppearanceSettings extends AppearanceThemeSettings {
+  /** Shared header mark, stored as a PNG data URL; empty uses the built-in mark. */
+  appIconDataUrl: string;
   presetSlots: AppearancePresetSlot[];
   wallpaperLayoutPresets: WallpaperLayoutPreset[];
   wallpaperActivePresetId: string | null;

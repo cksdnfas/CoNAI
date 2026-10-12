@@ -8,7 +8,6 @@
 @import '@milkdown/crepe/theme/common/placeholder.css' layer(base);
 @import '@milkdown/crepe/theme/common/toolbar.css' layer(base);
 @import '@milkdown/crepe/theme/common/table.css' layer(base);
-@import '@milkdown/crepe/theme/common/top-bar.css' layer(base);
 
 .post-rich-editor .milkdown {
   --crepe-color-background: transparent;
@@ -17,7 +16,9 @@
   --crepe-color-surface-low: var(--surface-low);
   --crepe-color-on-surface: var(--foreground);
   --crepe-color-on-surface-variant: var(--muted-foreground);
-  --crepe-color-outline: var(--line);
+  /* Crepe draws its icons (selection toolbar, block handle, slash menu, link tooltip) in "outline" and mixes the same
+     colour at 20% for its hairlines, so it must be a readable icon tone, not the hairline token. */
+  --crepe-color-outline: var(--muted-foreground);
   --crepe-color-primary: var(--primary);
   --crepe-color-secondary: var(--surface-high);
   --crepe-color-on-secondary: var(--foreground);
@@ -38,8 +39,66 @@
 
 .post-rich-editor .milkdown .ProseMirror {
   min-height: 22rem;
-  padding: 1.5rem 2.5rem;
+  padding: 1.25rem 1.5rem 1.25rem 3.5rem;
   overflow-wrap: anywhere;
+}
+
+/* The "+ / drag" handle sits left of each block: keep it compact so it fits inside the left padding. */
+.post-rich-editor .milkdown .milkdown-block-handle .operation-item {
+  width: 24px;
+  height: 24px;
+  padding: 2px;
+}
+
+.post-rich-editor .milkdown .milkdown-block-handle .operation-item svg {
+  width: 20px;
+  height: 20px;
+}
+
+.post-rich-editor .milkdown .milkdown-block-handle .operation-item:hover svg {
+  fill: var(--foreground);
+}
+
+/* The "/" menu: denser rows at the app's text size, and short enough to open inside a dialog's writing area
+   (Crepe's 420px list plus tabs did not fit and was clipped at the top). */
+.post-rich-editor .milkdown .milkdown-slash-menu {
+  border: 1px solid var(--line);
+}
+
+.post-rich-editor .milkdown .milkdown-slash-menu .tab-group {
+  padding: 8px 8px 0;
+}
+
+.post-rich-editor .milkdown .milkdown-slash-menu .tab-group ul {
+  padding: 4px 4px 8px;
+  gap: 4px;
+}
+
+.post-rich-editor .milkdown .milkdown-slash-menu .tab-group ul li,
+.post-rich-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group li > span {
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.post-rich-editor .milkdown .milkdown-slash-menu .menu-groups {
+  padding: 0 8px 8px;
+  max-height: min(18rem, 34vh);
+}
+
+.post-rich-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group h6 {
+  padding: 10px 10px 4px;
+  font-size: var(--text-xs);
+}
+
+.post-rich-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group li {
+  min-width: 200px;
+  gap: 10px;
+  padding: 7px 10px;
+}
+
+.post-rich-editor .milkdown .milkdown-slash-menu .menu-groups .menu-group li svg {
+  width: 20px;
+  height: 20px;
 }
 
 .post-rich-editor .post-editor-media {
@@ -72,6 +131,6 @@
 
 @media (max-width: 640px) {
   .post-rich-editor .milkdown .ProseMirror {
-    padding: 1rem 2rem;
+    padding: 1rem 1rem 1rem 3.25rem;
   }
 }

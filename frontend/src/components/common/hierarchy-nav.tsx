@@ -37,6 +37,8 @@ interface HierarchyNavProps<T> {
   expandOnSelect?: boolean | ((item: T, state: HierarchyNavItemState) => boolean)
   defaultExpandedIds?: HierarchyNodeId[]
   className?: string
+  /** A trailing control beside an expandable row (not inside its button), shown on hover / focus. */
+  renderItemAction?: (item: T, state: HierarchyNavItemState) => ReactNode
 }
 
 /** Build a parent-to-children map for hierarchy navigation rendering. */
@@ -104,6 +106,7 @@ export function HierarchyNav<T>({
   expandOnSelect,
   defaultExpandedIds = EMPTY_EXPANDED_IDS,
   className,
+  renderItemAction,
 }: HierarchyNavProps<T>) {
   const { t } = useI18n()
   const itemsByParentId = useMemo(() => buildHierarchyMap(items, getId, getParentId, sortItems), [items, getId, getParentId, sortItems])
@@ -196,7 +199,7 @@ export function HierarchyNav<T>({
           return (
             <div key={String(itemId)}>
               {expandable ? (
-                <div className="flex items-center gap-1" style={{ paddingLeft: `${depth * 14}px` }}>
+                <div className="group/hierarchy-row flex items-center gap-1" style={{ paddingLeft: `${depth * 14}px` }}>
                   {hasChildren ? (
                     <Button
                       type="button"
@@ -240,6 +243,11 @@ export function HierarchyNav<T>({
                       {content}
                     </div>
                   )}
+                  {renderItemAction ? (
+                    <span className={cn('flex shrink-0 opacity-0 transition-opacity group-hover/hierarchy-row:opacity-100 group-focus-within/hierarchy-row:opacity-100', isSelected && 'opacity-100')}>
+                      {renderItemAction(item, state)}
+                    </span>
+                  ) : null}
                 </div>
               ) : (
                 <Button

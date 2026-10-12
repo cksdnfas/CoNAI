@@ -12,6 +12,11 @@ for (const key of globals) {
   const value = key === 'window' ? dom.window : dom.window[key]
   Object.defineProperty(globalThis, key, { configurable: true, value: ['addEventListener', 'removeEventListener', 'dispatchEvent'].includes(key) ? (value as (...args: unknown[]) => unknown).bind(dom.window) : value })
 }
+// Toolbar commands scroll the selection into view; jsdom has no layout, so give it empty geometry.
+const emptyRect = () => ({ x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, toJSON: () => ({}) })
+for (const proto of [dom.window.Element.prototype, dom.window.Range.prototype]) {
+  Object.assign(proto, { getClientRects: () => [], getBoundingClientRect: emptyRect })
+}
 after(() => {
   dom.window.close()
   for (const [key, descriptor] of descriptors) {
@@ -38,7 +43,8 @@ test('post editor preserves Markdown and internal attachment contracts', async (
   const changes: string[] = []
   let media: import('../src/features/posts/post-rich-editor-engine').PostEditorMediaView[] = []
   let uploadWarnings = 0
-  const engine = createPostRichEditor({ root, value: source, label: '본문', onChange: (value) => changes.push(value), onMediaViewsChange: (value) => { media = value }, onUnsupportedUpload: () => { uploadWarnings++ } })
+  let format: import('../src/features/posts/post-rich-editor-engine').RichFormatState | null = null
+  const engine = createPostRichEditor({ root, value: source, label: '본문', onChange: (value) => changes.push(value), onMediaViewsChange: (value) => { media = value }, onFormatChange: (value) => { format = value }, onUnsupportedUpload: () => { uploadWarnings++ } })
   await engine.create()
   t.after(async () => { await engine.destroy(); root.remove() })
   const view = engine.crepe.editor.action((ctx) => ctx.get(editorViewCtx))
@@ -94,6 +100,77 @@ test('post editor preserves Markdown and internal attachment contracts', async (
     assert.match(engine.getMarkdown(), /뒤/)
     assert.ok(!engine.getMarkdown().includes('선택'))
     assert.equal(changes.at(-1), engine.getMarkdown())
+  })
+
+  await t.test('the formatting bar reads the caret state and its commands write Markdown', () => {
+    engine.setMarkdown('# 제목\n\n본문 글')
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 2)))
+    assert.equal(format?.heading, 1)
+    const paragraph = view.state.doc.child(0).nodeSize + 1
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, paragraph, paragraph + 2)))
+    assert.equal(format?.heading, null)
+    engine.format('bold')
+    assert.equal(format?.bold, true)
+    assert.match(engine.getMarkdown(), /\*\*본문\*\* 글/)
+    engine.format({ heading: 2 })
+    assert.match(engine.getMarkdown(), /^## \*\*본문\*\* 글$/m)
+    assert.equal(format?.heading, 2)
+    engine.format('quote')
+    assert.match(engine.getMarkdown(), /^> ## /m)
+    engine.format('undo')
+    assert.doesNotMatch(engine.getMarkdown(), /^> /m)
+    engine.format('redo')
+    assert.match(engine.getMarkdown(), /^> ## /m)
+    view.dispatch(view.state.tr.setSelection(TextSelection.atEnd(view.state.doc)))
+    engine.format('divider')
+    assert.match(engine.getMarkdown(), /^(\*\*\*|---)$/m)
+    assert.equal(changes.at(-1), engine.getMarkdown())
+  })
+
+  await t.test('block buttons toggle off and switch list kinds instead of nesting', () => {
+    const caretIn = (text: string) => {
+      let at = -1
+      view.state.doc.descendants((node, pos) => { if (at < 0 && node.isText && node.text?.includes(text)) at = pos + 1 })
+      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, at)))
+    }
+    engine.setMarkdown('항목\n')
+    caretIn('항목')
+    engine.format('bulletList')
+    assert.equal(format?.list, 'bulletList')
+    assert.match(engine.getMarkdown(), /^- 항목$/m)
+    engine.format('orderedList')
+    assert.equal(format?.list, 'orderedList')
+    assert.match(engine.getMarkdown(), /^1\. 항목$/m)
+    engine.format('taskList')
+    assert.equal(format?.list, 'taskList')
+    assert.match(engine.getMarkdown(), /^- \[ \] 항목$/m)
+    engine.format('bulletList')
+    assert.match(engine.getMarkdown(), /^- 항목$/m)
+    engine.format('bulletList')
+    assert.equal(format?.list, null)
+    assert.equal(engine.getMarkdown().trim(), '항목', 'the same list button again removes the list, never nests it')
+
+    engine.format('quote')
+    assert.equal(format?.quote, true)
+    assert.match(engine.getMarkdown(), /^> 항목$/m)
+    engine.format('quote')
+    assert.equal(format?.quote, false)
+    assert.equal(engine.getMarkdown().trim(), '항목')
+
+    engine.format('codeBlock')
+    assert.equal(format?.codeBlock, true)
+    assert.match(engine.getMarkdown(), /^```\n항목\n```$/m)
+    engine.format('codeBlock')
+    assert.equal(format?.codeBlock, false)
+    assert.equal(engine.getMarkdown().trim(), '항목')
+    assert.equal(format?.canUndo, true)
+  })
+
+  await t.test('editing a "- item" list keeps dash bullets', () => {
+    engine.setMarkdown('- 하나\n- 둘\n')
+    view.dispatch(view.state.tr.insertText('!', view.state.doc.content.size - 3))
+    assert.match(engine.getMarkdown(), /^- 하나\n- 둘!?/m)
+    assert.doesNotMatch(engine.getMarkdown(), /^\* /m)
   })
 
   await t.test('raw HTML stays inert and direct uploads cannot persist temporary blob URLs', async () => {

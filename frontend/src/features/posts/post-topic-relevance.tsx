@@ -1,14 +1,18 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { PostDetail, PostTopicEvaluationView, TopicRelevanceLevel } from '@conai/shared'
+import type { PostDetail, PostTopicEvaluationView, TopicRelevanceItem, TopicRelevanceLevel } from '@conai/shared'
+import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
+import { IconButton } from '@/components/ui/icon-button'
 import { Progress } from '@/components/ui/progress'
 import { ErrorState } from '@/components/ui/error-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { getErrorMessage } from '@/lib/error-message'
 import { POSTS_QUERY_KEY, getPostTopicEvaluation, requestPostTopicEvaluation } from '@/lib/api-posts'
+import { cn } from '@/lib/utils'
 import { usePostPermissions } from './use-post-permissions'
 
 type Translate = ReturnType<typeof useI18n>['t']
@@ -31,28 +35,28 @@ function stateLabel(value: PostTopicEvaluationView, t: Translate) {
   }
   return t(labels[value.status])
 }
-function notice(value: PostTopicEvaluationView, t: Translate) {
-  if (value.staleReason && !value.isCurrent) return t({ ko: '이전 결과는 참고값이야. 현재 내용과 기준으로 다시 평가하면 갱신돼.', en: 'Previous scores are for reference. Re-evaluate to use the current content and criteria.' })
+/** Why the last run produced no (full) result; one short line, only when it explains a missing score. */
+function failureNote(value: PostTopicEvaluationView, t: Translate) {
   const reasons: Record<string, { ko: string; en: string }> = {
-    daily_budget: { ko: '오늘 평가 한도에 도달했어. 한도 갱신 후 다시 요청할 수 있어.', en: 'The daily evaluation limit was reached. Request again after it resets.' },
-    judge_unavailable: { ko: '판단 모델이 준비되지 않았어. 공통 평가 설정을 확인해.', en: 'The judge is unavailable. Check shared evaluation settings.' },
-    topics_empty: { ko: '평가할 주제가 없어.', en: 'No evaluation topics are enabled.' },
-    input_budget: { ko: '평가 기준과 본문이 입력 한도를 초과해 평가를 보류했어.', en: 'The evaluation input exceeds the configured limit.' },
-    evaluation_disabled: { ko: '자동 평가가 꺼져 있어.', en: 'Automatic evaluations are off.' },
-    judge_failed: { ko: '모델 응답을 받지 못했어. 글은 저장되어 있어.', en: 'The model did not return a result. The post is saved.' },
-    invalid_response: { ko: '모델이 올바른 관련도 응답을 반환하지 않았어. 모델과 평가 기준을 확인해.', en: 'The model returned no valid topic answers. Check the model and criteria.' },
-    access_revoked: { ko: '평가 요청 권한이 변경되어 중단했어.', en: 'Evaluation access changed, so the request was stopped.' },
+    daily_budget: { ko: '오늘 평가 한도 도달', en: 'Daily limit reached' },
+    judge_unavailable: { ko: '판단 모델 준비 안 됨', en: 'Judge unavailable' },
+    topics_empty: { ko: '평가할 주제 없음', en: 'No topics enabled' },
+    input_budget: { ko: '입력 한도 초과', en: 'Input limit exceeded' },
+    evaluation_disabled: { ko: '자동 평가 꺼짐', en: 'Automatic evaluation off' },
+    judge_failed: { ko: '모델 응답 없음', en: 'No model response' },
+    invalid_response: { ko: '모델 응답 형식 오류', en: 'Invalid model response' },
+    access_revoked: { ko: '권한 변경으로 중단', en: 'Stopped: access changed' },
   }
-  if (value.reasonCode && reasons[value.reasonCode]) return t(reasons[value.reasonCode])
-  if (value.coverage === 'partial') return t({ ko: '긴 글의 일부 본문을 평가한 참고값이야.', en: 'These estimates use only part of the document.' })
-  if (value.status === 'partial') return t({ ko: '일부 주제의 응답이 없어. 응답한 항목만 점수를 표시해.', en: 'Some topics were unanswered. Only valid answers have scores.' })
-  return null
+  return value.reasonCode && reasons[value.reasonCode] ? t(reasons[value.reasonCode]) : null
+}
+function topItems(value: PostTopicEvaluationView) {
+  return value.items.filter(item => item.score !== null && item.score >= value.minimumScore).sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, value.maximumTopics)
 }
 
 export function PostTopicSummary({ value }: { value: PostTopicEvaluationView | undefined }) {
   const { t } = useI18n()
   if (!value || !value.requestId && !value.canRequest) return null
-  const items = value.isCurrent ? value.items.filter(item => item.score !== null && item.score >= value.minimumScore).sort((a,b) => (b.score ?? 0) - (a.score ?? 0)).slice(0,value.maximumTopics) : []
+  const items = value.isCurrent ? topItems(value) : []
   return (
     <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs" aria-label={t({ ko: '주제 관련도', en: 'Topic relevance' })}>
       <span className="text-muted-foreground">{t({ ko: '주제 관련도', en: 'Topic relevance' })}</span>
@@ -67,58 +71,119 @@ export function PostTopicSummary({ value }: { value: PostTopicEvaluationView | u
   )
 }
 
-export function PostTopicRelevance({ post }: { post: PostDetail }) {
-  const { t, formatDateTime } = useI18n()
+/** The open post's topic evaluation, shared by the header chips, the 평가 tab and the ⋯ menu. */
+export function usePostTopicEvaluation(post: PostDetail) {
+  const { t } = useI18n()
   const { viewerKey } = usePostPermissions()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  const [expanded, setExpanded] = useState(false)
-  const [showAll, setShowAll] = useState(false)
   const command = useRef<{ hash: string; key: string; force: boolean } | null>(null)
-  const key = [POSTS_QUERY_KEY,'topic-evaluation',viewerKey,post.id]
+  const key = [POSTS_QUERY_KEY, 'topic-evaluation', viewerKey, post.id]
   const query = useQuery({
     queryKey: key, queryFn: () => getPostTopicEvaluation(post.id), initialData: post.topicEvaluation,
     enabled: Boolean(post.topicEvaluation?.requestId || post.topicEvaluation?.canRequest),
-    refetchInterval: result => ['queued','running'].includes(result.state.data?.status ?? '') ? 5000 : false,
+    refetchInterval: result => ['queued', 'running'].includes(result.state.data?.status ?? '') ? 5000 : false,
   })
-  const value = query.data?.contentHash === post.topicEvaluation?.contentHash ? query.data : post.topicEvaluation
+  const fetched = query.data?.contentHash === post.topicEvaluation?.contentHash ? query.data : post.topicEvaluation
+  const value = fetched && (fetched.requestId || fetched.canRequest) && !post.knowledge?.deletedAt ? fetched : null
   const request = useMutation({
     mutationFn: () => {
       if (!value) throw new Error(t({ ko: '글을 다시 불러와줘.', en: 'Reload the post.' }))
       const force = Boolean(value.evaluatedAt)
       if (!command.current || command.current.hash !== value.contentHash || command.current.force !== force) command.current = { hash: value.contentHash, force, key: crypto.randomUUID() }
-      return requestPostTopicEvaluation(post.id,{ expectedContentHash: value.contentHash, idempotencyKey: command.current.key, force })
+      return requestPostTopicEvaluation(post.id, { expectedContentHash: value.contentHash, idempotencyKey: command.current.key, force })
     },
     onSuccess: async next => {
       command.current = null
-      queryClient.setQueryData(key,next)
+      queryClient.setQueryData(key, next)
       await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] })
     },
-    onError: error => showSnackbar({ tone: 'error', message: getErrorMessage(error,t({ ko: '평가를 요청하지 못했어.', en: 'Could not request an evaluation.' })) }),
+    onError: error => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '평가를 요청하지 못했어.', en: 'Could not request an evaluation.' })) }),
   })
-  if (!value || !value.requestId && !value.canRequest) return null
-  const waiting = ['queued','running'].includes(value.status)
-  const message = notice(value,t)
-  const items = [...value.items].filter(item => showAll || item.score === null || item.score >= value.minimumScore).sort((a,b) => (b.score ?? -1) - (a.score ?? -1))
+  const waiting = value !== null && ['queued', 'running'].includes(value.status)
+  return {
+    value,
+    waiting,
+    canRequest: Boolean(value?.canRequest) && !waiting && !request.isPending,
+    request: () => request.mutate(),
+    error: query.isError ? query.error : null,
+    retry: () => void query.refetch(),
+  }
+}
+export type PostTopicEvaluationState = ReturnType<typeof usePostTopicEvaluation>
+
+/** Header chips next to the tags: the top topics with a fill bar of their score. */
+/** Whether the header shows any topic chip (scores above the display threshold, or an evaluation in progress). */
+export function hasPostTopicChips(topic: PostTopicEvaluationState) {
+  return Boolean(topic.value && (topic.waiting || topItems(topic.value).length))
+}
+
+export function PostTopicChips({ topic, divider = true }: { topic: PostTopicEvaluationState; divider?: boolean }) {
+  const { t, formatDateTime } = useI18n()
+  const { value, waiting } = topic
+  if (!value) return null
+  const items = topItems(value)
+  if (!items.length && !waiting) return null
+  const stale = Boolean(value.staleReason && !value.isCurrent)
+  const tip = stale ? stateLabel(value, t)
+    : [t({ ko: '주제 관련도', en: 'Topic relevance' }), value.modelLabel, value.evaluatedAt ? formatDateTime(value.evaluatedAt) : null].filter(Boolean).join(' · ')
   return (
-    <section className="border-y border-line py-4" aria-label={t({ ko: '게시물 주제 관련도', en: 'Post topic relevance' })}>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground">{stateLabel(value,t)}</span>
-        <Button variant="ghost" size="xs" className="ml-auto" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{t(expanded ? { ko: '접기', en: 'Collapse' } : value.staleReason ? { ko: '이전 결과 보기', en: 'Show previous result' } : { ko: '자세히', en: 'Details' })}</Button>
+    <>
+      {divider ? <span aria-hidden className="mx-1 h-3.5 w-px bg-line" /> : null}
+      {items.length ? (
+        <Tip content={tip}>
+          <span className={cn('inline-flex flex-wrap items-center gap-1', stale && 'opacity-50')} aria-label={t({ ko: '주제 관련도', en: 'Topic relevance' })} tabIndex={0}>
+            {items.map(item => (
+              <span key={item.topicId} className="relative inline-flex items-center gap-1 overflow-hidden rounded-sm bg-surface-low px-2 pt-0.5 pb-1 text-xs">
+                <span className="truncate">{item.name}</span>
+                <span className="tabular-nums text-muted-foreground">{item.score}</span>
+                <span aria-hidden className="absolute bottom-0 left-0 h-0.5 bg-primary/70" style={{ width: `${item.score}%` }} />
+              </span>
+            ))}
+          </span>
+        </Tip>
+      ) : null}
+      {waiting ? <span className="inline-flex items-center rounded-sm bg-surface-low px-2 py-0.5 text-xs text-muted-foreground">{t({ ko: '평가 중', en: 'Evaluating' })}</span> : null}
+    </>
+  )
+}
+
+function TopicRow({ item }: { item: TopicRelevanceItem }) {
+  const { t } = useI18n()
+  return (
+    <div className="space-y-1.5 border-t border-line py-2.5">
+      <div className="flex min-w-0 items-center gap-3 text-sm">
+        <Tip content={item.description}><span className="min-w-0 truncate" tabIndex={0}>{item.name}</span></Tip>
+        <span className="text-xs text-muted-foreground">{t(item.answerStatus === 'missing' ? { ko: '응답 없음', en: 'No answer' } : LEVELS[item.level])}</span>
+        <span className="ml-auto shrink-0 tabular-nums">{item.score === null ? '—' : item.score}</span>
       </div>
-      <div className="mt-2" aria-live="polite"><PostTopicSummary value={value} /></div>
-      {message ? <p className="mt-3 text-xs text-muted-foreground">{message}</p> : null}
-      {expanded ? <div className="mt-3 space-y-4">
-        {items.map(item => <div key={item.topicId} className="border-b border-line pb-3 last:border-b-0">
-          <div className="mb-2 flex min-w-0 items-center gap-3"><span className="min-w-0 break-words text-sm">{item.name}</span><span className="text-xs text-muted-foreground">{t(item.answerStatus === 'missing' ? { ko: '응답 없음', en: 'No answer' } : LEVELS[item.level])}</span><span className="ml-auto shrink-0 text-sm tabular-nums">{item.score === null ? '—' : item.score + '%'}</span></div>
-          {item.score !== null ? <Progress size="sm" value={item.score} indicatorClassName="bg-foreground/60" aria-label={t({ ko: '{name} 관련도', en: '{name} relevance' }, { name: item.name })} /> : null}
-          <p className="mt-2 break-words text-xs text-muted-foreground">{item.description}</p>
-        </div>)}
-        {value.items.length ? <Button variant="ghost" size="xs" onClick={() => setShowAll(!showAll)}>{t(showAll ? { ko: '높은 관련도만 보기', en: 'Show higher scores' } : { ko: '낮은 관련도도 보기', en: 'Show lower scores' })}</Button> : null}
-        <div className="text-xs text-muted-foreground">{t({ ko: 'AI 추정치 · 주제별 독립 평가', en: 'AI estimates · independent topic scores' })}{value.modelLabel ? <p className="mt-1">{value.modelLabel}{value.evaluatedAt ? ' · ' + formatDateTime(value.evaluatedAt) : ''}</p> : null}{value.coverage === 'partial' ? <p className="mt-1">{t({ ko: '평가에 사용한 본문 {used}/{total}자', en: 'Document characters evaluated: {used}/{total}' }, { used: value.inputCharacters ?? 0, total: value.totalCharacters ?? 0 })}</p> : null}</div>
-        {value.canRequest ? <Button variant="subtle" size="sm" disabled={waiting || request.isPending} onClick={() => request.mutate()}>{t(waiting ? { ko: '평가 진행 중', en: 'Evaluation pending' } : value.evaluatedAt ? { ko: '다시 평가', en: 'Re-evaluate' } : { ko: '평가 요청', en: 'Request evaluation' })}</Button> : null}
-        {query.isError ? <ErrorState size="compact" error={query.error} onRetry={() => void query.refetch()} /> : null}
-      </div> : null}
+      {item.score !== null ? <Progress size="sm" value={item.score} indicatorClassName="bg-primary/70" aria-label={t({ ko: '{name} 관련도', en: '{name} relevance' }, { name: item.name })} /> : null}
+    </div>
+  )
+}
+
+/** Every topic with its level and score; low scores behind a toggle. Lives in the 평가 tab. */
+export function PostTopicDetails({ topic }: { topic: PostTopicEvaluationState }) {
+  const { t, formatDateTime } = useI18n()
+  const [showAll, setShowAll] = useState(false)
+  const { value } = topic
+  if (!value) return null
+  const sorted = [...value.items].sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
+  const high = sorted.filter(item => item.score === null || item.score >= value.minimumScore)
+  const items = showAll ? sorted : high
+  const note = failureNote(value, t)
+  const meta = [value.status === 'completed' && value.isCurrent ? null : stateLabel(value, t), value.modelLabel, value.evaluatedAt ? formatDateTime(value.evaluatedAt) : null,
+    value.coverage === 'partial' ? t({ ko: '본문 {used}/{total}자', en: '{used}/{total} chars' }, { used: value.inputCharacters ?? 0, total: value.totalCharacters ?? 0 }) : null, note].filter(Boolean).join(' · ')
+  return (
+    <section className="pt-6" aria-label={t({ ko: '주제 관련도', en: 'Topic relevance' })}>
+      <div className="flex items-center gap-2 pb-2">
+        <h3 className="text-sm font-semibold">{t({ ko: '주제', en: 'Topics' })}</h3>
+        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" aria-live="polite">{meta}</span>
+        {value.canRequest ? <IconButton size="icon-sm" variant="ghost" disabled={!topic.canRequest} label={value.evaluatedAt ? t({ ko: '주제 다시 평가', en: 'Re-evaluate topics' }) : t({ ko: '주제 평가 요청', en: 'Evaluate topics' })} onClick={topic.request}><RefreshCw /></IconButton> : null}
+      </div>
+      <div className={cn(value.staleReason && !value.isCurrent && 'opacity-60')}>{items.map(item => <TopicRow key={item.topicId} item={item} />)}</div>
+      {sorted.length > high.length ? <Button variant="ghost" size="xs" className="mt-1" onClick={() => setShowAll(!showAll)}>{t(showAll ? { ko: '높은 관련도만', en: 'Higher scores only' } : { ko: '낮은 관련도 {count}개 더', en: '{count} lower scores' }, { count: sorted.length - high.length })}</Button> : null}
+      {topic.error ? <ErrorState size="compact" error={topic.error} onRetry={topic.retry} /> : null}
     </section>
   )
 }

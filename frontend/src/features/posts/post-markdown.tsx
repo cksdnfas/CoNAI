@@ -4,13 +4,13 @@ import { Link } from 'react-router-dom'
 import remarkGfm from 'remark-gfm'
 import { rehypeMentions } from '@/features/codex-chat/chat-mentions'
 import { cn } from '@/lib/utils'
-import { AudioEmbed, FileEmbed, GroupEmbed, LibraryMedia, MediaGallery } from './post-media'
+import { AudioEmbed, FileEmbed, GroupEmbed, LibraryMedia, MediaGallery, PostCardEmbed } from './post-media'
 import { parsePostLink, postRoute } from './post-links'
 
-const EMBED = String.raw`!\[[^\]\n]*\]\(\s*(?:media|audio|group|file):[^)\s]+\s*\)`
+const EMBED = String.raw`!\[[^\]\n]*\]\(\s*(?:media|audio|group|file|post):[^)\s]+\s*\)`
 const EMBED_LINE = new RegExp(String.raw`^\s*(?:${EMBED}\s*)+$`)
 const MEDIA_EMBED = /!\[([^\]\n]*)\]\(\s*media:([a-f0-9]{48}|[a-f0-9]{32})(?:\.[a-z0-9]{1,5})?\s*\)/gi
-const APP_SCHEME = /^(media|audio|group|file|gallery):/
+const APP_SCHEME = /^(media|audio|group|file|gallery|post):/
 
 /** Library ids in body order, for the lightbox. */
 export function mediaHashesOf(body: string) {
@@ -54,13 +54,14 @@ function urlTransform(url: string) {
 
 export function PostEmbedImage({ src, alt }: ComponentProps<'img'>) {
   const source = typeof src === 'string' ? src : ''
-  const match = /^(media|audio|group|file|gallery):([^\s]+)$/.exec(source)
+  const match = /^(media|audio|group|file|gallery|post):([^\s]+)$/.exec(source)
   if (!match) return <img src={defaultUrlTransform(source) || undefined} alt={alt ?? ''} loading="lazy" className="my-2 max-h-96 max-w-full rounded-sm" />
   const [, kind, ref] = match
   if (kind === 'gallery') return <MediaGallery items={ref.split(',').map((hash) => ({ hash }))} />
   if (kind === 'media') return <LibraryMedia hash={ref.replace(/\.[a-z0-9]+$/i, '').toLowerCase()} caption={alt || undefined} className="my-3" />
   if (kind === 'audio') return <AudioEmbed candidateId={ref} caption={alt || undefined} />
   if (kind === 'group') return <GroupEmbed groupId={Number(ref)} caption={alt || undefined} />
+  if (kind === 'post') return /^\d+$/.test(ref) ? <PostCardEmbed postId={Number(ref)} caption={alt || undefined} /> : null
   return <FileEmbed fileId={ref.toLowerCase()} caption={alt || undefined} />
 }
 
@@ -93,7 +94,7 @@ const COMPONENTS: Components = {
 
 /**
  * A post or comment body: GitHub-flavoured Markdown without raw HTML, plus app media written as
- * `![caption](media|audio|group|file:ref)`. `mentions` highlights `@name` (comments).
+ * `![caption](media|audio|group|file:ref)`, and other posts as small cards: `![title](post:id)`. `mentions` highlights `@name` (comments).
  */
 export const PostMarkdown = memo(function PostMarkdown({ text, mentions, className }: { text: string; mentions?: readonly string[]; className?: string }) {
   const rehypePlugins = useMemo(() => (mentions?.length ? [rehypeMentions(mentions)] : []), [mentions])

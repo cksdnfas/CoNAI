@@ -64,7 +64,7 @@ function useUsageLines(slot: ModelSlot, workflowNodes: number) {
     slot.judgePresets.length > 0 ? `${t({ ko: '판단 프리셋', en: 'Judge presets' })}: ${slot.judgePresets.map((preset) => preset.name).join(', ')}` : null,
     slot.userProfiles > 0 ? t({ ko: '사용자 프로필 {count}', en: '{count} user profiles' }, { count: slot.userProfiles }) : null,
     slot.chats > 0 ? t({ ko: '채팅 반응 {count}', en: '{count} chat reactions' }, { count: slot.chats }) : null,
-    (slot.contentEvaluations ?? 0) > 0 ? t({ ko: '콘텐츠 평가 · 주제 관련도', en: 'Content evaluation · topic relevance' }) : null,
+    (slot.contentEvaluations ?? 0) > 0 ? t({ ko: '게시판 · 주제 관련도', en: 'Posts · topic relevance' }) : null,
     workflowNodes > 0 ? t({ ko: '워크플로 노드 {count}', en: '{count} workflow nodes' }, { count: workflowNodes }) : null,
   ].filter((line): line is string => line !== null)
 }

@@ -1,49 +1,18 @@
-# CoNAI Frontend Reset Baseline
+# CoNAI Frontend
 
-이 폴더는 2026-03-21 기준으로 **기존 프론트엔드 구현을 봉인한 뒤, 새 프론트엔드를 0부터 다시 만들기 위한 최소 골격**으로 재구성되었다.
+React·TypeScript 기반의 CoNAI 웹 앱이다. 미디어·생성·파일·게시글/지식·채팅·설정 화면과 앱 전역 채팅 패널을 제공한다. 개발 방향은 채팅 어시스턴트의 화면 기능 연결과 대량 콘텐츠의 성능·사용감 개선이다.
 
-## 현재 상태
-- 기존 기능 구현: 제거됨
-- 목적: 새 프론트 재구축용 빈 기반 확보
-- 유지한 것:
-  - Vite + React + TypeScript 빌드 체인
-  - Tailwind CSS 4 기반 스타일 엔트리
-  - shadcn/ui 기반 컴포넌트 체계
-  - React Compiler(자동 메모이제이션) 활성화
-  - 백엔드 프록시 설정 (`/api`, `/uploads`, `/temp` -> `:1666`)
+## 수정 전에
 
-## 고정 기준
-- 프론트 dev 포트: `1677`
-- Primary: `#F95E14`
-- Secondary: `#FFB59A`
-- Style reference: `The Silent Curator — a premium dark editorial gallery where the interface recedes and the artwork takes the spotlight.`
+1. [프로젝트 개발 가이드](../AI_Guidelines.md)
+2. [프론트 구조](APP_ARCHITECTURE.md)
+3. UI 변경 시 [디자인 기준](DESIGN_PRESET.md)
+4. AI 연결 변경 시 [공유 계약과 서버 연결 지점](../DEVELOPMENT.md)
 
-## 디자인 기준 문서
-- `RESET_BASELINE.md`
-- `DESIGN_PRESET.md`
-- `APP_ARCHITECTURE.md`
+## 실행과 검증
 
-## 기술 스택
-- React 19
-- Vite 8
-- TypeScript 5
-- Tailwind CSS 4
-- shadcn CLI v4 / shadcn/ui 컴포넌트 흐름
-- React Compiler (`babel-plugin-react-compiler` + Vite 8 plugin-react 경로)
+루트에서 `npm run dev`로 shared/backend/frontend를 함께 실행한다. 프론트만 실행하려면 `npm run dev:frontend`를 사용한다. 기본 dev 포트는 `1677`이며 프록시 대상과 포트 설정은 `vite.config.ts`를 확인한다.
 
-## 실행
-```bash
-cd frontend
-npm run dev
-```
+이 폴더에서 `npm run typecheck`, `npm run lint`, `npm run build`를 사용할 수 있다. 변경 범위에 필요한 검사만 선택한다.
 
-또는 프로젝트 루트에서:
-```bash
-npm run dev:frontend
-```
-
-## 다음 권장 작업
-1. 디자인 프리셋 기반 컴포넌트 통일
-2. 홈/상세/업로드 3개 화면의 톤 일치 검증
-3. 업로드/인증/설정 순으로 MVP 복구
-4. 그룹/설정 고도화/생성/워크플로우는 후순위 분리 구현
+스택은 React, Vite, Tailwind CSS, TanStack Query, React Router와 공용 UI 컴포넌트다. 정확한 버전은 `package.json`과 루트 lockfile을 따른다. React Compiler 설정은 `vite.config.ts`에서 관리한다.

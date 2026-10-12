@@ -1,7 +1,11 @@
 # CoNAI Design Preset — The Silent Curator
 
-작성일: 2026-03-21 · 구현 규칙 갱신: 2026-09-28 (Flat 재설계, V1 A: 앱 전체)
+작성일: 2026-03-21 · 문서 정리: 2026-10-13 (Flat 기준)
 기준 레퍼런스: 사용자 제공 홈페이지 시안 + Design System Strategy `The Silent Curator`
+
+프론트 디자인의 단일 기준 문서다. 과거 RESET_BASELINE의 중복 색상·레이아웃 지침은 이 문서로 통합했다.
+개발 방향은 [AI_Guidelines.md](../AI_Guidelines.md)를 따른다. 미디어·지식·채팅·설정에 같은 공용 UI를 사용하며,
+대량 데이터의 탐색·입력 속도와 가독성을 장식보다 우선한다. 기능의 어시스턴트 연결은 [DEVELOPMENT.md](../DEVELOPMENT.md)를 참고한다.
 
 ## Creative North Star
 
@@ -61,9 +65,10 @@ Midnight / Paper light 프리셋도 같은 L* 단계를 따른다. custom 팔레
 - 화면의 5% 이상이 주황으로 느껴지지 않게 유지한다.
 - decorative orange 사용 금지.
 
-### 4. Editorial Spacing
-- 공간이 충분해 보이면, 한 번 더 벌린다.
-- 이 시스템은 촘촘한 업무용 툴이 아니라 **숨 쉬는 갤러리형 작업 UI**를 지향한다.
+### 4. Spacing and working density
+- 여백은 정보 구분과 조작에 필요한 만큼 사용한다. 과도한 여백으로 탐색·편집을 느리게 하지 않는다.
+- 미디어 피드, 지식 목록, 채팅, 설정은 같은 토큰을 쓰되 작업에 맞는 밀도를 선택한다.
+- 가상 목록·키보드 입력·모바일 조작을 우선하고 불필요한 애니메이션과 무거운 장식을 줄인다.
 
 ---
 
@@ -216,8 +221,8 @@ Current row = `bg-fill` + 2px primary bar on the left + `foreground` text (Sideb
 홈페이지는 “운영 대시보드”보다 “큐레이티드 피드”에 가까워야 한다.
 
 ### Must keep
-- 상단 floating nav
-- 강한 hero headline
+- 공용 앱 내비게이션
+- 검색·필터와 콘텐츠에 빠르게 접근하는 구조
 - 필터 칩 / 정렬 / 검색의 조용한 존재감
 - 피드 자체가 주인공
 
@@ -233,7 +238,7 @@ Current row = `bg-fill` + 2px primary bar on the left + `foreground` text (Sideb
 
 ### Do
 - 여백과 hairline으로 나눈다; 면과 그림자는 떠 있는 것에만
-- negative space를 아끼지 않는다
+- 작업에 맞는 여백과 정보 밀도를 선택한다
 - active / CTA만 강하게 강조한다
 - UI보다 이미지가 먼저 보이게 한다
 

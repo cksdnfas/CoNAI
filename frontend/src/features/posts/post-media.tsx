@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Download, ExternalLink, File as FileIcon, ImageOff, Lock, Music, Pause, Play } from 'lucide-react'
+import type { PostMediaRef } from '@conai/shared'
+import { Download, ExternalLink, File as FileIcon, FileText, ImageOff, Lock, Music, Pause, Play } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { WaveformThumb } from '@/features/audio/audio-waveform'
@@ -11,11 +12,19 @@ import { getAudioCandidate } from '@/lib/api-audio'
 import { getGroup, getGroupImages } from '@/lib/api-groups'
 import { getImage } from '@/lib/api-images'
 import { formatFileSize } from '@/lib/api-files'
-import { getPostFile, postFileUrl } from '@/lib/api-posts'
+import { getPost, getPostFile, POSTS_QUERY_KEY, postFileUrl } from '@/lib/api-posts'
 import { buildApiUrl } from '@/lib/api-url'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
+import { postRoute } from './post-links'
 import { usePostPermissions } from './use-post-permissions'
+
+/** The first library item or group a post embeds, as a still cover. */
+export function postCoverUrl(media: PostMediaRef[]) {
+  const first = media.find((item) => item.kind === 'media' || item.kind === 'group')
+  if (!first) return null
+  return buildApiUrl(first.kind === 'media' ? `/api/images/${first.ref}/thumbnail` : `/api/groups/${first.ref}/thumbnail`)
+}
 
 /** The post being rendered (file embeds are served through it) and every library item it shows, for the lightbox. */
 export const PostMediaContext = createContext<{ postId: number | null; mediaHashes: string[]; knowledgeContentVersion?: number }>({ postId: null, mediaHashes: [] })
@@ -60,16 +69,20 @@ function MediaPlaceholder({ icon, label, className }: { icon: ReactNode; label: 
 
 /**
  * One library item. Videos and animated images play muted on a loop while on screen; a click opens the lightbox
- * over every library item of the post.
+ * over every library item of the post (or over `gallery` when the caller already listed its items, e.g. a group).
  */
-export function LibraryMedia({ hash, caption, tile = false, autoPlay = true, className }: { hash: string; caption?: string; tile?: boolean; autoPlay?: boolean; className?: string }) {
+export function LibraryMedia({ hash, caption, tile = false, autoPlay = true, className, record, gallery }: {
+  hash: string; caption?: string; tile?: boolean; autoPlay?: boolean; className?: string
+  record?: ImageRecord; gallery?: { hashes: string[]; items: ImageRecord[] }
+}) {
   const { t } = useI18n()
   const { canViewImages } = usePostPermissions()
   const viewer = useImageViewModal()
   const { mediaHashes } = useContext(PostMediaContext)
   const [ref, view] = useInView<HTMLDivElement>()
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const query = useQuery({ queryKey: ['post-media', hash], queryFn: () => getImage(hash), enabled: canViewImages && view.seen, staleTime: 5 * 60_000, retry: false })
+  const fetched = useQuery({ queryKey: ['post-media', hash], queryFn: () => getImage(hash), enabled: canViewImages && view.seen && !record, staleTime: 5 * 60_000, retry: false })
+  const query = record ? { data: record, isError: false } : fetched
   const kind = libraryMediaKind(query.data)
 
   useEffect(() => {
@@ -81,7 +94,9 @@ export function LibraryMedia({ hash, caption, tile = false, autoPlay = true, cla
 
   if (!canViewImages) return <MediaPlaceholder icon={<Lock className="size-4" />} label={t({ ko: '이미지를 볼 권한이 없어', en: 'No permission to view images' })} className={className} />
   const ratio = query.data?.width && query.data?.height ? `${query.data.width} / ${query.data.height}` : undefined
-  const open = () => viewer?.openImageView({ compositeHash: hash, compositeHashes: mediaHashes.includes(hash) ? mediaHashes : [hash] })
+  const open = () => viewer?.openImageView(gallery
+    ? { compositeHash: hash, compositeHashes: gallery.hashes, sourceItems: gallery.items }
+    : { compositeHash: hash, compositeHashes: mediaHashes.includes(hash) ? mediaHashes : [hash] })
 
   let body: ReactNode
   if (query.isError) body = <MediaPlaceholder icon={<ImageOff className="size-4" />} label={t({ ko: '지워졌거나 볼 수 없는 미디어야', en: 'Media removed or unavailable' })} />
@@ -166,34 +181,28 @@ export function AudioEmbed({ candidateId, caption }: { candidateId: string; capt
 export function GroupEmbed({ groupId, caption }: { groupId: number; caption?: string }) {
   const { t } = useI18n()
   const { canViewImages } = usePostPermissions()
-  const viewer = useImageViewModal()
   const groupQuery = useQuery({ queryKey: ['post-group', groupId], queryFn: () => getGroup(groupId), enabled: canViewImages, staleTime: 5 * 60_000, retry: false })
-  const imagesQuery = useQuery({ queryKey: ['post-group-images', groupId], queryFn: () => getGroupImages(groupId, { limit: 9 }), enabled: canViewImages, staleTime: 60_000, retry: false })
+  // Subgroups included: the picker shows the subtree count, and a parent group often holds nothing directly.
+  const imagesQuery = useQuery({ queryKey: ['post-group-images', groupId, 'subtree'], queryFn: () => getGroupImages(groupId, { limit: 9, includeChildren: true }), enabled: canViewImages, staleTime: 60_000, retry: false })
   if (!canViewImages) return <MediaPlaceholder icon={<Lock className="size-4" />} label={t({ ko: '이미지를 볼 권한이 없어', en: 'No permission to view images' })} className="my-3" />
   if (groupQuery.isError) return <MediaPlaceholder icon={<ImageOff className="size-4" />} label={t({ ko: '지워졌거나 볼 수 없는 그룹이야', en: 'Group removed or unavailable' })} className="my-3" />
   const images = (imagesQuery.data?.images ?? []).filter((image) => image.composite_hash)
-  const hashes = images.map((image) => image.composite_hash as string)
+  const gallery = { hashes: images.map((image) => image.composite_hash as string), items: images }
   const total = imagesQuery.data?.pagination.total ?? images.length
   return (
     <div className="post-media my-3 space-y-2">
       <div className="flex items-baseline gap-2 text-sm">
         <span className="font-medium">{caption || groupQuery.data?.name || t({ ko: '그룹', en: 'Group' })}</span>
-        <span className="text-xs tabular-nums text-muted-foreground">{t({ ko: '{count}장', en: '{count} items' }, { count: total })}</span>
+        <span className="text-xs tabular-nums text-muted-foreground">{t({ ko: '{count}개', en: '{count} items' }, { count: total })}</span>
         <span className="flex-1" />
         {total > images.length ? <Link to={`/groups/${groupId}`} className="text-xs text-primary hover:underline">{t({ ko: '더 보기', en: 'See all' })}</Link> : null}
       </div>
       {imagesQuery.isPending ? <span className="block h-40 animate-pulse rounded-sm bg-surface-low" /> : (
+        // Videos go through LibraryMedia too: an <img> on a video's thumbnail URL renders nothing until a poster exists.
         <div className="columns-2 gap-1.5 sm:columns-3">
-          {images.map((image) => {
-            const hash = image.composite_hash as string
-            const kind = libraryMediaKind(image)
-            const ratio = image.width && image.height ? `${image.width} / ${image.height}` : undefined
-            return (
-              <img key={hash} src={kind === 'animated' ? fileUrl(hash) : thumbnailUrl(hash)} alt="" loading="lazy" draggable={false}
-                onClick={() => viewer?.openImageView({ compositeHash: hash, compositeHashes: hashes, sourceItems: images })}
-                className="mb-1.5 block h-auto w-full cursor-zoom-in break-inside-avoid rounded-sm" style={{ aspectRatio: ratio }} />
-            )
-          })}
+          {images.map((image) => (
+            <LibraryMedia key={image.composite_hash} hash={image.composite_hash as string} record={image} gallery={gallery} tile className="mb-1.5 break-inside-avoid" />
+          ))}
         </div>
       )}
     </div>
@@ -228,5 +237,31 @@ export function FileEmbed({ fileId, caption }: { fileId: string; caption?: strin
         <a href={postFileUrl(postId, fileId, 'download', knowledgeContentVersion)} download><Download /></a>
       </IconButton>
     </div>
+  )
+}
+
+/** Another post as a small card: cover thumbnail, then its title and the first lines of its text. */
+export function PostCardEmbed({ postId, caption }: { postId: number; caption?: string }) {
+  const { t } = useI18n()
+  const { canViewImages } = usePostPermissions()
+  const query = useQuery({ queryKey: [POSTS_QUERY_KEY, 'card', postId], queryFn: () => getPost(postId), staleTime: 5 * 60_000, retry: false })
+  const [coverFailed, setCoverFailed] = useState(false)
+  if (query.isError) return <MediaPlaceholder icon={<FileText className="size-4" />} label={t({ ko: '지워졌거나 볼 수 없는 글이야', en: 'Post removed or unavailable' })} className="my-3 min-h-14 max-w-xl py-3" />
+  const post = query.data
+  const cover = post && canViewImages && !coverFailed ? postCoverUrl(post.media) : null
+  return (
+    <Link to={postRoute({ postId, commentId: null })} className="my-3 flex max-w-xl items-center gap-3 rounded-sm border border-line p-2 no-underline transition-colors hover:bg-surface-low">
+      {cover ? <img src={cover} alt="" loading="lazy" draggable={false} onError={() => setCoverFailed(true)} className="h-16 w-20 shrink-0 rounded-sm object-cover" />
+        : <span className="flex h-16 w-20 shrink-0 items-center justify-center rounded-sm bg-surface-low text-muted-foreground"><FileText className="size-5" /></span>}
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        {post ? <>
+          <span className="truncate text-sm font-medium text-foreground">{post.title || caption}</span>
+          {post.excerpt ? <span className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{post.excerpt}</span> : null}
+        </> : <>
+          <span className="h-4 w-1/2 animate-pulse rounded-sm bg-surface-low" />
+          <span className="h-3 w-4/5 animate-pulse rounded-sm bg-surface-low" />
+        </>}
+      </span>
+    </Link>
   )
 }

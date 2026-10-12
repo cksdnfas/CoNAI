@@ -19,6 +19,7 @@ import { registerTranslationCatalog, useI18n } from '@/i18n'
 import { getPublicHeaderNavigationSettings } from '@/lib/api-settings-general'
 import { APP_BRAND_TOOLTIP, APP_ICON_SRC, APP_NAME } from '@/lib/app-metadata'
 import { cn } from '@/lib/utils'
+import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { useMinWidth } from '@/lib/use-min-width'
 import { normalizeHeaderNavigationOrder, type HeaderNavigationPageKey } from '@conai/shared'
 import { DEFAULT_HEADER_NAVIGATION_SETTINGS } from '@/lib/settings-defaults'
@@ -103,6 +104,7 @@ function AppShellLayout() {
   const location = useLocation()
   const { t } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
+  const appearanceQuery = useGlobalAppearanceSettingsQuery()
   const headerNavigationQuery = useQuery({
     queryKey: ['public-header-navigation-settings'],
     queryFn: getPublicHeaderNavigationSettings,
@@ -148,7 +150,15 @@ function AppShellLayout() {
                 onMouseEnter={() => prefetchAppRoute(logoTarget)}
                 onFocus={() => prefetchAppRoute(logoTarget)}
               >
-                <img src={APP_ICON_SRC} alt="" className="size-8 shrink-0 rounded-sm object-cover" draggable={false} />
+                <img
+                  src={appearanceQuery.data?.appIconDataUrl || APP_ICON_SRC}
+                  alt=""
+                  className="size-8 shrink-0 rounded-sm object-contain"
+                  draggable={false}
+                  onError={(event) => {
+                    if (event.currentTarget.getAttribute('src') !== APP_ICON_SRC) event.currentTarget.src = APP_ICON_SRC
+                  }}
+                />
                 <span className="hidden text-lg font-bold tracking-[-0.04em] text-foreground sm:inline">{APP_NAME}</span>
               </NavLink>
             </Tip>

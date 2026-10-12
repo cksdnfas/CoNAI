@@ -36,6 +36,7 @@ export * from './utils/minimaxDirectorResolution';
 export * from './types/fileStore';
 export * from './types/posts';
 export * from './types/contentEvaluation';
+export { TOPIC_EVALUATION_LIMITS } from './types/contentEvaluation';
 export * from './types/chatAssets'
 export * from './utils/chatPortrait'
 export * from './types/agentCli'

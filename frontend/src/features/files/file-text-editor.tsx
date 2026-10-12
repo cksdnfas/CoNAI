@@ -2,8 +2,8 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { File } from 'lucide-react'
 import type { StoredFileEntry } from '@conai/shared'
+import { FieldTabs } from '@/components/common/field-tabs'
 import { SegmentedControl } from '@/components/common/segmented-control'
-import { TextTabs } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
@@ -11,7 +11,6 @@ import { Input } from '@/components/ui/input'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { Textarea } from '@/components/ui/textarea'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageArray, pageFreeText, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
@@ -21,8 +20,10 @@ import { getErrorMessage } from '@/lib/error-message'
 
 const ChatMarkdown = lazy(() => import('@/features/codex-chat/chat-markdown').then((module) => ({ default: module.ChatMarkdown })))
 const PlainTextEditor = lazy(() => import('@/components/common/plain-text-editor').then((module) => ({ default: module.PlainTextEditor })))
+const PostRichEditor = lazy(() => import('@/features/posts/post-rich-editor').then((module) => ({ default: module.PostRichEditor })))
 
 type DocumentFormat = 'md' | 'txt'
+type MarkdownTab = 'write' | 'source' | 'preview'
 /**
  * The document text the connected chat sees with every request: a document up to this long is a field, a longer one
  * a chunk of this size (files.doc_at moves it) changed with files.doc_edit.
@@ -64,7 +65,7 @@ export function FileTextEditor({ entry, parentId, owner, onClose, chatPage = fal
   const [format, setFormat] = useState<DocumentFormat>('md')
   const [text, setText] = useState(entry ? null as string | null : '')
   const [baseline, setBaseline] = useState(entry ? null as string | null : '')
-  const [tab, setTab] = useState<'edit' | 'preview'>('edit')
+  const [tab, setTab] = useState<MarkdownTab>('write')
   const tooLarge = entry !== null && entry.size > MAX_TEXT_DOCUMENT_BYTES
   const source = useQuery({
     queryKey: ['file-text-editor', owner ?? null, entry?.id],
@@ -134,7 +135,7 @@ export function FileTextEditor({ entry, parentId, owner, onClose, chatPage = fal
     apply: (patch) => {
       if (typeof patch.documentName === 'string' && !file) setName(patch.documentName)
       if ((patch.documentFormat === 'md' || patch.documentFormat === 'txt') && !file) setFormat(patch.documentFormat)
-      if (typeof patch.content === 'string' && text !== null) { setText(patch.content); setTab('edit') }
+      if (typeof patch.content === 'string' && text !== null) { setText(patch.content); if (tab === 'preview') setTab('write') }
     },
     applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
@@ -152,17 +153,39 @@ export function FileTextEditor({ entry, parentId, owner, onClose, chatPage = fal
   if (tooLarge) content = <EmptyState icon={File} title={t({ ko: '2MB가 넘는 파일은 여기서 편집할 수 없어', en: 'Files over 2 MB cannot be edited here' })} />
   else if (source.isError) content = <ErrorState title={t({ ko: '파일을 열지 못했어.', en: 'Could not open the file.' })} error={source.error} onRetry={() => void source.refetch()} />
   else if (text === null) content = <LoadingState />
-  else if (!markdown) content = <Suspense fallback={<LoadingState />}><PlainTextEditor value={text} onChange={setText} autoFocus={file !== null} /></Suspense>
-  else if (markdown && tab === 'preview') content = <div className="h-[55vh] overflow-auto"><Suspense fallback={<LoadingState />}><ChatMarkdown text={text} /></Suspense></div>
+  else if (!markdown) content = <Suspense fallback={<LoadingState />}><PlainTextEditor value={text} onChange={setText} autoFocus={file !== null} fileName={file?.name ?? fileName} /></Suspense>
   else content = (
-    <Textarea
-      autoFocus={file !== null}
-      spellCheck={false}
-      aria-label={t({ ko: '내용', en: 'Content' })}
-      className="h-[55vh] resize-none font-mono leading-relaxed"
-      value={text}
-      onChange={(event) => setText(event.target.value)}
-    />
+    // Markdown: the same in-place tabs as the post editor, in one frame. The visual editor keeps the text Markdown.
+    <div className="theme-input-surface min-w-0 overflow-hidden rounded-sm border">
+      <FieldTabs
+        value={tab}
+        onChange={setTab}
+        ariaLabel={t({ ko: '편집 방식', en: 'Editing mode' })}
+        bare
+        items={[{ value: 'write', label: t({ ko: '서식 편집', en: 'Visual' }) }, { value: 'source', label: t({ ko: '원문', en: 'Source' }) }, { value: 'preview', label: t({ ko: '미리보기', en: 'Preview' }) }]}
+      />
+      <div className="border-t border-line">
+        <Suspense fallback={<div className="h-[55vh]"><LoadingState /></div>}>
+          {tab === 'write' ? (
+            <PostRichEditor
+              value={text}
+              onChange={setText}
+              autoFocus={file !== null}
+              bodyClassName="h-[55vh] min-h-0 overflow-y-auto"
+              onError={(error) => {
+                setTab('source')
+                showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '서식 편집기를 열지 못했어. 원문에서 계속 편집할 수 있어.', en: 'Could not open the visual editor. You can continue editing the source.' })) })
+              }}
+              onUnsupportedUpload={() => showSnackbar({ tone: 'info', message: t({ ko: '여기선 이미지를 붙여 넣을 수 없어. 원문에 링크로 넣어줘.', en: 'Images cannot be pasted here. Add them as links in the source.' }) })}
+            />
+          ) : tab === 'source' ? (
+            <PlainTextEditor value={text} onChange={setText} autoFocus={file !== null} fileName="document.md" bare />
+          ) : (
+            <div className="h-[55vh] overflow-auto p-4"><ChatMarkdown text={text} /></div>
+          )}
+        </Suspense>
+      </div>
+    </div>
   )
 
   return (
@@ -180,9 +203,6 @@ export function FileTextEditor({ entry, parentId, owner, onClose, chatPage = fal
             />
           </div>
         )}
-        {markdown && text !== null ? (
-          <TextTabs value={tab} onChange={setTab} items={[{ value: 'edit', label: t({ ko: '편집', en: 'Edit' }) }, { value: 'preview', label: t({ ko: '미리보기', en: 'Preview' }) }]} />
-        ) : null}
         {content}
       </ModalBody>
       <ModalFooter>

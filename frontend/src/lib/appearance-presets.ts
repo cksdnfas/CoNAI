@@ -483,6 +483,7 @@ export function createDefaultAppearancePresetSlots(): AppearancePresetSlot[] {
 
 export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
   ...DEFAULT_APPEARANCE_THEME,
+  appIconDataUrl: '',
   presetSlots: createDefaultAppearancePresetSlots(),
   wallpaperLayoutPresets: [],
   wallpaperActivePresetId: null,

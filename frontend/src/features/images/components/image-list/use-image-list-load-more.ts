@@ -33,6 +33,7 @@ export function useImageListLoadMore({ hasMore, isLoadingMore, onLoadMore }: Use
     const sentinel = sentinelRef.current
     if (!sentinel || !hasMore || !hasLoadMoreCallback) return
 
+    let disposed = false
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0]
@@ -44,8 +45,13 @@ export function useImageListLoadMore({ hasMore, isLoadingMore, onLoadMore }: Use
         isLoadMorePendingRef.current = true
         void Promise.resolve(loadMore()).finally(() => {
           requestAnimationFrame(() => {
-            if (!isLoadingMoreRef.current) {
+            if (!disposed && !isLoadingMoreRef.current) {
               isLoadMorePendingRef.current = false
+              // A narrow feed beside the chat can keep the sentinel inside the prefetch margin.
+              // Fast requests may also batch away the loading-state change that rebuilds this observer.
+              // Observe again after layout settles so an unchanged intersection still loads the next page.
+              observer.unobserve(sentinel)
+              observer.observe(sentinel)
             }
           })
         })
@@ -58,7 +64,10 @@ export function useImageListLoadMore({ hasMore, isLoadingMore, onLoadMore }: Use
     )
 
     observer.observe(sentinel)
-    return () => observer.disconnect()
+    return () => {
+      disposed = true
+      observer.disconnect()
+    }
   }, [hasMore, hasLoadMoreCallback, isLoadingMore])
 
   return sentinelRef

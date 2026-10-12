@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PostAssessmentTaskFit, PostDetail, PostSummary } from '@conai/shared'
+import { Search, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ErrorState } from '@/components/ui/error-state'
 import { Field } from '@/components/ui/field'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
-import { Section } from '@/components/ui/section'
+import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
@@ -43,7 +44,6 @@ function TaskFitDialog({ post, context, taskFit, onClose }: { post: PostDetail; 
   return <Modal open onClose={onClose} title={taskFit === 'useful' ? t({ ko: '이 검색에 유용했어', en: 'Useful for this search' }) : t({ ko: '이 검색엔 맞지 않아', en: 'Unsuitable for this search' })} size="narrow">
     <ModalBody>
       <p className="whitespace-pre-wrap text-sm">{t({ ko: '검색: {query}', en: 'Search: {query}' }, { query: context.receipt.query })}</p>
-      <p className="text-xs text-muted-foreground">{t({ ko: '내 계정의 같은 검색에서 문서를 고를 때 반영돼.', en: 'This affects document selection for the same search in your account.' })}</p>
       <Field label={t({ ko: '설명 (선택)', en: 'Explanation (optional)' })}><Textarea rows={3} maxLength={2000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
     </ModalBody>
     <ModalFooter><Button variant="ghost" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button><Button disabled={save.isPending} onClick={() => save.mutate(crypto.randomUUID())}>{t({ ko: '검색 의견 저장', en: 'Save search feedback' })}</Button></ModalFooter>
@@ -68,15 +68,16 @@ export function PostKnowledgeTaskFit({ post, context }: { post: PostDetail; cont
   })
   if (!ownContext) return null
   const taskFit: PostAssessmentTaskFit = query.data?.taskFit ?? 'unknown'
-  return <Section heading={t({ ko: '이 검색의 적합성', en: 'Fit for this search' })} actions={allowed ? <>
-    <Button variant={taskFit === 'useful' ? 'secondary' : 'ghost'} size="sm" aria-pressed={taskFit === 'useful'} onClick={() => setPicked('useful')}>{t({ ko: '유용했어', en: 'Useful' })}</Button>
-    <Button variant={taskFit === 'unsuitable' ? 'secondary' : 'ghost'} size="sm" aria-pressed={taskFit === 'unsuitable'} onClick={() => setPicked('unsuitable')}>{t({ ko: '맞지 않아', en: 'Unsuitable' })}</Button>
-    {taskFit !== 'unknown' ? <Button variant="ghost" size="sm" disabled={cancel.isPending} onClick={() => cancel.mutate(crypto.randomUUID())}>{t({ ko: '검색 의견 취소', en: 'Cancel search feedback' })}</Button> : null}
-  </> : undefined}>
-    <p className="whitespace-pre-wrap text-sm text-muted-foreground">{ownContext.receipt.query}</p>
-    {!isCurrent || expired ? <p className="text-sm text-muted-foreground">{t({ ko: '검색한 내용 판이 바뀌었거나 검색 기록이 만료됐어. 검색 목록에서 문서를 다시 열어줘.', en: 'The content changed or the search record expired. Open the document from search results again.' })}</p> : <p className="text-xs text-muted-foreground">{t({ ko: '내 계정의 같은 검색에서 문서를 고를 때 반영돼.', en: 'This affects document selection for the same search in your account.' })}</p>}
+  return <div className="flex flex-wrap items-center gap-2 border-b border-line py-2.5 text-sm" aria-label={t({ ko: '이 검색의 적합성', en: 'Fit for this search' })}>
+    <Search className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+    <span className="min-w-0 flex-1 truncate text-muted-foreground" title={ownContext.receipt.query}>{ownContext.receipt.query}</span>
+    {allowed ? <>
+      <Button variant={taskFit === 'useful' ? 'secondary' : 'ghost'} size="xs" aria-pressed={taskFit === 'useful'} onClick={() => setPicked('useful')}>{t({ ko: '유용했어', en: 'Useful' })}</Button>
+      <Button variant={taskFit === 'unsuitable' ? 'secondary' : 'ghost'} size="xs" aria-pressed={taskFit === 'unsuitable'} onClick={() => setPicked('unsuitable')}>{t({ ko: '맞지 않아', en: 'Unsuitable' })}</Button>
+      {taskFit !== 'unknown' ? <IconButton variant="ghost" size="icon-xs" disabled={cancel.isPending} label={t({ ko: '검색 의견 취소', en: 'Cancel search feedback' })} onClick={() => cancel.mutate(crypto.randomUUID())}><Undo2 /></IconButton> : null}
+    </> : <span className="text-xs text-muted-foreground">{t({ ko: '검색 기록 만료', en: 'Search record expired' })}</span>}
     {query.isError ? <ErrorState size="compact" error={query.error} onRetry={() => void query.refetch()} /> : null}
-    {query.data?.reason ? <p className="whitespace-pre-wrap text-sm">{query.data.reason}</p> : null}
+    {query.data?.reason ? <p className="w-full whitespace-pre-wrap text-xs text-muted-foreground">{query.data.reason}</p> : null}
     {picked && allowed && ownContext ? <TaskFitDialog post={post} context={ownContext} taskFit={picked} onClose={() => setPicked(null)} /> : null}
-  </Section>
+  </div>
 }

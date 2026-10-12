@@ -1,6 +1,12 @@
-import { useRef } from 'react'
-import { Check, Download, Eye, RotateCcw, Undo2, Upload } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Check, Download, Eye, Images, Pencil, RotateCcw, Undo2, Upload } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
+import { Button } from '@/components/ui/button'
+import { SettingRow } from '@/components/ui/setting-row'
+import { APP_ICON_SRC } from '@/lib/app-metadata'
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
+import { ChatMediaPicker } from '@/features/codex-chat/chat-media-picker'
+import { AppIconEditor } from './app-icon-editor'
 import { InstantApplyHint, SectionDirtyBadge } from './settings-section-status'
 import { AppearanceBadgeColorRows, AppearanceThemeRows } from './appearance-color-editor-content'
 import { AppearanceFinishRows, AppearanceFontRows } from './appearance-general-editor-content'
@@ -26,13 +32,25 @@ export function AppearanceTab({
   onSavePresetSlots,
   onUploadCustomFont,
   onClearCustomFont,
+  onUploadAppIcon,
+  onSelectLibraryAppIcon,
+  appIconSource,
+  onEditAppIcon,
+  onCloseAppIconEditor,
+  onRegisterAppIcon,
+  onResetAppIcon,
+  isSavingAppIcon,
+  isLoadingAppIcon,
   isSaving,
   isUploadingFont,
 }: AppearanceTabProps) {
   const { t } = useI18n()
+  const { canViewImages } = useImagePermissions()
+  const [appIconPickerOpen, setAppIconPickerOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const sansFontInputRef = useRef<HTMLInputElement | null>(null)
   const monoFontInputRef = useRef<HTMLInputElement | null>(null)
+  const appIconInputRef = useRef<HTMLInputElement | null>(null)
   const colorValues = getAppearanceTabColorValues(appearanceDraft)
   const editorProps = appearanceDraft ? {
     appearanceDraft,
@@ -46,6 +64,17 @@ export function AppearanceTab({
 
   return (
     <div className="space-y-8">
+      <input
+        ref={appIconInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/avif,.png,.jpg,.jpeg,.webp,.gif,.avif"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file) void onUploadAppIcon(file).catch(() => {})
+          event.target.value = ''
+        }}
+      />
       <input
         ref={fileInputRef}
         type="file"
@@ -126,6 +155,33 @@ export function AppearanceTab({
               </>
             )}
           >
+            <SettingRow
+              label={t({ ko: '앱 마크', en: 'App mark' })}
+              info={t({ ko: 'PC 파일이나 내부 이미지를 골라 편집한 뒤 등록해줘. 20MB 이하의 PNG, JPG, WebP, GIF, AVIF를 지원하고 투명 배경을 유지해. 등록하면 모든 사용자의 상단 마크에 바로 적용돼. 움직이는 이미지는 한 장으로 저장돼.', en: 'Choose a local file or an app library image, edit it, and register it. PNG, JPG, WebP, GIF, and AVIF up to 20 MB are supported, with transparency preserved. Registration applies the mark to everyone immediately. Animated images are saved as a still image.' })}
+            >
+              <img
+                src={editorProps.appearanceDraft.appIconDataUrl || APP_ICON_SRC}
+                alt={t({ ko: '앱 마크 미리보기', en: 'App mark preview' })}
+                className="bg-checker size-12 shrink-0 rounded-sm object-contain"
+                draggable={false}
+              />
+              <Button type="button" size="sm" variant="secondary" onClick={() => appIconInputRef.current?.click()} disabled={isSaving || isLoadingAppIcon}>
+                <Upload className="size-4" aria-hidden />
+                {isLoadingAppIcon ? t({ ko: '불러오는 중', en: 'Loading' }) : t({ ko: 'PC에서 선택', en: 'Choose local file' })}
+              </Button>
+              <Button type="button" size="sm" variant="secondary" onClick={() => setAppIconPickerOpen(true)} disabled={isSaving || isLoadingAppIcon || !canViewImages}>
+                <Images className="size-4" aria-hidden />
+                {t({ ko: '내부 이미지', en: 'App library' })}
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={onEditAppIcon} disabled={isSaving || isLoadingAppIcon}>
+                <Pencil className="size-4" aria-hidden />
+                {t({ ko: '편집', en: 'Edit' })}
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => void onResetAppIcon().catch(() => {})} disabled={isSaving || isLoadingAppIcon || !editorProps.appearanceDraft.appIconDataUrl}>
+                <RotateCcw className="size-4" aria-hidden />
+                {t({ ko: '기본 마크', en: 'Default mark' })}
+              </Button>
+            </SettingRow>
             <AppearanceThemeRows {...editorProps} />
           </RowGroup>
 
@@ -158,6 +214,23 @@ export function AppearanceTab({
       ) : (
         <SettingsRowsSkeleton rows={4} />
       )}
+      {appIconPickerOpen ? (
+        <ChatMediaPicker
+          initial={[]}
+          maxCount={1}
+          imagesOnly
+          title={t({ ko: '앱 마크로 쓸 내부 이미지', en: 'Choose an app library image for the mark' })}
+          applyLabel={t({ ko: '선택', en: 'Select' })}
+          note={null}
+          onClose={() => setAppIconPickerOpen(false)}
+          onPick={(items) => {
+            if (isSaving || isLoadingAppIcon || !canViewImages) return
+            setAppIconPickerOpen(false)
+            if (items[0]) void onSelectLibraryAppIcon(items[0].compositeHash).catch(() => {})
+          }}
+        />
+      ) : null}
+      {appIconSource ? <AppIconEditor key={appIconSource.id} source={appIconSource} isSaving={isSavingAppIcon} onRegister={onRegisterAppIcon} onClose={onCloseAppIconEditor} /> : null}
     </div>
   )
 }

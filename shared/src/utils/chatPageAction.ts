@@ -115,6 +115,7 @@ export const CHAT_PAGE_ACTION_PERMISSIONS: Record<string, string | null> = {
   'settings.mcp_http': null, 'settings.maintenance': null,
   'settings.chat_options': null, 'settings.default_model': null, 'settings.llm_preset': null, 'settings.mcp_server': null, 'settings.mcp_server_draft': null,
   'settings.usage_period': null, 'settings.judge_filter': null,
+  'settings.content_topic': null,
   'settings.user_profile': 'chat.use', 'settings.flag': 'chat.use', 'settings.routine': null, 'settings.automation_switch': null,
 }
 /**

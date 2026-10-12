@@ -281,8 +281,11 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, reply, e
   )
 }
 
-/** Comments two levels deep (deeper answers quote), bot calls still in progress, and the comment box. */
-export function PostComments({ post, draft, setDraft }: { post: PostDetail; draft: PostCommentDraft; setDraft: (update: (current: PostCommentDraft) => PostCommentDraft) => void }) {
+/**
+ * Comments two levels deep (deeper answers quote), bot calls still in progress, and the comment box. `hideHeading`:
+ * the caller already labels the list (the post's 댓글 tab).
+ */
+export function PostComments({ post, draft, setDraft, hideHeading = false }: { post: PostDetail; draft: PostCommentDraft; setDraft: (update: (current: PostCommentDraft) => PostCommentDraft) => void; hideHeading?: boolean }) {
   const { t } = useI18n()
   const editProps = (id: number) => ({ editing: draft.edit?.id === id ? draft.edit.text : null, setEditing: (text: string | null) => setDraft((current) => ({ ...current, edit: text === null ? null : { id, text } })) })
   const { canComment, canSummon, isAdmin } = usePostPermissions()
@@ -331,9 +334,9 @@ export function PostComments({ post, draft, setDraft }: { post: PostDetail; draf
 
   return (
     <section className="space-y-2" aria-label={t({ ko: '댓글', en: 'Comments' })}>
-      <h2 className="text-sm font-semibold">{t({ ko: '댓글 {count}', en: 'Comments {count}' }, { count: post.commentCount })}</h2>
+      {hideHeading ? null : <h2 className="text-sm font-semibold">{t({ ko: '댓글 {count}', en: 'Comments {count}' }, { count: post.commentCount })}</h2>}
       {commentsQuery.isPending ? <div className="h-16 animate-pulse rounded-sm bg-surface-low" /> : null}
-      <div className="divide-y divide-line border-y border-line">
+      <div className={cn('divide-y divide-line', hideHeading ? (tops.length ? 'border-b border-line' : '') : 'border-y border-line')}>
         {tops.map((top) => (
           <div key={top.id}>
             <CommentRow comment={top} quoted={null} mentionNames={mentionNames} canReply={canReply} reply={false} focused={focusedId === top.id} onReply={() => setReplyTo(top.id)} {...editProps(top.id)} />

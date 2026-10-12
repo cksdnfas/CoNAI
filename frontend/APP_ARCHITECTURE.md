@@ -1,6 +1,7 @@
 # CoNAI Frontend Architecture
 
-갱신: 2026-09-28 · React 19 + Vite + Tailwind v4 + TanStack Query + React Router (hash router), React Compiler on.
+갱신: 2026-10-13 · React + Vite + Tailwind + TanStack Query + React Router (hash router).
+정책은 [AI_Guidelines.md](../AI_Guidelines.md), 서버·AI 연결은 [DEVELOPMENT.md](../DEVELOPMENT.md)를 따른다.
 
 ## Runtime
 - Dev server: port `1677` (or `FRONTEND_URL`). Vite proxies `/api`, `/uploads`, `/temp`, `/save` to the backend on `1666`.
@@ -9,8 +10,11 @@
 
 ## Providers (`src/app/providers.tsx`, outer → inner)
 `QueryClientProvider` → `RuntimeEventStreamProvider` (SSE bridge into the query cache) → `I18nProvider` →
-`ThemeProvider` (applies the saved appearance settings as CSS variables) → `SnackbarProvider` → `TooltipProvider` →
+`ThemeProvider` (applies the saved appearance settings as CSS variables) → `TooltipProvider` → `SnackbarProvider` →
 `ConfirmProvider` (`useConfirm()`).
+
+The app shell also mounts `ChatPageProvider` → `CodexChatProvider`: page registration and the chat dock share the
+current screen state. See `components/layout/app-shell.tsx`; these providers are not global route-independent providers.
 
 ## Routes (`src/app/router.tsx`, pages lazy-loaded in `src/app/lazy-routes.tsx`)
 | Path | Feature folder | Permission |
@@ -25,12 +29,19 @@
 | `/public/workflows/:slug` | `features/image-generation` | public workflow page |
 | `/images/:compositeHash`, `/images/:compositeHash/metadata` | `features/images`, `features/metadata` | `page.image-detail.view`, `page.metadata-editor.view` |
 | `/upload` | `features/upload` | `page.upload.view` |
+| `/chat` | `features/codex-chat` | `page.chat.view` |
+| `/files` | `features/files` | `page.files.view` |
+| `/posts` | `features/posts` (board and knowledge) | `page.posts.view` |
+| `/audio` | `features/audio` | `page.audio.view` |
+| `/sprite` | `features/sprite` | `page.sprite.view` |
 | `/settings` | `features/settings` | `page.settings.view` |
-| `/wallpaper`, `/wallpaper/runtime` | `features/wallpaper` | `page.wallpaper*.view` |
+| `/wallpaper` | `features/wallpaper` | `page.wallpaper.view` |
+| `/wallpaper/runtime` | `features/wallpaper` | separate runtime access flow; outside app shell |
 | `/graph` | redirect to `/generation?tab=workflows` | |
 | `/dev/ui` | `features/dev-ui-catalog` | dev builds only |
 
-Everything except `/login` and `/dev/ui` renders inside `ProtectedAppShell` → `components/layout/app-shell.tsx`.
+Everything except `/login`, `/dev/ui` and `/wallpaper/runtime` renders inside `ProtectedAppShell` → `components/layout/app-shell.tsx`.
+The public workflow route has its own access flow; being inside the shell does not make it a private workflow.
 
 ## Layers
 - `src/components/ui/` — design-system primitives (Button, IconButton, Panel, Section, Modal, Input, …). No feature
@@ -49,8 +60,20 @@ Everything except `/login` and `/dev/ui` renders inside `ProtectedAppShell` → 
 - Korean UI copy uses casual 반말.
 
 ## Design system
-See `DESIGN_PRESET.md` ("The Silent Curator", D1: tone instead of outlines, button variant guide, tokens) and the
+See [DESIGN_PRESET.md](DESIGN_PRESET.md) ("The Silent Curator", flat page, spacing and hairline rows, button variants, tokens) and the
 live catalog at `/#/dev/ui`. Use `components/ui`; the `[ds/*]` lint guards in `eslint.config.js` flag bypasses.
+
+## Assistant integration and performance
+
+- New page features include an assistant path: register bounded fields/data/actions with the page context and reuse
+  the native state setters/API. Follow the shared action schema, permission mapping and view/draft/commit tiers.
+- Server-side automation uses MCP tools over the same domain services. A navigation entry alone is not full feature support.
+- Preserve the shared virtualized list in `features/images/components/image-list/` (Virtuoso + ViSelect), stable media
+  identity, bounded loading and video preview lifecycle. Do not build a separate engine per page.
+- Keep expensive work out of input/scroll/render paths. Reuse the query cache and runtime event bridge; invalidate
+  affected data instead of refetching every list. Keep page snapshots and tool responses bounded.
+- React Compiler is configured in `vite.config.ts`. Preserve the default compiler path; use the existing compiler-off
+  build only to investigate a demonstrated compatibility issue, not as the default optimization strategy.
 
 ## Checks
 `npm run typecheck`, `npx eslint .`, `npm run build` (run in `frontend/`).

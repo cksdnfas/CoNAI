@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { updateAppearanceSettings, uploadAppearanceFont } from '@/lib/api-settings-appearance'
+import { buildApiUrl } from '@/lib/api-client'
+import { APP_ICON_SRC } from '@/lib/app-metadata'
 import { DEFAULT_APPEARANCE_SETTINGS, applyAppearanceTheme, extractAppearanceTheme } from '@/lib/appearance'
 import { buildAppearancePackage, restoreAppearancePackage } from '@/lib/appearance-package'
-import type { AppearanceTabProps } from './components/appearance-tab.types'
+import type { AppIconSource, AppearanceTabProps } from './components/appearance-tab.types'
 import type { AppearancePresetSlot, AppearanceSettings } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { areSettingsDraftsEqual, type SettingsDraftSection } from './settings-draft-sections'
@@ -42,9 +44,35 @@ export function useAppearanceSettingsTab({
 }: UseAppearanceSettingsTabOptions): { tabProps: AppearanceTabProps; draftSection: SettingsDraftSection } {
   const { t } = useI18n()
   const [appearanceDraft, setAppearanceDraft] = useState<AppearanceSettings | null>(null)
+  const [isLoadingAppIcon, setIsLoadingAppIcon] = useState(false)
+  const [appIconSource, setAppIconSource] = useState<AppIconSource | null>(null)
+  const appIconRequestRef = useRef<AbortController | null>(null)
+  const appIconRevisionRef = useRef(0)
   // An imported package is only previewed on the live theme until the user applies or reverts it.
   const [importPreview, setImportPreview] = useState<{ appearance: AppearanceSettings; fileName: string } | null>(null)
   const effectiveAppearanceDraft = appearanceDraft ?? currentAppearance ?? null
+
+  useEffect(() => () => {
+    appIconRevisionRef.current += 1
+    appIconRequestRef.current?.abort()
+  }, [])
+
+  useEffect(() => () => {
+    if (appIconSource?.url.startsWith('blob:')) URL.revokeObjectURL(appIconSource.url)
+  }, [appIconSource])
+
+  const appIconMutation = useMutation({
+    mutationFn: (appIconDataUrl: string) => updateAppearanceSettings({ appIconDataUrl }),
+    onSuccess: (settings) => {
+      syncSettingsCache(settings)
+      // Registering the mark must preserve any other unsaved theme edits.
+      setAppearanceDraft((draft) => draft ? { ...draft, appIconDataUrl: settings.appearance.appIconDataUrl } : settings.appearance)
+      setAppIconSource(null)
+      notifyInfo(settings.appearance.appIconDataUrl
+        ? t({ ko: '앱 마크를 등록했어.', en: 'App mark registered.' })
+        : t({ ko: '기본 앱 마크로 되돌렸어.', en: 'Restored the default app mark.' }))
+    },
+  })
 
   useEffect(() => {
     if (isActive) {
@@ -112,6 +140,7 @@ export function useAppearanceSettingsTab({
     const presetSlots = normalizeAppearancePresetSlots(effectiveAppearanceDraft.presetSlots)
     await appearanceMutation.mutateAsync({
       ...extractAppearanceTheme(effectiveAppearanceDraft),
+      ...(effectiveAppearanceDraft.appIconDataUrl === savedAppearance.appIconDataUrl ? {} : { appIconDataUrl: effectiveAppearanceDraft.appIconDataUrl }),
       ...(areSettingsDraftsEqual(presetSlots, savedAppearance.presetSlots) ? {} : { presetSlots }),
     })
   }
@@ -210,6 +239,84 @@ export function useAppearanceSettingsTab({
     notifyInfo(t({ ko: '{targetLabel} 업로드 폰트를 draft에서 해제했어. 저장하면 반영돼.', en: 'Cleared the {targetLabel} uploaded font from the draft. Save to apply.' }, { targetLabel: target === 'sans' ? t({ ko: '본문', en: 'body' }) : t({ ko: '모노', en: 'mono' }) }))
   }
 
+  const openAppIconFile = (file: File) => {
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif'].includes(file.type) || file.size > 20 * 1024 * 1024) {
+      const message = t({ ko: '20MB 이하의 PNG, JPG, WebP, GIF, AVIF 이미지를 골라줘.', en: 'Choose a PNG, JPG, WebP, GIF, or AVIF image up to 20 MB.' })
+      throw new Error(message)
+    }
+    appIconRequestRef.current?.abort()
+    setIsLoadingAppIcon(false)
+    setAppIconSource({ id: ++appIconRevisionRef.current, url: URL.createObjectURL(file), name: file.name })
+  }
+
+  const handleAppIconUpload = async (file: File) => {
+    try {
+      openAppIconFile(file)
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : t({ ko: '이미지를 열지 못했어.', en: 'Could not open the image.' }))
+      throw error
+    }
+  }
+
+  const handleLibraryAppIconSelect = async (compositeHash: string) => {
+    appIconRequestRef.current?.abort()
+    const controller = new AbortController()
+    appIconRequestRef.current = controller
+    const revision = ++appIconRevisionRef.current
+    setIsLoadingAppIcon(true)
+    try {
+      // Load this one selected original so cropping and alpha do not inherit thumbnail compression.
+      const response = await fetch(buildApiUrl(`/api/images/${encodeURIComponent(compositeHash)}/file`), {
+        credentials: 'include',
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]),
+      })
+      if (!response.ok) throw new Error(t({ ko: '내부 이미지를 불러오지 못했어. 이미지가 남아 있는지와 보기 권한을 확인해줘.', en: 'Could not load the app library image. Check that it still exists and you have permission to view it.' }))
+      if (Number(response.headers.get('Content-Length')) > 20 * 1024 * 1024) {
+        await response.body?.cancel()
+        throw new Error(t({ ko: '20MB 이하의 이미지를 골라줘.', en: 'Choose an image up to 20 MB.' }))
+      }
+      const image = await response.blob()
+      if (controller.signal.aborted || revision !== appIconRevisionRef.current) throw new DOMException('Canceled', 'AbortError')
+      openAppIconFile(new File([image], 'app-mark', { type: image.type }))
+    } catch (error) {
+      if (controller.signal.aborted || revision !== appIconRevisionRef.current) throw error
+      notifyError(error instanceof Error ? error.message : t({ ko: '내부 이미지를 불러오지 못했어.', en: 'Could not load the app library image.' }))
+      throw error
+    } finally {
+      if (appIconRequestRef.current === controller) {
+        appIconRequestRef.current = null
+        setIsLoadingAppIcon(false)
+      }
+    }
+  }
+
+  const handleAppIconClose = () => {
+    appIconRevisionRef.current += 1
+    appIconRequestRef.current?.abort()
+    setIsLoadingAppIcon(false)
+    setAppIconSource(null)
+  }
+
+  const handleAppIconEdit = () => {
+    if (appIconMutation.isPending) return
+    appIconRequestRef.current?.abort()
+    setIsLoadingAppIcon(false)
+    setAppIconSource({ id: ++appIconRevisionRef.current, url: effectiveAppearanceDraft?.appIconDataUrl || APP_ICON_SRC, name: 'app-mark' })
+  }
+
+  const handleAppIconRegister = async (dataUrl: string) => {
+    await appIconMutation.mutateAsync(dataUrl)
+  }
+
+  const handleAppIconReset = async () => {
+    try {
+      await appIconMutation.mutateAsync('')
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : t({ ko: '앱 마크를 되돌리지 못했어.', en: 'Could not restore the app mark.' }))
+      throw error
+    }
+  }
+
   const draftSection: SettingsDraftSection = {
     id: 'appearance',
     label: t({ ko: '테마', en: 'Theme' }),
@@ -235,7 +342,16 @@ export function useAppearanceSettingsTab({
       onSavePresetSlots: handleAppearancePresetSlotsSave,
       onUploadCustomFont: handleAppearanceFontUpload,
       onClearCustomFont: handleAppearanceFontClear,
-      isSaving: appearanceMutation.isPending || appearancePresetSlotsMutation.isPending,
+      onUploadAppIcon: handleAppIconUpload,
+      onSelectLibraryAppIcon: handleLibraryAppIconSelect,
+      appIconSource,
+      onEditAppIcon: handleAppIconEdit,
+      onCloseAppIconEditor: handleAppIconClose,
+      onRegisterAppIcon: handleAppIconRegister,
+      onResetAppIcon: handleAppIconReset,
+      isSavingAppIcon: appIconMutation.isPending,
+      isLoadingAppIcon,
+      isSaving: appearanceMutation.isPending || appearancePresetSlotsMutation.isPending || appIconMutation.isPending,
       isUploadingFont: appearanceFontUploadMutation.isPending,
     },
   }

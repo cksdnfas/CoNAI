@@ -35,7 +35,7 @@ test('maintenance routes are admin-only and search history is per account', { ti
   const { registerAppRoutes } = await import('../src/startup/registerAppRoutes')
   const app = express()
   const sessions = new Map<string, Record<string, unknown>>()
-  app.use(express.json())
+  app.use(express.json({ limit: '1mb' }))
   app.use((req, _res, next) => {
     const id = Number(req.header('x-test-account')) || undefined
     const sid = `test-${id ?? 'anonymous'}`
@@ -65,6 +65,34 @@ test('maintenance routes are admin-only and search history is per account', { ti
   AuthPermissionGroup.addAccountMembership(group.id, guestId)
   AuthPermissionGroup.addAccountMembership(group.id, otherId)
   invalidateConfiguredAuthCache()
+
+  await t.test('only admins can change the shared app mark and invalid images preserve the saved mark', async () => {
+    const url = '/api/settings/appearance'
+    assert.equal((await call(url, 0, 'PUT', { appIconDataUrl: '' })).status, 401)
+    assert.equal((await call(url, guestId, 'PUT', { appIconDataUrl: '' })).status, 403)
+    assert.equal((await call('/api/settings/appearance-public', 0)).body.data.appIconDataUrl, '')
+
+    const sharp = (await import('sharp')).default
+    const image = await sharp({ create: { width: 2, height: 1, channels: 4, background: { r: 80, g: 120, b: 160, alpha: 0.5 } } }).png().toBuffer()
+    const saved = await call(url, adminId, 'PUT', { appIconDataUrl: `data:image/png;base64,${image.toString('base64')}` })
+    assert.equal(saved.status, 200)
+    const mark = saved.body.data.appearance.appIconDataUrl
+    assert.equal((await call('/api/settings/appearance-public', 0)).body.data.appIconDataUrl, mark)
+    const metadata = await sharp(Buffer.from(mark.split(',')[1], 'base64')).metadata()
+    assert.equal(metadata.width, 128)
+    assert.equal(metadata.height, 128)
+    assert.equal(metadata.hasAlpha, true)
+    const pixels = await sharp(Buffer.from(mark.split(',')[1], 'base64')).ensureAlpha().raw().toBuffer()
+    assert.equal(pixels[3], 0, 'padding remains fully transparent')
+    assert.equal(pixels[(64 * 128 + 64) * 4 + 3], 128, 'partial transparency survives resize and storage')
+
+    for (const appIconDataUrl of [null, 'https://example.com/icon.png', 'data:image/svg+xml;base64,PHN2Zy8+', 'data:image/png;base64,YmFk', `data:image/png;base64,${'A'.repeat(384 * 1024)}`]) {
+      assert.equal((await call(url, adminId, 'PUT', { appIconDataUrl })).status, 400)
+    }
+    assert.equal((await call('/api/settings/appearance-public', 0)).body.data.appIconDataUrl, mark)
+    assert.equal((await call(url, adminId, 'PUT', { appIconDataUrl: '' })).status, 200)
+    assert.equal((await call('/api/settings/appearance-public', 0)).body.data.appIconDataUrl, '')
+  })
 
   await t.test('a prompt viewer cannot install or check shared Danbooru database releases', async () => {
     const promptGroup = AuthPermissionGroup.createCustomGroup({ name: 'prompt-viewer', permissionKeys: ['prompts.view'] })

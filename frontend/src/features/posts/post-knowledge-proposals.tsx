@@ -120,7 +120,8 @@ export function KnowledgeProposalReview({ proposalId, onClose }: { proposalId: s
   )
 }
 
-export function PostKnowledgeProposals({ postId, standalone = false }: { postId?: number; standalone?: boolean }) {
+/** `bare`: the list alone (the post's 제안 tab), without the section heading. */
+export function PostKnowledgeProposals({ postId, standalone = false, bare = false }: { postId?: number; standalone?: boolean; bare?: boolean }) {
   const { t, formatDateTime } = useI18n()
   const [picked, setPicked] = useState<string | null>(null)
   const [status, setStatus] = useState<'pending' | 'applied' | 'rejected'>('pending')
@@ -131,10 +132,14 @@ export function PostKnowledgeProposals({ postId, standalone = false }: { postId?
     getNextPageParam: (page) => page.offset + page.items.length < page.total ? page.offset + page.items.length : undefined,
   })
   const items = query.data?.pages.flatMap((page) => page.items) ?? []
-  return (
-    <Section heading={standalone ? t({ ko: '변경 제안', en: 'Change proposals' }) : t({ ko: '검토할 변경 제안', en: 'Pending change proposals' })} bodyClassName="space-y-0" actions={standalone ? <Select value={status} aria-label={t({ ko: '제안 상태', en: 'Proposal status' })} onChange={(event) => setStatus(event.target.value as typeof status)}><option value="pending">{t({ ko: '검토 대기', en: 'Pending' })}</option><option value="applied">{t({ ko: '반영됨', en: 'Applied' })}</option><option value="rejected">{t({ ko: '거절됨', en: 'Rejected' })}</option></Select> : undefined}>
+  const body = <>
       {query.isPending ? <LoadingState /> : query.isError ? <ErrorState size="compact" error={query.error} onRetry={() => void query.refetch()} /> : query.data ? <div>{items.map((item) => <ListRow key={item.id} asChild interactive><button type="button" onClick={() => setPicked(item.id)} className="w-full text-left"><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{item.title}</span><span className="text-xs text-muted-foreground">{item.proposedByName} · {formatDateTime(item.createdAt)}</span></span><Badge variant="ghost">{item.kind === 'create' ? t({ ko: '새 문서', en: 'New document' }) : t({ ko: '수정', en: 'Update' })}</Badge></button></ListRow>)}{!items.length ? <p className="py-3 text-sm text-muted-foreground">{t({ ko: '해당 제안이 없어', en: 'No matching proposals' })}</p> : null}{query.hasNextPage ? <Button variant="ghost" size="sm" disabled={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>{t({ ko: '더 보기', en: 'Load more' })}</Button> : null}</div> : null}
       {picked ? <KnowledgeProposalReview proposalId={picked} onClose={() => setPicked(null)} /> : null}
+  </>
+  if (bare) return <div>{body}</div>
+  return (
+    <Section heading={standalone ? t({ ko: '변경 제안', en: 'Change proposals' }) : t({ ko: '검토할 변경 제안', en: 'Pending change proposals' })} bodyClassName="space-y-0" actions={standalone ? <Select value={status} aria-label={t({ ko: '제안 상태', en: 'Proposal status' })} onChange={(event) => setStatus(event.target.value as typeof status)}><option value="pending">{t({ ko: '검토 대기', en: 'Pending' })}</option><option value="applied">{t({ ko: '반영됨', en: 'Applied' })}</option><option value="rejected">{t({ ko: '거절됨', en: 'Rejected' })}</option></Select> : undefined}>
+      {body}
     </Section>
   )
 }

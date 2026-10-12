@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import multer from 'multer'
+import sharp from 'sharp'
 import { Router, Request, Response } from 'express'
 import { sendRouteBadRequest } from '../routeValidation'
 import { asyncHandler } from '../../middleware/asyncHandler'
@@ -467,6 +468,27 @@ router.put('/appearance', asyncHandler(async (req: Request, res: Response) => {
   if (appearanceValidationError) {
     sendRouteBadRequest(res, appearanceValidationError)
     return
+  }
+
+  if (appearanceSettings.appIconDataUrl !== undefined) {
+    const dataUrl = appearanceSettings.appIconDataUrl
+    if (typeof dataUrl !== 'string' || dataUrl.length > 384 * 1024
+      || (dataUrl !== '' && !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(dataUrl))) {
+      sendRouteBadRequest(res, 'appIconDataUrl must be a PNG data URL up to 384 KB, or an empty string')
+      return
+    }
+
+    if (dataUrl) {
+      try {
+        const image = await sharp(Buffer.from(dataUrl.slice('data:image/png;base64,'.length), 'base64'), {
+          limitInputPixels: 256 * 256,
+        }).resize(128, 128, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer()
+        appearanceSettings.appIconDataUrl = `data:image/png;base64,${image.toString('base64')}`
+      } catch {
+        sendRouteBadRequest(res, 'appIconDataUrl must contain a valid image of at most 65536 pixels')
+        return
+      }
+    }
   }
 
   if (appearanceSettings.presetSlots !== undefined) {

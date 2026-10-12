@@ -6,12 +6,13 @@ import { ToggleChip } from '@/components/ui/chip'
 import { useI18n } from '@/i18n'
 import { PostAuthorAvatar, PostAuthorName, useRelativeTime } from './post-author'
 import { PostReferenceButton, SourceChatLink } from './post-chat-links'
-import { PostComments, type PostCommentDraft } from './post-comments'
+import type { PostCommentDraft } from './post-comments'
 import { mediaHashesOf, PostMarkdown } from './post-markdown'
 import { PostMediaContext } from './post-media'
-import { PostKnowledgePanel } from './post-knowledge-panel'
+import { PostVoteBar } from './post-knowledge-panel'
 import { PostKnowledgeStatus } from './post-knowledge-status'
-import { PostTopicRelevance } from './post-topic-relevance'
+import { PostReactions } from './post-reactions'
+import { hasPostTopicChips, PostTopicChips, usePostTopicEvaluation } from './post-topic-relevance'
 import type { KnowledgeSearchContext } from './post-knowledge-task-fit'
 
 /** Ancestors first: 창작 › 일러스트. */
@@ -34,6 +35,8 @@ export function PostView({ post, categories, onTag, onCategory, commentDraft, se
   const relative = useRelativeTime()
   const mediaContext = useMemo(() => ({ postId: post.id, mediaHashes: mediaHashesOf(post.body) }), [post.id, post.body])
   const path = categoryPath(categories, post.categoryId)
+  const topic = usePostTopicEvaluation(post)
+  const showTopicChips = hasPostTopicChips(topic)
   const when = post.publishedAt ?? post.updatedAt
 
   return (
@@ -68,23 +71,26 @@ export function PostView({ post, categories, onTag, onCategory, commentDraft, se
           {post.commentMode === 'closed' ? <span className="inline-flex items-center gap-1 text-xs"><Lock className="size-3.5" />{t({ ko: '댓글 닫힘', en: 'Comments closed' })}</span> : null}
           <PostKnowledgeStatus knowledge={post.knowledge} />
         </div>
-        {post.tags.length ? (
-          <div className="flex flex-wrap gap-1">
+        {post.tags.length || showTopicChips ? (
+          <div className="flex flex-wrap items-center gap-1">
             {post.tags.map((tag) => (
               <ToggleChip key={tag} size="sm" pressed={false} onClick={() => onTag(tag)}>#{tag}</ToggleChip>
             ))}
+            {showTopicChips ? <PostTopicChips topic={topic} divider={post.tags.length > 0} /> : null}
           </div>
         ) : null}
       </header>
-      {!post.knowledge?.deletedAt ? <PostTopicRelevance key={'topic-' + post.id} post={post} /> : null}
-      <PostMediaContext.Provider value={mediaContext}>
-        <PostMarkdown text={post.body} className="text-[0.95rem]" />
-      </PostMediaContext.Provider>
-      {!post.knowledge?.deletedAt ? <><hr className="border-line" />
-      <PostMediaContext.Provider value={mediaContext}>
-        <PostComments post={post} draft={commentDraft} setDraft={setCommentDraft} />
-      </PostMediaContext.Provider></> : null}
-      <PostKnowledgePanel key={post.id} post={post} searchContext={knowledgeSearchContext} />
+      <div>
+        <PostMediaContext.Provider value={mediaContext}>
+          <PostMarkdown text={post.body} className="text-[0.95rem]" />
+        </PostMediaContext.Provider>
+        <PostVoteBar key={post.id} post={post} topic={topic} />
+      </div>
+      {!post.knowledge?.deletedAt ? (
+        <PostMediaContext.Provider value={mediaContext}>
+          <PostReactions key={post.id} post={post} topic={topic} searchContext={knowledgeSearchContext} commentDraft={commentDraft} setCommentDraft={setCommentDraft} />
+        </PostMediaContext.Provider>
+      ) : null}
     </article>
   )
 }

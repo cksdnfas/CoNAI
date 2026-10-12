@@ -1,5 +1,11 @@
 import type { AppearancePresetSlot, AppearanceSettings } from '@conai/shared'
 
+export interface AppIconSource {
+  id: number
+  url: string
+  name: string
+}
+
 export interface AppearanceTabProps {
   appearanceDraft: AppearanceSettings | null
   savedAppearance: AppearanceSettings
@@ -15,6 +21,15 @@ export interface AppearanceTabProps {
   onSavePresetSlots: (presetSlots: AppearancePresetSlot[]) => void
   onUploadCustomFont: (target: 'sans' | 'mono', file: File) => void | Promise<void>
   onClearCustomFont: (target: 'sans' | 'mono') => void
+  onUploadAppIcon: (file: File) => Promise<void>
+  onSelectLibraryAppIcon: (compositeHash: string) => Promise<void>
+  appIconSource: AppIconSource | null
+  onEditAppIcon: () => void
+  onCloseAppIconEditor: () => void
+  onRegisterAppIcon: (dataUrl: string) => Promise<void>
+  onResetAppIcon: () => Promise<void>
+  isSavingAppIcon: boolean
+  isLoadingAppIcon: boolean
   isSaving: boolean
   isUploadingFont: boolean
 }

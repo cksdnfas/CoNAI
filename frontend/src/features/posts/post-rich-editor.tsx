@@ -7,29 +7,39 @@ import { listItem } from '@milkdown/crepe/feature/list-item'
 import { placeholder } from '@milkdown/crepe/feature/placeholder'
 import { table } from '@milkdown/crepe/feature/table'
 import { toolbar } from '@milkdown/crepe/feature/toolbar'
-import { topBar } from '@milkdown/crepe/feature/top-bar'
 import { LoadingState } from '@/components/ui/loading-state'
 import { useI18n } from '@/i18n'
+import { cn } from '@/lib/utils'
 import { PostEmbedImage } from './post-markdown'
-import { createPostRichEditor, type PostEditorMediaView, type PostRichEditorEngine } from './post-rich-editor-engine'
+import { createPostRichEditor, EMPTY_FORMAT_STATE, type PostEditorMediaView, type PostRichEditorEngine } from './post-rich-editor-engine'
+import { RichFormatBar } from './rich-format-bar'
 import './post-rich-editor.css'
 
 export type PostRichEditorHandle = { insertMarkdown: (markdown: string) => boolean }
 
-export function PostRichEditor({ value, onChange, onError, onUnsupportedUpload, ref }: {
+/**
+ * Visual Markdown editing (Milkdown Crepe) with the app's formatting bar. The value stays Markdown both ways.
+ * `bodyClassName` sizes the writing area under the bar (e.g. a fixed height that scrolls inside a dialog);
+ * `stickyTop` keeps the bar in view while the page scrolls a long text.
+ */
+export function PostRichEditor({ value, onChange, onError, onUnsupportedUpload, bodyClassName, stickyTop, autoFocus = false, ref }: {
   value: string
   onChange: (markdown: string) => void
   onError: (error: unknown) => void
   onUnsupportedUpload: () => void
+  bodyClassName?: string
+  stickyTop?: string
+  autoFocus?: boolean
   ref?: Ref<PostRichEditorHandle>
 }) {
   const { t } = useI18n()
   const host = useRef<HTMLDivElement>(null)
   const engine = useRef<PostRichEditorEngine | null>(null)
-  const latest = useRef({ value, onChange, onError, onUnsupportedUpload, t })
-  latest.current = { value, onChange, onError, onUnsupportedUpload, t }
+  const latest = useRef({ value, onChange, onError, onUnsupportedUpload, t, autoFocus })
+  latest.current = { value, onChange, onError, onUnsupportedUpload, t, autoFocus }
   const [ready, setReady] = useState(false)
   const [media, setMedia] = useState<PostEditorMediaView[]>([])
+  const [format, setFormat] = useState(EMPTY_FORMAT_STATE)
 
   useImperativeHandle(ref, () => ({
     insertMarkdown: (markdown) => engine.current?.insertMarkdown(markdown) ?? false,
@@ -47,6 +57,7 @@ export function PostRichEditor({ value, onChange, onError, onUnsupportedUpload, 
       label: translate({ ko: '본문', en: 'Body' }),
       onChange: (markdown) => latest.current.onChange(markdown),
       onMediaViewsChange: (views) => { if (!cancelled) setMedia(views) },
+      onFormatChange: (state) => { if (!cancelled) setFormat(state) },
       onUnsupportedUpload: () => latest.current.onUnsupportedUpload(),
     })
     instance.crepe
@@ -61,12 +72,6 @@ export function PostRichEditor({ value, onChange, onError, onUnsupportedUpload, 
         codeLabel: translate({ ko: '코드', en: 'Code' }),
         linkLabel: translate({ ko: '링크', en: 'Link' }),
         strikethroughLabel: translate({ ko: '취소선', en: 'Strikethrough' }),
-      })
-      .addFeature(topBar, {
-        headingOptions: [
-          { label: translate({ ko: '본문', en: 'Paragraph' }), level: null },
-          ...[1, 2, 3, 4, 5, 6].map((level) => ({ label: translate({ ko: '제목 {level}', en: 'Heading {level}' }, { level }), level })),
-        ],
       })
       .addFeature(blockEdit, {
         textGroup: {
@@ -99,6 +104,7 @@ export function PostRichEditor({ value, onChange, onError, onUnsupportedUpload, 
       instance.setMarkdown(latest.current.value)
       engine.current = instance
       setReady(true)
+      if (latest.current.autoFocus) instance.focus()
     }).catch((error: unknown) => { if (!cancelled) latest.current.onError(error) })
 
     return () => {
@@ -115,9 +121,12 @@ export function PostRichEditor({ value, onChange, onError, onUnsupportedUpload, 
   }, [value])
 
   return (
-    <div className="post-rich-editor min-h-[22rem]">
-      {!ready ? <LoadingState /> : null}
-      <div ref={host} />
+    <div className="post-rich-editor">
+      <RichFormatBar state={format} disabled={!ready} stickyTop={stickyTop} onFormat={(action) => engine.current?.format(action)} />
+      <div className={cn('min-h-[22rem]', bodyClassName)}>
+        {!ready ? <LoadingState /> : null}
+        <div ref={host} />
+      </div>
       {media.map(({ id, dom, src, alt }) => createPortal(<PostEmbedImage src={src} alt={alt} />, dom, String(id)))}
     </div>
   )

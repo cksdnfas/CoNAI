@@ -2,11 +2,11 @@
 
 # CoNAI
 
-**ComfyUI · NovelAI · Stable Diffusion 결과물을 한곳에서 찾고, 정리하고, 다시 생성하는 로컬 AI 미디어 작업대**
+**이미지·영상·생성물을 관리하고, 지식을 축적하며, AI 어시스턴트로 작업을 이어가는 개인화 앱**
 
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-2ea44f?style=for-the-badge)](https://cksdnfas.github.io/CoNAI/)
 [![Release](https://img.shields.io/badge/release-26.10.10-4f46e5?style=for-the-badge)](docs/RELEASE-MD/RELEASE_26.10.10.md)
-[![Node](https://img.shields.io/badge/node-%3E%3D20.19-339933?style=for-the-badge)](package.json)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.13.0-339933?style=for-the-badge)](package.json)
 [![Docs Deploy](https://img.shields.io/github/actions/workflow/status/cksdnfas/CoNAI/docs-pages.yml?branch=main&label=pages&style=for-the-badge)](https://github.com/cksdnfas/CoNAI/actions/workflows/docs-pages.yml)
 
 [📘 GitHub Pages 문서](https://cksdnfas.github.io/CoNAI/) · [🚀 처음 시작하기](https://cksdnfas.github.io/CoNAI/GUIDE/START_HERE.html) · [🧩 MCP 가이드](https://cksdnfas.github.io/CoNAI/GUIDE/MCP_GUIDE.html) · [📝 26.10.10 릴리즈 노트](docs/RELEASE-MD/RELEASE_26.10.10.md)
@@ -17,11 +17,11 @@
 
 ## 뭐 하는 앱인가
 
-CoNAI는 생성형 이미지/비디오 작업을 위한 로컬 관리 앱입니다. 생성 결과를 등록하고, 메타데이터를 읽고, 프롬프트와 태그로 찾고, 그룹으로 정리하고, 다시 ComfyUI/NovelAI/Codex 생성 흐름으로 연결합니다.
+CoNAI는 이미지·영상·생성물 관리를 기반으로 지식을 축적하고 작업을 자동화하는 앱입니다. 공개 배포하며, 혼자 또는 소수의 사용자가 자기 환경에 맞춰 사용하는 것을 중심으로 설계합니다.
 
-핵심 목표는 하나입니다.
+미디어 등록·검색·분류·생성 기반 위에 채팅, 페이지 어시스턴트, 파일과 게시글/지식, 작업 자동화를 연결하고 있습니다. 앞으로의 개발은 웹 전체 기능의 어시스턴트 연결, MCP 도구 개선, 대량 콘텐츠의 성능과 사용감, 유지보수에 집중합니다. 모든 기능의 AI 연결이 완료된 상태는 아니며 실제 지원 범위는 각 사용자 가이드에서 확인합니다.
 
-> **생성 결과를 잃어버리지 않고, 빠르게 비교하고, 바로 다음 생성으로 이어가기.**
+개발을 시작할 때는 [AI 개발 가이드](AI_Guidelines.md)와 [개발 구조·코드 연결 지점](DEVELOPMENT.md)을 먼저 읽습니다.
 
 ---
 
@@ -102,7 +102,7 @@ CoNAI는 생성형 이미지/비디오 작업을 위한 로컬 관리 앱입니�
 
 ### 요구사항
 
-- Node.js `>= 20.19` (권장: Node.js 22 LTS)
+- Node.js `>= 22.13.0` (`package.json`의 engines 기준)
 - npm
 - Windows 환경 권장
 
@@ -140,15 +140,10 @@ Node.js 설치 없이 컨테이너 하나로 실행합니다. 기본 이미지�
 docker compose up -d --build        # http://localhost:1666
 ```
 
-NVIDIA GPU는 별도 빌드로 선택합니다. RTX 50 시리즈는 CUDA 인덱스를 `cu128`로 바꿔야 태거가 GPU를 씁니다.
+NVIDIA GPU는 별도 빌드로 선택합니다. CUDA 빌드는 `compose.gpu.yaml`의 `TORCH_BACKEND` 인자를 사용하며 환경 변수 `CONAI_TORCH_BACKEND`로 선택합니다. GPU·드라이버별 선택은 [Docker 가이드](docs/GUIDE/DOCKER.md)를 참고합니다.
 
 ```bash
-# RTX 40 시리즈 이하
 docker compose -f compose.yaml -f compose.gpu.yaml up -d --build
-
-# RTX 50 시리즈
-docker compose -f compose.yaml -f compose.gpu.yaml build   --build-arg PYTORCH_CUDA_INDEX_URL=https://download.pytorch.org/whl/cu128
-docker compose -f compose.yaml -f compose.gpu.yaml up -d
 ```
 
 | 확인할 것 | 내용 |
@@ -157,7 +152,7 @@ docker compose -f compose.yaml -f compose.gpu.yaml up -d
 | 첫 관리자 | 컨테이너 안에서 `POST http://127.0.0.1:1666/api/auth/setup`으로 생성 |
 | 감시 폴더 | 호스트 폴더를 볼륨으로 마운트하고 컨테이너 경로로 등록 |
 | 프록시 없이 공개 | `TRUST_PROXY=false` 설정 |
-| GPU 확인 | `docker compose exec conai python3 -c "import torch; print(torch.cuda.is_available())"` |
+| GPU 확인 | `docker compose exec conai /opt/conai-ai/bin/python -c "import torch; print(torch.cuda.is_available())"` |
 
 GPU 확인, Coolify 배포 설정, 환경 변수는 [Docker로 실행 가이드](https://cksdnfas.github.io/CoNAI/GUIDE/DOCKER.html)에 정리돼 있습니다.
 
@@ -212,6 +207,8 @@ CoNAI/
 
 ## 문서
 
+- **개발 기준**: [AI_Guidelines.md](AI_Guidelines.md)
+- **개발 구조와 AI 연결**: [DEVELOPMENT.md](DEVELOPMENT.md)
 - **GitHub Pages**: https://cksdnfas.github.io/CoNAI/
 - **가이드 홈**: [`docs/GUIDE/`](docs/GUIDE)
 - **릴리즈 노트**: [`docs/RELEASE-MD/`](docs/RELEASE-MD)

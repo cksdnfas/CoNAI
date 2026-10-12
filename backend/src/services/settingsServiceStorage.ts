@@ -606,6 +606,7 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
     },
     appearance: {
       ...getDefaultAppearanceTheme(),
+      appIconDataUrl: '',
       presetSlots: getDefaultAppearancePresetSlots(),
       wallpaperLayoutPresets: [],
       wallpaperActivePresetId: null,

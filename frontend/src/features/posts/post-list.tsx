@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import type { PostCategory, PostMediaRef, PostSummary } from '@conai/shared'
+import type { PostCategory, PostSummary } from '@conai/shared'
 import { EyeOff, FileClock, Images, MessageCircle, MessageSquare, Pin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ToggleChip } from '@/components/ui/chip'
@@ -8,7 +8,7 @@ import { useI18n } from '@/i18n'
 import { getImage } from '@/lib/api-images'
 import { buildApiUrl } from '@/lib/api-url'
 import { cn } from '@/lib/utils'
-import { libraryMediaKind } from './post-media'
+import { libraryMediaKind, postCoverUrl as coverUrl } from './post-media'
 import { PostAuthorAvatar, PostAuthorName, useRelativeTime } from './post-author'
 import { usePostPermissions } from './use-post-permissions'
 import { PostKnowledgeStatus } from './post-knowledge-status'
@@ -19,13 +19,6 @@ type ListProps = {
   categories: PostCategory[]
   onOpen: (post: PostSummary) => void
   onTag: (tag: string) => void
-}
-
-/** The first library item or group a post embeds, as a still cover. */
-function coverUrl(media: PostMediaRef[]) {
-  const first = media.find((item) => item.kind === 'media' || item.kind === 'group')
-  if (!first) return null
-  return buildApiUrl(first.kind === 'media' ? `/api/images/${first.ref}/thumbnail` : `/api/groups/${first.ref}/thumbnail`)
 }
 
 /** In search results: the comment a post was found through. */

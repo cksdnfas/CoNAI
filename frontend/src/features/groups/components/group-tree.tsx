@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, type ReactNode } from 'react'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
@@ -16,6 +16,8 @@ interface GroupTreeProps {
   /** Group row currently hovered by an image drag. */
   dropTargetId?: number | null
   onSelectGroup: (groupId: number) => void
+  /** A trailing control per row (e.g. "insert this group"), shown on hover / focus and on the selected row. */
+  renderGroupAction?: (group: GroupWithHierarchy) => ReactNode
 }
 
 /** Attribute the sidebar's delegated drag-and-drop reads to find the hovered group row. */
@@ -67,7 +69,7 @@ function filterGroupsByName(groups: GroupWithHierarchy[], filterText: string) {
   }
 }
 
-export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '', dropTargetId = null, onSelectGroup }: GroupTreeProps) {
+export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '', dropTargetId = null, onSelectGroup, renderGroupAction }: GroupTreeProps) {
   const { formatNumber, t } = useI18n()
   const { visibleGroups, expandedIds } = useMemo(() => filterGroupsByName(groups, filterText), [filterText, groups])
 
@@ -114,6 +116,7 @@ export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '',
       renderIcon={renderGroupIcon}
       getItemClassName={getItemClassName}
       getItemDataAttributes={getItemDataAttributes}
+      renderItemAction={renderGroupAction}
     />
   )
 }

@@ -264,6 +264,13 @@ export function normalizeAppearanceSettings(raw: unknown, fallback: AppearanceSe
   }
 
   const source = isRecord(raw) && isRecord(raw.appearance) ? raw.appearance : raw
+  const appIconDataUrl = isRecord(source) && source.appIconDataUrl !== undefined
+    ? source.appIconDataUrl
+    : fallback.appIconDataUrl
+  if (typeof appIconDataUrl !== 'string' || appIconDataUrl.length > 384 * 1024
+    || (appIconDataUrl !== '' && !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(appIconDataUrl))) {
+    return null
+  }
   const fallbackSlots = fallback.presetSlots.length > 0 ? fallback.presetSlots : createDefaultAppearancePresetSlots()
 
   let presetSlots = fallbackSlots
@@ -285,6 +292,7 @@ export function normalizeAppearanceSettings(raw: unknown, fallback: AppearanceSe
 
   return {
     ...appearance,
+    appIconDataUrl,
     presetSlots,
     wallpaperLayoutPresets: fallback.wallpaperLayoutPresets,
     wallpaperActivePresetId: fallback.wallpaperActivePresetId,
@@ -299,6 +307,7 @@ export function normalizeAppearanceImport(raw: unknown, fallback: AppearanceSett
 
   return {
     ...appearance,
+    appIconDataUrl: fallback.appIconDataUrl,
     presetSlots: fallback.presetSlots,
     wallpaperLayoutPresets: fallback.wallpaperLayoutPresets,
     wallpaperActivePresetId: fallback.wallpaperActivePresetId,
