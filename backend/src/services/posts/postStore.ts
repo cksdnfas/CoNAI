@@ -13,15 +13,20 @@ import {
   type PostSummary,
   type PostTag,
 } from '@conai/shared';
+import { createHash, randomUUID } from 'crypto';
 import { getUserSettingsDb } from '../../database/userSettingsDb';
 import { AuthAccount } from '../../models/AuthAccount';
 import { publishRuntimeEvent } from '../runtime-events/runtimeEventBus';
 import { ChatProfileStore } from '../codex-chat/chatProfiles';
 import { isProfileAssetHidden } from '../codex-chat/chatProfileAssets';
-import { PostError, requireKey, type PostActor } from './postActor';
+import { PostError, requireKey, requireHumanPostActor, type PostActor } from './postActor';
 import { excerptOf, extractMediaRefs, saveMediaRefs } from './postMedia';
 import { loadPostsSettings } from './postsSettings';
-import { commentMatches, removePostSearchDocument, postSearchFilter, refreshPostSearchIndex, writePostSearchDocument } from './postSearch';
+import { commentMatches, removePostSearchDocument, postSearchFilter, trashPostSearchFilter, refreshPostSearchIndex, writePostSearchDocument, createPostRelevanceResolver } from './postSearch';
+import { findKnowledgeRow, getKnowledgeState, visibleKnowledgeSources, requireKnowledgeRevision, syncKnowledgeContent, normalizeKnowledgeSources, saveKnowledgeSources, KnowledgeStore } from './knowledgeStore';
+import { getKnowledgeQuality, knowledgeTaskFitMultiplier, knowledgeSearchTaskKey, issueKnowledgeSearchReceipts } from './knowledgeAssessment';
+import { semanticPostCandidates } from '../embeddings/postSemantic';
+import { notifySemanticChange } from '../embeddings/semanticSignal';
 
 type CategoryRow = { id: number; parent_id: number | null; name: string; name_key: string; description: string; sort_order: number };
 export type PostRow = {
@@ -133,9 +138,10 @@ function canEditComment(actor: PostActor, row: Pick<CommentRow, 'owner_account_i
 }
 
 export function requirePostRow(actor: PostActor, postId: number): PostRow {
+  requireKey(actor, 'posts.view');
   if (!Number.isSafeInteger(postId) || postId < 1) throw new PostError('잘못된 게시물 ID야.');
   const row = db().prepare('SELECT * FROM posts WHERE id = ?').get(postId) as PostRow | undefined;
-  if (!row || !canSeePost(actor, row)) throw new PostError('게시물을 찾을 수 없어.', 404);
+  if (!row || !canSeePost(actor, row) || findKnowledgeRow(postId)?.deleted_at) throw new PostError('게시물을 찾을 수 없어.', 404);
   return row;
 }
 
@@ -189,7 +195,7 @@ function parseCategoryId(value: unknown, nullable = true): number | null {
 
 export const PostCategoryStore = {
   list(): PostCategory[] {
-    return (db().prepare(`SELECT c.*, (SELECT COUNT(*) FROM posts p WHERE p.category_id = c.id AND p.status = 'published') AS post_count
+    return (db().prepare(`SELECT c.*, (SELECT COUNT(*) FROM posts p WHERE p.category_id = c.id AND p.status = 'published' AND NOT EXISTS(SELECT 1 FROM post_knowledge k WHERE k.post_id=p.id AND k.deleted_at IS NOT NULL)) AS post_count
       FROM post_categories c ORDER BY c.sort_order, c.name_key, c.id`).all() as Array<CategoryRow & { post_count: number }>).map(toCategory);
   },
 
@@ -287,6 +293,7 @@ export const PostTagStore = {
   list(limit = 200): PostTag[] {
     return (db().prepare(`SELECT t.name, COUNT(*) AS post_count FROM post_tags t
       JOIN post_tag_links l ON l.tag_id = t.id JOIN posts p ON p.id = l.post_id AND p.status = 'published'
+      WHERE NOT EXISTS(SELECT 1 FROM post_knowledge k WHERE k.post_id=p.id AND k.deleted_at IS NOT NULL)
       GROUP BY t.id ORDER BY post_count DESC, t.name_key LIMIT ?`).all(Math.max(1, Math.min(1000, limit))) as Array<{ name: string; post_count: number }>)
       .map((row) => ({ name: row.name, postCount: row.post_count }));
   },
@@ -328,17 +335,22 @@ function summaries(actor: PostActor, rows: PostRow[]): PostSummary[] {
     id: row.id, categoryId: row.category_id, title: row.title, excerpt: row.excerpt, status: row.status, author: author(row),
     tags: tags.get(row.id) ?? [], media: media.get(row.id) ?? [], mediaCount: counts.get(row.id) ?? 0, commentCount: row.comment_count,
     pinned: row.pinned === 1, commentMode: row.comment_mode, revision: row.revision, publishedAt: iso(row.published_at),
-    createdAt: iso(row.created_at) as string, updatedAt: iso(row.updated_at) as string, canEdit: canEditPost(actor, row),
+    createdAt: iso(row.created_at) as string, updatedAt: iso(row.updated_at) as string, canEdit: canEditPost(actor, row), knowledge: getKnowledgeState(row.id, actor),
   }));
 }
 
 export type PostListQuery = {
   categoryId?: unknown; tag?: unknown; q?: unknown; status?: unknown; authorProfileId?: unknown; offset?: unknown; limit?: unknown;
+  kind?: unknown; reviewStatus?: unknown; deleted?: unknown; sort?: unknown; snapshot?: unknown; taskKey?: unknown; taskConditionKey?:unknown;
 };
 
 export type PostInput = {
   title?: unknown; body?: unknown; categoryId?: unknown; tags?: unknown; status?: unknown; commentMode?: unknown; pinned?: unknown; expectedRevision?: unknown;
+  knowledgeSources?: unknown;
 };
+
+type SearchSnapshot = { key: string; ids: number[]; scoreVersion: string; expiresAt: number };
+const searchSnapshots = new Map<string, SearchSnapshot>();
 
 function statusInput(actor: PostActor, value: unknown, fallback: PostStatus): PostStatus {
   if (value === undefined) return fallback;
@@ -349,20 +361,41 @@ function statusInput(actor: PostActor, value: unknown, fallback: PostStatus): Po
 
 export const PostStore = {
   async list(actor: PostActor, query: PostListQuery): Promise<PostListResult> {
+    requireKey(actor, 'posts.view');
     const offset = query.offset === undefined ? 0 : Number(query.offset);
     const limit = query.limit === undefined ? 20 : Number(query.limit);
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 50) throw new PostError('잘못된 목록 범위야.');
+    if (query.sort !== undefined && query.sort !== '' && query.sort !== 'relevance' && query.sort !== 'recent') throw new PostError('잘못된 정렬이야.');
     const where: string[] = [];
     const params: unknown[] = [];
+    const trashedOnly = query.deleted === 'only';
+    where.push(trashedOnly ? 'EXISTS(SELECT 1 FROM post_knowledge k WHERE k.post_id=p.id AND k.deleted_at IS NOT NULL)' : 'NOT EXISTS(SELECT 1 FROM post_knowledge k WHERE k.post_id=p.id AND k.deleted_at IS NOT NULL)');
+    if (trashedOnly && !actor.isAdmin) {
+      if (actor.accountId === null) where.push('0');
+      else { where.push('p.owner_account_id = ?'); params.push(actor.accountId); }
+    }
+    if (query.kind === 'knowledge') where.push('EXISTS(SELECT 1 FROM post_knowledge k WHERE k.post_id=p.id AND k.enabled=1)');
+    else if (query.kind === 'post') where.push('NOT EXISTS(SELECT 1 FROM post_knowledge k WHERE k.post_id=p.id AND k.enabled=1)');
+    else if (query.kind !== undefined && query.kind !== '' && query.kind !== 'all') throw new PostError('잘못된 문서 종류 필터야.');
+    if (query.reviewStatus !== undefined && query.reviewStatus !== '') {
+      if (!['unreviewed','verified','needs_review'].includes(String(query.reviewStatus))) throw new PostError('검토 상태 필터가 잘못됐어.');
+      where.push('EXISTS(SELECT 1 FROM post_knowledge k WHERE k.post_id=p.id AND k.review_status=?)'); params.push(query.reviewStatus);
+    }
     const status = query.status === undefined || query.status === '' ? 'published' : String(query.status);
     if (!['published', 'draft', 'hidden', 'all'].includes(status)) throw new PostError('잘못된 상태 필터야.');
     if (status === 'all') {
-      if (!actor.isAdmin) { where.push(`(p.status = 'published' OR p.owner_account_id IS ?)`); params.push(actor.accountId); }
+      if (!actor.isAdmin) {
+        if (actor.accountId === null) where.push("p.status = 'published'");
+        else { where.push(`(p.status = 'published' OR p.owner_account_id = ?)`); params.push(actor.accountId); }
+      }
     } else {
       where.push('p.status = ?');
       params.push(status);
       // Drafts and hidden posts: your own, or all of them for administrators.
-      if (status !== 'published' && !actor.isAdmin) { where.push('p.owner_account_id IS ?'); params.push(actor.accountId); }
+      if (status !== 'published' && !actor.isAdmin) {
+        if (actor.accountId === null) where.push('0');
+        else { where.push('p.owner_account_id = ?'); params.push(actor.accountId); }
+      }
     }
     if (query.categoryId !== undefined && query.categoryId !== '') {
       const categoryId = parseCategoryId(query.categoryId, false) as number;
@@ -379,26 +412,80 @@ export const PostStore = {
       params.push(Number(query.authorProfileId));
     }
     let terms: string[] = [];
+    let semantic: Array<{ postId: number; score: number; contentHash: string }> = [];
     if (typeof query.q === 'string' && query.q.trim()) {
-      await refreshPostSearchIndex();
-      const filter = postSearchFilter(query.q);
-      where.push(filter.sql);
-      params.push(...filter.params);
+      if(!trashedOnly) await refreshPostSearchIndex();
+      const filter = trashedOnly?trashPostSearchFilter(query.q):postSearchFilter(query.q);
       terms = filter.terms;
+      if (!query.snapshot && !trashedOnly) {
+        try { semantic = await semanticPostCandidates(actor, query.q); } catch { /* keyword search remains available */ }
+      }
+      // During snapshot continuation candidate IDs are fixed, with live visibility rechecked below.
+      if (!query.snapshot) {
+        where.push(semantic.length ? `(${filter.sql} OR p.id IN (${semantic.map(() => '?').join(',')}))` : filter.sql);
+        params.push(...filter.params, ...semantic.map(item => item.postId));
+      }
     }
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const order = status === 'published' ? 'p.pinned DESC, p.published_at DESC, p.id DESC' : 'p.updated_at DESC, p.id DESC';
-    const rows = db().prepare(`SELECT p.* FROM posts p ${clause} ORDER BY ${order} LIMIT ? OFFSET ?`).all(...params, limit, offset) as PostRow[];
-    const { total } = db().prepare(`SELECT COUNT(*) AS total FROM posts p ${clause}`).get(...params) as { total: number };
+    const policy = loadPostsSettings().knowledge;
+    const ranking = Boolean(query.snapshot || query.sort === 'relevance' || (query.sort !== 'recent' && (terms.length || (query.kind === 'knowledge' && policy.rankingEnabled))));
+    let rows: PostRow[], total: number, snapshot: string | undefined, scoreVersion: string | undefined;
+    if (ranking) {
+      const key = JSON.stringify([actor.accountId,actor.isAdmin,[...actor.keys].sort(),query.categoryId ?? null,query.tag ?? null,query.q ?? null,status,query.authorProfileId ?? null,query.kind ?? null,query.reviewStatus ?? null,query.deleted ?? null,query.sort ?? null,query.taskKey ?? null,query.taskConditionKey??null]);
+      let stored: SearchSnapshot;
+      if (query.snapshot) {
+        snapshot = String(query.snapshot);
+        const found = searchSnapshots.get(snapshot);
+        if (!found || found.expiresAt < Date.now() || found.key !== key) throw new PostError('검색 페이지가 만료됐어. 처음부터 다시 검색해줘.',409,'SEARCH_SNAPSHOT_EXPIRED');
+        stored = found;
+      } else {
+        const candidates = db().prepare(`SELECT p.* FROM posts p ${clause} ORDER BY ${order}`).all(...params) as PostRow[];
+        const scores = new Map(semantic.map(item => [item.postId,item.score]));
+        const assessedIds=policy.enabled&&policy.rankingEnabled?new Set((db().prepare('SELECT DISTINCT e.post_id FROM post_assessment_heads h JOIN post_assessment_events e ON e.id=h.event_id').all() as Array<{post_id:number}>).map(row=>row.post_id)):new Set<number>();
+        const relevanceBand=createPostRelevanceResolver(terms,typeof query.q==='string'?query.q:'');
+        const taskCondition=typeof query.q==='string'&&query.q.trim()?(typeof query.taskConditionKey==='string'?query.taskConditionKey:knowledgeSearchTaskKey(query.q)):null;
+        const ranked = candidates.map(row => {
+          const knowledge = assessedIds.has(row.id)?findKnowledgeRow(row.id):undefined;
+          let quality = 1,fit=1;
+          if (knowledge?.enabled) {
+            try { quality = getKnowledgeQuality(actor,row.id).qualityMultiplier; } catch { /* neutral score on aggregation failure */ }
+            if(taskCondition) {
+              try {fit=knowledgeTaskFitMultiplier(actor,row.id,taskCondition,typeof query.taskKey==='string'?query.taskKey:undefined);} catch { /* fit cache failure must not stop keyword search */ }
+            }
+          }
+          // A keyword candidate always keeps baseline relevance; optional semantic proximity is a bounded bonus.
+          const relevance = 1+Math.max(0,Math.min(1,scores.get(row.id) ?? 0));
+          return { row,band: relevanceBand(row),score: relevance*quality*fit };
+        });
+        ranked.sort((a,b) => a.band-b.band || b.score-a.score || b.row.pinned-a.row.pinned || b.row.id-a.row.id);
+        scoreVersion = `${policy.policyVersion}:r2:${createHash('sha256').update(JSON.stringify(policy)).digest('hex').slice(0,12)}`;
+        snapshot = randomUUID(); stored = { key,ids: ranked.map(item => item.row.id),scoreVersion,expiresAt: Date.now()+120_000 };
+        for (const [token,value] of searchSnapshots) if (value.expiresAt<Date.now()) searchSnapshots.delete(token);
+        while (searchSnapshots.size>=100) searchSnapshots.delete(searchSnapshots.keys().next().value!);
+        searchSnapshots.set(snapshot,stored);
+      }
+      scoreVersion = stored.scoreVersion; total = stored.ids.length;
+      const pageIds = stored.ids.slice(offset,offset+limit);
+      const allowed = pageIds.length ? db().prepare(`SELECT p.* FROM posts p ${clause} AND p.id IN (${pageIds.map(() => '?').join(',')})`).all(...params,...pageIds) as PostRow[] : [];
+      const byId = new Map(allowed.map(row => [row.id,row]));
+      rows = pageIds.flatMap(id => byId.has(id) ? [byId.get(id)!] : []);
+    } else {
+      rows = db().prepare(`SELECT p.* FROM posts p ${clause} ORDER BY ${order} LIMIT ? OFFSET ?`).all(...params,limit,offset) as PostRow[];
+      total = (db().prepare(`SELECT COUNT(*) AS total FROM posts p ${clause}`).get(...params) as { total: number }).total;
+    }
     // A post found only through one of its comments says which comment.
     const viaComment = commentMatches(rows.map((row) => row.id), terms);
-    const items = summaries(actor, rows).map((item) => (viaComment.has(item.id) ? { ...item, matchedComment: viaComment.get(item.id) } : item));
-    return { items, total, offset, limit };
+    const receipts=typeof query.q==='string'&&terms.length&&!trashedOnly?issueKnowledgeSearchReceipts(actor,rows.map(row=>row.id),query.q):new Map();
+    const items = summaries(actor, rows).map((item) => ({...item,...(viaComment.has(item.id)?{matchedComment:viaComment.get(item.id)}:{}),...(receipts.has(item.id)?{knowledgeSearchReceipt:receipts.get(item.id)}:{})}));
+    return { items,total,offset,limit,...(snapshot ? { snapshot,scoreVersion } : {}) };
   },
 
   get(actor: PostActor, postId: number): PostDetail {
     const row = requirePostRow(actor, postId);
-    return { ...summaries(actor, [row])[0], body: row.body, sourceChat: createSourceChatResolver(actor)(row) };
+    const knowledge = findKnowledgeRow(postId);
+    return { ...summaries(actor, [row])[0], body: row.body, sourceChat: createSourceChatResolver(actor)(row),
+      ...(knowledge ? { knowledgeSources: visibleKnowledgeSources(actor,postId),knowledgeQuality: getKnowledgeQuality(actor,postId) } : {}) };
   },
 
   /** `source`: manual (web), chat (a bot tool), routine, workflow, mention; `origin`: the chat reply it came from. */
@@ -427,6 +514,7 @@ export const PostStore = {
       return id;
     }).immediate();
     announce(postId, 'post');
+    notifySemanticChange('post');
     return PostStore.get(actor, postId);
   },
 
@@ -435,6 +523,8 @@ export const PostStore = {
     const updated = db().transaction(() => {
       const row = requirePostRow(actor, postId);
       if (!canEditPost(actor, row)) throw new PostError('이 글을 고칠 권한이 없어.', 403);
+      const knowledge = findKnowledgeRow(postId);
+      if (knowledge) { requireHumanPostActor(actor); requireKnowledgeRevision(input.expectedRevision,row.revision); }
       if (input.expectedRevision !== undefined && Number(input.expectedRevision) !== row.revision) {
         throw new PostError(`다른 곳에서 먼저 고쳤어 (현재 판 ${row.revision}). 새로 불러온 다음 다시 고쳐줘.`, 409);
       }
@@ -446,11 +536,16 @@ export const PostStore = {
       const commentMode: PostCommentMode = input.commentMode === undefined ? row.comment_mode : input.commentMode === 'closed' ? 'closed' : 'open';
       const pinned = input.pinned === undefined || !(actor.isAdmin && actor.profileId === null) ? row.pinned : input.pinned === true ? 1 : 0;
       const contentChanged = title !== row.title || body !== row.body;
+      if (input.knowledgeSources !== undefined) {
+        requireHumanPostActor(actor);
+        if (!knowledge) throw new PostError('지식 문서에만 출처를 연결할 수 있어.');
+        saveKnowledgeSources(postId,normalizeKnowledgeSources(actor,input.knowledgeSources));
+      }
       if (contentChanged) {
         const editor = authorSnapshot(actor);
         db().prepare(`INSERT OR REPLACE INTO post_revisions (post_id, revision, title, body, edited_by_type, edited_by_account_id, edited_by_profile_id) VALUES (?, ?, ?, ?, ?, ?, ?)`)
           .run(postId, row.revision, row.title, row.body, editor.type, actor.accountId, editor.profileId);
-        db().prepare(`DELETE FROM post_revisions WHERE post_id = ? AND revision NOT IN (SELECT revision FROM post_revisions WHERE post_id = ? ORDER BY revision DESC LIMIT ${MAX_REVISIONS})`).run(postId, postId);
+        if (!knowledge) db().prepare(`DELETE FROM post_revisions WHERE post_id = ? AND revision NOT IN (SELECT revision FROM post_revisions WHERE post_id = ? ORDER BY revision DESC LIMIT ${MAX_REVISIONS})`).run(postId, postId);
       }
       db().prepare(`UPDATE posts SET title = ?, body = ?, excerpt = ?, category_id = ?, status = ?, comment_mode = ?, pinned = ?,
           revision = revision + 1, updated_at = CURRENT_TIMESTAMP,
@@ -458,14 +553,17 @@ export const PostStore = {
         WHERE id = ?`).run(title, body, excerptOf(body), categoryId, status, commentMode, pinned, status, postId);
       if (input.tags !== undefined) saveTags(postId, normalizeTags(input.tags));
       if (body !== row.body) saveMediaRefs(postId, 'post', postId, extractMediaRefs(body), row.owner_account_id);
+      syncKnowledgeContent(actor,postId);
       writePostSearchDocument(postId);
       return postId;
     }).immediate();
     announce(updated, 'post');
+    notifySemanticChange('post');
     return PostStore.get(actor, updated);
   },
 
-  remove(actor: PostActor, postId: number) {
+  remove(actor: PostActor, postId: number, input: { expectedRevision?: unknown } = {}) {
+    if (findKnowledgeRow(postId)) { KnowledgeStore.trash(actor,postId,input); return; }
     db().transaction(() => {
       const row = requirePostRow(actor, postId);
       if (!canEditPost(actor, row)) throw new PostError('이 글을 지울 권한이 없어.', 403);
@@ -473,6 +571,7 @@ export const PostStore = {
       db().prepare('DELETE FROM posts WHERE id = ?').run(postId);
     }).immediate();
     announce(postId, 'post');
+    notifySemanticChange('post');
   },
 
   /** Earlier versions (newest first): each was replaced at `createdAt` by an edit from `editedBy`. */
@@ -495,6 +594,17 @@ export const PostStore = {
       LEFT JOIN post_comments c ON r.owner_type = 'comment' AND c.id = r.owner_id
       WHERE r.post_id = ? AND r.kind = 'file' AND r.ref = ? AND (r.owner_type = 'post' OR c.status = 'visible' OR ?) LIMIT 1`)
       .get(postId, fileId, actor.isAdmin ? 1 : 0) as { file_owner_key: string } | undefined;
+    return row?.file_owner_key ?? null;
+  },
+
+  /** Explicit historic version access belongs to editors; publication never grants a private old attachment. */
+  embeddedKnowledgeVersionFileOwner(actor: PostActor,postId: number,contentVersion: number,fileId: string): string | null {
+    requireKey(actor,'posts.view');
+    const post = db().prepare('SELECT * FROM posts WHERE id=?').get(postId) as PostRow | undefined;
+    if (!post || !findKnowledgeRow(postId) || !canSeePost(actor,post) || !canEditPost(actor,post)) throw new PostError('이전 판의 첨부파일을 볼 권한이 없어.',403);
+    if (!Number.isSafeInteger(contentVersion) || contentVersion<1 || !db().prepare('SELECT 1 FROM post_knowledge_versions WHERE post_id=? AND content_version=?').get(postId,contentVersion)) throw new PostError('내용 판을 찾을 수 없어.',404);
+    const row = db().prepare("SELECT file_owner_key FROM post_knowledge_media_refs WHERE post_id=? AND content_version=? AND kind='file' AND ref=?")
+      .get(postId,contentVersion,fileId) as { file_owner_key: string | null } | undefined;
     return row?.file_owner_key ?? null;
   },
 };

@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { libraryMediaKind } from './post-media'
 import { PostAuthorAvatar, PostAuthorName, useRelativeTime } from './post-author'
 import { usePostPermissions } from './use-post-permissions'
+import { PostKnowledgeStatus } from './post-knowledge-status'
 
 type ListProps = {
   posts: PostSummary[]
@@ -45,6 +46,7 @@ function StatusMarks({ post }: { post: PostSummary }) {
       {post.pinned ? <Pin className="size-3.5 shrink-0 text-primary" aria-label={t({ ko: '고정', en: 'Pinned' })} /> : null}
       {post.status === 'draft' ? <FileClock className="size-3.5 shrink-0 text-muted-foreground" aria-label={t({ ko: '초안', en: 'Draft' })} /> : null}
       {post.status === 'hidden' ? <EyeOff className="size-3.5 shrink-0 text-destructive" aria-label={t({ ko: '숨김', en: 'Hidden' })} /> : null}
+      <PostKnowledgeStatus knowledge={post.knowledge} />
     </>
   )
 }

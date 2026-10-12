@@ -4,7 +4,7 @@
  * first pass looks at everything anyway).
  */
 
-export type SemanticSource = 'recall' | 'lore' | 'message' | 'file' | 'image'
+export type SemanticSource = 'recall' | 'lore' | 'message' | 'file' | 'image' | 'post'
 
 let listener: ((source: SemanticSource) => void) | null = null
 

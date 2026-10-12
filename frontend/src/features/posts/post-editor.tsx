@@ -2,7 +2,7 @@ import { lazy, Suspense, useMemo, useRef, useState, type KeyboardEvent } from 'r
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { PostCategory, PostCommentMode, PostDetail, PostStatus } from '@conai/shared'
 import { CHAT_PAGE_LIMITS, POST_LIMITS } from '@conai/shared'
-import { AudioLines, FolderTree, Image as ImageIcon, Paperclip, X } from 'lucide-react'
+import { AudioLines, FolderTree, Image as ImageIcon, Link as LinkIcon, Paperclip, X } from 'lucide-react'
 import { FieldTabs } from '@/components/common/field-tabs'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -22,11 +22,12 @@ import { AudioEmbedPicker, GroupEmbedPicker } from './post-embed-pickers'
 import { mediaHashesOf, PostMarkdown } from './post-markdown'
 import { PostMediaContext } from './post-media'
 import { usePostPermissions } from './use-post-permissions'
+import { PostLinkPicker } from './post-link-picker'
 import type { PostRichEditorHandle } from './post-rich-editor'
 
 const PostRichEditor = lazy(() => import('./post-rich-editor').then((module) => ({ default: module.PostRichEditor })))
 
-type Picker = 'media' | 'audio' | 'group' | 'file' | null
+type Picker = 'media' | 'audio' | 'group' | 'file' | 'post' | null
 /**
  * The body the connected chat sees with every request: a body up to this long is a field, a longer one a chunk of
  * this size (posts.body_at moves it) changed with posts.body_edit.
@@ -176,7 +177,7 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
   const dirty = post
     ? title !== post.title || body !== post.body || categoryId !== post.categoryId || tags.join('\u0000') !== post.tags.join('\u0000') || status !== post.status || commentMode !== post.commentMode || (isAdmin && pinned !== post.pinned)
     : Boolean(title.trim() || body.trim())
-  useChatPageRegistration(save.isPending ? null : {
+  useChatPageRegistration(save.isPending || post?.knowledge ? null : {
     kind: 'posts',
     title: post ? t({ ko: '글 고치기', en: 'Edit post' }) : t({ ko: '새 글', en: 'New post' }),
     resourceId: `edit:${post?.id ?? 'new'}`,
@@ -256,6 +257,7 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
             items={[{ value: 'write', label: t({ ko: '서식 편집', en: 'Visual' }) }, { value: 'source', label: t({ ko: '원문', en: 'Source' }) }, { value: 'preview', label: t({ ko: '미리보기', en: 'Preview' }) }]}
           />
           <div className="flex items-center gap-0.5 px-1">
+            <IconButton size="icon-sm" variant="ghost" label={t({ ko: '문서 링크 넣기', en: 'Insert document link' })} onClick={() => setPicker('post')}><LinkIcon /></IconButton>
             {canViewImages ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '이미지·영상 넣기', en: 'Insert images or videos' })} onClick={() => setPicker('media')}><ImageIcon /></IconButton> : null}
             {canViewAudio ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '오디오 넣기', en: 'Insert audio' })} onClick={() => setPicker('audio')}><AudioLines /></IconButton> : null}
             {canViewImages ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '그룹 넣기', en: 'Insert group' })} onClick={() => setPicker('group')}><FolderTree /></IconButton> : null}
@@ -313,6 +315,10 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
         <Button onClick={() => save.mutate()} disabled={!title.trim() || save.isPending}>{t({ ko: '저장', en: 'Save' })}</Button>
       </div>
 
+      {picker === 'post' ? <PostLinkPicker onClose={() => setPicker(null)} onPick={(target) => {
+        insert([`[${target.title.replace(/[\\[\]]/g, '\\$&').replace(/\s+/g, ' ')}](post:${target.id})`])
+        setPicker(null)
+      }} /> : null}
       {picker === 'media' ? (
         <ChatMediaPicker
           initial={[]}

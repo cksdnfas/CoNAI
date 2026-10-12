@@ -246,6 +246,74 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
     assert.equal(embedding.versionBelow('6.0.0+cpu', '6.1.0'), true)
   })
 
+  await t.test('knowledge semantics: optional, permissions before ranking, and current content only', async () => {
+    const { PostStore } = await import('../src/services/posts/postStore')
+    const { KnowledgeStore } = await import('../src/services/posts/knowledgeStore')
+    const { semanticPostCandidates, postSemanticStatus } = await import('../src/services/embeddings/postSemantic')
+    const { updatePostsSettings } = await import('../src/services/posts/postsSettings')
+    const owner = { accountId: 1, isAdmin: true, keys: new Set<string>(), profileId: null, origin: 'human' as const }
+    const reader = { accountId: 2, isAdmin: false, keys: new Set(['posts.view']), profileId: null, origin: 'human' as const }
+    let publicPost = PostStore.create(owner, { title: '겨울 여행 지식', body: '설원에서 늑대를 피해 이끼를 찾아갔다.' })
+    let privatePost = PostStore.create(owner, { title: '비공개 계획', body: '설원 늑대 이끼 늑대 늑대', status: 'hidden' })
+    publicPost = KnowledgeStore.patch(owner, publicPost.id, { expectedRevision: publicPost.revision, enabled: true })
+    privatePost = KnowledgeStore.patch(owner, privatePost.id, { expectedRevision: privatePost.revision, enabled: true })
+    settingsService.updateEmbeddingSettings({ postSearch: false })
+    const before = requests.length
+    assert.deepEqual(await semanticPostCandidates(reader, '눈밭'), [])
+    assert.equal(requests.length, before, 'disabled knowledge search never starts or requests the worker')
+    assert.equal(postSemanticStatus(reader).total, 1, 'status does not disclose private document counts')
+    settingsService.updateEmbeddingSettings({ postSearch: true })
+    while (await semanticIndexer.sweep() > 0) { /* existing indexer drains the isolated fixtures */ }
+    assert.ok(vectorStore.get('post-knowledge', String(privatePost.id), embedding.EMBEDDING_MODEL_KEY).length)
+    assert.deepEqual((await semanticPostCandidates(reader, '눈밭')).map(hit => hit.postId), [publicPost.id])
+    assert.equal(postSemanticStatus(reader).indexed, 1)
+    publicPost = PostStore.update(owner, publicPost.id, { expectedRevision: publicPost.revision, body: '고춧가루를 넣고 스튜를 끓였다.' })
+    assert.deepEqual(await semanticPostCandidates(reader, '눈밭'), [], 'a stale vector cannot return the old procedure')
+    assert.equal(postSemanticStatus(reader).indexed, 0)
+    updatePostsSettings({ knowledge: { enabled: false } })
+    const disabledBefore = requests.length
+    assert.deepEqual(await semanticPostCandidates(reader, '스튜'), [])
+    assert.equal(requests.length, disabledBefore, 'the knowledge master switch also prevents semantic requests')
+    updatePostsSettings({ knowledge: { enabled: true } })
+    KnowledgeStore.trash(owner, publicPost.id, { expectedRevision: publicPost.revision })
+    semanticIndexInternals.pruneVectors()
+    assert.equal(vectorStore.get('post-knowledge', String(publicPost.id), embedding.EMBEDDING_MODEL_KEY).length, 0)
+    settingsService.updateEmbeddingSettings({ postSearch: false })
+  })
+
+  await t.test('knowledge search combines semantic relevance and quality within a band while retaining unindexed keyword candidates', async () => {
+    const { PostStore } = await import('../src/services/posts/postStore')
+    const { KnowledgeStore } = await import('../src/services/posts/knowledgeStore')
+    const { KnowledgeAssessmentStore } = await import('../src/services/posts/knowledgeAssessment')
+    const { updatePostsSettings } = await import('../src/services/posts/postsSettings')
+    const owner = { accountId: 1,isAdmin: true,keys: new Set<string>(),profileId: null,origin: 'human' as const }
+    const reader = { accountId: 2,isAdmin: false,keys: new Set(['posts.view','posts.evaluate']),profileId: null,origin: 'human' as const }
+    semanticIndexer.stop()
+    settingsService.updateEmbeddingSettings({ postSearch: true })
+    updatePostsSettings({ knowledge: { rankingEnabled: true } })
+    const make = (title: string,body: string) => {
+      const post=PostStore.create(owner,{title,body})
+      return KnowledgeStore.patch(owner,post.id,{expectedRevision:post.revision})
+    }
+    const strong=make('관련 절차','눈밭에서 진행하는 절차')
+    const weak=make('보충 절차','눈밭에서 고춧가루를 준비하는 절차')
+    while(await semanticIndexer.sweep()>0) { /* existing worker fake produces real indexed candidates */ }
+    const unindexed=make('아직 색인 중인 절차','눈밭에서 진행하는 절차')
+    assert.equal(vectorStore.get('post-knowledge',String(unindexed.id),embedding.EMBEDDING_MODEL_KEY).length,0)
+    KnowledgeStore.review(owner,strong.id,{contentVersion:1,action:'verify'})
+    KnowledgeAssessmentStore.vote(reader,weak.id,{contentVersion:1,idempotencyKey:'semantic-weak-up',quality:'up'})
+    const initial=await PostStore.list(reader,{q:'눈밭',kind:'knowledge',sort:'relevance'})
+    assert.deepEqual(initial.items.map(post=>post.id),[strong.id,weak.id,unindexed.id],'stronger semantic relevance wins over a small quality bonus inside the same body-match band')
+    for(let index=0;index<10;index++) KnowledgeAssessmentStore.vote({...reader,accountId:100+index},strong.id,{contentVersion:1,idempotencyKey:`semantic-strong-down-${index}`,quality:'down'})
+    const penalized=await PostStore.list(reader,{q:'눈밭',kind:'knowledge',sort:'relevance'})
+    assert.equal(penalized.items[0].id,weak.id,'grounded human negatives still lower a previously verified semantic match')
+    assert.ok(penalized.items.some(post=>post.id===unindexed.id),'missing vectors never remove a keyword match')
+    settingsService.updateEmbeddingSettings({postSearch:false})
+    const keywords=await PostStore.list(reader,{q:'눈밭',kind:'knowledge',sort:'relevance'})
+    assert.deepEqual(keywords.items.map(post=>post.id),[weak.id,unindexed.id,strong.id],'the same quality policy works with baseline keyword relevance only')
+    updatePostsSettings({knowledge:{rankingEnabled:false}})
+  })
+
   await t.test('prune drops vectors whose source is gone', async () => {
     db.prepare('DELETE FROM chat_summary_segments WHERE id = ?').run(segmentIds[5])
     semanticIndexInternals.pruneVectors()

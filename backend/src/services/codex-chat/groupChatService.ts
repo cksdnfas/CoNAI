@@ -1,5 +1,6 @@
 import { validateChatMediaAttachments } from './chatMediaAttachments'
 import { randomUUID } from 'crypto'
+import { chatExecutionRoot } from './chatExecutionRoot'
 import type { ChatExecutionContext, ChatMessageRouting, ChatRecipient, ChatRoutineRouting, ChatTaskRouting } from '@conai/shared'
 import { automaticReplyRouting, messageSender, quoteMessage, requireReplyTarget, userReplyRouting } from './chatReplies'
 import { registerChatReply, skipThreadGenerationReactions } from './chatReplyRegistry'
@@ -234,7 +235,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
   const messages = withGenerationOutcomes(CodexChatStore.listMessages(run.threadId).filter((message) => message.id !== replacingMessageId))
   const source = messages.find((message) => message.id === sourceMessageId) ?? null
   const replyId = randomUUID()
-  const context: ChatExecutionContext = { threadId: run.threadId, profileId: profile.id, kind: 'group', replyId }
+  const context: ChatExecutionContext = { threadId: run.threadId, profileId: profile.id, kind: 'group', replyId, rootExecutionId: chatExecutionRoot(run.threadId, sourceMessageId) }
   const active: ActiveReply = { controller, text: '', toolCalls: new Map(), routing: automaticReplyRouting(thread, source, replyId) }
   let explicitlyRouted = false
   run.active.set(profile.id, active)

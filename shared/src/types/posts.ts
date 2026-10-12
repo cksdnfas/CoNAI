@@ -1,4 +1,5 @@
 /** Posts: a blog of hierarchical categories, tags and comments, written mostly by chat profiles ("bots"). */
+export * from './postKnowledgeRuntime';
 
 export type PostStatus = 'draft' | 'published' | 'hidden';
 export type PostAuthorType = 'account' | 'profile';
@@ -65,6 +66,9 @@ export interface PostSummary {
   canEdit: boolean;
   /** Search results only: the comment the post was found through. */
   matchedComment?: PostCommentMatch;
+  knowledge?: PostKnowledge | null;
+  /** Issued only for an actual human search result; never derived from free-form feedback. */
+  knowledgeSearchReceipt?: PostKnowledgeSearchReceipt;
 }
 
 /** An earlier version of a post, kept when an edit replaced it (the newest 20). */
@@ -99,6 +103,8 @@ export interface PostCommentMatch {
 export interface PostDetail extends PostSummary {
   body: string;
   sourceChat: PostSourceChat | null;
+  knowledgeSources?: PostKnowledgeSource[];
+  knowledgeQuality?: PostQualityStats;
 }
 
 export interface PostListResult {
@@ -106,6 +112,9 @@ export interface PostListResult {
   total: number;
   offset: number;
   limit: number;
+  /** Ranking policy and fixed search order; pass snapshot to keep pagination stable. */
+  scoreVersion?: string;
+  snapshot?: string;
 }
 
 export type PostCommentStatus = 'visible' | 'hidden' | 'deleted';
@@ -175,12 +184,232 @@ export interface PostsSafetySettings {
   summonsPerAccountPerHour: number;
 }
 
+export type PostKnowledgeReviewStatus = 'unreviewed' | 'verified' | 'needs_review';
+export type PostAssessmentQuality = 'up' | 'down' | 'abstain';
+export type PostAssessmentTaskFit = 'useful' | 'unsuitable' | 'unknown';
+export type PostAssessmentEvaluator = 'human' | 'use_ai' | 'judge';
+
+export interface PostKnowledge {
+  enabled: boolean;
+  contentVersion: number;
+  contentHash: string;
+  reviewStatus: PostKnowledgeReviewStatus;
+  verifiedContentVersion: number | null;
+  deletedAt: string | null;
+  replacementPostId: number | null;
+  canEvaluate: boolean;
+  canReview: boolean;
+}
+
+/** A public citation; private chat context is never accepted as a public source. */
+export interface PostKnowledgeSource {
+  kind: 'post' | 'comment' | 'url';
+  postId: number | null;
+  commentId: number | null;
+  url: string | null;
+  contentVersion: number | null;
+  contentHash: string | null;
+  revision: number | null;
+  start: number | null;
+  end: number | null;
+  quote: string;
+  observedAt: string | null;
+}
+
+export interface PostKnowledgeLink {
+  postId: number | null;
+  commentId: number | null;
+  title: string;
+  relation: 'reference' | 'unresolved';
+}
+
+export interface PostKnowledgeLinks {
+  sources: PostKnowledgeSource[];
+  links: PostKnowledgeLink[];
+  backlinks: Array<{ postId: number; title: string }>;
+  aliases: string[];
+}
+
+export interface PostKnowledgeVersion {
+  contentVersion: number;
+  contentHash: string;
+  postRevision: number;
+  title: string;
+  body: string;
+  sources: PostKnowledgeSource[];
+  attachments: PostMediaRef[];
+  changedBy: string;
+  changeReason: string;
+  createdAt: string;
+}
+
+export interface PostAssessmentVote {
+  eventId: number;
+  quality: PostAssessmentQuality;
+  taskFit: PostAssessmentTaskFit;
+  reasonCode: string | null;
+  reason: string;
+  contentHash: string;
+  contentVersion: number;
+  createdAt: string;
+}
+
+export interface PostKnowledgeSearchReceipt { token: string; query: string; expiresAt: string }
+export interface PostTaskFitFeedback {
+  eventId: number;
+  taskFit: PostAssessmentTaskFit;
+  contentVersion: number;
+  contentHash: string;
+  reasonCode: string | null;
+  reason: string;
+  createdAt: string;
+}
+
+export type PostAssessmentEventKind = 'assessment' | 'invalidate' | 'correction';
+export interface PostAssessmentAuditEntry {
+  eventId: number;
+  evaluator: PostAssessmentEvaluator;
+  quality: PostAssessmentQuality;
+  taskFit: PostAssessmentTaskFit;
+  contentVersion: number;
+  currentContent: boolean;
+  isLatest: boolean;
+  eventKind: PostAssessmentEventKind;
+  supersedesEventId: number | null;
+  reasonCode: string | null;
+  reason: string;
+  evidenceQuote: string;
+  moderationReason: string | null;
+  canModerate: boolean;
+  createdAt: string;
+}
+export interface PostAssessmentAuditList { items: PostAssessmentAuditEntry[]; total: number; offset: number; limit: number }
+export interface PostAssessmentModerationResult { assessment: PostAssessmentAuditEntry; quality: PostQualityStats }
+
+export interface PostKnowledgePermanentDeleteDependency {
+  kind: 'source' | 'link' | 'replacement' | 'proposal' | 'evaluation' | 'bot_run' | 'shared_attachment';
+  scope: 'current' | 'history' | 'proposal' | 'runtime';
+  postId: number | null;
+  title: string | null;
+  count: number;
+  blocking: boolean;
+}
+export interface PostKnowledgePermanentDeletePreview {
+  postId: number;
+  title: string;
+  expectedRevision: number;
+  contentVersion: number;
+  counts: { comments: number; versions: number; revisions: number; assessmentEvents: number; assessmentHeads: number;
+    moderations: number; reviewEvents: number; sources: number; links: number; aliases: number; proposals: number;
+    uses: number; evaluationRequests: number; botRuns: number; attachmentRefs: number };
+  dependencies: PostKnowledgePermanentDeleteDependency[];
+  blocked: boolean;
+  previewToken: string;
+  expiresAt: string;
+  filesRetained: true;
+}
+export interface PostKnowledgePermanentDeleteResult { postId: number; deletedAt: string; filesRetained: true }
+
+export interface PostQualityGroup {
+  up: number;
+  down: number;
+  abstain: number;
+  rawCount: number;
+  independentCount: number;
+  effectiveWeight: number;
+}
+
+export interface PostQualityStats {
+  contentVersion: number;
+  contentHash: string;
+  policyVersion: string;
+  current: { human: PostQualityGroup; useAi: PostQualityGroup; judge: PostQualityGroup };
+  history: { up: number; down: number; effectiveWeight: number };
+  up: number;
+  down: number;
+  sampleCount: number;
+  independentCount: number;
+  aiRawWeight: number;
+  aiEffectiveWeight: number;
+  aiCap: number;
+  smoothedDown: number;
+  qualityMultiplier: number;
+  needsReview: boolean;
+  ownVote: PostAssessmentVote | null;
+  reasons: Array<{ eventId: number; evaluator: PostAssessmentEvaluator; quality: PostAssessmentQuality; reasonCode: string | null; reason: string; evidenceQuote: string; contentVersion: number; current: boolean; createdAt: string }>;
+}
+
+export interface PostReviewIssue {
+  id: number;
+  contentVersion: number;
+  reason: string;
+  evidenceQuote: string;
+  createdAt: string;
+  resolvedAt: string | null;
+  resolution: string | null;
+  evidenceAvailable?: boolean;
+}
+
+export interface PostKnowledgeReviewQueue {
+  items: Array<{ post: PostSummary; issues: PostReviewIssue[] }>;
+  total: number;
+}
+
+export interface PostKnowledgeExport {
+  postId: number;
+  title: string;
+  markdown: string;
+  contentVersion: number;
+  contentHash: string;
+  sources: PostKnowledgeSource[];
+  links: PostKnowledgeLink[];
+  attachments: PostMediaRef[];
+}
+
+export interface PostsKnowledgeSettings {
+  enabled: boolean;
+  rankingEnabled: boolean;
+  autoEvaluationEnabled: boolean;
+  judgeProvider: string | null;
+  judgeModel: string | null;
+  policyVersion: 'v1';
+  humanWeight: number;
+  useAiWeight: number;
+  judgeWeight: number;
+  aiBundleCap: number;
+  aiDailyFamilyLimit: number;
+  aiGlobalMinimumCap: number;
+  aiGlobalHumanRatio: number;
+  historyWeight: number;
+  historyCap: number;
+  dailyCallLimit: number;
+  dailyTokenLimit: number;
+  maxDocumentsPerExecution: number;
+  maxSegmentsPerDocument: number;
+  maxInputCharacters: number;
+  maxRetries: number;
+  privateRetentionDays: number;
+  diagnosticRetentionDays: number;
+}
+
+export const DEFAULT_POSTS_KNOWLEDGE_SETTINGS: PostsKnowledgeSettings = {
+  enabled: true, rankingEnabled: false, autoEvaluationEnabled: false,
+  judgeProvider: null, judgeModel: null, policyVersion: 'v1',
+  humanWeight: 1, useAiWeight: 0.25, judgeWeight: 0.5, aiBundleCap: 0.5,
+  aiDailyFamilyLimit: 3, aiGlobalMinimumCap: 2, aiGlobalHumanRatio: 0.5,
+  historyWeight: 0.25, historyCap: 2,
+  dailyCallLimit: 20, dailyTokenLimit: 50_000, maxDocumentsPerExecution: 5,
+  maxSegmentsPerDocument: 3, maxInputCharacters: 12_000, maxRetries: 2,
+  privateRetentionDays: 30, diagnosticRetentionDays: 7,
+};
+
 export interface PostsSettings {
   /** List layout everyone starts with; each viewer can switch in the toolbar. */
   layout: PostListLayout;
   /** Status of a post a bot writes. */
   botPostStatus: 'published' | 'draft';
   safety: PostsSafetySettings;
+  knowledge: PostsKnowledgeSettings;
 }
 
 export const POSTS_SAFETY_LIMITS: Record<Exclude<keyof PostsSafetySettings, 'summonEnabled'>, { min: number; max: number; default: number }> = {
@@ -202,6 +431,7 @@ export const DEFAULT_POSTS_SETTINGS: PostsSettings = {
     callsPerProfilePerDay: POSTS_SAFETY_LIMITS.callsPerProfilePerDay.default,
     summonsPerAccountPerHour: POSTS_SAFETY_LIMITS.summonsPerAccountPerHour.default,
   },
+  knowledge: DEFAULT_POSTS_KNOWLEDGE_SETTINGS,
 };
 
 export const POST_LIMITS = {

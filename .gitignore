@@ -66,6 +66,10 @@ backend/test/*
 !backend/test/image-permissions.test.ts
 !backend/test/generated-media-pipeline.test.ts
 !backend/test/document-search.test.ts
+!backend/test/posts.test.ts
+!backend/test/chat-semantic.test.ts
+!backend/test/mcp-posts-files-tools.test.ts
+!backend/test/posts-knowledge-runtime.test.ts
 !frontend/test/
 frontend/test/*
 !frontend/test/post-rich-editor.test.ts

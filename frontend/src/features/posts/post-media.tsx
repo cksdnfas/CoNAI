@@ -18,7 +18,7 @@ import type { ImageRecord } from '@/types/image'
 import { usePostPermissions } from './use-post-permissions'
 
 /** The post being rendered (file embeds are served through it) and every library item it shows, for the lightbox. */
-export const PostMediaContext = createContext<{ postId: number | null; mediaHashes: string[] }>({ postId: null, mediaHashes: [] })
+export const PostMediaContext = createContext<{ postId: number | null; mediaHashes: string[]; knowledgeContentVersion?: number }>({ postId: null, mediaHashes: [] })
 
 /** True once the element has come near the viewport, and whether it is in view right now. */
 function useInView<T extends Element>(rootMargin = '200px') {
@@ -203,9 +203,9 @@ export function GroupEmbed({ groupId, caption }: { groupId: number; caption?: st
 /** A file from the writer's file store, served through the post. */
 export function FileEmbed({ fileId, caption }: { fileId: string; caption?: string }) {
   const { t } = useI18n()
-  const { postId } = useContext(PostMediaContext)
+  const { postId, knowledgeContentVersion } = useContext(PostMediaContext)
   const { canViewImages } = usePostPermissions()
-  const query = useQuery({ queryKey: ['post-file', postId, fileId], queryFn: () => getPostFile(postId as number, fileId), enabled: postId !== null, staleTime: 5 * 60_000, retry: false })
+  const query = useQuery({ queryKey: ['post-file', postId, knowledgeContentVersion ?? 'current', fileId], queryFn: () => getPostFile(postId as number, fileId, knowledgeContentVersion), enabled: postId !== null, staleTime: 5 * 60_000, retry: false })
   if (postId === null) return <MediaPlaceholder icon={<FileIcon className="size-4" />} label={t({ ko: '저장하면 파일이 보여', en: 'The file shows once saved' })} className="my-3 min-h-14 py-3" />
   if (query.isError) return <MediaPlaceholder icon={<FileIcon className="size-4" />} label={t({ ko: '지워졌거나 볼 수 없는 파일이야', en: 'File removed or unavailable' })} className="my-3 min-h-14 py-3" />
   const entry = query.data
@@ -213,19 +213,19 @@ export function FileEmbed({ fileId, caption }: { fileId: string; caption?: strin
   return (
     <div className="my-3 flex items-center gap-3 border-y border-line py-2.5">
       {media && canViewImages && entry ? (
-        <img src={postFileUrl(postId, fileId, 'thumbnail')} alt="" className="size-12 shrink-0 rounded-sm object-cover" />
+        <img src={postFileUrl(postId, fileId, 'thumbnail', knowledgeContentVersion)} alt="" className="size-12 shrink-0 rounded-sm object-cover" />
       ) : (
         <span className="flex size-12 shrink-0 items-center justify-center rounded-sm bg-surface-low text-muted-foreground"><FileIcon className="size-5" /></span>
       )}
       <div className="flex min-w-0 flex-1 flex-col">
-        <a href={postFileUrl(postId, fileId, 'view')} target="_blank" rel="noreferrer noopener" className="truncate text-sm font-medium hover:underline">{caption || entry?.name || fileId}</a>
+        <a href={postFileUrl(postId, fileId, 'view', knowledgeContentVersion)} target="_blank" rel="noreferrer noopener" className="truncate text-sm font-medium hover:underline">{caption || entry?.name || fileId}</a>
         <span className="text-xs text-muted-foreground">{entry ? formatFileSize(entry.size) : ''}</span>
       </div>
       <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '새 탭에서 열기', en: 'Open in new tab' })}>
-        <a href={postFileUrl(postId, fileId, 'view')} target="_blank" rel="noreferrer noopener"><ExternalLink /></a>
+        <a href={postFileUrl(postId, fileId, 'view', knowledgeContentVersion)} target="_blank" rel="noreferrer noopener"><ExternalLink /></a>
       </IconButton>
       <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '다운로드', en: 'Download' })}>
-        <a href={postFileUrl(postId, fileId, 'download')} download><Download /></a>
+        <a href={postFileUrl(postId, fileId, 'download', knowledgeContentVersion)} download><Download /></a>
       </IconButton>
     </div>
   )

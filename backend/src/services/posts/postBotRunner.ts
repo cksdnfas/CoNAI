@@ -10,9 +10,8 @@ import { resolveChatAccess, resolveChatProfileToolGrant } from '../codex-chat/co
 import { CodexChatStore } from '../codex-chat/codexChatStore';
 import { ChatWakeBusyError, ensureAutomationRoom, wakeChatRoom } from '../codex-chat/chatRoomWake';
 import { actorFromRequester, type PostActor } from './postActor';
-import { markdownToPlainText } from './postMedia';
 import { BoardCallRooms, PostBotRuns, summonableProfiles, type BotRunRow } from './postBotRuns';
-import { announcePostChange, PostCategoryStore, PostCommentStore, type CommentRow, type PostRow } from './postStore';
+import { announcePostChange, requirePostRow, PostCategoryStore, PostCommentStore, type CommentRow, type PostRow } from './postStore';
 import { loadPostsSettings } from './postsSettings';
 
 /**
@@ -155,7 +154,7 @@ function instructionFor(post: PostRow, trigger: CommentRow | null) {
   const top = trigger ? (trigger.parent_id ?? trigger.id) : null;
   const thread = top ? db().prepare(`SELECT * FROM post_comments WHERE post_id = ? AND (id = ? OR parent_id = ?) AND status = 'visible' ORDER BY created_at, id`).all(post.id, top, top) as CommentRow[] : [];
   const line = (comment: CommentRow) => `- [${comment.id}] ${comment.author_name}${comment.author_type === 'profile' ? ' (bot)' : ''}: ${comment.body.replace(/\s+/g, ' ').slice(0, 600)}`;
-  const body = markdownToPlainText(post.body);
+  const body = post.body;
   return [
     `Someone called you (by @name or by replying to your comment) in a comment on the CoNAI posts board (post #${post.id}). Your answer becomes your reply under that comment.`,
     SHARED_ROOM_NOTE,
@@ -188,8 +187,8 @@ async function waitForGeneratedMedia(threadId: number, replyId: string | null | 
 }
 
 async function execute(run: BotRunRow, controller: AbortController) {
-  const post = db().prepare('SELECT * FROM posts WHERE id = ?').get(run.post_id) as PostRow | undefined;
-  const trigger = run.trigger_comment_id ? db().prepare('SELECT * FROM post_comments WHERE id = ?').get(run.trigger_comment_id) as CommentRow | undefined : undefined;
+  let post = db().prepare('SELECT * FROM posts WHERE id = ?').get(run.post_id) as PostRow | undefined;
+  let trigger = run.trigger_comment_id ? db().prepare('SELECT * FROM post_comments WHERE id = ?').get(run.trigger_comment_id) as CommentRow | undefined : undefined;
   if (!post || !trigger || trigger.status !== 'visible') return setStatus(run.id, 'skipped', { error: '글이나 부른 댓글이 사라졌어.' });
   const runAs = resolveAutomationRunAs(run.run_as_account_id, ['posts.view', 'posts.comment']);
   if (!runAs.ok) return setStatus(run.id, 'failed', { error: runAs.message });
@@ -198,10 +197,16 @@ async function execute(run: BotRunRow, controller: AbortController) {
   const profile = ChatProfileStore.find(run.profile_id);
   // One board room per (account, bot): automation rooms are keyed per account, so the key names the bot.
   const room = await ensureAutomationRoom(requester, run.profile_id, `posts:board:${run.profile_id}`, `게시판 · ${profile?.name ?? run.profile_name}`);
+  // Creating/recovering the room can await: recheck current publication, trash and caller authority before quoting.
+  try {
+    post = requirePostRow(actorFromRequester(requester, run.profile_id), run.post_id);
+    trigger = db().prepare('SELECT * FROM post_comments WHERE id = ? AND post_id = ? AND status = ?').get(run.trigger_comment_id, post.id, 'visible') as CommentRow | undefined;
+    if (!trigger) return setStatus(run.id, 'skipped', { error: '부른 댓글에 더 이상 접근할 수 없어.' });
+  } catch (error) { return setStatus(run.id, 'skipped', { error: error instanceof Error ? error.message.slice(0, 500) : '글에 더 이상 접근할 수 없어.' }); }
   // Calls from many posts pile up in this one room: its summary keeps the older ones short (LLM chats; Codex compacts).
   if (room.summary_enabled === null) CodexChatStore.updateThreadContext(room.id, { summaryEnabled: true });
   const withTools = profile ? answersWithTools(profile, requester) : false;
-  const unbind = BoardCallRooms.bind(room.id, run.id, run.profile_id);
+  const unbind = BoardCallRooms.bind(room.id, run.id, run.profile_id, withTools ? null : { postId: post.id, body: post.body.slice(0, 3000) });
   let result;
   try {
     result = await wakeChatRoom({

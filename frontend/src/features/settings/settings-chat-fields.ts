@@ -237,6 +237,7 @@ const EMBEDDING: FieldSpec[] = grouped({ ko: '임베딩', en: 'Embeddings' }, [
   toggle('lorebook', { ko: '로어북 의미 발동', en: 'Lorebook by meaning' }),
   toggle('chatHistory', { ko: '채팅 기록 검색', en: 'Chat history search' }),
   toggle('fileSearch', { ko: '파일·회의록 검색', en: 'File and minutes search' }),
+  { ...toggle('postSearch', { ko: '게시판 지식 의미 검색', en: 'Knowledge document search by meaning' }), fallback: false },
   toggle('imageSearch', { ko: '이미지 임베딩 (CPU로 라이브러리 색인)', en: 'Image embeddings (indexes the library on the CPU)' }),
   toggle('keepModelLoaded', { ko: '모델 메모리 유지', en: 'Keep model in memory' }),
   count('autoUnloadMinutes', { ko: '자동 언로드(분)', en: 'Auto unload (minutes)' }, 1, 1440),

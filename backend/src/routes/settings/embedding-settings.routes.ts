@@ -19,7 +19,7 @@ import { vectorStore } from '../../services/vectors/vectorStore';
 import { sendRouteBadRequest } from '../routeValidation';
 
 const router = Router();
-const FLAGS = ['enabled', 'chatRecall', 'lorebook', 'chatHistory', 'fileSearch', 'imageSearch', 'keepModelLoaded'] as const;
+const FLAGS = ['enabled', 'chatRecall', 'lorebook', 'chatHistory', 'fileSearch', 'postSearch', 'imageSearch', 'keepModelLoaded'] as const;
 
 async function embeddingStatus(): Promise<EmbeddingServerStatus> {
   const settings = settingsService.loadSettings().embedding;

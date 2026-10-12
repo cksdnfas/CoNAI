@@ -15,6 +15,7 @@ import { registerSpriteJobHandlers } from '../sprite/spriteService'
 import { registerAudioExportJobHandlers } from '../audio/audioExportJob'
 import { registerAudioLegacyImportJobHandlers } from '../audio/audioLegacyImportJob'
 import { registerImageBatchResizeJobHandlers } from '../imageBatchResize/imageBatchResizeService'
+import { initializeKnowledgeEvaluationRuntime, registerKnowledgeEvaluationHandler } from '../posts/knowledge/knowledgeEvaluation'
 
 export { RuntimeJobRunner, RuntimeJobCancelledError } from './runtimeJobRunner'
 export type { RuntimeJobContext, RuntimeJobHandlerOptions } from './runtimeJobRunner'
@@ -55,10 +56,12 @@ export function registerRuntimeJobHandlers(): void {
   registerAudioExportJobHandlers()
   registerAudioLegacyImportJobHandlers()
   registerImageBatchResizeJobHandlers()
+  registerKnowledgeEvaluationHandler()
 }
 
 /** Register handlers and recover interrupted jobs. `index.ts` 기동 시퀀스가 1회 호출한다. */
 export function bootstrapRuntimeJobs(): void {
   registerRuntimeJobHandlers()
   RuntimeJobRunner.bootstrap()
+  initializeKnowledgeEvaluationRuntime()
 }

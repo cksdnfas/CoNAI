@@ -1,9 +1,11 @@
 import { memo, useMemo, type ComponentProps } from 'react'
 import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown'
+import { Link } from 'react-router-dom'
 import remarkGfm from 'remark-gfm'
 import { rehypeMentions } from '@/features/codex-chat/chat-mentions'
 import { cn } from '@/lib/utils'
 import { AudioEmbed, FileEmbed, GroupEmbed, LibraryMedia, MediaGallery } from './post-media'
+import { parsePostLink, postRoute } from './post-links'
 
 const EMBED = String.raw`!\[[^\]\n]*\]\(\s*(?:media|audio|group|file):[^)\s]+\s*\)`
 const EMBED_LINE = new RegExp(String.raw`^\s*(?:${EMBED}\s*)+$`)
@@ -47,7 +49,7 @@ function groupGalleries(body: string) {
 }
 
 function urlTransform(url: string) {
-  return APP_SCHEME.test(url) ? url : defaultUrlTransform(url)
+  return APP_SCHEME.test(url) || parsePostLink(url) ? url : defaultUrlTransform(url)
 }
 
 export function PostEmbedImage({ src, alt }: ComponentProps<'img'>) {
@@ -69,7 +71,11 @@ const COMPONENTS: Components = {
   img: PostEmbedImage,
   // A paragraph with an embed becomes a div: embeds are blocks (players, galleries), which may not sit inside <p>.
   p: ({ node, children }) => holdsEmbed(node as HastNode | undefined) ? <div className="my-3">{children}</div> : <p className="my-3 first:mt-0 last:mb-0">{children}</p>,
-  a: ({ children, href }) => <a href={href} target="_blank" rel="noreferrer noopener" className="text-primary underline underline-offset-2">{children}</a>,
+  a: ({ children, href }) => {
+    const post = parsePostLink(href)
+    return post ? <Link to={postRoute(post)} className="text-primary underline underline-offset-2">{children}</Link>
+      : <a href={href} target="_blank" rel="noreferrer noopener" className="text-primary underline underline-offset-2">{children}</a>
+  },
   ul: ({ children }) => <ul className="my-3 list-disc space-y-1 pl-5">{children}</ul>,
   ol: ({ children }) => <ol className="my-3 list-decimal space-y-1 pl-5">{children}</ol>,
   h1: ({ children }) => <h2 className="mb-2 mt-6 text-xl font-bold first:mt-0">{children}</h2>,

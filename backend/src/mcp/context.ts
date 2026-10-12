@@ -131,6 +131,8 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   posts_revisions: 'read',
   posts_delete: 'organize',
   posts_restore_revision: 'organize',
+  posts_assess: 'organize',
+  posts_propose_knowledge: 'organize',
   post_comment_edit: 'organize',
   post_comment_delete: 'organize',
   post_comment_hide: 'organize',

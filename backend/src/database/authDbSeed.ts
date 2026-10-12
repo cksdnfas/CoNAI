@@ -64,6 +64,8 @@ export const PERMISSIONS_V2_SOURCES: Record<PermissionKey, readonly string[]> = 
   'posts.comment': [],
   'posts.write': [],
   'posts.summon': [],
+  'posts.evaluate': [],
+  'posts.knowledge.review': [],
   'chat.use': ['chat.llm.use'],
   'chat.agent.use': ['chat.codex.use', 'chat.claude.use'],
   // New with web search: nothing to fold in.

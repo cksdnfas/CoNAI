@@ -22,6 +22,7 @@ const SPACE_LABELS: Record<string, TranslationInput> = {
   'chat-lore': { ko: '로어', en: 'lore' },
   'chat-message': { ko: '메시지', en: 'messages' },
   file: { ko: '파일', en: 'files' },
+  'post-knowledge': { ko: '지식 문서', en: 'knowledge documents' },
   'media-image': { ko: '이미지', en: 'images' },
 }
 
@@ -88,6 +89,13 @@ export function EmbeddingSettingsCard({ heading, actions, draft, status, onPatch
             disabled={!isEnabled}
             onCheckedChange={(checked) => onPatch({ fileSearch: checked })}
             label={<ChatFilledLabel fieldId="embedding.fileSearch">{t({ ko: '파일·회의록 검색', en: 'File and minutes search' })}</ChatFilledLabel>}
+          />
+          <SettingsSwitchRow
+            checked={draft.postSearch === true}
+            disabled={!isEnabled}
+            onCheckedChange={(checked) => onPatch({ postSearch: checked })}
+            label={<ChatFilledLabel fieldId="embedding.postSearch">{t({ ko: '게시판 지식 의미 검색', en: 'Knowledge document search by meaning' })}</ChatFilledLabel>}
+            info={t({ ko: '지식 문서 본문을 색인해 뜻이 가까운 문서를 찾아. 꺼도 키워드 검색은 사용할 수 있어.', en: 'Indexes knowledge documents to find related wording. Keyword search remains available when off.' })}
           />
           <SettingsSwitchRow
             checked={draft.imageSearch}

@@ -31,6 +31,7 @@ export type RuntimeJobKind =
   | 'audio-export'
   | 'audio-legacy-import'
   | 'image-batch-resize'
+  | 'post-knowledge-evaluation'
 
 export type RuntimeJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 

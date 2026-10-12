@@ -9,6 +9,9 @@ import { PostReferenceButton, SourceChatLink } from './post-chat-links'
 import { PostComments, type PostCommentDraft } from './post-comments'
 import { mediaHashesOf, PostMarkdown } from './post-markdown'
 import { PostMediaContext } from './post-media'
+import { PostKnowledgePanel } from './post-knowledge-panel'
+import { PostKnowledgeStatus } from './post-knowledge-status'
+import type { KnowledgeSearchContext } from './post-knowledge-task-fit'
 
 /** Ancestors first: 창작 › 일러스트. */
 export function categoryPath(categories: PostCategory[], id: number | null) {
@@ -21,9 +24,10 @@ export function categoryPath(categories: PostCategory[], id: number | null) {
 }
 
 /** One post: title, who wrote it and when, tags, the body with its media, then the comments. */
-export function PostView({ post, categories, onTag, onCategory, commentDraft, setCommentDraft }: {
+export function PostView({ post, categories, onTag, onCategory, commentDraft, setCommentDraft, knowledgeSearchContext }: {
   post: PostDetail; categories: PostCategory[]; onTag: (tag: string) => void; onCategory: (id: number) => void
   commentDraft: PostCommentDraft; setCommentDraft: (update: (current: PostCommentDraft) => PostCommentDraft) => void
+  knowledgeSearchContext: KnowledgeSearchContext | null
 }) {
   const { t, formatDateTime } = useI18n()
   const relative = useRelativeTime()
@@ -61,6 +65,7 @@ export function PostView({ post, categories, onTag, onCategory, commentDraft, se
           {post.status === 'draft' ? <span className="inline-flex items-center gap-1 text-xs"><FileClock className="size-3.5" />{t({ ko: '초안', en: 'Draft' })}</span> : null}
           {post.status === 'hidden' ? <span className="inline-flex items-center gap-1 text-xs text-destructive"><EyeOff className="size-3.5" />{t({ ko: '숨김', en: 'Hidden' })}</span> : null}
           {post.commentMode === 'closed' ? <span className="inline-flex items-center gap-1 text-xs"><Lock className="size-3.5" />{t({ ko: '댓글 닫힘', en: 'Comments closed' })}</span> : null}
+          <PostKnowledgeStatus knowledge={post.knowledge} />
         </div>
         {post.tags.length ? (
           <div className="flex flex-wrap gap-1">
@@ -73,10 +78,11 @@ export function PostView({ post, categories, onTag, onCategory, commentDraft, se
       <PostMediaContext.Provider value={mediaContext}>
         <PostMarkdown text={post.body} className="text-[0.95rem]" />
       </PostMediaContext.Provider>
-      <hr className="border-line" />
+      {!post.knowledge?.deletedAt ? <><hr className="border-line" />
       <PostMediaContext.Provider value={mediaContext}>
         <PostComments post={post} draft={commentDraft} setDraft={setCommentDraft} />
-      </PostMediaContext.Provider>
+      </PostMediaContext.Provider></> : null}
+      <PostKnowledgePanel key={post.id} post={post} searchContext={knowledgeSearchContext} />
     </article>
   )
 }

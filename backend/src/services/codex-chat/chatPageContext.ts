@@ -10,6 +10,7 @@ import { CodexChatStore } from './codexChatStore'
 import { chatPageView } from '../../mcp/tools/chatPageView'
 import { COMFY_SEED_RULE } from '../comfyui/seedControl'
 import { createHash } from 'crypto'
+import { requireKnowledgePageAction } from '../posts/knowledge/knowledgePage'
 
 export class ChatPageContextError extends Error {
   constructor(message: string, readonly status = 400) { super(message) }
@@ -29,8 +30,9 @@ export function requireChatPageAccess(requester: McpRequester, page: Pick<ChatPa
   }
 }
 
-export function requireChatPageActionAccess(requester: McpRequester, page: Pick<ChatPageSnapshot, 'path'>, actionId: string, args?: Record<string, unknown>) {
+export function requireChatPageActionAccess(requester: McpRequester, page: Pick<ChatPageSnapshot, 'path'> & Partial<Pick<ChatPageSnapshot, 'resourceId' | 'data'>>, actionId: string, args?: Record<string, unknown>) {
   if (!chatPageActionAllowed(page.path, actionId)) throw new ChatPageContextError('이 페이지에 등록되지 않은 작업이야.', 403)
+  requireKnowledgePageAction(page, actionId)
   if (actionId === 'page.navigate' && args) {
     // The destination is `to`: MCP argument checks refuse any key named `path` as a server file path.
     const path = typeof args.to === 'string' ? args.to : ''

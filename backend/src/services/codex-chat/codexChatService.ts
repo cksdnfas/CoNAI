@@ -32,6 +32,7 @@ import { BLOCK_EDITS_MAX, foldBlockState, parseBlockEdits, usableBlocks } from '
 import { postHistoryText, buildPersonaPrompt, fillCharacterPlaceholders, flagDirectiveFor, referenceBlock, resolveAuthorNote, sendableMessages, splitTurns, REPLY_FORMAT_GUIDANCE, GENERATION_GUIDANCE, type ChatContextMeta } from './llmChatContext'
 import { visibleContextMessages } from './chatDiagnostics'
 import { contextSource, limitContextMeta, legacyContextMeta } from './chatContextDiagnostics'
+import { knowledgePageForExecution, recordQuotedBoardKnowledge } from '../posts/knowledge/knowledgePage'
 import { redactChatRequestBody, saveChatRequestCapture } from './chatRequestCaptures'
 import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { translateReply, translateUserInput } from './chatTranslation'
@@ -706,8 +707,11 @@ export async function runCodexGroupReply(params: {
   assertChatAvailable(requester)
   const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
   const session = await ensureSession(requester, scopes, toolAllowlist, profile.generationPresetIds, params.chatContext)
-  setCodexChatExecution(session.token, params.chatContext)
   const run = resolveCodexRun(session, profile)
+  params.chatContext.knowledgeProvider = 'codex'
+  params.chatContext.knowledgeOutputLimit = profile.toolOutputLimit
+  params.chatContext.knowledgeModel = run.model ?? session.catalog.models.find(item => item.isDefault)?.id ?? 'unspecified'
+  setCodexChatExecution(session.token, params.chatContext)
   const previousCodexThreadId = ChatGroupStore.member(threadId, profile.id)?.codex_thread_id ?? null
   const codexThreadId = await ensureCodexThread(session, previousCodexThreadId, profile,
     (id) => ChatGroupStore.setMemberCodexThread(threadId, profile.id, id))
@@ -816,8 +820,11 @@ export async function runCodexOrderTurn(params: {
   requireCodexProfile(profile.id, requester)
   const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
   const session = await ensureSession(requester, scopes, toolAllowlist, profile.generationPresetIds, params.chatContext)
-  setCodexChatExecution(session.token, params.chatContext)
   const run = resolveCodexRun(session, profile)
+  params.chatContext.knowledgeProvider = 'codex'
+  params.chatContext.knowledgeOutputLimit = profile.toolOutputLimit
+  params.chatContext.knowledgeModel = run.model ?? session.catalog.models.find(item => item.isDefault)?.id ?? 'unspecified'
+  setCodexChatExecution(session.token, params.chatContext)
   const codexThreadId = await ensureCodexThread(session, null, profile, () => {})
   let outcome: GroupReplyResult | null = null
   let resolveFinished: (message: CodexChatMessageRecord) => void = () => {}
@@ -1213,7 +1220,13 @@ export const CodexChatService = {
       emit(turn, { type: 'user', message: userMessage })
       turn.controller = new AbortController()
       turn.delivery = beginDirectReply(thread, profile.id, CodexChatStore.listMessages(threadId), userMessage, turn.controller.signal, (delivery) => emit(turn, { type: 'routing', routing: delivery }))
-      setCodexChatExecution(session.token, { ...turn.delivery.context, page })
+      turn.delivery.context.knowledgeProvider = 'codex'
+      turn.delivery.context.knowledgeOutputLimit = profile.toolOutputLimit
+      turn.delivery.context.knowledgeModel = run.model ?? session.catalog.models.find(item => item.isDefault)?.id ?? 'unspecified'
+      recordQuotedBoardKnowledge({ requester, chatContext: turn.delivery.context, source: 'codex-chat', scopes })
+      const knowledgePage = page ? knowledgePageForExecution({ requester, chatContext: turn.delivery.context, source: 'codex-chat', scopes }, page) : undefined
+      turn.delivery.context.page = knowledgePage
+      setCodexChatExecution(session.token, turn.delivery.context)
 
       try {
         // Codex keeps every turn's input in its memory, so lore already given since the last compaction (same entry,
@@ -1229,7 +1242,7 @@ export const CodexChatService = {
         const rejected = pendingRejectedLore(threadId, profile, sent)
         const outcomes = pendingGenerationOutcomes(threadId, history.filter((entry) => entry.id < userMessageId), sent)
         const replyGuide = pendingReplyGuidance(sent)
-        const pageReference = pendingPageReference(page, requester, sent)
+        const pageReference = pendingPageReference(knowledgePage, requester, sent)
         const cards = pendingProposalOutcomes(threadId, sent)
         // The judge's yes items add their directives (Codex keeps its tools for the whole thread, so none are steered).
         turn.judged = await judgeBeforeReply({ profile, threadId, replyId: turn.delivery.context.replyId ?? null, availableTools: null, signal: turn.controller.signal }).catch((error: unknown) => {

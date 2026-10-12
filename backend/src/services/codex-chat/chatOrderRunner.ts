@@ -1,4 +1,7 @@
 import { randomUUID } from 'crypto'
+import { chatExecutionRoot } from './chatExecutionRoot'
+import { finishKnowledgeExecution, knowledgeExecutionFromChat } from '../posts/knowledge/knowledgeRuntime'
+import { beginKnowledgeOrderTask } from '../posts/knowledge/knowledgeTaskObservations'
 import type { ChatExecutionContext } from '@conai/shared'
 import { isChatOwnTool, type McpRequester } from '../../mcp/context'
 import { inlineTextsForChat, loadAttachedImages } from './chatAttachments'
@@ -76,9 +79,11 @@ export async function runChatOrder(requester: McpRequester, threadId: number, me
   const replyId = CodexChatStore.ensureReplyId(threadId, messageId, randomUUID)
   const run = beginChatOrderRun(threadId, messageId, replyId)
   if (!run) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
-  const context: ChatExecutionContext = { threadId, profileId: profile.id, kind: thread.kind, replyId }
+  const context: ChatExecutionContext = { threadId, profileId: profile.id, kind: thread.kind, replyId, rootExecutionId: chatExecutionRoot(threadId, messageId), knowledgeExecutionId: `chat:${threadId}:order:${randomUUID()}` }
   let unregister = () => {}
+  let knowledgeStatus: 'completed' | 'failed' = 'failed'
   try {
+    beginKnowledgeOrderTask(requester,context,kind)
     unregister = registerChatReply(context, run.signal, () => { throw new ChatReplyError('지시 작업에서는 답장 대상을 바꿀 수 없어.') })
     const emit = (event: CodexChatStreamEvent) => { if (event.type === 'tool') listener(event) }
     const directive = chatOrderDirective(kind, messageId)
@@ -136,8 +141,11 @@ export async function runChatOrder(requester: McpRequester, threadId: number, me
     }
     const message = CodexChatStore.listMessages(threadId).find((entry) => entry.id === messageId) ?? target
     listener({ type: 'done', message })
+    knowledgeStatus = 'completed'
     return message
   } finally {
+    try { finishKnowledgeExecution(knowledgeExecutionFromChat(requester, context), { status: run.signal.aborted ? 'cancelled' : knowledgeStatus }) }
+    catch (error) { console.warn('[Knowledge] order completion skipped:', error instanceof Error ? error.message : error) }
     unregister()
     run.end()
   }

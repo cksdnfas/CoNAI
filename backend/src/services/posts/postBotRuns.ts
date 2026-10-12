@@ -4,9 +4,10 @@ import { canUseChatProfile, resolveChatAccess } from '../codex-chat/codexChatAcc
 import { loadChatSettings } from '../codex-chat/chatSettings';
 import { ChatProfileStore } from '../codex-chat/chatProfiles';
 import { isProfileAssetHidden } from '../codex-chat/chatProfileAssets';
-import { PostError, type PostActor } from './postActor';
-import { announcePostChange, iso, requirePostRow } from './postStore';
+import { PostError, requireHumanPostActor, type PostActor } from './postActor';
+import { announcePostChange, canEditPost, iso, requirePostRow } from './postStore';
 import { loadPostsSettings } from './postsSettings';
+import { findKnowledgeRow, requireKnowledgeRow } from './knowledgeStore';
 
 export type BotRunRow = {
   id: number; post_id: number; trigger_comment_id: number | null; profile_id: number; profile_name: string; status: PostBotRunStatus;
@@ -17,6 +18,15 @@ export type BotRunRow = {
 const db = () => getUserSettingsDb();
 /** Runs a post shows: everything still open plus the last day of finished ones. */
 const RECENT_FINISHED = "datetime('now', '-1 day')";
+
+/** Trash owners can inspect and stop existing calls; this never permits a new bot turn or exposes its document. */
+function requireRunPost(actor: PostActor, postId: number) {
+  if (!findKnowledgeRow(postId)?.deleted_at) return requirePostRow(actor, postId);
+  requireHumanPostActor(actor);
+  const { post } = requireKnowledgeRow(actor, postId, { allowDeleted: true });
+  if (!canEditPost(actor, post)) throw new PostError('봇 호출을 찾을 수 없어.', 404);
+  return post;
+}
 
 function canCancel(actor: PostActor, row: BotRunRow) {
   return (row.status === 'queued' || row.status === 'running') && (actor.isAdmin || (actor.accountId !== null && row.requested_by_account_id === actor.accountId));
@@ -39,7 +49,7 @@ export function summonableProfiles(accountId: number | null) {
 
 export const PostBotRuns = {
   list(actor: PostActor, postId: number): PostBotRun[] {
-    requirePostRow(actor, postId);
+    requireRunPost(actor, postId);
     return (db().prepare(`SELECT * FROM post_bot_runs WHERE post_id = ? AND (status IN ('queued', 'running') OR created_at >= ${RECENT_FINISHED}) ORDER BY id`)
       .all(postId) as BotRunRow[]).map((row) => toBotRun(actor, row));
   },
@@ -57,7 +67,7 @@ export const PostBotRuns = {
   cancel(actor: PostActor, runId: number): PostBotRun {
     const row = db().prepare('SELECT * FROM post_bot_runs WHERE id = ?').get(runId) as BotRunRow | undefined;
     if (!row) throw new PostError('봇 호출을 찾을 수 없어.', 404);
-    requirePostRow(actor, row.post_id);
+    requireRunPost(actor, row.post_id);
     if (!canCancel(actor, row)) throw new PostError('이 호출을 취소할 수 없어.', 403);
     db().prepare(`UPDATE post_bot_runs SET status = 'cancelled', error = '취소됨', finished_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('queued', 'running')`).run(runId);
     for (const listener of cancelListeners) {

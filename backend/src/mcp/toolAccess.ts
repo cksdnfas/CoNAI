@@ -40,6 +40,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   list_files: 'files.view', get_file_info: 'files.view', read_file_text: 'files.view', search_files: 'files.view',
   list_file_versions: 'files.view', read_file_version: 'files.view', restore_file_version: ['files.view', 'files.edit'],
   posts_categories: 'posts.view', posts_search: 'posts.view', posts_read: 'posts.view',
+  posts_assess: ['posts.view', 'posts.evaluate'], posts_propose_knowledge: ['posts.view', 'posts.write'],
   posts_create: ['posts.view', 'posts.write'], posts_update: ['posts.view', 'posts.write'], post_comment: ['posts.view', 'posts.comment'],
   posts_tags: 'posts.view', posts_revisions: ['posts.view', 'posts.write'], posts_delete: ['posts.view', 'posts.write'], posts_restore_revision: ['posts.view', 'posts.write'],
   post_comment_edit: ['posts.view', 'posts.comment'], post_comment_delete: ['posts.view', 'posts.comment'],
@@ -92,6 +93,8 @@ const BOARD_CALL_BLOCKED_POST_TOOLS = new Set(['posts_delete', 'posts_restore_re
  */
 function pageKeepsTool(path: string, toolName: string) {
   if (path.startsWith('/public/')) return false;
+  // This only stores a pending draft; its organize scope and feature grants still apply below.
+  if (path.split('?')[0] === '/posts' && toolName === 'posts_propose_knowledge') return true;
   return PAGE_SAFE_SCOPES.has(getMcpToolScope(toolName) ?? '') && !PAGE_PRIVATE_FILE_TOOLS.has(toolName);
 }
 

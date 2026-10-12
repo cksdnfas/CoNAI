@@ -1,6 +1,7 @@
 import type { ChatExecutionContext, ChatMessageRouting, ChatRecipient } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { isChatOrderReply } from './chatOrderRuns'
+import { bindKnowledgeGenerationOperation } from '../posts/knowledge/knowledgeTaskObservations'
 
 export type ReplyRouteInput = { messageId?: number; recipients?: ChatRecipient[] }
 type ReplyHandler = { context: ChatExecutionContext; signal: AbortSignal; route: (input: ReplyRouteInput) => ChatMessageRouting }
@@ -55,4 +56,5 @@ export function linkChatGeneration(context: ChatExecutionContext | undefined, jo
     VALUES (?, ?, ?, COALESCE((SELECT CASE WHEN ? = 1 AND t.reaction_enabled = 1 AND p.engine = 'llm' AND (t.kind = 'group' OR t.engine = 'llm') THEN 1 ELSE 0 END
     FROM codex_chat_threads t JOIN llm_chat_profiles p ON p.id = ? WHERE t.id = ?), 0))`)
     .run(jobId, context.threadId, context.replyId, reacts, context.profileId, context.threadId)
+  bindKnowledgeGenerationOperation(context,jobId)
 }

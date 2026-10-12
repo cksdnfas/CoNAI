@@ -22,6 +22,8 @@ export const PERMISSION_CATALOG = [
   { key: 'posts.view', section: 'posts', label: { ko: '게시판 보기', en: 'View posts' }, description: 'Read published posts, their media and comments.' },
   { key: 'posts.comment', section: 'posts', label: { ko: '게시판 댓글', en: 'Comment on posts' }, description: 'Write, edit and delete your own comments.' },
   { key: 'posts.write', section: 'posts', label: { ko: '게시물 쓰기', en: 'Write posts' }, description: 'Write posts and edit or delete your own.' },
+  { key: 'posts.evaluate', section: 'posts', label: { ko: '지식 문서 평가', en: 'Evaluate knowledge' }, description: 'Submit assessments for knowledge documents you can read.' },
+  { key: 'posts.knowledge.review', section: 'posts', label: { ko: '지식 문서 검토', en: 'Review knowledge' }, description: 'Verify knowledge versions and resolve reported issues.' },
   { key: 'posts.summon', section: 'posts', label: { ko: '댓글로 봇 부르기 (부른 계정 사용량)', en: 'Call bots from comments (uses your account)' }, description: 'Call chat profiles with @ in a comment; the bot runs as your account.' },
   { key: 'chat.use', section: 'chat', label: { ko: '채팅', en: 'Chat' }, description: 'Chat with API model profiles.' },
   { key: 'chat.agent.use', section: 'chat', label: { ko: '서버 에이전트 채팅 (Codex·Claude Code, 서버 계정 사용량 공유)', en: 'Server agent chat (Codex, Claude Code; shares server account usage)' }, description: 'Chat with profiles that run on the server Codex or Claude Code account.' },

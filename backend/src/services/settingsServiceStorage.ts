@@ -497,6 +497,7 @@ function normalizeEmbeddingSettings(raw: any, defaults: EmbeddingSettings): Embe
     lorebook: flag('lorebook'),
     chatHistory: flag('chatHistory'),
     fileSearch: flag('fileSearch'),
+    postSearch: flag('postSearch') ?? false,
     imageSearch: flag('imageSearch'),
     keepModelLoaded: flag('keepModelLoaded'),
     autoUnloadMinutes: Number.isInteger(minutes) && minutes >= 1 && minutes <= 1440 ? minutes : defaults.autoUnloadMinutes,
@@ -559,6 +560,7 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
       lorebook: true,
       chatHistory: true,
       fileSearch: true,
+      postSearch: false,
       imageSearch: false,
       keepModelLoaded: false,
       // Chat turns come minutes apart; a short idle would reload the model (several seconds) mid-conversation.

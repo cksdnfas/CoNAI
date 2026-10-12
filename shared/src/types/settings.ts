@@ -137,6 +137,8 @@ export interface EmbeddingSettings {
   chatHistory: boolean;
   /** File store search (minutes and linked files included) also finds related wording. */
   fileSearch: boolean;
+  /** Optional knowledge-document search; absent in older settings means off. */
+  postSearch?: boolean;
   /**
    * Library images get an image vector (CPU, about 0.7 s each, in the background): find images by a description and
    * by what they show. Loads the vision part of the model too (about 2.2 GB instead of 1.3 GB). Off by default.

@@ -2,6 +2,7 @@ import type { ChatMessageRouting, ChatRecipient, ChatReplyQuote } from '@conai/s
 import type { ChatExecutionContext } from '@conai/shared'
 import { randomUUID } from 'crypto'
 import { registerChatReply } from './chatReplyRegistry'
+import { chatExecutionRoot } from './chatExecutionRoot'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { ChatProfileStore } from './chatProfiles'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
@@ -71,7 +72,7 @@ export function messageAddress(message: CodexChatMessageRecord) {
 
 export function beginDirectReply(thread: CodexChatThreadRecord, profileId: number, messages: CodexChatMessageRecord[], source: CodexChatMessageRecord | null, signal: AbortSignal, onRouting: (routing: ChatMessageRouting) => void) {
   const replyId = randomUUID()
-  const context: ChatExecutionContext = { threadId: thread.id, profileId, kind: 'direct', replyId }
+  const context: ChatExecutionContext = { threadId: thread.id, profileId, kind: 'direct', replyId, rootExecutionId: chatExecutionRoot(thread.id, source?.id) }
   const state = { context, routing: automaticReplyRouting(thread, source, replyId), close: () => {} }
   state.close = registerChatReply(context, signal, (input) => {
     const target = input.messageId === undefined ? null : requireReplyTarget(thread.id, input.messageId, messages)

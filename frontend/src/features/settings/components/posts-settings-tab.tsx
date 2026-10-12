@@ -9,6 +9,7 @@ import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { useI18n } from '@/i18n'
 import { SectionDirtyBadge } from './settings-section-status'
 import { SETTINGS_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
+import { PostsKnowledgeSettingsRows } from './posts-knowledge-settings'
 
 type NumericSafetyKey = Exclude<keyof PostsSafetySettings, 'summonEnabled'>
 
@@ -73,6 +74,7 @@ export function PostsSettingsTab({ draft, onPatch, dirty }: { draft: PostsSettin
           </SettingRow>
         ))}
       </RowGroup>
+      <PostsKnowledgeSettingsRows draft={draft.knowledge} onPatch={(patch) => onPatch({ knowledge: { ...draft.knowledge, ...patch } })} />
     </div>
   )
 }

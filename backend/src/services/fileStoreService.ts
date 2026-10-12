@@ -320,7 +320,7 @@ export const FileStoreService = {
         if (db.prepare('SELECT 1 FROM chat_file_attachments WHERE file_id = ?').get(id)) {
           throw new FileStoreError(`채팅에서 참조 중인 파일은 삭제할 수 없어: ${row.name}`, 409);
         }
-        if (db.prepare("SELECT 1 FROM post_media_refs WHERE kind = 'file' AND ref = ?").get(id)) {
+        if (db.prepare("SELECT 1 FROM post_media_refs WHERE kind = 'file' AND ref = ? UNION ALL SELECT 1 FROM post_knowledge_media_refs WHERE kind = 'file' AND ref = ? LIMIT 1").get(id, id)) {
           throw new FileStoreError(`게시물에서 쓰는 파일은 삭제할 수 없어: ${row.name}`, 409);
         }
         rows.push(row);
@@ -490,7 +490,7 @@ export const FileStoreService = {
         if (db.prepare('SELECT 1 FROM chat_file_attachments WHERE file_id = ?').get(row.id)) {
           throw new FileStoreError(`채팅에서 참조 중인 파일은 삭제할 수 없어: ${row.name}`, 409);
         }
-        if (db.prepare("SELECT 1 FROM post_media_refs WHERE kind = 'file' AND ref = ?").get(row.id)) {
+        if (db.prepare("SELECT 1 FROM post_media_refs WHERE kind = 'file' AND ref = ? UNION ALL SELECT 1 FROM post_knowledge_media_refs WHERE kind = 'file' AND ref = ? LIMIT 1").get(row.id, row.id)) {
           throw new FileStoreError(`게시물에서 쓰는 파일은 삭제할 수 없어: ${row.name}`, 409);
         }
       }

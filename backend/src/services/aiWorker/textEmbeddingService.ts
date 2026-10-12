@@ -104,7 +104,7 @@ function requestThreads(priority: AiWorkerPriority) {
 export type EmbedKind = 'query' | 'document' | 'similarity'
 export type EmbedItem = { text: string; title?: string | null }
 export type EmbeddedChunk = { start: number; end: number; vector: Float32Array }
-export type EmbeddingFeature = 'chatRecall' | 'lorebook' | 'chatHistory' | 'fileSearch' | 'imageSearch'
+export type EmbeddingFeature = 'chatRecall' | 'lorebook' | 'chatHistory' | 'fileSearch' | 'imageSearch' | 'postSearch'
 
 export function embeddingSettings(): EmbeddingSettings {
   return settingsService.loadSettings().embedding
@@ -113,7 +113,7 @@ export function embeddingSettings(): EmbeddingSettings {
 /** Whether embeddings are on for this use (the runtime may still be missing; callers fall back on failure). */
 export function embeddingFeatureOn(feature: EmbeddingFeature) {
   const settings = embeddingSettings()
-  return settings.enabled && settings[feature]
+  return settings.enabled && settings[feature] === true
 }
 
 /** Which instance the worker keeps: "full" (vision tower too) while image search is on, else text only. */

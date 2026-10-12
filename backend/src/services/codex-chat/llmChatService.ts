@@ -32,6 +32,7 @@ import { ChatSummaryStore } from './chatMemory'
 import { appendUserDirective, buildChatMessages, cutToolOutput, directContextTurns, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, latestWindow, prefixUserContent, rawMessagesEstimate, recordPromptUsage, replyCapFor, resolveContextConfig, sendableMessages, stripThinking, summarizeAhead, summarizeAll, unsummarizedMessages, wrapUpRequest } from './llmChatContext'
 import { addressLabelFilter, restatement, roundSeparator } from './chatReplyText'
 import { chatPageReference, NO_PAGE_NOTE, parseChatPageContext, proposalOutcomeNote } from './chatPageContext'
+import { knowledgePageForExecution, recordQuotedBoardKnowledge } from '../posts/knowledge/knowledgePage'
 import type { ChatSendOptions } from './chatTasks'
 import { rememberChatPage } from './chatPageBridge'
 import { notifyChatUserSend } from './chatSendEvents'
@@ -408,6 +409,17 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
   if (target.transport === 'claude-code' && !resolveChatAccess(requester.accountId).claude) throw new LlmChatError('Claude Code를 사용할 권한이 없어.', 403)
   const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
   const chatContext = turn.chatContext ?? turn.delivery?.context
+  if (chatContext) {
+    chatContext.knowledgeProvider = target.providerName
+    chatContext.knowledgeModel = target.model
+    chatContext.knowledgeOutputLimit = profile.toolOutputLimit
+    recordQuotedBoardKnowledge({ requester, chatContext, source: 'llm-chat', scopes: ['read'] })
+  }
+  if (chatContext?.page) {
+    const page = knowledgePageForExecution({ requester, chatContext, source: 'llm-chat', scopes: ['read'] }, chatContext.page)
+    chatContext.page = page
+    turn.page = page
+  }
   const bridge = !turn.reaction && (scopes.length > 0 || chatContext) ? await openChatMcpBridge(requester, scopes, toolAllowlist, { generationPresetIds: profile.generationPresetIds, chatContext, contentRatingLimit: profileContentLimit(profile) }) : null
 
   // The judge reads the conversation before the request is built: its answers decide the tools, the directive, and

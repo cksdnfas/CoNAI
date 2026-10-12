@@ -21,6 +21,7 @@ import { FileStoreService } from '../fileStoreService'
 import { SEMANTIC_SPACES } from './rankFusion'
 import { indexPendingImages, pruneImageVectors } from './imageIndex'
 import { onSemanticChange, type SemanticSource } from './semanticSignal'
+import { loadPostsSettings } from '../posts/postsSettings'
 
 /**
  * What text embeddings are kept for, one vector space each (vectors.db; derived data, rebuilt when missing):
@@ -56,7 +57,7 @@ const FIRST_SWEEP_MS = 60_000
 /** After a failed pass (not an embedding failure, which has its own rest). */
 const ERROR_SWEEP_MS = 60_000
 /** How soon a change is looked at: a chat message is searched with on-the-spot indexing anyway, so it can wait. */
-const SIGNAL_DELAY_MS: Record<SemanticSource, number> = { recall: 2_000, lore: 2_000, file: 5_000, image: 10_000, message: 60_000 }
+const SIGNAL_DELAY_MS: Record<SemanticSource, number> = { recall: 2_000, lore: 2_000, file: 5_000, post: 5_000, image: 10_000, message: 60_000 }
 /** Items one scan queues: a backlog is scanned once per this many, not once per batch. */
 const QUEUE_ITEMS = 64
 const PRUNE_EVERY_MS = 60 * 60_000
@@ -173,6 +174,10 @@ async function indexFileBatch(item: IndexItem, priority: 'normal' | 'low') {
 
 function store(item: IndexItem, chunks: EmbeddedChunk[]) {
   if (chunks.length === 0) return
+  if (item.space === SEMANTIC_SPACES.post) {
+    const current = getUserSettingsDb().prepare('SELECT content_hash FROM post_knowledge WHERE post_id = ? AND enabled = 1 AND deleted_at IS NULL').get(Number(item.sourceKey)) as { content_hash: string } | undefined
+    if (!loadPostsSettings().knowledge.enabled || !embeddingFeatureOn('postSearch') || current?.content_hash !== item.hash) return
+  }
   const whole = chunks.length === 1 && chunks[0].start === 0 && chunks[0].end >= item.text.length
   vectorStore.replace(item.space, item.sourceKey, EMBEDDING_MODEL_KEY, chunks.map((chunk, index) => ({
     vector: chunk.vector, chunk: index, ownerKey: item.ownerKey, contentHash: item.hash,
@@ -263,6 +268,9 @@ function pruneVectors() {
     OR owner_key NOT IN (${threads.length ? threads.map((id) => `'thread:${Number(id)}'`).join(', ') : "''"}))`).run(SEMANTIC_SPACES.message).changes
   removed += db.prepare(`DELETE FROM vector_db.vectors WHERE space = ? AND NOT EXISTS (
     SELECT 1 FROM stored_file_entries e WHERE e.id = vector_db.vectors.source_key AND e.deleted_at IS NULL)`).run(SEMANTIC_SPACES.file).changes
+  removed += db.prepare(`DELETE FROM vector_db.vectors WHERE space = ? AND NOT EXISTS (
+    SELECT 1 FROM post_knowledge k WHERE k.post_id = CAST(vector_db.vectors.source_key AS INTEGER)
+      AND k.enabled = 1 AND k.deleted_at IS NULL AND k.content_hash = vector_db.vectors.content_hash)`).run(SEMANTIC_SPACES.post).changes
   const lore = new Set(allLoreEntries().map(({ bookId, entry }) => loreEntryVectorKey(bookId, entry.id)))
   for (const sourceKey of vectorStore.contentHashes(SEMANTIC_SPACES.lore, EMBEDDING_MODEL_KEY).keys()) {
     if (!lore.has(sourceKey)) removed += vectorStore.remove(SEMANTIC_SPACES.lore, sourceKey)
@@ -283,6 +291,18 @@ type TextSource = {
   batch: number
 }
 
+/** Only knowledge bodies; votes and category moves do not invalidate their content hash. */
+function pendingPosts(limit: number): IndexItem[] {
+  const rows = getUserSettingsDb().prepare(`SELECT p.id, p.title, p.body, k.content_hash
+    FROM posts p JOIN post_knowledge k ON k.post_id = p.id
+    LEFT JOIN vector_db.vectors v ON v.space = @space AND v.source_key = CAST(p.id AS TEXT)
+      AND v.chunk = 0 AND v.model_key = @model
+    WHERE k.enabled = 1 AND k.deleted_at IS NULL AND trim(p.body) != ''
+      AND (v.source_key IS NULL OR v.content_hash IS NOT k.content_hash)
+    ORDER BY p.id DESC LIMIT @limit`).all({ space: SEMANTIC_SPACES.post, model: EMBEDDING_MODEL_KEY, limit }) as Array<{ id: number; title: string; body: string; content_hash: string }>
+  return rows.map(row => ({ space: SEMANTIC_SPACES.post, sourceKey: String(row.id), ownerKey: 'posts', hash: row.content_hash, text: row.body, title: row.title, maxChunks: 256 }))
+}
+
 /** Most useful first: what the next reply recalls, then lore, then searchable history and files; images last. */
 const TEXT_SOURCES: TextSource[] = [
   { source: 'recall', feature: 'chatRecall', pending: (limit) => pendingSegments(limit), scan: QUEUE_ITEMS, batch: BATCH_ITEMS },
@@ -290,10 +310,12 @@ const TEXT_SOURCES: TextSource[] = [
   { source: 'message', feature: 'chatHistory', pending: (limit) => pendingMessages(limit), scan: QUEUE_ITEMS, batch: BATCH_ITEMS },
   // Files persist four chunks and their resume cursor per pass.
   { source: 'file', feature: 'fileSearch', pending: pendingFiles, scan: 2, batch: 1 },
+  { source: 'post', feature: 'postSearch', pending: pendingPosts, scan: 4, batch: 1 },
 ]
-const ALL_SOURCES: SemanticSource[] = ['recall', 'lore', 'message', 'file', 'image']
+const ALL_SOURCES: SemanticSource[] = ['recall', 'lore', 'message', 'file', 'post', 'image']
 
 function sourceOn(settings: EmbeddingSettings, source: SemanticSource) {
+  if (source === 'post') return loadPostsSettings().knowledge.enabled && settings.postSearch === true
   if (source === 'image') return settings.imageSearch
   if (source === 'message') return settings.chatHistory || settings.chatRecall
   return settings[TEXT_SOURCES.find((entry) => entry.source === source)!.feature]

@@ -35,6 +35,7 @@ export type RuntimeJobKind =
   | 'audio-export'
   | 'audio-legacy-import'
   | 'image-batch-resize'
+  | 'post-knowledge-evaluation'
 
 export type RuntimeJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 
@@ -65,6 +66,7 @@ export const RUNTIME_JOB_KINDS: readonly RuntimeJobKind[] = [
   'audio-export',
   'audio-legacy-import',
   'image-batch-resize',
+  'post-knowledge-evaluation',
 ]
 
 export const RUNTIME_JOB_TERMINAL_STATUSES: readonly RuntimeJobStatus[] = ['completed', 'failed', 'cancelled']

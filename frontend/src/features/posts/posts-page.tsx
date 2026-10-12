@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
-import type { PostCategory, PostListLayout, PostSummary } from '@conai/shared'
-import { ArrowLeft, EyeOff, FileClock, FolderPlus, History, LayoutGrid, Newspaper, Pencil, PenSquare, Rows3, Search, Smartphone, Trash2, X } from 'lucide-react'
+import { useLocation, useSearchParams } from 'react-router-dom'
+import type { PostCategory, PostDetail, PostKnowledgeReviewStatus, PostListLayout, PostSummary } from '@conai/shared'
+import { ArrowLeft, BookOpen, ClipboardCheck, EyeOff, FileClock, FileDiff, FolderPlus, History, LayoutGrid, Newspaper, Pencil, PenSquare, Rows3, Search, Smartphone, Trash2, Undo2, X } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -14,12 +14,13 @@ import { ErrorState } from '@/components/ui/error-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { LoadingState } from '@/components/ui/loading-state'
+import { Select } from '@/components/ui/select'
 import { SidebarGroupLabel, SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageNumber, pageFreeText, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, cancelPostBotRun, createPostCategory, createPostComment, deletePost, deletePostCategory, deletePostComment, getPost, getPostsSettings, listPostCategories, listPostComments, listPostRevisions, listPosts, listPostTags, setPostCommentHidden, updatePost, updatePostCategory, updatePostComment } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, cancelPostBotRun, createPostCategory, createPostComment, deletePost, deletePostCategory, deletePostComment, getPost, getPostsSettings, listPostCategories, listPostComments, listPostRevisions, listPosts, listPostTags, restorePostKnowledge, setPostCommentHidden, trashPostKnowledge, updatePost, updatePostCategory, updatePostComment } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { PostCategoryDialog } from './post-category-dialog'
@@ -30,6 +31,11 @@ import { PostRevisionsDialog } from './post-revisions-dialog'
 import { categoryPath, PostView } from './post-view'
 import { usePostPermissions } from './use-post-permissions'
 import { usePostsLayout } from './use-posts-layout'
+import { PostKnowledgeList, PostKnowledgeReviewList, PostKnowledgeSearchMode } from './post-knowledge-list'
+import { PostKnowledgeProposals } from './post-knowledge-proposals'
+import { PostKnowledgeVersionsDialog } from './post-knowledge-versions'
+import { parseKnowledgeSearchContext, type KnowledgeSearchContext } from './post-knowledge-task-fit'
+import { PostKnowledgePermanentDeleteDialog } from './post-knowledge-permanent-delete'
 
 const PAGE_SIZE = 20
 /** How much of a long post body the connected chat reads at a time (posts.body_at moves through it). */
@@ -47,11 +53,18 @@ export function PostsPage() {
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const [params, setParams] = useSearchParams()
+  const location = useLocation()
   const permissions = usePostPermissions()
+  const knowledgeSearchContext = parseKnowledgeSearchContext((location.state as { knowledgeSearchContext?: unknown } | null)?.knowledgeSearchContext)
   const categoryId = Number(params.get('category')) || null
   const tag = params.get('tag') || null
   const statusParam = params.get('status')
   const status: StatusFilter = statusParam === 'draft' || statusParam === 'hidden' ? statusParam : null
+  const knowledgeOnly = params.get('kind') === 'knowledge'
+  const knowledgeSection = params.get('section')
+  const section = knowledgeSection === 'review' || knowledgeSection === 'proposals' || knowledgeSection === 'trash' ? knowledgeSection : null
+  const reviewParam = params.get('review')
+  const reviewStatus: PostKnowledgeReviewStatus | undefined = reviewParam === 'unreviewed' || reviewParam === 'verified' || reviewParam === 'needs_review' ? reviewParam : undefined
   const postId = Number(params.get('post')) || null
   const edit = params.get('edit')
   const editId = edit && edit !== 'new' ? Number(edit) || null : null
@@ -66,44 +79,58 @@ export function PostsPage() {
   }, [searchInput])
   const [categoryDialog, setCategoryDialog] = useState<CategoryDialog>(null)
   const [revisionsOpen, setRevisionsOpen] = useState(false)
+  const [permanentDeletePost, setPermanentDeletePost] = useState<PostSummary | null>(null)
 
   const settingsQuery = useQuery({ queryKey: ['post-settings'], queryFn: getPostsSettings, staleTime: 60_000 })
   const [layout, setLayout] = usePostsLayout(settingsQuery.data?.layout ?? 'feed')
   const categoriesQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'categories'], queryFn: listPostCategories })
   const tagsQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'tags'], queryFn: listPostTags })
   const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data])
-  const listFilter = { categoryId, tag, q: searchOpen ? searchQuery : '', status: status ?? 'published' as const }
+  const knowledgeEnabled = settingsQuery.data?.knowledge.enabled !== false
+  const listFilter = { categoryId, tag, q: searchOpen ? searchQuery : '', status: section === 'trash' ? 'all' as const : status ?? 'published' as const,
+    ...(knowledgeOnly ? { kind: 'knowledge' as const, reviewStatus, sort: 'relevance' as const } : {}), ...(section === 'trash' ? { kind: 'knowledge' as const, deleted: 'only' as const } : {}) }
   const listQuery = useInfiniteQuery({
-    queryKey: [POSTS_QUERY_KEY, 'list', listFilter],
-    queryFn: ({ pageParam }) => listPosts({ ...listFilter, offset: pageParam, limit: PAGE_SIZE }),
-    initialPageParam: 0,
-    getNextPageParam: (last) => (last.offset + last.items.length < last.total ? last.offset + last.items.length : undefined),
-    enabled: view === 'list',
+    queryKey: [POSTS_QUERY_KEY, 'list', permissions.viewerKey, listFilter],
+    queryFn: ({ pageParam }) => listPosts({ ...listFilter, ...pageParam, limit: PAGE_SIZE }),
+    initialPageParam: { offset: 0, snapshot: undefined as string | undefined },
+    getNextPageParam: (last) => (last.offset + last.items.length < last.total ? { offset: last.offset + last.items.length, snapshot: last.snapshot } : undefined),
+    enabled: view === 'list' && section !== 'review' && section !== 'proposals',
   })
   const posts = useMemo(() => listQuery.data?.pages.flatMap((page) => page.items) ?? [], [listQuery.data])
-  const postQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'post', postId ?? editId], queryFn: () => getPost((postId ?? editId) as number), enabled: (view === 'post' && postId !== null) || editId !== null, retry: false })
+  const postQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'post', permissions.viewerKey, postId ?? editId], queryFn: () => getPost((postId ?? editId) as number), enabled: (view === 'post' && postId !== null) || editId !== null, retry: false })
 
-  const update = (patch: Record<string, string | null>) => {
+  const update = (patch: Record<string, string | null>, searchContext: KnowledgeSearchContext | null = null) => {
     const next = new URLSearchParams(params)
     for (const [key, value] of Object.entries(patch)) {
       if (value === null || value === '') next.delete(key)
       else next.set(key, value)
     }
-    setParams(next)
+    setParams(next, { state: searchContext ? { knowledgeSearchContext: searchContext } : null })
   }
   const openList = (patch: Record<string, string | null> = {}) => update({ post: null, edit: null, comment: null, ...patch })
   // A search hit found through a comment opens at that comment.
-  const openPost = (post: Pick<PostSummary, 'id' | 'matchedComment'>) => update({ post: String(post.id), edit: null, comment: post.matchedComment ? String(post.matchedComment.id) : null })
+  const openPost = (post: Pick<PostSummary, 'id' | 'matchedComment' | 'knowledge' | 'knowledgeSearchReceipt'>) => {
+    const searchContext: KnowledgeSearchContext | null = post.knowledge?.enabled && post.knowledgeSearchReceipt ? {
+      viewerKey: permissions.viewerKey, postId: post.id, contentVersion: post.knowledge.contentVersion,
+      contentHash: post.knowledge.contentHash, receipt: post.knowledgeSearchReceipt,
+    } : null
+    update({ post: String(post.id), edit: null, comment: post.matchedComment ? String(post.matchedComment.id) : null }, searchContext)
+  }
   const filterTag = (value: string) => openList({ tag: value })
-  const filterCategory = (id: number | null) => openList({ category: id === null ? null : String(id), tag: null, status: null })
+  const filterCategory = (id: number | null) => openList({ category: id === null ? null : String(id), tag: null, status: null, kind: null, section: null, review: null })
 
   const removePost = useMutation({
-    mutationFn: (id: number) => deletePost(id),
+    mutationFn: async (post: PostDetail) => { if (post.knowledge) await trashPostKnowledge(post.id, post.revision); else await deletePost(post.id) },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] })
       openList()
     },
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '글을 지우지 못했어.', en: 'Could not delete the post.' })) }),
+  })
+  const restoreTrash = useMutation({
+    mutationFn: (post: Pick<PostSummary, 'id' | 'revision'>) => restorePostKnowledge(post.id, post.revision),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }),
+    onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '문서를 복원하지 못했어.', en: 'Could not restore the document.' })) }),
   })
 
   // The open post's comment boxes (see PostCommentDraft): held here so the connected chat can read and draft them.
@@ -113,16 +140,16 @@ export function PostsPage() {
   const [bodyOffset, setBodyOffset] = useState(0)
   useEffect(() => { setBodyOffset(0) }, [postId])
   const openPostData = view === 'post' ? postQuery.data ?? null : null
-  const commentsQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'comments', postId], queryFn: () => listPostComments(postId as number), enabled: openPostData !== null })
+  const commentsQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'comments', postId], queryFn: () => listPostComments(postId as number), enabled: openPostData !== null && !openPostData.knowledge?.deletedAt })
   const visibleComments = (commentsQuery.data?.comments ?? []).filter((comment) => comment.status === 'visible')
   // Hidden comments still show to administrators (and their writers), so the chat can show them again.
   const shownComments = (commentsQuery.data?.comments ?? []).filter((comment) => comment.status !== 'deleted')
   const editableComments = shownComments.filter((comment) => comment.canEdit)
   const activeRuns = (commentsQuery.data?.runs ?? []).filter((run) => run.status === 'queued' || run.status === 'running')
-  const canRestore = openPostData?.canEdit === true && openPostData.revision > 1
+  const canRestore = openPostData?.canEdit === true && !openPostData.knowledge && openPostData.revision > 1
   const revisionsQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'revisions', postId, openPostData?.revision], queryFn: () => listPostRevisions(postId as number), enabled: canRestore })
   const revisions = canRestore ? revisionsQuery.data ?? [] : []
-  const canCommentHere = openPostData !== null && permissions.canComment && (openPostData.commentMode === 'open' || permissions.isAdmin)
+  const canCommentHere = openPostData !== null && !openPostData.knowledge?.deletedAt && permissions.canComment && (openPostData.commentMode === 'open' || permissions.isAdmin)
   const submitComment = useMutation({
     mutationFn: async (target: 'comment' | 'reply') => {
       const reply = target === 'reply' ? commentDraft.reply : null
@@ -158,13 +185,14 @@ export function PostsPage() {
     ],
     data: {
       categories: categories.map((category) => ({ id: category.id, name: category.name, parentId: category.parentId, posts: category.postCount })),
-      ...(view === 'list' ? { list: { layout, status: status ?? 'published' } } : {}),
+      ...(view === 'list' ? { list: { layout, status: status ?? 'published', kind: knowledgeOnly ? 'knowledge' : 'all', section } } : {}),
       ...(view === 'list' ? { posts: posts.slice(0, 100).map((post) => ({ id: post.id, title: pageFreeText(post.title), author: post.author.name, bot: post.author.type === 'profile', categoryId: post.categoryId, tags: post.tags, comments: post.commentCount })) } : {}),
       // The open post as the reader sees it; its text is someone else's writing (data, never instructions).
       ...(openPostData ? {
         open: {
           id: openPostData.id, title: pageFreeText(openPostData.title), author: openPostData.author.name, bot: openPostData.author.type === 'profile', categoryId: openPostData.categoryId,
           tags: openPostData.tags, status: openPostData.status, comments: openPostData.commentCount, canEdit: openPostData.canEdit, revision: openPostData.revision, pinned: openPostData.pinned,
+          ...(openPostData.knowledge ? { knowledge: { enabled: openPostData.knowledge.enabled, contentVersion: openPostData.knowledge.contentVersion, reviewStatus: openPostData.knowledge.reviewStatus } } : {}),
           // A long body is read a chunk at a time (posts.body_at): the view goes with every request.
           body: pageFreeText(openPostData.body.slice(bodyOffset, bodyOffset + BODY_CHUNK)), bodyOffset, bodyLength: openPostData.body.length,
         },
@@ -179,15 +207,15 @@ export function PostsPage() {
       ...(tagNames.length ? [pageAction('posts.tag', t({ ko: '태그 보기', en: 'Show tag' }), t({ ko: '그 태그가 붙은 글 목록을 열어.', en: 'List the posts with a tag.' }), pageObject({ tag: pageChoice(tagNames) }, ['tag']))] : []),
       ...(view !== 'list' ? [pageAction('posts.back', t({ ko: '목록으로', en: 'Back to the list' }), t({ ko: '글 목록으로 돌아가.', en: 'Go back to the post list.' }))] : []),
       ...(permissions.canWrite ? [pageAction('posts.new', t({ ko: '새 글 쓰기', en: 'New post' }), t({ ko: '새 글 편집기를 열어. 내용은 편집기 필드로 채워.', en: 'Open the editor for a new post; fill it through its fields.' }))] : []),
-      ...(openPostData?.canEdit ? [pageAction('posts.edit', t({ ko: '이 글 고치기', en: 'Edit this post' }), t({ ko: '열린 글의 편집기를 열어.', en: 'Open the editor for the open post.' }))] : []),
+      ...(openPostData?.canEdit && !openPostData.knowledge ? [pageAction('posts.edit', t({ ko: '이 글 고치기', en: 'Edit this post' }), t({ ko: '열린 글의 편집기를 열어.', en: 'Open the editor for the open post.' }))] : []),
       ...(canCommentHere && draftedComment ? [pageAction('posts.comment', t({ ko: '댓글 올리기', en: 'Post comment' }), t({ ko: '입력칸의 댓글(comment) 또는 답글(reply)을 올려.', en: 'Post the drafted comment or reply.' }), pageObject({ target: pageChoice(['comment', 'reply']) }, ['target']), 'save')] : []),
       ...(view === 'list' ? [
         pageAction('posts.layout', t({ ko: '목록 모양', en: 'List layout' }), '', pageObject({ layout: pageChoice(['feed', 'cards', 'sns']) }, ['layout'])),
         pageAction('posts.filter', t({ ko: '글 상태별 목록', en: 'List by status' }), '', pageObject({ status: pageChoice(['published', ...(permissions.canWrite ? ['draft'] : []), ...(permissions.isAdmin ? ['hidden'] : [])]) }, ['status'])),
       ] : []),
       ...(openPostData && openPostData.body.length > BODY_CHUNK ? [pageAction('posts.body_at', t({ ko: '본문 이어 읽기', en: 'Read the body from' }), t({ ko: 'data.open.body를 offset부터 보여줘', en: 'data.open.body from offset' }), pageObject({ offset: pageNumber(0, Math.max(0, openPostData.body.length - 1), true) }, ['offset']))] : []),
-      ...(openPostData?.canEdit ? [pageAction('posts.delete', t({ ko: '이 글 지우기', en: 'Delete this post' }), '', undefined, 'save')] : []),
-      ...(revisions.length ? [pageAction('posts.restore_revision', t({ ko: '이전 판으로 되돌리기', en: 'Restore earlier version' }), t({ ko: 'data.earlierVersions의 판', en: 'a version in data.earlierVersions' }), pageObject({ revision: pageNumber(1, undefined, true) }, ['revision']), 'save')] : []),
+      ...(openPostData?.canEdit && !openPostData.knowledge ? [pageAction('posts.delete', t({ ko: '이 글 지우기', en: 'Delete this post' }), '', undefined, 'save')] : []),
+      ...(revisions.length && !openPostData?.knowledge ? [pageAction('posts.restore_revision', t({ ko: '이전 판으로 되돌리기', en: 'Restore earlier version' }), t({ ko: 'data.earlierVersions의 판', en: 'a version in data.earlierVersions' }), pageObject({ revision: pageNumber(1, undefined, true) }, ['revision']), 'save')] : []),
       ...(commentDraft.edit && commentDraft.edit.text.trim() ? [pageAction('posts.comment_update', t({ ko: '고친 댓글 저장', en: 'Save edited comment' }), '', undefined, 'save')] : []),
       ...(editableComments.length ? [pageAction('posts.comment_delete', t({ ko: '내 댓글 지우기', en: 'Delete own comment' }), '', pageObject({ id: pageNumber(1, undefined, true) }, ['id']), 'save')] : []),
       ...(permissions.isAdmin && shownComments.length ? [pageAction('posts.comment_hide', t({ ko: '댓글 숨기기·보이기', en: 'Hide or show comment' }), '', pageObject({ id: pageNumber(1, undefined, true), hidden: { type: 'boolean' } }, ['id', 'hidden']), 'save')] : []),
@@ -227,16 +255,16 @@ export function PostsPage() {
       else if (id === 'posts.tag') filterTag(String(args.tag))
       else if (id === 'posts.back') openList()
       else if (id === 'posts.new') update({ edit: 'new', post: null, comment: null })
-      else if (id === 'posts.edit' && postId) update({ edit: String(postId) })
+      else if (id === 'posts.edit' && postId && !openPostData?.knowledge) update({ edit: String(postId) })
       else if (id === 'posts.comment') await submitComment.mutateAsync(args.target === 'reply' ? 'reply' : 'comment')
       else if (id === 'posts.layout') setLayout(args.layout as PostListLayout)
       else if (id === 'posts.filter') openList({ status: args.status === 'published' ? null : String(args.status), category: null, tag: null })
       else if (id === 'posts.body_at') setBodyOffset(Number(args.offset))
-      else if (id === 'posts.delete' && openPostData) {
+      else if (id === 'posts.delete' && openPostData && !openPostData.knowledge) {
         await deletePost(openPostData.id)
         await refreshPosts()
         openList()
-      } else if (id === 'posts.restore_revision' && openPostData) {
+      } else if (id === 'posts.restore_revision' && openPostData && !openPostData.knowledge) {
         const revision = revisions.find((item) => item.revision === Number(args.revision))
         if (!revision) throw new Error('그 판을 찾을 수 없어.')
         await updatePost(openPostData.id, { title: revision.title, body: revision.body, expectedRevision: openPostData.revision })
@@ -281,9 +309,15 @@ export function PostsPage() {
   const flat = useMemo(() => flattenCategories(categories), [categories])
   const sidebar = (
     <SidebarNav aria-label={t({ ko: '게시판', en: 'Posts' })}>
-      <SidebarItem icon={Newspaper} label={t({ ko: '전체', en: 'All posts' })} active={view === 'list' && !categoryId && !tag && !status} onClick={() => filterCategory(null)} />
-      {permissions.canWrite ? <SidebarItem icon={FileClock} label={t({ ko: '내 초안', en: 'My drafts' })} active={status === 'draft'} onClick={() => openList({ status: 'draft', category: null, tag: null })} /> : null}
-      {permissions.isAdmin ? <SidebarItem icon={EyeOff} label={t({ ko: '숨긴 글', en: 'Hidden posts' })} active={status === 'hidden'} onClick={() => openList({ status: 'hidden', category: null, tag: null })} /> : null}
+      <SidebarItem icon={Newspaper} label={t({ ko: '전체', en: 'All posts' })} active={view === 'list' && !categoryId && !tag && !status && !knowledgeOnly && !section} onClick={() => filterCategory(null)} />
+      {knowledgeEnabled ? <>
+        <SidebarItem icon={BookOpen} label={t({ ko: '지식 문서', en: 'Knowledge documents' })} active={view === 'list' && knowledgeOnly && !section} onClick={() => openList({ kind: 'knowledge', section: null, category: null, tag: null, status: null, review: null })} />
+        {permissions.canReview ? <SidebarItem icon={ClipboardCheck} label={t({ ko: '재검토 목록', en: 'Review queue' })} active={view === 'list' && section === 'review'} onClick={() => openList({ kind: 'knowledge', section: 'review', category: null, tag: null, status: null })} /> : null}
+        {permissions.canWrite || permissions.canReview ? <SidebarItem icon={FileDiff} label={t({ ko: '변경 제안', en: 'Change proposals' })} active={view === 'list' && section === 'proposals'} onClick={() => openList({ kind: 'knowledge', section: 'proposals', category: null, tag: null, status: null })} /> : null}
+        {permissions.canWrite || permissions.isAdmin ? <SidebarItem icon={Trash2} label={t({ ko: '지식 휴지통', en: 'Knowledge trash' })} active={view === 'list' && section === 'trash'} onClick={() => openList({ kind: 'knowledge', section: 'trash', category: null, tag: null, status: null })} /> : null}
+      </> : null}
+      {permissions.canWrite ? <SidebarItem icon={FileClock} label={t({ ko: '내 초안', en: 'My drafts' })} active={status === 'draft'} onClick={() => openList({ status: 'draft', category: null, tag: null, kind: null, section: null, review: null })} /> : null}
+      {permissions.isAdmin ? <SidebarItem icon={EyeOff} label={t({ ko: '숨긴 글', en: 'Hidden posts' })} active={status === 'hidden'} onClick={() => openList({ status: 'hidden', category: null, tag: null, kind: null, section: null, review: null })} /> : null}
       <SidebarGroupLabel actions={permissions.isAdmin ? (
         <IconButton size="icon-xs" variant="ghost" label={t({ ko: '새 카테고리', en: 'New category' })} onClick={() => setCategoryDialog({ category: null, parentId: categoryId })}><FolderPlus /></IconButton>
       ) : undefined}>{t({ ko: '카테고리', en: 'Categories' })}</SidebarGroupLabel>
@@ -332,6 +366,7 @@ export function PostsPage() {
     ) : (
       <nav className="flex min-w-0 flex-wrap items-center gap-1 text-sm" aria-label={t({ ko: '현재 위치', en: 'Current location' })}>
         <Button variant="ghost" size="sm" className={cn('px-2', !(crumbs.length || status) && 'font-semibold')} onClick={() => filterCategory(null)}>{t({ ko: '게시판', en: 'Posts' })}</Button>
+        {knowledgeOnly ? <><span className="text-muted-foreground">›</span><span className="px-1 font-semibold">{section === 'review' ? t({ ko: '재검토 목록', en: 'Review queue' }) : section === 'proposals' ? t({ ko: '변경 제안', en: 'Change proposals' }) : section === 'trash' ? t({ ko: '지식 휴지통', en: 'Knowledge trash' }) : t({ ko: '지식 문서', en: 'Knowledge documents' })}</span></> : null}
         {status ? <><span className="text-muted-foreground">›</span><span className="px-1 font-semibold">{status === 'draft' ? t({ ko: '내 초안', en: 'My drafts' }) : t({ ko: '숨긴 글', en: 'Hidden posts' })}</span></> : null}
         {crumbs.map((category, index) => (
           <span key={category.id} className="inline-flex items-center gap-1">
@@ -349,7 +384,7 @@ export function PostsPage() {
     )
     toolbarActions = (
       <>
-        <SegmentedControl
+        {!knowledgeOnly ? <SegmentedControl
           size="xs"
           value={layout}
           onChange={(value) => setLayout(value as PostListLayout)}
@@ -359,8 +394,9 @@ export function PostsPage() {
             { value: 'cards', label: <LayoutGrid className="size-3.5" />, ariaLabel: t({ ko: '카드', en: 'Cards' }) },
             { value: 'sns', label: <Smartphone className="size-3.5" />, ariaLabel: t({ ko: 'SNS', en: 'SNS' }) },
           ]}
-        />
-        {!searchOpen ? <IconButton variant="ghost" label={t({ ko: '검색', en: 'Search' })} onClick={() => setSearchOpen(true)}><Search /></IconButton> : null}
+        /> : null}
+        {knowledgeOnly && !section && !searchOpen ? <Select className="w-32" value={reviewStatus ?? ''} aria-label={t({ ko: '검토 상태', en: 'Review status' })} onChange={(event) => openList({ review: event.target.value || null })}><option value="">{t({ ko: '검토 상태 전체', en: 'All reviews' })}</option><option value="unreviewed">{t({ ko: '미검토', en: 'Unreviewed' })}</option><option value="verified">{t({ ko: '검증됨', en: 'Verified' })}</option><option value="needs_review">{t({ ko: '재검토 필요', en: 'Needs review' })}</option></Select> : null}
+        {!searchOpen && section !== 'review' && section !== 'proposals' ? <IconButton variant="ghost" label={t({ ko: '검색', en: 'Search' })} onClick={() => setSearchOpen(true)}><Search /></IconButton> : null}
         {permissions.canWrite ? <IconButton variant="default" label={t({ ko: '새 글', en: 'New post' })} onClick={() => update({ edit: 'new', post: null })}><PenSquare /></IconButton> : null}
       </>
     )
@@ -374,13 +410,15 @@ export function PostsPage() {
         </span>
       </div>
     )
-    toolbarActions = view === 'post' && postQuery.data?.canEdit ? (
+    toolbarActions = view === 'post' && postQuery.isSuccess && postQuery.data?.canEdit ? (
       <>
-        {postQuery.data.revision > 1 ? <IconButton variant="ghost" label={t({ ko: '이전 판', en: 'Earlier versions' })} onClick={() => setRevisionsOpen(true)}><History /></IconButton> : null}
-        <IconButton variant="ghost" label={t({ ko: '고치기', en: 'Edit' })} onClick={() => update({ edit: String(postQuery.data.id) })}><Pencil /></IconButton>
-        <IconButton variant="ghost" label={t({ ko: '지우기', en: 'Delete' })} disabled={removePost.isPending} onClick={async () => {
-          if (await confirm({ title: t({ ko: '이 글을 지울까?', en: 'Delete this post?' }), description: t({ ko: '댓글도 함께 지워져.', en: 'Its comments go too.' }), tone: 'destructive' })) removePost.mutate(postQuery.data.id)
-        }}><Trash2 /></IconButton>
+        {postQuery.data.knowledge || postQuery.data.revision > 1 ? <IconButton variant="ghost" label={t({ ko: '이전 판', en: 'Earlier versions' })} onClick={() => setRevisionsOpen(true)}><History /></IconButton> : null}
+        {postQuery.data.knowledge?.deletedAt ? <Button variant="secondary" size="sm" disabled={restoreTrash.isPending} onClick={() => restoreTrash.mutate(postQuery.data)}><Undo2 />{t({ ko: '휴지통에서 복원', en: 'Restore from trash' })}</Button> : <>
+          <IconButton variant="ghost" label={t({ ko: '고치기', en: 'Edit' })} onClick={() => update({ edit: String(postQuery.data.id) })}><Pencil /></IconButton>
+          <IconButton variant="ghost" label={postQuery.data.knowledge ? t({ ko: '휴지통으로', en: 'Move to trash' }) : t({ ko: '지우기', en: 'Delete' })} disabled={removePost.isPending} onClick={async () => {
+            if (await confirm({ title: postQuery.data.knowledge ? t({ ko: '지식 문서를 휴지통으로 옮길까?', en: 'Move this knowledge document to trash?' }) : t({ ko: '이 글을 지울까?', en: 'Delete this post?' }), description: postQuery.data.knowledge ? t({ ko: '본문·출처·평가 이력을 보존하고 복원할 수 있어.', en: 'The text, sources and feedback remain available for restoration.' }) : t({ ko: '댓글도 함께 지워져.', en: 'Its comments go too.' }), tone: 'destructive' })) removePost.mutate(postQuery.data)
+          }}><Trash2 /></IconButton>
+        </>}
       </>
     ) : null
   }
@@ -397,7 +435,11 @@ export function PostsPage() {
   } else if (view === 'post') {
     if (postQuery.isPending) content = <LoadingState />
     else if (postQuery.isError) content = <EmptyState icon={Newspaper} title={t({ ko: '글을 찾을 수 없어', en: 'Post not found' })} />
-    else content = <PostView post={postQuery.data} categories={categories} onTag={filterTag} onCategory={filterCategory} commentDraft={commentDraft} setCommentDraft={setCommentDraft} />
+    else content = <PostView post={postQuery.data} categories={categories} onTag={filterTag} onCategory={filterCategory} commentDraft={commentDraft} setCommentDraft={setCommentDraft} knowledgeSearchContext={knowledgeSearchContext} />
+  } else if (section === 'review') {
+    content = <PostKnowledgeReviewList onOpen={openPost} />
+  } else if (section === 'proposals') {
+    content = <PostKnowledgeProposals standalone />
   } else if (listQuery.isPending) {
     content = <LoadingState />
   } else if (listQuery.isError) {
@@ -408,9 +450,9 @@ export function PostsPage() {
     const listProps = { posts, categories, onOpen: openPost, onTag: filterTag }
     content = (
       <>
-        {layout === 'sns' ? <PostSns {...listProps} onReachEnd={() => { if (listQuery.hasNextPage && !listQuery.isFetchingNextPage) void listQuery.fetchNextPage() }} />
+        {knowledgeOnly ? <><PostKnowledgeSearchMode /><PostKnowledgeList posts={posts} onOpen={openPost} onRestore={(post) => restoreTrash.mutate(post)} onPermanentDelete={setPermanentDeletePost} isRestoring={restoreTrash.isPending} /></> : layout === 'sns' ? <PostSns {...listProps} onReachEnd={() => { if (listQuery.hasNextPage && !listQuery.isFetchingNextPage) void listQuery.fetchNextPage() }} />
           : layout === 'cards' ? <PostCards {...listProps} /> : <PostFeed {...listProps} />}
-        {layout !== 'sns' && listQuery.hasNextPage ? (
+        {(knowledgeOnly || layout !== 'sns') && listQuery.hasNextPage ? (
           <div className="flex justify-center pt-4">
             <Button variant="ghost" size="sm" disabled={listQuery.isFetchingNextPage} onClick={() => void listQuery.fetchNextPage()}>{t({ ko: '더 보기', en: 'Load more' })}</Button>
           </div>
@@ -429,7 +471,8 @@ export function PostsPage() {
       >
         {content}
       </PageWithSidebar>
-      {revisionsOpen && view === 'post' && postQuery.data ? <PostRevisionsDialog post={postQuery.data} onClose={() => setRevisionsOpen(false)} /> : null}
+      {revisionsOpen && view === 'post' && postQuery.data ? postQuery.data.knowledge ? <PostKnowledgeVersionsDialog post={postQuery.data} onClose={() => setRevisionsOpen(false)} /> : <PostRevisionsDialog post={postQuery.data} onClose={() => setRevisionsOpen(false)} /> : null}
+      {permanentDeletePost ? <PostKnowledgePermanentDeleteDialog key={permanentDeletePost.id} post={permanentDeletePost} onClose={() => setPermanentDeletePost(null)} /> : null}
       {categoryDialog ? (
         <PostCategoryDialog
           category={categoryDialog.category}

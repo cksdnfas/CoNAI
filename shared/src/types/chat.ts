@@ -5,6 +5,7 @@ import type { ChatProfileAssetsProposal } from './chatAssets'
 import type { ChatTaskPlanProposal, ChatTaskRouting } from './chatTask'
 import type { ChatRoutineRouting } from './chatRoutine'
 import type { ChatChoiceProposal } from './chatChoice'
+import type { PostKnowledgeTaskPurpose } from './postKnowledgeRuntime'
 
 /** A recipient is a member profile, the human, or a room announcement (no automatic reply). */
 export type ChatRecipient = number | 'user' | 'room'
@@ -37,6 +38,15 @@ export type ChatExecutionContext = {
   profileId: number
   kind: 'direct' | 'group'
   replyId?: string
+  /** Server root shared by retries, regenerated replies and members answering the same request. */
+  rootExecutionId?: string
+  /** Internal runtime facts; never populated from model arguments or browser input. */
+  knowledgeExecutionId?: string
+  knowledgeProvider?: string
+  knowledgeModel?: string
+  knowledgeOutputLimit?: number
+  /** Captured only from an authorized server-side human order. Never a model/browser-supplied execution field. */
+  knowledgeTaskPurpose?: PostKnowledgeTaskPurpose
   /** Validated, opted-in browser state for this reply only; never grants server-side authority. */
   page?: ChatPageSnapshot
 }
