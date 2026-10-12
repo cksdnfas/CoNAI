@@ -35,6 +35,7 @@ function audio(): HTMLAudioElement {
   element.addEventListener('timeupdate', () => {
     if (stopAt !== null && element!.currentTime >= stopAt) {
       element!.pause()
+      element!.currentTime = stopAt
       stopAt = null
     }
     emit({ currentTime: element!.currentTime })
@@ -72,6 +73,7 @@ export const audioPlayer = {
     onEnded = options.onEnded ?? null
     if (options.start !== undefined) player.currentTime = options.start
     else if (player.ended) player.currentTime = 0
+    emit({ currentTime: player.currentTime })
     void player.play().catch(() => emit({ playing: false }))
   },
   toggle(key: string, options: PlayOptions = {}) {
@@ -80,6 +82,9 @@ export const audioPlayer = {
   },
   pause() {
     element?.pause()
+  },
+  resume() {
+    if (element && state.key) void element.play().catch(() => emit({ playing: false }))
   },
   stop() {
     if (!element) return
@@ -91,7 +96,10 @@ export const audioPlayer = {
     emit({ key: null, playing: false, currentTime: 0, duration: 0 })
   },
   seek(seconds: number) {
-    if (element) element.currentTime = seconds
+    if (!element || !Number.isFinite(seconds)) return
+    const duration = Number.isFinite(element.duration) ? element.duration : Infinity
+    element.currentTime = Math.max(0, Math.min(seconds, stopAt ?? duration, duration))
+    emit({ currentTime: element.currentTime })
   },
   get state() {
     return state

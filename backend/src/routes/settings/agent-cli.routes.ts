@@ -21,6 +21,10 @@ agentCliRoutes.get('/agent-cli/:agent/status', asyncHandler(async (req, res) => 
 agentCliRoutes.get('/agent-cli/:agent/usage', asyncHandler(async (req, res) => {
   res.json({ success: true, data: await getAgentCliUsage(req.params.agent as 'codex' | 'claude', req.query.refresh === 'true') })
 }))
+// Unlike passive GET polling, this explicit admin action may send a short Claude request to renew OAuth.
+agentCliRoutes.post('/agent-cli/:agent/usage/refresh', asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await getAgentCliUsage(req.params.agent as 'codex' | 'claude', true, true) })
+}))
 agentCliRoutes.get('/agent-cli/:agent/version', asyncHandler(async (req, res) => {
   res.json({ success: true, data: req.params.agent === 'claude' ? await getClaudeVersion(req.query.refresh === 'true') : await getCodexCliVersionInfo({ refreshLatest: req.query.refresh === 'true' }) })
 }))

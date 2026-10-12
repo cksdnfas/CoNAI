@@ -137,6 +137,8 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
       assert.equal(await status(`/api/settings/agent-cli/${agent}/login`), 403)
       assert.equal(await status(`/api/settings/agent-cli/${agent}/login`, accountId), 403)
       assert.equal(await status(`/api/settings/agent-cli/${agent}/update`, accountId, 'POST'), 403)
+      assert.equal(await status(`/api/settings/agent-cli/${agent}/usage/refresh`, undefined, 'POST'), 403)
+      assert.equal(await status(`/api/settings/agent-cli/${agent}/usage/refresh`, accountId, 'POST'), 403)
       assert.equal(await status(`/api/settings/agent-cli/${agent}/login`, adminId), 200)
     }
     assert.equal(await status('/api/settings/agent-cli/unknown/login', adminId), 400)

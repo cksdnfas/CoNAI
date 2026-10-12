@@ -20,6 +20,7 @@ import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, createStoredTextFile, readWho
 import { getErrorMessage } from '@/lib/error-message'
 
 const ChatMarkdown = lazy(() => import('@/features/codex-chat/chat-markdown').then((module) => ({ default: module.ChatMarkdown })))
+const PlainTextEditor = lazy(() => import('@/components/common/plain-text-editor').then((module) => ({ default: module.PlainTextEditor })))
 
 type DocumentFormat = 'md' | 'txt'
 /**
@@ -81,9 +82,9 @@ export function FileTextEditor({ entry, parentId, owner, onClose, chatPage = fal
     }
   }, [source.data, text])
 
-  const markdown = file ? isMarkdownName(file.name) : format === 'md'
   // A typed .txt / .md wins over the switch, so "notes.md" never becomes "notes.md.txt".
   const fileName = /\.(txt|md|markdown)$/i.test(name.trim()) ? name.trim() : `${name.trim()}.${format}`
+  const markdown = isMarkdownName(file?.name ?? fileName)
   const dirty = file ? text !== null && text !== baseline : true
   const save = useMutation({
     mutationFn: (value: string) => (file ? saveStoredFileText(file.id, value, owner) : createStoredTextFile(parentId, fileName, value, owner)),
@@ -151,6 +152,7 @@ export function FileTextEditor({ entry, parentId, owner, onClose, chatPage = fal
   if (tooLarge) content = <EmptyState icon={File} title={t({ ko: '2MB가 넘는 파일은 여기서 편집할 수 없어', en: 'Files over 2 MB cannot be edited here' })} />
   else if (source.isError) content = <ErrorState title={t({ ko: '파일을 열지 못했어.', en: 'Could not open the file.' })} error={source.error} onRetry={() => void source.refetch()} />
   else if (text === null) content = <LoadingState />
+  else if (!markdown) content = <Suspense fallback={<LoadingState />}><PlainTextEditor value={text} onChange={setText} autoFocus={file !== null} /></Suspense>
   else if (markdown && tab === 'preview') content = <div className="h-[55vh] overflow-auto"><Suspense fallback={<LoadingState />}><ChatMarkdown text={text} /></Suspense></div>
   else content = (
     <Textarea

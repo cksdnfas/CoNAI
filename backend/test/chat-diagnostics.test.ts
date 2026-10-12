@@ -155,6 +155,7 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
     answerId = CodexChatStore.listMessages(threadId).at(-1)!.id
     assert.equal(message(answerId).status, 'completed', message(answerId).error ?? '')
     let meta = metaOf(answerId)
+    assert.equal(meta.runtime, 'direct', 'runtime is recorded even without raw request capture')
     const request = requests.at(-1)!
     const messages = meta.sections!.filter((section) => section.role !== 'tool-definition')
     assert.equal(messages.length, request.messages.length)
@@ -536,6 +537,14 @@ test('chat diagnostics: capture, read-time permissions, alternatives, branches a
     const result = await getChatDiagnostics(requester, threadId, id)
     assert.equal(result.meta.opaqueContext, true)
     assert.equal(result.meta.tokenUsage?.inputTokens, 20)
+    // Session diagnostics survive the metadata projection without exposing private session fields.
+    for (const runtime of ['pi', 'claude-code', 'codex']) {
+      CodexChatStore.setContextMeta(id, { ...meta, runtime, session: { resumed: true, compacted: false, path: 'PRIVATE_SESSION_PATH' } })
+      const sessionResult = await getChatDiagnostics(requester, threadId, id)
+      assert.equal(sessionResult.meta.runtime, runtime)
+      assert.deepEqual(sessionResult.meta.session, { resumed: true, compacted: false })
+      assert.ok(!JSON.stringify(sessionResult).includes('PRIVATE_SESSION_PATH'))
+    }
   })
 
   await t.test('permissions v2 folds old chat keys once and leaves prompts to administrators', async () => {

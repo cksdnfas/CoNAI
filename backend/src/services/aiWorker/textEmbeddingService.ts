@@ -138,6 +138,21 @@ function decodeVector(base64: string) {
   return new Float32Array(new Uint8Array(bytes).buffer)
 }
 
+let pendingDependencyCheck: Promise<void> | null = null
+
+/** A loaded model already proved its dependencies work. Recheck after unload/restart, not on each query. */
+async function ensureEmbeddingDependencies() {
+  if (embeddingModelWarm()) return
+  if (pendingDependencyCheck) return pendingDependencyCheck
+  const work = embeddingRuntime.checkDependencies().then((dependencies) => {
+    if (!dependencies.available) throw new Error(dependencies.message)
+  }).finally(() => {
+    if (pendingDependencyCheck === work) pendingDependencyCheck = null
+  })
+  pendingDependencyCheck = work
+  return work
+}
+
 /**
  * Embed texts; documents may be split into token windows (`chunkTokens`, `overlapTokens`, at most `maxChunks`), each
  * returned with its character span. Throws when the runtime is missing or the worker fails.
@@ -151,8 +166,7 @@ export async function embedTexts(
   if (Date.now() < unavailableUntil) throw new Error(lastFailure ?? 'Embeddings are unavailable')
   const priority = options.priority ?? 'normal'
   try {
-    const dependencies = await embeddingRuntime.checkDependencies()
-    if (!dependencies.available) throw new Error(dependencies.message)
+    await ensureEmbeddingDependencies()
     const reply = await textWorker.request<{ device: string; items: Array<Array<{ start: number; end: number; vector: string }>> }>('embed', {
       items: items.map((item) => ({ text: item.text, ...(item.title ? { title: item.title } : {}) })),
       kind,
@@ -191,8 +205,7 @@ export async function embedImages(paths: string[], options: { priority?: AiWorke
   if (Date.now() < unavailableUntil) throw new Error(lastFailure ?? 'Embeddings are unavailable')
   const priority = options.priority ?? 'low'
   try {
-    const dependencies = await embeddingRuntime.checkDependencies()
-    if (!dependencies.available) throw new Error(dependencies.message)
+    await ensureEmbeddingDependencies()
     const reply = await textWorker.request<{ device: string; items: Array<{ vector?: string; error?: string }> }>('embed_images', {
       images: paths, dim: IMAGE_EMBEDDING_DIM, device: 'cpu', threads: requestThreads(priority),
     }, { priority })
@@ -211,8 +224,7 @@ export async function embedImages(paths: string[], options: { priority?: AiWorke
 export async function warmEmbeddingModel(): Promise<boolean> {
   if (!embeddingSettings().enabled || Date.now() < unavailableUntil) return false
   try {
-    const dependencies = await embeddingRuntime.checkDependencies()
-    if (!dependencies.available) throw new Error(dependencies.message)
+    await ensureEmbeddingDependencies()
     await textWorker.request('load', { model: 'embedding', options: { device: 'cpu', variant: embeddingVariant() } }, { priority: 'low' })
     textWorker.touch('embedding', 'cpu')
     return true
@@ -226,6 +238,43 @@ export async function warmEmbeddingModel(): Promise<boolean> {
 export function resetEmbeddingBackoff() {
   unavailableUntil = 0
   lastFailure = null
+  pendingDependencyCheck = null
+  queryVectors.clear()
+  pendingQueries.clear()
+}
+
+// Query vectors depend on the model and task, not the changing image index. Keep a bounded LRU separately
+// from search results, and share pending work even after an individual caller's wait deadline expires.
+const QUERY_CACHE_SIZE = 128
+const queryVectors = new Map<string, Float32Array>()
+const pendingQueries = new Map<string, Promise<Float32Array | null>>()
+
+function queryVector(text: string, kind: EmbedKind): Promise<Float32Array | null> {
+  const key = JSON.stringify([EMBEDDING_MODEL_KEY, embeddingVariant(), kind, text])
+  const cached = queryVectors.get(key)
+  if (cached) {
+    queryVectors.delete(key)
+    queryVectors.set(key, cached)
+    return Promise.resolve(cached)
+  }
+  const pending = pendingQueries.get(key)
+  if (pending) return pending
+  const work = embedTexts([{ text }], kind, { priority: 'high' })
+    .then((items) => {
+      const vector = items[0]?.[0]?.vector ?? null
+      // A settings/runtime reset must not be undone by an old request finishing afterwards.
+      if (vector && pendingQueries.get(key) === work) {
+        queryVectors.set(key, vector)
+        while (queryVectors.size > QUERY_CACHE_SIZE) queryVectors.delete(queryVectors.keys().next().value as string)
+      }
+      return vector
+    })
+    .catch(() => null)
+    .finally(() => {
+      if (pendingQueries.get(key) === work) pendingQueries.delete(key)
+    })
+  pendingQueries.set(key, work)
+  return work
 }
 
 /**
@@ -235,9 +284,8 @@ export function resetEmbeddingBackoff() {
 export async function embedQuery(text: string, options: { waitMs?: number; kind?: EmbedKind } = {}): Promise<Float32Array | null> {
   const trimmed = text.trim()
   if (!trimmed || !embeddingSettings().enabled || Date.now() < unavailableUntil) return null
-  const work = embedTexts([{ text: trimmed }], options.kind ?? 'query', { priority: 'high' })
-    .then((items) => items[0]?.[0]?.vector ?? null)
-    .catch(() => null)
+  // Return a copy so a consumer cannot change a vector cached for other searches.
+  const work = queryVector(trimmed, options.kind ?? 'query').then((vector) => vector?.slice() ?? null)
   if (!options.waitMs) return work
   let timer: NodeJS.Timeout | undefined
   const timeout = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), options.waitMs) })

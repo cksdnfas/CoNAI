@@ -66,6 +66,9 @@ backend/test/*
 !backend/test/image-permissions.test.ts
 !backend/test/generated-media-pipeline.test.ts
 !backend/test/document-search.test.ts
+!frontend/test/
+frontend/test/*
+!frontend/test/post-rich-editor.test.ts
 
 # Uploaded images
 uploads/

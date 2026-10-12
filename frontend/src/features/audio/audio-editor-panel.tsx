@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Headphones, Pause, Play, RotateCcw, Save, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
 import { Textarea } from '@/components/ui/textarea'
@@ -44,7 +45,7 @@ function provenanceRows(candidate: AudioCandidate, t: ReturnType<typeof useI18n>
   return rows
 }
 
-type DragMode = { kind: 'start' | 'end' | 'move' | 'new'; originX: number; originStart: number; originEnd: number } | null
+type DragMode = { kind: 'start' | 'end' | 'move' | 'new' | 'seek'; originX: number; originStart: number; originEnd: number; anchor: number } | null
 
 /** The right-hand editor: region on the waveform, gain/pitch/speed/fades, region play, server preview, save as a new take. */
 export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, className, showHeader = true }: {
@@ -64,7 +65,9 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
   const [duration, setDuration] = useState<number>(candidate.file.duration ?? 0)
   const [params, setParams] = useState<AudioEditParams>(() => defaultParams(candidate.file.duration ?? 0))
   const [notes, setNotes] = useState(candidate.notes)
-  const [drag, setDrag] = useState<DragMode>(null)
+  const drag = useRef<DragMode>(null)
+  const [selectRegion, setSelectRegion] = useState(false)
+  const [hoverTime, setHoverTime] = useState<number | null>(null)
   const [busy, setBusy] = useState<'preview' | 'save' | null>(null)
   const previewUrl = useRef<string | null>(null)
   const regionKey = `region:${candidate.id}`
@@ -75,6 +78,7 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
     let cancelled = false
     const controller = new AbortController()
     setPeaks(null)
+    setDuration(candidate.file.duration ?? 0)
     setNotes(candidate.notes)
     setParams(defaultParams(candidate.file.duration ?? 0))
     loadAudioBuffer(audioCandidateFileUrl(candidate.id), controller.signal).then((buffer) => {
@@ -111,43 +115,62 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
 
   const timeAt = (clientX: number) => {
     const rect = canvasRef.current?.getBoundingClientRect()
-    if (!rect || duration <= 0) return 0
+    if (!rect || rect.width <= 0 || duration <= 0) return 0
     return Math.min(duration, Math.max(0, ((clientX - rect.left) / rect.width) * duration))
   }
+  const seekTo = (seconds: number) => {
+    const at = Math.max(0, Math.min(duration, seconds))
+    if (audioPlayer.state.key === candidate.id && audioPlayer.state.playing) audioPlayer.seek(at)
+    else audioPlayer.play(candidate.id, { start: at })
+  }
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (duration <= 0) return
+    if (duration <= 0 || event.button !== 0 || !event.isPrimary) return
+    event.preventDefault()
+    event.currentTarget.focus()
     const rect = event.currentTarget.getBoundingClientRect()
     const x = event.clientX - rect.left
     const startX = (params.start / duration) * rect.width
     const endX = (params.end / duration) * rect.width
-    const kind = Math.abs(x - startX) <= 8 ? 'start' : Math.abs(x - endX) <= 8 ? 'end' : x > startX && x < endX ? 'move' : 'new'
+    const selecting = selectRegion || event.shiftKey
+    const kind = !selecting ? 'seek' : Math.abs(x - startX) <= 10 ? 'start' : Math.abs(x - endX) <= 10 ? 'end' : !event.shiftKey && x > startX && x < endX ? 'move' : 'new'
     event.currentTarget.setPointerCapture(event.pointerId)
-    setDrag({ kind, originX: event.clientX, originStart: params.start, originEnd: params.end })
-    if (kind === 'new') {
-      const at = round3(timeAt(event.clientX))
-      set({ start: at, end: round3(Math.min(duration, at + 0.01)) })
-    }
+    const anchor = timeAt(event.clientX)
+    drag.current = { kind, originX: event.clientX, originStart: params.start, originEnd: params.end, anchor }
+    if (kind === 'seek') seekTo(anchor)
   }
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!drag) return
     const at = timeAt(event.clientX)
+    setHoverTime(at)
+    const activeDrag = drag.current
+    if (!activeDrag) return
+    if (activeDrag.kind === 'seek') { seekTo(at); return }
+    if (Math.abs(event.clientX - activeDrag.originX) < 3) return
     const rect = event.currentTarget.getBoundingClientRect()
-    const delta = ((event.clientX - drag.originX) / rect.width) * duration
-    if (drag.kind === 'start') set({ start: round3(Math.min(at, params.end - 0.01)) })
-    else if (drag.kind === 'end') set({ end: round3(Math.max(at, params.start + 0.01)) })
-    else if (drag.kind === 'move') {
-      const span = drag.originEnd - drag.originStart
-      const start = Math.min(duration - span, Math.max(0, drag.originStart + delta))
+    const delta = ((event.clientX - activeDrag.originX) / rect.width) * duration
+    const minSpan = Math.min(0.01, duration)
+    if (activeDrag.kind === 'start') set({ start: round3(Math.max(0, Math.min(at, activeDrag.originEnd - minSpan))) })
+    else if (activeDrag.kind === 'end') set({ end: round3(Math.min(duration, Math.max(at, activeDrag.originStart + minSpan))) })
+    else if (activeDrag.kind === 'move') {
+      const span = activeDrag.originEnd - activeDrag.originStart
+      const start = Math.min(duration - span, Math.max(0, activeDrag.originStart + delta))
       set({ start: round3(start), end: round3(start + span) })
     } else {
-      const anchor = drag.originStart
-      set({ start: round3(Math.min(anchor, at)), end: round3(Math.max(anchor + 0.01, at)) })
+      const start = Math.min(activeDrag.anchor, at, duration - minSpan)
+      set({ start: round3(start), end: round3(Math.min(duration, Math.max(start + minSpan, activeDrag.anchor, at))) })
     }
   }
 
   const playRegion = () => {
-    if (playing) { audioPlayer.pause(); return }
+    if (problem || duration <= 0) return
     audioPlayer.play(regionKey, { src: audioCandidateFileUrl(candidate.id), start: params.start, end: params.end, rate: params.speed })
+  }
+  const togglePlayback = () => {
+    if (playing) { audioPlayer.pause(); return }
+    if ((player.key === candidate.id || player.key === previewKey) && player.currentTime < player.duration) audioPlayer.resume()
+    else if (player.key === regionKey && player.currentTime >= params.start && player.currentTime < params.end) {
+      audioPlayer.play(regionKey, { src: audioCandidateFileUrl(candidate.id), start: player.currentTime, end: params.end, rate: params.speed })
+    } else if (player.key === regionKey) playRegion()
+    else audioPlayer.play(candidate.id, { start: 0 })
   }
   const playPreview = async () => {
     if (problem) return
@@ -198,17 +221,45 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
         </div>
       ) : null}
 
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="xs" variant={selectRegion ? 'ghost' : 'secondary'} aria-pressed={!selectRegion} onClick={() => setSelectRegion(false)}>{t({ ko: '재생 탐색', en: 'Seek' })}</Button>
+        <Button size="xs" variant={selectRegion ? 'secondary' : 'ghost'} aria-pressed={selectRegion} onClick={() => setSelectRegion(true)}>{t({ ko: '구간 선택', en: 'Select region' })}</Button>
+        <span className="ml-auto font-mono text-xs tabular-nums text-muted-foreground">{number(playhead ?? 0, 2)} / {number(duration, 2)}s</span>
+      </div>
       <div
-        className="relative h-24 cursor-crosshair touch-none select-none rounded-sm bg-foreground/[0.03]"
+        role="slider"
+        tabIndex={0}
+        aria-label={t({ ko: '오디오 재생 위치', en: 'Audio playback position' })}
+        aria-valuemin={0}
+        aria-valuemax={duration}
+        aria-valuenow={Math.min(duration, playhead ?? 0)}
+        aria-valuetext={`${number(playhead ?? 0, 2)} / ${number(duration, 2)}s`}
+        aria-disabled={duration <= 0}
+        className={cn('relative h-24 touch-none select-none rounded-sm bg-foreground/[0.03] outline-none focus-visible:ring-2 focus-visible:ring-ring', selectRegion ? 'cursor-crosshair' : 'cursor-pointer')}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={() => setDrag(null)}
-        onPointerCancel={() => setDrag(null)}
+        onPointerUp={(event) => { drag.current = null; if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId) }}
+        onPointerCancel={() => { drag.current = null }}
+        onLostPointerCapture={() => { drag.current = null }}
+        onPointerLeave={() => setHoverTime(null)}
+        onKeyDown={(event) => {
+          if (event.altKey || event.ctrlKey || event.metaKey || duration <= 0) return
+          const step = event.shiftKey ? 5 : 1
+          const at = playhead ?? 0
+          if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); if (!event.repeat) togglePlayback(); return }
+          const next = event.key === 'ArrowLeft' || event.key === 'ArrowDown' ? at - step : event.key === 'ArrowRight' || event.key === 'ArrowUp' ? at + step : event.key === 'Home' ? 0 : event.key === 'End' ? duration : null
+          if (next === null) return
+          event.preventDefault()
+          event.stopPropagation()
+          seekTo(next)
+        }}
       >
         <canvas ref={canvasRef} aria-hidden className="absolute inset-0 block size-full border-0 border-primary text-foreground/45" />
-        <div className="absolute inset-y-0 border-x-2 border-primary bg-primary/12" style={{ left: `${left}%`, right: `${right}%` }} />
+        <div className={cn('pointer-events-none absolute inset-y-0 border-x-2 border-primary bg-primary/12', selectRegion && 'border-x-4')} style={{ left: `${left}%`, right: `${right}%` }} />
         {playhead !== null && duration > 0 ? <div className="pointer-events-none absolute inset-y-0 w-px bg-foreground" style={{ left: `${(playhead / duration) * 100}%` }} /> : null}
+        {hoverTime !== null && duration > 0 ? <div className="pointer-events-none absolute inset-y-0 border-l border-foreground/40" style={{ left: `${(hoverTime / duration) * 100}%` }}><span className={cn('absolute top-1 rounded-sm bg-popover px-1 font-mono text-2xs text-popover-foreground shadow-sm', hoverTime > duration / 2 ? 'right-1' : 'left-1')}>{number(hoverTime, 2)}s</span></div> : null}
       </div>
+      <p className="-mt-2 text-2xs text-muted-foreground">{selectRegion ? t({ ko: '양 끝을 드래그해 구간 조절 · 안쪽 드래그로 이동 · Shift+드래그로 새 구간', en: 'Drag edges to trim · Drag inside to move · Shift+drag for a new region' }) : t({ ko: '클릭·드래그로 해당 위치 재생 · Shift+드래그로 구간 선택 · 파형에 포커스: Space 재생/정지, ← → 1초 이동 (Shift: 5초)', en: 'Click or drag to seek and play · Shift+drag to select · Waveform focused: Space play/pause, ← → 1 s (Shift: 5 s)' })}</p>
 
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '시작', en: 'Start' })}
@@ -244,7 +295,8 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
       {problem ? <p className="text-xs text-destructive">{problem}</p> : null}
 
       <div className="flex items-center gap-1">
-        <IconButton variant="secondary" size="icon-sm" label={t({ ko: '구간 재생', en: 'Play region' })} onClick={playRegion}>{playing && player.key === regionKey ? <Pause /> : <Play />}</IconButton>
+        <IconButton variant="secondary" size="icon-sm" disabled={duration <= 0} label={playing ? t({ ko: '일시정지', en: 'Pause' }) : t({ ko: '재생', en: 'Play' })} onClick={togglePlayback}>{playing ? <Pause /> : <Play />}</IconButton>
+        <Button variant="ghost" size="xs" disabled={duration <= 0 || Boolean(problem)} onClick={playRegion}>{t({ ko: '구간 재생', en: 'Play region' })}</Button>
         {canEdit ? <IconButton variant="secondary" size="icon-sm" label={t({ ko: '편집 미리듣기', en: 'Preview edit' })} disabled={Boolean(problem) || busy !== null} onClick={() => void playPreview()}><Headphones /></IconButton> : null}
         <IconButton variant="ghost" size="icon-sm" label={t({ ko: '되돌리기', en: 'Reset' })} disabled={!changed} onClick={() => setParams(defaultParams(duration))}><RotateCcw /></IconButton>
         <span className="flex-1" />

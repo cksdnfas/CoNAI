@@ -63,6 +63,8 @@ export function shouldIgnoreReviewKey(event: KeyboardEvent): boolean {
   if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented) return true
   const target = event.target as HTMLElement | null
   if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return true
+  if (target?.closest('[role="slider"], [role="menuitem"], [role="checkbox"], [role="combobox"]')) return true
+  if (target?.closest('button') && (event.key === ' ' || event.key === 'Enter')) return true
   if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"]')) return true
   return false
 }

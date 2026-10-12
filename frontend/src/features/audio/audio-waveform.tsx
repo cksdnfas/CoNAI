@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { audioCandidateFileUrl } from '@/lib/api-audio'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 
 /**
  * Waveforms are decoded in the browser from the take's own file (no server thumbnails): peaks are computed once per
@@ -109,7 +110,8 @@ export function drawPeaks(canvas: HTMLCanvasElement, peaks: Float32Array | null,
 }
 
 /** Small waveform for list rows and chat cards; decodes when it scrolls into view. */
-export function WaveformThumb({ candidateId, fileHash, src, progress, ghost = false, className }: { candidateId: string; fileHash: string; src?: string; progress?: number; ghost?: boolean; className?: string }) {
+export function WaveformThumb({ candidateId, fileHash, src, progress, ghost = false, className, duration = 0, onSeek, onToggle }: { candidateId: string; fileHash: string; src?: string; progress?: number; ghost?: boolean; className?: string; duration?: number; onSeek?: (seconds: number) => void; onToggle?: () => void }) {
+  const { t } = useI18n()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [peaks, setPeaks] = useState<Float32Array | null>(null)
   const [visible, setVisible] = useState(false)
@@ -144,5 +146,45 @@ export function WaveformThumb({ candidateId, fileHash, src, progress, ghost = fa
     return () => observer.disconnect()
   }, [peaks, progress, ghost])
 
-  return <canvas ref={canvasRef} aria-hidden className={cn('block h-7 w-full border-0 border-primary text-foreground/35', className)} />
+  const canvas = <canvas ref={canvasRef} aria-hidden className={cn('block h-7 w-full border-0 border-primary text-foreground/35', !onSeek && className)} />
+  if (!onSeek || ghost) return canvas
+  const position = Math.max(0, Math.min(duration, (progress ?? 0) * duration))
+  const seekAt = (clientX: number, target: HTMLDivElement) => {
+    const rect = target.getBoundingClientRect()
+    if (duration > 0 && rect.width > 0) onSeek(Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * duration)
+  }
+  return <div
+    role="slider"
+    tabIndex={duration > 0 ? 0 : -1}
+    aria-label={t({ ko: '오디오 재생 위치', en: 'Audio playback position' })}
+    aria-valuemin={0}
+    aria-valuemax={duration}
+    aria-valuenow={position}
+    aria-valuetext={`${position.toFixed(2)} / ${duration.toFixed(2)}s`}
+    aria-disabled={duration <= 0}
+    title={t({ ko: '클릭·드래그로 재생 위치 이동 · ← → 1초 (Shift: 5초) · Space 재생/정지', en: 'Click or drag to seek · ← → 1 s (Shift: 5 s) · Space play/pause' })}
+    className={cn('touch-none cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring', className)}
+    onClick={(event) => event.stopPropagation()}
+    onPointerDown={(event) => {
+      event.stopPropagation()
+      if (event.button !== 0 || !event.isPrimary || duration <= 0) return
+      event.preventDefault()
+      event.currentTarget.focus()
+      event.currentTarget.setPointerCapture(event.pointerId)
+      seekAt(event.clientX, event.currentTarget)
+    }}
+    onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) seekAt(event.clientX, event.currentTarget) }}
+    onPointerUp={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId) }}
+    onDragStart={(event) => { event.preventDefault(); event.stopPropagation() }}
+    onKeyDown={(event) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || duration <= 0) return
+      if ((event.key === ' ' || event.key === 'Enter') && onToggle) { event.preventDefault(); event.stopPropagation(); if (!event.repeat) onToggle(); return }
+      const step = event.shiftKey ? 5 : 1
+      const next = event.key === 'ArrowLeft' || event.key === 'ArrowDown' ? position - step : event.key === 'ArrowRight' || event.key === 'ArrowUp' ? position + step : event.key === 'Home' ? 0 : event.key === 'End' ? duration : null
+      if (next === null) return
+      event.preventDefault()
+      event.stopPropagation()
+      onSeek(Math.max(0, Math.min(duration, next)))
+    }}
+  >{canvas}</div>
 }

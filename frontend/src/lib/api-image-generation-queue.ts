@@ -81,12 +81,12 @@ export async function cancelCodexDeviceLogin() {
 }
 
 export async function getCodexCliVersion(options?: { refresh?: boolean }) {
-  return requestJson<{ success: boolean; data: CodexCliVersionInfo }>(`/api/generation-queue/codex/cli${options?.refresh ? '?refresh=true' : ''}`)
+  return requestJson<{ success: boolean; data: CodexCliVersionInfo }>(`/api/generation-queue/codex/cli${options?.refresh ? '?refresh=true' : ''}`, undefined, { timeoutMs: 60000 })
 }
 
 /** Install the latest Codex CLI on the server; rejected while Codex jobs are running. */
 export async function updateCodexCli() {
-  return requestJson<{ success: boolean; data: CodexCliVersionInfo }>('/api/generation-queue/codex/cli/update', { method: 'POST' })
+  return requestJson<{ success: boolean; data: CodexCliVersionInfo }>('/api/generation-queue/codex/cli/update', { method: 'POST' }, { timeoutMs: 660000 })
 }
 
 export type { CodexModelOption } from '@conai/shared'

@@ -10,7 +10,7 @@ const CACHE_MS = 60000
 const REQUEST_TIMEOUT_MS = 15000
 const CLAUDE_USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
 const cache = new Map<AgentCliName, { value: AgentCliUsage; at: number }>()
-const inFlight = new Map<AgentCliName, Promise<AgentCliUsage>>()
+const inFlight = new Map<AgentCliName, { promise: Promise<AgentCliUsage>; renewClaude: boolean }>()
 let codexProbe: CodexAppServerClient | null = null
 
 // A running app-server keeps the CLI files locked on Windows; the probe yields to an update.
@@ -96,12 +96,34 @@ function claudeAccessToken() {
   } catch { return null }
 }
 
-async function loadClaudeUsage(): Promise<AgentCliUsage> {
+/** Manual refresh only: reuse the chat runner's isolation, request lock and credential refresh/write-back. */
+async function renewClaudeToken() {
+  // A configured API key or fixed OAuth token cannot renew the file-based subscription login.
+  if (process.env.ANTHROPIC_API_KEY?.trim() || process.env.CLAUDE_CODE_OAUTH_TOKEN?.trim()) return
+  const { streamClaudeChatCompletion, CLAUDE_CHAT_PROVIDER } = await import('./codex-chat/claudeChatCompletion')
+  try {
+    await streamClaudeChatCompletion({
+      target: { providerName: CLAUDE_CHAT_PROVIDER, displayName: 'Claude Code', endpoint: 'claude-code://local', apiKey: null, model: 'haiku', generation: { maxTokens: 16, reasoningEffort: 'none' }, promptCacheMarks: false, timeoutMs: 60000 },
+      messages: [{ role: 'system', content: 'Reply only with OK.' }, { role: 'user', content: 'Reply OK.' }],
+      maxToolRounds: 0,
+      signal: AbortSignal.timeout(60000),
+    })
+  } catch {
+    // Even a rate-limited request can refresh credentials. Read them again without exposing CLI output.
+  }
+}
+
+async function loadClaudeUsage(renew = false): Promise<AgentCliUsage> {
   const token = claudeAccessToken()
   if (!token) return result([], 'Claude 구독 로그인일 때만 한도를 볼 수 있어.')
-  if (token === 'expired') return result([], 'Claude 토큰이 만료돼서 다음 사용 뒤에 다시 확인할 수 있어.')
+  if (token === 'expired') {
+    if (renew) { await renewClaudeToken(); return loadClaudeUsage() }
+    return result([], 'Claude 토큰이 만료됐어. 상태 새로고침으로 갱신하거나 다시 로그인해줘.')
+  }
   try {
     const response = await fetch(CLAUDE_USAGE_URL, { headers: { Authorization: `Bearer ${token}`, 'anthropic-beta': 'oauth-2025-04-20' }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
+    if (response.status === 401 && renew) { await renewClaudeToken(); return loadClaudeUsage() }
+    if (response.status === 401) return result([], 'Claude 인증이 만료됐어. 상태 새로고침 후에도 계속되면 다시 로그인해줘.')
     if (!response.ok) return result([], 'Claude 한도를 확인하지 못했어.')
     return result(claudeUsageWindows(((await response.json()) ?? {}) as Parameters<typeof claudeUsageWindows>[0]))
   } catch {
@@ -109,14 +131,21 @@ async function loadClaudeUsage(): Promise<AgentCliUsage> {
   }
 }
 
-export async function getAgentCliUsage(agent: AgentCliName, refresh = false): Promise<AgentCliUsage> {
+export async function getAgentCliUsage(agent: AgentCliName, refresh = false, renewClaude = false): Promise<AgentCliUsage> {
   const cached = cache.get(agent)
   if (!refresh && cached && Date.now() - cached.at < CACHE_MS) return cached.value
   const pending = inFlight.get(agent)
-  if (pending) return pending
-  const load = (agent === 'codex' ? loadCodexUsage() : loadClaudeUsage())
+  if (pending) {
+    // A manual refresh arriving during a passive poll must still get its one renewal attempt.
+    if (agent === 'claude' && renewClaude && !pending.renewClaude) {
+      await pending.promise
+      return getAgentCliUsage(agent, true, true)
+    }
+    return pending.promise
+  }
+  const load = (agent === 'codex' ? loadCodexUsage() : loadClaudeUsage(renewClaude))
     .then((value) => { cache.set(agent, { value, at: Date.now() }); return value })
     .finally(() => inFlight.delete(agent))
-  inFlight.set(agent, load)
+  inFlight.set(agent, { promise: load, renewClaude })
   return load
 }

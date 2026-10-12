@@ -340,6 +340,7 @@ async function finishTurn(session: Session, turn: TurnState, status: CodexChatMe
     return
   }
   turn.finishing = true
+  if (status === 'completed' && turn.contextMeta?.session) turn.contextMeta.session.compacted ??= false
 
   const finalTexts = [...turn.agentMessages.entries()].filter(([itemId]) => !turn.commentaryItems.has(itemId)).map(([, text]) => text)
   const content = (finalTexts.length > 0 ? finalTexts : [...turn.agentMessages.values()])
@@ -425,6 +426,8 @@ function recordTokenUsage(codexThreadId: string, value: unknown) {
 
 /** Codex folded the thread's memory: mark where in the transcript. */
 function recordCompaction(session: Session, codexThreadId: string) {
+  const active = session.activeTurns.get(codexThreadId)
+  if (active?.contextMeta?.session) active.contextMeta.session.compacted = true
   const chatThread = CodexChatStore.findThreadByCodexId(codexThreadId)
   if (chatThread) {
     const turn = session.activeTurns.get(codexThreadId)
@@ -450,13 +453,13 @@ function handleNotification(session: Session, notification: CodexAppServerNotifi
     }
     return
   }
+  const turn = threadId ? session.activeTurns.get(threadId) : undefined
+  const notificationTurnId = typeof params.turnId === 'string' ? params.turnId : (params.turn as { id?: string } | undefined)?.id
+  if (turn?.turnId && notificationTurnId && notificationTurnId !== turn.turnId) return
   if (threadId && method === 'item/completed' && (params.item as { type?: unknown } | undefined)?.type === 'contextCompaction') {
     recordCompaction(session, threadId)
     return
   }
-  const turn = threadId ? session.activeTurns.get(threadId) : undefined
-  const notificationTurnId = typeof params.turnId === 'string' ? params.turnId : (params.turn as { id?: string } | undefined)?.id
-  if (turn?.turnId && notificationTurnId && notificationTurnId !== turn.turnId) return
   if (!turn) {
     // A manual compaction runs as a turn of its own. It is done only when that turn completes: input sent before then
     // would join the compaction turn, and its completion would end the reply.
@@ -705,7 +708,8 @@ export async function runCodexGroupReply(params: {
   const session = await ensureSession(requester, scopes, toolAllowlist, profile.generationPresetIds, params.chatContext)
   setCodexChatExecution(session.token, params.chatContext)
   const run = resolveCodexRun(session, profile)
-  const codexThreadId = await ensureCodexThread(session, ChatGroupStore.member(threadId, profile.id)?.codex_thread_id ?? null, profile,
+  const previousCodexThreadId = ChatGroupStore.member(threadId, profile.id)?.codex_thread_id ?? null
+  const codexThreadId = await ensureCodexThread(session, previousCodexThreadId, profile,
     (id) => ChatGroupStore.setMemberCodexThread(threadId, profile.id, id))
   if (session.activeTurns.has(codexThreadId)) throw new CodexChatError('이 참가자의 이전 답변이 아직 진행 중이야.', 409)
 
@@ -770,6 +774,10 @@ export async function runCodexGroupReply(params: {
         }
         if (loadChatSettings().diagnostics.enabled && loadChatSettings().diagnostics.captureRaw) turn.requestCapture = redactChatRequestBody(body)
         turn.requestSent = true
+        if (turn.contextMeta?.version === 2) {
+          turn.contextMeta.runtime = 'codex'
+          turn.contextMeta.session = { resumed: codexThreadId === previousCodexThreadId }
+        }
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', body, THREAD_REQUEST_TIMEOUT_MS)
         turn.turnId = response.turn.id
         if (keys.length > 0) ChatGroupStore.setMemberLoreSent(threadId, profile.id, nextLoreSent(sent, keys))
@@ -1256,6 +1264,10 @@ export const CodexChatService = {
         }
         if (loadChatSettings().diagnostics.enabled && loadChatSettings().diagnostics.captureRaw) turn.requestCapture = redactChatRequestBody(body)
         turn.requestSent = true
+        if (turn.contextMeta?.version === 2) {
+          turn.contextMeta.runtime = 'codex'
+          turn.contextMeta.session = { resumed: !freshCodexThread }
+        }
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', body, THREAD_REQUEST_TIMEOUT_MS)
         turn.turnId = response.turn.id
         if (turn.judged && turn.contextMeta) turn.contextMeta.judge = turn.judged.diagnostics

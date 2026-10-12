@@ -19,6 +19,8 @@ export type ChatDiagnosticsFields = {
   version?: 2
   engine?: 'llm' | 'codex'
   opaqueContext?: boolean
+  runtime?: 'direct' | 'pi' | 'claude-code' | 'codex'
+  session?: { resumed: boolean; compacted?: boolean }
   profileId?: number
   sections?: ContextSection[]
   sources?: ContextSource[]
@@ -120,7 +122,8 @@ export function metadataOnly(meta: { lore: string[] } & ChatDiagnosticsFields) {
   if (meta.version !== 2) return legacyContextMeta(meta)
   return {
     ...legacyContextMeta(meta),
-    ...pick(meta, ['version', 'engine', 'opaqueContext', 'profileId', 'loreUnmatched', 'toolRounds', 'codexKeys', 'truncated']),
+    ...pick(meta, ['version', 'engine', 'opaqueContext', 'runtime', 'profileId', 'loreUnmatched', 'toolRounds', 'codexKeys', 'truncated']),
+    session: meta.session ? pick(meta.session, ['resumed', 'compacted']) : undefined,
     sections: meta.sections?.map((section) => ({ ...pick(section, ['kind', 'role', 'position', 'estTokens', 'hash']), ...(section.parts ? { parts: section.parts.map((part) => pick(part, ['kind', 'role', 'position', 'estTokens', 'hash'])) } : {}) })),
     sources: meta.sources?.map((source) => pick(source, ['kind', 'id', 'hash'])),
     auxiliarySources: meta.auxiliarySources?.map((source) => pick(source, ['kind', 'id', 'hash'])),

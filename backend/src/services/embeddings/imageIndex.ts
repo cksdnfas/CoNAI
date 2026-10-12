@@ -24,8 +24,8 @@ import {
 
 export const MEDIA_IMAGE_SPACE = 'media-image'
 
-/** Images per worker request (about 0.7-1 s each on CPU): a chat query waits behind at most one batch. */
-const BATCH_IMAGES = 2
+/** Yield the shared worker after each image so interactive queries do not wait through a multi-image batch. */
+const BATCH_IMAGES = 1
 const SCAN_PAGE = 500
 /** Pages one pass may scan without finding work (a caught-up library is walked over several passes). */
 const SCAN_PAGES_PER_PASS = 20
@@ -217,11 +217,14 @@ const rankCache = new Map<string, { at: number; hits: ImageVectorHit[] }>()
  */
 export async function rankImagesByText(text: string, options: { waitMs?: number } = {}): Promise<ImageVectorHit[] | null> {
   if (!embeddingFeatureOn('imageSearch')) return null
-  const key = text
+  const key = text.trim()
   const cached = rankCache.get(key)
   if (cached && Date.now() - cached.at < RANK_CACHE_MS) return cached.hits
   const query = await imageSpaceQuery(text, options.waitMs ?? 20_000)
   if (!query) return null
+  // Concurrent callers share query embedding; the first resumed caller also supplies the ranking.
+  const completed = rankCache.get(key)
+  if (completed && Date.now() - completed.at < RANK_CACHE_MS) return completed.hits
   const hits = vectorStore.search(MEDIA_IMAGE_SPACE, IMAGE_EMBEDDING_MODEL_KEY, query, { limit: RANK_LIMIT, minScore: TEXT_MATCH_MIN_SCORE })
     .map((hit) => ({ compositeHash: hit.sourceKey, score: hit.score }))
   rankCache.delete(key)

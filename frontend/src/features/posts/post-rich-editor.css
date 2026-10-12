@@ -1,0 +1,77 @@
+/* Keep the vendor reset below our media components' Tailwind utilities. */
+@import '@milkdown/crepe/theme/common/prosemirror.css' layer(base);
+@import '@milkdown/crepe/theme/common/reset.css' layer(base);
+@import '@milkdown/crepe/theme/common/block-edit.css' layer(base);
+@import '@milkdown/crepe/theme/common/cursor.css' layer(base);
+@import '@milkdown/crepe/theme/common/link-tooltip.css' layer(base);
+@import '@milkdown/crepe/theme/common/list-item.css' layer(base);
+@import '@milkdown/crepe/theme/common/placeholder.css' layer(base);
+@import '@milkdown/crepe/theme/common/toolbar.css' layer(base);
+@import '@milkdown/crepe/theme/common/table.css' layer(base);
+@import '@milkdown/crepe/theme/common/top-bar.css' layer(base);
+
+.post-rich-editor .milkdown {
+  --crepe-color-background: transparent;
+  --crepe-color-on-background: var(--foreground);
+  --crepe-color-surface: var(--surface-container);
+  --crepe-color-surface-low: var(--surface-low);
+  --crepe-color-on-surface: var(--foreground);
+  --crepe-color-on-surface-variant: var(--muted-foreground);
+  --crepe-color-outline: var(--line);
+  --crepe-color-primary: var(--primary);
+  --crepe-color-secondary: var(--surface-high);
+  --crepe-color-on-secondary: var(--foreground);
+  --crepe-color-inverse: var(--foreground);
+  --crepe-color-on-inverse: var(--background);
+  --crepe-color-inline-code: var(--primary);
+  --crepe-color-error: var(--destructive);
+  --crepe-color-hover: var(--fill);
+  --crepe-color-selected: color-mix(in srgb, var(--primary) 20%, transparent);
+  --crepe-color-inline-area: var(--surface-high);
+  --crepe-base-font-size: var(--text-sm);
+  --crepe-font-default: var(--font-sans);
+  --crepe-font-title: var(--font-sans);
+  --crepe-font-code: var(--font-mono);
+  --crepe-shadow-1: var(--elevation-1);
+  --crepe-shadow-2: var(--elevation-2);
+}
+
+.post-rich-editor .milkdown .ProseMirror {
+  min-height: 22rem;
+  padding: 1.5rem 2.5rem;
+  overflow-wrap: anywhere;
+}
+
+.post-rich-editor .post-editor-media {
+  display: inline-block;
+  width: 100%;
+  white-space: normal;
+  vertical-align: middle;
+}
+
+.post-rich-editor .milkdown .ProseMirror .post-editor-media img {
+  margin: 0;
+}
+
+.post-rich-editor .milkdown .ProseMirror > pre {
+  padding: 0.75rem;
+  overflow-x: auto;
+  background: var(--surface-low);
+  font-family: var(--font-mono);
+}
+
+.post-rich-editor .milkdown .ProseMirror > pre code {
+  background: transparent;
+  color: inherit;
+}
+
+.post-rich-editor .milkdown :focus-visible:not(.ProseMirror) {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .post-rich-editor .milkdown .ProseMirror {
+    padding: 1rem 2rem;
+  }
+}

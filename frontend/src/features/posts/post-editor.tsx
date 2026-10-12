@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { lazy, Suspense, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { PostCategory, PostCommentMode, PostDetail, PostStatus } from '@conai/shared'
 import { CHAT_PAGE_LIMITS, POST_LIMITS } from '@conai/shared'
@@ -7,6 +7,7 @@ import { FieldTabs } from '@/components/common/field-tabs'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { IconButton } from '@/components/ui/icon-button'
+import { LoadingState } from '@/components/ui/loading-state'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { ChatMediaPicker } from '@/features/codex-chat/chat-media-picker'
@@ -21,6 +22,9 @@ import { AudioEmbedPicker, GroupEmbedPicker } from './post-embed-pickers'
 import { mediaHashesOf, PostMarkdown } from './post-markdown'
 import { PostMediaContext } from './post-media'
 import { usePostPermissions } from './use-post-permissions'
+import type { PostRichEditorHandle } from './post-rich-editor'
+
+const PostRichEditor = lazy(() => import('./post-rich-editor').then((module) => ({ default: module.PostRichEditor })))
 
 type Picker = 'media' | 'audio' | 'group' | 'file' | null
 /**
@@ -114,11 +118,12 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
   const [status, setStatus] = useState<PostStatus>(post?.status ?? 'published')
   const [commentMode, setCommentMode] = useState<PostCommentMode>(post?.commentMode ?? 'open')
   const [pinned, setPinned] = useState(post?.pinned ?? false)
-  const [tab, setTab] = useState<'write' | 'preview'>('write')
+  const [tab, setTab] = useState<'write' | 'source' | 'preview'>('write')
   const [bodyOffset, setBodyOffset] = useState(0)
   const commitBody = useChatDraftTransaction(body, setBody)
   const [picker, setPicker] = useState<Picker>(null)
   const bodyRef = useRef<HTMLTextAreaElement | null>(null)
+  const richEditorRef = useRef<PostRichEditorHandle | null>(null)
   const flat = useMemo(() => flattenCategories(categories), [categories])
   const previewContext = useMemo(() => ({ postId: post?.id ?? null, mediaHashes: mediaHashesOf(body) }), [post?.id, body])
 
@@ -137,6 +142,7 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
   /** Put embed lines at the caret, each on its own line. */
   const insert = (lines: string[]) => {
     if (!lines.length) return
+    if (tab === 'write' && richEditorRef.current?.insertMarkdown(`${lines.join('\n\n')}\n`)) return
     const input = bodyRef.current
     const start = input?.selectionStart ?? body.length
     const end = input?.selectionEnd ?? body.length
@@ -145,7 +151,7 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
     const block = `${before && !before.endsWith('\n') ? '\n' : ''}${lines.join('\n')}\n${after.startsWith('\n') || !after ? '' : '\n'}`
     const next = `${before}${block}${after}`
     setBody(next)
-    setTab('write')
+    setTab(tab === 'write' ? 'write' : 'source')
     const caret = before.length + block.length
     window.requestAnimationFrame(() => {
       bodyRef.current?.focus()
@@ -201,7 +207,7 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
       if (typeof patch.status === 'string' && assistantStatuses.includes(patch.status as PostStatus)) setStatus(patch.status as PostStatus)
       if (patch.commentMode === 'open' || patch.commentMode === 'closed') setCommentMode(patch.commentMode)
       if (typeof patch.pinned === 'boolean' && isAdmin) setPinned(patch.pinned)
-      if (typeof patch.body === 'string') setTab('write')
+      if (typeof patch.body === 'string' && tab === 'preview') setTab('write')
     },
     applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
@@ -240,20 +246,38 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
         <TagInput tags={tags} onChange={setTags} />
       </div>
 
-      <div className="theme-input-surface relative overflow-hidden rounded-sm border">
-        <FieldTabs
-          value={tab}
-          onChange={setTab}
-          ariaLabel={t({ ko: '본문', en: 'Body' })}
-          items={[{ value: 'write', label: t({ ko: '작성', en: 'Write' }) }, { value: 'preview', label: t({ ko: '미리보기', en: 'Preview' }) }]}
-        />
-        <div className="absolute right-1 top-0.5 flex items-center gap-0.5">
-          {canViewImages ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '이미지·영상 넣기', en: 'Insert images or videos' })} onClick={() => setPicker('media')}><ImageIcon /></IconButton> : null}
-          {canViewAudio ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '오디오 넣기', en: 'Insert audio' })} onClick={() => setPicker('audio')}><AudioLines /></IconButton> : null}
-          {canViewImages ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '그룹 넣기', en: 'Insert group' })} onClick={() => setPicker('group')}><FolderTree /></IconButton> : null}
-          {canUseFiles ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '보관함 파일 넣기', en: 'Insert file' })} onClick={() => setPicker('file')}><Paperclip /></IconButton> : null}
+      <div className="theme-input-surface min-w-0 rounded-sm border">
+        <div className="flex flex-wrap items-center justify-between border-b border-line">
+          <FieldTabs
+            value={tab}
+            onChange={setTab}
+            ariaLabel={t({ ko: '본문', en: 'Body' })}
+            bare
+            items={[{ value: 'write', label: t({ ko: '서식 편집', en: 'Visual' }) }, { value: 'source', label: t({ ko: '원문', en: 'Source' }) }, { value: 'preview', label: t({ ko: '미리보기', en: 'Preview' }) }]}
+          />
+          <div className="flex items-center gap-0.5 px-1">
+            {canViewImages ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '이미지·영상 넣기', en: 'Insert images or videos' })} onClick={() => setPicker('media')}><ImageIcon /></IconButton> : null}
+            {canViewAudio ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '오디오 넣기', en: 'Insert audio' })} onClick={() => setPicker('audio')}><AudioLines /></IconButton> : null}
+            {canViewImages ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '그룹 넣기', en: 'Insert group' })} onClick={() => setPicker('group')}><FolderTree /></IconButton> : null}
+            {canUseFiles ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '보관함 파일 넣기', en: 'Insert file' })} onClick={() => setPicker('file')}><Paperclip /></IconButton> : null}
+          </div>
         </div>
         {tab === 'write' ? (
+          <PostMediaContext.Provider value={previewContext}>
+            <Suspense fallback={<div className="min-h-[22rem]"><LoadingState /></div>}>
+              <PostRichEditor
+                ref={richEditorRef}
+                value={body}
+                onChange={setBody}
+                onError={(error) => {
+                  setTab('source')
+                  showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '서식 편집기를 열지 못했어. 원문에서 계속 편집할 수 있어.', en: 'Could not open the visual editor. You can continue editing the source.' })) })
+                }}
+                onUnsupportedUpload={() => showSnackbar({ tone: 'info', message: t({ ko: '이미지와 파일은 위의 첨부 버튼으로 넣어줘.', en: 'Use the attachment buttons above to insert images and files.' }) })}
+              />
+            </Suspense>
+          </PostMediaContext.Provider>
+        ) : tab === 'source' ? (
           <textarea
             ref={bodyRef}
             value={body}

@@ -81,6 +81,9 @@ export interface ChatContextMeta {
   promptTokens?: number | null
   version?: 2
   engine?: ChatEngine
+  opaqueContext?: boolean
+  runtime?: 'direct' | 'pi' | 'claude-code' | 'codex'
+  session?: { resumed: boolean; compacted?: boolean }
   /** Effective scope at read time, including the replying profile's restriction. */
   scope?: ChatDiagnosticsScope
   profileId?: number

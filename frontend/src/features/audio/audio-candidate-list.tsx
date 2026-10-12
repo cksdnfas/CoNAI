@@ -6,7 +6,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import type { AudioCandidate, AudioGroup, AudioOrder, AudioReview } from '@/lib/api-audio'
 import { cn } from '@/lib/utils'
-import { useAudioPlayer } from './audio-player'
+import { audioPlayer, useAudioPlayer } from './audio-player'
 import { shortcutLabel, useAudioShortcuts } from './audio-shortcuts'
 import { WaveformThumb } from './audio-waveform'
 
@@ -173,7 +173,10 @@ export function AudioCandidateRow({ row, selected, canEdit, onSelect, onPlay, on
       >
         {playing ? <Pause className="fill-current" /> : <Play className="fill-current" />}
       </IconButton>
-      <WaveformThumb candidateId={candidate.id} fileHash={candidate.file_hash} progress={progress} className="hidden @3xl:block" />
+      <WaveformThumb candidateId={candidate.id} fileHash={candidate.file_hash} progress={progress} duration={player.key === candidate.id && player.duration > 0 ? player.duration : candidate.file.duration ?? 0} onToggle={onPlay} onSeek={(seconds) => {
+        if (audioPlayer.state.key === candidate.id && audioPlayer.state.playing) audioPlayer.seek(seconds)
+        else audioPlayer.play(candidate.id, { start: seconds })
+      }} className="hidden @3xl:block" />
       <div className="min-w-0">
         <p className={cn('truncate text-sm', depth > 0 && 'text-muted-foreground', selected && 'font-semibold text-foreground')}>{candidate.name}</p>
         <p className="truncate font-mono text-2xs text-muted-foreground">{detail(candidate)}<span className="@xl:hidden"> · {formatSeconds(candidate.file.duration)}</span></p>

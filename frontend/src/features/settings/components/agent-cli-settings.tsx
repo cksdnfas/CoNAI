@@ -15,7 +15,7 @@ import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { CodexDeviceLoginDialog } from '@/features/image-generation/components/codex-device-login-dialog'
 import { getCodexCliVersion, updateCodexCli } from '@/lib/api-image-generation-queue'
-import { cancelClaudeLogin, getAgentCliStatus, getAgentCliUsage, getAgentCliVersion, getClaudeLogin, startClaudeLogin, submitClaudeLoginCode, updateAgentCli } from '@/lib/api-agent-cli'
+import { cancelClaudeLogin, getAgentCliStatus, getAgentCliUsage, getAgentCliVersion, getClaudeLogin, refreshAgentCliUsage, startClaudeLogin, submitClaudeLoginCode, updateAgentCli } from '@/lib/api-agent-cli'
 
 function ClaudeLoginDialog({ open, onClose, onSucceeded }: { open: boolean; onClose: () => void; onSucceeded: () => void }) {
   const { t } = useI18n()
@@ -113,7 +113,7 @@ function AgentCliRow({ agent }: { agent: AgentCliName }) {
   const status = useQuery({ queryKey: ['agent-cli-status', agent], queryFn: () => getAgentCliStatus(agent), retry: false, refetchInterval: 30000 })
   const authenticated = status.data?.authenticated === true
   const usage = useQuery({ queryKey: ['agent-cli-usage', agent], queryFn: () => getAgentCliUsage(agent), enabled: authenticated, retry: false, refetchInterval: 300000 })
-  const version = useQuery({ queryKey: versionKey, queryFn: () => agent === 'codex' ? getCodexCliVersion() : getAgentCliVersion(agent).then((data) => ({ success: true, data })), retry: false, staleTime: 3600000 })
+  const version = useQuery({ queryKey: versionKey, queryFn: () => agent === 'codex' ? getCodexCliVersion() : getAgentCliVersion(agent).then((data) => ({ success: true, data })), retry: false, staleTime: 3600000, refetchInterval: (query) => query.state.data?.data.updating ? 2000 : false })
   const refreshStatus = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['agent-cli-status', agent] })
     void queryClient.invalidateQueries({ queryKey: ['codex-generation-status'] })
@@ -127,16 +127,23 @@ function AgentCliRow({ agent }: { agent: AgentCliName }) {
     onError: (error) => showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '업데이트 실패', en: 'Update failed' }), tone: 'error' }),
   })
   const refresh = useMutation({
-    mutationFn: () => agent === 'codex' ? getCodexCliVersion({ refresh: true }) : getAgentCliVersion(agent, true).then((data) => ({ success: true, data })),
-    onSuccess: (result) => {
-      queryClient.setQueryData(versionKey, result)
-      refreshStatus()
-      void getAgentCliUsage(agent, true).then((data) => queryClient.setQueryData(['agent-cli-usage', agent], data)).catch(() => {})
+    mutationFn: async () => {
+      await queryClient.cancelQueries({ queryKey: ['agent-cli-usage', agent] })
+      const [versionResult, usageResult] = await Promise.allSettled([
+        agent === 'codex' ? getCodexCliVersion({ refresh: true }) : getAgentCliVersion(agent, true).then((data) => ({ success: true, data })),
+        refreshAgentCliUsage(agent),
+      ])
+      if (versionResult.status === 'fulfilled') queryClient.setQueryData(versionKey, versionResult.value)
+      if (usageResult.status === 'fulfilled') queryClient.setQueryData(['agent-cli-usage', agent], usageResult.value)
+      if (versionResult.status === 'rejected') throw versionResult.reason
+      if (usageResult.status === 'rejected') throw usageResult.reason
     },
+    onSettled: refreshStatus,
     onError: (error) => showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '상태 확인 실패', en: 'Status check failed' }), tone: 'error' }),
   })
   const info = version.data?.data
   const busy = update.isPending || info?.updating === true
+  const upToDate = Boolean(info?.current && info.latest && !info.updateAvailable)
   const installOrUpdate = async () => {
     const allowed = await confirm({ title: t({ ko: '{name} 설치/업데이트', en: 'Install/update {name}' }, { name }), description: t({ ko: '진행 중인 작업이 있으면 업데이트할 수 없어. 서버에 최신 버전을 설치할까?', en: 'Updates are blocked while work is running. Install the latest version on the server?' }), confirmLabel: t({ ko: '설치/업데이트', en: 'Install/update' }) })
     if (allowed) update.mutate()
@@ -145,19 +152,23 @@ function AgentCliRow({ agent }: { agent: AgentCliName }) {
   const usageWindows = authenticated ? usage.data?.windows ?? [] : []
   return <>
     <SettingRow align={usageWindows.length ? 'start' : 'center'} label={<>
-      {/* The state stays visible (it is the row's answer); version details live in its tooltip. */}
-      <span className="flex items-center gap-2">
+      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
         {name}
-        <Tip content={[info?.current ? `v${info.current}` : null, status.data?.authMethod ?? null, info?.latest ? t({ ko: '최신 {version}', en: 'latest {version}' }, { version: info.latest }) : null].filter(Boolean).join(' · ')}>
+        {info?.current ? <span className="font-mono text-xs text-muted-foreground">v{info.current}</span> : null}
+        <Tip content={status.data?.authMethod ?? stateLabel}>
           <span className="text-xs text-muted-foreground">{stateLabel}</span>
         </Tip>
+        <span className={`text-xs ${info?.updateAvailable ? 'text-primary' : 'text-muted-foreground'}`}>
+          {busy ? t({ ko: '업데이트 중…', en: 'Updating…' }) : version.isPending ? t({ ko: '버전 확인 중…', en: 'Checking version…' }) : info?.updateAvailable ? t({ ko: '→ v{version} 업데이트 가능', en: '→ v{version} available' }, { version: info.latest ?? '' }) : upToDate ? t({ ko: '최신 버전', en: 'Up to date' }) : info?.current ? t({ ko: '최신 버전 확인 실패', en: 'Latest version unavailable' }) : null}
+        </span>
       </span>
       {(status.error || version.error || status.data?.message || info?.message) ? <span className="mt-0.5 block text-xs text-destructive">{status.error instanceof Error ? status.error.message : version.error instanceof Error ? version.error.message : status.data?.message ?? info?.message}</span> : null}
       {usageWindows.length ? <AgentCliUsageBars windows={usageWindows} /> : authenticated && usage.data?.message ? <span className="mt-0.5 block text-xs text-muted-foreground">{usage.data.message}</span> : null}
+      {authenticated && usage.error instanceof Error ? <span className="mt-0.5 block text-xs text-destructive">{usage.error.message}</span> : null}
     </>}>
       <IconButton variant="ghost" size="icon-sm" disabled={busy || refresh.isPending} label={t({ ko: '{name} 상태 새로고침', en: 'Refresh {name} status' }, { name })} onClick={() => refresh.mutate()}><RefreshCw className={refresh.isPending ? 'animate-spin' : undefined} /></IconButton>
-      <IconButton variant="secondary" size="icon-sm" disabled={busy || !status.data?.installed} onClick={() => setLoginOpen(true)} label={status.data?.authenticated ? t({ ko: '{name} 다시 로그인', en: 'Sign in to {name} again' }, { name }) : t({ ko: '{name} 로그인', en: 'Sign in to {name}' }, { name })}><LogIn /></IconButton>
-      <IconButton variant="secondary" size="icon-sm" disabled={busy || version.isPending || Boolean(info?.current && !info.updateAvailable)} onClick={() => void installOrUpdate()} label={busy ? t({ ko: '업데이트 중…', en: 'Updating…' }) : !info?.current ? t({ ko: '{name} 설치', en: 'Install {name}' }, { name }) : info.updateAvailable ? t({ ko: '{name} 업데이트', en: 'Update {name}' }, { name }) : t({ ko: '이미 최신 버전', en: 'Already up to date' })}>{busy ? <Loader2 className="animate-spin" /> : <Download />}</IconButton>
+      <IconButton variant="secondary" size="icon-sm" disabled={busy || refresh.isPending || !status.data?.installed} onClick={() => setLoginOpen(true)} label={status.data?.authenticated ? t({ ko: '{name} 다시 로그인', en: 'Sign in to {name} again' }, { name }) : t({ ko: '{name} 로그인', en: 'Sign in to {name}' }, { name })}><LogIn /></IconButton>
+      <IconButton variant="secondary" size="icon-sm" disabled={busy || refresh.isPending || version.isPending || upToDate} onClick={() => void installOrUpdate()} label={busy ? t({ ko: '업데이트 중…', en: 'Updating…' }) : !info?.current ? t({ ko: '{name} 설치', en: 'Install {name}' }, { name }) : upToDate ? t({ ko: '이미 최신 버전', en: 'Already up to date' }) : t({ ko: '{name} 업데이트', en: 'Update {name}' }, { name })}>{busy ? <Loader2 className="animate-spin" /> : <Download />}</IconButton>
     </SettingRow>
     {agent === 'codex' ? <CodexDeviceLoginDialog open={loginOpen} onClose={closeLogin} onSucceeded={refreshStatus} /> : <ClaudeLoginDialog open={loginOpen} onClose={closeLogin} onSucceeded={refreshStatus} />}
   </>

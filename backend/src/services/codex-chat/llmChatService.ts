@@ -438,13 +438,21 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     const offeredTools = visible
     turn.offeredTools = offeredTools
     const built = await buildMessages(offeredTools, withSemanticContext(judged?.context ?? null, semantic))
+    // Record the completed session without capturing its private history or filesystem path.
+    const engineSession = turn.engineSession ? {
+      ...turn.engineSession,
+      onDone: (id: string, compacted: boolean) => {
+        turn.engineSession!.onDone(id, compacted)
+        if (turn.contextMeta?.session) turn.contextMeta.session.compacted = compacted === true
+      },
+    } : undefined
     if (turn.engineSession?.runtime === 'pi') {
       // The same connection and model, run by pi, which folds its session at the context the server runs with.
       target.transport = 'pi'
-      target.piSession = turn.engineSession
+      target.piSession = engineSession
       target.contextWindow = await serverContextLimit(target)
       target.piVision = profile.visionEnabled
-    } else if (turn.engineSession) target.claudeSession = turn.engineSession
+    } else if (engineSession) target.claudeSession = engineSession
     const directive = judgeDirectiveText(judged, withheld)
     const messages = directive ? appendUserDirective(built, directive, 'judge') : built
     const offeredNames = new Set([...offeredTools.map((tool) => tool.function.name), ...catalogued])
@@ -514,6 +522,10 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           } : undefined,
           onRequestBody: (body, actualTarget) => {
             turn.requestSent = true
+            if (turn.contextMeta?.version === 2) {
+              turn.contextMeta.runtime = actualTarget.transport ?? 'direct'
+              if (engineSession) turn.contextMeta.session = { resumed: Boolean(engineSession.resumeId) }
+            }
             const diagnostics = loadChatSettings().diagnostics
             if (diagnostics.enabled && diagnostics.captureRaw) turn.requestCapture = redactChatRequestBody(body, actualTarget)
           },

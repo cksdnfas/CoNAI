@@ -6,7 +6,6 @@ import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { Tip } from '@/components/ui/tooltip'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { exportChatDiagnostics, getChatDiagnostics, type ChatContextKind, type ChatContextLore, type ChatContextMeta, type ChatDiagnosticText, type ChatSummarySegment } from '@/lib/api-codex-chat'
@@ -170,6 +169,7 @@ export function ChatContextInfo({ meta, previous, threadId, messageId, alternati
   const actualTokens = meta.promptTokens ?? meta.tokenUsage?.inputTokens
   const tokens = actualTokens == null ? `${t({ ko: '추정', en: 'est.' })} ${formatNumber(meta.estimatedTokens)}` : formatNumber(actualTokens)
   const totals = tokenGroups(meta)
+  const inSession = meta.opaqueContext || meta.engine === 'codex'
   const changes = previous ? contextChanges(meta, previous, t) : []
   const isNewLore = (entry: ChatContextLore) => previous && (previous.version === 2 ? !previous.loreEntries?.some((item) => loreKey(item) === loreKey(entry)) : !previous.lore.includes(entry.title))
   const texts = diagnosticsQuery.data?.texts ?? []
@@ -200,9 +200,20 @@ export function ChatContextInfo({ meta, previous, threadId, messageId, alternati
     [t({ ko: '토큰', en: 'Tokens' }), meta.promptTokens ? `${formatNumber(meta.promptTokens)} (${t({ ko: '추정', en: 'est.' })} ${formatNumber(meta.estimatedTokens)})` : `${t({ ko: '추정', en: 'est.' })} ${formatNumber(meta.estimatedTokens)}`],
   ]
   const details: Array<[string, ReactNode]> = [
-    [t({ ko: '원문 창', en: 'Message window' }), t({ ko: '메시지 {n}개 · 앞 {dropped}턴 빠짐', en: '{n} messages · {dropped} earlier turns omitted' }, { n: formatNumber(meta.window?.sent ?? meta.sentMessages), dropped: formatNumber(meta.window?.droppedTurns ?? 0) })],
-    [t({ ko: '요약', en: 'Summary' }), meta.summaryUntilMessageId !== null ? t({ ko: '메시지 {id}까지', en: 'Through message {id}' }, { id: meta.summaryUntilMessageId }) : t({ ko: '없음', en: 'None' })],
+    [t({ ko: '실행 방식', en: 'Runtime' }), meta.runtime === 'pi' ? t({ ko: 'pi 에이전트', en: 'pi agent' }) : meta.runtime === 'claude-code' ? 'Claude Code' : meta.runtime === 'codex' ? 'Codex' : meta.runtime === 'direct' ? t({ ko: 'CoNAI 직접', en: 'CoNAI direct' }) : t({ ko: '이 답변에는 실행 방식 기록이 없어', en: 'No runtime recorded for this reply' })],
   ]
+  if (inSession) {
+    details.push([t({ ko: '이번에 보낸 메시지', en: 'Messages sent this turn' }), formatNumber(meta.window?.sent ?? meta.sentMessages)])
+    if (meta.session) {
+      details.push([t({ ko: '세션', en: 'Session' }), meta.session.resumed ? t({ ko: '이전 대화 이어받음', en: 'Resumed previous conversation' }) : t({ ko: '새 세션', en: 'New session' })])
+      details.push([t({ ko: '이번 답변 중 압축', en: 'Compaction during this reply' }), meta.session.compacted === undefined ? t({ ko: '완료 기록 없음', en: 'No completion recorded' }) : meta.session.compacted ? t({ ko: '완료', en: 'Completed' }) : t({ ko: '발생하지 않음', en: 'Did not occur' })])
+    }
+  } else {
+    details.push(
+      [t({ ko: '원문 창', en: 'Message window' }), t({ ko: '메시지 {n}개 · 앞 {dropped}턴 빠짐', en: '{n} messages · {dropped} earlier turns omitted' }, { n: formatNumber(meta.window?.sent ?? meta.sentMessages), dropped: formatNumber(meta.window?.droppedTurns ?? 0) })],
+      [t({ ko: '요약', en: 'Summary' }), meta.summaryUntilMessageId !== null ? t({ ko: '메시지 {id}까지', en: 'Through message {id}' }, { id: meta.summaryUntilMessageId }) : t({ ko: '없음', en: 'None' })],
+    )
+  }
   if (meta.toolRounds) details.push([t({ ko: '도구', en: 'Tools' }), t({ ko: '{n}라운드', en: '{n} rounds' }, { n: meta.toolRounds })])
   if (previous) details.push([t({ ko: '직전 답변 대비', en: 'Since previous reply' }), changes.length ? <div className="flex flex-wrap gap-x-2 gap-y-1">{changes.map((change, index) => <span key={index} className={change.changed ? 'text-muted-foreground' : change.added ? 'text-success' : 'text-warning'}>{change.changed ? '~' : change.added ? '+' : '−'} {change.title}</span>)}</div> : t({ ko: '같음', en: 'Unchanged' })])
   return (
@@ -230,9 +241,9 @@ export function ChatContextInfo({ meta, previous, threadId, messageId, alternati
           </div>
           <div role="tabpanel" className="mt-3 max-h-[min(60vh,480px)] space-y-3 overflow-y-auto text-xs">
             {selectedTab === 'composition' ? <>
-              {meta.engine === 'codex' ? <div className="space-y-2">
+              {inSession ? <div className="space-y-2">
                 <div className="flex justify-between"><span>{t({ ko: '보낸 입력', en: 'Sent input' })}</span><span className="tabular-nums">{t({ ko: '키 {n}개', en: '{n} keys' }, { n: meta.codexKeys?.length ?? 0 })}</span></div>
-                <Tip content={t({ ko: '세션이 압축하고 보관한 내부 문맥은 볼 수 없어', en: 'The session’s compacted and stored internal context is unavailable' })}><span tabIndex={0} className="flex items-center gap-1.5 text-muted-foreground"><LockKeyhole className="size-3" />{t({ ko: '세션 내부 문맥', en: 'Session internal context' })}</span></Tip>
+                <p className="text-muted-foreground">{t({ ko: '이번에 세션에 보낸 입력을 표시해. 세션이 보관한 전체 대화와 압축 요약은 포함되지 않아.', en: 'Shows input sent to the session this turn. The full conversation and compacted summary stored in the session are not included.' })}</p>
               </div> : <div className="space-y-2">
                 <div className="flex h-2.5 gap-px overflow-hidden rounded-sm" aria-hidden="true">
                   {GROUPS.map((group, index) => totals[index] > 0 ? <span key={group.id} style={{ flex: `${totals[index]} 1 0%`, backgroundColor: `var(--chat-diagnostics-${group.id})` }} /> : null)}
@@ -264,6 +275,8 @@ export function ChatContextInfo({ meta, previous, threadId, messageId, alternati
                 {details.map(([label, value]) => <div key={label} className="contents"><dt className="text-muted-foreground">{label}</dt><dd className="min-w-0 break-words tabular-nums">{value}</dd></div>)}
               </dl>
             </> : diagnosticsQuery.isFetching ? <p className="text-muted-foreground" role="status">{t({ ko: '불러오는 중…', en: 'Loading…' })}</p> : diagnosticsQuery.isError ? <p role="alert" className="text-destructive">{getErrorMessage(diagnosticsQuery.error, t({ ko: '진단을 불러오지 못했어.', en: 'Could not load diagnostics.' }))}</p> : diagnosticsQuery.data ? <>
+              {selectedTab === 'raw' && diagnosticsQuery.data.scope === 'prompts' && diagnosticsQuery.data.raw == null ? <p className="text-muted-foreground">{t({ ko: '이 답변에 저장된 요청 원문이 없어. 원문 기록이 꺼져 있었거나 보관 한도로 삭제됐을 수 있어. 설정의 채팅 공통 설정 → 진단 → 원문 기록을 켜면 이후 답변부터 저장돼.', en: 'No raw request is saved for this reply. Capture may have been disabled, or the retention limit may have removed it. Enable Capture raw requests under shared chat settings → Diagnostics to save future replies.' })}</p> : null}
+              {selectedTab === 'content' && visibleTexts.length === 0 ? <p className="text-muted-foreground">{t({ ko: '이 답변에 표시할 본문 기록이 없어.', en: 'No content records are available for this reply.' })}</p> : null}
               {[...new Set(visibleTexts.map((source) => source.kind))].map((kind) => {
                 const entries = visibleTexts.filter((source) => source.kind === kind)
                 return selectedTab === 'raw' ? <details key={kind} className="group border-t border-line pt-2 first:border-t-0 first:pt-0"><summary className="flex cursor-pointer items-center gap-1 font-semibold"><ChevronRight className="size-3 transition-transform group-open:rotate-90" />{t(KIND_LABELS[kind])}</summary><div className="space-y-3 pt-2 font-mono">{entries.map((source, index) => <div key={index}>{textBody(source)}</div>)}</div></details> : <section key={kind} className="space-y-2 border-t border-line pt-3 first:border-t-0 first:pt-0"><h4 className="font-semibold">{t(KIND_LABELS[kind])}</h4>{entries.map((source, index) => <div key={index}>{textBody(source)}</div>)}</section>

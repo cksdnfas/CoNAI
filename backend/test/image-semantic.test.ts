@@ -46,12 +46,18 @@ test('image semantic: index walk, text search, similar images, safety, prune, ro
   const { settingsService } = await import('../src/services/settingsService')
   const embedding = await import('../src/services/aiWorker/textEmbeddingService')
   const requests: Array<{ op: string; payload: any }> = []
-  embedding.embeddingRuntime.checkDependencies = async () => ({ available: true, message: 'ok', missingPackages: [], python: 'fake' })
+  let dependencyChecks = 0
+  let embedGate: Promise<void> | undefined
+  embedding.embeddingRuntime.checkDependencies = async () => {
+    dependencyChecks++
+    return { available: true, message: 'ok', missingPackages: [], python: 'fake' }
+  }
   t.mock.method(embedding.textWorker, 'request', async (op: string, payload: any) => {
     requests.push({ op, payload })
     // Text at the full dimension, images at its prefix; text searches over images cut the query down.
     if (op === 'embed') assert.equal(payload.dim, embedding.EMBEDDING_DIM)
     if (op === 'embed_images') assert.equal(payload.dim, embedding.IMAGE_EMBEDDING_DIM)
+    if (op === 'embed') await embedGate
     if (op === 'embed') return { device: 'cpu', items: payload.items.map((item: { text: string }) => [{ start: 0, end: item.text.length, vector: base64(fakeVector(item.text, payload.dim)) }]) }
     if (op === 'embed_images') {
       return { device: 'cpu', items: payload.images.map((file: string) => (file.includes('broken') ? { error: 'cannot identify image file' } : { vector: base64(fakeVector(path.basename(file), payload.dim)) })) }
@@ -87,12 +93,14 @@ test('image semantic: index walk, text search, similar images, safety, prune, ro
 
   let looked = 0
   for (let pass = 0; pass < 10; pass += 1) {
-    const done = await indexPendingImages(2)
+    const done = await indexPendingImages()
     if (done === 0) break
     looked += done
   }
   assert.equal(looked, 5, 'four images and the unreadable one; the video and the missing file are never sent')
   assert.equal(imageIndexCount(), 4)
+  assert.ok(requests.filter((request) => request.op === 'embed_images').every((request) => request.payload.images.length === 1),
+    'background indexing yields to interactive searches after each image')
   const sent = requests.filter((request) => request.op === 'embed_images').flatMap((request) => request.payload.images as string[])
   assert.deepEqual(sent.map((file) => path.win32.basename(file)), ['broken.png', 'soup-bowl.png', 'city-night.png', 'cat-window.png', 'cat-sofa.png'])
   assert.equal(imageIndexInternals.state().fullPass, true)
@@ -111,6 +119,82 @@ test('image semantic: index walk, text search, similar images, safety, prune, ro
   const cats = await searchImagesByText('고양이 사진', 3)
   assert.deepEqual(cats?.slice(0, 3).map((hit) => hit.compositeHash).sort(), [hash(1), hash(2), hash(8)].sort())
   assert.equal(requests.filter((request) => request.op === 'embed').at(-1)?.payload.variant, 'full')
+
+  await t.test('warm searches skip runtime probes; cold workers still check dependencies', async (t) => {
+    assert.equal(dependencyChecks, 1, 'only the first image batch needs a runtime check')
+    const cold = t.mock.method(embedding.textWorker, 'loadedModels', () => new Map())
+    await Promise.all([embedding.embedQuery('cold cat'), embedding.embedQuery('cold city')])
+    assert.equal(dependencyChecks, 2, 'concurrent cold requests share one dependency check')
+    cold.mock.restore()
+    await embedding.embedQuery('warm cat')
+    assert.equal(dependencyChecks, 2)
+  })
+
+  await t.test('concurrent searches and retries share work, with independent deadlines and cached copies', async () => {
+    embedding.resetEmbeddingBackoff()
+    const before = requests.length
+    let release!: () => void
+    embedGate = new Promise<void>((resolve) => { release = resolve })
+    try {
+      const short = embedding.embedQuery('shared cat', { waitMs: 5 })
+      const patient = embedding.embedQuery(' shared cat ')
+      assert.equal(await short, null)
+      const retry = embedding.embedQuery('shared cat')
+      assert.equal(requests.length - before, 1)
+      release()
+      const [a, b] = await Promise.all([patient, retry])
+      assert.ok(a && b)
+      assert.deepEqual(a, b)
+      a.fill(0)
+      assert.deepEqual(await embedding.embedQuery('shared cat'), b, 'callers cannot mutate the cache')
+      assert.equal(requests.length - before, 1)
+      await embedding.embedQuery('shared cat', { kind: 'similarity' })
+      assert.equal(requests.length - before, 2, 'different tasks have different vectors')
+    } finally {
+      release()
+      embedGate = undefined
+    }
+  })
+
+  await t.test('reset cannot repopulate the cache with an old in-flight result', async () => {
+    let release!: () => void
+    embedGate = new Promise<void>((resolve) => { release = resolve })
+    const old = embedding.embedQuery('reset cat')
+    embedding.resetEmbeddingBackoff()
+    release()
+    await old
+    embedGate = undefined
+    const before = requests.length
+    await embedding.embedQuery('reset cat')
+    assert.equal(requests.length - before, 1)
+  })
+
+  await t.test('failed query work is removed so a later search can recover', async (t) => {
+    const request = embedding.textWorker.request.bind(embedding.textWorker)
+    let calls = 0
+    t.mock.method(embedding.textWorker, 'request', (...args: Parameters<typeof request>) => {
+      if (++calls === 1) return Promise.reject(Object.assign(new Error('worker stopped'), { errorType: 'WorkerStopped' }))
+      return request(...args)
+    })
+    assert.equal(await embedding.embedQuery('recovered cat'), null)
+    assert.ok(await embedding.embedQuery('recovered cat'))
+    assert.ok(await embedding.embedQuery('recovered cat'))
+    assert.equal(calls, 2, 'failure is retried; success is cached')
+  })
+
+  await t.test('concurrent library searches share the ranking and refresh it without re-embedding', async (t) => {
+    const { vectorStore } = await import('../src/services/vectors/vectorStore')
+    const { rankImagesByText } = await import('../src/services/embeddings/imageIndex')
+    const search = t.mock.method(vectorStore, 'search')
+    const before = requests.length
+    const [a, b] = await Promise.all([rankImagesByText('rank cat'), rankImagesByText(' rank cat ')])
+    assert.deepEqual(a, b)
+    assert.equal(search.mock.callCount(), 1)
+    imageIndexInternals.reset()
+    await rankImagesByText('rank cat')
+    assert.equal(search.mock.callCount(), 2, 'results can refresh as the library changes')
+    assert.equal(requests.length - before, 1, 'the query vector survives a ranking refresh')
+  })
 
   // Hidden rating tiers never come back.
   RatingScoreModel.createTier({ tier_name: '테스트 숨김', min_score: 10000, max_score: null, tier_order: -100, color: '#000000', feed_visibility: 'hide' })

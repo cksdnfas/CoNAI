@@ -50,10 +50,10 @@ function urlTransform(url: string) {
   return APP_SCHEME.test(url) ? url : defaultUrlTransform(url)
 }
 
-function EmbedImage({ src, alt }: ComponentProps<'img'>) {
+export function PostEmbedImage({ src, alt }: ComponentProps<'img'>) {
   const source = typeof src === 'string' ? src : ''
   const match = /^(media|audio|group|file|gallery):([^\s]+)$/.exec(source)
-  if (!match) return <img src={source} alt={alt ?? ''} loading="lazy" className="my-2 max-h-96 max-w-full rounded-sm" />
+  if (!match) return <img src={defaultUrlTransform(source) || undefined} alt={alt ?? ''} loading="lazy" className="my-2 max-h-96 max-w-full rounded-sm" />
   const [, kind, ref] = match
   if (kind === 'gallery') return <MediaGallery items={ref.split(',').map((hash) => ({ hash }))} />
   if (kind === 'media') return <LibraryMedia hash={ref.replace(/\.[a-z0-9]+$/i, '').toLowerCase()} caption={alt || undefined} className="my-3" />
@@ -66,7 +66,7 @@ type HastNode = { type: string; tagName?: string; properties?: Record<string, un
 const holdsEmbed = (node: HastNode | undefined) => (node?.children ?? []).some((child) => child.type === 'element' && child.tagName === 'img' && APP_SCHEME.test(String(child.properties?.src ?? '')))
 
 const COMPONENTS: Components = {
-  img: EmbedImage,
+  img: PostEmbedImage,
   // A paragraph with an embed becomes a div: embeds are blocks (players, galleries), which may not sit inside <p>.
   p: ({ node, children }) => holdsEmbed(node as HastNode | undefined) ? <div className="my-3">{children}</div> : <p className="my-3 first:mt-0 last:mb-0">{children}</p>,
   a: ({ children, href }) => <a href={href} target="_blank" rel="noreferrer noopener" className="text-primary underline underline-offset-2">{children}</a>,
